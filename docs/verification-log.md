@@ -44808,3 +44808,54 @@ dropping `storage-quota-exceeded` from the Python SDK fails 3 arms. Both restore
 byte-identical from a scratchpad snapshot taken of the corrected files.
 
 `it(` counts unchanged, 8 and 8, matching HEAD. No new file, no ratchet change.
+
+## V-1054 — a customer-facing 4xx promised by two comments, carrying a problem type that does not exist
+
+Fell out of V-1053 rather than being looked for. Having derived the canonical registry,
+the cheap follow-up was to scan server source for any
+`https://errors.driftstack.dev/<slug>` literal NOT in `PROBLEM_TYPES`. One came back:
+`egress-tunnel-unreachable`, in `services/session-egress.ts` and
+`services/proxy-backends/socks5.ts`.
+
+Both occurrences are in comments, and both assert present-tense customer behaviour.
+session-egress.ts said `applyToSession` throws so that "the session-create call
+surfaces a clean 4xx with problem-type …/egress-tunnel-unreachable or
+…/egress-config-invalid". socks5.ts said "Customers whose SOCKS5 host is unreachable
+get a 4xx with problem-type …/egress-tunnel-unreachable".
+
+THREE separate things make that false, and each had to be checked:
+
+1. Nothing calls `applyToSession`. bootstrap.ts:1218 already says so in its own
+   words, and routes/session-proxy.ts:17 repeats it — so two files were honest
+   about the wiring while the two that describe the customer outcome were not.
+2. The probe rejects with `new Error('egress-tunnel-unreachable: …')` — a plain
+   Error carrying the slug as a message prefix, not a Problem with that type.
+3. Neither `egress-tunnel-unreachable` nor `egress-config-invalid` is in
+   `PROBLEM_TYPES` (32 entries, checked by derivation in V-1053). Even wired and
+   even wrapped, the URI would be one no SDK maps.
+
+So the described failure would reach a customer as a 500 internal with no typed error
+to catch, and today reaches them not at all. Both comments now state the lifecycle as
+an INTENDED contract and list all three gaps, because someone wiring the
+planning-133 edge needs all three and the caller is the least of them.
+
+The two content-parity pins that froze this prose are corrected in the same commit,
+each with a per-occurrence negative asserting the retracted sentence does not come
+back, plus positives for each of the three gaps separately — a single combined
+assertion would let two thirds of the correction be deleted silently.
+`proxy-backends-socks5.test.ts` also mentions the slug but pins the plain-Error throw,
+which is true, and is unchanged.
+
+TWO ERRORS OF MINE, both caught by the control run rather than at commit. The first
+pin kept a stale regex from the sentence I had just rewritten — I replaced the second
+`expect` block and not the first, so the file failed against my own correction.
+The second regex demanded a line break inside "applyToSession has no caller", which
+prettier had left on one line. Control was 2 red before either mutation, which is what
+surfaced them; running the mutations first and reading "1 failed" as success would
+have hidden both.
+
+Mutations: restoring the false 4xx claim to either file fails that file's pin;
+deleting the plain-Error gap fails session-egress's; deleting the PROBLEM_TYPES gap
+fails socks5's. 4/4, restored byte-identical from a snapshot of the corrected files.
+
+`it(` counts unchanged, 11 and 14, matching HEAD.

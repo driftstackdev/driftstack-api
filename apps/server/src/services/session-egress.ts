@@ -67,12 +67,24 @@ export interface EgressHandle {
 export interface SessionEgressService {
   /**
    * Configure customer-supplied egress for the given session.
-   * Called by the session-create path AFTER reservation + BEFORE
-   * the browser process spawns. Throws on tunnel-unreachable /
-   * config-parse-error so the session-create call surfaces a
-   * clean 4xx with problem-type
-   * `https://errors.driftstack.dev/egress-tunnel-unreachable` or
-   * `…/egress-config-invalid`.
+   *
+   * INTENDED lifecycle: called by the session-create path AFTER
+   * reservation + BEFORE the browser process spawns, throwing on
+   * tunnel-unreachable / config-parse-error so session-create fails
+   * fast rather than after the browser is already up.
+   *
+   * V-1054 — that lifecycle is a contract, not current behaviour, and
+   * this comment used to state it as fact. Nothing calls this method:
+   * bootstrap instantiates SocksProxyBackend, routes/session-proxy.ts
+   * holds the service without calling it, and applyToSession has no
+   * caller anywhere, so no customer request reaches any of it.
+   *
+   * Two further gaps to close when planning-133 wires the edge, both
+   * measured rather than assumed. The implementation rejects with a
+   * plain Error, not a Problem. And neither egress-tunnel-unreachable
+   * nor egress-config-invalid is in PROBLEM_TYPES — so as written the
+   * failure would surface as 500 internal, and no SDK would map it to
+   * a typed error a customer could catch.
    */
   applyToSession(args: { config: SessionEgressConfig }): Promise<EgressHandle>;
 

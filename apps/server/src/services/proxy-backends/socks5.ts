@@ -9,11 +9,16 @@
 //     present, port in range, optional auth credentials).
 //   - TCP-probe the host:port with a short timeout before
 //     returning the EgressHandle (planning 133 §"Phase 1 §5 —
-//     fail-fast on session create"). Customers whose SOCKS5 host
-//     is unreachable get a 4xx with problem-type
-//     `https://errors.driftstack.dev/egress-tunnel-unreachable`
-//     instead of a delayed failure once the WebKit fork tries
-//     to connect.
+//     fail-fast on session create"), so an unreachable SOCKS5
+//     host fails at configure time rather than once the WebKit
+//     fork tries to connect.
+//
+//     V-1054 — no customer sees that yet, and this bullet used to
+//     say they did. applyToSession has no caller; the probe
+//     rejects with a plain Error rather than a Problem; and
+//     egress-tunnel-unreachable is not in PROBLEM_TYPES. Wiring
+//     the session-create edge needs all three, or the fail-fast
+//     arrives as a 500 internal that no SDK maps.
 //   - Return an EgressHandle whose envOverrides the harness
 //     reads when spawning the WebKit fork — DRIFTSTACK_SOCKS5_*
 //     env vars per planning 133's per-WebContent SOCKS5 config

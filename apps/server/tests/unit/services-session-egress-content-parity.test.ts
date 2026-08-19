@@ -84,13 +84,30 @@ describe('services/session-egress content parity', () => {
     );
   });
 
-  it("applyToSession 'AFTER reservation BEFORE browser spawn' lifecycle pinned: 'Called by the session-create path AFTER reservation + BEFORE the browser process spawns. Throws on tunnel-unreachable / config-parse-error so the session-create call surfaces a clean 4xx with problem-type https://errors.driftstack.dev/egress-tunnel-unreachable or …/egress-config-invalid.' — pinned so the lifecycle-order + 2-problem-type catalog (tunnel-unreachable, config-invalid) stay documented", () => {
-    expect(body).toMatch(
-      /Configure customer-supplied egress for the given session\.\s*\n?\s*\*\s+Called by the session-create path AFTER reservation \+ BEFORE\s*\n?\s*\*\s+the browser process spawns\./,
+  it('V-1054 applyToSession lifecycle is pinned as an INTENDED contract, not as current behaviour. The comment used to assert a customer gets a clean 4xx carrying an egress problem-type; nothing calls the method, it rejects with a plain Error rather than a Problem, and neither URI is in PROBLEM_TYPES, so the failure it describes would arrive as a 500 no SDK maps', () => {
+    expect(body).toMatch(/Configure customer-supplied egress for the given session\./);
+    // The intent survives…
+    expect(body).toMatch(/INTENDED lifecycle: called by the session-create path AFTER/);
+    expect(body).toMatch(/throwing on\s*\n?\s*\*\s+tunnel-unreachable \/ config-parse-error/);
+
+    // …and each of the three reasons it is not yet true is stated. A future
+    // reader who wires the edge needs all three, not just the caller.
+    expect(body, 'the no-caller retraction is gone').toMatch(
+      /applyToSession has no\s*\n?\s*\*\s+caller anywhere/,
     );
-    expect(body).toMatch(
-      /Throws on tunnel-unreachable \/\s*\n?\s*\*\s+config-parse-error so the session-create call surfaces a\s*\n?\s*\*\s+clean 4xx with problem-type\s*\n?\s*\*\s+`https:\/\/errors\.driftstack\.dev\/egress-tunnel-unreachable` or\s*\n?\s*\*\s+`…\/egress-config-invalid`\./,
+    expect(body, 'the plain-Error-not-Problem gap is gone').toMatch(
+      /rejects with a\s*\n?\s*\*\s+plain Error, not a Problem/,
     );
+    expect(body, 'the missing-from-PROBLEM_TYPES gap is gone').toMatch(
+      /neither egress-tunnel-unreachable\s*\n?\s*\*\s+nor egress-config-invalid is in PROBLEM_TYPES/,
+    );
+
+    // And the retracted claim itself does not come back.
+    expect(
+      body,
+      'session-egress.ts again promises a customer-facing 4xx carrying an egress problem-type; ' +
+        'no caller reaches this method and neither URI is in the registry',
+    ).not.toMatch(/surfaces a\s*\n?\s*\*\s+clean 4xx with problem-type/);
   });
 
   it("releaseFromSession idempotency framing pinned: 'Tear down the per-session egress resources. Called by session-end (/v1/sessions/:id/destroy, idle timeout, or fatal session error). Idempotent — releasing a handle that was never applied or has already been released is a no-op.' — pinned so the 3-trigger-source catalog (destroy/idle/fatal-error) + idempotent-on-already-released contract stay documented", () => {

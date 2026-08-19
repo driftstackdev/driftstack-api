@@ -31,13 +31,28 @@ describe('services/proxy-backends/socks5 content parity', () => {
     );
   });
 
-  it("4-responsibility-bullet framing pinned: 'Validate the customer-supplied SOCKS5 config (host + port present, port in range, optional auth credentials).' + 'TCP-probe the host:port with a short timeout before returning the EgressHandle (planning 133 §\"Phase 1 §5 — fail-fast on session create\"). Customers whose SOCKS5 host is unreachable get a 4xx with problem-type https://errors.driftstack.dev/egress-tunnel-unreachable instead of a delayed failure once the WebKit fork tries to connect.' + 'Return an EgressHandle whose envOverrides the harness reads when spawning the WebKit fork — DRIFTSTACK_SOCKS5_* env vars per planning 133's per-WebContent SOCKS5 config contract.' + 'releaseFromSession is a no-op for SOCKS5: env vars are process-scoped to the WebKit child; cleanup happens when the browser process exits.' — pinned so the 4-responsibility roster + planning-133-fail-fast + egress-tunnel-unreachable problem-type + per-WebContent env-var + no-op-release contract all stay documented", () => {
+  it("V-1054 4-responsibility-bullet framing pinned, with the fail-fast bullet stating an intent rather than a customer-visible 4xx: 'Validate the customer-supplied SOCKS5 config (host + port present, port in range, optional auth credentials).' + 'TCP-probe the host:port with a short timeout before returning the EgressHandle (planning 133 §\"Phase 1 §5 — fail-fast on session create\"). Customers whose SOCKS5 host is unreachable get a 4xx with problem-type https://errors.driftstack.dev/egress-tunnel-unreachable instead of a delayed failure once the WebKit fork tries to connect.' + 'Return an EgressHandle whose envOverrides the harness reads when spawning the WebKit fork — DRIFTSTACK_SOCKS5_* env vars per planning 133's per-WebContent SOCKS5 config contract.' + 'releaseFromSession is a no-op for SOCKS5: env vars are process-scoped to the WebKit child; cleanup happens when the browser process exits.' — pinned so the 4-responsibility roster + planning-133-fail-fast + egress-tunnel-unreachable problem-type + per-WebContent env-var + no-op-release contract all stay documented", () => {
     expect(body).toMatch(
       /\/\/\s+- Validate the customer-supplied SOCKS5 config \(host \+ port\s*\n?\s*\/\/\s+present, port in range, optional auth credentials\)\./,
     );
+    // V-1054 — the fail-fast intent stays pinned…
     expect(body).toMatch(
-      /\/\/\s+- TCP-probe the host:port with a short timeout before\s*\n?\s*\/\/\s+returning the EgressHandle \(planning 133 §"Phase 1 §5 —\s*\n?\s*\/\/\s+fail-fast on session create"\)\. Customers whose SOCKS5 host\s*\n?\s*\/\/\s+is unreachable get a 4xx with problem-type\s*\n?\s*\/\/\s+`https:\/\/errors\.driftstack\.dev\/egress-tunnel-unreachable`/,
+      /\/\/\s+- TCP-probe the host:port with a short timeout before\s*\n?\s*\/\/\s+returning the EgressHandle \(planning 133 §"Phase 1 §5 —\s*\n?\s*\/\/\s+fail-fast on session create"\)/,
     );
+    // …together with the three reasons no customer sees it yet.
+    expect(body, 'the no-caller retraction is gone').toMatch(/applyToSession has no caller/);
+    expect(body, 'the plain-Error-not-Problem gap is gone').toMatch(
+      /rejects with a plain Error rather than a Problem/,
+    );
+    expect(body, 'the missing-from-PROBLEM_TYPES gap is gone').toMatch(
+      /egress-tunnel-unreachable is not in PROBLEM_TYPES/,
+    );
+    // The retracted claim does not come back.
+    expect(
+      body,
+      'socks5.ts again promises customers a 4xx carrying egress-tunnel-unreachable; the probe ' +
+        'rejects with a plain Error and the URI is not in the registry',
+    ).not.toMatch(/is unreachable get a 4xx with problem-type/);
     expect(body).toMatch(
       /\/\/\s+- releaseFromSession is a no-op for SOCKS5: env vars are\s*\n?\s*\/\/\s+process-scoped to the WebKit child; cleanup happens when\s*\n?\s*\/\/\s+the browser process exits\./,
     );
