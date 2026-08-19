@@ -38817,3 +38817,41 @@ condition did not consider.
 
 No source change. One class member measured clean, two false positives dissolved, one instrument
 rule confirmed.
+
+## V-905 — 26 env vars the server reads are absent from the operator spec (2026-08-18)
+
+**The last clean member of the cross-workspace class.** `production-env-schema.md` calls itself the
+cheat sheet and names `docs/deployment/env-vars.md` as "the longer per-variable spec (defaults,
+allowed values, behaviour-on-absent)". That spec is what an operator provisions from, and it is
+missing **26** of the 91 variables the server reads.
+
+**Among them:** `PROFILE_MASTER_KEY` and `PROFILE_MASTER_KEY_CMD` (profile encryption),
+`NOWPAYMENTS_IPN_SECRET` (payment-webhook signature verification),
+`OAUTH_CLIENT_SIGNING_SECRET` with the Google and GitHub credentials, the three `LIVEKIT_*` values,
+`TRUST_PROXY`, `METRICS_SCRAPE_TOKEN`, `DRIFTSTACK_FLEET_INTERNAL_TOKEN` and `PERMISSIVE_CORS`.
+
+**Most are documented somewhere, and that is the problem rather than the mitigation.** They live in
+the go-live runbook, internal design notes from June, and this log. An operator reads the spec; a
+variable whose only home is a design document is one nobody provisions, and the failure lands at
+runtime on whichever feature it gated.
+
+**Two instrument faults first, both caught before the claim.** The initial run reported **63**
+undocumented vars, because I compared against the CHEAT SHEET — the document that says in its own
+second paragraph that it is a summary and points at the real spec. Reading the summary instead of
+the authority is the V-889/V-895 error for the third time. And my token pattern required five
+characters, silently excluding `PORT` and `HOST`. Fixing both took the count from 63 to 26, and 26
+is the number I then verified var-by-var with direct greps rather than trusting the set difference.
+
+**Recorded as a tight ceiling, not fixed.** Writing the missing entries means stating a default, an
+allowed range and an on-absent behaviour for an encryption master key, an IPN signing secret and
+OAuth credentials. Those are deployment facts I cannot derive from source, and a confidently wrong
+operator document is worse than a gap. So the guard holds the set at 26, requires it to be exactly
+26 rather than at-most (a ceiling with slack has already stopped working), and fails the moment a
+27th appears.
+
+Mutation-proved both ways: adding a new undocumented variable fails two arms, and documenting one of
+the existing 26 fails the tightness arm until the ceiling is lowered in the same commit — which is
+the behaviour that makes the debt shrink rather than drift.
+
+**For the queue:** 26 variables need operator-facing entries, and roughly a third of them are
+secrets whose correct documentation is a deployment decision rather than a source fact.
