@@ -38781,3 +38781,39 @@ having caught them.
 **Recorded so the comparison is not re-run**, and with the extractor note attached: for route
 enumeration in this repo, match the verb and then scan forward for the literal. The tight pattern
 silently loses 40% of the routes.
+
+## V-904 — browser storage keys are consistent, and a helper defeated the scan again (2026-08-18)
+
+**Cleanest remaining member of the V-902 cross-workspace class.** Storage keys are exact literals
+with no template interpolation, so unlike the route scan they should measure cleanly. If a login
+page writes one key and a dashboard page reads another, sign-in silently fails on that page only.
+
+**Nine keys across the three web frontends, all `ds_`-prefixed, no near-miss variants**
+(no `ds_session_token` shadowing `ds_web_session_token`, which is the shape that would hurt).
+`ds_web_session_token` is read in 44 places, written in 7, cleared in 5 — a consistent
+session-token contract.
+
+**Two apparent anomalies, both false, both already guarded.**
+
+- **`ds_onboarding_app_clicked`** — 0 reads, 0 writes, 1 removal. Dead-looking, and deliberate:
+  `desktop-app-access-truth-cross-source-invariant` asserts the overview page **removes** it and
+  explicitly `not.toContain` a `setItem` for it. It is legacy state from an earlier version being
+  cleaned up on load, and the guard pins the asymmetry rather than the presence — a considered
+  design that reads as dead code until you find its test.
+- **`ds_signup_email`** — written once, never read. It is read, through `readSignupState(...)` and
+  `removeSignupState(...)` helpers, with a parity test covering both the cleanup and the
+  resend-prompt fallback when the key is absent.
+
+**Third time this session a helper abstraction defeated a literal search**, after V-880 (Go's
+`doEventStream` hiding the `text/event-stream` header) and V-895 (`errors.ts` importing
+`PROBLEM_TYPES` rather than defining it). The pattern is now unambiguous enough to state as a rule:
+**in this codebase, a literal-scan miss means "find the helper" before it means "not there."** Every
+instance has been an abstraction doing its job.
+
+**My own label was wrong too**, and worth recording: the scan printed `ds_onboarding_app_clicked` as
+"READ-ONLY: nothing ever writes it" when it has zero reads and one removal. Remove-only, not
+read-only. A tally with three columns and a one-condition label will misdescribe whichever case the
+condition did not consider.
+
+No source change. One class member measured clean, two false positives dissolved, one instrument
+rule confirmed.
