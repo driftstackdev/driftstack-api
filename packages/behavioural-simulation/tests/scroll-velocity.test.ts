@@ -129,6 +129,12 @@ describe('V-530.B generateScrollVelocityProfile — properties', () => {
   });
 
   it('delta signs match direction across all classes + seeds', () => {
+    // `signed` counts the ticks actually compared. Every assertion here sits
+    // behind `deltaPx !== 0`, so a generator that emitted only zero deltas would
+    // satisfy this arm having compared nothing — the seeds are fixed, so the
+    // count is deterministic and this stays a one-time verdict rather than a
+    // flaky one.
+    let signed = 0;
     for (const klass of ALL_CLASSES) {
       for (const direction of DIRECTIONS) {
         for (const seed of seeds(8, `sign-${klass}-${direction}`)) {
@@ -141,12 +147,14 @@ describe('V-530.B generateScrollVelocityProfile — properties', () => {
           for (const tick of profile.ticks) {
             // Allow tick.deltaPx === 0 at terminal tick (velocity below threshold)
             if (tick.deltaPx !== 0) {
+              signed += 1;
               expect(Math.sign(tick.deltaPx)).toBe(expectedSign);
             }
           }
         }
       }
     }
+    expect(signed, 'no non-zero delta was produced, so no sign was checked').toBeGreaterThan(0);
   });
 
   it('cumulativePx matches running sum of deltaPx exactly', () => {

@@ -39377,3 +39377,38 @@ about it, and reading "passed" as "vacuous" across a batch of arms is how a proo
 comments and an OpenAPI description string, `incident-policy` whose identical shape is currently LIVE
 because `incident.*` really is not subscribable, a dashboard hamburger check, an SDK async-parity
 allowlist that duplicates its own source list, and two seeded-generator loops. Next.
+
+## V-920 — two seeded-generator arms that were one seed away from asserting nothing (2026-08-19)
+
+**Continuing V-919's triage.** Two arms in `behavioural-simulation` put every assertion behind a
+condition on generated data: `idle.test.ts` checks `refocusAt` only "when non-null", and
+`scroll-velocity.test.ts` checks a tick's sign only when `deltaPx !== 0`.
+
+**Not currently vacuous — I checked instead of assuming, and it changed the finding.** I expected
+`transition` to be the broken case, since its `refocusProbability` is 0.05 and the arm used a single
+seed. A probe at that exact seed says otherwise: all four classes produce a non-null `refocusAt`
+(`reading=6456 thinking=3438 distracted=2223 transition=504`). So these arms do assert today. Had I
+written up "transition almost always rolls null" — which is what the probability suggests — it would
+have been a confident wrong finding about a one-draw event.
+
+**Latent, and proven by mutation.** Setting `transition`'s `refocusProbability` to 0 makes the
+pre-fix arm PASS; forcing `deltaPx` to 0 in `scroll.ts` makes the pre-fix sign arm PASS. Both
+mutations destroy exactly the property the arm is named for, and both reported green. So the defect
+is real but conditional: one seed change, one probability tweak, or one generator change away from
+silent coverage loss, with nothing to announce it.
+
+**Fix** — count what was actually compared and require it to be non-zero. `idle` now sweeps 200 FIXED
+seeds per class, asserts every non-null value is in range, and asserts at least one non-null was
+seen; `scroll-velocity` counts signed ticks and requires at least one. The seed lists are fixed, so
+both counts are deterministic: these stay one-time verdicts rather than becoming flaky, which matters
+because a probabilistic assertion in a seeded suite is a worse defect than the one being fixed.
+
+**Both proofs are two-sided.** Under each mutation the pre-fix arm passes and the post-fix arm fails
+with the intended message — "transition never produced a non-null refocusAt in 200 seeds" and "no
+non-zero delta was produced, so no sign was checked". That pairing is what separates a fix from a
+rewrite: the same mutation that the old arm ignored is the one the new arm reports.
+
+**Remaining from V-918's ten:** the mTLS gate, `incident-policy`'s live-gate shape, the dashboard
+hamburger check, the SDK async-parity allowlist, and one confirmed false positive — the email
+attribution sweep, whose condition is the negation of its own assertion (`if (violates) expect(not
+violates)`), making it a find-and-fail loop that cannot be vacuous.

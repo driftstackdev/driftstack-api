@@ -38,11 +38,20 @@ describe('V-530.D generateIdlePeriod — class defaults', () => {
     });
 
     it(`${cls}: refocusAt (when non-null) lies within (0, durationMs]`, () => {
-      const idle = generateIdlePeriod({ idleClass: cls, seed: 'fixed-seed' });
-      if (idle.refocusAt !== null) {
+      // A fixed seed sweep rather than one seed. With a single seed this arm
+      // asserted nothing whenever that seed happened to roll null, which for
+      // `transition` (refocusProbability 0.05) is almost always — a permanently
+      // vacuous arm that reported as a pass. The seed list is fixed, so the
+      // count below is deterministic: this either passes forever or fails once.
+      let nonNull = 0;
+      for (let i = 0; i < 200; i += 1) {
+        const idle = generateIdlePeriod({ idleClass: cls, seed: `refocus-${cls}-${String(i)}` });
+        if (idle.refocusAt === null) continue;
+        nonNull += 1;
         expect(idle.refocusAt).toBeGreaterThan(0);
         expect(idle.refocusAt).toBeLessThanOrEqual(idle.durationMs);
       }
+      expect(nonNull, `${cls} never produced a non-null refocusAt in 200 seeds`).toBeGreaterThan(0);
     });
   }
 });
