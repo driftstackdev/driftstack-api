@@ -44767,3 +44767,44 @@ swapping the `test.ping` payload type fails two arms; renaming `sendTestEvent` f
 third. Restored byte-identical from the corrected snapshot.
 
 `it(` count 3 in a new file. Ratchets 2935→2936 and 3101→3102.
+
+## V-1053 — a guard frozen at 24 URIs while the registry held 32
+
+Continuing the third-leg line from V-1052 onto errors. The question was whether a
+problem type the server can return might be unmapped by an SDK, which surfaces to a
+customer as a generic `DriftstackError` instead of the typed subclass their `catch`
+branch names.
+
+Checked prior art first: `cross-sdk-problem-type-parity` (W676) already asserts the
+canonical URIs are a subset of every SDK's mapping table. So the mechanism existed.
+What it asserted over did not match reality.
+
+MEASURED: `PROBLEM_TYPES` holds 32 entries. The guard's `SHARED_PROBLEM_URIS` held 24,
+hand-maintained. The eight unasserted ones are the newest —
+`byok-anthropic-required`, `bundled-llm-budget-exhausted`,
+`bundled-llm-consent-required`, `pair-mode-conflict`, `pair-mode-invalid-transition`,
+`storage-quota-exceeded`, `proxy-validation-failed`, `profile-in-use`. All three SDKs
+do in fact map all 32, so there is no live defect; the defect is that nothing would
+have said so. Any type added next was unguarded by construction.
+
+The blind spot was measured rather than argued. Removing `profile-in-use` from the Go
+SDK's `errorBuilders` and running HEAD's version of both guards: 16 passed. That is a
+customer-visible regression — Go callers would get `UnknownError` where they wrote a
+typed branch — passing a green suite.
+
+Three different counts appear in prose across this file family: the W676 header says
+"canonical 23-URI set", its arm titles say 24, and
+`api-types-problem-content-parity` has a title reading "22 entries pinned" above a
+list of 24. None is the real number. Rather than correct three numbers to 32 and wait
+for the next divergence, both guards now DERIVE from `PROBLEM_TYPES` — the count
+follows the registry, and a newly added type is guarded the day it lands.
+
+Both derivations carry a floor (`>= 32`) because a subset assertion over an empty set
+passes against SDKs that map nothing; a registry that failed to import would otherwise
+turn every arm green and vacuous.
+
+Mutations, after the change: dropping `profile-in-use` from the Go SDK fails 3 arms;
+dropping `storage-quota-exceeded` from the Python SDK fails 3 arms. Both restored
+byte-identical from a scratchpad snapshot taken of the corrected files.
+
+`it(` counts unchanged, 8 and 8, matching HEAD. No new file, no ratchet change.

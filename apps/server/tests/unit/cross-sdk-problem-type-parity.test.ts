@@ -2,8 +2,8 @@
 // drift-guard series (W649 verb parity + W675 error-class parity +
 // W676 problem-type URI parity).
 //
-// Asserts every RFC 7807 problem-type URI in the canonical 23-URI
-// set is mapped in ALL 3 SDKs' mapping tables:
+// Asserts every RFC 7807 problem-type URI in `PROBLEM_TYPES` is mapped
+// in ALL 3 SDKs' mapping tables:
 //
 //   - sdk-typescript: TYPE_TO_CTOR (errors.ts) — Record<string, ctor>
 //   - sdk-go:         errorBuilders (error_mapping.go) — map[string]builder
@@ -17,9 +17,18 @@
 //
 // Methodology: extract every `https://errors.driftstack.dev/<slug>`
 // occurrence from each SDK's mapping table file, then assert the
-// canonical 23-URI set is a SUBSET of every SDK's mapped URIs. SDK-
-// specific extras are allowed but the canonical set MUST be in all
-// 3.
+// canonical set is a SUBSET of every SDK's mapped URIs. SDK-specific
+// extras are allowed but the canonical set MUST be in all 3.
+//
+// V-1053 — the canonical set is now DERIVED from `PROBLEM_TYPES` rather
+// than frozen here. It had been a hand-maintained list of 24 while the
+// registry held 32, so the eight newest types — BYOK, both bundled-LLM
+// errors, both pair-mode errors, storage-quota, proxy-validation and
+// profile-in-use — were mapped by all three SDKs but asserted by none,
+// and any type added next would have been unguarded by construction.
+// Three different counts (22, 23, 24) appeared in prose across this
+// file family, none of them the real one; a derived set cannot go
+// stale that way.
 //
 // NOTE: rate-limited is handled SEPARATELY in sdk-typescript (via
 // errorFromProblem's explicit branch so it can pass
@@ -29,6 +38,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { PROBLEM_TYPES } from '@driftstack/api-types';
 import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -57,35 +67,10 @@ function extractProblemUris(source: string): Set<string> {
   return out;
 }
 
-// The CANONICAL shared problem-type URIs. Every SDK MUST map every
-// URI in this set to a typed error class. SDK-specific extras are
-// allowed but not asserted here.
-const SHARED_PROBLEM_URIS = new Set([
-  'https://errors.driftstack.dev/bad-request',
-  'https://errors.driftstack.dev/unauthorized',
-  'https://errors.driftstack.dev/forbidden',
-  'https://errors.driftstack.dev/not-found',
-  'https://errors.driftstack.dev/conflict',
-  'https://errors.driftstack.dev/rate-limited',
-  'https://errors.driftstack.dev/concurrency-limit',
-  'https://errors.driftstack.dev/tier-limit',
-  'https://errors.driftstack.dev/revoked-key',
-  'https://errors.driftstack.dev/expired-key',
-  'https://errors.driftstack.dev/invalid-key',
-  'https://errors.driftstack.dev/session-destroyed',
-  'https://errors.driftstack.dev/session-timeout',
-  'https://errors.driftstack.dev/legal-acceptance-required',
-  'https://errors.driftstack.dev/driver-error',
-  'https://errors.driftstack.dev/driver-not-integrated',
-  'https://errors.driftstack.dev/validation-failed',
-  'https://errors.driftstack.dev/email-already-registered',
-  'https://errors.driftstack.dev/invalid-credentials',
-  'https://errors.driftstack.dev/invalid-auth-token',
-  'https://errors.driftstack.dev/email-not-verified',
-  'https://errors.driftstack.dev/feature-unavailable',
-  'https://errors.driftstack.dev/mfa-step-up-required',
-  'https://errors.driftstack.dev/internal',
-]);
+// The CANONICAL shared problem-type URIs, derived from the registry the
+// server actually emits. Every URI here MUST map to a typed error class
+// in every SDK; SDK-specific extras are allowed but not asserted.
+const SHARED_PROBLEM_URIS = new Set<string>(Object.values(PROBLEM_TYPES));
 
 describe('W676 cross-SDK problem-type URI parity', () => {
   it('all 3 SDK error-mapping files exist at canonical paths', () => {
@@ -94,28 +79,28 @@ describe('W676 cross-SDK problem-type URI parity', () => {
     expect(existsSync(PY_ERRORS), `missing ${PY_ERRORS}`).toBe(true);
   });
 
-  it('sdk-typescript maps the 24 canonical problem-type URIs (in TYPE_TO_CTOR + the explicit rate-limited branch in errorFromProblem)', () => {
+  it('sdk-typescript maps every problem-type URI in PROBLEM_TYPES (in TYPE_TO_CTOR + the explicit rate-limited branch in errorFromProblem)', () => {
     const ts = extractProblemUris(read(TS_ERRORS));
     for (const uri of SHARED_PROBLEM_URIS) {
       expect(ts.has(uri), `sdk-typescript missing canonical URI ${uri}`).toBe(true);
     }
   });
 
-  it('sdk-go maps the 24 canonical problem-type URIs (in errorBuilders)', () => {
+  it('sdk-go maps every problem-type URI in PROBLEM_TYPES (in errorBuilders)', () => {
     const go = extractProblemUris(read(GO_MAPPING));
     for (const uri of SHARED_PROBLEM_URIS) {
       expect(go.has(uri), `sdk-go missing canonical URI ${uri}`).toBe(true);
     }
   });
 
-  it('sdk-python maps the 24 canonical problem-type URIs (in PROBLEM_TYPE_TO_ERROR)', () => {
+  it('sdk-python maps every problem-type URI in PROBLEM_TYPES (in PROBLEM_TYPE_TO_ERROR)', () => {
     const py = extractProblemUris(read(PY_ERRORS));
     for (const uri of SHARED_PROBLEM_URIS) {
       expect(py.has(uri), `sdk-python missing canonical URI ${uri}`).toBe(true);
     }
   });
 
-  it("CROSS-SDK invariant — the 24 canonical problem-type URIs are a SUBSET of every SDK's mapping table. Drift to dropping any URI in any SDK would let a server-emitted problem-type silently surface as a generic DriftstackError on that SDK (customer's `catch (RateLimitError)` would miss a 429 if rate-limited URI was dropped).", () => {
+  it("CROSS-SDK invariant — every problem-type URI in PROBLEM_TYPES is a SUBSET of every SDK's mapping table. Drift to dropping any URI in any SDK would let a server-emitted problem-type silently surface as a generic DriftstackError on that SDK (customer's `catch (RateLimitError)` would miss a 429 if rate-limited URI was dropped).", () => {
     const ts = extractProblemUris(read(TS_ERRORS));
     const go = extractProblemUris(read(GO_MAPPING));
     const py = extractProblemUris(read(PY_ERRORS));
@@ -161,12 +146,18 @@ describe('W676 cross-SDK problem-type URI parity', () => {
     }
   });
 
-  it('test file metadata — file exists at canonical path + 24 canonical shared URIs pinned in module-level SHARED_PROBLEM_URIS set. Drift to a different count would mean the canonical set itself was modified — review carefully.', () => {
+  it('test file metadata — file exists at canonical path + SHARED_PROBLEM_URIS is derived from PROBLEM_TYPES rather than frozen, so a newly added problem type is guarded the day it lands. Drift to a different count would mean the canonical set itself was modified — review carefully.', () => {
     expect(
       existsSync(
         resolve(REPO_ROOT, 'apps/server/tests/unit/cross-sdk-problem-type-parity.test.ts'),
       ),
     ).toBe(true);
-    expect(SHARED_PROBLEM_URIS.size, 'canonical shared URI count').toBe(24);
+    // Derived, so the count follows the registry. The floor is what stops a
+    // registry that failed to load from making every arm above vacuous — a
+    // subset assertion over an empty set passes against SDKs that map nothing.
+    expect(SHARED_PROBLEM_URIS.size, 'canonical shared URI count').toBe(
+      Object.values(PROBLEM_TYPES).length,
+    );
+    expect(SHARED_PROBLEM_URIS.size, 'PROBLEM_TYPES failed to load').toBeGreaterThanOrEqual(32);
   });
 });

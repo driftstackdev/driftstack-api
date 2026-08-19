@@ -13,7 +13,9 @@
 //   • ProblemSchema: type URL + title + status int 100..599 +
 //     optional detail/instance + .catchall(unknown) for extensions
 //     + .describe.
-//   • PROBLEM_TYPES const dictionary: 22 URI entries pinned.
+//   • PROBLEM_TYPES const dictionary: every entry checked, derived from the
+//     const itself (V-1053 — the list here was frozen at 24 entries under a
+//     title claiming 22, while the registry held 32).
 //   • V-079 / V-352b / V-353e rationale comments preserved.
 //   • ProblemType = (typeof PROBLEM_TYPES)[keyof typeof
 //     PROBLEM_TYPES] inferred union.
@@ -21,6 +23,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { PROBLEM_TYPES } from '@driftstack/api-types';
 import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -59,35 +62,22 @@ describe('W432.B packages/api-types/src/problem.ts content parity', () => {
     expect(body).toMatch(/\} as const;/);
   });
 
-  it('PROBLEM_TYPES URI registry: 22 entries pinned (BadRequest/Unauthorized/Forbidden/NotFound/Conflict/RateLimited/ConcurrencyLimit/TierLimit/RevokedKey/ExpiredKey/InvalidKey/SessionDestroyed/SessionTimeout/LegalAcceptanceRequired/DriverError/DriverNotIntegrated/ValidationFailed/Internal + V-079 4-error cluster + V-352b FeatureUnavailable + V-353e MfaStepUpRequired)', () => {
-    const entries: [string, string][] = [
-      ['BadRequest', 'bad-request'],
-      ['Unauthorized', 'unauthorized'],
-      ['Forbidden', 'forbidden'],
-      ['NotFound', 'not-found'],
-      ['Conflict', 'conflict'],
-      ['RateLimited', 'rate-limited'],
-      ['ConcurrencyLimit', 'concurrency-limit'],
-      ['TierLimit', 'tier-limit'],
-      ['RevokedKey', 'revoked-key'],
-      ['ExpiredKey', 'expired-key'],
-      ['InvalidKey', 'invalid-key'],
-      ['SessionDestroyed', 'session-destroyed'],
-      ['SessionTimeout', 'session-timeout'],
-      ['LegalAcceptanceRequired', 'legal-acceptance-required'],
-      ['DriverError', 'driver-error'],
-      ['DriverNotIntegrated', 'driver-not-integrated'],
-      ['ValidationFailed', 'validation-failed'],
-      ['Internal', 'internal'],
-      ['EmailAlreadyRegistered', 'email-already-registered'],
-      ['InvalidCredentials', 'invalid-credentials'],
-      ['InvalidAuthToken', 'invalid-auth-token'],
-      ['EmailNotVerified', 'email-not-verified'],
-      ['FeatureUnavailable', 'feature-unavailable'],
-      ['MfaStepUpRequired', 'mfa-step-up-required'],
-    ];
-    for (const [key, slug] of entries) {
-      expect(body).toMatch(new RegExp(`${key}: 'https://errors\\.driftstack\\.dev/${slug}',`));
+  it('PROBLEM_TYPES URI registry — every entry in the const appears in the source with its canonical URI, derived from the const rather than a frozen list. The list here had been fixed at 24 entries while the registry held 32, so the eight newest types were unchecked and the next one added would have been too.', () => {
+    const entries = Object.entries(PROBLEM_TYPES);
+
+    // A registry that failed to load would make the loop below vacuous.
+    expect(entries.length, 'PROBLEM_TYPES entries').toBeGreaterThanOrEqual(32);
+
+    for (const [key, uri] of entries) {
+      const slug = uri.replace('https://errors.driftstack.dev/', '');
+      expect(
+        uri,
+        `${key} does not use the canonical https://errors.driftstack.dev/<slug> form`,
+      ).toMatch(/^https:\/\/errors\.driftstack\.dev\/[a-z][a-z0-9-]*$/);
+      expect(
+        body,
+        `${key} is exported from api-types but its declaration is not in the source read here`,
+      ).toMatch(new RegExp(`${key}: 'https://errors\\.driftstack\\.dev/${slug}',`));
     }
   });
 
