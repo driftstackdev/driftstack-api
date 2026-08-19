@@ -40325,3 +40325,50 @@ filename, which turns a contract into a wish.
 **Three proofs, one per arm.** Removing the PDF's declaration — the original defect — fails the
 declaration arm. Renaming the route's header send fails the route arm. Adding a disposition to the text
 receipt fails the inline arm.
+
+## V-942 — the one identifier support asks customers to quote was declared nowhere (2026-08-19)
+
+**Swept the response-header surface V-941 opened, and found the worst case at the top of it.**
+`middleware/request-id.ts` sets `x-request-id` on EVERY response and CORS exposes it so a browser can
+read it. **Five customer pages** tell people to include it when contacting support — `quickstart`,
+`quickstart-curl`, and all three SDK quickstarts, each phrased as "the request ID from any error
+response". The published document declared it **zero times**. The single identifier support asks for was
+invisible to any client generated from the contract.
+
+**Second gap in the same sweep, and it was self-documented.** `middleware/ip-rate-limit.ts` sends BOTH
+the IETF `RateLimit-*` trio and the older `X-RateLimit-*` aliases, and the CORS `exposedHeaders` list
+exposes both. The document declared only the IETF names — while the `X-RateLimit-Bucket` description
+said, in prose, "Sent alongside the X-RateLimit-\* aliases of the three headers above." A header
+acknowledged inside another header's description is precisely the state V-941 found for
+Content-Disposition: mentioned, and unusable by a generator.
+
+**Measured the whole surface rather than picking targets.** 18 distinct headers are set across the
+server; 12 were declared somewhere. The undeclared remainder was `x-request-id`, the three
+`x-ratelimit-*` aliases, `content-type` (not a declarable header — it is the content map), and
+`cache-control`.
+
+**`Cache-Control` was left alone, deliberately.** It is set at nine sites with values that differ by
+endpoint (`no-store, private` on billing reads, `public, max-age=30` on status). It describes cache
+semantics rather than a value a client reads and acts on, and declaring it per-endpoint would mean nine
+different descriptions for no behavioural gain. Recorded as a decision, not an oversight.
+
+**Fixed:** `X-Request-Id` now declared on 847 error responses via the shared `errors4xx` set, merged
+with the 401 and 429 header sets rather than replacing them; the three `X-RateLimit-*` aliases now
+declared at 213 each alongside the IETF trio.
+
+**Scope stated rather than implied.** X-Request-Id is declared on ERROR responses — where the documented
+workflow points — and success responses carry it too and remain undeclared. That is a stated remainder;
+covering it means editing every 2xx block in the file.
+
+**THREE ends guarded, not two:** the document, the middleware that sends the header, and the customer
+pages that promise it. Any pair alone rots — declare it and stop sending it and the contract lies; send
+it and drop the docs and nobody knows to look; keep the docs and drop the declaration and this defect
+returns.
+
+**Four proofs, one per end.** Removing all 847 declarations fails the declaration arm at 0. Renaming the
+middleware's header fails the send arm. Rewriting one quickstart's mention fails the promise arm.
+Removing the 639 alias declarations fails the rate-limit arm.
+
+**The spec diff is 11 103 lines and mechanical** — 847 X-Request-Id blocks plus 639 alias blocks, with
+removals confined to structural reflow, checked by classifying every changed line rather than eyeballing
+the total. Generated Python models unaffected: response headers are not model classes.

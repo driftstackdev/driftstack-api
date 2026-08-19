@@ -342,6 +342,24 @@ function buildRegistry(): OpenAPIRegistry {
         'Which bucket was charged, e.g. `global` or `sessions:create`. Sent alongside the X-RateLimit-* aliases of the three headers above, kept for existing clients.',
       schema: { type: 'string' },
     },
+    // V-942 — the aliases the line above already admits to, declared rather than
+    // described. `middleware/ip-rate-limit.ts` sends both families and the CORS
+    // `exposedHeaders` list exposes both, so a browser client can read either;
+    // naming them only inside another header's description left the older family
+    // invisible to a code generator, which is the gap V-941 closed for
+    // Content-Disposition.
+    'X-RateLimit-Limit': {
+      description: 'Legacy alias of `RateLimit-Limit`, sent alongside it.',
+      schema: { type: 'integer', minimum: 0 },
+    },
+    'X-RateLimit-Remaining': {
+      description: 'Legacy alias of `RateLimit-Remaining`, sent alongside it.',
+      schema: { type: 'integer', minimum: 0 },
+    },
+    'X-RateLimit-Reset': {
+      description: 'Legacy alias of `RateLimit-Reset`, sent alongside it.',
+      schema: { type: 'integer', minimum: 0 },
+    },
     // `as const` so the `type` literals stay 'integer' / 'string' rather than
     // widening to `string`, which does not satisfy the response config's schema
     // union. Vitest does not type-check, so the suite is green either way — the
@@ -352,6 +370,22 @@ function buildRegistry(): OpenAPIRegistry {
   // it on every one. Declared here for the same reason the 429 headers are:
   // fixing the conformance while leaving the header undeclared would just move
   // the gap, from "not sent" to "sent but invisible to a generated client".
+  // V-942 — `middleware/request-id.ts` sets this on EVERY response and CORS
+  // exposes it, and five customer pages tell people to quote it when contacting
+  // support ("the request ID from any error response"). The document declared it
+  // nowhere, so the one identifier support asks for was invisible to a generated
+  // client. Declared on the shared error responses because that is where the
+  // documented workflow points; success responses carry it too and are NOT
+  // declared here, which is a stated remainder rather than a silent one —
+  // covering them means touching every 2xx block in this file.
+  const requestIdHeader = {
+    'X-Request-Id': {
+      description:
+        'Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.',
+      schema: { type: 'string' },
+    },
+  } as const;
+
   const unauthorizedHeaders = {
     'WWW-Authenticate': {
       description:
@@ -377,18 +411,28 @@ function buildRegistry(): OpenAPIRegistry {
     },
   } as const;
 
+  // V-942 — every one of these carries X-Request-Id, so each declares it. The 401
+  // and 429 merge it with their own header sets rather than replacing them.
   const errors4xx = {
-    400: { description: 'Validation failed.', content: problemContent },
+    400: {
+      description: 'Validation failed.',
+      content: problemContent,
+      headers: requestIdHeader,
+    },
     401: {
       description: 'Authentication failed.',
       content: problemContent,
-      headers: unauthorizedHeaders,
+      headers: { ...unauthorizedHeaders, ...requestIdHeader },
     },
-    403: { description: 'Caller not permitted.', content: problemContent },
+    403: {
+      description: 'Caller not permitted.',
+      content: problemContent,
+      headers: requestIdHeader,
+    },
     429: {
       description: 'Rate limit or concurrency limit hit.',
       content: problemContent,
-      headers: rateLimitHeaders,
+      headers: { ...rateLimitHeaders, ...requestIdHeader },
     },
   };
 
