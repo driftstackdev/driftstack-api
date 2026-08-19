@@ -80,26 +80,24 @@ describe('W822 cross-SDK SessionsResource methods parity', () => {
 
   it('CRITICAL Python provides BOTH SessionsResource (sync) AND AsyncSessionsResource (async) — every sync method has an async counterpart. Drift to dropping the async tree would break AsyncDriftstack customers.', () => {
     const p = read(PY);
-    // 9 async methods.
+    // V-921: this filter listed the same eight names as REQUIRED_METHODS, so it
+    // was always true and every method was checked — but only by coincidence.
+    // Its comment describes excluding sync-only helpers like `iterate`, which is
+    // not in REQUIRED_METHODS at all, so adding a genuinely sync-only method
+    // here would have silently skipped it rather than flagging the mismatch.
+    // The set is now derived, and the count is asserted so a rename is loud.
+    const DUAL = new Set(REQUIRED_METHODS.map(([, pyName]) => pyName));
+    let checked = 0;
     for (const [, pyName] of REQUIRED_METHODS) {
-      // iterate is sync-only generator (Iterator/AsyncIterator), get_state etc are dual.
-      if (
-        [
-          'list',
-          'navigate',
-          'interact',
-          'wait',
-          'get_state',
-          'capture',
-          'destroy',
-          'create',
-        ].includes(pyName)
-      ) {
-        expect(p, `Python AsyncSessionsResource missing 'async def ${pyName}'`).toMatch(
-          new RegExp(`async def ${pyName}\\(`),
-        );
-      }
+      if (!DUAL.has(pyName)) continue;
+      checked += 1;
+      expect(p, `Python AsyncSessionsResource missing 'async def ${pyName}'`).toMatch(
+        new RegExp(`async def ${pyName}\\(`),
+      );
     }
+    expect(checked, 'every required method was checked for an async counterpart').toBe(
+      REQUIRED_METHODS.length,
+    );
   });
 
   // ─── iterate() helper exists ──────────────────────────────────

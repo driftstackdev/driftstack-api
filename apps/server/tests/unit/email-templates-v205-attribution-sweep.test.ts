@@ -93,6 +93,14 @@ describe('v2-#16 email-templates V-205 attribution sweep', () => {
       if (violatesRe.test(naked)) {
         // Allow internal identifiers like "DRIFTSTACK_SOCKS5" — these
         // aren't lowercase + don't match this pattern.
+        //
+        // vacuity-exempt: the condition is the negation of the assertion. This
+        // is a find-and-fail loop — the branch is entered only when the literal
+        // already violates, and entering it fails. So the arm cannot pass while
+        // a violation exists, which is the property
+        // `a-test-arm-may-not-hide-all-its-assertions` checks for; it is
+        // structurally identical to a hidden assertion and semantically its
+        // opposite.
         expect(naked, `lowercase "driftstack" in customer copy: ${lit}`).not.toMatch(violatesRe);
       }
     }

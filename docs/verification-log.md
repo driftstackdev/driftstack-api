@@ -39412,3 +39412,59 @@ rewrite: the same mutation that the old arm ignored is the one the new arm repor
 hamburger check, the SDK async-parity allowlist, and one confirmed false positive — the email
 attribution sweep, whose condition is the negation of its own assertion (`if (violates) expect(not
 violates)`), making it a find-and-fail loop that cannot be vacuous.
+
+## V-921 — the last four hidden-assertion arms, and the detector promoted to a ratchet (2026-08-19)
+
+**Closing V-918's list.** Three more fixes and one confirmed exception, then the instrument itself
+becomes a guard so the shape cannot return.
+
+**The mTLS gate was the worst-constructed of the eleven.** `security-page-doc-parity` forbids the
+public /security page from claiming end-to-end mTLS or client-cert validation — gated on
+`/mTLS|clientCert|client.cert/` over `apps/server/src`. That matches three files containing **no
+implementation at all**: two comments and an OpenAPI description string, all describing the OPERATOR
+fleet-node edge, whose mTLS is Cloudflare Authenticated Origin Pulls at the infra layer. So the guard
+had retired on prose, and the page could have claimed customer mTLS with nothing objecting. It does
+not make the claim — checked, not assumed. Re-gated on `requestCert: true`, a concrete TLS marker
+that is genuinely absent, so the arm is live again and a real implementation would fail the
+precondition arm first and make the claim sayable deliberately.
+
+**`incident-policy` is the same shape while still LIVE**, because `incident.*` really is not
+subscribable, so its arm does run. Hoisted anyway: the day incident events become subscribable, the
+old form would have gone quiet and reported a pass, which is exactly what happened to its six
+siblings. Now that day fails a precondition arm instead.
+
+**`sdk-sessions-resource-cross-sdk-parity`** filtered its async-counterpart check through a list of
+eight method names identical to `REQUIRED_METHODS`, so it was always true and everything was checked
+— by coincidence. Its comment describes excluding sync-only helpers like `iterate`, which is not in
+`REQUIRED_METHODS`, so a genuinely sync-only addition would have been skipped silently rather than
+flagged. Set derived from the source list, count asserted.
+
+**`dashboard-layout-landmarks`** enforced an aria-label "only when a hamburger is present", so
+renaming the control dropped the accessibility check instead of failing. Two of its three patterns
+(`menu-toggle`, `menu-button`) already matched nothing.
+
+**One genuine exception, declared at its site.** The email attribution sweep writes
+`if (violates) expect(not violates)` — a find-and-fail loop whose condition is the negation of its
+own assertion. It is structurally identical to a hidden assertion and semantically its opposite: it
+cannot pass while a violation exists. Marked `vacuity-exempt:` with that reasoning inline.
+
+**Promoted to a ratchet:** `a-test-arm-may-not-hide-all-its-assertions` now fails on any arm whose
+every `expect(` sits inside a conditional, across every test under `apps/` and `packages/`.
+Exceptions are declared with a `vacuity-exempt:` comment in the arm — deliberately at the site rather
+than as a list inside the guard, because a curated exclusion list over a scanner is where a real miss
+hides (V-903, V-908).
+
+**Five mutation proofs.** Dropping the exemption handling flags the live email arm — a positive
+control proving the detector fires on real code today, not just on reverted fixtures. Narrowing the
+walk fails the corpus arm at 62 files against a floor of 2500. Reverting the `recipe-library` wait
+arm to its branching form flags it by name. And the arm-scoping change has its own proof: with the
+marker moved to a SIBLING arm and removed from the flagged one, the flagged arm is still reported —
+under the file-wide check it started as, that sibling marker would have excused it, including for
+arms added later.
+
+**The count went 14 → 1 over V-918 to V-921**, and the one remaining is the documented exception.
+Worth being clear about what this arc did and did not find: of the eleven, exactly two would have
+missed a real regression in a real package today (V-919's wait barriers, and only because sibling
+sequence arms cover the same ground). The rest were guards reporting coverage they had stopped
+providing, on pages that were correct anyway. The value is not defects caught — it is that eleven
+green arms were not evidence of anything, and now the suite can tell the difference.

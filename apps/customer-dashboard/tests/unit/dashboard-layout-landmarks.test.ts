@@ -39,9 +39,15 @@ describe('W282.B DashboardLayout accessibility landmarks', () => {
   });
 
   it('mobile hamburger has an accessible aria-label', () => {
-    // Only enforce when a hamburger is present.
-    if (/hamburger|menu-toggle|menu-button/i.test(body)) {
-      expect(body).toMatch(/aria-label=["'][^"']+["']/);
-    }
+    // Asserted, not assumed. This was "only enforce when a hamburger is
+    // present", which meant renaming the control silently dropped the
+    // accessibility check instead of failing — and of the three patterns only
+    // `hamburger` matches today, so two thirds of the condition was already
+    // dead. A control that disappears should fail here and be removed
+    // deliberately, not vanish from coverage on a rename.
+    expect(body, 'the layout still has a mobile menu control').toMatch(
+      /hamburger|menu-toggle|menu-button/i,
+    );
+    expect(body).toMatch(/aria-label=["'][^"']+["']/);
   });
 });

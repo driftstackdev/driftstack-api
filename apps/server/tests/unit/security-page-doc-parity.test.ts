@@ -33,12 +33,23 @@ function serverSourceMatches(re: RegExp): boolean {
 describe('W246.A /security page doc parity', () => {
   const doc = read();
 
-  it('does not assert mTLS without a server-side impl', () => {
-    const hasMtls = serverSourceMatches(/mTLS|clientCert|client.cert/);
-    if (!hasMtls) {
-      expect(doc).not.toMatch(/mTLS,?\s+end to end/);
-      expect(doc).not.toMatch(/client-cert validation/);
-    }
+  // V-921: a CONCRETE marker, not a mention. The gate here was
+  // /mTLS|clientCert|client.cert/ over apps/server/src, which is satisfied by
+  // three files that contain no implementation at all: two comments and an
+  // OpenAPI description string, all describing the OPERATOR fleet-node edge
+  // (Cloudflare Authenticated Origin Pulls — infra, not server code). So the
+  // arm below had already retired on prose, and the page could have claimed
+  // customer-facing mTLS with nothing objecting. Customer mTLS would mean a TLS
+  // server asking for a client certificate, so that is what is checked.
+  const hasCustomerMtls = serverSourceMatches(/requestCert:\s*true/);
+
+  it('CRITICAL no customer-facing mTLS is implemented, which is the fact the arm below depends on. Asserted separately so that if it ever ships, THIS fails first and the claim becomes sayable — rather than the old gate, which a comment mentioning mTLS was enough to open.', () => {
+    expect(hasCustomerMtls, 'no TLS listener requests a client certificate').toBe(false);
+  });
+
+  it.skipIf(hasCustomerMtls)('does not assert mTLS without a server-side impl', () => {
+    expect(doc).not.toMatch(/mTLS,?\s+end to end/);
+    expect(doc).not.toMatch(/client-cert validation/);
   });
 
   it('publishes only the concrete SOCKS5 egress backend', () => {

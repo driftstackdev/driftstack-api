@@ -37,19 +37,32 @@ describe('W243.A incident-policy doc parity', () => {
     expect(body).not.toMatch(/incident_subscriptions/);
   });
 
-  it('identifies incident.* as internal events rather than customer webhooks', () => {
-    const live = new Set(
-      (SubscribableWebhookEventTypeSchema._def.values as readonly string[]).map((v) => v),
-    );
-    if (!live.has('incident.created')) {
+  const live = new Set(
+    (SubscribableWebhookEventTypeSchema._def.values as readonly string[]).map((v) => v),
+  );
+  const incidentIsSubscribable = live.has('incident.created');
+
+  // V-921: this gate is LIVE — incident.* genuinely is not subscribable, so the
+  // arm below really runs. It is hoisted anyway because the shape is the one
+  // V-917/V-918 found dead in six sibling guards: branching inside the body
+  // means that the day incident.* becomes subscribable, this arm goes quiet and
+  // reports a pass. Now that day fails the arm above instead.
+  it('CRITICAL incident.* is not customer-subscribable, which is the fact the arm below depends on. If it ever becomes subscribable this fails first and forces a decision about the page, rather than the page silently losing its guard.', () => {
+    expect(live.size, 'the enum was really read').toBeGreaterThan(3);
+    expect(incidentIsSubscribable, 'incident.created is not in the subscribable enum').toBe(false);
+  });
+
+  it.skipIf(incidentIsSubscribable)(
+    'identifies incident.* as internal events rather than customer webhooks',
+    () => {
       expect(body).toMatch(
         /are admin-audit \/ internal SSE event types, not customer webhook\s+subscription values/,
       );
       expect(body).toMatch(/Email subscription is the customer-facing\s+notification path/);
       expect(body).not.toMatch(/Webhook event type is\s*<code>incident\.created<\/code>/i);
       expect(body).not.toMatch(/not yet|future webhook/i);
-    }
-  });
+    },
+  );
 
   it('SLA response uses camelCase keys matching SlaTargetReport', () => {
     // Confirm the service exports camelCase keys.
