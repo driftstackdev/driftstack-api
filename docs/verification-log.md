@@ -39907,3 +39907,45 @@ That half was verified from both ends and its proof still holds.
 
 **Corrected tally: 24 mirrors hand-checked, 8 divergent, 16 clean.** V-930's claim of 9 divergences
 counted this one, and it was not a divergence.
+
+## V-932 — the requirement no schema can express, and the document did not mention either (2026-08-19)
+
+**V-931's mistake, turned into an instrument.** That entry mistook a handler-enforced requirement for
+a documentation defect because it read the schema and not the code below the parse. The
+generalisation: wherever validation lives in the HANDLER, the schema cannot carry it, so the
+description is the only place the rule can live — and nothing checks that it does. Four such sites
+exist in the routes; a scan found them all.
+
+**Three were already fine.** The incident PUT (V-931) is published correctly, by hand. BYOK
+Anthropic's manual `typeof api_key !== 'string' || length === 0` check is exactly the mirror's
+`z.string().min(1)`. The proxy scheme→block checks in `account-me.ts` are the union-versus-flat
+divergence already recorded as a decision in V-928.
+
+**The fourth was silent.** `POST /v1/agent-sessions/{id}/input-event` requires `client_id` for
+pair-mode sessions on BOTH legs — the first event fires the takeover-request transition and is
+rejected without it, and every later event must carry the same id that owns `human-driving`. Neither
+rule is expressible as `required`, because both depend on the session's current `pair_mode_state`,
+which the schema cannot see. So `client_id` is correctly optional — a manual-mode session does not
+need one — and the published description said `client_id?: string` and stopped. No mention of pair
+mode, takeover or human-driving in its 805 characters, on an endpoint whose own summary says
+"manual/pair mode only".
+
+**Nobody was broken, for a reason worth noting: the customer docs were already right.**
+`apps/docs/src/pages/api/agent-sessions.md` explains both legs accurately, including WHY the field is
+optional in the schema. I checked that prose against the route rather than trusting it — the docs'
+"first event rejects without it" maps to the `ai-driving` takeover check, and "every subsequent event
+must carry the SAME client_id" maps to the `human-driving` check plus the 409 on mismatch. So the gap
+was only in the machine-readable contract, which is what SDK users generate from.
+
+**Fixed** by stating the rule in the endpoint description, worded from the verified route behaviour
+rather than copied from the docs page.
+
+**Three proofs, and the middle one is the useful one.** Truncating the description before the rule
+fails the prose arm — that is the original defect. Dropping a route leg fails the pairing arm.
+Forcing `client_id` into the static `required` set ALSO fails: that is the obvious wrong fix, and it
+would tell every manual-mode caller to send a field they do not need. A guard that only demanded the
+prose would have accepted it.
+
+**The pairing is the point.** A documented requirement with no code behind it is fiction (V-929's
+`stripe_refund_id`). Code with no documentation behind it is a surprise (this entry). V-931 was the
+case of reading one side and concluding about the other; every arm here reads both.
