@@ -250,7 +250,7 @@ describe('V-960 the anonymous unknown-field exemption is earned per route', () =
     expect(absorbed, 'a body with a mistyped required key was accepted:').toEqual([]);
   });
 
-  it('CRITICAL exactly two anonymous routes really do drop a field in silence, and the number is pinned. This is the whole of the open decision — not fifteen routes, two — and a third appearing without anyone noticing is the thing this arm exists to stop.', () => {
+  it('CRITICAL the two api-types-schema routes that really do drop a field in silence, pinned by count. V-1031: these are two of THREE — POST /v1/oauth/revoke is the third, and it is pinned by the arm below rather than here because its body is declared in the route file instead of api-types. The count here is the size of this list, so it can only ever describe what somebody already put in it', () => {
     expect(DROPS_SILENTLY.length, 'anonymous routes that silently drop a mistyped field').toBe(2);
     for (const c of DROPS_SILENTLY) {
       const parsed = c.schema.safeParse(c.typo);
@@ -280,5 +280,33 @@ describe('V-960 the anonymous unknown-field exemption is earned per route', () =
       confirm?.[1],
       'ConfirmMergeBodySchema gained an optional field, so its exemption is no longer earned',
     ).not.toContain('.optional()');
+  });
+
+  it('CRITICAL POST /v1/oauth/revoke is the third silent-drop route, and it was in neither list. Its body is declared in the route file, so the schema-driven arms above cannot see it: `token_type_hint` is optional (RFC 7009 makes it a hint), the handler parses with parseOrThrow and never calls reportUnknownRequestFields, and the route is anonymous. A caller who misspells it is answered 200 with the hint discarded. Both assertions below fail if that changes in either direction, so wiring the reporter or making the field required updates the record rather than silently diverging from it.', () => {
+    const src = readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes/oauth.ts'), 'utf8');
+
+    const decl = /const RevokeBody = z\.object\(\{([\s\S]*?)\n\}\)/.exec(src);
+    expect(
+      decl,
+      'RevokeBody is no longer declared as a z.object in routes/oauth.ts',
+    ).not.toBeNull();
+    const body = (decl?.[1] ?? '').replace(/\/\/[^\n]*/g, '');
+    const optional = [...body.matchAll(/^\s*(\w+)\s*:\s*([^\n]*(?:\n\s{6,}[^\n]*)*)/gm)]
+      .filter((m) => /\.optional\(\)|\.default\(|\.nullish\(\)/.test(m[2] ?? ''))
+      .map((m) => m[1] as string);
+    expect(
+      optional,
+      'the optional fields of RevokeBody changed — if token_type_hint became required this route ' +
+        'left the silent-drop class and the header above should say so',
+    ).toEqual(['token_type_hint']);
+
+    const registration = /app\.post\s*(?:<[^(]*>)?\s*\(\s*'\/v1\/oauth\/revoke'/.exec(src);
+    expect(registration, 'the revoke route is no longer registered here').not.toBeNull();
+    const handler = src.slice(registration?.index ?? 0, (registration?.index ?? 0) + 1200);
+    expect(
+      handler.includes('reportUnknownRequestFields'),
+      'the revoke route now reports unknown fields — good, but it is no longer a silent-drop route ' +
+        'and belongs out of this arm and out of the open decision',
+    ).toBe(false);
   });
 });

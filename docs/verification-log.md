@@ -43979,3 +43979,39 @@ Spec restored byte-identical.
 
 `it(` count 3 → 4. No new file, no ratchet change. `apps/server/tests/unit` green: 1935 files,
 20239 passed.
+
+## V-1031 — the open decision was two routes; it is three
+
+`an-anonymous-exemption-is-earned-per-route` pins the anonymous routes where a mistyped optional
+field is dropped in silence: the caller is answered 200, their value discarded, nothing said. Its arm
+asserts "exactly two", and the two — signup `name`, cli-authorize `client_label` — are the standing
+owner decision.
+
+Derived the population rather than trusting the number. All 21 anonymous POST routes skip
+`reportUnknownRequestFields`; the guard covers 15 of them (11 where every field is required, 2 that
+drop silently, 2 route-local oauth-client bodies). Of the six it never named, five cannot drop
+anything — `status/subscribe` has a single required field, and the oauth token/introspect bodies
+declare no optional field. **`POST /v1/oauth/revoke` can.** `RevokeBody` declares
+`token_type_hint` optional, the handler parses with `parseOrThrow` and never calls the reporter, and
+the route is anonymous, so a caller who misspells the hint is answered 200 with it discarded.
+
+The impact is mild on its own — RFC 7009 makes `token_type_hint` a hint, and a server that ignores it
+searches both token types — but it is the same class as the two under decision, and the arm asserting
+"exactly two" was measuring the length of its own hardcoded list. A count that describes the list it
+is computed from cannot discover a third member.
+
+Pinned the way the file already handles route-local bodies, by reading the source: the optional-field
+set of `RevokeBody` must be exactly `token_type_hint`, and the revoke handler must still not report
+unknown fields. Both assertions fail if EITHER changes, so making the field required or wiring the
+reporter updates the record instead of quietly diverging from it. The count arm's title now says it
+pins two of three and why the third lives elsewhere.
+
+Mutation: making `token_type_hint` required → RED; wiring the reporter on revoke → RED. Both are
+fixes rather than regressions, which is the point — the guard asks to be told. Control 5/5,
+`oauth.ts` restored byte-identical.
+
+For the owner queue: the unknown-field decision covers THREE anonymous routes, not two — signup
+`name`, cli-authorize `client_label`, and oauth revoke `token_type_hint`.
+
+`it(` count 4 → 5. No new file, no ratchet change. `apps/server/tests/unit` green: 1935 files,
+20240 passed.
