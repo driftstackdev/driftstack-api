@@ -38234,3 +38234,34 @@ with a 400 also fails the arm, because then the page would be wrong in the other
 
 **Left for a decision:** whether an empty `Idempotency-Key` should 400 rather than be ignored. The
 docs now describe what happens; making it _safe_ is an API behaviour change on a live payment path.
+
+## V-888 — the two-doc-surface instrument, and the rate-limit numbers hold (2026-08-18)
+
+**The instrument V-887 actually handed me.** That entry was chasing comments that assert what
+customer docs say; what it found was more useful — **two customer-facing doc surfaces documenting
+the same feature and disagreeing**. `apps/docs/src/pages/**` (58 topics) and
+`apps/marketing-site/src/pages/docs/**` (33 topics) overlap on **seven**: api-keys, audit-log,
+cost-monitoring, pagination, profiles, rate-limits, sessions. Every one is a place the V-887 defect
+can recur, and unlike a scan for a phrase this is an enumerable set.
+
+**Started with rate-limits, because numbers diverge more quietly than prose** — and because V-813
+added a bucket row to the marketing page during this sweep, which made a fix-one-copy miss by my own
+hand the most likely finding available.
+
+**It holds, three ways.** The `agent_sessions:input_event` bucket the marketing page gained is on
+the docs-site page too, so V-813 did not leave a copy behind. The numbers agree with each other in
+different units — marketing states "360 burst / 5,400 req/min", the reference states capacity/refill
+"360 / 90", and 90 × 60 = 5,400. And both agree with the authority: `TIER_RATE_LIMIT_DEFAULTS` in
+`packages/api-types/src/common.ts` gives solo_manual 360/90, api_builder 600/150, free 240/60.
+
+Checking against the source of truth rather than just comparing the two pages is what makes this a
+result rather than a coincidence — two documents agreeing tells you nothing if both were copied from
+the same wrong place. Here the unit conversion is independently correct on each side, which is the
+stronger signal.
+
+**Recorded so the set is not re-derived.** Six overlapping topics remain unchecked: api-keys,
+audit-log, cost-monitoring, pagination, profiles, sessions. The method that worked is three-way —
+compare the pages to each other AND both to the implementation — because the failure V-887 found was
+one page right and one page wrong, which a two-way comparison flags but cannot adjudicate.
+
+No source change. One instrument enumerated, one topic cleared.
