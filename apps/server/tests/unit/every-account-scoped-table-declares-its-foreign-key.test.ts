@@ -59,19 +59,32 @@ interface TableInfo {
   declaresForeignKey: boolean;
 }
 
+/** How many tables the schema declares, independent of the parse below. */
+function declarationCount(): number {
+  return [...readFileSync(SCHEMA, 'utf8').matchAll(/=\s*pgTable\(/g)].length;
+}
+
 /** Every pgTable in the schema, with whether it is account-scoped and keyed. */
 function tables(): TableInfo[] {
   const lines = readFileSync(SCHEMA, 'utf8').split('\n');
   const starts: { line: number; ident: string }[] = [];
   lines.forEach((l, i) => {
-    const m = /^export const (\w+) = pgTable\($/.exec(l);
+    // V-970 — BOTH declaration forms. The anchored `pgTable($` shape misses a
+    // table declared on one line, `export const x = pgTable('x', {`, and three of
+    // the schema's tables are written that way — pricing, platform_secrets and
+    // account_mfa. All three are compliant today (account_mfa is account-scoped
+    // and does declare its key), so this was a latent hole rather than a live one:
+    // a NEW account-scoped table written single-line without a foreign key simply
+    // would not have entered the population this guard checks.
+    const m = /^export const (\w+) = pgTable\(/.exec(l);
     if (m) starts.push({ line: i, ident: m[1]! });
   });
 
   return starts.map((start, k) => {
     const end = k + 1 < starts.length ? starts[k + 1]!.line : lines.length;
     const body = lines.slice(start.line, end).join('\n');
-    const named = /pgTable\(\s*\n\s*'([a-z0-9_]+)'/.exec(body);
+    // The table's wire name follows the paren on either the same line or the next.
+    const named = /pgTable\(\s*\n?\s*'([a-z0-9_]+)'/.exec(body);
     const accountScoped = body.includes("'account_id'");
     // Look only at the account_id column's own declaration, so a `.references()`
     // on some other column (api_key_id, profile_id) cannot stand in for it.
@@ -90,8 +103,13 @@ describe('every account-scoped table declares its foreign key', () => {
     const all = tables();
     const scoped = all.filter((t) => t.accountScoped);
 
-    // MEASURED: 49 tables, 31 of them account-scoped.
-    expect(all.length, 'pgTable declarations parsed').toBeGreaterThanOrEqual(45);
+    // V-970 — compared against an independent count rather than floored. The floor
+    // this replaces was 45 against 49 parsed, so losing three tables to a
+    // declaration shape the regex did not know cleared it comfortably — which is
+    // what happened. A floor detects a scan that matches NOTHING; it cannot detect
+    // one that matches most things.
+    expect(all.length, 'every pgTable declaration is parsed').toBe(declarationCount());
+    expect(all.length, 'pgTable declarations parsed').toBeGreaterThanOrEqual(50);
     expect(scoped.length, 'tables carrying an account_id').toBeGreaterThanOrEqual(30);
     expect(
       all.some((t) => t.name === 'accounts'),

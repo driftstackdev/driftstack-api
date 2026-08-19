@@ -41474,3 +41474,37 @@ free-tier account opting into company-funded billing — has **3 hits** and a de
 inverted-window guard exists in three copies: the customer list route's is covered (1 hit), the admin list
 and admin export copies are not. Left as a stated remainder rather than closed: the rule is proven once, and
 two untested duplicates of a query-validation refusal are a weaker case than anything else on the list.
+
+## V-970 — a foreign-key guard was checking 49 of the schema's 52 tables
+
+**V-969 generalised.** A regex applied per line cannot match what prettier wrapped; the readiness assessment
+records that emptying a scan twice, and V-969 was a third. Swept the suite for the shape: 14 test files
+combine a per-line loop with a newline-spanning regex. Thirteen use them correctly — including the one that
+looked worst, `every-account-scoped-table-declares-its-foreign-key`, whose `/pgTable\(\s*\n\s*'…'/` is
+applied to a joined block, not a line.
+
+**Its OTHER regex is the problem.** Table discovery is `/^export const (\w+) = pgTable\($/` — anchored on
+the paren ending the line. Three of the schema's tables are declared on one line instead:
+`export const pricing = pgTable('pricing', {`, and the same for `platform_secrets` and `account_mfa`. **The
+guard was parsing 49 of 52 tables.**
+
+**All three are compliant today, so this was latent.** `pricing` and `platform_secrets` are not
+account-scoped; `account_mfa` is, and does declare `.references(() => accounts.id, { onDelete: 'cascade' })`.
+What was missing is the guarantee: a NEW account-scoped table written single-line without a foreign key
+never entered the population, and the database would accept rows pointing at accounts that do not exist —
+the exact failure this guard's own arm describes.
+
+**Its floor could not see it, and the file already knew why.** The first arm reads "MEASURED: 49 tables, 31
+of them account-scoped" with a floor of 45, and its comment records that an earlier version of this scan
+"found THREE tables in a 49-table schema" — the author hit scan-blindness here before and added a floor. A
+floor of 45 against 49 absorbs the loss of three. It detects a scan matching nothing; it cannot detect one
+matching most things, which is the V-945 lesson in a different file.
+
+**Fixed both ways.** Discovery now accepts either declaration form, and the floor is replaced by an equality
+against an independent count of `pgTable(` occurrences — so a THIRD declaration shape fails here rather than
+vanishing, which a widened regex alone would not achieve.
+
+**Paired proof.** A single-line, account-scoped table with no `.references()` added to the schema: the fixed
+guard names it, `account-scoped table(s) with no foreign key and no stated reason: ['leaky_audit']`. The
+guard as it stands at HEAD passes **4 of 4** on the identical schema. Narrowing the discovery regex back
+fails the new equality at `expected 49 to be 52`.
