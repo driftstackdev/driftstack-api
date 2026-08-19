@@ -125,11 +125,15 @@ function integrationFiles(): string[] {
 describe('an integration test cannot pass without the service it integrates with', () => {
   it('CRITICAL the scan finds real integration files, so the check below is not vacuous', () => {
     const files = integrationFiles();
-    expect(files.length, 'no integration tests found — the scan is broken').toBeGreaterThan(50);
+    // V-937 — floors raised from 50 and 10 to just under measured (351 files, 99
+    // of them using the bail idiom). At 50 and 10 this scan could have lost 86%
+    // and 90% of its corpus and still reported success, which is the vacuous pass
+    // this whole file exists to prevent, aimed at itself.
+    expect(files.length, 'no integration tests found — the scan is broken').toBeGreaterThan(320);
     expect(
       files.filter((f) => BAILS_ON_MISSING_DEPENDENCY.test(readFileSync(f, 'utf-8'))).length,
       'no file uses the bail idiom — the pattern this guards has changed shape',
-    ).toBeGreaterThan(10);
+    ).toBeGreaterThan(90);
   });
 
   it('CRITICAL every file that bails on a missing service also asserts the service was there', () => {

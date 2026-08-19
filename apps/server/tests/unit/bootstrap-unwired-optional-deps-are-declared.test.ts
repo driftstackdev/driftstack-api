@@ -345,7 +345,9 @@ describe('every optional dependency bootstrap does not pass is declared', () => 
       [...bootstrapSource.matchAll(/new (\w+)\(/g)].length,
       'service constructions in bootstrap',
     ).toBeGreaterThan(20);
-    expect(sourceFiles.length, 'server source files scanned').toBeGreaterThan(100);
+    // V-937 — raised from 100 to just under the measured 338. A floor at 100
+    // tolerated losing two thirds of the tree while still reporting a green.
+    expect(sourceFiles.length, 'server source files scanned').toBeGreaterThan(300);
   });
 
   it('CRITICAL no optional dependency is left unwired without a written reason. An unwired optional dep is a feature that exists only in tests: it compiles, and every unit test builds its own deps, so nothing else in the suite can see it.', () => {

@@ -40127,3 +40127,46 @@ strict JSON to make a number go up.
 **Nothing else changed.** No source fix, no new file, no ratchet bump: the defect was a measurement
 that had drifted from what the code reads, which is the same class as V-922 and found the same way —
 by measuring rather than believing the comment.
+
+## V-937 — non-vacuity floors measured against their corpora; two were 7x and 3x slack (2026-08-19)
+
+**V-936's class, swept deliberately.** That entry found a coverage floor at a quarter of what its guard
+actually read. There are 620 numeric floors across the unit suite, so the question is how many have
+drifted from the corpus they measure. I took the subset whose actual value is cheaply and
+deterministically computable — file-count walks — and replicated each guard's OWN walk rather than
+approximating it with `find`, which matters: the integration guard uses a flat `readdirSync`, not a
+recursive one.
+
+**Measured:**
+
+| guard                                                           | floor | actual | slack       |
+| --------------------------------------------------------------- | ----- | ------ | ----------- |
+| `an-integration-test-cannot-pass-without-its-database` — files  | 50    | 351    | 7.0x        |
+| same guard — files using the bail idiom                         | 10    | 99     | 9.9x        |
+| `bootstrap-unwired-optional-deps-are-declared` — server sources | 100   | 338    | 3.4x        |
+| `a-test-arm-may-not-hide-all-its-assertions` — test files       | 2500  | 2901   | 1.1x — fine |
+
+The first is the one worth naming: a guard whose entire purpose is stopping integration tests from
+vacuous-passing had non-vacuity floors that tolerated losing 86% of its files and 90% of its idiom
+corpus. The same failure it polices, pointed at itself.
+
+**Raised to just under measured** — 320, 90 and 300. Floors may rise (V-794); this direction is always
+safe.
+
+**One isolated proof, and one honest non-result.** Getting the first took three attempts, and the two
+that failed are the useful part:
+
+- Restricting the walk to files starting with `a` (79 files) failed the OLD floors too — but on the
+  IDIOM arm, at 0, not the file count. The idiom is unevenly distributed.
+- Slicing to the first 100 alphabetically also tripped the idiom arm, at 1.
+- The mutation that isolates the file-count floor keeps only the 99 idiom files: a **72% corpus loss**
+  where the idiom count stays at 99. With the raised floors that fails ("expected 99 to be greater than
+  320"). With the OLD floors it PASSES — all four arms green. That is the demonstration.
+
+For the bootstrap guard I could NOT isolate its floor: halving the source walk fails the raised floor,
+but two other arms in the same file fail as well, so the old floor at 100 was not the only thing
+standing there. Raising it is a defensible tightening, not a demonstrated gap closure, and it is
+recorded as the weaker of the two claims rather than presented alongside the first.
+
+**No source change, no new file, no ratchet bump.** Three numbers moved, and the reason each moved is
+now written where the number lives.
