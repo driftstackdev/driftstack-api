@@ -63,6 +63,32 @@ describe('v2-#37 AgentRuntime <-> SDK kind union parity', () => {
       );
     }
 
+    // V-973 — WHICH error each kind becomes, not merely that a branch exists.
+    //
+    // The comment above says `account-turn-limit` "maps to a typed retryable 429
+    // RateLimitedError", and nothing asserted it. Coverage shows none of these four
+    // translations is executed by any test — the cap itself IS tested, one layer
+    // down in agent-runtime.test.ts, so what went unchecked is the mapping to HTTP.
+    //
+    // It is not interchangeable. `packages/sdk-typescript/src/retry.ts` retries 429
+    // and no other 4xx, so a concurrency cap demoted from RateLimitedError (429) to
+    // ConflictError (409) stops being retryable: the customer's turn fails
+    // permanently where it used to succeed once a slot freed. The existence pin
+    // above would not notice, because the branch is still there.
+    const ERROR_BY_KIND: Readonly<Record<string, string>> = {
+      'session-closed': 'ConflictError',
+      'turn-in-progress': 'ConflictError',
+      'account-turn-limit': 'RateLimitedError',
+      'ai-control-unavailable': 'ConflictError',
+    };
+    for (const [kind, errorClass] of Object.entries(ERROR_BY_KIND)) {
+      const at = route.indexOf(`result.kind === '${kind}'`);
+      expect(at, `the route still branches on kind:'${kind}'`).toBeGreaterThan(-1);
+      const branch = route.slice(at, at + 400);
+      const thrown = /throw new (\w+Error)\(/.exec(branch);
+      expect(thrown?.[1], `kind:'${kind}' must be answered with ${errorClass}`).toBe(errorClass);
+    }
+
     for (const kind of runtimeKinds) {
       expect(resource, `TS SDK AgentMessageResponse union is missing kind:'${kind}'`).toContain(
         `kind: '${kind}'`,

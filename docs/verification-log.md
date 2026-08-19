@@ -41560,3 +41560,36 @@ removed (6 and 5 before and after). I left these alone while the peer was mid-fl
 only once the tree was clean — rewriting another agent's in-flight tests is the concurrent-writer
 interference this repo warns about; leaving a known-red suite for the next reader to inherit is a different
 kind of cost, and by then it was the only one still being paid.
+
+## V-973 — a pin that proved a branch existed, not what it answered
+
+**From the coverage list: four route-error translations, none executed.** `POST /:id/message` turns the
+runtime's discriminated result into HTTP — `session-closed`, `turn-in-progress`, `account-turn-limit` and
+`ai-control-unavailable`. All four throws have **0 hits**.
+
+**The cap itself is tested; the mapping is not.** `agent-runtime.ts:639` produces
+`kind: 'account-turn-limit'` and `agent-runtime.test.ts` asserts it with `current` and `limit` — 1 hit. What
+no test executes is the route turning that into an HTTP answer.
+
+**An existing pin covers the wrong half.** `v2-37-agent-message-kinds-parity` asserts the route
+**contains** `result.kind === '<kind>'` for each of the four, so deleting a branch is caught. Which error
+the branch throws was not asserted anywhere — and the guard's own comment states the answer it never
+checked: "`account-turn-limit` — maps to a typed retryable **429** RateLimitedError."
+
+**The distinction is not cosmetic.** `packages/sdk-typescript/src/retry.ts` retries 429 and no other 4xx.
+Demote the concurrency cap from `RateLimitedError` (429) to `ConflictError` (409) and it stops being
+retryable: a customer's turn fails permanently where it previously succeeded once a slot freed. The branch is
+still present, so the existence pin still passes.
+
+**Strengthened in place rather than duplicated**, with the mapping as data — `session-closed`,
+`turn-in-progress` and `ai-control-unavailable` to `ConflictError`, `account-turn-limit` to
+`RateLimitedError` — each verified against the route before being written down.
+
+**Paired proof.** The demotion fails the new assertion by name (`expected 'ConflictError' to be
+'RateLimitedError'`) and leaves the guard as it stands at HEAD passing **2 of 2**.
+
+**Chosen over the more direct test, and the reason is proportion.** Driving the route to return
+`account-turn-limit` needs a runtime double the integration fixture does not expose; no integration test
+drives any of these four kinds today. Building that harness for one status-code assertion is not
+proportionate, and a source-level mapping pin catches the regression that matters — a kind quietly answered
+with the wrong class — at a fraction of the cost. Stated so the trade is visible rather than implied.
