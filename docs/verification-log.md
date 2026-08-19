@@ -44282,3 +44282,36 @@ from here on, and the state was verified by grep rather than assumed from the ex
 
 Full e2e: 203 passed. `apps/server/tests/unit` green: 1935 files, 20244 passed. Spec count 30 → 31 in
 both files that state it, which V-1036's derived arm requires.
+
+## V-1040 — the tenancy axis, closed behaviourally after V-1025 declined to close it statically
+
+V-1025 measured route-layer tenancy by reading source, found nothing wrong, and deliberately added no
+guard: a static check "would have to see through one level of delegation, and one that cannot
+produces false reds until it gets tuned into uselessness". Running the server removes that problem —
+ownership either holds or it does not, and indirection cannot hide the answer.
+
+The repo had exactly ONE cross-account test: `sessions.spec.ts`, B navigating A's session. This adds
+profiles, webhook endpoints, and a write path (capturing a snapshot against another account's
+profile). Every id is created through the real API by A, so nothing is fabricated.
+
+**Two of my three assertions were wrong, and measuring is what corrected them.**
+
+`DELETE /v1/profiles/:id` with B's key answers **204**, not 404. That reads like a cross-tenant
+delete. It is not: a probe showed the owner's profile still returns 200 afterwards, and the same 204
+comes back for an id that never existed anywhere. It is an idempotent delete affecting zero rows, and
+because the response is identical for a stranger's id and a nonexistent one, it discloses nothing.
+The assertion worth making is that the resource SURVIVES, which is what the file now checks.
+
+The snapshot write answers 400, not 404 — the body is rejected before ownership is consulted. Also
+not a leak, and asserting one specific code would have frozen an ordering that is not the property.
+The file asserts refusal instead.
+
+Had I filed the first run, it would have reported a destructive IDOR on profiles. The probe that
+disproved it took two minutes.
+
+**What the file does catch, proved:** removing `eq(profiles.accountId, …)` from the profile delete's
+WHERE — a real cross-tenant delete — destroys A's profile and reds this spec. That is precisely the
+failure V-1025 could not guard by reading source, and it is now guarded.
+
+Full e2e: 206 passed. `apps/server/tests/unit` green: 1935 files, 20244 passed. Spec count 31 → 32 in
+both files that state it.
