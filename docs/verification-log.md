@@ -38608,3 +38608,35 @@ Recorded so the scan is not re-run, and because a human-confirmation gate on an 
 money is worth knowing is guarded rather than assuming.
 
 No source change.
+
+## V-899 — the entire AI-agent surface was marked DEFERRED, and it is the product (2026-08-18)
+
+**The surface instrument, applied to Surface 10.** All three of its rows read DEFERRED against
+V-361: "Agent execution service shell", "Natural language task input", "LLM integration
+(bundled-LLM provider)". All three shipped, and I had verified pieces of each earlier in this
+session without noticing the catalog said otherwise.
+
+- **Execution shell** — `agent-executor.ts`, `agent-runtime.ts` and
+  `agent-executor-control-plane.ts` all exist, and V-898 established their shared
+  human-confirmation gate is tested three ways across two executors.
+- **Natural language input** — `agent-sessions.ts` accepts `user_message` (1–8000 chars) and feeds
+  `agent-decomposer-claude.ts`, with a deterministic decomposer beside it.
+- **Bundled-LLM provider** — V-891 traced the billing path end to end: `cost_basis` of
+  `bundled_flat_per_turn`, `POSTED_BUNDLED_COST_CENTS = 10`, drawn against
+  `bundled_llm_monthly_cap_usd_cents` with a `BundledLlmBudgetExhaustedError` at the cap.
+
+**This is the clustering pattern V-876 predicted, on the largest surface yet.** Five status-page
+rows went stale together because that surface shipped as one arc; here an entire product layer did.
+The catalog's own priority list calls V-361 Tier-1 work, so a reader triaging scope sees the AI
+agent layer as unstarted while it is running, tested, billed and gated.
+
+**One row pinned, two not** — the same asymmetry as V-873 and V-877. The pinned row is why the
+suite noticed my edit at all; the other two would have drifted silently either way. All three are
+now bound, so the surface cannot half-revert, and each was mutation-proved independently rather than
+as a group.
+
+**Width-preserving cells again**, so no column reflow and no sibling-pin breakage — the V-874
+failure engineered out for the fourth time.
+
+**23 of 59 non-SHIPPED rows verified; 36 remain.** The basis line still reads V-293 and still must:
+23 checked is not 119 re-verified, and V-873's reasoning for not moving it holds unchanged.

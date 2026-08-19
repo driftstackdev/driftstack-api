@@ -158,7 +158,24 @@ describe('W561 /docs/architecture/v294-feature-catalog.md content parity', () =>
   it("Surface 10 AI agent + Surface 11 compliance framing pinned: '### Surface 10 — AI agent layer (planning file 06)' + '| Agent execution service shell             | DEFERRED              | V-361          | 16      | privacy + DPA Annex 3 + ToS' + '| BYOK + bundled billing models             | SHIPPED (markup-only) | tier3_explicit' + 'Note: full agent loop is post-v1 per planning file 00. V-361 ships the shell + scaffolding only. Most agent-loop features are OUT-OF-SCOPE for v1.' + '### Surface 11 — Compliance + security' + '| Data residency (EU-first)           | SHIPPED      | V-NNN' + '| GDPR DSAR support                   | DEFERRED     | V-360' + '| AUP enforcement (real)              | DEFERRED     | V-358' + '| Penetration testing                 | OUT-OF-SCOPE | year-2' — pinned so the Surface-10-AI-V-361-shell-16h + BYOK-markup-only-SHIPPED + post-v1-full-loop + Surface-11-compliance + EU-first-data-residency-SHIPPED + V-360-DSAR-DEFERRED + V-358-AUP + pentest-OUT-OF-SCOPE-year-2 commitment survives", () => {
     expect(body).toMatch(/### Surface 10 — AI agent layer \(planning file 06\)/);
     expect(body).toMatch(
-      /\| Agent execution service shell\s+\| DEFERRED\s+\| V-361\s+\| 16\s+\| privacy \+ DPA Annex 3 \+ ToS/,
+      /\| Agent execution service shell\s+\| SHIPPED\s+\| V-361\s+\|\s+—\s+\| privacy \+ DPA Annex 3 \+ ToS/,
+    );
+
+    // V-899 — the whole AI-agent surface was marked DEFERRED after it shipped:
+    // agent-executor / agent-runtime / agent-executor-control-plane exist and
+    // their confirmation gate is tested three ways (V-898), agent-sessions
+    // accepts `user_message` and feeds agent-decomposer-claude, and the
+    // bundled-LLM provider bills a flat per-turn cost against a monthly cap
+    // (V-891). Negative on the stale status, and the two siblings that were
+    // never pinned are bound here so the surface cannot half-revert.
+    expect(body, 'the deferred execution-shell row is gone').not.toMatch(
+      /\| Agent execution service shell\s+\| DEFERRED/,
+    );
+    expect(body, 'natural-language input reads as shipped').toMatch(
+      /\| Natural language task input\s+\| SHIPPED\s+\| V-361/,
+    );
+    expect(body, 'and the bundled-LLM provider row with it').toMatch(
+      /\| LLM integration \(bundled-LLM provider\)\s+\| SHIPPED\s+\| V-361/,
     );
     expect(body).toMatch(
       /\| BYOK \+ bundled billing models\s+\| SHIPPED \(markup-only\) \| tier3_explicit/,

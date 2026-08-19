@@ -452,10 +452,10 @@ Per founder direction "founder-facing trust first; admin tooling second; SDK fea
 
 | Feature                                   | Status                | Slice          | Tier-1h | Legal updates                 |
 | ----------------------------------------- | --------------------- | -------------- | ------- | ----------------------------- |
-| Agent execution service shell             | DEFERRED              | V-361          | 16      | privacy + DPA Annex 3 + ToS   |
-| Natural language task input               | DEFERRED              | V-361          | 4       | —                             |
+| Agent execution service shell             | SHIPPED               | V-361          | —       | privacy + DPA Annex 3 + ToS   |
+| Natural language task input               | SHIPPED               | V-361          | —       | —                             |
 | Perception-reason-action loop             | UNDISCOVERED          | V-NNN+         | 24      | —                             |
-| LLM integration (bundled-LLM provider)    | DEFERRED              | V-361          | 8       | DPA Annex 3 (already present) |
+| LLM integration (bundled-LLM provider)    | SHIPPED               | V-361          | —       | DPA Annex 3 (already present) |
 | Page representation (visual + structured) | UNDISCOVERED          | V-NNN+         | 16      | —                             |
 | Streaming agent thoughts (SSE)            | UNDISCOVERED          | V-NNN+         | 8       | —                             |
 | BYOK + bundled billing models             | SHIPPED (markup-only) | tier3_explicit | —       | —                             |
