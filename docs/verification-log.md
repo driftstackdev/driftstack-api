@@ -37663,3 +37663,40 @@ time a pin depended on typography rather than content (V-867 was line wrapping; 
 
 Mutation-proved three ways — restoring PENDING, removing the verbatim marker alone, and altering
 the preserved instruction — each failing independently. Document restored byte-identical.
+
+## V-872 — guarding the property that made the last six findings possible (2026-08-18)
+
+**Six consecutive findings had one cause.** V-866 (a P0 launch-blocker built months earlier),
+V-867 (a runbook telling operators to wait for a landed driver), V-868 (a checklist row calling a
+shipped feature deferred), V-869 (an ADR whose decision production does not run), V-870 (a
+checkpoint read as current state) and V-871 (an action item asking for an asset that shipped six
+weeks earlier). The code was right every time. The document describing it was not, and in no case
+did the reader have any way to know how much to distrust.
+
+**Measured before fixing.** Across `docs/**`, the documents asserting per-item status a reader acts
+on: **one carries a freshness marker, four do not.** The largest by far is
+`v294-feature-catalog.md` — **119 status markers, no date** — and V-868 already found one of its
+rows stale. `founder-action-queue.md` has 18 and says only "living document. Updated as items
+resolve", which is an intention rather than a record. (Five documents matched the heuristic; the
+count is not the finding and I have not treated it as one.)
+
+**The catalog's freshness signal is better than a date, and it was already there.** Its Source line
+records cross-referencing against the verification log at **V-293**. The log's highest entry is
+V-871 — so every classification is **578 entries behind its own stated basis**, and that is
+computable rather than a judgement call. Both documents now carry a note saying so where a reader
+meets it before the rows.
+
+**Guard, and the design that matters.** It reads the catalog's stated basis, reads the log's highest
+entry, and requires the staleness note only while the gap is wide. Re-verify the catalog, move the
+Source line forward, and the requirement lifts on its own. A note that had to be deleted by hand
+would simply become the next stale claim — which is the whole pathology being fixed.
+
+**The mutation proof caught a real flaw in the guard itself.** The first draft's sanity arm asserted
+the basis EQUALS 293. Moving the Source line forward — the exact remedy the guard exists to
+encourage — failed it. A guard that fights its own fix is the defect V-794 names, and it appeared
+here in the guard written to generalise six instances of that defect. Replaced with a range: the
+basis must be positive and may not claim entries the log does not contain.
+
+Proved four ways: removing the note while stale fails; removing it AFTER moving the basis forward
+**passes**, which is the self-lifting property; a basis citing unwritten entries fails; and the
+queue's missing-roll-up warning is required. Both documents restored byte-identical.

@@ -1,7 +1,15 @@
 # Founder action queue
 
 **Status:** living document. Updated as items resolve / new items surface.
-**Owner:** founder (action items themselves) + engineering (queue maintenance).
+
+> **⚠ V-872 — this queue carries no roll-up date, and at least one item outlived
+> its work by six weeks.** V-871 found the brand-asset entry asking for a
+> 1200×630 PNG that had shipped on 2026-07-07 and was already wired into
+> `BaseLayout.astro`. "Updated as items resolve" is an intention, not a record:
+> there is no marker here to check an item's freshness against, which is exactly
+> how a resolved item stays unmarked indefinitely. Verify an item against source
+> before spending time on it.
+> **Owner:** founder (action items themselves) + engineering (queue maintenance).
 
 This is the **outside-engineering** action queue — things only the
 founder can do because they require credentials, billing access, legal

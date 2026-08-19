@@ -4,6 +4,26 @@
 
 **Purpose**: Single load-bearing scope artifact for the V-295+ multi-week production-ready arc. Founder direction 2026-05-07 retired the deferred-post-launch pattern; every previously-deferred feature ships in v1 unless V-294 surfaces it as legitimately out-of-scope.
 
+> **⚠ V-872 — every classification below was made against a verification log that
+> has since advanced by hundreds of entries.**
+>
+> The Source line above states the basis: cross-referenced against
+> `docs/verification-log.md` at **V-293**. That is the freshness marker this
+> document has, and it is a better one than a date because it is checkable — the
+> log's highest entry when this note was written was V-871, so the classifications
+> are 578 entries behind their own stated basis.
+>
+> This is not a claim that the table is wrong. It is a claim that a row here is
+> evidence of what was true at V-293 and nothing more, and that the difference
+> matters: V-868 found the Tauri deep-link row marked DEFERRED after V-328 shipped
+> it, and corrected that row alone. The other rows have not been re-verified.
+>
+> **Check a row against source before acting on it.** Six findings in this arc
+> (V-866 through V-871) were status documents asserting work as outstanding that
+> had shipped — a P0 blocker, a runbook step, a checklist row, an ADR decision, a
+> checkpoint's blocked list and an action item. The code was right in every case;
+> the document describing it was not.
+
 ---
 
 ## Status taxonomy
