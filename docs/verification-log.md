@@ -37987,3 +37987,42 @@ still not a grep.
 
 Both rows corrected with width-preserving cells so the table does not reflow. Staleness note still
 required after the edit, basis line still V-293. **20 of 59 verified; 39 remain.**
+
+## V-881 — re-checking my own negatives after V-880, and one thing found on the way (2026-08-18)
+
+**V-880's error had a defined blast radius, so I measured it rather than assuming.** That entry
+found I had searched for a literal string where the question was about a capability, producing two
+false negatives. Every OTHER row I dismissed this arc was dismissed the same way — a grep returning
+empty — so each was a candidate for the same mistake. Re-ran all three with capability-shaped
+searches instead of string-shaped ones.
+
+**All three dismissals hold.**
+
+- **Admin IP allowlist** (V-877). Searching for the concept rather than `ADMIN_IP` surfaces exactly
+  one "allowlist" in the middleware, and it is a lowercased _email_ allowlist for a staff bump. Not
+  an IP gate. Row correct.
+- **GDPR DSAR endpoint** (V-875). Nothing under erasure, subject-access, personal-data or
+  account-export either. Row correct.
+- **Separate admin auth + mandatory TOTP** (V-877). This one nearly turned: `account-mfa.ts` exists,
+  so TOTP is plainly built somewhere. But the row names two specific things — admin auth _separate_
+  from customer auth, and TOTP _mandatory_ for admins. `auth.ts` shows the admin scope appended to
+  the same synthetic api-key, so the auth path is shared, not separate. And the freshness gate is
+  applied in exactly one file — `account-mfa.ts` itself. Row correct.
+
+**So V-880's error was contained to the two SDK rows.** Worth establishing, because "I made this
+mistake once" and "this mistake is throughout my work" call for very different responses, and only
+measurement distinguishes them.
+
+**Found while checking, and recorded rather than acted on:** `requireMfaFresh` is a built middleware
+decorator that **no admin route applies**. Every `/v1/admin/*` endpoint — including
+`owner/secrets/{name}/reveal`, `accounts/{id}/delete` and `api-keys/{id}/revoke` — is gated on the
+`driftstack_internal_admin` scope alone, with no step-up or freshness requirement, while the gate
+that would provide one already exists and is wired only to the MFA-management routes.
+
+That is not a defect against any document — the catalog row records it as DEFERRED and is right, and
+V-333 is the tracked work. It is worth naming because it sits beside V-861's finding that admin
+reads write no audit row: the privileged surface has neither step-up auth nor read auditing, and
+both mechanisms are built. Whether to apply them is a security decision, and applying an MFA gate to
+live admin routes is not something to do quietly at the end of a sweep.
+
+No source change. Three negatives re-verified, one observation recorded.
