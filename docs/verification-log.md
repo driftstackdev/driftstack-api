@@ -42474,3 +42474,40 @@ mutation missed".
 `npm run typecheck` exit 0. `EXPECTED_TEST_FILES` 2924 → 2925, `_ALL` 3090 → 3091, for the one file
 added. Run against a second disposable database (`driftstack_tenant_v995`) so it could not contend
 with a coverage run in flight on the first.
+
+## V-996 — the last two cold account-scoped deletes, and the one bounded by nothing else (2026-08-19)
+
+Seventh and eighth of the tenant-scope sweep, closing the DELETE half of V-993's list of 19
+account-scoped `src/db` functions that no integration test executes.
+
+**`DrizzleRateLimitOverridesRepo.clear(accountId, bucketKey)` is the one worth reading twice.** Unlike
+every other member of this sweep it is **not keyed by id**: its WHERE is `and(eq(accountId),
+eq(bucketKey))`. So the account predicate is not protecting one customer's row from another — it is
+the only thing bounding the statement at all. Delete it and "clear my override for
+`sessions:create`" becomes "delete every account's override for `sessions:create`", returning `true`
+to the caller while every affected customer silently drops to their tier default. That is V-994's MFA
+shape again: a mass delete wearing a single-tenant signature. Neither of the two real-Postgres
+rate-limit-override files calls `.clear(`.
+
+`DrizzleProfilesRepo.purgeTrashed({ id, accountId })` carries two predicates in one WHERE — the
+account, and `isNotNull(deletedAt)`, which is what stops a purge reaching a LIVE profile. The method
+appears in the corpus only as a fake returning `false`, so neither was driven. Both are pinned here,
+with a positive control so the refusal arms cannot pass against a purge that purges nothing.
+
+Three mutations, each red by name: the account predicate (stranger's trashed profile survives → 0),
+the trashed-only predicate (purge reaches a live profile → "expected true to be false"), and
+`clear`'s account predicate (stranger's override wiped → "expected 0 to be 1").
+
+**V-995's lesson applied rather than re-learned.** The purgeTrashed account predicate appears
+**fifteen times** in `profiles-repo.ts`; a replace-first-occurrence would have neutralised an
+unrelated read and left the arms green, which is exactly how V-995's first attempt fooled me. This
+mutation slices the `purgeTrashed` function body first, asserts the slice contains `.delete(profiles)`,
+and only then edits — and for `clear`, asserts the anchor count is exactly 1 before touching it.
+
+**One self-inflicted red, attributed before investigating.** The full suite run for V-995 came back
+with a single failure: `verify-suite`'s on-disk-count pin, "expected 2925 to be 2926". I created this
+batch's test file while that suite was running, so the count moved underneath it. Same class as the
+mtime hazard recorded earlier, in its file-addition form: do not add or edit test files while a suite
+is in flight, because the failure looks like someone else's.
+
+`npm run typecheck` exit 0. `EXPECTED_TEST_FILES` 2925 → 2926, `_ALL` 3091 → 3092.
