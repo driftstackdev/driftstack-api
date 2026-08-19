@@ -118,6 +118,20 @@ describe('W547.B /docs/security-audit-2026-05-06.md content parity', () => {
     expect(body, 'P1-002 records that its documentation action is complete').toMatch(
       /\*\*Status \(V-884, 2026-08-18\): action complete\.\*\*/,
     );
+
+    // V-885 — the P2 table and the Resume-points list were both unpinned, which
+    // is why they drifted. P2-001 was closed by the same V-247 change that
+    // closed P0-001, and every Resume-points item has shipped. Asserted
+    // positively; the planned lists themselves stay as the record.
+    expect(body, 'P2-001 is recorded as closed by the P0 fix').toMatch(
+      /\*\*Status \(V-885, 2026-08-18\): P2-001 is closed; the rest stand\.\*\*/,
+    );
+    expect(body, 'and the resume list says its items shipped').toMatch(
+      /\*\*Status \(V-885, 2026-08-18\): every item on this list has shipped\.\*\*/,
+    );
+    expect(body, 'while the P2 group is still named as the open remainder').toMatch(
+      /The `P2-\*` group is the only part still open/,
+    );
   });
 
   it("10-verified-clean inventory framing pinned: '## Verified clean (explicitly checked)' + '**Scope-check enforcement**' + '**Plaintext credential leakage**' + '**Stripe webhook idempotency** — `processed_stripe_events` PK constraint resolves the check-then-insert race; replay protection via 5-minute timestamp tolerance + HMAC-SHA256 constant-time compare.' + '**Audit log injection**' + '**Account-scope leakage** — every resource lookup uses `(resourceId, accountId)` tuple in the repo layer; cross-account access returns null (treated as 404).' + '**Web session token security** — opaque sha256-hashed tokens (D-028); Bearer auth via header (not cookies → CSRF-immune); proper TTL + revocation.' + '**CSRF protection**' + '**User enumeration prevention** — auth-flow responses are shape-stable for unknown emails (always returns `{sent: true, ...}`).' + '**Cache version invalidation correctness**' + '**Multi-customer Stripe webhook events**' — pinned so the 10-verified-clean inventory + Stripe-PK-idempotency + 5-min-timestamp-tolerance + HMAC-SHA256 constant-time + (resourceId,accountId)-tuple + D-028 web-session-opaque-sha256 + CSRF-immune-Bearer-header commitment survives", () => {

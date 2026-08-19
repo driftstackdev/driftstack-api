@@ -110,6 +110,14 @@ alias satisfies that scope. Cloudflare Access remains defense in depth.
 | V-246-P2-004 | Stripe API error logs include type+code only (could include more context for debugging)     |
 | V-246-P2-005 | No documented audit log retention/pruning policy (V-163 archive is the path; needs cadence) |
 
+**Status (V-885, 2026-08-18): P2-001 is closed; the rest stand.** The V-247 fix
+that closed P0-001 is exactly this item's subject — `auth-cache.ts` now keeps a
+per-key version counter (`auth:keyid:<id>:v`) checked on every `get()`, so cache
+invalidation no longer relies on `keyPrefix` randomness. P2-002 (no
+customer-facing note on revocation lag), P2-003, P2-004 and P2-005 were checked
+and remain open; P2-005's policy is written in ADR-006, but the monthly sweep it
+specifies has never run (V-865), so the cadence it asks for still does not exist.
+
 All P2s are operational/documentation rather than architectural. None blocking launch.
 
 ## Verified clean (explicitly checked)
@@ -127,9 +135,12 @@ All P2s are operational/documentation rather than architectural. None blocking l
 
 ## Resume points
 
-- V-247: implement V-246-P0-001 fix (key-version cache invalidation).
-- V-248: implement V-246-P1-001 fix (Stripe URL allowlist).
-- V-NNN post-launch: V-246-P1-002 (ops runbook docs), V-246-P1-003 (scope refactor), V-246-P1-004 (IP rate limiting), `V-246-P2-*` (operational docs and ops procedures).
+**Status (V-885, 2026-08-18): every item on this list has shipped.** Kept as the
+record of what was planned; do not read it as outstanding work.
+
+- V-247: implement V-246-P0-001 fix (key-version cache invalidation). — **done**, per-key version counter in `auth-cache.ts` (V-883).
+- V-248: implement V-246-P1-001 fix (Stripe URL allowlist). — **done**, `validateReturnUrl()` in `billing.ts` (V-884).
+- V-NNN post-launch: V-246-P1-002 (ops runbook docs), V-246-P1-003 (scope refactor), V-246-P1-004 (IP rate limiting), `V-246-P2-*` (operational docs and ops procedures). — P1-002 **done** (runbook PII section), P1-003 **done** (audit's own V616 note), P1-004 **done** (`AUTH_IP_LIMITS` across nine route modules). The `P2-*` group is the only part still open, and P2-001 of it has since closed.
 
 Audit is the load-bearing artifact; fixes are mechanical from here. Founder reviews this doc on wake to validate the prioritization (e.g. agree V-246-P1-003 is genuinely deferrable given Cloudflare Access mitigation).
 

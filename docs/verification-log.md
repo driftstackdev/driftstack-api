@@ -38130,3 +38130,37 @@ undone, because changing what production logs is a decision rather than a sweep 
 found. Pinned positively for the same reason, and mutation-proved three ways — each status stripped
 independently fails, and altering the original P1-001 finding text still fails, so record and
 resolution stay independently bound.
+
+## V-885 — the audit's "what to do next" list is entirely done (2026-08-18)
+
+**Finishing the security-audit sweep at the two sections V-884 named.**
+
+**Resume points — every item has shipped.** The list reads "V-247: implement the P0-001 fix",
+"V-248: implement the P1-001 fix", then P1-002, P1-003 and P1-004 as post-launch work. All five are
+closed, three of them verified in the last two entries: the key-version counter (V-883),
+`validateReturnUrl()` (V-884), the runbook PII section (V-884), `AUTH_IP_LIMITS` across nine route
+modules (V-884), and P1-003 by the audit's own V616 note. This is the V-871 shape on a security
+document — a section whose entire purpose is telling a reader what to do next, where there is
+nothing left on it.
+
+**P2-001 was closed by the P0 fix, and nobody noticed because they are in different sections.**
+"Cache invalidation doesn't track key version (relies on unique keyPrefix randomness)" is precisely
+what `auth:keyid:<id>:v` fixed. One change closed a P0 and a P2 filed separately; the P0 got its
+note in V-883 and the P2 sat two headings below, still listed.
+
+**Four P2s checked and left open, deliberately.** P2-002 has no customer-facing note about
+revocation lag anywhere in the customer docs. P2-003 and P2-004 are unchanged. P2-005 is the
+interesting one: it asks for a documented retention/pruning policy with a cadence, and the policy
+exists in ADR-006 — but V-865 established that the monthly sweep it specifies has never run. So the
+document it asked for was written and the cadence it actually wanted still does not exist. Marking
+it closed on the strength of the ADR alone would have been exactly the shallow read this arc keeps
+finding.
+
+**Both sections were unpinned**, which is why they drifted while the individually-pinned findings
+above them were maintained. Now pinned, and the mutation proof includes an over-claim case: writing
+"everything is closed" in place of "the `P2-*` group is the only part still open" fails, so the pin
+binds the honest remainder rather than just the good news.
+
+**Security-audit thread closed.** Three entries (V-883, V-884, V-885), four resolved findings given
+their status, one stale ops-runbook mitigation corrected, and five items verified as genuinely
+still open. Every finding in the document now carries either a resolution or a confirmed-open check.
