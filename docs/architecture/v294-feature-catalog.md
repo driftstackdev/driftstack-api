@@ -397,7 +397,7 @@ Per founder direction "founder-facing trust first; admin tooling second; SDK fea
 | Revenue dashboard                                 | UNDISCOVERED | V-326         | 8       | —             |
 | Detection vendor monitoring                       | UNDISCOVERED | V-327         | 8       | —             |
 | Mac fleet management UI                           | AGENT-1      | n/a           | n/a     | —             |
-| Incident management UI                            | DEFERRED     | V-318         | 8       | —             |
+| Incident management UI                            | SHIPPED      | V-338         | —       | —             |
 | Postmortem generation                             | DEFERRED     | V-318         | 4       | —             |
 | Feature flags UI                                  | UNDISCOVERED | V-328         | 6       | —             |
 | Plan configuration UI                             | UNDISCOVERED | V-329         | 4       | ToS           |

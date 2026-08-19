@@ -37830,3 +37830,39 @@ remains. **A whole surface shipping is what makes rows stale in batches** — th
 45 remaining rows are approached that way rather than one at a time.
 
 No source change: every row checked this pass is accurate, and saying so is the finding.
+
+## V-877 — the surface instrument, applied: admin panel (2026-08-18)
+
+**V-876 said to stop grinding rows and ask whether a SURFACE shipped.** This is that, on Surface 7
+(admin panel), chosen because it shows 6 open against 6 shipped while the panel demonstrably runs a
+large control plane — 35 admin GET routes and a full set of mutations were enumerated in V-861.
+
+**One row stale: Incident management UI.** `apps/admin-panel/src/pages/incidents/index.astro` ships
+a create form and PUT-based updates, described in the page itself as "Manually post and update
+status-page incidents", backed by `/v1/admin/incidents` and its `updates` / `resolve` routes.
+
+**And it confirms V-876's prediction about WHY rows go stale.** The row cites V-318; the page header
+says V-338. The feature landed under a different V-number than the row was written against, so
+nothing that tracked V-318 would ever have marked this row done. That is the second failure mode —
+the first being a whole surface shipping at once, as the status-page rows did.
+
+**Four checked and left alone, which is the more important half:**
+
+- **IP allowlist enforcement (admin)** — no `ADMIN_IP` / `ipAllowlist` anywhere. My first grep hit
+  `middleware/auth.ts` and `lib/app.ts` on the bare word "allowlist" and looked like a find; the
+  narrow search returned nothing. A broad grep matching a common word is not evidence.
+- **`/audit-log filterable + export`** — filters exist and deep-link via `admin_id`, but the page's
+  own comment says the result filter is client-side "since the endpoint doesn't accept a result
+  filter today". Partial by its own account, which is what IN-FLIGHT means. Left.
+- **Postmortem generation** — same V-318 as the corrected row, and an easy assumption to carry over.
+  The incidents page posts and updates incidents; it does not generate postmortems. Different
+  feature, still open.
+- **Separate admin auth + mandatory TOTP** — no admin-auth route module exists.
+
+**Width-preserving edit.** `SHIPPED     ` and `V-338        ` are padded to the exact widths of the
+cells they replace, so the table does not reflow and no sibling pin can break — the V-874 failure
+designed out rather than repaired afterwards.
+
+**The row was unpinned**, so instead of a pin proof I proved the thing that matters here: removing
+the V-872 staleness note still fails, i.e. correcting a row did not quietly satisfy the freshness
+requirement. The basis line still reads V-293. **15 of 59 verified; 44 remain.**
