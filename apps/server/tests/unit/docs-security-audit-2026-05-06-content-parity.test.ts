@@ -75,6 +75,19 @@ describe('W547.B /docs/security-audit-2026-05-06.md content parity', () => {
       /Alternative considered but rejected: Option A \(re-verify `revokedAt` from DB on every cache hit\) — adds a DB query per cache hit, defeats the cache\./,
     );
     expect(body).toMatch(/\*\*Targeted at V-247\.\*\*/);
+
+    // V-883 — the P0 above was closed by V-247 and sat under "P0 —
+    // launch-blocking" without the resolution note this document uses
+    // elsewhere (see the V616 note on P1-003). Asserted positively rather than
+    // by banning the P0 heading: the finding text is an audit record and stays,
+    // so what must be present is the status beside it. A resolved P0 does not
+    // un-resolve, so this pin cannot expire the way V-794 warns about.
+    expect(body, 'the P0 carries its resolution status').toMatch(
+      /\*\*Status \(V-883, 2026-08-18\): resolved in application code\.\*\*/,
+    );
+    expect(body, 'and names the mechanism that closed it').toMatch(
+      /per-key version counter\s*\n?\s*\(`auth:keyid:<id>:v`\), bumped by `invalidateKey\(\)`/,
+    );
   });
 
   it("P1-001 open-redirect Stripe URL allowlist framing pinned: '### V-246-P1-001 — Open redirect in Stripe checkout return URLs' + '**File:** `apps/server/src/routes/billing.ts` lines 56–57, 76–77.' + '`POST /v1/billing/checkout-session` and `POST /v1/billing/trial-pack` accept `success_url` + `cancel_url` from the request body and pass them straight to Stripe's Checkout API. A malicious customer (or someone with a stolen API key) could craft a checkout link with `success_url: https://attacker.com/phishing`' + '**Fix shape:** validate `success_url` + `cancel_url` against a configured allowlist of origins (default: `https://app.driftstack.dev`). Customer needing custom URLs gets a clear error pointing at \"contact support\" for enterprise allowlisting.' + '**Targeted at V-248.**' — pinned so the P1-001 + billing.ts-lines-56-57+76-77 + Stripe-Checkout-success_url-cancel_url-pass-through + attacker.com/phishing-example + allowlist-default-app.driftstack.dev + enterprise-allowlist-support-path + V-248-targeting commitment survives", () => {

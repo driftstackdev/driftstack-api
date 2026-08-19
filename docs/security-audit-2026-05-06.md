@@ -32,6 +32,15 @@ Alternative considered but rejected: Option A (re-verify `revokedAt` from DB on 
 
 **Targeted at V-247.**
 
+**Status (V-883, 2026-08-18): resolved in application code.** The selected
+Option B shipped. `services/auth-cache.ts` defines a per-key version counter
+(`auth:keyid:<id>:v`), bumped by `invalidateKey()` and checked by `get()`, so an
+in-flight slow-path `set()` that captured the pre-revoke version produces an
+entry the next `get()` detects as stale. The source comment carries this
+finding's own id, and `services-auth-cache-content-parity` pins it. This entry
+sat under "P0 — launch-blocking" after the fix landed; the finding text above is
+left intact because an audit records what was found, not what is true today.
+
 ## P1 — launch-recommended
 
 ### V-246-P1-001 — Open redirect in Stripe checkout return URLs

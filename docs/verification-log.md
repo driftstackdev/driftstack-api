@@ -38058,3 +38058,40 @@ describe one surface: the most privileged endpoints have neither step-up auth no
 both mechanisms are already built and working elsewhere.
 
 No source change. One population measured, empty; one earlier phrasing made precise.
+
+## V-883 — a fixed P0 still listed as launch-blocking in the security audit (2026-08-18)
+
+**Followed from V-882, and this one is not a decision — it is a defect.** V-881/V-882 established
+that the admin surface has neither step-up MFA nor read auditing. The obvious next question was
+whether any security document CLAIMS protections that do not exist. It does not — the audit's only
+MFA mention is the pino redact list, which is accurate. But checking that turned up the inverse.
+
+**`docs/security-audit-2026-05-06.md` lists `V-246-P0-001` under "## P0 — launch-blocking".** The
+finding is an API-key revocation race: the DB write lands before the auth-cache invalidation, so a
+concurrent request can authenticate a revoked key from a stale entry. The entry ends "**Targeted at
+V-247.**" and nothing more.
+
+**It shipped.** `services/auth-cache.ts` defines `auth:keyid:<id>:v`, a per-key version counter
+bumped by `invalidateKey()` and checked by `get()`, which is precisely the "Option B (key-version
+counter)" the audit selected over the rejected Option A. The source comment carries this finding's
+own id — "V-247 / V-246-P0-001" — and `services-auth-cache-content-parity` pins that comment.
+
+**So the same test suite pins the closure while the audit calls it launch-blocking.** Neither
+document is wrong about the world; they were never asked about each other. That is the sharpest
+version of this arc's pattern, because the stakes differ from a stale catalog row: someone reading
+the P0 section for launch readiness sees an unfixed authentication-bypass window and either
+re-implements a shipped fix or reports a live vulnerability that is closed.
+
+**The document already knew how to do this.** Its P1-003 entry carries "**Status (V616,
+2026-07-13): resolved in application code.**" The convention exists; this P0 simply never got one.
+Added in the same form, with the finding text left intact — an audit records what was found, not
+what is true today, and rewriting the finding would destroy the record while fixing the status.
+
+**Pinned positively rather than by banning the P0 heading**, for that reason: what must be present
+is the status beside the finding, not the absence of the finding. A resolved P0 does not un-resolve,
+so this pin cannot expire in the way V-794 warns about — unlike the one it caught me writing in
+V-865.
+
+Mutation-proved three ways: stripping the status fails, keeping the status but dropping the
+mechanism fails, and altering the ORIGINAL finding text still fails — so the audit record and its
+resolution are independently bound. Document restored byte-identical.
