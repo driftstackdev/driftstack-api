@@ -140,7 +140,6 @@ def _is_retry_safe(method: str, headers: dict[str, str]) -> bool:
     )
 
 
-
 _REDACTED_HEADERS = ("authorization", "x-driftstack-gui-control-key", "x-byok-anthropic-api-key")
 
 
@@ -174,6 +173,7 @@ def _scrub_chained_request(err: BaseException) -> BaseException:
         except Exception:  # noqa: BLE001 - never let scrubbing mask the real error
             pass
     return err
+
 
 def _build_headers(
     api_key: str, has_body: bool, effective_account: str | None = None

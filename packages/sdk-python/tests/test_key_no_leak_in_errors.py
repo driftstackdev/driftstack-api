@@ -60,8 +60,9 @@ def test_key_absent_from_network_failure_error() -> None:
     _assert_no_key(ei.value)
 
 
-def _reachable_paths(obj: object, secret: str, seen: set[int] | None = None,
-                     path: str = "err", depth: int = 0) -> list[str]:
+def _reachable_paths(
+    obj: object, secret: str, seen: set[int] | None = None, path: str = "err", depth: int = 0
+) -> list[str]:
     """Every attribute path from ``obj`` at which ``secret`` is reachable.
 
     The arms above check ``str()`` and ``repr()``. That is the wrong surface for
