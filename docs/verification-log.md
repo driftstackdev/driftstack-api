@@ -41726,3 +41726,34 @@ probe — and dropping it from the all-optional one still does.
 `parsed.data`, which would have made every report empty — the module's docstring warns about exactly that,
 and it is the third property of this mechanism I have now checked across every site rather than the ones I
 touched.
+
+## V-978 — re-measuring to check my own claims, and the numbers reconcile exactly
+
+**Given four self-inflicted errors this session, the arms I added deserved the same scrutiny as the code.**
+A coverage run at HEAD, intersected column-precisely with every throw site, answers whether each closure
+actually made its target execute — rather than my believing it because the mutation proof went red.
+
+**Every one did.** `mfa.ts` already-enrolled refusal **2 hits** (V-963); the incident-reopen state guard
+**1** (V-967); the rate-limit fail-closed branch **1** (V-968); `profiles.ts` and `recipes.ts` pagination
+refusals **4 each** (V-975); both admin inverted-window copies **2 each** (V-971).
+
+**The population moved 300 → 292, and the delta is exactly the eight sites I closed** — V-963, V-966, V-967
+and V-968 one apiece, V-975 two, V-971 two. Per class it also reconciles: `ValidationError` 15 → 11 (the
+four I closed), `BadRequestError` 24 → 22 (the two admin copies), `NotFoundError` unchanged at 17, which is
+right because V-974 triaged that class as residual and added no arms.
+
+**The verifier I wrote for this was itself wrong, and it is the fifth instance.** It reported V-967 as
+**0 hits**. Its throw-locating logic searched forward from the message text, and that refusal's
+`throw new ValidationError({` sits on the line _before_ the interpolated message, so it measured a
+different statement 17 lines away. Checking the site directly — `lastIndexOf('throw new ValidationError')`
+from the message, then the column-precise lookup — gives **1 hit**. Had I trusted the script I would have
+reported a closure as having silently failed to take.
+
+**What that keeps proving:** every one of these slips has been a locator or a window standing in for reading
+the construct itself, and every one surfaced only because a second, differently-shaped check disagreed with
+the first. The reconciliation above is worth more than any single figure in it, because two independent
+counts agreeing is a much stronger statement than either alone.
+
+**Remaining: 292, of which 191 are plain `Error`** — the defensive-invariant class V-962 separated out.
+The typed remainder is 101, and V-974's caveat still governs how it should be read: a cold branch may be a
+second layer proven by a mutation ledger rather than an untested one.
