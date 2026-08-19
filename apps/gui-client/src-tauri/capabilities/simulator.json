@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "simulator",
-  "description": "Capabilities for the floating-iPhone simulator windows (label simulator-*): drag the frame to move, focus, close, minimize, resize (rotate), and render the live session webview. Deliberately minimal — no fs/shell/store; the device window only needs windowing + webview + events.",
+  "description": "Capabilities for the floating-iPhone simulator windows (label simulator-*): drag the frame to move, focus, close, minimize, resize (rotate), render the live session webview, and persist the handed-off API base URL plus session recordings. This grant is NOT minimal any more. The earlier description advertised windowing, webview and events only, and that had quietly stopped being true: SimulatorWindow calls persistBaseUrl (plugin-store) on mount, and when that call is denied authedFetch falls back to localhost:3000 and every control call fails. Nothing caught it because these windows had been deleted; they exist again on Windows and Linux, where there is no separate Simulator app. The grant now mirrors EXACTLY what simulator-app.json already gives the separate app's sim-* windows -- the same view, so the same needs -- and nothing beyond them. The account API key is NOT reachable from here and widening this file cannot change that: secret_save/secret_load/secret_delete are gated in Rust by secret_command_caller_allowed -> is_main_gui_command_caller, which requires the window label to be exactly \"main\".",
   "windows": ["simulator-*"],
   "permissions": [
     "core:window:default",
@@ -12,6 +12,25 @@
     "core:window:allow-set-size",
     "core:window:allow-set-always-on-top",
     "core:webview:default",
-    "core:event:default"
+    "core:event:default",
+    "store:default",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        {
+          "path": "$APPDATA/recordings/**"
+        },
+        {
+          "path": "$DOWNLOAD/**"
+        }
+      ]
+    },
+    "fs:allow-read-text-file",
+    "fs:allow-write-text-file",
+    "fs:allow-write-file",
+    "fs:allow-remove",
+    "fs:allow-mkdir",
+    "fs:allow-exists",
+    "fs:allow-read-dir"
   ]
 }

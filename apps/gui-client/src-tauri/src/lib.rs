@@ -439,6 +439,7 @@ pub fn run() {
             proxy_test,
             proxy_exit_probe,
             endpoint_resolve,
+            simulator_app_supported,
             launch_simulator,
             set_dock_tile,
             reset_dock_tile,
@@ -1142,6 +1143,24 @@ fn ping() -> &'static str {
 /// label and a unique non-secret handoff id; the Simulator reads and unlinks
 /// that exact file before creating/updating its WebView. Base64 must never be
 /// treated as process-list protection.
+/// Whether THIS BUILD's platform ships the separate "Driftstack Simulator" app.
+///
+/// macOS installs it as its own .app bundle with its own Dock icon, and
+/// `launch_simulator` below spawns it via `open`. No other platform has that
+/// bundle — the non-macOS branch of `launch_simulator` returns an error — so on
+/// Windows and Linux the GUI has to open the simulator as an in-process window
+/// instead. Without this the front end cannot tell "the app is missing" (worth
+/// an error) from "this platform has no such app" (worth a different window),
+/// and a Windows user simply cannot launch a profile at all.
+///
+/// A compile-time constant rather than a runtime probe: the question is "was
+/// this binary built for the platform that has the separate app", which is
+/// exactly what `launch_simulator`'s own `cfg` gate answers.
+#[tauri::command]
+fn simulator_app_supported() -> bool {
+    cfg!(target_os = "macos")
+}
+
 #[tauri::command]
 fn launch_simulator(
     window: tauri::WebviewWindow,

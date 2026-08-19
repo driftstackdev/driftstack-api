@@ -11,11 +11,24 @@
 // session label in argv. This pins that no secondary secret-bearing command is
 // reintroduced.
 //
-// There is NO in-app webview fallback: when `launch_simulator` rejects the
-// opener returns `opened:false` with a reason for the caller to surface (the
+// On macOS there is NO in-app webview fallback: when `launch_simulator` rejects
+// the opener returns `opened:false` with a reason for the caller to surface (the
 // inline window read as embedded in the main GUI + a silent fallback caused the
 // founder's multi-hour "still the same window" saga). This file pins that
-// failure contract so the fallback can't be reintroduced.
+// failure contract so the fallback can't be reintroduced THERE.
+//
+// ⚠️ That contract is macOS-only, and this header used to state it as though it
+// were universal. It is not: no other platform ships the separate app, so
+// `launch_simulator` answers Err("the separate simulator app is macOS-only") and
+// an unconditional no-fallback rule means a Windows or Linux user cannot launch
+// a profile at all. The in-process window is restored for those platforms and
+// pinned by `the-simulator-opens-on-a-platform-with-no-separate-app`.
+//
+// This suite still asserts the macOS side, and its throwing WebviewWindow mock
+// still guards it, because the default `invoke` mock below resolves `undefined`
+// for `simulator_app_supported` — and only an explicit `false` selects the
+// in-process path. So every case here runs the separate-app branch, which is
+// what these arms are about.
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { LiveKitInfo } from '@driftstack/sdk';

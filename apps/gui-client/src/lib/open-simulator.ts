@@ -1,14 +1,29 @@
 // Opens the floating-iPhone simulator window (founder 2026-06-11: a standalone,
 // borderless, transparent, draggable iPhone — exactly like the Xcode Simulator).
 //
-// Launches the SEPARATE "Driftstack Simulator" app (its own Dock icon) via the
-// `launch_simulator` Tauri command, handing off the LiveKit join info +
+// ON macOS: launches the SEPARATE "Driftstack Simulator" app (its own Dock icon)
+// via the `launch_simulator` Tauri command, handing off the LiveKit join info +
 // per-session control key. The separate app renders SimulatorWindow at
-// `?window=simulator` and keeps one window per session (multi-window). It is the
-// ONLY way the simulator opens — there is no in-app webview fallback (the inline
-// window read as embedded in the main GUI and the separate app is reliably
-// installed now). A launch failure returns `opened:false` with a reason so the
-// caller surfaces a user-facing error instead of silently degrading.
+// `?window=simulator` and keeps one window per session (multi-window). There is
+// no in-app fallback there — the inline window read as embedded in the main GUI
+// and the separate app is reliably installed — so a launch failure returns
+// `opened:false` with a reason and the caller shows a user-facing error.
+//
+// ON EVERY OTHER PLATFORM there IS no separate app. `launch_simulator`'s
+// `#[cfg(not(target_os = "macos"))]` branch answers
+// `Err("the separate simulator app is macOS-only")`, and since 0b1fe535f removed
+// the in-process fallback that error had nowhere to go: launching a profile —
+// the product's central action — failed outright on Windows and Linux. That
+// commit's reasoning ("the separate app is reliably installed now") was true of
+// macOS only, and the branch it deleted was the one every other platform used;
+// the code it removed said so in as many words: "not installed / non-macOS /
+// spawn failed -> in-process window fallback".
+//
+// So the in-process window is restored for non-macOS ONLY, selected by
+// `simulator_app_supported` — a compile-time constant from the Rust side rather
+// than a guess from the error string. macOS behaviour is unchanged, deliberately:
+// the founder-hit "still in the same window as the main GUI" saga is why it has
+// no fallback, and that reasoning still holds where the separate app exists.
 
 import type { LiveKitInfo } from '@driftstack/sdk';
 import type { DriftstackClient } from './client';
@@ -56,6 +71,102 @@ export interface OpenSimulatorResult {
 /** Open (or focus) the floating-iPhone window for a session. `opened:false`
  *  carries a human-readable `reason` so callers can SHOW why the launch failed
  *  (there is no in-app fallback — the caller surfaces the error to the user). */
+/** Phone-sized window. The video is object-contained, so exact aspect is not
+ *  load-bearing; the extra 34px is the in-content toolbar a borderless window
+ *  needs in place of OS chrome. */
+const SIM_WIDTH = 330;
+const SIM_HEIGHT = 684 + 34;
+
+/**
+ * Open the simulator as an in-process Tauri window.
+ *
+ * Used ONLY where no separate Simulator app exists (Windows, Linux). Restored
+ * from 0b1fe535f^, which is where it was deleted for macOS-specific reasons.
+ * Every option below is carried over from that implementation rather than
+ * re-derived, because each one encodes a founder-reported behaviour: spawning
+ * BESIDE the main window (a centred borderless window reads as embedded),
+ * non-maximizable (the aspect-locked video just letterboxes), borderless +
+ * transparent (the iPhone IS the window), and present in the taskbar.
+ */
+async function openInProcessSimulatorWindow(
+  sessionId: string,
+  query: string,
+  deviceName: string | undefined,
+  profileName: string | undefined,
+): Promise<OpenSimulatorResult> {
+  const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+  // Stable, filesystem-safe label per session — one window per session, so a
+  // second launch of the same session focuses rather than duplicating.
+  const label = `simulator-${sessionId}`;
+
+  const existing = await WebviewWindow.getByLabel(label).catch(() => null);
+  if (existing !== null) {
+    await existing.setFocus().catch(() => undefined);
+    return { opened: true };
+  }
+
+  // Beside the main window, not centred over it. Best-effort: fall back to
+  // centring only when the main window's geometry is unreadable.
+  let position: { x: number; y: number } | null = null;
+  try {
+    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+    const main = getCurrentWebviewWindow();
+    const pos = await main.outerPosition();
+    const size = await main.outerSize();
+    const factor = await main.scaleFactor();
+    position = {
+      x: Math.round(pos.x / factor + size.width / factor + 16),
+      y: Math.round(pos.y / factor),
+    };
+  } catch {
+    position = null;
+  }
+
+  const buildWindow = (): InstanceType<typeof WebviewWindow> =>
+    new WebviewWindow(label, {
+      url: `index.html?${query}`,
+      title: `${deviceName ?? 'iPhone'}${profileName !== undefined && profileName !== '' ? ` \u2014 ${profileName}` : ''}`,
+      width: SIM_WIDTH,
+      height: SIM_HEIGHT,
+      resizable: true,
+      maximizable: false,
+      decorations: false,
+      transparent: true,
+      alwaysOnTop: false,
+      minimizable: true,
+      skipTaskbar: false,
+      ...(position !== null ? { x: position.x, y: position.y } : { center: true }),
+      shadow: false,
+    });
+
+  interface Attempt {
+    opened: boolean;
+    reason?: string;
+    /** The backend still holds the label for a window the JS side cannot see —
+     *  recoverable by closing it and retrying once. */
+    labelCollision?: boolean;
+  }
+
+  const attempt = (win: InstanceType<typeof WebviewWindow>): Promise<Attempt> =>
+    new Promise<Attempt>((resolve) => {
+      void win.once('tauri://created', () => resolve({ opened: true }));
+      void win.once('tauri://error', (e) => {
+        const reason = typeof e?.payload === 'string' ? e.payload : JSON.stringify(e?.payload ?? e);
+        resolve({ opened: false, reason, labelCollision: /already exists|label/i.test(reason) });
+      });
+    });
+
+  let result = await attempt(buildWindow());
+  if (!result.opened && result.labelCollision === true) {
+    const stale = await WebviewWindow.getByLabel(label).catch(() => null);
+    await stale?.close().catch(() => undefined);
+    result = await attempt(buildWindow());
+  }
+
+  if (result.opened) return { opened: true };
+  return { opened: false, ...(result.reason !== undefined ? { reason: result.reason } : {}) };
+}
+
 export async function openSimulatorWindow({
   sessionId,
   info,
@@ -132,8 +243,35 @@ export async function openSimulatorWindow({
   // caused a multi-hour "still the same window" debugging saga (founder
   // 2026-06-12). The separate app is reliably installed now, so a launch failure
   // returns a clean `opened:false` reason for the caller to surface to the user.
+  const { invoke } = await import('@tauri-apps/api/core');
+
+  // Which of the two paths this platform gets. ONLY an explicit `false` switches
+  // to the in-process window: a rejection (older binary without the command) or
+  // any non-boolean answer keeps the exact macOS behaviour rather than silently
+  // gaining an inline window — the failure mode 0b1fe535f was written to end. A
+  // pre-command binary on Windows could not launch a profile either way, so the
+  // conservative default costs nothing there.
+  const hasSeparateApp =
+    (await invoke<boolean>('simulator_app_supported').catch(() => true)) !== false;
+  if (!hasSeparateApp) {
+    // No separate app on this platform. `launch_simulator` would answer
+    // Err("the separate simulator app is macOS-only"), so do not call it at all —
+    // the in-process window is the supported path here, not a degradation.
+    try {
+      return await openInProcessSimulatorWindow(
+        sessionId,
+        params.toString(),
+        deviceName,
+        profileName,
+      );
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      console.warn('[simulator] in-process simulator window failed:', reason);
+      return { opened: false, reason };
+    }
+  }
+
   try {
-    const { invoke } = await import('@tauri-apps/api/core');
     // `sessionLabel` (the plain session id) is the per-session window KEY in the
     // separate app (multi-window, founder 2026-06-23): each session opens/focuses its
     // own iPhone window. `payload` crosses only Tauri IPC; Rust writes it to an
