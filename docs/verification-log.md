@@ -40390,3 +40390,35 @@ to the headerless one-liner. Proof: reverting the 400 to its old form fails the 
 The lesson is narrower than "enumerate pins": enumerate pins on the SHAPE OF THE CODE being changed, not
 only on the identifiers in it. A pin that freezes formatting breaks on any edit that reflows the thing it
 froze, and grepping for what a change is ABOUT will not find it.
+
+## V-943 — the reflow-fragile pin class measured at 3313, and deliberately not ratcheted (2026-08-19)
+
+**V-942's addendum suggested a sweep, so I measured the class before proposing one.** A pin whose regex
+strings several `\s*\n?\s*` joints together is freezing SOURCE LAYOUT, not meaning: any reflow or field
+addition breaks it, and a grep for what the change is about will not find it. That failure hit the
+`errors4xx` family three times — a peer's 401 challenge, then my X-Request-Id addition, then the split
+version of the same pin.
+
+**Measured across the server test tree:** 47 256 `toMatch` pins (excluding `.not.toMatch` sentinels, per
+the incumbent guard's own lookbehind), of which **3313 carry three or more newline joints, across 604
+files**. The worst single pin strings 23 joints over 791 characters; `api-types-common-content-parity`
+alone holds 32.
+
+**Not ratcheted, and the reasoning matters more than the number.** The V-794 guard ceilings two pin
+pathologies — a frozen future-tense promise and a hand-maintained count — and both are ceilinged because
+the pinned text becomes FALSE. A multi-line pin is not false. Its failure mode is a false RED on a benign
+reflow, which costs a maintainer ten minutes and cannot mislead anyone about the product. Adding a
+ceiling at 3313 would mean "no new multi-line pins" in a codebase where multi-line pins are how nearly
+every content-parity guard is written — an obstructive ratchet dressed as a quality one, and the kind of
+rule that gets worked around rather than followed.
+
+**The subset that actually caused failures is much narrower**: a pin freezing the shape of a SHARED
+helper — `errors4xx`, the header consts — rather than a one-off literal. When the shared thing gains a
+field, every pin on its shape breaks at once. That subset is already handled: V-942 split those pins per
+status so a header addition touches one assertion instead of a chain, and asserts header composition
+separately from the `$ref` claim it used to be entangled with.
+
+**So this entry changes nothing on purpose.** It records a 3313-item measurement, names the 604 files, and
+states why the number is house style rather than a backlog — so the next sweep that notices multi-line
+pins does not spend a turn rediscovering that ratcheting them is the wrong move. That is the third such
+refusal in this arc, after byte-count floors (V-939) and floors already inside 10% (V-937/V-938).
