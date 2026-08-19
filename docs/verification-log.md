@@ -41365,3 +41365,39 @@ well-formed one, so the arm proves the parse refuses malformed input rather than
 elsewhere in the file. V-963: a refusal masked by a neighbouring covered path. This: the same, on an
 anonymous surface. In each case the file is touched by tests, so nothing looks wrong — which is exactly what
 a coverage intersection sees and a text search cannot.
+
+## V-967 — the only control stopping an operator reopening a live incident had no test
+
+**Next off the masked-pair ranking.** `admin-incidents.ts:404` refuses a reopen when the incident is not
+resolved, with the status named in the message. **0 hits.** The body parse seven lines above it is covered,
+so the handler reads as exercised — the third time this shape has produced a finding.
+
+**It is the only control, verified down the stack rather than assumed.** `incidentsService.reopen` is a
+one-line delegation to `repo.reopen`. The Drizzle repo's UPDATE is
+`.set({ status: 'investigating', resolvedAt: null, updatedAt: now }).where(eq(incidents.id, id))` — **no
+status predicate**. It reopens whatever id it is handed. So nothing below the route re-checks, and the
+route's own comment states the case it exists for: "avoids accidental status churn (e.g. operator clicking
+the wrong button on an active incident)".
+
+**Removing it does not fail — it succeeds.** The proof reports `expected 200 to be 400`: an active incident
+is forced back to `investigating` and a timeline update is posted. That update is **customer-visible on the
+public status page**, so an operator misclick would rewrite a live incident's published history.
+
+**Paired proof, three ways.** With the new arm the deletion fails by name. `admin-incidents.test.ts` as it
+stands at HEAD: 28 passed. `db-incidents-resolve-reopen-drizzle` — the suite whose name suggests it owns
+this behaviour: 7 passed. It exercises the repo, which is exactly why the repo path is covered while the
+route guard is not.
+
+**Both halves asserted, and the second half caught my own wrong assumption.** The arm checks the refusal AND
+that the incident is untouched. I first asserted the timeline had zero entries after the refusal; a created
+incident already carries one, so the arm failed on my assumption rather than on the code. Rewritten to
+compare against a count taken before the reopen, which is the actual invariant — the refused call must add
+nothing, whatever the baseline is.
+
+**Also cleared in the same pass, recorded so the area is not re-opened.** The proxy-config guards in
+`account-me.ts` looked alarming — two uncovered `BadRequestError`s next to two covered ones on a
+customer-facing SSRF surface. Both **SSRF** guards are covered (3 hits for OpenVPN, 2 for WireGuard). The two
+uncovered ones are the "a config block is required for this scheme" shape checks, unreachable because
+`AccountProxyInputSchema` is a `z.discriminatedUnion('scheme', …)` whose openvpn and wireguard variants
+declare the block as required and `.strict()`. Fourth instance of the §5j pattern — a guard made redundant
+by an upstream schema.

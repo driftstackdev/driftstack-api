@@ -97,6 +97,53 @@ describe('POST /v1/admin/incidents', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it('CRITICAL reopening an incident that is not resolved is refused, and the incident is untouched. This route guard is the ONLY control: incidentsService.reopen delegates straight to repo.reopen, whose UPDATE carries no status predicate — `.set({ status: investigating, resolvedAt: null }).where(eq(incidents.id, id))` reopens whatever id it is given. Coverage showed the refusal executed by no test while the body parse seven lines above it is executed, so the handler reads as exercised.', async () => {
+    fx = await buildTestApp();
+    const created = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/admin/incidents',
+      headers: { ...headers, ...auth(fx) },
+      payload: { title: 'Live one', description: 'still going', severity: 'minor' },
+    });
+    expect(created.statusCode, 'the incident was created active').toBe(201);
+    const incidentId = created.json<{ incident: { id: string; status: string } }>().incident.id;
+
+    const before = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/admin/incidents/${incidentId}`,
+      headers: { ...headers, ...auth(fx) },
+    });
+    const timelineBefore = before.json<{ updates: unknown[] }>().updates.length;
+
+    const reopen = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/admin/incidents/${incidentId}/reopen`,
+      headers: { ...headers, ...auth(fx) },
+      payload: { message: 'clicked the wrong button' },
+    });
+    expect(reopen.statusCode, 'an active incident cannot be reopened').toBe(400);
+    expect(
+      JSON.stringify(reopen.json()),
+      'the refusal names the status it refused, so the operator can see what they hit',
+    ).toContain('only resolved incidents can be reopened');
+
+    // The effect half: status is not the property that matters on its own — a
+    // handler that churned the row and only then refused would satisfy the
+    // assertions above and still have posted a customer-visible timeline entry.
+    const after = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/admin/incidents/${incidentId}`,
+      headers: { ...headers, ...auth(fx) },
+    });
+    const body = after.json<{ incident: { status: string }; updates: unknown[] }>();
+    expect(body.incident.status, 'the incident kept its status').not.toBe('resolved');
+    expect(
+      body.updates.length,
+      'and the refused reopen posted no timeline entry — a created incident already carries one, so ' +
+        'this compares against the count taken before rather than assuming it starts empty',
+    ).toBe(timelineBefore);
+  });
+
   it('400 when severity is invalid', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
