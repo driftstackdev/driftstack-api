@@ -44899,3 +44899,66 @@ the stale arm and the instrument arm together. Restored byte-identical.
 `it(` count 3 in a new file. Ratchets 2936→2937 and 3102→3103.
 
 Full suite before this entry: 2989 passed | 113 skipped (3102 files), 30102 tests.
+
+## V-1056 — a terminal-status helper that disagreed with the rule the data obeys
+
+Found by sweeping test-title prose for counts that contradict a derived enum — the
+class V-1053 was an instance of. Most hits were noise (a title saying "5 fields" near
+an unrelated enum), but one was not: a gui-client pin titled "CryptoOrderStatus
+5-value union" against a `CryptoOrderStatusSchema` of six.
+
+Three things were wrong in `components/CryptoOrderStatusBadge.tsx`, and the third is
+the one that matters.
+
+1. The header comment listed five statuses, omitting `cancelled`.
+2. The exported `CryptoOrderStatus` union was those same five. Nothing imports it —
+   the five views take the component, not the type — so the divergence from the
+   canonical six was invisible.
+3. `isTerminalCryptoOrderStatus` returned true for `paid` and `failed` only.
+
+The third contradicts the rule the server enforces. `isTerminalForward` in
+services/crypto-orders.ts refuses to move an order out of `paid`, `failed` OR
+`cancelled`, with V-666.J's reason stated inline: a late-arriving IPN payment must not
+revive an abandoned order. Two other places already agreed with the server rather than
+with the helper — `lib/use-crypto-order.ts` and the dashboard's `select-tier.astro`
+each build `{paid, failed, cancelled}` by hand.
+
+So the helper was the only piece of the four that had it wrong, and it is the one with
+the name that invites reuse. It has no production caller today; the defect is what
+happens when someone reaches for the obvious helper instead of re-deriving the set for
+a third time.
+
+THE PIN'S OWN JUSTIFICATION WAS FALSE, in both files that carried it. It read that the
+two-value form was pinned "so V-534.T useCryptoOrder polling auto-stops on the same
+2-value terminal set". The hook has never imported this helper, and its set is the
+three-value one plus `partial`. A second note claimed `cancelled` was "surfaced via a
+separate code path" — the STATUS_LABEL and STATUS_TONE maps in that same file have
+always carried it.
+
+`partial` is deliberately left non-terminal, and the reason is recorded rather than
+assumed: the server treats it as semi-terminal, since `paid` and `failed` still
+override it. The polling hook stops on `partial` for a different reason — a partial
+payment needs the customer to act — and conflating the two is how a helper like this
+goes wrong in the first place.
+
+Enumerated with all three patterns (import path, quoted basename, helper name): five
+views consume the component and none take the type or the helper; three test files
+freeze it. Two of the three needed more than the arm the first grep pointed at — the
+server-side pin held four stale spots (header prose, a bullet list, the framing arm,
+the union arm) and the gui-client pin held two.
+
+A METHOD TRAP worth recording. Running the three test files by passing a shell
+variable to vitest produced no output at all, for the control as well as every
+mutation. zsh does not word-split unquoted parameters, so three paths arrived as one
+argument, matched nothing, and vitest exited without running. Every line of that
+mutation round was empty, which reads exactly like a clean pass if the grep is loose.
+Inlining the paths gave the real result. Same family as the backgrounded-heredoc
+finding: the failure mode of a mis-shaped command is silence, not an error.
+
+Mutations, all four against the real component: reverting the helper to two values
+fails 4 arms; dropping `cancelled` from the union fails 2; adding `partial` to the
+terminal set fails 5; restoring the five-status header fails 1. Restored
+byte-identical.
+
+`it(` counts: 7 and 21 unchanged; CryptoOrderStatusBadge.test.tsx 12→13 for the added
+partition arm. No new file, no ratchet change.

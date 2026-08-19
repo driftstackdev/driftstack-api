@@ -44,15 +44,34 @@ describe('V-534.U cryptoOrderStatusToneFor', () => {
 });
 
 describe('V-534.U isTerminalCryptoOrderStatus', () => {
-  it('paid + failed are terminal', () => {
+  it('paid + failed + cancelled are terminal', () => {
     expect(isTerminalCryptoOrderStatus('paid')).toBe(true);
     expect(isTerminalCryptoOrderStatus('failed')).toBe(true);
+    // V-1056 — cancelled was missing here and from the helper. The server's
+    // isTerminalForward refuses to move an order out of any of the three, so a
+    // late IPN payment cannot revive an abandoned order; a helper that called
+    // cancelled non-terminal disagreed with the rule the data obeys.
+    expect(isTerminalCryptoOrderStatus('cancelled')).toBe(true);
   });
 
   it('pending + confirming + partial are NOT terminal', () => {
     expect(isTerminalCryptoOrderStatus('pending')).toBe(false);
     expect(isTerminalCryptoOrderStatus('confirming')).toBe(false);
+    // 'partial' stays non-terminal: paid and failed still override it server-side.
+    // The polling hook stops on it for a different reason — a partial payment
+    // needs the customer to act — and that is not the same question.
     expect(isTerminalCryptoOrderStatus('partial')).toBe(false);
+  });
+
+  it('every status the schema declares gets a definite terminal answer, and the two sets partition it', () => {
+    const all = ['pending', 'confirming', 'paid', 'failed', 'partial', 'cancelled'];
+    const terminal = all.filter((s) => isTerminalCryptoOrderStatus(s));
+    expect(terminal.sort(), 'the terminal set drifted from the server rule').toEqual([
+      'cancelled',
+      'failed',
+      'paid',
+    ]);
+    expect(all.length - terminal.length, 'non-terminal statuses').toBe(3);
   });
 });
 

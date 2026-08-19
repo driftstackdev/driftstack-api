@@ -1,27 +1,33 @@
 // W476.C — drift guard for apps/gui-client/src/components/CryptoOrderStatusBadge.tsx.
-// V-534.U CryptoOrderStatusBadge. Drift here either drops the
+// V-534.U CryptoOrderStatusBadge. Drift here drops the
 // 'Partial — contact support' label (customers with partial-pay
 // orders see raw 'partial' string and don't know they need to
-// reach out) or breaks the isTerminalCryptoOrderStatus 2-value
-// signature (polling hooks rely on this to stop hammering the
-// order endpoint once paid/failed — drift here resumes
-// rate-limit-storm).
+// reach out), or moves isTerminalCryptoOrderStatus off the set
+// the server enforces.
+//
+// V-1056 — this header used to justify the helper's two-value form
+// as what the polling hook stops on. The hook has never imported
+// it, and builds {paid, failed, cancelled} plus 'partial' itself.
+// The helper now matches isTerminalForward in
+// services/crypto-orders.ts, which refuses to move an order out of
+// paid / failed / cancelled.
 //
 //   • V-534.U framing pinned: 'CryptoOrderStatusBadge
-//     presentational component.' + 'Maps a crypto-order status
-//     (pending / confirming / paid / failed / partial) to a
-//     label + tone for the checkout-confirmation view.'
-//   • CryptoOrderStatus 5-value union (pending | confirming |
-//     paid | failed | partial — NOT cancelled; cancelled is
-//     surfaced via a separate code path).
+//     presentational component.' + the header naming all six
+//     covered statuses.
+//   • CryptoOrderStatus 6-value union, matching
+//     CryptoOrderStatusSchema. It was five, excluding 'cancelled',
+//     under a note claiming cancelled was surfaced by a separate
+//     code path — the STATUS_LABEL and STATUS_TONE maps in the
+//     same file have always carried it.
 //   • STATUS_LABEL: pending→'Awaiting payment', confirming→
 //     'Confirming on-chain', paid→'Paid', failed→'Failed',
 //     partial→'Partial — contact support'.
 //   • STATUS_TONE: pending→neutral, confirming→busy, paid→
 //     success, failed→error, partial→warning.
 //   • Exported isTerminalCryptoOrderStatus: returns true for
-//     'paid' || 'failed' (terminal-stop trigger for V-534.T
-//     useCryptoOrder polling).
+//     'paid' || 'failed' || 'cancelled', matching isTerminalForward
+//     in services/crypto-orders.ts.
 //   • Render: role='status' + aria-label `Crypto order status:
 //     ${label}` + busy-tone dot with animate-pulse for the
 //     'confirming' on-chain step.
@@ -42,15 +48,25 @@ function read(p: string): string {
 describe('W476.C apps/gui-client/src/components/CryptoOrderStatusBadge.tsx content parity', () => {
   const body = read(LIB);
 
-  it("V-534.U framing pinned: 'V-534.U — CryptoOrderStatusBadge presentational component.' + 'Maps a crypto-order status (pending / confirming / paid / failed / partial) to a label + tone for the checkout-confirmation view.'", () => {
+  it("V-1056 V-534.U framing pinned, with the header no longer naming five of the six statuses it covers. It listed pending / confirming / paid / failed / partial while the label and tone maps below carried 'cancelled' too, so the file described itself as handling less than it did.", () => {
     expect(body).toMatch(/\/\/ V-534\.U — CryptoOrderStatusBadge presentational component\./);
-    expect(body).toMatch(
-      /\/\/ Maps a crypto-order status \(pending \/ confirming \/ paid \/ failed \/\s*\n?\s*\/\/ partial\) to a label \+ tone for the checkout-confirmation view\./,
-    );
+    expect(body).toMatch(/All six statuses in CryptoOrderStatusSchema are covered\./);
+    expect(
+      body,
+      'the header lists a five-status roster again, while the maps below carry six',
+    ).not.toMatch(/status \(pending \/ confirming \/ paid \/ failed \/\s*\n?\s*\/\/ partial\)/);
   });
 
-  it("CryptoOrderStatus 5-value union ('pending' | 'confirming' | 'paid' | 'failed' | 'partial' — NOT 'cancelled'; cancelled status is surfaced via a separate code path) + CryptoOrderStatusBadgeProps: status + size? 'sm'|'md'", () => {
-    expect(body).toMatch(
+  it("V-1056 CryptoOrderStatus is the 6-value union CryptoOrderStatusSchema declares + CryptoOrderStatusBadgeProps: status + size? 'sm'|'md'. It was five, excluding 'cancelled', under a note claiming cancelled came through a separate code path — the maps in this same file have always carried it, and nothing imported the union, so the divergence was invisible.", () => {
+    for (const value of ['pending', 'confirming', 'paid', 'failed', 'partial', 'cancelled']) {
+      expect(body, `CryptoOrderStatus no longer includes '${value}'`).toMatch(
+        new RegExp(`\\| '${value}'|= '${value}'`),
+      );
+    }
+    expect(
+      body,
+      "the union is the five-value form again, so 'cancelled' cannot be represented",
+    ).not.toMatch(
       /export type CryptoOrderStatus = 'pending' \| 'confirming' \| 'paid' \| 'failed' \| 'partial';/,
     );
     expect(body).toMatch(
@@ -76,10 +92,24 @@ describe('W476.C apps/gui-client/src/components/CryptoOrderStatusBadge.tsx conte
     );
   });
 
-  it("isTerminalCryptoOrderStatus exported: returns true ONLY for status === 'paid' || status === 'failed' — pinned so V-534.T useCryptoOrder polling auto-stops on the same 2-value terminal set; drift here resumes rate-limit-storm or never stops polling on a paid order", () => {
+  it("V-1056 isTerminalCryptoOrderStatus returns true for 'paid', 'failed' AND 'cancelled' — the set the server enforces in isTerminalForward, which refuses to move an order out of any of the three so a late IPN cannot revive an abandoned one. It excluded 'cancelled' under a rationale about the polling hook that was not true of the hook.", () => {
     expect(body).toMatch(
-      /export function isTerminalCryptoOrderStatus\(status: string\): boolean \{\s*\n?\s*return status === 'paid' \|\| status === 'failed';\s*\n?\s*\}/,
+      /export function isTerminalCryptoOrderStatus\(status: string\): boolean \{\s*\n?\s*return status === 'paid' \|\| status === 'failed' \|\| status === 'cancelled';\s*\n?\s*\}/,
     );
+
+    // The retracted two-value form does not come back.
+    expect(
+      body,
+      'isTerminalCryptoOrderStatus is two-value again; a cancelled order would read as still ' +
+        'moving, against isTerminalForward in services/crypto-orders.ts',
+    ).not.toMatch(/return status === 'paid' \|\| status === 'failed';/);
+
+    // 'partial' stays out: the server treats it as semi-terminal, so an order
+    // there can still move to paid or failed.
+    expect(
+      body,
+      "'partial' was added to the terminal set; the server still lets paid/failed override it",
+    ).not.toMatch(/status === 'partial'[^;]*;\s*\n?\s*\}/);
   });
 
   it("Render: role='status' + aria-label `Crypto order status: ${label}` + size default 'md' + busy-tone dot with animate-pulse (confirming on-chain visual indicator) + ternary chain for dot bg color; cryptoOrderStatusLabelFor + cryptoOrderStatusToneFor exported with ?? fallback for forward-compat", () => {

@@ -158,9 +158,14 @@ describe('W384.B gui-client SessionStatusBadge content parity', () => {
 describe('W384.B gui-client CryptoOrderStatusBadge content parity', () => {
   const body = read(CRYPTO);
 
-  it('V-534.U framing pinned + CryptoOrderStatus union: 5 literals (pending/confirming/paid/failed/partial)', () => {
+  it('V-1056 V-534.U framing pinned + CryptoOrderStatus union: 6 literals, the set CryptoOrderStatusSchema declares. It was 5, omitting cancelled, while the maps in the same file carried it.', () => {
     expect(body).toMatch(/V-534\.U — CryptoOrderStatusBadge presentational component/);
-    expect(body).toMatch(
+    for (const value of ['pending', 'confirming', 'paid', 'failed', 'partial', 'cancelled']) {
+      expect(body, `CryptoOrderStatus no longer includes '${value}'`).toMatch(
+        new RegExp(`\\| '${value}'|= '${value}'`),
+      );
+    }
+    expect(body, "the union dropped back to five values, excluding 'cancelled'").not.toMatch(
       /export type CryptoOrderStatus = 'pending' \| 'confirming' \| 'paid' \| 'failed' \| 'partial';/,
     );
   });
@@ -181,10 +186,14 @@ describe('W384.B gui-client CryptoOrderStatusBadge content parity', () => {
     expect(body).toMatch(/partial: 'warning',/);
   });
 
-  it('isTerminalCryptoOrderStatus helper: true only for paid OR failed', () => {
+  it('V-1056 isTerminalCryptoOrderStatus helper: true for paid, failed OR cancelled — matching isTerminalForward on the server', () => {
     expect(body).toMatch(
-      /export function isTerminalCryptoOrderStatus\(status: string\): boolean \{\s*\n?\s*return status === 'paid' \|\| status === 'failed';\s*\n?\s*\}/,
+      /export function isTerminalCryptoOrderStatus\(status: string\): boolean \{\s*\n?\s*return status === 'paid' \|\| status === 'failed' \|\| status === 'cancelled';\s*\n?\s*\}/,
     );
+    expect(
+      body,
+      'the two-value terminal set is back; a cancelled order would read as still moving',
+    ).not.toMatch(/return status === 'paid' \|\| status === 'failed';/);
   });
 
   it('CryptoOrderStatusBadge component: role="status" + aria-label="Crypto order status: ${label}"', () => {
