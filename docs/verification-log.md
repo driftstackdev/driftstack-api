@@ -40845,3 +40845,41 @@ nowhere fails it at 7 nodes against 35 000.
 `$.paths./v1/oauth/token.post.requestBody.content.application/json.schema.properties.redirect_uri.maxLength:
 snapshot=2048 live=77`. Editing the shared `X-Request-Id` description reports it on every response that
 declares it. Neutering the walk fails the floor.
+
+## V-953 — the generated Python models were guarded by class name, not by content
+
+**The same gap as V-952, one layer down the chain.** `openapi.ts` → `openapi.json` → `models.py`. V-952
+closed the first link at content level. The second link was guarded by
+`sdk-python-models-cover-every-spec-schema`, which checks that every component schema has a generated
+**class**. That catches a schema added without re-running the codegen and is blind to the more likely edit:
+a property added to a schema that already exists. The class is still there, so the guard passes, and the
+Python SDK ships a model that cannot represent a field its own API accepts.
+
+**Proved as a pair.** Adding `newly_added_field` to an existing spec schema and not regenerating fails the
+new guard by name — `Account: newly_added_field` — and the class-level guard reports **2 passed**. Removing
+a field from the generated class in the other direction fails it too (`Account: id`).
+
+**Not hypothetical.** V-928 found `models.py` genuinely stale against the spec and had to regenerate it;
+nothing at the time would have said so.
+
+**Measured before building.** 81 component schemas, 70 carrying properties, 205 generated classes, **zero**
+properties missing today. So this is a latent gap being closed, not a live defect being reported — stated
+plainly rather than dressed up as a catch.
+
+**Reads the artefacts rather than running the generator.** Running datamodel-codegen would be the most
+direct comparison and is the wrong trade: it needs the Python venv, so the guard would skip where the venv
+is absent, and a guard that skips is not a guard. Verified the parse is equivalent for this purpose by
+regenerating to a scratch file — the committed models are identical to a fresh run apart from the codegen
+timestamp line.
+
+**The first draft of the matcher was near-vacuous and produced the same clean result.** It asked whether the
+class block CONTAINED the property name as a substring. `id` occurs inside `idempotency`, inside type names
+and inside any description using the word, so nearly every property would have "been present" — a class with
+no fields at all would have passed. Tightened to field declarations plus `alias="…"`, which also handles
+renamed fields like `from_`. The strictness now has its own arm, asserted against a fixture because every
+real class happens to be correct: loosening the matcher back to a word scan fails it.
+
+**And one mutation did not apply.** M2 first targeted `class AccountResponse`, which does not exist, so the
+edit was a no-op and the guard's "3 passed" meant nothing. Re-run against the real `class Account`, it fails
+by name. A mutation that silently fails to apply reads exactly like a guard that does not fire — this arc
+has now hit that twice, and both times it was the assertion in the mutation script that caught it.
