@@ -44424,3 +44424,47 @@ it without earning it.
 
 `it(` count unchanged (4). No new file, no ratchet change. Integration tree with a real database: 357
 files, 3258 tests, all passing. `apps/server/tests/unit` green: 1935 files, 20244 passed.
+
+## V-1044 — a test I wrote, could not prove, and deleted
+
+Two sweeps first, both clean and both recorded so they are not repeated:
+
+The V-1043 shape generalised — arms promising refusal ("fail-closed", "must not", "rejects") whose
+body has no exact or negative status assertion. Six matched and all six are positive CONTROLS: "the
+key DOES work on its own session", "a well-formed query is still served", "the SAME uuid under the
+acc\_ prefix is accepted". Each exists to give a nearby refusal meaning, which is the pattern this
+suite should have more of, not less. V-1043 looks like the only instance of its shape.
+
+Published rate limits. `reference/rate-limits.md` lists a capacity per tier, and
+`published-rate-limit-table-matches-the-code` already derives that comparison over
+`Object.keys(TIER_RATE_LIMIT_DEFAULTS)` — every tier, no roster to rot. The eight published numbers
+equal the constant exactly.
+
+**Then the attempt that failed.** Docs matching a constant is a text property; an `api_scale` account
+actually receiving 6,000 is a behavioural one. Every rate-limited response carries
+`x-ratelimit-limit`, so one request per tier reads the applied capacity — eight requests instead of
+draining a 60,000-token bucket. I wrote that spec. It passed, 9/9, and the observed values were right:
+solo_manual 120, team_manual 360, and so on.
+
+It does not survive mutation. Three attempts, none detected:
+
+forcing the limiter's tier helper to return `'free'` — that turned out to be a test-seam FALLBACK,
+reached only when `resolvedTier === undefined`, which the comment says never happens with the real
+plugin. Dead code for this scenario.
+
+forcing `tier: authority.account.tier` to `'free'` at both live call sites — still 9/9.
+
+changing the published capacity for one tier — still 9/9, consistent with both sides reading the
+same constant.
+
+So I cannot show the file detects a tier-mapping failure, and a test whose value I cannot demonstrate
+is exactly what this sweep spends its time deleting from other people's work. It is deleted rather
+than shipped with a hedged comment. The capacity headers ARE correct today — that is measured and
+recorded here — but "correct today" is an observation, not a guard, and the file would have implied
+otherwise.
+
+What a future attempt needs: find where `result.capacity` is actually determined (the store call
+receives `tier` but the three mutations above suggest the capacity reaching the header comes from
+elsewhere), and mutate THAT. Without it there is no honest version of this test.
+
+No code change. Suite untouched: 2986 passed | 113 skipped (3099).
