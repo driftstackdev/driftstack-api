@@ -42260,3 +42260,52 @@ concluded the reverse direction was missing — without ever grepping for a guar
 reverse direction, which is called `every-documented-endpoint-exists`. The cost is one redundant
 guard, two log entries that overstated what they found, and a third that reported a deliberate
 decision as an open question.
+
+## V-991 — the "gate satisfied by something that is not the thing" class, measured closed (2026-08-19)
+
+V-987 through V-989 closed one vector of this class: a route gate satisfied by a `/v1` string that is a
+declaration rather than a registration. This entry records the rest of the class as **measured and
+closed**, because the next person to notice the shape should not spend a turn re-deriving it — which
+is what V-990 cost.
+
+`a-source-gate-may-not-be-satisfied-by-a-comment` (V-923) already owns the comment vector, and its
+rule is `code === 0 && comment > 0`. Its header states the boundary exactly: "route-registration gates
+legitimately match string literals only and are unaffected, which is why strings and comments are
+counted separately." **That exemption is the seam my V-987 work went through** — the two findings are
+complementary, not overlapping, and neither subsumes the other.
+
+Four vectors measured, using V-923's own gate discovery so the population matches:
+
+- **comment-satisfied** — 0 offenders across 16 patterns in 8 gates. V-923 is doing its job.
+- **string-only satisfied** — 3, every one a route-path pattern in `api-versioning-doc-parity`
+  (`/'\/v1\/sessions'/` and two siblings). A path IS a string, so this is correct by construction, and
+  it is why V-923 counts strings apart from comments rather than lumping them.
+- **matches nothing at all** — 1, and it is deliberate. `security-page-doc-parity`'s
+  `/requestCert:\s*true/` is V-921's replacement for a `/mTLS|clientCert/` pattern that three files
+  satisfied with prose. It matches nothing because no TLS listener asks for a client certificate, and
+  the file asserts exactly that in its own arm before depending on it. A zero-match gate is not a
+  defect when the zero is the assertion.
+- **capability-gated `skipIf` arms outside V-923's population** — 126 files use `skipIf`/`runIf`, of
+  which all but a handful are `db-*-drizzle` tests gating on Postgres availability, which is
+  environment gating and a different concern. Of the doc-parity remainder, two gate on `existsSync` of
+  an env template, and four compute their flag from an **imported Zod enum's values**
+  (`SubscribableWebhookEventTypeSchema._def.values`) rather than from any text match — each with a
+  companion arm asserting the gate has retired and a floor proving the enum was really read. Sound,
+  and better than the pattern I was looking for a weakness in.
+
+Gate DISCOVERY also checked, since that is where V-985 found its hole: V-923 finds gates by
+`function \w+(re: RegExp): boolean`, so an arrow-function or differently-named-parameter variant would
+be invisible. There are none — 8 gates, no alternative forms.
+
+**The instrument lesson is the part I did not expect.** I wrote the classifier on the TypeScript
+compiler's `createScanner`, assuming it would be more rigorous than V-923's hand-rolled character
+masker. It was worse: `scan()` without `reScanTemplateToken` mis-terminates a `${…}` template, so a
+TemplateTail span swallowed following code and the first run reported six gates as string-satisfied —
+including `bootstrap.ts:2730`'s `sessionEgressService: sessionEgressService`, an ordinary object
+property whose own neighbouring comment explains it was written in explicit `key: key` form
+specifically so a gate regex would match it. Caught only by grepping the source for the expression, as
+the standing rule requires. Rewritten on AST node spans, the count went 6 → 0. **V-923's masker
+counts `${}` nesting depth explicitly and is correct; the "more rigorous" API was the wrong tool used
+carelessly.**
+
+No code change. Four vectors, one already guarded, three measured empty or correct-by-design.
