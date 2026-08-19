@@ -39682,3 +39682,40 @@ second proof then ran against a stale document and reported a disagreement that 
 own restore, not of the mutation. The mutation-restore rule says restore byte-identical from a
 snapshot; it does not say the snapshot must be of the FIXED state, and for a generated artifact that
 distinction is the whole thing. Re-run cleanly against a post-fix snapshot, both proofs hold.
+
+## V-927 — two published bounds the routes enforce and the document omitted (2026-08-19)
+
+**Working V-926's open surface.** That entry left 19 spec-only mirrors uncompared because they have
+no name-matching api-types schema — their real validation is a const beside the route. Checked five
+by hand against their routes.
+
+**Three match exactly** — `AcceptLegalDocumentRequestOpenApi`, `RegisterMacNodeBodyOpenApi` and
+`SetEmailPrefRequestOpenApi` (which is not really hand-written: it reuses the shared
+`OptOutableEmailEventSchema`, which is why it cannot drift).
+
+**Two drop a bound the route enforces:**
+
+- `/v1/oauth/token` `redirect_uri` — `ExchangeCodeBody` in `routes/oauth.ts` is
+  `z.string().max(2048).url()`; the mirror was `z.string().url()`, so the document published
+  `format: uri` with no `maxLength`. Every other field on that endpoint matched exactly, which is what
+  makes the omission easy to miss by reading.
+- `/v1/status/subscribe` `email` — `SubscribeBodySchema` is
+  `z.string().trim().email(…).max(254)` (the RFC 5321 address limit); the mirror was
+  `z.string().email()`. A PUBLIC endpoint publishing no length at all.
+
+**Neither is dangerous, and I am not going to dress them up.** The server behaves correctly in both
+cases; the cost is that a request the document describes as valid draws a 400, so customers discover
+the limit by hitting it. That is the same class as V-924 and V-926 — the contract loose in a way the
+server is not — and worth closing for the same reason.
+
+**Guarded from BOTH ends**, which is the part that makes it durable: asserting only the published
+`maxLength` would keep passing if someone relaxed the route, and asserting only the route would keep
+passing if the mirror drifted again. The guard names the route file and the exact bound expression,
+and compares it to the published document.
+
+**Proofs.** Deleting the `maxLength` from the document fails the spec arm by name. Relaxing the route
+from 254 to 9999 fails the route arm. Both restored byte-identical.
+
+**Surface remaining:** 17 solo mirrors still uncompared. The base rate so far — two divergences in
+five checked, plus the two V-926 found in the comparable set — says the rest are worth the same
+treatment rather than an assumption that they are fine.

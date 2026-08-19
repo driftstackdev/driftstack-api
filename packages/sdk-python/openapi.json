@@ -16325,6 +16325,7 @@
                   },
                   "redirect_uri": {
                     "type": "string",
+                    "maxLength": 2048,
                     "format": "uri"
                   }
                 },
@@ -38195,6 +38196,7 @@
                 "properties": {
                   "email": {
                     "type": "string",
+                    "maxLength": 254,
                     "format": "email"
                   }
                 },

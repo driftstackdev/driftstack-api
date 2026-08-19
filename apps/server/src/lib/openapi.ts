@@ -2114,7 +2114,10 @@ function buildRegistry(): OpenAPIRegistry {
     code_verifier: z.string().min(43).max(128),
     client_id: z.string().min(1).max(128),
     client_secret: z.string().min(1).max(256),
-    redirect_uri: z.string().url(),
+    // V-927 — the 2048 bound is what `ExchangeCodeBody` in routes/oauth.ts
+    // enforces. The mirror dropped it, so the document did not tell clients the
+    // cap and a longer redirect_uri drew a 400 the spec had not predicted.
+    redirect_uri: z.string().max(2048).url(),
   });
   const OAuthTokenResponseOpenApi = z.object({
     access_token: z.string(),
@@ -5938,7 +5941,10 @@ function buildRegistry(): OpenAPIRegistry {
     data: z.array(StatusSlaTargetOpenApi),
   });
   const StatusSubscribeRequestOpenApi = z.object({
-    email: z.string().email(),
+    // V-927 — `SubscribeBodySchema` in routes/status-subscribe.ts caps this at
+    // 254 (the RFC 5321 address limit). The mirror dropped the bound, so this
+    // public endpoint published no length at all.
+    email: z.string().email().max(254),
   });
   // All three routes reply with a human-readable `message` (the route impls
   // return `{ message }`, never `{ ok }`).
