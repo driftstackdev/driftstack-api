@@ -44647,3 +44647,43 @@ choice between them.
 
 `it(` count 5 → 6. No new file, no ratchet change. `apps/server/tests/unit` green: 1936 files,
 20249 passed.
+
+## V-1050 — the email catalogue advertised a security email only a dormant service can send
+
+Applying V-1049's method to the other dormant service. `WebhookSecretForceRotationService` is in
+`NOT_WIRED_PENDING_DECISION`; the question is what customers are told meanwhile.
+
+`reference/emails.md`, the customer-facing catalogue, listed under "Security advisories — never
+opt-outable":
+
+**Your webhook secret was auto-rotated for security** — "A signing secret crossed the 91-day hard
+cap and the server rotated it."
+
+`sendWebhookSecretForceRotated` has exactly one caller: the dormant service. The email cannot arrive,
+and the 91-day hard cap does not run. That is not a documentation nit — a reader takes it as a
+security posture and stops rotating on their own cadence, believing the server does it. Corrected to
+say it is not currently sent, and to point at the manual rotation endpoint.
+
+The neighbouring row was wrong in a subtler way. "Sent inside the final ~24 hours of a FORCE-ROTATION
+grace window" — force-rotation never happens, so as worded the row describes an unreachable trigger.
+But the email itself IS reachable: `rotateSecret` opens a 24-hour grace window on every rotation, and
+its notice service IS constructed. The row now says a grace window opens whenever a secret is rotated,
+which today means one the customer requests.
+
+Checked rather than assumed, in both directions: the 60-day reminder's service IS constructed and
+ticked (`bootstrap.ts:2191`, `:2287`), so that row is accurate and stays as it is. Only the row whose
+sole sender is dormant was wrong.
+
+An arm now pins the catalogue to the wiring state in both directions: while the service is
+unconstructed the row must carry the not-sent qualifier, and if it is ever wired the qualifier must
+come out. Mutation: restoring the retracted wording → RED; wiring the service while the doc still says
+not-sent → RED.
+
+**The dist-freshness guard fired, and this time it was right.** V-1027 hit the same guard after a
+mutation restored content byte-identical, where only the mtime had moved and the artifact was not
+stale. Here the docs source genuinely changed, so the built artifact really was out of date and the
+answer was to rebuild rather than to correct a timestamp. Same guard, opposite correct response — the
+difference is whether the bytes moved.
+
+`it(` count 6 → 7. No new file, no ratchet change. `apps/server/tests/unit` green: 1936 files,
+20250 passed.

@@ -225,4 +225,36 @@ describe('every tick-driven service is wired, or recorded as deliberately not', 
         'promises the export carries the full audit history',
     ).toBe(true);
   });
+
+  it('CRITICAL the email catalogue does not advertise an email only a dormant service can send. V-1050: `reference/emails.md` told customers "A signing secret crossed the 91-day hard cap and the server rotated it", and the sole caller of sendWebhookSecretForceRotated is WebhookSecretForceRotationService, which nothing constructs. That is not a doc nit — a reader takes it as a security posture and stops rotating on their own cadence. The row now says it is not currently sent; wiring the service must take that qualifier back out.', () => {
+    const readRel = (rel: string): string => readFileSync(resolve(SRC, rel), 'utf8');
+    const bootstrap = readRel('lib/bootstrap.ts');
+    const app = readRel('lib/app.ts');
+    const wired =
+      /new WebhookSecretForceRotationService\(/.test(bootstrap) ||
+      /new WebhookSecretForceRotationService\(/.test(app);
+
+    const catalogue = readFileSync(
+      resolve(SRC, '..', '..', '..', 'apps/docs/src/pages/reference/emails.md'),
+      'utf8',
+    );
+    const row = catalogue
+      .split('\n')
+      .find((l) => l.startsWith('| **Your webhook secret was auto-rotated for security**'));
+    expect(row, 'the auto-rotation row is gone from the email catalogue').toBeDefined();
+
+    if (wired) {
+      expect(
+        row,
+        'the force-rotation service is wired now, so the catalogue must stop saying the email is ' +
+          'not sent',
+      ).not.toMatch(/NOT CURRENTLY SENT/);
+      return;
+    }
+    expect(
+      row,
+      'the only sender of this email is a service nothing constructs, so the catalogue must say so ' +
+        'rather than describing a 91-day hard cap that does not run',
+    ).toMatch(/NOT CURRENTLY SENT/);
+  });
 });
