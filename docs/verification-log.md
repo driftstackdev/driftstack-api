@@ -44210,3 +44210,42 @@ rather than a correctness gate.
 
 `it(` count 7 → 8. No new file, no ratchet change. `apps/server/tests/unit` green: 1935 files,
 20244 passed.
+
+## V-1038 — the auth property, verified against a running server instead of a preHandler array
+
+V-1023 derives which routes are gated by matching an auth mechanism in each registration's options.
+That is a claim about source text. Before this, only 22 distinct routes had an explicit
+"401 without auth" assertion anywhere in e2e or integration, against 212 gated registrations — about
+a tenth of the property was checked behaviourally.
+
+`every-gated-route-rejects-anonymous.spec.ts` boots the real app and asks all of them. 139 are
+reachable in this build and every one refuses. The other 73 are counted and skipped with the reason:
+30 answer 503 because their feature is unwired and the `…DisabledRoutes` stub is serving, 43 are
+absent at 404. The exercised count carries a floor so the arm cannot shrink to nothing.
+
+**What the mutations actually established, which is not what I set out to prove.**
+
+Deleting `app.requireAuth` from `GET /v1/account/me` → still 401. The route also drops out of the
+derived roster, so the check cannot see it either way.
+
+Neutralising the rate limiter's `UnauthorizedError` → still 401.
+
+Removing BOTH → 200, and the spec fails, naming the route.
+
+So two layers refuse independently, and `app.rateLimit(...)` is one of them: it is account-keyed and
+throws `Unauthorized` when there is no credential. The rate limiter is load-bearing for
+authentication, not only for throttling — which is worth knowing before anyone "simplifies" a route
+by dropping its bucket. This file verifies the OUTCOME across the served surface; V-1023 catches a
+route losing its own gate by reading the source. Neither covers both directions, and the header now
+says so rather than implying the stronger claim I first wrote.
+
+I nearly shipped that stronger claim. The first header asserted this would catch an ineffective
+route-level gate; two mutations disproved it, and the honest version records the layering instead.
+
+**My own V-1036 guard caught this commit.** Adding a spec file moved the Playwright count 29 → 30,
+and the arm that derives it against the tree failed in both files that state it — exactly the drift it
+was built for, one commit later. Corrected. The type-checker also caught `server.close()`, which the
+helper does not expose; it is `cleanup()`.
+
+Full e2e: 201 passed. `apps/server/tests/unit` green: 1935 files, 20244 passed. The spec lives under
+`tests/e2e/**`, which `vitest.node.config.ts` excludes, so no suite ratchet moves.
