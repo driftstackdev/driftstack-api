@@ -125,7 +125,7 @@ client = Driftstack(
 client = Driftstack(api_key="…", retry=RetryConfig(enabled=False))
 ```
 
-Retryable errors by default: `TransportError` (network / timeout / parse) + `RateLimitError`. Other typed errors (auth, validation, quota, concurrency) propagate immediately. 5xx responses are terminal (not retried).
+Retryable errors by default: `TransportError` (network / timeout / parse), `RateLimitError`, and `InternalError` — the plain 500. Other typed errors (auth, validation, quota, concurrency) propagate immediately, and so do the other 5xx kinds such as `DriverError` (502), where retrying an idempotent call would not help. This is the same set the TypeScript and Go SDKs retry; `RetryConfig.retryable_errors` is the tuple the loop actually uses.
 
 > **Idempotency on retried writes.** A `TransportError` can mean a request the server already processed but whose response was lost, so an automatically-retried create or charge can execute twice. Pass an `idempotency_key` on non-idempotent calls — e.g. `client.agent_sessions.create(body, idempotency_key="…")` — and the server dedupes the retry onto the first request (Stripe-pattern `(account_id, idempotency_key)` uniqueness).
 

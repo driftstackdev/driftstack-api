@@ -106,7 +106,7 @@ The full hierarchy lives in `errors.go`; the URI → type mapping is in `error_m
 
 ## Retry
 
-Default: 3 retries with exponential backoff and full jitter. Honours `Retry-After`. Retryable: `*TransportError` + `*RateLimitError`. Other typed errors propagate immediately.
+Default: 3 retries with exponential backoff and full jitter. Honours `Retry-After`. Retryable: `*TransportError`, `*RateLimitError`, and `*InternalError` — the plain 500. Other typed errors propagate immediately, and so do the other 5xx kinds such as `*DriverError` (502), where retrying an idempotent call would not help. This is the same set the TypeScript and Python SDKs retry; `IsRetryable` is the exported predicate the loop uses.
 
 ```go
 client := driftstack.New(

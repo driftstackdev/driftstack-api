@@ -45123,3 +45123,48 @@ sameness claim fails it; dropping InternalError from the stated set fails it.
 Restored byte-identical.
 
 `it(` count 5 unchanged. No new file, no ratchet change.
+
+## V-1061 — the same false retry claim in two more places, and why no guard saw it
+
+V-1060 corrected `sdk-go/doc.go`. The honest follow-up was whether it was alone, so I
+swept every customer-facing line in the three SDK packages and the docs site that
+mentions retrying alongside 5xx, 500, InternalError, transport, terminal or 429.
+
+It was not alone. TWO more said the same false thing:
+
+`sdk-python/README.md` — "Retryable errors by default: TransportError +
+RateLimitError. … 5xx responses are terminal (not retried)." Its own
+`RetryConfig.retryable_errors` is `(TransportError, RateLimitError, InternalError)`.
+
+`sdk-go/README.md` — "Retryable: *TransportError + *RateLimitError. Other typed
+errors propagate immediately." InternalError simply absent, with no visible gap.
+
+The TypeScript README is correct and says the SDK retries network failures and 5xx.
+
+WHY NOTHING CAUGHT IT, which is the part worth keeping. Two guards already pin the
+retryable set — `sdk-retry-policy-cross-sdk-parity` and `cross-sdk-retry-policy-
+parity` — and both were green, because both point at retry.ts, retry.py and retry.go,
+which have always been right. Every guard in this area watched implementations. None
+asked whether the pages customers read agreed with them. That is a structural blind
+spot, not an oversight in any one file: the corpus was dense with coverage exactly
+where the drift was not.
+
+Neither README's retry line was pinned by anything at all, so there was no pin to
+correct — only source, plus the new guard.
+
+The guard derives the set from the implementations rather than restating it, then
+requires each customer-facing page to name InternalError or 5xx, and to carry no
+phrasing that contradicts it. The negative half is the load-bearing one: a page can
+name InternalError in one line and call 5xx terminal two lines down, and the positive
+check alone would pass. An arm also asserts the contradiction patterns still match the
+sentence they were written for, so a typo cannot silently retire that half.
+
+Changelogs are excluded deliberately, and the reason is in the file: they record what
+was true at a version, and editing them to match today would be falsifying a history
+rather than fixing a claim.
+
+Mutations: restoring Python's sentence fails an arm; deleting InternalError from the
+Go README — the exact silent-omission shape it had — fails an arm; regressing doc.go
+to the V-1060 wording fails an arm. Restored byte-identical.
+
+`it(` count 3 in a new file. Ratchets 2938→2939 and 3104→3105.
