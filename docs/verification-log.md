@@ -39052,3 +39052,33 @@ sampled the earliest batches and found them sound, and this bounds the unread-he
 The mistakes this session have been isolated rather than systemic, and saying so is as much a
 finding as the corrections were — an unbounded suspicion about one's own work costs more than the
 errors do.
+
+## V-912 — two more early batches re-verified; the sample is now four of twenty-six, all clean (2026-08-19)
+
+**Continuing V-909's audit on the repository side rather than my own process.**
+
+- **B8 / action 14 — `account.email_verified` documented as a `system` actor.** Fixed on both
+  sides, which is the half worth checking: the docs table now reads
+  `account.email_verified | customer | Customer clicked the verify-email link`, and
+  `auth-flows.ts` emits it through `emitAuditBestEffort`, whose `record()` call passes
+  `actorType: 'customer'` with `actorAccountId` defaulting to the account itself. Documentation and
+  emission agree. The emit runs through a helper, so a literal search near the action name for an
+  actor argument finds nothing — V-904's rule applied before it could produce a false negative.
+- **B6 / action 4 — crypto orders documented as an in-memory `Map`.** The claim is gone from
+  `api/billing-crypto.md`, and `crypto_orders` is a real Postgres table in `schema.ts` with its own
+  account index. Nothing left describing the store as ephemeral.
+
+**Four of twenty-six sampled — B1, B3, B6, B8 — and every one holds.** Chosen across four
+subsystems (team RBAC scope semantics, avatar at-rest posture, audit actor typing, payment
+persistence) rather than clustered, so the sample is not accidentally testing one author's good day.
+
+**The audit's own yield, stated honestly.** Across V-909 through here it has produced one finding,
+and that finding (V-910) was about my later work rather than the batches. The early remediation is
+holding up under re-verification with instruments it did not have — which is a real result, because
+the premise of the audit was that it might not.
+
+**What that implies for the remaining twenty-two.** Continuing to sample has declining value: four
+clean draws across four subsystems is reasonable evidence the batch work was careful, and the next
+draw is unlikely to change that read. I am recording the sample size rather than continuing to grow
+it, so the next reader knows both what was checked and that the rest was a judgement call, not an
+oversight.
