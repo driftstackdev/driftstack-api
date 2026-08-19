@@ -37460,6 +37460,11 @@ null;`. The line offered as proof the gate does not exist is the line that imple
 number is the fastest-rotting evidence a document can carry, and citing one to prove a NEGATIVE
 inverts the moment the file moves.
 
+**[V-910 correction: the file's own `HISTORICAL SNAPSHOT` banner at line 5 already stated that
+section 8's outstanding items had shipped. The body fix below stands — a reader arriving by link or
+search meets §8's own words without the banner — but the impact argued in the next paragraph is
+overstated, because a top-down reader hits the disclaimer first.]**
+
 **Why it matters beyond tidiness.** This is a launch-readiness document. Someone triaging P0
 blockers reads a shipped feature as outstanding work and either re-implements it or reports a gap
 that closed — the same two costs V-826 identified for a stale register, here on the launch list.
@@ -38983,3 +38988,32 @@ carefully, not proof the other twenty-four are. I am recording it as a sample ra
 diverged from the prescribed text and was more accurate. Grepping for a plan's proposed literal to
 confirm a batch shipped therefore reports a false miss — which is what my first two greps here did,
 and would have been a third wrong finding had I stopped at the count.
+
+## V-910 — V-866 corrected a section the same file already disclaimed, and I never read the top of it
+
+**Continuing V-909's audit into B7, and it lands on my own later work.** B7 (action 24) added a
+`HISTORICAL SNAPSHOT` banner to `docs/gui-client/audit-current-state.md` stating that everything
+"sections 1, 4, 7, **8** and 11 … list as outstanding has since shipped", and naming among the
+shipped items "tier and concurrent-cap display with button gating (V-237)".
+
+**V-866 then reported §8's tier-aware enforcement as a stale P0 as though it were undisclosed.** The
+banner is at line 5. V-866's correction is at line 96. I edited that section without reading the
+first five lines of the file — and the file had been worked on earlier in this same arc, by me.
+
+**The fix stands; its stated impact does not.** §8's body says "Not implemented" and "P0
+launch-blocking" in its own words, and a reader arriving by link, search or table-of-contents jump
+meets that without the banner. Correcting the body is a real improvement over disclaiming it at the
+top, which is why V-866's edit was worth making. But V-866 argued the cost as "someone triaging P0
+blockers reads a shipped feature as outstanding", and a triager reading top-down hits the banner
+first. **The risk was smaller than I described it.**
+
+**Third form of the same failure.** V-905 duplicated a guard whose filename was two words from mine.
+V-907 refined the rule to grep the invariant phrase. Neither would have caught this: the question
+here is not "does a guard exist" or "has this invariant been checked" but **"has this FILE already
+been addressed, and what does its header say"**. B7 is in the plan I have been working from all
+session, under the action number the prompt still lists. The cheapest possible check — read the top
+of the file before editing the middle — is the one I skipped.
+
+**Corrected in place**: V-866's entry now records that the banner preceded it. The audit method from
+V-909 has now found something in two of three batches sampled, and both findings were about my own
+work rather than the repository's.
