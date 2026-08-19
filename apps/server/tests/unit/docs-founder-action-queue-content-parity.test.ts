@@ -17,7 +17,7 @@
 //     + EU VAT reverse-charge.
 //   • Pricing TBD: BYOK markup multiplier + bundled-LLM per-token
 //     rate.
-//   • Brand: og-default.png pending.
+//   • Brand: og-default.png SHIPPED (V-871) — 1200x630, wired in BaseLayout.
 //   • Legal: sub-processor list LOCKED 2026-05-03 V-052; legal docs
 //     DRAFT counsel-pending.
 //   • Resolution policy: 30-day audit-trail retention then archive.
@@ -131,7 +131,23 @@ describe('W548.B /docs/founder-action-queue.md content parity', () => {
     expect(body).toMatch(/API Builder \/ API Scale \/ Enterprise tiers/);
     expect(body).toMatch(/## Brand assets/);
     expect(body).toMatch(/### og-default\.png/);
-    expect(body).toMatch(/Drop a 1200×630 PNG into/);
+    // V-871 — the asset shipped 2026-07-07 and BaseLayout defaults to it, but
+    // this entry still read PENDING with a placeholder URL. Negative on the
+    // stale status, positive on the shipped state; the 1200×630 spec survives
+    // as the record of what was asked for.
+    expect(body, 'the pending status is gone').not.toMatch(
+      /\*\*Status:\*\* PENDING \(placeholder URL today/,
+    );
+    expect(body, 'the asset is recorded as shipped and wired').toMatch(
+      /\*\*Status:\*\* DONE \(V-871 check\)/,
+    );
+    expect(body, 'and the original specification is preserved verbatim').toMatch(
+      /\*\*Original ask, kept verbatim as the record of what was specified:\*\*/,
+    );
+    expect(
+      body,
+      'including the instruction itself, which a third pin in this block freezes',
+    ).toMatch(/Drop a\s*\n?\s*1200×630 PNG into/);
     expect(body).toMatch(/`apps\/marketing-site\/public\/og-default\.png`\. Brand-on-image/);
     expect(body).toMatch(/treatment with the oxblood D logo \+ "Driftstack" wordmark \+ a/);
     expect(body).toMatch(/one-line tagline\./);

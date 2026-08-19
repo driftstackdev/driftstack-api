@@ -167,11 +167,14 @@ the founder needs to do.
 
 ### og-default.png
 
-- **Status:** PENDING (placeholder URL today; HTML renders fine
-  without the asset, only social-card preview fails).
-- **Blocks:** Open Graph + Twitter card preview rendering on
-  shared marketing-site links (V-132).
-- **Action:** Drop a 1200×630 PNG into
+- **Status:** DONE (V-871 check). `apps/marketing-site/public/og-default.png`
+  is a 1200×630 PNG dated 2026-07-07, generated from `og-default.svg` by
+  `scripts/gen-og-image.mjs`, and `BaseLayout.astro` resolves every page's
+  `ogImage` to `/og-default.png` by default — so it is wired, not a placeholder
+  URL. This entry asked for it for six weeks after it landed.
+- **Blocks:** nothing. Open Graph + Twitter card previews render (V-132).
+- **Original ask, kept verbatim as the record of what was specified:** Drop a
+  1200×630 PNG into
   `apps/marketing-site/public/og-default.png`. Brand-on-image
   treatment with the oxblood D logo + "Driftstack" wordmark + a
   one-line tagline.

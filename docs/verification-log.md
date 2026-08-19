@@ -37627,3 +37627,39 @@ which is exactly the mistake V-794 caught me making in V-865.
 Mutation-proved three ways: stripping the checkpoint marker fails, removing the not-edited rationale
 fails, and mutating a preserved historical row still fails — so the old pins bind the record and the
 new ones bind the banner, without either capturing the other. Document restored byte-identical.
+
+## V-871 — the action queue asked for an asset that shipped six weeks earlier (2026-08-18)
+
+**Sixth in the readiness-document run, and the one that costs the reader time directly.**
+`docs/founder-action-queue.md` is the list of things somebody is supposed to DO. Its brand-assets
+entry reads "**Status:** PENDING (placeholder URL today)" and asks for a 1200×630 PNG at
+`apps/marketing-site/public/og-default.png`.
+
+**The file is there, and has been since 2026-07-07.** 59,996 bytes, header parses as PNG
+**1200×630** — exactly the requested dimensions — generated from `og-default.svg` by
+`scripts/gen-og-image.mjs`. It is not an unreferenced file either: `BaseLayout.astro` resolves every
+page's `ogImage` to `/og-default.png` by default, so the "placeholder URL today" half is false too.
+The entry has been asking for finished work for six weeks.
+
+**The queue has no roll-up date at all** — it says "living document. Updated as items resolve".
+Both other readiness documents this arc at least carried a date to distrust; this one offers nothing
+to check freshness against, which is why an item can sit resolved and unmarked indefinitely.
+
+**Checked and NOT claimed: the auto-merge item.** "Allow auto-merge in repo settings (V-148)" looked
+equally stale — `.github/workflows/dependabot-auto-merge.yml` exists. But the item is about a
+**GitHub repository setting**, and a workflow file is not evidence that the setting is enabled. Same
+shape as V-870's cutover script: the artifact that would USE a thing is not proof the thing is done.
+Left alone.
+
+**Three pins, and the third surfaced only by failing.** Two were found by grep — the action
+instruction and a summary line in the test file's own header comment. A third assertion later in the
+same block froze `og-default.png`. Brand-on-image` including its punctuation, and my rewrite changed
+a full stop to a comma. Rather than repoint that pin I restored the original instruction verbatim,
+which is the better outcome anyway: the entry now records the asset as shipped AND preserves the
+specification exactly as written, so the historical ask survives the status change.
+
+That is the fifth time this arc a claim lived where the first search did not look, and the second
+time a pin depended on typography rather than content (V-867 was line wrapping; this was a period).
+
+Mutation-proved three ways — restoring PENDING, removing the verbatim marker alone, and altering
+the preserved instruction — each failing independently. Document restored byte-identical.
