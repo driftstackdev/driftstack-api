@@ -6,18 +6,21 @@
 // and put the format in a `description`, so the only machine-readable part of
 // the contract was "any string". LOOSER than the server, the usual direction.
 //
-// `PUT /v1/admin/incidents/{id}` — the mirror applied
-// `.required({ started_at: true })`, but the route parses with plain
-// `CreateIncidentRequestSchema`, where `started_at` is optional and "defaults to
-// server-now if omitted". STRICTER than the server, which is the rarer direction
-// and worth naming: it breaks nobody who complies, so no test and no user ever
-// reports it, and a generated client simply marks a field mandatory that the API
-// would have defaulted.
+// `PUT /v1/admin/incidents/{id}` — the document requires `started_at` while the
+// SCHEMA it is built from marks that field optional. V-930 read that as the
+// document being stricter than the server and loosened it; V-931 put it back,
+// because the enforcement is not in the schema at all. It is a hand-written check
+// two lines below the handler's `safeParse`:
 //
-// Both are now the same object the route uses — `AccountIdSchema` for the id,
-// and the unmodified request schema for the incident body. This file checks the
-// property from BOTH sides, because a one-sided check would keep passing when
-// the other side moves.
+//     if (parsed.data.started_at === undefined) {
+//       throw new BadRequestError('started_at is required for idempotent …');
+//     }
+//
+// Without it the upsert is not idempotent — every retry would take a different
+// server-now timestamp — and the admin panel both sends the field and compares it
+// back on retry. So the arm below asserts the document requires MORE than the
+// schema here, and pins the route-side check that earns it. Reading which schema
+// a handler parses with is not the same as reading what the handler validates.
 
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -86,7 +89,7 @@ describe('V-930 the document is neither looser nor stricter than the route', () 
     );
   });
 
-  it('CRITICAL the incident bodies require exactly what the schema requires, on BOTH verbs. POST and PUT parse with the same schema, so any difference between their published required sets is the document inventing a rule. started_at is optional and defaults to server-now, so demanding it made a generated client force a value the API would have filled in.', () => {
+  it('CRITICAL the incident PUT publishes the extra requirement its handler enforces, and POST does not. The two verbs share a schema, so the published difference between them can only be justified by code — here a check below the parse that refuses a missing started_at, without which the idempotent upsert would take a fresh server-now timestamp on every retry.', () => {
     const shape = (
       CreateIncidentRequestSchema as unknown as {
         shape: Record<string, { isOptional(): boolean }>;
@@ -98,11 +101,16 @@ describe('V-930 the document is neither looser nor stricter than the route', () 
       .sort();
     const post = [...(body('/v1/admin/incidents', 'post').required ?? [])].sort();
     const put = [...(body('/v1/admin/incidents/{id}', 'put').required ?? [])].sort();
-    expect(post, 'POST required set vs the schema').toEqual(enforced);
-    expect(put, 'PUT required set vs the schema').toEqual(enforced);
+    expect(post, 'POST publishes exactly the schema requirements').toEqual(enforced);
+    expect(put, 'PUT publishes the schema requirements plus started_at').toEqual(
+      [...enforced, 'started_at'].sort(),
+    );
+    // The route-side half. Without this the arm above would keep passing if the
+    // handler dropped its check while the document went on advertising the rule —
+    // which is the direction V-930 mistook for a documentation defect.
     expect(
-      put,
-      'started_at is optional on the route, so the document may not demand it',
-    ).not.toContain('started_at');
+      readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes/admin-incidents.ts'), 'utf8'),
+      'the PUT handler still refuses a missing started_at',
+    ).toMatch(/started_at is required for idempotent incident creation/);
   });
 });

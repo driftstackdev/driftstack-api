@@ -20002,7 +20002,7 @@
                     "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
                   }
                 },
-                "required": ["title", "description", "severity"]
+                "required": ["title", "description", "severity", "started_at"]
               }
             }
           }

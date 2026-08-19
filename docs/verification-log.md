@@ -39863,3 +39863,47 @@ published document has been corrected on nine endpoints — two MFA bodies, two 
 proxy body's bounds and formats, the admin refund body, the bundled-llm at-least-one rule, the
 transfer id format, and the incident PUT. None changed server behaviour; all nine changed what the
 API promises.
+
+## V-931 — retracting half of V-930: the incident PUT really does require started_at (2026-08-19)
+
+**I loosened a correct contract.** V-930 reported `PUT /v1/admin/incidents/{id}` as publishing
+`started_at` as required while the route left it optional, and relaxed the document to match. That was
+wrong, and the repo caught it: `openapi-incidents-truth` asserts
+`if (method === 'put') expect(required).toContain('started_at')`, and the full suite went red on it.
+
+**What I actually missed.** I read the handler's validation line —
+`CreateIncidentRequestSchema.safeParse(request.body)` — confirmed that `started_at` is optional in
+that schema, and stopped. The enforcement is on the two lines immediately BELOW the parse:
+
+```
+if (parsed.data.started_at === undefined) {
+  throw new BadRequestError('started_at is required for idempotent incident creation.');
+}
+```
+
+So the route does require it, the document was right, and the guard was right. **Which schema a
+handler parses with is not the same as what the handler validates.** Every other endpoint in this arc
+put its whole contract in the schema, and I generalised from that without checking.
+
+**The reason it matters, which I had backwards.** Without an explicit `started_at`, the upsert is not
+idempotent — each retry would take a fresh server-now timestamp. The admin panel supplies the field
+and compares it back on retry (`incidents/index.astro`). Document, guard, route and only caller all
+agreed; I was the one out of step.
+
+**Reverted.** The mirror is `CreateIncidentRequestSchema.required({ started_at: true })` again, the
+published PUT requires `started_at`, `openapi-incidents-truth` passes, and the source now carries the
+route-check quote so the next reader does not have to find it.
+
+**My V-930 guard asserted the wrong invariant too**, and is corrected rather than deleted: it now
+requires the PUT to publish the schema's requirements PLUS `started_at`, and pins the route-side check
+that earns the difference. That pairing is the point — a published requirement with no code behind it
+is a documentation defect, and the same requirement with code behind it is a contract. The arm cannot
+tell those apart without reading both, which is exactly the mistake it now guards against. Proof:
+deleting the route's check fails the arm by name.
+
+**What survives from V-930:** the transfer-body fix is untouched and correct — the route validates
+`recipient_account_id` against an `acc_<uuid>` regex, and the document had published a bare string.
+That half was verified from both ends and its proof still holds.
+
+**Corrected tally: 24 mirrors hand-checked, 8 divergent, 16 clean.** V-930's claim of 9 divergences
+counted this one, and it was not a divergence.

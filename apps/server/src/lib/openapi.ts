@@ -2794,15 +2794,21 @@ function buildRegistry(): OpenAPIRegistry {
     window: true,
     limit: true,
   });
-  // V-930 — the same schema the route parses with, un-narrowed. This applied
-  // `.required({ started_at: true })`, but PUT /v1/admin/incidents/{id} parses
-  // with plain CreateIncidentRequestSchema, where started_at is optional and
-  // "defaults to server-now if omitted". So the document was STRICTER than the
-  // server — the inverse of the usual drift, and harmless to a caller who
-  // complies, but it made a generated client mark a field mandatory that the API
-  // will happily default. If the stricter upsert contract was the intent, the
-  // route is where to enforce it; the document cannot enforce anything.
-  const IdempotentCreateIncidentRequestOpenApi = CreateIncidentRequestSchema;
+  // V-931 — `started_at` really IS required on the idempotent PUT, and this
+  // document is right to say so. V-930 briefly loosened it after reading only the
+  // handler's `safeParse` line, which uses the plain schema where the field is
+  // optional. The enforcement is on the two lines BELOW that call:
+  //
+  //     if (parsed.data.started_at === undefined) {
+  //       throw new BadRequestError('started_at is required for idempotent …');
+  //     }
+  //
+  // Without it the upsert is not idempotent — each retry would take a different
+  // server-now timestamp. The admin panel supplies it and compares it back on
+  // retry (incidents/index.astro), so all three layers agree.
+  const IdempotentCreateIncidentRequestOpenApi = CreateIncidentRequestSchema.required({
+    started_at: true,
+  });
   const IncidentMutationResponseOpenApi = z.object({
     incident: IncidentSchema,
     update: IncidentUpdateSchema,
