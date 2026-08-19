@@ -41120,3 +41120,45 @@ than by re-reading the file. Both suites green, 30 tests.
 **Standing correction to the record:** V-958's conclusion — that a real gap existed — is wrong. What
 survives from it is the method (test a documented claim instead of pinning its text) and the measurement
 that the claim is true: foreign-live DELETE 204, foreign-unknown DELETE 204, owner's profile intact.
+
+## V-960 — the fifteen-route decision is a two-route decision, and the other thirteen are now earned
+
+**The open item I have flagged for four turns was never fifteen routes wide.** The unknown-field reporter
+skips the unauthenticated auth surface. V-951 showed both original reasons for that fail: the shapes are
+published, and the failure mode does reach at least one of these routes. I have been reporting the remainder
+as a fifteen-route product decision. Measuring it reduces it to two.
+
+**First, the set is not what I said it was.** I had called all sixteen backlog entries anonymous. Enumerated
+individually with the V-948-correct registration pattern: fifteen are gated only by an IP rate-limiter, and
+`POST /v1/sessions/:id/proxy` sits behind `requireAuth + write:sessions` — already refused in V-946 for a
+different and correct reason (the route throws unconditionally, so nothing can be dropped).
+
+**Then the criterion, which is objective rather than a judgement.** A mistyped field can only be dropped in
+silence if the schema has a field it is willing to do without. Where every declared field is required, the
+typo IS a missing required field: zod refuses with 400 and the caller is told exactly what happened. The
+mechanism has nothing to add, and the exemption is correct on the merits.
+
+**Measured, and the arithmetic is exact: 11 + 2 + 2 = 15.** Eleven schemas are importable and drop-proof —
+ten declare no optional field at all, and `MfaChallengeRequestSchema` declares two that a `.refine()` makes
+at-least-one, so a mistyped `code` leaves neither present and the parse fails. Two more live inside
+`auth-oauth-client.ts` rather than api-types and declare no optional field either. **Two remain where the
+drop is real:** `POST /v1/auth/signup` (`name`) and `POST /v1/auth/cli-authorize/initiate` (`client_label`).
+
+**That is the whole decision, and it is now pinned rather than described.** The thirteen are held to the
+property that earns their exemption, so an optional field added to `LoginRequestSchema` next month fails
+here naming the route instead of quietly making the exemption unearned. The two are pinned as behaviour: if
+either stops dropping its field, the entry fails and the decision is moot.
+
+**My first version of this guard promised something its code did not do.** It ran each schema over a body
+with one hand-picked key misspelled — which tests whether THAT key is droppable and says nothing about a
+field added later. The header claimed "adding an optional field to `LoginRequestSchema` … now fails here,
+naming the route". Mutation says otherwise: that exact edit left all four arms green, **and still did after
+rebuilding the package**, so it was the guard and not the dist/src gap. Rewritten to derive optionality from
+the schema itself, unwrapping `ZodEffects` the way `knownRequestKeys` does. Four proofs now fire, each naming
+its route: the added optional field on login, signup's `name` becoming required, an optional field added to
+the route-local `StartBodySchema`, and removing the `refineCovers` entry that excuses the MFA pair.
+
+**Recorded because it is the fourth instrument failure of this session** — after a corpus-wide search that
+should have been file-scoped, an array-vs-string `toContain`, and a symbol-name scan that could not see
+coverage through a caller. The pattern is consistent: every one asserted at the level of names or fixtures
+where the property lives at the level of behaviour. The mutation caught all four; nothing else would have.
