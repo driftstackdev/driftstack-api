@@ -43,6 +43,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DrizzleAuthFlowsRepo } from '../../src/db/auth-flows-repo.js';
 import { DrizzleProfilesRepo } from '../../src/db/profiles-repo.js';
+import { DrizzleWebhooksRepo } from '../../src/db/webhooks-repo.js';
 import type * as schema from '../../src/db/schema.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
@@ -66,6 +67,7 @@ beforeAll(async () => {
   try {
     await client`SELECT 1 FROM web_sessions LIMIT 0`;
     await client`SELECT 1 FROM profiles LIMIT 0`;
+    await client`SELECT 1 FROM webhook_endpoints LIMIT 0`;
   } catch {
     dbReachable = false;
     await client.end({ timeout: 1 }).catch(() => {});
@@ -76,6 +78,7 @@ beforeAll(async () => {
 afterAll(async () => {
   if (client) {
     for (const accountId of seeded) {
+      await client`DELETE FROM webhook_endpoints WHERE account_id = ${accountId}`.catch(() => {});
       await client`DELETE FROM web_sessions WHERE account_id = ${accountId}`.catch(() => {});
       await client`DELETE FROM profiles WHERE account_id = ${accountId}`.catch(() => {});
       await client`DELETE FROM accounts WHERE id = ${accountId}`.catch(() => {});
@@ -156,6 +159,44 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       // rather than a query that returns one row for everyone.
       const theirs = await repo.listActiveWebSessionsForAccount(stranger, new Date());
       expect(theirs.map((r) => r.id)).toEqual([strangerLive?.id as string]);
+    });
+
+    it("CRITICAL listEndpoints returns only the asking account's webhook endpoints. V-1000 — the eighth and last genuinely unheld predicate on the cold list: unscoping it leaves 357 tests over 30 webhook files green. The customer-facing list is a pass-through (`services/webhooks.ts:447` returns it directly), so unscoped it hands every account's endpoint URLs to any caller. The route maps to `secret_prefix` rather than the decrypted secret, so signing secrets do NOT leak — the disclosure is the URLs and their metadata, which is bad enough and is stated at its real size.", async () => {
+      if (unusable('webhook endpoints')) return;
+      const sql = client as ReturnType<typeof postgres>;
+      const db = drizzle(sql) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleWebhooksRepo(
+        { client: sql, db, close: async () => {} },
+        { secretEncryptionKeyBase64: Buffer.alloc(32, 17).toString('base64') },
+      );
+      const [owner, stranger] = await seedPair(sql, 'wh');
+
+      // Rows are created through the repo rather than seeded by hand: the stored
+      // secret must be a v2 envelope, and a raw plaintext one makes the read throw
+      // before any assertion runs.
+      const ownerEp = await repo.insertEndpoint({
+        accountId: owner,
+        url: 'https://owner.test/hook',
+        secret: 'whsec_abcdefghijklmnopqrstuvwxyz234567',
+        secretPrefix: 'whsec_owner',
+        events: ['session.completed'],
+        description: null,
+      });
+      const strangerEp = await repo.insertEndpoint({
+        accountId: stranger,
+        url: 'https://stranger.test/hook',
+        secret: 'whsec_abcdefghijklmnopqrstuvwxyz234567',
+        secretPrefix: 'whsec_stranger',
+        events: ['session.completed'],
+        description: null,
+      });
+
+      const ids = (await repo.listEndpoints(owner)).map((e) => e.id);
+      expect(ids, "the owner's own endpoint must be listed").toContain(ownerEp.id);
+      expect(ids, "another account's webhook endpoint must never be listed").not.toContain(
+        strangerEp.id,
+      );
+      expect(ids).toEqual([ownerEp.id]);
     });
 
     it("CRITICAL listTrashed returns only the asking account's trashed profiles, and no live one. The recycle-bin listing goes straight back through services/profiles.ts, so this predicate is the boundary; the rule is currently proven against the in-memory profiles double.", async () => {

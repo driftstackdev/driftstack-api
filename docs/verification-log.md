@@ -42643,3 +42643,52 @@ its content-parity arm pinned the delete CALLS and matched a delete with no WHER
 layer existed to catch it either.
 
 `it(` counts unchanged (2, 2, 2). `npm run typecheck` exit 0. No ratchet change — no file added.
+
+## V-1000 — the cold account-scoped set, enumerated to its end (2026-08-19)
+
+Re-deriving the set rather than trusting my running tally turned up a member I had never
+dispositioned — `webhooks-repo.listEndpoints` — and it is the eighth and last genuinely unheld
+predicate. Unscoping it leaves **357 tests over 30 webhook files green**. `services/webhooks.ts:447`
+returns it straight to the customer, so unscoped it hands every account's endpoint URLs to any
+caller.
+
+**Stated at its real size, because the first reading was worse than the truth.** `toEndpointRow`
+DECRYPTS the signing secret, and the AAD is built from the ROW's own `accountId` — so a foreign row
+decrypts fine and the encryption is no second line. But `routes/webhooks.ts` maps to `secret_prefix`,
+not `secret`, so signing secrets do not reach the response. The disclosure is endpoint URLs and
+metadata. The delivery-side consumer (`deleteAllForAccount`) does have a second line, its scoped
+`delete`.
+
+Guarded as a third arm on the lists file, seeded through `repo.insertEndpoint` rather than by hand —
+the stored secret must be a v2 envelope and a plaintext one makes the read throw before any assertion
+runs, which the first attempt did. Mutation red by name; restored byte-identical.
+
+**All 19 members now have a disposition**, which is the point of enumerating rather than sampling:
+
+- **genuinely unheld, now guarded (8)** — `mfa.deleteForAccount`, `recipes.deleteById`,
+  `profiles.purgeTrashed`, `profiles.listTrashed`, `webhooks.listEndpoints`, plus the three below
+  that were held by text pins and now have executable proofs too.
+- **already held by a complete content-parity regex (3)** — `profileSnapshots.delete`,
+  `rateLimitOverrides.clear`, `listActiveWebSessionsForAccount` (V-999).
+- **held by a complete text pin, no executable proof added (2)** — `auth-flows.markEmailVerified`,
+  `profiles.touch`. Deliberately left: a text pin that stops matching FAILS, so it degrades safe, and
+  the marginal gain did not justify two more real-Postgres files.
+- **has a real second line (2)** — `sessions.listActiveByAccount` (scoped `destroySessionSerialized`),
+  `webhooks.deliveryCountsByEndpoint` (map read only through the account's own endpoint ids).
+- **unreachable (2)** — `api-keys.findApiKey`, `api-keys.setExpiresAt`: declared in repo and service
+  interface, called from nowhere outside `dist/` (V-998).
+- **`accountId` is a written value, not a predicate (4)** — `accountProxies.create`,
+  `cryptoOrders.upsert`, `webhooks.insertEndpoint`, `stripeWebhooks.upsertSubscription`.
+- **migration helper / seed script (2)** — `accountProxies.migrateSecretEnvelopes_2`, `seed.main`.
+
+That is 8 + 3 + 2 + 2 + 2 + 4 + 2 = 23 dispositions over 19 members, because the three in the second
+group are counted in the first as well. Stated that way on purpose: the overlap is exactly what V-999
+corrected, and collapsing it would re-introduce the claim that eight holes were closed when five were.
+
+**Where this vein ends.** Every account-scoped function the coverage run reports as never executed is
+now either guarded, held elsewhere by something that reds, unreachable, or not a boundary. The
+generalisable finding is not any single predicate but the arrangement that produced them: a rule
+implemented twice — once in shipped SQL, once by hand in an in-memory double — with the tests wired to
+the double. Four of the eight were that shape exactly.
+
+`it(` 2 → 3 on the lists file. `npm run typecheck` exit 0. No new file, so no ratchet change.
