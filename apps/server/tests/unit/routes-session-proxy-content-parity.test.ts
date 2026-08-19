@@ -197,4 +197,30 @@ describe('routes/session-proxy content parity', () => {
       ).toEqual([]);
     }
   });
+
+  it('CRITICAL the spec prose and the handler agree about WHEN the 503 happens. V-1047: the openapi comment said a 503 is what deployments without a compatible backend return — which reads as "it works where one exists" — while the handler throws unconditionally and says so, including when a backend IS present. The published spec still advertises a 200 for this path, so an SDK generated from it carries a success shape no caller can reach; that is the intended contract rather than a lie, but only while the prose says which of the two a reader is looking at.', () => {
+    const route = read('apps/server/src/routes/session-proxy.ts');
+    const spec = read('apps/server/src/lib/openapi.ts');
+
+    // The handler throws with no condition on backend presence. If a wiring
+    // change makes the throw conditional, this fails and the paragraph below it
+    // has to be rewritten in the same commit.
+    expect(route, 'the proxy route no longer throws FeatureUnavailableError').toMatch(
+      /throw new FeatureUnavailableError\(/,
+    );
+    expect(
+      route,
+      'the route now guards the throw on a backend being present — the spec prose describes an ' +
+        'unconditional throw and must be updated with it',
+    ).toMatch(/throws[\s\S]{0,24}unconditionally/);
+
+    // The retracted framing must not come back.
+    expect(
+      spec,
+      'the spec comment again implies the 503 is limited to deployments without a backend',
+    ).not.toMatch(/Deployments without a compatible backend return FeatureUnavailable/);
+    expect(spec, 'the spec no longer records that the throw is unconditional').toMatch(
+      /throws FeatureUnavailable[\s\S]{0,24}unconditionally/,
+    );
+  });
 });

@@ -44538,3 +44538,40 @@ title claiming more than its body is the exact defect this sweep has spent the s
 other people's files.
 
 Full e2e: 222 passed. `apps/server/tests/unit` green: 1935 files, 20244 passed. Spec count 35 → 36.
+
+## V-1047 — the spec said the 503 was conditional; the handler says it is not
+
+Two verifications first, both clean and both worth not repeating. The control-key half of the
+"two writers must agree on capacity" invariant — the path where the destructive bug actually happened
+— IS guarded: `team-effective-owner-rate-limit` asserts the control key's capacity equals the owner's
+account-authenticated capacity and exceeds the free floor, with a comment noting that a lookup count
+alone would not catch the regression. Together with V-1046 both halves of that invariant are covered.
+
+Then the session-proxy route, which sits on the standing implement-or-delete decision. It is in the
+PUBLISHED spec — `/v1/sessions/{id}/proxy`, in `packages/sdk-python/openapi.json`, declaring a 200 —
+and the handler throws `FeatureUnavailableError` unconditionally. Its own comment is explicit:
+"this throws unconditionally, including when a backend IS present (V-823; it always is, see
+bootstrap)".
+
+The comment above the spec registration said the opposite: "Deployments without a compatible backend
+return FeatureUnavailable; the public request and response contract is otherwise identical." That
+reads as "it works where one exists". It does not work anywhere.
+
+Both stay as they are — the 200 documents the contract the route will answer once wired, and the
+customer-facing 503 wording is deliberately about availability, which is accurate either way. What
+changed is the prose, which now says which of the two a reader is looking at, and a guard that pins
+the PAIR: the route throwing unconditionally and the spec recording it. Wiring the route reds the
+guard until the paragraph moves with it. That is the whole of what can be done here without taking
+the owner's decision.
+
+**Rule 5 fired, in its exact documented form.** The arm went in via a python heredoc whose `\n`
+became a literal newline inside a regex, producing an unterminated expression. Vitest reported "Tests
+no tests" rather than a failure — a green-looking run over a file it could not parse — and the `it(`
+count comparison against HEAD (14 → 15) is what said the arm existed while nothing ran. Fixed with a
+newline-agnostic `[\s\S]{0,24}`.
+
+Mutation: restoring the retracted spec framing → RED; making the route's throw conditional → RED.
+Sources restored byte-identical.
+
+`it(` count 14 → 15. No new file, no ratchet change. `apps/server/tests/unit` green: 1935 files,
+20245 passed.

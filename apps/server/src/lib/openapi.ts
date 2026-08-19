@@ -3993,8 +3993,18 @@ function buildRegistry(): OpenAPIRegistry {
 
   // ── EG-API-1.2 + 1.3 — customer-configurable egress (planning 133) ──────
   // These routes use the configured SOCKS5/OpenVPN/WireGuard backend.
-  // Deployments without a compatible backend return FeatureUnavailable;
-  // the public request and response contract is otherwise identical.
+  // V-1047 — this comment used to say a 503 is what deployments WITHOUT a
+  // compatible backend return, which reads as "it works where one exists". The
+  // handler says otherwise in its own words: it throws FeatureUnavailable
+  // unconditionally, "including when a backend IS present (V-823; it always is,
+  // see bootstrap)". The route layer is simply not wired to the egress service.
+  //
+  // The 200 below therefore documents the intended contract, not a reachable
+  // response, and the 503 description is the only outcome a caller sees today.
+  // Both stay: the shape is what the route will answer once it is wired, and the
+  // customer-facing wording is deliberately about availability rather than
+  // implementation. `routes-session-proxy-content-parity` pins the pair, so
+  // wiring the route fails there until this paragraph is updated with it.
   registerRoute(r, {
     method: 'post',
     path: '/v1/sessions/{id}/proxy',
