@@ -41906,3 +41906,70 @@ that has held up.
 **Still open and still the owner's:** whether to report unknown fields on the two anonymous routes that
 silently drop one (signup `name`, cli-authorize/initiate `client_label`), and whether the four admin
 account-lifecycle routes should report a mistyped `reason` rather than writing a reasonless audit row.
+
+## V-984 — the sweep's last unbuilt deliverable, and the three endpoints it found unpublished (2026-08-19)
+
+**The remaining-actions list I have been treating as stale is stale — now enumerated rather than
+assumed.** Every one of the 38 sweep findings resolves: 32 closed in batches, four are the
+`⚠ DECISION REQUIRED` items (5, 7, 12, 25) that belong to the owner, and action 19 is **refuted** —
+V-812 established that the `ping` 200 sits behind `human-driving`, which nothing emits. Action 37
+looked open (no batch in the plan, no log entry citing it) but its four sub-items landed under their
+own numbering: V-826 corrected the R2 sub-processor register, V-827 the superseded banner, the
+ADR-004 enum note, and the `/v1/captures` and `cli-authorize` path corrections.
+
+A first pass at this reconciliation grepped the log for the literal string `Action N` and reported
+**12 of 38 cited**, with the "missing" set suspiciously equal to the actions already known to be
+done. That measured citation STYLE, not closure: V-795 closes action 17 without ever writing
+"Action 17". Every figure above comes from matching each finding's SUBJECT instead.
+
+**What was genuinely unbuilt is the cross-source guard action 37 ends with** — "assert every `/v1/…`
+path literal in the docs exists in the OpenAPI spec's `paths`. Build it." Nothing runs that
+direction; V-847 runs spec→docs, and `api-reference-surface-doc-parity` checks a curated list on one
+page.
+
+**Run as proposed it is unshippable, and measuring said so before a line was written: 144 distinct
+misses over 2444 literals.** Three reasons, all correct behaviour:
+
+- `docs/**` is mostly dated internal snapshots naming endpoints that were real when written
+  (`/v1/billing/trial-pack`, retired in migration 0065). Failing a suite on those would contradict
+  action 37's own thesis, which is that those files need a date and not a line-edit.
+- "in the spec" is the wrong oracle for "exists" — `/v1/webhooks/stripe` is registered, live, and
+  deliberately unpublished. A route can be real and withheld.
+- A doc that correctly records a REMOVAL must name the removed path. `reference/metrics.md` says the
+  legacy `/v1/sessions/:id/livekit-token` "was removed"; the naive check calls that drift.
+
+Narrowed to `apps/docs/src/pages/**`, with existence meaning published **or** registered, the same
+scan returns 533 literals and 16 flags, **every one an artefact or correct prose** — scope-table
+wildcards, `/v1/models` (Anthropic's endpoint, called upstream by the BYOK key test), example ids,
+and two markdown soft-wraps. The guard is green on arrival and worth having: `/v1/captures`, the
+phantom that motivated it, is what it detects.
+
+**The finding came from the fourth arm.** Three endpoints are live, documented on a customer page,
+and absent from the published spec: `/v1/whoami` (`lib/app.ts` ← `reference/scopes.md`),
+`/v1/status/stream` (`routes/status-stream.ts` ← `api/status.md`), and
+`/v1/oauth/authorize/complete` (`routes/oauth.ts` ← `api/oauth.md`). `lib/openapi.ts` records no
+withheld-path list, so nothing states the omission is deliberate. Two costs: no generated SDK method
+in any of the three SDKs, and `docs-response-examples-match-the-spec` cannot check those pages'
+examples, because it only sees paths the spec knows — the omission hides itself from the guard that
+would catch a wrong example. `/v1/whoami`'s example was checked by hand here and is accurate.
+Whether to publish them is a surface decision and stays the owner's; the list is what stops it being
+inherited.
+
+**The instrument had the flaw it exists to catch.** `livePaths()` first accepted backticks as string
+delimiters, so a comment in `routes/billing.ts` writing `` `/v1/billing/*` `` in markdown style
+registered as a live route. Every inflated entry is a phantom path the first arm would then wave
+through because somebody mentioned it in prose. Found by this file's own fourth arm reporting a
+wildcard as live, not by reading.
+
+Four arms, each mutation-proved: a phantom path added to `scopes.md` reds arm 1; narrowing the scan
+reds the control; deleting the six words that earn the metrics.md exemption reds arm 3; dropping
+`/v1/whoami` from the list reds arm 4. Restored byte-identical from a scratchpad snapshot, `it(`
+count 4 unchanged, `npm run typecheck` exit 0 across all workspaces.
+
+`EXPECTED_TEST_FILES` 2923 → 2924, `_ALL` 3089 → 3090, for this file alone.
+
+**Still open and still the owner's:** the four `⚠ DECISION REQUIRED` sweep items (5, 7, 12, 25);
+whether to publish the three endpoints above; whether to report unknown fields on the two anonymous
+routes that silently drop one (signup `name`, cli-authorize/initiate `client_label`); and whether the
+four admin account-lifecycle routes should report a mistyped `reason` rather than writing a
+reasonless audit row.
