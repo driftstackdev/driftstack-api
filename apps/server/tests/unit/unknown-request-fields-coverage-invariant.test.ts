@@ -311,7 +311,14 @@ describe('customer-facing writes report the fields they ignored', () => {
     // `reject` registrations the module uses when its internal token is absent.
     // An ungated addition breaks the equality; swapping the staff scope for a
     // customer one breaks the marker count.
-    const REGISTRATION = /app\.(?:get|post|put|patch|delete)\(/g;
+    // V-948 — `\s*(?:<[^(]*>)?\s*\(` rather than a bare `\(`. Written the bare
+    // way one commit earlier, this pattern could not see a registration carrying
+    // a type argument — `app.post<{ Params: { id: string } }>(` — which is 119 of
+    // the 285 registrations under src/routes. Neither staff file uses that shape
+    // today, so the counts were right and the arm looked healthy; it would have
+    // gone quietly wrong the moment one did, which is the failure this arm exists
+    // to prevent. The fixture arm below tests the pattern instead of trusting it.
+    const REGISTRATION = /app\.(?:get|post|put|patch|delete)\s*(?:<[^(]*>)?\s*\(/g;
     const PREHANDLER = /preHandler:/g;
     for (const [file, markers] of STAFF_EXEMPT_FILES) {
       const src = readFileSync(join(ROUTES_DIR, file), 'utf8');
@@ -323,8 +330,9 @@ describe('customer-facing writes report the fields they ignored', () => {
         const block = src.slice(m.index, m.index + 300);
         return markers.some((marker) => block.includes(marker));
       }).length;
-      const rejects = [...src.matchAll(/app\.(?:get|post|put|patch|delete)\([^)]*,\s*reject\)/g)]
-        .length;
+      const rejects = [
+        ...src.matchAll(/app\.(?:get|post|put|patch|delete)\s*(?:<[^(]*>)?\s*\([^)]*,\s*reject\)/g),
+      ].length;
 
       expect(registrations, `${file} still registers routes`).toBeGreaterThan(0);
       expect(preHandlers, `${file} still has gated registrations`).toBeGreaterThan(0);
@@ -335,6 +343,19 @@ describe('customer-facing writes report the fields they ignored', () => {
           'a route was added without a gate and the file-level exemption is now covering a ' +
           'surface it was never justified for',
       ).toBe(preHandlers + rejects);
+    }
+
+    // V-948 — the pattern above is tested against a fixture, not just run. Both
+    // staff files use only the plain shape, so a pattern blind to the other one
+    // produces correct counts today and silently stops counting later.
+    for (const [label, fixture] of [
+      ['type-argument', "  app.post<{ Params: { id: string } }>(\n    '/v1/x/:id',\n"],
+      ['plain', "  app.post(\n    '/v1/x',\n"],
+    ] as const) {
+      expect(
+        [...fixture.matchAll(REGISTRATION)].length,
+        `the registration pattern sees a ${label} registration`,
+      ).toBe(1);
     }
   });
 

@@ -80,25 +80,58 @@ interface AppRoute {
 }
 
 /**
+ * Every `app.method(…)` registration in a source, in BOTH shapes Fastify allows:
+ * plain, and carrying a type argument (`app.post<{ Params: … }>(`).
+ *
+ * V-948 — the second shape is not a corner case. 119 of the 285 registrations
+ * under `src/routes` carry a type argument, 41% of the surface, and a pattern
+ * anchored on `\(` right after the method name sees none of them.
+ */
+const REGISTRATION_ANY = /\bapp\.(get|post|put|patch|delete)\s*(?:<[^(]*>)?\s*\(/g;
+
+/**
  * Routes registered directly in `lib/app.ts`, with whether they authenticate.
  *
- * Only this file's shape is parsed — `app.method('/path', …)` with the options
- * object, if any, on the same line. That is every registration there, and the
- * count case below fails if the shape ever changes, rather than silently
- * parsing fewer routes.
+ * V-948 — this used to parse ONE line-anchored shape, `app.method('/path', …)`
+ * with the options object on the same line, and its comment claimed "the count
+ * case below fails if the shape ever changes, rather than silently parsing fewer
+ * routes". That was not true. The count case was a FLOOR of 5, and 5 is what the
+ * file has: a sixth registration written multi-line, or with a type argument like
+ * 41% of the routes surface, parsed to nothing and cleared the floor. The auth arm
+ * below — which its own text calls the only thing in the repo auditing this file —
+ * would never have seen it.
+ *
+ * So the parse is no longer line-anchored, and the count case no longer floors.
+ * It compares against `REGISTRATION_ANY`, which recognises both shapes: every
+ * registration in the file must be accounted for, so a shape this parser cannot
+ * read fails here instead of disappearing.
+ *
+ * `authed` is read from the registration head — the text between the opening
+ * paren and the handler's arrow. An inline-arrow preHandler would truncate that
+ * early and report the route as unguarded, which fails loudly; the failure
+ * direction is deliberate.
  */
 function appTsRoutes(): AppRoute[] {
   const src = readFileSync(resolve(SRC, 'lib', 'app.ts'), 'utf8');
   const out: AppRoute[] = [];
-  for (const line of src.split('\n')) {
-    const m = /^\s*app\.(get|post|put|patch|delete)\('([^']+)'(.*)$/.exec(line);
-    if (m === null) continue;
+  for (const m of src.matchAll(REGISTRATION_ANY)) {
+    const after = src.slice(m.index + m[0].length);
+    const path = /^\s*'([^']+)'/.exec(after);
+    if (path === null) continue;
+    const arrow = after.indexOf('=>');
+    const head = after.slice(0, arrow === -1 ? 400 : arrow);
     out.push({
-      key: `${m[1]!.toUpperCase()} ${m[2]!}`,
-      authed: m[3]!.includes('app.requireAuth'),
+      key: `${m[1]!.toUpperCase()} ${path[1]!}`,
+      authed: head.includes('app.requireAuth'),
     });
   }
   return out;
+}
+
+/** How many registrations the file contains, independent of the parse above. */
+function appTsRegistrationCount(): number {
+  const src = readFileSync(resolve(SRC, 'lib', 'app.ts'), 'utf8');
+  return [...src.matchAll(REGISTRATION_ANY)].length;
 }
 
 describe('route registrations live where the route guards can see them', () => {
@@ -122,13 +155,53 @@ describe('route registrations live where the route guards can see them', () => {
     ).toEqual([]);
   });
 
-  it('CRITICAL lib/app.ts still parses into its known routes, so the auth check below is not silently reading an empty list after a refactor changes the registration shape.', () => {
+  it('CRITICAL EVERY registration in lib/app.ts is parsed, not merely five of them. Compared against an independent count rather than floored: the floor this replaces could not tell a route the parser could not read from a route that was not there, so a sixth registration written multi-line — or with a type argument, which 41% of the routes surface uses — would have skipped the auth arm below entirely.', () => {
     const routes = appTsRoutes();
     expect(routes.length, 'routes parsed from lib/app.ts').toBeGreaterThanOrEqual(5);
+    expect(
+      routes.length,
+      'a registration in lib/app.ts was not parsed. It is still registered and still serving; it is ' +
+        'just invisible to the auth arm below. Widen the parse rather than lowering this',
+    ).toBe(appTsRegistrationCount());
     expect(
       routes.map((r) => r.key),
       'the authenticated one must be among them',
     ).toContain('GET /v1/whoami');
+  });
+
+  it('CRITICAL the registration pattern recognises a TYPE-ARGUMENT registration. Tested against a literal fixture rather than the current file, because lib/app.ts happens to use only the plain shape today — so a pattern blind to the other shape would look perfectly healthy right up to the commit that adds one, which is exactly how the parse this replaces stayed wrong.', () => {
+    const generic = "  app.post<{ Params: { id: string } }>(\n    '/v1/things/:id',\n";
+    const plain = "  app.post(\n    '/v1/things',\n";
+    for (const [label, fixture] of [
+      ['type-argument', generic],
+      ['plain', plain],
+    ] as const) {
+      expect(
+        [...fixture.matchAll(REGISTRATION_ANY)].length,
+        `the registration pattern sees a ${label} registration`,
+      ).toBe(1);
+    }
+
+    // And the fixture is not hypothetical — the shape is most of this codebase.
+    // Floored well under the 119 measured so ordinary route churn does not touch
+    // this, while a claim that the shape is rare stays falsifiable.
+    const withTypeArgument = registrationSites()
+      .filter((f) => f.startsWith('routes/'))
+      .reduce(
+        (n, f) =>
+          n +
+          [
+            ...readFileSync(resolve(SRC, f), 'utf8').matchAll(
+              /\bapp\.(?:get|post|put|patch|delete)\s*</g,
+            ),
+          ].length,
+        0,
+      );
+    expect(
+      withTypeArgument,
+      'type-argument registrations under src/routes — if this collapses, either the surface was ' +
+        'rewritten or this measurement broke, and the fixture above is no longer describing anything real',
+    ).toBeGreaterThan(60);
   });
 
   it('CRITICAL every route in lib/app.ts authenticates or is a named public ops endpoint. Nothing else covers this: stripping requireAuth from /v1/whoami reds only the content-parity pin that happens to quote that line, and a documented new route here passes every guard in the repo.', () => {

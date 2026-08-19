@@ -40609,3 +40609,49 @@ All restores byte-identical from a snapshot of the fixed state.
 (11 sites), where the anonymous-surface judgement genuinely matters — those routes answer unauthenticated
 callers, and the module's own `status-subscribe` exemption reasons that echoing keys back on such a surface
 discloses schema shape to probing.
+
+## V-948 — 41% of route registrations were invisible to the guards that enumerate them
+
+**Found by a failure, not a search.** Attributing the remaining `agent-sessions.ts` backlog sites to their
+registrations, every one of five resolved to the same registration 300 lines above — the same collapse
+V-946 recorded as "two misclassifications". The reason is not judgement. Those routes are written
+`app.post<{ Params: { id: string } }>(`, and every attribution regex used in this arc anchored on `\(`
+immediately after the method name. A type argument sits between, so the registration was **not misread; it
+was never seen**.
+
+**Measured before describing it: 119 of 285 registrations under `src/routes` carry a type argument — 41%,
+across 29 files.** `sessions.ts` is 12 of 14; `billing-crypto-orders.ts` is 7 of 7.
+
+**Then every route-enumerating regex in the test suite was checked against a fixture rather than by eye.**
+Twenty patterns across nineteen files. Eighteen already tolerate the shape, mostly by accident of writing
+`[^(]*` or `[<(]` — which happens to admit a type argument since `{ Params: { id: string } }` contains no
+paren. **Two were blind.**
+
+**One of the two was mine, committed in V-947, one commit earlier.** The staff-gate arm added there counts
+registrations to prove every route in an exempted staff file is gated. Neither staff file uses the
+type-argument shape, so the counts were correct and the arm looked healthy — it would have gone quietly
+wrong the first time one did, which is the exact failure the arm exists to prevent.
+
+**The other is the more serious one.** `route-registration-locations-are-pinned` parses `lib/app.ts` to
+check every route there authenticates, and its own arm text says "a documented new route here passes every
+guard in the repo" — so this is the only thing auditing that file. The parser matched one line-anchored
+shape, and its comment claimed "the count case below fails if the shape ever changes, rather than silently
+parsing fewer routes". **That was not true.** The count case was a FLOOR of 5, and 5 is what the file
+holds, so an unparseable sixth registration cleared it. The docstring described a protection the code did
+not implement.
+
+**Proved as a pair, old guard against new, same mutation.** Adding
+`app.post<{ Params: { id: string } }>('/v1/leaked/:id', …)` with no `requireAuth` to `lib/app.ts`: the
+pre-fix guard reports **5 passed**. The fixed guard names it — `POST /v1/leaked/:id`. Same for mine: an
+ungated type-argument route added to `mac-nodes-register.ts` passes the V-947 version (7 passed) and fails
+the fixed one (5 registrations vs 4 accounted for).
+
+**The floor is gone.** `appTsRoutes()` now parses both shapes and multi-line registrations, and the count
+case compares against an independent registration count instead of flooring: every registration in the file
+must be accounted for, so a shape the parser cannot read fails rather than disappearing.
+
+**Both guards now test their pattern against a literal fixture, not against the current file.** That is the
+generalisable half. Both files happen to use only the plain shape today, so a blind pattern reads as
+perfectly healthy right up to the commit that adds the other one — which is how this survived. A further
+arm floors the type-argument population under `src/routes` at 60, so "that shape is rare here" stays
+falsifiable; stripping the counter to a form that matches nothing fails it at 0.
