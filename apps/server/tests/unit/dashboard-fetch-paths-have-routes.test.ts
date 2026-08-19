@@ -12,6 +12,22 @@
 // '/path', ...)` calls + prefixes, so an `app.METHOD(...)` regex false-negatives
 // (learned W476/W481). We assert plain substring presence in the concatenated
 // route source — a path that exists nowhere in routes/ has zero occurrences.
+//
+// V-989 — that reasoning was sound and its conclusion is now obsolete. The
+// false-negative it avoids comes from a regex that stops at `app.post(`; one
+// that allows an optional type argument and whitespace before the quoted path
+// reads all 209 registrations, the multi-line and `app.post<{ Params: … }>(`
+// forms included. So the anchor is available, and substring presence costs more
+// than it saves: a path named in a COMMENT, in an error message, or in a policy
+// roster inside routes/ satisfies `.includes()` while no route serves it — the
+// same defect V-987/V-988 found in all three SDK path guards.
+//
+// The check keeps PREFIX semantics, which is the part that genuinely needs care:
+// the apps build `/v1/api-keys/` + id, so the referenced base must match a
+// registration or be a parent of one, not equal it. Measured before the change —
+// 51 customer-dashboard paths and 20 admin-panel paths, every one resolving
+// under both the old rule and the new one, so this is a latent hole closed at
+// zero cost rather than a live break repaired.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -41,6 +57,28 @@ describe('W481 dashboard fetch paths resolve to server routes (frontend↔backen
     .map((f) => readFileSync(f, 'utf8'))
     .join('\n');
 
+  /** Paths the server REGISTERS, param names erased so `:id` and `:keyId` compare equal. */
+  const registered = new Set(
+    [
+      ...routeSrc.matchAll(
+        /app\.(?:get|post|put|patch|delete)\s*(?:<[^(]*>)?\s*\(\s*['"`](\/v1\/[^'"`]*)['"`]/g,
+      ),
+    ].map((m) => (m[1] ?? '').replace(/:[A-Za-z_]+/g, ':p').replace(/\/+$/, '')),
+  );
+
+  /**
+   * A referenced base path is served when it IS a registration or is a parent of
+   * one — `/v1/api-keys` is served by `/v1/api-keys/:p/rotate`, because the app
+   * appends the id itself.
+   */
+  function servedBy(p: string): boolean {
+    const n = p.replace(/:[A-Za-z_]+/g, ':p').replace(/\/+$/, '');
+    for (const r of registered) {
+      if (r === n || r.startsWith(`${n}/`)) return true;
+    }
+    return false;
+  }
+
   // Distinct /v1/ paths an app references, trailing slash stripped (apps build
   // `/v1/api-keys/` + id; the base path is what must exist). Require a quote/
   // backtick immediately before `/v1/` so we only capture actual API-call path
@@ -69,8 +107,8 @@ describe('W481 dashboard fetch paths resolve to server routes (frontend↔backen
     it(`${name}: finds fetch paths to check (>=${min})`, () => {
       expect(paths.size).toBeGreaterThanOrEqual(min);
     });
-    it(`${name}: every /v1/ fetch path exists in the server route source`, () => {
-      const missing = [...paths].filter((p) => !routeSrc.includes(p)).sort();
+    it(`${name}: every /v1/ fetch path is served by a registered route`, () => {
+      const missing = [...paths].filter((p) => !servedBy(p)).sort();
       expect(
         missing,
         `${name} fetches these paths but they have no server route (404 — broken action):\n${missing.join('\n')}`,

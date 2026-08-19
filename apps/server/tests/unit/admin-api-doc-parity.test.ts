@@ -16,6 +16,23 @@ function read(path: string): string {
   return readFileSync(path, 'utf8');
 }
 
+/**
+ * Paths this route file REGISTERS, param names erased.
+ *
+ * Anchored on `app.<verb>(`, allowing a type argument and a path on the next
+ * line — the forms the routes use. A quoted literal on its own may be a comment,
+ * an error message or a policy row.
+ */
+function registeredPaths(blob: string): Set<string> {
+  const out = new Set<string>();
+  for (const m of blob.matchAll(
+    /app\.(?:get|post|put|patch|delete)\s*(?:<[^(]*>)?\s*\(\s*['"`](\/v1\/[^'"`]*)['"`]/g,
+  )) {
+    out.add((m[1] ?? '').replace(/:[A-Za-z_]+/g, ':*').replace(/\/+$/, ''));
+  }
+  return out;
+}
+
 describe('W222.A admin-api doc parity', () => {
   const doc = read(DOC_PATH);
   const routes = read(ADMIN_ROUTE_PATH);
@@ -27,17 +44,24 @@ describe('W222.A admin-api doc parity', () => {
     ).map((m) => m[2]!);
     expect(docPaths.length).toBeGreaterThan(0);
     const normalise = (p: string) => p.replace(/:[A-Za-z_]+/g, ':*');
-    const normalisedRoutes = normalise(routes);
+    // V-989 — a quoted literal is not a registration. Same correction as the
+    // three SDK path guards (V-987/V-988): the message below says "not
+    // registered", so the check should be one. Within this file every quoted
+    // literal happens to be a registration today (11 of 11, measured), which is
+    // why the looseness was invisible rather than why it was safe.
+    const registeredHere = registeredPaths(routes);
     for (const p of docPaths) {
-      const np = normalise(p);
-      const ok = normalisedRoutes.includes(`'${np}'`) || normalisedRoutes.includes(`"${np}"`);
-      expect(ok, `${p} not registered in admin-crypto-orders.ts`).toBe(true);
+      const np = normalise(p.replace(/\/+$/, ''));
+      expect(
+        registeredHere.has(np),
+        `${p} is not registered in admin-crypto-orders.ts — a path named only in a comment or an error message is not an endpoint`,
+      ).toBe(true);
     }
   });
 
   it('every registered /v1/admin/crypto-orders endpoint is mentioned in the doc', () => {
-    const registered = Array.from(routes.matchAll(/'(\/v1\/admin\/crypto-orders[^']*)'/g)).map(
-      (m) => m[1]!,
+    const registered = [...registeredPaths(routes)].filter((p) =>
+      p.startsWith('/v1/admin/crypto-orders'),
     );
     expect(registered.length).toBeGreaterThan(0);
     const normalise = (p: string) => p.replace(/:[A-Za-z_]+/g, ':*');

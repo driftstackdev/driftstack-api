@@ -42162,3 +42162,48 @@ between a route and a string that looks like one is invisible in a repo where th
 is every repo, until the day one is renamed.
 
 `it(` counts 2 → 3 on the Go guard, unchanged at 4 on mine. `npm run typecheck` exit 0.
+
+## V-989 — the rest of the class, and the two members I left alone (2026-08-19)
+
+Having found the same defect in three SDK path guards and in my own, I enumerated the class rather
+than stopping at four: guards that scan server source for `/v1/…` strings and treat a match as proof
+a route exists. Six files, of which one — `docs-public-surface-resolves` — is already correct and
+reasons about it explicitly in its own comments, including the `/v1/whoami`-lives-in-`lib/app.ts`
+case that trips a naive `routes/`-only scan.
+
+**`dashboard-fetch-paths-have-routes` is the one that mattered.** It asserts every `/v1` path the
+customer dashboard and admin panel fetch has a server route, and its header explains the substring
+choice: an `app.METHOD(...)` regex false-negatives on multi-line registrations, "learned W476/W481".
+That reasoning was sound and its conclusion is now obsolete — a regex allowing an optional type
+argument and whitespace before the quoted path reads all 209 registrations, multi-line and
+`app.post<{ Params: … }>(` included. So the anchor is available, and substring presence costs more
+than it saves.
+
+**The mutation is the clearest one of the arc.** Renaming the `/v1/api-keys` registrations while
+leaving the literal in a comment: the string still occurs **13 times** in `admin.ts`, so the old
+`.includes()` rule passes, and the tightened rule correctly reports the dashboard fetching a path
+nothing serves. Same file, same string count, opposite verdict.
+
+Prefix semantics are kept, which is the part that needed care rather than tightening: the apps build
+`/v1/api-keys/` + id, so a referenced base must match a registration **or be a parent of one**.
+Measured first — 51 customer-dashboard and 20 admin-panel paths, every one resolving under both the
+old and new rules, so this is a latent hole closed at zero cost.
+
+`admin-api-doc-parity` got the same correction in both directions. Its failure message already said
+"not registered"; now the check is one. Eleven of eleven quoted literals in that file are
+registrations, which is why the looseness was invisible — not why it was safe.
+
+**`the-crypto-api-doc-lists-every-customer-crypto-route` I examined and deliberately left.** It is
+technically in the class, but its author already identified the exact vector and mitigated it: the
+source is comment-stripped before scanning, with a note saying that counting the header comment
+"would let the roster agree with a comment rather than with the registrations". With comments gone,
+two files scanned, and all 6 literals being registrations, the residual exposure is a path inside an
+error-message string. Rewriting a file whose author demonstrably reasoned about this would be churn,
+and the file says so better than a changelog entry would.
+
+So the class is: 6 members, 1 already right, 4 corrected across V-987/V-988/V-989, 1 examined and
+left with the reason recorded. Every correction was measured as latent before it was made — no SDK,
+dashboard or doc is currently pointing at a path that does not exist.
+
+`it(` counts unchanged (4 tests in the dashboard guard, 2 in admin-api-doc-parity — the dashboard's
+two `it(` calls run once per app). `npm run typecheck` exit 0.
