@@ -40422,3 +40422,47 @@ separately from the `$ref` claim it used to be entangled with.
 states why the number is house style rather than a backlog — so the next sweep that notices multi-line
 pins does not spend a turn rediscovering that ratcheting them is the wrong move. That is the third such
 refusal in this arc, after byte-count floors (V-939) and floors already inside 10% (V-937/V-938).
+
+## V-944 — the header sweep closed with a ratchet, which immediately found a 19th header (2026-08-19)
+
+**Closing the class three entries fixed by hand.** V-941 found `Content-Disposition` sent by four routes
+and declared for one. V-942 found `X-Request-Id` sent on every response, promised on five customer pages,
+declared nowhere — plus the `X-RateLimit-*` aliases named only inside another header's prose. Each was
+found by looking, which does not scale and does not persist.
+
+**First, the remaining singletons verified rather than assumed.** `Location` is sent by
+`billing.ts:154` (`reply.code(302).header('location', …)`) and declared on
+`GET /v1/account/me/billing-portal [302]`. `Idempotent-Replayed` is sent only by crypto-checkout, declared
+only there, and the idempotency reference documents exactly that asymmetry — a general replay "returns the
+same status code and body as the original", while line 116 singles out crypto checkout as the one that
+sets the header. Document, spec and routes agree; no defect.
+
+**Then the ratchet, and it earned itself in the first run.** The new guard asserts every header the server
+sends is declared or exempt-with-a-reason, and it failed on `set-cookie` — a header my own hand
+enumeration had missed.
+
+**Why I missed it is the useful part.** My enumeration used a line-based `git grep` for
+`.header('name'`. `auth-oauth-client.ts` writes the cookie across a multi-line call, with the name on the
+line AFTER `.header(`, so a line-oriented pattern cannot see it. The guard reads whole files and allows a
+newline inside the call. So the instrument built from a measurement was strictly better than the
+measurement — and 18 was the wrong number all along.
+
+**Declared, not exempted, because the cookie is load-bearing.** `POST /v1/auth/oauth-client/start` SETS an
+HttpOnly PKCE cookie scoped to `Path=/v1/auth/oauth-client`, and `confirm-merge` clears it once the
+verifier is spent. Both endpoints are published. A browser returns the cookie automatically and would
+never notice the omission — which is precisely why it went unpublished — but a client implementing the
+dance outside a browser has to know to send it back, or the flow simply fails.
+
+**Two exemptions, each carrying its reason in the guard rather than a bare name:** `content-type`, which
+is not a declarable response header (it IS the content map), and `cache-control`, per V-942's recorded
+decision. A third arm refuses a STALE exemption — one naming a header nothing sends any more — because a
+list of unjustified names is how a real gap hides among deliberate ones.
+
+**Three proofs.** Undeclaring `Set-Cookie` reproduces the exact failure the guard was born from.
+Adding an exemption for a header nothing sends fails the staleness arm. Deleting the
+`Content-Disposition` declarations fails the arm that names this arc's published headers individually —
+named rather than counted, because a count stays green when one header is swapped for another.
+
+**Pin check done the way V-942 taught.** Before committing I looked for pins on the SHAPE of the two
+response blocks I edited, not just their identifiers, and ran every guard mentioning `oauth-client`
+plus the three most likely spec pins. All green.

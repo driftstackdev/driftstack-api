@@ -19057,6 +19057,14 @@
         "responses": {
           "200": {
             "description": "Authorize URL — the client redirects the user's browser here to start the IDP consent flow.",
+            "headers": {
+              "Set-Cookie": {
+                "description": "HttpOnly PKCE cookie scoped to `Path=/v1/auth/oauth-client`, carrying the signed verifier for this nonce. Must be returned on the callback for the flow to complete.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -19109,6 +19117,14 @@
         "responses": {
           "200": {
             "description": "Merge confirmed; IDP identity now linked to the existing account.",
+            "headers": {
+              "Set-Cookie": {
+                "description": "Clears the PKCE cookie for this nonce (`Max-Age=0`) now that the verifier has been consumed.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {

@@ -2128,6 +2128,18 @@ function buildRegistry(): OpenAPIRegistry {
         description:
           "Authorize URL — the client redirects the user's browser here to start the IDP consent flow.",
         content: { 'application/json': { schema: OauthClientStartResponseOpenApi } },
+        // V-944 — this endpoint SETS the PKCE cookie the confirm step reads back,
+        // so the flow does not work without it. Declared because a client
+        // implementing the dance outside a browser has to know to return it; a
+        // browser does it automatically and would never notice the omission,
+        // which is why it went unpublished.
+        headers: {
+          'Set-Cookie': {
+            description:
+              'HttpOnly PKCE cookie scoped to `Path=/v1/auth/oauth-client`, carrying the signed verifier for this nonce. Must be returned on the callback for the flow to complete.',
+            schema: { type: 'string' },
+          },
+        },
       },
       400: { description: 'Unknown provider OR provider not configured.', content: problemContent },
     },
@@ -2147,6 +2159,15 @@ function buildRegistry(): OpenAPIRegistry {
       200: {
         description: 'Merge confirmed; IDP identity now linked to the existing account.',
         content: { 'application/json': { schema: OauthClientConfirmMergeResponseOpenApi } },
+        // V-944 — the mirror of the header above: this step CLEARS the PKCE
+        // cookie (Max-Age=0) once the verifier has been spent.
+        headers: {
+          'Set-Cookie': {
+            description:
+              'Clears the PKCE cookie for this nonce (`Max-Age=0`) now that the verifier has been consumed.',
+            schema: { type: 'string' },
+          },
+        },
       },
       400: {
         description: 'Token is invalid, expired, or already used.',
