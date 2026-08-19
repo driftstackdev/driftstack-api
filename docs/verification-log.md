@@ -41973,3 +41973,60 @@ whether to publish the three endpoints above; whether to report unknown fields o
 routes that silently drop one (signup `name`, cli-authorize/initiate `client_label`); and whether the
 four admin account-lifecycle routes should report a mistyped `reason` rather than writing a
 reasonless audit row.
+
+## V-985 — a second body-parse call form the coverage invariant could not see (2026-08-19)
+
+Following V-984's `/v1/oauth/authorize/complete` finding into its handler turned up two things, one
+in the docs and one in the guard I have extended six times this session.
+
+**The customer doc described a defence the code does not implement.** `api/oauth.md` said a
+body-supplied `account_id` "is rejected to prevent cross-account takeover". It is not rejected.
+`ApproveAuthorizationBody` is a plain `z.object`, so the key is stripped and the request answers
+`200`; the route never reads it, taking the approving account from the authenticated session. The
+source comment has this exactly right — "Unknown keys are stripped by zod" — so the page contradicted
+the code's own note. The distinction is the entire value of the sentence to the person it is written
+for: a reviewer probing with a victim's `account_id`, told to expect a refusal, sees a `200` and can
+conclude the field was **honoured**, which is the opposite of what happened and the alarming reading.
+The corrected sentence names the real mechanism, and says not to read the `200` as acceptance.
+No pin froze the old wording — searched by import path and by quoted basename across all test roots,
+and for the claim's own words repo-wide.
+
+**The guard could not see the route at all.** `PARSE_RE` matched `(\w+Schema)\.safeParse(req.body)`.
+`oauth.ts` parses with `parseOrThrow(ApproveAuthorizationBody, req.body)` — wrong shape, and a schema
+argument not named `…Schema` either. **Nine body-parse sites across three files were outside the
+population**: five in `oauth.ts`, three in `admin-crypto-orders.ts` (exempt by prefix, but exempt is a
+verdict the scan should reach rather than miss), and `billing-crypto-orders.ts (UpdateNoteSchema)` —
+a name the old pattern matches and a call form it does not, which is the cleanest proof this was
+about shape and not naming.
+
+This is the file's own lesson one call form over. Its header already records an earlier pattern that
+saw 40 of 84 sites because it matched `request.body` and not `req.body`, and says a floor "detects a
+regex matching NOTHING; it cannot detect one matching half the population." The same blind spot
+reappeared in a dimension nobody had thought to vary.
+
+The dot form keeps its `\w+Schema` anchor: relaxing it to `\w+` would admit `JSON.parse(req.body)` as
+a site named "JSON". `parseOrThrow` needs no anchor, its first argument being a schema by
+construction.
+
+**`KNOWN_UNREPORTED` 16 → 22, and the direction matters.** The arm says the backlog may only fall.
+That rule holds at CONSTANT VISIBILITY — a route that starts reporting leaves the list, and nothing
+joins by regressing. These six joined because the population grew: they were always unreported and
+never counted, so 16 was an accurate count of a set missing six members. A rise is legitimate only in
+the same commit as a widening. They are recorded rather than wired for the reason the header gives:
+five are RFC-defined OAuth endpoints where echoing a third-party client's unknown keys back is a
+protocol question, not a house-style one. `billing-crypto-orders.ts (UpdateNoteSchema)` is the one
+plain customer write among them and the strongest candidate to wire next.
+
+Three mutations, each red on its own sentinel: narrowing the pattern back reds both the new fixture
+arm and the staleness arm (6 entries orphaned); reinstating the retracted wording reds the doc pin;
+adding `.strict()` to the schema reds the cross-source arm, which is the case where the page should
+go back to saying rejected. Restored byte-identical from a scratchpad snapshot. `it(` counts 9 → 10
+and 11 → 12, both accounted for. `npm run typecheck` exit 0.
+
+**A procedural note worth more than the batch.** V-984's full suite came back exit 1 on
+`dist-reading-suites-have-fresh-artifacts`, reporting the docs app's built artifact as older than its
+source. Attributed before investigating, per the standing rule — and it was mine: mutation-proving
+V-984 edited two pages under `apps/docs` and restored them byte-identical, but **a byte-identical
+restore still moves the mtime**, and that guard compares mtimes rather than content. `git status` was
+clean while the suite was red, which is precisely the state that invites a wrong diagnosis. Mutation
+proofs against any file an mtime guard watches need a rebuild afterwards, not just a restore.

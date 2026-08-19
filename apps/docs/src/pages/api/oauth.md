@@ -130,9 +130,12 @@ Body:
 ```
 
 The approving account is derived from the authenticated dashboard
-session — `account_id` is intentionally **not** accepted from the
-body (a body-supplied `account_id` is rejected to prevent
-cross-account takeover). General API keys cannot call this endpoint,
+session — `account_id` is **never read from the body**. A body-supplied
+`account_id` is stripped by schema validation rather than refused, so
+the request still returns `200`: it approves for the authenticated
+caller's account, never the supplied one. Do not read that `200` as the
+field having been honoured — not reading it is what prevents
+cross-account takeover. General API keys cannot call this endpoint,
 even if they have broad scopes: consent must be a human action from an
 interactive dashboard session.
 

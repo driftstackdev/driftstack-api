@@ -149,4 +149,29 @@ describe('docs/pages/api/oauth content parity', () => {
     expect(body).toMatch(/resume after an\s*\n?upgrade if they have not expired or been revoked/);
     expect(body).not.toMatch(/feature_not_available/);
   });
+
+  it('V-985 CRITICAL pins the account_id defence to the mechanism the code actually implements. The page said a body-supplied `account_id` was REJECTED to prevent cross-account takeover. It is not rejected: `ApproveAuthorizationBody` is a plain z.object, so the key is stripped and the request answers 200 — the route simply never reads it, which the source comment states correctly. The distinction is the whole value of the sentence to a reviewer: someone probing with a victim `account_id`, told to expect a refusal, sees a 200 and can conclude the field was HONOURED, which is the opposite of what happened. Cross-checked against the schema so the prose cannot outlive the behaviour.', () => {
+    expect(body).toMatch(/`account_id` is \*\*never read from the body\*\*/);
+    expect(body).toMatch(/stripped by schema validation rather than refused/);
+    expect(body).toMatch(
+      /approves for the authenticated\s*\n?caller's account, never the supplied one/,
+    );
+    // The retracted claim, paraphrased in the negative so it cannot come back.
+    expect(body).not.toMatch(/account_id` is rejected/);
+
+    // Cross-source: the sentence above is only true while the schema strips.
+    const routeSrc = readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes/oauth.ts'), 'utf8');
+    const decl = routeSrc.slice(routeSrc.indexOf('const ApproveAuthorizationBody'));
+    const body_ = decl.slice(0, decl.indexOf('});') + 3);
+    expect(body_, 'ApproveAuthorizationBody still exists').toContain('authorization_id');
+    expect(
+      body_,
+      'ApproveAuthorizationBody is now .strict(), so a body-supplied account_id really IS refused — ' +
+        'the page should go back to saying rejected, and this arm should say so instead',
+    ).not.toContain('.strict()');
+    expect(
+      body_,
+      'the schema now accepts an account_id from the body — this is the takeover the comment warns about',
+    ).not.toContain('account_id');
+  });
 });

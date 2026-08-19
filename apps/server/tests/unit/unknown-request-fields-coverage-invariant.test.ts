@@ -135,6 +135,22 @@ const KNOWN_UNREPORTED: ReadonlySet<string> = new Set([
   'auth.ts (SignupRequestSchema)',
   'auth.ts (VerifyEmailRequestSchema)',
   'session-proxy.ts (SessionEgressConfigSchema)',
+  // V-985 — the six the `parseOrThrow` widening made visible. Same status as the
+  // block above: never checked, because they were never in the population. None
+  // is `.strict()`, so each strips a mistyped key and answers success.
+  //
+  // Listed rather than wired, for the reason the header gives. Five are OAuth
+  // protocol endpoints, where echoing a caller's unknown keys back is an RFC
+  // question and not a house style one — `/token`, `/introspect` and `/revoke`
+  // are consumed by third-party client libraries whose spare fields are their
+  // business. `billing-crypto-orders.ts (UpdateNoteSchema)` is the one plain
+  // customer write among them and the strongest candidate to wire next.
+  'billing-crypto-orders.ts (UpdateNoteSchema)',
+  'oauth.ts (ApproveAuthorizationBody)',
+  'oauth.ts (ExchangeCodeBody)',
+  'oauth.ts (IntrospectBody)',
+  'oauth.ts (RegisterClientBody)',
+  'oauth.ts (RevokeBody)',
 ]);
 
 /**
@@ -186,8 +202,19 @@ const isExempt = (file: string): boolean =>
 // codebase, so the scan saw 40 of 84 body-parse sites and 40 clears a floor of
 // 30. A floor detects a regex matching NOTHING; it cannot detect one matching
 // half the population.
+// V-985 — the second call form. `parseOrThrow(Schema, req.body)` is a body parse
+// with the same silent-drop consequence, and the pattern above cannot see it:
+// wrong shape, and its schema argument is often not named `…Schema` either
+// (`ApproveAuthorizationBody`, `SweepBody`). Nine sites across three files were
+// outside the population entirely — including `billing-crypto-orders.ts
+// (UpdateNoteSchema)`, whose NAME the old pattern matches and whose call form it
+// does not, which is the cleanest demonstration that this was about shape.
+//
+// The dot form keeps its `\w+Schema` anchor deliberately. Relaxing it to `\w+`
+// would admit `JSON.parse(req.body)` as a site named "JSON"; `parseOrThrow`
+// needs no such anchor because its first argument is a schema by construction.
 const PARSE_RE =
-  /(\w+Schema)\.(?:safeParse|parse)\(\s*(?:req\.body|request\.body|raw[A-Za-z]*Body)/;
+  /(?:(\w+Schema)\.(?:safeParse|parse)\(\s*(?:req\.body|request\.body|raw[A-Za-z]*Body)|parseOrThrow\(\s*(\w+)\s*,\s*(?:req\.body|request\.body|raw[A-Za-z]*Body))/;
 
 /** The same pattern, global, for the whole-file scan below. */
 const PARSE_RE_GLOBAL = new RegExp(PARSE_RE.source, 'g');
@@ -243,7 +270,8 @@ function scan(): Site[] {
       sites.push({
         file,
         line,
-        schema: match[1]!,
+        // group 1 is the dot form's schema, group 2 the parseOrThrow form's
+        schema: (match[1] ?? match[2])!,
         reports: window.includes('reportUnknownRequestFields('),
         reportedSchema: keysMatch ? (keysMatch[1] ?? keysMatch[2] ?? null) : null,
       });
@@ -271,6 +299,30 @@ describe('customer-facing writes report the fields they ignored', () => {
       wrapped.split('\n').filter((l) => new RegExp(PARSE_RE.source).test(l)).length,
       'a per-line scan sees the wrapped call not at all — this is the hole being closed',
     ).toBe(0);
+  });
+
+  it('CRITICAL the parse pattern matches BOTH call forms, including a schema argument not named `…Schema`. A body parse written as `parseOrThrow(Body, req.body)` drops unknown keys exactly like the dot form, and the pattern that shipped before V-985 could not see one of them — nine sites across three files sat outside the population, so every count this file reported was of an incomplete set. Asserted against fixtures including the OLD pattern, so the hole is demonstrated rather than described.', () => {
+    const OLD =
+      /(\w+Schema)\.(?:safeParse|parse)\(\s*(?:req\.body|request\.body|raw[A-Za-z]*Body)/g;
+    const forms = [
+      'const body = parseOrThrow(ApproveAuthorizationBody, req.body);',
+      'const body = parseOrThrow(SweepBody, req.body ?? {});',
+      'const body = parseOrThrow(UpdateNoteSchema, request.body);',
+    ];
+    for (const form of forms) {
+      expect([...form.matchAll(PARSE_RE_GLOBAL)].length, `now matched: ${form}`).toBe(1);
+      expect([...form.matchAll(new RegExp(OLD.source, 'g'))].length, `was invisible: ${form}`).toBe(
+        0,
+      );
+    }
+    // The schema name must survive into the site, or the backlog keys are wrong.
+    const m = PARSE_RE_GLOBAL.exec('const body = parseOrThrow(RevokeBody, req.body);');
+    PARSE_RE_GLOBAL.lastIndex = 0;
+    expect(m?.[1] ?? m?.[2], 'the schema argument is captured').toBe('RevokeBody');
+    // And the dot form still yields ITS name from group 1, unchanged.
+    const dot = PARSE_RE_GLOBAL.exec('const parsed = ShortSchema.safeParse(req.body);');
+    PARSE_RE_GLOBAL.lastIndex = 0;
+    expect(dot?.[1], 'the dot form is unaffected by the widening').toBe('ShortSchema');
   });
 
   it('CRITICAL the scan found a real population of body-parsing routes', () => {
@@ -324,7 +376,15 @@ describe('customer-facing writes report the fields they ignored', () => {
     // after V-948 fixed the pattern that could not see their type-argument
     // registrations. The fifth, RunTurnRequestSchema, was never a defect at all:
     // see REPORTED_AT_ROUTE_ENTRY above.
-    expect(KNOWN_UNREPORTED.size, 'backlog entries — may only fall, never rise').toBe(16);
+    // V-985 — 16 to 22, and this is the one direction of change the rule above
+    // does NOT forbid, so it is worth being exact about why. The backlog may only
+    // fall AT CONSTANT VISIBILITY: a route that starts reporting leaves the list,
+    // and nothing may join it by regressing. These six joined because the
+    // POPULATION grew — `parseOrThrow` sites were always unreported and were never
+    // counted, so the 16 was a true count of a set that was missing six members.
+    // A rise here is only ever legitimate in the same commit as a widening, and
+    // the widening is what makes it visible rather than what causes it.
+    expect(KNOWN_UNREPORTED.size, 'backlog entries — may only fall, never rise').toBe(22);
     const live = new Set(
       sites
         .filter((s) => !isExempt(s.file) && !s.reports && !EXEMPT_SCHEMA_NAMES.includes(s.schema))
