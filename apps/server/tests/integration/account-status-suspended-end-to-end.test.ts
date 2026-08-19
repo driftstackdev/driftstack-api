@@ -23,18 +23,18 @@ describe('account-status suspended end-to-end', () => {
     expect(res.statusCode).toBe(200);
   });
 
-  it('suspended account → 4xx (403 forbidden or similar) on /v1/account/me', async () => {
+  it('CRITICAL suspended account → 403 with the problem type the acceptable-use policy names, on a READ. V-1042: this asserted only `statusCode < 500`, so a suspended account answered 200 would have passed the arm titled "4xx" — and its comment said a 200 was acceptable. The AUP §5.2 does not leave that open: it tells customers the API rejects authenticated requests with 403 carrying `https://errors.driftstack.dev/forbidden`. The server already does exactly that; only the assertion was loose.', async () => {
     fx = await buildTestApp({ tier: 'api_builder', accountStatus: 'suspended' });
     const res = await fx.app.inject({
       method: 'GET',
       url: '/v1/account/me',
       headers: { authorization: `Bearer ${fx.plaintext}` },
     });
-    // Suspended accounts may either:
-    // - 4xx (gated by status check) → preferred
-    // - 200 (no status gate on read) → acceptable if writes are gated
-    // Either way: NOT 500
-    expect(res.statusCode).toBeLessThan(500);
+    expect(res.statusCode, 'a suspended account must be refused on reads too').toBe(403);
+    const body = res.json<{ type?: string; detail?: string }>();
+    expect(body.type, 'the problem type the AUP promises').toBe(
+      'https://errors.driftstack.dev/forbidden',
+    );
   });
 
   it('suspended account → 4xx on a write endpoint (session creation)', async () => {
@@ -45,9 +45,11 @@ describe('account-status suspended end-to-end', () => {
       headers: { authorization: `Bearer ${fx.plaintext}` },
       payload: { label: 'suspended-test' },
     });
-    // Writes on suspended accounts should be gated — 4xx
-    expect(res.statusCode).toBeGreaterThanOrEqual(400);
-    expect(res.statusCode).toBeLessThan(500);
+    // V-1042 — same promise, same precision: 403 and the named type, not any 4xx.
+    expect(res.statusCode, 'a suspended account must be refused on writes').toBe(403);
+    expect(res.json<{ type?: string }>().type, 'the problem type the AUP promises').toBe(
+      'https://errors.driftstack.dev/forbidden',
+    );
   });
 
   it('revoked API key → 401 (NOT 200 — auth must catch the revocation)', async () => {

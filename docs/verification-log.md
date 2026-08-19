@@ -44352,3 +44352,40 @@ form while proving nothing about the role.
 
 Full e2e: 209 passed. `apps/server/tests/unit` green: 1935 files, 20244 passed. Spec count 32 → 33 in
 both files that state it.
+
+## V-1042 — a legal promise, and the test that would have passed if it were broken
+
+`docs/legal/acceptable-use-policy.md` §5.2 tells customers what suspension means, in four parts. Part
+(b) is precise: "the API rejects authenticated requests with HTTP 403 carrying a problem type
+`https://errors.driftstack.dev/forbidden`".
+
+The integration suite already had an arm for it, titled "suspended account → 4xx (403 forbidden or
+similar)". It asserted `expect(res.statusCode).toBeLessThan(500)`, and its comment said a **200** was
+"acceptable if writes are gated". So a build where suspension did nothing at all on reads would have
+passed the test that appears to cover the promise. That is the gap between a title and an assertion
+this sweep keeps finding, here sitting under a commitment made to customers in a legal document.
+
+The server is not wrong. Probed against a running instance, a suspended account gets exactly
+`403 {"type":"https://errors.driftstack.dev/forbidden","title":"Forbidden","detail":"Account is
+suspended."}`. Only the assertion was loose. Both arms in that file now check the status AND the type,
+on a read and on a write.
+
+The new e2e spec adds what the integration arm cannot: a control that the same key works while
+ACTIVE, so the 403 is the suspension rather than a broken credential, and a reinstatement check — the
+AUP describes suspension as a state a customer can be reinstated from, so reversibility is part of
+what is being promised.
+
+**Scope stated rather than implied.** Only part (b) is exercised. (a) session destruction runs through
+the admin suspend path and needs a staff credential; (c) concerns BYOK secrets and this build answers
+503 on those routes, so there is no customer-provided secret to preserve; (d) needs Stripe, and
+V-1020 verified it by tracing the call chain instead. Flipping `accounts.status` directly exercises
+the auth gate and nothing else, and the file says so.
+
+**The mutations took three attempts, and the reason is worth keeping.** Removing the suspension throw
+I found first changed nothing: there are FIVE `status === 'suspended'` checks in `services/auth.ts` —
+the cache-hit paths and the fresh paths each carry their own — so no single deletion opens the gate.
+Neutralising all five reds the spec, and so does keeping the 403 while changing the error class, which
+is what proves the promised problem-type URI is load-bearing rather than decorative. A one-site
+mutation would have "proved" a spec that checks nothing.
+
+Full e2e: 211 passed. `apps/server/tests/unit` green: 1935 files, 20244 passed. Spec count 33 → 34.
