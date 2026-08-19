@@ -41272,3 +41272,31 @@ and nothing red.
 the file. Here, a refusal is masked by a neighbouring path that tests already exercise for a different
 reason. Both are the failure that a covered-looking file hides: the suite touches the code, so the code
 looks guarded.
+
+## V-964 — two more candidates triaged off V-962's list, with reasons
+
+Recorded because the value of a candidate list is that entries leave it for a stated reason. Neither of
+these is a finding; both would otherwise be re-examined by whoever takes the next slice.
+
+**`services/webhooks.ts:991` — `Invalid URL: ${raw}`, 0 hits. Unreachable via any route.** `parseHttpsUrl`
+wraps `new URL(raw)` in a try/catch, and both callers sit behind schemas that already validate: create and
+update both declare `url: z.string().url().refine((u) => u.startsWith('https://'))`. Zod rejects a
+non-URL and a non-https URL before the service is entered. This is the third instance of the §5j pattern
+V-957 recorded — a service-layer guard made redundant by an upstream schema — and it is worth noting that
+its https sibling two lines below shows **1 hit**, i.e. something calls `parseHttpsUrl` directly rather than
+through a route, which is why one of the pair looks exercised and the other does not.
+
+**`services/profiles.ts:998` — the 99-copy exhaustion, 0 hits. Reachable, correct, deliberately not tested.**
+`deriveNonConflictingCopyName` walks `X (copy)`, `X (copy 2)` … `X (copy 99)` and refuses when all are
+taken. I first assumed this was enterprise-only and checked instead of writing it down: `PROFILES_PER_TIER`
+is free 1, solo_manual 10, api_starter 25, team_manual 50, **api_builder 100, agency_manual 200,
+api_scale 500**, enterprise custom — so four tiers can hold 99 copies plus the original, and the refusal is
+reachable on all four. It is correct as written, and the throw is load-bearing beyond the refusal: the loop
+has no fallthrough return, so removing it fails typecheck rather than silently misbehaving. Exercising it
+needs 99 seeded rows for one assertion about a message; recorded as a considered skip rather than left
+looking unexamined.
+
+**Also worth carrying forward:** the coverage instrument distinguishes these three cases cleanly, and grep
+could not have. Unreachable-by-schema (webhooks), reachable-but-expensive-to-reach (profiles), and
+reachable-and-masked-by-a-neighbour (V-963's MFA guard) all read identically to a text search — every one is
+"a throw the tests do not mention".
