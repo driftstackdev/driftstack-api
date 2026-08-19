@@ -17,15 +17,24 @@ export default defineConfig({
       // surfaces only. Excludes:
       //   - Drizzle repos (`apps/server/src/db/`). The V-086 audit recorded
       //     this as "exercised by e2e against real Postgres, not by vitest",
-      //     and that is NO LONGER TRUE: 66 integration files under
+      //     and that is NO LONGER TRUE: 135 integration files under
       //     apps/server/tests/integration import from `src/db/`, including the
       //     repos directly, and they run under vitest whenever DATABASE_URL is
-      //     set. 53 source files are therefore excluded from the gate on a
-      //     justification that has expired.
-      //     Left in place rather than removed, because including them changes
-      //     what the thresholds below mean and the new number is unmeasured —
-      //     see A2-PRODUCTION-READINESS-ASSESSMENT item 5e. Correcting the
-      //     reason is not the same as making the decision.
+      //     set. 54 source files are therefore excluded from the gate on a
+      //     justification that has expired. (V-1002 — those two counts were 66
+      //     and 53 when written on 2026-08-14; the method reproduces them
+      //     exactly at that commit, so they grew rather than differ.)
+      //     Left in place rather than removed. V-1002 MEASURED the number this
+      //     note used to call unmeasured: with the exclusion lifted and
+      //     DATABASE_URL set — CI's own conditions — the gate reports lines
+      //     92.29 / statements 90.74 / functions 90.94 / branches 81.74 against
+      //     85/83/84/75, so every threshold still passes with 6.7 points of
+      //     headroom on the tightest. Including src/db costs at most 1.30
+      //     points (branches) and IMPROVES functions by 0.14. The blocker was
+      //     the number, and the number says removing this line is free — but
+      //     changing what CI enforces is still a decision somebody makes, not
+      //     one a measurement makes for them. See A2-PRODUCTION-READINESS
+      //     item 5e.
       //   - api-types schemas — Zod runtime, no .test.ts imports.
       //   - Astro apps (marketing-site, customer-dashboard) — typechecked
       //     by `astro check`, not under vitest scope.

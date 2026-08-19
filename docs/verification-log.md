@@ -42732,3 +42732,60 @@ would be speculative at this cost; what is recorded here is the shape and the on
 teeth, so the next reader can decide with evidence rather than re-derive the sample.
 
 `it(` 14 → 15. `npm run typecheck` exit 0. No new file, so no ratchet change.
+
+## V-1002 — the coverage number readiness 5e deferred, measured on the sixth attempt (2026-08-19)
+
+`vitest.config.ts` excludes `apps/server/src/db/**` from coverage on a justification its own comment
+records as expired, and says why it stayed anyway: "including them changes what the thresholds below
+mean and **the new number is unmeasured**… Correcting the reason is not the same as making the
+decision." Readiness 5e says the same and records what stopped it — lifting the exclusion reds the pin
+that freezes it.
+
+**Measured, under CI's own conditions** — full suite, `DATABASE_URL` set, exclusion lifted, 3093 files
+and 30,583 tests all passing:
+
+|            | with `src/db` | `src/db` alone | without it | threshold |
+| ---------- | ------------- | -------------- | ---------- | --------- |
+| lines      | 92.29         | 86.77          | 93.05      | 85        |
+| statements | 90.74         | 84.53          | 91.61      | 83        |
+| functions  | 90.94         | 91.51          | 90.80      | 84        |
+| branches   | 81.74         | **71.66**      | 83.05      | 75        |
+
+Every threshold passes, with **6.7 points of headroom** on the tightest. Including the layer costs at
+most **1.30 points** (branches) and IMPROVES functions by 0.14 — the db layer's functions are better
+covered than the average. Its branch coverage, 71.66, is the only figure under a threshold and is
+carried by the rest. All three columns come from ONE run, so the comparison is like-for-like rather
+than against 5e's 2026-08-14 figures, which were taken without `DATABASE_URL` and are not comparable.
+
+**Six attempts, and the obstacle is worth recording because it is general.** Lifting the exclusion
+reds two pins that freeze it — and **a failing run suppresses the coverage report entirely**, so every
+attempt produced test results and no numbers. `--coverage.include` on the command line does not beat a
+config `exclude` (it yields an empty report), and `--exclude` did not drop the two offending files.
+What worked: **commenting the line out instead of deleting it.** Both pins match the exclusion's TEXT,
+which survives a `//`, while the array entry does not — so the pins stay green and the exclusion lifts.
+The remaining failure on attempt five was my own file-count pin, from adding a test file mid-run.
+
+That the pins pass while the behaviour changes is, in a small way, the same weakness this arc has been
+finding all week — a text pin cannot tell a live array entry from a commented one. Here it was useful
+rather than harmful, and it is worth naming rather than quietly exploiting.
+
+Counts corrected in the same commit: **66 → 135** integration files importing `src/db/` and **53 → 54**
+source files, in `vitest.config.ts`, in the three places the pin freezes them, and in readiness 5e.
+Both were right when written on 2026-08-14 — the method reproduces them exactly at `1ac9f7846` — and
+grew.
+
+**The decision is now unblocked and is still somebody's.** The stated blocker was the missing number;
+the number says removing the exclusion is free. The edit is one line in `vitest.config.ts` plus the
+three pin occurrences. Recording it rather than making it, because changing what CI enforces for
+everyone is not a measurement's call.
+
+**A second, smaller measurement.** The 48 non-account-scoped cold functions are not an open field:
+`mfa-repo.markRecoveryCodeUsed` — the atomic single-use consume whose whole point is that a recovery
+code cannot be spent twice — is cold, but `db-mfa-repo-content-parity` pins its entire body including
+`isNull(usedAt)` and `return updated.length === 1`. Six sampled at random are pinned in one to eight
+content-parity files each. So "cold" there means not executed, not unguarded. The caveat from V-994
+still stands and is why this is a sample rather than a clearance: only 27% of the 372 arms across 41
+`db-*-content-parity` files reference a `.where(` at all, and the MFA delete is the case where the
+missing one mattered.
+
+`it(` counts unchanged. `npm run typecheck` exit 0.
