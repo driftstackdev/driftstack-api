@@ -55,6 +55,11 @@ left intact because an audit records what was found, not what is true today.
 
 **Targeted at V-248.**
 
+**Status (V-884, 2026-08-18): resolved in application code.** `billing.ts`
+defines `validateReturnUrl()`, which parses each URL and rejects any origin not
+on `ALLOWED_RETURN_ORIGINS` with a `BadRequestError`. It is applied to both
+`success_url` and `cancel_url` — the two parameters this finding names.
+
 ### V-246-P1-002 — PII in operational logs (auth flows)
 
 **Files:** `apps/server/src/services/auth-flows.ts` lines 406–407, 468–469.
@@ -64,6 +69,13 @@ left intact because an audit records what was found, not what is true today.
 **Risk:** acceptable. Documented ops posture. IP-based rate limiting (planned post-launch) is the right long-term mitigation.
 
 **Action:** document in `docs/deployment/runbook.md` that Pino logs may contain email addresses from failed auth-flow attempts; affects log-sharing posture (don't share raw logs with non-Driftstack-staff).
+
+**Status (V-884, 2026-08-18): action complete.** This finding's action was to
+document the posture, not to change code. `docs/deployment/runbook.md` carries a
+"Log-handling — PII posture" section naming the intentional cases, the
+`auth-flows.ts` line, and the instruction not to share raw Pino output. The
+residual risk is further reduced because P1-004 below — the mitigation this
+finding points at — has since shipped.
 
 ### V-246-P1-003 — `account_owner` scope reachability into `/v1/admin/*`
 

@@ -38095,3 +38095,38 @@ V-865.
 Mutation-proved three ways: stripping the status fails, keeping the status but dropping the
 mechanism fails, and altering the ORIGINAL finding text still fails — so the audit record and its
 resolution are independently bound. Document restored byte-identical.
+
+## V-884 — the rest of the security audit's open findings, and a stale mitigation in the runbook
+
+**Following V-883's own recommendation.** Enumerated every `###` finding in
+`docs/security-audit-2026-05-06.md` and which carry a resolution note. Three did (P0-001 after
+V-883, P1-003, P1-004); two did not.
+
+**P1-001 — Open redirect in Stripe checkout return URLs. Fixed.** `billing.ts` defines
+`validateReturnUrl()`, which parses the URL and rejects any origin not on
+`ALLOWED_RETURN_ORIGINS` with a `BadRequestError`, applied to both `success_url` and `cancel_url` —
+the two parameters the finding names. I had read that function earlier in this session while
+verifying an unrelated billing claim, which is the only reason it was on my list.
+
+**P1-002 — PII in operational logs. Action complete, and it was never a code fix.** Its stated
+action was to document the posture in the deployment runbook. That section exists —
+"Log-handling — PII posture" names the intentional cases, cites the `auth-flows.ts` line, and says
+not to share raw Pino output. Reading the finding's Action line rather than assuming a code change
+is what settled this in one step; the risk line even says "acceptable", which a scan for unfixed
+code would have missed entirely.
+
+**And a third thing, found because P1-002 pointed at it.** The runbook's mitigation paragraph read
+"IP-based rate limiting on auth endpoints (V-246-P1-004, **post-launch**) … **When that lands**, the
+email can be replaced with a hash + IP." It landed: `AUTH_IP_LIMITS` and `ipRateLimit` are applied
+across nine route modules including `auth.ts` and `auth-cli.ts`, and the audit already records
+P1-004 as resolved. Verified independently rather than inherited from the audit's own note.
+
+So an ops document was still describing a shipped control as future work, in a paragraph whose whole
+purpose is to tell an operator what protects customer PII. Corrected, and the follow-on it
+describes — replacing the logged email with a hash + IP — is now unblocked and explicitly left
+undone, because changing what production logs is a decision rather than a sweep edit.
+
+**Findings left intact, statuses added beside them**, same as V-883: an audit records what was
+found. Pinned positively for the same reason, and mutation-proved three ways — each status stripped
+independently fails, and altering the original P1-001 finding text still fails, so record and
+resolution stay independently bound.

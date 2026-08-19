@@ -104,6 +104,20 @@ describe('W547.B /docs/security-audit-2026-05-06.md content parity', () => {
       /\*\*Fix shape:\*\* validate `success_url` \+ `cancel_url` against a configured allowlist of origins \(default: `https:\/\/app\.driftstack\.dev`\)\./,
     );
     expect(body).toMatch(/\*\*Targeted at V-248\.\*\*/);
+
+    // V-884 — P1-001 and P1-002 both sat without the resolution note this
+    // document uses elsewhere. P1-001's fix is in billing.ts; P1-002's action
+    // was a runbook section, which exists. Findings left intact; only the
+    // status is asserted, and a resolved finding does not un-resolve.
+    expect(body, 'P1-001 carries its resolution').toMatch(
+      /\*\*Status \(V-884, 2026-08-18\): resolved in application code\.\*\* `billing\.ts`/,
+    );
+    expect(body, 'and names the allowlist that closed it').toMatch(
+      /rejects any origin not\s*\n?\s*on `ALLOWED_RETURN_ORIGINS`/,
+    );
+    expect(body, 'P1-002 records that its documentation action is complete').toMatch(
+      /\*\*Status \(V-884, 2026-08-18\): action complete\.\*\*/,
+    );
   });
 
   it("10-verified-clean inventory framing pinned: '## Verified clean (explicitly checked)' + '**Scope-check enforcement**' + '**Plaintext credential leakage**' + '**Stripe webhook idempotency** — `processed_stripe_events` PK constraint resolves the check-then-insert race; replay protection via 5-minute timestamp tolerance + HMAC-SHA256 constant-time compare.' + '**Audit log injection**' + '**Account-scope leakage** — every resource lookup uses `(resourceId, accountId)` tuple in the repo layer; cross-account access returns null (treated as 404).' + '**Web session token security** — opaque sha256-hashed tokens (D-028); Bearer auth via header (not cookies → CSRF-immune); proper TTL + revocation.' + '**CSRF protection**' + '**User enumeration prevention** — auth-flow responses are shape-stable for unknown emails (always returns `{sent: true, ...}`).' + '**Cache version invalidation correctness**' + '**Multi-customer Stripe webhook events**' — pinned so the 10-verified-clean inventory + Stripe-PK-idempotency + 5-min-timestamp-tolerance + HMAC-SHA256 constant-time + (resourceId,accountId)-tuple + D-028 web-session-opaque-sha256 + CSRF-immune-Bearer-header commitment survives", () => {
