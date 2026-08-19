@@ -151,6 +151,7 @@ import {
   ResolveIncidentRequestSchema,
   OpenVpnProxyConfigSchema,
   RecordRefundRequestSchema,
+  AccountIdSchema,
   AddSupportNoteRequestSchema,
   WireGuardProxyConfigSchema,
 } from '@driftstack/api-types';
@@ -2793,9 +2794,15 @@ function buildRegistry(): OpenAPIRegistry {
     window: true,
     limit: true,
   });
-  const IdempotentCreateIncidentRequestOpenApi = CreateIncidentRequestSchema.required({
-    started_at: true,
-  });
+  // V-930 — the same schema the route parses with, un-narrowed. This applied
+  // `.required({ started_at: true })`, but PUT /v1/admin/incidents/{id} parses
+  // with plain CreateIncidentRequestSchema, where started_at is optional and
+  // "defaults to server-now if omitted". So the document was STRICTER than the
+  // server — the inverse of the usual drift, and harmless to a caller who
+  // complies, but it made a generated client mark a field mandatory that the API
+  // will happily default. If the stricter upsert contract was the intent, the
+  // route is where to enforce it; the document cannot enforce anything.
+  const IdempotentCreateIncidentRequestOpenApi = CreateIncidentRequestSchema;
   const IncidentMutationResponseOpenApi = z.object({
     incident: IncidentSchema,
     update: IncidentUpdateSchema,
@@ -6801,8 +6808,13 @@ function buildRegistry(): OpenAPIRegistry {
   });
   // 2026-05-22 — V-666 transfer ownership of a profile to another account
   // by id (the recipient shares their acc_<uuid> out-of-band).
+  // V-930 — AccountIdSchema, not a bare string. The route enforces
+  // /^acc_[0-9a-f]{8}-.../ inline and answers 400 with 'Expected "acc_<uuid>"'
+  // otherwise; the mirror published `type: string` and put the format in a
+  // description, so the only machine-readable part of the contract was "any
+  // string". PrefixedId('acc') generates byte-identical regex to the route's.
   const TransferProfileRequestOpenApi = z.object({
-    recipient_account_id: z.string().describe('Recipient account id (acc_<uuid>).'),
+    recipient_account_id: AccountIdSchema.describe('Recipient account id (acc_<uuid>).'),
   });
   const TransferProfileResponseOpenApi = z.object({
     new_profile: ProfileResponseOpenApi,

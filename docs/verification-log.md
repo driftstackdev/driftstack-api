@@ -39819,3 +39819,47 @@ set, the phantom field, and the reason cap. Deleting `minProperties` fails the f
 
 **Mirror tally: 18 hand-checked, 7 divergent, 11 clean.** Remaining: the OAuth-client pair, the
 incident idempotent body, the profile transfer/launch bodies, and the account-organization PUT.
+
+## V-930 — two mirrors that missed in opposite directions (2026-08-19)
+
+**Looser.** `POST /v1/profiles/{id}/transfer` validates `recipient_account_id` against
+`/^acc_[0-9a-f]{8}-…/` inline and answers 400 with `Expected "acc_<uuid>"` otherwise. The mirror
+published `type: string` and put the format in a `description`, so the only machine-readable part of
+the contract was "any string" — every value the endpoint refuses was admitted by the document. Fixed
+with `AccountIdSchema`, which api-types already had: `PrefixedId('acc')` generates byte-identical
+regex to the route's inline check, so this is the schema the route means rather than a copy of it.
+
+**Stricter, which is the rarer direction and the more interesting one.** `PUT
+/v1/admin/incidents/{id}` published `started_at` as REQUIRED, via
+`CreateIncidentRequestSchema.required({ started_at: true })`. The route parses that request with the
+PLAIN schema — the same object POST uses — where `started_at` is optional and, per its own comment,
+"defaults to server-now if omitted". So the document demanded a field the API would have filled in.
+
+That direction is worth naming because of how it hides: an over-strict document breaks nobody who
+complies. No user hits it, no test fails, no error is ever logged. It only shows up as a generated
+client marking a field mandatory that the API does not — which nobody experiences as a bug, just as
+friction. Every other divergence in this arc was the loose kind, found because it produced a 400;
+this one produced nothing at all.
+
+If the stricter upsert contract was the intent — requiring an explicit `started_at` so an idempotent
+PUT is deterministic — the ROUTE is where to enforce it. A document cannot enforce anything, and a
+document that claims a rule the server does not apply is just a wrong document. Recorded rather than
+silently made true in the wrong layer.
+
+**Also checked and clean, so the mirror surface is now fully swept:** the OAuth-client start and
+confirm-merge bodies, the admin OAuth client registration, MFA verify and disable, audit-note,
+legal-accept, mac-node register, email preferences, BYOK Anthropic, and the profile clone / snapshot
+/ restore bodies all match their routes exactly. `LaunchProfileRequestOpenApi` already IS the real
+schema.
+
+**Proofs, one per direction.** Removing the published pattern fails the transfer arm; re-adding
+`started_at` to the PUT required set fails the incident arm. Both restored byte-identical.
+
+**Generated Python models: timestamp-only diff, restored rather than committed** — both bodies are
+inline, so no model class changes.
+
+**Final mirror tally: 24 hand-checked, 9 divergent, 15 clean.** Across V-926 through V-930 the
+published document has been corrected on nine endpoints — two MFA bodies, two dropped bounds, the
+proxy body's bounds and formats, the admin refund body, the bundled-llm at-least-one rule, the
+transfer id format, and the incident PUT. None changed server behaviour; all nine changed what the
+API promises.

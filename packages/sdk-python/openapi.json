@@ -20002,7 +20002,7 @@
                     "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
                   }
                 },
-                "required": ["title", "description", "severity", "started_at"]
+                "required": ["title", "description", "severity"]
               }
             }
           }
@@ -42901,6 +42901,7 @@
                 "properties": {
                   "recipient_account_id": {
                     "type": "string",
+                    "pattern": "^acc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "description": "Recipient account id (acc_<uuid>)."
                   }
                 },
