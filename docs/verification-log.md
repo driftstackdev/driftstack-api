@@ -40921,3 +40921,46 @@ the false-red shape.
 
 **No code defect found.** Recorded as a refusal with its evidence, on the V-939 and V-943 precedent — the
 measurement is the deliverable, and the only change is that the scope decision now carries a check.
+
+## V-955 — an SDK exemption rule enforced for one of the two entries it governs
+
+**Two dead ends first, both recorded so they are not re-run.**
+
+_SDK coverage of the published surface._ `V-455` was a one-time audit — `docs/internal/v455-coverage-audit.md`,
+dated 19 May — that enumerated OpenAPI and SDK gaps and closed them across V-456→V-465, with **no standing
+guard**. The obvious follow-up was to re-measure. Checked the audit doc first: its table **has** been
+maintained, rows carrying ✅ against their closing V-number, and the headline gap counts sit in V-455's prose
+as history rather than as current status. `/v1/profiles` and `/v1/webhooks` base CRUD, its two named
+examples, are both published today. No drift to report.
+
+_Do the SDKs call paths the server does not serve?_ A literal scan flagged 18 paths across the three SDKs.
+**All 18 were my own extraction bugs, not defects.** Python builds paths with f-strings containing nested
+quotes — `f"/v1/api-keys/{quote(key_id, safe='')}"` — so the regex truncated at the inner quote. Go builds by
+concatenation: `"/v1/webhook-deliveries/" + url.PathEscape(id) + "/replay"` scanned as
+`/v1/webhook-deliveries`, which is indeed not a route, while the real path is. The rest were doc strings and
+an unstripped `?format=csv`. A literal scan cannot enumerate the paths an SDK calls; three construction
+idioms defeat it. Abandoned rather than refined, on the V-903 and V-928 precedent.
+
+**The finding came from the class that has been paying: a stated rule with nothing enforcing it.**
+`cross-sdk-resource-surface-parity` allows a method to exist in one SDK alone, under a rule written in its
+own comment — "Every entry must be a language-idiom convenience whose canonical name is present in all three
+— never a capability one SDK has and the others lack."
+
+It governs two entries and was enforced for one. `usage.current` had the canonical name checked by three
+hard-coded assertions. `cryptoorders.listall` declared itself "sugar over the shared `iterate` paginator,
+which all three expose" and **nothing asserted `iterate` existed anywhere**. Both claims are true today —
+verified by hand, `iterate` is present in TypeScript, Python and Go — so this is a latent hole rather than a
+live one. What makes it worth closing is that an entry excusing a genuine capability gap would have read
+exactly like these two.
+
+**Fixed by making the canonical name data instead of prose.** Each entry now carries `canonical` alongside
+its reason, and an arm requires that method in all three SDKs for every entry. A new exemption cannot be
+added without naming the method that makes it an idiom rather than a gap.
+
+**Three mutations, and the first two did not prove what they looked like they proved.** Renaming Go's
+`Iterate` fires the new arm — and also the pre-existing divergence arm, which catches any Go rename. Adding
+a bogus entry fires the new arm — and also the staleness arm, because the method does not exist in
+TypeScript either. Neither isolates the thing being tested, which by this arc's own V-949 rule means neither
+is a proof of it. The isolating mutation keeps the extra real and points only its `canonical` at a
+nonexistent method: **1 failed, the new arm alone**, reporting `usage.current claims to be sugar over
+noSuchMethod, which TypeScript and Python and Go do not expose`.

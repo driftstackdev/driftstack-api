@@ -29,15 +29,38 @@ const norm = (s: string): string => s.toLowerCase().replace(/[^a-z]/g, '');
  *
  * Every entry must be a language-idiom convenience whose canonical name is
  * present in all three — never a capability one SDK has and the others lack.
+ *
+ * V-955 — that rule used to be prose plus a hard-coded check of ONE entry.
+ * `usage.current` had `expect(ts.usage).toContain('currentperiod')` and the same
+ * for Python and Go; `cryptoorders.listall` claimed to be sugar over a shared
+ * `iterate` and nothing asserted `iterate` existed anywhere. Both claims happen to
+ * be true today — this is a latent hole, not a live one — but an entry excusing a
+ * genuine capability gap would have read exactly like these two.
+ *
+ * So the canonical name is now DATA rather than prose, and the arm below requires
+ * it in all three SDKs for every entry. A new exemption cannot be added without
+ * naming the method that makes it a convenience rather than a gap.
  */
-const INTENTIONAL_EXTRAS: Record<string, Record<string, string>> = {
+interface IntentionalExtra {
+  /** The method all three SDKs must expose, of which this entry is sugar. */
+  readonly canonical: string;
+  readonly reason: string;
+}
+
+const INTENTIONAL_EXTRAS: Record<string, Record<string, IntentionalExtra>> = {
   usage: {
-    current:
-      'TypeScript-only shorthand; delegates to currentPeriod, which all three expose. Kept for back-compat.',
+    current: {
+      canonical: 'currentPeriod',
+      reason:
+        'TypeScript-only shorthand; delegates to currentPeriod, which all three expose. Kept for back-compat.',
+    },
   },
   cryptoorders: {
-    listall:
-      'TypeScript-only async-generator sugar over the shared `iterate` paginator, which all three expose.',
+    listall: {
+      canonical: 'iterate',
+      reason:
+        'TypeScript-only async-generator sugar over the shared `iterate` paginator, which all three expose.',
+    },
   },
 };
 
@@ -140,5 +163,33 @@ describe('the three SDKs expose the same resource surface', () => {
       }
     }
     expect(stale, 'allowlisted extra(s) that no longer exist:').toEqual([]);
+  });
+
+  it('CRITICAL every intentional extra is sugar over a method ALL THREE SDKs expose. That is the entire difference between a language idiom and a capability one SDK has and the others lack — and it was prose plus a hard-coded check of one of the two entries, so an exemption hiding a real gap would have read exactly like the ones already here.', () => {
+    const unbacked: string[] = [];
+    for (const [resource, extras] of Object.entries(INTENTIONAL_EXTRAS)) {
+      for (const [method, extra] of Object.entries(extras)) {
+        const canonical = norm(extra.canonical);
+        const absent = (
+          [
+            ['TypeScript', ts],
+            ['Python', py],
+            ['Go', go],
+          ] as const
+        )
+          .filter(([, surface]) => !(surface[resource]?.has(canonical) ?? false))
+          .map(([label]) => label);
+        if (absent.length > 0) {
+          unbacked.push(
+            `${resource}.${method} claims to be sugar over ${extra.canonical}, which ${absent.join(' and ')} ${absent.length === 1 ? 'does' : 'do'} not expose`,
+          );
+        }
+      }
+    }
+    expect(
+      unbacked,
+      'these exemptions excuse a single-SDK method whose canonical form is NOT available everywhere, ' +
+        'so they are covering a capability gap rather than a naming idiom:',
+    ).toEqual([]);
   });
 });
