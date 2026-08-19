@@ -44080,3 +44080,33 @@ shape looks the same.
 
 `it(` count 4 → 5. No new file, no ratchet change to the suite gate. `apps/server/tests/unit` green:
 1935 files, 20241 passed.
+
+## V-1034 — every conditional skip audited against where its condition can be true (measured negative)
+
+V-1033 established there are 144 conditional skips and no unconditional ones. The follow-up question
+is the one that matters: a `skipIf` whose condition is never false somewhere is a permanent skip
+wearing a conditional's clothes. Nineteen distinct conditions gate all 144. Each was checked against
+where it can flip:
+
+100 `!process.env.CI && !process.env.DATABASE_URL` — runs in CI, and locally with a database.
+11 `!RUN_DB_TESTS` — set by a workflow.
+7 `hasEgressImpl` and 5 siblings (`hasCustomerMtls`, `isSubscribable`, …) — inverted by design:
+the suite runs while a feature is ABSENT and stands down once it ships, which is the shape the
+egress claim gate uses.
+4 `!process.env.REDIS_URL` — provided by CI.
+4 `!NPMRC_EXISTS` — the interesting one.
+the rest — gui flag constants read from source, already covered by
+`gui-flag-gated-suites-track-their-flag`.
+
+`.npmrc` is gitignored, so a fresh CI checkout does not have it and those four assertions skip THERE
+while running on an operator's machine — inverted from every other conditional skip in the repo,
+where the local run is the one that stands down. That is exactly the shape worth flagging, and the
+file flags it: a comment dated 2026-05-20 states the file is gitignored, that the runner has no
+`.npmrc`, and that the skip keeps CI green while the local operator-side guard still fires. Deliberate
+and written down.
+
+So: nothing dead. No guard added for the class either. Pinning "every skipIf condition can be true
+somewhere" needs a map of which workflow or script sets each flag, plus an allowlist for the inverted
+cases — a gate whose upkeep exceeds what it protects, and V-1032 is the precedent for not building
+that. The audit is the deliverable; it is recorded so the next person does not have to redo it to
+learn the answer is no.
