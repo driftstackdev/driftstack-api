@@ -2074,8 +2074,19 @@ _What IS reachable and untested:_ `:779` `'Avatar image is empty.'`, via a
 payload of pure padding (`'===='` passes both `.min(4)` and the regex and decodes
 to zero bytes). One arm, worth having.
 
-_Not proposed:_ deleting the dead branch. It costs nothing, and a future change
-to either the schema regex or the decode call would make it live again.
+_Not proposed:_ deleting the dead branch. It costs nothing.
+
+> **Corrected 2026-08-19 (V-957).** The sentence that used to close this section
+> said a future change to _either_ the schema regex or the decode call would make
+> the branch live again. Only the decode call would. The two reasons above are
+> independent, and reason 1 does not stop holding when reason 2 goes: with the
+> regex removed, `Buffer.from` still never throws — measured, `'!!!!'` → 0 bytes,
+> `'!!ABCD!!'` → 3 bytes, `'not base64 at all'` → 10 bytes, no exception in any
+> case. The wording mattered because it described the `catch` as a backstop that
+> reactivates if the schema is weakened. It is not one: drop the regex and
+> `'!!ABCD!!'` is decoded and stored as an avatar with nothing raised. What
+> actually protects the regex is that `avatar-policy-cross-source-invariant` and
+> `api-types-accounts-content-parity` both pin it, so removing it fails the suite.
 
 #### 5h. NEW — 76 text-pin anchors name a control they cannot guard
 

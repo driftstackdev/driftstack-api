@@ -8,6 +8,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+import { UploadAvatarRequestSchema } from '@driftstack/api-types';
 
 let fx: TestAppFixture;
 
@@ -792,10 +793,48 @@ describe('GET/PUT /v1/account/me/organization (per-account org-sync phase 3)', (
 // is DEAD CODE for two independent reasons and is deliberately not covered:
 // `Buffer.from(x, 'base64')` never throws — verified, it silently drops
 // non-alphabet characters — and the schema regex has already rejected anything
-// that would make it throw. It is left in place because it costs nothing and a
-// change to either the regex or the decode call would make it live again.
+// that would make it throw. It is left in place because it costs nothing.
+//
+// V-957 corrects the rest of what this note used to say. It claimed a change to
+// EITHER the regex or the decode call would make the branch live again. Only the
+// decode call would. Removing the regex leaves the branch just as dead, because
+// reason one does not depend on reason two — measured: with nothing but the
+// decode in the way, `'!!!!'` yields 0 bytes, `'!!ABCD!!'` yields 3 and
+// `'not base64 at all'` yields 10, and none of them throws.
+//
+// The distinction is not pedantry. As written, the note told a maintainer that
+// weakening the schema was safe because a backstop would take over. There is no
+// backstop: drop the regex and `'!!ABCD!!'` decodes to three bytes and is stored
+// as somebody's avatar, silently. What actually protects the regex is that two
+// guards pin it — `avatar-policy-cross-source-invariant` and
+// `api-types-accounts-content-parity` — so its removal fails the suite. The
+// `catch` contributes nothing to that and never did.
 
 describe('POST /v1/account/me/avatar — emptiness', () => {
+  it('CRITICAL the base64 regex is the only thing keeping non-base64 out, and the catch in the route is not a second line of defence. Asserted because the note above used to claim otherwise: a maintainer told the catch reactivates when the schema is weakened would drop the regex believing something still refuses the payload. Nothing does — the decode returns bytes and the upload proceeds.', () => {
+    for (const [input, expectedBytes] of [
+      ['!!!!', 0],
+      ['!!ABCD!!', 3],
+      ['not base64 at all', 10],
+    ] as const) {
+      // The route wraps exactly this call in the `catch` that is claimed to fire.
+      expect(
+        () => Buffer.from(input, 'base64'),
+        `Buffer.from(${JSON.stringify(input)}, 'base64') must not throw — if it ever does, the route's catch is live and this note needs rewriting again`,
+      ).not.toThrow();
+      expect(
+        Buffer.from(input, 'base64').length,
+        `${JSON.stringify(input)} decodes silently rather than being refused`,
+      ).toBe(expectedBytes);
+    }
+    // And the thing that DOES refuse it is the schema, so a caller never gets here.
+    expect(
+      UploadAvatarRequestSchema.safeParse({ content_type: 'image/png', data_base64: '!!ABCD!!' })
+        .success,
+      'the schema regex refuses non-base64 before the route runs — this is the real control',
+    ).toBe(false);
+  });
+
   it('CRITICAL a payload that decodes to zero bytes is refused. Pure base64 padding passes both the length floor and the character-class regex, so the schema cannot catch it; without this check a customer would get an "avatar" that is a zero-byte object in the public bucket, and every surface rendering it would show a broken image rather than the initials fallback.', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({

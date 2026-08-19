@@ -41002,3 +41002,49 @@ the interpolation form `${v.portalUrl}`, the rename fails it — six occurrences
 has an arm proving that caller opts in explicitly; `docs-public-surface-resolves` enforces its "each entry
 must say whose API it is" rule at line 293; and `bootstrap-url-literals-guard`'s two allowlist entries are
 both still load-bearing in the file it scans.
+
+## V-957 — a dead branch documented as a backstop that would reactivate; it would not
+
+**Reached by re-deriving a documented finding, which is worth recording on its own.** Auditing the avatar
+upload for byte-vs-declared-type validation, I found the `catch` around
+`Buffer.from(parsed.data.data_base64, 'base64')` unreachable and the `content_type` caller-declared. Both
+were already known: `A2-PRODUCTION-READINESS-ASSESSMENT.md` §5j records the dead branch with the same two
+reasons and the same verification method, and the SVG/XSS question is pinned in five places across api-types
+and all three SDKs. I grepped prior art for "avatar" and validation terms but not for the base64 branch
+specifically, and that gap cost the investigation. The lesson is the existing one, restated: grep prior art
+for the SPECIFIC claim, not the area.
+
+**What was not already known is that §5j's closing sentence is wrong.** It reads: "a future change to
+either the schema regex or the decode call would make it live again." Only the decode call would. The two
+reasons for the branch being dead are independent, and reason one does not stop holding when reason two
+goes. Measured with nothing but the decode in the way: `'!!!!'` → 0 bytes, `'!!ABCD!!'` → 3 bytes,
+`'not base64 at all'` → 10 bytes, **no exception in any case**.
+
+**The wording matters because it describes a backstop that does not exist.** As written, it tells a
+maintainer that weakening `UploadAvatarRequestSchema` is survivable because the route's `catch` takes over.
+It does not: drop the regex and `'!!ABCD!!'` decodes to three bytes and is stored as somebody's avatar,
+silently, with nothing raised. The same sentence had been copied into the integration test's header comment.
+
+**Proved by removing the regex and watching who notices.** `account-me.test.ts` — every behavioural arm for
+this route — **passes**. The failures come from `avatar-policy-cross-source-invariant` and
+`api-types-accounts-content-parity`, the two guards that pin the regex as source text. That is the real
+protection, and the corrected note now says so instead of crediting the `catch`.
+
+**Corrected in both places, and made checkable.** A new arm asserts the decode does not throw for each of
+the three inputs and returns exactly the byte counts above, and that the schema is what refuses the payload
+— so the claim that the branch is unconditionally dead is a test rather than a comment. Changing an expected
+byte count fails it.
+
+**Also verified clean in the same pass, recorded so the area is not re-audited:** the avatar content-type
+allowlist is `['image/png','image/jpeg','image/webp']` with no scriptable type; bytes are not validated
+against the declared type, which is safe only because that allowlist is closed, and the exclusion of
+`image/svg+xml` is pinned with its XSS rationale in `avatar-policy-cross-source-invariant`,
+`cross-sdk-avatar-allowlist-parity` and both SDK content-parity guards.
+
+**And one negative sweep, recorded so it is not re-run.** After making the same too-weak-substring mistake
+twice this session (V-953, V-956), I swept the suite for it: 350 `toContain('<identifier>')` assertions, 127
+whose token has a longer identifier somewhere in source. Narrowing to source-text subjects on code
+identifiers left 18, and **all 18 are sound** — 16 are `toContain` on an ARRAY, which is exact membership,
+not substring; `routes-admin-owner-content-parity` scans a file containing only the bare token, the longer
+symbol living elsewhere in my over-broad corpus; and the `gui-client` one is already pinned exactly by a
+structural regex two lines above it. Zero real instances. Both mistakes were mine, not the repo's.
