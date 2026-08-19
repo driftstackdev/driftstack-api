@@ -41300,3 +41300,38 @@ looking unexamined.
 could not have. Unreachable-by-schema (webhooks), reachable-but-expensive-to-reach (profiles), and
 reachable-and-masked-by-a-neighbour (V-963's MFA guard) all read identically to a text search — every one is
 "a throw the tests do not mention".
+
+## V-965 — the second "feature unavailable" mechanism, verified complete, and a guard refused
+
+**The `FeatureUnavailableError` slice off V-962's list: all eight sites are deployment-wiring guards.** Five
+are `if (!accountProxiesRepo) throw new FeatureUnavailableError('Proxies are not configured.')`, one is the
+avatar route's `r2Public` check, one is the R2-put failure path, one is pair-mode's Redis lock. They never
+execute because the test fixture always wires those dependencies — which is the correct reason, not a gap.
+
+**What made the slice worth taking is that this is a SECOND mechanism for the same concern.**
+`every-activation-gate-has-a-refusing-disabled-variant` guards the registrar form —
+`if (deps.thing !== undefined) registerThingRoutes(…); else registerThingDisabledRoutes(app);` — across
+seven subsystems, and derives its list by scanning `lib/app.ts` for `register…DisabledRoutes`. The
+`account-me.ts` proxy and avatar routes do it differently: always registered, each handler guarding its own
+dependency. That guard cannot see this shape, and the failure mode is the one it exists to prevent — an
+unconfigured deployment answering a TypeError-500 instead of a clean 503.
+
+**Measured repo-wide: 28 handler×optional-dependency uses, 0 unguarded.** Guarded by four different
+mechanisms, which is the whole difficulty: an inline `if (!dep) throw`, an enclosing
+`if (dep !== undefined)` wrapped around the registration itself, a destructuring default (`= 10`), and
+optional chaining or truthiness.
+
+**Three iterations to get the measurement right, and the first two would have been reported as findings.**
+The first flagged 22 — including `error`, a catch binding my optional-dep regex mistook for a dependency,
+and every `if (authCache) { … }` site, because my detector only recognised NEGATIVE guards. Corrected to
+recognise truthiness and optional chaining: 3 left. All three were then artifacts of my block slicer, which
+starts at `app.get(` and therefore cannot see a conditional wrapped **around** the registration —
+`transcriptEventBus` is guarded at line 3474 exactly that way, and `pairModeLock` both inline and at
+registration.
+
+**A guard for this class is refused, and the measurement is the reason.** Encoding "a handler using an
+optional dependency must guard it" means encoding all four mechanisms plus enclosing-scope awareness — the
+detection that took me three attempts and was wrong twice in ways that looked like real findings. A guard
+built on it would be a false-red machine, which is the V-954 judgement applied to a different heuristic:
+the check is only worth having if it is more reliable than the thing it watches. This one would not be.
+Recorded so the next reader knows the mechanism was checked and found complete, rather than not looked at.
