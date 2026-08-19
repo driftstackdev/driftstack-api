@@ -43918,3 +43918,32 @@ the whole argument for the change.
 
 `it(` counts unchanged (2, 8, 2, 2, 4). No new file, no ratchet change to the suite gate.
 `apps/server/tests/unit` green: 1935 files, 20237 passed.
+
+## V-1029 — a cross-SDK guard checking 15 of the 19 resources it promises
+
+Same class as V-1027, found by sweeping for it deliberately: 94 guards make a universal claim in
+their header while iterating a hand-picked roster. Most of those rosters are complete — three app
+roots because there are three apps — so the discriminator is a roster smaller than a DERIVABLE
+population.
+
+`cross-sdk-verb-parity` says it "asserts the 3 first-party SDKs all expose the SAME verb surface per
+resource". Its `RESOURCES` list held 15 entries. The TypeScript SDK ships 19 resource files, and the
+four missing — `agent_sessions`, `archetypes`, `egress`, `recipes` — exist in the Python and Go SDKs
+too. `agent-sessions` is the largest resource in the SDK. Their verb surfaces were compared across no
+SDKs at all.
+
+Extending the roster to 19 passes, so nothing was actually divergent. That is the ordinary outcome
+and it is still worth the commit: the guard now checks what its header says, and the proof is that
+neutralising a `/v1/recipes` path in the Python SDK passes 10/10 under the old roster and reds under
+the new one.
+
+A roster that has to be hand-maintained will drift again, so an arm now derives the population:
+every `sdk-typescript/src/resources/*.ts` must appear in `RESOURCES`, or the guard fails naming the
+ones that ship unchecked. That is the same fix V-1018 applied to counts — the number, or here the
+list, stops being prose the moment something derives it.
+
+Mutation: dropping `archetypes` from the roster → RED on the coverage arm; breaking a Python recipes
+path → RED on verb parity, and GREEN under the pre-V-1029 roster, which is the whole argument.
+
+`it(` count 10 → 11. No new file, no ratchet change. `apps/server/tests/unit` green: 1935 files,
+20238 passed.

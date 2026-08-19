@@ -14,7 +14,7 @@
 // — a SDK that doesn't reference /v1/usage/series silently doesn't
 // expose the V-452 time-series surface.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -31,16 +31,20 @@ function read(p: string): string {
 // but with different naming conventions per language.
 const RESOURCES = [
   'account',
+  'agent_sessions',
+  'archetypes',
   'api_keys',
   'audit_log',
   'auth',
   'billing',
   'crypto_orders',
+  'egress',
   'email_preferences',
   'legal',
   'mfa',
   'profile_snapshots',
   'profiles',
+  'recipes',
   'sessions',
   'team',
   'usage',
@@ -199,5 +203,20 @@ describe('W649 cross-SDK verb parity', () => {
     expect(
       existsSync(resolve(REPO_ROOT, 'apps/server/tests/unit/cross-sdk-verb-parity.test.ts')),
     ).toBe(true);
+  });
+
+  it('CRITICAL the roster covers every SDK resource. The header promises the three SDKs expose the same verb surface PER RESOURCE, and until V-1029 the list backing that promise held 15 of the 19 resources the TypeScript SDK ships — agent_sessions, archetypes, egress and recipes were checked by nothing, agent-sessions being the largest resource in the SDK. All four turned out to agree; the point is that nothing was asking.', () => {
+    const tsDir = resolve(REPO_ROOT, 'packages/sdk-typescript/src/resources');
+    const shipped = readdirSync(tsDir)
+      .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))
+      .map((f) => f.replace(/\.ts$/, '').replace(/-/g, '_'))
+      .sort();
+    expect(shipped.length, 'TypeScript SDK resource files found').toBeGreaterThanOrEqual(19);
+    const roster = new Set<string>(RESOURCES);
+    expect(
+      shipped.filter((r) => !roster.has(r)),
+      'these SDK resources ship but are not in RESOURCES, so their verb surface is compared ' +
+        'across no SDKs at all — add them to the roster:',
+    ).toEqual([]);
   });
 });
