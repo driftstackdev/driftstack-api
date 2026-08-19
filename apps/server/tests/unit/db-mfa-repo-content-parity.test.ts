@@ -139,6 +139,19 @@ describe('W446.A apps/server/src/db/mfa-repo.ts content parity', () => {
     expect(body).toMatch(/mfa-credentials:\$\{accountId\}/);
     expect(body).toMatch(/\.delete\(accountMfaRecoveryCodes\)/);
     expect(body).toMatch(/await tx\.delete\(accountMfa\)/);
+    // V-994 — the two account predicates, which ARE the tenant boundary here.
+    // The two assertions above pin the delete CALLS, and both match a delete with
+    // no WHERE clause at all: removing both predicates left this file's six arms
+    // green, along with 73 unit tests and 67 real-Postgres integration tests. The
+    // executable proof is `db-mfa-delete-for-account-tenant-scope-drizzle`; this
+    // is the cheap text layer beside it, in the shape the `listUnusedRecoveryCodes`
+    // arm below already uses for its own predicate.
+    expect(body).toMatch(
+      /\.delete\(accountMfaRecoveryCodes\)\s*\n?\s*\.where\(eq\(accountMfaRecoveryCodes\.accountId, accountId\)\)/,
+    );
+    expect(body).toMatch(
+      /await tx\.delete\(accountMfa\)\.where\(eq\(accountMfa\.accountId, accountId\)\)/,
+    );
   });
 
   it('nextRevision guarantees a stale snapshot cannot share the persisted revision', () => {

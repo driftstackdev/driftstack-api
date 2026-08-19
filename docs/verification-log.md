@@ -42393,3 +42393,45 @@ reason: in CI the unit tests run alongside and can only add.
 Method, for whoever repeats it: `driftstack_cov_dblayer` on the local Postgres (left in place, it is
 disposable), Redis index 15 (verified empty first — 12, 11 and 14 were not), the `src/db` coverage
 exclusion lifted for one run and restored from a scratchpad snapshot.
+
+## V-994 — one customer disabling MFA could have wiped everyone's, and nothing would have failed (2026-08-19)
+
+`DrizzleMfaRepo.deleteForAccount` deletes from `account_mfa_recovery_codes` and `account_mfa` in one
+transaction under the per-account advisory lock. Both statements carry
+`.where(eq(…accountId, accountId))`, and those two predicates are the whole tenant boundary: without
+them, `MfaService.disable` for one customer removes **every** customer's second factor and every
+unused recovery code in the table, leaving those accounts authenticable by password alone with nobody
+told.
+
+**The source is correct. What was missing is anything that would notice if it stopped being.**
+Measured by deleting both predicates and running everything that names MFA:
+
+- **73 tests over four MFA unit guards — all green.** Including `db-mfa-repo-content-parity`, whose
+  `deleteForAccount` arm pinned `.delete(accountMfaRecoveryCodes)` and `await tx.delete(accountMfa)`.
+  Both match a delete with no `WHERE` at all. The arm immediately below it pins
+  `listUnusedRecoveryCodes`'s entire body **including** its account predicate — so this is a specific
+  omission in one arm, not the file's style.
+- **67 tests over ten MFA integration files against real Postgres — all green.** Including
+  `db-mfa-recovery-codes-tenant-scope-drizzle`, a file named for tenant scoping. Reading it explains
+  why: it is "third of the tenant-scope sweep" and guards the READ path
+  (`listUnusedRecoveryCodes`), which it states plainly. The delete path was simply never a member of
+  that sweep.
+
+**How it was found, which matters more than the instance.** V-993 measured `src/db` per function:
+730 functions, 81 never executed, **19 of them account-scoped**. `deleteForAccount` was one of the 19. The cold list is not a curiosity — it is a list of SQL predicates no test drives, and the first
+one read out of it turned out to be a cross-account wipe away from being unguarded. `findApiKey`,
+`profiles-repo.purgeTrashed` and `sessions-repo.listActiveByAccount` sit on the same list.
+
+**Fixed as the fourth member of the tenant-scope sweep**, in that sweep's own idiom: two accounts
+seeded with an enrollment and a recovery code each on real Postgres, `deleteForAccount(owner)`, then
+the owner's rows gone and the stranger's intact. A positive control asserts both seeds landed, because
+without it every arm would pass against a seed that never happened.
+
+Three mutations, each caught with per-predicate precision — both predicates removed gives the stranger
+`{enrol: 0, codes: 0}`; the enrollment predicate alone `{enrol: 0, codes: 1}`; the recovery-code
+predicate alone `{enrol: 1, codes: 0}`. The text pin was strengthened alongside to name both WHERE
+clauses, in the shape its own sibling arm already used, and it reds on the same mutations — a cheap
+second layer beside the executable one. Restored byte-identical each time; `it(` count unchanged at
+16; `npm run typecheck` exit 0.
+
+`EXPECTED_TEST_FILES` 2923 → 2924 and `_ALL` 3089 → 3090, for the one file added.
