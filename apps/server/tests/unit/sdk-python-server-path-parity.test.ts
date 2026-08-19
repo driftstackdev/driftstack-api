@@ -103,7 +103,14 @@ describe('W250.A SDK-python ↔ server path parity', () => {
         .replace(/\/$/, '');
       sdkPaths.add(normalized);
     }
-    expect(sdkPaths.size).toBeGreaterThan(10);
+    // V-1026 — a ratchet, not a smoke test. This floor was `> 10` against a real
+    // population of 89: extraction could have regressed to a dozen paths and every
+    // arm below would still have passed while checking an eighth of the SDK. The
+    // number rises when the python SDK gains endpoints, in the same commit.
+    expect(
+      sdkPaths.size,
+      'python SDK paths extracted — if this dropped, the parity arms below are checking a fraction of the surface',
+    ).toBeGreaterThanOrEqual(89);
 
     const serverPaths = registeredPaths(serverBlob);
 

@@ -108,7 +108,14 @@ describe('W250.B SDK-go ↔ server path parity', () => {
         sdkPaths.add(path);
       }
     }
-    expect(sdkPaths.size).toBeGreaterThan(10);
+    // V-1026 — a ratchet, not a smoke test. This floor was `> 10` against a real
+    // population of 99: extraction could have regressed to a dozen paths and every
+    // arm below would still have passed while checking an eighth of the SDK. The
+    // number rises when the go SDK gains endpoints, in the same commit.
+    expect(
+      sdkPaths.size,
+      'go SDK paths extracted — if this dropped, the parity arms below are checking a fraction of the surface',
+    ).toBeGreaterThanOrEqual(99);
 
     const serverPaths = registeredPaths(serverBlob);
 

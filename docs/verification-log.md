@@ -43799,3 +43799,45 @@ That is four instrument errors across V-1022 through V-1025, every one of which 
 security finding: a three-route file read as two, rate limiting read as authentication, 85 ungated
 routes that were a disabled-feature fallback, and now an IDOR that was a truncated slice. The
 measurement is the cheap part; establishing that the measurement is of the right thing is the work.
+
+## V-1026 — three anti-vacuity floors set ten times too low, found by failing at something else
+
+This turn's sweep of customer-facing docs and SDK parity found no defects. Everything checked out:
+the 9 declared webhook event types are all documented and nothing is documented that cannot fire
+(`egress.capability_report` is the harness event that TRIGGERS the customer webhook, and
+`webhook_delivery.replayed` is a real `admin_audit_action`, both correctly described as such); every
+example value in the payload docs resolves to a real literal; `docs/api/webhook-events.md` and the
+customer page still mirror byte-for-byte apart from Astro frontmatter; all 19 API-key scopes are
+documented with no phantom entries.
+
+**What did come out of it is a hole in three guards, and the route to it is the finding.**
+
+Chasing an apparent cross-SDK gap, my own path extractor produced five wrong answers in a row:
+`?format=csv` suffixes excluded by a character class, backtick paths inside JSDoc counted as calls,
+and finally `f"/v1/profiles/{quote(profile_id, safe='')}"` — whose embedded `''` and space terminate a
+naive `["'](/v1/[^"']+)["']` match early. Every one of those looked like a Python SDK missing
+endpoints its siblings had.
+
+The repo's own guard handles that exact shape correctly, and says so: it rewrites `{…}` to `:p`
+BEFORE quote-matching, with a comment naming the `safe=''` case. Better than mine. But measuring what
+it extracts — by temporarily asserting an impossible count and reading the actual back — gave the
+real numbers against their floors:
+
+`sdk-python-server-path-parity` 89 paths, floor `> 10`
+`sdk-typescript-server-path-parity` 100 paths, floor `> 10`
+`sdk-go-server-path-parity` 99 paths, floor `> 10`
+
+An order of magnitude of slack. The floors are there to stop the arms passing vacuously, and at 10
+they permit extraction to collapse to an eighth of the SDK surface while every arm stays green.
+
+Proved it precisely rather than asserting it. Breaking the f-string normalisation reds under BOTH
+floors — but through the missing-path arm, because mangled paths are not registered routes, so that
+mutation says nothing about the floor. The failure a floor uniquely catches is a SILENT DROP: capping
+the extractor at 12 valid paths leaves the old floor green at 3/3 and reds the new one. That is the
+mutation that belongs in the record; the first one would have been a proof of the wrong thing.
+
+Floors raised to the measured counts as one-way ratchets, each with a note that the number rises in
+the same commit the SDK gains endpoints.
+
+`it(` counts unchanged (3, 2, 3). No new file, no ratchet change to the suite gate.
+`apps/server/tests/unit` green: 1935 files, 20236 passed.
