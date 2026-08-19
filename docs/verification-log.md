@@ -42334,9 +42334,8 @@ by this gate. The migrate step is load-bearing and its own comment says why: wit
 
 So the blind spot is real, narrower, and of a different kind: **the layer runs and nothing reports
 which parts of it ran**, because `vitest.config.ts` excludes `apps/server/src/db/**` from coverage.
-Executed-but-unmeasured, not unexecuted. Locally the same 134 files skip for want of `DATABASE_URL`,
-which is exactly the 109 skipped files in every local green I have been quoting — worth knowing when
-reading one.
+Executed-but-unmeasured, not unexecuted. Locally those files skip for want of `DATABASE_URL` — see
+V-993, which corrects a sentence that first stood here equating them with the whole local skip count.
 
 **The failure mode is one the file already names.** Its second arm rejects a stale not-covered entry
 because that "excuses nothing while making the blind spot look wider than it is, and the next real gap
@@ -42350,3 +42349,47 @@ population, `ci.yml`'s `build-test` env and migrate step, and the coverage exclu
 each red on its own sentinel — removing `DATABASE_URL` from `build-test`, deleting the `src/db`
 coverage exclusion, and breaking the population scan. `it(` 4 → 5, `npm run typecheck` exit 0, and the
 other pin over `verify-suite.mjs` (`workspace-ci-workflow-content-parity`, 9 arms) still green.
+
+## V-993 — a correction to V-992, and the first measurement of the layer it argued about (2026-08-19)
+
+**The correction.** V-992 ended by saying the `DATABASE_URL`-gated files "are exactly the 109 skipped
+files in every local green". They are not, and the sentence contradicted itself — it named 134 files
+and equated them with 109. Measured: **95** test files gate wholly on `DATABASE_URL`, about **11** on
+`RUN_DB_TESTS`, **4** on `REDIS_URL`, plus a few flag-gated singles — 113 fully-gated files against
+~109 reported skipped. The db-layer files are most of a local green's skips, not all of them.
+
+**And V-917 had already enumerated this correctly**, in this same log: "all 109 are env-gated, CI sets
+`DATABASE_URL` and `REDIS_URL`, and `ci.yml` migrates the schema first". It never claimed they were
+one mechanism. That is the fourth time in two days I have restated something the repo already had
+right — the pattern is now well enough evidenced to be worth naming: I reach for a number I measured
+myself and forget the log is a source. Corrected in `verify-suite.mjs` and in V-992's own paragraph,
+paraphrased, pointing at V-917.
+
+**The measurement V-992 made possible.** V-992 established that `apps/server/src/db/**` is executed by
+`build-test` and merely unmeasured. Nobody had a number for it, because the coverage config excludes
+the directory and `--coverage.include` on the command line does not beat a config `exclude` — that
+combination reports an EMPTY file set, which is worth knowing before anyone tries it. Lifting the
+exclusion for one run and restoring it byte-identical:
+
+- **54 of 54 files under `src/db` appear in the report — none is invisible.**
+- **2090 of 2540 statements executed = 82.3%**, from the integration suite alone.
+- Excluding `migrate.ts`, `seed.ts` and `seed-target-guard.ts` — a migration runner and two seeding
+  utilities, run as scripts and not by any test — the repo files sit at **2090/2473 = 84.5%**, and
+  those three account for every fully-uncovered statement in the layer (0 of 67).
+- The suite that produced it: **353 files, 3249 tests, all passing** against a disposable database.
+  Locally they skip; run, they are green, so nothing here is rotting.
+
+**So the excluded layer is not a void, it is a well-covered layer nobody counts.** 84.5% would sit
+just above the repo's 83% statement threshold. That makes re-including it a real option rather than a
+cliff — but it is a decision about what CI enforces, so the number is recorded here and the exclusion
+is left alone.
+
+**One caveat, stated because the number invites the wrong reading.** That run also failed the global
+coverage thresholds (statements 66.84% against 83%). That is an artefact of running _integration tests
+only_ — the unit tests, which cover most of the non-db source, were not in the run. It is NOT evidence
+that including `src/db` would drop the repo below its gate, and the 82.3% is a FLOOR for the same
+reason: in CI the unit tests run alongside and can only add.
+
+Method, for whoever repeats it: `driftstack_cov_dblayer` on the local Postgres (left in place, it is
+disposable), Redis index 15 (verified empty first — 12, 11 and 14 were not), the `src/db` coverage
+exclusion lifted for one run and restored from a scratchpad snapshot.

@@ -68,8 +68,13 @@ export const EXPECTED_TEST_FILES_ALL = 3089;
  * !DATABASE_URL)` resolves to RUN and the db layer is executed here. What it is
  * not is MEASURED: `vitest.config.ts` excludes `apps/server/src/db/**` from
  * coverage. The real blind spot is narrower and different — the layer runs, and
- * nothing reports which parts of it ran. Locally, without `DATABASE_URL`, those
- * files skip, which is the 109 skipped files in every local green.
+ * nothing reports which parts of it ran.
+ *
+ * Locally those files skip for want of `DATABASE_URL`. They are MOST of the ~109
+ * skipped files in a local green, not all of them: 95 test files gate on
+ * `DATABASE_URL`, about 11 on `RUN_DB_TESTS` and 4 on `REDIS_URL`. V-917 already
+ * enumerated the skip mechanisms and found every one of them env-gated with zero
+ * unconditional skips — read that before quoting a skip count as a db-layer figure.
  *
  * Keyed by the job id in `.github/workflows/ci.yml`. A new job there must be
  * added here or the ci-jobs census fails — the point being that "not run by this
