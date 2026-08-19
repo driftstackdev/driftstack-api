@@ -39017,3 +39017,38 @@ of the file before editing the middle — is the one I skipped.
 **Corrected in place**: V-866's entry now records that the banner preceded it. The audit method from
 V-909 has now found something in two of three batches sampled, and both findings were about my own
 work rather than the repository's.
+
+## V-911 — V-910's failure was a single instance, and the check that prevents it costs one command
+
+**Bounding the failure, as V-907 did for V-905.** V-910 found that V-866 corrected a section its own
+file already disclaimed, because I edited line 96 without reading line 5. That is checkable across
+every file this arc touched: enumerate the non-test, non-log files edited since V-857 and read each
+one's header.
+
+**Five files. Four clean, and the fifth is the one already corrected.**
+
+- `apps/docs/src/pages/reference/idempotency.md` — frontmatter only, no disclaimer. V-887's
+  empty-key correction was novel.
+- `docs/security-audit-2026-05-06.md` — no global disclaimer; it carries per-finding status notes,
+  which is the convention V-883/884/885 used rather than bypassed.
+- `docs/deployment/runbook.md` — its header DOES disclaim, "Everything in `[TODO]` is a known gap".
+  Checked rather than assumed: V-884's corrected paragraph sits in "## Log-handling — PII posture",
+  a section containing zero `[TODO]` markers. The disclaimer does not reach it.
+- `docs/founder-action-queue.md` and `docs/architecture/v294-feature-catalog.md` — both now carry
+  prominent banners, and both banners are MINE from V-872. They postdate the findings they would
+  have covered, so they cannot have pre-empted them.
+
+**So the pattern is one instance, not a habit.** That matters because the alternative reading — that
+I have been editing file middles blind all session — would call for re-checking every entry, and it
+is not what the evidence says.
+
+**The habit that prevents it is now specified and cheap**, which is the V-907 criterion: before
+editing a document, read its first six non-empty lines. One command, and it is the only step that
+would have caught V-866, because the disclaimer was neither a guard, an invariant, nor a pin — just
+prose at the top of the file I was already in.
+
+**Three audits, three bounded failures.** V-907 bounded the duplicate-guard lapse to one, V-909
+sampled the earliest batches and found them sound, and this bounds the unread-header lapse to one.
+The mistakes this session have been isolated rather than systemic, and saying so is as much a
+finding as the corrections were — an unbounded suspicion about one's own work costs more than the
+errors do.
