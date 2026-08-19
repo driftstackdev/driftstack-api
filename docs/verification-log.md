@@ -42125,3 +42125,40 @@ written down anywhere.
 
 `it(` counts 1 → 2 and 2 → 3. `npm run typecheck` exit 0. Full suite before this batch: 2981 files
 passed, 109 skipped (3090), 30050 tests passed, exit 0.
+
+## V-988 — the third guard, and a correction to what V-987 said about it (2026-08-19)
+
+**V-987 stated that the Go SDK has no server-path guard, unlike its two siblings. That is wrong.**
+`sdk-go-server-path-parity.test.ts` has existed since 2026-08-01. The paragraph reasoning about why
+building one would be awkward — Go composing paths by concatenation — describes a problem the
+existing guard already solves, in the twelve lines it spends normalising
+`"/v1/sessions/" + url.PathEscape(id) + "/navigate"` down to a comparable shape.
+
+The cause is worth recording because it is mechanical and will recur: I listed the SDK guards with
+`ls | grep | head -30`, then `| tail -20`, on a list of more than fifty. `sdk-go-server-path-parity`
+sorts into the middle, which neither window showed. A head and a tail do not cover a list unless you
+have checked that they overlap.
+
+**The correction improves the finding rather than shrinking it.** The Go guard had the SAME loose
+server set as the other two — every quoted `/v1/…` literal under `apps/server/src`, counting a
+`lib/openapi.ts` declaration, a `device-key-deny.ts` policy row and an error message as endpoints. So
+this was never two guards out of three: **all three shipped the same defect, and all three carried a
+header claiming they checked registration.** Tightened here on the same anchor, with the same
+fixtures, and mutation-proved on the same rename: renaming `app.get('/v1/archetypes'` now reds the Go
+guard naming `/v1/archetypes`, where before it stayed green.
+
+**And the same looseness was in my own guard from two commits earlier.**
+`a-customer-doc-does-not-name-an-endpoint-that-does-not-exist` built its live set from quoted
+literals in `routes/` and `lib/app.ts`. V-984 had already caught one half of this — backticks in a
+comment registering as a route — and fixed only that half, leaving the quoted-declaration half
+standing. Measured before tightening: 210 quoted literals against 209 registrations, the single
+difference a bare `/v1` prefix, so the correction is free. It removes a way for a phantom documented
+path to resolve against a mention of itself.
+
+That is the fourth guard of this class in two days, three of them written by other hands and one by
+mine. The shape is consistent: a file that needs "does the server serve this?" reaches for a text
+search over the server tree, because a text search is what the surrounding files do. The distinction
+between a route and a string that looks like one is invisible in a repo where the two agree — which
+is every repo, until the day one is renamed.
+
+`it(` counts 2 → 3 on the Go guard, unchanged at 4 on mine. `npm run typecheck` exit 0.

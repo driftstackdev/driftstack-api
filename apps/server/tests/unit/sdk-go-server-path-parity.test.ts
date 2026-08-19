@@ -4,6 +4,12 @@
 // `"/v1/sessions/" + url.PathEscape(sessionID) + "/navigate"`. We
 // normalise those concatenations to `:p` placeholders before
 // comparing against the server's normalised path set.
+//
+// V-988 — the third of the three, tightened for the reason V-987 gives in the
+// other two: "the server's normalised path set" was every quoted `/v1/…` literal
+// anywhere under `apps/server/src`, which counts a `lib/openapi.ts` declaration,
+// a middleware policy row and an error message as if each were an endpoint. All
+// three siblings shared the weakness and all three claimed to check registration.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -43,6 +49,23 @@ function safeStat(p: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Paths the server actually REGISTERS, normalised for comparison.
+ *
+ * Anchored on the `app.<verb>(` call, allowing a type argument and a path on the
+ * following line — the form `routes/webhooks.ts` uses for
+ * `/v1/webhook-deliveries/:deliveryId/replay`, which this SDK calls.
+ */
+function registeredPaths(blob: string): Set<string> {
+  const out = new Set<string>();
+  for (const m of blob.matchAll(
+    /app\.(?:get|post|put|patch|delete)\s*(?:<[^(]*>)?\s*\(\s*['"`](\/v1\/[^'"`]*)['"`]/g,
+  )) {
+    out.add((m[1] ?? '').replace(/:[a-zA-Z_]+/g, ':p').replace(/\/$/, ''));
+  }
+  return out;
 }
 
 describe('W250.B SDK-go ↔ server path parity', () => {
@@ -87,14 +110,31 @@ describe('W250.B SDK-go ↔ server path parity', () => {
     }
     expect(sdkPaths.size).toBeGreaterThan(10);
 
-    const serverPaths = new Set<string>();
-    for (const m of serverBlob.matchAll(/['"](\/v1\/[A-Za-z0-9:_./-]+)['"]/g)) {
-      const raw = m[1]!;
-      const normalized = raw.replace(/:[a-zA-Z_]+/g, ':p').replace(/\/$/, '');
-      serverPaths.add(normalized);
-    }
+    const serverPaths = registeredPaths(serverBlob);
 
     const missing = [...sdkPaths].filter((p) => !serverPaths.has(p));
-    expect(missing).toEqual([]);
+    expect(
+      missing,
+      'these Go SDK paths are not REGISTERED by any route — a path that merely appears in ' +
+        'lib/openapi.ts or a policy roster is a declaration, not an endpoint:',
+    ).toEqual([]);
+  });
+
+  it('V-988 CRITICAL the server side is route REGISTRATIONS, not every /v1 string in the source tree. The same fixtures as the TypeScript and Python twins, because the same loose set shipped in all three: renaming a real registration left every one of them green while lib/openapi.ts still declared the old path.', () => {
+    expect(registeredPaths("app.get('/v1/thing', handler);").has('/v1/thing')).toBe(true);
+    expect(
+      registeredPaths(
+        "app.post<{ Params: { deliveryId: string } }>(\n  '/v1/thing/:deliveryId/replay',",
+      ).has('/v1/thing/:p/replay'),
+      'the type-argument-then-next-line form this SDK calls',
+    ).toBe(true);
+    expect(
+      registeredPaths("  { method: 'GET', path: '/v1/declared-only' },").size,
+      'an OpenAPI declaration is not a registration',
+    ).toBe(0);
+    expect(
+      registeredPaths("  'POST:/v1/policy-listed/:id/replay',").size,
+      'a middleware policy row is not a registration',
+    ).toBe(0);
   });
 });

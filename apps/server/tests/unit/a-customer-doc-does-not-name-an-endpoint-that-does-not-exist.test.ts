@@ -138,7 +138,18 @@ function livePaths(): Set<string> {
     // as a registration inflates the live set. That matters more than it looks:
     // every inflated entry is a phantom path arm 1 would then wave through
     // because somebody mentioned it. Caught by this file's own fourth arm.
-    for (const m of readFileSync(f, 'utf8').matchAll(/['"](\/v1\/[^'"\s]*)['"]/g)) {
+    //
+    // V-988 — and anchored on the registration call, not merely on a quoted
+    // literal. The three SDK path guards each derived "the server has this
+    // route" from any quoted `/v1/…` string under `apps/server/src`, which
+    // counts a declaration and a policy row as endpoints; this file shipped
+    // with the same looseness two commits earlier. Measured when tightening:
+    // 210 quoted literals against 209 registrations here, the one difference
+    // being a bare `/v1` prefix, so the correction costs nothing and removes a
+    // way for a phantom documented path to resolve against a mention.
+    for (const m of readFileSync(f, 'utf8').matchAll(
+      /app\.(?:get|post|put|patch|delete)\s*(?:<[^(]*>)?\s*\(\s*['"](\/v1\/[^'"]*)['"]/g,
+    )) {
       live.add(normalise(m[1] ?? ''));
     }
   }
