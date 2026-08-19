@@ -42831,3 +42831,33 @@ uuid-shaped keys after a documented 22P02 incident that "silently killed LiveKit
 dispatched session".
 
 `it(` 5 → 6. `npm run typecheck` exit 0. No new file, so no ratchet change.
+
+## V-1004 — two more axes measured, both closed (2026-08-19)
+
+Recorded because a negative that is not written down gets re-derived, which this arc has now paid for
+four times.
+
+**Cap / quota counts.** The `sumMonthlySpendCents` shape — an unscoped aggregate makes one customer's
+usage consume another's cap, and the refusal looks like their own budget — is the most consequential
+form of an unscoped read, so it is worth checking whether any sibling has it. Every cap-enforcing
+count in `src/db` is WARM: `profiles.countByAccount`, `sessions.countActiveSessions`,
+`agentSessions.countActive`, `webhooks.countActiveEndpoints`, `usage.totalsForPeriod`,
+`profiles.sumSizeBytesByAccount`, and `bundledLlm.sumMonthlySpendCents` itself, which the 2026-08-07
+sweep already guards. `agentSessions.countActiveForProfile` counts by profile id alone, which is sound
+because the profile PK is a uuid owned by exactly one account — not an unscoped aggregate.
+
+**A cold retention purge that is not a gap.** `agent-turn-receipts-repo.purgeForTerminatedAccountsBefore`
+has four callers and zero coverage hits, which reads like the V-994 shape: a live GDPR-erasure path no
+test executes. It is not. The method is a one-line delegate to the standalone
+`purgeTurnReceiptsForTerminatedAccountsBefore`, and THAT is warm at 7 hits — the sweeper calls the
+standalone directly, so coverage attributes the work there and the wrapper shows cold. The standalone
+exists deliberately: its docstring records that binding the erasure path to the class would make an
+unset `MFA_ENCRYPTION_KEY` "silently switch off a retention commitment that has no relationship to
+it", the defect fixed in `2eeddefa7`.
+
+So "cold" has now produced a fourth distinct meaning across this arc — untested-but-live (V-994 to
+V-997, V-1003), unreachable (V-998), deliberately caller-free under a guard (V-998), and **covered
+under another name** (here). Reading a coverage zero as a gap without asking which one it is has been
+wrong more often than right.
+
+No code change.
