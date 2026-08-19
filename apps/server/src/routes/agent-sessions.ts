@@ -24,7 +24,7 @@ import {
   UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES_DEFAULT,
   UPLOAD_MAX_FILE_BYTES_DEFAULT,
 } from '../lib/upload-caps.js';
-import { reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
+import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -1959,6 +1959,16 @@ export function registerAgentSessionsRoutes(
       const ctx = requireCtx(req);
       const parsed = CreateAgentSessionRequestSchema.safeParse(req.body ?? {});
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      // V-947 — report the keys zod stripped. Gate verified by reading this
+      // route's own registration, not inferred: a pattern-based split misread
+      // two of these in V-946.
+      reportUnknownRequestFields({
+        body: req.body ?? {},
+        knownKeys: knownRequestKeys(CreateAgentSessionRequestSchema),
+        reply,
+        logger: req.log,
+        route: 'POST /v1/agent-sessions',
+      });
       // v2-#19 — Stripe-pattern idempotency. Header name is lowercase
       // per Fastify's normalised headers map; the dashboard / SDK send
       // it as `Idempotency-Key` and the wire-level toLowerCase happens
@@ -5296,6 +5306,16 @@ export function registerAgentSessionsRoutes(
       const ctx = requireCtx(req);
       const parsed = ResumeSessionRequestSchema.safeParse(req.body ?? {});
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      // V-947 — report the keys zod stripped. Gate verified by reading this
+      // route's own registration, not inferred: a pattern-based split misread
+      // two of these in V-946.
+      reportUnknownRequestFields({
+        body: req.body ?? {},
+        knownKeys: knownRequestKeys(ResumeSessionRequestSchema),
+        reply,
+        logger: req.log,
+        route: 'POST /v1/agent-sessions/:id/resume',
+      });
       const rec = await sessions.get(req.params.id);
       if (rec === null || !callerCanAccessAgentSession(ctx, rec.accountId)) {
         throw new NotFoundError(`AgentSession ${req.params.id} not found.`);

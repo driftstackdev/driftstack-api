@@ -40560,3 +40560,52 @@ now held to the rule. Raising the ceiling back to 34 fails the count arm.
 **Remaining: 31 keys.** The largest cluster is `auth.ts` (12 sites — signup, login, verify-email,
 magic-link, password-reset, refresh, logout), which is exactly where the anonymous-surface judgement
 matters most and where a wrong call leaks schema shape to unauthenticated probing.
+
+## V-947 — five more unreported writes wired, five that were never customer surfaces
+
+**Continuing to read the V-946 backlog one registration at a time.** The classifier is not trusted here:
+two automated attempts at the anonymous-vs-authed split misread routes, so every site below was resolved
+by reading its own `app.post(...)` options block.
+
+**Five wired.** `POST /v1/agent-sessions` and `POST /v1/agent-sessions/:id/resume`
+(`requireAuth + write:sessions`), `POST /v1/agent-sessions/:id/transport-report`
+(`controlKeyOrAccountAuth` plus an explicit `await app.requireScope('read:sessions')(req, reply)` inside
+the handler), `POST /v1/auth/cli-authorize/bind-device-code` (`requireAuth`), and
+`POST /v1/auth/mfa/step-up` (`requireAuth + loginGate`). In each the caller is already identified before
+the parse, so echoing back its own unrecognised keys discloses nothing it did not send.
+
+**Five came off the list WITHOUT being wired, and that is the finding.** Three `mac-nodes-register.ts`
+routes and two `internal-atlas-priority.ts` routes were sitting in a backlog of _customer-facing_ writes
+and are not customer-facing at all. All four `mac-nodes-register.ts` registrations are
+`requireAuth + requireScope('driftstack_internal_admin')`. `internal-atlas-priority.ts` gates four routes
+on a bearer-token `requireInternalAuth` (which calls `deps.auth.validate(req)` and throws), two on the
+staff scope, and — when the internal token is not configured — registers the same four paths to an
+unconditional `reject`. They belong under the module's existing staff rationale, the one the `admin-`
+prefix already carries. The backlog had been counting them as unfixed customer defects.
+
+**The exemption is checked, not asserted.** `admin-` announces its rationale in the filename; these two
+carry it only in their preHandlers, where a later commit could quietly drop it. So a new arm requires,
+per file, that every `preHandler:` block names a staff marker AND that the registration count equals
+gated + `reject` registrations — so an ungated route added to one of these files fails here instead of
+inheriting a file-level exemption it does not qualify for. Counted rather than brace-matched on purpose:
+this arc has had two guards fooled by naive brace matching.
+
+**A pin about authentication broke for a reason unrelated to authentication.** `MfaStepUpRequestSchema`'s
+handler was `async (req) =>`; the reporter needs `reply`, and adding it pushed the registration past the
+100-char print width, so prettier reflowed the whole handler. `routes-auth-content-parity` froze the
+registration _and_ `async (req) => {` on one line, so it went red. The pin's own test name claims "requires
+bearer auth + web-session" — the parameter list was never the claim. Rewritten to pin the path and the
+gate list only, and proved in **both** directions: dropping `app.requireAuth` from the gate list fails it,
+and collapsing the registration back onto one line does **not**. That second proof is the point — the old
+pin would have failed on a reflow that changed nothing.
+
+**Four more proofs.** Re-adding a wired key to the backlog fails the count arm (22 ≠ 21). Swapping one
+`driftstack_internal_admin` scope in `mac-nodes-register.ts` for a customer scope fails the staff-gate arm
+(3 of 4 blocks). Adding an ungated registration to `internal-atlas-priority.ts` fails the count equality
+(11 ≠ 10). Removing the report block just wired into `auth-cli.ts` fails the main coverage arm by name.
+All restores byte-identical from a snapshot of the fixed state.
+
+**Ceiling 31 → 21.** Five wired, five reclassified. The remaining largest cluster is still `auth.ts`
+(11 sites), where the anonymous-surface judgement genuinely matters — those routes answer unauthenticated
+callers, and the module's own `status-subscribe` exemption reasons that echoing keys back on such a surface
+discloses schema shape to probing.

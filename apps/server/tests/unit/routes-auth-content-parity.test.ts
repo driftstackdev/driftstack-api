@@ -152,8 +152,14 @@ describe('W421.B apps/server/src/routes/auth.ts content parity', () => {
     expect(body).toMatch(
       /\/\/ V-353e — step-up reauth on the EXISTING web session\. Caller is\s*\n?\s*\/\/ bearer-authed; we verify the 6-digit \(or recovery\) code and stamp\s*\n?\s*\/\/ `mfa_satisfied_at` on their session\. Step-up-gated routes\s*\n?\s*\/\/ \(DELETE \/v1\/account\/mfa, future DELETE \/v1\/account\) pass for the\s*\n?\s*\/\/ next 15 min\./,
     );
+    // V-947 — the gate list is the claim in this test's name; the handler's
+    // parameter list was never part of it. The pin used to include
+    // `async (req) => {` on the same line, so wiring the unknown-field reporter
+    // into this route — which needs a `reply` parameter, which pushed the
+    // registration past the print width — broke a pin about authentication for a
+    // reason that had nothing to do with authentication. Path and gates only.
     expect(body).toMatch(
-      /app\.post\('\/v1\/auth\/mfa\/step-up', \{ preHandler: \[app\.requireAuth, loginGate\] \}, async \(req\) => \{/,
+      /'\/v1\/auth\/mfa\/step-up',\s*\n?\s*\{ preHandler: \[app\.requireAuth, loginGate\] \}/,
     );
     expect(body).toMatch(
       /if \(ctx\.webSession === null\) \{\s*\n?\s*throw new ForbiddenError\('MFA step-up is only callable from a web session\.'\);/,

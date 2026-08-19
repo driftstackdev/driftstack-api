@@ -50,6 +50,7 @@ import {
 } from '../lib/errors.js';
 import { readClientIp } from '../lib/client-ip.js';
 import { AUTH_IP_LIMITS, ipRateLimit } from '../middleware/ip-rate-limit.js';
+import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import type { RateLimitStore } from '../services/rate-limit.js';
 
 function clientIp(req: FastifyRequest): string | null {
@@ -310,29 +311,43 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
   // 401 if the caller isn't authed; 401 if not a web session
   // (API-key callers can't step-up since there's no session row to
   // refresh). Rate-limited via loginGate to slow brute force.
-  app.post('/v1/auth/mfa/step-up', { preHandler: [app.requireAuth, loginGate] }, async (req) => {
-    const ctx = req.account;
-    if (!ctx) throw new Error('account context missing after requireAuth');
-    if (ctx.webSession === null) {
-      throw new ForbiddenError('MFA step-up is only callable from a web session.');
-    }
-    const parsed = MfaStepUpRequestSchema.safeParse(req.body);
-    if (!parsed.success) throw new ValidationError(parsed.error.flatten());
-
-    try {
-      const result = await service.stepUpReauth({
-        accountId: ctx.account.id,
-        sessionId: ctx.webSession.id,
-        input: parsed.data.code ?? parsed.data.recovery_code!,
+  app.post(
+    '/v1/auth/mfa/step-up',
+    { preHandler: [app.requireAuth, loginGate] },
+    async (req, reply) => {
+      const ctx = req.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      if (ctx.webSession === null) {
+        throw new ForbiddenError('MFA step-up is only callable from a web session.');
+      }
+      const parsed = MfaStepUpRequestSchema.safeParse(req.body);
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      // V-947 — report the keys zod stripped. Gate verified by reading this
+      // route's own registration, not inferred: a pattern-based split misread
+      // two of these in V-946.
+      reportUnknownRequestFields({
+        body: req.body,
+        knownKeys: knownRequestKeys(MfaStepUpRequestSchema),
+        reply,
+        logger: req.log,
+        route: 'POST /v1/auth/mfa/step-up',
       });
-      return {
-        via: result.via,
-        mfa_satisfied_at: result.mfaSatisfiedAt.toISOString(),
-      };
-    } catch (e) {
-      mapAuthFlowError(e);
-    }
-  });
+
+      try {
+        const result = await service.stepUpReauth({
+          accountId: ctx.account.id,
+          sessionId: ctx.webSession.id,
+          input: parsed.data.code ?? parsed.data.recovery_code!,
+        });
+        return {
+          via: result.via,
+          mfa_satisfied_at: result.mfaSatisfiedAt.toISOString(),
+        };
+      } catch (e) {
+        mapAuthFlowError(e);
+      }
+    },
+  );
 
   app.post('/v1/auth/magic-link/request', { preHandler: [magicLinkRequestGate] }, async (req) => {
     const parsed = MagicLinkRequestSchema.safeParse(req.body);

@@ -19,6 +19,7 @@ import type { ApiKeysService } from '../services/api-keys.js';
 import { CliAuthorizeError, type CliAuthorizeService } from '../services/cli-authorize.js';
 import { BadRequestError, ForbiddenError, NotFoundError, ValidationError } from '../lib/errors.js';
 import { AUTH_IP_LIMITS, ipRateLimit } from '../middleware/ip-rate-limit.js';
+import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import type { RateLimitStore } from '../services/rate-limit.js';
 
 const DEFAULT_KEY_NAME = 'Desktop client';
@@ -72,7 +73,7 @@ export function registerAuthCliRoutes(app: FastifyInstance, deps: AuthCliRoutesD
   app.post(
     '/v1/auth/cli-authorize/bind-device-code',
     { preHandler: [app.requireAuth, app.rateLimit('global')] },
-    async (req) => {
+    async (req, reply) => {
       const ctx = req.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
       // C1 — bind must be driven by an interactive dashboard web session,
@@ -86,6 +87,16 @@ export function registerAuthCliRoutes(app: FastifyInstance, deps: AuthCliRoutesD
       }
       const parsed = CliAuthorizeBindRequestSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      // V-947 — report the keys zod stripped. Gate verified by reading this
+      // route's own registration, not inferred: a pattern-based split misread
+      // two of these in V-946.
+      reportUnknownRequestFields({
+        body: req.body,
+        knownKeys: knownRequestKeys(CliAuthorizeBindRequestSchema),
+        reply,
+        logger: req.log,
+        route: 'POST /v1/auth/cli-authorize/bind-device-code',
+      });
 
       const scopes = parsed.data.scopes ?? DEFAULT_SCOPES;
       const created = await apiKeysService.create(ctx, {

@@ -21,6 +21,22 @@
 //                      attracts probing, and this route's gate is not
 //                      `requireAuth`.
 //
+// V-947 adds two more files under the SAME staff rationale as `admin-*`, which
+// applies to them by gate rather than by filename:
+//
+//   mac-nodes-register       all four registrations sit behind
+//                            `requireAuth + requireScope('driftstack_internal_admin')`.
+//   internal-atlas-priority  bearer-token `requireInternalAuth` on four routes,
+//                            the staff scope on two, and — when the internal
+//                            token is not configured — the same four paths
+//                            registered to an unconditional `reject`.
+//
+// Those two are not taken on trust either. The `admin-` prefix at least carries
+// its rationale in the name; these carry it only in their preHandlers, so the
+// staff-gate arm below asserts every registration in them is gated (or rejects),
+// and an ungated route added to one of these files fails here rather than
+// inheriting a file-level exemption it does not qualify for.
+//
 // The exemption list is itself checked for rot, so an exempt file that stops
 // parsing bodies — or stops existing — fails here rather than quietly widening
 // the exemption.
@@ -35,7 +51,26 @@ const ROUTES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../src/r
 
 /** Files whose body-parsing writes deliberately do not report. */
 const EXEMPT_PREFIXES = ['admin-', 'admin.ts'] as const;
-const EXEMPT_FILES = ['status-subscribe.ts'] as const;
+const EXEMPT_FILES = [
+  'status-subscribe.ts',
+  // V-947 — staff surfaces by gate rather than by filename. Checked below.
+  'mac-nodes-register.ts',
+  'internal-atlas-priority.ts',
+] as const;
+
+/**
+ * The two files exempted for being staff-only, and the gate markers that make
+ * them so. Kept separate from `EXEMPT_FILES` because `status-subscribe.ts` is
+ * exempt for the opposite reason — it is ANONYMOUS — and asserting a staff gate
+ * on it would be wrong.
+ */
+const STAFF_EXEMPT_FILES: ReadonlyArray<readonly [string, readonly string[]]> = [
+  ['mac-nodes-register.ts', ["requireScope('driftstack_internal_admin')"]],
+  [
+    'internal-atlas-priority.ts',
+    ["requireScope('driftstack_internal_admin')", 'requireInternalAuth'],
+  ],
+];
 
 /**
  * Schemas that are `.strict()`, so zod REJECTS an unknown key with a 400 rather
@@ -75,15 +110,11 @@ const EXEMPT_SCHEMA_NAMES = EXEMPT_SCHEMAS.map(([name]) => name);
  * route means deleting its key in the same commit.
  */
 const KNOWN_UNREPORTED: ReadonlySet<string> = new Set([
-  'agent-sessions-transport-report.ts (transportReportBodySchema)',
-  'agent-sessions.ts (CreateAgentSessionRequestSchema)',
   'agent-sessions.ts (HandbackBodySchema)',
   'agent-sessions.ts (NavigateHistoryBodySchema)',
-  'agent-sessions.ts (ResumeSessionRequestSchema)',
   'agent-sessions.ts (RunTurnRequestSchema)',
   'agent-sessions.ts (SetCookiesBodySchema)',
   'agent-sessions.ts (UploadFileBodySchema)',
-  'auth-cli.ts (CliAuthorizeBindRequestSchema)',
   'auth-cli.ts (CliAuthorizeExchangeRequestSchema)',
   'auth-cli.ts (CliAuthorizeInitiateRequestSchema)',
   'auth-oauth-client.ts (ConfirmMergeBodySchema)',
@@ -93,18 +124,12 @@ const KNOWN_UNREPORTED: ReadonlySet<string> = new Set([
   'auth.ts (MagicLinkConsumeRequestSchema)',
   'auth.ts (MagicLinkRequestSchema)',
   'auth.ts (MfaChallengeRequestSchema)',
-  'auth.ts (MfaStepUpRequestSchema)',
   'auth.ts (PasswordResetConfirmRequestSchema)',
   'auth.ts (PasswordResetRequestSchema)',
   'auth.ts (RefreshSessionRequestSchema)',
   'auth.ts (ResendVerificationRequestSchema)',
   'auth.ts (SignupRequestSchema)',
   'auth.ts (VerifyEmailRequestSchema)',
-  'internal-atlas-priority.ts (eventStatusBodySchema)',
-  'internal-atlas-priority.ts (probeSignatureBodySchema)',
-  'mac-nodes-register.ts (ControlNodeBodySchema)',
-  'mac-nodes-register.ts (RegisterBodySchema)',
-  'mac-nodes-register.ts (RegisterNodeBodySchema)',
   'session-proxy.ts (SessionEgressConfigSchema)',
 ]);
 
@@ -211,12 +236,19 @@ describe('customer-facing writes report the fields they ignored', () => {
     ).toEqual([]);
   });
 
-  it('CRITICAL the unreported backlog only ever shrinks, and holds no stale entry. Pinned rather than floored: 34 is the number the widened pattern exposed, and wiring a route means deleting its key in the same commit. An entry that no longer matches an unreported site is worse than none — it reads like a considered decision while silencing whatever next lands under that key.', () => {
+  it('CRITICAL the unreported backlog only ever shrinks, and holds no stale entry. Pinned rather than floored, because a floor lets it grow: wiring a route means deleting its key in the same commit, and the number below is a falling ceiling with its history in the comments. An entry that no longer matches an unreported site is worse than none — it reads like a considered decision while silencing whatever next lands under that key.', () => {
     // V-946 — 34 to 31: crypto-checkout, its quote, and profile clone were wired
     // after reading each registration individually. Lowering this is what the
     // staleness arm forces — it flagged all three by name the moment they started
     // reporting, so the count cannot drift above the real backlog.
-    expect(KNOWN_UNREPORTED.size, 'backlog entries — may only fall, never rise').toBe(31);
+    //
+    // V-947 — 31 to 21. Five more wired the same way, one registration at a time:
+    // POST /v1/agent-sessions and its resume, the transport report, the CLI
+    // bind-device-code, and MFA step-up. The other five came off the list without
+    // being wired, because reading them showed they were never customer surfaces:
+    // three mac-nodes routes and two internal atlas-priority routes are staff-only,
+    // so they moved to the file exemption and its staff-gate arm.
+    expect(KNOWN_UNREPORTED.size, 'backlog entries — may only fall, never rise').toBe(21);
     const live = new Set(
       sites
         .filter((s) => !isExempt(s.file) && !s.reports && !EXEMPT_SCHEMA_NAMES.includes(s.schema))
@@ -270,6 +302,40 @@ describe('customer-facing writes report the fields they ignored', () => {
       sites.filter((s) => s.reports && s.reportedSchema === null).map((s) => s.file),
       'a report was found with no readable knownKeys expression, so the arm above cannot check it',
     ).toEqual([]);
+  });
+
+  it('CRITICAL every registration in a file exempted for being STAFF-ONLY is actually gated. That is the whole justification for skipping the reporter there, and unlike the admin- prefix it is invisible in the filename — an ungated customer route added to one of these files would inherit an exemption it does not qualify for.', () => {
+    // Counted rather than brace-matched, deliberately: this arc has had two
+    // guards fooled by naive brace matching. Every registration must be either
+    // gated by a preHandler naming a staff marker, or one of the unconditional
+    // `reject` registrations the module uses when its internal token is absent.
+    // An ungated addition breaks the equality; swapping the staff scope for a
+    // customer one breaks the marker count.
+    const REGISTRATION = /app\.(?:get|post|put|patch|delete)\(/g;
+    const PREHANDLER = /preHandler:/g;
+    for (const [file, markers] of STAFF_EXEMPT_FILES) {
+      const src = readFileSync(join(ROUTES_DIR, file), 'utf8');
+      const registrations = [...src.matchAll(REGISTRATION)].length;
+      const preHandlers = [...src.matchAll(PREHANDLER)].length;
+      // A preHandler block naming at least one staff marker, within the 300
+      // characters after the keyword — wide enough for a multi-line array.
+      const staffGated = [...src.matchAll(PREHANDLER)].filter((m) => {
+        const block = src.slice(m.index, m.index + 300);
+        return markers.some((marker) => block.includes(marker));
+      }).length;
+      const rejects = [...src.matchAll(/app\.(?:get|post|put|patch|delete)\([^)]*,\s*reject\)/g)]
+        .length;
+
+      expect(registrations, `${file} still registers routes`).toBeGreaterThan(0);
+      expect(preHandlers, `${file} still has gated registrations`).toBeGreaterThan(0);
+      expect(staffGated, `every preHandler block in ${file} names a staff gate`).toBe(preHandlers);
+      expect(
+        registrations,
+        `every registration in ${file} is staff-gated or an unconditional reject — if this is off, ` +
+          'a route was added without a gate and the file-level exemption is now covering a ' +
+          'surface it was never justified for',
+      ).toBe(preHandlers + rejects);
+    }
   });
 
   it('CRITICAL each exemption still names a file that exists and still parses a body', () => {
