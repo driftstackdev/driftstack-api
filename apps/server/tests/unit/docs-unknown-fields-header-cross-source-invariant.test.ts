@@ -70,6 +70,30 @@ describe('the documented unknown-fields contract matches the code that emits it'
     ).toContain(`${keyChars} characters`);
   });
 
+  it('CRITICAL the page documents the percent-encoding, and its worked example is the value the encoder really produces. V-950 — the page used to promise "the request succeeds exactly as if it had not been sent" while a field name carrying an emoji or a non-Latin script answered 500, so this pins the claim to the code from both ends. The example is computed here rather than transcribed: a documented value nothing can produce is fiction that reads as a contract.', () => {
+    expect(
+      source(),
+      'the emitter no longer renders reported keys header-safe, so a field name with a character ' +
+        'outside U+0000–U+00FF — or a CR, LF or NUL — makes reply.header throw and answers 500 on a ' +
+        'request that used to succeed',
+    ).toContain('headerSafeText(');
+    expect(
+      doc(),
+      'the emitter percent-encodes reported key names; the page does not say so, so a customer ' +
+        'displaying the header verbatim would show %XX escapes with no explanation',
+    ).toContain('Percent-encoded');
+
+    // The page walks `field-不明`. Compute what the emitter would send for it.
+    const example = `field-${String.fromCodePoint(0x4e0d, 0x660e)}`;
+    expect(doc(), 'the page states an encoded example the encoder does not produce').toContain(
+      encodeURIComponent(example),
+    );
+    expect(
+      doc(),
+      'and it still shows the name being encoded, so the pair reads as a mapping',
+    ).toContain(example);
+  });
+
   it('CRITICAL the two behavioural decisions the page states still hold in code', () => {
     // Reporting-not-rejecting: the page tells customers nothing breaks if they
     // send an extra field. That is only true while the helper returns the keys

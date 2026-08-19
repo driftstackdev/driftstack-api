@@ -18,7 +18,7 @@
 // blocks), and the failure this item describes is a mistyped top-level field.
 
 import type { FastifyBaseLogger, FastifyReply, FastifyRequest } from 'fastify';
-import { sliceWithoutSplittingSurrogate } from './bounded-text.js';
+import { headerSafeText, sliceWithoutSplittingSurrogate } from './bounded-text.js';
 import type { z, ZodObject, ZodRawShape } from 'zod';
 import { ValidationError } from './errors.js';
 
@@ -72,7 +72,11 @@ export function reportUnknownRequestFields(args: {
   const unknown = Object.keys(body)
     .filter((k) => !known.has(k))
     .slice(0, MAX_REPORTED)
-    .map((k) => sliceWithoutSplittingSurrogate(k, MAX_KEY_CHARS));
+    // V-950 — bounded AND rendered header-safe. The bound alone was never enough:
+    // any code point above U+00FF, or a CR/LF/NUL, makes `reply.header` throw and
+    // answers 500 on a request that used to succeed. The sanitised form is what the
+    // log gets too, so a newline in a field name cannot forge a log line either.
+    .map((k) => headerSafeText(sliceWithoutSplittingSurrogate(k, MAX_KEY_CHARS)));
   if (unknown.length === 0) return [];
   reply.header(UNKNOWN_FIELDS_HEADER, unknown.join(','));
   logger?.warn(

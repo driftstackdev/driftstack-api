@@ -40693,3 +40693,65 @@ Un-wiring handback fails the main coverage arm. All restores byte-identical.
 **Ceiling 21 → 16.** What remains is the `auth.ts` cluster of 11 plus `auth-cli.ts` initiate/exchange,
 `auth-oauth-client.ts` start/confirm-merge, and `session-proxy.ts` — every one of them an anonymous or
 near-anonymous surface, which is the judgement this sweep has consistently refused to make mechanically.
+
+## V-950 — the field-reporting header answered 500 on a field name it could not send
+
+**Found by testing the exemption rationale, not the code.** The 16 remaining backlog entries all rest on one
+claim: echoing a caller's keys back on an anonymous surface discloses schema shape. That is checkable, so I
+checked it — **all 16 routes have their complete request-body property list published in the OpenAPI
+document**. `POST /v1/auth/signup` publishes `email`, `name`, `password`; login publishes `email`,
+`password`; and so on for every one. The shape is already public in a document served to anyone, so the
+disclosure the exemption protects against has already happened by design.
+
+**But before acting on that, the mechanism itself needed checking, because it echoes caller-controlled text
+into a response header.** It bounds that text by LENGTH and nothing else.
+
+**The result is a 500 on a request that used to succeed.** Node accepts U+0000–U+00FF in a header value and
+rejects every code point above it, so an unrecognised field name containing an emoji — or a field name in
+any non-Latin script — makes `reply.header` throw. Measured, not assumed: U+00FF is accepted and U+0100 is
+not. Reproduced through the real `POST /v1/profiles` route, not a bare Fastify instance. CR, LF and NUL do
+the same, which is also what blocks the header injection they would otherwise be.
+
+**The module promises the opposite in as many words:** "the request still succeeds exactly as before … Nothing
+about the response body changes, so no existing integration can break on it." The customer page repeats it:
+"the request succeeds exactly as if it had not been sent." A 500 is a worse outcome than the silence the
+reporting replaced, and the non-Latin case is not hostile at all — it is an ordinary mistyped field, which
+is the exact case this mechanism exists to handle gracefully. It was reachable on every wired route,
+including the nine wired in V-947 and V-949.
+
+**`bounded-text.ts` already described this failure — for one input.** Its header note says a bound landing
+mid-character leaves a lone surrogate and "into a RESPONSE HEADER it throws … A field name carrying an emoji
+across that bound took the response down". Slicing without splitting fixed that case. **The bound was never
+the cause.** An emoji well under the bound throws identically. A fix aimed at the boundary read as a fix for
+the class.
+
+**Fixed by percent-encoding rather than stripping.** The output alphabet is `A-Za-z0-9-_.!~*'()` plus `%XX`,
+so it is safe by construction rather than by a blocklist that has to stay complete. An ASCII name — every
+field this API declares — passes through unchanged, so the header still names the field the developer
+mistyped. And a comma inside a name becomes `%2C`, where the old rendering would have let it masquerade as
+the separator between two reported keys.
+
+**The naive form of that fix fails on the same input as the bug.** `encodeURIComponent` throws `URIError` on
+an unpaired surrogate, and `JSON.parse('{"a\ud800b":1}')` produces one without complaint — verified, the key
+comes back as code units `61 d800 62`. Unpaired halves are replaced first; valid pairs are left alone.
+Dropping that replacement is one of the mutations, and it reproduces the 500.
+
+**Swept the class: 30 non-literal response-header values across the server, exactly one carrying
+caller-controlled text.** `request.id` looked like a second — `genReqId` returns an inbound `x-request-id`
+verbatim on a length check alone, and it is echoed on **every** response. It is not vulnerable, for a reason
+worth recording: over real HTTP, inbound header bytes decode as latin1, so every code unit is at most U+00FF
+and the echo cannot throw; a NUL is refused with 400 by the parser before any handler runs. Proved over a
+raw socket, because `inject()` hands JS strings straight through and would have reported a 500 that real HTTP
+cannot produce. **The asymmetry is the point: request headers cannot carry a character above U+00FF, request
+bodies can.** `x-ratelimit-bucket` takes one of four literal bucket names, and the billing `location` header
+is Stripe's URL built from configuration.
+
+**Three mutations, all caught.** Reverting the emitter to the unsanitised form reproduces the 500 on both the
+hostile and the non-hostile cases and fails the docs-parity arm. Dropping the surrogate replacement raises
+`URIError` on the lone-surrogate key. Changing the docs bullet fails parity. The docs arm computes the
+worked example with the real encoder rather than transcribing it, so a documented value nothing can produce
+cannot pass.
+
+**Left undone deliberately:** the 16 entries stay. The disclosure rationale is now known to be unsound —
+the shapes are public — but wiring anonymous auth routes changes what an unauthenticated caller sees on
+login and signup, and that is a decision to state rather than one to slip in behind a defect fix.

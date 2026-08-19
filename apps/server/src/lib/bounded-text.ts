@@ -32,3 +32,37 @@ export function sliceWithoutSplittingSurrogate(value: string, max: number): stri
   const last = cut.charCodeAt(cut.length - 1);
   return last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut;
 }
+
+/** An unpaired surrogate — a high one with no low after, or a low with no high before. */
+const UNPAIRED_SURROGATE =
+  /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+
+/**
+ * Render caller-controlled text so it can be sent as a header value at all.
+ *
+ * V-950 — the note above describes the lone-surrogate case, and slicing safely
+ * fixed only that. The bound was never the cause. Node accepts U+0000–U+00FF in a
+ * header value and rejects **every** code point above it, so a whole emoji, or a
+ * field name in any non-Latin script, throws `ERR_INVALID_CHAR` with no truncation
+ * involved at all — as do CR, LF and NUL, which is the header-injection attempt
+ * the same throw happens to block. Measured, not assumed: U+00FF is accepted and
+ * U+0100 is not.
+ *
+ * A 500 on a mistyped field is worse than the silence the reporting replaced, and
+ * `unknown-request-fields.ts` promises the opposite in as many words — "the request
+ * still succeeds exactly as before … no existing integration can break on it".
+ *
+ * Percent-encoding rather than stripping, for three reasons. The output alphabet is
+ * `A-Za-z0-9-_.!~*'()` plus `%XX`, all inside the accepted range, so it is safe by
+ * construction rather than by a blocklist that has to stay complete. An ASCII field
+ * name — every real one in this API — passes through unchanged, so the header a
+ * developer reads is the name they mistyped. And a comma inside a field name becomes
+ * `%2C`, which the previous rendering would have let masquerade as the separator
+ * between two reported keys.
+ *
+ * Unpaired surrogates are replaced first: `encodeURIComponent` throws `URIError` on
+ * one, which would make this sanitiser fail exactly the way it exists to prevent.
+ */
+export function headerSafeText(value: string): string {
+  return encodeURIComponent(value.replace(UNPAIRED_SURROGATE, '�'));
+}

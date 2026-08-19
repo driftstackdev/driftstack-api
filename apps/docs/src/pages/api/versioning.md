@@ -81,6 +81,14 @@ Specifics worth knowing:
   too noisy to be useful.
 - **At most 10 keys**, each truncated to 64 characters, so a large
   body cannot inflate the response.
+- **Percent-encoded**, so that any field name can be reported without
+  changing the response. An ASCII name — every field this API
+  declares — appears unchanged. A name containing a character an HTTP
+  header cannot carry, such as a non-Latin script or an emoji, appears
+  in `%XX` form: `field-不明` is reported as
+  `field-%E4%B8%8D%E6%98%8E`. A comma inside a name becomes `%2C`, so
+  it cannot be mistaken for the separator. Decode with
+  `decodeURIComponent` if you display the value.
 - **The header is absent** when every field was recognised — treat
   presence, not value, as the signal.
 - **Reporting, never rejecting.** The status code and response
