@@ -10,9 +10,16 @@
 //     non-reversible mapping. Storing raw plaintext in cache would weaken
 //     the security posture if Redis were compromised; storing only the
 //     hash means a Redis dump alone doesn't yield usable plaintext keys.
-//   - TTL is 30s. Customers are documented that key revocation takes effect
-//     within 30s in the worst case. Most invalidations propagate
-//     immediately via the explicit invalidate paths.
+//   - TTL is 30s. That bounds how long an entry LIVES; it is not a
+//     revocation budget. V-886: this said customers are documented a 30s
+//     worst-case revocation window. No customer-facing page states any such
+//     window — the audit's own P2-002 records that gap as open — and the
+//     claim understated the guarantee anyway. Since V-247 a revocation
+//     INCRs the per-key version counter, and `get()` compares it on EVERY
+//     read, so a revoked key stops authenticating on the next request
+//     rather than at TTL expiry. If Redis errors, `get()` returns null and
+//     degrades to the authoritative scrypt path, so the failure mode is
+//     closed rather than stale.
 //   - Revocation triggers `invalidateKey(keyId)` immediately; the cached
 //     entry is deleted via reverse-index lookup.
 //   - Account tier / status changes trigger `invalidateAccount(accountId)`

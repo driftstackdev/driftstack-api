@@ -38164,3 +38164,35 @@ binds the honest remainder rather than just the good news.
 **Security-audit thread closed.** Three entries (V-883, V-884, V-885), four resolved findings given
 their status, one stale ops-runbook mitigation corrected, and five items verified as genuinely
 still open. Every finding in the document now carries either a resolution or a confirmed-open check.
+
+## V-886 — a security-critical comment asserting a customer commitment that does not exist (2026-08-18)
+
+**Followed from V-885's one genuinely-open P2.** P2-002 records "30s revocation lag documented
+internally but no customer-facing public note". Checking what the internal documentation actually
+says turned that around: `auth-cache.ts`'s header states **"Customers are documented that key
+revocation takes effect within 30s in the worst case."** No customer page says any such thing —
+every 30s in the customer docs is agent-session heartbeat timing. The comment asserts a public
+commitment that was never made, on the file that implements authentication caching.
+
+**And the claim understated the guarantee it was describing.** The 30s TTL bounds how long an entry
+LIVES; it is not a revocation budget. Since V-247 a revocation INCRs a per-key version counter, and
+`get()` compares that counter on EVERY read — a revoked key stops authenticating on the next
+request, not at TTL expiry. When Redis errors, `get()` returns null and degrades to the
+authoritative scrypt path, so the failure mode is closed rather than stale. This is the same fix
+V-883 verified; its own file header had not caught up with it.
+
+**Two pins froze the false sentence, and the second is the one that matters.**
+`services-auth-cache-content-parity` was findable from the filename. `auth-cache-d020-cross-source-
+invariant` was not, and it went further — its `it()` title asserted "**the 30s-worst-case is the
+customer-facing contract**", elevating a claim about nonexistent documentation into a stated
+contract. Sixth time this arc that a claim lived where the obvious search would not look, and the
+first time the hidden copy was the more emphatic one.
+
+**Corrected with per-occurrence negatives across both files**, so the customer-documentation claim
+and the worst-case framing each fail independently — proved, including a partial reintroduction of
+only the second half.
+
+**P2-002 stays open and is now better specified.** The gap is real: customers have no published
+statement about revocation timing. What changed is that the answer to publish is "immediate on the
+next request", not "within 30 seconds" — writing that page is a customer-facing commitment and
+belongs to whoever owns the public contract, not to a sweep.

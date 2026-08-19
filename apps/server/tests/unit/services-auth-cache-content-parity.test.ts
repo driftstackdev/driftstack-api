@@ -58,8 +58,22 @@ describe('W403.C apps/server/src/services/auth-cache.ts content parity', () => {
     expect(body).toMatch(
       /The cache key is `sha256\(plaintext\)` — a deterministic but\s*\n?\s*\/\/\s*non-reversible mapping\./,
     );
-    expect(body).toMatch(
-      /TTL is 30s\. Customers are documented that key revocation takes effect\s*\n?\s*\/\/\s*within 30s in the worst case\./,
+    // V-886 — this froze "Customers are documented that key revocation takes
+    // effect within 30s in the worst case". No customer page states any such
+    // window (the audit's P2-002 records that gap), and the V-247 key-version
+    // gate makes revocation take effect on the next read rather than at TTL.
+    // One negative per half of the removed claim.
+    expect(body, 'the customer-documentation claim is gone').not.toMatch(
+      /Customers are documented that key revocation takes effect/,
+    );
+    expect(body, 'and the 30s worst-case framing with it').not.toMatch(
+      /within 30s in the worst case/,
+    );
+    expect(body, 'the TTL is described as an entry lifetime, not a revocation budget').toMatch(
+      /TTL is 30s\. That bounds how long an entry LIVES; it is not a/,
+    );
+    expect(body, 'and the version gate is named as what actually revokes').toMatch(
+      /`get\(\)` compares it on EVERY\s*\n?\s*\/\/\s*read/,
     );
   });
 

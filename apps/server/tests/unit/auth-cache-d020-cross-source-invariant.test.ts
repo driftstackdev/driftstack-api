@@ -115,11 +115,18 @@ describe('W924 D-020 auth-cache cross-source invariant', () => {
 
   // ─── 30s TTL + revocation documented worst-case ──────────────
 
-  it("CRITICAL 30s TTL framing — 'TTL is 30s. Customers are documented that key revocation takes effect within 30s in the worst case. Most invalidations propagate immediately via the explicit invalidate paths'. The 30s-worst-case is the customer-facing contract; explicit-invalidate-paths is the operational reality.", () => {
+  it("V-886 CRITICAL 30s TTL framing — the TTL bounds an entry's lifetime and is NOT a revocation budget. This arm used to pin the opposite: that customers are documented a 30s worst-case revocation window. No customer page states one, and since V-247 a revocation INCRs the per-key version counter which get() compares on every read, so a revoked key stops authenticating on the next request. The old text understated the guarantee AND asserted a customer commitment that does not exist.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/auth-cache.ts'));
-    expect(p).toMatch(/TTL is 30s\. Customers are documented that key revocation takes effect/);
-    expect(p).toMatch(/within 30s in the worst case\. Most invalidations propagate/);
-    expect(p).toMatch(/immediately via the explicit invalidate paths/);
+    expect(p, 'the customer-documentation claim is gone').not.toMatch(
+      /Customers are documented that key revocation takes effect/,
+    );
+    expect(p, 'and the worst-case window with it').not.toMatch(/within 30s in the worst case/);
+    expect(p, 'the TTL is framed as an entry lifetime').toMatch(
+      /it is not a\s*\n?\s*\/\/\s*revocation budget/,
+    );
+    expect(p, 'and the failure mode is named as closed, not stale').toMatch(
+      /degrades to the authoritative scrypt path/,
+    );
   });
 
   // ─── invalidateKey immediate + reverse-index ─────────────────
