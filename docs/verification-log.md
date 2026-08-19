@@ -43336,3 +43336,37 @@ globally correct. A gate that asks "is this claim still in the code" wants prose
 `routes-session-proxy-content-parity` is the file that proves it.
 
 Full suite after V-1013: 2983 passed | 113 skipped (3096), 30067 tests.
+
+## V-1015 — the SDK client fields still advertised the team auth path as future work
+
+V-1010 corrected the team-RBAC framing in the SDK _resource_ files and deferred the _client_ files.
+This closes them. Four occurrences of one sentence, in three shipped SDKs:
+`sdk-typescript/src/client.ts:72`, `sdk-go/client.go:108`, and
+`sdk-python/src/driftstack/client.py` at both 122 and 190 — the sync and async constructors, which is
+the kind of second copy this sweep keeps finding.
+
+Re-verified against source rather than trusting V-1010. `services/auth.ts` loads team memberships on
+every authenticated path (five call sites into `findTeamMemberships`), and
+`resolveEffectiveAccount` at `auth.ts:855` looks the requested account up in `ctx.teams` and returns
+`kind: 'team'` with the member's role, or 403s. The integration ships. What remains true is the
+narrower half: a member gets nothing implicitly — acting on an owner's account requires sending
+`X-Driftstack-Account` explicitly. So the field comments now say that instead of naming a future
+work item, which is also the more useful thing for a customer reading the SDK.
+
+The guard set was already contradicting itself. `cross-sdk-team-rbac-parity` asserts the three team
+RESOURCE files must NOT contain the pending-integration anchor, while four client pins required it
+verbatim. Same claim, opposite pins, both green — because they read different files.
+
+Each pin now carries a per-occurrence negative on the retracted anchor. Mutation: reverting each
+source file individually reds its own pins and nothing else (ts 2, go 1, py 1 — the TS file is pinned
+twice, by the constructor-parity file and its own content-parity file); weakening the new text
+without reintroducing the anchor reds the positive sentinel alone. Control 43/43.
+
+**The control caught me destroying my own fix.** The scratchpad snapshot was taken BEFORE the
+correction was applied, so the first mutation round restored the retracted sentence each time and
+left the tree with corrected PINS and reverted SOURCE — which reads as four unexplained failures,
+not as a self-inflicted revert. `git status` showed the SDK files unmodified, which is the tell:
+the fix was gone. Snapshot the CORRECTED file, not the original. This is the same lesson as V-1006 in
+a new disguise, and it has now cost me twice.
+
+`it(` counts unchanged (13, 8, 6, 16).

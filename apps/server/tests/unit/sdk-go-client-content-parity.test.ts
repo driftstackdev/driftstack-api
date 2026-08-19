@@ -94,7 +94,10 @@ describe('W588.A packages/sdk-go/client.go content parity', () => {
     expect(body).toMatch(/\/\/ V-216 \/ V-449 — append-only customer audit log\./);
     expect(body).toMatch(/\/\/ V-204 \/ V-449 — email opt-in\/opt-out preferences\./);
     expect(body).toMatch(/\/\/ V-049 \/ V-458 — legal acceptance\./);
-    expect(body).toMatch(/\/\/ V-298c — Team RBAC\. Auth path integration is V-298d\./);
+    expect(body).toMatch(
+      /\/\/ V-298c — Team RBAC\. Act on an owner's account via X-Driftstack-Account\./,
+    );
+    expect(body, 'the retracted pending-integration anchor is back').not.toMatch(/V-298d/);
   });
 
   it('Functional options: WithBaseURL trim trailing slash + WithHTTPClient + WithRetry + WithTimeout (only when http nil) pinned', () => {

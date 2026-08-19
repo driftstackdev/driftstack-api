@@ -69,7 +69,7 @@ export class Driftstack {
   readonly emailPreferences: EmailPreferencesResource;
   /** V-049 — legal-document acceptance machinery. */
   readonly legal: LegalResource;
-  /** V-298c — Team RBAC. Auth path integration is V-298d. */
+  /** V-298c — Team RBAC. Act on an owner's account via X-Driftstack-Account. */
   readonly team: TeamResource;
   /** EG-API-1.2/1.3 — customer-configurable egress (planning 133). */
   readonly egress: EgressResource;

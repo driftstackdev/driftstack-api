@@ -105,7 +105,7 @@ type Client struct {
 	EmailPreferences *EmailPreferencesResource
 	// V-049 / V-458 — legal acceptance.
 	Legal *LegalResource
-	// V-298c — Team RBAC. Auth path integration is V-298d.
+	// V-298c — Team RBAC. Act on an owner's account via X-Driftstack-Account.
 	Team *TeamResource
 	// EG-API-1.2/1.3 — customer-configurable egress (planning 133).
 	Egress *EgressResource

@@ -135,8 +135,9 @@ describe('W423.C packages/sdk-typescript/src/client.ts content parity', () => {
       /\/\*\* V-049 — legal-document acceptance machinery\. \*\/\s*\n?\s*readonly legal: LegalResource;/,
     );
     expect(body).toMatch(
-      /\/\*\* V-298c — Team RBAC\. Auth path integration is V-298d\. \*\/\s*\n?\s*readonly team: TeamResource;/,
+      /\/\*\* V-298c — Team RBAC\. Act on an owner's account via X-Driftstack-Account\. \*\/\s*\n?\s*readonly team: TeamResource;/,
     );
+    expect(body, 'the retracted pending-integration anchor is back').not.toMatch(/V-298d/);
   });
 
   it('private readonly http: HttpClient — encapsulated, NOT exposed publicly. CRITICAL: drift to public would let customers mutate the HTTP client (e.g. swap retry config mid-flight) which would surprise resource-level callers that assume stable config. The private+readonly combo is the load-bearing access-control claim.', () => {

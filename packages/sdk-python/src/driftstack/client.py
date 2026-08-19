@@ -119,7 +119,7 @@ class Driftstack:
         self.email_preferences = EmailPreferencesResource(self._http)
         # V-049 / V-458 — legal acceptance.
         self.legal = LegalResource(self._http)
-        # V-298c — Team RBAC. Auth path integration is V-298d.
+        # V-298c — Team RBAC. Act on an owner's account via X-Driftstack-Account.
         self.team = TeamResource(self._http)
         # EG-API-1.2/1.3 — customer-configurable egress (planning 133).
         self.egress = EgressResource(self._http)
@@ -187,7 +187,7 @@ class AsyncDriftstack:
         self.email_preferences = AsyncEmailPreferencesResource(self._http)
         # V-049 / V-458 — legal acceptance.
         self.legal = AsyncLegalResource(self._http)
-        # V-298c — Team RBAC. Auth path integration is V-298d.
+        # V-298c — Team RBAC. Act on an owner's account via X-Driftstack-Account.
         self.team = AsyncTeamResource(self._http)
         # EG-API-1.2/1.3 — customer-configurable egress (planning 133).
         self.egress = AsyncEgressResource(self._http)

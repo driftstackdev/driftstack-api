@@ -121,7 +121,9 @@ describe('W819 cross-SDK client constructor parity', () => {
     expect(p).toMatch(/V-216 — append-only customer audit log/);
     expect(p).toMatch(/V-204 — non-critical email opt-in\/opt-out preferences/);
     expect(p).toMatch(/V-049 — legal-document acceptance machinery/);
-    expect(p).toMatch(/V-298c — Team RBAC\. Auth path integration is V-298d/);
+    expect(p).toMatch(/V-298c — Team RBAC\. Act on an owner's account via X-Driftstack-Account\./);
+    // V-1015 — the field once advertised the auth-path integration as future work.
+    expect(p, 'the retracted pending-integration anchor is back').not.toMatch(/V-298d/);
   });
 
   // ─── DriftstackOptions / config shape (TS) ────────────────────

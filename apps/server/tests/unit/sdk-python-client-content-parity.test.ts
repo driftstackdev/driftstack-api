@@ -129,7 +129,10 @@ describe('W585.A packages/sdk-python/src/driftstack/client.py content parity', (
     expect(body).toMatch(/self\.email_preferences = EmailPreferencesResource\(self\._http\)/);
     expect(body).toMatch(/# V-049 \/ V-458 — legal acceptance\./);
     expect(body).toMatch(/self\.legal = LegalResource\(self\._http\)/);
-    expect(body).toMatch(/# V-298c — Team RBAC\. Auth path integration is V-298d\./);
+    expect(body).toMatch(
+      /# V-298c — Team RBAC\. Act on an owner's account via X-Driftstack-Account\./,
+    );
+    expect(body, 'the retracted pending-integration anchor is back').not.toMatch(/V-298d/);
     expect(body).toMatch(/self\.team = TeamResource\(self\._http\)/);
     expect(body).toMatch(/def close\(self\) -> None:\s*\n\s*self\._http\.close\(\)/);
     expect(body).toMatch(/def __enter__\(self\) -> Driftstack:\s*\n\s*return self/);
