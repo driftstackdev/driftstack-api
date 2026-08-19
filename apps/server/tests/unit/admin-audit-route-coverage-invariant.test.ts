@@ -21,9 +21,11 @@
 //
 // So the sentence is now derived rather than asserted. The lists below ARE the
 // documented behaviour: a new admin mutation that forgets its audit row fails
-// here, and a decision to start auditing reads is an edit to `UNAUDITED_READS`
-// rather than a prose rewrite. That is what the sweep asked for — it turns the
-// open question into a one-line allowlist change.
+// here, and a decision to start auditing reads reds the no-GET-audits arm below,
+// which is where that decision gets recorded — the arm and the header paragraph
+// move together instead of the prose drifting behind. That is what the sweep
+// asked for: the open question becomes an edit to a checked list, not an edit to
+// a sentence nothing verifies.
 //
 // ⚠️ This asserts an audit CALL exists in the handler, not that it is correct or
 // that it fires on every path. A handler that records the wrong action, or skips

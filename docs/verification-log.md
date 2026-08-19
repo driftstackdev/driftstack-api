@@ -43004,7 +43004,8 @@ per-file on purpose: `admin-accounts.ts` alone holds fourteen registrations, and
 would call every one audited because a neighbour is.
 
 The decision the sweep asked for — read-audit for the endpoints returning customer PII, "at minimum
-the CSV export" — is now a one-line edit to `UNAUDITED_READS` rather than a prose rewrite. It stays
+the CSV export" — now reds the no-GET-audits arm the moment it is acted on, so the guard and the
+header paragraph move together instead of the prose drifting behind. It stays
 open, and so does whether to pay the migration for the three OAuth-client mutations.
 
 Mutation-proved: neutralising the audit call inside `POST /v1/admin/accounts/:id/tier` reds the
