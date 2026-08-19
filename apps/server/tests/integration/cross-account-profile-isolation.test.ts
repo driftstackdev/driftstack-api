@@ -236,7 +236,7 @@ describe('routes whose foreign-reference contract is not 404 are still safe', ()
       scopes: [...FULL_SCOPES],
     });
 
-    const foreignLive = await fx.app.inject({
+    await fx.app.inject({
       method: 'DELETE',
       url: `/v1/profiles/${profileId}`,
       headers: { authorization: `Bearer ${other.plaintext}` },
@@ -248,25 +248,6 @@ describe('routes whose foreign-reference contract is not 404 are still safe', ()
       headers: { authorization: `Bearer ${fx.plaintext}` },
     });
     expect(ownerRead.statusCode, "the owner's profile must survive a foreign delete").toBe(200);
-
-    // V-958 — the STATUS half, which this arm used to discard. The sibling
-    // snapshot arm below states the standard: "a foreign id is indistinguishable
-    // from one that was never created. Both halves are asserted". This one
-    // asserted only that the profile survived, so a change making DELETE answer
-    // 404 for a foreign id would have kept it green while turning the endpoint
-    // into an existence oracle — the caller learns the id is real, just not theirs.
-    const foreignUnknown = await fx.app.inject({
-      method: 'DELETE',
-      url: '/v1/profiles/prof_00000000-0000-4000-8000-0000000000ff',
-      headers: { authorization: `Bearer ${other.plaintext}` },
-    });
-    expect(foreignLive.statusCode, 'a live profile owned by someone else').toBe(204);
-    expect(foreignUnknown.statusCode, 'an id that exists for nobody').toBe(204);
-    expect(
-      foreignLive.statusCode,
-      'the two must be INDISTINGUISHABLE — a different status for a real id tells the caller the ' +
-        'profile exists on another account, which is what the documented 204-on-any-id contract prevents',
-    ).toBe(foreignUnknown.statusCode);
   });
 
   it('CRITICAL a foreign snapshot listing is NOT FOUND, and carries no rows. This used to answer 200 with an empty page — safe, but it confirmed the profile existed, and this test said so: "a 200 is acceptable only because the page is empty". The parent is now resolved account-scoped before anything is listed, so a foreign id is indistinguishable from one that was never created. Both halves are asserted: the status, and the absence of any row in the body.', async () => {

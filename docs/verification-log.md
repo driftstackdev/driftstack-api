@@ -41090,3 +41090,33 @@ optional-chained method that does not exist, so `?? await this.repo.delete(args)
 original behaviour and the suite went green — the third silent no-op this session. Re-run against the real
 `accountId` check in the in-memory repo, it fires. Every mutation script in this arc now asserts its own
 edit applied; that assertion is what caught this.
+
+## V-959 — retraction of V-958: the property was already tested, in a third file
+
+**V-958 is withdrawn and its code change reverted.** It claimed that the indistinguishability half of the
+profile-delete contract — a foreign id answering exactly as an id that never existed — was untested, and
+strengthened `cross-account-profile-isolation.test.ts` accordingly. That property was already asserted, in
+`cross-account-isolation-every-creatable-family.test.ts`, which holds
+`IDEMPOTENT_DELETE = new Set(['DELETE /v1/profiles/:id'])` and an arm reading: "each idempotent delete
+answers a foreign id EXACTLY as it answers an id that never existed … If these ever diverge, the 204 becomes
+an existence oracle." Same property, same reasoning, already load-bearing.
+
+**The miss is the finding, and it is the same one V-958 itself wrote up.** That entry opens by recording
+that I nearly shipped a duplicate because I grepped `method: 'DELETE'` scoped to `profiles*.test.ts` and
+missed a file whose name does not match. Having written that, I then checked exactly one sibling —
+`cross-account-profile-isolation.test.ts` — concluded from its silence that nothing covered the status, and
+did not check the family-wide suite **that I had listed in my own terminal output eight commands earlier**.
+Rule (2) says enumerate with BOTH patterns because a claim has three times lived in a file the obvious grep
+missed. Reading a second file is not enumerating; it is a longer guess.
+
+**What the roster protects, checked rather than assumed.** The family suite's coverage rests on a
+hand-maintained set, so the obvious follow-up worry is that deleting the entry would silently drop the
+check. It would not: the op then falls into the 404-expected group two arms above, which fails because the
+route answers 204. The roster is self-protecting in the direction that matters.
+
+**Reverted byte-identical to the pre-V-958 state**, verified by diffing against the parent commit rather
+than by re-reading the file. Both suites green, 30 tests.
+
+**Standing correction to the record:** V-958's conclusion — that a real gap existed — is wrong. What
+survives from it is the method (test a documented claim instead of pinning its text) and the measurement
+that the claim is true: foreign-live DELETE 204, foreign-unknown DELETE 204, owner's profile intact.
