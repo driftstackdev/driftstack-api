@@ -54,8 +54,11 @@ export const EXPECTED_TEST_FILES_ALL = 3099;
 /**
  * The CI jobs this gate does NOT run, with how to run each locally.
  *
- * Measured 2026-08-18, all green, none of it by this gate: 199 Playwright tests
- * over 29 spec files, 362 Python tests, and the Go suite.
+ * Measured 2026-08-18 and RE-RUN 2026-08-19, all green, none of it by this gate:
+ * 199 Playwright tests over 29 spec files (enumerated, not executed — they need
+ * browsers and a live server), 365 passing Python tests with 4 skipped that want
+ * a live base URL and key, and 236 Go tests from an uncached run. The Python
+ * figure read 362 until the re-run; the other two were exact.
  *
  * V-992 — this used to add that those 29 spec files were the only tests touching
  * `apps/server/src/db/**` against a real Postgres, and therefore that this gate

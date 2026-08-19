@@ -8,8 +8,11 @@
 // It matters because of how the green is quoted. Every commit message in this
 // repo that says "verified at the CI bar" is citing this gate, so a claim about
 // the whole pipeline gets made from a run covering a fifth of it. Measured
-// 2026-08-18, all green and none of it by this gate: 199 Playwright tests over 29
-// spec files, 362 Python tests, and the Go suite.
+// 2026-08-18 and re-run 2026-08-19, all green and none of it by this gate: 199
+// Playwright tests over 29 spec files, 365 passing Python tests (4 skipped, each
+// wanting a live server), and 236 Go tests. V-1036 executed the Go and Python
+// suites rather than citing them; Playwright was enumerated, since it needs
+// browsers and a running server.
 //
 // V-992 — the paragraph that stood here said the 29 e2e spec files were the only
 // tests exercising `apps/server/src/db/**` against a real Postgres, and concluded
@@ -178,6 +181,26 @@ describe('a gate that does not name its blind spot reads as total', () => {
         Number(stated?.[1] ?? -1),
         `the gate says ${String(stated?.[1])} files gate on ${label}; there are ${actual}`,
       ).toBe(actual);
+    }
+  });
+
+  it('CRITICAL the Playwright spec-file count both files quote is derived. The three TEST counts beside it cannot be — they need browsers, a live server and a Go toolchain, so they stay dated snapshots that V-1036 re-ran by hand. The FILE count needs none of that, and a figure that can be checked and is not is the shape this suite keeps finding.', () => {
+    const specs = readdirSync(resolve(REPO_ROOT, 'apps/server/tests/e2e'), {
+      recursive: true,
+      encoding: 'utf8',
+    }).filter((f) => typeof f === 'string' && f.endsWith('.spec.ts'));
+    expect(specs.length, 'Playwright spec files found').toBeGreaterThanOrEqual(25);
+
+    for (const rel of [
+      'scripts/verify-suite.mjs',
+      'apps/server/tests/unit/a-gate-that-does-not-name-its-blind-spot-reads-as-total.test.ts',
+    ]) {
+      const stated = /(\d+) spec files/.exec(read(rel));
+      expect(stated, `${rel} no longer states a spec-file count`).not.toBeNull();
+      expect(
+        Number(stated?.[1] ?? -1),
+        `${rel} says ${String(stated?.[1])} Playwright spec files; the tree has ${specs.length}`,
+      ).toBe(specs.length);
     }
   });
 });

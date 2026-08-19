@@ -44144,3 +44144,37 @@ instead, with the exact command shape that reproduces it.
 
 `it(` count 5 → 6 on the one test file. No new file, no ratchet change. `apps/server/tests/unit`
 green: 1935 files, 20242 passed.
+
+## V-1036 — ran the three CI jobs the gate says it does not cover
+
+V-1035 executed the DB-gated suites instead of reasoning about them. The same argument applies to the
+four jobs `verify-suite` names as outside itself, whose combined coverage is cited in two files and
+had been measured once, on 2026-08-18. Re-ran what can be run here:
+
+Go SDK — 236 tests, 0 failures, `-count=1` so it is not the build cache answering.
+Python SDK — 365 passed, 4 skipped. The four want `DS_LIVE_BASE_URL` + `DS_LIVE_API_KEY`
+against a running server, so they are conditional in the way this repo requires.
+Playwright — 199 tests over 29 spec files, ENUMERATED via `--list` rather than executed: it needs
+browsers and a live server, and pretending otherwise would be the kind of claim this
+sweep exists to catch.
+
+Two of the three figures were exact. The Python count had drifted 362 → 365, which is small and is
+the point: the paragraph carrying it is the repo's disclosure of what a green from this gate does NOT
+cover, quoted in commit messages as "verified at the CI bar". Corrected in both files, dated with the
+re-run, and the enumeration-versus-execution distinction written down per job rather than left for a
+reader to assume.
+
+The spec-FILE count is derivable and now derived — an arm counts `*.spec.ts` under the e2e tree and
+compares it against the number stated in both files. The three TEST counts are not derivable without
+browsers, a server and a Go toolchain, so they stay dated snapshots, and the arm says so rather than
+implying the whole line is checked.
+
+Mutation: changing the gate's stated spec count → RED; adding one spec file so the tree moves past
+the stated number → RED. Probe removed, tree confirmed clean.
+
+Worth stating plainly: nothing was broken in any of the three suites. The finding is a stale figure in
+a disclosure, and the deliverable is that two of these numbers now cannot go stale while the third
+category is honestly labelled as a snapshot.
+
+`it(` count 6 → 7 on the one test file. No new file, no ratchet change. `apps/server/tests/unit`
+green: 1935 files, 20243 passed.
