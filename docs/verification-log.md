@@ -38026,3 +38026,35 @@ both mechanisms are built. Whether to apply them is a security decision, and app
 live admin routes is not something to do quietly at the end of a sweep.
 
 No source change. Three negatives re-verified, one observation recorded.
+
+## V-882 — no dormant middleware, and a refinement to how V-881 phrased its finding (2026-08-18)
+
+**Instrument.** V-881 found a security gate built but not applied to the surface that would benefit
+from it. Dormant _services_ already have a guard (`every-service-is-wired-or-recorded-as-dormant`,
+five recorded); dormant _middleware_ had never been measured. Enumerated every `app.decorate('…')`
+across `apps/server/src/middleware` and counted uses across all route modules.
+
+**Six decorators, all applied. The class is empty:** `rateLimit` 203, `requireAuth` 256,
+`requireScope` 184, `requireOwner` 12, `requireAuthEventSource` 7, `requireMfaFresh` 6. Nothing is
+declared and left unwired, so there is no roster to build and no guard worth writing — recorded so
+the measurement is not repeated.
+
+**And it sharpens V-881.** `requireMfaFresh` shows six uses, which briefly looked like it
+contradicted "applied in exactly one file". It does not: all six are inside `account-mfa.ts`, one
+distinct file, confirmed before writing this. But the census is a better description of the state
+than "built and never applied" — the gate is used, and used only to protect the routes that manage
+MFA itself. It guards its own management surface and nothing else.
+
+That is a more precise and slightly more uncomfortable framing of the same finding. A gate that
+exists and is wired somewhere is easier to leave alone than one that is obviously dormant: it does
+not look unfinished. Every `/v1/admin/*` route — `owner/secrets/{name}/reveal`,
+`accounts/{id}/delete`, `api-keys/{id}/revoke` — still passes on scope alone, and the mechanism that
+would add step-up sits one line away in the same codebase.
+
+Unchanged from V-881: this is not a defect against any document, the catalog row records it
+correctly as deferred under V-333, and wiring an MFA gate onto live admin routes is a security
+decision rather than sweep work. Recorded beside V-861's unaudited admin reads because the two
+describe one surface: the most privileged endpoints have neither step-up auth nor read auditing, and
+both mechanisms are already built and working elsewhere.
+
+No source change. One population measured, empty; one earlier phrasing made precise.
