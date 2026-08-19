@@ -7,7 +7,8 @@
 //
 //   • V-298c 5 endpoints: invites POST/GET + invites/accept + members
 //     GET + members/:id DELETE.
-//   • V-298c framing pinned: route-only; auth path doesn't yet honor
+//   • V-298c framing pinned: routes registered; the auth-path integration
+//     has shipped, and membership grants nothing IMPLICITLY (V-1010)
 //     team membership (V-298d wires it); members can be invited +
 //     accept but the resulting membership doesn't grant permissions
 //     on the owner's resources until V-298d.
@@ -41,8 +42,15 @@ describe('W437.C apps/server/src/routes/team.ts content parity', () => {
       /\/\/\s*POST\s+\/v1\/team\/invites\s+— owner invites email \(account_owner\)\s*\n?\s*\/\/\s*GET\s+\/v1\/team\/invites\s+— list pending \(read; owner-scoped by query\)\s*\n?\s*\/\/\s*POST\s+\/v1\/team\/invites\/accept\s+— invitee accepts \(account_owner\)\s*\n?\s*\/\/\s*GET\s+\/v1\/team\/members\s+— list confirmed \(read; owner-scoped by query\)\s*\n?\s*\/\/\s*GET\s+\/v1\/team\/owners\s+— list teams caller joined \(read\)\s*\n?\s*\/\/\s*DELETE \/v1\/team\/members\/:id\s+— remove member \(account_owner\)/,
     );
     expect(body).toMatch(
-      /\/\/ V-298c is route-only; the auth path itself doesn't yet honor team\s*\n?\s*\/\/ membership \(V-298d\)\. Members can be invited \+ accept, but the\s*\n?\s*\/\/ resulting membership doesn't grant them any permissions on the\s*\n?\s*\/\/ owner's resources until V-298d wires it\./,
+      /V-298c registered these routes; the auth-path integration it deferred\s*\n?\s*\/\/ has since SHIPPED\./,
     );
+    // The retracted claims, paraphrased in the negative. The stronger one — that
+    // membership grants no permissions at all — was false: an admin member acts on
+    // the owner's account today.
+    expect(body).not.toMatch(/doesn't yet honor team/);
+    expect(body).not.toMatch(/grant them any permissions/);
+    // The half that is still true, kept pinned.
+    expect(body).toMatch(/membership grants nothing IMPLICITLY/);
   });
 
   it('team reads require broad read and invite acceptance requires account_owner', () => {

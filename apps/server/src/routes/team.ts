@@ -7,10 +7,21 @@
 //   GET    /v1/team/owners               — list teams caller joined (read)
 //   DELETE /v1/team/members/:id          — remove member (account_owner)
 //
-// V-298c is route-only; the auth path itself doesn't yet honor team
-// membership (V-298d). Members can be invited + accept, but the
-// resulting membership doesn't grant them any permissions on the
-// owner's resources until V-298d wires it.
+// V-298c registered these routes; the auth-path integration it deferred
+// has since SHIPPED. `resolveEffectiveAccount` (services/auth.ts) reads
+// `X-Driftstack-Account`: naming an owner you hold a membership on
+// returns that owner's account id with your role, and the participating
+// routes then scope to the owner rather than to you.
+//
+// V-1010 — this paragraph used to describe that integration as still
+// pending and, more strongly, said a membership granted no permissions
+// on the owner's resources at all. The second half was flatly false: an
+// admin member can act on the owner's account today, which V-795 and
+// V-812 both document as designed behaviour.
+//
+// The part worth keeping, and kept: membership grants nothing IMPLICITLY.
+// Without the header a member's key resolves to their own account, so
+// access to an owner's resources is always an explicit act-as request.
 
 import type { FastifyInstance } from 'fastify';
 import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';

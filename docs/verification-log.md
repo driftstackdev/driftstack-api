@@ -43100,3 +43100,58 @@ Mutation-proved: reinstating the dry-run sentence flags the script by name, and 
 
 `it(` 3 in the new file. `EXPECTED_TEST_FILES` 2928 → 2929, `_ALL` 3094 → 3095.
 `npm run typecheck` exit 0, `bash -n` clean on the edited script.
+
+## V-1010 — a shipped auth integration still documented as pending, in customer-facing API text (2026-08-19)
+
+Sweep action 23's doc half was closed by V-822 — `team-roles-taxonomy.md` now opens with "multi-seat
+account support, which has SHIPPED" and records what it previously said. **The same claim survived in
+five server-side places, one of which ships to customers.**
+
+`routes/team.ts` carried the strongest and flatly false version: "the auth path itself doesn't yet
+honor team membership (V-298d)… the resulting membership doesn't grant them **any** permissions on
+the owner's resources until V-298d wires it." `services/auth.ts`'s `resolveEffectiveAccount` reads
+`X-Driftstack-Account`, and for an owner you hold a membership on it returns that owner's account id
+with your role — which V-795 and V-812 both document as designed behaviour. An admin member acts on
+the owner's account today.
+
+`lib/openapi.ts` carried it in a **customer-facing response description**: "Membership recorded.
+(Auth-path integration is V-298d; member acts as owner only after that ships.)" An integrator reading
+the API reference is told the capability does not exist yet. It does — and the security-relevant half
+of that is not that they under-use it, but that they do not realise a member CAN act on the owner's
+account.
+
+**The distinction that matters, and that the correction preserves.** Three of the five occurrences —
+`lib/app.ts`, `lib/bootstrap.ts`, and a second spot in `lib/openapi.ts` — say membership grants "no
+**implicit** permissions". That qualifier is still TRUE: without the header a member's key resolves to
+their own account, so every cross-account access is an explicit act-as request. Only the framing
+around it ("is V-298d", "until then", "does NOT yet honor") is stale. Correcting those without
+destroying the true half is why this batch stops at two files rather than sweeping all five — the
+remaining three need the framing changed and the qualifier kept, and are recorded here rather than
+half-done.
+
+Also unfixed and recorded: all three SDK clients carry "V-298c — Team RBAC. Auth path integration is
+V-298d." That is a terse work-item reference rather than an assertion the capability is missing, so it
+is weaker than the server text — but it is stale in the same direction, and the three SDK team
+RESOURCE files carry the "no implicit permissions" phrasing too.
+
+Corrected here in one commit: `routes/team.ts` and the customer-facing OpenAPI description, with both
+pins moved alongside. Both retracted claims are paraphrased and pinned in the negative, and the true
+half — "membership grants nothing IMPLICITLY" — is now pinned positively so a future correction cannot
+delete it along with the false part. The OpenAPI description turned out to be pinned by nothing, which
+is how it stayed wrong while two pins guarded the route comment beside it.
+
+Mutation-proved: reinstating the retracted sentences reds both pin files.
+
+**Fourth instance of the header-corrected-body-stale shape** in this arc, after V-1005, V-1006 and
+V-1009 — and the first where the surviving copy was customer-facing. A sweep for the class across
+source files found no OTHER live instance: 38 files record a retraction, only one is source
+(`services/crypto-orders.ts`), and both of its retractions are sound — verified by checking that the
+payment reconciliation really does compare `actually_paid` against the crypto `pay_amount`, not the
+fiat `price_amount`.
+
+**Why no general guard for the class.** The rule that makes a retraction safe — paraphrase it, never
+quote it — is the same rule that makes it undetectable: a well-formed retraction leaves no literal
+string to search for. The class has to be caught per-instance, which is what V-1009's printf guard
+does for scripts. That is worth knowing before someone tries to build the sweep.
+
+`it(` counts unchanged at 14 and 13. `npm run typecheck` exit 0.

@@ -12,9 +12,9 @@
 //     DELETE /v1/team/members/:id          — remove member
 //
 //   Route-only-not-yet-auth-path framing — 'V-298c is route-only;
-//   the auth path itself doesn't yet honor team membership (V-298d).
+//   the auth-path integration has SHIPPED; membership grants nothing
 //   Members can be invited + accept, but the resulting membership
-//   doesn't grant them any permissions on the owner's resources
+//   IMPLICITLY, only through an explicit act-as header (V-1010).
 //   until V-298d wires it'.
 //
 //   InviteBodySchema — email (trimmed + zod email validator) + role
@@ -78,12 +78,14 @@ describe('W1050 routes/team V-298c + V-326c cross-source invariant', () => {
 
   // ─── Route-only-not-yet-auth-path framing ────────────────────
 
-  it("CRITICAL route-only framing — 'V-298c is route-only; the auth path itself doesn't yet honor team membership (V-298d). Members can be invited + accept, but the resulting membership doesn't grant them any permissions on the owner's resources until V-298d wires it'. The migration-window framing prevents premature reliance on the membership for auth.", () => {
+  it("V-1010 CRITICAL act-as framing — the auth-path integration V-298c deferred has SHIPPED, and what remains true is that membership grants nothing IMPLICITLY. This arm used to pin the opposite as 'the migration-window framing that prevents premature reliance on the membership for auth': it asserted the auth path did not honor membership and that a membership granted no permissions on the owner's resources at all. resolveEffectiveAccount returns the owner's account id with the member's role for any X-Driftstack-Account naming a team they belong to, which V-795 and V-812 both document as designed.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/team.ts'));
-    expect(p).toMatch(/V-298c is route-only; the auth path itself doesn't yet honor team/);
-    expect(p).toMatch(/membership \(V-298d\)\. Members can be invited \+ accept, but the/);
-    expect(p).toMatch(/resulting membership doesn't grant them any permissions on the/);
-    expect(p).toMatch(/owner's resources until V-298d wires it\./);
+    expect(p).toMatch(/the auth-path integration it deferred/);
+    expect(p).toMatch(/has since SHIPPED\./);
+    expect(p).toMatch(/membership grants nothing IMPLICITLY/);
+    // The retracted claims, paraphrased in the negative.
+    expect(p).not.toMatch(/doesn't yet honor team/);
+    expect(p).not.toMatch(/grant them any permissions/);
   });
 
   // ─── InviteBody / AcceptBody schemas ─────────────────────────

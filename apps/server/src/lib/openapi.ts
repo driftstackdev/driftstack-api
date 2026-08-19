@@ -1139,7 +1139,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description:
-          'Membership recorded. (Auth-path integration is V-298d; member acts as owner only after that ships.)',
+          'Membership recorded. The member can now act on the owner account by sending X-Driftstack-Account with the owner id; their role decides what that permits. Without that header their key resolves to their own account.',
         content: {
           'application/json': { schema: z.object({ membership: TeamMemberSchema }) },
         },
