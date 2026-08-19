@@ -39519,3 +39519,45 @@ parser did not buy correctness at the cost of detection.
 test. What it did was make a guard's claim true, and record the size of the gap between what it
 asserted and what it read — which is the same failure this arc has been chasing in other people's
 guards, found in mine one entry after I shipped it.
+
+## V-923 — is any other gate answered by a comment? No — and two wrong classifiers on the way to knowing (2026-08-19)
+
+**The class, twice confirmed.** Several guards decide what a marketing or trust page may claim by
+asking whether a capability is IMPLEMENTED, using a regex over `apps/server/src`. V-917 found the
+egress gate satisfied by any mention of SOCKS5, including `lib/webhook-target-guard.ts` blocking proxy
+schemes as SSRF targets. V-921 found the mTLS gate satisfied by three files holding no implementation
+at all. Two instances is a class, so: are there more?
+
+**Enumerated by SHAPE, not by name — which mattered.** Nine test files define a
+`(re: RegExp) => boolean` source-tree scanner. Eight name it `serverSourceMatches`; the others use
+`serverMatches` and `routeRegistered`. A grep for the common name would have missed
+`api-reference-surface-doc-parity` entirely, which is the third time this arc that a claim lived in a
+file the obvious pattern skipped.
+
+**Answer: no third instance.** Every pattern across all nine files matches either executable code or
+route-path string literals. The class is closed.
+
+**Two classifier corrections, both caught before they became findings.**
+
+1. **Strings are not comments.** The first version lumped every non-code match together as "prose" and
+   reported three defects in `api-versioning-doc-parity`: gates for `'/v1/sessions'`, `'/v1/profiles'`
+   and `'/v1/billing/crypto-checkout'`. Those are route paths, and a route path IS a string literal —
+   `app.get('/v1/sessions'` at `routes/sessions.ts:213` is exactly the right evidence. Reporting them
+   would have been three confident wrong findings from an instrument built to catch wrong findings.
+2. **"Comment-only" was too narrow to catch the case that motivated it.** Having split strings from
+   comments, the obvious rule is "flag patterns matching ONLY comments" — and the V-921 mTLS gate
+   scores 4 comment hits and 1 string hit (an OpenAPI description), so that single string would have
+   exonerated the confirmed instance. The rule that works is `code === 0 && comment > 0`: no match in
+   executable code, and at least one in a comment. Route-path gates score `comment=0` and pass.
+
+Both corrections came from running the instrument against a case whose answer I already knew. Neither
+was visible by reading the rule.
+
+**Ratcheted** as `a-source-gate-may-not-be-satisfied-by-a-comment`, recomputed rather than pinned. It
+discovers gate files by shape, and if it finds one whose source root it cannot resolve it FAILS rather
+than skipping — the difference between covering a class and covering the files it happened to know
+about, which is the V-922 lesson applied at build time instead of one entry later.
+
+**Proofs.** Restoring the pre-V-921 mTLS gate is caught by name with `code=0, comment=4`. Adding a new
+gate over an unresolvable root fails the discovery arm. No source change outside tests; the finding is
+that the class has no third member, which is only worth stating because it was measured.
