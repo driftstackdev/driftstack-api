@@ -42789,3 +42789,45 @@ still stands and is why this is a sample rather than a clearance: only 27% of th
 missing one mattered.
 
 `it(` counts unchanged. `npm run typecheck` exit 0.
+
+## V-1003 — the replay/revocation axis, measured; one predicate unheld (2026-08-19)
+
+V-1002 ended on a measured worry: only 27% of the arms across 41 `db-*-content-parity` files reference
+a `.where(` at all, and the MFA delete was the case where the missing one mattered. The natural next
+axis is not tenancy but **replay, expiry and revocation** — `isNull(usedAt)`, `isNull(consumedAt)`,
+`isNull(revokedAt)`, `isNull(disabledAt)`. 44 such predicates in `src/db`, across 41 functions:
+**37 warm, 4 cold.**
+
+Three of the four cold ones were already accounted for, and checking them first is what kept this
+batch from being three redundant tests:
+
+- `mfa-repo.markRecoveryCodeUsed` — the atomic single-use consume. `db-mfa-repo-content-parity` pins
+  its ENTIRE body including `isNull(usedAt)` and `return updated.length === 1`. Held.
+- `auth-flows-repo.findActiveAuthToken` — the lookup deciding whether a magic-link, password-reset or
+  email-verify token is still usable. Its pin freezes all three predicates and the `.limit(1)`. Held.
+- `listActiveWebSessionsForAccount` — guarded in V-997.
+
+**And the warm ones are genuinely exercised, not merely executed.** `consumeAuthToken` is the one that
+matters most — a replayable password-reset token is account takeover — and
+`db-auth-flows-session-revocation-drizzle` consumes a token, asserts `true`, consumes it again and
+asserts `false`, then races two concurrent consumes through `Promise.all`. That is the property
+tested, against real Postgres, including the concurrency case the source comment claims.
+
+**The fourth cold one is the finding.** `fleet-nodes-repo.getDetailByNodeIdOrId` resolves the Mac node
+bound to a session on the LiveKit token-minting path (`lib/livekit-token.ts:45`). Its WHERE is
+`and(isNull(fleetNodes.revokedAt), matchKey)`, and the revocation half is pinned by **nothing** — no
+test in the repo contains `isNull(fleetNodes.revokedAt)`, and the only tests touching the method hand
+`lk3-agent-sessions-livekit-token` a fake. Dropped, a decommissioned or compromised node stays
+resolvable and keeps receiving minted tokens for customer sessions.
+
+**Checked against the existing suite BEFORE claiming novelty**, which is V-999's correction applied
+rather than re-learned: with the exclusion removed, 463 tests across 40 fleet/livekit files stay
+green. Only then was the arm written.
+
+Added to the file that already drives this repo against real Postgres and whose own header speaks of
+preferring "a non-revoked livekit node", with a positive control (a live node still resolves by its
+human `node_id`) and both lookup shapes — `node_id` and the uuid PK, which the method OR-s in only for
+uuid-shaped keys after a documented 22P02 incident that "silently killed LiveKit minting on every
+dispatched session".
+
+`it(` 5 → 6. `npm run typecheck` exit 0. No new file, so no ratchet change.

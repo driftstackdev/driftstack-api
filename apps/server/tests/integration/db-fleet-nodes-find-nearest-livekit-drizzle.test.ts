@@ -257,5 +257,49 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       const emptyRegion = await repo.listWithLivekitNearest('');
       expect(emptyRegion.length).toBeGreaterThanOrEqual(2);
     });
+
+    it('V-1003 CRITICAL getDetailByNodeIdOrId excludes a REVOKED node. This resolves the Mac bound to a session on the LiveKit token-minting path (`lib/livekit-token.ts`), and its `isNull(revokedAt)` is pinned by nothing: no test in the repo contains that predicate, and the only tests touching this method hand `lk3` a fake. Dropped, a decommissioned or compromised node stays resolvable and keeps receiving minted tokens for customer sessions.', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleFleetNodesRepo({ client, db, close: async () => {} });
+
+      const liveNodeId = `test-node-${randomUUID()}`;
+      const deadNodeId = `test-node-${randomUUID()}`;
+      const live = await repo.register({
+        publicKeyBase64Url: pk(),
+        displayName: `live-${randomUUID().slice(0, 8)}`,
+        region: 'us',
+        hardwareClass: 'm2pro',
+        nodeId: liveNodeId,
+      });
+      const dead = await repo.register({
+        publicKeyBase64Url: pk(),
+        displayName: `dead-${randomUUID().slice(0, 8)}`,
+        region: 'us',
+        hardwareClass: 'm2pro',
+        nodeId: deadNodeId,
+      });
+      seededIds.push(live.id, dead.id);
+      await repo.revoke({ nodeId: dead.id, reason: 'decommissioned in test' });
+
+      // Positive control: without it the revocation arm also passes against a
+      // lookup that resolves nothing at all.
+      expect(
+        (await repo.getDetailByNodeIdOrId(liveNodeId))?.id,
+        'a live node must still resolve by its human node_id',
+      ).toBe(live.id);
+
+      // The boundary.
+      expect(
+        await repo.getDetailByNodeIdOrId(deadNodeId),
+        'a revoked node must not resolve — the LiveKit mint path would bind a session to it',
+      ).toBeNull();
+
+      // And by uuid PK, which the method OR-s in only for uuid-shaped keys.
+      expect(
+        await repo.getDetailByNodeIdOrId(dead.id),
+        'a revoked node must not resolve by its uuid either',
+      ).toBeNull();
+    });
   },
 );
