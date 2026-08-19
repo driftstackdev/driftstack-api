@@ -116,17 +116,22 @@ describe('an updater that is promised must be produced', () => {
       read(resolve(REPO, 'apps/gui-client/src-tauri/capabilities/updater-windows-linux.json')),
     ) as { platforms?: string[] };
     const platforms = cap.platforms ?? [];
-    if (platforms.includes('windows')) {
-      expect(
-        targets.some((t) => t === 'nsis' || t === 'msi'),
-        'the updater is scoped to windows but no Windows installer target is built',
-      ).toBe(true);
+    // V-972 — every assertion used to sit inside an `if (platforms.includes(…))`,
+    // so an empty or renamed `platforms` list made the arm pass having checked
+    // nothing. The platform list is now asserted to be real, and the per-platform
+    // checks are collected into one list that must be empty — so the arm asserts
+    // on every run whatever `platforms` contains.
+    expect(platforms.length, 'the updater capability still names platforms').toBeGreaterThan(0);
+    const unbuilt: string[] = [];
+    if (platforms.includes('windows') && !targets.some((t) => t === 'nsis' || t === 'msi')) {
+      unbuilt.push('windows: the updater is scoped to it but no nsis/msi target is built');
     }
-    if (platforms.includes('linux')) {
-      expect(
-        targets.some((t) => t === 'appimage' || t === 'deb' || t === 'rpm'),
-        'the updater is scoped to linux but no Linux target is built',
-      ).toBe(true);
+    if (
+      platforms.includes('linux') &&
+      !targets.some((t) => t === 'appimage' || t === 'deb' || t === 'rpm')
+    ) {
+      unbuilt.push('linux: the updater is scoped to it but no appimage/deb/rpm target is built');
     }
+    expect(unbuilt, 'platform(s) the updater promises with nothing to install:').toEqual([]);
   });
 });

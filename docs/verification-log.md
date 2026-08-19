@@ -41530,3 +41530,33 @@ suffix").
 
 **No source change.** All three copies agree today; what was missing was any test that would notice if they
 stopped.
+
+## V-972 — repairing a red left by two peer commits, in the shape the guard prescribes
+
+**Not my finding and not my feature; my guard and my red baseline.** `907d88b70` and `ddc08fce4` each landed
+a new test file whose arm puts every assertion behind a conditional, which
+`a-test-arm-may-not-hide-all-its-assertions` (V-921) refuses. The suite went red at `ddc08fce4` and stayed
+there — tree clean, no lock, no follow-up commit — so the work was no longer in flight and a red baseline
+makes every subsequent verification of my own ambiguous.
+
+**Both flags checked before acting, because a guard of mine was accusing someone else's code.**
+`a-window-that-can-be-opened…:166` has its single assertion inside
+`if (granted.some(p => p.startsWith('store:') || p.startsWith('fs:')))`.
+`an-updater-that-is-promised…:113` has both inside `if (platforms.includes(…))`. Each passes having asserted
+nothing the moment its condition goes false. The flags are correct.
+
+**Repaired in the shape the guard's own message prescribes, preserving intent exactly.** The first now
+asserts the implication directly — "it never both grants store/fs and claims it grants neither" — which runs
+on every capability and means the same thing. The second collects unsatisfied platforms into one list and
+asserts that list is empty, plus a floor that the capability still names platforms at all.
+
+**The repairs catch strictly more than the originals.** Three proofs: a description claiming
+"no fs/shell/store" while granting them fails the first; removing `nsis`/`msi` from the bundle targets while
+the updater still names windows fails the second by name; and **emptying the platform list fails the new
+floor** — a case neither original arm could see, because an empty list was precisely what made them vacuous.
+
+**Scope kept narrow on purpose.** Two arm bodies restructured, no feature code touched, no arms added or
+removed (6 and 5 before and after). I left these alone while the peer was mid-flight last turn and took them
+only once the tree was clean — rewriting another agent's in-flight tests is the concurrent-writer
+interference this repo warns about; leaving a known-red suite for the next reader to inherit is a different
+kind of cost, and by then it was the only one still being paid.

@@ -167,11 +167,17 @@ describe('a window that can be opened must be able to work', () => {
     const cap = capabilities().find((c) => (c.windows ?? []).includes('simulator-*'));
     const desc = (cap as Capability).description ?? '';
     const granted = permIds(cap as Capability);
-    if (granted.some((p) => p.startsWith('store:') || p.startsWith('fs:'))) {
-      expect(
-        /no fs\/shell\/store/i.test(desc),
-        'the description still says "no fs/shell/store" while granting them',
-      ).toBe(false);
-    }
+    // V-972 — the implication asserted directly rather than guarded by an `if`.
+    // Every assertion used to sit inside `if (granted.some(…))`, so the arm passed
+    // having checked nothing on any capability that granted neither store nor fs —
+    // which is the shape `a-test-arm-may-not-hide-all-its-assertions` refuses.
+    // Stated as "it never both grants them and claims it does not", the check runs
+    // on every capability and means the same thing.
+    const grantsStoreOrFs = granted.some((p) => p.startsWith('store:') || p.startsWith('fs:'));
+    const claimsNeither = /no fs\/shell\/store/i.test(desc);
+    expect(
+      grantsStoreOrFs && claimsNeither,
+      'the description still says "no fs/shell/store" while granting them',
+    ).toBe(false);
   });
 });
