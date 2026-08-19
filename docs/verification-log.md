@@ -40755,3 +40755,53 @@ cannot pass.
 **Left undone deliberately:** the 16 entries stay. The disclosure rationale is now known to be unsound —
 the shapes are public — but wiring anonymous auth routes changes what an unauthenticated caller sees on
 login and signup, and that is a decision to state rather than one to slip in behind a defect fix.
+
+## V-951 — the stated reason for the anonymous exclusion, corrected where it was false
+
+**Behaviour unchanged.** Whether to report unknown fields on an unauthenticated surface is a product
+decision and it stays open. What was fixable without deciding it is the _reason_, which was wrong in the
+source and wrong on a customer page.
+
+**The disclosure reason does not hold.** `unknown-request-fields.ts` said echoing keys back to an anonymous
+caller "is a (mild) disclosure of schema shape on exactly the surface that attracts probing". All fifteen
+excluded routes publish their complete request-body property list in the OpenAPI document — signup publishes
+`email`, `name`, `password`; login publishes `email`, `password`. The header would echo a key the caller
+themself sent, from a field list already served to anyone.
+
+**The second reason does not hold for signup.** The same paragraph said the failure being fixed "is a
+property of authenticated resource writes, not of login". Signup writes a resource: `name` is **optional**,
+so `{ email, password, nam: 'Alice' }` creates an account with no display name and answers success — the
+silent misconfiguration the module exists to surface, on the route the module names as immune. Worse, this
+schema had `bundled_llm_consent` and `bundled_llm_monthly_cap_usd_cents` removed in a 2026-06-30 security
+fix, so a client still sending them has them stripped in silence. That already has a guard
+(`signup-flow-cross-source-invariant`) pinning their absence; nothing tells the caller.
+
+What survives is narrower and now stated as such: on login, refresh, logout and the token-consuming routes
+there is no resource being configured, so there is nothing to silently misconfigure. Signup is not one of
+those.
+
+**The customer page asserted the disclosure reason too**, telling customers the header is withheld to protect
+a shape the same site publishes. Replaced with what actually helps them — the list of excluded endpoints and
+a pointer to the API reference that documents each one's fields.
+
+**The original rationale is retained verbatim** below the correction, because a parity pin quotes it and
+deleting it would have made that pin fail for a reason unrelated to what it guards.
+
+**A new guard holds the measurements, so the corrected reasoning cannot rot in either direction.** If a route
+stops publishing its body, the disclosure argument becomes live again for it and the guard says so. If
+signup's `name` becomes required, the counter-example stops being real and the comment must stop citing it.
+Four mutations, all caught: unpublishing the login body, requiring `name`, removing the module's note, and
+putting the disclosure claim back on the page.
+
+**One of those four caught a defect in the guard I had just written.** Making `name` required in
+`packages/api-types/src/auth.ts` did **not** fail the arm, because `@driftstack/api-types` resolves to
+`dist/index.js` — the arm was reading compiled output while reading like a source pin. It is the hazard this
+repo has recorded before: a dist-reading assertion is a false signal both ways, green against a stale build
+and blind to an edit not yet rebuilt. Fixed by asserting the source text as well; the mutation then fires. It
+was the mutation that found this, not review.
+
+**And the V-950 suite run came back exit 1**, on `dist-reading-suites-have-fresh-artifacts` — the same
+hazard, pointed at me. Editing `api/versioning.md` left the docs app's built artifact older than its source,
+so V-950 as committed was not suite-green; `npm run build --workspace @driftstack/docs` fixes it and the
+output is gitignored, so there is nothing to commit. Recorded rather than quietly corrected: a docs-page edit
+in this repo carries a rebuild with it.

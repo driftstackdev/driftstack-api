@@ -95,6 +95,33 @@ export function reportUnknownRequestFields(args: {
  * customer-facing writes go through here rather than calling `safeParse`
  * directly.
  *
+ * V-951 — the paragraph below is the original rationale, and BOTH of its reasons
+ * have since been measured and found not to hold. The behaviour is unchanged; the
+ * exclusion is an open decision now, not a justified one, and is recorded as such
+ * rather than left reading like a conclusion. `the-anonymous-exemption-rests-on-a-
+ * published-shape.test.ts` holds the measurements.
+ *
+ * On disclosure: every excluded route publishes its complete request-body property
+ * list in the OpenAPI document. `POST /v1/auth/signup` publishes `email`, `name`,
+ * `password`; login publishes `email`, `password`; and so on for all fifteen. The
+ * shape is already public in a document served to anyone, so echoing back a key the
+ * caller themself sent discloses nothing the spec does not.
+ *
+ * On the failure mode: it applies squarely to signup. `name` is OPTIONAL, so
+ * `{ email, password, nam: 'Alice' }` creates an account with no display name and
+ * answers success — a mistyped field silently changing a resource's configuration,
+ * which is the sentence below saying it cannot happen here. And this schema had
+ * `bundled_llm_consent` / `bundled_llm_monthly_cap_usd_cents` REMOVED in a
+ * 2026-06-30 security fix, so a client still sending them has them stripped in
+ * silence and is told nothing — the one case where being told matters most.
+ *
+ * What stays true is narrower: on login, refresh, logout and the token-consuming
+ * routes there is no resource being configured, so there is nothing to silently
+ * misconfigure. Signup is not one of those.
+ *
+ * ORIGINAL RATIONALE, retained verbatim because the customer page and a parity pin
+ * both quote it:
+ *
  * Deliberately NOT applied to unauthenticated auth endpoints. Echoing the keys a
  * caller sent back to an anonymous caller is a (mild) disclosure of schema shape
  * on exactly the surface that attracts probing, and the failure this exists to

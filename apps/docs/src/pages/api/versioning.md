@@ -95,9 +95,10 @@ Specifics worth knowing:
   body are identical with and without unknown fields, so nothing
   breaks by starting to send this header, and nothing breaks if
   you ignore it.
-- **Not emitted on unauthenticated auth endpoints.** Echoing the
-  keys an anonymous caller sent back to them discloses schema
-  shape on the surface most likely to be probed.
+- **Not emitted on unauthenticated auth endpoints** — signup, login,
+  password reset, magic link, email verification, token refresh and
+  logout. On those, check your field names against the request body
+  in the API reference, which lists every field each one accepts.
 
 Because it is purely additive, this header is not part of the
 breaking-change contract above: treat it as a diagnostic, and do
