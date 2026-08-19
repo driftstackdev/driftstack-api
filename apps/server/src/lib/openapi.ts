@@ -149,6 +149,8 @@ import {
   PublicIncidentFeedResponseSchema,
   PutIncidentResponseSchema,
   ResolveIncidentRequestSchema,
+  OpenVpnProxyConfigSchema,
+  WireGuardProxyConfigSchema,
 } from '@driftstack/api-types';
 // S33 2026-07-07 (fable-truth-audit) — the cookie shape the agent-session
 // cookie read/import routes emit + validate. Imported from the harness
@@ -1882,27 +1884,33 @@ function buildRegistry(): OpenAPIRegistry {
   });
   // ARC A — per-account customer proxies. The password is write-only (accepted
   // on create/update, never returned); responses expose has_password.
-  const OpenVpnConfigOpenApi = z.object({
-    config_blob: z.string(),
-    username: z.string().optional(),
-    password: z.string().optional(),
-  });
-  const WireGuardConfigOpenApi = z.object({
-    private_key: z.string(),
-    peer_public_key: z.string(),
-    endpoint: z.string(),
-    allowed_ips: z.string().optional(),
-    address: z.string().optional(),
-    dns: z.string().optional(),
-  });
+  // V-928 — the REAL config schemas, not hand-written mirrors of them. The
+  // mirrors published `z.string()` for every field, so the document carried no
+  // bounds and, worse, no FORMAT: a WireGuard key is a 44-character base64
+  // curve25519 value and the spec described it as any string, so the only way to
+  // learn the shape was a 400. Using the source schemas publishes every bound,
+  // regex and default automatically and removes the drift pair entirely.
+  //
+  // Their `.refine()` calls (the .ovpn `client`/`remote` directive checks and the
+  // endpoint port range) still do not reach JSON Schema — per V-924 a refine is a
+  // runtime predicate — but the regex and length bounds beside them do.
+  const OpenVpnConfigOpenApi = OpenVpnProxyConfigSchema;
+  const WireGuardConfigOpenApi = WireGuardProxyConfigSchema;
+  // V-928 — bounds mirror `AccountProxyCreateCommonShape` in api-types/profiles.ts,
+  // which is what `AccountProxyInputSchema` (the schema the route parses with)
+  // composes. The flat outer shape is kept deliberately: the real schema is a
+  // discriminatedUnion on `scheme`, but the Go SDK models this body as one struct
+  // and Go has no union type, so publishing the union would break the shape two
+  // generated SDKs are built from. That divergence is recorded in V-928 as a
+  // decision rather than changed here.
   const AccountProxyInputOpenApi = z
     .object({
-      label: z.string(),
+      label: z.string().min(1).max(80),
       scheme: z.enum(['socks5', 'http', 'openvpn', 'wireguard']).optional(),
-      host: z.string(),
-      port: z.number().int(),
-      username: z.string().nullable().optional(),
-      password: z.string().nullable().optional(),
+      host: z.string().min(1).max(255),
+      port: z.number().int().min(1).max(65535),
+      username: z.string().max(255).nullable().optional(),
+      password: z.string().max(1024).nullable().optional(),
       openvpn: OpenVpnConfigOpenApi.optional(),
       wireguard: WireGuardConfigOpenApi.optional(),
     })

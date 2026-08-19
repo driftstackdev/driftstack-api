@@ -39719,3 +39719,56 @@ from 254 to 9999 fails the route arm. Both restored byte-identical.
 **Surface remaining:** 17 solo mirrors still uncompared. The base rate so far — two divergences in
 five checked, plus the two V-926 found in the comparable set — says the rest are worth the same
 treatment rather than an assumption that they are fine.
+
+## V-928 — the published proxy body described a WireGuard key as "any string" (2026-08-19)
+
+**The largest mirror divergence yet.** `POST /v1/account/me/proxies` parses with
+`AccountProxyInputSchema`. Its common fields are bounded — label 1–80, host 1–255, port 1–65535,
+username ≤255, password ≤1024 — and its VPN blocks carry formats: a WireGuard key is a 44-character
+base64 curve25519 value, an endpoint is `host:port`, an .ovpn blob is capped at 256 KiB. The request
+body in `openapi.ts` was a hand-written mirror that typed **every one of those as a bare
+`z.string()`**. So the document told a customer nothing about a WireGuard key beyond "string", and
+the only way to learn the format was a 400.
+
+**Fixed by deleting the drift, not by copying it.** The nested blocks now reference the REAL
+`OpenVpnProxyConfigSchema` / `WireGuardProxyConfigSchema` rather than mirrors of them, so every
+bound, regex and default publishes automatically and that half cannot drift again by construction.
+Hand-copying six regexes would only have created a fresh pair to keep in step. The outer object's
+common bounds are stated explicitly and guarded.
+
+**What I did NOT change, and why it is a decision rather than a remediation.** The real schema is a
+`discriminatedUnion` on `scheme`: `scheme: 'openvpn'` REQUIRES the `openvpn` block, every branch is
+`.strict()`, and the source comment records that this replaced exactly the flat shape the mirror still
+publishes — "nothing at the TYPE level stopped a caller from constructing `{ scheme: 'wireguard' }`
+with no `wireguard` block". So the document still describes as valid two requests the server refuses:
+a scheme with no matching block, and a block on the wrong scheme.
+
+Publishing the union would be the more accurate contract. It is not mine to flip: the Go SDK models
+this body as ONE struct (`AccountProxyInput` in `sdk-go/egress.go`) and Go has no union type, and the
+Python models are GENERATED from this document. Reshaping a component two SDKs are built from is a
+product decision with an SDK-ergonomics tradeoff, so it is recorded here for the owner rather than
+changed unilaterally. Note the TypeScript SDK already gets the union, since it imports the api-types
+type directly — the three SDKs do not agree today.
+
+**The generated Python models were stale, and I checked whose staleness it was.** `models.py` carries
+a `datamodel-codegen` timestamp of 2026-07-31 while the spec has changed several times since,
+including three of my own commits. Rather than assume, I regenerated to a comparison: the drift is my
+V-928 constraints plus **one** pre-existing docstring from a peer's earlier spec change. Regenerated
+and included — the models are generated FROM the spec I am changing, so leaving them stale would ship
+a Python SDK that does not carry the constraints just published. The one borrowed docstring is called
+out rather than absorbed silently. `ruff check` passes and 365 Python tests pass; two files report
+formatting drift and both are pre-existing and untouched here.
+
+**A vacuous measurement, caught.** My first attempt to measure the model drift wrapped the generator
+in `timeout`, which macOS does not ship — the command failed, the diff compared the file against
+itself, and it reported zero drift. That is the shape this arc keeps finding, produced by my own
+tooling: a clean result from a step that never ran. The 58-line answer above came from re-running
+without it.
+
+**Proofs.** Stripping the label bound from the published component fails the bounds arm by name
+(`label: route max 80, document undefined`). Stripping the WireGuard key pattern fails the format arm.
+
+**Tally for the mirror surface:** 13 hand-checked, 5 divergent (two MFA bodies in V-926, two dropped
+bounds in V-927, this one), 8 clean. The mechanized comparison I tried first is not usable — it
+compared only 6 of 73 endpoints and two of its three hits were its own extraction bugs, so it is
+abandoned rather than refined, on the V-903 precedent.
