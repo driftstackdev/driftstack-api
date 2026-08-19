@@ -39082,3 +39082,35 @@ clean draws across four subsystems is reasonable evidence the batch work was car
 draw is unlikely to change that read. I am recording the sample size rather than continuing to grow
 it, so the next reader knows both what was checked and that the rest was a judgement call, not an
 oversight.
+
+## V-913 — re-opening V-879's conclusion, and confirming it (2026-08-19)
+
+**V-879 parked the catalog's remaining rows as needing a product judgement about what "complete"
+meant. I thought I had dismissed that too quickly**, because V-876 resolved exactly such a row by
+reading the priority list's own definition of its V-number — V-314 spelled out as "clear cache /
+reset to fresh", which settled two rows without any judgement call. If one definition could do that,
+others might.
+
+**Measured: 35 of the 43 remaining non-SHIPPED rows cite a V-number the priority list defines.** A
+much better starting position than "these need a decision" implied.
+
+**And it changes nothing.** Scanning every one of the 35 for a definition asserting completion
+("complete", "shipped", "done", "live") returns a single row — `/usage historical trends + cost
+projections`, DEFERRED against V-299, whose definition reads "usage page polish (live wiring
+complete; UI polish only)". That reads like a contradiction and is not: V-876 verified `usage.astro`
+has no trends or projections, so DEFERRED is right. V-299 was a polish slice that never covered
+building them, and the row simply cites the nearest slice rather than one that owns the work.
+
+**The definitions describe SLICES, not features**, which is why they cannot adjudicate a row.
+V-346 is "Customer-dashboard PARTIAL pages polish … visual upgrade to V-275 vocabulary" — two rows
+about session filtering and a live-updating detail view cite it, and nothing in a visual-vocabulary
+slice speaks to whether filtering exists. Same for V-300, defined as the billing portal redirect,
+cited by both the redirect row (shipped) and the plan-picker row (open).
+
+**One thing the exercise did produce**: V-299's "live wiring complete" independently confirms
+V-878's correction of `/usage summary + visualization` to SHIPPED, arrived at from the source side.
+Two routes to the same answer is worth more than the correction was on its own.
+
+**So V-879's conclusion stands, now tested rather than asserted.** The remaining rows turn on what
+their author counted as done, the priority list answers a different question, and the door is closed
+properly instead of left ajar. Recorded so it is not re-opened a third time.
