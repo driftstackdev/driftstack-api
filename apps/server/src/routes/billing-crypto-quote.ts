@@ -15,6 +15,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { AccountTier } from '@driftstack/api-types';
 import { z } from 'zod';
+import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import { ValidationError } from '../lib/errors.js';
 // Source the quote price from PricingService.listEffective() — the SAME
 // authoritative read the crypto-checkout CHARGE uses (billing-crypto.ts).
@@ -65,6 +66,16 @@ export function registerCryptoQuoteRoutes(app: FastifyInstance, deps: CryptoQuot
     async (req: FastifyRequest, reply) => {
       const parsed = QuoteSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      // V-946 — report the keys zod stripped. This route is behind
+      // `app.requireAuth` + a scope, verified at its registration, so the caller
+      // is known and echoing back its own unrecognised keys discloses nothing.
+      reportUnknownRequestFields({
+        body: req.body,
+        knownKeys: knownRequestKeys(QuoteSchema),
+        reply,
+        logger: req.log,
+        route: 'POST /v1/billing/crypto-checkout/quote',
+      });
       const product = parsed.data.product;
       // listEffective() = DB pricing row ?? TIER_PRICE_CENTS seed, per tier —
       // the same read billing-crypto.ts charges from, so an owner price edit

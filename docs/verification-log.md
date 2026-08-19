@@ -40516,3 +40516,47 @@ dropping mistyped fields today. The guard now sees them and will not let the num
 is per-route work — signup, login, MFA, magic-link, CLI authorize, OAuth start, crypto checkout,
 agent-session create, profile clone, session proxy — each needing the anonymous-surface judgement made
 deliberately.
+
+## V-946 — three of the 36 wired, and the classifier that could not do the rest (2026-08-19)
+
+**V-945 left 36 sites and said triage needed reading, not a regex. I tried a better regex first, and it
+failed too.** The second attempt attributed each parse site to the route registration whose SPAN contains
+it, rather than guessing a 40-line window. It reported 13 authenticated and 24 not — and it was wrong
+again: four separate sites all resolved to the same `handback` path, and `/v1/agent-sessions/:id/cookies/set`
+came back as ungated when its preHandler is `controlKeyOrAccountAuth('write')`, a custom helper my pattern
+had never heard of. Some of those parses also live in shared helpers with no registration above them at all.
+
+**So the gates are genuinely heterogeneous** — `requireAuth`, `controlKeyOrAccountAuth`, per-IP login
+gates, fleet-node JWT — and the anonymous/authenticated split is not derivable by pattern. Two attempts,
+two misclassifications. That is the finding that justifies V-945's refusal, and it is why the remaining
+backlog is being reduced by reading rather than by sweeping.
+
+**Four candidates read individually; three wired, one refused.** `crypto-checkout`,
+`crypto-checkout/quote` and `profiles/:id/clone` each sit behind `app.requireAuth` plus a scope, verified
+at the registration, so the caller is known and echoing back its own unrecognised keys discloses nothing.
+Each now reports next to its parse.
+
+**The fourth is the interesting one.** `POST /v1/sessions/:id/proxy` is behind
+`requireAuth + write:sessions` and looked identical — but its handler signature is `(req): never =>` and
+its own comment says "the route layer is not wired to the egress service yet — this throws
+unconditionally". **A route that never succeeds cannot silently drop a field**, so the reporter would be
+dead code there. Wiring was reverted; the backlog keeps the entry, because when egress lands the route
+will start succeeding and will need it then. No pattern would have found that reason — it is three lines
+of prose and a return type.
+
+**Two smaller things the wiring itself taught.** `profiles.ts` already imports the reporter but not
+`knownRequestKeys`, and its sibling call uses `Object.keys(Schema.shape)`, so the new call matches the
+file's existing form rather than introducing a second idiom. And the clone handler was `async (req) =>`
+with no `reply`, so it needed the parameter added — the kind of edit a bulk sweep would have gotten wrong
+in silence.
+
+**The ceiling did its job on me.** The moment the three routes started reporting, the staleness arm failed
+and named all three, refusing to let the count sit above the real backlog. Lowered 34 → 31 in this commit,
+which is what that arm exists to force.
+
+**Two proofs.** Un-wiring `crypto-checkout` fails the main arm by name — its backlog key is gone, so it is
+now held to the rule. Raising the ceiling back to 34 fails the count arm.
+
+**Remaining: 31 keys.** The largest cluster is `auth.ts` (12 sites — signup, login, verify-email,
+magic-link, password-reset, refresh, logout), which is exactly where the anonymous-surface judgement
+matters most and where a wrong call leaks schema shape to unauthenticated probing.

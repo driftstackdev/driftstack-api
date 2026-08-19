@@ -358,11 +358,21 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
   app.post<{ Params: { id: string } }>(
     '/v1/profiles/:id/clone',
     { preHandler: [app.requireAuth, app.requireScope('write:profiles'), app.rateLimit('global')] },
-    async (req) => {
+    async (req, reply) => {
       const ctx = requireCtx(req);
       const id = uuidFromProfileId(req.params.id);
       const parsed = CloneProfileRequestSchema.safeParse(req.body ?? {});
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      // V-946 — report the keys zod stripped. This route is behind
+      // `app.requireAuth` + a scope, verified at its registration, so the caller
+      // is known and echoing back its own unrecognised keys discloses nothing.
+      reportUnknownRequestFields({
+        body: req.body ?? {},
+        knownKeys: Object.keys(CloneProfileRequestSchema.shape),
+        reply,
+        logger: req.log,
+        route: 'POST /v1/profiles/:id/clone',
+      });
 
       const eff = effectiveAccountIdForWrite(req, ctx);
       let accountId = ctx.account.id;

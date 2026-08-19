@@ -38,6 +38,7 @@ import { randomBytes } from 'node:crypto';
 import type { CryptoOrdersService } from '../services/crypto-orders.js';
 import { mapNowpaymentsStatus } from '../services/crypto-orders.js';
 import { BadRequestError, ValidationError } from '../lib/errors.js';
+import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import { readIdempotencyKey } from '../lib/idempotency-key.js';
 import { EFFECTIVE_ACCOUNT_HEADER } from '../lib/effective-account-header.js';
 import type { NowPaymentsApiClient } from '../lib/nowpayments-api.js';
@@ -173,6 +174,16 @@ export function registerCryptoCheckoutRoutes(
       const ctx = requireCtx(req);
       const parsed = CreateCryptoCheckoutSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      // V-946 — report the keys zod stripped. This route is behind
+      // `app.requireAuth` + a scope, verified at its registration, so the caller
+      // is known and echoing back its own unrecognised keys discloses nothing.
+      reportUnknownRequestFields({
+        body: req.body,
+        knownKeys: knownRequestKeys(CreateCryptoCheckoutSchema),
+        reply,
+        logger: req.log,
+        route: 'POST /v1/billing/crypto-checkout',
+      });
 
       // 2026-05-21 — V-666.SEC: server-side authoritative price lookup.
       // The customer-supplied price_cents in parsed.data is IGNORED.

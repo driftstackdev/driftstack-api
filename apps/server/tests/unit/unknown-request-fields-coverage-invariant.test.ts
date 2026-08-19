@@ -100,14 +100,11 @@ const KNOWN_UNREPORTED: ReadonlySet<string> = new Set([
   'auth.ts (ResendVerificationRequestSchema)',
   'auth.ts (SignupRequestSchema)',
   'auth.ts (VerifyEmailRequestSchema)',
-  'billing-crypto-quote.ts (QuoteSchema)',
-  'billing-crypto.ts (CreateCryptoCheckoutSchema)',
   'internal-atlas-priority.ts (eventStatusBodySchema)',
   'internal-atlas-priority.ts (probeSignatureBodySchema)',
   'mac-nodes-register.ts (ControlNodeBodySchema)',
   'mac-nodes-register.ts (RegisterBodySchema)',
   'mac-nodes-register.ts (RegisterNodeBodySchema)',
-  'profiles.ts (CloneProfileRequestSchema)',
   'session-proxy.ts (SessionEgressConfigSchema)',
 ]);
 
@@ -215,7 +212,11 @@ describe('customer-facing writes report the fields they ignored', () => {
   });
 
   it('CRITICAL the unreported backlog only ever shrinks, and holds no stale entry. Pinned rather than floored: 34 is the number the widened pattern exposed, and wiring a route means deleting its key in the same commit. An entry that no longer matches an unreported site is worse than none — it reads like a considered decision while silencing whatever next lands under that key.', () => {
-    expect(KNOWN_UNREPORTED.size, 'backlog entries — may only fall, never rise').toBe(34);
+    // V-946 — 34 to 31: crypto-checkout, its quote, and profile clone were wired
+    // after reading each registration individually. Lowering this is what the
+    // staleness arm forces — it flagged all three by name the moment they started
+    // reporting, so the count cannot drift above the real backlog.
+    expect(KNOWN_UNREPORTED.size, 'backlog entries — may only fall, never rise').toBe(31);
     const live = new Set(
       sites
         .filter((s) => !isExempt(s.file) && !s.reports && !EXEMPT_SCHEMA_NAMES.includes(s.schema))
