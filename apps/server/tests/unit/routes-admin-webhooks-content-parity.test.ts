@@ -5,7 +5,7 @@
 // D-025 contract (silent admin actions) or breaks the V-512 endpoint-
 // id prefix strip (admin GUI DLQ drill-down filter stops working).
 //
-//   • Framing pinned: 4 routes (get/replay/requeue/DLQ list); admin
+//   • Framing pinned: 5 routes (get/replay/requeue/DLQ list/discard); admin
 //     scope; D-025 audit-write-before-response.
 //   • PUBLIC_ID_RE shared helper + uuidFromPrefixedId.
 //   • publicDelivery: id=wdl_ + webhook_id=whk_ + event_id +
@@ -21,7 +21,7 @@
 //   • V-512 endpoint_id prefix strip: `webhook_endpoint_` removed
 //     before passing to repo.
 //   • Scope-gate: requireScope('driftstack_internal_admin') +
-//     rateLimit('global') on ALL 4 routes.
+//     rateLimit('global') on ALL 5 routes.
 //   • ListDlqQuerySchema + ListDlqQueryInput from @driftstack/api-types.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -40,7 +40,12 @@ function read(p: string): string {
 describe('W419.A apps/server/src/routes/admin-webhooks.ts content parity', () => {
   const body = read(LIB);
 
-  it('Framing pinned: 4 routes (replay/requeue/get/DLQ); admin scope; D-025 audit-write-before-response contract', () => {
+  it('Framing pinned: 5 routes (get/replay/DLQ list/requeue/discard); admin scope; D-025 audit-write-before-response contract. The count said 4 until V-1021 — the DLQ discard route was never added to it', () => {
+    // V-1021 — derived, so the roster count cannot drift from the file again.
+    const registrations = [
+      ...body.matchAll(/app\.(get|post|put|patch|delete)\s*(?:<[^(]*>)?\s*\(\s*'(\/v1\/[^']*)'/g),
+    ];
+    expect(registrations.length, 'routes registered in admin-webhooks.ts').toBe(5);
     expect(body).toMatch(
       /Admin-only webhook ops routes — replay, requeue, get-by-id, DLQ list\.\s*\n?\s*\/\/\s*All require admin scope\. Each mutating endpoint records an audit row\s*\n?\s*\/\/\s*before returning \(D-025 audit-write-before-response contract\)\./,
     );

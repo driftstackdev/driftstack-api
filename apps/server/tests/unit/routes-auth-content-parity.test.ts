@@ -1,5 +1,5 @@
 // W421.B — drift guard for apps/server/src/routes/auth.ts.
-// V-079 user-facing auth-flow endpoints (10 routes) + V-251 IP-based
+// V-079 user-facing auth-flow endpoints (12 routes) + V-251 IP-based
 // rate-limiting + V-353d MFA challenge + V-353e step-up reauth. Drift
 // here either drops V-251 IP rate-limiting on signup/login/verify-
 // email/password-reset/resend-verification (account-existence leak +
@@ -7,10 +7,12 @@
 // union response (login silently grants session to MFA-enrolled
 // account).
 //
-//   • V-079 framing pinned: 10 routes (signup + verify-email +
+//   • V-079 framing pinned: 12 routes (signup + verify-email +
 //     resend-verification #187 + login + magic-link
 //     request/consume + password-reset request/confirm + refresh +
-//     logout); all PUBLIC (no requireAuth — these ARE the gate).
+//     logout + the MFA pair); public EXCEPT mfa/step-up, which runs
+//     behind requireAuth because it re-asserts MFA for a session that
+//     is already authenticated.
 //   • V-251 IP rate-limit framing pinned: signup + login +
 //     verify-email + password-reset-request + resend-verification;
 //     per-IP token-bucket; auth-ip: prefix to avoid conflict with
@@ -52,7 +54,7 @@ function read(p: string): string {
 describe('W421.B apps/server/src/routes/auth.ts content parity', () => {
   const body = read(LIB);
 
-  it('V-079 framing pinned: 10 routes; all PUBLIC (no requireAuth — these ARE the gate)', () => {
+  it('V-079 framing pinned: 12 routes, all public EXCEPT mfa/step-up. The header listed ten and called every one of them public; the MFA pair arrived later and step-up runs behind requireAuth, so the blanket claim was wrong about the one route it mattered for. The count is derived below rather than asserted.', () => {
     expect(body).toMatch(/User-facing auth-flow endpoints \(V-079\)\./);
     expect(body).toMatch(/POST \/v1\/auth\/signup\s+— email \+ password/);
     expect(body).toMatch(/POST \/v1\/auth\/verify-email\s+— consume signup-verify token/);
@@ -72,7 +74,34 @@ describe('W421.B apps/server/src/routes/auth.ts content parity', () => {
     );
     expect(body).toMatch(/POST \/v1\/auth\/refresh\s+— rotate web session/);
     expect(body).toMatch(/POST \/v1\/auth\/logout\s+— revoke web session/);
-    expect(body).toMatch(/All endpoints are public \(no requireAuth — these ARE the gate\)\./);
+    expect(body).toMatch(
+      /POST \/v1\/auth\/mfa\/challenge\s+— finish a login that returned an MFA challenge/,
+    );
+    expect(body).toMatch(
+      /POST \/v1\/auth\/mfa\/step-up\s+— re-assert MFA on an already-authenticated session/,
+    );
+    expect(body).toMatch(
+      /Every endpoint here is public \(no requireAuth — these ARE the gate\) EXCEPT\s*\n?\s*\/\/ POST \/v1\/auth\/mfa\/step-up/,
+    );
+    // V-1021 — the retracted sentence claimed the property held for every route.
+    expect(body, 'the blanket all-public claim is back').not.toMatch(
+      /All endpoints are public \(no requireAuth/,
+    );
+
+    // Derived, so the number cannot drift again: count the registrations rather
+    // than trusting the title. step-up is the only one behind requireAuth.
+    const registrations = [
+      ...body.matchAll(/app\.(get|post|put|patch|delete)\s*(?:<[^(]*>)?\s*\(\s*'(\/v1\/[^']*)'/g),
+    ];
+    expect(registrations.length, 'routes registered in auth.ts').toBe(12);
+    const authed = registrations.filter((m) => {
+      const after = body.slice(m.index, m.index + 400);
+      return /app\.requireAuth/.test(after.slice(0, after.indexOf('async') + 1 || 400));
+    });
+    expect(
+      authed.map((m) => m[2]),
+      'exactly one auth route runs behind requireAuth, and it is the step-up route',
+    ).toEqual(['/v1/auth/mfa/step-up']);
   });
 
   it('V-251 framing pinned: signup/login/verify-email/password-reset-request rate-limited per IP; auth-ip: prefix; AUTH_IP_LIMITS source; founder P1-004 override 2026-05-07', () => {

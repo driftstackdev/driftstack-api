@@ -4,6 +4,8 @@
 //   POST /v1/auth/verify-email           — consume signup-verify token
 //   POST /v1/auth/resend-verification    — resend signup-verify email (#187)
 //   POST /v1/auth/login                  — email + password → web session
+//   POST /v1/auth/mfa/challenge          — finish a login that returned an MFA challenge
+//   POST /v1/auth/mfa/step-up            — re-assert MFA on an already-authenticated session
 //   POST /v1/auth/magic-link/request     — request a magic-link email
 //   POST /v1/auth/magic-link/consume     — consume magic-link → web session
 //   POST /v1/auth/password-reset/request — request a password-reset email
@@ -11,7 +13,10 @@
 //   POST /v1/auth/refresh                — rotate web session
 //   POST /v1/auth/logout                 — revoke web session
 //
-// All endpoints are public (no requireAuth — these ARE the gate).
+// Every endpoint here is public (no requireAuth — these ARE the gate) EXCEPT
+// POST /v1/auth/mfa/step-up, which re-asserts MFA for a session that is already
+// authenticated and so runs behind requireAuth. The blanket wording, and a route
+// list that stopped at ten, both predate the MFA pair.
 //
 // V-251 — IP-based rate limiting wired on signup / login / verify-email
 // / password-reset-request. Per-IP token-bucket via the same

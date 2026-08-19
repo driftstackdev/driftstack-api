@@ -58,7 +58,7 @@ describe('W1044 routes/billing V-082 + V-248 cross-source invariant', () => {
     expect(p).toMatch(/Billing routes \(V-082\)\./);
   });
 
-  it('CRITICAL endpoint roster — 3 routes (checkout-session / portal-session / billing-state); trial-pack retired 2026-05-27. The exhaustive header comment is the canonical contract.', () => {
+  it('CRITICAL endpoint roster — 4 routes (checkout-session / portal-session / the account/me billing-portal alias / billing-state); trial-pack retired 2026-05-27. The exhaustive header comment is the canonical contract.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/billing.ts'));
     expect(p).toMatch(/POST \/v1\/billing\/checkout-session\s+— start a paid-tier subscription/);
     expect(p).toMatch(/POST \/v1\/billing\/portal-session\s+— open Stripe Customer Portal/);

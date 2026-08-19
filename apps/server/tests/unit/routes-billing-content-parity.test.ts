@@ -42,7 +42,18 @@ function read(p: string): string {
 describe('W418.C apps/server/src/routes/billing.ts content parity', () => {
   const body = read(LIB);
 
-  it('V-082 framing pinned: 3 routes (checkout-session + portal-session + state); trial_pack checkout retired 2026-05-27', () => {
+  it('V-082 framing pinned: 4 routes (checkout-session + portal-session + state + the account/me billing-portal alias); trial_pack checkout retired 2026-05-27', () => {
+    // V-1021 — derived from the LIVE registrar only. billing.ts also holds
+    // registerBillingDisabledRoutes, which registers the same four paths for the
+    // Stripe-unconfigured branch, so counting the whole file double-counts.
+    const live = body.slice(
+      body.indexOf('export function registerBillingRoutes'),
+      body.indexOf('export function registerBillingDisabledRoutes'),
+    );
+    const registrations = [
+      ...live.matchAll(/app\.(get|post|put|patch|delete)\s*(?:<[^(]*>)?\s*\(\s*'(\/v1\/[^']*)'/g),
+    ];
+    expect(registrations.length, 'routes registered by registerBillingRoutes').toBe(4);
     expect(body).toMatch(/Billing routes \(V-082\)\./);
     expect(body).toMatch(/POST \/v1\/billing\/checkout-session\s+— start a paid-tier subscription/);
     expect(body).toMatch(/POST \/v1\/billing\/portal-session\s+— open Stripe Customer Portal/);

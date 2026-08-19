@@ -43591,3 +43591,47 @@ giving a fields-claim interface a method → RED on the new mixed-member arm. Co
 
 `it(` counts unchanged (18, 19). No new file, no ratchet change. `apps/server/tests/unit` green:
 1934 files, 20231 passed.
+
+## V-1021 — a route roster that stopped at ten, and the security property it carried
+
+Same method as V-1018/V-1020, applied to route counts: 26 titles state one, and resolving each
+against the registrations in the file it pins found four wrong. One of them carried more than a
+number.
+
+**`routes/auth.ts` — the one that matters.** Its header lists ten routes and ends "All endpoints are
+public (no requireAuth — these ARE the gate)." The file registers twelve. The two it never listed
+are the MFA pair, and `POST /v1/auth/mfa/step-up` is registered with
+`preHandler: [app.requireAuth, loginGate]`. So the blanket sentence was wrong about exactly the route
+where it mattered: step-up re-asserts MFA for a session that is ALREADY authenticated, which is why
+it sits behind requireAuth, and a reader taking the header at its word would have read the whole file
+as the unauthenticated gate. `routes-auth-content-parity` pinned that sentence verbatim and stayed
+green, because the pin asserts the sentence exists, not that it is true.
+
+Header and pin corrected together. The pin now derives the count from the registrations and asserts
+that exactly one route runs behind requireAuth and that it is step-up — so the property is checked
+rather than described, and a second authenticated route appearing in this file fails here.
+
+**Three stale counts, no property attached.** `admin-webhooks` said 4 and registers 5 — the missing
+one is `POST /v1/admin/webhook-dlq/:id/discard`, and the same file's "rateLimit('global') on ALL 4
+routes" was stale in the same way. `billing` said 3 and registers 4 in two separate pins; the unnamed
+fourth is the `GET /v1/account/me/billing-portal` alias.
+
+**Why the billing count needed care.** A naive scan says `routes/billing.ts` registers EIGHT, which
+would have been a wrong finding reported confidently. It holds two registrars — `registerBillingRoutes`
+and `registerBillingDisabledRoutes` — that register the same four paths, and `app.ts` picks one in an
+if/else depending on whether Stripe is configured. The derived assertion counts the live registrar
+only, and says so, because a future reader running the obvious grep will get 8 too.
+
+Mutation: neutralising the discard registration → RED; adding a fifth route to the live billing
+registrar → RED; dropping `requireAuth` from step-up → RED on the property arm. The first attempt at
+the admin-webhooks mutation renamed the path to another `/v1/…` path and did NOT go red — the count
+was still 5. A mutation that does not change what the assertion measures proves nothing, and it looked
+like a weak guard for one run.
+
+Also verified and NOT a defect: V-1020 raised that the AUP promises suspension pauses billing, so I
+traced it. `admin-accounts.suspend` → `pauseCollectionForAccount` → `pauseSubscriptionCollection` →
+Stripe, with the unsuspend inverse, gated in bootstrap only on Stripe being configured at all. The
+promise holds end to end.
+
+`it(` counts unchanged (17, 13, 14, 12). No new file, no ratchet change. `apps/server/tests/unit`
+green: 1934 files, 20231 passed.
