@@ -38265,3 +38265,39 @@ compare the pages to each other AND both to the implementation — because the f
 one page right and one page wrong, which a two-way comparison flags but cannot adjudicate.
 
 No source change. One instrument enumerated, one topic cleared.
+
+## V-889 — pagination: three surfaces, two near-misses of my own, no defect (2026-08-18)
+
+**Second of the seven overlapping topics from V-888.** Pagination is documented on three customer
+pages — `docs/reference/pagination.md`, `marketing/docs/pagination.astro`, and a separate
+`marketing/docs/admin-api-pagination.astro`. All three are accurate. Getting there took two wrong
+turns, and both are the same mistake in different clothes.
+
+**Near-miss one: a disagreement that is a scope difference.** The reference page says "Maximum:
+`100` on most endpoints; a few admin list endpoints (e.g. status subscribers) allow `200`". The
+general marketing page says "integer 1-100 … **Hard cap at 100**". That reads as a flat
+contradiction, and the 200 is real — `admin-status-subscribers.ts` sets `max(200)`. What resolves it
+is that the marketing site documents the admin surface on its OWN page. The general page describes
+the surface a customer can reach, where 100 is the true cap; admin pagination is covered separately.
+Two pages disagreeing is only a defect when they describe the same surface.
+
+**Near-miss two: the right number attributed to the wrong schema.** The admin page says
+`GET /v1/admin/crypto-orders` allows "max 200 on this endpoint". `admin-crypto-orders.ts` contains a
+`max(500)` limit, which looked like the page understating a cap by more than half. It is not that
+route's: the 500 belongs to `SweepBody`, the request body of the sweep-expired endpoint. The list
+route clamps in the handler rather than the schema — `if (n < 1 || n > 200) throw
+BadRequestError('limit must be an integer between 1 and 200.')` — so the page is exactly right.
+
+**Both near-misses came from reading a file rather than a route.** A module can hold several limit
+schemas for several endpoints, and grepping the module for a bound finds whichever appears first,
+not the one that governs. V-880 recorded the same error against a helper function and V-878 against
+a page file; this is its third form, and the tell each time was a number that looked wrong by an
+implausible margin. An implausible discrepancy is usually a mis-attributed measurement, not a
+spectacular bug.
+
+**Two of seven topics cleared** (rate-limits in V-888, pagination here), both by three-way
+comparison against the implementation. Five remain: api-keys, audit-log, cost-monitoring, profiles,
+sessions.
+
+No source change. Three pages verified, two of my own inferences discarded before they became
+claims.
