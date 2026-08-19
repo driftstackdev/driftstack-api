@@ -43,9 +43,17 @@ dedupe effect; guard those calls separately if they need at-most-once behavior.
 
 The header value is a printable-ASCII string, 1–255 characters, with no
 whitespace. The server trims surrounding whitespace, then stores and
-matches the trimmed value exactly; a key that is empty, longer than 255
-characters, or contains whitespace or non-printable characters is
-rejected with a `400`. Recommended format:
+matches the trimmed value exactly. A key longer than 255 characters, or
+one containing whitespace or non-printable characters, is rejected with a
+`400`.
+
+An **empty or whitespace-only** header is treated as **absent**, not
+rejected: the request is processed normally, without idempotency
+protection and without an error. Send a real key or omit the header —
+an empty one silently gives you neither deduplication nor a `400` to
+tell you so. (This paragraph previously said an empty key returns `400`;
+it does not, and on a payment call the difference is the one that
+matters.) Recommended format:
 
 ```
 Idempotency-Key: <UUID-v4 or other globally-unique identifier>

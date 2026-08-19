@@ -133,4 +133,21 @@ describe('Arc 6 docs.idempotency — apps/docs/src/pages/reference/idempotency.m
     const errors = readFileSync(errorsPath, 'utf8');
     expect(errors).toMatch(/\/reference\/idempotency/);
   });
+
+  it('V-887 CRITICAL the empty-key contract matches the implementation, derived rather than pinned. The page said an empty key is rejected with a 400; `readIdempotencyKey` returns `absent` for an empty or whitespace-only value, so the request proceeds with no idempotency and no error. On a payment call that is the difference between a duplicate charge and a clear rejection, and the marketing page at /docs/idempotency-keys had it right all along — two customer docs disagreed and the unpinned one was wrong.', () => {
+    const impl = readFileSync(resolve(REPO_ROOT, 'apps/server/src/lib/idempotency-key.ts'), 'utf8');
+    // Derived: the code's own branch decides what the doc must say.
+    expect(impl, 'empty/whitespace-only is treated as absent').toMatch(
+      /if \(trimmed\.length === 0\) return \{ kind: 'absent' \};/,
+    );
+    expect(body, 'so the page must not promise a 400 for it').not.toMatch(
+      /a key that is empty, longer than 255/,
+    );
+    expect(body, 'and must say what actually happens').toMatch(
+      /An \*\*empty or whitespace-only\*\* header is treated as \*\*absent\*\*, not/,
+    );
+    expect(body, 'including that no error is returned').toMatch(
+      /without idempotency\s*\n?\s*protection and without an error/,
+    );
+  });
 });

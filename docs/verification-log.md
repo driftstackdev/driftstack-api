@@ -38196,3 +38196,41 @@ only the second half.
 statement about revocation timing. What changed is that the answer to publish is "immediate on the
 next request", not "within 30 seconds" — writing that page is a customer-facing commitment and
 belongs to whoever owns the public contract, not to a sweep.
+
+## V-887 — two customer docs disagreed about idempotency, and the wrong one was the API reference
+
+**Instrument, generalised from V-886.** That entry found a source comment asserting what customer
+documentation says, and being wrong about it. Scanned for the class: comments claiming "customers
+are documented", "per the customer docs", and similar. **Three hits, one of them my own V-886
+correction.** The other two both cite `/docs/idempotency-keys`.
+
+**My first conclusion was wrong and the rule caught it.** `apps/docs/src/pages/reference/
+idempotency.md` exists, so I took the cited `/docs/idempotency-keys` for a dead path. It is not —
+`apps/marketing-site/src/pages/docs/idempotency-keys.astro` serves exactly that. The citation is
+correct. What the check actually surfaced is that **two** customer-facing pages document idempotency,
+and they disagree.
+
+**The API reference overstates the contract.** It said "a key that is empty, longer than 255
+characters, or contains whitespace or non-printable characters is rejected with a `400`."
+`readIdempotencyKey` returns `{ kind: 'absent' }` for an empty or whitespace-only value — the
+request is processed normally, with **no idempotency and no error**. The marketing page had it right
+all along: it lists only the >255 and whitespace cases as `400` and never claims empty is rejected.
+
+**Why the direction matters.** A promised `400` is a signal the customer can act on. What actually
+happens is silent: a caller who sends an empty header believes they have deduplication and does not
+have it. `crypto-checkout` is on this path, so the failure mode is a duplicate charge on a retry
+that the customer expected to be safe. Understating a rejection would be conservative; this
+overstates protection.
+
+**The pin existed and did not cover this paragraph** — `docs-idempotency-content-parity` passed
+before and after the correction, which is exactly how the sentence drifted while the file looked
+guarded. My own note that the doc was unpinned was wrong too: I had grepped for the sentence rather
+than the file, the same mistake in miniature as the one this entry is about.
+
+**Fixed with a DERIVED arm rather than another text pin.** It reads the implementation's
+empty-value branch and requires the page to describe that branch, so the two cannot drift apart
+again. Mutation-proved three ways, including the one that matters: changing the CODE to reject empty
+with a 400 also fails the arm, because then the page would be wrong in the other direction.
+
+**Left for a decision:** whether an empty `Idempotency-Key` should 400 rather than be ignored. The
+docs now describe what happens; making it _safe_ is an API behaviour change on a live payment path.
