@@ -38367,3 +38367,37 @@ rather than their content. Recording it as unverified instead of inferring from 
 six of seven topics cleared, profiles outstanding.
 
 No source change.
+
+## V-892 — profiles clears; all seven overlapping topics done, one defect in total (2026-08-18)
+
+**Profiles, properly measured this time.** V-891 recorded it unverified because the comparison used
+a token regex that measured formatting rather than content. Reading what each page actually claims
+gives a real check: the reference page carries a **Tier caps** table and the marketing page a
+**Limits** table, both per-tier and both numeric.
+
+**Three-way, exact.** `PROFILES_PER_TIER` in `packages/api-types/src/common.ts` gives free 1,
+solo_manual 10, team_manual 50, agency_manual 200, api_starter 25, api_builder 100, api_scale 500,
+enterprise custom. Both pages carry all eight values and all eight match. The marketing page names
+the constant it is derived from ("per `PROFILES_PER_TIER`"), which is why it held: a table that
+cites its source is a table someone can check.
+
+The two pages differ in tier LABELS — the reference uses the enum names, the marketing page uses
+display names (Personal, Team, Agency). Not a defect: the numeric contract is identical and display
+naming is a product choice, not a claim about behaviour.
+
+**The instrument is complete. Seven topics, one defect.** rate-limits (V-888), pagination (V-889),
+api-keys (V-890), sessions / audit-log / cost-monitoring (V-891) and profiles here — all verified
+against the implementation, not merely against each other. The only disagreement across the whole
+overlap was V-887's idempotency empty-key contract.
+
+**So the V-887 defect was isolated, and that is the finding.** After discovering it I expected a
+pattern — two doc surfaces maintained separately, seven shared topics, drift looked likely. It was
+not there. Recording a negative of this size matters because the alternative is an open suspicion
+that costs someone the same seven checks later, and because I would have guessed wrong: three of
+these topics I flagged as probable defects mid-check (a hard-cap "contradiction", a 500-vs-200
+limit, a 10-cent rate with no constant) and all three dissolved on closer reading.
+
+Where the two surfaces are maintained separately they are, on this evidence, maintained well. The
+one failure was a page that had no counterpart keeping it honest.
+
+No source change.
