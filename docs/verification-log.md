@@ -44015,3 +44015,36 @@ For the owner queue: the unknown-field decision covers THREE anonymous routes, n
 
 `it(` count 4 → 5. No new file, no ratchet change. `apps/server/tests/unit` green: 1935 files,
 20240 passed.
+
+## V-1032 — one-directional roster loops, and why only one of nineteen was worth changing
+
+V-1031's defect was an arm asserting the length of its own hardcoded list. The sibling shape is a
+roster LOOP: `for (const x of ROSTER) expect(sourceBlob).toMatch(x)`, which asks whether every roster
+value is present in source and never whether source has grown. Measured across the cross-source
+invariants: 28 such loops, 19 with no exact-set assertion anywhere in the file.
+
+**One-directional is not the same as unguarded, and the measurement says so.** Adding a sixth value
+to the `session_status` pgEnum leaves its own guard green at 10/10 — and reds five arms across four
+other files: both migration guards, the sessions doc-parity lifecycle table, and the type-checker,
+which fails because server code no longer handles every DB status. The realistic drift is caught. So
+hardening all nineteen would be ceremony, and ceremony that risks false reds on rosters that are
+deliberately a subset.
+
+What is worth fixing is the one case where the file whose SUBJECT this is cannot answer its own
+question. `session-status-cross-source-invariant` now asserts the pgEnum holds exactly the five
+roster values in order, so a status added to the database without the matching api-types enum — which
+would ship a value the SDKs cannot represent — fails here rather than only in the type-checker three
+files away. Proof: the sixth-value mutation reds the new assertion and passes 10/10 under the previous
+version.
+
+The other eighteen are recorded rather than changed. Their aggregate coverage was measured, not
+assumed, and that is the difference between leaving them alone and not having looked.
+
+**The type-checker caught my own edit.** `body` is `m![1]`, so it is `string | undefined`, and
+`body.matchAll(...)` does not compile under strict mode — but vitest transpiles tests without
+checking, so the arm passed 10/10 while the tree was 1 red in
+`the-server-source-type-checks`. That guard exists for exactly this, and it found my change within a
+minute of my writing it. Narrowed and re-verified.
+
+`it(` count unchanged (10). No new file, no ratchet change. `apps/server/tests/unit` green: 1935
+files, 20240 passed.

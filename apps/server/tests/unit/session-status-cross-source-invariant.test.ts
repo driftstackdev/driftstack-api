@@ -63,6 +63,18 @@ describe('W854 SessionStatus cross-source invariant', () => {
     for (const s of SESSION_STATUSES) {
       expect(body, `pgEnum must include '${s}'`).toMatch(new RegExp(`'${s}'`));
     }
+
+    // V-1032 — the loop above only asks whether each ROSTER value is present, so a
+    // pgEnum that GAINS a value passes it while api-types stays at five. Real drift
+    // is caught in aggregate (the migration guards, the docs lifecycle table and the
+    // type-checker all fail on a new DB status), but not by the file whose subject
+    // this is. Asserting the exact set makes this guard answer its own question.
+    const declared = [...(body ?? '').matchAll(/'([^']+)'/g)].map((x) => x[1] as string);
+    expect(
+      declared,
+      'the session_status pgEnum no longer holds exactly the five roster values in order — a value ' +
+        'added here without the matching api-types enum ships a status the SDK cannot represent',
+    ).toEqual([...SESSION_STATUSES]);
   });
 
   // ─── Go SDK closed-enum consts ───────────────────────────────
