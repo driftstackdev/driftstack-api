@@ -30,6 +30,16 @@
 //
 // Measured before writing: neutralising either account predicate leaves the whole
 // recipes and profile-snapshot test surface green.
+//
+// V-999 CORRECTION — that sentence is right for recipes and WRONG for profile
+// snapshots. Re-measured by mutation against the EXISTING suite rather than by
+// grepping for pins: unscoping `deleteById` leaves 120 tests over 8 recipes files
+// green, but unscoping the snapshot delete REDS
+// `db-profile-snapshots-repo-content-parity`, which freezes that method's entire
+// body including the WHERE. So the snapshot arm here is defence-in-depth, not a
+// closed hole. It still earns its place — a regex over source is broken by any
+// reformat of the expression it pins, and prettier reflows these files constantly —
+// but the gap it closes is narrower than this header first claimed.
 
 import { randomUUID } from 'node:crypto';
 import postgres from 'postgres';

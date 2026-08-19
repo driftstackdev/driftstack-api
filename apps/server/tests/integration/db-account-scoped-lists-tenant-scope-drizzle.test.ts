@@ -23,6 +23,14 @@
 // does the equivalent. `auth-flows.test.ts` imports the double. So the RULE is proven
 // against a re-implementation of itself and the shipped SQL never runs.
 //
+// V-999 CORRECTION — for the web-session arm that understates what existed.
+// `db-auth-flows-repo-content-parity` pins that method's full WHERE, so unscoping it
+// REDS an existing test; this arm is defence-in-depth against a reformat the regex
+// cannot survive, not a closed hole. `listTrashed` IS unheld: unscoped, 290 tests
+// over 15 profiles files stay green, because the only pin on it freezes the
+// signature plus a file-level `toContain('isNotNull(profiles.deletedAt)')` that any
+// other method in the file satisfies.
+//
 // The sibling predicates in the same WHERE are pinned alongside the account one,
 // because a boundary test that only proves tenancy leaves them free to drift:
 // `isNull(revokedAt)` and `expiresAt > now` decide whether a revoked or expired
@@ -101,7 +109,7 @@ async function seedPair(sql: ReturnType<typeof postgres>, tag: string): Promise<
 describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
   'account-scoped list predicates (real Postgres)',
   () => {
-    it("CRITICAL listActiveWebSessionsForAccount returns only the asking account's live sign-ins. The route maps these straight to the response with no filter of its own, so this predicate is the only thing between one customer and every customer's device, IP and last-used time. Today the rule is proven only against the in-memory double the integration tests wire.", async () => {
+    it("CRITICAL listActiveWebSessionsForAccount returns only the asking account's live sign-ins. The route maps these straight to the response with no filter of its own, so this predicate is the only thing between one customer and every customer's device, IP and last-used time. Held today by a content-parity regex over the source and by the in-memory double; this is the executable proof neither of those is.", async () => {
       if (unusable('web sessions')) return;
       const sql = client as ReturnType<typeof postgres>;
       const db = drizzle(sql) as unknown as ReturnType<typeof drizzle<typeof schema>>;

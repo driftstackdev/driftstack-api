@@ -42601,3 +42601,45 @@ without checking which one it is would produce a test for code nothing calls —
 failure — the exact hazard the standing rule names. The `it(` count check passed (2, matching HEAD)
 because the count was never wrong; the file simply stopped parsing. The count check catches a stray
 `);`, not every way a file can fail to collect, so the run itself is the check that matters.
+
+## V-999 — three of my seven tenant-scope arms closed a hole that was already held (2026-08-19)
+
+V-994 to V-997 added seven executable tenant-scope arms, each introduced as covering a predicate
+"nothing held". **Re-measured by mutation against the EXISTING suite — the check my own notes
+prescribe and I skipped — that is true of four of them and false of three.**
+
+| repo method                       | unscoped ⇒ existing suite                           | verdict          |
+| --------------------------------- | --------------------------------------------------- | ---------------- |
+| `mfa.deleteForAccount`            | 73 unit + 67 real-PG green                          | genuinely unheld |
+| `recipes.deleteById`              | 120 tests over 8 files green                        | genuinely unheld |
+| `profiles.purgeTrashed`           | 290 tests over 15 files green                       | genuinely unheld |
+| `profiles.listTrashed`            | 290 tests over 15 files green                       | genuinely unheld |
+| `profileSnapshots.delete`         | **REDS** `db-profile-snapshots-repo-content-parity` | already held     |
+| `rateLimitOverrides.clear`        | **REDS** two rate-limit-override pins               | already held     |
+| `listActiveWebSessionsForAccount` | **REDS** `db-auth-flows-repo-content-parity`        | already held     |
+
+The three "already held" cases are pinned by content-parity regexes that freeze the whole method body
+including its WHERE. Those arms still earn their place — a regex over source is broken by any
+reformat of the expression it pins, and prettier reflows these files constantly, so an executable
+proof is strictly stronger — but each is defence-in-depth, not a closed hole, and the headers said
+otherwise. Corrected in all three files and in the one arm title that repeated it.
+
+**Two instrument failures produced this, and the second is the instructive one.**
+
+First, I audited by GREP: searching the unit tests for each predicate's text. It reported zero pins
+for `rateLimitOverrides.clear`. Both pins that hold it express the predicate as an escaped regex the
+search did not match, so a text search over text pins is exactly the wrong tool — the thing being
+searched for is itself a pattern.
+
+Second, and worse: **when I mutation-proved each new arm, I ran only my own file.** Seeing it red is
+evidence the new test works; it is not evidence anything was missing. My notes already carry this
+rule verbatim — "run the EXISTING suite against your mutation before committing a new guard … it
+converts 'I think this is novel' into a measured fact" — recorded on 2026-08-15 after the same
+mistake. One command, seconds, and it would have caught all three before they were written up.
+
+The four genuine gaps are the ones worth remembering: `deleteForAccount` (a mass MFA wipe),
+`deleteById`, `purgeTrashed` and `listTrashed`. The MFA one remains the sharpest finding of the arc —
+its content-parity arm pinned the delete CALLS and matched a delete with no WHERE at all, so no text
+layer existed to catch it either.
+
+`it(` counts unchanged (2, 2, 2). `npm run typecheck` exit 0. No ratchet change — no file added.

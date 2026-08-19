@@ -32,6 +32,14 @@
 //   • `rate_limit_overrides` has two real-Postgres files — `…-upsert-drizzle` and
 //     `…-repo-keyset-drizzle` — and neither calls `.clear(`.
 //
+// V-999 CORRECTION — "neither calls it" is true and "nothing held it" is not.
+// Unscoping `clear` REDS two existing text pins,
+// `db-rate-limit-overrides-repo-content-parity` and its `-v016-cross-source-invariant`
+// sibling. `purgeTrashed` is the genuinely unheld one: unscoped, 290 tests over 15
+// profiles files stay green. Measured by mutation against the existing suite, which
+// is the check that separates the two — a grep for pins missed both of these because
+// they express the predicate in an escaped regex the search did not match.
+//
 // The `isNotNull(deletedAt)` half of purgeTrashed is pinned here too: it is what keeps
 // a purge from reaching a LIVE profile, and it sits in the same WHERE.
 
