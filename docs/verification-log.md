@@ -45030,3 +45030,49 @@ for. `dist` is gitignored, so nothing enters the commit.
 
 Suite before the fix: 2 files failed, 3 tests, of 3103 files / 30655 tests. Both
 resolved; no assertion was weakened to get there.
+
+## V-1059 — "still alive" is spelled two ways across the session queries
+
+Generalising V-1056 rather than waiting for the next instance: swept for cases where
+one rule is built by hand in several layers and the copies could disagree. Comparing
+every literal string set in server, gui-client, dashboard and webhook-delivery source
+against the canonical enums, two domains came back with more than one distinct subset.
+
+`ApiKeyScope` was a false positive on inspection — the two subsets are different
+predicates, not two copies of one.
+
+`SessionStatus` was not. The enum has five values, and two spellings of "not finished"
+exist over it:
+
+    inArray(sessions.status, ACTIVE_SESSION_STATUSES)      — named, sessions-repo
+    notInArray(sessions.status, ['destroyed', 'errored'])  — inlined, four times
+
+They agree today: creating/ready/busy against destroyed/errored, an exact partition.
+The asymmetry is the risk. Adding a NON-terminal status is one edit, the named
+constant. Adding a TERMINAL one is four, across `db/sessions-repo.ts` (three) and
+`db/agent-sessions-repo.ts` (one), and any site left behind keeps returning that
+session to a customer as live — from a list endpoint, a concurrency count, or the
+agent-session lookup. The query still runs and still returns rows, so a missed site
+looks like nothing.
+
+The guard derives the terminal set as the enum minus the named active constant, rather
+than restating it, and requires every inlined predicate to equal it. That ties the two
+spellings together through the schema so the guard cannot drift with either side.
+
+A fifth site — `notInArray(status, ['busy', 'destroyed', 'errored'])` — is NOT the
+non-terminal test: it additionally refuses a busy session so a second claimant cannot
+take one mid-use. Listed with that reason rather than tolerated by a scan that accepts
+supersets, because a scan that quietly accepted supersets would also accept a site
+that had drifted.
+
+Prior art checked first, and it changed the design. `session-status-cross-source-
+invariant` already pins the 5-value enum by regex, so a sixth status cannot land
+silently — which is why this file guards the call sites rather than the enum. The two
+together answer different questions: that one asks whether the roster changed, this
+one asks whether everything that reads it was updated.
+
+Mutations, all against real source: shortening one of the four inlined sets fails the
+agreement arm; adding a terminal status to the active constant fails two arms; removing
+one fails two. Restored byte-identical.
+
+`it(` count 3 in a new file. Ratchets 2937→2938 and 3103→3104.
