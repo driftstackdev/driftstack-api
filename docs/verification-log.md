@@ -40883,3 +40883,41 @@ real class happens to be correct: loosening the matcher back to a word scan fail
 edit was a no-op and the guard's "3 passed" meant nothing. Re-run against the real `class Account`, it fails
 by name. A mutation that silently fails to apply reads exactly like a guard that does not fire — this arc
 has now hit that twice, and both times it was the assertion in the mutation script that caught it.
+
+## V-954 — a staleness rule I nearly extended would have opened this session red three times
+
+**The question was fair.** V-951 was bitten by `@driftstack/api-types` resolving to `dist/index.js`: a
+source edit to `packages/api-types/src/auth.ts` never reached the assertion reading the built package, so a
+mutation proof came back clean when it should have failed. 274 test files import that package.
+`dist-reading-suites-have-fresh-artifacts` compares `src` mtime to `dist` mtime — but only for
+`apps/<name>/dist` with an `index.html`. Packages are not covered. The obvious move was to extend it.
+
+**The obvious move was wrong, and measuring said so before I wrote it.** Three packages currently have a
+`src` mtime newer than their `dist` — `api-types`, `behavioural-simulation`, `recipe-library` — and **all
+three are false alarms**:
+
+- A fresh `tsc` build of `api-types` into a scratch directory is byte-identical to the committed `dist`
+  across all 24 emitted files. Its newest `src` mtime is 05:52 — **my own `cp`**, restoring a V-951
+  mutation to its original bytes. `dist` was built 02:22, eleven minutes _after_ the last real source
+  commit to that package.
+- `behavioural-simulation` and `recipe-library` are the same shape: last real source commits on 07-31 and
+  07-03, `dist` built after each, and an 08-19 01:19–01:22 `src` mtime from a checkout or touch.
+
+An mtime rule over packages would have gone red three times today with nothing wrong — one of those reds
+caused by the very mutation discipline these batches run on, which restores files by copy.
+
+**And the layer is already protected by something better than mtime.** `pretest` runs
+`npm run build --workspaces` before `vitest run`, so the canonical `npm test` path cannot read a stale
+package at all. That is a real invariant rather than a heuristic, so it is now **pinned**: if `pretest`
+stops building the workspaces, or disappears, the scope decision stops being safe and the guard fails
+saying so instead of silently continuing to skip packages. Both mutations caught — neutering the build step,
+and deleting `pretest` outright.
+
+**What remains, stated rather than papered over.** The direct `npx vitest run` path skips `pretest`, and
+that is the path these batches use. The mitigation that works there is not an mtime check; it is asserting
+against source text when the claim is about source, which is what V-951 did once it knew. That is recorded
+in the guard's scope note so the next person does not re-derive this investigation or extend the rule into
+the false-red shape.
+
+**No code defect found.** Recorded as a refusal with its evidence, on the V-939 and V-943 precedent — the
+measurement is the deliverable, and the only change is that the scope decision now carries a check.

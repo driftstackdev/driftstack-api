@@ -23,6 +23,33 @@
 // Whole-app `src` granularity is deliberate and matches the precedent: a
 // changed shared Layout restales every page while no page source moved, which
 // is precisely the false-green case worth catching.
+//
+// V-954 — `packages/*/dist` is OUT of scope, measured rather than assumed, and the
+// reason is asserted below rather than left as prose.
+//
+// The question is a fair one: `@driftstack/api-types` resolves to `dist/index.js`,
+// 274 test files import it, and V-951 was bitten by exactly that — a source edit to
+// `packages/api-types/src/auth.ts` did not reach the assertion reading the built
+// package, so a mutation proof came back clean when it should have failed.
+//
+// Two measurements say an mtime rule is the wrong instrument here. First, all three
+// packages whose `src` mtime currently exceeds their `dist` mtime are false alarms:
+// a fresh `tsc` build of `api-types` into a scratch directory is byte-identical to
+// the committed `dist` across all 24 emitted files, and the newest `src` mtime is a
+// `cp` that restored a mutation to its original bytes. `behavioural-simulation` and
+// `recipe-library` are the same shape — a checkout or touch, with `dist` built after
+// the last real source commit. An mtime guard over packages would have opened this
+// session red, three times, with nothing wrong.
+//
+// Second, the thing that actually protects the package layer is `pretest`, which
+// runs `npm run build --workspaces` before `vitest run` — so the canonical `npm test`
+// path cannot read a stale package at all. That is a real invariant, so it is pinned
+// below: if `pretest` stops building the workspaces, this scope decision stops being
+// safe and the guard says so instead of silently continuing to skip packages.
+//
+// What remains is the direct `npx vitest run` path, which skips `pretest` — and the
+// mitigation that works there is not an mtime check. It is asserting against source
+// text when the claim is about source, which is what V-951 did once it knew.
 
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -156,6 +183,19 @@ describe('every suite that executes a built page has a fresh artifact to execute
     expect(classify({ builtMs: 10, sourceMs: 5 }), 'built after the source changed').toBe('fresh');
     expect(classify({ builtMs: 10, sourceMs: 10 }), 'built in the same instant').toBe('fresh');
     expect(classify({ builtMs: 1, sourceMs: null }), 'no src to compare against').toBe('fresh');
+  });
+
+  it('CRITICAL the reason packages/*/dist is out of scope still holds: pretest builds every workspace before vitest runs, so the canonical npm test path cannot read a stale package. 274 test files import @driftstack/api-types from its dist, and V-951 was bitten by a source edit that did not reach the built package — so this scope decision is only safe while that build step exists. If it goes, packages need covering here and this fails rather than quietly continuing to skip them.', () => {
+    const scripts = JSON.parse(readFileSync(resolve(REPO_ROOT, 'package.json'), 'utf8')) as {
+      scripts?: Record<string, string>;
+    };
+    const pretest = scripts.scripts?.['pretest'];
+    expect(pretest, 'the repo still has a pretest step').toBeDefined();
+    expect(
+      pretest ?? '',
+      'pretest no longer builds the workspaces, so `npm test` can now read a stale packages/*/dist — ' +
+        'either restore the build or extend this guard to cover packages',
+    ).toContain('npm run build --workspaces');
   });
 
   it('CRITICAL every app with page-executing suites has a built artifact. Without one those suites do not fail with a reason — they emit a wall of raw ENOENTs naming a missing file rather than a missing build.', () => {
