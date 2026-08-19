@@ -37544,3 +37544,49 @@ plugin and that arm fails before the docs arm does, and "deferred" becomes sayab
 Mutation-proved three ways — restoring DEFERRED in each document independently (proving one clean
 document cannot mask the other) and downgrading the plugin to prove the liveness arm fails first.
 All three sources restored byte-identical.
+
+## V-869 — four documents, four answers about what production runs on (2026-08-18)
+
+**Continuing the readiness-document sweep into the checklist's 35 open rows.** Most are genuinely
+operational and not mine — certs, live Stripe keys, DNS. Three assert infrastructure state, and
+they contradict the repo.
+
+| Source                              | Machine class                      | Region             |
+| ----------------------------------- | ---------------------------------- | ------------------ |
+| ADR-001 (the decision)              | two CCX13                          | Falkenstein        |
+| the action queue                    | two CCX23                          | Falkenstein FSN1   |
+| pre-launch-checklist                | CCX13 staging + CCX23 prod         | Falkenstein        |
+| `docs/progress/v278-final-state.md` | **CPX32** prod + **CPX22** staging | **Nuremberg NBG1** |
+
+The last of those is the one that carries weight: its heading reads "Sub-processor map (live;
+matches DPA Annex 3)". CPX is shared-vCPU, CCX is dedicated — a different machine class, not a
+typo, and a different region. **Nothing recorded the supersession.** That is the same shape my own
+notes record for ADR-002/003.
+
+**The checklist rows are contradicted by the repo's own tooling.** It lists Hetzner provisioning,
+the Neon databases and the Upstash Redis as PENDING, while `infra/bootstrap/deploy-api.sh` targets
+both hosts by address, `scripts/deploy-status.sh` reads the running SHA and activation flags off
+each, and `scripts/v278l-upstash-split-cutover.sh` SSH-swaps `REDIS_URL` on production. That last
+one cannot be written against a database that does not exist.
+
+**Marked CONTRADICTED, not DONE.** I cannot reach the network and would not under the standing
+hold, so asserting the VMs are up would be exactly the over-claim this sweep keeps catching in the
+report. The rows now name the conflicting evidence and leave the operational confirmation open.
+ADR-001 gains a note saying what shipped is not what it specified; its decision text is untouched
+and still pinned, because an ADR records what was decided and that record is correct.
+
+**The legal surface was checked and is FINE.** DPA Annex 3 and privacy-policy §7 both state Hetzner
+as "Germany" — true of Nuremberg and Falkenstein alike — so no customer-facing document is wrong.
+Region granularity is precisely where this drift stayed harmless, and reporting a legal defect here
+would have been manufactured. Recording the null so nobody re-opens it.
+
+**One consequence recorded, not acted on.** `cost-defaults` derives its compute rate from "Hetzner
+CCX13 averaged across the fleet", pinned in `cost-defaults-v541f-cross-source-invariant`. If the
+fleet is CPX32/CPX22 that basis is the wrong machine class. Left alone deliberately: a cost constant
+should move on a measurement, not on an inference drawn from this note, and the direction of the
+error is unknown without pricing both.
+
+**Mutation proof of a different kind.** The risk here was that inserting a long note ABOVE pinned
+text would break the pins or, worse, leave them matching my note instead of the decision. Mutating
+the pinned decision sentence itself still fails the pin, so it binds the decision and not the
+preamble.

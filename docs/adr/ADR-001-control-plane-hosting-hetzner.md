@@ -52,6 +52,35 @@ Constraints that shaped the rethink:
 
 ## Decision
 
+> **⚠ V-869 — what shipped is not what this decision specified.**
+>
+> The decision below stands as the record of what was decided. It is not what
+> runs. `docs/progress/v278-final-state.md` carries the sub-processor map marked
+> live and matching DPA Annex 3, and it records **Hetzner Nuremberg (NBG1),
+> production CPX32 + staging CPX22** — a different region and a different machine
+> class (CPX is shared-vCPU; CCX is dedicated). Four documents give four answers
+> between them, and nothing recorded the supersession.
+>
+> Two consequences worth naming rather than leaving to be rediscovered:
+>
+> - The launch checklist still lists Hetzner provisioning, the Neon databases and
+>   the Upstash Redis as PENDING. The repo ships `infra/bootstrap/deploy-api.sh`
+>   targeting both hosts by address, `scripts/deploy-status.sh` reading the
+>   running SHA off each, and a cutover script that SSH-swaps `REDIS_URL` on
+>   production. Those rows describe work the tooling assumes is finished.
+> - `cost-defaults` derives its compute rate from "Hetzner CCX13 averaged across
+>   the fleet". If the fleet is CPX32/CPX22, that basis is a different machine
+>   class. Recorded here; not changed, because a cost constant should move on a
+>   measurement rather than on an inference from this note.
+>
+> The legal surface is unaffected and was checked: DPA Annex 3 and privacy-policy
+> §7 both state Hetzner as "Germany", which is true of Nuremberg and Falkenstein
+> alike, so no customer-facing document is wrong. Region granularity is exactly
+> where this drift stayed harmless.
+>
+> Resolving which machine class and region are authoritative is an operational
+> confirmation, not a documentation edit, so it is left open here.
+
 **Host the Driftstack control plane on Hetzner Cloud, two CCX13 VMs
 (staging + production), Falkenstein region.** Cloudflare Tunnel fronts
 the VMs for edge HTTPS termination and DDoS protection; the VMs run
