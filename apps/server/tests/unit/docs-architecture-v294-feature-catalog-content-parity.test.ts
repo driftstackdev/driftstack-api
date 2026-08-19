@@ -263,9 +263,18 @@ describe('W561 /docs/architecture/v294-feature-catalog.md content parity', () =>
       /### Surface 8 — SDKs \(`packages\/sdk-typescript`, `packages\/sdk-python`, `packages\/sdk-go`\)/,
     );
     expect(body).toMatch(/\| TypeScript SDK published \(npm\)\s+\| SHIPPED/);
-    expect(body).toMatch(/\| Python SDK alpha \+ first PyPI tag\s+\| DEFERRED \| V-335/);
-    expect(body).toMatch(/\| Go SDK alpha \+ first git tag\s+\| DEFERRED \| V-336/);
-    expect(body).toMatch(/\| Webhook signature verifier \(Go\)\s+\| DEFERRED \| V-337/);
+    expect(body).toMatch(/\| Python SDK alpha \+ first PyPI tag\s+\| DEFERRED\s+\| V-335/);
+    expect(body).toMatch(/\| Go SDK alpha \+ first git tag\s+\| DEFERRED\s+\| V-336/);
+    // V-875 — the Go verifier shipped: packages/sdk-go/webhook_signature.go
+    // exports VerifyWebhookSignature with timestamp tolerance and header
+    // parsing, alongside its own test file. Padding-tolerant per V-874, so a
+    // future column reflow cannot break these rows again.
+    expect(body, 'the deferred Go-verifier row is gone').not.toMatch(
+      /\| Webhook signature verifier \(Go\)\s+\| DEFERRED/,
+    );
+    expect(body, 'and reads as shipped').toMatch(
+      /\| Webhook signature verifier \(Go\)\s+\| SHIPPED\s+\| V-337/,
+    );
     expect(body).toMatch(/### Surface 9 — Infrastructure \+ ops \(`apps\/server` \+ `infra\/`\)/);
     expect(body).toMatch(/\| Hetzner deploy automation\s+\| SHIPPED\s+\| V-278/);
     expect(body).toMatch(/\| 5 CF Pages deploy workflows\s+\| SHIPPED\s+\| V-258-V-260 \+ V-295/);

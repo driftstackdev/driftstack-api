@@ -37766,3 +37766,39 @@ rule 5 exists for.
 
 Proved three ways: a real status change still fails, a real content change in the same row still
 fails, and pure re-padding now passes — which is the whole point of the change.
+
+## V-875 — second catalog pass: one row stale in four, and the rest genuinely open (2026-08-18)
+
+**Continuing V-873's remaining 52 rows.** The hit rate dropped sharply, which is the useful result:
+the catalog is not uniformly rotten, and knowing that is worth as much as the correction.
+
+**Checked and CORRECT — left alone:**
+
+- **GDPR DSAR support endpoint** (DEFERRED) — no DSAR or account-export route exists.
+- **`/billing invoice history + PDF download`** (DEFERRED) — `billing.ts` has no invoice route. The
+  crypto rail ships receipts in json/txt/pdf, which is a different surface and would have been an
+  easy false positive.
+- **SOCKS5 proxy support** (IN-FLIGHT) — accurate, and the module says so itself: its header lists
+  OpenVPN and WireGuard backends and a real SOCKS5 handshake probe (rather than the raw TCP connect
+  it does today) as out of scope. IN-FLIGHT is exactly right.
+
+**Corrected:** **Webhook signature verifier (Go)**. `packages/sdk-go/webhook_signature.go` exports
+`VerifyWebhookSignature` with timestamp tolerance and header parsing, with its own test file
+beside it.
+
+**Two rows deliberately NOT corrected, and the reason matters.** `Idempotency-key support` and
+`Streaming responses` both looked stale — TypeScript and Python carry idempotency (`http.ts`,
+`retry.ts`, `retry.py`) and the TypeScript SDK handles `text/event-stream`. But each row is ONE
+cell covering three SDKs, and coverage is partial: Go did not appear in the idempotency search, and
+SSE handling was only found in TypeScript. Marking either SHIPPED would assert parity that may not
+exist. The table cannot express per-SDK state, so the honest move is to leave the rows and record
+why — this is the same trap as the crypto receipts above, one step subtler.
+
+**V-874's lesson applied forward, not just backward.** The new status cell is written as `SHIPPED `
+— padded to the same width as `DEFERRED` — so the column does not reflow at all. Beyond that, the
+three sibling pins in that table were made padding-tolerant pre-emptively rather than waiting for
+the next reflow to break them. Mutation-proved: re-padding the entire SDK column now passes, where
+the identical change was what broke the suite one commit ago.
+
+**Running total: 11 of 59 non-SHIPPED rows verified** (7 in V-873, 4 here), 8 corrected, 3 confirmed
+accurate. 48 remain. The basis line still reads V-293 and still must, for the same reason as V-873.

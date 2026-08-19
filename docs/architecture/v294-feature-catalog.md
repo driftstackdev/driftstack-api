@@ -419,7 +419,7 @@ Per founder direction "founder-facing trust first; admin tooling second; SDK fea
 | Go SDK alpha + first git tag               | DEFERRED | V-336 | 6       | —             |
 | Webhook signature verifier (TS)            | SHIPPED  | V-NNN | —       | —             |
 | Webhook signature verifier (Python)        | SHIPPED  | V-NNN | —       | —             |
-| Webhook signature verifier (Go)            | DEFERRED | V-337 | 4       | —             |
+| Webhook signature verifier (Go)            | SHIPPED  | V-337 | —       | —             |
 | Streaming responses                        | DEFERRED | V-338 | 8       | —             |
 | Idempotency-key support                    | DEFERRED | V-339 | 4       | —             |
 | Scope-based permission helpers             | DEFERRED | V-340 | 4       | —             |
