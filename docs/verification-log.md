@@ -41783,3 +41783,44 @@ right.
 
 **Each arm keeps a positive case** — an absent clone name still auto-derives and answers 200 — so it refuses
 malformed input rather than the endpoint.
+
+## V-980 — correcting my own characterisation of the 191 plain-`Error` sites
+
+**V-962 and V-978 both described the 191 uncovered `throw new Error(` sites as "the defensive-invariant
+class — `if (!ctx) throw new Error('account context missing after requireAuth')` and its kind, unreachable
+by construction". I wrote that from two examples and never measured it. It covers 125 of the 191.**
+
+Measured breakdown:
+
+| count  | class                                                                              |
+| ------ | ---------------------------------------------------------------------------------- |
+| 119    | auth-context invariant (`if (!ctx) …`) — unreachable by construction, as described |
+| 4      | wiring invariant (a dependency that must be present by the time the line runs)     |
+| 2      | explicitly declared unreachable in their own comment                               |
+| **66** | **something else**                                                                 |
+
+**The 66 are not unreachable by construction; they are reachable under operational failure, and correctly
+fatal when they are.** Four sub-classes, read rather than pattern-matched:
+
+- **19 boot-migration stall guards** in `bootstrap.ts`, one per encrypted-column migration — "rows remain
+  but this batch scanned or converted none". That condition is _operationally reachable_: a wedged
+  migration at boot. Crashing is the intended posture, but it is a live runtime guard, not an impossibility.
+- **~25 crypto and encoding bound checks** across the seven encryption modules — plaintext exceeding its
+  byte bound, ciphertext not canonical base64, a GCM tag of the wrong length, a secret that does not
+  round-trip as UTF-8. Reachable if stored data is corrupt, which is the case they exist for.
+- **~15 repository post-conditions** — "rotation returned no result", "destroySessionSerialized returned
+  destroyed without destroyedAt". Unreachable while the repo honours its contract, which is the same
+  category as the 125 but stated about a collaborator rather than the request.
+- **3 internal bail-outs** in `decodeIncidentCursor`, bare `throw new Error()` with no message, used to jump
+  to a `catch` that answers `BadRequestError('Invalid incident cursor.')`. Those looked alarming — a
+  caller-supplied cursor reaching a message-less Error — and are not: the conversion is deliberate and the
+  customer-visible refusal it produces **is covered**, 1 hit, from `?cursor=not-a-valid-cursor`.
+
+**No defect found, and that is the whole result.** What changes is the accuracy of a figure I have twice
+offered as reassurance: "191 defensive invariants" reads as _nothing here can happen_, and the honest
+version is _125 cannot happen; 66 can, under corruption or a stalled migration, and are meant to be fatal
+when they do_. Anyone sizing the remaining risk from V-962's table should use this split.
+
+**Method note.** The classifier that produced the table is a pattern match, and its "OTHER" bucket is
+exactly where a pattern match stops being evidence — so every one of the 66 was read, and the three that
+looked like a customer-visible 500 were traced to their catch and their coverage before being cleared.
