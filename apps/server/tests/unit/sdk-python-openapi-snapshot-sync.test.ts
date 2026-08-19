@@ -8,11 +8,30 @@
 // W622 content-parity test only string-matches a few pinned properties,
 // and route-coverage checks path↔route, not snapshot↔spec.
 //
-// Scope is STRUCTURAL on purpose (paths, per-path methods, operationIds,
+// V-952 — the structural scope below was deliberate, and both reasons given for it
+// have been measured and do not hold. The arms are kept, because they name the
+// common drift precisely, but a full CONTENT comparison now runs alongside them.
+//
+// What the structural scope missed: everything inside an operation. Changing a
+// published bound in `openapi.ts` from `.max(2048)` to `.max(77)` without
+// re-dumping leaves paths, methods, operationIds, response statuses and schema keys
+// all identical, so every arm below passed — measured, 6 of 6 green on that exact
+// edit. Thirty-one test files read this snapshot, including guards that assert
+// published bounds, declared response headers and request-body property lists. A
+// stale snapshot does not just go unnoticed; it becomes the thing those guards
+// validate against, so they report agreement with a document the server no longer
+// generates.
+//
+// On "immune to prettier formatting": both sides are JSON.parse'd, so formatting was
+// never comparable in the first place.
+// On "example-value churn": there is none. The generator takes no arguments and
+// reads no env, no clock and no randomness, and a full walk of 40 582 comparable
+// nodes to depth 18 finds the snapshot and the live build identical.
+//
+// Scope was STRUCTURAL (paths, per-path methods, operationIds,
 // response-status sets, component-schema keys) — not a byte-for-byte compare.
 // That catches the real drift class (added/removed endpoints, operations,
-// operationIds, documented outcomes, schemas) while staying immune to prettier
-// formatting / example-value churn. If this fails, the fix is almost always:
+// operationIds, documented outcomes, schemas). If this fails, the fix is almost always:
 //   npm run sdk:python:dump-spec && npx prettier --write packages/sdk-python/openapi.json
 // committed in the SAME change as the openapi.ts edit. (A new schema here
 // also implies a pending datamodel-codegen run for models.py — see
@@ -69,9 +88,85 @@ function responseStatusSetsOf(spec: MinimalSpec): Record<string, string[]> {
   return out;
 }
 
+/** How many differing paths to report before stopping — enough to diagnose. */
+const MAX_REPORTED_DIFFS = 25;
+
+interface DeepCompare {
+  readonly diffs: string[];
+  /** Nodes actually compared. A walk that descends nowhere reports no diffs. */
+  readonly visited: number;
+}
+
+/**
+ * Every value at which the two documents disagree, as JSON paths.
+ *
+ * Deliberately NOT `expect(snapshot).toEqual(live)`: on a 40 000-node document that
+ * prints a diff nobody reads, and the failure this guards against is usually one
+ * edited bound or one dropped header. A path list says which.
+ *
+ * There is no depth cap. An earlier throwaway version of this walk capped at 14 and
+ * reported "no differences" — the document reaches depth 18, so four levels were
+ * never compared and the clean result was partly unearned.
+ */
+function deepCompare(snapshot: unknown, live: unknown): DeepCompare {
+  const diffs: string[] = [];
+  let visited = 0;
+
+  const walk = (a: unknown, b: unknown, path: string): void => {
+    if (diffs.length >= MAX_REPORTED_DIFFS) return;
+    visited += 1;
+    if (a === b) return;
+
+    const aObj = a !== null && typeof a === 'object';
+    const bObj = b !== null && typeof b === 'object';
+    if (!aObj || !bObj) {
+      diffs.push(`${path}: snapshot=${JSON.stringify(a)} live=${JSON.stringify(b)}`);
+      return;
+    }
+    if (Array.isArray(a) !== Array.isArray(b)) {
+      diffs.push(`${path}: one side is an array and the other is not`);
+      return;
+    }
+    for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+      if (!(key in a)) {
+        diffs.push(`${path}.${key}: present live, absent from the snapshot — re-dump`);
+        continue;
+      }
+      if (!(key in b)) {
+        diffs.push(`${path}.${key}: present in the snapshot, no longer generated — re-dump`);
+        continue;
+      }
+      walk(
+        (a as Record<string, unknown>)[key],
+        (b as Record<string, unknown>)[key],
+        `${path}.${key}`,
+      );
+    }
+  };
+
+  walk(snapshot, live, '$');
+  return { diffs, visited };
+}
+
 describe('sdk-python openapi.json snapshot ↔ live spec structural sync', () => {
   const live = generateOpenApiSpec() as unknown as MinimalSpec;
   const snapshot = JSON.parse(readFileSync(SNAPSHOT, 'utf8')) as MinimalSpec;
+
+  const compared = deepCompare(snapshot, JSON.parse(JSON.stringify(live)));
+
+  it(`CRITICAL the walk actually descended, so an empty difference list means agreement rather than a comparison that never happened. The arm below reports an ABSENCE — the shape this repo keeps finding green and blind — and an earlier draft of the same walk capped its depth and reported "no differences" over a document four levels deeper than the cap. (${FIX})`, () => {
+    expect(compared.visited, 'nodes compared between snapshot and live spec').toBeGreaterThan(
+      35_000,
+    );
+  });
+
+  it(`CRITICAL the snapshot matches the live spec in CONTENT, not only in shape. Thirty-one test files read this file; a stale one is not merely unnoticed, it is what those guards then validate against. Measured: changing a published bound from .max(2048) to .max(77) in openapi.ts left every structural arm below green. (${FIX})`, () => {
+    expect(
+      compared.diffs,
+      'the committed snapshot and the live spec disagree at these paths. Each is a published fact a ' +
+        'generated client and every spec-reading guard now has wrong',
+    ).toEqual([]);
+  });
 
   it(`info.version matches (${FIX})`, () => {
     expect(snapshot.info.version).toBe(live.info.version);

@@ -40805,3 +40805,43 @@ hazard, pointed at me. Editing `api/versioning.md` left the docs app's built art
 so V-950 as committed was not suite-green; `npm run build --workspace @driftstack/docs` fixes it and the
 output is gitignored, so there is nothing to commit. Recorded rather than quietly corrected: a docs-page edit
 in this repo carries a rebuild with it.
+
+## V-952 — the spec snapshot 31 guards read could drift in every dimension they read
+
+**The snapshot's sync guard compares only set-shaped things:** `info.version`, the path set, the
+method×path set, the operationId set, per-operation response-status sets, and component-schema keys. Nothing
+inside an operation — no properties, no bounds, no headers, no parameters, no descriptions.
+
+**Measured, not argued.** Changing a published bound in `openapi.ts` from `.max(2048)` to `.max(77)` and not
+re-dumping leaves every one of those sets identical: the sync guard reported **6 of 6 passing**. So did
+`a-published-bound-matches-the-route`, which reads the snapshot and therefore could not see the change
+either.
+
+**That is the part that makes it more than a stale file.** Thirty-one test files read
+`packages/sdk-python/openapi.json`, including the guards this arc built for published bounds, declared
+response headers, request-body property lists, page-size caps and 204 contracts. A stale snapshot does not
+merely go unnoticed — it becomes the thing those guards validate against, so they report agreement with a
+document the server no longer generates. Every one of them was resting on a currency check that did not
+cover what they read.
+
+**The narrow scope was deliberate, and both of its stated reasons fail.** The header comment kept it
+structural to stay "immune to prettier formatting / example-value churn". Formatting was never comparable —
+both sides are `JSON.parse`d. And there is no churn to be immune to: `generateOpenApiSpec()` takes no
+arguments and reads no env, no clock and no randomness, and a full walk finds the two identical at
+**40 582 comparable nodes to depth 18**.
+
+**Fixed by adding a content comparison beside the structural arms**, which are kept because they name the
+common drift precisely. Reported as a list of differing JSON paths rather than `toEqual` on the whole
+document: on 40 000 nodes that prints a diff nobody reads, while the real failure is one edited bound or one
+dropped header, and a path says which.
+
+**My own first attempt at the measurement was wrong, and the node count is what caught it.** The throwaway
+diff script capped recursion at depth 14 and reported "no differences". The document reaches depth 18, so
+four levels were never compared and the clean result was partly unearned. Re-run uncapped, it holds — but
+the guard now carries a visited-node floor for exactly that reason, and neutering the walk so it descends
+nowhere fails it at 7 nodes against 35 000.
+
+**Three mutations, all caught with the exact path named.** The bound edit reports
+`$.paths./v1/oauth/token.post.requestBody.content.application/json.schema.properties.redirect_uri.maxLength:
+snapshot=2048 live=77`. Editing the shared `X-Request-Id` description reports it on every response that
+declares it. Neutering the walk fails the floor.
