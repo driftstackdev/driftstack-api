@@ -38471,3 +38471,41 @@ not about whether the code is correct — and four wrong measurements in a row i
 stop and check the premise, which is what finally produced the 46=46 answer.
 
 No source change.
+
+## V-895 — the customer error catalogue matches exactly, and a stripper that eats URLs (2026-08-18)
+
+**Back to product verification.** `docs/reference/errors.md` is the customer's error catalogue and
+`PROBLEM_TYPES` is what the server actually emits. Neither had been compared.
+
+**32 defined, 32 documented, exact in both directions.** Nothing cited that the server cannot emit,
+nothing emitted that the customer cannot look up. That is the same completeness the audit-log
+catalogue showed in V-891, on the surface a customer reaches when something has already gone wrong.
+
+**It took three attempts, and the reason is worth more than the result.** The first two reported
+`PROBLEM_TYPES defined: 0` alongside 32 documented types — which, read carelessly, says every
+documented error type is invented. Two different causes:
+
+1. I read `apps/server/src/lib/errors.ts`, which _imports_ `PROBLEM_TYPES` from
+   `@driftstack/api-types` rather than defining it. Reading the consumer instead of the definition,
+   which is the error V-889 recorded against a route module.
+2. Then, with the right file, my comment-stripper `//[^\n]*` **deleted every value in the object**.
+   The values are URLs — `https://errors.driftstack.dev/bad-request` — and `https://` contains the
+   comment opener, so the stripper ate from `//errors...` to end of line. Fixed with a lookbehind
+   (`(?<!:)//`).
+
+**Checked whether that stripper has bitten anything committed.** Several guards strip line comments
+before parsing — the legal-reason gate, the OAuth allowlist check, the enum-vocabulary invariant and
+others. For each, the source files they parse were checked for `https://` content: none of the
+files being stripped carry URLs, so the pattern has not corrupted a real assertion. The hazard is
+real and confined to ad-hoc analysis scripts, which is where it bit me twice in two turns.
+
+**The measurement-error tally is now the honest headline.** Five artifacts across two turns, all
+self-caught, and the failure mode is consistent: a tool that reports an alarming number, where the
+number turns out to describe the instrument rather than the code. The 0-of-32 reading was the most
+dangerous yet — it looked like a catalogue full of fabricated error types on a customer-facing page.
+
+**Guard deliberately not added.** The pairing is already covered: `error-handler-rfc7807-cross-
+source-invariant` ties the handler to `PROBLEM_TYPES`, and every documented type resolves. Adding a
+third file to assert what two already establish would be volume, not coverage.
+
+No source change.
