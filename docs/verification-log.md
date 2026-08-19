@@ -42435,3 +42435,42 @@ second layer beside the executable one. Restored byte-identical each time; `it(`
 16; `npm run typecheck` exit 0.
 
 `EXPECTED_TEST_FILES` 2923 → 2924 and `_ALL` 3089 → 3090, for the one file added.
+
+## V-995 — two more account-scoped DELETEs proven only against doubles (2026-08-19)
+
+Fifth and sixth of the tenant-scope sweep, from the same list that produced V-994: the 19
+account-scoped `src/db` functions that no integration test executes.
+
+`DrizzleRecipesRepo.deleteById` and `DrizzleProfileSnapshotsRepo.delete` both delete BY ID with
+`where and(eq(id), eq(accountId))`. The account predicate is what stops a caller removing another
+customer's row by naming its id.
+
+**Both rules were already tested — against doubles.** `recipes-inmemory.test.ts` asserts
+"deleteById … is a no-op for cross-account", on `InMemoryRecipesRepo`; `recipes-routes.test.ts` drives
+HTTP DELETE through `buildTestApp`, which wires in-memory repos. No integration file constructs
+`DrizzleProfileSnapshotsRepo` and calls `.delete` at all — the two that touch snapshots on real
+Postgres drive restore and the terminated-account purge. That is precisely the shape
+`db-profiles-repo-tenant-scope` names in its own header: "a double that re-implements the same
+filtering by hand, and never executes a line of the shipped SQL."
+
+Added as one file with an arm each, in the sweep's idiom, each with a positive control (the owner
+deleting their OWN row must return true and remove it) so the boundary arm cannot pass against a
+delete that deletes nothing.
+
+**The mutation proof failed first, and the failure was mine.** Neutralising
+`.where(and(eq(recipes.id, args.id), eq(recipes.accountId, args.accountId)))` with a
+replace-first-occurrence left both arms GREEN. The honest reading of that is "my new test is weak",
+and I nearly recorded it as one. It was not: **that exact WHERE string appears twice in each file** —
+`getById` at recipes-repo:279 and `deleteById` at :287, the same pair at profile-snapshots-repo:127
+and :135 — so the edit neutralised the READ path and left the delete untouched. Re-run against the
+second occurrence, with an assertion that the mutated site really is a `.delete(`, both arms red by
+name.
+
+Asserting that a mutation APPLIED is not enough when the anchor is not unique; the script has to
+assert WHERE it applied. Before believing the test was weak I also flipped one expectation to prove
+the assertions execute at all — they do — which is what separated "my test is vacuous" from "my
+mutation missed".
+
+`npm run typecheck` exit 0. `EXPECTED_TEST_FILES` 2924 → 2925, `_ALL` 3090 → 3091, for the one file
+added. Run against a second disposable database (`driftstack_tenant_v995`) so it could not contend
+with a coverage run in flight on the first.
