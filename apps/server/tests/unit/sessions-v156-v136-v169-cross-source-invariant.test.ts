@@ -138,7 +138,7 @@ describe('W946 V-156 + V-136 + V-169 sessions cross-source invariant', () => {
 
   // ─── SessionRecord 13-field shape ────────────────────────────
 
-  it('CRITICAL SessionRecord has 13 fields — id + accountId + apiKeyId + driverSessionId + status (5-value) + archetype + purpose (V-169 SessionPurpose) + label (nullable) + metadata (nullable Record) + createdAt + updatedAt + lastStateAt (nullable) + destroyedAt (nullable). The 13-field shape carries account-scope ids + state-machine + V-169 purpose + 3 nullable timestamps.', () => {
+  it('CRITICAL SessionRecord has 15 fields, and this arm pins 13 of them — id + accountId + apiKeyId + driverSessionId + status (5-value) + archetype + purpose (V-169 SessionPurpose) + label (nullable) + metadata (nullable Record) + createdAt + updatedAt + lastStateAt (nullable) + destroyedAt (nullable). The 13-field shape carries account-scope ids + state-machine + V-169 purpose + 3 nullable timestamps.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/sessions.ts'));
     expect(p).toMatch(/export interface SessionRecord \{/);
     expect(p).toMatch(/id: string;/);
@@ -234,7 +234,7 @@ describe('W946 V-156 + V-136 + V-169 sessions cross-source invariant', () => {
 
   // ─── NewSessionInput 6-field write shape ─────────────────────
 
-  it('CRITICAL NewSessionInput has 6 fields — accountId + apiKeyId + driverSessionId + archetype + purpose (V-169) + label (nullable) + metadata (nullable Record). The 7-field write shape is what insertSession() consumes.', () => {
+  it('CRITICAL NewSessionInput has 7 fields, and this arm pins 6 of them — accountId + apiKeyId + driverSessionId + archetype + purpose (V-169) + label (nullable) + metadata (nullable Record). The 7-field write shape is what insertSession() consumes.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/sessions.ts'));
     expect(p).toMatch(/export interface NewSessionInput \{/);
     expect(p).toMatch(/accountId: string;/);

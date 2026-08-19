@@ -196,7 +196,7 @@ describe('W919 V-667 OAuth service cross-source invariant', () => {
 
   // ─── AccessToken 6-field shape ───────────────────────────────
 
-  it('CRITICAL AccessToken has 6 fields and carries the client ownership used by introspection/revocation', () => {
+  it('CRITICAL AccessToken has 7 fields, and this arm pins 6 of them and carries the client ownership used by introspection/revocation', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/oauth.ts'));
     expect(p).toMatch(/export interface AccessToken \{/);
     expect(p).toMatch(/token: string;/);

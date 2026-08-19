@@ -110,7 +110,7 @@ describe('W947 V-295a incidents cross-source invariant', () => {
 
   // ─── IncidentRow 13-field shape ──────────────────────────────
 
-  it('CRITICAL IncidentRow has 13 fields — id + title + description + severity (IncidentSeverity) + status (IncidentStatus) + affectedComponents (readonly[]) + public + startedAt + resolvedAt (nullable) + createdByAdminId (nullable) + createdByAdminKeyId (nullable) + autoProbeTarget (nullable) + createdAt + updatedAt. The 13-field shape carries the full incident state.', () => {
+  it('CRITICAL IncidentRow has 14 fields, and this arm pins 13 of them — id + title + description + severity (IncidentSeverity) + status (IncidentStatus) + affectedComponents (readonly[]) + public + startedAt + resolvedAt (nullable) + createdByAdminId (nullable) + createdByAdminKeyId (nullable) + autoProbeTarget (nullable) + createdAt + updatedAt. The 13-field shape carries the full incident state.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/incidents.ts'));
     expect(p).toMatch(/export interface IncidentRow \{/);
     expect(p).toMatch(/id: string;/);
@@ -158,7 +158,7 @@ describe('W947 V-295a incidents cross-source invariant', () => {
 
   // ─── ListIncidentsOpts shape ─────────────────────────────────
 
-  it("CRITICAL ListIncidentsOpts has 3 fields — scope ('public' | 'all') + since + limit. The scope-discriminator drives the route-vs-status-page read split.", () => {
+  it("CRITICAL ListIncidentsOpts has 6 fields, and this arm pins 3 of them — scope ('public' | 'all') + since + limit. The scope-discriminator drives the route-vs-status-page read split.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/incidents.ts'));
     expect(p).toMatch(/export interface ListIncidentsOpts \{/);
     expect(p).toMatch(/scope\?: 'public' \| 'all';/);

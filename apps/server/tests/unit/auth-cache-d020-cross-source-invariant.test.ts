@@ -225,7 +225,7 @@ describe('W924 D-020 auth-cache cross-source invariant', () => {
     expect(p).toMatch(/absence as an empty array \(safe default — no implicit team grants\)/);
   });
 
-  it('CRITICAL SerializedTeamMembership has 3 fields — membershipId + ownerAccountId + role (member|admin). The 3-field shape mirrors AccountContext.teams element shape.', () => {
+  it('CRITICAL SerializedTeamMembership has 5 fields, and this arm pins 3 of them — membershipId + ownerAccountId + role (member|admin). The 3-field shape mirrors AccountContext.teams element shape.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/auth-cache.ts'));
     expect(p).toMatch(/interface SerializedTeamMembership \{/);
     expect(p).toMatch(/membershipId: string;/);

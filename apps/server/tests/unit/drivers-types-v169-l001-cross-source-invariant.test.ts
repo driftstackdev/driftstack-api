@@ -159,7 +159,7 @@ describe('W984 drivers/types V-169 + L-001 cross-source invariant', () => {
 
   // ─── SessionStateResult 5-field ──────────────────────────────
 
-  it('CRITICAL SessionStateResult has 5 fields — url|null + title|null + cookies (array of opaque records) + localStorage (Record<string, string>) + capturedAt: Date. The 5-field shape is what V-666.I session-state-export captures.', () => {
+  it('CRITICAL SessionStateResult has 6 fields, and this arm pins 5 of them — url|null + title|null + cookies (array of opaque records) + localStorage (Record<string, string>) + capturedAt: Date. The 5-field shape is what V-666.I session-state-export captures.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/drivers/types.ts'));
     expect(p).toMatch(/export interface SessionStateResult \{/);
     expect(p).toMatch(/url: string \| null;/);

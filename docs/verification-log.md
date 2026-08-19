@@ -43459,3 +43459,55 @@ is documented as one-way. Rewritten, and back to 75.
 
 `it(` counts +1 on the two files gaining an arm (16, 21), unchanged on the third (11). No new files,
 no ratchet change. `apps/server/tests/unit` green: 20226 passed.
+
+## V-1018 — fifteen test titles state a field count the interface no longer has
+
+V-794 bounds two classes of expiring claim with one-way ceilings: 75 pin files freeze a future-tense
+promise, 91 freeze a hand-maintained count. Its own header calls those a backlog rather than a
+commit. A ceiling stops the population growing; it never asks whether the numbers still hold. So I
+asked.
+
+The corpus is full of arms shaped `CRITICAL <Interface> has N fields — a + b + c`, whose body then
+asserts each named field with its own `toMatch`. Every one of those assertions is real and every one
+passes. Nothing counts the interface, so a field added later satisfies all of them while the title
+keeps advertising the old shape. Measured across every such title, resolving each interface in the
+file its own arm reads:
+
+ProfileRecord said 8, has 15 SessionRecord said 13, has 15
+WebhookEndpointRow said 15, has 20 NewSessionInput said 6, has 7
+AuthPluginOptions said 4, has 9 WebhookDeliveryRow said 13, has 14
+ListIncidentsOpts said 3, has 6 IncidentRow said 13, has 14
+TeamMembership said 3, has 5 MfaEnrollmentRow said 8, has 9
+SerializedTeamMembership said 3, has 5 AccessToken said 6, has 7
+NewApiKeyInput said 6, has 8 AuthFlowAccountRow said 8, has 9
+SessionStateResult said 5, has 6
+
+Fifteen of them, and the gaps are not cosmetic. `ProfileRecord`'s seven missing fields include
+`deletedAt` (the recycle bin) and `sizeBytes` (the per-profile storage a customer is quoted for).
+`TeamMembership`'s two are `ownerEmail` and `ownerName`, which is how the dashboard labels a team
+instead of showing a bare `acc_<uuid>`. Anyone reading these titles as the documented shape — which
+is what a cross-source invariant is for — was reading a shape several slices out of date.
+
+Each title now states the real count and how many the arm pins, and
+`a-field-count-in-a-test-title-is-derived.test.ts` derives the number so it can never drift again.
+
+Two things the guard had to get right before its answer meant anything. It resolves each interface in
+the file the ARM READS rather than by global name search: `LegalDocumentEntry` and `ListDeliveriesPage`
+each exist twice, in the server and in a package, and a guard whose answer depends on which directory
+the walk reached first is worse than no guard. And it names its own blind spot — sixteen sibling arms
+state a field count for a Zod SCHEMA, which needs a different parser and is NOT covered here, pinned
+by an arm so the green above is not read as total.
+
+Mutation: adding a 16th field to `ProfileRecord` → RED; reverting any one title to its old number →
+RED; breaking the member parser → RED on the self-test that proves it counts members rather than
+braces or comments.
+
+**The V-1015 snapshot trap, again, in a new shape.** The snapshot loop copied each file immediately
+before editing it, so the snapshots held pre-fix versions and restoring after a mutation silently
+reverted the fix. Worse than last time: `webhooks-service-cross-source-invariant.test.ts` carried TWO
+corrections, I re-applied one, and the control stayed red for a second round. Snapshot AFTER the fix,
+and when a file carries more than one correction, re-verify the whole file rather than the one line
+just touched.
+
+Ratchets 2931→2932 and 3097→3098. `it(` counts unchanged across all twelve edited files.
+`apps/server/tests/unit` green: 20230 passed.

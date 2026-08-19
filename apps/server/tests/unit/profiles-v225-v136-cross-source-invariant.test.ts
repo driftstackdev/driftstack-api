@@ -93,7 +93,7 @@ describe('W948 V-225 + V-136 profiles cross-source invariant', () => {
 
   // ─── ProfileRecord 8-field shape ─────────────────────────────
 
-  it('CRITICAL ProfileRecord has 8 fields — id + accountId + name + archetype + description (nullable) + lastUsedAt (nullable) + createdAt + updatedAt. The 8-field shape carries account-scope + per-profile metadata + activity timestamp.', () => {
+  it('CRITICAL ProfileRecord has 15 fields, and this arm pins 8 of them — id + accountId + name + archetype + description (nullable) + lastUsedAt (nullable) + createdAt + updatedAt. The 8-field shape carries account-scope + per-profile metadata + activity timestamp.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/profiles.ts'));
     expect(p).toMatch(/export interface ProfileRecord \{/);
     expect(p).toMatch(/id: string;/);

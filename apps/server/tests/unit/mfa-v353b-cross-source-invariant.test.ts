@@ -103,7 +103,7 @@ describe('W938 V-353b MFA cross-source invariant', () => {
 
   // ─── MfaEnrollmentRow 8-field shape ──────────────────────────
 
-  it('CRITICAL MfaEnrollmentRow has 8 fields — accountId + totpSecretCiphertext + totpSecretIv + totpSecretTag + enrolledAt (nullable; null=pending) + lastUsedAt (nullable) + createdAt + updatedAt. The 3-cipher-field split (ciphertext + iv + tag) is the AES-256-GCM at-rest contract.', () => {
+  it('CRITICAL MfaEnrollmentRow has 9 fields, and this arm pins 8 of them — accountId + totpSecretCiphertext + totpSecretIv + totpSecretTag + enrolledAt (nullable; null=pending) + lastUsedAt (nullable) + createdAt + updatedAt. The 3-cipher-field split (ciphertext + iv + tag) is the AES-256-GCM at-rest contract.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/mfa.ts'));
     expect(p).toMatch(/export interface MfaEnrollmentRow \{/);
     expect(p).toMatch(/accountId: string;/);

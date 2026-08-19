@@ -205,7 +205,7 @@ describe('W951 auth service V-168 + V-326 + V-352 + V-353e cross-source invarian
 
   // ─── TeamMembership 3-field shape ────────────────────────────
 
-  it("CRITICAL TeamMembership has 3 fields — membershipId + ownerAccountId + role ('member' | 'admin'). The 3-field shape matches W924 auth-cache SerializedTeamMembership + W929 email-preferences V-330d effectiveAccountId resolver contract.", () => {
+  it("CRITICAL TeamMembership has 5 fields, and this arm pins 3 of them — membershipId + ownerAccountId + role ('member' | 'admin'). The 3-field shape matches W924 auth-cache SerializedTeamMembership + W929 email-preferences V-330d effectiveAccountId resolver contract.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/auth.ts'));
     expect(p).toMatch(/export interface TeamMembership \{/);
     expect(p).toMatch(/membershipId: string;/);

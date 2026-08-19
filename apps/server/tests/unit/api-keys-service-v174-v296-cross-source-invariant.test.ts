@@ -109,7 +109,7 @@ describe('W950 api-keys service V-174 + V-296 cross-source invariant', () => {
 
   // ─── NewApiKeyInput 6-field shape ────────────────────────────
 
-  it('CRITICAL NewApiKeyInput has 6 fields — accountId + name + scopes (ApiKeyScope[]) + keyPrefix + keyHash + expiresAt (nullable). The 6-field write shape is what insertApiKey consumes; id + revokedAt + createdAt are server-assigned.', () => {
+  it('CRITICAL NewApiKeyInput has 8 fields, and this arm pins 6 of them — accountId + name + scopes (ApiKeyScope[]) + keyPrefix + keyHash + expiresAt (nullable). The 6-field write shape is what insertApiKey consumes; id + revokedAt + createdAt are server-assigned.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/api-keys.ts'));
     expect(p).toMatch(/export interface NewApiKeyInput \{/);
     expect(p).toMatch(/accountId: string;/);

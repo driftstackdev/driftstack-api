@@ -121,7 +121,7 @@ describe('W980 auth middleware V-353e MFA step-up cross-source invariant', () =>
 
   // ─── AuthPluginOptions 4-field shape ─────────────────────────
 
-  it('CRITICAL AuthPluginOptions has 4 fields — authRepo + authCache (nullable) + authCoalescer (nullable) + mfaService (optional, V-353e). The optional-mfaService is what makes the gate a no-op in fixtures without MFA wired.', () => {
+  it('CRITICAL AuthPluginOptions has 9 fields, and this arm pins 4 of them — authRepo + authCache (nullable) + authCoalescer (nullable) + mfaService (optional, V-353e). The optional-mfaService is what makes the gate a no-op in fixtures without MFA wired.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/middleware/auth.ts'));
     expect(p).toMatch(/export interface AuthPluginOptions \{/);
     expect(p).toMatch(/authRepo: AccountAuthRepo;/);

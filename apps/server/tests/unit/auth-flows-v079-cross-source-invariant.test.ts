@@ -137,7 +137,7 @@ describe('W941 V-079 auth-flows cross-source invariant', () => {
 
   // ─── AuthFlowAccountRow 8-field shape ────────────────────────
 
-  it('CRITICAL AuthFlowAccountRow has 8 fields — id + email + name (nullable) + passwordHash (nullable; null = magic-link-only account) + emailVerifiedAt (nullable; null = pending verification) + tier + status + createdAt. The 3-nullable fields cover pending-verify / passwordless / unnamed states.', () => {
+  it('CRITICAL AuthFlowAccountRow has 9 fields, and this arm pins 8 of them — id + email + name (nullable) + passwordHash (nullable; null = magic-link-only account) + emailVerifiedAt (nullable; null = pending verification) + tier + status + createdAt. The 3-nullable fields cover pending-verify / passwordless / unnamed states.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/auth-flows.ts'));
     expect(p).toMatch(/export interface AuthFlowAccountRow \{/);
     expect(p).toMatch(/id: string;/);

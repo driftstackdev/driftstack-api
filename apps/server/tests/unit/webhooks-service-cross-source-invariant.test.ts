@@ -144,7 +144,7 @@ describe('W949 webhooks service cross-source invariant', () => {
 
   // ─── WebhookEndpointRow 15-field shape ───────────────────────
 
-  it('CRITICAL WebhookEndpointRow has 15 fields — id + accountId + url + secret + secretPrefix + secretPrev (V-359 nullable) + secretPrevExpiresAt (V-359 nullable) + events (WebhookEventType[]) + description (nullable) + active + consecutiveFailures + lastSuccessAt (nullable) + lastFailureAt (nullable) + disabledAt (nullable) + createdAt + updatedAt. The 15-field row carries D-023 + V-359 rotation + per-endpoint failure-counting state.', () => {
+  it('CRITICAL WebhookEndpointRow has 20 fields, and this arm pins 15 of them — id + accountId + url + secret + secretPrefix + secretPrev (V-359 nullable) + secretPrevExpiresAt (V-359 nullable) + events (WebhookEventType[]) + description (nullable) + active + consecutiveFailures + lastSuccessAt (nullable) + lastFailureAt (nullable) + disabledAt (nullable) + createdAt + updatedAt. The 15-field row carries D-023 + V-359 rotation + per-endpoint failure-counting state.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/webhooks.ts'));
     expect(p).toMatch(/export interface WebhookEndpointRow \{/);
     expect(p).toMatch(/secretPrefix: string;/);
@@ -160,7 +160,7 @@ describe('W949 webhooks service cross-source invariant', () => {
 
   // ─── WebhookDeliveryRow 13-field shape ───────────────────────
 
-  it('CRITICAL WebhookDeliveryRow has 13 fields — id + webhookId + eventId + eventType + payload (Record) + status + attempts + nextAttemptAt + lastResponseStatus (nullable) + lastResponseExcerpt (nullable) + lastError (nullable) + deliveredAt (nullable) + createdAt + updatedAt. The 13-field delivery row captures attempt count + last-response + retry-time state.', () => {
+  it('CRITICAL WebhookDeliveryRow has 14 fields, and this arm pins 13 of them — id + webhookId + eventId + eventType + payload (Record) + status + attempts + nextAttemptAt + lastResponseStatus (nullable) + lastResponseExcerpt (nullable) + lastError (nullable) + deliveredAt (nullable) + createdAt + updatedAt. The 13-field delivery row captures attempt count + last-response + retry-time state.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/webhooks.ts'));
     expect(p).toMatch(/export interface WebhookDeliveryRow \{/);
     expect(p).toMatch(/webhookId: string;/);
