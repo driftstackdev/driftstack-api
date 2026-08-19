@@ -10,6 +10,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { ApiKeyScopeSchema } from '@driftstack/api-types';
 import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -332,31 +333,17 @@ describe('W786 docs reference/ triplet content parity', () => {
     expect(p).toMatch(/\*\*Granular scopes \*\* — `verb:resource` syntax/);
   });
 
-  it('CRITICAL scope-catalog 18 rows pinned. Drift to dropping any scope would silently mismatch ApiKeyScopeSchema + 41-case scope-check.test.ts.', () => {
+  it('V-1057 scope-catalog rows are derived from ApiKeyScopeSchema, so every scope a customer can hold has a row on the page. The roster was frozen as a 19-item list under a title claiming 18, beside a reference to a "41-case" scope-check file that has 32 arms and 56 tests; a scope added next would have been documented nowhere and asserted by nothing.', () => {
     const p = read(SCP);
+    const scopes = ApiKeyScopeSchema.options;
 
-    for (const scope of [
-      'read',
-      'write',
-      'admin',
-      'account_owner',
-      'driftstack_internal_admin',
-      'gui_control',
-      'read:sessions',
-      'write:sessions',
-      'read:profiles',
-      'write:profiles',
-      'admin:profiles',
-      'read:webhooks',
-      'write:webhooks',
-      'admin:webhooks',
-      'read:api-keys',
-      'admin:api-keys',
-      'read:billing',
-      'admin:billing',
-      'read:audit',
-    ]) {
-      expect(p, `scope ${scope}`).toMatch(new RegExp(`\\| \`${scope}\``));
+    // A schema that failed to load would make the loop below vacuous.
+    expect(scopes.length, 'scopes in ApiKeyScopeSchema').toBeGreaterThanOrEqual(19);
+
+    for (const scope of scopes) {
+      expect(p, `scope ${scope} has no row in reference/scopes.md`).toMatch(
+        new RegExp(`\\| \`${scope}\``),
+      );
     }
   });
 

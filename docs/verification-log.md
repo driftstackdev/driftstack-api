@@ -44962,3 +44962,37 @@ byte-identical.
 
 `it(` counts: 7 and 21 unchanged; CryptoOrderStatusBadge.test.tsx 12→13 for the added
 partition arm. No new file, no ratchet change.
+
+## V-1057 — the count-in-a-title class, measured to exhaustion
+
+V-1053 fixed one stale count in prose and V-1056 came out of sweeping for more. The
+obvious next move was to extend V-1018's count-in-a-title guard from `X has N fields`
+to `<CONST>: N entries`, so the class would be closed by construction.
+
+MEASURED FIRST, and the measurement said not to. Across 44 enum and `as const`
+declarations with a derivable size, and every `it(` title in
+`apps/server/tests/unit`, exactly ONE claim disagrees with its declaration — the
+`ApiKeyScopeSchema` one below. V-1053's `PROBLEM_TYPES` claim was the other, already
+fixed. A guard for a population of one is not worth its own file; fixing the one and
+recording the sweep is.
+
+The single hit: `docs-pages-reference-triplet-content-parity` titled "scope-catalog 18
+rows pinned" over a hand-written list of 19, against a schema of 19. So the number was
+wrong and the coverage was accidentally right. The same title also cites a "41-case
+scope-check.test.ts" — that file has 32 arms, 34 `expect(` calls and 56 tests, so the
+figure is stale under every reading. Two hand-maintained cross-file numbers in one
+sentence, neither checked by anything.
+
+The roster is now derived from `ApiKeyScopeSchema.options` with a floor, so a
+twentieth scope gets a documented row or fails, rather than being unasserted by
+construction. That is the V-1053 treatment and the reason the numbers are gone from
+the title rather than corrected: a corrected number goes stale the same way.
+
+Mutations: removing `read:audit` from the page fails the arm; removing `gui_control`
+— a scope the old frozen list DID name, so the sharper test is that the derived form
+still catches it — fails two. Restored byte-identical.
+
+`it(` count 27 unchanged. No new file, no ratchet change.
+
+NEGATIVE recorded, so the next sweep does not redo it: scope catalogue is complete
+(19/19 in reference/scopes.md), and the count-in-title population is now zero.
