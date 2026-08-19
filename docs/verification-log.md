@@ -41401,3 +41401,37 @@ uncovered ones are the "a config block is required for this scheme" shape checks
 `AccountProxyInputSchema` is a `z.discriminatedUnion('scheme', …)` whose openvpn and wireguard variants
 declare the block as required and `.strict()`. Fourth instance of the §5j pattern — a guard made redundant
 by an upstream schema.
+
+## V-968 — a fail-closed rate-limit posture that nothing would have noticed turning into fail-open
+
+**Fourth off the masked-pair ranking, and the broadest.** `middleware/rate-limit.ts:372` is the shared
+per-bucket gate. When a control-key request's owner-authority lookup fails, it logs
+"failing CLOSED" and throws `RateLimitedError(60)`. **0 hits.** The `UnauthorizedError` fourteen lines above
+is covered, so the function reads as exercised.
+
+**The design is deliberate and layered, which is why the untested branch matters.** A `ForbiddenError` — a
+deleted or suspended owner — is rethrown as 403 on purpose, with a comment explaining that answering 429
+there would hand the SDK a `Retry-After` it honours forever against a permanent condition. Every OTHER
+failure, a store blip included, must become a 429. That second branch is the security-relevant one: it is
+what stops an authority-lookup outage from admitting control-key traffic unmetered, and it was the half
+with no test.
+
+**Not the same thing as the test whose name suggests it.** `a-rate-limit-store-outage-does-not-remove-the-gate`
+drives `middleware/ip-rate-limit.ts` with a broken STORE. This is `middleware/rate-limit.ts` with a failing
+authority LOOKUP — different middleware, different dependency, different branch. Nothing in the suite
+referenced `loadLiveOwnerAuthority` or `guiControlKeyRateLimitAccountId` at all.
+
+**Proved by making it fail open.** Replacing the throw with a permissive authority makes the control-key
+request answer **200 instead of 429** — admitted, unmetered. Against the suite at HEAD that regression is
+invisible three ways: the route's own file passes 12, the store-outage unit suite and the effective-owner
+rate-limit integration suite pass 13 between them.
+
+**The injection point was chosen to isolate the branch, not just to break something.** The lookup is failed
+at `findActiveRateLimitOverrides`, which runs AFTER the account null/status checks — so the error is
+non-`ForbiddenError` by construction and lands in the fail-closed catch rather than the 403 path. The
+sibling arm directly above shows the identical request answering 200 when the lookup is healthy, so the
+contrast is the failure and nothing else.
+
+**Fourth finding of the masked shape** (V-961, V-963, V-966, V-967, and now this), and the strongest
+argument yet for the instrument: every one of these sits in a file the suite already touches, so no
+coverage-percentage or file-level count would have pointed at any of them.

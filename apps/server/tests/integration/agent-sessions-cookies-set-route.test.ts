@@ -5,7 +5,7 @@
 // round-trip through the fleet control connection's SetCookiesRequestCorrelator.
 // Mirrors the cookies + files route tests.
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PROBLEM_TYPES } from '@driftstack/api-types';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
@@ -255,6 +255,31 @@ describe('POST /v1/agent-sessions/:id/cookies/set gui_control_key auth', () => {
     // node connected) rather than 401.
     expect(res.statusCode).toBe(200);
     expect(res.json<SetCookiesBody>().status).toBe('unavailable');
+  });
+
+  it('CRITICAL when the owner-authority lookup fails, a control-key request is refused rather than let through unmetered. middleware/rate-limit.ts fails CLOSED here by design — its comment says so — and coverage showed the throw executed by no test while the UnauthorizedError fourteen lines above it is executed. A ForbiddenError (deleted or suspended owner) is deliberately rethrown as 403; anything else, a store blip included, must become a 429 and not a free pass.', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, enableFleetControlPlane: true });
+    const id = await createSession(fx);
+    const key = await mintKey(id);
+
+    // The lookup fails AFTER the account checks, so this is the non-Forbidden
+    // branch: a capacity decision the middleware cannot make.
+    vi.spyOn(fx.authRepo, 'findActiveRateLimitOverrides').mockRejectedValue(
+      new Error('overrides store unavailable'),
+    );
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/cookies/set`,
+      headers: { [GCK_HEADER]: key },
+      payload: IMPORT_BODY,
+    });
+    // The sibling arm above shows this exact request answering 200 when the
+    // lookup is healthy, so the contrast isolates the failure path.
+    expect(res.statusCode, 'the request is refused, not admitted unmetered').toBe(429);
+    expect(res.headers['retry-after'], 'and it carries the Retry-After the refusal sets').toBe(
+      '60',
+    );
   });
 
   it('a control key minted for session A is REJECTED on session B (401)', async () => {
