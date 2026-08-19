@@ -37901,3 +37901,16 @@ is a customer-facing claim rather than a catalog row, so it belongs in its own c
 
 Width-preserving cells again, so no reflow and no pin churn. The staleness note remains required —
 proved after the edit — and the basis line still reads V-293. **16 of 59 verified; 43 remain.**
+
+**V-878 addendum — the invoice flag was mine and it was wrong.** The entry above noted that
+`billing.astro` promises to manage "invoices" while no invoice route exists, and left it for a later
+check. Checked now, and there is nothing to find. The page is accurate and unusually careful about
+it: the header sentence continues "All payment changes redirect to Stripe's secure portal", the
+invoices card says "Invoice history and permanent receipt URLs are available in the Stripe Customer
+Portal", and the source comment records that plan history and the full invoice list live there
+because the retired `/subscription` page folded into this card.
+
+Reading one clause and stopping is what produced the suspicion — the sentence I quoted ends in a
+full stop that is not the end of the thought. Retracted here rather than left standing, because a
+"noted for later" that is wrong costs the next reader the same investigation I just ran, and this
+log is cited from source files that outlive the session.
