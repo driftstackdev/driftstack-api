@@ -5333,6 +5333,19 @@ function buildRegistry(): OpenAPIRegistry {
             schema: z.string().describe('Binary PDF body. base64 only on display.'),
           },
         },
+        // V-941 — declared, not merely mentioned. The audit-log export already
+        // carries this header for the reason recorded there: prose is not
+        // something a code generator can use. This endpoint's own summary named
+        // Content-Disposition in text while the machine-readable contract said
+        // nothing, and /docs/guides/paying-with-crypto tells customers to fetch it
+        // with `curl -O -J`, which takes its filename from exactly this header.
+        headers: {
+          'Content-Disposition': {
+            description:
+              'Attachment filename, e.g. `attachment; filename="receipt-ord_a1b2c3d4e5f6.pdf"`.',
+            schema: { type: 'string' },
+          },
+        },
       },
       404: { description: 'No such order.', content: problemContent },
       ...errors4xx,
@@ -5706,6 +5719,15 @@ function buildRegistry(): OpenAPIRegistry {
         content: {
           'text/csv': {
             schema: z.string().describe('RFC 4180 CSV; UTF-8 no BOM.'),
+          },
+        },
+        // V-941 — declared, not merely sent. The route attaches a filename and
+        // the GUI's admin export reads it back off the response; a client built
+        // from this document had no typed way to know the header exists.
+        headers: {
+          'Content-Disposition': {
+            description: 'Attachment filename: `attachment; filename="crypto-orders.csv"`.',
+            schema: { type: 'string' },
           },
         },
       },

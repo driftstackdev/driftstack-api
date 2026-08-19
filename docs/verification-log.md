@@ -40293,3 +40293,35 @@ deliberate rather than lazy.
 name. Drifting one error response to `application/json` fails the problem+json arm. Deleting a 204 from
 the document fails the pinned count — pinned at exactly 20 rather than floored, because a 204
 disappearing from the contract is itself the change worth noticing.
+
+## V-941 — three endpoints send an attachment filename; the document declared it for one (2026-08-19)
+
+**Found by following a documented customer workflow to the header it depends on.** V-940 measured
+response CONTENT types clean, which left response HEADERS unexamined. `/docs/guides/paying-with-crypto`
+tells customers to fetch the PDF receipt with `curl -O -J`, and `-J` takes the saved filename from
+`Content-Disposition`. So a published contract that never mentions that header leaves a documented
+workflow resting on something a generated client cannot see.
+
+**Four routes send it; one response declared it.** `account-audit.ts` (twice, CSV and JSON),
+`admin-crypto-orders.ts`, and `billing-crypto-orders.ts` all attach a filename. Only the audit-log
+export declared the header — and the comment beside that declaration states the principle better than I
+would: "The description above has always MENTIONED this header, but prose is not something a code
+generator can use."
+
+**The other two were in exactly the state that comment describes.** The PDF receipt's own summary reads
+"PDF rendering of the receipt with Content-Disposition: attachment" — the header named in a sentence,
+absent from the machine-readable contract. The admin CSV said nothing at all, while the GUI's admin
+export reads the filename back off the response.
+
+**Verified before fixing, and one endpoint stays out.** `receipt.txt` sends `text/plain` inline with NO
+disposition, which is correct for something meant to be read rather than saved. So this is a set of
+three, not four, and the guard asserts the text receipt's ABSENCE so a later sweep "completing the set"
+cannot quietly turn an inline receipt into a download.
+
+**Both ends guarded.** The declaration arm is compared against each route's own `content-disposition`
+send, quoted from source: check only the document and it keeps passing when a route stops attaching a
+filename, which turns a contract into a wish.
+
+**Three proofs, one per arm.** Removing the PDF's declaration — the original defect — fails the
+declaration arm. Renaming the route's header send fails the route arm. Adding a disposition to the text
+receipt fails the inline arm.

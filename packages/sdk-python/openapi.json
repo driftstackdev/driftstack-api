@@ -33351,6 +33351,14 @@
         "responses": {
           "200": {
             "description": "PDF bytes; the route also sets a meaningful filename.",
+            "headers": {
+              "Content-Disposition": {
+                "description": "Attachment filename, e.g. `attachment; filename=\"receipt-ord_a1b2c3d4e5f6.pdf\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/pdf": {
                 "schema": {
@@ -35809,6 +35817,14 @@
         "responses": {
           "200": {
             "description": "CSV body. First row is the header.",
+            "headers": {
+              "Content-Disposition": {
+                "description": "Attachment filename: `attachment; filename=\"crypto-orders.csv\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "text/csv": {
                 "schema": {
