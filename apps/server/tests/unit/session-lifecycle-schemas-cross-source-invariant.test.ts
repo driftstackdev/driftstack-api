@@ -38,7 +38,7 @@ describe('W895 Session lifecycle schemas cross-source invariant', () => {
 
   // ─── Session 12-field shape ──────────────────────────────────
 
-  it('CRITICAL SessionSchema has 12 fields — id + account_id + api_key_id + status + archetype + purpose + label + metadata + created_at + updated_at + last_state_at + destroyed_at. The 12-field shape is the full session-lifecycle audit-style read.', () => {
+  it('CRITICAL SessionSchema has 14 fields, and this arm pins 12 of them — id + account_id + api_key_id + status + archetype + purpose + label + metadata + created_at + updated_at + last_state_at + destroyed_at. The two it does not pin are egress_capabilities and egress_capability_report, added after this arm was written. The shape is the full session-lifecycle audit-style read.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/sessions.ts'));
     const m = p.match(/SessionSchema = z\.object\(\{([\s\S]+?)\}\);/);
     expect(m).not.toBeNull();

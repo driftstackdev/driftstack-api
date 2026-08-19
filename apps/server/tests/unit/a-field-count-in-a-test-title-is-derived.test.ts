@@ -22,12 +22,13 @@
 // population growing without saying whether the numbers still hold. This asks
 // that question instead, and it is derivable, so it should never have been prose.
 //
-// Deliberately narrow: only `interface` declarations, only titles of the exact
-// `X has N fields` shape. The Zod-schema equivalents (`…Schema has N fields`) are
-// NOT covered — a `z.object` shape needs a different parser, sixteen of them are
-// in the corpus, and pretending otherwise would be the vacuous half-coverage this
-// sweep keeps finding. The arm below names that gap out loud rather than leaving
-// a reader to assume it is total.
+// Scope: titles of the exact `X has N fields` shape, resolved against either an
+// `interface` declaration or a literal `z.object({ … })`. V-1018 shipped this
+// covering interfaces only and named the schema gap out loud; V-1019 closed it,
+// and three of those sixteen schema claims were wrong too — including one that
+// omitted the field carrying the amount a customer has to pay. A schema composed
+// with `.extend()` or `.merge()` would be counted from its literal half only, so
+// an arm below asserts none of the covered claims is built that way.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -80,6 +81,50 @@ function interfaceBody(src: string, name: string): string | null {
     }
   }
   return null;
+}
+
+/**
+ * The literal `z.object({ … })` body of a schema declaration, brace-matched.
+ *
+ * V-1018 left these uncovered and V-1019 closes them: `z.object` keys are the
+ * same claim in a different syntax, and three of the sixteen were wrong.
+ */
+function zodObjectBody(src: string, name: string): string | null {
+  const decl = new RegExp(
+    `(?:export\\s+)?const\\s+${name}\\s*(?::[^=]+)?=\\s*z\\s*\\.?\\s*object\\(\\s*\\{`,
+  ).exec(src);
+  if (decl === null) return null;
+  const open = src.indexOf('{', decl.index + decl[0].length - 1);
+  let depth = 0;
+  for (let i = open; i < src.length; i += 1) {
+    if (src[i] === '{') depth += 1;
+    else if (src[i] === '}') {
+      depth -= 1;
+      if (depth === 0) return src.slice(open + 1, i);
+    }
+  }
+  return null;
+}
+
+/** Top-level keys of a z.object body — comma-separated rather than semicolon. */
+function zodKeys(body: string): string[] {
+  const code = body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const keys: string[] = [];
+  let depth = 0;
+  let cur = '';
+  for (const ch of code) {
+    if ('{(['.includes(ch)) depth += 1;
+    if ('})]'.includes(ch)) depth -= 1;
+    if (ch === ',' && depth === 0) {
+      keys.push(cur);
+      cur = '';
+    } else cur += ch;
+  }
+  keys.push(cur);
+  return keys
+    .map((k) => /^\s*['"]?([A-Za-z_]\w*)['"]?\s*:/.exec(k))
+    .filter((m): m is RegExpExecArray => m !== null)
+    .map((m) => m[1] as string);
 }
 
 /**
@@ -144,22 +189,31 @@ function claims(): Claim[] {
   return out;
 }
 
+/** Field count of a declaration, whether it is an interface or a z.object schema. */
+function countIn(src: string, name: string): number | null {
+  const iface = interfaceBody(src, name);
+  if (iface !== null) return memberNames(iface).length;
+  const zod = zodObjectBody(src, name);
+  if (zod !== null) return zodKeys(zod).length;
+  return null;
+}
+
 /** The source the claim is about: the file its arm reads, else a unique global match. */
-function resolveBody(
+function resolveCount(
   claim: Claim,
   sources: readonly (readonly [string, string])[],
-): { body: string; ambiguous: boolean } | null {
+): { count: number; ambiguous: boolean } | null {
   if (claim.readsPath !== null) {
     const hit = sources.find(([p]) => p.endsWith(claim.readsPath as string));
     if (hit !== undefined) {
-      const body = interfaceBody(hit[1], claim.iface);
-      if (body !== null) return { body, ambiguous: false };
+      const c = countIn(hit[1], claim.iface);
+      if (c !== null) return { count: c, ambiguous: false };
     }
   }
-  const hits = sources.filter(([, s]) => interfaceBody(s, claim.iface) !== null);
+  const hits = sources.filter(([, s]) => countIn(s, claim.iface) !== null);
   if (hits.length === 0) return null;
   return {
-    body: interfaceBody(hits[0]?.[1] as string, claim.iface) as string,
+    count: countIn(hits[0]?.[1] as string, claim.iface) as number,
     ambiguous: hits.length > 1,
   };
 }
@@ -187,11 +241,11 @@ describe('V-1018 a field count in a test title is derived', () => {
     const ambiguous: string[] = [];
     const missing: string[] = [];
     for (const claim of all) {
-      const r = resolveBody(claim, sources);
+      const r = resolveCount(claim, sources);
       if (r === null) missing.push(`${claim.iface} (${claim.testFile})`);
       else if (r.ambiguous) {
         const where = sources
-          .filter(([, s]) => interfaceBody(s, claim.iface) !== null)
+          .filter(([, s]) => countIn(s, claim.iface) !== null)
           .map(([p]) => p.slice(REPO_ROOT.length + 1))
           .join(', ');
         ambiguous.push(`${claim.iface} (${claim.testFile}): ${where}`);
@@ -209,9 +263,9 @@ describe('V-1018 a field count in a test title is derived', () => {
   it('CRITICAL a title that states a field count states the real one. Each of these arms asserts its named fields individually and passes; the number beside them is the part nothing checked, so it kept describing a shape that had since grown. Update the title to the real count when a field is added, in the same commit that adds it.', () => {
     const wrong: string[] = [];
     for (const claim of all) {
-      const r = resolveBody(claim, sources);
+      const r = resolveCount(claim, sources);
       if (r === null) continue;
-      const real = memberNames(r.body).length;
+      const real = r.count;
       if (real !== claim.claimed) {
         wrong.push(
           `${claim.testFile}: ${claim.iface} title says ${claim.claimed}, source has ${real}`,
@@ -224,12 +278,34 @@ describe('V-1018 a field count in a test title is derived', () => {
     ).toEqual([]);
   });
 
-  it('CRITICAL this guard names its own blind spot. Sixteen sibling arms state a field count for a Zod SCHEMA rather than an interface, and none of them is covered here. Recorded so the green above is not read as "every field count in the corpus is checked".', () => {
+  it('CRITICAL the schema half is really covered, not just walked past. V-1018 shipped this guard covering interfaces only and said so; V-1019 added z.object schemas, and three of the sixteen were wrong. If the schema parser ever stops resolving them, every Schema claim would silently fall through the continue in the arm above and this file would pass while checking half the corpus.', () => {
     const schemaClaims = all.filter(({ iface }) => /Schema$/.test(iface));
+    expect(schemaClaims.length, 'Schema-shaped field-count claims found').toBeGreaterThanOrEqual(
+      10,
+    );
+    const unresolved = schemaClaims
+      .filter((c) => resolveCount(c, sources) === null)
+      .map((c) => `${c.iface} (${c.testFile})`)
+      .sort();
     expect(
-      schemaClaims.length,
-      'no Schema-shaped claims found — either they were converted to interfaces (delete this arm) ' +
-        'or the title regex stopped matching them',
-    ).toBeGreaterThanOrEqual(10);
+      unresolved,
+      'these Schema claims resolve to nothing, so nothing checks their number:',
+    ).toEqual([]);
+    // The parser reads a literal z.object body. A schema COMPOSED with .extend()
+    // or .merge() would count only its literal half, so none of the covered
+    // claims may be built that way.
+    const composed = schemaClaims
+      .filter((c) => {
+        const hit = sources.find(([p]) => (c.readsPath === null ? false : p.endsWith(c.readsPath)));
+        if (hit === undefined) return false;
+        const decl = new RegExp(`const\\s+${c.iface}\\b[^;]*?\\.(?:extend|merge)\\(`, 's');
+        return decl.test(hit[1]);
+      })
+      .map((c) => c.iface)
+      .sort();
+    expect(
+      composed,
+      'these schemas are composed with .extend()/.merge(), so a literal-body count understates them:',
+    ).toEqual([]);
   });
 });

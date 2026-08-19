@@ -48,7 +48,7 @@ describe('W891 plaintext-once secrets cross-source invariant', () => {
     );
   });
 
-  it('CRITICAL ApiKeySchema has 9 fields — id + name + key_prefix + scopes + last_used_at + revoked_at + expires_at + created_at. The 9 fields are display-only; no plaintext field.', () => {
+  it('CRITICAL ApiKeySchema has 8 fields — id + name + key_prefix + scopes + last_used_at + revoked_at + expires_at + created_at. The 8 fields are display-only; no plaintext field. The count said 9 while listing 8 until V-1019 — nothing counted it.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/api-keys.ts'));
     const m = p.match(/ApiKeySchema = z\.object\(\{([\s\S]+?)\}\);/);
     expect(m).not.toBeNull();

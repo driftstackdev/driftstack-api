@@ -92,7 +92,7 @@ describe('W902 CryptoCheckout currency + price-cents cross-source invariant', ()
 
   // ─── 4-field CreateCryptoCheckoutResponse ────────────────────
 
-  it('CRITICAL CreateCryptoCheckoutResponseSchema has 9 fields — order_id + product + price_cents + price_currency + status + provider + payment_address (nullable) + pay_currency (nullable) + created_at. The 9-field response gives clients enough to begin payment.', () => {
+  it('CRITICAL CreateCryptoCheckoutResponseSchema has 10 fields, and this arm pins 9 of them — order_id + product + price_cents + price_currency + status + provider + payment_address (nullable) + pay_currency (nullable) + created_at. The unpinned tenth is pay_amount — the amount the customer actually has to send — so the response gives clients enough to begin payment, and did so before this title admitted the field existed.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/crypto-orders.ts'));
     const m = p.match(/CreateCryptoCheckoutResponseSchema = z\.object\(\{([\s\S]+?)\}\);/);
     expect(m).not.toBeNull();

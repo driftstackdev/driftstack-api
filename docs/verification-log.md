@@ -43511,3 +43511,38 @@ just touched.
 
 Ratchets 2931→2932 and 3097→3098. `it(` counts unchanged across all twelve edited files.
 `apps/server/tests/unit` green: 20230 passed.
+
+## V-1019 — the blind spot V-1018 declared, closed, and three more wrong counts in it
+
+V-1018 shipped a guard covering `interface` field counts and pinned an arm saying the sixteen
+Zod-schema siblings were NOT covered, because a `z.object` needs a different parser. Naming a gap is
+not closing it, and the same measurement run against schemas found three more wrong:
+
+`SessionSchema` said 12 and has 14. The two it never mentioned are `egress_capabilities` and
+`egress_capability_report` — the per-session egress posture, added after the arm was written.
+
+`CreateCryptoCheckoutResponseSchema` said 9 and has 10. The missing one is `pay_amount`: the
+amount of crypto the customer actually has to send. The title's own sentence claimed the 9-field
+response "gives clients enough to begin payment" while the field carrying the payment amount was
+the one it left out.
+
+`ApiKeySchema` said 9 twice while listing exactly 8, and the schema has 8. An off-by-one against
+its own enumeration, sitting in the arm whose job is to prove an API-key response carries no
+plaintext secret. The security property held; the count beside it never did.
+
+The guard now resolves a claim against an interface OR a literal `z.object`, and the arm that used to
+say "schemas are not covered" now asserts they ARE — that every Schema claim resolves, so none can
+fall through to the `continue` and be silently skipped, and that none of the covered schemas is built
+with `.extend()`/`.merge()`, which a literal-body count would understate. Replacing that arm mattered
+in its own right: left alone it would have been a guard asserting its own coverage gap after the gap
+was gone, which is the exact defect this arc keeps closing.
+
+Mutation: adding a 15th key to `SessionSchema` → RED; reverting the `ApiKeySchema` number → RED;
+breaking the comma-splitter so z.object keys stop parsing → RED.
+
+**Self-inflicted red, worth recording.** The full suite for V-1018 was started and then I began
+editing while it ran, so it came back 1 failed — my own guard file, caught mid-edit still seeing the
+three uncorrected schema titles. Nothing regressed. Do not start a background suite and then edit the
+tree; the result describes neither the old state nor the new one.
+
+`it(` counts unchanged (11, 11, 10). No new file, no ratchet change.
