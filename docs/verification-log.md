@@ -38678,3 +38678,40 @@ accurate rows cluster too, and surfaces 11 and 12 are simply maintained. Basis l
 V-293.
 
 No source change.
+
+## V-901 — the catalog surface sweep completes: R2 status polling ships (2026-08-18)
+
+**Last three surfaces, six rows, one correction.**
+
+**Corrected — Auto-polling (Hetzner cron + R2).** `StatusSnapshotService` writes
+`status/incidents-public.json` to R2, and bootstrap drives it on a `setInterval` beside the health
+probe — the module header states the cadence outright ("bootstrap calls processSnapshot() in the
+same 60s poller"). It is gated on `R2_BUCKET_PUBLIC`, and bootstrap logs plainly when that is unset:
+"status-snapshot writer disabled … Status page will fail open when API is unreachable." **Built and
+awaiting operator config is not deferred** — the distinction V-868 drew for the deep-link scheme,
+and this row is its twin.
+
+**Five rows verified accurate and left alone.**
+
+- **Twitter / Slack notifications** and **Component-specific subscribe** — nothing in the status
+  site; the subscribe page is all-or-nothing with no per-component selection.
+- **SLA reporting / uptime calculations** — no uptime arithmetic anywhere in the status site. My
+  first grep "found" it, but every hit was a layout import; reading them was what settled it.
+- **Linux package signing** (GUI client) — an operator certificate task, independently listed as
+  outstanding in the action queue.
+- **FAQ + edge-case deepening** (doc site) — content work with no completion test; nothing in
+  source can adjudicate it.
+
+**The sweep is complete: all twelve surfaces, 35 of 59 non-SHIPPED rows verified, 13 corrected and
+22 confirmed accurate.** The remaining 24 are the ones V-879 characterised — referenced as
+"partial", "mock-only" or a bare V-number, where the capability exists and the open question is what
+its author counted as done.
+
+**What the completed sweep shows.** Drift was never uniform. Thirteen corrections fell in three
+clusters — the status-page surface, the AI-agent layer, and single features that landed under a
+different V-number than their row cited. Surfaces 11 and 12 were accurate throughout. A catalog does
+not rot evenly; it rots where a whole surface ships at once and nobody walks back through the rows
+it closed.
+
+Mutation-proved both ways: reverting the row fails, and re-padding the whole column does not — the
+V-874 hardening holding on its fifth application.

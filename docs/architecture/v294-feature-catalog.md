@@ -369,7 +369,7 @@ Per founder direction "founder-facing trust first; admin tooling second; SDK fea
 | Per-component status                | SHIPPED (V-873) | V-295 | 4       | —                         |
 | Incident history (last 30 days)     | SHIPPED (V-873) | V-295 | 4       | privacy retention         |
 | Manual incident posting (admin)     | SHIPPED (V-873) | V-295 | 6       | —                         |
-| Auto-polling (Hetzner cron + R2)    | DEFERRED        | V-295 | 8       | DPA Annex 3 (cron worker) |
+| Auto-polling (Hetzner cron + R2)    | SHIPPED         | V-295 | —       | DPA Annex 3 (cron worker) |
 | Email subscription for incidents    | SHIPPED (V-873) | V-295 | 8       | privacy + DPA             |
 | Twitter / Slack notifications       | DEFERRED        | V-295 | 6       | DPA Annex 3               |
 | SLA reporting / uptime calculations | DEFERRED        | V-295 | 6       | ToS (SLA clause)          |

@@ -271,7 +271,16 @@ describe('W561 /docs/architecture/v294-feature-catalog.md content parity', () =>
       /\| Top-level overall status\s+\| SHIPPED \(V-873\) \| V-295/,
     );
     expect(body).toMatch(
-      /\| Auto-polling \(Hetzner cron \+ R2\)\s+\| DEFERRED\s+\| V-295 \| 8\s+\| DPA Annex 3 \(cron worker\)/,
+      /\| Auto-polling \(Hetzner cron \+ R2\)\s+\| SHIPPED\s+\| V-295 \|\s+—\s+\| DPA Annex 3 \(cron worker\)/,
+    );
+
+    // V-901 — the R2 status snapshot is written on a 60s interval by
+    // bootstrap (`setInterval` → `statusSnapshotService.processSnapshot`), not
+    // deferred. It is gated on R2_BUCKET_PUBLIC, which is operator config, and
+    // bootstrap logs plainly when that is unset. Built-awaiting-config is not
+    // deferred — the same distinction V-868 drew for the deep-link scheme.
+    expect(body, 'the deferred auto-polling row is gone').not.toMatch(
+      /\| Auto-polling \(Hetzner cron \+ R2\)\s+\| DEFERRED/,
     );
     expect(body).toMatch(
       /\| SLA reporting \/ uptime calculations \| DEFERRED\s+\| V-295 \| 6\s+\| ToS \(SLA clause\)/,
