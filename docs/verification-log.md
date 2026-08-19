@@ -42309,3 +42309,44 @@ counts `${}` nesting depth explicitly and is correct; the "more rigorous" API wa
 carelessly.**
 
 No code change. Four vectors, one already guarded, three measured empty or correct-by-design.
+
+## V-992 — the gate that names its own blind spot named the wrong one (2026-08-19)
+
+`a-gate-that-does-not-name-its-blind-spot-reads-as-total` exists so a green from `build-test` is not
+quoted as "the CI bar" for a five-job pipeline. Its header, and the same paragraph in
+`scripts/verify-suite.mjs`, said the 29 Playwright spec files "are the ONLY tests that exercise
+`apps/server/src/db/**` against a real Postgres", concluding that "the layer the coverage gate
+declines to measure is also the layer this gate never executes".
+
+**Both halves are false, and the repo had already recorded them as false.** `vitest.config.ts` carries
+the correction, committed 2026-08-14 under the title "53 files sit outside the coverage gate on a
+reason that expired": the V-086 justification "exercised by e2e against real Postgres, not by vitest"
+is marked NO LONGER TRUE, because integration files import `src/db/` directly and run under vitest
+whenever `DATABASE_URL` is set. The blind-spot guard made the retracted claim on **2026-08-18 — four
+days later.**
+
+Measured here: **135 integration files import `../../src/db/`, 134 of them keyed to `DATABASE_URL`.**
+CI's `build-test` — the job this gate IS — sets `DATABASE_URL`, runs `db:migrate`, and only then runs
+the suite, so `describe.skipIf(!CI && !DATABASE_URL)` resolves to RUN. The database layer is executed
+by this gate. The migrate step is load-bearing and its own comment says why: without it those tests
+"probe `SELECT 1 FROM profiles`, find no schema, and silently vacuous-pass", which they did until
+2026-06-12.
+
+So the blind spot is real, narrower, and of a different kind: **the layer runs and nothing reports
+which parts of it ran**, because `vitest.config.ts` excludes `apps/server/src/db/**` from coverage.
+Executed-but-unmeasured, not unexecuted. Locally the same 134 files skip for want of `DATABASE_URL`,
+which is exactly the 109 skipped files in every local green I have been quoting — worth knowing when
+reading one.
+
+**The failure mode is one the file already names.** Its second arm rejects a stale not-covered entry
+because that "excuses nothing while making the blind spot look wider than it is, and the next real gap
+hides behind the noise". That is precisely what its own header did, about this repo's verification
+posture, for a day — and it cost me the start of a batch aimed at closing a gap that was not there.
+An overstated blind spot misdirects exactly the person who takes it seriously.
+
+Corrected in both places in one commit, with the retraction paraphrased and the new arm deriving the
+claim from the three sources that disagreed rather than restating any of them: the integration-file
+population, `ci.yml`'s `build-test` env and migrate step, and the coverage exclusion. Three mutations,
+each red on its own sentinel — removing `DATABASE_URL` from `build-test`, deleting the `src/db`
+coverage exclusion, and breaking the population scan. `it(` 4 → 5, `npm run typecheck` exit 0, and the
+other pin over `verify-suite.mjs` (`workspace-ci-workflow-content-parity`, 9 arms) still green.

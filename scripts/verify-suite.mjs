@@ -55,11 +55,21 @@ export const EXPECTED_TEST_FILES_ALL = 3089;
  * The CI jobs this gate does NOT run, with how to run each locally.
  *
  * Measured 2026-08-18, all green, none of it by this gate: 199 Playwright tests
- * over 29 spec files, 362 Python tests, and the Go suite. Those 29 spec files
- * are the ONLY tests that exercise `apps/server/src/db/**` against a real
- * Postgres — the same directory the coverage config excludes on the grounds that
- * it is "exercised by e2e". So the layer the coverage gate declines to measure is
- * also the layer this gate never executes, and neither of them says so.
+ * over 29 spec files, 362 Python tests, and the Go suite.
+ *
+ * V-992 — this used to add that those 29 spec files were the only tests touching
+ * `apps/server/src/db/**` against a real Postgres, and therefore that this gate
+ * never executes the database layer. Both halves were wrong, and `vitest.config.ts`
+ * had already recorded them as expired four days before they were written here.
+ *
+ * 135 integration files import `../../src/db/`, 134 of them keyed to
+ * `DATABASE_URL`. CI's `build-test` — the job this gate IS — sets `DATABASE_URL`,
+ * migrates the schema, and only then runs the suite, so `describe.skipIf(!CI &&
+ * !DATABASE_URL)` resolves to RUN and the db layer is executed here. What it is
+ * not is MEASURED: `vitest.config.ts` excludes `apps/server/src/db/**` from
+ * coverage. The real blind spot is narrower and different — the layer runs, and
+ * nothing reports which parts of it ran. Locally, without `DATABASE_URL`, those
+ * files skip, which is the 109 skipped files in every local green.
  *
  * Keyed by the job id in `.github/workflows/ci.yml`. A new job there must be
  * added here or the ci-jobs census fails — the point being that "not run by this

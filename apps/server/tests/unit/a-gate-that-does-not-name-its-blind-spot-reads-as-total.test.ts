@@ -11,13 +11,25 @@
 // 2026-08-18, all green and none of it by this gate: 199 Playwright tests over 29
 // spec files, 362 Python tests, and the Go suite.
 //
-// The e2e omission is the one with teeth. Those 29 spec files are the ONLY tests
-// that exercise `apps/server/src/db/**` against a real Postgres — the same
-// directory `vitest.config.ts` excludes from coverage, on the stated grounds that
-// it is "exercised by e2e, not by vitest". So the layer the coverage gate declines
-// to measure is also the layer this gate never executes. Both statements are
-// individually defensible; together they leave the repo's database layer measured
-// by neither, and neither file said so.
+// V-992 — the paragraph that stood here said the 29 e2e spec files were the only
+// tests exercising `apps/server/src/db/**` against a real Postgres, and concluded
+// that this gate never executes the database layer. Both halves were wrong, and
+// this file made the claim on 2026-08-18 — four days AFTER `vitest.config.ts`
+// recorded the same justification as expired, in a commit titled "53 files sit
+// outside the coverage gate on a reason that expired".
+//
+// 135 integration files import `../../src/db/`, 134 keyed to `DATABASE_URL`. The
+// `build-test` job — the job this gate IS — sets `DATABASE_URL`, migrates the
+// schema, then runs the suite, so `describe.skipIf(!CI && !DATABASE_URL)` resolves
+// to RUN. The db layer is executed by this gate. What it is not is MEASURED:
+// `vitest.config.ts` excludes `apps/server/src/db/**` from coverage.
+//
+// So the blind spot is real but narrower and of a different kind than was written:
+// the layer runs here and nothing reports which parts of it ran. Overstating it
+// is the failure the second arm below already names — a blind spot described wider
+// than it is "excuses nothing while making the blind spot look wider than it is,
+// and the next real gap hides behind the noise." That is what happened, in this
+// file, about this repo's own verification posture.
 //
 // So the dispositions are derived against the workflow rather than remembered.
 // Every job in ci.yml must be either the job this gate IS, or listed as not
@@ -25,7 +37,7 @@
 // says which it is — the same reason the cross-account censuses exist: "not run
 // here" and "not a test job" must never look identical from a green run.
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -95,5 +107,38 @@ describe('a gate that does not name its blind spot reads as total', () => {
       NOT_COVERED_BY_THIS_GATE.some((s) => s.job === 'e2e'),
       'e2e must stay named while it stays excluded',
     ).toBe(true);
+  });
+
+  it('V-992 CRITICAL the database layer is EXECUTED by this gate and merely unmeasured by it, which is a different and narrower blind spot than "e2e is the only thing that touches it". Derived from the three sources that disagreed rather than restated, because the wrong version of this survived four days in two files while a third already recorded it as expired — and a blind spot described wider than it is buries the next real one.', () => {
+    const integration = resolve(REPO_ROOT, 'apps/server/tests/integration');
+    const dbTests = readdirSync(integration).filter((f) => {
+      if (!f.endsWith('.test.ts')) return false;
+      const src = readFileSync(resolve(integration, f), 'utf8');
+      return src.includes("from '../../src/db/") && src.includes('DATABASE_URL');
+    });
+    expect(
+      dbTests.length,
+      'integration files exercising src/db and keyed to DATABASE_URL — if this collapses, the ' +
+        'expired "only e2e touches the db layer" justification becomes true again and the ' +
+        'paragraph above needs rewriting, not this floor lowering',
+    ).toBeGreaterThanOrEqual(100);
+
+    // They RUN in this gate's job, which is the half that was stated backwards.
+    const ci = read('.github/workflows/ci.yml');
+    const buildTest = ci.slice(ci.indexOf('build-test:'), ci.indexOf('  e2e:'));
+    expect(buildTest, 'build-test no longer provides a DATABASE_URL').toMatch(
+      /DATABASE_URL:\s*postgres:/,
+    );
+    expect(
+      buildTest,
+      'build-test no longer migrates before testing — without this the db tests vacuous-pass',
+    ).toMatch(/db:migrate/);
+
+    // And the genuine gap: executed, not measured.
+    expect(
+      read('vitest.config.ts'),
+      'src/db is no longer excluded from coverage — then the db layer IS measured and this arm ' +
+        'should be retired along with the paragraph above',
+    ).toMatch(/'apps\/server\/src\/db\/\*\*'/);
   });
 });
