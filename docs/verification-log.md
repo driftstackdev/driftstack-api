@@ -38855,3 +38855,38 @@ the behaviour that makes the debt shrink rather than drift.
 
 **For the queue:** 26 variables need operator-facing entries, and roughly a third of them are
 secrets whose correct documentation is a deployment decision rather than a source fact.
+
+## V-906 — retracting V-905: the variables are documented, and I duplicated an existing guard
+
+**V-905 is wrong and is withdrawn.** It claimed 26 environment variables the server reads are
+absent from the operator documentation. They are not. `every-env-var-the-server-reads-is-documented`
+has existed since before this session and checks a **four-source union**: `.env.example`, the
+production and staging env templates, and `docs/deployment/env-vars.md`. All 26 are in the
+production and staging templates — `TRUST_PROXY`, `PROFILE_MASTER_KEY`, `NOWPAYMENTS_IPN_SECRET` and
+`LIVEKIT_API_KEY` each appear in both.
+
+**My premise was the error.** I argued "an operator provisions from the spec, so a variable missing
+from it is one nobody sets". Operators provision from the TEMPLATES — they are copied to
+`/opt/driftstack/api/.env`, which is the mechanism the schema doc describes in its own first
+paragraph. I measured against a prose reference and called the result a provisioning gap.
+
+**I also duplicated an existing guard, and violated my own rule doing it.**
+`an-env-var-the-server-reads-is-documented-or-listed` was a second, weaker implementation of
+`every-env-var-the-server-reads-is-documented`: mine held a count ceiling, the incumbent holds a
+NAMED roster plus a staleness arm that fails when an entry is documented or stops being read. Its
+header even records the same instrument fault I hit — that scanning `process.env.X` alone finds 22
+variables and misses the central config. **My own recorded rule is to grep prior art BEFORE
+investigating**, and the filenames differ by two words. Reverted: the guard is deleted and the test
+ratchets are restored.
+
+**One real thing survives, and it is small.** The incumbent's roster comment said the 19 formerly
+listed variables are "now in `docs/deployment/env-vars.md`". They are in the templates. That
+sentence is what sent me down this path — a reader checking only the named file finds 26 missing and
+concludes exactly what I concluded. Corrected to name the four sources and say which one is
+load-bearing.
+
+**What this cost, stated plainly.** A wrong finding, a duplicate test file, a ratchet bump and a
+commit, against one corrected comment. The prior-art grep would have taken one command. This is the
+second time this rule has been broken after being written down, and the lesson is not "check
+harder" — it is that a filename search for the invariant, not the defect, is the cheap step: I was
+looking for undocumented env vars and never asked whether anyone had already looked.

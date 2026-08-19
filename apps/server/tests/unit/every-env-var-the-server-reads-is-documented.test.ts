@@ -84,7 +84,12 @@ const ENV_REFERENCE = resolve(REPO, 'docs', 'deployment', 'env-vars.md');
  */
 const UNDOCUMENTED_ENV = new Set<string>([
   // EMPTIED 2026-08-14. This list held 19 variables the server reads and no
-  // document described. Every one is now in docs/deployment/env-vars.md, and
+  // document described. Every one is now in one of the four sources above —
+  // V-906: mostly the production/staging env templates rather than
+  // docs/deployment/env-vars.md, which this comment used to name alone. The
+  // templates are what an operator copies to /opt/driftstack/api/.env, so that
+  // is the load-bearing home; the distinction matters because a reader checking
+  // only the prose reference finds 26 of them missing and concludes wrongly. And
   // the exemption is gone rather than kept "just in case" — an allow-list that
   // outlives its entries is a place the next undocumented variable lands
   // quietly, which is exactly how this list reached 19.
