@@ -44315,3 +44315,40 @@ failure V-1025 could not guard by reading source, and it is now guarded.
 
 Full e2e: 206 passed. `apps/server/tests/unit` green: 1935 files, 20244 passed. Spec count 31 → 32 in
 both files that state it.
+
+## V-1041 — the role half of the corrected team sentence, verified end to end
+
+Four commits this session corrected the same claim across nine files: the team auth-path integration
+shipped, and what survives is narrower — membership grants nothing implicitly, and a member acting on
+an owner's account via `X-Driftstack-Account` is bounded by membership role and required scope
+(V-1010, V-1015, V-1016). All of that was established by READING `resolveEffectiveAccount` and pinned
+by a source-level guard.
+
+The ROLE half is enforced in eleven places across seven route files (`effective.role !== 'admin'`).
+Exactly one — `PUT /v1/account/me/organization` — had a behavioural test. The sentence the sweep spent
+four commits getting right was, for the other ten sites, still only prose plus a grep.
+
+This drives the real flow: seed an owner and an invitee, insert an invite with role `member`, accept
+it through the API, then act on the owner's account with the header.
+
+Three assertions, and the two controls are what give the first any meaning:
+
+1. A `member` is refused 403 on the admin-bound writes.
+2. The SAME member performs the SAME writes on their OWN account without a 403 — so the refusal is
+   attributable to the role rather than to a broken operation or a weak key.
+3. An `admin`-role member IS allowed through on the owner's account — so the 403 is a role BOUND
+   rather than team access being blocked outright. Without this, a server that refused every team
+   caller would pass test 1 and look correct.
+
+Mutation, both directions: neutralising the role check on `email-preferences` so a member gets
+through → test 1 reds; widening `account-me` to refuse every team caller including admins → test 3
+reds. A spec that only caught the first would have called a blanket block "enforcement".
+
+One payload error on the way: `event_type: 'session_failure'` is not an opt-outable event, so the
+route answered 400 before the role check ran and the first run looked like a missing 403. The real
+enum has six values and none of them is that. Body validation preceding the role check is also the
+reason the assertion is on 403 specifically rather than "not 2xx" — a 400 would satisfy the weaker
+form while proving nothing about the role.
+
+Full e2e: 209 passed. `apps/server/tests/unit` green: 1935 files, 20244 passed. Spec count 32 → 33 in
+both files that state it.
