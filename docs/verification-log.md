@@ -42692,3 +42692,43 @@ implemented twice — once in shipped SQL, once by hand in an in-memory double �
 the double. Four of the eight were that shape exactly.
 
 `it(` 2 → 3 on the lists file. `npm run typecheck` exit 0. No new file, so no ratchet change.
+
+## V-1001 — the repo and the double this suite pairs were never checked against each other (2026-08-19)
+
+V-1000 named the arrangement behind four of its eight findings: a rule implemented twice, once in
+shipped SQL and once by hand in an in-memory double, with the tests wired to the double. The obvious
+follow-on is whether any double has DRIFTED from the SQL it stands in for. Three sampled by hand
+first — the auth-flows web-session listing (models `authEpoch` and the sort order faithfully), its
+`findWebSessionByIdForAccount` (identical predicate), and the sessions double — and the third is where
+it stops being hypothetical.
+
+`sessions-repo.ts` declares `ACTIVE_SESSION_STATUSES` once and uses it twice: `listActiveByAccount`
+and `listExpiredForAutoDestroy`, the auto-destroy sweeper's query. **The double hard-codes the same
+three literals twice**, in the two methods standing in for those. The constant is not exported, so
+nothing links the three places. `in-memory-sessions-repo.ts:390` even says so — "Mirrors the Drizzle
+query: active (creating/ready/busy) sessions" — a comment recording a duplication rather than a
+reference.
+
+**The asymmetry is the point, and it is sharper than "nothing checks this".** The repo's set IS
+frozen, by a text pin in this very file (line 91 pins the declaration verbatim). So widening it reds
+that pin — and the natural response is to update the pin and ship, leaving the double on the old set
+with nothing objecting. Every test wired to the double would then model a different active-status set
+than the shipped sweeper reaps. That is a divergence a green suite cannot show you.
+
+The precedent for caring is in the repo already: `in-memory-legal-repo.test.ts` exists solely to pin a
+DOUBLE's tiebreaker to "the Drizzle repo's `ORDER BY document_key, accepted_at DESC, id DESC`", and
+its commit — "deterministic latest-acceptance tiebreaker on accepted_at ties" — is a divergence that
+was found and fixed in June. One double of twenty-nine has such a guard.
+
+Added as an arm to the file whose FIRST arm already pins the Drizzle+double pairing as "the V-156
+sessions-repo contract" without ever checking the pair agrees. It derives the canonical set from the
+repo, counts the repo's uses (2, so a third cannot appear unnoticed), extracts both of the double's
+hard-coded chains, and compares each. Mutation-proved in both directions: widening the repo's set
+reds it (alongside the text pin), and narrowing ONE of the double's two copies reds it alone —
+`expected [ 'creating', 'ready' ] to deeply equal [ 'busy', 'creating', 'ready' ]`.
+
+Not generalised to the other twenty-eight doubles. Two of the three sampled were faithful, so a sweep
+would be speculative at this cost; what is recorded here is the shape and the one instance that has
+teeth, so the next reader can decide with evidence rather than re-derive the sample.
+
+`it(` 14 → 15. `npm run typecheck` exit 0. No new file, so no ratchet change.

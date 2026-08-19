@@ -245,4 +245,35 @@ describe('W998 db/sessions-repo cross-source invariant', () => {
       ),
     ).toBe(true);
   });
+
+  // ─── V-1001: the pair this file names must AGREE ─────────────
+
+  it("CRITICAL the in-memory double's active-status rule matches the repo's ACTIVE_SESSION_STATUSES. This file's first arm pins the Drizzle+double PAIRING as the V-156 contract but never checked the two agree on anything. The repo names the set once and uses it twice — listActiveByAccount and listExpiredForAutoDestroy, the auto-destroy sweeper's query — while the double hard-codes the same three literals TWICE, in the methods standing in for those two. The constant is not exported, so nothing links them: adding a status makes the shipped sweeper reap it and leaves every test wired to the double modelling the old set, silently.", () => {
+    const repoSrc = read(resolve(REPO_ROOT, 'apps/server/src/db/sessions-repo.ts'));
+    const doubleSrc = read(
+      resolve(REPO_ROOT, 'apps/server/tests/integration/_helpers/in-memory-sessions-repo.ts'),
+    );
+
+    const decl = /const ACTIVE_SESSION_STATUSES[^=]*=\s*\[([^\]]*)\]/.exec(repoSrc);
+    expect(decl, 'ACTIVE_SESSION_STATUSES no longer declared as an array literal').not.toBeNull();
+    const canonical = [...(decl?.[1] ?? '').matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+    expect(canonical.length, 'the constant parsed as empty — the regex, not the source').toBe(3);
+
+    // Every place the repo uses the set, so a third use cannot appear unnoticed.
+    const uses = [...repoSrc.matchAll(/inArray\(sessions\.status, ACTIVE_SESSION_STATUSES\)/g)];
+    expect(uses.length, 'repo queries keyed to the constant').toBe(2);
+
+    // The double's copies: `s.status === 'a' || s.status === 'b' || ...` chains.
+    const chains = [
+      ...doubleSrc.matchAll(/s\.status === '[a-z_]+'(?:\s*\|\|\s*s\.status === '[a-z_]+')+/g),
+    ].map((m) => [...m[0].matchAll(/'([a-z_]+)'/g)].map((x) => x[1]));
+    expect(chains.length, 'hard-coded active-status chains in the double').toBe(2);
+    for (const chain of chains) {
+      expect(
+        [...chain].sort(),
+        'the double models a different active-status set than the repo — the shipped query and ' +
+          'the double every test wires have diverged',
+      ).toEqual([...canonical].sort());
+    }
+  });
 });
