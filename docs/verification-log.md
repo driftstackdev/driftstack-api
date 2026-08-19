@@ -43260,3 +43260,52 @@ that is a refactor, not a remediation — but they share the flawed shape and th
 Ratchets 2929→2930 and 3095→3096 for the one test file added. `tsc -p apps/server/tsconfig.json`
 does NOT cover the test tree — it printed nothing on a file with a hard syntax error that vitest
 caught immediately, so it is not a validator for these edits.
+
+## V-1013 — one of the sixteen strippers was actually blind, and it was not the one I expected
+
+V-1012 fixed three guards and noted six others carried their own comment-stripper. The real count is
+sixteen. Rather than repoint them on principle, each shape was measured against the corpus: apply it
+to all 506 files under `apps/server/src` and `packages`, and count import statements it destroys.
+
+Every block-comment-first shape is broken — 85 import lines destroyed across 18 files, identically
+for all four variants, including the one carrying a `(?<!:)` lookbehind that someone had already
+added after hitting the `https://` case. The line-comment-first shapes are clean, because stripping
+line comments first removes the fake `/*` opener before it can do harm. That is the whole difference,
+and it is invisible unless measured.
+
+Destruction is not blindness, though, and four of the five suspects turned out fine:
+
+`bootstrap-unwired-optional-deps-are-declared` — its stripper deletes 84.9% of `lib/bootstrap.ts`,
+a single runaway span covering lines 528-3273 with 117 construction sites in it. Verdict unchanged
+under a correct stripper, and a real violation planted at line 3119 INSIDE the destroyed span is
+still caught: the guard reads `bootstrapSource` raw and strips only selected extracts. The 84.9%
+describes what the function would delete, not what the guard decides over. Fragile, not blind.
+
+`every-declared-admin-audit-action-is-reachable` — 30.5% of `db/schema.ts` deleted, verdict
+unchanged, `admin_audit_action` survives.
+
+`the-egress-claim-gate-has-one-definition` — reads a directory where 97 files carry the pattern,
+so a hidden definer looked likely. Discovered set is identical under both strippers: 5 and 5.
+
+`the-built-api-types-agrees-with-its-source` — reads `api-types/src/common.ts`, which does not
+carry the pattern. Safe by input.
+
+**`sdk-no-debug-leak-cross-sdk-parity` is the one that was really blind.**
+`packages/sdk-typescript/src/resources/account.ts` opens with
+`// AccountResource — typed methods for /v1/account/*.` — a line comment, but the `/*` in that
+wildcard path opens a span that closes at the next `*/` on line 24, swallowing the file's first
+twenty-four lines including its imports. A `console.log` planted at line 10, which is a real
+top-level statement position, was NOT reported: the guard passed 7/7. With the shared scanner it
+fails by name. Eleven files under `packages` open that way, plus eighteen under `apps/server/src`.
+
+I nearly filed this wrong. The first plant landed inside what I assumed was a runaway; it had to be
+checked against the file before the result meant anything, because a `console.log` inside a GENUINE
+block comment is correctly ignored and would have looked identical in the output.
+
+The function was also named `stripCommentsAndStrings` and documented as stripping strings "naively".
+It never stripped a string. Renamed to `stripComments` rather than taught to strip them — adding
+behaviour is not this commit's job, and a name that overstates is the same defect class this arc has
+been closing all session.
+
+Mutation: the planted leak → RED (was green); control → 7 passed. No ratchet change, no new file.
+`it(` count unchanged (7). Full suite after V-1012: 2983 passed | 113 skipped (3096), 30067 tests.

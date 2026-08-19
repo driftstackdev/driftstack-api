@@ -12,6 +12,8 @@ import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { readdirSync, statSync } from 'node:fs';
 
+import { codeOnly } from './_helpers/code-only.js';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 
@@ -34,13 +36,19 @@ function listFiles(dir: string, ext: string): string[] {
   return out;
 }
 
-/** Strip TS/JS comments (block + line) and strings naively. */
-function stripCommentsAndStrings(src: string): string {
-  // Remove block comments.
-  let s = src.replace(/\/\*[\s\S]*?\*\//g, '');
-  // Remove single-line comments.
-  s = s.replace(/\/\/.*$/gm, '');
-  return s;
+/**
+ * Strip TS/JS comments. Strings are NOT stripped, despite what this function was
+ * called until V-1013 — nothing here ever removed them.
+ *
+ * The removed implementation ran the block-comment pass first, so the `/*` in a
+ * line comment naming a wildcard route path opened a comment that closed at the
+ * next `*\/`. `resources/account.ts` opens with exactly that, and the resulting
+ * span swallowed its first 24 lines — imports included. A `console.log` placed in
+ * that span was NOT reported: the shipped guard passed 7/7 with one planted
+ * there, and the shared scanner fails on it by name.
+ */
+function stripComments(src: string): string {
+  return codeOnly(src);
 }
 
 /** Strip Python comments + docstrings naively. */
@@ -56,7 +64,7 @@ function stripPythonCommentsAndDocstrings(src: string): string {
 /** Strip Go comments naively. */
 function stripGoComments(src: string): string {
   // Same as TS — Go uses //+/* */ syntax.
-  return stripCommentsAndStrings(src);
+  return stripComments(src);
 }
 
 // The three detectors, named once and used both by the sweeps below and by the
@@ -66,7 +74,7 @@ function stripGoComments(src: string): string {
 /** Bare `console.*` calls in TS source, ignoring comments. */
 function tsDebugLeaks(src: string): string[] {
   // Allow logger.debug(...) but flag bare console.*.
-  return stripCommentsAndStrings(src).match(/\bconsole\.(log|debug|info|warn|error)\s*\(/g) ?? [];
+  return stripComments(src).match(/\bconsole\.(log|debug|info|warn|error)\s*\(/g) ?? [];
 }
 
 /** Bare `print(` calls in Python source, ignoring comments and docstrings. */
