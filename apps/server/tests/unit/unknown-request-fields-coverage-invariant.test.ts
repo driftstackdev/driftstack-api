@@ -46,6 +46,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { LaunchProfileRequestSchema, ResumeSessionRequestSchema } from '@driftstack/api-types';
+import { transportReportBodySchema } from '../../src/routes/agent-sessions-transport-report.js';
 
 const ROUTES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../src/routes');
 
@@ -88,6 +89,10 @@ const EXEMPT_SCHEMAS: ReadonlyArray<readonly [string, unknown]> = [
   // from the parse, so the reporter placed after it could never have anything to
   // report. It belongs here, where the strictness that makes it safe is CHECKED.
   ['ResumeSessionRequestSchema', ResumeSessionRequestSchema],
+  // V-977 — the second of the two. V-976 said "exactly one is strict" on the
+  // strength of a six-line grep window; this schema's `.strict()` sits on line
+  // eleven of its declaration, so the window missed it and the claim was wrong.
+  ['transportReportBodySchema', transportReportBodySchema],
 ];
 const EXEMPT_SCHEMA_NAMES = EXEMPT_SCHEMAS.map(([name]) => name);
 
@@ -339,12 +344,25 @@ describe('customer-facing writes report the fields they ignored', () => {
     // nothing to report. Lose the modifier and the route starts stripping keys
     // exactly like the ones this mechanism was built for, while the exemption
     // above keeps waving it through.
+    // V-977 — the verdict comes from the ISSUE, not from the rejection.
+    //
+    // This filter used to read `return parsed.success`, i.e. "the probe was
+    // refused, so the schema must be strict". That is only sound for a schema
+    // whose fields are all optional, because any schema with a REQUIRED field
+    // refuses the probe for missing fields whether or not it is strict. Measured:
+    // with `transportReportBodySchema` exempted, deleting its `.strict()`
+    // left this arm green — the exemption was riding on a check that could not
+    // see the property it was named for. Zod reports an `unrecognized_keys`
+    // issue only when a strict object meets an unknown key, so that is the
+    // verdict, and a schema that refuses for any other reason no longer counts.
     const notStrict = EXEMPT_SCHEMAS.filter(([, schema]) => {
-      const parsed = (schema as { safeParse: (v: unknown) => { success: boolean } }).safeParse({
-        label: 'x',
-        __unknown_probe__: 'y',
-      });
-      return parsed.success;
+      const parsed = (
+        schema as {
+          safeParse: (v: unknown) => { success: boolean; error?: { issues: { code: string }[] } };
+        }
+      ).safeParse({ label: 'x', __unknown_probe__: 'y' });
+      if (parsed.success) return true;
+      return !(parsed.error?.issues ?? []).some((i) => i.code === 'unrecognized_keys');
     }).map(([name]) => name);
     expect(
       notStrict,

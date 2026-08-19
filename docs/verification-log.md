@@ -41688,3 +41688,41 @@ table drifting. That drift is guarded on both edges and the chain closes transit
 `billing-crypto-quote-product-list-cross-source-invariant` ties the route's `SUPPORTED_PRODUCTS` to
 `TIER_PRICE_CENTS`, and `the-purchasable-product-set-is-one-set` (V-924) ties `TIER_PRICE_CENTS` to
 `PURCHASABLE_TIERS`. All three lists hold the same six tiers, so the branch is genuinely unreachable.
+
+## V-977 — correcting V-976, and the check that let the error through
+
+**V-976's count was wrong, and I am retracting it.** That entry said "of the ten schemas wired in V-947 and
+V-949, **exactly one is strict**". Two are. `transportReportBodySchema` is
+`z.object({ … }).strict()`, so the reporter V-947 put after its parse is dead for the same reason the resume
+one was — an unknown key is a 400 from the parse, never a stripped field to report.
+
+**The error was in how I checked, and it is the session's recurring shape.** For the five route-local
+schemas I used `grep -A 6` around the declaration. This schema's `.strict()` sits on the eleventh line of
+its declaration, outside the window. A wider extractor then over-corrected in the other direction, flagging
+`CreateAgentSessionRequestSchema` and `RunTurnRequestSchema` as strict when their `.strict()` is on a
+NESTED object — both close with a plain `});`. Neither window size is the answer; reading the top-level
+close is. Verified that way for all three.
+
+**Fixed the same way as V-976:** dead call and its now-unused import removed, schema added to the guard's
+`EXEMPT_SCHEMAS`.
+
+**Then the exemption did not hold, and that is the more useful finding.** Deleting `.strict()` from
+`transportReportBodySchema` left the guard **green**. Its strictness arm probed with
+`safeParse({ label:'x', __unknown_probe__:'y' })` and read `parsed.success` — treating any rejection as
+proof of strictness. That is sound only for a schema whose fields are all optional. This one has four
+required fields, so the probe is refused for missing fields whether or not it is strict, and the exemption
+was riding on a check that could not see the property it was named for.
+
+`ResumeSessionRequestSchema` passed that arm in V-976 for the wrong reason too — it happens to be
+all-optional, so its rejection really was about the unknown key. One entry sound by luck, one unsound, and
+the arm could not tell them apart.
+
+**The verdict now comes from the issue, not the rejection.** Zod emits an `unrecognized_keys` issue only
+when a strict object meets an unknown key, so the filter asks for that code. Proved on both entries:
+dropping `.strict()` from the required-fields schema now fails by name — the case that defeated the old
+probe — and dropping it from the all-optional one still does.
+
+**Also confirmed clean in the same pass:** all 39 reporter call sites pass a RAW body. None passes
+`parsed.data`, which would have made every report empty — the module's docstring warns about exactly that,
+and it is the third property of this mechanism I have now checked across every site rather than the ones I
+touched.
