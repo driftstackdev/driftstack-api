@@ -48,18 +48,28 @@ describe('W245.A api-changelog doc parity', () => {
     expect(doc).toMatch(/90-day\s+deprecation/i);
   });
 
-  it('framings for crypto.order.* events match SubscribableWebhookEventTypeSchema gating', () => {
-    const live = new Set(
-      (SubscribableWebhookEventTypeSchema._def.values as readonly string[]).map((v) => v),
+  const live = new Set(
+    (SubscribableWebhookEventTypeSchema._def.values as readonly string[]).map((v) => v),
+  );
+  const cryptoIsLive = live.has('crypto.order.paid');
+
+  it('CRITICAL the subscribability gate was computed and has RETIRED. V-666 added crypto.order.paid to the enum, so the arm below stopped asserting anything and kept reporting as a pass — and what it forbids is the very framing that became correct.', () => {
+    expect(live.size, 'the enum was really read').toBeGreaterThan(3);
+    expect(cryptoIsLive, 'crypto.order.paid is subscribable, so the framing gate has retired').toBe(
+      true,
     );
-    if (!live.has('crypto.order.paid')) {
+  });
+
+  it.skipIf(cryptoIsLive)(
+    'framings for crypto.order.* events match SubscribableWebhookEventTypeSchema gating',
+    () => {
       // Doc must NOT call these "fires" as customer webhooks.
       expect(doc).not.toMatch(/<strong>Webhooks — <code>crypto\.order\.(paid|failed)<\/code>/);
       // Doc must caveat customer subscription as roadmap somewhere
       // referencing the gating schema.
       expect(doc).toMatch(/SubscribableWebhookEventTypeSchema/);
-    }
-  });
+    },
+  );
 
   it('cross-links to api-versioning + webhooks-crypto-events', () => {
     expect(doc).toMatch(/\/docs\/api-versioning/);

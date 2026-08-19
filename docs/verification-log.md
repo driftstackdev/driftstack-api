@@ -39285,3 +39285,47 @@ would have been precisely the vacuity this guard exists to catch, committed insi
 same, one layer down — a correct decision, applied twice, in a codebase with five copies of the
 thing it corrected. The lesson is not about egress. It is that "fix the gate" needs an enumeration
 step, and the cheap way to get one permanently is to derive the rule instead of editing the sites.
+
+## V-918 — a calibrated detector for arms that assert nothing, and the four it found in the crypto family (2026-08-19)
+
+**The instrument.** V-917's second defect — assertions inside `if (gate) { ... }` in a test body,
+which stop running when the gate flips and keep reporting as passes — is a control-flow property, so
+unlike V-908's abandoned matcher census it can be detected without judgement. The rule: an arm where
+EVERY `expect(` sits inside a conditional block.
+
+**It was wrong on the first run, and the calibration is why I know.** Against the four instances
+V-917 had just fixed, the scanner returned ZERO. The bug: `\b(?:it|test)\s*\(` also matches the
+`test(` in `re.test(readFileSync(p))`, which sits in the helper ABOVE the first arm in every one of
+those files — the false match then consumed the first real arm. A negative lookbehind fixed it, and
+the calibration now reads 4/4 on the pre-fix files and 0/4 on the post-fix ones. Reporting the first
+number would have been a confident "no instances" from a scanner that could not see the very defect
+it was built from.
+
+**Repo-wide: 14 arms.** Four are the same shape as V-917 with a different feature — V-666 added
+`crypto.order.paid` and `crypto.order.failed` to `SubscribableWebhookEventTypeSchema`, retiring the
+gate in `billing-crypto-overview`, `billing-crypto-troubleshooting`, `api-changelog` and
+`crypto-orders-ops-runbook` doc-parity. One arm's title still reads "while the enum stays gated"; the
+enum stopped being gated in V-666.
+
+**The docs were all correct anyway**, which I checked rather than assumed: no page carries a stale
+not-yet-subscribable note, and billing-crypto-overview now says the event "is emitted and is
+subscribable" with polling offered as the alternative. So no customer-facing defect — the same
+verdict as V-917, and the same reason to fix it regardless. Four guards over customer billing copy
+had been reporting green while asserting nothing, and the docs being right was not their doing.
+
+**Fix** matches V-917: the gate hoisted to describe scope, the arm converted to
+`it.skipIf(gate)`, and a CRITICAL arm asserting the enum was read and the gate has retired.
+
+**A two-sided mutation proof, better than the one V-917 used.** Re-pointing the gate at a value
+absent from the enum fails the retirement arm AND activates the preserved arm, which then fails
+because the page correctly says the event is subscribable. That second failure is the useful one: it
+proves the preserved arm is live coverage for a future re-gating rather than dead weight kept for
+sentiment. The enum lives in `@driftstack/api-types`, so mutating its source would not have been
+visible to `npx vitest run` without a rebuild; mutating the gate expression tests the same thing and
+is valid under a plain run.
+
+**Ten arms remain**, and they are not all defects — `incident-policy-doc-parity` has the same shape
+but its gate is LIVE, because `incident.*` genuinely is not subscribable, so the arm really runs.
+The rest are loop-conditionals in `behavioural-simulation`, `recipe-library`, a dashboard landmark
+check and an mTLS gate. Triaged in the next entry rather than assumed guilty: the detector finds a
+shape that CAN be vacuous, and whether it is depends on whether the condition ever holds.

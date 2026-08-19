@@ -34,11 +34,21 @@ describe('W233.A billing-crypto-troubleshooting doc parity', () => {
     expect(doc).not.toMatch(/\/v1\/billing\/crypto-orders\/ORD(?:\/|$)/);
   });
 
-  it('crypto.order webhook link points at the roadmap reference, not /docs/webhooks', () => {
-    if (!subscribable.has('crypto.order.paid')) {
+  const isSubscribable = subscribable.has('crypto.order.paid');
+
+  it('CRITICAL the subscribability gate was computed and has RETIRED. V-666 made crypto.order.paid subscribable, so the arm below stopped asserting anything while still reporting as a pass — the roadmap-reference rule it enforces is exactly what should no longer apply.', () => {
+    expect(subscribable.size, 'the enum was really read').toBeGreaterThan(3);
+    expect(isSubscribable, 'crypto.order.paid is subscribable, so the link gate has retired').toBe(
+      true,
+    );
+  });
+
+  it.skipIf(isSubscribable)(
+    'crypto.order webhook link points at the roadmap reference, not /docs/webhooks',
+    () => {
       const block = doc.split('<h2>Related</h2>')[1] ?? '';
       expect(block).toMatch(/\/docs\/webhooks-crypto-events/);
       expect(block).not.toMatch(/href="\/docs\/webhooks"><code>crypto\.order\.paid<\/code>/);
-    }
-  });
+    },
+  );
 });

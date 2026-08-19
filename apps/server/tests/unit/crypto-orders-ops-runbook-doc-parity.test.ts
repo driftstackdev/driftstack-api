@@ -66,12 +66,20 @@ describe('W242.C crypto-orders-ops-runbook doc parity', () => {
     expect(doc).toMatch(/payment_id=np_/);
   });
 
-  it('flags crypto.order.failed as not-yet-subscribable while the enum stays gated', () => {
-    const live = new Set(
-      (SubscribableWebhookEventTypeSchema._def.values as readonly string[]).map((v) => v),
-    );
-    if (!live.has('crypto.order.failed')) {
-      expect(doc).toMatch(/not yet customer-\s*subscribable/i);
-    }
+  const live = new Set(
+    (SubscribableWebhookEventTypeSchema._def.values as readonly string[]).map((v) => v),
+  );
+  const failedIsLive = live.has('crypto.order.failed');
+
+  it('CRITICAL the subscribability gate was computed and has RETIRED. The arm title says "while the enum stays gated" and the enum stopped being gated in V-666, so it has asserted nothing since — while still reporting as a pass. Support reads this runbook; a stale not-yet-subscribable note would have been unguarded either way.', () => {
+    expect(live.size, 'the enum was really read').toBeGreaterThan(3);
+    expect(failedIsLive, 'crypto.order.failed is subscribable, so the gate has retired').toBe(true);
   });
+
+  it.skipIf(failedIsLive)(
+    'flags crypto.order.failed as not-yet-subscribable while the enum stays gated',
+    () => {
+      expect(doc).toMatch(/not yet customer-\s*subscribable/i);
+    },
+  );
 });

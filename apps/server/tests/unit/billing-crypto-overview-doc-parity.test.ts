@@ -32,16 +32,26 @@ describe('W230.A billing-crypto-overview doc parity', () => {
     (SubscribableWebhookEventTypeSchema._def.values as readonly string[]).map((v) => v),
   );
 
-  it('crypto.order.paid is not framed as a live subscribable webhook today', () => {
-    const isSubscribable = subscribable.has('crypto.order.paid');
-    if (!isSubscribable) {
+  const isSubscribable = subscribable.has('crypto.order.paid');
+
+  it('CRITICAL the subscribability gate was computed and has RETIRED. V-666 added crypto.order.paid to the subscribable enum, so the arm below stopped asserting anything and kept reporting as a pass. The page was updated correctly anyway — it now says the event is subscribable and offers polling as the alternative — but nothing here was holding it to that.', () => {
+    expect(subscribable.size, 'the enum was really read').toBeGreaterThan(3);
+    expect(
+      isSubscribable,
+      'crypto.order.paid is subscribable, so the caveat gate has retired',
+    ).toBe(true);
+  });
+
+  it.skipIf(isSubscribable)(
+    'crypto.order.paid is not framed as a live subscribable webhook',
+    () => {
       // Doc must caveat that the event isn't subscribable yet.
       expect(doc).toMatch(/not yet on the subscribable webhook event list/i);
       expect(doc).toMatch(/poll/i);
       // The previous casual "if you have webhooks configured" framing.
       expect(doc).not.toMatch(/if you\s+have webhooks configured/);
-    }
-  });
+    },
+  );
 
   it('receipt endpoints in the doc match the route registrations', () => {
     for (const suffix of ['/receipt', '/receipt.txt', '/receipt.pdf']) {
