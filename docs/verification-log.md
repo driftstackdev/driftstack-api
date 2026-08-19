@@ -38509,3 +38509,35 @@ source-invariant` ties the handler to `PROBLEM_TYPES`, and every documented type
 third file to assert what two already establish would be volume, not coverage.
 
 No source change.
+
+## V-896 — the webhook event catalogue is complete, and two apparent gaps were not gaps (2026-08-18)
+
+**Last enumerable customer catalogue.** `webhook_event_type` carries 11 values; the webhooks doc
+section documents 9. Both apparent discrepancies resolved against source, and neither is a defect.
+
+**`egress.capability_report` — not an invented event.** `events.md` cites it while the enum does
+not contain it, which reads as documentation for an event that cannot fire. It is the HARNESS-side
+event name: the page says "Fires when the WebKit-fork harness emits an `egress.capability_report`
+event … and the control plane ingests it", and the customer-facing webhook it triggers is
+`session.egress_capability_changed`, which IS in the enum and IS documented. `schema.ts` carries the
+same name in a comment and an `egress_capability_report` jsonb column. Correctly described
+internal plumbing, not fiction.
+
+**`quota.warning_80pct` and `quota.exceeded` — undocumented on purpose.** Neither appears anywhere
+in the customer docs, which looked like two subscribable events a customer could never find. The
+repo answers it directly: `webhooks-repo.ts` defines `HISTORICAL_SILENT_WEBHOOK_EVENTS` for exactly
+these two, with the comment "The PostgreSQL enum retains two never-emitted quota values for
+migration compatibility. They are not part of the current customer contract and must be removed
+whenever a persisted endpoint is materialized." They are never emitted AND actively stripped from
+persisted endpoints. Documenting them would advertise events that cannot fire — the docs are right,
+and the code goes further than the docs by removing them at materialization.
+
+**The refinement this adds to the instrument.** Enum-versus-docs comparison has now cleared five
+catalogues (error types 32/32, audit actions 46/46, api-key scopes as a declared subset, session
+statuses 5/5, webhook events 9/11-by-design). What the webhook case shows is that **set difference
+is not the question — customer contract is.** An enum can legitimately hold values that are
+migration ballast, internal plumbing, or deliberately withheld, and each looks identical to a
+documentation gap until the reason is read. Two of two flagged discrepancies here were
+false positives, and both took one file-read to dissolve.
+
+No source change.
