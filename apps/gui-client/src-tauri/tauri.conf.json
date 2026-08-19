@@ -49,6 +49,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": ["app", "dmg", "nsis", "appimage", "deb"],
     "category": "DeveloperTool",
     "icon": [
