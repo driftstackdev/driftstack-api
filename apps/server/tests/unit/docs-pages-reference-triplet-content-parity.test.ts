@@ -333,7 +333,7 @@ describe('W786 docs reference/ triplet content parity', () => {
     expect(p).toMatch(/\*\*Granular scopes \*\* — `verb:resource` syntax/);
   });
 
-  it('V-1057 scope-catalog rows are derived from ApiKeyScopeSchema, so every scope a customer can hold has a row on the page. The roster was frozen as a 19-item list under a title claiming 18, beside a reference to a "41-case" scope-check file that has 32 arms and 56 tests; a scope added next would have been documented nowhere and asserted by nothing.', () => {
+  it('V-1057 scope-catalog rows are derived from ApiKeyScopeSchema, so every scope a customer can hold has a row on the page. The roster was frozen as a hand-written list under a title whose count did not match it, beside a case-count for scope-check.test.ts that matches neither its arms nor its tests; a scope added next would have been documented nowhere and asserted by nothing. The figures are gone rather than corrected, because a corrected figure goes stale the same way — including the ones that would have sat in this sentence.', () => {
     const p = read(SCP);
     const scopes = ApiKeyScopeSchema.options;
 

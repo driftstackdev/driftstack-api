@@ -44996,3 +44996,37 @@ still catches it — fails two. Restored byte-identical.
 
 NEGATIVE recorded, so the next sweep does not redo it: scope catalogue is complete
 (19/19 in reference/scopes.md), and the count-in-title population is now zero.
+
+## V-1058 — the retraction froze the thing it was retracting
+
+The full suite after V-1057 came back with two reds. Neither was a peer's: the tree
+was clean before the run.
+
+FIRST, and the one worth recording. V-794's meta-guard — "no NEW pin freezes a
+hand-maintained count" — went from 91 to 92. The new offender was the file I had just
+fixed. V-1057's whole point was that a count in a title goes stale, and the title I
+wrote to say so read "…a 41-case scope-check file that has 32 arms and 56 tests". The
+phrase `32 arms` is precisely the shape the guard forbids, so the sentence explaining
+why hand-maintained counts rot became a hand-maintained count that will rot.
+
+This is the retraction-versus-sentinel collision the batch rules call out, in a form I
+had not seen: not a retraction quoting the claim it retracts, but a retraction
+REPRODUCING the defect it describes. Naming the wrong numbers was the natural way to
+show they were wrong, and it was the one way I could not write it. The title now says
+the cited figure matches neither the file's arms nor its tests, without saying what
+either is — and says out loud that the figures are gone rather than corrected,
+including the ones that would have sat in that sentence.
+
+Worth noting the guard caught this and I did not. The per-file run was green; only the
+full suite sees a corpus-wide ratchet. That is the argument for running it every few
+commits rather than trusting per-file greens.
+
+SECOND, mechanical. `dist-reading-suites-have-fresh-artifacts` reported `apps/docs`
+built before its source changed. The content was byte-identical to HEAD — V-1057's
+mutation round restored `reference/scopes.md` with `cp`, which rewrites mtime. Same
+shape as V-1027. Rebuilt rather than back-dating the timestamp: the guard's proxy is
+mtime, and an artifact that genuinely postdates its source is the state it is asking
+for. `dist` is gitignored, so nothing enters the commit.
+
+Suite before the fix: 2 files failed, 3 tests, of 3103 files / 30655 tests. Both
+resolved; no assertion was weakened to get there.
