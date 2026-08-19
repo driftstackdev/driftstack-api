@@ -54,7 +54,7 @@ describe('W534.C packages/sdk-go/doc.go content parity', () => {
     expect(body).toMatch(/\/\/\t_ = client\.Sessions\.Destroy\(ctx, session\.ID\)/);
   });
 
-  it("Typed errors + retry + webhook-signature framing pinned: 'Errors are typed: every server problem-type maps to a concrete error type customers can switch on with errors.As. The retry policy is applied automatically (configurable via [WithRetry]) and honours Retry-After.' + 'Webhook signature verification is in [VerifyWebhookSignature].' — pinned so the typed-errors + errors.As-switch + retry-policy + WithRetry-configurable + Retry-After-honoured + VerifyWebhookSignature-pointer commitment survives (drift to dropping errors.As guidance would lose the canonical Go-idiom error-handling pattern; drift to silent-Retry-After-ignore would break server-side rate-limit cooperation)", () => {
+  it("V-1060 typed errors + retry + webhook-signature framing pinned, with the retry set matching IsRetryable rather than contradicting it: 'Errors are typed: every server problem-type maps to a concrete error type customers can switch on with errors.As. The retry policy is applied automatically (configurable via [WithRetry]) and honours Retry-After.' + 'Webhook signature verification is in [VerifyWebhookSignature].' — pinned so the typed-errors + errors.As-switch + retry-policy + WithRetry-configurable + Retry-After-honoured + VerifyWebhookSignature-pointer commitment survives (drift to dropping errors.As guidance would lose the canonical Go-idiom error-handling pattern; drift to silent-Retry-After-ignore would break server-side rate-limit cooperation)", () => {
     expect(body).toMatch(
       /\/\/ Errors are typed: every server problem-type maps to a concrete error\s*\n?\s*\/\/ type customers can switch on with errors\.As\. The retry policy is\s*\n?\s*\/\/ applied automatically \(configurable via \[WithRetry\]\) and honours\s*\n?\s*\/\/ Retry-After\./,
     );
@@ -63,9 +63,25 @@ describe('W534.C packages/sdk-go/doc.go content parity', () => {
     // duplicate-POST warning tied to IdempotencyKey. Pinned so a customer is
     // never silently left to discover that a retried create/charge can double-
     // execute — dropping this re-exposes the duplicate-side-effect footgun.
+    // V-1056/V-1060 — the retry set, stated the way the code implements it.
     expect(body).toMatch(
-      /Retries fire on transport errors and 429 rate limits[\s\S]*?not on 4xx or 5xx response bodies[\s\S]*?terminal in the Go/,
+      /Retries fire on transport errors, on 429 rate limits,[\s\S]*?and on InternalError — the plain 500/,
     );
+    expect(body).toMatch(
+      /Every other typed error is[\s\S]*?terminal, including the other 5xx kinds such as DriverError \(502\)/,
+    );
+    // The cross-SDK claim is load-bearing: TS's retry.ts says its set matches Go's,
+    // so the two must not describe different sets.
+    expect(body).toMatch(/the same[\s\S]*?set the TypeScript and Python SDKs retry/);
+
+    // The retracted claim does not come back. It told a Go customer that a 500
+    // would not be retried, which is the case where they would add their own
+    // loop on top of one that is already running.
+    expect(
+      body,
+      'doc.go again tells customers 5xx responses are terminal in the Go SDK; IsRetryable ' +
+        'returns true for InternalError and withRetry uses it',
+    ).not.toMatch(/not on 4xx or 5xx response bodies/);
     expect(body).toMatch(
       /an automatically-retried create\s*\n?\s*\/\/ or charge can execute twice — pass an IdempotencyKey[\s\S]*?collapses the retry/,
     );

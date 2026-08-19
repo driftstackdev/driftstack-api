@@ -45076,3 +45076,50 @@ agreement arm; adding a terminal status to the active constant fails two arms; r
 one fails two. Restored byte-identical.
 
 `it(` count 3 in a new file. Ratchets 2937→2938 and 3103→3104.
+
+## V-1060 — the Go SDK's package doc told customers 5xx would not be retried
+
+Second pass of the V-1059 sweep, aimed at numbers rather than enum members: one rule,
+several hand-written copies, do they agree.
+
+Pagination came back clean and the negative is worth recording so it is not redone.
+Per-page caps live in shared `api-types` schemas rather than being restated per route,
+`reference/pagination.md` says defaults and maxima vary per endpoint rather than
+naming one, and the OpenAPI document's declared maxima match. Nothing to fix.
+
+SDK retry defaults came back clean on the numbers and dirty on the prose. All three
+SDKs default to 3 retries, 200 ms initial, 10 s cap, multiplier 2, and each says so.
+But two of the three describe DIFFERENT retryable sets, and they cannot both be right:
+
+sdk-typescript/src/retry.ts — retries transport, internal (5xx) and 429, not the
+terminal 5xx kinds like DriverError (502), and states this "matches the Go
+(IsRetryable) + Python (is_retryable) SDKs".
+
+sdk-go/doc.go — "Retries fire on transport errors and 429 rate limits (not on 4xx
+or 5xx response bodies — those are terminal in the Go SDK)."
+
+Resolved against the code, not by preferring one comment. `IsRetryable` in
+sdk-go/errors.go returns true for TransportError, InternalError and RateLimitError.
+`withRetry` calls the unexported `isRetryable`, which is a one-line delegation to
+`IsRetryable`, and its own comment names the three. So the Go SDK retries plain 500s,
+TypeScript's claim of sameness is correct, and the package doc is the false one.
+
+That matters more than an ordinary stale comment because `doc.go` IS the godoc — the
+first screen a Go customer reads on pkg.go.dev. It told them a 500 is terminal, which
+is exactly the belief that leads to writing an outer retry loop on top of one already
+running, and the paragraph's own idempotency warning covers only the transport case.
+
+The correction states the set as the code implements it — transport, 429, and
+InternalError, with the other 5xx kinds such as DriverError terminal — points at the
+exported predicate, and says the set is shared with the other two SDKs, since
+TypeScript's comment depends on that being true.
+
+Enumerated with all three patterns: four test files reference `sdk-go/doc.go`, one
+pins this paragraph. `gofmt` clean, `go build`, `go vet` and `go test ./...` all pass;
+the change is comment-only.
+
+Mutations: restoring the retracted sentence fails the arm; dropping the cross-SDK
+sameness claim fails it; dropping InternalError from the stated set fails it.
+Restored byte-identical.
+
+`it(` count 5 unchanged. No new file, no ratchet change.
