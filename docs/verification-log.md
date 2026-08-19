@@ -39148,3 +39148,37 @@ solving a problem the existing discipline already solves.
 **One further slip, loud rather than silent:** the parity-pin block I appended referenced `body`,
 which is not in scope in that file — it reads `PAGE` through a helper. `ReferenceError` on the first
 run. That is the failure mode rule 5 contrasts with the stray `);` that reports "no tests" instead.
+
+## V-915 — auditing my own queue: every open item is decision-only, and one had already been closed
+
+**V-914 found I had mis-assigned P2-002 to the operator when it was documentation of verified
+behaviour. That warranted checking the rest of the queue the same way**, asking of each item: is the
+DOCUMENTATION side done, so that what remains is genuinely a decision rather than work I have been
+declining?
+
+**Verified item by item, in source rather than from memory:**
+
+| Item                              | Documentation side                                                                                  | Closed by    |
+| --------------------------------- | --------------------------------------------------------------------------------------------------- | ------------ |
+| Profile cap 429 vs ADR-004's 402  | ADR-004 carries an implementation note stating what shipped differs, naming `TierLimitError` at 429 | V-814        |
+| Archive enablement                | ADR-006 §3 marked DECIDED, NOT IMPLEMENTED                                                          | V-865        |
+| Machine class / region            | ADR-001 carries "what shipped is not what this decision specified"                                  | V-869        |
+| Admin step-up MFA + read auditing | Split decided, and the closed-pgEnum migration constraint recorded                                  | V-861, V-882 |
+| Hash + IP logging                 | Runbook's "Log-handling — PII posture" section states the current posture                           | V-884        |
+| Empty `Idempotency-Key`           | Reference page states it is treated as absent, with no error                                        | V-887        |
+| Catalog's 24 partial rows         | Confirmed unresolvable from the priority list, twice                                                | V-879, V-913 |
+
+**So the queue is clean, and that is the finding.** Every item has its current state written down where
+a reader meets it — the ADR carries its own divergence, the runbook its own posture, the customer
+page its own behaviour. What remains in each case is a choice about whether to CHANGE something,
+which is the part that is not mine.
+
+**One item was already closed and I had been listing it as open**: the 429/402 divergence. V-814
+recorded it in ADR-004 in exactly the form V-865 later used for ADR-006, and I have been handing it
+back as an outstanding decision without checking that the documentation half was done four hundred
+entries ago. The prior-art habit caught it this time — I looked before acting rather than after.
+
+**Worth stating plainly:** a queue is a document like any other, and this one had drifted the same
+way the repository's documents did. The entries I have been correcting all session had a common
+shape — a status that was true when written and never revisited — and my own hand-off list had it
+too.
