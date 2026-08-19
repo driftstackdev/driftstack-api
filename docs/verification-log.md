@@ -41593,3 +41593,36 @@ still present, so the existence pin still passes.
 drives any of these four kinds today. Building that harness for one status-code assertion is not
 proportionate, and a source-level mapping pin catches the regression that matters — a kind quietly answered
 with the wrong class — at a fraction of the cost. Stated so the trade is visible rather than implied.
+
+## V-974 — two classes retired off the coverage list, and a caveat on V-962's number
+
+**`TierLimitError` (2 sites) — not a gap, and the reason corrects how the list should be read.** Both
+uncovered sites are the race-safe `limitExceeded` branch of the profile cap, on `clone` and `importProfile`.
+`transferProfile`'s equivalent shows 1 hit — that is §5h's closure, which it called a real gap — so the
+shape looked identical and unfinished.
+
+It is not. `profiles.test.ts` carries a block for exactly this, with a **mutation ledger**: "clone pre-check
+alone neutralized — SURVIVES; clone BOTH layers neutralized — 1 red", and the same for import. Each door
+checks the cap twice, a pre-check and the atomic result of the insert. In a normal run the pre-check refuses
+first, so the atomic branch never executes — **0 hits** — while the ledger shows it refusing when the
+pre-check is neutralised. The branch is proven load-bearing by mutation, which is the only way to prove a
+second layer of defence in depth.
+
+**That is a real limitation of the instrument V-962 introduced, and it qualifies the number I published.**
+"300 of 1,069 throw sites never executed" is accurate as a coverage statement and is NOT a count of unproven
+branches: coverage cannot distinguish a branch nothing has ever reasoned about from a second layer
+deliberately shadowed by a first and proven by a documented neutralisation. Anyone working the remainder
+should check for a mutation ledger before calling a cold branch unguarded — this one would have looked like
+a live gap on the numbers alone.
+
+**`NotFoundError` (17 sites) — all residual, triaged in one pass.** Three classes, all previously
+established: wiring guards reported as a 404 (`sessions.ts:190`, `agent-sessions.ts:2024/2041/2092` —
+`profilesService`, `accountProxiesService`, `driverSessionsRepo` undefined), which is V-965's
+deployment-configuration class; vanished-row races (`billing.ts:251`, `team-members.ts:271`,
+`profiles.ts:646`, `agent-sessions.ts:1940/3383`, `account-me.ts:907/942`), which is §5f's owner-vanished
+class; and two self-documented type-narrowing defensives in `status-subscribers.ts` whose own comments read
+"this branch should be unreachable. Guard for type-narrowing only."
+
+**19 of the 109 typed candidates retired with reasons.** Recorded rather than left looking unexamined, and
+because the TierLimitError case is the one that would most plausibly have been reported as a finding by
+someone reading the coverage output without opening the test file beside it.
