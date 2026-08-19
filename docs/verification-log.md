@@ -38572,3 +38572,39 @@ the arms are independent rather than all keying off the same behaviour.
 
 This is the first guard this session written for a defect that has NOT happened. The contract is
 documented, the code honours it, and the only gap was that nothing would notice if it stopped.
+
+## V-898 — the untested-contract class is effectively empty (2026-08-18)
+
+**Generalised V-897 into an instrument.** That entry found an exported function whose docblock
+stated an obligation and which nothing exercised. Scanned all of `apps/server/src` for the shape:
+exported functions whose docblock asserts a MUST / never / always / guarantee, minus any whose name
+appears anywhere in the test suite. **One candidate across the entire server**, and the instrument
+correctly excluded `sanitizePersistedWebhookEvents` now that V-897 gave it a test — a reasonable
+soundness signal.
+
+**The candidate was a false positive, and a reassuring one.** `consequentialHalt` in
+`agent-executor.ts` carries a genuinely load-bearing contract: an AI agent about to take a
+consequential action (purchase, payment, deletion) halts for human confirmation, "a matching
+approval is consumed before returning null, so one human decision releases one action only", and it
+is exported precisely so Stub / Real / ControlPlane cannot drift apart — "swapping executors must
+never drop it".
+
+It is thoroughly covered, just not by name. `agent-executor-real` has "consumes one consequential
+approval before dispatching a repeated match". `agent-executor-control-plane` has a whole
+describe block for the gate: halts before dispatching an unapproved consequential tap (asserting the
+box never receives it), proceeds when pre-approved, and — the one that matters — "uses one approval
+for one matching dispatch and halts before a repeated target". Both production-relevant executors
+test the replay case independently, and because all three share the one function, a change from
+`approved.delete(signature)` to `.has(signature)` fails in more than one place.
+
+**The instrument's limitation is exactly the caveat I stated before using it:** name-absent is not
+behaviour-untested. A function exercised through its callers — which is the right level for an
+executor gate — is invisible to a name grep. That is why the scan produced one candidate rather
+than none, and why the candidate dissolved on reading rather than on measurement.
+
+**So the class is effectively empty**, which is the useful result: every exported function in the
+server carrying a documented obligation has something that would notice if it stopped honouring it.
+Recorded so the scan is not re-run, and because a human-confirmation gate on an agent that can spend
+money is worth knowing is guarded rather than assuming.
+
+No source change.
