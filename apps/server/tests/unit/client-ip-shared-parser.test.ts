@@ -21,6 +21,8 @@ import Fastify from 'fastify';
 
 import { readClientIp } from '../../src/lib/client-ip.js';
 
+import { codeOnly } from './_helpers/code-only.js';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 
@@ -120,7 +122,9 @@ const DISCOVERED_CONSUMERS: readonly string[] = readdirSync(
 )
   .filter((f) => f.endsWith('.ts'))
   .filter((f) =>
-    /readClientIp/.test(readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes', f), 'utf8')),
+    /readClientIp/.test(
+      codeOnly(readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes', f), 'utf8')),
+    ),
   )
   .map((f) => `apps/server/src/routes/${f}`)
   .sort();
@@ -152,7 +156,9 @@ describe('drift-guard: legacy hand-rolled clientIp helper must NOT be reintroduc
     const rogue = readdirSync(resolve(REPO_ROOT, 'apps/server/src/routes'))
       .filter((f) => f.endsWith('.ts'))
       .filter((f) => {
-        const body = readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes', f), 'utf8');
+        const body = codeOnly(
+          readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes', f), 'utf8'),
+        );
         const m = /function\s+clientIp\s*\([^)]*\)[^{]*\{([\s\S]{0,600}?)\n\}/.exec(body);
         return m !== null && !m[1]?.includes('readClientIp(');
       });
@@ -168,7 +174,9 @@ describe('drift-guard: legacy hand-rolled clientIp helper must NOT be reintroduc
     const rogue = readdirSync(resolve(REPO_ROOT, 'apps/server/src/routes'))
       .filter((f) => f.endsWith('.ts'))
       .filter((f) => {
-        const body = readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes', f), 'utf8');
+        const body = codeOnly(
+          readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes', f), 'utf8'),
+        );
         return body.includes('x-forwarded-for') && !body.includes('readClientIp');
       });
     expect(
@@ -179,7 +187,7 @@ describe('drift-guard: legacy hand-rolled clientIp helper must NOT be reintroduc
   });
 
   it.each(DISCOVERED_CONSUMERS)('%s imports readClientIp from the shared lib', (relPath) => {
-    const body = readFileSync(resolve(REPO_ROOT, relPath), 'utf8');
+    const body = codeOnly(readFileSync(resolve(REPO_ROOT, relPath), 'utf8'));
     expect(body).toMatch(/from ['"]\.\.\/lib\/client-ip\.js['"]/);
     expect(body).toMatch(/readClientIp/);
   });
@@ -187,7 +195,7 @@ describe('drift-guard: legacy hand-rolled clientIp helper must NOT be reintroduc
   it.each(DISCOVERED_CONSUMERS)(
     '%s defines no local clientIp, or one that delegates',
     (relPath) => {
-      const body = readFileSync(resolve(REPO_ROOT, relPath), 'utf8');
+      const body = codeOnly(readFileSync(resolve(REPO_ROOT, relPath), 'utf8'));
       // The legacy form was `function clientIp(request: FastifyRequest): string | null {`
       // returning its own `req.ip ?? null`. The DEFINITION is not the problem —
       // routes/auth.ts keeps the name because it reads better at its eleven call
@@ -204,7 +212,7 @@ describe('drift-guard: legacy hand-rolled clientIp helper must NOT be reintroduc
   );
 
   it.each(DISCOVERED_CONSUMERS)('%s no longer hand-rolls the XFF split inline', (relPath) => {
-    const body = readFileSync(resolve(REPO_ROOT, relPath), 'utf8');
+    const body = codeOnly(readFileSync(resolve(REPO_ROOT, relPath), 'utf8'));
     // Sentinel: the legacy form used `request.headers['x-forwarded-for']`
     // followed by `.split(',')[0]`. Either token surviving is the
     // shape of a partial revert.

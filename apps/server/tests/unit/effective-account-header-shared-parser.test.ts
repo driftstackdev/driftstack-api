@@ -31,6 +31,8 @@ import {
   readEffectiveAccountHeader,
 } from '../../src/lib/effective-account-header.js';
 
+import { codeOnly } from './_helpers/code-only.js';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 
@@ -134,7 +136,7 @@ describe('readEffectiveAccountHeader — shared parser', () => {
         .filter((f) => f.endsWith('.ts'))
         .filter((f) =>
           /readEffectiveAccountHeader|EFFECTIVE_ACCOUNT_HEADER/.test(
-            readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes', f), 'utf8'),
+            codeOnly(readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes', f), 'utf8')),
           ),
         )
         .map((f) => `apps/server/src/routes/${f}`);
@@ -160,7 +162,9 @@ describe('readEffectiveAccountHeader — shared parser', () => {
       const bypassing = readdirSync(resolve(REPO_ROOT, 'apps/server/src/routes'))
         .filter((f) => f.endsWith('.ts'))
         .filter((f) => {
-          const body = readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes', f), 'utf8');
+          const body = codeOnly(
+            readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes', f), 'utf8'),
+          );
           const touches =
             body.includes('x-driftstack-account') || body.includes('EFFECTIVE_ACCOUNT_HEADER');
           return touches && !body.includes('readEffectiveAccountHeader(');
@@ -178,9 +182,8 @@ describe('readEffectiveAccountHeader — shared parser', () => {
       // It is an exception because it is STRICTER. If it is ever "tidied" into
       // the shared parser, `'   '` and `['', 'acc_x']` start reading as absent
       // and the self-workspace-only rule silently stops rejecting them.
-      const body = readFileSync(
-        resolve(REPO_ROOT, 'apps/server/src/routes/billing-crypto.ts'),
-        'utf8',
+      const body = codeOnly(
+        readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes/billing-crypto.ts'), 'utf8'),
       );
       expect(
         body,
@@ -196,7 +199,7 @@ describe('readEffectiveAccountHeader — shared parser', () => {
 
     for (const route of CONSUMER_ROUTES) {
       it(`${route} uses the shared readEffectiveAccountHeader`, () => {
-        const body = readFileSync(resolve(REPO_ROOT, route), 'utf8');
+        const body = codeOnly(readFileSync(resolve(REPO_ROOT, route), 'utf8'));
         expect(body).toMatch(
           /import \{ readEffectiveAccountHeader \} from '\.\.\/lib\/effective-account-header\.js'/,
         );

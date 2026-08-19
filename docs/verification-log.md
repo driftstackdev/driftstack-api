@@ -43198,3 +43198,65 @@ guards.
 
 `it(` counts unchanged (14, 13, 18). `npm run typecheck` exit 0. All four originally-failing files
 pass. No new file, so no ratchet change.
+
+## V-1012 — the comment-stripper three guards decide with, and the wildcard that broke it
+
+Swept the rest of the class V-1011 opened. Twenty-two guards discover a population by matching text
+over source; six already stripped comments, and of the sixteen that did not, two matched an
+IDENTIFIER and so could be fooled by prose: `client-ip-shared-parser` and
+`effective-account-header-shared-parser`. `effective-account-header-is-read-only-through-the-resolver`
+was checked and is sound — it excludes comments explicitly at line 80.
+
+Both were measured before being touched, in both directions.
+
+**False red, confirmed and worth fixing.** Appending `// this route deliberately does not call
+readClientIp` to a route that has no reason to use it pulls the file into DISCOVERED_CONSUMERS and
+then fails two arms, telling the operator the route does not import a parser it should never import.
+The effective-account guard does the same on one arm. This is the trap: writing down WHY a route
+opts out is the natural thing to do, and doing it breaks the gate.
+
+**False green, NOT confirmed — the guard is sound.** The rogue-XFF arm skips any file containing
+`readClientIp`, so a comment naming it looked like it would exempt a hand-rolled parse. It does not,
+for two independent reasons measured separately: a non-consumer naming it in a comment gets
+discovered and reds the import arm instead, and a real consumer that also hand-rolls XFF is caught
+by `%s no longer hand-rolls the XFF split inline`. Both were driven as mutations, and both went red.
+Recorded because the arm reads unsafe and is not.
+
+**The fix's first version was wrong, and wrong in the direction that hides.** The stripper this arc
+has pasted into three files is two regexes, block pass first. `routes/agent-sessions.ts` opens with a
+line comment naming a wildcard route path — the `/*` in it is inside a `//` comment, but the block
+pass cannot see that, so it opened a comment there and closed it 7962 characters later, deleting the
+imports in between. The control run went red on `agent-sessions.ts` before any mutation. Eighteen
+files under `apps/server/src` carry a `/*` inside a line comment, nearly all wildcard route paths.
+
+Measured whether V-1011 shipped this defect live: no. Zero identifiers that appear in real code are
+destroyed by the naive stripper across `apps/server/src`, so its verdicts were right — but by luck,
+since only the import assertion in these two guards read a region the runaway had eaten. Fragile, not
+blind.
+
+So the stripper became a scanner in `tests/unit/_helpers/code-only.ts`, shared by all three guards.
+Its second version was also wrong: `lib/redact-url.ts` matches on character classes like `/['"]/`,
+and an unmodelled quote inside a regex literal opens a string that never closes, after which every
+comment in the rest of the file survives — the widening direction. Regex literals are now modelled,
+which needs the previous significant token to tell an opener from a division sign.
+
+A stripper is a bad thing to get wrong quietly: strip too little and guards match prose again, strip
+too much and they assert over an empty file. So `code-only-strips-comments-not-code.test.ts` pins
+both directions over every server source file — no import statement may be lost, no whole-line
+comment may survive. Both arms failed against real files while this commit was being written, which
+is the only reason the scanner is shaped the way it is.
+
+Mutation matrix, all against the four affected files together (104 tests):
+comments naming all three identifiers in a non-consumer → GREEN (was 3 red);
+a real hand-rolled XFF parse in a real consumer → RED;
+regex literals unmodelled → RED; line comments no longer beating block comments → RED (7 arms);
+string literals untracked → RED. Helper and routes restored byte-identical from a scratchpad
+snapshot.
+
+Noted for later: six other guards carry their own comment-stripper. They are not repointed here —
+that is a refactor, not a remediation — but they share the flawed shape and the helper now exists.
+
+`it(` counts unchanged (12, 12, 18). `apps/server/tests/unit` green: 1932 files, 20221 tests.
+Ratchets 2929→2930 and 3095→3096 for the one test file added. `tsc -p apps/server/tsconfig.json`
+does NOT cover the test tree — it printed nothing on a file with a hard syntax error that vitest
+caught immediately, so it is not a validator for these edits.
