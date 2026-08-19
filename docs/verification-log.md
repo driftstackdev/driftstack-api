@@ -42207,3 +42207,56 @@ dashboard or doc is currently pointing at a path that does not exist.
 
 `it(` counts unchanged (4 tests in the dashboard guard, 2 in admin-api-doc-parity — the dashboard's
 two `it(` calls run once per app). `npm run typecheck` exit 0.
+
+## V-990 — V-984 rebuilt two existing guards and reported a recorded decision as a finding (2026-08-19)
+
+**The guard added in V-984 is redundant and is removed here.** Enumerating the
+registration-vs-mention class properly — after V-988 caught me missing a file by listing a directory
+with `head` and `tail` — turned up two guards that already own the questions V-984 and V-986 asked,
+both written days earlier and both better than what I wrote.
+
+`every-documented-endpoint-exists` (2026-08-17) checks that every endpoint the customer docs promise
+is registered. It reads routes from `app.<verb>('<path>')` across `routes/*` **and** `lib/app.ts`,
+strips comments first, and scans the same `apps/docs/src/pages` tree. **Its header already documents
+the same four artefacts I rediscovered and wrote up as measurement in V-984**: the line-wrapped
+`/v1/billing/crypto-`, the `/v1/legal` prefix in prose, a trailing full stop, and `GET /v1/models`
+being ANTHROPIC's endpoint named in the BYOK page. It restricts to the backticked `VERB /v1/…` form
+precisely because the looser extraction I used produced "five false alarms out of five". My version
+took the noisier extractor and then built exemptions to handle the noise the prior art had already
+designed out.
+
+`a-route-in-neither-the-spec-nor-the-docs-is-a-decision` (2026-08-18) is the third quadrant that
+V-986 called unmeasured. It is not merely present, it is sharper: against the spec AND the backticked
+doc lines it finds 17 routes written down nowhere and names the two that are reachable with an
+ordinary customer key — `POST /v1/sessions/{id}/gui-input` and
+`GET /v1/agent-sessions/{id}/gui-control-key`. **V-986 looked at those same routes and called them
+desktop-client surfaces with no defect.** The existing analysis is better evidenced than mine and
+reaches the opposite conclusion about whether anything is at stake.
+
+**And the V-984 "finding" was never a finding.** I reported that `/v1/whoami`, `/v1/status/stream`
+and `POST /v1/oauth/authorize/complete` are live and customer-documented but absent from the
+published spec, and wrote that "`lib/openapi.ts` records no withheld-path list, so nothing states the
+omission is deliberate." The list exists. It is `INTENTIONALLY_UNPUBLISHED_OPERATIONS` in
+`openapi-route-coverage`, it contains all three by name, and the comment above it says they are "the
+only literal Fastify registrations intentionally omitted from OpenAPI — keep this exact so a newly
+registered route cannot disappear from security review and generated-client discovery without a
+deliberate test change." That is the same "listed, not inherited" property my fourth arm claimed to
+be adding, already enforced exactly, by a guard that resolves registrations through the TypeScript
+AST rather than a regex. I concluded from the silence of the file I happened to open.
+
+So all four arms duplicate existing work, and the file is deleted rather than kept as a weaker second
+opinion — two files claiming one question is how one gets edited and the other rots.
+`EXPECTED_TEST_FILES` 2924 → 2923 and `_ALL` 3090 → 3089, reversing V-984's bump; my own commit was
+the last to touch those pins, so nothing of a peer's is absorbed.
+
+**What survives from V-984 is the part that was not about this question at all**: the backtick bug in
+its own `livePaths`, which is what put me onto the class that V-987, V-988 and V-989 then closed
+across four real guards. Those corrections stand on their own measurements and are unaffected.
+
+**The lesson is the one my own notes already carry, and I ran past it three times.** Prior art must be
+enumerated before investigating, not after. In V-984 I searched for guards referencing the spec and
+the docs, read `every-published-customer-path-is-documented-or-declared`, found it ran spec→docs, and
+concluded the reverse direction was missing — without ever grepping for a guard named after the
+reverse direction, which is called `every-documented-endpoint-exists`. The cost is one redundant
+guard, two log entries that overstated what they found, and a third that reported a deliberate
+decision as an open question.
