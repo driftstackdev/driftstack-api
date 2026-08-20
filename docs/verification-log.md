@@ -47502,3 +47502,47 @@ stale check. Neither was evidence for the assertion under test. The floor doing 
 correct behaviour — it is there so a discovery that silently returned nothing cannot
 pass — but it means the stale case had to be isolated by adding a sixth rostered app
 that nothing deploys, keeping the count intact.
+
+### V-1108 — correcting V-1092's own claim, and two probe payloads built on it
+
+Continuing the roster sweep reached `no-public-write-echoes-what-you-sent`, which turned
+out to be already defended — it derives its census from `printRoutes()` at :196 and
+requires a new unauthenticated write to join the table or be exempted. Nothing to add.
+
+Measuring it produced something else. Instrumenting the sweep to record status per probe
+shows **every** public write answers 400 (oauth/introspect 401); not one reaches its
+handler. That is deliberate, not a gap — the file calls them "a marker payload" and "a
+malformed body", and the validation path is exactly where an echo happens, which is why
+the positive control is a Zod `invalid_enum_value` carrying `received`. No finding.
+
+**What is a finding is in my own V-1092 entry.** It states that `refresh_token`
+"appears nowhere in the product except redaction denylists … and `docs/decisions.md`".
+That is false, and the reason is a truncated grep: I piped the enumeration through
+`head` and reported from the first ten lines. Re-run without truncation, twelve source
+occurrences, and two families are legitimate product vocabulary:
+
+- `routes/oauth.ts:89` and `lib/openapi.ts:2254` — `token_type_hint:
+z.enum(['access_token', 'refresh_token'])`, RFC 7009 on `/v1/oauth/revoke`.
+- `lib/oauth-client-exchange.ts:221` — reading `refresh_token` off an upstream OAuth
+  provider's token response.
+
+The V-1092 fix stands: Driftstack's SESSION refresh issues and accepts one opaque
+`token`, and the pin titles describing an OAuth pair were wrong. Only the justification
+overreached, and the distinction matters — `refresh_token` is fiction on the session
+surface and correct on the OAuth-provider surface. The guard is scoped to the six SDK
+auth files and their pins, none of which expose an OAuth-provider method, so it blocks
+nothing legitimate today; its comment now records why, and says to widen the exemption
+rather than rename an RFC field if an SDK ever adds `oauth.revoke(...)`.
+
+Two probe payloads were built on the same misreading: `/v1/auth/refresh` and
+`/v1/auth/logout` were sent `refresh_token`, a field neither schema has. Both still
+answer 400 either way — the marker is far under the 32-character minimum — so the sweep
+was never wrong about what it measured, but it was rejecting the body for naming a
+field that does not exist rather than for the reason a real caller would hit. Both now
+send `token`.
+
+**That correction is deliberately unguarded.** Pinning it would mean asserting each
+probe payload's keys against its route's schema, which needs a hand-written
+route-to-schema map — a new roster that is its own population, which is the exact shape
+this sweep has spent the last three findings removing. V-1092's guard already stops the
+fiction returning to the surfaces a customer reads.

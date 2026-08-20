@@ -64,8 +64,14 @@ const PUBLIC_WRITES: readonly PublicWrite[] = [
   { url: '/v1/auth/signup', method: 'POST', payload: { email: `${M}3@x`, password: `${M}4` } },
   { url: '/v1/auth/verify-email', method: 'POST', payload: { token: `${M}5` } },
   { url: '/v1/auth/resend-verification', method: 'POST', payload: { email: `${M}6@x` } },
-  { url: '/v1/auth/refresh', method: 'POST', payload: { refresh_token: `${M}7` } },
-  { url: '/v1/auth/logout', method: 'POST', payload: { refresh_token: `${M}8` } },
+  // V-1108 — these two carried `refresh_token`, a field neither route has:
+  // RefreshSessionRequestSchema and LogoutRequestSchema each take a single
+  // `token` (V-1092). Both still answer 400 — the marker is far under the
+  // 32-char minimum — so the sweep still probes the error path it is written
+  // for, but with the body a real caller would send rather than one rejected
+  // for naming a field that does not exist.
+  { url: '/v1/auth/refresh', method: 'POST', payload: { token: `${M}7` } },
+  { url: '/v1/auth/logout', method: 'POST', payload: { token: `${M}8` } },
   {
     url: '/v1/auth/mfa/challenge',
     method: 'POST',

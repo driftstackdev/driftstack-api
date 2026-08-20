@@ -51,7 +51,22 @@ const SURFACES = [
   'apps/server/tests/unit/sdk-go-auth-content-parity.test.ts',
 ] as const;
 
-/** The OAuth field names the product does not have. */
+/**
+ * The OAuth field names the SESSION surface does not have.
+ *
+ * V-1108 — scope matters here, and the V-1092 write-up overstated it. These
+ * words are not absent from the product: `/v1/oauth/revoke` accepts
+ * `token_type_hint: z.enum(['access_token', 'refresh_token'])` per RFC 7009,
+ * and `lib/oauth-client-exchange.ts` reads `refresh_token` off an upstream
+ * provider's token response. Both are correct usage of someone else's
+ * vocabulary. What does not exist is a Driftstack SESSION refresh token —
+ * `/v1/auth/refresh` takes one opaque `token` and returns a session.
+ *
+ * So this list is applied only to SURFACES above, none of which expose an
+ * OAuth-provider method today. If an SDK ever adds `oauth.revoke(...)`, its
+ * `token_type_hint` argument is legitimate and belongs on that surface: widen
+ * the exemption rather than renaming the RFC field.
+ */
 const ABSENT_FIELDS = ['refresh_token', 'access_token'] as const;
 
 const read = (rel: string): string => readFileSync(resolve(REPO_ROOT, rel), 'utf8');
