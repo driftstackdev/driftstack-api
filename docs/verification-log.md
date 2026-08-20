@@ -48097,3 +48097,21 @@ comment says "isn't owned by the calling account" while the handler uses
 `effectiveAccountIdForWrite`) and its OpenAPI twin at `openapi.ts:1488`. Verified wrong,
 but it is a second claim on a different route, so it belongs in its own commit rather
 than being folded into this one.
+
+### V-1121 addendum — editing openapi.ts requires regenerating the committed spec
+
+The full suite went red after V-1121: `sdk-python-openapi-snapshot-sync` and the
+`openapi` integration arm both fail when `openapi.ts` changes without
+`packages/sdk-python/openapi.json` being regenerated. My one-word description edit —
+"calling" to "effective" — was enough.
+
+The guard states its own remedy in the failure message ("run
+`npm run sdk:python:dump-spec` + prettier, committed alongside the openapi.ts change"),
+and its title explains why it exists: thirty-one test files read that snapshot, so a
+stale one is not merely unnoticed — it becomes what those guards validate against. It
+was built after a measured case where changing a published bound from `.max(2048)` to
+`.max(77)` left every structural arm green.
+
+Regenerated: one line changed, the snapshots-list description. That is the companion
+step for any `openapi.ts` edit and it belongs in the same commit as the edit — this one
+is a follow-up only because I missed it, and the guard is what caught me.
