@@ -48699,3 +48699,46 @@ retractions paraphrase it.
 D-2 itself is untouched and still needs the real Cloudflare ACL, which cannot be read
 from this repo. What changed is that the source now describes where customer data
 actually lives, which is a precondition for deciding it rather than an answer to it.
+
+### V-1135 — the audit Origin column checked against the emit sites; it is accurate, and now guarded
+
+D-5 asks two things: how a dual-actor action is represented in the customer audit
+catalog, and whether the Origin column should be derived from the emit sites instead of
+hand-maintained.
+
+**(a) verified, and the doc is already right.** `session.destroyed` really is emitted both
+ways — `actorType: 'customer'` on the customer teardown path in `services/sessions.ts`,
+and `'system'` on three failure/expiry paths. The plan's line numbers are accurate here
+within a line or two, unlike D-16's. The catalog row already reads "customer or system",
+so the one row D-5 names is not a defect.
+
+**The unasked question was the one worth answering:** whether any of the other 39 rows
+carries the same shape behind a one-value cell. That is the live harm — the page sells
+`?actor_type=` as a GDPR Article 15 self-audit, so a row labelled `customer` that the
+server also emits as `system` returns a short answer that looks complete. **Measured
+across all 40: none.** Every Origin cell agrees with source today.
+
+**(b) answered without taking the decision.** Generating the column is an authoring-model
+change and the API owner's call. Verifying it is not, and it delivers the same protection,
+so that is what shipped.
+
+**Three resolvers were wrong before this one, and each wrongness was invisible.**
+
+- Requiring `action:` adjacent to `actorType:` resolved 22 of 40 and reported zero
+  mismatches. A clean result over 55% of the population, with nothing on screen saying so.
+- Attributing every actorType in a FILE to every action in it resolved 40 of 40 and
+  produced two mismatches — both false. `services/sessions.ts` carries customer and system
+  emits, so `session.created` inherited `system` from a neighbour. I checked both at their
+  emit sites before reporting; had I not, this entry would have named two defects that do
+  not exist.
+- Matching `actorType: '<x>'` without a trailing comma swallowed
+  `actorType: 'customer' | 'system' | 'staff';` — the type union in `CustomerAuditEmitter`
+  — and attributed `customer` to every action that interface lists, including one only
+  ever emitted as `system`. That is a false AGREEMENT, the direction that ships quietly.
+
+The comma separates an object-literal emit from a type declaration; an `as const` arm is
+required because `services/sessions.ts` writes `actorType: 'customer' as const,`. The
+guard fails on an unresolved row rather than skipping it, because a row nobody can locate
+would otherwise compare an empty set against a populated cell and pass. Four arms, all
+mutation-proved: narrowing a dual cell, documenting an action nothing emits, collapsing
+the dual origin at source, and re-matching the type union.
