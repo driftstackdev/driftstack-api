@@ -47464,3 +47464,41 @@ and the second is in the table with a query string my comparison stripped. Both 
 have been confident, specific, wrong security findings. The detector for "which files
 lack a completeness arm" was also wrong at first — it grepped one phrasing and reported
 the profile guard as missing an arm it has, worded differently.
+
+### V-1107 — the CSP table audits the frontends it lists, and nothing listed the frontends
+
+Continuing the V-1106 sweep through the 77 rosters that derive no population. The
+next-highest-consequence is `frontend-pages-csp-security-parity`, whose `SURFACES` table
+pairs each Cloudflare Pages frontend with its `public/_headers` file and asserts the
+exact script/style/image/connect policy for each.
+
+Measured: complete today. Five deploy workflows, five apps, five `_headers` files, five
+rows — and `errors-site`, which nothing deploys, has its own dedicated arm. Nothing
+enforced any of that.
+
+Two failure directions, and the second is the one a roster cannot see at all:
+
+- an app gains a `_headers` file and no row — it ships an unaudited policy;
+- an app is deployed with **no `_headers` file at all** — it ships no CSP, and looks
+  exactly like an app this guard has approved, because a table keyed on `_headers`
+  files has nothing to notice.
+
+The arm derives the deployed set from `.github/workflows/deploy-*.yml` (excluding the
+server, which is not a Pages frontend) and requires each deployed app to have a row AND
+a `_headers` file, plus no row for an app nothing deploys — a row for a retired app
+audits nothing while making the coverage look wider than it is.
+
+Mutation-proved, restored byte-identical, workspace verified clean afterwards:
+
+- deleting the `status-site` row fails as "deployed … but have no row in SURFACES";
+- adding a `deploy-portal.yml` for an app with no `_headers` and no row fails naming
+  `portal` — the realistic new-frontend case;
+- a rostered app with no deploy workflow fails the stale-row assertion naming it.
+
+**Two mutations proved the wrong thing first and were redone.** Pointing a row at a
+non-existent path failed via ENOENT from a sibling arm rather than my assertion, and
+removing a deploy workflow tripped the discovery floor (`>= 5`) before reaching the
+stale check. Neither was evidence for the assertion under test. The floor doing that is
+correct behaviour — it is there so a discovery that silently returned nothing cannot
+pass — but it means the stale case had to be isolated by adding a sixth rostered app
+that nothing deploys, keeping the count intact.
