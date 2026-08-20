@@ -49923,3 +49923,41 @@ policy, not a contradiction across binding terms.
 The lesson is the one this arc keeps relearning from the other side: **find the authority
 before calling surfaces inconsistent.** I compared three restatements to each other, and the
 document that governs them answered two thirds of it in a sentence I had not read.
+
+### V-1164 — the binding termination clause states a retention period no row in the schedule supports
+
+V-1163's correction taught the method: read the authority, then check what restates it. Applied
+to the Terms' six clauses carrying a concrete quantity, one does not survive contact with the
+document it defers to.
+
+**Terms §14.5.4** — binding, and the clause a customer reads to learn what happens to their
+data after they leave: "Driftstack retains Customer Data for the periods specified in **the
+Privacy Policy** (typically **30 days post-termination for content data**, longer for billing
+and tax records as required by Dutch law)."
+
+**Privacy Policy §9 lists eleven categories and none of them is that.** The only 30-day
+post-termination row is _Customer-Provided Secrets_ — credentials, not content. What a reader
+would call content sits either side of the number:
+
+- API Capture artifacts, Live-session media and Desktop-local recordings — **not retained at
+  all**; returned inline, streamed and dropped, or never uploaded.
+- Session metadata — **90 days** operational.
+- Profile metadata and Snapshots — **customer-controlled**, persisting until the Customer
+  deletes them, which sits oddly beside §14.5.3 ending their access to do so.
+
+So the parenthetical is wrong in both directions at once: most content is retained for less
+than it promises, and session metadata for three times longer. **"Content data" is not defined
+anywhere in the Terms**, which is what lets one number stand in for eleven rows.
+
+**A guard holds it in place.** `legal-terms-content-parity` pins the exact string
+`typically 30 days post-termination for content\s+data`, and its own title states "30-day
+post-termination content retention" as fact. The privacy table is pinned separately. Each
+surface is frozen saying what it says, and nothing compares them — the same self-consistent-pin
+shape as V-1163, now in a binding contract.
+
+**Not fixed, and this one especially not.** Terms §14.5.4 explicitly defers to the Privacy
+Policy for the periods, so the schedule governs and a customer who follows the deference gets
+the right answer; it is the parenthetical read alone that misleads. Whether to define "content
+data", drop the number, or align it is a drafting decision for counsel, whose review of the
+legal pages `docs/launch/pre-launch-checklist.md` still lists as outstanding. Recorded with the
+row-by-row comparison so that review does not have to build it.
