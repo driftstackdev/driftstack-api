@@ -50646,3 +50646,26 @@ pins the count, so header and assertions cannot drift apart again.
 deletion must NAME the deleted path — the tombstones do, and my own corrections above now do too.
 "Every path cited in a header resolves" would fight the correct practice. The signal was worth
 one sweep, not a permanent arm.
+
+#### V-1180 addendum — a fourth stale header, and one thing deliberately not changed
+
+Sweeping repo-wide for other prose still calling `iphone16pro` the locked slug found one more:
+`locked-archetype-label-sweep`'s header opened "The locked archetype slug is
+`iphone16pro_ios18_7_safari26_4`" while **its own arm asserts
+`expect(LOCKED_ARCHETYPE_ID).toBe('iphone17_ios18_7_safari26_4')`**. The code imports the constant
+from `@driftstack/api-types` and was never wrong — which is precisely why nothing caught the
+prose. Corrected; the iOS-versus-Safari conflation the sweep actually polices is unrelated to
+which device is locked, so its purpose is unchanged.
+
+**Deliberately NOT changed: the marketing copy.** `capabilities.ts` carries
+`archetypeReference: 'iPhone 16 Pro / iOS 18.7 / Safari 26.4'`, and the shipped site renders
+"iPhone 16 Pro · iOS 18.7 · Safari 26.4". That looked like the same defect on a much larger
+surface, and it is not. `trust/cumulative-rig.astro` frames it as "the 'Driftstack' column is what
+an iPhone 16 Pro **returns**" — measurement provenance, not a statement about the current default —
+and `index.astro` already distinguishes "iPhone 15 Pro, iPhone 16 Pro, and **the current iPhone 17
+lineup**".
+
+Re-attributing a published measurement to a different device is not a documentation fix; it would
+be asserting that the rig was measured on hardware I have no evidence it ran on. The stale-slug
+class stops at prose that names the _locked default_. Flagging it here so the distinction is on
+record rather than rediscovered as a finding.

@@ -1,7 +1,16 @@
 // W262.D — workspace-wide sweep guard. The locked archetype slug is
-// `iphone16pro_ios18_7_safari26_4` (iOS 18.7 + Safari 26.4); prior
+// `iphone17_ios18_7_safari26_4` (iOS 18.7 + Safari 26.4); prior
 // marketing copy conflated those into a fictional "iOS 26.4". Fail
 // if any marketing-site / docs page resurrects that conflation.
+//
+// V-1180 — this said `iphone16pro_…` while the arm below asserted
+// `iphone17_…`, so the header contradicted its own file. The 2026-06-11
+// cutover moved the locked default; the CODE here reads
+// `LOCKED_ARCHETYPE_ID` from `@driftstack/api-types` and was never wrong,
+// which is exactly why nothing caught the prose. Only the description drifted.
+//
+// The iOS-18.7-vs-Safari-26.4 conflation this sweep exists to catch is
+// unrelated to which device is locked, so the guard's purpose is unchanged.
 
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
