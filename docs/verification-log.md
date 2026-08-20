@@ -49301,3 +49301,48 @@ human step outside the repo, which is exactly why nothing here records it.
 D-6 stands, on better evidence than it cites: the question is unanswerable from the repo,
 and the repo's own artifacts say the irreversible step was staged and never marked done.
 No source change — the remaining half needs the remote, and that is the owner's to run.
+
+### V-1150 — the REMAINING action list is spent; re-derived rather than assumed
+
+Every batch this arc has opened against a list of 24 "REMAINING" actions. That list was
+measured stale once before, and after eight D-items whose citations had drifted it was
+worth re-deriving instead of working further against it.
+
+Mapped all 26 plan sections to their action numbers and checked each remaining action two
+ways: whether a verification-log entry names it, and — where that was silent or where the
+answer mattered — against source directly.
+
+**Nineteen have V-entries naming them**, from V-808 through V-1105. **Four do not, and all
+four are nonetheless done:**
+
+- **22** — `LifecycleEvent` was documented as 4 kinds against 6. Fixed by V-805, and fixed
+  the right way: the doc lists all six and the pin DERIVES them from the union with a
+  vacuity floor rather than restating a number.
+- **15 + 16** — `network-architecture.md`. The future-tense promise went with V-809; the
+  diagrams with V-1119.
+- **36** — the SDK pins it names carry no count-asserting titles that source refutes; the
+  one remaining count, "all 3 client implementations", is correct.
+
+**The finding the plan explicitly deferred is also closed.** B21 flagged, as its own future
+action, that the doc claimed a Cloudflare Tunnel and "no inbound port open beyond SSH" —
+contradicted by `infra/nginx/cloudflare-real-ip.conf`, which states the origin's ufw allows
+443/tcp from anywhere. V-1087 retired that bullet, V-1088 the "Tunnel restart" failure row,
+and V-1119 the diagram and the mTLS section, each naming what it retired. Nothing there is
+outstanding.
+
+Spot-checked two of the V-entry-covered actions against source rather than trusting the
+log: action 28's `drivers/types.ts` now reads "Three implementations" with V-1096's
+retraction, and the rate-limits page carries all four enforced buckets, exact-matching the
+roster derived from `app.rateLimit(...)` registrations.
+
+**Two wrong keys of my own in one batch, both of which read as findings.** Searching the
+rate-limits page for backticked bucket names returned three of four and looked like a live
+defect; the page defines its buckets in a JS array as `name: 'sessions:create'`, so the
+fourth was there all along. And I first derived the "enforced" roster by guessing bucket
+names instead of extracting them from the registrations. Both would have produced a
+confident wrong entry. A roster comparison is only as good as the two extractions under it,
+and mine were wrong twice before they agreed.
+
+The action list is spent. What remains open in this arc is the D-set, and after V-1147
+through V-1149 that is down to items needing a human: procurement, a remote query, and
+product calls.
