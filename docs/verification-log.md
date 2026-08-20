@@ -51417,3 +51417,49 @@ caught it immediately, and the remaining probes were rerun against targeted file
 full suite. **A mutation loop that dies partway leaves source mutated**, and the only thing between
 that and a committed mutant is checking the tree every time rather than trusting the loop's restore
 step to have run.
+
+### V-1197 — the doubles were right, which is why nothing failed
+
+Two more applications of the corrected heuristic, then the finding that closes the arc.
+
+**Response-leak sweep — covered, and confirmed by probe rather than by reading.**
+`no-response-leaks-a-credential` sweeps 2xx bodies across the whole population, matches on LEAF key
+names ("a path-wide regex matches the container instead of the field and acquits everything under a
+well-named parent"), and runs two auth surfaces because a customer key sees admin routes only as
+403s. Added a real leak — `secret` into `publicEndpoint` — and it named the route, the field path
+and the read-versus-reveal distinction. The one-time API-key reveal is allowlisted at its own
+operation precisely so the same field anywhere else fails.
+
+**Cache/rate-limit keys — nothing to forget.** Every account-scoped key carries its scope; the rest
+are keyed by a secret that IS the identity.
+
+**Then the question this whole session was pointing at: are the in-memory doubles right?** The
+structural finding behind all 18 db-layer defects was that unit tests drive doubles which
+reimplement the property in TypeScript. That raises the obvious follow-up — if a double were WRONG,
+unit tests would assert behaviour production does not have. So I checked the doubles against the
+exact predicates I had found untested:
+
+```
+in-memory-auth-flows-repo.ts:156   if (row.expiresAt.getTime() <= args.now.getTime()) continue;
+in-memory-auth-flows-repo.ts:246   if (row.expiresAt.getTime() <= args.now.getTime()) continue;
+in-memory-api-keys-repo.ts:87      return Promise.resolve(r && r.accountId === accountId ? r : null);
+```
+
+**Every one is correct.** The auth-flows double even documents the contract it mirrors in its own
+header: "findActiveAuthToken filters by kind + tokenHash + expires_at + consumed_at."
+
+That is the sharpest statement of the session's finding, and it is evidence rather than inference.
+**The tests were real, the doubles were faithful, and the property held — in TypeScript.** The SQL
+that actually ships had no test at all. V-1187's api-keys tenancy and V-1193's session/token expiry
+are precisely the predicates the doubles got right and the database never had checked.
+
+So the failure was never "nobody tested this". It was **"the thing under test was a faithful model
+of the thing that ships"** — and a faithful model is the hardest kind to notice, because every test
+around it passes for the right reasons.
+
+**The principled remedy, named rather than half-built.** These doubles have documented contracts;
+the honest fix is a contract test executed against BOTH implementations, so one suite proves the
+double and the Drizzle repo agree. That is 29 doubles' worth of work and a design decision about
+where the contract lives, which is not something to start at the end of a sweep. The six arms added
+in V-1187/1193 close the specific predicates; the general remedy is recorded here as owed, not as
+done.
