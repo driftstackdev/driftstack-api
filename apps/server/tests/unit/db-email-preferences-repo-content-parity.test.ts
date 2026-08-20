@@ -34,8 +34,8 @@ describe('W441.C apps/server/src/db/email-preferences-repo.ts content parity', (
     expect(body).toMatch(/\/\/ V-204 — Drizzle-backed EmailPreferencesRepo\./);
   });
 
-  it('imports: and/eq from drizzle-orm; OptOutableEmailEvent from api-types; EmailPreferenceRecord/Repo from services; Database type; accountEmailPreferences schema', () => {
-    expect(body).toMatch(/import \{ and, eq \} from 'drizzle-orm';/);
+  it('imports: and/asc/eq from drizzle-orm; OptOutableEmailEvent from api-types; EmailPreferenceRecord/Repo from services; Database type; accountEmailPreferences schema', () => {
+    expect(body).toMatch(/import \{ and, asc, eq \} from 'drizzle-orm';/);
     expect(body).toMatch(/import type \{ OptOutableEmailEvent \} from '@driftstack\/api-types';/);
     expect(body).toMatch(
       /import type \{ EmailPreferenceRecord, EmailPreferencesRepo \} from '\.\.\/services\/email-preferences\.js';/,
@@ -50,9 +50,16 @@ describe('W441.C apps/server/src/db/email-preferences-repo.ts content parity', (
     );
   });
 
-  it('list(accountId): select * from accountEmailPreferences where accountId; map via toRecord', () => {
+  it('list(accountId): select * from accountEmailPreferences where accountId, ordered by eventType; map via toRecord', () => {
+    // V-1201 — split from one chain regex into two. The method gained an ORDER BY (the rows are
+    // rendered as the customer's preference list, and without one the same account saw them in a
+    // different order per load), and extending the single expression through the new comment
+    // block would have made an already-brittle chain worse. The halves are asserted separately.
     expect(body).toMatch(
-      /async list\(accountId: string\): Promise<EmailPreferenceRecord\[\]> \{\s*\n?\s*const rows = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(accountEmailPreferences\)\s*\n?\s*\.where\(eq\(accountEmailPreferences\.accountId, accountId\)\);\s*\n?\s*return rows\.map\(toRecord\);\s*\n?\s*\}/,
+      /async list\(accountId: string\): Promise<EmailPreferenceRecord\[\]> \{[^}]*\.select\(\)[^}]*\.from\(accountEmailPreferences\)[^}]*\.where\(eq\(accountEmailPreferences\.accountId, accountId\)\)/,
+    );
+    expect(body).toMatch(
+      /\.orderBy\(asc\(accountEmailPreferences\.eventType\)\);\s*\n?\s*return rows\.map\(toRecord\);/,
     );
   });
 

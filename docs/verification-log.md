@@ -51666,3 +51666,66 @@ same "a gate that does not name its blind spot reads as total" failure the suite
 given an arm for. The negative half of that arm is equally deliberate: the V-174 alias legitimately
 contains `scopes.includes('admin')`, and a pattern that flagged it would make the sweep unusable
 and get it deleted.
+
+---
+
+## V-1201 — twelve unordered reads, five acquitted by a unique index, two that were not
+
+A Postgres `SELECT` with no `ORDER BY` has no guaranteed row order. An in-memory double returns
+insertion order, every time, for free. That is the V-1197 shape once more, with the double
+supplying a _guarantee_ rather than a predicate: a test asserting an order passes against the
+double and promises something the shipping query does not provide.
+
+Fourteen array-returning reads in `apps/server/src/db/` carried no `ORDER BY`. Each was checked
+against its consumers, because the rule is not "reads need ORDER BY" — most of these genuinely do
+not, and an ORDER BY on a purge-job id list is cost with no meaning.
+
+**Five looked like defects and were closed by a constraint, not by the query.** Arbitrary order is
+only observable when something contests a key:
+
+```
+auth-repo.findActiveRateLimitOverrides  indexOverrides() is last-write-wins keyed by bucketKey
+                                        -> UNIQUE (account_id, bucket_key): never contested
+auth-repo.findTeamMemberships           consumed as ctx.teams.find(t => t.ownerAccountId === …)
+                                        -> UNIQUE (owner_account_id, member_account_id): at most
+                                           one match, so it cannot pick a different ROLE per request
+pricing-repo.listAll                    folded into a Map keyed by tier
+                                        -> tier is the pricing PRIMARY KEY; the returned order comes
+                                           from the TIER_MONTHLY_PRICE_CENTS ladder, not from SQL
+usage-repo.dailyBucketsForRange         GROUP BY with no ORDER BY, but the result is merged into a
+                                        Map and explicitly sorted by date before it is returned
+status-subscribers.listConfirmed        incident fan-out mails every recipient — no batching or slice
+```
+
+The rate-limit and team-membership ones are worth naming: both would have been real. A contested
+`bucketKey` means a customer's rate limit varies per request; a contested membership means `.find()`
+can return a different ROLE. Both are unreachable, and only the unique index says so — nothing in
+the query or the consumer does. That is the fifth time this session a hole has been closed by a
+constraint rather than by the code around it.
+
+**Two did not survive the review.** `oauth-links-repo.listForAccount` and
+`email-preferences-repo.list` both render straight to the customer — the dashboard's "Connected
+accounts" list (and, with `?active_only=false`, the revoked history) and the email-preference list.
+With no `ORDER BY`, the same account can see its own rows in a different order on each load. Both
+gained one in this commit: links by `(linked_at, id)` — `id` so two links made in the same instant
+still order deterministically — and preferences by `event_type`.
+
+**The guard** is `apps/server/tests/unit/an-unordered-read-is-reviewed-not-accidental.test.ts`. It
+holds an allowlist of the twelve that remain, each entry recording which consumer was checked and
+why arbitrary order is unobservable there. A new unordered read must earn its place rather than
+inherit the silence, and a stale entry — method renamed, deleted, or since ordered — fails too,
+because reasoning that no longer describes any code would keep vouching for whatever took the name.
+
+Mutation-proved:
+
+```
+M1  revert the oauth-links ORDER BY  -> listForAccount reported unreviewed   1 failed | 3 passed
+M2  an allowlisted read gains one    -> pricing-repo::listAll reported stale 1 failed | 3 passed
+M3  the detector stops detecting     -> self-check + both list arms red      3 failed | 1 passed
+restored (source 0 dirty)                                                    4 passed
+```
+
+M1 is the one that proves two things at once: that the fix in this commit is load-bearing, and that
+the detector notices a read losing its order. M3 cascades on purpose — a dead detector empties the
+scan, so the allowlist agrees with it and only the self-check arm can tell you why the repo suddenly
+looks clean.

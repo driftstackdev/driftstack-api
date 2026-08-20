@@ -1,6 +1,6 @@
 // V-204 — Drizzle-backed EmailPreferencesRepo.
 
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import type { OptOutableEmailEvent } from '@driftstack/api-types';
 import type { EmailPreferenceRecord, EmailPreferencesRepo } from '../services/email-preferences.js';
 import type { Database } from './client.js';
@@ -13,7 +13,11 @@ export class DrizzleEmailPreferencesRepo implements EmailPreferencesRepo {
     const rows = await this.database.db
       .select()
       .from(accountEmailPreferences)
-      .where(eq(accountEmailPreferences.accountId, accountId));
+      .where(eq(accountEmailPreferences.accountId, accountId))
+      // Rendered as the customer's email-preference list. Without an ORDER BY the same
+      // account can see its preferences in a different order on each load; `event_type` is
+      // the stable, meaningful key to sort on.
+      .orderBy(asc(accountEmailPreferences.eventType));
     return rows.map(toRecord);
   }
 

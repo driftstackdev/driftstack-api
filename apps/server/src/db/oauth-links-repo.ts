@@ -3,7 +3,7 @@
 // services/oauth-client.ts onto the account_oauth_links +
 // oauth_pending_links tables landed in migration 0039.
 
-import { and, eq, gt, isNull } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull } from 'drizzle-orm';
 import type { Database } from './client.js';
 import { accountOauthLinks, oauthPendingLinks } from './schema.js';
 import type {
@@ -71,7 +71,13 @@ export class DrizzleOAuthLinksRepo implements OAuthLinksRepo {
     const rows = await this.database.db
       .select()
       .from(accountOauthLinks)
-      .where(eq(accountOauthLinks.accountId, accountId));
+      .where(eq(accountOauthLinks.accountId, accountId))
+      // The dashboard's "Connected accounts" list renders this order directly, and
+      // `?active_only=false` audit views render the revoked history with it. Without an
+      // ORDER BY the rows arrive in whatever order the scan produces, so the same account
+      // can see its links in a different order on each load. `id` breaks ties so two links
+      // made in the same instant still order deterministically.
+      .orderBy(asc(accountOauthLinks.linkedAt), asc(accountOauthLinks.id));
     return rows.map(toLinkRow);
   }
 
