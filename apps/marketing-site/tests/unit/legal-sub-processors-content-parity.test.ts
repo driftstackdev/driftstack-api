@@ -193,10 +193,20 @@ describe('W379.A marketing-site /legal/sub-processors.md content parity', () => 
     expect(existsSync(resolve(dir, 'privacy.md'))).toBe(true);
   });
 
-  it('DPA section 4 cross-reference + "authoritative list" framing pinned', () => {
+  // V-1168 — this pinned a pointer at a numbered DPA section. Section 4 is
+  // International transfers; the DPA's sub-processor clause is 3.4 and the list it
+  // references these pages from is Annex 3. Two pins froze the wrong number, so the
+  // page could not be corrected without a red in both.
+  it('DPA Annex-3 cross-reference + "authoritative list" framing pinned', () => {
     expect(body).toMatch(
-      /referenced from the\s+\[Data Processing Addendum\]\(\/legal\/dpa\/\) \(section 4 — "Sub-processors"\)/,
+      /referenced from the\s+\[Data Processing Addendum\]\(\/legal\/dpa\/\) \(Annex 3 — "Sub-processors"\)/,
     );
+
+    // V-1168 negative — the retired pointer, quoted so it cannot come back.
+    expect(body, 'the page names a numbered DPA section again').not.toMatch(
+      /\(section 4 — "Sub-processors"\)/,
+    );
+
     expect(body).toMatch(/the authoritative list at the date marked above/);
   });
 

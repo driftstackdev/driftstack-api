@@ -50071,3 +50071,44 @@ mismatched the DPA's `## 7. Records…` for the same reason, a period where I ex
 whitespace. Both times the document was right and my pattern was narrow, which is now the
 seventh instance this arc. The tell is consistent enough to state plainly: **an absence found
 by a pattern I just wrote is a claim about the pattern until I have read the source.**
+
+### V-1168 — a second wrong DPA citation, and V-1167's sweep was incomplete
+
+V-1167 closed the cross-citation class with "five citations, one defect". **Both numbers were
+wrong.** Widening the pattern found **fourteen** citations, and a second defect among them.
+
+**The defect.** `legal/sub-processors.md` says the page "is referenced from the
+[Data Processing Addendum](/legal/dpa/) (**section 4** — "Sub-processors")". DPA §4 is
+_International transfers_. The DPA's sub-processor clause is **§3.4**, and the place it
+actually references these pages from is **Annex 3 — Sub-processors** (lines 502 and 534).
+Corrected to Annex 3, which is where the reference lives rather than where the topic is
+discussed.
+
+**Two pins froze it**, so the page could not be corrected without a red in both:
+`marketing-site-pages-legal-sub-processors-content-parity` (whose it-title also asserted the
+"DPA section 4 anchor") and `legal-sub-processors-content-parity`. The second only surfaced
+when the suite went red — my wording-grep matched one regex form and not the other, though
+rule 2's file enumeration had listed both. Enumerating the FILES and then grepping for a
+string inside them is two steps, and I checked the second against one spelling.
+
+**Why V-1167 under-counted.** Its pattern required the document name adjacent to "Section",
+so it caught `per the DPA Section 6.1` and missed
+`[Data Processing Addendum](/legal/dpa/) (section 4 — …)` — a markdown link followed by a
+parenthetical. Nine citations were invisible to it.
+
+**Two of the newly-found fourteen looked like defects and are not**, both caught by reading
+rather than trusting the sweep: `terms → refunds §8.7.1` is the Terms citing its own 8.7.1
+(my classifier saw "refund" in the lead-in and mislabelled a self-reference), and
+`sub-processors → dpa §4.2` is an explicit historical note — "the previous in-DPA appendix
+(**DPA v0.9**, section 4.2)" — a version-qualified citation to a superseded document, which is
+correct as written.
+
+So the corrected tally: **fourteen cross-document citations, twelve correct, two defective —
+one fixed in V-1166 and one here.** The remaining twelve resolve to a heading whose subject
+matches what cites it.
+
+The lesson lands on my own sweep rather than the corpus. V-1167 said the class held one
+defect; it held two, and the sweep that said otherwise was narrow in exactly the way the
+seven earlier artifacts were. **A sweep that reports a class is closed is a claim about the
+pattern, not the corpus** — and stating a count ("five citations") gave that claim a
+precision it had not earned.

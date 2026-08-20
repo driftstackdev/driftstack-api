@@ -33,10 +33,17 @@ function read(p: string): string {
 describe('W505.A apps/marketing-site/src/pages/legal/sub-processors.md content parity', () => {
   const body = read(LIB);
 
-  it("Version 1.1 + effective 2026-07-07 + DPA section 4 anchor — pinned so the version-tracked register + the DPA-section-4 cross-reference both survive (S43 2026-07-07: v1.0 → v1.1 for the Cloudflare R2 correction, per the page's own bump-the-effective-date convention)", () => {
+  it("Version 1.1 + effective 2026-07-07 + DPA Annex-3 anchor — pinned so the version-tracked register + the DPA-section-4 cross-reference both survive (S43 2026-07-07: v1.0 → v1.1 for the Cloudflare R2 correction, per the page's own bump-the-effective-date convention)", () => {
     expect(body).toMatch(/\*\*Version:\*\* 1\.1 · \*\*Effective:\*\* 2026-07-07/);
     expect(body).toMatch(
-      /referenced from the\s*\n?\s*\[Data Processing Addendum\]\(\/legal\/dpa\/\) \(section 4 — "Sub-processors"\)/,
+      /referenced from the\s*\n?\s*\[Data Processing Addendum\]\(\/legal\/dpa\/\) \(Annex 3 — "Sub-processors"\)/,
+    );
+
+    // V-1168 negative — the retired pointer named a numbered section that covers
+    // international transfers, not this list. Quoted so it cannot return; the note
+    // above paraphrases it.
+    expect(body, 'the page points at a numbered DPA section again').not.toMatch(
+      /\(section 4 — "Sub-processors"\)/,
     );
     expect(body).not.toMatch(/\[Data Processing Addendum\]\(dpa\.md\)/);
   });

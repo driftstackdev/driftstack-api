@@ -8,7 +8,7 @@ description: The third parties Driftstack uses to deliver the service, what each
 
 This page enumerates the sub-processors Driftstack engages to deliver
 the Service. It is referenced from the
-[Data Processing Addendum](/legal/dpa/) (section 4 — "Sub-processors") and
+[Data Processing Addendum](/legal/dpa/) (Annex 3 — "Sub-processors") and
 is the authoritative list at the date marked above. Customers under a
 signed DPA can subscribe to the change-notification mailing list
 described at the bottom.
