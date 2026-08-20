@@ -86,9 +86,25 @@ const ConfigSchema = z.object({
       /**
        * V-295c2 — separate public-readable bucket for the status-page
        * snapshot. MUST be a different bucket from bucketRecordings —
-       * recordings contain Customer Data and must remain private. The
-       * public bucket holds operational JSON only (incident snapshots).
-       * Optional: when null, status-snapshot writer is disabled.
+       * recordings contain Customer Data and must remain private.
+       *
+       * Two things are written here, not one:
+       *   • operational incident JSON, via StatusSnapshotService (V-295c2);
+       *   • customer-uploaded AVATARS, keyed `avatars/<account_id>.<ext>`,
+       *     via `r2Public.putObject` in routes/account-me.ts (V-352b).
+       *
+       * V-1134 — this comment used to restrict the bucket to the first of
+       * those, which stopped being true the moment avatars landed here. An
+       * avatar is customer personal data sitting on a public-readable
+       * bucket, so the Customer Data boundary above is narrower than it
+       * reads: it holds for recordings, not for everything a customer
+       * supplies. Said plainly because D-2 — whether avatars belong on a
+       * public bucket, and whether deleted avatars should be reaped rather
+       * than left in place — is still open, and it cannot be decided
+       * against a description of this bucket that omits them.
+       *
+       * Optional: when null, the status-snapshot writer is disabled and the
+       * avatar endpoints return 503.
        */
       bucketPublic: z.string().min(1).nullable(),
       endpointUrl: z.string().url(),

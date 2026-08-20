@@ -111,13 +111,26 @@ describe('W966 config lib cross-source invariant', () => {
 
   // ─── V-295c2 R2 dual-bucket framing ──────────────────────────
 
-  it("CRITICAL V-295c2 R2.bucketPublic framing — 'V-295c2 — separate public-readable bucket for the status-page snapshot. MUST be a different bucket from bucketRecordings — recordings contain Customer Data and must remain private. The public bucket holds operational JSON only (incident snapshots). Optional: when null, status-snapshot writer is disabled'. The 2-bucket separation defends against Customer-Data → public leak.", () => {
+  // V-1134 — this pinned the bucketPublic comment verbatim, including the sentence
+  // restricting that bucket to operational JSON, and its own title concluded that the
+  // two-bucket split "defends against Customer-Data → public leak". The conclusion was
+  // false: V-352b writes customer avatars to this very bucket via r2Public.putObject.
+  // The separation defends RECORDINGS, which is narrower and true. Anchors are split
+  // from the volatile claim so a corrected comment no longer has to fight a regex that
+  // spanned both.
+  it('CRITICAL V-295c2 R2.bucketPublic framing. The two-bucket split keeps RECORDINGS off the public bucket — narrower than the leak-proof reading this pin used to assert in its own title, because customer avatars are written to the public bucket too.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/config.ts'));
     expect(p).toMatch(/V-295c2 — separate public-readable bucket for the status-page/);
     expect(p).toMatch(/snapshot\. MUST be a different bucket from bucketRecordings —/);
-    expect(p).toMatch(/recordings contain Customer Data and must remain private\. The/);
-    expect(p).toMatch(/public bucket holds operational JSON only \(incident snapshots\)\./);
-    expect(p).toMatch(/Optional: when null, status-snapshot writer is disabled\./);
+    expect(p).toMatch(/recordings contain Customer Data and must remain private/);
+
+    // V-1134 negative — the retired restriction, quoted so it cannot come back.
+    expect(p, 'the public bucket is described as operational-JSON-only again').not.toMatch(
+      /holds operational JSON only/,
+    );
+
+    expect(p).toMatch(/customer-uploaded AVATARS/);
+    expect(p).toMatch(/avatar endpoints return 503/);
   });
 
   it('CRITICAL R2 has 6-field shape: accountId + accessKeyId + secretAccessKey + bucketRecordings + bucketPublic (nullable) + endpointUrl. The nullable bucketPublic is the V-295c2 disabled-when-unset toggle.', () => {

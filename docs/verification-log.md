@@ -48649,3 +48649,53 @@ is churn that changes no assertion. Separately, both SDKs total 138 methods by t
 extractor, consistent with the lockstep policy in `sdk-versioning.md`; I did not verify
 member-by-member equivalence, and `the-three-sdks-expose-the-same-surface` already owns
 that property.
+
+### V-1134 — the public bucket carries customer data, and its own config comment denied it
+
+Verifying D-2's factual basis, the way V-1128 did for D-7. Part (a) holds exactly as
+written, and the source says so itself: `routes/account-me.ts` comments that on
+`DELETE /v1/account/me/avatar` the R2 object "is intentionally left in place: a future
+sweeper job collects orphaned avatar keys". That sweeper does not exist — the only file
+in `apps/server/src` mentioning an avatar sweep is the comment promising one — and
+`services/account-deletion-purge-sweeper.ts` never touches avatars. So avatar bytes
+survive both the DELETE and full account deletion.
+
+But checking part (b) turned up something D-2 does not mention, and it is a defect rather
+than a decision. `lib/config.ts` documented `bucketPublic` as carrying operational JSON
+alone, with a Customer Data boundary as the stated rationale: recordings stay private
+because they contain Customer Data. **That restriction stopped being true at V-352b**,
+which writes customer-uploaded avatars to that same bucket via `r2Public.putObject`,
+keyed `avatars/<account_id>.<ext>`. `lib/r2.ts` calls it "the public-snapshot bucket" in
+the very function that builds the avatar key, so the two files describe the same bucket
+incompatibly.
+
+An avatar is customer personal data on a public-readable bucket. The comment did not
+merely go stale — it described a security boundary the code stopped enforcing, and D-2
+is a privacy decision that would have been taken against it.
+
+**Corrected the comment and guarded the property.** The new guard derives the consumer
+set rather than pinning a count, because the failure worth preventing is a THIRD consumer
+arriving quietly. Two derivations unioned: files referencing the public client directly,
+and classes `bootstrap.ts` constructs with it — the second is required because
+`StatusSnapshotService` receives the client as a constructor argument and its own file
+never names it, so the direct scan alone would have found one consumer and reported the
+roster complete. All three sentinels mutation-proved, including smuggling a reference
+into an undeclared service.
+
+**Rule 2 caught me out, and the enumeration was the thing that failed.** I did grep both
+patterns for pins over `config.ts` — and piped both through `head -5`. Thirty-one files
+reference it; the one that froze the retired wording was not in the first five of either
+list, so the correction went in believing nothing pinned it. The background suite failed
+on `config-lib-cross-source-invariant`. Enumerating and truncating the enumeration are
+not the same act, and the truncated one reads exactly like a complete sweep.
+
+Two pins froze it, both in the shape this arc keeps retiring. One chained a stable anchor
+to the volatile claim in a single regex (`…must remain private\. The`), so the comment
+could not be corrected without a red. The other's TITLE concluded that the two-bucket
+split "defends against Customer-Data → public leak" — a claim the avatar path falsifies.
+Both split, both given a negative sentinel quoting the retired restriction; the
+retractions paraphrase it.
+
+D-2 itself is untouched and still needs the real Cloudflare ACL, which cannot be read
+from this repo. What changed is that the source now describes where customer data
+actually lives, which is a precondition for deciding it rather than an answer to it.

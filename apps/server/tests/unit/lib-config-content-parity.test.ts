@@ -95,10 +95,19 @@ describe('W390.A apps/server/src/lib/config.ts content parity', () => {
     );
   });
 
+  // V-1134 — the regex here spanned the stable anchor and the retired
+  // operational-JSON-only restriction in one chain, so correcting the comment meant
+  // fighting the pin rather than updating it. Split.
   it('V-295c2 bucketPublic: separate public-readable bucket, MUST differ from bucketRecordings', () => {
-    expect(body).toMatch(
-      /V-295c2 — separate public-readable bucket for the status-page\s*\n?\s*\*\s*snapshot\. MUST be a different bucket from bucketRecordings —\s*\n?\s*\*\s*recordings contain Customer Data and must remain private\. The\s*\n?\s*\*\s*public bucket holds operational JSON only \(incident snapshots\)/,
+    expect(body).toMatch(/V-295c2 — separate public-readable bucket for the status-page/);
+    expect(body).toMatch(/snapshot\. MUST be a different bucket from bucketRecordings/);
+
+    // V-1134 negative — customer avatars live on this bucket, so the restriction the
+    // chain used to freeze is false and may not return.
+    expect(body, 'the retired operational-JSON-only restriction is back').not.toMatch(
+      /holds operational JSON only/,
     );
+
     expect(body).toMatch(/bucketPublic: z\.string\(\)\.min\(1\)\.nullable\(\),/);
   });
 
