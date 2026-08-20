@@ -141,6 +141,16 @@ client.cryptoOrders.get(orderId);
 client.cryptoOrders.cancel(orderId);
 client.cryptoOrders.receipt(orderId);
 
+client.archetypes.list(); // catalogue of available behavioural archetypes
+
+client.egress.attachToSession(sessionId, body);
+client.egress.getSessionProxy(sessionId);
+client.egress.listProxies();
+client.egress.createProxy(body);
+client.egress.updateProxy(id, body);
+client.egress.deleteProxy(id);
+client.egress.testProxy(id);
+
 client.usage.current();
 client.account.me();
 ```
@@ -206,6 +216,10 @@ asyncio.run(main())
 | `client.email_preferences` | `list`, `set`, `opt_in`, `opt_out`                                                                                                            |
 | `client.legal`             | `documents`, `required`, `accept`                                                                                                             |
 | `client.profile_snapshots` | `capture`, `list_for_profile`, `list`, `iterate`, `get`, `restore`, `delete`                                                                  |
+| `client.archetypes`        | `list`                                                                                                                                        |
+| `client.billing`           | `get_state`, `create_checkout_session`, `create_portal_session`                                                                               |
+| `client.crypto_orders`     | `quote`, `create_checkout`, `list`, `iterate`, `get`, `update_note`, `cancel`, `receipt`                                                      |
+| `client.egress`            | `attach_to_session`, `get_session_proxy`, `list_proxies`, `create_proxy`, `update_proxy`, `delete_proxy`, `test_proxy`                        |
 
 Inputs accept either a Pydantic model OR a plain `dict`. Outputs are typed Pydantic models.
 

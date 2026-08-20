@@ -80,6 +80,14 @@ const HAND_MAINTAINED_COUNT =
  * to change my behaviour twice, which says the note is not the mechanism. The
  * arm is.
  *
+ * Ratcheted 91 → 90 by V-1130, which retired the SDK-installation pin's hand-listed
+ * thirteen-accessor roster. That one was the offender shape in its purest form: the
+ * roster WAS its own population, so it could not report the four shipped resources
+ * absent from the page, and it never checked two that were present. Replaced by
+ * derivation from `client.py` and `client.ts`. This file's own header names an
+ * accessor miscount as the motivating example, so the ceiling moving here is the
+ * example finally closing.
+ *
  * Ratcheted 92 → 91 by V-819, which retired the DR checklist pin's frozen module
  * count. That correction landed in its own commit WITHOUT re-running this file,
  * and the tight arm below caught it in the next full suite — which is the arm
@@ -106,7 +114,7 @@ const HAND_MAINTAINED_COUNT =
  * that were both broken — the comparison measured nothing and agreed with itself.
  * The fixture case below is what actually caught it.
  */
-const CEILINGS = { futureTense: 75, handMaintainedCount: 91 } as const;
+const CEILINGS = { futureTense: 75, handMaintainedCount: 90 } as const;
 
 function parityPinFiles(): string[] {
   return readdirSync(UNIT_DIR)

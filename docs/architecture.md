@@ -88,9 +88,13 @@
 - `apps/marketing-site/` — Astro static-build for `driftstack.dev` (V-064+). SEO basics in `public/robots.txt` + `@astrojs/sitemap` integration (V-106).
 - `apps/customer-dashboard/` — Astro static-build scaffolding for `app.driftstack.dev` (V-099). Sidebar + DashboardLayout + mock-data layer; sub-pages pending Tier 3 review per the customer-dashboard-stack proposal in `docs/architecture/customer-dashboard-stack.md` (PROPOSED).
 - `apps/gui-client/` — Tauri desktop client. Separate workstream.
-- `packages/sdk-typescript/` — `@driftstack/sdk` with 7 resource accessors as of V-101 (sessions / api-keys / usage / webhooks / profiles / billing / auth).
-- `packages/sdk-python/` — Python SDK; same 7 resource accessors as of V-103.
-- `packages/sdk-go/` — Go SDK (planned).
+- `packages/sdk-typescript/` — `@driftstack/sdk`; 19 resource accessors (V-1130 count; this
+  read "7 as of V-101" long after the surface had grown, and the dated qualifier made a
+  stale number look deliberate).
+- `packages/sdk-python/` — Python SDK; the same 19 accessors, sync + async.
+- `packages/sdk-go/` — Go SDK; the same 19 accessors. This said "(planned)" until V-1130,
+  which was not a dated claim but a wrong one: the Go SDK ships, carries its own CHANGELOG,
+  and `docs/architecture/sdk-versioning.md` has governed it as one of three SDKs since V-177.
 - `packages/api-types/` — Public Zod schemas + inferred TS types. Single source of truth for the API contract.
 
 ## Public API surfaces

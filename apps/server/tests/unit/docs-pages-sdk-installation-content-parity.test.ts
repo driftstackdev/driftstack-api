@@ -189,28 +189,65 @@ describe('W778 docs /sdk/installation content parity', () => {
     );
   });
 
-  it('CRITICAL Python resource-table pinned with 13 accessors. Drift to dropping a row would break SDK consumer typings.', () => {
+  // V-1130 — this hand-listed thirteen accessors against a page carrying
+  // fifteen rows and an SDK shipping nineteen, so it was blind in both
+  // directions at once: four shipped resources (archetypes, billing,
+  // crypto_orders, egress) had no row on the canonical install page, and two
+  // that did have rows (agent_sessions, recipes) were never checked. A
+  // hand-written roster cannot report a member nobody added to it — the
+  // self-cancelling shape this series keeps re-deriving. Derived from
+  // client.py instead, so the next accessor added without a row fails here.
+  it('CRITICAL every Python resource accessor the SDK ships has a row in the installation table, DERIVED from client.py rather than hand-listed. A hand-written roster is its own population and cannot notice a resource missing from it, which is how four shipped accessors reached customers absent from the canonical install page.', () => {
     const p = read(PAGE);
+    const client = read(resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/client.py'));
 
-    for (const accessor of [
-      'client.sessions',
-      'client.profiles',
-      'client.api_keys',
-      'client.usage',
-      'client.webhooks',
-      'client.team',
-      'client.account',
-      'client.auth',
-      'client.audit_log',
-      'client.mfa',
-      'client.email_preferences',
-      'client.legal',
-      'client.profile_snapshots',
-    ]) {
-      expect(p, `accessor ${accessor}`).toMatch(
-        new RegExp(`\\| \`${accessor.replace(/\./g, '\\.')}\``),
-      );
-    }
+    const open = /^class Driftstack\b/m.exec(client);
+    expect(open, 'the sync Driftstack class moved out of client.py').not.toBeNull();
+    const after = client.slice((open as RegExpExecArray).index + 1);
+    const next = /^class /m.exec(after);
+    const body = next === null ? after : after.slice(0, next.index);
+
+    const accessors = [...body.matchAll(/^\s+self\.([a-z_]+) *= *[A-Za-z]+Resource\(/gm)].map(
+      (m) => m[1],
+    );
+    // Floor, not an equality pin: a new resource should fail on its missing
+    // row below, not here. Zero would mean the parse broke and every row
+    // "passes" — the vacuous-green this file was corrected for.
+    expect(
+      accessors.length,
+      'no accessors parsed out of client.py — its shape moved',
+    ).toBeGreaterThanOrEqual(19);
+
+    const missing = accessors.filter((a) => !new RegExp(`\\| \`client\\.${a}\``).test(p));
+    expect(
+      missing.sort(),
+      'Python resource accessors the SDK ships with no row in the installation page table:',
+    ).toEqual([]);
+  });
+
+  // V-1130 — the TypeScript block had the same gap for the same reason: it
+  // showed seventeen of the nineteen accessors client.ts ships, omitting
+  // archetypes and egress. Nothing checked it at all, so the omission was
+  // not even a stale pin — it was an unwatched surface.
+  it('CRITICAL every TypeScript resource accessor the SDK ships appears in the page TS resources block, DERIVED from client.ts. The block is prose-shaped rather than a table, so a resource missing from it is invisible to any reader who does not already know it exists.', () => {
+    const p = read(PAGE);
+    const client = read(resolve(REPO_ROOT, 'packages/sdk-typescript/src/client.ts'));
+
+    const accessors = [
+      ...client.matchAll(
+        /^\s+(?:public |readonly |public readonly )?([a-zA-Z]+)!?:\s*[A-Z][A-Za-z]*Resource/gm,
+      ),
+    ].map((m) => m[1]);
+    expect(
+      accessors.length,
+      'no accessors parsed out of client.ts — its shape moved',
+    ).toBeGreaterThanOrEqual(19);
+
+    const missing = accessors.filter((a) => !new RegExp(`\\bclient\\.${a}\\.`).test(p));
+    expect(
+      missing.sort(),
+      'TypeScript resource accessors the SDK ships that the installation page never shows:',
+    ).toEqual([]);
   });
 
   it("CRITICAL Python pydantic-OR-dict input + typed-Pydantic-output framing pinned. The 'Inputs accept either a Pydantic model OR a plain dict. Outputs are typed Pydantic models' wording is the load-bearing Python idiom.", () => {

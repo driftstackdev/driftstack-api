@@ -48487,3 +48487,60 @@ the modifier vocabulary in prose, so customers are still told exactly how to sen
 coordinates. The violation therefore lives in the api-types barrel, the three SDKs, and
 the description string — not in the spec schema. Anyone choosing ENFORCE and planning to
 "pull the schema out of the spec" will find nothing there to pull; the work is elsewhere.
+
+### V-1130 — the SDK install page showed 15 of 19 resources, and the pin that watched it listed 13
+
+Chasing D-14, which alleges four pin files freeze four wrong accessor counts (15/16/17/18)
+against 19. Those exact numbers are stale — only one such pin survives — but the defect
+underneath is real, larger than described, and customer-facing.
+
+`/sdk/installation` is the canonical install reference. Measured against the SDK sources:
+
+- **Python table: 15 rows, 19 shipped.** Missing `archetypes`, `billing`, `crypto_orders`
+  and `egress` — all four customer resources documented elsewhere in `apps/docs`, one with
+  its own `paying-with-crypto` guide.
+- **TypeScript block: 17 of 19.** Missing `archetypes` and `egress`. Nothing checked this
+  block at all, so it was not a stale pin — it was an unwatched surface.
+
+**Why the guard could not see it.** The pin hand-listed 13 accessor names and asserted each
+was present. A hand-written roster is its own population: it cannot report a member nobody
+added to it. It was blind in both directions at once — silent on the four absent rows, and
+never checking `agent_sessions` or `recipes`, which were on the page all along. That is the
+self-cancelling shape this series keeps re-deriving, and the meta-guard
+`a-parity-pin-cannot-freeze-a-claim-that-expires` names an accessor miscount as its
+motivating example.
+
+Both arms are now DERIVED — Python from `client.py`, TypeScript from `client.ts` — each
+with a floor assertion so a broken parse fails loudly instead of passing vacuously over an
+empty list. Mutation-proved individually: deleting the `client.egress` row fails the Python
+arm naming `egress`; deleting `client.archetypes.list()` fails the TS arm naming
+`archetypes`. Restores verified by asserting the corrected content is PRESENT, never by
+comparing against a baseline — the V-1123 failure.
+
+**A wrong key nearly produced a wrong finding.** I grepped customer docs for
+`crypto_orders`, got zero pages, and was one step from reporting a shipped resource as
+undocumented everywhere. The docs spell it `crypto-orders` — 7 pages, including a dedicated
+guide. The underscore is the Python accessor spelling and nothing else. Same lesson as the
+`gui_control` grep two findings ago: I guessed the vocabulary instead of reading it.
+
+**Also fixed, same class, in `docs/architecture.md`.** Its current-state workspace inventory
+called the TypeScript and Python SDKs "7 resource accessors as of V-101/V-103" and the Go
+SDK "(planned)". The first two are dated claims that went stale — the qualifier made a wrong
+number look deliberate. The third is simply false: the Go SDK ships 19 accessors and has
+been governed as one of three SDKs since V-177. Unpinned (checked both grep patterns), so
+corrected directly.
+
+D-14's remaining question — whether to consolidate the prose rosters — is untouched and
+still the SDK owner's call. This fixes the customer-facing defect either way.
+
+**Addendum — the meta-guard caught the ratchet I owed it.** The full suite came back with
+one failure: `a-parity-pin-cannot-freeze-a-claim-that-expires` measures 90 hand-maintained
+counts against a ceiling of 91, tight by design. Retiring the 13-accessor roster dropped
+the population by exactly one, and that file's rule is that the retiring commit must lower
+the ceiling rather than leave slack. Ratcheted 91 → 90 here. Worth noting that this file's
+header names "an sdk-go client claiming 15 resource accessors against 19" as its motivating
+example — so this ceiling moving is that example finally being closed rather than described.
+
+Also worth recording: the background task reported **exit code 0** while the suite carried
+a real failure, because the command ended with an `echo` whose status masked vitest's. The
+summary line is the evidence; the exit code was not.
