@@ -46146,3 +46146,53 @@ Mutations: removing the nav child while the page keeps the section fails three a
 restoring the invented anchor fails one. Restored byte-identical, docs rebuilt.
 
 `it(` counts unchanged, 5 and 16.
+
+## V-1081 — the method-aware question V-1080 could not answer, answered
+
+V-1080 found a documented-or-declared guard that matches path STRINGS, so a documented
+`POST /v1/agent-sessions` hides an undocumented `GET`. I refused to extend it there
+because my two measurements disagreed (56, then 48) and both were wrong. This is that
+measurement done properly, with both sides normalised: `{param}` and `:param` folded
+to the same token, and no trailing word-boundary that a path ending in `}` can never
+satisfy.
+
+RESULT: 164 published customer operations, 9 never mentioned with their method, and
+all 9 resolve without a change.
+
+Five are already declared by design in that guard, with reasons — the egress
+diagnostic, the fleet control surface, both halves of the dashboard-internal OAuth
+client flow, and `sessions/:id/proxy`, whose exemption says documenting it "would
+advertise a feature that cannot be used" (the permanently-503 route V-1047/V-1048
+recorded).
+
+`/health` and `/version` are infrastructure probes; `api/status.md` mentions `/health`
+only to say the status endpoint is distinct from it, which is the correct treatment.
+
+`/v1/account/web-sessions` IS documented — `api/auth.md` defers to `api/account.md`,
+which carries an "Active sign-ins" section with the scope split and the SDK method
+names. It was flagged only because that section never writes the literal string
+"GET /v1/account/web-sessions".
+
+So the path-keyed guard is adequate, the method-aware refinement finds nothing, and
+V-1080's gap was a different thing entirely: an absent SECTION, not an absent method
+prefix. Extending the guard would add machinery for a population of zero — recorded
+here so the idea is not revived on the same reasoning.
+
+THREE MORE NEGATIVES, each a vein that could have held something.
+
+SDK methods named in docs PROSE rather than as `client.x.y()` chains — the gap in
+V-1075's sweep, which only matched the chain form. 22 such names; 8 resolve in no SDK
+and every one is explained: `rate` and `irate` are PromQL functions in the metrics
+reference, `require` is JavaScript in a quickstart, and the remaining five
+(`autoDestroyExpired`, `destroyAllForAccount`, `projectSessionFailedData`,
+`runWithFailureCapture`, `bucketConfigFor`) are real server-side functions the docs
+name to explain behaviour. All five exist.
+
+Webhook PAYLOAD fields, which V-1052 never covered — it compared event names only.
+`session.failed` documents `session_id`, `duration_ms`, `operation`, `error_name` and
+`error_message`. The emit passes `{ session_id, duration_ms, operation, failure_class
+}` into `projectSessionFailedData`, which drops `failure_class` and expands it through
+`sessionFailureCopy` into exactly the documented `error_name` / `error_message` pair —
+and the example on the page is precisely the `session_timeout` case. Accurate.
+
+A turn of negatives is worth recording when the alternative is deriving them again.
