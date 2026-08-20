@@ -49184,3 +49184,41 @@ swallows real failures is worse than the false positive it fixes:
 
 "Probably future work" is not something a scan may infer on a document's behalf. The
 document says it, or the citation is broken.
+
+### V-1147 — D-13 verified, and the fallback it asks about is tested under exactly its failure mode
+
+D-13 asks whether the V-268 polling fallback is sufficient to release on, given that
+V-328e's OS hand-off shipped without per-platform native-bundle validation, and that
+`driftstack://` has never been exercised against a signed macOS bundle, an `.msi` install,
+or a `.deb` handler.
+
+Every premise verified. The verification-log lines it cites say exactly what it quotes —
+"Per-platform native-bundle test still pending" — and the scheme is registered in
+`src-tauri/tauri.conf.json` under `deep-link.schemes: ["driftstack"]`. So the primary path
+is wired and its native validation really is outstanding.
+
+**What the plan does not say is that the fallback is purpose-built for this exact gap and
+tested under it.** `lib/browser-sign-in.ts` states it in its own header: the deep link is
+the primary path, and "the 2s polling loop stays as a FALLBACK for platforms / installs
+where the URL scheme registration didn't take (e.g. Linux without a desktop env, Windows
+without HKCU write access)", with both paths converging on the same state transition.
+
+That is not just an intention. Across four test files and 47 tests:
+
+- `falls back to polling when onOpenUrl throws (plugin unavailable)` — the fallback
+  engages when the deep-link plugin is absent, which is the failure mode a missing or
+  unregistered scheme produces.
+- `deep-link arrival fast-paths to success without waiting for the poll` — the primary
+  path converges when the scheme DOES take.
+- `exchange returns 4xx → fixed error state stops the poll loop` and `cancel() returns to
+idle + stops the poll loop` — the fallback terminates rather than spinning.
+
+So the residual risk is narrower than D-13 frames it. What remains genuinely unproven is
+the OS-level handoff on a real signed bundle, which no unit test can establish. What is
+proven is that a customer whose scheme registration does not take still completes sign-in,
+which is the outcome the native test was going to protect.
+
+No source change. Recorded because the decision reads differently once the fallback's test
+coverage is on the table, and nothing in the plan put it there. Also checked: no customer
+documentation mentions `driftstack://` at all, so nothing published depends on the
+hand-off firing.
