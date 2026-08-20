@@ -48778,3 +48778,51 @@ Counting what this arc has now verified rather than assumed: D-2, D-5, D-7 and D
 full, plus these four. D-9 leaves the list. The rest stand, and every one of them turns on
 something no amount of source-reading settles — a Cloudflare ACL, whether a rehearsal
 happened, what the role model is FOR.
+
+### V-1137 — the Retryable? column was the one nobody derived
+
+D-10 asks whether a permanent tier cap should keep sharing HTTP 429 with transient
+throttling, and whether the problem body should carry an `upgrade_url`. Both premises
+verified and both hold:
+
+- **Three** error classes carry `status: 429` — `RateLimitedError`,
+  `ConcurrencyLimitError` and `TierLimitError` — out of 32 `ApiError` subclasses. A
+  per-period quota really does share a status with a token bucket, and no amount of
+  retrying clears one of them.
+- The claim that first-party SDKs are safe holds in all three. TypeScript switches on
+  `err.kind` for transport/internal/rate_limited; Python's `_RETRYABLE_TYPES` is
+  `(TransportError, InternalError, RateLimitError)`; Go's `IsRetryable` runs `errors.As`
+  against the same three. None retries the two caps.
+
+**The decision is untouched. What was actionable is a gap none of the neighbouring guards
+covered.** `reference/errors.md` carries a `Retryable?` column, and for a raw-HTTP
+customer — the exact audience D-10 names — that column is the only place the difference
+between the three 429s is written down. It was hand-maintained. Checked before building:
+
+- `errors-md-status-vs-code-parity` derives the STATUS column from `lib/errors.ts` and
+  mentions Retryable zero times.
+- `sdk-retry-policy-cross-sdk-parity` and `cross-sdk-retry-policy-parity` pin that the
+  three implementations agree with each other, saying nothing about the doc.
+- V-1061's guard covers prose shipped inside the SDK packages — `sdk-go/doc.go` and the
+  two READMEs — and never reads `apps/docs`.
+
+So the status column was derived, the SDK-package prose was derived, the implementations
+were pinned against each other, and the column a customer actually reads to decide whether
+to retry was not. Measured across all 34 rows before building: it is accurate today.
+Three arms, each mutation-proved — marking the permanent cap retryable in the docs,
+making Python disagree, and moving the tier cap off 429.
+
+**The extractor disagreed with itself first, and that was the useful signal.** Deriving
+the TypeScript set found only two classes where Python and Go found three. TypeScript
+classes reach their kind two ways — `super(toOpts('<kind>', p))` for most, a literal
+`kind: 'transport'` for `TransportError` — and handling one shape silently dropped it.
+Three implementations agreeing and one extractor dissenting means the extractor is wrong;
+had I trusted it, this entry would have reported a cross-SDK divergence that does not
+exist.
+
+**A subtlety found on the way out, recorded in the guard.** The comparison is by class
+name, and the SDKs do not name every class alike: the reference row for `tier-limit` reads
+`TierLimitError` in TypeScript and `QuotaExceededError` in Python. The three retryable
+classes DO share names across all three, which is what makes the comparison meaningful —
+and `sdk-versioning.md` requires that of the error hierarchy. Whether the non-retryable
+classes are supposed to share names too is a separate question this does not answer.
