@@ -48953,3 +48953,35 @@ so retiring the note becomes deliberate.
 written confirmation that double-opt-in status notifications may ride `outbound`, remains
 the call of whoever holds the Postmark account. What changed is that the question can no
 longer be answered by reading a document that never mentions the mail.
+
+### V-1141 — a runbook guard reported a correct citation as a missing file
+
+Surfaced while attributing a red that was not mine. `every-runbook-path-resolves` failed
+claiming `docs/runbooks/gui-release.md` cites `apps/gui-client/package.js` and
+`apps/gui-client/src-tauri/tauri.conf.js`, neither of which exists. Grepping the runbook
+for those strings returned nothing, which is the tell: **the runbook was correct and the
+extractor truncated it.** It cites `package.json` and `tauri.conf.json`, both present.
+
+The cause is alternation ordering. The path regex ended
+`\.(?:ts|mjs|js|sh|sql|md|json)`, and a regex alternation takes the first branch that
+matches, not the longest. Against `package.json` the engine reaches `js`, matches, and
+stops — capturing `package.js` and leaving `on` behind. `json` sat last in a list where
+`js` came fourth, so it could never be reached for any real filename.
+
+Latent since the guard was written, and invisible until a runbook cited a `.json` path for
+the first time. Fixed by putting `json` ahead of `js` AND adding a `(?![A-Za-z0-9])`
+boundary, because ordering alone is luck that holds until someone appends another
+extension. The boundary makes truncation impossible rather than merely unlikely.
+
+Mutation-proved in both directions, which matters more than usual here: a fix that stops
+false positives can just as easily stop true ones. The guard still fires on a missing
+`.ts` citation and on a missing `.json` citation, so the corrected branch is live rather
+than permissive.
+
+**Attribution, since this red arrived in a shared worktree.** The failing runbook belongs
+to a peer's in-flight release work, and their two commits landed between my full-suite runs
+— the earlier failures I saw (a stale file-count ratchet and a `gui-release.yml` parity
+pin) were theirs and are now green. I did not touch their runbook, workflow or
+`apps/gui-client`; the defect was in the shared guard, whose file was clean, so fixing it
+could not collide. Their runbook needed no change, which is the point: the correct
+response to this red was to fix the instrument, not the thing it accused.

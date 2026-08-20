@@ -43,7 +43,12 @@ const RUNBOOKS = resolve(REPO_ROOT, 'docs', 'runbooks');
  * file kinds runbooks actually cite.
  */
 const REPO_PATH =
-  /(?:^|[\s`(])((?:apps|packages|scripts|docs|operations)\/[A-Za-z0-9_./-]+\.(?:ts|mjs|js|sh|sql|md|json))/g;
+  // V-1141 — `json` MUST precede `js`, and the trailing boundary is what makes that
+  // ordering safe rather than lucky. Regex alternation takes the first branch that
+  // matches, so with `js` first a citation of `package.json` matched `package.js`,
+  // left `on` unconsumed, and this file reported a runbook citing a file that does
+  // not exist. The runbook was correct; the extractor truncated it.
+  /(?:^|[\s`(])((?:apps|packages|scripts|docs|operations)\/[A-Za-z0-9_./-]+\.(?:json|mjs|ts|js|sh|sql|md))(?![A-Za-z0-9])/g;
 
 function runbookFiles(): string[] {
   return readdirSync(RUNBOOKS)
