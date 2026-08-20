@@ -33,7 +33,12 @@ import { METRIC_NAMES, type MetricsRegistry } from './metrics-registry.js';
 
 export const ACCOUNT_DELETION_PURGE_JOB_TYPE = 'account_deletion.purge';
 
-const ACCOUNT_DELETION_RETENTION_DAYS = 30;
+/**
+ * V-1206 — exported so the published §9 "Customer-Provided Secrets" window can be pinned against
+ * this number rather than against a copy of it. The policy text and this constant were each
+ * pinned on their own side, which catches an edit to either and not a DRIFT between them.
+ */
+export const ACCOUNT_DELETION_RETENTION_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**

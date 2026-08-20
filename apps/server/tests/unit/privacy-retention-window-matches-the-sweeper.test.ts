@@ -21,6 +21,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { RETENTION_WINDOW_DAYS } from '../../src/db/retention-scrub-repo.js';
+import { ACCOUNT_DELETION_RETENTION_DAYS } from '../../src/services/account-deletion-purge-sweeper.js';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 
@@ -103,5 +104,25 @@ describe('published §9 retention window matches the sweeper (V-759)', () => {
       missing,
       'published cop(ies) that no longer authorise anonymisation — the retention scrub in db/retention-scrub-repo.ts depends on this clause:',
     ).toEqual([]);
+  });
+  it('CRITICAL the published Customer-Provided Secrets window equals ACCOUNT_DELETION_RETENTION_DAYS. Both sides were already pinned separately — the policy text in the legal content-parity tests, the constant nowhere at all — which catches an edit to either and not a DRIFT between them. This is the number a customer is promised their credentials are gone by.', () => {
+    for (const src of SOURCES) {
+      const body = readFileSync(resolve(REPO_ROOT, src), 'utf8');
+      const row = /^\|\s*Customer-Provided Secrets\b.*$/m.exec(body)?.[0];
+      expect(
+        row,
+        `the Customer-Provided Secrets row is missing from ${src}, so this arm read nothing`,
+      ).toBeDefined();
+      const published = Number(/within\s+(\d+)\s+days/.exec(row ?? '')?.[1]);
+      expect(
+        published,
+        `no "within N days" figure could be read out of the Customer-Provided Secrets row in ${src}`,
+      ).not.toBeNaN();
+      expect(
+        published,
+        `${src} promises secrets are deleted within ${published} days; the purge sweeper uses ` +
+          `${ACCOUNT_DELETION_RETENTION_DAYS}. Whichever is wrong, customers are reading the other one`,
+      ).toBe(ACCOUNT_DELETION_RETENTION_DAYS);
+    }
   });
 });

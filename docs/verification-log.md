@@ -51933,3 +51933,56 @@ tables carrying no retention bound; that may still stand, and nothing here speak
 The lesson is not new but it is mine this time: a claim repeated across turns stops being read as a
 claim. This one survived three reports because each one inherited it from the last rather than from
 the source. The instrument for that is the same as for everything else here — go look.
+
+---
+
+## V-1206 — the other half of D-7, verified rather than inherited
+
+V-1205 corrected my claim that the 90-day session-metadata commitment had no enforcement, and
+explicitly left the second half unverified: that other tables carry no retention bound. Having just
+been wrong once by inheriting a claim, I went and checked it.
+
+**It is also wrong as I was carrying it.** Every §9 category with an active deadline has a wired,
+unconditional enforcer:
+
+```
+Session metadata            90d   RetentionScrubSweeperService        (V-759, bootstrap:1720)
+Authentication data         90d   same sweep, api_keys.name sentinel
+Customer-Provided Secrets   30d   AccountDeletionPurgeSweeper         ACCOUNT_DELETION_RETENTION_DAYS
+Status-subscriber address   90d   wireDailyMaintenanceSweep -> processPurge(now)
+```
+
+and the tables I had assumed were unbounded are not: `admin_audit_log` and `webhook_deliveries` are
+archived then deleted by `audit-archive` at a 90-day hot tier, `agent_turn_receipts` has its own
+purge, and `auth_tokens` is swept by `auth-flows-sweeper` via `deleteStaleAuthTokens` (consumed
+before / expired before). `account_audit_log` has no age-based delete, which is consistent with it
+falling under "Account data — duration of Subscription + 7 years", a horizon nothing needs to
+enforce yet.
+
+**The real gap was narrower and different from what I had been reporting.** `RETENTION_WINDOW_DAYS`
+is pinned against the published number by `privacy-retention-window-matches-the-sweeper`, which
+reads the figure OUT of both published copies so the two cannot drift in either direction.
+`ACCOUNT_DELETION_RETENTION_DAYS` had **no test reference anywhere**. The policy text was pinned on
+its own side by the legal content-parity tests, and the code was pinned on its own side — which
+catches an edit to either and cannot catch a drift BETWEEN them. That is the number a customer is
+promised their credentials are gone by.
+
+The constant is now exported and pinned into the existing cross-source guard, beside the window it
+belongs with rather than in a new file. Proved in both directions, which is the whole point of a
+cross-source pin:
+
+```
+M1  sweeper drifts 30 -> 90   policy says 30, sweeper uses 90   1 failed | 3 passed
+M2  policy drifts 30 -> 60    policy says 60, sweeper uses 30   1 failed | 3 passed
+restored (both published copies back at 30)                     4 passed
+```
+
+**What is left of D-7 is a decision, not a defect.** The enforcement exists, runs, and now has its
+numbers pinned. What no test can settle is whether `account_audit_log` and the incident tables
+should carry a bound shorter than the 7-year account-data horizon they currently inherit. That is a
+policy judgement about disclosed processing, and it still needs a human.
+
+Recording the shape rather than only the fix: I reported the first half of this for three turns and
+the second half for four, and both were wrong. The failure was not the original analysis, which was
+probably right when written. It was that each report inherited the previous report instead of the
+source, and a claim restated often enough stops being read as a claim at all.
