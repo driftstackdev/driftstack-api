@@ -46369,3 +46369,43 @@ Each recent turn has needed more machinery to surface less, and across the arc t
 instrument has been wrong more often than the code — seventeen artifacts now, every
 one caught by reading the source instead of trusting a count. Negatives with their
 evidence are most of the remaining value.
+
+## V-1085 — a red CI stage that running only vitest could never show
+
+Two turns of clean negatives, so I stopped re-sweeping surfaces and asked a different
+question: what does CI run that I do not? The `build-test` job runs `build`,
+`check:rendered-product-status`, `typecheck`, `lint`, `format:check` and the migration
+BEFORE vitest. Across roughly twenty-five commits this session I had run vitest and
+nothing else.
+
+`typecheck`, `lint` and `format:check` are green. `check:rendered-product-status`
+FAILS, and it is not mine: `apps/docs/src/pages/api/recipes.md` carries `(V-736)` and
+a `V-812 —` retraction in customer prose, introduced 2026-08-18, and those render
+straight into `apps/docs/dist/api/recipes/index.html`. The guard forbids internal
+markers in built HTML a customer reads, so the job would fail at that step, before a
+single test ran.
+
+The guard's own source says why this could sit unnoticed: an allowlist comment records
+that a phrase in the AUP "is the phrase that had the guard failing — which is very
+likely why nothing was wired to run it". A gate that has been red before tends to stay
+unrun, and an unrun gate is indistinguishable from a passing one until someone runs it.
+
+The CONTENT was right and stays: `agent_session_id` must be a session you can access,
+your own or one owned by a team where you hold admin, and a team admin snapshotting the
+owner's session gets a `201`. Only the engineering bookkeeping left the sentence. After
+the fix the stage passes across 212 HTML files in 6 apps.
+
+The pin kept its access-rule assertion and gained a negative on `\bV-\d{3,}` in the
+page, so a marker cannot come back through the unit suite either — which matters
+because that suite is what runs on every commit, while the rendered guard runs only in
+CI and only after a docs build.
+
+Mutations: putting `(V-736)` back fails the pin AND the rendered guard, checked
+separately; weakening the access rule to "must belong to the calling account" — the
+claim V-812 corrected — fails the pin. Restored byte-identical, docs rebuilt.
+
+`it(` count 11, unchanged. No new file, no ratchet change.
+
+Worth carrying forward: "run what nothing runs" has now produced two findings
+(V-1079's stale count from the e2e suite, this one from a CI stage), while five
+consecutive sweeps of already-guarded surfaces produced none.

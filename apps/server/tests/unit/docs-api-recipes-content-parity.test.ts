@@ -58,9 +58,17 @@ describe('docs/api/recipes content parity', () => {
     // owner OR an admin member of the owner's team (V-736), so a team admin
     // snapshotting the owner's session gets a 201. The 404-not-403 anti-enumeration
     // posture is real and stays pinned.
+    // V-1085 — the sentence carried `(V-736)` and a `V-812 —` retraction into
+    // customer-rendered HTML, which `check:rendered-product-status` forbids and
+    // which failed that CI stage. The CONTENT was right; only the bookkeeping was
+    // leaking, so the access rule stays pinned and the markers must not come back.
     expect(body).toMatch(
-      /- `agent_session_id` — required\. Must be a session you can ACCESS: one\s*\n?\s*your own account owns, or one owned by a team you hold the \*\*admin\*\*\s*\n?\s*role on \(V-736\)\./,
+      /- `agent_session_id` — required\. Must be a session you can ACCESS: one\s*\n?\s*your own account owns, or one owned by a team you hold the \*\*admin\*\*\s*\n?\s*role on/,
     );
+    expect(
+      body,
+      'an internal V-marker is back in customer-rendered prose; check:rendered-product-status fails on it',
+    ).not.toMatch(/\bV-\d{3,}/);
     expect(body).toMatch(/a team admin snapshotting the owner's session gets/);
     expect(body, 'the calling-account-only claim must not return').not.toMatch(
       /Must belong to the calling/,

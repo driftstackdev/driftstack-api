@@ -58,9 +58,8 @@ Request body:
 
 - `agent_session_id` — required. Must be a session you can ACCESS: one
   your own account owns, or one owned by a team you hold the **admin**
-  role on (V-736). V-812 — this used to say the session must belong to
-  the calling account; a team admin snapshotting the owner's session gets
-  a `201`, not the refusal the sentence implied. Anything else references return 404.
+  role on — a team admin snapshotting the owner's session gets a `201`,
+  not a refusal. Anything else references return 404.
 - `label` — required. 1-120 characters after trim.
 - `description` — optional. Up to 2000 characters.
 
