@@ -129,6 +129,17 @@ describe('a window that can be opened must be able to work', () => {
     ).toEqual([]);
   });
 
+  it('CRITICAL a window that may CLOSE may also DESTROY. Tauri calls api.prevent_close() the moment a window has a JS onCloseRequested listener and hands the real close to JavaScript, whose only mechanism is destroy() — so allow-close without allow-destroy is not a narrower grant, it is a window that cannot be closed at all. The rejection lands in a fire-and-forget listen callback, becomes an unhandled rejection, and paints the fatal overlay over the in-content toolbar that holds the only close button a decorations:false window has.', () => {
+    const cap = capabilities().find((c) => (c.windows ?? []).includes('simulator-*'));
+    const granted = permIds(cap as Capability);
+    if (granted.includes('core:window:allow-close')) {
+      expect(
+        granted,
+        'simulator-* may close but not destroy — every close path dead-ends in a denied command and the window becomes unclosable',
+      ).toContain('core:window:allow-destroy');
+    }
+  });
+
   it('CRITICAL the in-process window is granted no MORE than the separate app already has. The separate app’s sim-* windows render the same view for the same purpose, so its grant is the honest ceiling — a capability that quietly grew past it would be widening the attack surface under cover of a bug fix.', () => {
     const caps = capabilities();
     const inProcess = caps.find((c) => (c.windows ?? []).includes('simulator-*'));
