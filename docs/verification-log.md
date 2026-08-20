@@ -48742,3 +48742,39 @@ guard fails on an unresolved row rather than skipping it, because a row nobody c
 would otherwise compare an empty set against a populated cell and pass. Four arms, all
 mutation-proved: narrowing a dual cell, documenting an action nothing emits, collapsing
 the dual origin at source, and re-matching the type union.
+
+### V-1136 — D-9 is already closed; D-3, D-12 and D-15 verified still live
+
+Checking the smaller D-items the way V-1128/V-1134/V-1135 checked the large ones. One can
+be struck from the list outright.
+
+**D-9 — CLOSED, no work outstanding.** It asks whether `IncidentsService` should take a
+`Logger` and log the rejection its four fire-and-forget `.catch` bodies swallow. It
+already does: the constructor takes an optional `IncidentsLogger`, all four hooks bind
+`err` and call `reportNotificationFailure`, and the source comment that used to describe
+the silence now reads "but no longer silent".
+
+The interesting part is the failure mode that would have made that fix inert. The logger
+parameter is OPTIONAL, so a service that takes one and a bootstrap that stops passing one
+type-check identically and go quiet in production only. **That is guarded too** — V-1100
+asserts both halves, and its own wording names the reason: the claim "is only true in
+production if a logger is actually passed". `bootstrap.ts` does pass it. Nothing to do,
+and nothing left to check.
+
+Three others confirmed still live, premises intact:
+
+- **D-3** — `docs/runbooks/dr-rehearsal-history.md`, mandated by item E3, still does not
+  exist on disk. The factual half holds; whether the rehearsal ever ran is not answerable
+  from this repo.
+- **D-12** — the shipped taxonomy really is two roles. The DB enum is
+  `teamRole('role', ['member', 'admin'])` and `'viewer'` appears nowhere in
+  `packages/api-types/src` or `apps/server/src`. So the V-142 four-role model is either
+  backlog or abandoned, which is the decision.
+- **D-15** — `refresh()` is still `dict[str, Any]` in and out in the Python SDK, both the
+  sync and async definitions. The untyped body is exactly what V-1092 relied on when it
+  found the prose around it was the only place a field name appeared at all.
+
+Counting what this arc has now verified rather than assumed: D-2, D-5, D-7 and D-16 in
+full, plus these four. D-9 leaves the list. The rest stand, and every one of them turns on
+something no amount of source-reading settles — a Cloudflare ACL, whether a rehearsal
+happened, what the role model is FOR.
