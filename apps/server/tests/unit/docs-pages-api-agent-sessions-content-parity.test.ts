@@ -167,4 +167,39 @@ describe('docs/pages/api/agent-sessions content parity', () => {
       /`ai_control_unavailable: true` when a message's admitted control epoch changes/,
     );
   });
+
+  it('V-1076 CRITICAL the message endpoint documents its SSE lane, including that errors ride inside the terminal frame rather than the HTTP status. A caller branching on the response status reads an invalid body or an unknown session as success, because the lane answers 200 and reports the real status as a field of the envelope.', () => {
+    expect(body, 'the SSE opt-in is no longer documented').toMatch(
+      /Send `Accept: text\/event-stream`/,
+    );
+    expect(body, 'the terminal frame name is no longer documented').toMatch(
+      /event: response`? whose `data:` is JSON `\{ status, body \}`/,
+    );
+    expect(body, 'the errors-inside-the-frame warning is gone').toMatch(
+      /Branching on\s*\n?\s*the response status alone will read every one of those as success/,
+    );
+    expect(body, 'the heartbeat-comment note is gone').toMatch(
+      /Heartbeats are SSE comments, not events/,
+    );
+    expect(body, 'the rate-limit exception is gone').toMatch(
+      /Rate-limit denial is the one exception/,
+    );
+
+    // The route must still behave the way the page now describes, or the page is
+    // the next thing to go stale.
+    const route = readFileSync(
+      resolve(REPO_ROOT, 'apps/server/src/routes/agent-sessions.ts'),
+      'utf8',
+    );
+    expect(route, 'the message route no longer selects the lane on Accept').toMatch(
+      /'text\/event-stream'/,
+    );
+    expect(route, 'the terminal frame is no longer named response').toMatch(
+      /event: response\\ndata: \$\{terminal\}/,
+    );
+    expect(route, 'the heartbeat is no longer an SSE comment').toMatch(/`: heartbeat \$\{/);
+    expect(route, 'a rate-limit denial no longer bypasses the stream').toMatch(
+      /err instanceof RateLimitedError \|\| !wantsEventStream/,
+    );
+  });
 });

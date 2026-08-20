@@ -371,6 +371,29 @@ Errors:
 |    503 | feature-unavailable | no Mac has registered LiveKit credentials yet                                    |
 |    503 | feature-unavailable | stored Mac secret is unreadable (ops-actionable; rotate key)                     |
 
+### Streaming the turn (SSE)
+
+Send `Accept: text/event-stream` on the message request and the turn
+streams instead of blocking. The lane differs from the JSON one in ways
+worth writing a client around:
+
+- **Heartbeats are SSE comments, not events.** The stream opens with
+  `: stream open` and emits `: heartbeat <ISO-8601>` periodically. Lines
+  beginning `:` carry no event name and no data — a client waiting on
+  named events correctly sees nothing until the turn finishes, which for
+  a browser task is normal rather than a stall.
+- **One terminal frame, always named `response`.** The stream ends with
+  `event: response` whose `data:` is JSON `{ status, body }` — the HTTP
+  status the JSON lane would have returned, and the same body.
+- **Errors arrive inside that frame, not as a status code.** An invalid
+  body or an unknown session answers `200` at the HTTP layer and reports
+  the failure as the `status` field of the terminal envelope. Branching on
+  the response status alone will read every one of those as success; read
+  `status` from the payload.
+- **Rate-limit denial is the one exception.** A `429` is still a hard HTTP
+  status with no stream, because the bucket is decided before any body
+  exists.
+
 ## Live transcript stream (SSE)
 
 `GET /v1/agent-sessions/{id}/transcript`

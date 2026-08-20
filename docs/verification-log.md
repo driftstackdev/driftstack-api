@@ -45895,3 +45895,49 @@ Together with V-1063 (request bounds), V-1072 (response fields), V-1073 (helper-
 responses), and V-1074 (the pagination envelope, both directions), the spec-versus-
 behaviour question is now closed on every leg I can measure: what a route accepts,
 what it returns, what it publishes, and what status it answers with.
+
+## V-1076 — a streaming lane whose errors do not arrive as errors
+
+Applied the catalogue shape that found V-1051 and V-1052 to SSE event names. The first
+scan returned 63 "events" and almost all were structured-log `event:` fields, not
+stream frames — narrowing to actual `reply.raw.write` framing left three writers.
+
+Two are correct. `routes/status-stream.ts` emits exactly what the incident bus
+publishes, `incident.created` and `incident.resolved`, and `api/status.md` documents
+both by name. The transcript stream emits `transcript.entry` and `api/agent-sessions.md`
+documents it with its `id:` and `data:` contract.
+
+THE THIRD WAS UNDOCUMENTED. `POST /v1/agent-sessions/:id/message` has a second lane:
+send `Accept: text/event-stream` and the turn streams. Nothing on the page said so.
+The page mentions "the heartbeat stream" once, in passing, inside the Idempotency-Key
+bullet — which is the only hint that a stream exists at all.
+
+Four things about that lane a client has to be built around, none of them written down:
+
+Heartbeats are SSE COMMENTS. The stream opens `: stream open` and emits
+`: heartbeat <ISO>`, lines with no event name and no data. A client waiting on named
+events sees nothing until the turn ends, which for a browser task is correct and
+looks like a stall.
+
+The terminal frame is always `event: response`, carrying `{ status, body }`.
+
+ERRORS RIDE INSIDE THAT FRAME. An invalid body or an unknown session answers 200 at
+the HTTP layer and reports the real status as a FIELD of the envelope. A caller
+branching on the response status reads every one of those as success. The route says
+so in its own comment — "on the SSE lane the one terminal `event: response`
+envelope, which is where an invalid body or an unknown/foreign session has always
+been reported" — so the behaviour was deliberate and only the customer was left out.
+
+Rate-limit denial is the exception and stays a hard 429, because the bucket is
+decided before any body exists.
+
+All four are documented now, and the guard asserts both halves: the page says it, and
+the route still does it. A page describing a lane the server changed is the failure
+this arc keeps finding, so the arm pins `text/event-stream` selection, the frame name,
+the comment-shaped heartbeat, and the rate-limit bypass in the source as well.
+
+Mutations: deleting the errors-inside-the-frame warning fails; removing the section
+fails; renaming the terminal frame fails; making a rate-limit denial stream fails.
+Restored byte-identical, `apps/docs` rebuilt.
+
+`it(` count 11→12. No new file, no ratchet change.
