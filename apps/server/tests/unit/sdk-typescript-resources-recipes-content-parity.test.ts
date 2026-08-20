@@ -70,9 +70,16 @@ describe('sdk-typescript resources/recipes content parity', () => {
     expect(body).toMatch(/description\?: string;/);
   });
 
-  it("cross-account 404 existence-leak-prevention framing pinned: 'Source agent_session id to snapshot. The session must belong to the caller's account; cross-account ids return 404 (server intentionally doesn't distinguish missing from forbidden to avoid existence leakage).' — pinned so the deliberately-vague 404 contract survives. Drift to a distinguishable 403 would leak whether a session id exists in another account — a privacy violation that the deliberate-404 design is meant to prevent", () => {
+  it("V-1120 ACCESS-scoped 404 framing pinned: the source session must be one you can ACCESS — your own account's, or a team's you hold admin on — and anything else 404s rather than 403s. The old text said the session must belong to the caller's account, which is the rule V-812 retracted: the route gates on callerCanAccessAgentSession, so a team admin snapshotting the owner's session gets a 201.", () => {
+    const body = read(LIB);
     expect(body).toMatch(
-      /Source agent_session id to snapshot\. The session must\s*\n?\s*\*\s+belong to the caller's account; cross-account ids return\s*\n?\s*\*\s+404 \(server intentionally doesn't distinguish missing\s*\n?\s*\*\s+from forbidden to avoid existence leakage\)\./,
+      /Must be a session you can\s*\n?\s*\*\s+ACCESS: one your own account owns, or one owned by a team you hold/,
+    );
+    expect(body, 'the anti-enumeration reason must stay').toMatch(
+      /doesn't distinguish missing from forbidden/,
+    );
+    expect(body, "the caller's-account claim must not return").not.toMatch(
+      /belong to the caller's account/,
     );
   });
 

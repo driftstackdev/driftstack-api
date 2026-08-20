@@ -48008,3 +48008,45 @@ Mutation-proved, restored byte-identical: the §1 diagram Tunnel label fails the
 negative; the §2 Tunnel prose fails its own negative, isolated by keeping the Pages
 sentence so the positive did not fire first; deleting the Pages-SPA fact fails that
 positive.
+
+### V-1120 — B18's SDK half was never applied, and rule 2 missed it twice
+
+Working the plan's deferred list. Three of its five entries are already closed — the
+incidents arm names all three lifecycle hooks, the team-RBAC Webhooks row already lists
+PATCH and `rotate-secret`, and ADR-004's void contrast is correctly left as history under
+its banner. The fifth is the recipes SDK docstrings, filed as "ambiguous rather than
+false; owner's call".
+
+It is not ambiguous, and it is not one item.
+
+B18 corrected `apps/docs/src/pages/api/recipes.md` to say the source session must be one
+you can ACCESS. Its supplied pin edits for the TypeScript SDK
+(`sdk-typescript-resources-recipes:73/:75`) were never applied, and neither were the
+Python or Go equivalents. All three SDKs still stated the retracted rule on the CREATE
+docstring — the type a customer reads in their editor:
+
+- TS: "The session must belong to the caller's account; cross-account ids return 404"
+- Python: "cross-account access on `agent_session_id` returns 404 (not 403) by design"
+- Go: "Cross-account access on AgentSessionID returns 404 (not 403)"
+
+The route gates both call sites on `callerCanAccessAgentSession(ctx, source.accountId)`,
+so a team admin snapshotting the OWNER's session gets a 201. All three now say ACCESS,
+keep the 404-not-403 anti-enumeration reason, and each pin carries a negative on its own
+old wording.
+
+**Go's other three lines were deliberately left alone**, and the pin now says why. Lines
+138/152/172 make the same "cross-account id returns 404" claim about `recipeID` on
+Get/Delete/detail — and that is TRUE, because those really are strictly own-account
+(verified in V-1101). The same sentence is correct in one place and wrong in another,
+which is precisely why a blanket find-and-replace would have been the wrong instrument.
+
+**Rule 2 missed this twice.** V-1101 swept "must belong to the calling account" and
+V-812 before it; the TypeScript SDK says "caller's account". One apostrophe-s, and three
+customer-facing SDK surfaces stayed wrong through two sweeps that were explicitly looking
+for them. The pattern list for a claim needs to include its possessive and its passive
+forms, not just the spelling the first instance happened to use.
+
+Mutation-proved, restored byte-identical, and each isolated: reverting the TS docstring
+fails its positive; reverting Go's create comment fails the create-side negative while
+the Get/Delete assertion stays green, which is the collateral-damage check; reverting
+Python fails its arm. `go vet` clean, 365 pytest passed, 0 tsc errors.

@@ -60,9 +60,17 @@ type CreateRecipeRequest struct {
 // Create snapshots a finished agent_session's intent_log + transcript
 // into a new recipe row. Returns the inserted Recipe.
 //
-// Cross-account access on AgentSessionID returns 404 (not 403) — the
-// server intentionally doesn't distinguish missing from forbidden to
-// avoid existence leakage.
+// AgentSessionID must be a session the caller can ACCESS: one their own
+// account owns, or one owned by a team they hold admin on. Anything else
+// returns 404 (not 403) — the server intentionally doesn't distinguish
+// missing from forbidden to avoid existence leakage.
+//
+// V-1120 — this read "Cross-account access on AgentSessionID returns 404",
+// the rule V-812 retracted. The route gates on callerCanAccessAgentSession,
+// so a team admin snapshotting the owner's session is created, and the
+// recipe is filed under the ADMIN's account. The Get/Delete comments below
+// are about recipeID and stay as they are: those really are strictly
+// own-account.
 func (r *RecipesResource) Create(ctx context.Context, body CreateRecipeRequest) (*Recipe, error) {
 	var out Recipe
 	if err := r.client.do(ctx, requestOptions{

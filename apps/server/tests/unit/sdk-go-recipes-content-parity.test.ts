@@ -53,9 +53,20 @@ describe('sdk-go recipes content parity', () => {
     );
   });
 
-  it("Create() cross-account 404 existence-leak-prevention framing pinned: 'Cross-account access on AgentSessionID returns 404 (not 403) — the server intentionally doesn't distinguish missing from forbidden to avoid existence leakage.' — pinned so the deliberate-404 privacy contract is explicit on the Go side. Drift to documenting 403 would mislead Go consumers about server behavior + leak the privacy-contract rationale to callers", () => {
+  it("V-1120 Create() ACCESS-scoped 404 framing pinned. The old comment read 'Cross-account access on AgentSessionID returns 404', the rule V-812 retracted. The Get/Delete comments below are NOT changed: those are about recipeID, which really is strictly own-account, so the same words are correct there and wrong here.", () => {
+    const body = read(LIB);
     expect(body).toMatch(
-      /\/\/ Cross-account access on AgentSessionID returns 404 \(not 403\) — the\s*\n?\s*\/\/ server intentionally doesn't distinguish missing from forbidden to\s*\n?\s*\/\/ avoid existence leakage\./,
+      /\/\/ AgentSessionID must be a session the caller can ACCESS: one their own\s*\n?\s*\/\/ account owns, or one owned by a team they hold admin on\./,
+    );
+    expect(body, 'the anti-enumeration reason must stay').toMatch(
+      /doesn't distinguish\s*\n?\/\/ missing from forbidden/,
+    );
+    expect(body, 'the create-side any-cross-account claim must not return').not.toMatch(
+      /\/\/ Cross-account access on AgentSessionID returns 404/,
+    );
+    // …while the recipeID comments keep saying exactly that, correctly.
+    expect(body, 'the Get/Delete own-account framing was collateral-damaged').toMatch(
+      /cross-account id returns 404 \(existence not leaked\)/,
     );
   });
 

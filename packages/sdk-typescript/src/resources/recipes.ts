@@ -52,10 +52,15 @@ export interface RecipeSuggestion {
 }
 
 export interface CreateRecipeRequest {
-  /** Source agent_session id to snapshot. The session must
-   *  belong to the caller's account; cross-account ids return
-   *  404 (server intentionally doesn't distinguish missing
-   *  from forbidden to avoid existence leakage). */
+  /** Source agent_session id to snapshot. Must be a session you can
+   *  ACCESS: one your own account owns, or one owned by a team you hold
+   *  `admin` on. Anything else returns 404 (the server intentionally
+   *  doesn't distinguish missing from forbidden, to avoid existence
+   *  leakage). V-1120 — this said the session must belong to the
+   *  caller's account, which is the rule V-812 retracted: the route
+   *  gates on `callerCanAccessAgentSession`, so a team admin
+   *  snapshotting the owner's session gets a 201. The recipe itself is
+   *  still filed under YOUR account. */
   agent_session_id: string;
   /** Human-facing label, 1..120 chars after trim. */
   label: string;

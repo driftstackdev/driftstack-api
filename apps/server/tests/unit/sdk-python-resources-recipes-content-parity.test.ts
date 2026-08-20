@@ -72,9 +72,16 @@ describe('sdk-python resources/recipes content parity', () => {
     );
   });
 
-  it("cross-account 404 existence-leak-prevention framing pinned: 'Server-side: cross-account access on agent_session_id returns 404 (not 403) by design — existence isn't leaked.' — pinned so the deliberate-404 privacy contract is explicit on the Python side. Drift to documenting 403 would mislead consumers about the actual server behavior + leak the privacy-contract rationale to downstream callers", () => {
+  it("V-1120 ACCESS-scoped 404 framing pinned: agent_session_id must be a session you can ACCESS, and anything else 404s rather than 403s. The old docstring read as though any cross-account id 404s, which is the rule V-812 retracted — a team admin snapshotting the owner's session gets a 201, filed under the admin's own account.", () => {
+    const body = read(LIB);
     expect(body).toMatch(
-      /Server-side: cross-account access on ``agent_session_id``\s*\n?\s*returns 404 \(not 403\) by design — existence isn't leaked\./,
+      /``agent_session_id`` must be a session you can\s*\n?\s*ACCESS — one your own account owns, or one owned by a team you/,
+    );
+    expect(body, 'the 404-not-403 reason must stay').toMatch(
+      /returns 404 \(not 403\) by\s*\n?\s*design/,
+    );
+    expect(body, 'the any-cross-account-404s claim must not return').not.toMatch(
+      /cross-account access on ``agent_session_id``\s*\n?\s*returns 404/,
     );
   });
 
