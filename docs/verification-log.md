@@ -50821,3 +50821,47 @@ That is a customer-facing commitment with a legal surface, and it cannot be clos
 wiring it deletes production rows after an R2 upload, and amending it changes a published policy.
 Adding it to the items that need a human, alongside D-4, D-6, D-10, D-12, D-16 and the counsel
 review from V-1163/V-1164. Recorded here so it is escalated rather than re-derived.
+
+### V-1184 — a verification turn: four sweeps, no new defects, and one guard not worth building
+
+Following D-7 outward. Nothing here changes code; it records what was checked so the next sweep
+does not re-walk it.
+
+**1. Published retention commitments vs. their enforcers.** §9's table carries eleven categories.
+The rows that promise action within a window all have a live mechanism: `privacy.retention_scrub`
+(V-759) anonymises sessions, session_operations and keys, and `account_deletion.purge` — fully
+wired in bootstrap, registered, enqueued — enforces the Customer-Provided-Secrets row. The
+job-chain liveness roster holds **16 job types**; `AuditArchiveService` is the **only** service on
+the deliberately-unwired list, and that is D-7, already recorded in four places. The
+authentication-data row is guarded bidirectionally by
+`a-retention-promise-matches-what-the-sweeper-does`, which reads the verb from the SQL and from
+the policy row and fails on disagreement in either direction — the strongest shape in this repo
+for a claim-versus-behaviour pair.
+
+**2. `apps/errors-site`.** Flagged by a density metric as zero-source with nine guards pointing at
+it. The metric was the artifact: it is a build-script-only app (`build.mjs` + `dist/`, no
+`package.json`), so `src/` was the wrong thing to count. Its dist is fresh against its generator
+and it carries slug-parity, CSP, attribution and personal-name sweeps.
+
+**3. Every surface citing a contradicted ADR.** Derived the contradicted set from the Status lines
+themselves (ADR-002, ADR-003, ADR-005) and enumerated all ~30 citing lines across `docs/`. Five
+needed a verdict marker and now carry one (V-1181/1182/1183). **The rest are correct as they
+stand**, and the distinction is worth stating because it is what makes the count meaningful:
+reference links and V-log lines cite an ADR without restating its decision; `moneybird-scoping`
+cites it as context for a deferred integration; two progress files are dated snapshots; and
+`v294-feature-catalog` — whose "Trial pack mechanics | SHIPPED" row looked like a sixth defect —
+carries a V-872 banner stating every classification was made at V-293 and is "578 entries behind
+its own stated basis", which is a better freshness marker than a date because it is checkable.
+The action queue's "## Stripe (ADR-002)" heading groups open Stripe _configuration_ items that
+remain valid; ADR-002's contradiction is that Stripe is not the only rail, not that it is not a
+rail.
+
+**4. The guard I decided not to build.** Five hand-fixes of one shape invites a general rule:
+_a surface citing a record must carry that record's verdict_. It does not survive contact with the
+population. Roughly twenty of the thirty citing lines are legitimate references, so the rule needs
+a twenty-entry allowlist — and a hand-listed roster of that size is the self-cancelling shape this
+log keeps re-deriving: it cannot report a member nobody added to it, and nobody rechecks it. The
+tractable subset would be structured status TABLES asserting `SHIPPED` against a reversed record,
+but the only instance is already covered by its own staleness banner, so it would be a guard for a
+hypothesis. **A guard whose allowlist is larger than its finding set is a worse instrument than the
+sweep that found them.** Recorded as a decision rather than left as an obvious-looking gap.
