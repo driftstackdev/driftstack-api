@@ -138,9 +138,19 @@ export const CreateSessionRequestSchema = z.object({
    * 2026-05-20 — profile binding. When supplied, the server records
    * the session as belonging to this profile (cookies, localStorage,
    * archetype inherited from the profile by default) + bumps the
-   * profile's `last_used_at`. Server validates that the profile
-   * belongs to the calling account; cross-account profile_id returns
-   * 404 to avoid leaking existence. Optional so ephemeral sessions
+   * profile's `last_used_at`. Server validates that the profile belongs
+   * to the EFFECTIVE account — your own, or the owner you are acting as
+   * via `X-Driftstack-Account`; a profile_id outside it returns 404 to
+   * avoid leaking existence.
+   *
+   * V-1101 — this said "belongs to the calling account", which inverts the
+   * rule for exactly the callers who need it. `routes/sessions.ts` resolves
+   * `ownerAccountId = effective.kind === 'team' ? effective.accountId :
+   * ctx.account.id` and scopes the lookup to THAT, so a team admin acting
+   * as an owner must pass one of the OWNER's profiles; passing their own
+   * gets the 404 the sentence promised for someone else's. Same shape as
+   * the recipes `agent_session_id` claim V-812 retracted, in a package the
+   * recipes work never looked at. Optional so ephemeral sessions
    * (no persistent state) still work as before. Accepts the canonical
    * `prof_<uuid>` id the profiles API returns OR a bare uuid (the server
    * normalizes); kept loose here so the prefixed form validates client-side too.

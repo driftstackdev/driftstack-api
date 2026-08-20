@@ -47117,3 +47117,50 @@ hook and offset; emptying the SECOND of the two `onPublicCreated` sites fails
 separately, which is the case a hook-name-only check would have missed; removing
 `logger` from the bootstrap construction fails with the reason that internal reporting
 does not matter if nothing is listening.
+
+### V-1101 — the retracted claim was still true somewhere nobody had looked
+
+Action 20 says the recipes docs claim `agent_session_id` must belong to the calling
+account. They no longer do: V-812 corrected `apps/docs/src/pages/api/recipes.md` and the
+TypeScript SDK to "a session you can ACCESS", and the pin carries both a positive on the
+new wording and a negative on the old. `routes/recipes.ts` gates on
+`callerCanAccessAgentSession` at both sites and that is pinned too. Nothing to redo.
+
+Rule 2 is the whole finding here. Grepping the CLAIM rather than the subject —
+`must belong to the calling account` across every extension — returned five hits. Two are
+the corrected pin. One is the recipes integration-test header, which still carried the
+retracted sentence because the sweep that fixed the customer surfaces greppped the doc
+surfaces and this is a test file. The fourth is the one that matters.
+
+**`packages/api-types/src/sessions.ts:142`** said the server validates the bound profile
+"belongs to the calling account". `routes/sessions.ts` resolves
+
+```
+const ownerAccountId = effective.kind === 'team' ? effective.accountId : ctx.account.id;
+```
+
+and calls `resolveProfileBinding(profileBareId, ownerAccountId, ownerTier)`. The scope is
+the EFFECTIVE account. So the sentence is not merely imprecise — it inverts the rule for
+exactly the callers who need it. A team admin acting as an owner must pass one of the
+OWNER's profiles; passing their own returns the 404 the sentence promised for someone
+else's. This is the same shape V-812 retracted for recipes, sitting in the shared types
+package that feeds every TypeScript customer's editor, and two pins froze the wrong side
+of it.
+
+Checked before over-correcting: recipe list/get/delete really do scope by
+`ctx.account.id`, so "the calling account's recipes" on the API page and in the SDK is
+right and was left alone. Only the profile-binding scope was wrong.
+
+Fixed together: the docstring now names the effective account and why; the content-parity
+pin gains a positive and a negative; and `profile-launch-cross-source-invariant` derives
+the scope from `routes/sessions.ts` instead of restating it, so the wording and the
+enforcement cannot drift apart again. The integration header is corrected with a note
+saying why it outlived the customer-facing fix.
+
+Mutation-proved, restored byte-identical: flipping EFFECTIVE to CALLING fails the scope
+sentinel; reintroducing the retracted sentence fails the negative; removing the team
+resolution from the route fails the derived arm with the message that the api-types
+wording is now the wrong one; calling `resolveProfileBinding` with the caller instead of
+the owner fails separately. The first attempt at the first mutation tripped an earlier
+anti-enumeration assertion instead of the sentinel under test, so it was re-run
+surgically — a failing arm is not proof that the arm you meant fired.

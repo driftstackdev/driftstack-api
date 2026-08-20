@@ -4,9 +4,16 @@
 //   1. Wired (recipesRepo + agentSessionsRepo both in AppDeps via
 //      the test fixture) — the route fires + snapshots the source
 //      agent-session.
-//   2. Cross-account auth check — the source agent_session_id
-//      must belong to the calling account; cross-account 404 (no
+//   2. Cross-account auth check — the source agent_session_id must be a
+//      session the caller can ACCESS: one their own account owns, or one
+//      owned by a team they hold admin on. Anything else is a 404 (no
 //      existence disclosure).
+//
+// V-1101 — this said "must belong to the calling account", the claim V-812
+// retracted from the customer docs and the TypeScript SDK. It survived here
+// because the sweep that fixed those greppped the doc surfaces, and this is
+// a test header. The route gates on callerCanAccessAgentSession, so a team
+// admin snapshotting the owner's session gets a 201.
 //
 // POST (create) + GET (list + detail) + DELETE are wired; recipe
 // EXECUTION stays v1.1 (harness-executor-gated). These tests exercise

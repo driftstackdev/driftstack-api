@@ -28,7 +28,23 @@ describe('Slice 1-2 — profile_id + POST /v1/profiles/:id/launch cross-source i
     const body = read(lib);
     expect(body).toMatch(/profile_id: z\.string\(\)\.optional\(\),/);
     expect(body).toMatch(/2026-05-20 — profile binding\. When supplied/);
-    expect(body).toMatch(/cross-account profile_id returns/);
+    expect(body).toMatch(/a profile_id outside it returns/);
+
+    // V-1101 — the scope the docstring states is derived from the route that
+    // enforces it rather than restated here. The docstring said "the calling
+    // account" while sessions.ts scopes the lookup to the team-resolved owner,
+    // and two pins froze the wrong side of that.
+    const route = read(resolve(REPO_ROOT, 'apps/server/src/routes/sessions.ts'));
+    expect(
+      route,
+      'the profile lookup is no longer scoped to the team-resolved owner, so the EFFECTIVE-account ' +
+        'wording in api-types is now the wrong one',
+    ).toMatch(
+      /const ownerAccountId = effective\.kind === 'team' \? effective\.accountId : ctx\.account\.id;/,
+    );
+    expect(route, 'resolveProfileBinding is no longer called with the owner account').toMatch(
+      /resolveProfileBinding\(profileBareId, ownerAccountId, ownerTier\)/,
+    );
   });
 
   it('server/src/routes/sessions.ts resolveProfileBinding helper validates ownership + inherits archetype + stamps metadata', () => {

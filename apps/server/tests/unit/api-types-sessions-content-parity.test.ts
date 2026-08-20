@@ -108,8 +108,18 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
       /export const CreateSessionRequestSchema = z\.object\(\{\s*\n?\s*archetype: SelectableArchetypeIdSchema\.optional\(\),\s*\n?\s*\/\*\* V-169 — harness purpose; defaults to `production_customer`\. \*\/\s*\n?\s*purpose: SessionPurposeSchema\.optional\(\),\s*\n?\s*label: SessionLabelSchema\.optional\(\),\s*\n?\s*metadata: SessionMetadataSchema\.optional\(\),\s*\n?\s*[\s\S]*?profile_id: z\.string\(\)\.optional\(\),\s*\n?\s*[\s\S]*?behavioral_profile: BehavioralProfileSchema\.optional\(\),\s*\n?\s*\}\);/,
     );
     // 2026-05-20 anti-enumeration framing pinned
-    expect(body).toMatch(/cross-account profile_id returns/);
+    expect(body).toMatch(/a profile_id outside it returns/);
     expect(body).toMatch(/Server validates that the profile/);
+    // V-1101 — the scope is the EFFECTIVE account, not the calling one.
+    // routes/sessions.ts resolves ownerAccountId from the team header and
+    // scopes the lookup to that, so a team admin acting as an owner passes
+    // the OWNER's profiles and would 404 on their own.
+    expect(body, 'the profile-binding scope is no longer stated').toMatch(
+      /belongs\s*\n?\s*\*\s*to the EFFECTIVE account/,
+    );
+    expect(body, 'the calling-account claim must not return').not.toMatch(
+      /profile\s*\n?\s*\*\s*belongs to the calling account/,
+    );
   });
 
   it('LaunchProfileRequest is a strict label-only projection of the canonical create schema', () => {
