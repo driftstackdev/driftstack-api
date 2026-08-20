@@ -50551,3 +50551,38 @@ files.
 
 Ports themselves: all claims correct, all six runbook commands exist. An honest negative, reached
 cheaply because the prior-art content-grep from V-1176 ran first this time.
+
+### V-1179 — the dormant-gate convention holds, and the grep that said otherwise was mine
+
+Swept the suite for tests that never run. Two classes, both clean, recorded so the sweep is not
+repeated:
+
+**Unconditional skips: zero.** No `describe.skip` / `it.skip` / `.todo` anywhere. Every match of
+those strings is inside a comment or inside `no-permanently-skipped-tests`, the guard that owns
+the property. That guard surfaced in the _first_ grep this time — content, not filenames, per
+V-1176.
+
+**Conditionally dormant suites: 15 gated on something other than the DB/Redis env vars.** Seven
+share `hasEgressImpl`; the rest are per-feature flags. The repo's convention is that a file
+branching on a dormant gate must also **state what the gate currently is** — `expect(typeof
+gate).toBe('boolean')` then `expect(gate, '… so the claim gate has retired').toBe(true)` — so a
+suite cannot go quietly dormant. A tally said two files skipped that convention. **Both were my
+grep, not the files:**
+
+- `billing-crypto-overview-doc-parity` does assert its gate, in a **multi-line** `expect(`
+  spanning four lines. My `grep "expect(isSubscribable"` is single-line and could not see it.
+- `marketing-egress-backends-are-really-accepted` mentions `it.skipIf(hasEgressImpl)` in its
+  header while describing its **sibling**, `marketing-egress-claim-sweep`. Read past the clause
+  and the file's whole reason for existing is the direction that sibling's retirement left open:
+  the site now names three backends as live, and nothing checked the API still accepts them.
+
+**The artifact is systematic and worth naming.** `expect(x, 'message').toBe(y)` exceeds the print
+width as soon as the message is a real sentence, so **prettier splits it across lines** — and
+this repo's house style is long explanatory messages. Every assertion worth finding is therefore
+the most likely to be multi-line, which makes a single-line `grep "expect(<name>"` biased exactly
+against what it is looking for. It reports _absence of an assertion_ when what it found was
+absence of a _formatting shape_. Same family as the V-1170 escaping artifact — searching source
+with a pattern shaped by how I imagine the code looks rather than how the formatter leaves it.
+
+Use `grep -A2`, or match the identifier alone and read the hits. Which is the rule already:
+**enumerate, then read the enumeration.**
