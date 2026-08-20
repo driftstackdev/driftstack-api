@@ -49508,3 +49508,27 @@ wrote quoted "first git tag pending" while the sentinel I wrote forbade that exa
 so the file failed against itself. The rule is that a retraction paraphrases and only a
 sentinel quotes; I have now written that sentence into several entries and still walked
 into it. Banner paraphrased, all three sentinels mutation-proved.
+
+**Addendum — V-1154's first commit absorbed a peer's file, and explicit pathspecs did not
+prevent it.** Rule 9 says never absorb a peer's work. I staged three files by explicit
+pathspec, and the commit reported **four**, having swept in a 126-line
+`apps/gui-client/tests/unit/an-in-process-simulator-…test.tsx` that a peer had created
+moments earlier. The mechanism is the pre-commit hook: lint-staged stashes and restores
+around the formatters, and a file appearing in that window can land in the commit even
+though it was never staged. **`git add <path>` is not the boundary I had been treating it
+as in a shared worktree.**
+
+Caught by reading the commit's own output — "4 files changed" against three pathspecs, and
+a `create mode` line for a file I had never touched. That line is the tell; the exit code
+was 0 and everything else looked normal.
+
+Corrected without touching their work. The commit was local-only (`git branch -r --contains`
+empty), so: `reset --soft HEAD~1` to keep every file staged, `restore --staged` the peer's
+file back to untracked, then re-commit the three. Their file was verified byte-identical
+across the whole operation — same sha256, same 8052 bytes, before and after — and it now
+appears in their own commit, `60c0c2f36`, and in none of mine.
+
+Two things worth carrying forward: **check `--stat` after every commit in a shared tree**,
+because the pathspec you passed is not proof of what landed; and `reset --soft` plus
+`restore --staged` is the correction that preserves a concurrent writer's work exactly,
+where `reset --hard` would have destroyed it.
