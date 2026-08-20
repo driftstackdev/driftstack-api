@@ -321,7 +321,7 @@ describe('W573.B /docs/gui-client/audit-current-state.md content parity', () => 
       body.indexOf('HISTORICAL SNAPSHOT'),
       body.indexOf('\n\n', body.indexOf('has since shipped')),
     );
-    const cited = [...banner.matchAll(/`([a-z][\w./-]+\.(?:ts|tsx|toml|json))`/g)].map(
+    const cited = [...banner.matchAll(/`([a-z][\w./-]+\.(?:tsx|toml|json|ts))`/g)].map(
       (m) => m[1] ?? '',
     );
     expect(cited.length, 'no evidence paths parsed out of the banner').toBeGreaterThanOrEqual(5);

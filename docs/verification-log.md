@@ -48985,3 +48985,41 @@ pin) were theirs and are now green. I did not touch their runbook, workflow or
 `apps/gui-client`; the defect was in the shared guard, whose file was clean, so fixing it
 could not collide. Their runbook needed no change, which is the point: the correct
 response to this red was to fix the instrument, not the thing it accused.
+
+### V-1142 — the alternation-shadowing class, bounded: V-1141 was the only live instance
+
+V-1141 fixed a regex whose `js` branch made `json` unreachable. That is a defect SHAPE, so
+I swept every guard for it rather than assuming one instance. Four alternations across the
+suite have an earlier branch that is a prefix of a later one. **None of the other three is
+a defect**, and the reason is worth writing down because it is the rule for the class:
+
+> Shadowing only bites when nothing after the alternation forces backtracking.
+
+- `a-parity-pin-cannot-freeze-a-claim-that-expires` — `wire|wired`, `ship|shipped`,
+  `add|added`, `replace|replaced`. It is a DETECTOR: matching the prefix still detects the
+  offender, so the unreachable branches change no outcome.
+- `api-reference-endpoints-parity` (twice) — `ses|sess` followed by a required `_`. For
+  `sess_…` the engine tries `ses`, needs `_`, sees `s`, backtracks and matches `sess`.
+- `docs-gui-client-audit-current-state-content-parity` — `ts|tsx`, mine, from V-1139. A
+  required closing backtick forces the same backtrack; verified by extraction, not by
+  reasoning. Reordered longest-first anyway, as defence rather than repair.
+
+V-1141's regex ended immediately after its extension group, so the truncated match had
+nothing to fail against and stood. That is the whole difference.
+
+**I nearly shipped a second finding here that was not one.** The `api-reference` matcher
+lists ten id prefixes; the canonical `PrefixedId` roster holds eight; the two sets disagree
+in BOTH directions — three roster prefixes absent, five branches that are not roster
+entries. That reads exactly like the hand-listed-roster defect this arc keeps finding. It
+is not: the matcher normalises id tokens in DOC EXAMPLE URLs, which is a different and
+larger population than schemas built with the `PrefixedId` helper — `ord_` is a doc
+convention with no schema behind it. Measured against the right population: exactly one
+prefix (`ord`) appears inside any doc `/v1/` path, and it is covered. Nothing is missing.
+The lesson is that two rosters disagreeing is only a defect once you have established they
+are meant to hold the same thing.
+
+**A tooling note that cost me a wrong reading.** `grep -oE ".{0,60}acc_[A-Za-z0-9]{4,}"`
+returned nothing on macOS while the same pattern without the bounded prefix returned three
+matches. Bounded repetition plus `-o` in BSD grep silently found nothing, which is
+indistinguishable from absence — I read it as "no occurrences" for one step. Python for
+context extraction from here.
