@@ -51606,3 +51606,63 @@ with `\(([^)]*)\)`, which stops at the first `)` — so `args.email.trim().toLow
 as `args.email.trim(`, and it reported `login` as an offender. A false positive in a guard written
 to catch false negatives. Same capture-boundary class as V-1171's lazy `[\s\S]*?`; fixed by allowing
 one level of nesting, `((?:[^()]|\([^()]*\))*)`.
+
+---
+
+## V-1200 — the class that recurred in eight places had per-service pins and no sweep
+
+Following the `null`-means-unscoped shape from V-1198 into the status-subscriber repo led to
+`markUnsubscribed`, whose null branch drops to an id-only predicate. That one is correct: the null
+caller is `forceUnsubscribe`, documented admin authority, behind
+`app.requireScope('driftstack_internal_admin')`. Correct scope, correct gate — not a finding.
+
+Checking that gate is what surfaced the real gap.
+
+**The incident being guarded against.** V-174 split the single `admin` scope into `account_owner`
+(customer) and `driftstack_internal_admin` (staff). The alias runs ONE WAY: a key literally
+carrying `admin` satisfies either new scope; neither new scope satisfies a literal `admin`
+requirement. Post-V-174 sessions carry `['read','write','account_owner']` (+
+`driftstack_internal_admin` for staff) and no legacy `admin` at all. So `requireScope('admin')`
+admits only API keys minted before the split.
+
+On 2026-05-26 that was live in roughly eight places at once — customer webhook
+create/update/rotate/delete/sendTest, the staff DLQ operations, rate-limit-override set/clear.
+Staff sessions passed the route's `driftstack_internal_admin` gate and were then refused by the
+service beneath it.
+
+**Current source is clean.** Both call shapes, swept across `apps/server/src` and every
+`packages/*/src`:
+
+```
+requireScope('admin')                 0 in source (1 hit, a test pinning the decorator itself)
+throwIfMissingScope(…, 'admin')       0 in source
+```
+
+**What was missing was the thing that keeps it clean.** The repo pins the scope per service —
+`admin-accounts-service.test.ts` asserts every public method requires `driftstack_internal_admin`,
+and several cross-source invariants pin their own routes. None of them can notice the gate in a
+service written next month. The failure is a CLASS: it recurred across eight sites in one
+incident, it fails closed and silently (route admits, service refuses, nothing logged as a
+defect), and the fixtures actively hide it — `build-test-app.ts` defaults scopes to
+`['read','write','admin']`, which satisfies the retired requirement, so every admin test passes.
+
+`apps/server/tests/unit/no-gate-rests-on-the-legacy-admin-scope.test.ts` is the sweep. Three arms:
+the walk reached the source it claims to cover, the offender patterns still match the shape they
+are written for (and still do NOT match the alias predicate in `services/auth.ts`, which must keep
+naming the legacy scope), and no source file gates on it.
+
+Mutation-proved in three directions:
+
+```
+M1  a route gains requireScope('admin')            -> offender arm names the file   1 failed | 2 passed
+M2  a service gains throwIfMissingScope(…,'admin') -> offender arm names the file   1 failed | 2 passed
+M3  the offender regex stops matching              -> SELF-CHECK arm red            1 failed | 2 passed
+restored (source 0 dirty)                                                           3 passed
+```
+
+M3 is the arm that matters most over time. A repo-wide sweep whose regex has quietly stopped
+matching reports a clean repo forever, and this is the only repo-wide check for the class — the
+same "a gate that does not name its blind spot reads as total" failure the suite gate itself was
+given an arm for. The negative half of that arm is equally deliberate: the V-174 alias legitimately
+contains `scopes.includes('admin')`, and a pattern that flagged it would make the sweep unusable
+and get it deleted.
