@@ -50035,3 +50035,39 @@ plainly exists does not. Fixed to accept both shapes; it now reports
 _"DPA Section 7 is 'Records of Processing' — not the clause that notifies the Customer"_.
 Mutation-proving is not just for confirming a sentinel fires — it is the only way to read the
 message it fires with.
+
+### V-1167 — the cross-document citation sweep, completed: five citations, one defect, already fixed
+
+V-1166 found the privacy policy pointing breach readers at the wrong DPA section. That is a
+class, not an incident, so this checked every cross-document section citation in the legal
+corpus rather than leaving the rest to chance.
+
+**Five citations across seven legal documents.** Each was resolved two ways: does the target
+section exist, and does its heading match what the citing sentence is about.
+
+| citing  | target     | heading at that number                       | verdict                |
+| ------- | ---------- | -------------------------------------------- | ---------------------- |
+| DPA     | ToS §13.3  | Carve-outs from the cap and excluded damages | correct                |
+| DPA     | Privacy §7 | Sub-processors                               | correct                |
+| Privacy | DPA §3.6   | Assistance with Data Subject requests        | correct                |
+| Privacy | DPA §6.1   | Notification to Customer                     | correct — after V-1166 |
+| ToS     | Privacy §7 | Sub-processors                               | correct                |
+
+Two deeper checks, both clean. The DPA cites a sub-item, "the carve-out for breach of
+confidentiality in **ToS Section 13.3(3)**" — and 13.3 item 3 is "Breach of Section 7
+(Confidentiality)", exact to the sub-item. Both anchor links in the DPA
+(`/legal/privacy/#7-sub-processors`, `#9-retention`) resolve to real headings.
+
+**So the class holds one defect, and it is already fixed.** Four of five citations were
+correct, and the correct ones are correct in a specific way worth naming: each cites a
+section whose heading states its subject, so the citation can be checked by reading two
+headings. The one that failed cited a number with no such property — nothing about "Section 7"
+told a reader it should have been about breaches.
+
+**My own extraction was wrong twice inside this one sweep.** Scanning 13.3 for numbered items
+with `^\s*\(?(\d)\)` found none and briefly looked like a second defect — the items are
+written `1.` with a period, not `(1)` with a paren. And V-1166's heading regex had already
+mismatched the DPA's `## 7. Records…` for the same reason, a period where I expected
+whitespace. Both times the document was right and my pattern was narrow, which is now the
+seventh instance this arc. The tell is consistent enough to state plainly: **an absence found
+by a pattern I just wrote is a claim about the pattern until I have read the source.**
