@@ -49346,3 +49346,38 @@ and mine were wrong twice before they agreed.
 The action list is spent. What remains open in this arc is the D-set, and after V-1147
 through V-1149 that is down to items needing a human: procurement, a remote query, and
 product calls.
+
+### V-1151 — the vacuity sweep came back clean, and my heuristic was the thing that was wrong
+
+The failure this arc kept hitting is a guard whose derived population goes empty and whose
+"no offenders" assertion then passes against nothing. My own guards carry explicit length
+floors because of it. So I swept the suite for guards that scan the filesystem, assert an
+empty offender list, and have no floor.
+
+Twenty-six candidates. Refining for the ones with no floor, no exemption-staleness arm and
+no `toContain` left twelve. **Then I tested four of them by actually emptying the
+population, and all four failed exactly as they should.**
+
+- `route-auth-coverage-invariant` — 2 of 8 arms fail. The exemption roster does it: empty
+  the routes and every declared anonymous/manual exemption becomes stale.
+- `route-mutation-ratelimit-coverage-invariant` — same mechanism, "every exact exemption
+  resolves to a current registration".
+- `unscoped-lookup-containment-invariant` — its sibling check fails: each unscoped lookup
+  must still have an account-scoped counterpart, and an empty scan finds no counterparts.
+- `an-sdk-may-not-read-a-key-the-server-never-sends` — fails on its own CRITICAL arm.
+
+**The codebase already had a stronger idiom than the one I have been adding.** A length
+floor asserts the population is non-empty. A roster that must still RESOLVE — exemptions
+pointing at live registrations, unscoped finders pointing at scoped siblings — asserts the
+population is non-empty _and_ that its members are the ones the guard was written against.
+It catches an emptied scan and a silently shifted one, where a floor only catches the first.
+
+So the sweep is a clean negative, and the useful part is why my heuristic over-flagged:
+searching for the mechanism I happen to use rather than for the property. Twenty-six
+candidates, twelve after refinement, and the four tested were all protected — by something
+my pattern could not see. I did not test the other eight; the honest statement is that four
+of twelve were checked and none was vacuous, not that the suite is proven clean.
+
+Recorded so nobody re-runs this sweep expecting findings, and so the roster-resolution
+idiom is written down as the better anti-vacuity mechanism rather than left implicit in the
+files that use it.
