@@ -50746,3 +50746,46 @@ mandatory. The notice points at the ADR for specifics and states only what it ca
 Unchanged, and stated plainly: neither superseding ADR exists, and this does not write them.
 Three surfaces now say the decision was reversed; none of them says why. That remains a debt with
 no author, which is exactly what the tracker is for.
+
+### V-1183 — enumerating the claim instead of chasing it, and the fourth and fifth surfaces
+
+V-1181 fixed the ADR index. V-1182 fixed the D-entry. Both were found by following a link from
+the previous one, which is the wrong method — it finds surfaces one at a time and stops when the
+links run out. Rule 2 says enumerate EVERY occurrence, and it applies to a **claim** exactly as it
+applies to a pin. So this swept the assertion itself, repo-wide.
+
+**Two more surfaces, both in one place.** `docs/architecture.md`'s "Decisions (cross-reference)"
+section listed:
+
+```
+- **D-027 / ADR-002** — Stripe-only payment rail at launch.
+- **ADR-003** — Paid trial pack ($2.99 / 14 days / $0.18-per-hour decrement) replaces a free tier.
+```
+
+Neither marked, both pinned verbatim. That is the fourth surface for ADR-002 and the **fifth** for
+ADR-003 — and the architecture doc is the one the onboarding page sends people to for intent.
+
+**The pin already contradicted itself.** Three lines above, the same arm asserts
+`not.toMatch(/trial_pack_credit_cents/)` with the comment "the dropped-column meter must not
+return". So the file knew the trial pack had been dropped at the schema level while freezing prose
+that said it replaces the free tier. Both facts sat in one test, four lines apart, for months.
+
+Both entries now carry their ADR's verdict, asserted by adjacency — proved by stripping each
+marker and, separately, by moving a marker into the file but away from its entry, which fails the
+adjacency arm specifically while a presence check would pass.
+
+**The honest negative is the more reassuring half.** The sweep covered
+`apps/marketing-site/src`, `apps/docs/src`, `apps/customer-dashboard/src`, `docs/` and
+`packages/` for "sole payment processor", "Stripe-only", "only payment processor", "single payment
+rail" and the passive constructions. **Zero customer-facing hits.** Every occurrence is internal:
+the two ADRs, the ADR index, the D-entry, this cross-reference, plus three that are correct as
+written — the pre-launch checklist already carries its dated note, a Moneybird scoping doc cites
+ADR-002 as context rather than asserting current state, and a v294 planning file lists it inside a
+numbered set of open questions awaiting verdicts, which is a historical artifact.
+
+So the reversal never reached a customer. It reached five internal records, three of which said
+the wrong thing until this week — and the ones that were right were right because someone
+remembered, not because anything checked.
+
+Still unchanged: neither superseding ADR exists, and this does not write them. Five surfaces now
+say the decision was reversed; none says why.

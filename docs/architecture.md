@@ -258,7 +258,12 @@ Pricing + commercial:
 
 - **D-019 / ADR-004** — Two-ladder pricing + concurrent-only metering. Supersedes file-127 single-ladder hours-with-overage.
 - **D-027 / ADR-002** — Stripe-only payment rail at launch.
+  **Contradicted by the shipped system since 2026-08-10** — a customer-facing crypto
+  rail ships alongside Stripe. See ADR-002's reality check; a superseding ADR is owed.
 - **ADR-003** — Paid trial pack ($2.99 / 14 days / $0.18-per-hour decrement) replaces a free tier.
+  **Reversed by the shipped system since 2026-08-10** — the trial pack was retired
+  2026-05-27 and `free` is a live tier. See ADR-003's reality check; a superseding ADR
+  is owed.
 
 Auth + security:
 

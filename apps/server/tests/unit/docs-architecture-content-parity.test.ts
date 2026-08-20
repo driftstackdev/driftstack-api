@@ -216,8 +216,19 @@ describe('W548.A /docs/architecture.md content parity', () => {
       /\*\*D-019 \/ ADR-004\*\* — Two-ladder pricing \+ concurrent-only metering\./,
     );
     expect(body).toMatch(/\*\*D-027 \/ ADR-002\*\* — Stripe-only payment rail at launch\./);
+    // V-1183 — this cross-reference is an index, and it listed two decisions the shipped
+    // system had already gone the other way on. Adjacency, not presence: a marker elsewhere
+    // in the file would satisfy a substring test while the entry still read as current.
+    expect(body, 'the D-027 cross-reference dropped its contradiction marker').toMatch(
+      /Stripe-only payment rail at launch\.\s*\n\s*\*\*Contradicted by the shipped system since 2026-08-10\*\*/,
+    );
     expect(body).toMatch(
       /\*\*ADR-003\*\* — Paid trial pack \(\$2\.99 \/ 14 days \/ \$0\.18-per-hour decrement\) replaces a free tier\./,
+    );
+    // The arm above already forbids `trial_pack_credit_cents` from returning, so this file
+    // knew the pack was dropped while pinning prose that said it replaces the free tier.
+    expect(body, 'the ADR-003 cross-reference dropped its reversal marker').toMatch(
+      /replaces a free tier\.\s*\n\s*\*\*Reversed by the shipped system since 2026-08-10\*\*/,
     );
     expect(body).toMatch(
       /\*\*D-028\*\* — Web sessions are opaque sha256-hashed tokens \(not JWT\)\./,
