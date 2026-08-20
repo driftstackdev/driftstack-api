@@ -168,6 +168,19 @@ stream.addEventListener('incident.resolved', (ev) => {
 });
 ```
 
+Connection caps: the stream is public and unauthenticated, so it is
+bounded — **10 concurrent connections per IP** and **500 in total**.
+Past either, the request is refused with `503 feature-unavailable`
+(`Status stream at capacity; retry shortly.`) and a `Retry-After: 30`
+header, before the connection is upgraded.
+
+The per-IP figure is the one worth designing around: browsers open one
+connection per tab, and everyone behind a single office NAT or corporate
+proxy shares an address. `EventSource` reconnects on its own and will
+keep retrying into the refusal, so a client that watches for the `error`
+event and backs off for the advertised 30 seconds recovers cleanly, while
+one that does not will loop.
+
 ## SLA report
 
 `GET /v1/status/sla`

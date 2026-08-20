@@ -45986,3 +45986,41 @@ Mutations: deleting the section fails; dropping only the "no turn ran" clause fa
 neutering the route's refusal fails. Restored byte-identical, `apps/docs` rebuilt.
 
 `it(` count 13→14. No new file, no ratchet change.
+
+## V-1078 — a public stream with a cap nobody published
+
+V-1077 found an undocumented `FeatureUnavailableError` branch, so I swept the class it
+belongs to: every 503 the server can throw. 20 sites. Most are documented — the
+LiveKit-credentials pair, the avatar-storage and platform-secret gates, the
+customer-egress refusal V-1054 corrected, the metrics and fleet-control-plane switches.
+
+`GET /v1/status/stream` was not. It is public, unauthenticated, and bounded — a global
+cap of 500 connections and **10 per IP**, past which the request is refused with `503
+feature-unavailable` and a `Retry-After: 30`, before the connection is upgraded. The
+page documents the stream, its two event names, its heartbeat and an `EventSource`
+example, and says nothing about any of that.
+
+The per-IP number is the one that matters, and it is small for the reason the endpoint
+is popular: a browser opens one connection per tab, and everyone behind one office NAT
+or corporate proxy shares an address. `EventSource` reconnects on its own, so a client
+that does not listen for `error` and honour the advertised delay loops into the refusal
+rather than backing off. That is now on the page, with the caps and the header.
+
+The caps were already pinned as SOURCE text by `routes-status-stream-content-parity`,
+which asserts the two constant declarations verbatim. That is the V-1066 arrangement
+exactly: one side frozen, the other silent, nothing comparing them. The new arm reads
+both constants out of the route and requires the page to publish those numbers, so
+raising a cap fails until the page follows.
+
+Two things checked that did not become claims. `Proxies are not configured.` on
+`GET /v1/account/me/proxies` looked like a second gap; it fires only when the proxies
+repo is absent, which is a deployment-wiring state rather than a customer-facing
+contract, and the page already documents the feature's availability. And my
+documented-or-not heuristic — word overlap between the throw message and the docs — is
+too crude to trust on its own, so every candidate it flagged was read before judging.
+
+Mutations: raising the route's per-IP cap without touching the page fails; deleting the
+`Retry-After` header fails; dropping the EventSource-retry warning fails; deleting the
+paragraph fails. Restored byte-identical, `apps/docs` rebuilt.
+
+`it(` count 7→8. No new file, no ratchet change.

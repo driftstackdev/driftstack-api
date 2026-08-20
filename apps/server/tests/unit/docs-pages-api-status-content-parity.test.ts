@@ -71,4 +71,40 @@ describe('docs/pages/api/status content parity', () => {
       /Lists public incidents from the last 30 days \(default\), most-recent\s*\n?\s*first\./,
     );
   });
+
+  it('V-1078 CRITICAL the published stream caps are the ones the route enforces, derived from its source rather than restated. The per-IP figure is the one customers hit: browsers open a connection per tab and an office NAT shares one address, and EventSource retries into the refusal on its own.', () => {
+    const route = readFileSync(
+      resolve(REPO_ROOT, 'apps/server/src/routes/status-stream.ts'),
+      'utf8',
+    );
+    const capOf = (name: string): string => {
+      const m = new RegExp(`const ${name} = (\\d+);`).exec(route);
+      expect(m, `${name} is no longer declared in status-stream.ts`).not.toBeNull();
+      return m?.[1] ?? '';
+    };
+    const perIp = capOf('MAX_CONNECTIONS_PER_IP');
+    const total = capOf('MAX_TOTAL_CONNECTIONS');
+
+    expect(body, `the page must publish the per-IP cap the route enforces (${perIp})`).toMatch(
+      new RegExp(`\\*\\*${perIp} concurrent connections per IP\\*\\*`),
+    );
+    expect(body, `the page must publish the total cap (${total})`).toMatch(
+      new RegExp(`\\*\\*${total} in total\\*\\*`),
+    );
+
+    // The refusal shape a client branches on, and the header it should honour.
+    expect(body, 'the 503 refusal is no longer documented').toMatch(/`503 feature-unavailable`/);
+    expect(body, 'the Retry-After hint is no longer documented').toMatch(/`Retry-After: 30`/);
+    expect(body, 'the EventSource-retries-into-it warning is gone').toMatch(
+      /`EventSource` reconnects on its own/,
+    );
+
+    // …and the route still refuses that way, or the page is next to go stale.
+    expect(route, 'the route no longer sets a retry-after on the refusal').toMatch(
+      /reply\.header\('retry-after', '30'\)/,
+    );
+    expect(route, 'the capacity gate no longer throws FeatureUnavailable').toMatch(
+      /throw new FeatureUnavailableError\('Status stream at capacity/,
+    );
+  });
 });
