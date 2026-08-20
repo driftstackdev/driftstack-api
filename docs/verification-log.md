@@ -49381,3 +49381,36 @@ of twelve were checked and none was vacuous, not that the suite is proven clean.
 Recorded so nobody re-runs this sweep expecting findings, and so the roster-resolution
 idiom is written down as the better anti-vacuity mechanism rather than left implicit in the
 files that use it.
+
+### V-1152 — four derivable classes swept, all clean, and I made the error I had been finding
+
+With the action list spent (V-1150), this turn probed four derivable cross-source classes
+for unguarded surface. All four came back clean, which is worth recording so the next
+reader does not re-derive them.
+
+- **Source-declared mirrors.** Constants whose comments name their own mirror target.
+  `TIER_CONCURRENT_SESSION_LIMITS` agrees with `marketing-site/src/data/pricing.ts` on all
+  seven overlapping tiers; `enterprise: 32` is absent from the public table because it is a
+  custom-contract sentinel, which the source comment says. The surface is saturated: 37
+  test files reference that constant and several enforce the mirror directly.
+- **Unguarded public constants.** All 23 exported SCREAMING_CASE constants in `api-types`
+  are referenced by at least one test. None is unheld.
+- **Spec prose.** Every one of the 11 `X-*` headers named in the published OpenAPI
+  descriptions exists in server source. Spec descriptions are customer-facing prose that
+  content-parity pins structurally do not reach, so this was worth asking; it is clean.
+- **Skipped tests.** Covered by `no-permanently-skipped-tests`, whose exemption map is
+  EMPTY and which passes. That guard already carries both disciplines this arc kept
+  re-deriving: an arm asserting the scan reaches real files, and an arm asserting the skip
+  pattern still matches a real skip — extractor validity checked inside the guard itself.
+
+**The useful part is the mistake.** I reported 117 files as hard-`describe.skip` and treated
+it as a coverage hole. `describe.skip` is a prefix of `describe.skipIf`, and my scan matched
+the substring: 117 of them are `skipIf(!process.env.CI && !process.env.DATABASE_URL)` —
+conditional, running in CI and locally with a database. The true count of unconditional
+`describe.skip(` is **two**, and both are guards _about_ skipping that contain the pattern
+as their own fixture.
+
+That is exactly the alternation-shadowing class of V-1141 and V-1142, which I had just spent
+a turn bounding in other people's regexes, committed in my own scan within the hour. The
+lesson those entries drew — a boundary, not just ordering — applies to grep patterns as
+much as to alternations, and knowing the class was not enough to stop me writing it.
