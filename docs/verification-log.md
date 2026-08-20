@@ -52045,3 +52045,49 @@ never ran.
 
 **Owed remaining: 27.** The template now has a second instance and the shape is confirmed on a
 repo whose contract was NOT already correct, which is the case that matters.
+
+---
+
+## V-1208 — the second half of the same drift, found only because I went back to look
+
+V-1207 found that V-1201 had given `DrizzleOAuthLinksRepo.listForAccount` an `ORDER BY` and left
+`InMemoryOAuthLinksRepo` behind. What I did not do at the time was ask what ELSE that commit
+touched. It touched two repos:
+
+```
+DrizzleEmailPreferencesRepo.list   ->  .orderBy(asc(accountEmailPreferences.eventType))
+InMemoryEmailPreferencesRepo.list  ->  for (const r of this.rows.values())     // Map write order
+```
+
+Same commit, same class, second file — and it had gone unexamined because finding one instance felt
+like finding _the_ instance. That is the repo-wide-not-named-file rule, applied to my own change
+rather than to a report's claim.
+
+Demonstrated before fixing, the same way:
+
+```
+before fixing the double:  1 failed | 10 passed   (× in-memory: the list is in write order)
+after fixing the double:   11 passed
+```
+
+**The fixture writes `tier-changed` before `billing-receipt`** so write order and alphabetical order
+disagree. Any pair chosen in alphabetical order would pass against a double that never sorts —
+the same vacuity trap as V-1207's backdate, and the fifth positive control this session that had to
+be forced before it could fail.
+
+**The semantic arm is the one worth keeping.** The interface documents a default-opted-in
+convention: opting back IN deletes the row rather than storing `true`, so absence and consent are
+the same state. That is easy to reimplement as "store true" — which still answers `isOptedOut`
+correctly while leaving a row behind in `list`. The two implementations would agree on the question
+customers ask and disagree on the one the preferences UI renders. M3 confirms the arm catches it.
+
+```
+M1  the DRIZZLE side loses its ORDER BY      drizzle ordering arm red     1 failed | 10 passed
+M2  the DOUBLE loses its sort                in-memory ordering arm red   1 failed | 10 passed
+M3  opting back in STORES true               "a row survived opting back in"  1 failed | 10 passed
+restored (source 0 dirty)                                                 11 passed
+```
+
+**Owed remaining: 26.** Both halves of the V-1201 drift are now closed, and the pattern that found
+them is worth stating plainly: after a contract test catches a drift, the next question is not
+"what else is owed" but "what else did that same commit touch".

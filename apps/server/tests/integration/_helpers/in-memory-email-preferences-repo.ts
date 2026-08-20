@@ -18,6 +18,10 @@ export class InMemoryEmailPreferencesRepo implements EmailPreferencesRepo {
     for (const r of this.rows.values()) {
       if (r.accountId === accountId) out.push(r);
     }
+    // V-1208 — mirrors DrizzleEmailPreferencesRepo's `ORDER BY event_type`. Map iteration is
+    // write order, which agreed with the real repo only until a customer opted out of two events
+    // in non-alphabetical order. V-1201 gave the Drizzle side its ORDER BY and left this behind.
+    out.sort((a, b) => a.eventType.localeCompare(b.eventType));
     return Promise.resolve(out);
   }
 
