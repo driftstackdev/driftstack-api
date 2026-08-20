@@ -155,7 +155,14 @@ describe('W624 app tsconfigs + READMEs + tailwind content parity', () => {
     expect(body).toMatch(/\(`xcrun notarytool submit --wait`\)\./);
     expect(body).toMatch(/Staple the notarisation ticket to the bundle\./);
     expect(body).toMatch(/^## Known limits$/m);
-    expect(body).toMatch(/\*\*DMG bundling currently disabled\*\* \(`targets: \["app"\]`\)/);
+    // V-1148 — this froze "DMG bundling currently disabled (targets: [\"app\"])". Both
+    // halves went false when dmg joined the bundle targets and the release workflow
+    // began publishing a .dmg its own notes tell customers to download. The local
+    // AppleScript limitation is real and kept; the state claim was not.
+    expect(body).toMatch(/\*\*DMG bundling is enabled, and can still fail LOCALLY\.\*\*/);
+    expect(body, 'the retired DMG-disabled claim is back').not.toMatch(
+      /DMG bundling currently disabled/,
+    );
     expect(body).toMatch(/`AppleEvent timed out \(-1712\)`/);
     expect(body).toMatch(/\*\*Apple silicon only\.\*\*/);
     expect(body).toMatch(/no Intel binary is distributed\./);

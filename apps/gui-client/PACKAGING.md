@@ -73,15 +73,16 @@ right-click → Open → Open bypasses the warning for local QA.
 
 ## Known limits
 
-- **DMG bundling currently disabled** (`targets: ["app"]`). The
-  Tauri-bundled `bundle_dmg.sh` runs an AppleScript that styles the
-  mounted DMG window (icon positions, drop-link); on this Mac it
-  fails with `AppleEvent timed out (-1712)` because Finder
-  automation permission isn't granted to the build process. The
-  `.app` builds cleanly. To re-enable DMG output, either:
+- **DMG bundling is enabled, and can still fail LOCALLY.** `targets`
+  includes `dmg`, and the release workflow publishes a `.dmg` that its
+  own release notes tell customers to download. Building one on a local
+  Mac is the part that breaks: the Tauri-bundled `bundle_dmg.sh` runs an
+  AppleScript that styles the mounted DMG window (icon positions,
+  drop-link), and without Finder automation permission it fails with
+  `AppleEvent timed out (-1712)`. The `.app` builds cleanly either way.
+  To build a DMG locally, either:
   1. Grant **System Settings → Privacy & Security → Automation →
-     Terminal (or your IDE) → Finder** permission, then flip targets
-     back to `["app", "dmg"]`; or
+     Terminal (or your IDE) → Finder** permission; or
   2. Swap to a non-AppleScript DMG tool (e.g. `create-dmg` via
      Homebrew, called from a postbuild script).
      V-035 captures the empirical detail.

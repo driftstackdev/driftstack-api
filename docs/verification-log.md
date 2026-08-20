@@ -49222,3 +49222,48 @@ No source change. Recorded because the decision reads differently once the fallb
 coverage is on the table, and nothing in the plan put it there. Also checked: no customer
 documentation mentions `driftstack://` at all, so nothing published depends on the
 hand-off firing.
+
+### V-1148 — D-4 verified; the packaging runbook said DMG was off while the release ships one
+
+D-4 asks whether the GUI launches unsigned and un-notarised, and flags that the release
+workflow publishes Windows and Linux artifacts for platforms the docs call unsupported.
+
+**Two of its citations are wrong.** It cites `pre-launch-checklist.md:91`; that file does
+not exist — the checklist is at `docs/launch/pre-launch-checklist.md`, and line 91 there is
+"API-key-paste fallback | READY". The signing rows are `:95-96`. More importantly that file
+carries **"Last roll-up: 2026-05-07"** and is over three months stale, so it cannot settle
+current state either way.
+
+Verified against source instead. `gui-release.yml` states the posture in its own header:
+"Pre-launch posture: NO OS-level binary signing. Customers see 'unknown publisher' /
+Gatekeeper warnings on first install." `bundle.macOS` in `tauri.conf.json` carries no
+signing identity, and the workflow's release notes tell macOS users the first launch "may
+prompt about an unidentified developer". So CI artifacts are unsigned, deliberately and
+documented.
+
+**I nearly corrected a customer-facing claim that is defensible, and stopping was the
+finding.** Four live surfaces — the pricing page, the dashboard index, and the welcome page
+twice — describe "the signed Apple-silicon macOS app supplied directly by Driftstack
+support", pinned by a `desktop-app-access-truth` cross-source invariant. Against the CI
+posture that reads false. But `PACKAGING.md` is a runbook for a SECOND distribution path
+and requires that "every customer-distributed build must use the hardened runtime,
+Developer ID signing, notarisation, stapling, and Gatekeeper verification". The
+direct-supply app is built and signed by that path, not by CI. Whether the certificate
+actually exists is exactly D-4's open procurement question — so changing that copy could
+have made a true statement false, on a pricing page, inside someone else's decision.
+
+**What was unambiguous, and is fixed.** `PACKAGING.md` told operators "**DMG bundling
+currently disabled** (`targets: ["app"]`)". Both halves are false: `targets` is
+`['app','dmg','nsis','appimage','deb']` since 2026-08-19, and the release workflow
+publishes a `.dmg` its own notes instruct customers to download. A pin froze the retired
+sentence, so the runbook could not be corrected without a red — the same
+guard-holds-a-false-claim shape as V-1143 and V-1144.
+
+The underlying operational note is real and kept: local DMG builds still fail with
+`AppleEvent timed out (-1712)` without Finder automation permission. Rewritten to separate
+what CI does from what a local Mac does, since conflating them is what made the sentence
+wrong. Negative sentinel over the retired claim, both directions mutation-proved.
+
+D-4 itself is untouched: whether to narrow the release matrix to the one platform
+`license-activation.md` calls supported, or extend support to the three it builds, is a
+product call.
