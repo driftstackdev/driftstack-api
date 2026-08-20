@@ -269,6 +269,20 @@ func main() {
 
 The Go SDK is single-package, has zero non-stdlib runtime dependencies, and is context-aware throughout.
 
+**Resources:** the Go client exposes the same resource accessors as the TypeScript and Python surfaces:
+
+```go
+client.Sessions      client.AgentSessions     client.Recipes
+client.Profiles      client.ProfileSnapshots  client.Archetypes
+client.APIKeys       client.Webhooks          client.Usage
+client.Billing       client.CryptoOrders      client.Egress
+client.Account       client.Auth              client.Mfa
+client.Team          client.AuditLog          client.EmailPreferences
+client.Legal
+```
+
+Method names are the exported CamelCase form of the Python table above — `client.webhooks.list_deliveries(id)` is `client.Webhooks.ListDeliveries(ctx, id)` — and every call takes `ctx` as its first argument and returns a `(value, error)` pair.
+
 ## Versioning across SDKs
 
 The HTTP API and the SDKs version independently. SDKs at any version stay compatible with the live API contract; SDK upgrades unlock newer fields and new resource methods, but won't break older method calls. See [SDK versioning policy](/sdk/versioning/) for the full guarantee.

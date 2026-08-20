@@ -48578,3 +48578,38 @@ assumption about which member a measurement added is not a measurement.
 
 Two corrections in one arc now, both to my own prior claim: V-1130's "only one survives"
 here, and V-1129's line numbers. The report is not the only thing carrying stale claims.
+
+### V-1132 — Go was the worst of the three, and the third roster on the same page
+
+Finishing what V-1130 started. The install page's Go section carried a single
+`client.Account.Me` example and no resource inventory at all, against the nineteen
+accessors `client.go` ships.
+
+**Measured across every page in `apps/docs`, not just this one.** That mattered: the Go
+surface IS documented elsewhere — `sdk/go-quickstart`, `sdk/error-handling`, and several
+guides — so "absent from the installation page" would have been the wrong claim. The right
+one is worse. Eight accessors appear NOWHERE in customer documentation: `Archetypes`,
+`Billing`, `CryptoOrders`, `Mfa`, `EmailPreferences`, `Legal`, `Egress` and `Recipes`. A Go
+customer had no way to learn those resources exist. TypeScript and Python each get a full
+per-method listing; Go got one line.
+
+Added a Go accessor inventory to the section, with the naming rule spelled out and verified
+against source: Go methods are the exported CamelCase form of the Python names
+(`list_deliveries` → `ListDeliveries`), take `ctx` first, and return a `(value, error)` pair.
+Deliberately written WITHOUT a count — a numeral there would be the exact thing this arc
+keeps retiring, and the derived guard enforces completeness without one.
+
+**A third hand-listed roster surfaced on the same page.** The What-ships capability matrix
+has fifteen rows; its pin checked seven and its title called the matrix seven-row. The eight
+it never named — Agent sessions, Recipes, Profile snapshots, Audit log, MFA, Billing, Email
+preferences, Legal — could each have lost a ✅ in silence. Now derived from the matrix, and
+mutation-proved by flipping MFA, one of the rows the old subset could not see.
+
+That arm states its own limit rather than implying more: it cannot prove the matrix is
+COMPLETE, because unlike the accessor arms there is no canonical capability list in source
+to check a roster against. `Archetypes`, `CryptoOrders` and `Egress` ship as accessors with
+no matrix row; the accessor arms cover them instead. Its anti-vacuity check names a row that
+cannot leave rather than freezing a row count — a floor there would have been a fourth
+hand-maintained number introduced by the commit retiring the third.
+
+Three rosters, one page, three findings: the count was never the defect. The shape was.

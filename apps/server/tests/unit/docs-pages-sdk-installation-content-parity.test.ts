@@ -238,6 +238,33 @@ describe('W778 docs /sdk/installation content parity', () => {
     ).toEqual([]);
   });
 
+  // V-1132 — Go was the worst of the three and the last to be measured. The section
+  // carried a single `client.Account.Me` example and no inventory at all, against the
+  // nineteen accessors `client.go` ships, so eight resources — Archetypes, Billing,
+  // CryptoOrders, Mfa, EmailPreferences, Legal, Egress and Recipes — appeared NOWHERE
+  // in `apps/docs`, not on this page and not on any guide. A Go customer had no way to
+  // learn they existed. Measured across every page before fixing, because the Go
+  // surface IS documented elsewhere (go-quickstart, error-handling, several guides) and
+  // "absent from this page" would have been the wrong claim.
+  it('CRITICAL every Go resource accessor the SDK ships is named on the page, DERIVED from client.go. Go has no table and no per-method block, so an accessor omitted here is invisible across all of apps/docs rather than merely under-documented.', () => {
+    const p = read(PAGE);
+    const client = read(resolve(REPO_ROOT, 'packages/sdk-go/client.go'));
+
+    const accessors = [...client.matchAll(/^\t([A-Z][A-Za-z]*)\s+\*[A-Za-z]+Resource$/gm)].map(
+      (m) => m[1],
+    );
+    expect(
+      accessors.length,
+      'no accessors parsed out of client.go — its struct shape moved',
+    ).toBeGreaterThanOrEqual(19);
+
+    const missing = accessors.filter((a) => !new RegExp(`\\bclient\\.${a}\\b`).test(p));
+    expect(
+      missing.sort(),
+      'Go resource accessors the SDK ships that the installation page never names:',
+    ).toEqual([]);
+  });
+
   it("CRITICAL Python pydantic-OR-dict input + typed-Pydantic-output framing pinned. The 'Inputs accept either a Pydantic model OR a plain dict. Outputs are typed Pydantic models' wording is the load-bearing Python idiom.", () => {
     const p = read(PAGE);
 
@@ -280,20 +307,40 @@ describe('W778 docs /sdk/installation content parity', () => {
     );
   });
 
-  it('CRITICAL 7-row What-ships capability-matrix pinned. Sessions/Profiles/API keys/Webhooks/Team RBAC/Usage/Account self — all 3 SDKs (TS/Python/Go) marked ✅. Drift would let customer expectations diverge from shipped capability.', () => {
+  // V-1132 — the third hand-listed roster on this page. It checked seven rows of a
+  // matrix that has fifteen, and its title described the matrix itself as having
+  // seven. The eight rows it never named — Agent sessions, Recipes, Profile
+  // snapshots, Audit log, MFA, Billing, Email preferences, Legal — could each have
+  // lost a ✅ in silence. Derived from the matrix now, so every row is checked and a
+  // new row is covered the moment it is added.
+  //
+  // What this deliberately CANNOT do is prove the matrix is complete. Unlike the
+  // accessor arms above, which derive from client.py / client.ts / client.go, there
+  // is no canonical capability list in source to check a roster against — so this
+  // asserts every row present is honest, not that no row is missing. Archetypes,
+  // CryptoOrders and Egress ship as accessors with no row here; the arms above are
+  // what cover them, and saying so is better than a floor that pretends otherwise.
+  it('CRITICAL every capability row in the What-ships matrix is ✅ across all three SDKs, DERIVED from the matrix rather than a hand-listed subset. A row that quietly loses a ✅ is a customer expectation diverging from shipped capability, and the seven-row subset this replaced was structurally unable to see the other eight.', () => {
     const p = read(PAGE);
+    const section = p.slice(p.indexOf('## What ships'));
+    const body = section.slice(0, section.indexOf('## Next steps'));
 
-    for (const cap of [
-      'Sessions',
-      'Profiles',
-      'API keys',
-      'Webhooks',
-      'Team RBAC',
-      'Usage',
-      'Account self',
-    ]) {
-      expect(p, `capability row ${cap}`).toMatch(new RegExp(`\\| ${cap}\\s+\\| ✅`));
-    }
+    const rows = [...body.matchAll(/^\| ([A-Za-z][^|]*?)\s*\|([^|]*)\|([^|]*)\|([^|]*)\|/gm)]
+      .filter((m) => (m[1] ?? '').trim() !== 'Capability')
+      .map((m) => ({
+        cap: (m[1] ?? '').trim(),
+        cols: [m[2], m[3], m[4]].map((c) => (c ?? '').trim()),
+      }));
+
+    // Anti-vacuity without freezing a row count: a parse that silently yields nothing
+    // would report every row honest. Sessions is the one row that cannot leave.
+    expect(
+      rows.map((r) => r.cap),
+      'no capability rows parsed — the matrix shape moved',
+    ).toContain('Sessions');
+
+    const notShipped = rows.filter((r) => r.cols.join('') !== '✅✅✅').map((r) => r.cap);
+    expect(notShipped.sort(), 'capability rows not marked ✅ across TS/Python/Go:').toEqual([]);
   });
 
   it('CRITICAL search/login are presented as capability-gated, never as shipped availability. Every currently shipped driver reports non-real capability, so both routes return 503 before session lookup; a bare "Full CRUD + ... /search/login" claim here would market availability the deployment does not have.', () => {
