@@ -49853,3 +49853,41 @@ source constant can confirm or refute it.
 No defect. Recorded because a customer-facing app verified end to end is worth as much as a
 fix, and because the 90/30 pairing is a small piece of good design: the two pages cannot
 drift apart, since the same server expression decides both.
+
+### V-1163 — three customer-facing surfaces state three different refund eligibility conditions
+
+Reading `apps/customer-dashboard` end to end — the last customer-facing app unexamined —
+turned up the first substantive divergence in several turns. Its 49 distinct `/v1` route
+references all resolve (the one apparent miss is a concatenation base for
+`/v1/webhook-deliveries/{id}/replay`). The problem is not a route. It is a promise.
+
+**The same 14-day refund window carries a different usage condition on each surface that
+states it:**
+
+- `legal/refunds.md` — "Within 14 days of first paid charge, **no usage**… if you signed up,
+  paid, and have **not yet initiated a Session**", and explicitly "a discretionary policy,
+  not a statutory right".
+- `docs/billing-faq.astro` — "Card payments: full refund within 14 days of payment **if you
+  haven't run sessions beyond a brief evaluation**."
+- `customer-dashboard/select-tier.astro` — "If you're an **EU/UK consumer** and want to
+  cancel within 14 days of first subscribing, contact support… we'll handle it **case by
+  case**", stating no usage condition at all.
+
+A customer who ran a brief evaluation session qualifies under the FAQ and does not under the
+refunds policy. A customer reading only the dashboard would not know a usage condition
+exists. The three are not degrees of the same sentence; they are three different offers.
+
+**No surface is declared canonical**, and nothing ties them: fourteen guards cover the
+refunds policy, the FAQ pins its own "14 days of payment" wording, and not one compares the
+eligibility CONDITION across surfaces. Each is individually pinned to say exactly what it
+says, which is why three of them can disagree while every guard stays green — the
+self-consistent-pin shape this arc has found repeatedly, at its most consequential yet.
+
+**Not fixed here, deliberately.** Which condition is correct is a business and legal
+decision, not a drafting error I can resolve: the refunds page disclaims a statutory right
+while the dashboard invokes EU/UK consumer status, and EU/UK withdrawal rights for digital
+services are not something a policy page can simply define. `docs/launch/pre-launch-checklist.md`
+still lists "Counsel review of legal pages" as outstanding. This belongs in that review, and
+a guard tying the three can only be written once someone says which text governs.
+
+Recorded with exact quotes so that review does not have to rediscover the divergence.
