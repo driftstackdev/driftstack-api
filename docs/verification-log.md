@@ -48408,3 +48408,45 @@ nothing at all enforced it. Here something does.
 
 Second consecutive clean sweep after V-1118. Recorded so the next reader spends their
 time on the D-items rather than re-deriving this.
+
+### V-1128 — D-7's factual basis verified against source, and sharpened in three ways
+
+D-7 is the highest-consequence open decision after D-16, and its premise came from the
+same report that rule 1 exists because of. An unsound premise makes an unsound privacy
+decision, so I verified all six claims. **All six hold.** Filed as verification, not as a
+fix — the remedy is the owner's call, and all three of D-7's options are still open.
+
+Verified: `routes/recipes.ts:174,179` files under `ctx.account.id` while storing
+`transcriptSnapshot: source.transcript`; list/get/delete (`:197,217,230`) are strictly
+`ctx.account.id`; `0044_recipes.sql:35-36` is `account_id` CASCADE plus `agent_session_id`
+SET NULL; `0042_agent_sessions.sql:36` makes the owner's sessions CASCADE on account
+deletion; `retention-scrub-repo.ts` touches only `session_operations`; and nothing
+re-checks membership after creation, so revocation cannot reach the row.
+
+Three refinements the report's framing understates:
+
+**1. It is not an act-as gap — no header is involved.** The read is gated by
+`callerCanAccessAgentSession` (`:160`), which returns true when
+`membership.role === 'admin'` on the owner's team, read from `ctx.teams` server-side.
+`recipes.ts:125-127` says so explicitly and treats it as the reason the module stays out
+of the effective-account registry. That reasoning is correct for forgery — no header can
+fake membership — but it means plain team-admin membership suffices. The hazard is more
+reachable than "no act-as header" suggests, not less.
+
+**2. The survival guarantee is correct for the case it was written for.**
+`0044_recipes.sql:13-17` states the intent: the recipe survives session cleanup because
+"a customer's recipe is theirs to keep." `agent-sessions-repo.ts:1080-81` repeats it.
+Both are right when the recipe's account and the transcript's subject are the same party.
+The team-admin path makes them different parties, and the guarantee silently extends to
+one it never contemplated. This is the precise shape — not a missing check, but a correct
+rule applied to an unconsidered party.
+
+**3. Article 17 erasure structurally cannot reach it.** `deleteAccount` is named as the
+GDPR Article 17 path (`bootstrap.ts:824`, `:1517`) and reclaims the account's OWN rows.
+The owner's transcript lives in a row belonging to the ADMIN's account, so erasing the
+owner never touches it. D-7's question (2) is therefore not "should the purge cover this"
+but "erasure cannot currently cover this at all" — a stronger statement.
+
+**No guard, deliberately.** A pin here would freeze a live hazard as expected behaviour,
+which is the failure V-1121's arc was corrected for. And each of D-7's three remedies
+implies a different guard, so building one presumes the decision.
