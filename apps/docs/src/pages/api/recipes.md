@@ -163,7 +163,7 @@ recipe is still useful as a transcript-only snapshot.
 
 | Status | Type                | When                                                                                                                                                   |
 | -----: | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-|    400 | validation          | body fails schema (missing label, label > 120 chars, description > 2000)                                                                               |
+|    400 | validation-failed   | body fails schema (missing label, label > 120 chars, description > 2000)                                                                               |
 |    404 | not-found           | `agent_session_id` doesn't exist, or belongs to an account you cannot access — 404 rather than 403 so the response does not confirm the session exists |
 |    401 | unauthorized        | missing or invalid bearer token                                                                                                                        |
 |    503 | feature-unavailable | recipe storage is not enabled for this deployment                                                                                                      |

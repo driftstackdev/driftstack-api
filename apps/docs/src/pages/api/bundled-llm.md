@@ -187,7 +187,7 @@ extension fields).
 
 | Status | Type                         | When                                                                     |
 | -----: | ---------------------------- | ------------------------------------------------------------------------ |
-|    400 | validation                   | body fails schema (negative cap, > 1_000_000 cap)                        |
+|    400 | validation-failed            | body fails schema (negative cap, > 1_000_000 cap)                        |
 |    401 | unauthorized                 | missing or invalid bearer token                                          |
 |    403 | forbidden                    | `consent: true` on a tier without bundled-LLM access (below API Builder) |
 |    402 | bundled-llm-budget-exhausted | spend reached the cap; recover via PATCH / BYOK / next month             |

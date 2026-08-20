@@ -47823,3 +47823,45 @@ Mutation-proved, restored byte-identical: removing one section's line fails as
 "expected 4 to be greater than or equal to 5"; widening a route's gate to broad `write`
 fails as "the saved-proxy routes no longer agree on one scope: expected
 [ 'write', 'account_owner' ]".
+
+### V-1116 — four pages documented a problem type the server cannot send
+
+Following the "stated for one, true for N" shape into a claim that is derivable
+precisely rather than by proximity: the slug in an error table's Type column.
+
+`ValidationError` carries `PROBLEM_TYPES.ValidationFailed` —
+`https://errors.driftstack.dev/validation-failed`. Four customer API pages listed
+**`validation`** instead: `recipes.md:166`, `agent-sessions.md:927`, `status.md:276`,
+`bundled-llm.md:190`. Rule 2 found all four; the obvious page was
+`agent-sessions.md`, and grepping the CLAIM rather than the page turned up three more.
+
+Every other row in those same tables is the exact declared slug — `forbidden`,
+`not-found`, `conflict`, `profile-in-use`, `pair-mode-conflict`,
+`bundled-llm-budget-exhausted` — so the convention was never ambiguous. One row was
+wrong, and it was wrong on the most common 400 a client will ever handle.
+
+**The failure mode is why this matters.** A caller who writes
+`if (problem.type.endsWith('/validation'))` compiles, runs, and silently never takes
+that branch. The schema failure falls through to whatever generic handler exists.
+Nothing 500s, nothing logs, and the client looks like it works until someone sends a
+malformed body and wonders why the error text is generic.
+
+None of the four rows was pinned. The new guard derives the legal set from
+`PROBLEM_TYPES` and requires every slug in an error table to be one the server can
+send — the whole class, not the four instances. `V-814`'s header warned that a
+proximity scan of statuses-near-class-names is unworkable, and this deliberately is not
+that: it reads a fixed table shape and compares a slug against a declared set, with no
+window and no allowlist.
+
+A census floor is asserted because both sides are compared as sets and two empty sets
+agree: a page-shape change that stopped matching would otherwise report every
+documented type legal having read none of them.
+
+Checked and excluded: `reference/metrics.md` also contains the bare word `validation`,
+as a value of the `outcome` label on `driftstack_mac_node_livekit_register_total`. That
+is a metric label, not a problem type, and the guard reads only the error-table shape.
+
+Mutation-proved, restored byte-identical: restoring `validation` on `status.md` fails as
+"status.md: 400 `validation` is not a declared problem type"; renaming a legal row to a
+plausible `session-missing` fails the same way. Ratchets 2944→2945 and 3110→3111 for the
+one file added.

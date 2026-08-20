@@ -271,11 +271,11 @@ with a long-lived token; the same endpoint accepts that token.
 
 ## Errors
 
-| Status | Type         | When                                                    |
-| -----: | ------------ | ------------------------------------------------------- |
-|    400 | validation   | body / query failed schema                              |
-|    404 | not-found    | non-public incident id, OR malformed `inc_<uuid>` value |
-|    429 | rate-limited | subscription rate-limit (3/min per IP) tripped          |
+| Status | Type              | When                                                    |
+| -----: | ----------------- | ------------------------------------------------------- |
+|    400 | validation-failed | body / query failed schema                              |
+|    404 | not-found         | non-public incident id, OR malformed `inc_<uuid>` value |
+|    429 | rate-limited      | subscription rate-limit (3/min per IP) tripped          |
 
 Subscriber-token errors (expired token, already-used confirm token)
 also return `404` — surfacing them as distinct codes would let an
