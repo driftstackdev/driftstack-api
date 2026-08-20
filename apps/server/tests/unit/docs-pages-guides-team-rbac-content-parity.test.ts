@@ -173,7 +173,7 @@ describe('W783 docs /guides/team-rbac content parity', () => {
     );
   });
 
-  it('CRITICAL 8-row header-honoring endpoint catalog includes nested profile taxonomy with member-read/admin-write roles.', () => {
+  it('V-1089 CRITICAL the header-honoring catalog still carries every resource it carried, now alongside the four it had been missing. The eight below are the original set; agent sessions, profile snapshots, billing and recipes joined them when the table was widened to match the server.', () => {
     const p = read(PAGE);
 
     for (const resource of [
@@ -188,7 +188,10 @@ describe('W783 docs /guides/team-rbac content parity', () => {
     ]) {
       expect(p, `header-honoring row ${resource}`).toMatch(new RegExp(`\\| ${resource}\\s+\\|`));
     }
-    expect(p).toMatch(/\| Profile taxonomy\s+\| GET \(member\/admin\), PUT \(admin only\)\s+\|/);
+    // V-1089 — the taxonomy row now names the path it covers as well as the roles.
+    expect(p).toMatch(
+      /\| Profile taxonomy\s+\| `\/v1\/account\/me\/organization` — GET \(member\/admin\), PUT \(admin only\)/,
+    );
   });
 
   it('CRITICAL non-honoring list narrows self-only identity /me and names the nested taxonomy exception.', () => {
@@ -311,5 +314,31 @@ describe('W783 docs /guides/team-rbac content parity', () => {
         ),
       ),
     ).toBe(true);
+  });
+
+  it('V-1089 CRITICAL the honors-table names the routes the server actually honors. It was narrower than the server -- four profile methods where every profile route honors the header, and no mention of webhook PATCH, rotate-secret or test -- so a team admin reading it would believe they could not act on an owner resource that they can.', () => {
+    const p = read(PAGE);
+
+    expect(p, 'the webhook row lost PATCH').toMatch(/GET \/ POST \/ PATCH \/ DELETE plus/);
+    for (const op of ['\\{id\\}/rotate-secret', '\\{id\\}/test']) {
+      expect(p, `the webhook row no longer names ${op}`).toMatch(new RegExp(op));
+    }
+    expect(p, 'the profiles row narrowed back to CRUD').toMatch(
+      /every `\/v1\/profiles` route — not just CRUD/,
+    );
+    expect(p, 'agent sessions are missing from the table').toMatch(
+      /\| Agent sessions {4}\| every `\/v1\/agent-sessions` route/,
+    );
+    expect(p, 'the was-narrower note is gone').toMatch(
+      /This table was previously narrower than the server/,
+    );
+
+    // …and the server still honors them, or the table is the next thing to rot.
+    const webhooks = readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes/webhooks.ts'), 'utf8');
+    const count = (webhooks.match(/effectiveAccountIdForWrite/g) ?? []).length;
+    expect(
+      count,
+      'webhooks.ts no longer gates its writes on the effective account, so the row overstates',
+    ).toBeGreaterThanOrEqual(5);
   });
 });

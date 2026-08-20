@@ -138,16 +138,26 @@ reveal the owner's policy or refund the member's already-consumed token.
 
 Endpoints that honor the header:
 
-| Resource          | Methods                                        |
-| ----------------- | ---------------------------------------------- |
-| Sessions          | GET / POST / DELETE + 5 action endpoints       |
-| Profiles          | GET / POST / PATCH / DELETE                    |
-| Profile taxonomy  | GET (member/admin), PUT (admin only)           |
-| API keys          | GET / POST / DELETE + `:id/rotate`             |
-| Webhooks          | GET / POST / DELETE + `:id/deliveries`, replay |
-| Audit log         | GET + `/export`                                |
-| Email preferences | GET / PUT (PUT = admin)                        |
-| Usage             | GET, `/series`                                 |
+| Resource          | Which routes                                                                                                                                                                                                                                |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sessions          | every `/v1/sessions` route except `/v1/sessions/{id}/proxy`                                                                                                                                                                                 |
+| Agent sessions    | every `/v1/agent-sessions` route, including `/message`. Note the collection READ needs `admin` — see above                                                                                                                                  |
+| Profiles          | every `/v1/profiles` route — not just CRUD, but `trash`, `restore`, `purge`, `clone`, `export`, `import`, `transfer`, `trim`                                                                                                                |
+| Profile snapshots | every `/v1/profile-snapshots` route, and `/v1/profiles/{id}/snapshots`                                                                                                                                                                      |
+| Profile taxonomy  | `/v1/account/me/organization` — GET (member/admin), PUT (admin only)                                                                                                                                                                        |
+| API keys          | every `/v1/api-keys` route, including `{id}/rotate`                                                                                                                                                                                         |
+| Webhooks          | every `/v1/webhooks` route — GET / POST / PATCH / DELETE plus `{id}/deliveries`, `{id}/rotate-secret`, `{id}/test`, and delivery replay. The Stripe and NOWPayments receivers under this prefix are provider callbacks, not customer routes |
+| Audit log         | GET + `/export`                                                                                                                                                                                                                             |
+| Email preferences | GET / PUT (PUT = admin)                                                                                                                                                                                                                     |
+| Usage             | GET, `/series`                                                                                                                                                                                                                              |
+| Billing           | `GET /v1/billing` only — checkout and portal sessions are per-caller                                                                                                                                                                        |
+| Recipes           | `POST /v1/recipes` only — the list, read and delete routes are per-caller                                                                                                                                                                   |
+
+This table was previously narrower than the server: it named four profile
+methods where every profile route honors the header, and omitted webhook
+PATCH, rotate-secret and test entirely. If you are unsure about a route
+not listed here, the safe assumption is that it operates on your own
+account.
 
 Endpoints that do NOT honor the header (operate on the caller's
 own account regardless):

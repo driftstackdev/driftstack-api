@@ -46559,3 +46559,52 @@ restart row fails; deleting ADR-001's not-as-shipped annotation fails. Restored
 byte-identical.
 
 `it(` counts 6 and 6, unchanged. No new file, no ratchet change.
+
+## V-1089 — the acting-as table was narrower than the server, in both directions I checked
+
+Third item off the plan's deferred-but-file-these list. It flagged the team-RBAC
+honors-table as omitting "webhook PATCH and rotate-secret". Measured against the
+routes, it omits more than that, and the under-statement is not confined to webhooks.
+
+Per resource, counting routes that resolve an effective account:
+
+`/v1/webhooks` 8 of 10 — the table named GET/POST/DELETE plus deliveries and
+replay, missing PATCH, `rotate-secret` AND `test`. The two that do not honor it are
+the Stripe and NOWPayments receivers, which sit under the same prefix and are
+provider callbacks rather than customer routes.
+
+`/v1/profiles` 16 of 16 — the table said "GET / POST / PATCH / DELETE" while every
+profile route honors it, including `trash`, `restore`, `purge`, `clone`, `export`,
+`import`, `transfer` and `trim`.
+
+`/v1/agent-sessions` 22 of 22, and the table did not mention agent sessions at all.
+`/v1/profile-snapshots` 4 of 4, also absent. `GET /v1/billing` and
+`POST /v1/recipes` honor it while their siblings do not, and neither was listed.
+
+So a team admin reading this table would conclude they cannot act on an owner's
+snapshots, exports, or webhook rotations. They can. The table now states each row as
+"every route under X" where that is true and names the exception where it is not, and
+says plainly that it used to be narrower.
+
+TWO OF MY OWN ERRORS, both caught by the run.
+
+The message route read as NOT honoring the header in my scan. It does —
+`prepareAgentMessage` calls `callerCanAccessAgentSession` and
+`consumeEffectiveOwnerRateLimit`, and it is a const declared outside the registration,
+the same blind spot V-1075 and V-1077 recorded. Writing "every route except /message"
+into a customer table would have been a fresh false claim produced by a known
+instrument flaw.
+
+And my enumeration missed a pin again. I grepped the guard for "Methods" and "honor
+the header"; the arm that actually froze the table iterates a list of eight resource
+names and says "8-row" in its title. Same lesson as V-1088 one commit earlier — a
+claim is not a string — except this time the arm caught me before the commit rather
+than after. My new arm also referenced `p` without defining it, which is the `body`
+versus `p` slip from V-1068, now made twice.
+
+Mutations: dropping rotate-secret and test fails; narrowing profiles back to CRUD
+fails; deleting the agent-sessions row fails. Restored byte-identical, docs rebuilt,
+and `check:rendered-product-status` still passes across 212 files — checked because
+this page renders and V-1085 was about markers leaking into exactly this app.
+
+`it(` count 26→27. No new file, no ratchet change.
