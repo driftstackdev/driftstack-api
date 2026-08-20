@@ -3,6 +3,9 @@
 // The comment on EXPECTED_TEST_FILES_ALL read "every project, which is what CI
 // runs". That is true of the two vitest projects and false of the pipeline: CI has
 // five jobs, and this gate is `build-test`. The other four — Playwright e2e,
+// V-1159 — ci.yml is not the whole PR gate. gui-build-check.yml also runs on
+// pull_request (paths: apps/gui-client, packages/sdk-typescript) and runs
+// `cargo test --all-targets`. The census below stays scoped to ci.yml by design.
 // Python SDK, Go SDK, bench — are never touched by it.
 //
 // It matters because of how the green is quoted. Every commit message in this
@@ -277,5 +280,32 @@ describe('a gate that does not name its blind spot reads as total', () => {
       'these specs make requests without starting a server, so they depend on something already ' +
         'listening — the suite is no longer self-contained:',
     ).toEqual([]);
+  });
+
+  // V-1159 — the census above is scoped to ci.yml by design, and that scope is the
+  // gap worth naming rather than closing here. A second workflow gates pull
+  // requests: gui-build-check.yml fires on `pull_request` whenever
+  // `apps/gui-client/**` or `packages/sdk-typescript/**` changes, and it runs
+  // `cargo test --all-targets` — Rust tests no vitest project collects. This arm
+  // derives that from the workflow, so the note in verify-suite.mjs cannot quietly
+  // stop being true, and cannot be deleted while the job still gates.
+  it('CRITICAL if a second workflow gates a pull request, the gate file says so. "CI has five jobs" is read as "everything that can fail a PR", which is exactly the over-claim this file exists to stop — and a change to packages/sdk-typescript triggers a Rust test run that no entry in the not-covered list names.', () => {
+    const wf = read('.github/workflows/gui-build-check.yml');
+    const gatesPrs = /^\s{2}pull_request:/m.test(wf);
+    const runsCargoTest = /cargo test --all-targets/.test(wf);
+
+    // Anti-vacuity: if the workflow stops gating PRs or stops running the Rust
+    // tests, the requirement below is moot and this arm should be revisited rather
+    // than silently satisfied by an empty premise.
+    expect(gatesPrs, 'gui-build-check no longer runs on pull_request').toBe(true);
+    expect(runsCargoTest, 'gui-build-check no longer runs cargo test').toBe(true);
+
+    const gate = read('scripts/verify-suite.mjs');
+    expect(gate, 'the gate no longer names the second PR-gating workflow').toMatch(
+      /gui-build-check\.yml/,
+    );
+    expect(gate, 'the gate no longer records how to run the Rust tests locally').toMatch(
+      /cargo test --all-targets/,
+    );
   });
 });

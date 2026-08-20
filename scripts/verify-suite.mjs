@@ -48,6 +48,16 @@ export const EXPECTED_TEST_FILES = 2953;
  * other four are enumerated in NOT_COVERED_BY_THIS_GATE and reported on every
  * successful run, because a gate that does not name its own blind spot gets read
  * as covering everything.
+ *
+ * V-1159 — and `ci.yml` is not the whole of what gates a pull request. A SECOND
+ * workflow, `.github/workflows/gui-build-check.yml`, runs on `pull_request` to
+ * main whenever `apps/gui-client/**` or `packages/sdk-typescript/**` changes, and
+ * it runs `cargo test --all-targets` — 32 Rust tests that no vitest project
+ * collects and no entry below names. Locally:
+ *   `apps/gui-client/src-tauri && cargo test --all-targets`
+ * The list below stays keyed to ci.yml on purpose, and the census enforces that
+ * scope; this note exists so "five jobs" is not read as "everything that can
+ * fail a PR".
  */
 export const EXPECTED_TEST_FILES_ALL = 3120;
 

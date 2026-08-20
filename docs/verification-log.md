@@ -49685,3 +49685,36 @@ and no claim, only the shape of an assertion that the shared guard forbids, and 
 suite green for everyone rather than parked behind a conversation. What I did NOT do is
 touch the permission grant itself, which is their decision and the substance of their
 commit.
+
+### V-1159 — "CI has five jobs" is true of ci.yml and not of what gates a pull request
+
+V-1157 closed the four blind spots the gate declares. This asked whether the declaration is
+complete, because a roster naming its own gaps can itself be short — the failure this arc
+has found repeatedly.
+
+**For its stated scope it is complete.** `ci.yml` has exactly five jobs: `build-test`, which
+is the gate, plus the four in `NOT_COVERED_BY_THIS_GATE`. A census guard enforces that, and
+the roster's comment says plainly it is "keyed by the job id in `.github/workflows/ci.yml`".
+
+**But ci.yml is not the whole of what gates a pull request.**
+`.github/workflows/gui-build-check.yml` fires on `pull_request` to main whenever
+`apps/gui-client/**` or `packages/sdk-typescript/**` changes, and it runs
+`cargo test --all-targets` — **32 Rust tests** that no vitest project collects and no entry
+in the not-covered list names. Ran them: 32 passed.
+
+This is self-implicating, which is why it is worth writing down. **My own commits this arc
+touched `packages/sdk-typescript/`** — V-1130, V-1137, V-1138 all did — so each would have
+triggered that workflow, and each time I reported "suite green" without having run the Rust
+tests. The gate's comment warns against exactly this: "a claim about the whole pipeline made
+from a green that covers a fifth of it". I made the smaller version of that mistake against
+the very file that names it.
+
+**Corrected the prose, not the scope.** The roster stays keyed to ci.yml and the census
+stays scoped to ci.yml — that boundary is deliberate and re-drawing it is a design decision,
+not a defect repair. What was wrong is that "CI has five jobs" reads as "everything that can
+fail a PR". Both prose sites now name the second gating workflow and its local command.
+
+The guard arm added derives the condition rather than freezing the sentence: it reads
+`gui-build-check.yml`, asserts the workflow still gates PRs and still runs the Rust tests,
+and only then requires the gate file to name it. If that job stops gating, the arm's premise
+is gone and it says so instead of passing on an empty one. Both sentinels mutation-proved.
