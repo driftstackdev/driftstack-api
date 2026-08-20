@@ -41,11 +41,11 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(existsSync(T('build.rs'))).toBe(true);
   });
 
-  it('Cargo.toml: driftstack-gui crate 0.1.1 MIT non-publish + lib triplet (staticlib/cdylib/rlib) + Tauri 2.0 + plugins + zeroize process-memory control keys + V-241 keyring + custom-protocol pinned', () => {
+  it('Cargo.toml: driftstack-gui crate 0.1.2 MIT non-publish + lib triplet (staticlib/cdylib/rlib) + Tauri 2.0 + plugins + zeroize process-memory control keys + V-241 keyring + custom-protocol pinned', () => {
     const body = read(T('Cargo.toml'));
     expect(body).toMatch(/^\[package\]$/m);
     expect(body).toMatch(/^name = "driftstack-gui"$/m);
-    expect(body).toMatch(/^version = "0\.1\.1"$/m);
+    expect(body).toMatch(/^version = "0\.1\.2"$/m);
     expect(body).toMatch(/^description = "Driftstack self-hosted GUI client"$/m);
     expect(body).toMatch(/^edition = "2021"$/m);
     expect(body).toMatch(/^license = "MIT"$/m);
@@ -507,7 +507,7 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(existsSync(T('capabilities/updater-windows-linux.json'))).toBe(true);
   });
 
-  it('tauri.conf.json: productName=Driftstack 0.1.1 + identifier dev.driftstack.gui + frontendDist ../dist + devUrl localhost:1420 + 1 main window (1280×800 / min 960×600 / Overlay titleBarStyle / hiddenTitle / #0b0f14) + 5-target bundle (app/dmg/nsis/appimage/deb) DeveloperTool + macOS minimumSystemVersion 12.0 + Entitlements.plist + V-243 updater endpoint github releases latest + $TAURI_UPDATER_PUBKEY placeholder + V-328 deep-link scheme driftstack desktop-only pinned', () => {
+  it('tauri.conf.json: productName=Driftstack 0.1.2 + identifier dev.driftstack.gui + frontendDist ../dist + devUrl localhost:1420 + 1 main window (1280×800 / min 960×600 / Overlay titleBarStyle / hiddenTitle / #0b0f14) + 5-target bundle (app/dmg/nsis/appimage/deb) DeveloperTool + macOS minimumSystemVersion 12.0 + Entitlements.plist + V-243 updater endpoint github releases latest + $TAURI_UPDATER_PUBKEY placeholder + V-328 deep-link scheme driftstack desktop-only pinned', () => {
     const body = read(T('tauri.conf.json'));
     const config = JSON.parse(body) as {
       app: { security: { capabilities: string[] } };
@@ -518,7 +518,7 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     };
     expect(body).toMatch(/"\$schema": "https:\/\/schema\.tauri\.app\/config\/2"/);
     expect(body).toMatch(/"productName": "Driftstack"/);
-    expect(body).toMatch(/"version": "0\.1\.1"/);
+    expect(body).toMatch(/"version": "0\.1\.2"/);
     expect(body).toMatch(/"identifier": "dev\.driftstack\.gui"/);
     expect(body).toMatch(/"frontendDist": "\.\.\/dist"/);
     expect(body).toMatch(/"devUrl": "http:\/\/localhost:1420"/);
