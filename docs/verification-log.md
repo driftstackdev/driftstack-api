@@ -49789,3 +49789,33 @@ That is the third measurement artifact of my own in this one turn — after runn
 pattern is consistent enough to name: **when a scan reports an alarming absence, suspect the
 scan before the repo** — absence is exactly what a wrong key, a narrow command, or an
 unsuitable log produces.
+
+### V-1161 — log-integrity sweep: 29 duplicates became 5 became 0, and the property was already guarded
+
+Having appended some forty entries to this log myself, I checked its integrity: a V-number
+carried by two findings makes every citation of it ambiguous, and this log is the project's
+primary evidence trail.
+
+**The measurement collapsed twice under its own errors.** A first pass on `^#{2,3}\s*(V-\d+)`
+reported **29** duplicated numbers — the regex captured only the numeric part, so `V-278.A`
+and `V-278.M` both read as `V-278`. Tightening to the full id gave **5**. Of those, three
+were my alternation matching a hyphen: `V-228-class`, `V-359-sdk` and `V-278.A-2` are
+distinct ids that `(—|-)` split at the wrong dash. That is the same shadowing shape as
+V-1141 and V-1142, and the fourth extractor artifact of mine in this area.
+
+**The two real ones are already declared.** `a-verification-log-number-resolves-to-one-finding`
+names V-535 and V-759 explicitly and enforces four things: that the log parses at all, that
+every number carried by more than one heading is declared with a reason, that every declared
+number is STILL shared so the roster cannot outlive its reasons, and — the distinction I was
+only working toward — that a number whose entries are UNRELATED carries a note telling a
+reader which one they want. V-759's two entries are unrelated and carry that note, added by
+V-856 and corrected by V-858. V-535's two are the same work in sequence, so no note is owed.
+
+Nothing to fix. Recorded for the one thing worth carrying: the guard is better than what I
+would have written, because it separates a number shared by related passes from a number
+shared by unrelated findings, and only demands a disambiguation note for the second. I was
+heading for a rule that treated both the same and would have demanded notes nobody needs.
+
+Also checked and clean: `scripts/migration-immutability-check.mjs` looked orphaned but is
+invoked by `deploy-bridge.sh` — correctly at deploy time, because it compares APPLIED
+migrations against files and needs a live database, which CI has no reason to hold.
