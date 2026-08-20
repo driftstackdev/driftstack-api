@@ -46116,3 +46116,33 @@ reverting the spec summary to the hard cap fails. Restored byte-identical, docs
 rebuilt.
 
 `it(` count 12→13. No new file, no ratchet change.
+
+### V-1080 addendum — the guards caught what my own change left half-done
+
+The full suite after V-1080 went red twice, both mine and both fair.
+
+`docs-anchor-link-integrity` reported `/guides/team-rbac/#role-gating` resolving to no
+heading. I invented that fragment: the role-gating content sits under "Step 4 — Act on
+the owner's resources", and there is no `## Role gating` heading to link to. The
+cross-reference now points at the page.
+
+`docs-nav-endpoint-children-integrity` reported the nav's children no longer matching
+the page's h2 set — because adding a `## List` section means the sidebar must carry it,
+in document order, between Create and Get. Added.
+
+That in turn moved two census figures, which is the correct chain rather than an
+annoyance: the anchor total 144→145 and the API endpoint total 136→137. Both are
+tripwires whose own comments say they are refreshed only after the exactness check
+passes, which is what happened here — the exactness arm went green first, then the
+counts were updated to match.
+
+Worth recording as the shape rather than the incident: a docs change is not one file.
+The page, the sidebar, the anchor targets it cites and two census pins all move
+together, and three separate guards each caught one edge of that. Committing the page
+alone would have shipped a section no sidebar links to and a cross-reference that
+404s in-page.
+
+Mutations: removing the nav child while the page keeps the section fails three arms;
+restoring the invented anchor fails one. Restored byte-identical, docs rebuilt.
+
+`it(` counts unchanged, 5 and 16.

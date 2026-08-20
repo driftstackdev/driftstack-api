@@ -185,7 +185,7 @@ Requires `read:sessions`, broad `read`, or `account_owner`.
 list. An agent session carries the model transcript and live control
 state, so the collection is not widened to read-only members — a `member`
 acting on an owner gets `403`. See
-[Team RBAC](/guides/team-rbac/#role-gating).
+[Team RBAC](/guides/team-rbac/).
 
 ## Get
 

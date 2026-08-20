@@ -181,6 +181,7 @@ export const DOC_NAV: DocNavSection[] = [
         label: 'Agent sessions',
         children: [
           { href: '/api/agent-sessions/#create', label: 'Create', method: 'POST' },
+          { href: '/api/agent-sessions/#list', label: 'List', method: 'GET' },
           { href: '/api/agent-sessions/#get', label: 'Get', method: 'GET' },
           { href: '/api/agent-sessions/#message', label: 'Message', method: 'POST' },
           { href: '/api/agent-sessions/#close', label: 'Close', method: 'DELETE' },

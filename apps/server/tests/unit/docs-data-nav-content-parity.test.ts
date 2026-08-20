@@ -314,7 +314,7 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
     );
   });
 
-  it('total tree size: 61 top-level routes + 144 child anchors, including the archetype catalog and its list endpoint. V-847 raised it from 141 — V-843 documented the crypto quote and receipt endpoints and V-846 gave them nav children, but this census lives in a DIFFERENT file from the one V-846 raised, so it kept the old number', () => {
+  it('V-1080 total tree size: 61 top-level routes + 145 child anchors — the agent-session LIST endpoint joined the tree, a live route all three SDKs wrap whose page carried no section for it. Including the archetype catalog and its list endpoint. V-847 raised it from 141 — V-843 documented the crypto quote and receipt endpoints and V-846 gave them nav children, but this census lives in a DIFFERENT file from the one V-846 raised, so it kept the old number', () => {
     const hrefs = [...body.matchAll(/href: '([^']+)',/g)].map((m) => m[1]!);
     const topLevel = hrefs.filter((h) => !h.includes('#'));
     const anchors = hrefs.filter((h) => h.includes('#'));
@@ -322,14 +322,14 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
     // +1 anchor: the organization taxonomy child added alongside `98d767a73`.
     // Refreshed after the endpoint-children integrity guard proved the tree
     // matches every page's h2 set exactly.
-    expect(anchors).toHaveLength(144);
+    expect(anchors).toHaveLength(145);
     // No duplicate hrefs at either level (the apps/docs
     // doc-nav-section-label-baseline suite enforces the top-level rule at
     // runtime too; mirrored here so a server-only run still catches it).
     expect(new Set(topLevel).size).toBe(61);
     // Set size must track the count — equality here is what proves NO duplicate
     // anchor was introduced along with the new child.
-    expect(new Set(anchors).size).toBe(144);
+    expect(new Set(anchors).size).toBe(145);
   });
 
   it('the 22 previously-orphaned routes are all present (6 reference + 5 sdk/api spillover checks kept explicit for the highest-traffic ones)', () => {
