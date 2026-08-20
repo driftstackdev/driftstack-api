@@ -47354,3 +47354,45 @@ which had the same shape, are anchored to the constant now. This file already ca
 Mutation-proved, restored byte-identical: the 600-plus-stray-300 mutation now fails the
 Python anchor; widening the Go tolerance to 30 minutes while keeping the constant name
 fails the Go anchor.
+
+### V-1105 — the same string banned in one file and required in another, both guards green
+
+With the plan exhausted, this pass swept a class that has produced two defects already:
+a fix landing on the customer surface and not on its internal twin. Mirror detection is
+mechanical — normalise every doc under `docs/` and `apps/docs/src/pages/`, compare
+pairwise, report anything above 0.80 similarity. 296 documents, two pairs:
+
+- `apps/docs/src/pages/webhooks/events.md` ↔ `docs/api/webhook-events.md` — IDENTICAL,
+  and guarded.
+- `apps/docs/src/pages/sdk/versioning.md` ↔ `docs/architecture/sdk-versioning.md` —
+  0.887. Diverged.
+
+Most of that divergence is deliberate: the internal doc carries the 1.0.0 ship criteria,
+which do not belong on a customer page. One difference is not.
+
+**The internal doc gave a Python pin that cannot work.** It advised
+`driftstack>=0.1.5,<0.2` / `driftstack~=0.1.5`, and named the package as `driftstack` in
+its applies-to line. `packages/sdk-python/pyproject.toml` declares
+`name = "driftstack-sdk"`; `driftstack` is only the import name. A requirement line
+copied out of that section does not resolve to this SDK.
+
+**What makes it worth recording is the pin state.** The customer page had already been
+corrected, and whoever corrected it added a negative sentinel —
+`docs-pages-sdk-versioning-content-parity` asserts `.not.toMatch(/\`driftstack>=0\.1\.5/)`with the comment "the bare-import-name pin advice must not come back". Meanwhile`docs-architecture-sdk-versioning-content-parity`asserted`toMatch(/- \*\*Python\*\*: \`driftstack>=0\.1\.5,<0\.2\` or/)`.
+
+So the repository simultaneously forbade that string in one file and required it in
+another, and both guards passed, because each was pinning its own document and neither
+knew the other existed. The correction reached the surface a customer reads and stopped
+there — the same shape as V-1102's runbook and V-1101's integration header, and the
+third instance this session.
+
+Both occurrences in the internal doc are fixed, and its pin now reads the distribution
+name out of `pyproject.toml` rather than spelling it, so a rename cannot leave the doc
+behind. A second pin in the same file had frozen the applies-to line and only surfaced
+when the suite went red — rule 2 again, on a claim that lived twice in one file.
+
+Mutation-proved, restored byte-identical: restoring the broken pin fails with "the
+Python pin must name the driftstack-sdk distribution"; renaming the distribution in
+`pyproject.toml` to `driftstack-client` fails the same arm naming the NEW distribution,
+which is the direction that matters — the doc now follows packaging rather than
+recording what it said once.

@@ -39,8 +39,12 @@ describe('W558.B /docs/architecture/sdk-versioning.md content parity', () => {
     expect(body).toMatch(/^# SDK versioning \+ deprecation policy$/m);
     expect(body).toMatch(/\*\*Status:\*\* Active/);
     expect(body).toMatch(/\*\*Effective date:\*\* 2026-05-05 \(V-177\)/);
+    // V-1105 — the applies-to line named `driftstack` as the Python package.
+    // That is the import name; the distribution is `driftstack-sdk`, and this
+    // file's pinning section gave a `driftstack>=…` requirement line that does
+    // not resolve. Both now say the distribution and note the import name.
     expect(body).toMatch(
-      /\*\*Applies to:\*\* `@driftstack\/sdk` \(TypeScript\), `driftstack` \(Python\),/,
+      /\*\*Applies to:\*\* `@driftstack\/sdk` \(TypeScript\), `driftstack-sdk`\s*\n?\s*\(Python — the PyPI distribution; the import name is `driftstack`\),/,
     );
     expect(body).toMatch(/`github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go` \(Go\)\./);
     expect(body).toMatch(/The three SDKs follow the same versioning \+ deprecation policy\./);
@@ -109,7 +113,29 @@ describe('W558.B /docs/architecture/sdk-versioning.md content parity', () => {
     expect(body).toMatch(/The lag should be ≤ one MINOR release\./);
     expect(body).toMatch(/## Version-pinning recommendations/);
     expect(body).toMatch(/- \*\*TypeScript\*\*: `"@driftstack\/sdk": "\^0\.1\.5"`/);
-    expect(body).toMatch(/- \*\*Python\*\*: `driftstack>=0\.1\.5,<0\.2` or/);
+    // V-1105 — this required `driftstack>=0.1.5,<0.2`, a pin that does not
+    // resolve to this SDK: the PyPI distribution is `driftstack-sdk` and
+    // `driftstack` is only the import name. The customer page carries a
+    // NEGATIVE sentinel against that exact string
+    // (docs-pages-sdk-versioning-content-parity), so the repo was banning it in
+    // one file and mandating it in another, with both guards green. The
+    // distribution name is read from pyproject.toml now rather than spelled
+    // here, so the two cannot disagree again.
+    const dist = /^name = "([^"]+)"/m.exec(
+      readFileSync(resolve(REPO_ROOT, 'packages/sdk-python/pyproject.toml'), 'utf8'),
+    );
+    expect(
+      dist,
+      'the Python distribution name is no longer declared in pyproject.toml',
+    ).not.toBeNull();
+    const distName = dist?.[1] ?? '';
+    expect(distName, 'the distribution name parsed as empty').toMatch(/\S/);
+    expect(body, `the Python pin must name the ${distName} distribution`).toContain(
+      `- **Python**: \`${distName}>=0.1.5,<0.2\` or`,
+    );
+    expect(body, 'the bare import-name pin must not return').not.toMatch(
+      /`driftstack>=0\.1\.5|`driftstack~=0\.1\.5`/,
+    );
     expect(body).toMatch(/- \*\*Go\*\*: `go\.mod`/);
     expect(body).toMatch(/## Release process/);
     expect(body).toMatch(/- TS: `npm publish` from `packages\/sdk-typescript\/`\./);

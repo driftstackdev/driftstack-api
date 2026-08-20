@@ -2,7 +2,8 @@
 
 **Status:** Active
 **Effective date:** 2026-05-05 (V-177)
-**Applies to:** `@driftstack/sdk` (TypeScript), `driftstack` (Python),
+**Applies to:** `@driftstack/sdk` (TypeScript), `driftstack-sdk`
+(Python — the PyPI distribution; the import name is `driftstack`),
 `github.com/driftstackdev/driftstack-api/packages/sdk-go` (Go).
 
 The three SDKs follow the same versioning + deprecation policy. Each
@@ -120,8 +121,14 @@ In customer code:
 
 - **TypeScript**: `"@driftstack/sdk": "^0.1.5"` (caret = pre-1.0
   pinning to MINOR). Bump on customer schedule.
-- **Python**: `driftstack>=0.1.5,<0.2` or
-  `driftstack~=0.1.5` (PEP 440 compatible-release).
+- **Python**: `driftstack-sdk>=0.1.5,<0.2` or
+  `driftstack-sdk~=0.1.5` (PEP 440 compatible-release). The PyPI
+  distribution is `driftstack-sdk`; `driftstack` is only the import
+  name (`pip install driftstack-sdk`, then `import driftstack`).
+  V-1105 — this advised pinning `driftstack`, which is not the
+  distribution and does not resolve to this SDK. The customer page
+  was corrected and given a negative sentinel against exactly that
+  string; this file kept it, and its own pin required it.
 - **Go**: `go.mod` with `github.com/driftstackdev/driftstack-api/
 packages/sdk-go v0.1.5`. Bump via `go get -u`.
 
