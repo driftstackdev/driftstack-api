@@ -40,7 +40,9 @@ describe('W347.C admin /index overview parity', () => {
   });
 
   it('recent-activity list hits /v1/admin/audit-log?limit=5', () => {
-    expect(page).toMatch(/\/v1\/admin\/audit-log\?[^'"`]*limit=5/);
+    // V-1117 — anchored. Without the boundary this matched `limit=50` and
+    // `limit=500` too, so the page size it claims to pin was a prefix.
+    expect(page).toMatch(/\/v1\/admin\/audit-log\?[^'"`]*limit=5\b/);
     expect(auditLog).toContain("'/v1/admin/audit-log'");
   });
 

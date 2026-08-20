@@ -47891,3 +47891,42 @@ The lesson worth keeping is the second one. A green pin that matches by prefix i
 indistinguishable from a green pin that matches the value, and only a mutation tells
 them apart — the same reason V-1104's replay-tolerance arm and V-1110's route-side
 extractor needed anchoring.
+
+### V-1117 — swept the prefix-matching pin class the V-1116 addendum exposed
+
+V-1116's addendum found two pins that matched `validation-failed` because they asked for
+`validation` with no trailing boundary. That shape is mechanically detectable, so it was
+swept rather than left as an anecdote.
+
+The naive detector — any `toMatch` regex ending in a digit — returns 1078 hits across
+2936 test files and is useless: `HTTP 503`, `403`, `RFC 5988`, `D-025` all end in a
+digit and cannot meaningfully be extended. Narrowing to a pinned VALUE whose delimiter
+is omitted (`capacity: 60`, `max\(100`, `SECRET_BODY_BYTES = 20`) gives 18.
+
+**Most are redundant, and mutation is what showed it.** A static check for "is this
+value anchored somewhere else" said all nine sampled were covered — and was WRONG on the
+first one tested by mutation: `SECRET_BODY_BYTES = 200` passed
+`server-webhook-signing-parity` outright. Running the whole unit suite against that same
+mutation, four tests in three OTHER files fail, one of them behavioural
+(`whsec_<32 base32 chars>`). Same for the OAuth IP rate limit: `capacity: 600` is caught,
+but by a sibling assertion carrying the whole line, not by the prefix pin. So the
+prefix pins over SOURCE values are redundant rather than exposed — a conclusion only the
+full-suite mutation supports, not the static check and not the single-file run.
+
+**Documentation is where they are the sole guard**, which is exactly why V-1116 bit.
+`GET /v1/profiles?limit=25` on the marketing profiles page changes to `limit=250` and
+the entire unit suite stays green except the dist-freshness guard, which only fired
+because the edit outran the build. 250 exceeds the 100 that `PaginationQuerySchema`
+enforces, so that is a copy-pasteable example which 400s. The admin-overview pin was the
+sharpest: `limit=5` with no boundary cannot tell 5 from 50 or 500.
+
+Three anchored, each mutation-proved: the profiles example, the sessions example, and
+the admin audit-log page size, the last failing on exactly the 5-vs-50 case its old form
+could not see.
+
+**Deliberately not built:** a guard asserting every documented `limit=N` is within the
+enforced cap. All examples are correct today, and the tight version needs a page-to-route
+map — the crypto-orders SDK pages document a route capped at 200, so a blanket ≤100 rule
+would false-fail legitimate copy. A loose ≤200 rule would catch only absurd values while
+reading as complete. That is the allowlist-shaped guard this arc has now declined four
+times.

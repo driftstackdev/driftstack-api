@@ -114,7 +114,8 @@ describe('W516.B apps/marketing-site/src/pages/docs/sessions.astro content parit
   });
 
   it("GET /v1/sessions list framing pinned: 'GET /v1/sessions?limit=25' + 200 OK with data + has_more + next_cursor + 'Cursor pagination. Pass the previous response's next_cursor as ?cursor= on the next request. Default page size is 50; max 100.' — pinned so the list-response shape + 50-default + 100-max + ?cursor= refeed-pattern commitments survive", () => {
-    expect(body).toMatch(/GET \/v1\/sessions\?limit=25/);
+    // V-1117 — anchored, same reason as the profiles page.
+    expect(body).toMatch(/GET \/v1\/sessions\?limit=25\b/);
     expect(body).toMatch(/"has_more": true,/);
     expect(body).toMatch(/"next_cursor": "eyJ0aWQiOi…"/);
     expect(body).toMatch(

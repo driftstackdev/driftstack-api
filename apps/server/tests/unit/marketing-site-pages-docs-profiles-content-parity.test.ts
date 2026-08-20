@@ -91,7 +91,9 @@ describe('W516.C apps/marketing-site/src/pages/docs/profiles.astro content parit
   });
 
   it("GET /v1/profiles cursor-paginated + default 50 / max 100 framing pinned + PATCH name/description/folder/tags-patchable (folder null-clears, tags exact-set-replace) + clone-to-change-archetype 'POST /v1/profiles/:id/clone' + 'the archetype is set at create time and pins the device identity for the life of the profile' — pinned so the cursor-pagination + 50-default + 100-max + 4-PATCH-fields + clone-not-PATCH-for-archetype commitments survive", () => {
-    expect(body).toMatch(/GET \/v1\/profiles\?limit=25/);
+    // V-1117 — anchored; `limit=250` matched this before, and 250 exceeds the
+    // 100 the pagination schema enforces, so the example would have 400d.
+    expect(body).toMatch(/GET \/v1\/profiles\?limit=25\b/);
     expect(body).toMatch(
       /Cursor pagination\. Default page size <strong>50<\/strong>; max\s*\n?\s*<strong>100<\/strong>\./,
     );
