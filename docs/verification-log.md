@@ -48613,3 +48613,39 @@ cannot leave rather than freezing a row count — a floor there would have been 
 hand-maintained number introduced by the commit retiring the third.
 
 Three rosters, one page, three findings: the count was never the defect. The shape was.
+
+### V-1133 — the per-method gap on the same page is by design, measured not assumed
+
+Having fixed accessor-level coverage across all three SDKs (V-1130, V-1132), the obvious
+next step was the layer below: does the page list every METHOD of each resource? It does
+not, and I nearly treated that as the same defect.
+
+Measured against the SDK sources rather than eyeballed:
+
+- TypeScript: **92 of 138** methods appear on the page.
+- Python: **105 of 138** in the resource table's Methods column.
+
+Both partial, both substantially so, and the shortfalls land on the same resources in
+each — `profiles` missing its trash/restore/purge lifecycle, `auth` missing the
+magic-link and password-reset family, `agent_sessions` missing `list`/`iterate`/
+`set_mode`/`resume`. Two independently-maintained surfaces do not land in the same place
+by accident: the per-method listings are illustrative, not inventories, and completing
+them was never the page's contract. **Not a defect. No fix, no guard.**
+
+**The line worth stating, because it is what makes V-1130 and V-1132 defects and this
+one not.** An absent ACCESSOR makes an entire resource undiscoverable — nothing in the
+docs, the page, or the customer's editor suggests `client.egress` exists at all, which
+is why eight Go resources were invisible product-wide. An absent METHOD on a resource
+that IS listed stays discoverable: the customer has the typed client in front of them,
+autocompletion enumerates it, and the reference pages carry it. Guarding accessor
+presence is enforcing discoverability; guarding method completeness would be enforcing a
+documentation style the page never adopted.
+
+Two things noted and deliberately not actioned. The pin titles on this page describe
+these subsets as a "9-action catalog", a "7-action catalog" and a "5-endpoint set" —
+wording that claims completeness for what the measurement shows are illustrative
+selections. They are internal test names asserting the right things, and renaming them
+is churn that changes no assertion. Separately, both SDKs total 138 methods by the same
+extractor, consistent with the lockstep policy in `sdk-versioning.md`; I did not verify
+member-by-member equivalence, and `the-three-sdks-expose-the-same-surface` already owns
+that property.
