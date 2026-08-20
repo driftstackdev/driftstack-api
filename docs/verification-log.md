@@ -49718,3 +49718,18 @@ The guard arm added derives the condition rather than freezing the sentence: it 
 `gui-build-check.yml`, asserts the workflow still gates PRs and still runs the Rust tests,
 and only then requires the gate file to name it. If that job stops gating, the arm's premise
 is gone and it says so instead of passing on an empty one. Both sentinels mutation-proved.
+
+**Addendum — running the Rust tests surfaced a stale `Cargo.lock`.** `cargo test` left
+`apps/gui-client/src-tauri/Cargo.lock` modified by exactly one line: `version = "0.0.1"` →
+`"0.1.1"`. That is not drift my run introduced — the manifest was bumped to `0.1.1` by
+`9946f6634` ("make the tag prove the version") earlier today and the lock was not updated
+with it, so the committed lock did not match the committed manifest.
+
+No CI consequence: nothing in the workflows passes `--locked` or `--frozen`, so CI
+regenerates it silently. The cost is local — every agent who runs any cargo command gets a
+dirty `Cargo.lock` they did not create, which is precisely the kind of unexplained dirty
+file that led to a peer's work being absorbed into my commit in V-1154's addendum.
+
+Committed the one-line sync rather than reverting it. It changes no dependency, no
+behaviour and no decision — the lock now records the version the manifest already declares —
+and leaving it would hand the same spurious diff to whoever runs cargo next.
