@@ -50447,3 +50447,42 @@ was right. The existing rule is _restore byte-identical from a scratchpad snapsh
 checkout_. The missing half: **the snapshot has to be of the state you intend to return to.**
 After a fix, that is the post-fix file, not the pristine one — otherwise the restore is itself a
 mutation, and a green run afterwards would have meant the fix was gone.
+
+### V-1176 — the env-template track was already closed, and why I kept failing to notice
+
+Measured deploy-template keys against what the server reads: 94 keys read, 57 in the production
+template, **11 listed but never read** — including `SESSION_SIGNING_SECRET`,
+`MAGIC_LINK_SIGNING_SECRET` and `WEBHOOK_DEFAULT_SIGNING_SEED`. A template telling an operator
+to set a signing secret that nothing reads is worse than a missing key, because it manufactures
+confidence.
+
+**All eleven are already on a reviewed exemption list** in
+`every-deploy-template-key-is-read-by-the-server`, which owns this exact property and has
+already caught a far worse instance of it: `POSTMARK_SERVER_TOKEN` where the server reads
+`POSTMARK_API_TOKEN`, and three R2 bucket names — misnamings that did not error, because
+`config.ts` builds those blocks only when every member is present, so they left transactional
+email and object storage silently **off** in production. That guard derives the read side at
+runtime and carries a third arm asserting its own exemption list has not gone stale.
+
+**The reverse direction is not a gap either**, and I checked rather than assumed: 48 keys the
+server reads are absent from the production template, but the load-bearing ones fail closed.
+`AUTH_VERIFY_EMAIL_URL` / `AUTH_MAGIC_LINK_URL` / `AUTH_PASSWORD_RESET_URL` derive from
+`DASHBOARD_ORIGIN`, and production boot **throws** if they cannot be resolved. Absent
+`DRIFTSTACK_STAFF_EMAILS` grants staff scope to nobody. The remainder are tuning knobs with
+defaults.
+
+**The method lesson, which is the real output.** This is the third prior-art collision in two
+sessions — route-versus-spec, and now this — and each time my survey was `ls tests/unit | grep
+-iE "<topic>"`. That search cannot work here, because **this repo names guards for the property
+they assert, as a sentence**: `every-deploy-template-key-is-read-by-the-server`,
+`every-registered-route-is-accounted-for`, `a-cited-dpa-section-contains-what-cites-it`,
+`the-retryable-column-matches-what-the-sdks-retry`. None contains "env", "route" or "openapi".
+A topic keyword matches the _subject_ of a guard, and these filenames encode the _claim_.
+
+The search that works is to grep test-file **content** for the concrete artifact about to be
+measured — the variable name, the path, the command — before measuring anything. Every one of
+these collisions would have been a single grep: `grep -rl SESSION_SIGNING_SECRET --include='*.test.ts'`
+returns the owning guard immediately, and did once I ran it.
+
+Cost of not doing that first: two full measurement passes, each with its own artifact-hunting
+detour. Recorded so the next sweep starts with the grep.
