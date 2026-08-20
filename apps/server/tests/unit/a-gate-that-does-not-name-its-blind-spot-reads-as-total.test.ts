@@ -193,6 +193,43 @@ describe('a gate that does not name its blind spot reads as total', () => {
     }
   });
 
+  it('CRITICAL where a dated test count appears twice, the two agree. V-1094: the Python figure was re-measured and the prose in verify-suite.mjs updated to 365, while the string the operator actually sees still read 362 — one place corrected, the other not, and the wrong one is the one that gets printed. These counts genuinely cannot be derived here, but two copies of a number in the same repository can always be held against each other.', () => {
+    const gate = read('scripts/verify-suite.mjs');
+    const split = gate.indexOf('export const NOT_COVERED_BY_THIS_GATE');
+    expect(
+      split,
+      'the not-covered list moved, so prose and printed text cannot be told apart',
+    ).toBeGreaterThan(0);
+    const prose = gate.slice(0, split);
+    const printed = gate.slice(split);
+
+    const pairs = [
+      {
+        label: 'Playwright',
+        inProse: /(\d+) Playwright tests/,
+        inPrinted: /(\d+) Playwright tests/,
+      },
+      { label: 'Python', inProse: /(\d+) passing Python tests/, inPrinted: /(\d+) pytest tests/ },
+    ];
+    const disagreed: string[] = [];
+    for (const { label, inProse, inPrinted } of pairs) {
+      const a = inProse.exec(prose);
+      const b = inPrinted.exec(printed);
+      expect(a, `verify-suite.mjs prose no longer states a ${label} count`).not.toBeNull();
+      expect(b, `verify-suite.mjs no longer prints a ${label} count`).not.toBeNull();
+      if (a?.[1] !== b?.[1]) {
+        disagreed.push(
+          `${label}: the comment says ${String(a?.[1])}, the printed job note says ${String(b?.[1])}`,
+        );
+      }
+    }
+    expect(
+      disagreed.sort(),
+      'a dated CI figure was corrected in one place and not the other — the printed note is what ' +
+        'an operator reads, so it is the copy that matters:',
+    ).toEqual([]);
+  });
+
   it('CRITICAL the Playwright spec-file count both files quote is derived. The three TEST counts beside it cannot be — they need browsers, a live server and a Go toolchain, so they stay dated snapshots that V-1036 re-ran by hand. The FILE count needs none of that, and a figure that can be checked and is not is the shape this suite keeps finding.', () => {
     const specs = readdirSync(resolve(REPO_ROOT, 'apps/server/tests/e2e'), {
       recursive: true,

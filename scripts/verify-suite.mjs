@@ -114,7 +114,9 @@ export const NOT_COVERED_BY_THIS_GATE = [
   },
   {
     job: 'python-sdk',
-    what: '362 pytest tests + ruff/mypy',
+    // V-1094: read 362 while the comment above already said 365. The re-run
+    // that corrected the prose did not reach the string the operator sees.
+    what: '365 pytest tests + ruff/mypy',
     local: 'packages/sdk-python && ./.venv/bin/python -m pytest -q',
   },
   {

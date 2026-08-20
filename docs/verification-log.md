@@ -46839,3 +46839,38 @@ the completeness arm by name; deleting the sync assignment fails the Python arm 
 `sync: self.archetypes = ArchetypesResource(self._http)`; deleting an async one fails
 it as `async: self.recipes = AsyncRecipesResource(self._http)`. The negative control
 matters most — the same Python deletion against the HEAD pin passes.
+
+### V-1094 — the corrected figure and the printed figure were not the same figure
+
+Running the `python-sdk` job to check the V-1092 docstrings, pytest reported 365
+passed and 4 skipped. The gate had just printed:
+
+```
+  - python-sdk: 362 pytest tests + ruff/mypy
+```
+
+The doc comment directly above that entry in `scripts/verify-suite.mjs` already read
+"365 passing Python tests with 4 skipped" and even recorded "The Python figure read
+362 until the re-run". So the re-measurement happened and was written down — into the
+prose, and not into the string an operator actually sees. One place corrected, one
+not, and the wrong one is the one that gets printed.
+
+These three CI counts genuinely cannot be derived here: they need browsers, a live
+server and a Go toolchain, which is why the file quotes them as dated snapshots and
+V-1079 already fixed a Playwright figure that had gone stale the same way. But
+underivable is not unverifiable. Two copies of a number in one repository can always
+be held against each other, and nothing was doing that — the existing arm cross-checks
+the spec-FILE count across both files precisely because it is derivable, and stops
+there.
+
+Added the sibling arm: for each figure stated both in the prose and in a printed job
+note, the two must agree. The file is split at the `NOT_COVERED_BY_THIS_GATE`
+declaration so prose and printed text are told apart rather than matched by first
+occurrence.
+
+Mutation-proved, restored byte-identical: restoring the printed 362 fails as "Python:
+the comment says 365, the printed job note says 362"; drifting the Playwright note to
+221 fails as the same shape. The Go entry states no number and is not checked.
+
+Also confirms the V-1092 docstrings are clean under that job: 365 passed, 4 skipped,
+mypy "no issues found in 31 source files", ruff "All checks passed!".
