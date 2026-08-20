@@ -46436,3 +46436,42 @@ machine would produce a number worth nothing.
 
 So the full `build-test` sequence is green end to end, and the one stage that was red
 is fixed.
+
+## V-1086 — the unrun lever, worked to exhaustion
+
+V-1079 and V-1085 both came from running something nothing runs, so I pushed that
+lever until it stopped yielding. It has now stopped, and the negatives are worth
+recording because each answers a question that looks open.
+
+SCRIPTS NOTHING INVOKES. 42 scripts in `scripts/`; 26 are referenced by no npm script,
+no workflow, and no sibling script. Every one is an operator tool — `deploy-*`,
+`smoke-*`, `gen-*`, `dev-bootstrap`, `dr-rehearse`, the `v528-adjust-*` one-shots —
+correctly manual rather than orphaned. The check-shaped ones are not runnable here as
+gates: `marketing-contrast-scan` needs the site served at localhost with headless
+Chromium, `gui-visual-check` writes PNGs for a human to read rather than passing or
+failing, `which-pins-cover` is a developer query, and `live-quality-scan` crawls the
+DEPLOYED site — which I did not run, because pointing a synthetic crawler at
+production is an outward action with no local finding to gain.
+
+TEST FILES NOTHING COLLECTS — the sharpest version, since a test nobody runs is worse
+than no test. 3145 test/spec files on disk excluding node_modules and dist; 36 are the
+Playwright e2e specs, which the node config excludes by design and which V-1079 ran
+separately; 3145 − 36 = 3109, exactly what vitest collects. And zero `.spec` files sit
+outside `tests/e2e`, so nothing needs a config that does not exist. Every test file on
+disk runs under exactly one of the two runners.
+
+MIGRATIONS, the last `build-test` stage I had not executed. 114 apply cleanly to a
+fresh disposable database, and re-running is a clean no-op — the redeploy path.
+`expectedCount` in `migrate.ts` is DERIVED from the journal's entry count rather than
+hand-maintained, which is the one number in this arc that was never at risk of the
+staleness the rest of them had. Database dropped after.
+
+THE RENDERED GUARD'S OWN CLAIM, checked because I had just relied on it: its comment
+says the allowlist "count is pinned by the test so growing this list is a deliberate
+edit rather than a quiet way to silence the guard". It is —
+`scripts/tests/check-rendered-product-status.test.ts` asserts `ALLOWED_PHRASES` has
+length 2. A guard that can be silenced by appending a phrase would have been the
+better finding; it cannot be.
+
+So the full `build-test` sequence is green end to end, every test file is collected,
+and no unrun gate remains that can be run here. The lever is spent.
