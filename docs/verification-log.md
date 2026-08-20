@@ -49414,3 +49414,42 @@ That is exactly the alternation-shadowing class of V-1141 and V-1142, which I ha
 a turn bounding in other people's regexes, committed in my own scan within the hour. The
 lesson those entries drew — a boundary, not just ordering — applies to grep patterns as
 much as to alternations, and knowing the class was not enough to stop me writing it.
+
+### V-1153 — the webhook delivery path read end-to-end, including a claim I had written myself
+
+Four sweeps came back clean last turn, so this one read a subsystem instead. The webhook
+delivery path is the right candidate: customer-facing, with retries, a DLQ, replay, and a
+rotating signing secret.
+
+**The first thing checked was my own claim.** V-1143 rewrote a sentence in
+`webhooks/events.md` to read that final failures land in DLQ "and can be re-sent from
+Replay". I introduced that; nothing in the plan asked for it. Verified through three
+layers: the route delegates without inspecting status; `replayDeliveryAsCustomer` gates on
+scope and account ownership but not on delivery state; and `resetDeliveryToPending` filters
+`ne(status, 'in_flight')` only. A `dlq` delivery is resettable, so the sentence is true. It
+would have been easy to leave that unchecked because I wrote it.
+
+The rest of the path is sound, and thoroughly held:
+
+- **Backoff** — `BACKOFF_MS_BY_ATTEMPT` is 1m/5m/15m/30m/60m, matching the documented "6
+  attempts (initial plus 5 retries)". `webhook-backoff-schedule-agrees-everywhere` compares
+  four sources and has an arm for exactly the claim that matters: the schedule customers
+  are promised is the schedule that runs.
+- **Replay authorization** — the route takes the write gate, so acting as a team owner needs
+  `admin` and a bare key needs `account_owner`. `webhooks/replay.md` states precisely that.
+- **Spec prose** — all 232 published operations carry a summary or description; none is bare.
+- **Dual-signing** — resolved and guarded. The prev-secret HMAC is a second `v1=` inside
+  `X-Driftstack-Signature`, not a separate header, and the invariant says drifting back to
+  claiming a separate header would contradict the corrected customer docs.
+
+**Two more of my own extractions were incomplete in one sitting.** I listed the delivery
+statuses as pending/delivered/failed/dlq from a narrow grep and missed `in_flight` — which
+turned out to be the one status the reset actually excludes, the single most load-bearing
+value in the query. And I reported the replay operations as having no spec prose after
+reading only `description`; both carry a `summary`. Neither error reached a commit, but
+both were one step from a confident wrong entry, and both were the same mistake: reading a
+field or a pattern narrower than the question.
+
+No defect found. Recorded because a subsystem verified end-to-end is worth as much as a
+fix when the next question is where to look, and because the DLQ sentence is now checked
+rather than merely written.
