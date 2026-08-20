@@ -32,6 +32,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 
 import { DrizzleAgentSessionsRepo } from '../../src/db/agent-sessions-repo.js';
 import { DrizzleAccountProxiesRepo } from '../../src/db/account-proxies-repo.js';
+import { DrizzleApiKeysRepo } from '../../src/db/api-keys-repo.js';
 import * as schema from '../../src/db/schema.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
@@ -42,6 +43,7 @@ let dbReachable = false;
 let client: ReturnType<typeof postgres> | null = null;
 let sessions: DrizzleAgentSessionsRepo | null = null;
 let proxies: DrizzleAccountProxiesRepo | null = null;
+let apiKeysRepo: DrizzleApiKeysRepo | null = null;
 const seeded: string[] = [];
 
 beforeAll(async () => {
@@ -61,11 +63,13 @@ beforeAll(async () => {
     transcriptEncryptionKeyBase64: TRANSCRIPT_KEY,
   });
   proxies = new DrizzleAccountProxiesRepo(handle);
+  apiKeysRepo = new DrizzleApiKeysRepo(handle);
 });
 
 afterAll(async () => {
   if (client) {
     for (const accountId of seeded) {
+      await client`DELETE FROM api_keys WHERE account_id = ${accountId}`.catch(() => {});
       await client`DELETE FROM account_proxies WHERE account_id = ${accountId}`.catch(() => {});
       await client`DELETE FROM agent_sessions WHERE account_id = ${accountId}`.catch(() => {});
       await client`DELETE FROM accounts WHERE id = ${accountId}`.catch(() => {});
@@ -103,6 +107,24 @@ async function seedProxy(accountId: string): Promise<string> {
     INSERT INTO account_proxies (id, account_id, label, scheme, host, port, username)
     VALUES (${id}, ${accountId}, ${`proxy-${id}`}, 'http', 'proxy.test', 8080, 'user')`;
   return id;
+}
+
+/**
+ * V-1187 — `api_keys.key_prefix` carries `uniqueIndex('api_keys_prefix_unique')`, so every
+ * fixture needs its own prefix; a shared one fails on insert and reads as a boundary failure.
+ */
+async function seedApiKey(accountId: string): Promise<string> {
+  if (!apiKeysRepo) throw new Error('no repo');
+  const tag = randomUUID().slice(0, 8);
+  const row = await apiKeysRepo.insertApiKey({
+    accountId,
+    name: `boundary-${tag}`,
+    scopes: ['read'],
+    keyPrefix: `ds_test_${tag}`,
+    keyHash: `hash-${tag}`,
+    expiresAt: null,
+  });
+  return row.id;
 }
 
 describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
@@ -172,6 +194,82 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         await proxies!.findById({ id: proxyId, accountId: attacker }),
         'a known id under the wrong account resolves to nothing',
       ).toBeNull();
+    });
+
+    // ── V-1187 — api-keys-repo, added after the same mutation sweep that produced this
+    // file found it uncovered. Neutralising `findApiKey`'s account predicate (leaving
+    // `accountId` referenced, so the unused-parameter type error cannot stand in for a
+    // real test) left 30,777 tests passing: only two CONTENT-PARITY files failed, and
+    // both pin the source text rather than the behaviour. Route-level cross-account
+    // rotation IS covered by `cross-account-isolation-every-creatable-family`; this is
+    // the repo backstop underneath it, which nothing exercised.
+
+    it('CRITICAL an API key cannot be fetched by id from another account. `findApiKey` takes the account explicitly and there is a deliberate `findApiKeyUnscoped` beside it, so a dropped predicate turns the scoped read into the unscoped one silently — the two differ by one clause and nothing behavioural compared them.', async () => {
+      const victim = await seedAccount();
+      const attacker = await seedAccount();
+      const keyId = await seedApiKey(victim);
+
+      expect((await apiKeysRepo!.findApiKey(keyId, victim))?.id, 'the owner can fetch it').toBe(
+        keyId,
+      );
+      expect(
+        await apiKeysRepo!.findApiKey(keyId, attacker),
+        'the attacker fetched the victim key by id',
+      ).toBeNull();
+    });
+
+    it('CRITICAL API keys are not listed to another account. The row carries the scope set and key metadata, so a cross-account list is an inventory of what the victim can do before anything is even used.', async () => {
+      const victim = await seedAccount();
+      const attacker = await seedAccount();
+      await seedApiKey(victim);
+
+      expect((await apiKeysRepo!.listApiKeys(victim)).length, 'the owner sees the key').toBe(1);
+      expect(
+        await apiKeysRepo!.listApiKeys(attacker),
+        'the attacker listed the victim key',
+      ).toEqual([]);
+    });
+
+    it('CRITICAL an API key cannot be REVOKED from another account, and survives the attempt. Revocation takes `accountId: string | null`, where null is the deliberate admin-unscoped path — so a customer-scoped call that stops scoping becomes the admin path without changing shape.', async () => {
+      const victim = await seedAccount();
+      const attacker = await seedAccount();
+      const keyId = await seedApiKey(victim);
+
+      const result = await apiKeysRepo!.revokeApiKeyAtomic({
+        id: keyId,
+        accountId: attacker,
+        revokedAt: new Date(),
+      });
+      expect(result.kind, 'the attacker revoked the victim key').not.toBe('revoked');
+      expect(
+        (await apiKeysRepo!.findApiKey(keyId, victim))?.revokedAt ?? null,
+        'the victim key was revoked by someone else',
+      ).toBeNull();
+    });
+
+    it('CRITICAL an API key cannot be ROTATED from another account, and the original is untouched. This is the severe one: rotation mints a successor and returns its plaintext, so a working cross-account rotation is simultaneously a credential takeover and a denial of service against the live key.', async () => {
+      const victim = await seedAccount();
+      const attacker = await seedAccount();
+      const keyId = await seedApiKey(victim);
+      const tag = randomUUID().slice(0, 8);
+
+      const result = await apiKeysRepo!.rotateApiKeyAtomic({
+        oldKeyId: keyId,
+        accountId: attacker,
+        keyPrefix: `ds_test_${tag}`,
+        keyHash: `hash-${tag}`,
+        now: new Date(),
+        gracePeriodMs: 0,
+      });
+      expect(result.kind, 'the attacker rotated the victim key').toBe('not_found');
+
+      const after = await apiKeysRepo!.findApiKey(keyId, victim);
+      expect(after?.id, 'the victim key vanished').toBe(keyId);
+      expect(after?.revokedAt ?? null, 'the victim key was revoked by the rotation').toBeNull();
+      expect(
+        (await apiKeysRepo!.listApiKeys(victim)).length,
+        'a successor key was minted into the victim account',
+      ).toBe(1);
     });
 
     it('CRITICAL a proxy cannot be DELETED from another account. This is the irreversible one: without the predicate, an id is enough to destroy another customer’s proxy configuration.', async () => {

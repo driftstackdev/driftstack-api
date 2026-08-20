@@ -50969,3 +50969,56 @@ probed happen to be covered by in-memory-fake tests that run locally.
 No defect. Six mutations, six kills, all behavioural. Recorded because the near-miss is the
 finding: I had three fabricated holes in hand and the only thing between them and this log was
 checking whether the tests that would catch them had run.
+
+### V-1187 — the repo account boundary, measured across every repo instead of two
+
+`db-repo-account-ownership-boundary` exists because an earlier sweep neutralised all 14
+`eq(t.accountId, …)` predicates in `agent-sessions-repo` and `account-proxies-repo` and the entire
+suite stayed green. It closed those two. **Nothing had asked about the other twenty-one repos** —
+and with Postgres and Redis reachable (V-1186), the 113 CI-only files run locally, so the question
+is finally answerable here.
+
+**First, the full suite with services up is green: 3126 files, 30,779 tests, zero failures.** The
+CI-only tier passes locally, which is the precondition for trusting anything below.
+
+**api-keys-repo had no behavioural boundary coverage.** `findApiKey(id, accountId)` neutralised —
+with `accountId` left referenced, so the unused-parameter type error could not stand in for a real
+test — left **30,777 tests passing**. Only two files failed, both content-parity, and both pin the
+`.where(and(…))` source TEXT rather than the behaviour. The repo also has a deliberate
+`findApiKeyUnscoped(id)` one method below, so a dropped predicate turns the scoped read into the
+unscoped one silently; the two differ by a single clause and nothing compared them.
+
+Four arms added, each mutation-proved against the neutralised predicate that 30,777 tests missed:
+scoped fetch, scoped list, scoped revoke (whose input takes `accountId: string | null`, where null
+is the deliberate admin path — so a customer call that stops scoping _becomes_ the admin path
+without changing shape), and scoped rotate. Rotation is the severe one: it mints a successor and
+returns its plaintext, so a working cross-account rotation is a credential takeover and a denial
+of service against the live key at once. Route-level cross-account rotation IS covered by
+`cross-account-isolation-every-creatable-family`; this is the backstop underneath it.
+
+**Then the same probe, across all 18 remaining repos at once** — 108 predicates neutralised in one
+run. Most died to behavioural integration tests (profiles, sessions, mfa, webhooks, auth,
+email-preferences, oauth-links, rate-limit-overrides, scheduled-jobs, session-operations, usage,
+crypto-orders, stripe-webhooks, plus four generic `db-account-scoped-*` guards). **Two did not:**
+
+- **`team-members-repo`** — member offboarding revokes keys under
+  `eq(apiKeys.accountId, ownerAccountId) AND eq(apiKeys.createdByAccountId, memberAccountId)`.
+  Without the owner scope, offboarding a member from one account revokes the keys that member
+  minted in _every_ account — a cross-tenant denial of service triggered by an ordinary HR action.
+- **`agent-turn-receipts-repo`** — the idempotency-key lookup is account-scoped. Without it, one
+  account's key can match another's, so B's turn is treated as a replay of A's and returns A's
+  receipt.
+
+Both are recorded here and NOT yet closed: writing fixtures for memberships and turn receipts
+needs the same care the api-keys arms got, and a fixture I have not verified would assert a
+boundary I have not actually tested. Next batch.
+
+**A defect of my own, caught by the repo.** The rotate arm omitted `gracePeriodMs`, a required
+field on `RotateApiKeyInput`. Vitest passed it — it transpiles without type-checking — and
+`the-server-source-type-checks` failed it. Exactly the "a vitest pass is not a tsc pass" trap, and
+the reason that guard exists.
+
+**And a tooling trap worth recording:** `for f in $FILES` does not word-split in zsh, so the first
+mass sweep silently mutated **nothing** and reported a clean suite. A sweep that applies no
+mutation looks exactly like a sweep that found no holes. The `neutralised predicates: 0` counter is
+what caught it — every mutation batch should print how many it actually applied.
