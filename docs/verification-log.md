@@ -50350,3 +50350,50 @@ it is not poisoning an alert channel either.
 The reason this entry exists at all: three plausible-looking leads, three negatives, and the
 temptation at each was to find _something_ rather than report nothing. **A sweep that must
 produce a finding will produce one.**
+
+### V-1174 — the SDK doc samples all work, and nothing was checking that they do
+
+Fifteen guards already cover the SDK documentation pages. **Every one is a content-parity
+pin** — it freezes the text of the page. That is the wrong shape for this property: rename
+`SessionsResource.navigate` in the TypeScript SDK, touch no documentation, and all fifteen
+still pass. The page text did not change, so nothing that checks page text can notice. The
+sample is now uncopyable and the suite is green.
+
+So this resolves instead of freezing: **259 `client.<resource>.<method>(` calls** pulled from
+fenced blocks across **64 documentation pages**, each looked up in the surface of the SDK its
+fence language names. Three separate populations with three conventions —
+`client.sessions.create`, `client.Sessions.Create`, `client.sessions.create`. Measured: 19
+resources and ~140 methods per SDK, **all 259 resolve**. Ships as an honest negative; it earns
+its place by the rename it will catch, which today nothing would.
+
+**Completeness was measured, not assumed.** All three languages bind the client to a variable
+literally named `client`, and a search for resource calls through any other receiver returned
+**nothing** — so `client.` is the whole population, not a convenient slice. And an unmapped
+fence tag would be skipped in silence, so an arm fails on any block carrying calls whose
+language this guard does not know.
+
+**The instrument had the bug, not the corpus.** `client.py` declares both `Driftstack` and
+`AsyncDriftstack`, each assigning the same nineteen attribute names to different classes.
+Collecting them into one map keeps whichever came last — the async one. The first version did
+exactly that, so the synchronous doc samples were being validated against the **async**
+surface. It passed. It also passed when I renamed the sync `create`, which is precisely the
+failure it exists to catch. Found only because that mutation **failed to fire** and I treated
+that as a claim about the probe rather than proof of the guard, per V-1172.
+
+Scoping each assignment to its enclosing class fixes it, and a new arm now asserts the two
+surfaces are identical — which makes the mistake loud next time and is a real customer-facing
+property besides: a method on only one client breaks anyone moving a working script from sync
+to async. Measured: **zero** divergence across all nineteen resources.
+
+Two further mutations missed for the same reason and are recorded because the pattern is now
+three-for-three: retagging a fence in `api/sessions.md` changed nothing (that page has only
+`json` blocks), and a line-bounded retag matched nothing (the tag was `typescript`, not `ts`).
+**Every mutation that did not fire this session was my aim, never the target.**
+
+Also confirmed dead ends before this, so nobody re-walks them: OpenAPI-versus-registered-routes
+is already covered by `every-registered-route-is-accounted-for`, which reads the route table
+back out of Fastify rather than parsing source, compares it to the contract, and carries a
+reviewed exemption list. My source-regex attempt reported 96 documented-not-registered and 30
+registered-not-documented; both numbers were artifacts of `{id}` versus `:id` and of route
+files that register on an instance not named `app`. The guard's own measurement — 244
+registered, 232 documented, 19 exempt — is the true one.
