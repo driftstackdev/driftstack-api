@@ -560,7 +560,7 @@ The Privacy Contact monitors threshold conditions and triggers DPO appointment w
 
 Driftstack implements technical and organisational measures
 appropriate to the risk under Article 32 GDPR. The measures are
-documented in detail in the [DPA Annex 2](dpa.md#annex-2-tom).
+documented in detail in the [DPA Annex 2](dpa.md#annex-2--technical-and-organisational-measures-toms).
 Summarised:
 
 1. **Encryption in transit:** TLS 1.2+ for all API and Service

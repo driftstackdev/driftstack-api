@@ -50259,3 +50259,49 @@ differ` against HEAD.
 
 Fixing a red left by another agent's commit is inside scope here only because the pin lives in
 `apps/server/tests`. The source was read, never edited.
+
+### V-1172 — three anchors that land the reader at the top of the document
+
+Two guards already check internal links, and **both throw the fragment away** before checking
+anything — `site-internal-links-resolve` does `raw.split('#')[0]`, `docs-internal-links-parity`
+does `href.replace(/[?#].*$/, '')`. That is right for what they own: they answer "does the PAGE
+exist". Nobody had asked whether the anchor does.
+
+A broken fragment does not 404. The browser leaves the reader at the top of the document with
+no signal, which on a 500-line DPA is worse than a dead link — they believe they are reading
+the clause they asked for.
+
+**Three were broken, all in the internal `docs/legal/` mirror:**
+
+| link                               | actual heading                                              | correct anchor                                         |
+| ---------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------ |
+| `privacy-policy.md#sub-processors` | `## 7. Sub-processors`                                      | `#7-sub-processors`                                    |
+| `dpa.md#annex-3-sub-processors`    | `## Annex 3 — Sub-processors`                               | `#annex-3--sub-processors`                             |
+| `dpa.md#annex-2-tom`               | `## Annex 2 — Technical and Organisational Measures (TOMs)` | `#annex-2--technical-and-organisational-measures-toms` |
+
+**The published mirror had all three right.** `privacy.md` and `privacy-policy.md` carry the
+same sentence byte for byte and diverge only inside the parentheses. So this was not an
+unchecked document — it was two mirrors of one document drifting where nothing looked.
+
+**The em-dash is the whole story of two of them.** `Annex 3 — Sub-processors` is not
+punctuation-then-space; it is space-dash-space, and removing the dash leaves _two_ spaces that
+become _two_ hyphens. Every hand-written `#annex-N-…` anchor in this repo assumed one; every
+generated one got it right.
+
+**Measured, not assumed.** The published anchors were checked against the shipped HTML first:
+470 fragment links across both built sites, **zero** unresolved, zero skipped — proved
+non-vacuous by mutating a real cross-page href and a real same-page one. So the guard reports
+an honest negative for the customer-facing surfaces and a real defect for the internal one.
+
+The guard derives the slug from the source heading rather than reading `dist/`, because a
+dist-reading test passes against a stale build. The derivation is held honest two ways: pinned
+heading→slug pairs verified against the shipped HTML, and a population arm requiring specific
+links to be found. Over the DPA's 40 headings the derivation reproduced the 40 shipped ids
+exactly, with nothing in one set and not the other.
+
+**A mutation that did not fire, and why that was my fault rather than the guard's.** Renaming
+`Annex 3 — Sub-processors` to `Annex 3 — Sub processors` changed nothing: both spellings slug
+to `annex-3--sub-processors`, since a hyphen and a space are both just hyphens afterwards. The
+arm was correct and my probe was a no-op. Re-proved with `Subprocessors`, which does move the
+slug, and again by tightening the spacing around the em-dash. **A mutation that fails to fire
+is a claim about the mutation until the mutation is shown to change the thing under test.**

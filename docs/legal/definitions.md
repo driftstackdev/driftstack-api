@@ -103,8 +103,8 @@ legal person that Processes Personal Data on behalf of a Controller.
 **"Sub-processor"** means a third-party Processor engaged by
 Driftstack to Process Personal Data on Customer's behalf in the
 course of providing the Service. The current Sub-processor list is
-maintained in the [Privacy Policy](privacy-policy.md#sub-processors)
-and the [DPA Annex 3](dpa.md#annex-3-sub-processors).
+maintained in the [Privacy Policy](privacy-policy.md#7-sub-processors)
+and the [DPA Annex 3](dpa.md#annex-3--sub-processors).
 
 **"Customer-Connected Service"** means a third-party service that
 Customer integrates with the Service using Customer's own
