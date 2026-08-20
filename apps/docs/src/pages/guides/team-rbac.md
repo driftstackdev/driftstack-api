@@ -151,7 +151,6 @@ Endpoints that honor the header:
 | Email preferences | GET / PUT (PUT = admin)                                                                                                                                                                                                                     |
 | Usage             | GET, `/series`                                                                                                                                                                                                                              |
 | Billing           | `GET /v1/billing` only — checkout and portal sessions are per-caller                                                                                                                                                                        |
-| Recipes           | `POST /v1/recipes` only — the list, read and delete routes are per-caller                                                                                                                                                                   |
 
 This table was previously narrower than the server: it named four profile
 methods where every profile route honors the header, and omitted webhook
@@ -167,6 +166,12 @@ own account regardless):
   team list. Its nested `/v1/account/me/organization` profile
   taxonomy is listed above and does honor the header.
 - `/v1/auth/*` — authentication is per-caller.
+- `/v1/recipes/*` — the header is IGNORED here, not rejected. A recipe is
+  always created under your own account. What team membership does give
+  you is reach into the SOURCE: `POST /v1/recipes` accepts an
+  `agent_session_id` owned by a team you hold `admin` on, and snapshots it
+  into a recipe that belongs to you. Sending `X-Driftstack-Account` does
+  not place the recipe under the owner.
 
 ## Step 5 — Audit the team's actions (owner)
 

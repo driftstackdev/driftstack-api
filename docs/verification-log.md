@@ -47740,3 +47740,47 @@ removing the page entry while keeping the row fails the pre-existing arm, so pag
 table are coupled in both directions; a ninth cursor route fails naming
 `webhook-replays`. Marketing rebuilt and the rendered page verified to carry the entry;
 `check:rendered-product-status` passes across 212 files.
+
+### V-1114 — the RBAC guide promised the header worked on a route that ignores it
+
+V-1113's shape generalises: a published catalog that claims completeness while its guard
+iterates the catalog. The team-RBAC guide has one, and the plan flagged it in passing —
+B18 warned that the pin "hardcodes 8-row header-honoring endpoint catalog with an 8-name
+loop". Nobody checked whether eight was the real number, or whether the eight were true.
+
+Neither was.
+
+**The table is a promise, and one row was false.** Its heading is "Endpoints that honor
+the header:", so a row tells a customer that sending `X-Driftstack-Account` makes the
+call operate on the owner. `Recipes | POST /v1/recipes only` was listed.
+`routes/recipes.ts` reads the header ZERO times and creates with
+`accountId: ctx.account.id` — the caller, always. A team admin following the guide gets
+a recipe under their own account and no error, because the header is ignored rather than
+rejected.
+
+The plan had it right and the page had it backwards: B18 said to add recipes to the
+NON-honouring list and explicitly not to the honours table. The row now sits in the
+non-honouring list with the half that is true — team membership does reach the SOURCE,
+so `POST /v1/recipes` accepts an `agent_session_id` owned by a team you administer and
+snapshots it into a recipe that belongs to you.
+
+**The pin covered 8 of 12 rows.** Agent sessions, Profile snapshots, Billing and Recipes
+were in the table and not in the loop, so deleting any of them from the customer guide
+passed every test. Measured, not inferred: deleting the Profile snapshots row is green
+before this change and fails after.
+
+The new derivation is what would have caught the false row: every `/v1/...` path the
+table cites is resolved to the module registering it, and that module must actually read
+the effective-account header. Rows that cite only a prefix stay covered by the name loop.
+
+Two of my own inferences were wrong on the way and were corrected against source:
+`/v1/usage` looked unguarded because `usage.ts` does not read the header — it is
+registered in `admin.ts`, which does, so the Usage row is legitimate. And I initially
+read the table as 8 rows because the pin says so; it has 12.
+
+Mutation-proved, restored byte-identical: restoring the Recipes row fails the negative;
+a new row citing `/v1/legal/accept` (legal.ts ignores the header) fails the derivation
+arm by name; deleting the Profile snapshots row fails the extended loop. The first
+attempt at that last mutation deleted nothing — a perl delimiter clash with the escaped
+pipes — and the suite passed, which is indistinguishable from a guard that does not work
+until the row count is checked.

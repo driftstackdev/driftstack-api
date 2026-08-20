@@ -7,7 +7,7 @@
 // W766 /api/team + W768 /api/audit-log + W757 dashboard /team
 // surfaces.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -185,6 +185,11 @@ describe('W783 docs /guides/team-rbac content parity', () => {
       'Audit log',
       'Email preferences',
       'Usage',
+      // V-1114 — these three were in the table and not in this loop, so
+      // deleting any of them from the customer guide passed every test.
+      'Agent sessions',
+      'Profile snapshots',
+      'Billing',
     ]) {
       expect(p, `header-honoring row ${resource}`).toMatch(new RegExp(`\\| ${resource}\\s+\\|`));
     }
@@ -340,5 +345,53 @@ describe('W783 docs /guides/team-rbac content parity', () => {
       count,
       'webhooks.ts no longer gates its writes on the effective account, so the row overstates',
     ).toBeGreaterThanOrEqual(5);
+  });
+  it('CRITICAL V-1114 every route path the honouring table cites is served by a module that actually reads the header. The table is titled "Endpoints that honor the header", and a row is a promise a customer acts on: send X-Driftstack-Account and the call operates on the owner. Recipes was listed and does not read the header at all — the recipe lands under the caller regardless — so the row promised an owner-scoped write that silently was not one.', () => {
+    const p = read(PAGE);
+    const table = p.slice(
+      p.indexOf('Endpoints that honor the header:'),
+      p.indexOf('Endpoints that do NOT honor'),
+    );
+    expect(table.length, 'the honouring table was not located').toBeGreaterThan(200);
+
+    const cited = [
+      ...new Set([...table.matchAll(/`(\/v1\/[A-Za-z0-9/{}_-]+)`/g)].map((m) => m[1] as string)),
+    ];
+    expect(cited.length, 'route paths cited in the honouring table').toBeGreaterThanOrEqual(6);
+
+    const routesDir = resolve(REPO_ROOT, 'apps/server/src/routes');
+    const READS_HEADER = /readEffectiveAccountHeader|resolveEffectiveAccount|effectiveAccountIdFor/;
+    const files = readdirSync(routesDir).filter((f) => f.endsWith('.ts'));
+
+    const broken: string[] = [];
+    for (const path of cited) {
+      // `{id}` in the doc is `:id` in the registration.
+      const registered = path.replace(/\{(\w+)\}/g, ':$1');
+      const owner = files.find((f) =>
+        readFileSync(resolve(routesDir, f), 'utf8').includes(`'${registered}'`),
+      );
+      if (owner === undefined) continue; // prefix-only cells like `/v1/webhooks` are covered by the name loop
+      if (!READS_HEADER.test(readFileSync(resolve(routesDir, owner), 'utf8'))) {
+        broken.push(`${path} -> ${owner} never reads the effective-account header`);
+      }
+    }
+    expect(
+      broken.sort(),
+      'the honouring table promises the header works on these, and the module serving them ignores ' +
+        'it — the call operates on the caller, silently:',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL V-1114 the recipes correction stays: the header is ignored there, not rejected, and the recipe lands under the caller. A reader who only learns that recipes are "per-caller" still does not know that team membership DOES reach the source agent-session, which is the half that makes the endpoint useful to a team.', () => {
+    const p = read(PAGE);
+    expect(p, 'the recipes entry left the non-honouring list').toMatch(
+      /`\/v1\/recipes\/\*` — the header is IGNORED here, not rejected/,
+    );
+    expect(p, 'the source-reach half is gone').toMatch(
+      /accepts an\s*\n?\s*`agent_session_id` owned by a team you hold `admin` on/,
+    );
+    expect(p, 'the recipes row must not return to the honouring table').not.toMatch(
+      /\| Recipes\s+\|/,
+    );
   });
 });
