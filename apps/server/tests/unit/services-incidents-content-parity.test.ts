@@ -210,6 +210,58 @@ describe('W401.A apps/server/src/services/incidents.ts content parity', () => {
     expect(body).toContain("import { ConflictError, NotFoundError } from '../lib/errors.js';");
   });
 
+  it('V-1100 CRITICAL every fire-and-forget lifecycle dispatch reports its own failure, and production passes a logger. V-807 corrected this comment from "awaited, throw logged" to fire-and-forget-but-reported, and built the reporting seam that made the second half true. The seam is only true where it is called: four dispatch sites exist, one was pinned, and an emptied catch on any of the other three restores the silence V-807 found — a status-page notification failing to reach every subscriber with no trace anywhere.', () => {
+    const body = read(LIB);
+    const dispatches = [...body.matchAll(/void this\.lifecycle\.(\w+)\(/g)].map((m) => ({
+      hook: m[1] ?? '',
+      at: m.index ?? 0,
+    }));
+    expect(dispatches.length, 'fire-and-forget lifecycle dispatches found').toBeGreaterThanOrEqual(
+      4,
+    );
+
+    const silent: string[] = [];
+    for (const d of dispatches) {
+      // The catch belongs to this dispatch: everything up to the first `});`
+      // that closes it. A hook name is required inside, so a catch that reports
+      // the WRONG hook is not accepted as coverage either.
+      const tail = body.slice(d.at, body.indexOf('});', d.at) + 3);
+      if (!new RegExp(`reportNotificationFailure\\('${d.hook}'`).test(tail)) {
+        silent.push(`${d.hook} at offset ${String(d.at)} does not report its own rejection`);
+      }
+    }
+    expect(
+      silent.sort(),
+      'these lifecycle dispatches swallow a rejection without reporting it — the doc comment above ' +
+        'says a throw IS reported through the optional logger, and for these it is not:',
+    ).toEqual([]);
+
+    // …and the claim is only true in production if a logger is actually passed.
+    // The service takes it as an optional trailing argument, so omitting it is
+    // silent by construction and no behavioural test can see it — the unit
+    // tests construct without one deliberately, to exercise the swallow.
+    const bootstrap = readFileSync(resolve(REPO_ROOT, 'apps/server/src/lib/bootstrap.ts'), 'utf8');
+    const at = bootstrap.indexOf('new IncidentsService(');
+    expect(at, 'bootstrap no longer constructs an IncidentsService').toBeGreaterThan(0);
+    let depth = 0;
+    let end = at;
+    for (let i = bootstrap.indexOf('(', at); i < bootstrap.length; i += 1) {
+      if (bootstrap[i] === '(') depth += 1;
+      else if (bootstrap[i] === ')') {
+        depth -= 1;
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+      }
+    }
+    expect(
+      bootstrap.slice(at, end),
+      'bootstrap constructs the IncidentsService without a logger, so every notification failure is ' +
+        'unreported in production however well the service reports internally',
+    ).toMatch(/\n\s*logger,?\s*$|,\s*logger\b/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

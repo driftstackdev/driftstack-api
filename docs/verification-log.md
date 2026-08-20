@@ -47078,3 +47078,42 @@ header fails the disagreement arm; removing the `wait` exemption from the contro
 code fails the arm that now reads it, with a message saying the two documents should
 lose the exception too; restoring the self-contradicting control-plane header fails its
 own sentinel; deleting the exception from the interface contract fails that one.
+
+### V-1100 — the plan's own fix would have reintroduced the defect it was closing
+
+Action 29 says `incidents.ts` claims lifecycle callbacks "are awaited; a throw is
+logged + swallowed", and supplies replacement prose. Both halves are stale, and the
+replacement is the more interesting problem.
+
+The comment was corrected by V-807 and now reads that callbacks are dispatched
+FIRE-AND-FORGET (`void …`) per W427, that a throw is caught and swallowed so a
+notification failure can never roll back an incident write, "but it IS reported through
+the optional logger, at error level" — with V-807's retraction of both original claims
+below it.
+
+The plan's supplied NEW text asserts the opposite of the current state: "A throw is
+swallowed and NOT logged — this service has no logger" and "all four catch handlers
+were empty". The service has an `IncidentsLogger` seam, a `reportNotificationFailure`
+method, and all four catch handlers call it; `bootstrap.ts` passes the logger. Applying
+that text verbatim would have re-documented a defect V-807 had already fixed, and its
+§D-9 rider — a wholesale notification failure being invisible — is what V-807 closed.
+Verified against source before editing, per rule 1, which is the only reason this did
+not land.
+
+**What was actually missing.** V-807's second half is true only where the seam is
+called, and the guard pinned one of the four dispatch sites. Emptying any of the other
+three restores exactly the silence V-807 found: a status-page notification failing to
+reach every subscriber with no trace. The production wiring was unguarded too — the
+logger is an optional trailing constructor argument, so omitting it is silent by
+construction, and no behavioural test can catch it because the unit tests construct
+without one deliberately, to exercise the swallow.
+
+So the arm derives every `void this.lifecycle.<hook>(` dispatch and requires each
+catch to report under its OWN hook name, then requires `bootstrap.ts` to pass a logger
+to the construction.
+
+Mutation-proved, restored byte-identical: emptying the `onPublicUpdated` catch fails by
+hook and offset; emptying the SECOND of the two `onPublicCreated` sites fails
+separately, which is the case a hook-name-only check would have missed; removing
+`logger` from the bootstrap construction fails with the reason that internal reporting
+does not matter if nothing is listening.
