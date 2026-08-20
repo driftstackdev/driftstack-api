@@ -51065,3 +51065,44 @@ Also fixed in passing: the membership fixture bound a `Date` into a `postgres` t
 timestamp columns and the driver refused it. That surfaced as a `TypeError` inside the seed rather
 than an assertion, which is the failure shape a fixture bug takes — it is worth distinguishing from
 a boundary failure before reading anything into it.
+
+### V-1189 — the third pass found the asymmetry: deletes guarded, reads not
+
+V-1188 closed team-members and retracted the receipts claim. It also left four repos cleared on
+weak evidence: I had checked that their names _appear_ in the generic tenant-scope guards. That is
+a filename inference, which this log has now recorded failing three separate ways. So this pass
+verified them by mutation instead.
+
+**The inference was right, and incomplete in a way the filename could never show.** All four —
+crypto-orders, bundled-llm, recipes, profile-snapshots — do have a covered predicate. But the
+guards' rosters name _methods_, and reading them out shows what the coverage actually is:
+
+```
+db-repo-account-scoped-reads-boundary      BundledLlm, CryptoOrders, OAuthLinks
+db-account-scoped-deletes-tenant-scope     ProfileSnapshots.delete, Recipes.deleteById
+```
+
+recipes has **six** account predicates and profile-snapshots **four**. Exactly one each is
+covered, and both are the DELETE. **The reads were not covered at all.**
+
+Neutralising the seven read predicates — `recipes.list`, `recipes.getById`,
+`profileSnapshots.list`, `profileSnapshots.findById`, leaving both delete paths correctly scoped —
+left **30,781 of 30,784 tests passing**. One file failed: a content-parity pin on the snapshot
+repo's source TEXT. **`recipes` produced no failure of any kind, not even a text pin.**
+
+So both repos had the asymmetry this sweep exists to find: you could not DELETE another account's
+recipe or snapshot, and nothing stopped you READING or ENUMERATING them. A recipe is a saved
+navigation flow — the selectors and step sequence a customer built, with labels naming the sites
+they automate. A snapshot row carries the parent profile's name and archetype.
+
+Four arms added to the guard that owns the reads property, mutation-proved together against the
+same seven-predicate neutralisation. Recipe fixtures go through the repo rather than raw SQL,
+because `list` decrypts the payload envelope and a hand-inserted row fails as a FIXTURE while
+looking exactly like a boundary failure — the trap the sibling guard already records for
+transcripts.
+
+**Worth stating about the method.** This is the third pass of the same sweep, and each pass found
+what the previous one's shortcut hid. The first closed two repos. The second closed api-keys and
+team-members, and cleared four repos by name. The third read the rosters and found the covered
+method was the delete in both. **A repo is not a unit of coverage; a method is** — and "this repo
+appears in a guard" answers a question nobody asked.
