@@ -46632,3 +46632,45 @@ existed. Read the line, matched the phrase rather than the padded cell.
 
 Mutation: naming the exempted path in the guide again fails the guard. Restored
 byte-identical, docs rebuilt.
+
+## V-1090 — a pin that asserted two of three, and said two in its title
+
+Last actionable item on the plan's deferred-but-file-these list: it flagged
+`incidents-v295a-cross-source-invariant` as saying "2 lifecycle hooks" where there are
+three, and noted it is prose only with nothing red.
+
+Verified: `IncidentsLifecycle` declares `onPublicCreated`, `onPublicResolved` and
+`onPublicUpdated` — the last added by V-545.B for per-update subscriber fan-out — and
+all three have live call sites in `services/incidents.ts`.
+
+The claim sat in THREE places in that one file: the header comment, a section divider,
+and the arm title. But the more interesting half is that the ARM matched its prose —
+it asserted `onPublicCreated` and `onPublicResolved` and stopped. So deleting
+`onPublicUpdated` from the interface would have left this file green, and with it the
+throttled per-update notification path a public incident depends on.
+
+Its sibling `services-incidents-content-parity` had it right all along, naming
+"V-545.B onPublicUpdated" and asserting it. That is why nothing was red: one guard
+covered what the other silently stopped covering. Two guards over the same interface,
+one of them a full hook behind, and the green came from the healthy one.
+
+Fixed in both directions — the three prose spots name all three hooks, and the arm now
+asserts `onPublicUpdated` is both DECLARED and INVOKED. Declared-but-never-called is
+the failure V-1055 was built around, so asserting only the interface line would have
+left half the gap open.
+
+The title states the hooks rather than counting them, per the lesson that a corrected
+number rots the same way the wrong one did.
+
+Mutations: deleting the hook from the interface now fails BOTH files, where before it
+would have failed only the sibling; leaving it declared while neutering its call site
+fails the new invocation assertion. Restored byte-identical.
+
+`it(` count 17, unchanged.
+
+That closes the plan's deferred list. Of its five entries, three were fixed
+(V-1087/V-1088 network architecture, V-1089 the acting-as table, and this one); ADR-004's
+void contrast is deliberately left as history under its banner, and the Python/Go
+recipes docstrings are an owner's call on whether "returns 404 by design" needs the
+team-admin qualifier — ambiguous rather than false, and no cross-SDK recipes parity
+test exists, so a one-SDK edit would red nothing and prove nothing.

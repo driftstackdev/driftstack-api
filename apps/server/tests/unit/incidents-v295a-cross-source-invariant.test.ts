@@ -55,7 +55,9 @@
 //   want a notification failure to roll back an incident write —
 //   the incident IS the source of truth, the email is best-effort)'.
 //
-//   2 lifecycle hooks: onPublicCreated + onPublicResolved (optional).
+//   Optional lifecycle hooks: onPublicCreated + onPublicResolved +
+//   onPublicUpdated (V-545.B). This header said two for as long as the
+//   third existed.
 //
 // stays in lockstep across apps/server/src/services/incidents.ts.
 
@@ -220,9 +222,9 @@ describe('W947 V-295a incidents cross-source invariant', () => {
     expect(p).not.toMatch(/we never want a notification failure to roll back an incident/);
   });
 
-  // ─── 2 optional lifecycle hooks ──────────────────────────────
+  // ─── the optional lifecycle hooks ────────────────────────────
 
-  it('CRITICAL IncidentsLifecycle has 2 optional hooks — onPublicCreated + onPublicResolved. Both take (incident: IncidentRow, update: IncidentUpdateRow). The 2-hook surface mirrors V-295e IncidentEventBus 2-event union + V-295c3-followup notify methods.', () => {
+  it('CRITICAL IncidentsLifecycle declares onPublicCreated, onPublicResolved AND onPublicUpdated (V-545.B), each optional. This arm asserted only the first two while the third had shipped, so removing onPublicUpdated — the per-update subscriber fan-out — would have left this file green. Both take (incident: IncidentRow, update: IncidentUpdateRow). The 2-hook surface mirrors V-295e IncidentEventBus 2-event union + V-295c3-followup notify methods.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/incidents.ts'));
     expect(p).toMatch(/export interface IncidentsLifecycle \{/);
     expect(p).toMatch(
@@ -230,6 +232,14 @@ describe('W947 V-295a incidents cross-source invariant', () => {
     );
     expect(p).toMatch(
       /onPublicResolved\?: \(incident: IncidentRow, finalUpdate: IncidentUpdateRow\) => Promise<void>;/,
+    );
+    // V-1090 — the third hook, and the one this file used to omit.
+    expect(p, 'onPublicUpdated is gone from IncidentsLifecycle').toMatch(
+      /onPublicUpdated\?: \(incident: IncidentRow, update: IncidentUpdateRow\) => Promise<void>;/,
+    );
+    // …and it is still invoked, not merely declared.
+    expect(p, 'onPublicUpdated is declared but no longer called').toMatch(
+      /this\.lifecycle\.onPublicUpdated\(/,
     );
   });
 
