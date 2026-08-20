@@ -91,7 +91,7 @@ describe('docs/api/recipes content parity', () => {
   });
 
   it('Errors table 4-row roster pinned, with no speculative Upcoming section', () => {
-    expect(body).toMatch(/\|\s*400 \| validation/);
+    expect(body).toMatch(/\|\s*400 \| validation-failed/);
     expect(body).toMatch(/\|\s*404 \| not-found/);
     expect(body).toMatch(/\|\s*401 \| unauthorized/);
     expect(body).toMatch(/\|\s*503 \| feature-unavailable/);

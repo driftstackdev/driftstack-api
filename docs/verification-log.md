@@ -47865,3 +47865,29 @@ Mutation-proved, restored byte-identical: restoring `validation` on `status.md` 
 "status.md: 400 `validation` is not a declared problem type"; renaming a legal row to a
 plausible `session-missing` fails the same way. Ratchets 2944→2945 and 3110→3111 for the
 one file added.
+
+### V-1116 addendum — the pin that froze it was written in a third spelling
+
+The full suite went red after committing V-1116: `docs-api-bundled-llm-content-parity`
+asserted the old row. My rule-2 enumeration had used two literal patterns —
+`400 | validation` and `| validation ` — and the pin expresses the row as an escaped
+REGEX, `/\|\s*400 \| validation\s*\|/`, where the trailing space is `\s*`. Neither
+pattern matched. That is the rule-2 failure the rule exists for, met in a spelling I did
+not think to try: not a different file, a different ENCODING of the same claim.
+
+Re-run across every test tree, two more occurrences surfaced, and they are the more
+interesting kind — `docs-api-recipes-content-parity:94` and
+`docs-bundled-llm-content-parity:82` match `/\|\s*400 \| validation/` with no trailing
+anchor. Those PASSED after the fix, because `validation-failed` starts with
+`validation`. They were pinning a prefix, not a slug, so they would equally accept
+`validation-error` or any other future wrong value. Both are now anchored to the real
+slug, and the tightening is mutation-proved: reverting the recipes row fails as
+"expected … to match /\|\s\*400 \| validation-failed/", which it did not do before.
+
+Also checked: no marketing-site page mirrors these error tables, so the four docs pages
+are the whole surface.
+
+The lesson worth keeping is the second one. A green pin that matches by prefix is
+indistinguishable from a green pin that matches the value, and only a mutation tells
+them apart — the same reason V-1104's replay-tolerance arm and V-1110's route-side
+extractor needed anchoring.

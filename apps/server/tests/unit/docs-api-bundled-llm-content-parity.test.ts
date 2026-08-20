@@ -108,8 +108,14 @@ describe('docs/api/bundled-llm content parity', () => {
     );
   });
 
-  it("Errors table 4-row roster pinned: 400 validation + 401 unauthorized + 402 bundled-llm-budget-exhausted + 402 bundled-llm-consent-required — pinned so the 2-different-402 distinction stays explicit (drift to merging them would lose the customer SDK's typed-error discrimination). The 503 (unwired bundled-LLM) is NOT returned on these settings/status reads — it surfaces on the agent-session turn route — so the table must NOT carry a 503 row.", () => {
-    expect(body).toMatch(/\|\s*400 \| validation\s*\|/);
+  it("Errors table 4-row roster pinned: 400 validation-failed + 401 unauthorized + 402 bundled-llm-budget-exhausted + 402 bundled-llm-consent-required — pinned so the 2-different-402 distinction stays explicit (drift to merging them would lose the customer SDK's typed-error discrimination). The 503 (unwired bundled-LLM) is NOT returned on these settings/status reads — it surfaces on the agent-session turn route — so the table must NOT carry a 503 row.", () => {
+    // V-1116 — the slug is `validation-failed`. ValidationError carries
+    // PROBLEM_TYPES.ValidationFailed, and this table had named a type the
+    // server cannot send; a client branching on it never matched.
+    expect(body).toMatch(/\|\s*400 \| validation-failed\s*\|/);
+    expect(body, 'the undeclared `validation` slug must not return').not.toMatch(
+      /\|\s*400 \| validation\s*\|/,
+    );
     expect(body).toMatch(/\|\s*401 \| unauthorized\s*\|/);
     expect(body).toMatch(/\|\s*402 \| bundled-llm-budget-exhausted/);
     expect(body).toMatch(/\|\s*402 \| bundled-llm-consent-required/);

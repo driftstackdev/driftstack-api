@@ -79,7 +79,7 @@ describe('Arc 6 docs.bundled-llm content parity', () => {
   });
 
   it('error table covers 400 / 401 / 402 (both); 503 is documented as agent-session-turn-only (not on these read routes)', () => {
-    expect(body).toMatch(/\|\s*400\s*\| validation/);
+    expect(body).toMatch(/\|\s*400\s*\| validation-failed/);
     expect(body).toMatch(/\|\s*401\s*\| unauthorized/);
     expect(body).toMatch(/\|\s*402\s*\| bundled-llm-budget-exhausted/);
     expect(body).toMatch(/\|\s*402\s*\| bundled-llm-consent-required/);
