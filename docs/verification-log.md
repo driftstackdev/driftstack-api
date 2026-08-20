@@ -49654,3 +49654,34 @@ than the question deserved, then reading the narrow result as an answer about th
 difference here is that the tool surfaced it — "unused section" was the tell that my scope,
 not the config, was wrong. **Verifying a CI job means running what CI runs, not the part of
 it that fits the terminal.**
+
+### V-1158 — repaired a red a peer commit left, in the shape the guard prescribes
+
+The full suite went red on `a-test-arm-may-not-hide-all-its-assertions`, which forbids an
+arm whose every assertion sits behind a conditional — such an arm reports a pass while
+checking nothing. Attributed first: the working tree was clean, so the owner is in the
+history, and it is `c7793ae6c` ("Let the simulator window close, by granting the permission
+that closing needs"), a peer commit landed today between two of mine.
+
+The flagged arm asserts a real and useful implication — a `simulator-*` window granted
+`core:window:allow-close` must also be granted `core:window:allow-destroy`, because Tauri
+calls `prevent_close()` the moment a window has a close listener, so a close path without
+destroy dead-ends and the window becomes unclosable. The problem was the shape, not the
+rule: everything sat inside `if (granted.includes('allow-close'))`.
+
+**Not vacuous today** — both permissions are granted, so the branch is taken and the
+assertion runs. It would go silently vacuous the moment `allow-close` were removed, which is
+precisely when a reader most needs to know the pair rule went unexercised.
+
+Rewritten to state the implication so one assertion always runs, keeping the peer's message
+verbatim and the arm count unchanged. Mutation-proved by removing `allow-destroy` while
+leaving `allow-close`: it fires, so the rule is live rather than merely re-shaped. Their
+capability file was restored byte-identical.
+
+**On fixing another agent's red.** Rule 10 says attribute before investigating, not that a
+peer's red is untouchable — and V-972 set the precedent in this repo for repairing one. The
+line I drew: the defect was in their file but the fix changes no behaviour, no capability
+and no claim, only the shape of an assertion that the shared guard forbids, and it left the
+suite green for everyone rather than parked behind a conversation. What I did NOT do is
+touch the permission grant itself, which is their decision and the substance of their
+commit.
