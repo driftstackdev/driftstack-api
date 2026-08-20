@@ -51839,3 +51839,50 @@ substitution whose escaping silently matched nothing. The rerun asserts the occu
 writing and prints `MUTATIONS APPLIED: 1`. A mutation that does not apply looks exactly like a
 mutation the tests survived, and only the count tells them apart. Same lesson as the zsh
 word-splitting sweep in V-1187, from a different tool.
+
+---
+
+## V-1204 — thirteen annotations that are true only because someone remembered to cast
+
+Following the postgres-js numeric trap this session already hit from the other side (a raw bigint
+read that needed `Number(size_bytes)`), I went looking for the version TypeScript cannot see.
+
+`sql<number>` tells the compiler an expression yields a number. It does not make it one. Postgres
+`count(*)` and `sum(...)` return bigint/numeric, and postgres-js hands those back as STRINGS rather
+than silently truncate past 2^53:
+
+```
+const [row] = await db.select({ n: sql<number>`count(*)` }) …
+row.n            // typed number, actually "7"
+total + row.n    // "07"   — concatenation, not addition
+row.n > limit    // coerces, so this one accidentally works
+```
+
+The comparison working is what makes it dangerous. The bug hides until something ADDS, and then it
+yields a plausible wrong figure rather than an error — no throw, no log, and `tsc` structurally
+cannot help, because the generic is an assertion by the author about what the database returns.
+
+**Measured first.** Every `sql<...>` generic in the repo: 13 `sql<number>`, 6 `sql<string>`,
+2 `sql<Date>`, 1 `sql<Date | null>`. All 13 numeric ones already carry a cast —
+`count(*)::int` ten times, `coalesce(sum(…), 0)::int` twice, one more `count(*)::int`. The schema is
+equally disciplined: all six `bigint` columns and the one `numeric` column declare `mode: 'number'`,
+so the Drizzle path converts. Four raw aggregate queries, all cast.
+
+So this axis is clean, and the finding is that its cleanliness rests on thirteen separate acts of
+remembering.
+
+**Why repo-wide rather than more per-file pins.** Several `*-content-parity` tests already pin an
+individual `count(*)::int` inside the repo file they cover. That is real coverage for those lines
+and none at all for the fourteenth occurrence, written next month, in a file that does not exist
+yet — the same argument as V-1200's scope sweep. The guard has no allowlist and should never need
+one: `::int` / `::float8` / `::numeric` is always available, and an uncast `sql<number>` is always a
+defect waiting on its first addition.
+
+```
+M1  drop ::int from one real occurrence  -> sessions-repo named as offender  1 failed | 2 passed
+M2  the cast pattern stops seeing ::int  -> self-check + offender arm red    2 failed | 1 passed
+restored (source 0 dirty)                                                    3 passed
+```
+
+Both mutations printed their applied count before running, per the V-1203 correction — a mutation
+that never landed looks exactly like one the tests survived.
