@@ -45329,3 +45329,55 @@ arms; deleting only the PUT half fails two. Restored byte-identical. `api-types`
 rebuilt, since `incidents.d.ts` carries the comment into every consumer.
 
 `it(` counts 11 and 12, unchanged. No new file, no ratchet change.
+
+## V-1065 — a plan ceiling a customer could only discover by hitting it
+
+V-1064 ended on the observation that a handler can enforce a rule its schema cannot
+express, which means schema-based checking is blind to a whole class. So I enumerated
+that class directly: every route that throws `BadRequestError` with a literal message
+AFTER a successful parse. 38 of them, across the live `/v1` surface.
+
+Most are restatements of a parse failure ("Invalid query parameters."). The
+interesting ones are substantive rules a caller could not predict, and the question
+for each is whether any customer-facing page says it. The SSRF host rule is documented
+— `api/proxies.md` already spells out that private, loopback, link-local and
+cloud-metadata addresses are refused. Two were not.
+
+FIRST, the cap. `POST /v1/account/me/proxies` refuses past `PROXIES_PER_TIER` with
+`Proxy limit reached (<cap>). Delete an existing proxy to add another.` The ceiling
+runs from 1 on free to 500 on api_scale, and no customer-facing page named it — not
+the API reference, not the marketing pricing page. Every sibling cap IS published:
+concurrent sessions and profiles in the usage quota table, session duration in the
+lifecycle guide. This one was the exception and nothing marked it as one, so the first
+way to learn your own limit was to exceed it.
+
+Documented now as a per-tier table mirroring the `PROFILES_PER_TIER` precedent, and
+the status difference is stated rather than smoothed over: the profile cap returns
+`429` with the `tier-limit` problem type, the proxy cap a plain `400`. Whether those
+should be reconciled is a behaviour decision, not a doc fix; a customer writing one
+handler for "I hit a plan ceiling" needs to know they differ today.
+
+SECOND, and worse because the page was positively wrong rather than silent. The update
+section listed three password cases — omit keeps, `null` clears, a value replaces —
+with no qualification. All three are false for a saved `openvpn`/`wireguard` proxy:
+the handler refuses `password` in the body at all unless `scheme` and the matching
+config block come too, because the credential is wrapped with the config. The test is
+`'password' in body`, so CLEARING is refused for the same reason setting is — which a
+page mentioning only replacement would still get wrong. Both halves are now stated.
+
+I left `api/usage.md` alone deliberately. Its quota table omits proxies, but the
+section names its two drivers explicitly rather than claiming to be every cap, so it
+is incomplete without being false. Adding a third column would touch a pinned table
+for something that is not a defect.
+
+INSTRUMENT NOTES, two, both of which produced a green that meant nothing.
+
+A mutation editing `PROXIES_PER_TIER` in `common.ts` did not apply at all: the pattern
+I anchored on appears in `PROFILES_PER_TIER` too, the assert caught the count, and the
+run that followed was of unmutated source. Then the scoped retry DID apply and the
+guard still passed — because it imports the constant from the built package, so a
+source edit moves nothing until `api-types` is rebuilt. Proven properly from three
+directions: understating one tier on the page fails it, deleting the enterprise row
+fails two arms, and raising the cap in source WITH a dist rebuild fails it.
+
+`it(` count 4 in a new file. Ratchets 2939→2940 and 3105→3106.

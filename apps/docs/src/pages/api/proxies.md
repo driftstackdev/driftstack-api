@@ -82,6 +82,27 @@ link-local, and cloud-metadata addresses (e.g. `127.0.0.1`,
 pointed at an internal address could be used to reach networks you
 shouldn't.
 
+**How many you can save:** each tier caps the number of saved proxies on
+the account. Crossing it on `POST /v1/account/me/proxies` returns `400`
+with `Proxy limit reached (<cap>). Delete an existing proxy to add
+another.` — note this is a `400`, not the `429 Tier limit` the profile
+cap uses. Values mirror `PROXIES_PER_TIER` in `@driftstack/api-types`:
+
+| Tier            | Saved proxies |
+| --------------- | ------------: |
+| `free`          |             1 |
+| `solo_manual`   |            10 |
+| `team_manual`   |            25 |
+| `agency_manual` |            50 |
+| `api_starter`   |            25 |
+| `api_builder`   |           100 |
+| `api_scale`     |           500 |
+| `enterprise`    |        custom |
+
+`free` gets exactly one and SOCKS5 only — OpenVPN and WireGuard need a
+paid tier. The enterprise allowance is negotiated rather than a number
+this page can print.
+
 ### VPN proxies (OpenVPN / WireGuard)
 
 For a VPN scheme, the secret config rides a nested block. `host`/`port`
@@ -135,11 +156,19 @@ be configured server-side; if it isn't, create returns `503`.
 
 `PUT /v1/account/me/proxies/{id}`
 
-Every field is optional. For the password:
+Every field is optional. For the password on a **SOCKS5 or HTTP** proxy:
 
 - **omit** `password` → keep the existing one
 - `"password": null` → clear it
 - `"password": "..."` → set/replace it
+
+**VPN proxies are different.** On a saved `openvpn` or `wireguard` proxy,
+sending `password` at all — a new value _or_ `null` — without also
+sending `scheme` and the matching config block is rejected with `400`:
+`A VPN password can only be changed by resubmitting the matching VPN
+configuration.` The credential is wrapped together with the config, so
+there is no way to rotate one without the other. To change a VPN
+password, resubmit the full VPN body as you would on create.
 
 `404` if the id isn't one of your proxies.
 
