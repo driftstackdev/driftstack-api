@@ -6,8 +6,10 @@
 // loses a case).
 //
 //   • Framing pinned: abstraction over WebKit substrate; mock.ts
-//     in-memory deterministic; webkit.ts throws
-//     DriverNotIntegratedError until Phase 2 + wiring.
+//     in-memory deterministic; playwright.ts dev and E2E only,
+//     imported lazily; webkit.ts throws DriverNotIntegratedError
+//     until Phase 2 + wiring. V-1096 — playwright.ts was missing from
+//     this roster and from the source comment it pins.
 //   • Pure-of-HTTP rationale: route layer parses Zod, services pass
 //     through pre-validated; driver works with validated objects.
 //   • CreateSessionInput.purpose union: production_customer (default
@@ -42,10 +44,21 @@ function read(p: string): string {
 describe('W430.B apps/server/src/drivers/types.ts content parity', () => {
   const body = read(LIB);
 
-  it('Framing pinned: Driver interface — abstraction over WebKit substrate; mock.ts in-memory deterministic; webkit.ts throws DriverNotIntegratedError until Phase 2 + wiring', () => {
+  it('Framing pinned: Driver interface — abstraction over WebKit substrate; mock.ts in-memory deterministic; playwright.ts dev and E2E only, lazily imported; webkit.ts throws DriverNotIntegratedError until Phase 2 + wiring. V-1096: the roster read as two and omitted playwright.ts, which the DRIVER enum had accepted since V-333b.', () => {
     expect(body).toMatch(/\/\/ Driver interface — abstraction over the WebKit substrate\./);
+    // One assertion per line. The single chained regex this replaced demanded
+    // mock.ts be followed immediately by webkit.ts, which is why inserting the
+    // driver that already existed would have failed the pin rather than the
+    // stale claim failing it.
+    expect(body).toMatch(/\/\/ Three implementations:/);
+    expect(body).toMatch(/- mock\.ts\s+in-memory, deterministic; used in dev \+ tests/);
     expect(body).toMatch(
-      /\/\/ Two implementations:\s*\n?\s*\/\/\s*- mock\.ts\s+in-memory, deterministic; used in dev \+ tests\s*\n?\s*\/\/\s*- webkit\.ts\s+real fork; throws DriverNotIntegratedError until the\s*\n?\s*\/\/\s+Driftstack WebKit fork closes Phase 2 and we wire it up/,
+      /- playwright\.ts\s+V-333b; dev and E2E only, imported lazily so production/,
+    );
+    expect(body).toMatch(/- webkit\.ts\s+real fork; throws DriverNotIntegratedError until the/);
+    expect(body).toMatch(/Driftstack WebKit fork closes Phase 2 and we wire it up/);
+    expect(body, 'the two-implementation claim must not return').not.toMatch(
+      /Two implementations:/,
     );
   });
 

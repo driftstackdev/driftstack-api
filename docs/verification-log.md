@@ -46910,3 +46910,48 @@ short-circuit fails the Go shape; replacing the TypeScript `maxAttempts: 0` bran
 with the caller's own policy fails the TypeScript shape. The SDK's own
 `tests/test_http_retry_gate.py` proves the runtime behaviour, but it runs in the
 `python-sdk` job, which this gate does not.
+
+### V-1096 — the last place still saying two drivers was the source, and two pins held it there
+
+Action 28 said `docs/architecture.md` and `drivers/types.ts` both claim two driver
+implementations where three exist. Checking first: the docs half is already done. Line
+80 reads "Three implementations" and names `playwright`, the factory sentence names it
+too, and `docs-architecture-content-parity` carries a negative on the old claim. Only
+the source comment was stale.
+
+Verified three ways rather than counted once. `apps/server/src/drivers/` holds
+`mock.ts`, `playwright.ts`, `webkit.ts` beside `index.ts`/`types.ts`; `lib/config.ts`
+declares `driver: z.enum(['mock', 'webkit', 'playwright'])`; and `playwright.ts`
+declares `export class PlaywrightDriver implements Driver`. All three agree on three.
+
+`drivers/types.ts:3` said "Two implementations" and listed mock and webkit. Two pins
+froze it: `drivers-types-content-parity` and `drivers-types-v169-l001-cross-source-invariant`,
+the second missed by the report entirely, both in their header comments as well as
+their assertions.
+
+**The blocker was the pin, not the prose.** The content-parity assertion was one
+chained regex requiring `- mock.ts …` to be followed immediately by `- webkit.ts …`.
+Adding the driver that already existed would have failed that pin. So the shape of the
+guard is what kept the roster wrong: the correct edit breaks it and the stale text
+passes. Split per line, which is the standing rule here for exactly this reason.
+
+Rule 2 mattered on the enumeration. "Two implementations" appears fifteen times in the
+tree and almost all of them are other subjects — the RateLimitStore pair, the webhook
+delivery pair, FrameSource, `requireScope`. Only three hits were about drivers.
+
+**Durable fix.** Correcting the prose to say three fixes today and not the next one. A
+fourth driver lands as a file and an enum member while every hand-written roster stays
+a member behind and the code runs fine. The invariant now derives the set from the
+directory, requires the `DRIVER` enum to accept exactly that set, and requires both
+`drivers/types.ts` and `docs/architecture.md` to name every member.
+
+Mutation-proved: reverting the source roster fails three arms including
+"drivers/types.ts does not list playwright.ts"; an unrostered `chromium.ts` appearing
+in the directory fails the enum/directory equality; dropping `playwright` from the
+enum fails the same arm from the other side.
+
+**Process note.** The first mutation round restored from a snapshot taken BEFORE the
+fix, so the "restore" silently reinstated the stale comment and `cmp` reported
+byte-identical against the wrong baseline — a clean tree as the failure mode. Caught
+by re-reading the file, redone against a post-fix snapshot, and the restore verified
+by asserting line 3 reads "Three implementations" rather than trusting `cmp` alone.

@@ -1,9 +1,16 @@
 // Driver interface — abstraction over the WebKit substrate.
 //
-// Two implementations:
+// Three implementations:
 //   - mock.ts        in-memory, deterministic; used in dev + tests
+//   - playwright.ts  V-333b; dev and E2E only, imported lazily so production
+//                    builds do not pull in the devDependency
 //   - webkit.ts      real fork; throws DriverNotIntegratedError until the
 //                    Driftstack WebKit fork closes Phase 2 and we wire it up
+//
+// V-1096 — this read "Two implementations" and omitted playwright.ts long
+// after DRIVER accepted it and docs/architecture.md described all three. The
+// roster is derived from the directory by the cross-source invariant now, so
+// a fourth cannot be added here in silence.
 //
 // The Zod-validated public types in @driftstack/api-types are *not* used as
 // the driver's input shape — the driver works with already-validated objects

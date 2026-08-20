@@ -3,10 +3,12 @@
 // drivers/types.ts driver-abstraction-interface primitive:
 //
 //   Driver-abstraction framing — 'Driver interface — abstraction over
-//   the WebKit substrate. Two implementations: mock.ts in-memory,
-//   deterministic; used in dev + tests + webkit.ts real fork; throws
+//   the WebKit substrate. Three implementations: mock.ts in-memory,
+//   deterministic; used in dev + tests + playwright.ts dev and E2E only,
+//   imported lazily + webkit.ts real fork; throws
 //   DriverNotIntegratedError until the Driftstack WebKit fork closes
-//   Phase 2 and we wire it up'.
+//   Phase 2 and we wire it up'. V-1096 — the roster read as two here and
+//   in the source comment, long after DRIVER accepted playwright.
 //
 //   Zod-not-at-driver-boundary framing — 'The Zod-validated public
 //   types in @driftstack/api-types are *not* used as the driver's
@@ -50,7 +52,7 @@
 //
 // stays in lockstep across apps/server/src/drivers/types.ts.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -65,10 +67,12 @@ function read(p: string): string {
 describe('W984 drivers/types V-169 + L-001 cross-source invariant', () => {
   // ─── Driver-abstraction framing ──────────────────────────────
 
-  it("CRITICAL apps/server/src/drivers/types.ts header pins surface — 'Driver interface — abstraction over the WebKit substrate. Two implementations: mock.ts in-memory, deterministic; used in dev + tests + webkit.ts real fork; throws DriverNotIntegratedError until the Driftstack WebKit fork closes Phase 2 and we wire it up'. The 2-impl (mock + webkit) + DriverNotIntegratedError-until-Phase-2 design is the V-156 driver-abstraction contract.", () => {
+  it('CRITICAL apps/server/src/drivers/types.ts header pins the driver roster and the DriverNotIntegratedError-until-Phase-2 design, which is the V-156 driver-abstraction contract. V-1096: this pinned a two-implementation roster naming mock and webkit. The DRIVER enum had accepted playwright since V-333b and docs/architecture.md described all three, so the source comment was the last place still saying two — and two pins held it there.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/drivers/types.ts'));
     expect(p).toMatch(/Driver interface — abstraction over the WebKit substrate\./);
-    expect(p).toMatch(/Two implementations:/);
+    expect(p).toMatch(/Three implementations:/);
+    expect(p).toMatch(/- playwright\.ts\s+V-333b; dev and E2E only, imported lazily so production/);
+    expect(p, 'the two-implementation claim must not return').not.toMatch(/Two implementations:/);
     expect(p).toMatch(/- mock\.ts\s+in-memory, deterministic; used in dev \+ tests/);
     expect(p).toMatch(/- webkit\.ts\s+real fork; throws DriverNotIntegratedError until the/);
     expect(p).toMatch(/Driftstack WebKit fork closes Phase 2 and we wire it up/);
@@ -214,6 +218,40 @@ describe('W984 drivers/types V-169 + L-001 cross-source invariant', () => {
   it('CRITICAL DriverSessionId = string. The string-alias keeps the driver-session-id type-safe at the call site (cannot accidentally pass an account-id).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/drivers/types.ts'));
     expect(p).toMatch(/export type DriverSessionId = string;/);
+  });
+
+  it('CRITICAL V-1096 the driver roster is the same in the directory, the DRIVER enum, and both places that describe it. Correcting the prose to say three fixes today and not the next one: a fourth driver lands as a new file and an enum member, and every hand-written roster stays a member behind while the code runs fine. The three sources are compared to each other so the omission is what fails, not the count.', () => {
+    const dir = resolve(REPO_ROOT, 'apps/server/src/drivers');
+    const onDisk = readdirSync(dir)
+      .filter((f) => f.endsWith('.ts') && f !== 'index.ts' && f !== 'types.ts')
+      .map((f) => f.replace(/\.ts$/, ''))
+      .sort();
+    expect(onDisk.length, 'driver implementation files found').toBeGreaterThanOrEqual(3);
+
+    const config = read(resolve(REPO_ROOT, 'apps/server/src/lib/config.ts'));
+    const enumM = /driver: z\.enum\(\[([^\]]*)\]\)/.exec(config);
+    expect(enumM, 'the DRIVER enum is no longer declared as driver: z.enum([...])').not.toBeNull();
+    const inEnum = [...(enumM?.[1] ?? '').matchAll(/'([a-z]+)'/g)].map((m) => m[1]!).sort();
+
+    expect(
+      inEnum,
+      'DRIVER accepts a different set of drivers than the directory implements — one of them is ' +
+        'either unreachable or unimplemented:',
+    ).toEqual(onDisk);
+
+    // …and every implementation is named in both descriptions of the set.
+    const types = read(resolve(REPO_ROOT, 'apps/server/src/drivers/types.ts'));
+    const arch = read(resolve(REPO_ROOT, 'docs/architecture.md'));
+    const unnamed: string[] = [];
+    for (const d of onDisk) {
+      if (!types.includes(`- ${d}.ts`)) unnamed.push(`drivers/types.ts does not list ${d}.ts`);
+      if (!new RegExp(`\`${d}\``).test(arch))
+        unnamed.push(`docs/architecture.md does not name ${d}`);
+    }
+    expect(
+      unnamed.sort(),
+      'a driver is implemented and selectable but missing from a roster that reads as complete:',
+    ).toEqual([]);
   });
 
   it('test file metadata — file exists at canonical path', () => {
