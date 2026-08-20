@@ -33,6 +33,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { DrizzleAgentSessionsRepo } from '../../src/db/agent-sessions-repo.js';
 import { DrizzleAccountProxiesRepo } from '../../src/db/account-proxies-repo.js';
 import { DrizzleApiKeysRepo } from '../../src/db/api-keys-repo.js';
+import { DrizzleTeamMembersRepo } from '../../src/db/team-members-repo.js';
 import * as schema from '../../src/db/schema.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
@@ -44,6 +45,7 @@ let client: ReturnType<typeof postgres> | null = null;
 let sessions: DrizzleAgentSessionsRepo | null = null;
 let proxies: DrizzleAccountProxiesRepo | null = null;
 let apiKeysRepo: DrizzleApiKeysRepo | null = null;
+let teamRepo: DrizzleTeamMembersRepo | null = null;
 const seeded: string[] = [];
 
 beforeAll(async () => {
@@ -64,11 +66,15 @@ beforeAll(async () => {
   });
   proxies = new DrizzleAccountProxiesRepo(handle);
   apiKeysRepo = new DrizzleApiKeysRepo(handle);
+  teamRepo = new DrizzleTeamMembersRepo(handle);
 });
 
 afterAll(async () => {
   if (client) {
     for (const accountId of seeded) {
+      await client`DELETE FROM team_members WHERE owner_account_id = ${accountId} OR member_account_id = ${accountId}`.catch(
+        () => {},
+      );
       await client`DELETE FROM api_keys WHERE account_id = ${accountId}`.catch(() => {});
       await client`DELETE FROM account_proxies WHERE account_id = ${accountId}`.catch(() => {});
       await client`DELETE FROM agent_sessions WHERE account_id = ${accountId}`.catch(() => {});
@@ -113,7 +119,7 @@ async function seedProxy(accountId: string): Promise<string> {
  * V-1187 — `api_keys.key_prefix` carries `uniqueIndex('api_keys_prefix_unique')`, so every
  * fixture needs its own prefix; a shared one fails on insert and reads as a boundary failure.
  */
-async function seedApiKey(accountId: string): Promise<string> {
+async function seedApiKey(accountId: string, createdByAccountId?: string): Promise<string> {
   if (!apiKeysRepo) throw new Error('no repo');
   const tag = randomUUID().slice(0, 8);
   const row = await apiKeysRepo.insertApiKey({
@@ -123,8 +129,19 @@ async function seedApiKey(accountId: string): Promise<string> {
     keyPrefix: `ds_test_${tag}`,
     keyHash: `hash-${tag}`,
     expiresAt: null,
+    createdByAccountId: createdByAccountId ?? null,
   });
   return row.id;
+}
+
+/** A live, accepted membership of `member` in `owner`'s team. */
+async function seedMembership(owner: string, member: string): Promise<string> {
+  if (!client) throw new Error('no client');
+  const id = randomUUID();
+  await client`
+    INSERT INTO team_members (id, owner_account_id, member_account_id, role, invited_at, accepted_at)
+    VALUES (${id}, ${owner}, ${member}, 'member', now(), now())`;
+  return id;
 }
 
 describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
@@ -270,6 +287,39 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         (await apiKeysRepo!.listApiKeys(victim)).length,
         'a successor key was minted into the victim account',
       ).toBe(1);
+    });
+
+    // ── V-1188 — team-members-repo. Found by the same sweep, and the only one of the
+    // three candidates that turned out to be REACHABLE: neutralising this predicate
+    // changed nothing the suite could see, and a member really can hold seats in two
+    // owner accounts (`listApiKeysMintedBy` exists precisely because keys minted BY an
+    // account live on OTHER accounts).
+
+    it('CRITICAL offboarding a member revokes the keys they minted on THIS owner only. The revoke is scoped by owner AND minter; drop the owner half and removing someone from one team revokes the keys they minted for every other team they belong to — a cross-tenant denial of service triggered by an ordinary offboarding, with no attacker involved.', async () => {
+      const ownerA = await seedAccount();
+      const ownerB = await seedAccount();
+      const member = await seedAccount();
+      const membershipInA = await seedMembership(ownerA, member);
+      await seedMembership(ownerB, member);
+
+      const keyInA = await seedApiKey(ownerA, member);
+      const keyInB = await seedApiKey(ownerB, member);
+
+      const result = await teamRepo!.removeMemberWithInvites(membershipInA, ownerA);
+      expect(result?.memberAccountId, 'the membership was not removed').toBe(member);
+      expect(
+        result?.revokedApiKeyIds,
+        "the member's key on this owner survived offboarding",
+      ).toEqual([keyInA]);
+
+      expect(
+        (await apiKeysRepo!.findApiKey(keyInA, ownerA))?.revokedAt ?? null,
+        'the offboarded key is still live',
+      ).not.toBeNull();
+      expect(
+        (await apiKeysRepo!.findApiKey(keyInB, ownerB))?.revokedAt ?? null,
+        "offboarding from one team revoked the member's key on an unrelated team",
+      ).toBeNull();
     });
 
     it('CRITICAL a proxy cannot be DELETED from another account. This is the irreversible one: without the predicate, an id is enough to destroy another customer’s proxy configuration.', async () => {

@@ -51022,3 +51022,46 @@ the reason that guard exists.
 mass sweep silently mutated **nothing** and reported a clean suite. A sweep that applies no
 mutation looks exactly like a sweep that found no holes. The `neutralised predicates: 0` counter is
 what caught it — every mutation batch should print how many it actually applied.
+
+### V-1188 — one of the two open holes was real; the other was my own bad claim
+
+V-1187 closed api-keys-repo and recorded two more repos as uncovered. Closing them meant reading
+what each predicate actually protects, and only one survived that reading.
+
+**team-members-repo — real, reachable, now closed.** `removeMemberWithInvites` revokes the
+offboarded member's keys under `eq(apiKeys.accountId, ownerAccountId) AND
+eq(apiKeys.createdByAccountId, memberAccountId)`. Drop the owner half and removing someone from one
+team revokes the keys they minted for **every other team they belong to**. Reachability is not
+hypothetical: `listApiKeysMintedBy` exists in the same codebase precisely because keys minted BY an
+account live ON other accounts, so a member holding seats in two owner accounts is a supported
+shape, not a contrivance. No attacker is involved — an ordinary offboarding is the trigger.
+
+Closed with an arm that seeds a member into two owner accounts, gives them a key in each,
+offboards from one, and asserts the other key is untouched. Mutation-proved twice, because the two
+plausible regressions are different edits: deleting the predicate outright, and neutralising it
+while keeping the shape. Both produce the same failure — the revoke returns two key ids where one
+is correct.
+
+**agent-turn-receipts-repo — NOT a hole. My V-1187 description of it was wrong.** I recorded that an
+unscoped idempotency lookup would let one account's key match another's and return the other
+account's receipt. It cannot. `agent_turn_receipts` has a **composite primary key
+`(account_id, idempotency_key)`**, so a second account reserving the same key does not conflict at
+all — the insert succeeds and the account-scoped lookup underneath is never reached. The second
+site, `complete()`, additionally requires a matching `agent_session_id` and `request_hash`, which
+are the victim's UUIDs and not attacker-supplied.
+
+So both receipt predicates are defence-in-depth on a path already made unreachable by the primary
+key. The mutation survived because **the code path is unreachable with a mismatched account, not
+because coverage is missing** — and those look identical from a test result alone. I published the
+wrong reading a turn early by inferring severity from the mutation surviving, without first asking
+what makes the branch reachable.
+
+That is the lesson worth more than the fix: **a surviving mutation is a question, not a finding.**
+It says no test distinguishes the two versions. Whether that is a coverage hole or an unreachable
+branch is decided by reading the schema and the callers — here, one composite primary key was the
+whole answer, and it took two minutes to check after costing a wrong claim in the log.
+
+Also fixed in passing: the membership fixture bound a `Date` into a `postgres` template for two
+timestamp columns and the driver refused it. That surfaced as a `TypeError` inside the seed rather
+than an assertion, which is the failure shape a fixture bug takes — it is worth distinguishing from
+a boundary failure before reading anything into it.
