@@ -135,6 +135,11 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 - **Decision:** use Stripe as the sole payment processor at launch. Drop Mollie from the active rail list. The earlier "dual-processor with Mollie primary" design (parent driftstack repo file 116) is deferred to the revisit triggers, not abandoned.
 - **Reasoning:** Stripe's EU payment-method coverage (iDEAL, Bancontact, SEPA Direct Debit, SOFORT, region-cards) closes the historical gap that justified Mollie-primary; Stripe Tax handles BTW reverse-charge natively (Mollie does not); Stripe Meters is required for BYOK LLM line-item billing (no Mollie equivalent); operational doubling cost (dual webhooks + dual reconciliation + dual sub-processor amendment surface) is meaningful for a small engineering team. Approved architectural deviation. If Stripe declines underwriting at company-onboarding, Mollie reactivates per the deferred dual-processor spec with proper Art 28(2) amendment notice.
 - **Tier:** 2 (vendor / structural; approved deviation from the planned dual-processor design).
+- **Contradicted by the shipped system since 2026-08-10:** a customer-facing crypto rail
+  ships alongside Stripe, so "sole payment processor" no longer describes what runs.
+  ADR-002 carries the dated reality check with the specifics; a superseding ADR is owed
+  and has no author yet. This entry states the fact, not the rationale — the latter
+  belongs to whoever made the call.
 - **ADR:** [ADR-002](adr/ADR-002-stripe-only-payment-processing.md) — full context + alternatives + revisit triggers.
 - **V-log:** V-052 (Coinbase Commerce dropped — single-rail posture follow-on), V-060 (this entry + ADR-002 landing).
 

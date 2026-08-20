@@ -26,6 +26,13 @@
 // the notice. What it will not allow is dropping the notice while the
 // contradiction stands.
 //
+// V-1182 — the debt lives on a THIRD surface. `docs/decisions.md` D-027 records the same
+// Stripe-only decision in one paragraph and links to ADR-002, and it carried no notice at
+// all: the ADR said "contradicted", the D-entry said "use Stripe as the sole payment
+// processor". Whoever reads the decisions file — which is the shorter, more-read index of
+// the two — got the pre-crypto answer. The arm below holds D-027's notice on the same terms
+// as the ADRs': state the contradiction, or point at a superseding ADR that exists.
+//
 // It also re-checks the FACTS the notes assert, because a notice that outlives
 // its own truth is the failure this repo just had elsewhere: a parity pin froze
 // "the verification log has reached V-750" and thereby made a stale number
@@ -98,6 +105,32 @@ describe('a contradicted ADR keeps its notice until a superseding ADR exists', (
       );
     },
   );
+
+  it('CRITICAL docs/decisions.md D-027 carries the same notice as the ADR it links to. The D-entry is the shorter index and the one more people open; an unmarked paragraph there hands a cold reader the pre-crypto answer no matter how prominent the ADR notice is.', () => {
+    const decisions = readFileSync(resolve(REPO_ROOT, 'docs/decisions.md'), 'utf8');
+    const start = decisions.indexOf('## D-027 ');
+    expect(
+      start,
+      'D-027 is gone from docs/decisions.md — it is the ADR-002 index entry',
+    ).toBeGreaterThan(-1);
+    const next = decisions.indexOf('\n## ', start + 1);
+    const entry = decisions.slice(start, next === -1 ? decisions.length : next);
+
+    // Positive control: this really is the Stripe entry, not whatever moved into its place.
+    expect(entry, 'D-027 no longer records the Stripe-only decision').toMatch(
+      /sole payment processor/i,
+    );
+
+    if (supersededBy(read('ADR-002-stripe-only-payment-processing.md')) !== null) return;
+    expect(
+      entry,
+      'ADR-002 is still contradicted and not superseded, so its D-entry must say so too',
+    ).toMatch(/Contradicted by the shipped system/i);
+    expect(entry, 'the D-027 notice lost its date').toMatch(/2026-08-10/);
+    expect(entry, 'the D-027 notice no longer records that a superseding ADR is owed').toMatch(
+      /superseding ADR/i,
+    );
+  });
 
   it('CRITICAL the facts behind the ADR-002 notice still hold', () => {
     // A notice that outlives its truth is the same defect as no notice. If the

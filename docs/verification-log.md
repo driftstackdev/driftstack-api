@@ -50709,3 +50709,40 @@ What neither ADR has is a superseding record. Both say so themselves: "a superse
 and has no author yet." That is unchanged here — writing the rationale for reversing a
 contractual decision is not a documentation fix, and this entry does not pretend otherwise. It
 makes the index tell the truth the ADRs already tell.
+
+### V-1182 — the same reversed decision, unmarked on a third surface
+
+V-1181 fixed the ADR index. The same decision lives in a third place, and that one was also
+silent: `docs/decisions.md` **D-027** records "use Stripe as the sole payment processor at
+launch. Drop Mollie from the active rail list", links to ADR-002, and carried **no notice at
+all**.
+
+Verified against source rather than against ADR-002's prose: `apps/server/src/routes/` holds
+`billing-crypto.ts`, `billing-crypto-orders.ts`, `billing-crypto-quote.ts` and
+`admin-crypto-orders.ts`, exposing `/v1/billing/crypto-orders` with get / cancel / receipt /
+receipt.txt / receipt.pdf, and `db/schema.ts` defines a `crypto_orders` table. The crypto rail
+ships. "Sole payment processor" does not describe what runs.
+
+**Why this surface matters more than it looks.** `contradicted-adrs-keep-their-notice-until-
+superseded` already holds the notice on both contradicted ADRs, re-checks the facts behind each,
+and deliberately declines to write the superseding ADRs — its reasoning is that an ADR's value is
+the RATIONALE and nobody who did not make the call can supply it. All correct, and its scope is
+`docs/adr/`. But D-027 is the _shorter_ record and the one more people open; the decisions file
+is where a reader goes for the one-paragraph version. A cold reader got the pre-crypto answer no
+matter how prominent the ADR notice was.
+
+D-027 now carries the same notice on the same terms, and the debt tracker was **extended** rather
+than duplicated: one arm, keyed to ADR-002's supersession state, so paying the debt in the ADR
+lifts the requirement in both places at once. It asserts the notice, its date, and that the owed
+superseding ADR is still recorded as owed. Proved on four mutations — stripping the notice, the
+date, and the owed-ADR clause each fail their own assertion, and renaming the heading trips the
+positive control rather than passing vacuously.
+
+**No count was restated.** The ADR names eight `/v1/billing/crypto-*` routes; I did not carry
+that number into D-027, because this guard's own header records the failure that teaches why — a
+parity pin froze "the verification log has reached V-750" and thereby made a stale number
+mandatory. The notice points at the ADR for specifics and states only what it can keep true.
+
+Unchanged, and stated plainly: neither superseding ADR exists, and this does not write them.
+Three surfaces now say the decision was reversed; none of them says why. That remains a debt with
+no author, which is exactly what the tracker is for.
