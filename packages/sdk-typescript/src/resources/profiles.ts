@@ -208,7 +208,8 @@ export class ProfilesResource {
 
   /**
    * V-480 — import a profile from a v1 export envelope, minting a fresh
-   * profile in the calling account. Tier-cap + name-conflict semantics
+   * profile in the EFFECTIVE account — your own, or the owner you are acting
+   * as via `X-Driftstack-Account`. Tier-cap + name-conflict semantics
    * match `create`. Importing an envelope from a different account is
    * permitted (file-based transfer between teammates).
    */

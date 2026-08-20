@@ -48249,3 +48249,48 @@ only that two files agree; it cannot tell you they agree on the right thing.
 Repaired: all ten source corrections re-applied, all nine pins pass against them, full
 suite 3111 files green, `go vet` and ruff clean, 0 tsc errors. The nine mutations were
 re-run against the correct baseline before this commit.
+
+### V-1124 — the sixth instance, found by deriving the pairing instead of sweeping again
+
+**Self-audit first.** After V-1123's mutation loop reverted its own fixes, the blast
+radius needed bounding rather than assuming. Every fix claimed in this arc was checked
+against HEAD in both directions: 24/24 corrected strings present, and 9/9 retracted
+claims gone with no live occurrence surviving. V-1123 was the only corrupted batch, and
+it is repaired. The earlier batches survived because they were mutated by hand, one file
+at a time — scripting the loop is what turned a recoverable slip into eight silent
+reverts.
+
+**Then the durable fix.** V-1101, V-1103, V-1121, V-1122 and V-1123 were one sentence
+corrected five times. Correcting it a sixth time was not going to stop a seventh, so
+this derives the pairing: TypeScript SDK resources are named after their route module,
+twelve of nineteen pair that way, and for those the guard reads the route, decides
+whether it resolves an effective account, and requires the docstrings to match. The
+seven that do not pair — `account`, `api-keys`, `audit-log`, `crypto-orders`, `egress`,
+`mfa`, `usage` — are named as out of scope, with an arm that fails if any of them ever
+gains a same-named route and quietly drops out of the derived check. A hand-written map
+for those would be the roster-is-its-own-population shape V-1106 through V-1113 removed.
+
+**It found a sixth instance on its first run.** `POST /v1/profiles/import` resolves
+`effectiveAccountIdForWrite` and mints under `owner.id`, while the SDK said it mints "a
+fresh profile in the calling account". Five hand sweeps missed it because every pattern
+I had built said "for the calling account" or "owned by the calling account" — this one
+says "in". A derived check does not care which preposition the sentence uses.
+
+**And it caught a rule-4 violation of mine.** My V-1121 retraction on
+`profile-snapshots.ts` QUOTED the phrase it retracts, which is exactly the collision the
+batch rules warn about — retraction paraphrases, sentinel quotes. A line-based filter
+cannot exempt it either, because the finding id sits on the previous line. Paraphrased
+rather than filtered around: the guard was right and the retraction was wrong.
+
+The effective-account detector is deliberately file-wide, not per-handler. V-1123 spent
+three attempts on a per-handler window and got a different answer each time — too narrow
+missed the resolution, too wide caught the next handler, and keying on an
+`effectiveAccountId:` option missed the two modules that pass `effective.accountId`
+positionally. A module that resolves an effective account anywhere is one whose
+docstrings must not promise caller-only scoping, which is the property actually needed.
+
+Mutation-proved: reverting the import docstring fails the offenders arm; making
+`legal.ts` resolve an effective account fails the discriminator; giving an UNPAIRED
+resource a same-named route fails the staleness arm. Comment-stripping was proved by
+accident — the first attempt injected the marker into a comment and the detector
+correctly ignored it. Ratchets 2945→2946 and 3111→3112.
