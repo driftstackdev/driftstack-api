@@ -1,6 +1,15 @@
 // The upload reference publishes three caps. The route enforces three caps.
 // Nothing connected them.
 //
+// V-1066 added a fourth, the avatar cap, which had the identical shape in a
+// different file. `AVATAR_MAX_BYTES` is pinned as source TEXT by
+// `avatar-policy-cross-source-invariant` (which declares its own local copy of
+// the value rather than importing it), and `api/account.md`'s "Max raw size:
+// 2 MiB" is pinned as doc TEXT by two content-parity files. Both sides frozen,
+// neither compared. Raising the cap fails the source pin, whoever raises it
+// updates that pin, and the docs pin keeps passing on a figure that is now
+// wrong — the customer is told 2 MiB while the server accepts more.
+//
 // Measured: doubling the per-session lifetime cap
 // (`sessionUploadMaxLifetimeBytes` 2 GiB → 4 GiB) left the ENTIRE suite green —
 // 28,038 tests, zero reds. Not "only self-referential pins red", as with the
@@ -36,6 +45,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { AVATAR_MAX_BYTES } from '@driftstack/api-types';
 import { describe, expect, it } from 'vitest';
 import { binarySizeLabel } from '../../src/lib/binary-size-label.js';
 import {
@@ -47,6 +57,8 @@ import {
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 const ROUTE = resolve(REPO, 'apps', 'server', 'src', 'routes', 'agent-sessions.ts');
 const DOC = resolve(REPO, 'apps', 'docs', 'src', 'pages', 'api', 'agent-sessions.md');
+const ACCOUNT_DOC = resolve(REPO, 'apps', 'docs', 'src', 'pages', 'api', 'account.md');
+const ACCOUNT_ROUTE = resolve(REPO, 'apps', 'server', 'src', 'routes', 'account-me.ts');
 
 interface Cap {
   /** The default the route applies when nothing is injected. */
@@ -127,5 +139,28 @@ describe('the documented upload caps are the enforced ones', () => {
       /at most \d+ ?[KMG]i?B of uploads/.test(route),
       'an upload rejection message hardcodes a size again',
     ).toBe(false);
+  });
+
+  it('CRITICAL V-1066 the avatar cap the page publishes is the one the route enforces. Both sides were frozen independently — the constant as source text, the doc sentence as doc text — and nothing compared them, so raising the cap fails the source pin, whoever raises it updates that pin, and the page keeps promising a figure the server no longer applies.', () => {
+    const accountDoc = readFileSync(ACCOUNT_DOC, 'utf-8');
+    const claimed = /Max raw size: ([\d.]+ [KMG]i?B)/.exec(accountDoc)?.[1];
+    expect(claimed, 'the avatar size claim is no longer on api/account.md').toBeTruthy();
+    expect(AVATAR_MAX_BYTES, 'AVATAR_MAX_BYTES is not a positive size').toBeGreaterThan(0);
+    expect(
+      claimed,
+      `api/account.md publishes ${String(claimed)} but AVATAR_MAX_BYTES is ` +
+        `${binarySizeLabel(AVATAR_MAX_BYTES)}`,
+    ).toBe(binarySizeLabel(AVATAR_MAX_BYTES));
+  });
+
+  it('CRITICAL the avatar route still rejects against that same constant. Matching the docs to a constant proves nothing if the handler stopped reading it — the same link the upload arm above draws between the imported defaults and the route.', () => {
+    const accountRoute = readFileSync(ACCOUNT_ROUTE, 'utf-8');
+    expect(accountRoute, 'the avatar route no longer compares against AVATAR_MAX_BYTES').toMatch(
+      /bytes\.length > AVATAR_MAX_BYTES/,
+    );
+    expect(
+      accountRoute,
+      'the avatar rejection message no longer interpolates the constant, so it can drift from it',
+    ).toContain('Max ${AVATAR_MAX_BYTES} bytes.');
   });
 });

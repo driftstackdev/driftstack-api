@@ -45399,3 +45399,49 @@ the next person to pin markdown emphasis will hit the same thing.
 Re-proved after the change: deleting the null clause still fails the arm. `apps/docs`
 rebuilt afterwards so the dist-freshness guard sees an artifact that postdates the
 page.
+
+## V-1066 — the avatar cap was frozen twice and compared never
+
+Finished the post-parse-rejection sweep V-1065 started, then followed where it led.
+
+THE SWEEP IS CLOSED, and the negative took real work to establish. Of the 38
+post-parse `BadRequestError` rejections, the substantive ones are all documented:
+the MFA disable confirmation (`api/mfa.md`), the `billing_cycle` YYYY-MM format
+(`api/cost-monitoring.md`), the 2 MiB avatar cap and 64 MiB per-file upload cap, and
+— checked carefully because it looked like the best candidate in the batch — the
+refusal of an `http`-scheme proxy at session create, which `api/proxies.md` spells out
+in three places including that it is a 400 rather than a silent failure. Only the two
+V-1065 fixed were missing.
+
+MY SEARCH KEY WAS WRONG FIRST, and it produced a table of six confident zeros.
+Grepping the docs for the literal error text returns nothing for rules that ARE
+documented, because documentation paraphrases rather than quoting the server's string.
+The http-proxy rule is the clearest case: zero literal hits, three prose passages.
+Every "not documented" verdict in that first pass had to be re-derived semantically,
+and five of six flipped.
+
+WHAT THE SWEEP LED TO. The published numbers are hand-mirrored constants, so the
+question became which are connected. The upload caps are: V-1065's neighbour
+`the-documented-upload-caps-are-the-enforced-ones` imports the defaults and derives the
+labels, after doubling the per-session cap once left all 28,038 tests green.
+
+The avatar cap is not, and has the same three-copy shape.
+`avatar-policy-cross-source-invariant` pins `AVATAR_MAX_BYTES` as source TEXT — and
+declares its own local copy of the value rather than importing it — while two
+content-parity files pin `Max raw size: 2 MiB` as doc TEXT. Both sides frozen, neither
+compared. The failure mode is specific: raise the cap, the source pin fails, whoever
+raised it updates that pin, and the docs pin keeps passing on a figure the server no
+longer applies. The customer is told 2 MiB while more is accepted.
+
+Extended the existing guard rather than adding a file, since it is precisely "the
+documented caps are the enforced ones" for the sibling limits. Two arms: the doc figure
+must equal `binarySizeLabel(AVATAR_MAX_BYTES)`, and the route must still compare
+against that constant — because matching docs to a constant proves nothing if the
+handler stopped reading it, the same link the upload arm already draws.
+
+Mutations: changing the published figure fails it; raising `AVATAR_MAX_BYTES` in source
+WITH an `api-types` rebuild and leaving the doc stale fails it — the real drift, and
+run with the rebuild after V-1065 taught me a source-only edit moves nothing; replacing
+the route's comparison with a literal fails the second arm. Restored byte-identical.
+
+`it(` count 3→5. No new file, no ratchet change.
