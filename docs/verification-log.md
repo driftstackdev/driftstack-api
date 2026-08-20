@@ -51149,3 +51149,45 @@ the covered method was the DELETE, pass four bisected inside a single repo and f
 methods behind eleven loud ones. **A green suite under a whole-repo mutation says the repo has some
 coverage — it says nothing about which method.** The bisect is cheap: one run to see what fires,
 one to confirm the remainder, then one file per candidate.
+
+### V-1191 — the signing secret was readable and rotatable across accounts
+
+Fifth pass, bisecting `sessions-repo` (16 predicates), `mfa-repo` (14) and `webhooks-repo` (11)
+together. Neutralising all 41 fired 28 assertions; neutralising only the methods those did not
+name left 5 firing; neutralising the remainder left **one**. That last step is what makes the
+result trustworthy — a set neutralised together and passing green proves every member uncovered,
+with no guessing about which assertion belonged to which predicate.
+
+**Sessions and MFA came back clean.** Every uncovered-looking method was either covered
+(`findSessionUnscoped` is exercised by `db-session-destroy-concurrency`, `listAllSessions` by the
+admin keyset cursor arm, `replaceRecoveryCodesIfCurrent` by the completion/replacement arm) or a
+boot-time self-check against a row the process already owns — not a tenancy boundary, the same
+call V-1190 made for `profiles-repo`.
+
+**`webhooks-repo` was not.** Its own header already said so: _the worst-covered live file in the
+server by branches (48%)_. Three real ones, all closed:
+
+- **`findEndpoint`** — returns the row through `toEndpointRow`, which **decrypts and returns the
+  signing secret**. Unscoped, one account reads another's webhook secret: the value that customer
+  verifies deliveries with, and therefore enough to forge a signed payload their own handler
+  accepts.
+- **`rotateSecret`** (two predicates — the guarded UPDATE and the miss-path read) — rotation moves
+  the live secret into the grace slot and installs a new one, so a cross-account rotation both
+  takes the endpoint over and breaks every in-flight delivery the victim is still verifying.
+- **`deliveryCountsByEndpoint`** — the map is keyed by endpoint id, so an unscoped join returns
+  every account's endpoints: a directory of ids plus the delivery volume and failure state behind
+  each.
+
+The repo's only pre-existing cross-account arm was on `updateEndpoint`.
+
+**One of my four arms was vacuous, and the mutation proof is what caught it.** The delivery-counts
+arm asserted the other account's endpoint was absent from the map — but the map is built FROM
+deliveries, so an endpoint with none is absent whether or not the join is scoped. It passed the
+mutation. It now seeds a real delivery for each account and asserts the owner sees theirs before
+asserting the stranger's is missing. **An absence proves nothing until the thing would otherwise
+be present**, and proving each arm against its own predicate is the only thing that surfaces it —
+a whole-file proof would have shown three reds and looked complete.
+
+Also, a second fixture bug of the same shape as V-1188's: `newSecret` must match
+`whsec_<32 lowercase base32>`, and an invalid one throws inside the encryption helper rather than
+failing an assertion. Fixture bugs announce themselves as errors, not as boundary results.

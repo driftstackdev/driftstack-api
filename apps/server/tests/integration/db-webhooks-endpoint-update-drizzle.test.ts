@@ -197,6 +197,74 @@ describe('webhook endpoint update', () => {
     ).toBe('https://hooks.test.local/original');
   });
 
+  // ── V-1191 — three sibling reads/writes on this repo that the ownership sweep found
+  // unguarded. `updateEndpoint` above was the only cross-account arm the repo had; the
+  // header's own note that this is the worst-covered live file by branches is why.
+
+  it('CRITICAL another account cannot READ this endpoint. `findEndpoint` decrypts and returns the signing SECRET, so an unscoped read hands over the value a customer verifies deliveries with — enough to forge a signed payload their own handler accepts.', async () => {
+    if (!dbReachable || !repo) return;
+    const mine = await seedEndpoint();
+    const theirs = await seedEndpoint();
+
+    expect((await repo.findEndpoint(mine.id, mine.accountId))?.id, 'the owner cannot read it').toBe(
+      mine.id,
+    );
+    expect(
+      await repo.findEndpoint(mine.id, theirs.accountId),
+      'another account read this endpoint, and with it the signing secret',
+    ).toBeNull();
+  });
+
+  it("CRITICAL another account cannot ROTATE this endpoint's secret. Rotation moves the live secret into the grace slot and installs a new one, so a cross-account rotation both takes the endpoint over and breaks every in-flight delivery the victim is still verifying.", async () => {
+    if (!dbReachable || !repo) return;
+    const mine = await seedEndpoint();
+    const theirs = await seedEndpoint();
+    const before = await repo.findEndpoint(mine.id, mine.accountId);
+
+    const rotated = await repo.rotateSecret({
+      id: mine.id,
+      accountId: theirs.accountId,
+      newSecret: `whsec_${base32(32)}`,
+      newPrefix: 'whsec_a',
+      graceExpiresAt: new Date(Date.now() + 60_000),
+      now: new Date(),
+    });
+    expect(rotated, 'the cross-account rotation reported success').toBeNull();
+
+    const after = await repo.findEndpoint(mine.id, mine.accountId);
+    expect(after?.secret, "another account rotated this endpoint's signing secret").toBe(
+      before?.secret,
+    );
+  });
+
+  it("CRITICAL delivery counts are per account. The map is keyed by endpoint id, so an unscoped join returns every account's endpoints — a directory of ids plus the delivery volume and failure state behind each.", async () => {
+    if (!dbReachable || !repo) return;
+    const mine = await seedEndpoint();
+    const theirs = await seedEndpoint();
+
+    // Anti-vacuity: the map is built FROM deliveries, so an endpoint with none
+    // is absent whether or not the join is scoped. The other account needs a real
+    // delivery row before its absence proves anything.
+    await sql!`
+      INSERT INTO webhook_deliveries (webhook_id, event_id, event_type, payload, status)
+      VALUES (${theirs.id}, ${randomUUID()}, 'session.completed', '{}'::jsonb, 'delivered')`;
+    await sql!`
+      INSERT INTO webhook_deliveries (webhook_id, event_id, event_type, payload, status)
+      VALUES (${mine.id}, ${randomUUID()}, 'session.completed', '{}'::jsonb, 'delivered')`;
+
+    expect(
+      (await repo.deliveryCountsByEndpoint(theirs.accountId)).has(theirs.id),
+      'the fixture delivery is not visible to its own owner — the check below would prove nothing',
+    ).toBe(true);
+
+    const counts = await repo.deliveryCountsByEndpoint(mine.accountId);
+    expect(counts.has(mine.id), 'the owner cannot see its own delivery counts').toBe(true);
+    expect(
+      counts.has(theirs.id),
+      "another account's endpoint appeared in this account's delivery counts",
+    ).toBe(false);
+  });
+
   it('CRITICAL a disabled endpoint is a tombstone and cannot be edited', async () => {
     if (!dbReachable || !repo) return;
     const { accountId, id } = await seedEndpoint({ disabled: true });
