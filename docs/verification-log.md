@@ -49891,3 +49891,35 @@ still lists "Counsel review of legal pages" as outstanding. This belongs in that
 a guard tying the three can only be written once someone says which text governs.
 
 Recorded with exact quotes so that review does not have to rediscover the divergence.
+
+**Correction to V-1163 — I overstated it, and the binding text narrows it to one divergence.**
+Two claims in that entry are wrong.
+
+**"No surface is declared canonical" is false.** `legal/refunds.md` says in its own opening
+that it "is incorporated into the Terms of Service by reference; **section 8.7 of the Terms
+is the binding contractual statement** and this policy expands on the operational mechanics".
+`docs/admin-api.astro` independently calls `/legal/refunds` "the binding rules". There is a
+hierarchy and I did not look for it before writing that the three surfaces float free.
+
+**"Three different offers" is false.** Terms §8.7 reads: "Subscriptions are non-refundable
+**except where mandated by law**. Driftstack may, at its discretion, issue refunds for
+service failures attributable to Driftstack." Read against that:
+
+- The dashboard's EU/UK 14-day clause is the _"except where mandated by law"_ carve-out
+  §8.7 explicitly preserves. It states no usage condition because a statutory withdrawal
+  right is not Driftstack's to condition. **Not a divergence — the correct handling of a
+  different thing.**
+- `refunds.md`'s 14-day no-usage refund is a _discretionary_ offer, which §8.7's "may, at
+  its discretion" permits. Consistent.
+
+**What survives is one real divergence, between two discretionary statements of the same
+offer:** `refunds.md` grants it only if you have "not yet initiated a Session", while
+`billing-faq.astro` grants it "if you haven't run sessions beyond a brief evaluation". A
+customer who ran one evaluation session qualifies under the FAQ and not under the policy the
+FAQ's own hierarchy defers to. That is still worth an owner's decision, and still unguarded —
+no test compares the two conditions — but it is a threshold mismatch inside a discretionary
+policy, not a contradiction across binding terms.
+
+The lesson is the one this arc keeps relearning from the other side: **find the authority
+before calling surfaces inconsistent.** I compared three restatements to each other, and the
+document that governs them answered two thirds of it in a sentence I had not read.
