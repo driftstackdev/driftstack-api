@@ -29,6 +29,14 @@
 // from the spec is the reverse: a property TypeScript promises, that customers
 // will write code against, and that the documented contract does not include.
 //
+// V-1062 extended this from FIELD NAMES to BOUNDS. Presence was the only thing
+// compared, so a spec property could carry the right name and no constraint at all
+// while the route rejected the value — `cursor` was published as any string against
+// a schema requiring 1..512, and a validation-schedule cadence was published with a
+// floor and no ceiling against a one-year cap. Both were hand-rolled mirrors in
+// lib/openapi.ts; both now use the source schema, which is the fix V-928 already
+// applied to the proxy body.
+//
 // COVERAGE: 39 of the 70 object schemas in the committed spec have a matching
 // exported zod object. The other 31 are declared inline inside `lib/openapi.ts`
 // rather than imported from `api-types` — `AccountMeResponse`, `AdminAccount`,
@@ -72,6 +80,40 @@ function specSchemas(): Map<string, Set<string>> {
   for (const [name, s] of Object.entries(spec.components?.schemas ?? {})) {
     if (s.properties !== undefined) out.set(name, new Set(Object.keys(s.properties)));
   }
+  return out;
+}
+
+/** Object schemas in the committed spec, name → property name → published subschema. */
+function fullSpecSchemas(): Map<string, Record<string, Record<string, unknown>>> {
+  const spec = JSON.parse(readFileSync(SPEC, 'utf8')) as {
+    components?: {
+      schemas?: Record<string, { properties?: Record<string, Record<string, unknown>> }>;
+    };
+  };
+  const out = new Map<string, Record<string, Record<string, unknown>>>();
+  for (const [name, s] of Object.entries(spec.components?.schemas ?? {})) {
+    if (s.properties !== undefined) out.set(name, s.properties);
+  }
+  return out;
+}
+
+/**
+ * JSON-Schema keywords a zod field enforces, read from its `_def` checks.
+ *
+ * Only the keywords that survive the zod-to-openapi conversion are reported. A
+ * `.refine()` is a runtime predicate with no JSON Schema equivalent (V-924), so it
+ * is deliberately not counted — claiming it should be published would make this arm
+ * fail for a reason nobody can fix.
+ */
+function constraintsOf(def: unknown): string[] {
+  const d = (def as { _def?: { typeName?: string; checks?: { kind: string }[] } })._def;
+  const inner = (def as { _def?: { innerType?: unknown } })._def?.innerType;
+  if (d?.checks === undefined && inner !== undefined) return constraintsOf(inner);
+  const kinds = new Set((d?.checks ?? []).map((c) => c.kind));
+  const isString = d?.typeName === 'ZodString';
+  const out: string[] = [];
+  if (kinds.has('min')) out.push(isString ? 'minLength' : 'minimum');
+  if (kinds.has('max')) out.push(isString ? 'maxLength' : 'maximum');
   return out;
 }
 
@@ -128,5 +170,28 @@ describe('the api-types shapes match the committed spec', () => {
       if (undocumented.length > 0) extra.push(`${name}: ${undocumented.sort().join(', ')}`);
     }
     expect(extra, 'api-types field(s) the spec does not document:').toEqual([]);
+  });
+
+  it('CRITICAL a documented property carries the constraints its schema enforces. A name that matches with no bound behind it is the shape V-1062 found twice: the document says any string, the route rejects the value, and the only way a customer learns the real limit is a 400 they were told could not happen.', () => {
+    const spec = fullSpecSchemas();
+    const loose: string[] = [];
+    for (const name of pairedNames()) {
+      const zod = (apiTypes as Record<string, unknown>)[`${name}Schema`];
+      const shape = (zod as { shape?: Record<string, unknown> } | undefined)?.shape;
+      if (shape === undefined) continue;
+      for (const [field, def] of Object.entries(shape)) {
+        const enforced = constraintsOf(def);
+        if (enforced.length === 0) continue;
+        const published = spec.get(name)?.[field] ?? {};
+        for (const key of enforced) {
+          if (!(key in published)) loose.push(`${name}.${field}: schema enforces ${key}`);
+        }
+      }
+    }
+    expect(
+      loose.sort(),
+      'the spec publishes these properties without the constraint the route enforces — use the ' +
+        'source schema in lib/openapi.ts rather than a hand-rolled mirror:',
+    ).toEqual([]);
   });
 });

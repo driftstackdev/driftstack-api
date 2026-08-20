@@ -15030,17 +15030,21 @@
                 "type": "object",
                 "properties": {
                   "archetype_id": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1
                   },
                   "cadence_seconds": {
                     "type": "integer",
-                    "minimum": 60
+                    "minimum": 60,
+                    "maximum": 31536000
                   },
                   "enabled": {
-                    "type": "boolean"
+                    "type": "boolean",
+                    "default": true
                   },
                   "reason": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 500
                   }
                 },
                 "required": ["archetype_id", "cadence_seconds"]
@@ -49327,7 +49331,8 @@
             "schema": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 100
+              "maximum": 100,
+              "default": 50
             },
             "required": false,
             "name": "limit",
@@ -49335,7 +49340,9 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
             },
             "required": false,
             "name": "cursor",

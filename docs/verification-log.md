@@ -45168,3 +45168,66 @@ Go README — the exact silent-omission shape it had — fails an arm; regressin
 to the V-1060 wording fails an arm. Restored byte-identical.
 
 `it(` count 3 in a new file. Ratchets 2938→2939 and 3104→3105.
+
+## V-1062 — the spec published a name and no bound, twice
+
+Three negatives first, recorded so the next sweep does not repeat them.
+
+Customer-facing promises hold. The "trashed profiles are retained for 30 days" claim
+is enforced by `ProfileTrashPurgeSweeperService`, registered AND enqueued in bootstrap
+alongside the account-deletion purge, so it is wired rather than merely constructed —
+the V-1055 question, asked and answered. The three "never logged" claims hold too: the
+session-login `password` is a top-level body field covered by pino's `body.password`
+path, and the per-request BYOK credential is the header `x-byok-anthropic-api-key`,
+whose normalised form is in the sensitive-key set. Retention windows across all
+customer docs agree on one number.
+
+A FOURTH near-finding was wrong, and reading before claiming is what stopped it. The
+proxy body's OpenAPI mirror is a flat object where the route parses a discriminated
+union — which looks exactly like drift. It is a recorded V-928 decision: the Go SDK
+models the body as one struct and Go has no union type, so publishing the union would
+break the shape two generated SDKs are built from. The comment says so at the
+declaration. `the-proxy-body-publishes-its-real-bounds` already guards its bounds.
+That is the third time this session grepping prior art first avoided a wrong claim or
+a redundant guard.
+
+THE REAL FINDING. `lib/openapi.ts` declares 88 local `…OpenApi` object mirrors.
+Comparing each against the api-types schema of the same name, two publish a property
+with no constraint where the route enforces one:
+
+`ListDeliveriesQuery.cursor` — published as any string; `ListDeliveriesQuerySchema`,
+which `routes/webhooks.ts` parses with, requires 1..512. Worse than a plain mirror:
+the source schema was ALREADY imported and registered as the `ListDeliveriesQuery`
+component, so the document carried the right shape under that name and a looser one
+on the route itself.
+
+`UpsertValidationScheduleRequest` — `archetype_id` published without its min 1,
+`reason` without its max 500, and `cadence_seconds` with a floor of 60 and NO
+ceiling against a schema capping it at one year.
+
+Both now assign the source schema directly, which is the fix V-928 applied to the
+proxy body: publishing every bound automatically and removing the drift pair.
+
+MY OWN INSTRUMENT UNDER-REPORTED, which is worth more than the finding. The sweep
+compared `.max(N)` literals, so `.max(60 * 60 * 24 * 365)` read as no bound at all on
+BOTH sides and cancelled out. The cadence ceiling only surfaced when I read the source
+schema by hand. A comparison that normalises two sides through the same lossy parse
+agrees with itself.
+
+REGENERATION TRAP. `npm run sdk:python:dump-spec` rewrote the committed artifact with
+6915 insertions and 1688 deletions — the dump script writes raw JSON and lint-staged
+prettier-formats the committed copy. Running prettier reduced it to 13 insertions and
+6 deletions, exactly the bounds. Committing before normalising would have buried a
+four-property change in a seven-thousand-line diff.
+
+The guard is extended rather than duplicated. `api-types-shapes-match-the-spec`
+already pairs 39 spec schemas with their zod objects and compares field NAMES in both
+directions; presence was all it asked. It now also asks whether a matched property
+carries the constraints its schema enforces. `.refine()` is deliberately not counted —
+a runtime predicate has no JSON Schema equivalent per V-924, and demanding it be
+published would fail for a reason nobody can fix.
+
+Mutations against the committed spec: stripping `maxLength` from cursor fails the new
+arm; stripping a numeric `maximum` fails it. Restored byte-identical.
+
+`it(` count 4→5 for the added arm. No new file, no ratchet change.

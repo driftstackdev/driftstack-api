@@ -112,6 +112,7 @@ import {
   InteractResponseSchema,
   ListAuditLogQuerySchema,
   ListDeliveriesQuerySchema,
+  UpsertValidationScheduleRequestSchema,
   ListDlqQuerySchema,
   NavigateRequestSchema,
   NavigateResponseSchema,
@@ -1531,12 +1532,11 @@ function buildRegistry(): OpenAPIRegistry {
   const ListValidationSchedulesResponseOpenApi = z.object({
     data: z.array(ValidationScheduleOpenApi),
   });
-  const UpsertValidationScheduleRequestOpenApi = z.object({
-    archetype_id: z.string(),
-    cadence_seconds: z.number().int().min(60),
-    enabled: z.boolean().optional(),
-    reason: z.string().optional(),
-  });
+  // V-1062 — was hand-rolled and published none of the route's bounds:
+  // archetype_id min 1, reason max 500, and a cadence ceiling of one year that
+  // the mirror omitted entirely, so the document said any cadence above 60 was
+  // acceptable. Using the source schema publishes all of them.
+  const UpsertValidationScheduleRequestOpenApi = UpsertValidationScheduleRequestSchema;
   registerRoute(r, {
     method: 'get',
     path: '/v1/admin/validation-schedules',
@@ -6397,11 +6397,12 @@ function buildRegistry(): OpenAPIRegistry {
   const ListWebhookEndpointsResponseOpenApi = z.object({
     data: z.array(WebhookEndpointSchema),
   });
-  const ListDeliveriesQueryOpenApi = z.object({
-    limit: z.number().int().min(1).max(100).optional(),
-    cursor: z.string().optional(),
-    status: z.enum(['pending', 'in_flight', 'delivered', 'failed', 'dlq']).optional(),
-  });
+  // V-1062 — was a hand-rolled twin that published `cursor` as an unbounded
+  // string while the route parses with ListDeliveriesQuerySchema, which requires
+  // 1..512. The source schema is already imported and registered as the
+  // `ListDeliveriesQuery` component above, so the document carried the right
+  // shape under that name and a looser one on the route itself.
+  const ListDeliveriesQueryOpenApi = ListDeliveriesQuerySchema;
   const PaginatedDeliveriesOpenApi = z.object({
     data: z.array(WebhookDeliverySchema),
     has_more: z.boolean(),
