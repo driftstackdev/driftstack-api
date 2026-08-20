@@ -50865,3 +50865,52 @@ tractable subset would be structured status TABLES asserting `SHIPPED` against a
 but the only instance is already covered by its own staleness banner, so it would be a guard for a
 hypothesis. **A guard whose allowlist is larger than its finding set is a worse instrument than the
 sweep that found them.** Recorded as a decision rather than left as an obvious-looking gap.
+
+### V-1185 — mutation as a discovery tool: six security mutations, zero holes
+
+Every sweep for the last several entries looked for a wrong CLAIM. That vein is worked out — four
+sweeps in V-1184 found nothing. So this inverted the method: **mutate load-bearing source and ask
+what fails to fire.** A mutation nothing catches is a coverage hole, and unlike a prose sweep it
+cannot be satisfied by a document being tidy.
+
+**The design matters more than the count.** A blunt mutation (`return true` in place of the
+comparison) proves little, because a structural guard —
+`timing-safe-equal-pattern-cross-source-invariant` — would catch the _shape_ change without any
+test ever exercising the behaviour. So after one blunt probe, the remaining five were written to
+**preserve `timingSafeEqual` and destroy only the property**: compare a value to itself.
+`timingSafeEqual(expected, expected)` is still constant-time, still the right function, still
+matches every pattern pin — and always returns true.
+
+| site                         | mutation      | caught by                                                              |
+| ---------------------------- | ------------- | ---------------------------------------------------------------------- |
+| `lib/nowpayments-signing.ts` | `return true` | 7 files / 10 tests, incl. the integration IPN test                     |
+| `lib/nowpayments-signing.ts` | self-compare  | "rejects when the body is mutated" + "when the secret is wrong"        |
+| `lib/oauth-client-state.ts`  | self-compare  | "signed with wrong secret → bad-signature", "tampered payload"         |
+| `lib/api-keys.ts`            | self-compare  | api-keys lib invariant + scrypt-kdf invariant                          |
+| `services/cli-authorize.ts`  | self-compare  | "throws state_mismatch" (bind + exchange), "rejects a wrong user code" |
+| `services/oauth.ts`          | self-compare  | "rejects bad client_secret", "401 on invalid client credentials"       |
+
+**All six caught, every one by a behavioural test rather than only by the pattern pin.** That is
+the result worth recording: these paths are guarded by tests that actually exercise the refusal,
+so the pattern invariants are a second line rather than the only one.
+
+**Two adjacent hypotheses, both artifacts of my own measurement:**
+
+- _"Some account-scoped resource lacks isolation coverage."_
+  `cross-account-isolation-every-creatable-family` already found and closed exactly that — webhooks
+  and API keys were the two uncovered families, and it re-reads the victim's records byte-for-byte
+  afterwards, because a 404 says the caller was told nothing, not that the write was refused.
+- _"Some source file is guarded only by content-parity pins, so its behaviour is unpinned."_
+  This is the V-1174 shape and it looked real: 18 files matched. It is a detection artifact —
+  integration tests drive routes through `buildTestApp` and never name the route file, so a
+  file-reference heuristic cannot see them. `every-route-is-driven-over-http` owns that property
+  properly, from Fastify's `printRoutes` rather than a regex, and its header records the exact trap
+  I fell into: a regex over `src/routes/*.ts` finds 154 routes where the app registers 232.
+
+**Attribution note.** The batch run also reddened three gui-client files. Those were a peer's
+in-flight edits, which landed as `fdc18fca0` mid-run; all three pass at that commit. Checked
+before investigating, per the standing rule — a red during a mutation run is the most tempting
+possible false lead, because it looks like the mutation found something.
+
+Cost: ~12 minutes of suite time across two full runs. Recorded so the next sweep spends it
+somewhere else.
