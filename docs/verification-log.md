@@ -49453,3 +49453,17 @@ field or a pattern narrower than the question.
 No defect found. Recorded because a subsystem verified end-to-end is worth as much as a
 fix when the next question is where to look, and because the DLQ sentence is now checked
 rather than merely written.
+
+**Addendum — the crypto-orders path, and why its numbers are not guardable from source.**
+Read the same way and stopped at a boundary worth naming. The customer pages carry concrete
+figures — 20/30/60 minutes, 24 hours, 31 days, a confirmation count — and the instinct is to
+tie each to a constant. Most cannot be: the order lifecycle is `confirming` → `paid`, and
+the confirmation thresholds belong to NowPayments, not to this repo. There is no in-repo
+value to compare them against, so a cross-source guard over them would be asserting one doc
+against another rather than against the thing that decides.
+
+That is the same shape as D-4's Apple certificate and D-6's repo visibility: a published
+claim whose truth-maker is outside the tree. The honest response is to say so rather than
+build a guard that looks like verification and is not. What IS in-repo and guarded stands —
+the tier price map is authoritative server-side since V-666.SEC, after a version that
+trusted customer-supplied `price_cents` and allowed price tampering.
