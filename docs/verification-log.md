@@ -51790,3 +51790,52 @@ nothing at all.
 The lesson is the one this log keeps relearning from a different direction: a redundant safeguard
 is not free. The Set and the tier comparison both implemented "within-tier reuse is fine", and the
 overlap made the real rule untestable.
+
+---
+
+## V-1203 — the guard I shipped one commit ago had an unstated blind spot
+
+Continuing the fold sweep from V-1202 into `legal-repo.ts:82`, which folds legal acceptances by
+`document_key`. An account that accepted v1 and later v2 has two rows under one key, so the
+surviving record decides which version of the terms the customer is recorded as having accepted.
+
+It is correct, and carefully so:
+
+```
+SELECT DISTINCT ON (document_key) …
+FROM legal_acceptances WHERE account_id = $1
+ORDER BY document_key, accepted_at DESC, id DESC
+```
+
+`DISTINCT ON` with the matching `ORDER BY`, latest acceptance first, and an `id DESC` tiebreaker
+because `accepted_at` is not monotonic-unique. Its comment notes the in-memory double carries the
+same tiebreaker — the V-1198 agreement problem, already solved here.
+
+**What it exposed is mine.** V-1201's detector walks Drizzle `.select(` chains. `legal-repo` uses
+`db.execute(sql`…`)`, so this query — and every other hand-written one — was invisible to the guard
+I had committed minutes earlier. A guard whose entire subject is unstated guarantees was itself
+making one.
+
+**Measured before being described**, per the rule that keeps proving itself: 22 raw SELECT blocks
+in `src/db`, 15 without `ORDER BY`. All 15 are `pg_advisory_xact_lock` acquisitions, scalar
+`count(*)` reads, or the lifecycle CTE inside `dailyBucketsForRange` already reviewed in V-1201.
+**The gap was real and empty** — worth stating plainly, because "we found nothing" and "we did not
+look" are indistinguishable from the outside, and that distinction is the whole point of this file.
+
+Two arms added. One classifies every ORDER-BY-less raw SELECT as a lock, a scalar, or reviewed, so
+a raw query returning a contested row set in arbitrary order fails. One is the second detector's
+own self-check, because it has exactly the failure mode of the first: match nothing, report clean,
+look identical to a healthy repo.
+
+```
+M1  a raw multi-row SELECT with no ORDER BY appears  -> named as an offender   1 failed | 5 passed
+M2  the raw detector stops matching                  -> self-check red         1 failed | 5 passed
+restored                                                                       6 passed
+```
+
+**A process note worth keeping.** M2 initially reported the suite still green, which would have
+read as "the self-check is not load-bearing". The mutation had not applied — a `perl -pi -e`
+substitution whose escaping silently matched nothing. The rerun asserts the occurrence count before
+writing and prints `MUTATIONS APPLIED: 1`. A mutation that does not apply looks exactly like a
+mutation the tests survived, and only the count tells them apart. Same lesson as the zsh
+word-splitting sweep in V-1187, from a different tool.

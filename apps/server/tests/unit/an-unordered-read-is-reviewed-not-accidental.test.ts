@@ -99,6 +99,38 @@ function scan(): string[] {
   return out;
 }
 
+/**
+ * V-1202 — the detector above only sees Drizzle `.select(` chains, so every raw tagged-template
+ * query was invisible to it. That was an unstated blind spot in a guard whose whole subject is
+ * unstated guarantees. Measured before being described: 22 raw SELECT blocks in src/db, 15
+ * without ORDER BY — and all 15 are advisory-lock acquisitions or scalar counts, so the gap was
+ * real but empty. These arms keep it empty.
+ */
+function rawSelectsWithoutOrderBy(source: string): string[] {
+  const out: string[] = [];
+  for (const m of source.matchAll(/(?:sql|client<[^>]*>)`([^`]*)`/g)) {
+    const body = m[1] ?? '';
+    if (!/\bSELECT\b/i.test(body)) continue;
+    if (/\bORDER BY\b/i.test(body)) continue;
+    out.push(body.replace(/\s+/g, ' ').trim());
+  }
+  return out;
+}
+
+/** A read with no ORDER BY is fine when it cannot return a contested row set. */
+const SCALAR_OR_LOCK =
+  /pg_advisory_xact_lock\(|hashtext(?:extended)?\(|SELECT\s+\(?\s*(?:SELECT\s+)?count\(/i;
+
+/** Reviewed 2026-08-20, same standard as REVIEWED above. */
+const REVIEWED_RAW: Array<{ match: string; why: string }> = [
+  {
+    match: 'WITH lifecycle_intervals AS',
+    why:
+      'the lifecycle CTE inside dailyBucketsForRange — its rows are merged into a Map keyed by ' +
+      'day and the method sorts by date before returning, so no arbitrary order escapes',
+  },
+];
+
 describe('V-1201 an unordered read is reviewed, not accidental', () => {
   it('CRITICAL the detector still detects. It must find an array-returning select with no orderBy, and must NOT flag the same method once ordered — a detector that has quietly stopped matching reports an empty offender list forever, which reads exactly like a clean repo.', () => {
     const unordered = `
@@ -143,6 +175,42 @@ describe('V-1201 an unordered read is reviewed, not accidental', () => {
       stale,
       'these entries no longer match an unordered read — delete them, or if the method was ' +
         'renamed, re-verify the consumer under its new name rather than moving the entry',
+    ).toEqual([]);
+  });
+  it('CRITICAL raw tagged-template reads are covered too. The chain detector above cannot see `sql`/`client` queries at all, so without this arm the guard would report a clean repo while every hand-written SELECT went unexamined — the exact shape it exists to catch.', () => {
+    const offenders: string[] = [];
+    for (const file of readdirSync(DB_DIR)
+      .filter((f) => f.endsWith('.ts'))
+      .sort()) {
+      for (const body of rawSelectsWithoutOrderBy(readFileSync(resolve(DB_DIR, file), 'utf8'))) {
+        if (SCALAR_OR_LOCK.test(body)) continue;
+        if (REVIEWED_RAW.some((r) => body.includes(r.match))) continue;
+        offenders.push(`${file} — ${body.slice(0, 70)}`);
+      }
+    }
+    expect(
+      offenders,
+      'these raw SELECTs have no ORDER BY and are neither a lock acquisition, a scalar count, nor ' +
+        'reviewed above. A raw query that returns a contested row set in arbitrary order is the ' +
+        'same defect as an unordered .select() chain, and nothing else in the suite looks at them',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL the raw-SQL detector still finds raw SQL. It is a second detector with the same failure mode as the first: match nothing, report clean, look identical to a healthy repo.', () => {
+    const all = readdirSync(DB_DIR)
+      .filter((f) => f.endsWith('.ts'))
+      .flatMap((f) => rawSelectsWithoutOrderBy(readFileSync(resolve(DB_DIR, f), 'utf8')));
+    expect(
+      all.length,
+      'the raw-SQL detector matched nothing across the whole repo layer',
+    ).toBeGreaterThan(10);
+    expect(
+      rawSelectsWithoutOrderBy('const x = sql`SELECT a FROM t WHERE b = 1`;'),
+      'the detector missed a bare raw SELECT with no ORDER BY',
+    ).toEqual(['SELECT a FROM t WHERE b = 1']);
+    expect(
+      rawSelectsWithoutOrderBy('const x = sql`SELECT a FROM t ORDER BY a`;'),
+      'the detector flags a raw SELECT that DOES order',
     ).toEqual([]);
   });
 });
