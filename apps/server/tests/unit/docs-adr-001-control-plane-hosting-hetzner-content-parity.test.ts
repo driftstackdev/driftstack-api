@@ -76,8 +76,14 @@ describe('W549.C /docs/adr/ADR-001-control-plane-hosting-hetzner.md content pari
     expect(body).toMatch(/## Decision/);
     expect(body).toMatch(/\*\*Host the Driftstack control plane on Hetzner Cloud, two CCX13 VMs/);
     expect(body).toMatch(/\(staging \+ production\), Falkenstein region\.\*\*/);
+    // V-1088 — the DECISION stands; the fronting mechanism it names does not
+    // ship. Annotated rather than rewritten, matching how ADR-002/003/005/006
+    // record a record overtaken by the system.
     expect(body).toMatch(/Cloudflare Tunnel fronts/);
-    expect(body).toMatch(/the VMs for edge HTTPS termination and DDoS protection;/);
+    expect(body, 'the not-as-shipped annotation is gone').toMatch(
+      /\*\*NOT AS\s*\n?\s*SHIPPED \(V-1088\): no `cloudflared` runs in `infra\/`/,
+    );
+    expect(body).toMatch(/the VMs for edge HTTPS termination and DDoS protection —/);
     expect(body).toMatch(
       /the VMs run\s*\n?\s*the control plane container behind loopback-only HTTP;/,
     );

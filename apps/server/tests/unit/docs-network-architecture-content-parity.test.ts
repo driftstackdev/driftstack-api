@@ -60,8 +60,12 @@ describe('W548.C /docs/network-architecture.md content parity', () => {
     expect(body).toMatch(/Driftstack at launch is a single-region deployment with three/);
     expect(body).toMatch(/network surfaces:/);
     expect(body).toMatch(/1\. \*\*Customer ↔ control plane\*\* — public HTTPS API on/);
-    expect(body).toMatch(/`api\.driftstack\.dev`\. TLS terminated at Cloudflare, plain HTTP to/);
-    expect(body).toMatch(/the Hetzner VM over a Cloudflare Tunnel\./);
+    expect(body).toMatch(/`api\.driftstack\.dev`\. TLS terminated at Cloudflare and again at the/);
+    // V-1088 — the overview repeated the §1 Tunnel claim. Same correction.
+    expect(body).toMatch(/TLS terminated at Cloudflare and again at the\s*\n?\s*origin's nginx/);
+    expect(body, 'the overview again routes traffic over a Tunnel').not.toMatch(
+      /the Hetzner VM over a Cloudflare Tunnel/,
+    );
     expect(body).toMatch(
       /2\. \*\*Customer ↔ marketing site\*\* — public HTTPS on `driftstack\.dev`,/,
     );
@@ -149,8 +153,12 @@ describe('W548.C /docs/network-architecture.md content parity', () => {
     );
     expect(body).toMatch(/fails; status page polls the Hetzner VM directly via SSH-tunnel/);
     expect(body).toMatch(/fallback\./);
-    expect(body).toMatch(/- \*\*Cloudflare Tunnel restart\*\*: ~5 second blip; readiness probe/);
-    expect(body).toMatch(/catches it\./);
+    // V-1088 — a failure mode of a component that is not deployed.
+    expect(body).toMatch(/- \*\*Origin nginx restart\*\*: ~5 second blip; readiness probe catches/);
+    expect(body, 'the failure table again lists a Tunnel restart').not.toMatch(
+      /\*\*Cloudflare Tunnel restart\*\*/,
+    );
+    expect(body).toMatch(/readiness probe catches\s*\n?\s*it\./);
     expect(body).toMatch(/- \*\*Hetzner VM down\*\*: 503s from Cloudflare\. Customer SDK retry/);
     expect(body).toMatch(/policy \(V-005\) handles transient ones; persistent failure/);
     expect(body).toMatch(/triggers the alert path\./);

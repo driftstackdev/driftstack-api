@@ -25,8 +25,8 @@ Driftstack at launch is a single-region deployment with three
 network surfaces:
 
 1. **Customer ↔ control plane** — public HTTPS API on
-   `api.driftstack.dev`. TLS terminated at Cloudflare, plain HTTP to
-   the Hetzner VM over a Cloudflare Tunnel.
+   `api.driftstack.dev`. TLS terminated at Cloudflare and again at the
+   origin's nginx, which is publicly reachable on 443 — see §1.
 2. **Customer ↔ marketing site** — public HTTPS on `driftstack.dev`,
    `docs.driftstack.dev`, and `app.driftstack.dev`, all static on
    Cloudflare Pages. V-809 — `app.driftstack.dev` is its own Cloudflare
@@ -92,8 +92,10 @@ SDK / GUI               (proxy + WAF)        (Docker container)
 - **Cloudflare-side failure** (rare): `cf.driftstack.dev/health`
   fails; status page polls the Hetzner VM directly via SSH-tunnel
   fallback.
-- **Cloudflare Tunnel restart**: ~5 second blip; readiness probe
-  catches it.
+- **Origin nginx restart**: ~5 second blip; readiness probe catches
+  it. V-1088 — this row read "Cloudflare Tunnel restart", a failure
+  mode of a component that is not deployed; the real blip comes from
+  the nginx the origin actually runs.
 - **Hetzner VM down**: 503s from Cloudflare. Customer SDK retry
   policy (V-005) handles transient ones; persistent failure
   triggers the alert path.

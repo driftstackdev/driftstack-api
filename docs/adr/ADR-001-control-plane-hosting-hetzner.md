@@ -83,7 +83,12 @@ Constraints that shaped the rethink:
 
 **Host the Driftstack control plane on Hetzner Cloud, two CCX13 VMs
 (staging + production), Falkenstein region.** Cloudflare Tunnel fronts
-the VMs for edge HTTPS termination and DDoS protection; the VMs run
+the VMs for edge HTTPS termination and DDoS protection — **NOT AS
+SHIPPED (V-1088): no `cloudflared` runs in `infra/`; Cloudflare
+proxies to a publicly reachable origin nginx instead, and
+`bootstrap.sh` opens 80 and 443. The hosting decision stands; the
+fronting mechanism differs, and `docs/network-architecture.md` §1
+describes what runs.**; the VMs run
 the control plane container behind loopback-only HTTP; mTLS for the
 fleet endpoint terminates directly on the Hetzner VM (per V-054
 decision 1A — skip Cloudflare API Shield).

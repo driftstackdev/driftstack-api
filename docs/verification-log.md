@@ -46517,3 +46517,45 @@ Mutations: restoring the Tunnel sentence fails; dropping only the ufw evidence f
 re-describing the nginx fix as closing the port fails. Restored byte-identical.
 
 `it(` count 6, unchanged. No new file, no ratchet change.
+
+## V-1088 — I fixed one of the four, and rule 2 is why I found the other three
+
+V-1087 corrected §1 of `docs/network-architecture.md` and its pin, and I committed it.
+Then I did what rule 2 requires and searched for the CLAIM rather than the file — and
+the same falsehood was live in three more places. The plan said "pinned four ways" and
+it was right; I had fixed one.
+
+`docs/network-architecture.md:29`, the Overview — "plain HTTP to the Hetzner VM over
+a Cloudflare Tunnel", pinned separately from §1 in the same guard.
+
+`docs/network-architecture.md:95`, the failure-mode table — "**Cloudflare Tunnel
+restart**: ~5 second blip". A failure mode of a component that is not deployed, and
+the row that would send someone looking at the wrong thing during an outage. It is
+the origin's nginx that restarts.
+
+`docs/adr/ADR-001:85` — "Cloudflare Tunnel fronts the VMs for edge HTTPS termination
+and DDoS protection", with a second mention at :137.
+
+ADR-001 is treated differently from the other two on purpose. It records a DECISION,
+and the decision — Hetzner, two CCX13s, Falkenstein — stands; only the fronting
+mechanism differs. So it carries a NOT-AS-SHIPPED annotation in the house pattern
+V-1082 followed for ADR-005 and ADR-006, rather than being rewritten into a
+description of current state. The two network-architecture entries describe current
+state and are corrected outright.
+
+THE LESSON IS ABOUT MY OWN PROCESS, not the docs. V-1087's enumeration searched the
+FILE and the exact sentence `no inbound port`, both of which pointed at one place. The
+claim's other spellings — "over a Cloudflare Tunnel", "Cloudflare Tunnel restart",
+"Cloudflare Tunnel fronts" — say the same false thing in words the first grep could not
+match. Rule 2 exists because a claim is not a string, and this is the fourth time in
+this arc it has paid, but the first time it caught me after I had already committed.
+
+Three adjacent assertions also had to move, which is the ordinary cost of editing
+pinned prose: each of my rewrites changed the line a neighbouring `toMatch` continued
+into. Caught by the run, fixed in the same commit.
+
+Mutations: reverting the overview to route over a Tunnel fails; restoring the Tunnel
+restart row fails; deleting ADR-001's not-as-shipped annotation fails. Restored
+byte-identical.
+
+`it(` counts 6 and 6, unchanged. No new file, no ratchet change.
