@@ -49145,3 +49145,42 @@ Two false positives in the 28 are worth naming so nobody chases them:
 `apps/server/src/db/migrations/NNNN_descriptive_name.sql` and
 `docs/incidents/YYYYMMDD-load-test-anomaly.md` are deliberate placeholders in an onboarding
 guide and a methodology doc. A path-resolution scan cannot tell a template from a citation.
+
+### V-1146 — a citation the document declares unwritten is not a broken link
+
+Following the 26 remaining unresolved internal citations from V-1145, one coherent class
+came out of them: documents pointing at runbooks that do not exist. Four across the repo —
+`ai-chat-agent-ops.md`, `dr-rehearsal-history.md`, `hetzner-instance-down.md`, and
+`mfa-encryption-key-rotation.md`.
+
+**All four are honest, and that is the finding.** The chaos-scenario inventory writes
+"Document the recovery procedure at `docs/runbooks/hetzner-instance-down.md` (NOT YET
+WRITTEN — V-547.B target)" — and its parity guard pins the NOT-YET-WRITTEN marker along
+with the path, which is exactly right. The DR checklist's item E3 sends rehearsal results
+to `incidents.md` "OR a fresh `docs/runbooks/dr-rehearsal-history.md` (creates if
+missing)". The AI-chat design doc lists its operator runbook as an unchecked box. And the
+fourth is cited only by V-1143's own guard header, listing it as a fixed example — my own
+text, not a citation.
+
+So the class is well managed. It also **confirms D-3 from the other side**: the DR
+checklist mandates creating `dr-rehearsal-history.md` during a rehearsal, so the file's
+absence is evidence about whether a rehearsal ever completed, not a broken link to repair.
+Deleting that reference would destroy the signal the decision rests on.
+
+**What this did surface is a defect in my own instrument.** V-1145 widened the runbook
+guard's population without any exemption for declared-unwritten targets. Proved: an
+honest forward reference written into a runbook — the repo's own convention, used in three
+places — is reported as a runbook citing a file that does not exist. The V-1141 shape
+again, an instrument accusing the document.
+
+Exemption added, deliberately narrow: the marker must sit immediately after the path, so
+the document has to SAY the file is unwritten. Three mutations, because an exemption that
+swallows real failures is worse than the false positive it fixes:
+
+- a MARKED forward reference no longer fires;
+- an UNMARKED missing file still fires;
+- a marker elsewhere in the same file does not launder an unmarked citation — adjacency
+  is required.
+
+"Probably future work" is not something a scan may infer on a document's behalf. The
+document says it, or the citation is broken.

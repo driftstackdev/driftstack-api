@@ -78,11 +78,32 @@ function runbookFiles(): string[] {
   });
 }
 
+/**
+ * V-1146 — a citation the document itself declares unwritten is not a broken link.
+ *
+ * The repo has a convention for this and uses it in three places: the chaos-scenario
+ * inventory writes ``docs/runbooks/hetzner-instance-down.md`` `(NOT YET WRITTEN —
+ * V-547.B target)`, and the DR checklist says its results go to a fresh
+ * `dr-rehearsal-history.md` `(creates if missing)`. Those are work items stated
+ * honestly, and V-1145 widened this guard's population without an exemption for them —
+ * so the first honest forward reference written into a runbook would have been reported
+ * as a runbook citing a file that does not exist. That is the V-1141 failure again:
+ * the instrument accusing the document.
+ *
+ * The exemption is deliberately narrow. The marker has to sit right after the path, so
+ * the document has to SAY the file is unwritten; a missing file with no such note still
+ * fails. "Probably future work" is not something a scan may infer on a document's behalf.
+ */
+const DECLARED_UNWRITTEN = /^[\s`)]*\((?:NOT YET WRITTEN|creates if missing|to be written)/i;
+
 function citedPaths(): Map<string, string[]> {
   const out = new Map<string, string[]>();
   for (const file of runbookFiles()) {
-    for (const m of readFileSync(file, 'utf8').matchAll(REPO_PATH)) {
+    const body = readFileSync(file, 'utf8');
+    for (const m of body.matchAll(REPO_PATH)) {
       const p = (m[1] ?? '').replace(/[.,;:`]+$/, '');
+      const after = body.slice(m.index + m[0].length, m.index + m[0].length + 40);
+      if (DECLARED_UNWRITTEN.test(after)) continue;
       out.set(p, [...(out.get(p) ?? []), file.slice(REPO_ROOT.length + 1)]);
     }
   }
