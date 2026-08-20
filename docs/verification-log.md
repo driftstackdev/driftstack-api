@@ -45847,3 +45847,51 @@ Mutations: stripping the envelope from the committed spec fails the new arm; rem
 
 `it(` count 2→3. Spec regenerated: 7 insertions, 1 deletion. No new file, no ratchet
 change.
+
+## V-1075 — four measurements, no defects, and the instrument limits that make each negative honest
+
+A turn of negatives. Recording them because each cost real measurement, and an
+unrecorded negative gets re-derived.
+
+STATUS CODES. 228 routes compared: the success codes a handler can send against the
+2xx codes its operation publishes. Four disagreements, all four the instrument.
+`PUT /v1/admin/incidents/:id` and `PUT /v1/admin/owner/secrets/:name` publish
+`[200, 201]` and set the code with a ternary — `reply.code(written.outcome ===
+'created' ? 201 : 200)` — which a `\.code\((\d{3})\)` pattern cannot see.
+`DELETE /v1/account/mfa` and `POST /v1/account/mfa/disable` publish 204 and looked
+like they sent 200, because both register a shared `disableHandler` const declared
+OUTSIDE either registration call, and the `reply.code(204)` lives there. Paren-bounding
+the registration — the fix that made V-1072 correct — is what put it out of reach.
+Both limits are why no guard was built here: the population would need ternary
+evaluation and cross-reference resolution to be trustworthy, and a scan that cannot
+see either would report its blind spots as compliance.
+
+SDK ROUTE REACHABILITY. The three `*-server-path-parity` guards run SDK→server: every
+SDK path resolves to a route. The reverse is unguarded, which is the V-1069 asymmetry,
+so I measured it. 174 customer-facing live routes; 46 appear in no SDK. All 46 are
+surfaces no SDK should wrap — the OAuth server endpoints (`token`, `introspect`,
+`revoke`, `authorize`), the Stripe and NOWPayments receivers, the status-site feed, the
+fleet and mac-node registration surface, and the GUI-control endpoints the desktop
+client drives.
+
+The first pass said 103, and the difference is the instrument again: SDKs interpolate
+(`${id}`, `%s`, `{id}`) and my normaliser only understood the server's `:id`. A
+number more than twice the truth would have made a case for work that did not exist.
+
+DOCUMENTED SDK CALLS. 113 distinct `client.<resource>.<method>()` chains appear across
+the customer docs. Every one resolves in at least one SDK. A quickstart calling a
+method that does not exist is a first-five-minutes failure, and there are none.
+
+THE PATH-COUNT ASYMMETRY IS EXPLAINED, not a finding. TypeScript carries 102 path
+literals, Python 69, Go 56, which reads like coverage drift until you check what is
+already guarded: `cross-sdk-resource-surface-parity` asserts the three expose the same
+RESOURCES and the same METHODS per resource, with single-SDK extras allowlisted and
+required to be sugar over a method all three carry. The literal counts differ because
+Go composes with `fmt.Sprintf` and Python through helpers, not because the surface
+differs. Seventh time this session that reading the existing guard changed the
+conclusion.
+
+Together with V-1063 (request bounds), V-1072 (response fields), V-1073 (helper-built
+responses), and V-1074 (the pagination envelope, both directions), the spec-versus-
+behaviour question is now closed on every leg I can measure: what a route accepts,
+what it returns, what it publishes, and what status it answers with.
