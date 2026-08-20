@@ -49624,3 +49624,33 @@ to start unless the database URL is loopback, names a database, and is NOT the s
 development one, and unless the Redis URL selects a non-default index — because the harness
 calls `flushdb()`. A tool that refuses to run against the wrong target is the reason running
 this was safe to do unprompted.
+
+### V-1157 — the other declared blind spots, run: 365 pytest, ruff, mypy, go vet/test/build
+
+V-1156 ran the e2e job the gate says it does not cover. This closed the rest.
+`verify-suite.mjs` names four uncovered jobs; three are gating and all three are green:
+
+- **python-sdk** — `365 passed, 4 skipped`, matching the gate's stated "365 pytest tests"
+  exactly. `ruff check` clean, `ruff format --check` reports 73 files already formatted,
+  and `mypy src examples` finds no issues across 43 source files.
+- **go-sdk** — `go vet ./...`, `go test ./...` and `go build ./...` all exit 0.
+- **bench-regression** — not run; the gate marks it advisory and says it does not gate a
+  merge, so running it proves nothing about correctness.
+
+Together with V-1156's 222 Playwright tests, every non-advisory job the local gate declares
+itself blind to is now verified green, and the gate's own figures — 222 and 365 — are
+accurate rather than aspirational.
+
+**I ran two of these narrower than CI does, and the tool told me.** `mypy src` reported the
+`langchain_core.*` override as an unused config section, which reads like dead configuration
+left behind by a removed dependency. It is not: CI runs `mypy src examples`, the override
+exists so the examples directory can be type-checked at all, and its comment says why —
+"an example calling a renamed SDK method would ship broken to customers". Under CI's
+invocation the file count goes 31 → 43 and the override is live. I also ran `ruff check`
+without the `ruff format --check` that CI pairs with it.
+
+Both were the same error as the delivery-status grep in V-1153: running a narrower command
+than the question deserved, then reading the narrow result as an answer about the whole. The
+difference here is that the tool surfaced it — "unused section" was the tell that my scope,
+not the config, was wrong. **Verifying a CI job means running what CI runs, not the part of
+it that fits the terminal.**
