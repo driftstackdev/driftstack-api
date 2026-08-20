@@ -132,11 +132,21 @@ describe('W678 cross-SDK webhook-signature format parity', () => {
     expect(ts).toMatch(/DEFAULT_TOLERANCE_SEC = 300/);
 
     // sdk-go: DefaultWebhookTolerance time constant — 5 minutes.
-    expect(go).toMatch(/DefaultWebhookTolerance/);
-    expect(go).toMatch(/5 ?\* ?time\.Minute|300 ?\* ?time\.Second/);
+    expect(go).toMatch(
+      /DefaultWebhookTolerance = 5 ?\* ?time\.Minute|DefaultWebhookTolerance = 300 ?\* ?time\.Second/,
+    );
 
-    // sdk-python: similar default in seconds.
-    expect(py).toMatch(/300|5 ?\* ?60/);
+    // sdk-python: anchored to the constant, not to the digits.
+    //
+    // V-1104 — this read `/300|5 ?\* ?60/` against the whole file, which asks
+    // whether the number appears anywhere rather than what the default IS.
+    // Measured: setting DEFAULT_TOLERANCE_SEC to 600 while leaving any other
+    // "300" in the file — a comment saying what it used to be is the obvious
+    // one — passes this arm. Two better-anchored guards caught that mutation,
+    // so nothing was exposed; the assertion in the file whose title claims
+    // cross-SDK parity was simply not the one doing the work. The Go line had
+    // the same shape and is anchored above for the same reason.
+    expect(py).toMatch(/DEFAULT_TOLERANCE_SEC = 300/);
   });
 
   it('CRITICAL V-359 headerPrev fallback — all 3 SDKs expose the optional previous-secret signature input (headerPrev / HeaderPrev / header_prev) for backward-compat. Driftstack does NOT emit a separate header; during rotation the prev HMAC is a second v1= inside the main x-driftstack-signature header, which the verifier already checks. The "EITHER header OR headerPrev matching the secret" pattern stays, but passing header alone covers rotation deliveries.', () => {

@@ -47296,3 +47296,61 @@ Mutation-proved, restored byte-identical: restoring any one calling-account 404 
 the page-wide negative; restoring the Launch wording fails its positive; removing the
 effective resolution from the list handler fails the scoped arm (and passed the unscoped
 one); removing the team-admin refusal from launch fails the arm that documents it.
+
+### V-1104 — the plan is exhausted; three sweeps, two clean, and one guard that cannot be built
+
+Every finding in the report is now accounted for. Actions 25 and 37 were the last two
+never assigned a batch, and both are closed:
+
+- **25** (session-proxy dead code). The header now says the 503 "is NOT a
+  deployment-configuration state. It is an unfinished route-to-service edge. An operator
+  who reads the comments below as written goes hunting through env vars for a backend
+  that is already there", and names `_service` as destructured and never called. Whether
+  the route should exist at all is D-owned and stays there.
+- **37** (stale progress/roadmap docs). The ADR-004 `account_tier` half is handled the
+  way an ADR should be — V-827 added an implementation note under the original decision
+  rather than rewriting it.
+
+That leaves 1, 5, 7 and 12 (the four `⚠ DECISION REQUIRED`) and 19 (refuted). The fix
+stream is done.
+
+**Sweep 1 — per-site ownership gates. Clean, measured.** `agent-sessions.ts` applies
+`callerCanAccessAgentSession` at 19 sites; a whole-file assertion cannot report one
+being deleted. Rather than reason about it, one gate block was removed and the suite
+run: `cross-account-agent-session-isolation` failed by name — "GET
+/v1/agent-sessions/:id/page-state refuses an unrelated account. A 2xx here exposes
+another customer's live browser". `requireScope` is covered structurally by
+`route-auth-coverage-invariant`. The class is defended. (First attempt used
+`if (false && …)`, which only tripped the typecheck — an unreachable branch is a type
+error, not a semantic change, so it measured nothing.)
+
+**Sweep 2 — phantom `/v1` paths in documentation. Clean, and the recommended guard is
+unbuildable.** Action 37 proposes asserting that every `/v1/…` literal in `docs/**` and
+`apps/docs/**` resolves to a real registration. Measured: 107 distinct paths cited, 25
+unregistered. Every one of the four that mattered — the two runbooks, the architecture
+doc, the customer metrics page — is CORRECT:
+
+- `dr-runbook.md`: "Confirm `/version` (NOT `/v1/version` — this endpoint is unversioned)"
+- `livekit-go-live.md`: "there is no `/v1/config-summary` endpoint — it was never built"
+- `reference/metrics.md`: "(The legacy `/v1/sessions/:id/livekit-token` route … was removed.)"
+- `architecture.md`: `/v1/admin/accounts/{,:id,:id/{tier,suspend,…}}` — brace shorthand,
+  not a literal
+
+The guard as specified fires on correct negative statements and on compressed notation.
+It would arrive with an allowlist, and V-814's header already names that shape: "the
+allowlist would have grown faster than the signal". Recorded so it is not built later
+from the plan text alone.
+
+**Sweep 3 — one hardening worth landing.** `cross-sdk-webhook-signature-parity` pinned
+the replay tolerance in Python as `/300|5 ?\* ?60/` over the whole file, which asks
+whether the digits appear rather than what the default is. Measured: setting
+`DEFAULT_TOLERANCE_SEC = 600` while leaving a comment saying it used to be 300 passes
+that arm. Nothing was exposed — `sdk-webhook-signature-cross-sdk-parity` and the Python
+content-parity pin both caught the same mutation — but the assertion in the file whose
+title claims cross-SDK parity was not the one doing the work. Both it and the Go line,
+which had the same shape, are anchored to the constant now. This file already carries a
+2026-07-31 note correcting exactly this class on its constant-time-comparison arms.
+
+Mutation-proved, restored byte-identical: the 600-plus-stray-300 mutation now fails the
+Python anchor; widening the Go tolerance to 30 minutes while keeping the constant name
+fails the Go anchor.
