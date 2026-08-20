@@ -49587,3 +49587,40 @@ claim in numbers.
 No fix. The queue is the outside-engineering list — credentials, billing, legal authority —
 so its items are external by construction, the same boundary as D-4, D-6 and the crypto
 confirmation thresholds. What the repo could answer, it answered.
+
+### V-1156 — ran the suite the local gate says it does not run: 222 e2e tests, green
+
+Three checks this turn, and the third is the one worth having.
+
+**ADRs — clean, and already handled.** A recorded lesson of mine said ADR-002 and ADR-003
+contradicted the shipped system with no supersession. Both now carry banners, and
+ADR-002's is exact: V-750 records on 2026-08-10 that "Stripe-only payment processing" is
+contradicted by a full crypto rail — eight `/v1/billing/crypto-*` routes, a
+signature-verified IPN ingress, `crypto_orders` + `crypto_entitlements`, a tier-activation
+service with refund clawback, and its own security audit. I counted the eight routes
+independently against the published spec; the banner is right. No superseding ADR exists,
+which is what the banner says.
+
+**e2e specs reference only live routes.** Twenty distinct `/v1` paths across the specs; three
+appeared unregistered and all three are artifacts of my own normaliser — `psnap_x` is a
+concrete test id where the route carries `:id`, and `/v1/admin/` is a `startsWith` prefix
+check, not a path.
+
+**Then I stopped verifying that the suite exists and ran it.** `verify-suite.mjs` names four
+jobs its gate does not cover and e2e is one of them — but it also prints the exact local
+command, and a recorded lesson says the specs are runnable without Docker. Postgres and
+Redis were up, `driftstack_e2e_a2` already existed, so nothing needed creating. **222 tests
+passed in 54.1s.**
+
+Worth noting what those 222 cover, because none of them is in the 3007-file vitest number
+this arc has been reporting: signed webhook round-trips through the real worker and the
+published SDK verifier, a loopback-endpoint refusal, team invite/accept/remove against a real
+database, suspension and reinstatement, and every published tier's rate-limit header matching
+its capacity. Real coverage is materially higher than the gate reports, which is exactly why
+the gate naming its own blind spot matters.
+
+`scripts/e2e-local.mjs` deserves a note: it is a refusal harness, not a runner. It declines
+to start unless the database URL is loopback, names a database, and is NOT the shared
+development one, and unless the Redis URL selects a non-default index — because the harness
+calls `flushdb()`. A tool that refuses to run against the wrong target is the reason running
+this was safe to do unprompted.
