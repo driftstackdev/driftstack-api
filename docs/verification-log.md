@@ -48450,3 +48450,40 @@ but "erasure cannot currently cover this at all" — a stronger statement.
 **No guard, deliberately.** A pin here would freeze a live hazard as expected behaviour,
 which is the failure V-1121's arc was corrected for. And each of D-7's three remedies
 implies a different guard, so building one presumes the decision.
+
+### V-1129 — D-16 verified: the violation holds, but two of its statements do not
+
+Same treatment as V-1128, on the item the plan calls highest-consequence overall. The
+substantive finding **holds**: L-001's three scoped-surface conditions all fail for
+`POST /v1/agent-sessions/:id/input-event`. `InputEventSchema` is at
+`agent-input-event.ts:60` and barrel-exported at `index.ts:24`; the preHandler is
+`controlKeyOrAccountAuth('write')` with no `gui_control` gate; and `sendInputEvent` ships
+in all three SDKs. Two statements around it do not survive checking.
+
+**1. Every line number cited is stale.** The route is at `agent-sessions.ts:3751`, not
+3702-3709. `FeatureUnavailableError` — the mitigant that keeps the bypass latent — is at
+`:3840`, not 3934. The spec entry is `openapi.ts:4549`, not 4369-4374. I read the cited
+ranges first and found nothing there, which reads exactly like a refuted claim rather than
+a moved one. Anyone actioning this from the plan's coordinates will land on unrelated code.
+
+**2. "`docs/locked-decisions.md` still reads as policy" is REFUTED.** A `⚠ V-825` banner
+already sits directly under L-001. It states that a second mechanics surface shipped and
+"meets none of the three conditions above", walks all three bullets individually, contrasts
+the compliant `gui-input` surface, and names the reason the existing drift guard is blind
+(`gui-input-l001-cross-source-invariant.test.ts` reads `schemas/gui-input.ts` and nothing
+else). That is precisely the interim B25/action 38e proposes as landable-immediately — it
+is already landed. **There is no banner work outstanding on D-16.**
+
+I missed it on first pass because I grepped `violat|reality|NOT enforced|does not hold`
+and the banner says "meets none of the three conditions". Rule 2's lesson, again, in a
+file I had already opened.
+
+**A refinement that changes what option (1) costs.** The spec vector is not what it looks
+like. `openapi.ts` emits `event: z.object({}).passthrough()`, so the shipped
+`openapi.json` carries `"event": {"type": "object", "properties": {}}` — the coordinate
+fields are NOT machine-readable in the spec, and there is no `InputEvent` schema
+component. But the endpoint DESCRIPTION names `mouseMove`, `tap`, `keyDown`, `keyUp` and
+the modifier vocabulary in prose, so customers are still told exactly how to send
+coordinates. The violation therefore lives in the api-types barrel, the three SDKs, and
+the description string — not in the spec schema. Anyone choosing ENFORCE and planning to
+"pull the schema out of the spec" will find nothing there to pull; the work is elsewhere.
