@@ -10,13 +10,23 @@
 // This asserts the equality invariant directly (extracts both sides, no
 // hardcoded expected value) so any future divergence on either side fails.
 //
+// V-1110 — the blind spot, named rather than left implicit. This guard reads a
+// Zod `limit … max(N)` on both sides. An endpoint that validates its bound
+// imperatively is invisible to it: `/v1/admin/crypto-orders` parses `limit` as
+// a digit-string and refuses out-of-range values with
+// `if (!Number.isInteger(n) || n < 1 || n > 200) throw new BadRequestError(...)`.
+// Spec and route agree there today (both 200) — checked by hand while adding the
+// completeness arm below — but nothing here would notice if they stopped.
+// Extending the extractor to imperative bounds is real work with an unknown
+// yield; what is NOT acceptable is the coverage reading as total when it is not.
+//
 // The spec declares the query two ways: inline inside the registerRoute
 // block (anchor = the path string) or via a named `*QueryOpenApi` const
 // above it (anchor = the const name). Each admin list route file carries
 // exactly one `limit: z.coerce...max(N)` field, so extracting the single
 // match is unambiguous.
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -54,7 +64,7 @@ function specLimitMax(anchor: string): number | null {
   const endTok = anchor.startsWith('/v1/') ? 'registerRoute(' : '});';
   const endIdx = rest.indexOf(endTok, 1);
   const block = endIdx > 0 ? rest.slice(0, endIdx) : rest;
-  const m = block.match(/limit: z\.number\(\)\.int\(\)\.min\(1\)\.max\((\d+)\)/);
+  const m = block.match(/limit: z\.(?:coerce\.)?number\(\)\.int\(\)\.min\(1\)\.max\((\d+)\)/);
   const g = m?.[1];
   return g !== undefined ? Number(g) : null;
 }
@@ -86,6 +96,15 @@ const ADMIN_LIST_ENDPOINTS: ReadonlyArray<{
     routeFile: 'admin-status-subscribers.ts',
     specAnchor: '/v1/admin/status-subscribers',
   },
+  // V-1110 — published as an admin list endpoint (`GET /v1/admin/atlas-priority/queue`)
+  // and enforcing its own `limit … max(1000)`, but never compared. Its route file is
+  // named `internal-atlas-priority.ts` because it also serves the `/v1/internal/…`
+  // twin, so a roster keyed on the `admin-` filename prefix never reached it.
+  {
+    label: '/v1/admin/atlas-priority/queue',
+    routeFile: 'internal-atlas-priority.ts',
+    specAnchor: 'AtlasPriorityQueueQueryOpenApi',
+  },
 ];
 
 describe('OpenAPI spec ↔ route `limit` max parity (admin list endpoints)', () => {
@@ -101,4 +120,41 @@ describe('OpenAPI spec ↔ route `limit` max parity (admin list endpoints)', () 
       ).toBe(routeMax);
     });
   }
+  it('CRITICAL V-1110 every route that enforces a limit on a published /v1/admin path is in the table. The pairs this file compares are the pairs someone listed, so an endpoint left out is not reported as unchecked — its spec max and its route max simply never meet. That is the drift the file exists to catch: /v1/admin/accounts advertised 200 while the route enforced 100, and an integrator trusting the published spec got a 400.', () => {
+    const routesDir = resolve(REPO, 'apps/server/src/routes');
+    const LIMIT = /limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(\d+\)/;
+    const enforcing = readdirSync(routesDir)
+      .filter((f) => f.endsWith('.ts'))
+      .filter((f) => {
+        const src = readFileSync(resolve(routesDir, f), 'utf8');
+        // `z.coerce` is the marker of a QUERY bound, not a body bound: query
+        // values arrive as strings and must be coerced, while a JSON body
+        // limit is a plain `z.number()`. Dropping that requirement matched
+        // admin-crypto-orders.ts on its POST sweep-body limit (500) and would
+        // have compared it against the list query's advertised 200.
+        //
+        // The file name is not the test either — internal-atlas-priority.ts
+        // serves both an /v1/admin and an /v1/internal surface.
+        return LIMIT.test(src) && /['"`]\/v1\/admin\//.test(src);
+      })
+      .sort();
+    expect(
+      enforcing.length,
+      'route files enforcing a limit on an admin path',
+    ).toBeGreaterThanOrEqual(6);
+
+    const rostered = new Set(ADMIN_LIST_ENDPOINTS.map((e) => e.routeFile));
+    expect(
+      enforcing.filter((f) => !rostered.has(f)),
+      'these route files enforce a limit on a published admin path but no row compares their ' +
+        'enforced max against the advertised one:',
+    ).toEqual([]);
+
+    const stale = [...rostered].filter((f) => !enforcing.includes(f)).sort();
+    expect(
+      stale,
+      'rows for route files that no longer enforce a limit on an admin path — the row compares ' +
+        'nothing while making the coverage look wider:',
+    ).toEqual([]);
+  });
 });

@@ -47584,3 +47584,50 @@ Mutation-proved, restored byte-identical:
   the missing `.astro`, the server one reporting the missing table row;
 - deleting the `/verify-email` row while the config still declares it fails as
   `verifyEmail -> /verify-email`.
+
+### V-1110 — an admin list endpoint whose published bound nothing compared
+
+Continuing the roster sweep. Three of the remaining rosters turned out to be tied to
+their declarations already, and my detector could not see it: `GRANULAR_SCOPES` ends in
+`expect(ApiKeyScopeSchema.options).toEqual([...ALL_SCOPES])` and `ADMIN_AUDIT_ACTIONS`
+does the same. Derivation-by-import is the cleanest form there is, and a heuristic
+looking for `readdirSync`/`printRoutes` sees none of it. That is the third false
+negative from that detector; reading is what settled all three.
+
+`openapi-admin-list-limit-bounds-parity` is a good instrument — it extracts the
+advertised `limit … max(N)` and the enforced one and compares them, with no hardcoded
+expected value, and it fails loudly if either extraction returns null. Its population
+was hand-written, and it was missing an endpoint:
+
+**`GET /v1/admin/atlas-priority/queue`** is published with `limit … max(1000)` and
+enforces `max(1000)`, and no row compared them. It was missed because the roster is
+keyed on route files and this one is named `internal-atlas-priority.ts` — it serves the
+`/v1/internal/…` twin as well, so a reader scanning for `admin-*.ts` never reaches it.
+The two sides agree today; nothing was making them.
+
+Adding it also required widening the SPEC-side extractor, which required only
+`z.number()` while this declaration uses `z.coerce.number()`.
+
+**The near-miss is the instructive part.** I widened the ROUTE side the same way, and
+the new completeness arm immediately reported `admin-crypto-orders.ts` as an unrostered
+admin list endpoint. It is not one. Its `limit … max(500)` is a POST sweep-trigger
+BODY, and the list query's advertised bound is 200 — comparing them would have been a
+fabricated failure. `z.coerce` is not incidental: query values arrive as strings and
+must be coerced, while a JSON body limit is a plain `z.number()`, so the original
+extractor was using coercion as the marker for "this is a query bound". The route-side
+requirement is restored and the completeness arm keys on it too.
+
+Chasing that also answered whether `/v1/admin/crypto-orders` is itself a drift: it is
+not. The route enforces the published 200 imperatively —
+`if (!Number.isInteger(n) || n < 1 || n > 200) throw new BadRequestError(...)` — rather
+than through a Zod bound. Which means this guard structurally cannot see it, so the
+header now says so, with that endpoint as the worked example. Extending the extractor to
+imperative bounds is real work with unknown yield; coverage reading as total when it is
+not is the thing that is not acceptable.
+
+Mutation-proved, restored byte-identical: deleting the atlas row fails the completeness
+arm naming `internal-atlas-priority.ts`; drifting the advertised max to 2000 fails as
+"spec advertises max 2000 but route enforces 1000". The first attempt at that second
+mutation edited nothing — the file already contained two `max(2000)` elsewhere and my
+pattern was not anchored to the constant — and the suite passed, which reads exactly
+like a guard that does not work.
