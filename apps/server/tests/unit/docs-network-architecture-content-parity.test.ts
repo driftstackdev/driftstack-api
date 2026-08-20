@@ -100,11 +100,35 @@ describe('W548.C /docs/network-architecture.md content parity', () => {
       /- Customer SDKs hit `https:\/\/api\.driftstack\.dev` \(DNS in Cloudflare,/,
     );
     expect(body).toMatch(/Cloudflare proxy on\)\./);
-    expect(body).toMatch(/- Cloudflare Tunnel from the Hetzner VM connects outbound to/);
-    expect(body).toMatch(/Cloudflare; no inbound port is open on the VM beyond SSH for/);
-    expect(body).toMatch(/ops\./);
-    expect(body).toMatch(/- TLS terminated at Cloudflare's edge\. Hetzner VM serves plain HTTP/);
-    expect(body).toMatch(/on `127\.0\.0\.1:7780` \(compose file binds localhost-only\)\./);
+    // V-1087 — this used to pin a Cloudflare Tunnel and "no inbound port … beyond
+    // SSH". Neither is true: nothing in infra/ runs cloudflared, and bootstrap.sh
+    // opens 80 and 443. That closed-origin assumption is the one the 2026-06-13
+    // origin-spoof incident invalidated, so each half is asserted separately —
+    // losing the ufw evidence while keeping the word "proxies" would read as
+    // corrected while saying nothing.
+    expect(body).toMatch(/- Cloudflare proxies to the origin over the public internet\./);
+    expect(body, 'the no-Tunnel fact is gone').toMatch(
+      /There is\s*\n?\s*no Cloudflare Tunnel: nothing in `infra\/` runs `cloudflared`/,
+    );
+    expect(body, 'the open-port evidence is gone').toMatch(/opens 22, 80 AND 443 inbound/);
+    expect(body, 'the incident that the old claim contradicted is no longer named').toMatch(
+      /2026-06-13 origin-spoof incident/,
+    );
+    expect(body, 'the nginx fix is again described as closing the port').toMatch(
+      /it does NOT close the port/,
+    );
+    expect(body).toMatch(/- TLS terminates at Cloudflare's edge AND again at the origin/);
+    expect(body).toMatch(/the app\s*\n?\s*container binds `127\.0\.0\.1:7780`/);
+
+    // The retracted claims must not come back.
+    expect(
+      body,
+      'the doc again claims a Cloudflare Tunnel, which nothing in infra/ runs',
+    ).not.toMatch(/Cloudflare Tunnel from the Hetzner VM connects outbound/);
+    expect(
+      body,
+      'the doc again claims no inbound port beyond SSH, the assumption the origin-spoof incident broke',
+    ).not.toMatch(/no inbound port is open on the VM beyond SSH/);
     expect(body).toMatch(/- Cloudflare WAF rules: rate-limit per-IP for unauthenticated/);
     expect(body).toMatch(/requests, block known-bad ASNs from the auth surface only\./);
     expect(body).toMatch(/- Customer base is EU \+ UK \+ US \+ Switzerland; Cloudflare's EU/);

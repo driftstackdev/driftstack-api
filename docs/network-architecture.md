@@ -57,11 +57,22 @@ SDK / GUI               (proxy + WAF)        (Docker container)
 
 - Customer SDKs hit `https://api.driftstack.dev` (DNS in Cloudflare,
   Cloudflare proxy on).
-- Cloudflare Tunnel from the Hetzner VM connects outbound to
-  Cloudflare; no inbound port is open on the VM beyond SSH for
-  ops.
-- TLS terminated at Cloudflare's edge. Hetzner VM serves plain HTTP
-  on `127.0.0.1:7780` (compose file binds localhost-only).
+- Cloudflare proxies to the origin over the public internet. There is
+  no Cloudflare Tunnel: nothing in `infra/` runs `cloudflared`, and
+  `infra/bootstrap/bootstrap.sh` opens 22, 80 AND 443 inbound
+  (`ufw allow 443/tcp comment 'HTTPS'`). V-1087 — this bullet used to
+  claim a Tunnel and that no inbound port was open beyond SSH, which
+  is the assumption the 2026-06-13 origin-spoof incident invalidated:
+  because the origin answers 443 from anywhere and Authenticated
+  Origin Pulls are not configured, an attacker could reach it directly
+  and forge `CF-Connecting-IP`. The nginx fix
+  (`infra/nginx/cloudflare-real-ip.conf`) narrows which peers are
+  trusted for that header; it does NOT close the port, so the
+  direct-reachability half of this remains true and worth stating.
+- TLS terminates at Cloudflare's edge AND again at the origin — nginx
+  listens `443 ssl http2` per `infra/nginx/*.conf`. Behind it the app
+  container binds `127.0.0.1:7780` and is not itself reachable from
+  outside; nginx is the public listener that fronts it.
 - Cloudflare WAF rules: rate-limit per-IP for unauthenticated
   requests, block known-bad ASNs from the auth surface only.
 - Customer base is EU + UK + US + Switzerland; Cloudflare's EU

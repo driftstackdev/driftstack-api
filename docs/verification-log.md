@@ -46475,3 +46475,45 @@ better finding; it cannot be.
 
 So the full `build-test` sequence is green end to end, every test file is collected,
 and no unrun gate remains that can be run here. The lever is spent.
+
+## V-1087 — "no inbound port is open" was the assumption an incident had already broken
+
+Both discovery levers being spent, I went back to the plan's own
+"deferred-but-file-these" list — items it surfaced without assigning a batch, which are
+FIXES rather than the D-\* decisions. The first is a security-posture claim, and the
+plan flags it as "pinned four ways. Its own action."
+
+Verified from source rather than from the report, which has been wrong before.
+`docs/network-architecture.md` §1 said:
+
+"Cloudflare Tunnel from the Hetzner VM connects outbound to Cloudflare; no inbound
+port is open on the VM beyond SSH for ops."
+
+Neither half holds. Nothing in `infra/` runs `cloudflared` — there is no Tunnel — and
+`infra/bootstrap/bootstrap.sh` opens three ports, not one: `ufw allow 22/tcp`,
+`ufw allow 80/tcp`, `ufw allow 443/tcp comment 'HTTPS'`. nginx listens `443 ssl http2`
+publicly per `infra/nginx/*.conf`.
+
+WHAT MAKES IT WORTH MORE THAN A WORDING FIX is that the false half is exactly the
+assumption a real incident invalidated. `infra/nginx/cloudflare-real-ip.conf` opens
+with its own account of 2026-06-13: because the origin answers 443 from anywhere with
+no Authenticated Origin Pulls, an attacker could connect directly and forge
+`CF-Connecting-IP`, which nginx trusted, defeating every IP-keyed rate limit and
+poisoning audit fields. The fix narrowed which peers are trusted for that header. It
+did not close the port — so a reader who believed the architecture doc would still be
+reasoning from the state that made the incident possible.
+
+The second bullet needed splitting rather than deleting: the app container really does
+bind `127.0.0.1:7780` and is not itself externally reachable, but nginx in front of it
+is public and terminates TLS. "TLS terminated at Cloudflare's edge" alone hid that
+there is a second termination at the origin.
+
+The pin asserted the old text across five lines. It now asserts each fact separately —
+no-Tunnel, the ufw evidence, the incident, and that the nginx fix did NOT close the
+port — with negatives on both retracted claims. Separate arms because losing the ufw
+evidence while keeping the word "proxies" would read as corrected while saying nothing.
+
+Mutations: restoring the Tunnel sentence fails; dropping only the ufw evidence fails;
+re-describing the nginx fix as closing the port fails. Restored byte-identical.
+
+`it(` count 6, unchanged. No new file, no ratchet change.
