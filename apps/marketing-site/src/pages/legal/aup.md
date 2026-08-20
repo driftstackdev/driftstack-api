@@ -185,13 +185,13 @@ response) below.
 Driftstack's enforcement of this AUP follows a graduated progression,
 subject to the discretion in Section 5.4 below:
 
-1. **Warning.** First instance of a non-severe violation — Driftstack
+1. **5.1 Warning.** First instance of a non-severe violation — Driftstack
    notifies Customer in writing identifying the AUP clause believed
    violated, the specific Session(s) at issue, and a remediation
    window (typically 7 days). Customer's continued use during the
    warning window is not itself a further violation, but failure to
    remediate within the window escalates.
-2. **Suspension.** A continued or repeated violation following a
+2. **5.2 Suspension.** A continued or repeated violation following a
    warning, OR a moderately severe first violation — Driftstack
    suspends Customer's account. Suspension means: (a) existing
    Sessions are destroyed, (b) the API rejects authenticated requests
@@ -213,7 +213,7 @@ subject to the discretion in Section 5.4 below:
    to detect suspension programmatically should subscribe to that rather
    than parse the 403.
 
-3. **Termination.** A severe violation under Section 1, OR a
+3. **5.3 Termination.** A severe violation under Section 1, OR a
    continuing violation that survives suspension, OR a Customer's
    refusal to dispute or remediate during the suspension window —
    Driftstack terminates the Subscription per Section 16 of the ToS.

@@ -50112,3 +50112,49 @@ defect; it held two, and the sweep that said otherwise was narrow in exactly the
 seven earlier artifacts were. **A sweep that reports a class is closed is a claim about the
 pattern, not the corpus** — and stating a count ("five citations") gave that claim a
 precision it had not earned.
+
+### V-1169 — the enforcement ladder cited three clauses that did not exist
+
+V-1168 said a sweep reporting a class closed is a claim about the pattern. So this stopped
+sweeping the cross-citation class and **resolved** it instead: all **147** numbered clause
+citations across both published legal mirrors, each looked up in the clause structure of the
+document it names.
+
+**The defect, a third shape.** V-1166 and V-1168 both found citations pointing at a clause
+that exists and means something else. This one points at clauses that **do not exist at
+all**. AUP §5 "Enforcement progression" lists its three steps as an ordered list — Warning,
+Suspension, Termination — and never gave them identifiers. Yet `### 5.4 Discretion to skip
+steps` follows it, and §5.4's own carve-out reads "The progression in **Section 5.1–5.3** is
+the default and applies in the absence of these conditions."
+
+`### 5.4` was the **only** `###` in the entire document: an orphan sub-clause under a section
+whose other parts were unnumbered. Three independent surfaces assumed 5.1–5.3 were real —
+that heading, that sentence, and ~15 citations of "AUP §5.2" in shipped source
+(`services/billing.ts`, `services/admin-accounts.ts`, `lib/bootstrap.ts`), in V-758 and
+V-1042's e2e spec, and in two pin titles. Only the document itself did not provide them.
+
+So the steps were **numbered** rather than the citation deleted — the corpus was right and
+the document was the outlier. Used the inline convention the Terms already uses for
+sub-clauses (`5.5 **Customer warranties.**`), which leaves the ordered-list rendering and
+every nested block untouched; the diff is three lines per mirror. This is not tidiness:
+§5.4 lets Driftstack **skip steps** in the ladder, so a customer disputing a suspension has
+to be able to name the step that was skipped.
+
+**Four resolver versions were wrong before one was right**, and every one of them produced a
+clean-looking list of broken citations over documents that were correct:
+
+| version | claimed broken | why it was wrong |
+| --- | --- | --- |
+| headings only | 31 | sub-clauses are inline bold leads (`12.1 **Driftstack indemnifies…**`), not headings |
+| + inline leads | 5 | line-scoped context missed a document name wrapped to the next line |
+| + paragraph ctx | 3 | `this DPA` earlier in the sentence hijacked "Section 13 **of the Terms of Service**" |
+| + qualifier rule | 2 | `ToS Section 13.3(3)` — `(3)` sits between the number and its qualifier, so the name **preceding** the citation had to be consulted |
+| + preceding name | **0** | — |
+
+Two of those five "defects" I had already half-believed. The one that stayed through every
+version was the AUP, which is the one that was real.
+
+The guard asserts that specific known-good citations **resolve** — one per targeting rule —
+rather than only that the broken list is empty. A resolver that quietly stopped matching
+would otherwise report the whole corpus honest, which is precisely how the first four
+versions looked from the outside.
