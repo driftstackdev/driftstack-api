@@ -140,7 +140,7 @@ describe('W552.A /docs/launch/pre-launch-checklist.md content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it('V-1083 CRITICAL the test-coverage row points at the maintained ratchets instead of freezing a count. The page carries a staleness warning saying that quoting a fixed number is itself the failure it is about, and this row quoted one anyway — measured with the DB-gated integration files running, and ~230 files behind within nine days.', () => {
+  it('V-1083 CRITICAL the test-coverage row points at the maintained ratchets instead of freezing a count. The page carries a staleness warning saying that quoting a fixed number is itself the failure it is about, and this row quoted one anyway — measured with the DB-gated integration files running, and behind by hundreds of files within nine days. The figure is deliberately not restated here — V-1058 caught this same guard-title mistake once already, and a retraction that quotes the count it retracts is the defect dressed as the correction.', () => {
     expect(body, 'the row no longer points at the ratchets').toMatch(
       /`EXPECTED_TEST_FILES` \/ `EXPECTED_TEST_FILES_ALL`/,
     );

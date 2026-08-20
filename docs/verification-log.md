@@ -46285,3 +46285,40 @@ Mutations: restoring a frozen count fails; dropping the reason clause fails; ren
 a ratchet in the gate fails. Restored byte-identical.
 
 `it(` count 6→7. No new file, no ratchet change.
+
+### V-1083 addendum — I made the V-1058 mistake again, in the commit that was about it
+
+The full suite after V-1083 went red on V-794's meta-guard: 92 pin files freeze a
+hand-maintained count against a ceiling of 91. The new offender was the file I had just
+written.
+
+My arm's title read "~230 files behind within nine days". `230 files` is exactly the
+number-plus-noun shape that guard forbids, and I had put it in a change whose entire
+argument is that a corrected number rots identically to the one it replaced. V-1058 was
+the same mistake — a retraction quoting the count it retracts — and this is its second
+occurrence, which is worth recording plainly rather than filing as a slip.
+
+The pattern behind both: describing a stale figure feels like it requires naming it.
+It does not, and naming it is what re-creates the defect one layer up. The title now
+says "behind by hundreds of files", and says why the figure is not restated, so the
+next person to reach for the number sees the reason first.
+
+Also worth noting what did NOT trip the guard: a pre-existing `expect(...).not.toMatch(
+/1086 \/ 109 files server/)` on line 132 of the same file contains the same shape and is
+fine, because V-794 reads comments and `it(` titles rather than assertion bodies. The
+distinction is right — a negative regex naming the string it forbids is the correct way
+to write that assertion, while a title asserting a count is a claim.
+
+Mutation: putting a count back in the title fails the meta-guard's two arms. Restored
+byte-identical.
+
+`it(` count 7, unchanged.
+
+A SECOND self-inflicted failure in the same fix, and a different one. The corrected
+title contained the word "correction's" — and an apostrophe inside a single-quoted
+`it(` title is a parse error. It survived my own prettier run and my own vitest run,
+then failed eslint inside the commit hook, because lint-staged's prettier pass rewrote
+the line and chose the delimiter that collides. lint-staged reverted cleanly, so
+nothing partial landed. Same family as the emphasis-marker break in V-1065: prettier
+owns the quoting, so prose that contains a quote character is a hazard in a pinned
+string. The phrase is now apostrophe-free.
