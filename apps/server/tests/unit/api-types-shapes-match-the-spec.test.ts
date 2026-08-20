@@ -44,7 +44,7 @@
 // nothing here to compare. That number is floored: pairing that quietly shrinks
 // turns this file into a comparison of nothing while it still reads green.
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -105,15 +105,109 @@ function fullSpecSchemas(): Map<string, Record<string, Record<string, unknown>>>
  * is deliberately not counted — claiming it should be published would make this arm
  * fail for a reason nobody can fix.
  */
-function constraintsOf(def: unknown): string[] {
-  const d = (def as { _def?: { typeName?: string; checks?: { kind: string }[] } })._def;
+function constraintsOf(def: unknown): string[][] {
+  const d = (
+    def as {
+      _def?: { typeName?: string; checks?: { kind: string; inclusive?: boolean }[] };
+    }
+  )._def;
   const inner = (def as { _def?: { innerType?: unknown } })._def?.innerType;
   if (d?.checks === undefined && inner !== undefined) return constraintsOf(inner);
-  const kinds = new Set((d?.checks ?? []).map((c) => c.kind));
+  const checks = d?.checks ?? [];
   const isString = d?.typeName === 'ZodString';
-  const out: string[] = [];
-  if (kinds.has('min')) out.push(isString ? 'minLength' : 'minimum');
-  if (kinds.has('max')) out.push(isString ? 'maxLength' : 'maximum');
+  const out: string[][] = [];
+  for (const c of checks) {
+    if (c.kind !== 'min' && c.kind !== 'max') continue;
+    if (isString) {
+      out.push([c.kind === 'min' ? 'minLength' : 'maxLength']);
+      continue;
+    }
+    // V-1063 — a numeric bound publishes EITHER the inclusive or the exclusive
+    // keyword, and `.positive()` / `.negative()` are min/max checks with
+    // `inclusive: false`. Demanding `minimum` for a `.positive()` field reports a
+    // spec that is already correct: `exclusiveMinimum: 0` is exactly right for it.
+    // Each entry is a set of acceptable keywords, satisfied by any one of them.
+    out.push(c.kind === 'min' ? ['minimum', 'exclusiveMinimum'] : ['maximum', 'exclusiveMaximum']);
+  }
+  return out;
+}
+
+/**
+ * Each live `/v1` registration paired with the schema its handler parses.
+ *
+ * V-1063 — the component-level comparison above cannot see operation-level query
+ * parameters, and six of the seven properties V-1063 fixed were exactly that: a
+ * `cursor` declared inline on the operation, published unbounded, against routes
+ * that all enforce 1..512. Fixing them without extending the guard would have left
+ * them free to regress.
+ *
+ * Segments are bounded by the enclosing `export function` as well as the next
+ * registration — without that bound the last live route in a file swallows the
+ * `…DisabledRoutes` stub beneath it, which has produced a wrong count three times
+ * in this corpus.
+ */
+function routeSchemaPairs(): { method: string; path: string; schema: string }[] {
+  const dir = resolve(REPO, 'apps/server/src/routes');
+  const REGISTRATION =
+    /app\.(get|post|put|patch|delete)\s*(?:<[^(]*>)?\s*\(\s*['"`](\/v1\/[^'"`]*)['"`]/g;
+  const out: { method: string; path: string; schema: string }[] = [];
+  for (const file of readdirSync(dir).filter((f) => f.endsWith('.ts'))) {
+    const src = readFileSync(resolve(dir, file), 'utf8');
+    const fns = [...src.matchAll(/^export function (\w+)/gm)].map((m) => [m.index, m[1]!] as const);
+    const edges = [...fns.map(([at]) => at), src.length];
+    const regs = [...src.matchAll(REGISTRATION)];
+    for (const [i, m] of regs.entries()) {
+      let owner = '(top)';
+      let fnEnd = src.length;
+      for (const [idx, [at, name]] of fns.entries()) {
+        if (at <= m.index) {
+          owner = name;
+          fnEnd = edges[idx + 1] ?? src.length;
+        } else break;
+      }
+      if (/Disabled/.test(owner)) continue;
+      const nextReg = i + 1 < regs.length ? (regs[i + 1]?.index ?? src.length) : src.length;
+      const segment = src.slice(m.index + m[0].length, Math.min(nextReg, fnEnd));
+      const parsed = /(\w+Schema)\.(?:safeParse|parse)\(/.exec(segment);
+      if (parsed !== null) {
+        out.push({ method: (m[1] ?? '').toLowerCase(), path: m[2] ?? '', schema: parsed[1]! });
+      }
+    }
+  }
+  return out;
+}
+
+/** Published properties for one operation: request body fields plus query params. */
+function operationProperties(
+  spec: Record<string, unknown>,
+  method: string,
+  path: string,
+): Record<string, Record<string, unknown>> {
+  const paths = (spec as { paths?: Record<string, Record<string, unknown>> }).paths ?? {};
+  const op = paths[path.replace(/:(\w+)/g, '{$1}')]?.[method] as
+    | {
+        parameters?: { name: string; schema?: Record<string, unknown> }[];
+        requestBody?: {
+          content?: { 'application/json'?: { schema?: Record<string, unknown> } };
+        };
+      }
+    | undefined;
+  if (op === undefined) return {};
+  const out: Record<string, Record<string, unknown>> = {};
+  let body = op.requestBody?.content?.['application/json']?.schema;
+  const ref = body?.['$ref'];
+  if (typeof ref === 'string') {
+    const comps = (spec as { components?: { schemas?: Record<string, Record<string, unknown>> } })
+      .components?.schemas;
+    body = comps?.[ref.split('/').pop() ?? ''];
+  }
+  const props = body?.['properties'];
+  if (props !== null && typeof props === 'object') {
+    for (const [k, v] of Object.entries(props as Record<string, Record<string, unknown>>)) {
+      out[k] = v;
+    }
+  }
+  for (const p of op.parameters ?? []) out[p.name] = p.schema ?? {};
   return out;
 }
 
@@ -183,8 +277,10 @@ describe('the api-types shapes match the committed spec', () => {
         const enforced = constraintsOf(def);
         if (enforced.length === 0) continue;
         const published = spec.get(name)?.[field] ?? {};
-        for (const key of enforced) {
-          if (!(key in published)) loose.push(`${name}.${field}: schema enforces ${key}`);
+        for (const acceptable of enforced) {
+          if (!acceptable.some((k) => k in published)) {
+            loose.push(`${name}.${field}: schema enforces ${acceptable.join(' or ')}`);
+          }
         }
       }
     }
@@ -192,6 +288,42 @@ describe('the api-types shapes match the committed spec', () => {
       loose.sort(),
       'the spec publishes these properties without the constraint the route enforces — use the ' +
         'source schema in lib/openapi.ts rather than a hand-rolled mirror:',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL an operation publishes the constraints its own handler enforces. The component comparison above cannot see query parameters declared inline on an operation, which is where six of the seven V-1063 properties lived — every paginated list published `cursor` as any string while every one of those routes rejects anything outside 1..512.', () => {
+    const spec = JSON.parse(readFileSync(SPEC, 'utf8')) as Record<string, unknown>;
+    const pairs = routeSchemaPairs();
+
+    // The pairing has to find real routes, or the loop below compares nothing.
+    expect(pairs.length, 'registrations paired to a parsing schema').toBeGreaterThanOrEqual(90);
+
+    const loose: string[] = [];
+    let compared = 0;
+    for (const { method, path, schema } of pairs) {
+      const zod = (apiTypes as Record<string, unknown>)[schema];
+      const shape = (zod as { shape?: Record<string, unknown> } | undefined)?.shape;
+      if (shape === undefined) continue;
+      const published = operationProperties(spec, method, path);
+      if (Object.keys(published).length === 0) continue;
+      compared += 1;
+      for (const [field, def] of Object.entries(shape)) {
+        const declared = published[field];
+        if (declared === undefined) continue;
+        for (const acceptable of constraintsOf(def)) {
+          if (!acceptable.some((k) => k in declared)) {
+            loose.push(
+              `${method.toUpperCase()} ${path} .${field}: ${schema} enforces ` +
+                `${acceptable.join(' or ')}`,
+            );
+          }
+        }
+      }
+    }
+    expect(compared, 'operations compared against their parsing schema').toBeGreaterThanOrEqual(50);
+    expect(
+      [...new Set(loose)].sort(),
+      'these operations publish a property looser than the schema their handler parses with:',
     ).toEqual([]);
   });
 });

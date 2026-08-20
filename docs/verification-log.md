@@ -45231,3 +45231,55 @@ Mutations against the committed spec: stripping `maxLength` from cursor fails th
 arm; stripping a numeric `maximum` fails it. Restored byte-identical.
 
 `it(` count 4→5 for the added arm. No new file, no ratchet change.
+
+## V-1063 — the same defect six more times, found only after fixing my instrument
+
+V-1062 closed two loose spec properties and recorded that my own sweep had
+under-reported: it compared `.max(N)` literals, so `.max(60 * 60 * 24 * 365)` read as
+absent on both sides and cancelled out. This is what re-running it properly found.
+
+Replacing the regex with runtime zod introspection, and pairing by ROUTE (path +
+method) instead of by schema NAME, turned up seven more candidates. Six were real:
+
+`cursor` published as an unbounded string on `GET /v1/account/audit-log`,
+`GET /v1/recipes`, `GET /v1/admin/api-keys`, `GET /v1/admin/sessions`,
+`GET /v1/admin/rate-limit-overrides` and `GET /v1/admin/accounts`. Every one of
+those routes enforces 1..512 — four via a local declaration with those exact
+bounds, two via `PaginationQuerySchema` — and the document said any string.
+
+`POST /v1/profiles/:id/clone` `.name` published as any string, against
+`ProfileNameSchema`: trimmed, 1..120, with a character-class pattern. Publishing
+the source schema now emits the pattern too, which the document never carried —
+the "no FORMAT" complaint V-928 wrote about the proxy body, still true here.
+
+THE SEVENTH WAS MY OWN INSTRUMENT AGAIN. `POST /v1/admin/accounts/:id/refund-record`
+`.amount_cents` looked loose because I demanded `minimum`. The schema is
+`z.number().int().positive()`, which is a min check with `inclusive: false`, and the
+spec correctly publishes `exclusiveMinimum: 0`. The reported defect was in the
+comparison, not the document.
+
+That flaw was in the guard I committed in V-1062, not only in the probe. It passed
+because no name-paired schema uses `.positive()` — a false negative today and a false
+FAILURE the moment one does. `constraintsOf` now returns a set of acceptable keywords
+per bound, satisfied by either the inclusive or the exclusive spelling.
+
+AND THE GUARD COULD NOT SEE SIX OF THE SEVEN FIXES. This surfaced from a mutation that
+refused to fire: stripping the only `exclusiveMinimum` from the spec left it green,
+because the arm walks NAMED COMPONENTS and those six cursors are query parameters
+declared inline on their operations. Committing the fixes without noticing would have
+left them free to regress silently — the same structural blind spot as V-1061, where
+every guard watched implementations and none watched the customer-facing page.
+
+So a second arm pairs each live `/v1` registration with the schema its handler parses
+and compares against that operation's own published properties, body and query
+together. Segments are bounded by the enclosing `export function` as well as the next
+registration, because without that bound the last live route in a file swallows the
+`…DisabledRoutes` stub beneath it — three times in this corpus already.
+
+Mutations, against real source rather than the artifact: reverting ONE of the six
+cursors to `z.string().optional()` and regenerating fails the new arm; reverting the
+clone name fails it. The component arm still fires on a stripped `maxLength`. Restored
+byte-identical.
+
+`it(` count 5→6. Spec regenerated: 22 insertions, 7 deletions after normalising
+formatting, all of them bounds.

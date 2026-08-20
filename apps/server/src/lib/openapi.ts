@@ -117,6 +117,7 @@ import {
   NavigateRequestSchema,
   NavigateResponseSchema,
   PaginationQuerySchema,
+  ProfileNameSchema,
   ProblemSchema,
   QuotaOverrideResponseSchema,
   SessionSchema,
@@ -2363,7 +2364,7 @@ function buildRegistry(): OpenAPIRegistry {
   // V-216 — customer-facing audit log.
   const ListAccountAuditQueryOpenApi = z.object({
     limit: z.number().int().min(1).max(100).optional(),
-    cursor: z.string().optional(),
+    cursor: PaginationQuerySchema.shape.cursor,
     action: z.string().optional(),
   });
   const AccountAuditEntryOpenApi = z
@@ -2594,7 +2595,7 @@ function buildRegistry(): OpenAPIRegistry {
   // Cross-account rate-limit overrides list (admin)
   const ListAdminOverridesQueryOpenApi = z.object({
     limit: z.number().int().min(1).max(100).optional(),
-    cursor: z.string().optional(),
+    cursor: PaginationQuerySchema.shape.cursor,
     account_id: z.string().optional(),
     include_expired: z.enum(['true', 'false']).optional(),
   });
@@ -2621,7 +2622,7 @@ function buildRegistry(): OpenAPIRegistry {
   // Cross-account API keys list (admin)
   const ListAdminApiKeysQueryOpenApi = z.object({
     limit: z.number().int().min(1).max(100).optional(),
-    cursor: z.string().optional(),
+    cursor: PaginationQuerySchema.shape.cursor,
     account_id: z.string().optional(),
     revoked: z.enum(['true', 'false']).optional(),
   });
@@ -2648,7 +2649,7 @@ function buildRegistry(): OpenAPIRegistry {
   // Cross-account sessions list (admin)
   const ListAdminSessionsQueryOpenApi = z.object({
     limit: z.number().int().min(1).max(100).optional(),
-    cursor: z.string().optional(),
+    cursor: PaginationQuerySchema.shape.cursor,
     status: z.enum(['creating', 'ready', 'busy', 'destroyed', 'errored']).optional(),
     account_id: z.string().optional(),
   });
@@ -2747,7 +2748,7 @@ function buildRegistry(): OpenAPIRegistry {
     request: {
       query: z.object({
         limit: z.number().int().min(1).max(100).optional(),
-        cursor: z.string().optional(),
+        cursor: PaginationQuerySchema.shape.cursor,
         status: z.enum(['active', 'suspended', 'deleted']).optional(),
         tier: z.string().optional(),
         email_contains: z.string().min(1).max(254).optional(),
@@ -5068,7 +5069,7 @@ function buildRegistry(): OpenAPIRegistry {
     request: {
       query: z.object({
         limit: z.coerce.number().int().min(1).max(100).optional(),
-        cursor: z.string().optional(),
+        cursor: PaginationQuerySchema.shape.cursor,
       }),
     },
     responses: {
@@ -6800,8 +6801,12 @@ function buildRegistry(): OpenAPIRegistry {
   });
 
   // ── V-313 profile cloning ──────────────────────────────────────────────
+  // V-1063 — was `z.string().optional()`, publishing no bound while the route
+  // parses with CloneProfileRequestSchema, whose `name` is ProfileNameSchema:
+  // trimmed, 1..120. A caller reading the document had no way to learn the limit
+  // except a 400.
   const CloneProfileRequestOpenApi = z.object({
-    name: z.string().optional(),
+    name: ProfileNameSchema.optional(),
   });
   const ProfileResponseOpenApi = z.object({
     id: z.string(),
