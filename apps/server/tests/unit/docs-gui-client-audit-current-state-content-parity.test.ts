@@ -292,4 +292,53 @@ describe('W573.B /docs/gui-client/audit-current-state.md content parity', () => 
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });
+
+  // V-1139 — this document says, in §4, that customer API keys are stored in
+  // PLAINTEXT ON DISK. That was true when it was written and is false now: the GUI
+  // stores the key in the OS keychain via `keyring-rs`, scoped per baseUrl, and
+  // purges both historical plaintext shapes out of settings.json on first load.
+  //
+  // The only thing standing between a reader and that retired claim is the
+  // HISTORICAL SNAPSHOT banner V-801 added at the top. Nothing pinned the banner —
+  // 117 assertions in this file froze the body, and none of them held the one
+  // paragraph that makes the body safe to read. Delete the banner and the document
+  // silently becomes a current-state claim that Driftstack keeps paid license keys
+  // in the clear.
+  it('CRITICAL the historical-snapshot banner is present. Every "Current:" heading below it describes 2026-05-06, and §4 in particular still reports plaintext at-rest storage of customer API keys — a claim the shipped keychain implementation retired. Without this paragraph the document reads as a live security posture that is both false and alarming.', () => {
+    const body = read(LIB);
+    expect(body, 'the historical-snapshot banner was removed').toMatch(/HISTORICAL SNAPSHOT/);
+    expect(body, 'the as-of qualifier on every Current: heading was removed').toMatch(
+      /means current _as of the date in the\s*\n?>?\s*line above_, not today/,
+    );
+    expect(body, 'the banner no longer records that the outstanding items shipped').toMatch(
+      /has since shipped/,
+    );
+  });
+
+  it('CRITICAL every file the banner cites as evidence still exists. The banner earns its authority by saying each item was "confirmed to exist in the tree rather than assumed" — so a path that moved turns the evidence back into an assertion, which is exactly what it was written to stop being.', () => {
+    const body = read(LIB);
+    const banner = body.slice(
+      body.indexOf('HISTORICAL SNAPSHOT'),
+      body.indexOf('\n\n', body.indexOf('has since shipped')),
+    );
+    const cited = [...banner.matchAll(/`([a-z][\w./-]+\.(?:ts|tsx|toml|json))`/g)].map(
+      (m) => m[1] ?? '',
+    );
+    expect(cited.length, 'no evidence paths parsed out of the banner').toBeGreaterThanOrEqual(5);
+
+    const missing = cited.filter((rel) => !existsSync(resolve(REPO_ROOT, 'apps/gui-client', rel)));
+    expect(
+      missing.sort(),
+      'banner evidence paths that no longer resolve under apps/gui-client',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL the keychain claim the banner rests on is still true in source. If the GUI ever falls back to persisting the key in settings.json, §4 stops being historical and becomes accurate again — and this file should go red rather than let a retired security gap quietly return.', () => {
+    const settings = read(resolve(REPO_ROOT, 'apps/gui-client/src/lib/settings.ts'));
+    expect(settings, 'the OS-keychain load path is gone').toMatch(/async function keychainLoad\(/);
+    expect(settings, 'the OS-keychain save path is gone').toMatch(/async function keychainSave\(/);
+    expect(settings, 'the plaintext purge on load is gone').toMatch(
+      /Purge BOTH historical plaintext shapes/,
+    );
+  });
 });

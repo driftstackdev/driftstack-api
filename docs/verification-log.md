@@ -48868,3 +48868,44 @@ naming Go classes from builders reported 29 of 30 slugs divergent. Twenty-nine o
 not a finding, it is a broken extractor. Resolving the builder body got 23 of 32; the other
 nine assemble fields over several lines, so the scan has to cover the whole function. Only
 then does it settle at two — which is what the reference table had said from the start.
+
+### V-1139 — D-11 was already answered; the paragraph that answered it was unguarded
+
+D-11 asks whether `docs/gui-client/audit-current-state.md` is a live current-state document
+or the PHASE-1 triage record, and calls the half-maintained middle "what exists" — pointing
+at a contradiction where §9 has the OS keychain shipping while §4 reports the API key
+plaintext on disk.
+
+**The premise is refuted. V-801 already froze it**, inside this same arc. The document
+opens with a HISTORICAL SNAPSHOT banner stating that every "Current:" heading below means
+current as of 2026-05-06 and not today, and listing what has since shipped. So §4 and §9
+do not contradict each other; §4 is dated and the banner says so.
+
+Verified rather than taken on trust, because the banner makes a factual claim. The GUI
+stores the API key in the OS keychain via `keyring-rs` — macOS Keychain, Windows
+Credential Manager, Secret Service/KWallet — under a baseUrl-scoped entry name, with a
+one-shot migration that reads the legacy plaintext shapes, writes them to the keychain,
+and then **rewrites `settings.json` without them**. A locked or dismissed keychain keeps
+the key in memory for the session and explicitly never falls back to disk. All seven files
+the banner cites as evidence exist. V-801's claim holds in full.
+
+**What is actionable is what nothing was holding.** This document says, in §4, that
+customer-paid license keys sit in plaintext on disk. That sentence is retired only by the
+banner, and the banner was pinned by nothing: the parity guard carries 117 assertions over
+the body — D-11 estimates "~30", which is itself an undercount — and not one of them held
+the paragraph that makes the body safe to read. Delete the banner and the document reverts,
+in silence, to a current-state claim that Driftstack keeps paid credentials in the clear.
+That is the same inert-fix shape as D-9, where V-1100 had already guarded the wiring; here
+nothing had.
+
+Three arms added to the existing guard, each mutation-proved: the banner and its as-of
+qualifier must be present; every evidence path the banner cites must still resolve, parsed
+out of the banner text so the roster maintains itself; and the keychain load/save paths and
+the plaintext purge must still exist in `settings.ts`, so a regression that made §4 accurate
+again turns this file red instead of quietly vindicating it.
+
+**The (a)/(b) decision is moot, not taken.** D-11 offers freezing the doc and deleting the
+guard, or keeping it live and accepting that assertions move with every GUI landing. The
+churn cost was the argument for (a), and it only applies to a LIVE document. V-801 froze
+this one, so the body stops moving and the 117 assertions stop churning on their own. The
+GUI owner can still delete the guard; there is now just no cost forcing it.
