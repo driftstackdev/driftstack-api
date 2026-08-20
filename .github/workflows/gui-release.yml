@@ -123,6 +123,35 @@ jobs:
           fi
           echo "tag ${GITHUB_REF_NAME} matches app version ${app_version}"
 
+      # tauri-action publishes by creating the GitHub Release itself. That call
+      # fails on this org — verified, not guessed:
+      #
+      #   PUT /repos/.../actions/permissions/workflow
+      #   409 Conflict: "Write permissions for workflows are disabled by the
+      #                  organization"
+      #
+      # The org policy overrides both the repo default AND this job's
+      # `permissions: contents: write`, so the run log cheerfully prints
+      # "Contents: write" and the REST call still answers "Resource not
+      # accessible by integration". gui-v0.1.0 built all three platforms and
+      # then threw every artifact away at that last step.
+      #
+      # Until an org owner allows write (Settings -> Actions -> General ->
+      # Workflow permissions, org level), the release must already exist so
+      # tauri-action uploads into it instead of creating one. Check that FIRST:
+      # a ten-minute cross-platform build that ends in a permissions error is
+      # the most expensive way possible to learn this.
+      - name: Release must already exist (org blocks Actions from creating one)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ! gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "::error::Release ${GITHUB_REF_NAME} does not exist, and this org forbids Actions from creating one (see docs/runbooks/gui-release.md). Create it first:  gh release create ${GITHUB_REF_NAME} --title 'Driftstack GUI ${GITHUB_REF_NAME}' --notes '...'"
+            exit 1
+          fi
+          echo "release ${GITHUB_REF_NAME} exists; tauri-action will upload into it"
+
       - name: Replace TAURI_UPDATER_PUBKEY placeholder
         shell: bash
         run: |
