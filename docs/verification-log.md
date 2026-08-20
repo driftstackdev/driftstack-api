@@ -46995,3 +46995,42 @@ Mutation-proved, restored byte-identical: renaming `/v1/team/owners` fails as
 a `PATCH .../role` fails the negative claim — proved with the count bumped and the
 path listed first, so the failure could only come from the arm under test rather than
 a neighbour.
+
+### V-1098 — the instruction was corrected and the illustration beside it was not guarded
+
+Action 8 says the DR checklist gates B5 on "32 modules / ≥ ~80 paths". It does not, and
+has not since V-819. B5 now reads "Do NOT eyeball this against a remembered number —
+derive both sides", gives the two commands, and requires the restored instance to match
+production. The pin carries the corrected instruction AND negatives on both retired
+figures, so neither can come back. That is the fix done properly; nothing to redo.
+
+The residual is one line. B5 closes by dating what the derivation returned — "60
+modules and 208 paths" — and nothing checked it. The module half is `ls
+apps/server/src/routes/*.ts | wc -l`, which is a directory listing this suite can run,
+so a new route module silently ages the figure the operator reads.
+
+**What I deliberately did not assert.** `packages/sdk-python/openapi.json` carries 196
+paths against the doc's 208, and that gap is not a defect. B5 exists precisely because
+`lib/app.ts` registers conditionally — `registerTeamRoutes` and its siblings sit inside
+`if (deps.X !== undefined)` — so the live surface varies with which dependencies a boot
+wires. The committed spec is one boot's output; the doc's figure is a live-boot
+snapshot. Holding one against the other would compare two different measurements and
+report the difference as drift, which is the error this sweep has now caught itself
+making twice. So the arm asserts the module count, requires the path figure to still be
+a number, and pins the conditional registration that makes the path half underivable —
+if that ever stops being true, the reasoning should be revisited rather than the number
+quietly gated.
+
+My own measurements also disagreed with the plan's on the way in: it cites 67
+`register*(` call sites and ~45 dependency gates where I count 74 and 30. I did not
+publish either figure, because the whole point of this finding is that an absolute
+count of a conditionally-registered surface is the wrong instrument.
+
+Mutation-proved, restored byte-identical: drifting the stated count to 59 fails with
+both numbers named; deleting the dated sentence fails the extraction rather than
+passing over nothing; adding a real route module fails as "B5 says 60 route modules;
+the routes directory holds 61".
+
+**Process note.** The first insertion landed before the closing brace of the preceding
+arm, which quietly moved the C/D/E assertions into the new one — the tests still
+passed. Caught by the rule-5 `it(` count and re-done at the correct boundary.

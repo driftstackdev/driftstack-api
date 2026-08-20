@@ -14,7 +14,7 @@
 //   • V-542.B automation BullMQ weekly→quarterly + 3-impl-req.
 //   • V-542.C admin-status integration later.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -96,6 +96,37 @@ describe('W563.C /docs/internal/v542-backup-verification-checklist.md content pa
     expect(body).toMatch(/\*\*E3\.\*\* Checklist results logged with date \+ pass\/fail per item/);
     expect(body).toMatch(/docs\/runbooks\/incidents\.md/);
     expect(body).toMatch(/docs\/runbooks\/dr-rehearsal-history\.md/);
+  });
+
+  it('V-1098 CRITICAL the module count B5 quotes is the module count on disk. B5 was corrected to derive both sides rather than gate on a remembered number, and it closes by dating what the derivation returned. The instruction is now right and the illustration beside it can still rot, which is the fix-one-copy shape V-1094 found in the CI figures. The module half is a directory listing, so it is checkable here; the path half is not, and is left alone deliberately.', () => {
+    const body = read(LIB);
+    const stated = /At the time of writing that is (\d+) modules\s*\n?\s*and (\d+) paths\./.exec(
+      body,
+    );
+    expect(stated, 'B5 no longer dates what the two commands returned').not.toBeNull();
+
+    // Exactly the command B5 tells the operator to run.
+    const onDisk = readdirSync(resolve(REPO_ROOT, 'apps/server/src/routes')).filter((f) =>
+      f.endsWith('.ts'),
+    ).length;
+    expect(
+      Number(stated?.[1] ?? -1),
+      `B5 says ${String(stated?.[1])} route modules; the routes directory holds ${String(onDisk)}`,
+    ).toBe(onDisk);
+
+    // The path figure is deliberately NOT held against
+    // packages/sdk-python/openapi.json, which carries a different number. That
+    // spec is one boot's output, and B5 exists because lib/app.ts registers
+    // conditionally — the live surface varies with which dependencies the
+    // rehearsal wires. Holding a live-boot snapshot against a build artefact
+    // would compare two different measurements and call the gap a defect.
+    expect(Number(stated?.[2] ?? -1), 'the dated path figure is still a number').toBeGreaterThan(
+      100,
+    );
+    expect(
+      readFileSync(resolve(REPO_ROOT, 'apps/server/src/lib/app.ts'), 'utf8'),
+      'registration is no longer dependency-conditional, so a fixed path count may now be gateable and the reasoning above should be revisited',
+    ).toMatch(/if \(deps\.\w+ !== undefined\)/);
   });
 
   it("Pass/fail + V-542.B automation + V-542.A-this-wave framing pinned: '## Pass/fail criteria' + 'The rehearsal **PASSES** when every B + C item ticks. A and D items are' + 'informational' + 'The rehearsal **FAILS** when any B or C item doesn't tick.' + 'Failure must be logged with a root-cause note and a follow-up V-NNN slice' + '## Automation target (V-542.B — later wave)' + 'A scheduled BullMQ job runs the rehearsal weekly during pre-launch (then' + 'quarterly post-launch).' + 'Pass: log to status page admin view \"DR rehearsal passed YYYY-MM-DD\".' + 'Fail: Postmark alert to admin email' + '`scripts/dr-rehearse.sh` extended with structured pass/fail output' + '(JSON to stdout) instead of just exit code.' + 'Job runner (`apps/server/src/services/jobs/dr-rehearsal-job.ts`)' + 'Migration adding `dr_rehearsal_log` table (date + pass/fail + harness' + '## V-542.A this wave' + 'This document is the V-542.A artifact.' + 'V-542.B automates it. V-542.C (later) integrates the' + 'results into the admin status surface.' + '## Verification' + 'V-205 + V-211 regex sweep: zero hits.' + '`scripts/dr-rehearse.sh` exists at expected path.' — pinned so the B+C-must-pass + A+D-informational + FAILS-root-cause-V-NNN-followup + V-542.B-BullMQ-weekly→quarterly + Postmark-fail-alert + 3-impl-req (JSON-pass/fail + dr-rehearsal-job.ts + dr_rehearsal_log-table) + V-542.A-this-doc + V-542.C-admin-status-later + dr-rehearse.sh-exists commitment survives", () => {
