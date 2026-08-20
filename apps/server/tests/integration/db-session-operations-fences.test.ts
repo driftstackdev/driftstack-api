@@ -178,6 +178,46 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(row?.count).toBe(1);
     });
 
+    // V-1192 — NOT a repo-predicate boundary test, and the distinction is the point.
+    // The ownership sweep neutralised the account predicate in `admit`'s idempotency
+    // lookup and the whole suite stayed green. That lookup is CONFLICT-RESOLUTION: it runs
+    // only when the `ON CONFLICT DO NOTHING` insert returns nothing, and the partial unique
+    // index behind it is `(account_id, idempotency_key_hash) WHERE hash IS NOT NULL` — whose
+    // own migration comment says it is "scoped to the account so one customer's key can
+    // never collide with another's". So a second account never conflicts, never reaches the
+    // lookup, and the predicate is unreachable rather than unguarded.
+    //
+    // What IS worth pinning is the property that makes it unreachable: FENCE 2's index is
+    // account-scoped. Narrow it to the hash alone and this arm fails — the second customer
+    // would collide, fall into the lookup, and be handed the first customer's operation.
+    it("CRITICAL FENCE 2 is scoped per account — two customers using the same Idempotency-Key each get their OWN operation. The uniqueness that guarantees it is the (account, key) partial index, not the repo WHERE clause; if that index ever narrows to the key alone, the second customer is served the first one's operation row and their real request never runs.", async () => {
+      if (!dbReachable || !client) return;
+      const repo = repoOf();
+      const a = await seedSession();
+      const b = await seedSession();
+      const shared = sha256('retry-1');
+
+      const first = await repo.admit(
+        admitArgs(a.accountId, a.sessionId, { idempotencyKeyHash: shared }),
+      );
+      expect(first.kind, 'the first account was not admitted').toBe('admitted');
+
+      const other = await repo.admit(
+        admitArgs(b.accountId, b.sessionId, { idempotencyKeyHash: shared }),
+      );
+      expect(
+        other.kind,
+        "a second account reusing the same Idempotency-Key was served the first account's operation",
+      ).toBe('admitted');
+      if (first.kind !== 'admitted' || other.kind !== 'admitted') return;
+      expect(other.operation.id, 'the two accounts share one operation row').not.toBe(
+        first.operation.id,
+      );
+      expect(other.operation.accountId, 'the row came back owned by the other account').toBe(
+        b.accountId,
+      );
+    });
+
     it('CRITICAL FENCE 2 in ISOLATION — a retry AFTER the first operation settled still replays instead of submitting the credentials a second time. This is the case that actually exercises the idempotency index: while the first operation is live, fence 1 blocks the insert on its own, so the test above would still pass with the idempotency index dropped. Verified by dropping it — only this case reds.', async () => {
       if (!dbReachable || !client) return;
       const repo = repoOf();

@@ -133,6 +133,25 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(await repo().findActiveSubscription(acc)).toBeNull();
     });
 
+    // V-1192 — found by the ownership mutation sweep. Neutralising this method's account
+    // predicate left the ENTIRE integration suite green, and the two sibling lookups below
+    // are covered while this one was not.
+    it('CRITICAL findActiveSubscription does not see another account\'s subscription. It is the guard in front of Checkout: unscoped it returns whoever on the platform subscribed most recently, so EVERY account is refused with "already has an active subscription" — a platform-wide stop on new revenue, and the refusal body carries the other account\'s tier and status.', async () => {
+      if (!reachable) throw new Error('real PostgreSQL setup failed');
+      const subscriber = await account();
+      const newcomer = await account();
+      await sub(subscriber, 'active', new Date(NOW.getTime() - DAY));
+
+      expect(
+        (await repo().findActiveSubscription(subscriber))?.status,
+        'the subscriber cannot see their own active subscription',
+      ).toBe('active');
+      expect(
+        await repo().findActiveSubscription(newcomer),
+        "an account with no subscription of its own was handed another account's",
+      ).toBeNull();
+    });
+
     it('CRITICAL a canceled row that sorts NEWER than a live one must not win — created_at is frozen at first-webhook insert, so a replayed event can invert the order and the pause would hit the dead subscription while the live one kept billing a suspended customer', async () => {
       if (!reachable) throw new Error('real PostgreSQL setup failed');
       const acc = await account();

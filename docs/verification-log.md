@@ -51191,3 +51191,50 @@ a whole-file proof would have shown three reds and looked complete.
 Also, a second fixture bug of the same shape as V-1188's: `newSecret` must match
 `whsec_<32 lowercase base32>`, and an invalid one throws inside the encryption helper rather than
 failing an assertion. Fixture bugs announce themselves as errors, not as boundary results.
+
+### V-1192 — the sweep is finished: one last hole, and the same unreachable shape twice
+
+Sixth and final pass, covering the eight repos never bisected: email-preferences,
+rate-limit-overrides, usage, session-operations, stripe-webhooks, account-audit, auth-flows and
+billing — 26 predicates across 19 methods. Neutralising all fired 21 assertions; the unnamed
+remainder fired 3; the remainder of THAT left two.
+
+**`billing-repo.findActiveSubscription` — real, and the widest blast radius of anything found.**
+Neutralising it left the entire integration suite green. It is the guard in front of Checkout:
+
+```
+const existing = await this.repo.findActiveSubscription(args.accountId);
+if (existing !== null) throw new ConflictError('Account already has an active subscription…')
+```
+
+Unscoped it returns whoever on the platform subscribed most recently, ordered by `created_at`
+desc. So **every** account is refused Checkout — a platform-wide stop on new revenue — and the
+refusal body carries `existing_tier` and `existing_status` from a stranger's subscription. Its two
+sibling lookups in the same file are both covered; this one was not. Closed and mutation-proved.
+
+**`session-operations-repo.admit` — unreachable, not unguarded, and I nearly filed it as a hole
+for the second time this sweep.** The neutralised predicate sits in a CONFLICT-RESOLUTION path: it
+runs only when `ON CONFLICT DO NOTHING` returns no row, and the partial unique index behind that is
+`(account_id, idempotency_key_hash) WHERE hash IS NOT NULL`. The migration's own comment says it is
+"scoped to the account so one customer's key can never collide with another's". A second account
+never conflicts, never reaches the lookup, and the predicate cannot be crossed.
+
+I wrote the arm before checking, and it passed under the mutation — which is the correct result
+and looked like a failed test. Rather than delete it I reframed it to assert the property that
+makes the predicate unreachable: FENCE 2's index is account-scoped, so two customers sharing an
+Idempotency-Key each get their own operation. Narrow that index to the hash alone and the arm
+fails. It is a real regression guard on a real invariant; it is **not** a repo-predicate boundary
+test, and the header now says so.
+
+**Twice in one sweep, the same shape.** V-1188's receipts and this one are both
+conflict-resolution reads behind an account-scoped unique constraint. That is worth naming: **a
+lookup that only runs after a uniqueness conflict inherits the scope of the constraint that caused
+the conflict.** Neutralising its predicate is unobservable by construction, and the test result is
+identical to a genuine coverage hole. The schema is the only place that distinguishes them.
+
+**Sweep totals.** Six passes over 21 repos and roughly 200 account predicates. **Twelve genuine
+holes closed** — api-keys (4 methods), team-members offboarding, recipes and profile-snapshots
+reads (4), profiles countByAccount / findByAccountAndName / transferAtomic source claim, webhooks
+findEndpoint / rotateSecret / deliveryCounts, and billing findActiveSubscription. **Two false
+alarms retracted**, both this shape. Every closed arm was proved against its own predicate, which
+is how the one vacuous arm in V-1191 was caught.
