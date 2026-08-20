@@ -49070,3 +49070,40 @@ tree, all of which resolve and none of which a customer can open. Four SDK quick
 `docs/internal/cross-agent-control-plane-contract.md`. Whether customer pages should name
 internal documents at all is an editorial call across eight pages, and not one to take
 inside a path-resolution fix.
+
+### V-1144 — the erasure pointer sent customers to a document with no erasure procedure in it
+
+V-1143 recorded nine internal `docs/` citations in customer pages as an editorial matter:
+all resolve, none is openable by a customer. Before leaving it there I checked whether any
+cites CONTENT the target does not contain — the difference between an inconvenient pointer
+and a wrong one. One does.
+
+`api/legal.md` told customers that to "withdraw consent" they follow "the
+`docs/legal/dpa.md` Art. 17 right-to-erasure procedure". The DPA has no such procedure.
+Searched for every spelling: `erasure` — zero, `withdraw` — zero, "right to be forgotten"
+— zero. Its only occurrence of "17" is the effective date, `2026-07-17`. It does carry
+deletion language (§3.8, "Deletion or return at end of Processing"), but that is
+return-or-delete when processing ENDS, not a data-subject request.
+
+The Article 17 right is in the privacy policy — `legal/privacy.md:496`, "Right to erasure
+('right to be forgotten' — Article 17)", with the 17(1) circumstances and 17(3)
+exceptions — and that document is published at `driftstack.dev/legal/privacy/`. So the
+line was wrong twice: wrong document, and a path the reader cannot open either way. Anyone
+following it was a customer trying to exercise erasure.
+
+Corrected to the published privacy policy. The pin froze the whole sentence in one regex,
+stable anchor and volatile claim together, so the citation could not have been fixed
+without a red — the chained shape this arc has split repeatedly. Split into the append-only
+anchor, the corrected pointer, and a negative quoting the retired one.
+
+**Both mutations run the way V-1143 taught.** The negative is proved by ADDING the retired
+string with the correct pointer left intact — replacing it trips the positive first and
+proves nothing. The positive is proved separately by removing the privacy-policy link.
+
+**The other eight citations verified accurate, and that is the useful half of this entry.**
+`docs/runbooks/incidents.md` really does have a §3.4 "Customer notification template (Art.
+34)". The cross-agent contract really does track `takeover-grant`, three times.
+`decisions.md` really does carry D-021 for the SDK package decision. The telemetry design
+notes really do cover the notifications SSE route including its auth. Eight accurate
+pointers a customer cannot open is an editorial question; one pointer to a procedure that
+does not exist was a defect, and only checking the content told them apart.

@@ -144,11 +144,24 @@ describe('W773 docs /api/legal content parity', () => {
     );
   });
 
-  it('CRITICAL append-only + no-DELETE-or-PATCH framing pinned. The \'The acceptance row is append-only — there is no DELETE or PATCH. Customers wishing to "withdraw consent" follow the docs/legal/dpa.md Art. 17 right-to-erasure procedure rather than this endpoint\' wording matches GDPR right-of-erasure routing.', () => {
+  // V-1144 — this froze the whole sentence in one regex, stable anchor and volatile
+  // claim together, so the citation could not be corrected without a red. The claim was
+  // wrong twice over: it sent a customer exercising erasure to `docs/legal/dpa.md`, a
+  // repo path they cannot open, and that document contains no Article 17 material at all
+  // — its only "17" is the effective date, and its deletion clause (§3.8) is
+  // return-or-delete at END of processing, not a data-subject request. The Article 17
+  // right is in the privacy policy, which is published.
+  it('CRITICAL append-only + no-DELETE-or-PATCH framing pinned, with the erasure pointer split out. A customer who reads this line is trying to withdraw consent, so where it sends them is the load-bearing half — and the anchor is separated from it so the pointer can be corrected without fighting the pin.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /The acceptance row is append-only — there is no `DELETE` or\s*\n?`PATCH`\. Customers wishing to "withdraw consent" follow the\s*\n?`docs\/legal\/dpa\.md` Art\. 17 right-to-erasure procedure rather\s*\n?than this endpoint\./,
+    expect(p).toMatch(/The acceptance row is append-only — there is no `DELETE` or\s*\n?`PATCH`\./);
+    expect(p).toMatch(/Article 17 right to erasure set out in the/);
+    expect(p).toMatch(/\[privacy policy\]\(https:\/\/driftstack\.dev\/legal\/privacy\/\)/);
+
+    // V-1144 negative — the retired pointer, quoted so it cannot return. The DPA has no
+    // Article 17 procedure to follow.
+    expect(p, 'the erasure pointer names the DPA again').not.toMatch(
+      /`docs\/legal\/dpa\.md` Art\. 17/,
     );
   });
 

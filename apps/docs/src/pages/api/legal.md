@@ -165,8 +165,9 @@ Errors:
   client retry — log the version drift for audit.
 
 The acceptance row is append-only — there is no `DELETE` or
-`PATCH`. Customers wishing to "withdraw consent" follow the
-`docs/legal/dpa.md` Art. 17 right-to-erasure procedure rather
+`PATCH`. Customers wishing to "withdraw consent" exercise the
+Article 17 right to erasure set out in the
+[privacy policy](https://driftstack.dev/legal/privacy/) rather
 than this endpoint.
 
 Required scope: `account_owner` (the route gates acceptance on
