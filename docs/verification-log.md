@@ -49267,3 +49267,37 @@ wrong. Negative sentinel over the retired claim, both directions mutation-proved
 D-4 itself is untouched: whether to narrow the release matrix to the one platform
 `license-activation.md` calls supported, or extend support to the three it builds, is a
 product call.
+
+### V-1149 — D-6's local half verified, and one of its inferences does not hold
+
+D-6 asks whether `driftstackdev/driftstack-api` is public today, and notes that nothing in
+the repo records the manual force-push executing. The visibility query itself
+(`gh repo view --json visibility`) is assigned to the account owner and touches a security
+posture, so I did not run it. Everything checkable from inside the repo, I checked.
+
+Confirmed: both violator commits resolve — `63a20c1` ("Handoff: Postmark approval
+requested…") and `ef649a1` ("V-492 / V-493 / V-508: wave 9…"), both dated 2026-05-10 — and
+`origin` is still `git@github.com:driftstackdev/driftstack-api.git`.
+
+**But "both violator SHAs still resolve" is not evidence about the remote.** A local clone
+keeps its objects after a remote force-push; the old commits stay reachable here whether or
+not the remote's history was ever rewritten. D-6 reads their resolving as showing the
+remote still holds them, and it does not show that. It shows this clone does.
+
+**The in-repo evidence that the scrub has not run is stronger than the SHAs, and points the
+same way.** The V-528 runbook still carries `Status: STAGED — manual trigger by the
+Driftstack team tomorrow`, dated 2026-05-10 and never updated. Its line "Now that the repo
+is private" is conditional prose inside Step 5's own frame — the precondition the step
+assumes, not a record that Step 4 landed. No verification-log entry records the flip or the
+scrub as executed.
+
+And the tool cannot have done it. `scripts/v528-scrub-violators.sh` says in its header that
+it "rewrites history LOCALLY and prints the two force-push commands to run afterwards — it
+does NOT push", a distinction V-817 had to correct once already when the header claimed
+otherwise, and V-1009 corrected again on 2026-08-19 when the runtime output still told the
+operator it pushes. So even a completed run leaves the remote untouched; the push is a
+human step outside the repo, which is exactly why nothing here records it.
+
+D-6 stands, on better evidence than it cites: the question is unanswerable from the repo,
+and the repo's own artifacts say the irreversible step was staged and never marked done.
+No source change — the remaining half needs the remote, and that is the owner's to run.
