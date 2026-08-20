@@ -104,4 +104,43 @@ describe('the SDK retry-safety gate agrees across all three languages', () => {
       /strings\.TrimSpace\(v\)\s*!=\s*""/,
     );
   });
+
+  it('CRITICAL V-1095 the eligibility gate reads the method and the headers and nothing else. A retry policy is a caller-supplied argument in all three SDKs, and the one thing it must never do is make an ineligible request eligible — that is a keyless create being auto-resent. The Python module docstring states this as a promise ("does not make a request eligible ... reads only the method and the headers"), and until now it was pinned only against its own file, so the code it describes lives in another one entirely.', () => {
+    const gates: { lang: string; params: string }[] = [];
+    const tsSig = /function isRetrySafe\(([^)]*)\)/.exec(readFileSync(TS_HTTP, 'utf8'));
+    const pySig = /def _is_retry_safe\(([^)]*)\)/.exec(readFileSync(PY_HTTP, 'utf8'));
+    const goSig = /func isRetrySafe\(([^)]*)\)/.exec(readFileSync(GO_CLIENT, 'utf8'));
+    expect(tsSig, 'the TypeScript gate is no longer declared as isRetrySafe').not.toBeNull();
+    expect(pySig, 'the Python gate is no longer declared as _is_retry_safe').not.toBeNull();
+    expect(goSig, 'the Go gate is no longer declared as isRetrySafe').not.toBeNull();
+    gates.push({ lang: 'TypeScript', params: tsSig?.[1] ?? '' });
+    gates.push({ lang: 'Python', params: pySig?.[1] ?? '' });
+    gates.push({ lang: 'Go', params: goSig?.[1] ?? '' });
+
+    const widened = gates
+      .filter((g) => /retry|config|policy|attempts/i.test(g.params))
+      .map((g) => `${g.lang}: isRetrySafe(${g.params.replace(/\s+/g, ' ').trim()})`);
+    expect(
+      widened.sort(),
+      'the eligibility gate now takes retry configuration, so a caller-supplied policy can decide ' +
+        'whether a keyless POST is resent — eligibility must stay a function of the request alone:',
+    ).toEqual([]);
+
+    // Each gate must also short-circuit BEFORE the retry loop, or take a branch
+    // the caller's policy cannot override. The three do it three ways, so the
+    // shapes are asserted separately rather than by one pattern.
+    expect(
+      readFileSync(PY_HTTP, 'utf8'),
+      'the Python sync/async paths no longer return before with_retry when the gate says no',
+    ).toMatch(/if not _is_retry_safe\(method, headers\):\s*\n\s*return (await )?_do\(\)/);
+    expect(
+      readFileSync(GO_CLIENT, 'utf8'),
+      'the Go path no longer returns doOnce before withRetry when the gate says no',
+    ).toMatch(/if !isRetrySafe\(opts\.method, opts\.headers\) \{\s*\n\s*return c\.doOnce/);
+    expect(
+      readFileSync(TS_HTTP, 'utf8'),
+      'TypeScript no longer forces a single attempt for an ineligible request — it overrides the ' +
+        'caller policy rather than short-circuiting, so the override is the load-bearing part',
+    ).toMatch(/isRetrySafe\(opts\.method, opts\.headers\)\s*\n?\s*\?[\s\S]{0,80}maxAttempts: 0/);
+  });
 });

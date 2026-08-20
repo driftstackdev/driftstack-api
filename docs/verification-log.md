@@ -46874,3 +46874,39 @@ the comment says 365, the printed job note says 362"; drifting the Playwright no
 
 Also confirms the V-1092 docstrings are clean under that job: 365 passed, 4 skipped,
 mypy "no issues found in 31 source files", ruff "All checks passed!".
+
+### V-1095 — action 26 was already fixed; the guard it asked for was not built
+
+The plan lists action 26 as outstanding, with a supplied replacement for the
+`retry.py` module docstring that claimed "callers can opt in via the `retry`
+argument on the HTTP client". That text is not there. V-810 corrected it already,
+down to the retraction paragraph, and `sdk-python-retry-content-parity` pins the
+corrected wording with a negative on the old sentence. Nothing to fix.
+
+What was outstanding is the cross-source guard the plan proposed in the same row, and
+the gap is the one this sweep keeps finding: **the docstring makes a claim about a
+file it is not pinned against.** It says eligibility "is decided by
+:func:`driftstack.http._is_retry_safe`, which reads only the method and the headers"
+— and every assertion behind that sentence reads `retry.py`. Change the gate in
+`http.py` to consult a caller-supplied policy and the docstring becomes false again
+with every pin green.
+
+Checked before building, since prior art has been re-derived four times in this
+corpus. `sdk-retry-safety-gate-cross-sdk-parity` exists and is close: it agrees the
+method SETS across the three languages and pins the blank-key handling. It says
+nothing about the gate's inputs or about where the gate sits relative to the retry
+loop.
+
+Added there rather than in a new file. All three SDKs take `(method, headers)` and
+nothing else, and each denies an ineligible request in its own way — Python and Go
+return before the retry loop, TypeScript overrides the caller's policy to
+`maxAttempts: 0`. The arm asserts the signatures carry no retry/config/policy
+parameter and pins each of the three refusal shapes separately, because one pattern
+over three idioms would match by accident.
+
+Mutation-proved, restored byte-identical: widening the Python gate to accept a
+`RetryConfig` fails by printing the offending signature; deleting the Go
+short-circuit fails the Go shape; replacing the TypeScript `maxAttempts: 0` branch
+with the caller's own policy fails the TypeScript shape. The SDK's own
+`tests/test_http_retry_gate.py` proves the runtime behaviour, but it runs in the
+`python-sdk` job, which this gate does not.
