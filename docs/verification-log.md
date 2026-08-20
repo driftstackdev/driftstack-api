@@ -49733,3 +49733,38 @@ file that led to a peer's work being absorbed into my commit in V-1154's addendu
 Committed the one-line sync rather than reverting it. It changes no dependency, no
 behaviour and no decision — the lock now records the version the manifest already declares —
 and leaving it would hand the same spurious diff to whoever runs cargo next.
+
+### V-1160 — every job that can gate or advise a pull request, run locally and green
+
+V-1156 through V-1159 worked outward from the gate's declared blind spots. This closes the
+set: **every job that gates or advises a pull request has now been run on this machine.**
+
+| job                                      | how it runs                                                 | result                                |
+| ---------------------------------------- | ----------------------------------------------------------- | ------------------------------------- |
+| `build-test` (the gate)                  | `npx vitest run`                                            | 3007 files, 30218 tests               |
+| `e2e`                                    | `scripts/e2e-local.mjs`                                     | 222 Playwright, real Postgres + Redis |
+| `python-sdk`                             | pytest + ruff + `ruff format --check` + `mypy src examples` | 365 passed, 43 files clean            |
+| `go-sdk`                                 | `go vet` / `go test` / `go build`                           | clean                                 |
+| `bench-regression`                       | `bench:json` then `bench:check-regression`                  | all within threshold                  |
+| `gui-build-check` (unnamed until V-1159) | 7 steps incl. `cargo check` + `cargo test`                  | all green, 32 Rust tests              |
+
+Two things this turned up that reading could not.
+
+**The bench job really does compare.** Its name promises regression detection and the CI
+comment mentions a bootstrap mode that "exits 2" without a baseline — which invites the
+suspicion that it has been in bootstrap forever, printing numbers and detecting nothing.
+It has not: `docs/benchmarks/baseline.ci.json` exists, the comparison ran, every one of the
+nine benchmarks came back `[ok]`, and the script reported "All benchmarks within threshold".
+The advisory `continue-on-error` is about shared-runner noise, not about a missing baseline.
+
+**I ran the wrong command first, for the third time in three turns.** `npm run bench` is
+plain `vitest bench --run` — it prints timings and compares nothing. CI runs `bench:json`
+followed by `bench:check-regression`, and only the second one is the check. My exit 0 from
+the first told me nothing, and would have gone into an entry as "bench green" if I had
+stopped there. The same error as `mypy src` for `mypy src examples` in V-1157 and the
+narrow delivery-status grep in V-1153: **the name of a thing is not its CI invocation, and
+running the part that fits the terminal answers a smaller question than the one asked.**
+
+Nothing needed fixing — every job is green. What changed is that "green" now means the
+whole gating surface rather than a fifth of it, which is the claim the gate's own comment
+has been warning against being made loosely since long before this arc.
