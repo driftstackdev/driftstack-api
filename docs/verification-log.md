@@ -45663,3 +45663,48 @@ when the sentence they parse is absent. In each the population survives the remo
 the thing being asserted.
 
 `it(` count 3→4. No new file, no ratchet change.
+
+## V-1071 — the writes that fall between two body guards
+
+Following V-1070's audit outward: if a guard's population can lose members silently,
+the next question is whether two guards can share a blind spot at their boundary.
+
+Two files police request bodies and BOTH key their population on the schema.
+`unknown-request-fields-coverage-invariant` finds `XSchema.safeParse(req.body)` sites
+and asks whether each reports unknown fields; `api-types-shapes-match-the-spec` pairs
+each route with the schema its handler parses and compares published bounds against
+it. A handler that validates by hand has no schema to key on, so it is in neither
+population — not by exemption, by construction.
+
+MEASURED: six live writes read `request.body` with no schema parse. All six are fine,
+and establishing that took the work: two are raw-body webhook receivers whose payload
+is signature-verified bytes; `PUT /v1/account/me/byok-anthropic-key` checks one field
+as a non-empty string, which is exactly what the document publishes for it
+(`minLength: 1`, required — read out of the committed spec, not assumed);
+`POST /v1/api-keys/:id/rotate` hand-checks an optional name and says so in a comment;
+`POST /v1/profiles/:id/transfer` checks one field and throws a ValidationError naming
+it; and `POST /v1/agent-sessions/:id/message` hand-reads but still passes
+`RunTurnRequestSchema.shape` to the unknown-field reporter, so the failure this file
+worries about is already covered for it.
+
+The risk is a seventh. `Item 6` in this corpus was a mistyped field dropped in
+silence, so a request answered success having changed nothing the caller asked for. A
+new hand-validated write reintroduces that where neither guard is looking.
+
+The population is pinned from the start rather than derived, which is the correction
+V-1069 and V-1070 each had to make after shipping. A new hand-validated write is
+unlisted and fails; a listed one that moves to a schema, or stops reading a body,
+leaves the derived set and fails as stale.
+
+THREE INSTRUMENT CORRECTIONS on the way to the six. The first pass reported 27
+unparsed writes; `parseRequestBodyReportingUnknown` — a third call form — accounted
+for four of them, and `PATCH /v1/profiles/:id` was in that list looking alarming until
+I read it. Restricting to handlers that actually READ a body dropped 27 to 6, because
+most of the rest are body-less action endpoints where "no parse" is correct. Each
+narrowing came from reading a route rather than trusting the count.
+
+Mutations: injecting a hand-validated write fails the unlisted arm; converting
+`transfer` to a schema parse fails the stale arm; making it stop reading the body
+fails the stale arm. Restored byte-identical.
+
+`it(` count 3 in a new file. Ratchets 2941→2942 and 3107→3108.
