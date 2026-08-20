@@ -89,7 +89,14 @@ describe('W593.C packages/sdk-go/profile_snapshots.go content parity', () => {
     expect(body).toMatch(
       /return r\.listInternal\(\s*\n\s*ctx,\s*\n\s*"\/v1\/profiles\/"\+url\.PathEscape\(profileID\)\+"\/snapshots",\s*\n\s*query,\s*\n\s*\)/,
     );
-    expect(body).toMatch(/\/\/ List returns every snapshot owned by the calling account\./);
+    // V-1121 — the handler resolves the team header, so List returns the
+    // EFFECTIVE account's snapshots.
+    expect(body).toMatch(
+      /\/\/ List returns every snapshot owned by the EFFECTIVE account: the caller's/,
+    );
+    expect(body, 'the calling-account claim must not return').not.toMatch(
+      /\/\/ List returns every snapshot owned by the calling account\./,
+    );
     expect(body).toMatch(/return r\.listInternal\(ctx, "\/v1\/profile-snapshots", query\)/);
   });
 

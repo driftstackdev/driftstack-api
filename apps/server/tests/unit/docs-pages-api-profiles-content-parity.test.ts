@@ -206,7 +206,12 @@ describe('W763 docs /api/profiles content parity', () => {
 
     expect(p).toMatch(/`GET \/v1\/profiles\/:id\/snapshots` — newest-first, paginated\./);
     expect(p).toMatch(
-      /`GET \/v1\/profile-snapshots` — every snapshot owned by the calling\s*\n?account, across all profiles\./,
+      // V-1121 — this cross-reference kept the calling-account wording that
+      // V-1103 corrected on profile-snapshots.md itself. The sweep missed it
+      // because that page says "every snapshot the calling account owns" and
+      // this one says "owned by the calling account" — same claim, different
+      // word order.
+      /`GET \/v1\/profile-snapshots` — every snapshot the effective account owns/,
     );
   });
 

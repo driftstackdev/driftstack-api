@@ -80,8 +80,16 @@ describe('W584.C packages/sdk-python/src/driftstack/resources/profile_snapshots.
     expect(body).toMatch(
       /def list_for_profile\(\s*\n\s*self,\s*\n\s*profile_id: str,\s*\n\s*\*,\s*\n\s*limit: int \| None = None,\s*\n\s*cursor: str \| None = None,\s*\n\s*\) -> dict\[str, Any\]:\s*\n\s*"""List snapshots for one profile, newest-first\."""\s*\n\s*qs = _encode_query\(\{"limit": limit, "cursor": cursor\}\)\s*\n\s*path = f"\/v1\/profiles\/\{quote\(profile_id, safe=''\)\}\/snapshots"\s*\n\s*if qs:\s*\n\s*path = f"\{path\}\?\{qs\}"\s*\n\s*return self\._http\.request\("GET", path\)/,
     );
+    // V-1121 — the signature and the docstring are asserted separately now.
+    // The single chained regex this replaced ran from `def list(` through the
+    // docstring text, so correcting the docstring broke a pin about the
+    // SIGNATURE — the same coupling V-1092 had to split on the auth resource.
     expect(body).toMatch(
-      /def list\(self, \*, limit: int \| None = None, cursor: str \| None = None\) -> dict\[str, Any\]:\s*\n\s*"""List every snapshot owned by the calling account\."""\s*\n\s*qs = _encode_query\(\{"limit": limit, "cursor": cursor\}\)\s*\n\s*path = "\/v1\/profile-snapshots" \+ \(f"\?\{qs\}" if qs else ""\)\s*\n\s*return self\._http\.request\("GET", path\)/,
+      /def list\(self, \*, limit: int \| None = None, cursor: str \| None = None\) -> dict\[str, Any\]:/,
+    );
+    expect(body).toMatch(/"""List every snapshot owned by the EFFECTIVE account\./);
+    expect(body, 'the calling-account claim must not return').not.toMatch(
+      /"""List every snapshot owned by the calling account\./,
     );
   });
 

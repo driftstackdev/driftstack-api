@@ -47,7 +47,9 @@ export class ProfileSnapshotsResource {
     });
   }
 
-  /** List every snapshot owned by the calling account. */
+  /** List every snapshot owned by the EFFECTIVE account — your own, or the
+   *  owner you are acting as via `X-Driftstack-Account`. V-1121 — this said
+   *  "the calling account"; the handler resolves the team header first. */
   list(query: PaginationQueryInput = {}): Promise<ProfileSnapshotsListPage> {
     return this.http.request<ProfileSnapshotsListPage>({
       method: 'GET',

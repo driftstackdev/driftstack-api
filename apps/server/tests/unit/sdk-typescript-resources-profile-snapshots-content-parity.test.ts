@@ -98,7 +98,11 @@ describe('W426.C packages/sdk-typescript/src/resources/profile-snapshots.ts cont
   });
 
   it('list verb (account-wide) — GET /v1/profile-snapshots (NO :profileId in path) → Promise<ProfileSnapshotsListPage>. Drops to the /v1/profile-snapshots URL family because this is the account-wide listing (every snapshot the caller owns, regardless of parent profile). Drift to nesting under /v1/profiles would force the dashboard to pick a parent profile before listing all snapshots, breaking the "show me everything" UX.', () => {
-    expect(body).toMatch(/\/\*\* List every snapshot owned by the calling account\. \*\//);
+    // V-1121 — effective account, not calling.
+    expect(body).toMatch(/List every snapshot owned by the EFFECTIVE account/);
+    expect(body, 'the calling-account claim must not return').not.toMatch(
+      /List every snapshot owned by the calling account/,
+    );
     expect(body).toMatch(
       /list\(query: PaginationQueryInput = \{\}\): Promise<ProfileSnapshotsListPage> \{\s*\n?\s*return this\.http\.request<ProfileSnapshotsListPage>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/profile-snapshots',\s*\n?\s*query: \{\s*\n?\s*\.\.\.\(query\.limit !== undefined \? \{ limit: query\.limit \} : \{\}\),\s*\n?\s*\.\.\.\(query\.cursor !== undefined \? \{ cursor: query\.cursor \} : \{\}\),\s*\n?\s*\},\s*\n?\s*\}\);\s*\n?\s*\}/,
     );

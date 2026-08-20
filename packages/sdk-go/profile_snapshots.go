@@ -77,7 +77,12 @@ func (r *ProfileSnapshotsResource) ListForProfile(
 	)
 }
 
-// List returns every snapshot owned by the calling account.
+// List returns every snapshot owned by the EFFECTIVE account: the caller's
+// own, or the owner they are acting as via X-Driftstack-Account.
+//
+// V-1121 — this said "the calling account". The handler resolves
+// eff.kind == "team" ? eff.accountId : ctx.account.id, so a team admin acting
+// as an owner lists the OWNER's snapshots.
 func (r *ProfileSnapshotsResource) List(
 	ctx context.Context,
 	query *ListProfileSnapshotsQuery,

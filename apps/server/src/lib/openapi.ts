@@ -7169,7 +7169,7 @@ function buildRegistry(): OpenAPIRegistry {
     path: '/v1/profile-snapshots',
     operationId: 'listSnapshots',
     summary:
-      'List every snapshot owned by the calling account (cross-profile) (requires `read:profiles`, broad `read`, or `account_owner`)',
+      'List every snapshot owned by the effective account (cross-profile) (requires `read:profiles`, broad `read`, or `account_owner`)',
     tags: ['snapshots'],
     security: auth,
     request: { query: PaginationQuerySchema },

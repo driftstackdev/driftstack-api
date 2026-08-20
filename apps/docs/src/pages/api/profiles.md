@@ -397,8 +397,9 @@ capture time), and `captured_at`.
 **List**
 
 `GET /v1/profiles/:id/snapshots` — newest-first, paginated.
-`GET /v1/profile-snapshots` — every snapshot owned by the calling
-account, across all profiles. Same pagination shape.
+`GET /v1/profile-snapshots` — every snapshot the effective account owns — your own, or the owner you are
+acting as via `X-Driftstack-Account`, across all
+profiles. Same pagination shape.
 
 **Get one**
 

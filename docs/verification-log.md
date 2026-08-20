@@ -48050,3 +48050,50 @@ Mutation-proved, restored byte-identical, and each isolated: reverting the TS do
 fails its positive; reverting Go's create comment fails the create-side negative while
 the Get/Delete assertion stays green, which is the collateral-damage check; reverting
 Python fails its arm. `go vet` clean, 365 pytest passed, 0 tsc errors.
+
+### V-1121 — re-auditing my own retractions with the pattern set V-1120 taught
+
+V-1120 showed a retracted claim surviving two sweeps because one surface wrote
+"caller's account" where the others wrote "calling account". That is a defect in my
+METHOD, not in any one file, so this pass re-ran every retraction from this arc against
+an expanded pattern set — possessive, passive, reordered — across 9637 files and every
+extension, not just the surfaces each original sweep happened to visit.
+
+Four retractions came back clean: the `validation` slug (V-1116), the driver roster
+(V-1096), the bucket-key count (V-1091), and the session `refresh_token` (V-1092/1108) —
+their only remaining hits are their own sentinels and retraction prose.
+
+**V-1103's calling-vs-effective correction did not.** Two surfaces it never reached,
+both genuinely wrong:
+
+- `packages/sdk-go/profile_snapshots.go:80` — "List returns every snapshot owned by the
+  calling account", where the handler resolves
+  `eff.kind === 'team' ? eff.accountId : ctx.account.id`.
+- `apps/docs/src/pages/api/profiles.md:400` — the cross-reference to
+  `GET /v1/profile-snapshots`, saying "every snapshot owned by the calling account". The
+  page V-1103 fixed says "every snapshot the calling account OWNS"; this one reverses the
+  word order, so the sweep's pattern missed it.
+
+Both spellings of the same sentence, on the same route, three sweeps apart. The TypeScript
+and Python SDKs carried it too, and the OpenAPI description with them — five surfaces for
+one claim, corrected here with a negative on each.
+
+Checked and deliberately NOT changed: `apps/docs/src/pages/api/team.md:189` says a team
+membership 404s if not owned by the calling account, and that is right —
+`DELETE /v1/team/members/:id` scopes on `ownerAccountId: ctx.account.id`, and team routes
+are per-caller by design. The same words are correct there and wrong on snapshots, which
+is why the fix could not be a replace.
+
+One pin needed splitting rather than editing: the Python arm asserted the `list()`
+SIGNATURE and its docstring in a single chained regex, so correcting the docstring broke
+a pin about the signature — the same coupling V-1092 had to split on the auth resource.
+
+Mutation-proved, restored byte-identical, each isolated: reverting the docs
+cross-reference, the Go comment, and the Python docstring each fails its own arm. `go vet`
+clean, 365 pytest passed, 0 tsc errors, docs rebuilt and the rendered gate green.
+
+**Named, not fixed:** the same audit flagged `webhooks.ts:277` (the self-service replay
+comment says "isn't owned by the calling account" while the handler uses
+`effectiveAccountIdForWrite`) and its OpenAPI twin at `openapi.ts:1488`. Verified wrong,
+but it is a second claim on a different route, so it belongs in its own commit rather
+than being folded into this one.

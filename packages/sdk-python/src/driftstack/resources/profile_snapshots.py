@@ -56,7 +56,12 @@ class ProfileSnapshotsResource:
         return self._http.request("GET", path)
 
     def list(self, *, limit: int | None = None, cursor: str | None = None) -> dict[str, Any]:
-        """List every snapshot owned by the calling account."""
+        """List every snapshot owned by the EFFECTIVE account.
+
+        Your own account, or the owner you are acting as via
+        ``X-Driftstack-Account``. V-1121 — this said "the calling
+        account"; the handler resolves the team header first.
+        """
         qs = _encode_query({"limit": limit, "cursor": cursor})
         path = "/v1/profile-snapshots" + (f"?{qs}" if qs else "")
         return self._http.request("GET", path)
