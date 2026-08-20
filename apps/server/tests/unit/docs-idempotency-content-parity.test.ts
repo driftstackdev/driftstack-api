@@ -150,4 +150,32 @@ describe('Arc 6 docs.idempotency — apps/docs/src/pages/reference/idempotency.m
       /without idempotency\s*\n?\s*protection and without an error/,
     );
   });
+
+  it('V-1077 CRITICAL the page documents the one endpoint where sending a key can fail a request that omitting it would not. The agent-turn receipt is stored encrypted, so on a deployment without MFA_ENCRYPTION_KEY a valid Idempotency-Key answers 503 while the same request without the header runs the turn — the exact inverse of the advice everywhere else on this page.', () => {
+    expect(body, 'the inverted case is no longer documented').toMatch(
+      /sending a key can fail a request that omitting it would not/i,
+    );
+    expect(body, 'the endpoint is no longer named').toMatch(
+      /`POST \/v1\/agent-sessions\/\{id\}\/message`/,
+    );
+    expect(body, 'the 503 and its meaning are no longer stated').toMatch(
+      /`503 feature-unavailable`/,
+    );
+    expect(body, 'the page no longer says no turn ran').toMatch(/no turn ran/);
+
+    // …and the route still behaves that way, or the page is next to go stale.
+    const route = readFileSync(
+      resolve(REPO_ROOT, 'apps/server/src/routes/agent-sessions.ts'),
+      'utf8',
+    );
+    expect(
+      route,
+      'the message route no longer refuses a valid key when the receipt store is absent',
+    ).toMatch(
+      /if \(agentTurnReceipts === undefined\) \{\s*\n?\s*throw new FeatureUnavailableError\(/,
+    );
+    expect(route, 'an absent key no longer runs the turn without a receipt').toMatch(
+      /if \(idempotency\.kind === 'absent'\)/,
+    );
+  });
 });

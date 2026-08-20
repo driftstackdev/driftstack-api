@@ -39,6 +39,23 @@ surface, the GET surface, and idempotent-by-design POSTs like
 `/v1/auth/login` — ignores the header. Sending it is harmless but has no
 dedupe effect; guard those calls separately if they need at-most-once behavior.
 
+### One case where sending a key can fail a request that omitting it would not
+
+`POST /v1/agent-sessions/{id}/message` stores its receipt encrypted, so the
+receipt store only exists on a deployment with `MFA_ENCRYPTION_KEY`
+configured. Where it is not, that endpoint answers a valid
+`Idempotency-Key` with `503 feature-unavailable` — _"Agent-turn idempotency
+storage is unavailable. Do not retry this browser task without the same
+key; contact support."_ — while the same request WITHOUT the header runs
+the turn normally.
+
+That is deliberate: a browser turn is expensive and side-effecting, and
+the server would rather refuse than accept a key it cannot honour and let
+you believe a retry is safe. It is worth knowing because it inverts the
+usual advice — on that one endpoint, in that one deployment state, the
+header is the reason the call fails. A `503` here means "your retry
+protection is not available", not "the turn failed"; no turn ran.
+
 ## Format
 
 The header value is a printable-ASCII string, 1–255 characters, with no

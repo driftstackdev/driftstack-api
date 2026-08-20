@@ -45941,3 +45941,48 @@ fails; renaming the terminal frame fails; making a rate-limit denial stream fail
 Restored byte-identical, `apps/docs` rebuilt.
 
 `it(` count 11→12. No new file, no ratchet change.
+
+## V-1077 — the header the docs push hardest is the one that can fail the call
+
+Generalising V-1076: which other behaviour is selected by a request header, and is it
+documented? 18 distinct headers are read across the server. Most of the apparent gaps
+are not customer contracts — `cf-ipcity` and friends are Cloudflare-injected,
+`stripe-signature` and `x-nowpayments-sig` are provider-supplied on receivers,
+`set-cookie` appears only in the logger's redaction list.
+
+`Last-Event-ID` checked out in both directions, which is the pleasing kind of
+negative: `api/agent-sessions.md` documents SSE resume on the transcript stream, and
+`api/account-notifications.md` states there is NO resume there — and the sweep confirms
+only agent-sessions reads that header.
+
+IDEMPOTENCY was the productive one, after two more instrument artifacts. My
+route-segment scan reported `DELETE /v1/agent-sessions/:id` as reading the key: it
+matches the word inside a comment about a "fast sequential idempotency path". It also
+reported `POST /v1/agent-sessions/{id}/message` as NOT handling the key, which is
+backwards — the handling lives in `handleAgentMessage`, a const declared outside the
+registration call, the same blind spot V-1075 recorded for status codes. The documented
+four-endpoint list is accurate.
+
+THE FINDING is a branch inside that helper. The agent-turn receipt is stored encrypted,
+so the receipt store only exists where `MFA_ENCRYPTION_KEY` is configured. Where it is
+not:
+
+sending a VALID `Idempotency-Key` → `503 feature-unavailable`
+sending NO header → the turn runs normally
+
+So on the one endpoint whose documentation calls the header "strongly recommended",
+following that advice is what fails the request. Nothing on either page said so.
+
+The behaviour is right — a browser turn is expensive and side-effecting, and refusing
+beats accepting a key the server cannot honour while the caller believes a retry is
+safe. What was missing is that a customer hitting it has no way to know the 503 means
+"your retry protection is unavailable" rather than "your turn failed", and no way to
+know that no turn ran. Both are now on the page, next to the advice they invert.
+
+The guard pins both halves: the page states it, and the route still refuses a valid key
+when the store is absent while an absent key still runs the turn.
+
+Mutations: deleting the section fails; dropping only the "no turn ran" clause fails;
+neutering the route's refusal fails. Restored byte-identical, `apps/docs` rebuilt.
+
+`it(` count 13→14. No new file, no ratchet change.
