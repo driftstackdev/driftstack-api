@@ -45283,3 +45283,49 @@ byte-identical.
 
 `it(` count 5→6. Spec regenerated: 22 insertions, 7 deletions after normalising
 formatting, all of them bounds.
+
+## V-1064 — a shared schema whose comment described only one of its two consumers
+
+Continuing the spec-versus-code line onto a dimension the V-1063 arms do not test:
+REQUIRED-NESS. A document that marks a field optional where the route demands it
+produces an SDK that omits it and a 400 the customer was told could not happen.
+
+MEASURED, and the answer is that this dimension is already owned. Across 39
+name-paired components: zero mismatches, because those components are generated FROM
+the schema, so required-ness is derived rather than restated. Extending the probe to
+operation bodies — 48 compared — produced exactly one candidate.
+
+THE CANDIDATE WAS MY PROBE, FOR THE THIRD TIME IN THIS VEIN.
+`PUT /v1/admin/incidents/:id` publishes `started_at` as required while
+`CreateIncidentRequestSchema`, which its handler parses, marks it optional. That reads
+as a document stricter than the server. It is not: the handler checks
+`parsed.data.started_at === undefined` after parsing and throws
+`BadRequestError('started_at is required for idempotent incident creation.')`. The
+spec is correct and the schema is not the whole rule.
+
+This one mattered more than the earlier two. A zod-only required-ness arm would have
+failed on a CORRECT document, and the obvious way to make it green is to delete the
+`.required({ started_at: true })` — weakening the spec into a lie in the harmful
+direction, telling customers a field is optional that the server rejects. So the
+recorded decision is NOT to add that arm: optionality in a zod shape is not the
+route's contract, because a handler can add a check the schema cannot express.
+
+Prior art existed for this exact case, found before acting:
+`the-document-is-neither-looser-nor-stricter` already asserts that the incident PUT
+publishes the extra requirement its handler enforces and that POST does not. Fourth
+time this session that grepping first changed what I did.
+
+THE RESIDUE IS REAL, and small. Both verbs share `CreateIncidentRequestSchema`, and
+its comment said "Defaults to server-now if omitted" with no qualification — true for
+`POST /v1/admin/incidents`, which falls back to `new Date()`, and false for the PUT,
+which rejects the request. One sentence describing one of two consumers, in a type
+whose readers cannot tell which. Corrected to name both, pointing at the guard that
+holds the published difference.
+
+Both pins updated in the same commit, each with the halves asserted SEPARATELY, so
+dropping the PUT clause while keeping the POST clause fails — which is exactly the
+shape the old comment had. Mutations: restoring the unconditional sentence fails two
+arms; deleting only the PUT half fails two. Restored byte-identical. `api-types` dist
+rebuilt, since `incidents.d.ts` carries the comment into every consumer.
+
+`it(` counts 11 and 12, unchanged. No new file, no ratchet change.

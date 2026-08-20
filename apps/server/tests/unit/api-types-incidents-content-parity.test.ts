@@ -92,9 +92,21 @@ describe('W434.A packages/api-types/src/incidents.ts content parity', () => {
     expect(body).toMatch(
       /\/\*\* When false, the incident is admin-only \(internal triage before\s*\n?\s*\*\s*public confirmation\)\. Defaults true\. \*\/\s*\n?\s*public: z\.boolean\(\)\.optional\(\),/,
     );
-    expect(body).toMatch(
-      /\/\*\* ISO-8601 timestamp when the incident actually started\.\s*\n?\s*\*\s*Defaults to server-now if omitted\. Operators usually backdate\s*\n?\s*\*\s*this once they identify the actual start time\. \*\/\s*\n?\s*started_at: Iso8601Schema\.optional\(\),/,
+    // V-1064 — the comment used to state the server-now default unconditionally,
+    // which is false for the idempotent PUT. Both halves are pinned separately so
+    // neither can be dropped while the other survives.
+    expect(body).toMatch(/\/\*\* ISO-8601 timestamp when the incident actually started\./);
+    expect(body, 'the POST default is no longer stated').toMatch(
+      /`POST \/v1\/admin\/incidents` defaults to server-now if omitted/,
     );
+    expect(body, 'the PUT rejection is no longer stated').toMatch(
+      /rejects its absence with a 400 in the handler/,
+    );
+    expect(
+      body,
+      'started_at again claims a server-now default with no mention of the PUT that rejects its ' +
+        'absence',
+    ).not.toMatch(/started\.\s*\n?\s*\*\s*Defaults to server-now if omitted\. Operators/);
   });
 
   it('AddIncidentUpdate: message 1..2000 + status; ResolveIncident: final message 1..2000 only', () => {

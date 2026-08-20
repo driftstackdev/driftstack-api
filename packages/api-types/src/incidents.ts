@@ -72,8 +72,18 @@ export const CreateIncidentRequestSchema = z.object({
    *  public confirmation). Defaults true. */
   public: z.boolean().optional(),
   /** ISO-8601 timestamp when the incident actually started.
-   *  Defaults to server-now if omitted. Operators usually backdate
-   *  this once they identify the actual start time. */
+   *
+   *  Optional here because the two routes sharing this schema treat it
+   *  differently, and V-1064 corrected this comment for saying only the
+   *  first: `POST /v1/admin/incidents` defaults to server-now if omitted,
+   *  while `PUT /v1/admin/incidents/:id` — the idempotent create with a
+   *  caller-owned id — rejects its absence with a 400 in the handler,
+   *  after this schema has already accepted it. The published document
+   *  states that difference per verb; see
+   *  `the-document-is-neither-looser-nor-stricter`.
+   *
+   *  Operators usually backdate this once they identify the actual start
+   *  time. */
   started_at: Iso8601Schema.optional(),
 });
 export type CreateIncidentRequest = z.infer<typeof CreateIncidentRequestSchema>;

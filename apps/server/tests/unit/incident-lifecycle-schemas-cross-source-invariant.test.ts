@@ -9,7 +9,8 @@
 //     - status?: IncidentStatusSchema (defaults 'investigating').
 //     - affected_components?: array of 1-50-char slugs, max 20.
 //     - public?: boolean (defaults true).
-//     - started_at?: ISO (defaults server-now; ops backdate).
+//     - started_at?: ISO (POST defaults server-now, PUT rejects absence;
+//       ops backdate).
 //
 //   AddIncidentUpdateRequest (2 fields):
 //     - message: string 1-2000.
@@ -89,11 +90,14 @@ describe('W890 V-295a Incident lifecycle schemas cross-source invariant', () => 
     );
   });
 
-  it("CRITICAL CreateIncident.started_at is Iso8601Schema.optional() — 'defaults to server-now if omitted. Operators usually backdate this once they identify the actual start time'. The backdate-pattern is what makes RCA-aligned timestamps possible.", () => {
+  it("V-1064 CreateIncident.started_at is Iso8601Schema.optional(), and the comment names both verbs rather than only the POST default — 'defaults to server-now if omitted. Operators usually backdate this once they identify the actual start time'. The backdate-pattern is what makes RCA-aligned timestamps possible.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/incidents.ts'));
     expect(p).toMatch(/started_at: Iso8601Schema\.optional\(\)/);
-    expect(p).toMatch(
-      /Operators usually backdate\s*\n\s*\*\s*this once they identify the actual start time/,
+    expect(p).toMatch(/Operators usually backdate this once they identify the actual start/);
+    // V-1064 — optional in the schema, but only one of the two verbs sharing it
+    // treats an omission as a default. The comment now names both.
+    expect(p, 'the per-verb difference is no longer stated').toMatch(
+      /`PUT \/v1\/admin\/incidents\/:id`[\s\S]*?rejects its absence with a 400/,
     );
   });
 
