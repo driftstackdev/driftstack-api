@@ -205,9 +205,13 @@ to the assigned browser runtime.
 
 Errors:
 
-- `404` if the profile isn't owned by the calling account
-  (deliberate anti-enumeration — cross-account `profile_id` is
+- `404` if the profile isn't owned by the **effective** account — your own,
+  or the owner you are acting as via `X-Driftstack-Account` (deliberate
+  anti-enumeration — a `profile_id` outside that account is
   indistinguishable from a missing one).
+- `403` if you send `X-Driftstack-Account` for a team you are a member of
+  but not an **admin** of: launching a profile on a team owner requires the
+  admin role on that team.
 - `409 profile-in-use` if the profile already has a live session —
   a profile can run only one session at a time (the body's
   `active_session_id` names the live one). End it first, then launch.
@@ -541,7 +545,8 @@ profile has **no saved state yet** (a fresh profile has nothing to
 trim), or the deployment's profile storage / fleet control plane
 isn't enabled. On `"ok"`, `size_bytes` (the new stored size) updates
 the storage meter and launch-quota checks immediately. Returns `404`
-if the profile isn't found or isn't owned by the calling account.
+if the profile isn't found or isn't owned by the effective account —
+your own, or the owner you are acting as via `X-Driftstack-Account`.
 
 ## Lifecycle interaction
 

@@ -47253,3 +47253,46 @@ workflow posture line fails its own sentinel.
 The first attempt at the middle mutation silently injected nothing — the marker count
 came back 0 and the suite passed, which reads exactly like a guard that works. Counting
 the injected marker before trusting the run is what caught it.
+
+### V-1103 — the sweep V-1101 implied, run properly: six more calling-vs-effective claims
+
+The batch list is exhausted, so this pass swept for the class V-1101 exposed rather than
+working from the plan: a page describing account scope as the CALLING account where the
+handler resolves the EFFECTIVE one. Nine route modules resolve an effective account.
+`packages/api-types` came back clean apart from V-1101's own retraction. The customer
+docs did not.
+
+Six live claims, all confirmed against their handlers first:
+
+| page                                          | claim                                             | handler                                                 |
+| --------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------- |
+| `api/profiles.md` Launch                      | `404` if not owned by the calling account         | `sessions.ts` resolves `ownerAccountId` from the header |
+| `api/profiles.md` Trim                        | not found or not owned by the calling account     | `profiles.ts` uses `effectiveAccountIdForWrite`         |
+| `api/profile-snapshots.md` capture            | profile id doesn't belong to the calling account  | effective                                               |
+| `api/profile-snapshots.md` cross-account list | every snapshot the calling account owns           | effective                                               |
+| `api/profile-snapshots.md` restore            | snapshot id doesn't belong to the calling account | effective                                               |
+| `api/profile-snapshots.md` delete             | snapshot id doesn't belong to the calling account | effective                                               |
+
+`profiles.md` is the sharper case: sixty lines above the Launch error it already says
+"With no header, the calling account remains the owner" — the page knows about the
+header and forgets it at the error that sends a customer looking for a missing profile.
+Launch also refuses a non-admin team member with a 403 the page never mentioned, so a
+caller with a valid header and the wrong role reads the 404 bullet and hunts for the
+wrong problem. That bullet is added.
+
+Rule 2 mattered twice. My first enumeration used the phrasing V-1101 had taught me
+("isn't owned by") and missed "doesn't belong to" — the second wording carried three of
+the six, and one of them was frozen by a pin that only surfaced when the suite went red.
+
+**My own new guard was weak, and only the mutation proof showed it.** The first version
+asserted the effective-account resolution existed anywhere in
+`routes/profile-snapshots.ts`. Three handlers resolve identically, so deleting it from
+the list handler left two matches and the arm green — measured, not reasoned. Rewritten
+to scope the search to the cross-account list registration. This is the same
+population-detection failure V-1069 and V-1070 were corrected for, committed by the
+guard written to catch its cousin.
+
+Mutation-proved, restored byte-identical: restoring any one calling-account 404 fails
+the page-wide negative; restoring the Launch wording fails its positive; removing the
+effective resolution from the list handler fails the scoped arm (and passed the unscoped
+one); removing the team-admin refusal from launch fails the arm that documents it.

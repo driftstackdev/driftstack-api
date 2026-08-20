@@ -74,8 +74,9 @@ renamed, re-archetyped, or deleted.
 
 Errors:
 
-- `404 not-found` — the profile id doesn't belong to the calling
-  account.
+- `404 not-found` — the profile id doesn't belong to the effective
+  account (your own, or the owner you are acting as via
+  `X-Driftstack-Account`).
 
 Required scope: `write` or `write:profiles`.
 
@@ -114,9 +115,10 @@ Required scope: `read` or `read:profiles`.
 
 `GET /v1/profile-snapshots`
 
-Returns every snapshot the calling account owns, across all
-profiles. Useful for the dashboard's "all snapshots" view or for
-audit reconciliation.
+Returns every snapshot the effective account owns, across all profiles —
+your own account, or the owner you are acting as via
+`X-Driftstack-Account`. Useful for the dashboard's "all snapshots" view or
+for audit reconciliation.
 
 Response (200):
 
@@ -199,8 +201,9 @@ Response (200):
 
 Errors:
 
-- `404 not-found` — the snapshot id doesn't belong to the calling
-  account.
+- `404 not-found` — the snapshot id doesn't belong to the effective
+  account (your own, or the owner you are acting as via
+  `X-Driftstack-Account`).
 - `409 conflict` — a profile with the requested `name` already
   exists.
 - `429 tier-limit` — the new profile would push the account over
@@ -218,8 +221,9 @@ affected. Returns 204 on success.
 
 Errors:
 
-- `404 not-found` — the snapshot id doesn't belong to the calling
-  account.
+- `404 not-found` — the snapshot id doesn't belong to the effective
+  account (your own, or the owner you are acting as via
+  `X-Driftstack-Account`).
 
 Required scope: `write` or `write:profiles`.
 

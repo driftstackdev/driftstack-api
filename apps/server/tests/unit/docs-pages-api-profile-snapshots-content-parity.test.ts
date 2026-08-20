@@ -94,8 +94,13 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
   it('CRITICAL capture error roster pinned: 404 = not-yours profile id. The capture service (services/profile-snapshots.ts:120-137) only throws NotFoundError; there is NO 409-on-duplicate-label (labels are not unique), so the doc must NOT claim one.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/`404 not-found` — the profile id doesn't belong to the calling/);
-    expect(p).toMatch(/account\./);
+    // V-1103 — every handler in routes/profile-snapshots.ts resolves an
+    // effective account, and this page stated the calling-account rule at four
+    // separate errors. This pin froze one of them.
+    expect(p).toMatch(/`404 not-found` — the profile id doesn't belong to the effective/);
+    expect(p, 'the calling-account 404 wording must not return anywhere on this page').not.toMatch(
+      /belong to the calling\s*\n?\s*account/,
+    );
     // Guard against a 409-on-duplicate-label reappearing in the Capture
     // errors block — capture() does not enforce label uniqueness.
     const captureSection = p.slice(
@@ -111,9 +116,30 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
     expect(p).toMatch(/`GET \/v1\/profiles\/:id\/snapshots`/);
     expect(p).toMatch(/Returns all snapshots of profile `:id`, newest first\./);
     expect(p).toMatch(/`GET \/v1\/profile-snapshots`/);
-    expect(p).toMatch(
-      /Returns every snapshot the calling account owns, across all\s*\n?profiles\./,
+    // V-1103 — the scope is the EFFECTIVE account. The handler resolves
+    // `eff.kind === 'team' ? eff.accountId : ctx.account.id`, so a team admin
+    // acting as an owner lists the OWNER's snapshots, not their own. The page
+    // said "the calling account", which is the answer only when no header is
+    // sent, and this pin froze it.
+    expect(p).toMatch(/Returns every snapshot the effective account owns, across all profiles —/);
+    expect(p, 'the calling-account claim must not return').not.toMatch(
+      /every snapshot the calling account owns/,
     );
+    // Scoped to the cross-account LIST registration, not the file. Three
+    // handlers resolve the same way, so a file-wide match survives deleting
+    // one — measured: removing it from this handler left the arm green, which
+    // is the population-detection failure this suite keeps finding in others.
+    const routeSrc = readFileSync(
+      resolve(REPO_ROOT, 'apps/server/src/routes/profile-snapshots.ts'),
+      'utf8',
+    );
+    const listAt = routeSrc.indexOf("'/v1/profile-snapshots',");
+    expect(listAt, 'the cross-account list registration moved').toBeGreaterThan(0);
+    expect(
+      routeSrc.slice(listAt, routeSrc.indexOf("'/v1/profile-snapshots/:id'", listAt)),
+      'the cross-account list handler no longer resolves an effective account, so the page wording ' +
+        'should follow it back to the calling account',
+    ).toMatch(/const accountId = eff\.kind === 'team' \? eff\.accountId : ctx\.account\.id;/);
   });
 
   it("CRITICAL cross-account list per-row parent_name framing pinned. The 'Each row carries parent_name … handy when listing across profiles so you don\\'t have to issue a second fetch per row' wording is the load-bearing N+1-avoidance comm (field is parent_name, matching publicSnapshot — NOT the stale profile_name).", () => {
@@ -143,7 +169,10 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
   it("CRITICAL restore 3-error-code set pinned — 404 (not yours) / 409 (name taken) / 429 (tier-limit). The 'Snapshot restore counts against the same cap as profile-create' wording matches W756 dashboard /snapshots restore-form 'counts against your profile tier cap' framing.", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/`404 not-found` — the snapshot id doesn't belong to the calling/);
+    // V-1103 — effective account, not calling. The restore handler resolves
+    // `effectiveAccountIdForWrite`, so a team admin restores from the OWNER's
+    // snapshots. This is the second pin on this page that froze the old rule.
+    expect(p).toMatch(/`404 not-found` — the snapshot id doesn't belong to the effective/);
     expect(p).toMatch(
       /`409 conflict` — a profile with the requested `name` already\s*\n?\s+exists\./,
     );

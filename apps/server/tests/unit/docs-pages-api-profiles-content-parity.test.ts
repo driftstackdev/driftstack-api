@@ -348,6 +348,34 @@ describe('W763 docs /api/profiles content parity', () => {
     );
   });
 
+  it('V-1103 CRITICAL the Launch and Trim 404s name the EFFECTIVE account. Both handlers resolve the team header — launch via `ownerAccountId = effective.kind === \'team\' ? effective.accountId : ctx.account.id`, trim via `effectiveAccountIdForWrite` — so the profile they look for belongs to the owner being acted as, not the caller. The page said "the calling account" at both errors while saying the opposite about ownership sixty lines earlier, and neither sentence was pinned.', () => {
+    const p = read(PAGE);
+
+    expect(p, 'the Launch 404 no longer names the effective account').toMatch(
+      /`404` if the profile isn't owned by the \*\*effective\*\* account/,
+    );
+    expect(p, 'the Trim 404 no longer names the effective account').toMatch(
+      /isn't found or isn't owned by the effective account/,
+    );
+    expect(p, 'the calling-account 404 wording must not return').not.toMatch(
+      /isn't owned by the calling account/,
+    );
+
+    // Launch additionally refuses a non-admin team member, which is a 403 the
+    // page never mentioned — a caller with a valid header and the wrong role
+    // reads the 404 bullet and looks for a missing profile.
+    expect(p, 'the team-admin requirement on launch is undocumented again').toMatch(
+      /requires the\s*\n?\s*admin role on that team/,
+    );
+    const route = readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes/sessions.ts'), 'utf8');
+    const launchAt = route.indexOf("'/v1/profiles/:id/launch',");
+    expect(launchAt, 'the launch registration moved').toBeGreaterThan(0);
+    expect(
+      route.slice(launchAt, launchAt + 2000),
+      'launch no longer refuses a non-admin team member, so the 403 bullet should go with it',
+    ).toMatch(/Launching a profile on a team owner requires admin role on that team\./);
+  });
+
   it('test file metadata — file exists at canonical path', () => {
     expect(
       existsSync(
