@@ -8,6 +8,24 @@ Roll-up of every item between current state and "first paying customer can sign 
 - Per-runbook detail lives in `docs/founder-actions/v*.md` + `docs/deployment/*.md` + `docs/operations/*.md`.
 - Per-V-NNN history lives in `docs/verification-log.md`.
 
+> **⚠ V-1154 — this file's roll-up predates most of what it tracks.** The date below is
+> 2026-05-07; the tree has moved a long way since, and two rows were marking shipped work
+> as outstanding. Corrected here against evidence in the repo:
+>
+> - **Go SDK** described its first tag as still outstanding. Seven exist, `packages/sdk-go/v0.1.0`
+>   through `v0.1.6`. Now READY.
+> - **First gui-v0.1.0 tag** read PENDING. Both `gui-v0.1.0` and `gui-v0.1.1` exist. Now
+>   READY.
+>
+> One row is left alone because the repo cannot settle it. **Python SDK** reads "first PyPI
+> tag pending", and there is no Python tag in this repo — but `apps/docs/src/pages/sdk/
+installation.md` tells customers the package is "published on PyPI". One of those two is
+> wrong and only PyPI can say which, so neither was edited. If the package IS published,
+> this row is stale; if it is not, the customer page is.
+>
+> A row marked PENDING that has shipped is not a harmless lag. This document is the launch
+> gate, and every false PENDING makes the genuinely blocking rows harder to see.
+
 **Last roll-up:** 2026-05-07 (V-279), refreshed 2026-05-07 (V-287),
 2026-05-09 (V-361 — V-353 cycle / V-359 / V-298a / V-313 / V-360 +
 SDK + audit cleanup absorbed).
@@ -77,7 +95,7 @@ SDK + audit cleanup absorbed).
 | ---------------------------------- | -------------------- | ----- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | TypeScript SDK (`@driftstack/sdk`) | READY                | eng   | yes (READY)          | published on npm; pre-1.0; full resource surface                                                                                                                        |
 | Python SDK (`driftstack-sdk`)      | PENDING ENG          | eng   | no (alpha is enough) | wheel-buildable; first PyPI tag pending. Founder direction: launch can ship without Python live                                                                         |
-| Go SDK                             | PENDING ENG          | eng   | no (alpha is enough) | examples compile; first git tag pending                                                                                                                                 |
+| Go SDK                             | READY                | eng   | no (alpha is enough) | examples compile; tagged through `packages/sdk-go/v0.1.6` (V-1154)                                                                                                      |
 | Webhook signature verifier         | READY (TS + Py + Go) | eng   | yes (READY)          | `verifyWebhookSignature` in TS; `verify_webhook_signature` in Python; `VerifyWebhookSignature` in Go. V-359-sdk extended all three with `headerPrev` for rotation grace |
 
 ## 3. GUI client (apps/gui-client)
@@ -96,7 +114,7 @@ SDK + audit cleanup absorbed).
 | Windows code signing                                                    | PENDING FOUNDER    | founder | softens UX                         | EV cert (~$200+/yr) for SmartScreen reputation. Without: SmartScreen warns until reputation accumulates                                                                                                                                                                                                                    |
 | Linux package signing                                                   | PENDING            | founder | no (deferred per D-2026-05-06-03c) | unsigned `.AppImage` is fine for technical operators                                                                                                                                                                                                                                                                       |
 | Tauri Updater signing keys (V-243)                                      | COMPLETE           | founder | yes (READY)                        | TAURI_UPDATER_PUBKEY / PRIVKEY / PRIVKEY_PASSWORD GitHub secrets set 2026-05-07. Runbook: `docs/founder-actions/v243-tauri-updater-keys.md`                                                                                                                                                                                |
-| First gui-v0.1.0 tag                                                    | PENDING FOUNDER    | founder | yes                                | fires CI release pipeline; can ship Linux-only `.AppImage` first if Apple/Windows certs not yet set up                                                                                                                                                                                                                     |
+| First gui-v0.1.0 tag                                                    | READY              | founder | yes                                | fires CI release pipeline; can ship Linux-only `.AppImage` first if Apple/Windows certs not yet set up                                                                                                                                                                                                                     |
 | Tauri custom URL scheme                                                 | BUILT, UNVALIDATED | eng     | no                                 | V-866 correction: NOT deferred. V-328 shipped the code — `tauri-plugin-deep-link` registers `driftstack://`, and App.tsx runs an always-on listener. Outstanding work is the per-OS bundle run in docs/founder-actions/v328-tauri-deep-link-test.md, not the feature. Polling still works as fallback; not launch-blocking |
 
 ## 4. Customer dashboard (apps/customer-dashboard)

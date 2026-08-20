@@ -162,4 +162,32 @@ describe('W552.A /docs/launch/pre-launch-checklist.md content parity', () => {
       );
     }
   });
+
+  // V-1154 — this document is the launch gate, and two rows marked shipped work as
+  // outstanding: the Go SDK's "first git tag pending" against seven tags reaching
+  // `packages/sdk-go/v0.1.6`, and "First gui-v0.1.0 tag" PENDING against a tag that
+  // exists. A false PENDING is not a harmless lag here — it buries the rows that really
+  // are blocking. The tags themselves cannot be asserted from a test (a shallow CI clone
+  // may carry none), so these hold the corrected TEXT and quote the retired claims.
+  it('CRITICAL the launch gate does not re-list shipped release milestones as outstanding. Both rows below were PENDING against tags that exist in the repo; a reader triaging launch readiness reads PENDING as work left to do.', () => {
+    const body = read(LIB);
+
+    expect(body, 'the Go SDK row claims its first tag is still pending').not.toMatch(
+      /first git tag pending/,
+    );
+    expect(body, 'the Go SDK row no longer records the tags that exist').toMatch(
+      /tagged through `packages\/sdk-go\/v0\.1\.6`/,
+    );
+    expect(body, 'the first-gui-tag row is PENDING again').not.toMatch(
+      /First gui-v0\.1\.0 tag\s*\|\s*PENDING/,
+    );
+  });
+
+  it('CRITICAL the staleness banner stays. Its roll-up date is 2026-05-07 and the tree has moved a long way past it, so every row below is a claim about a moment, not about now. The banner is also the only place recording that the Python row and the customer installation page disagree about PyPI — a contradiction this repo cannot settle.', () => {
+    const body = read(LIB);
+    expect(body, 'the V-1154 staleness banner was removed').toMatch(/V-1154/);
+    expect(body, 'the banner no longer records the unresolved PyPI contradiction').toMatch(
+      /published on PyPI/,
+    );
+  });
 });

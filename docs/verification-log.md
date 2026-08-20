@@ -49467,3 +49467,44 @@ claim whose truth-maker is outside the tree. The honest response is to say so ra
 build a guard that looks like verification and is not. What IS in-repo and guarded stands —
 the tier price map is authoritative server-side since V-666.SEC, after a version that
 trusted customer-supplied `price_cents` and allowed price tampering.
+
+### V-1154 — the launch gate listed shipped release milestones as outstanding
+
+V-1148 noted in passing that `docs/launch/pre-launch-checklist.md` carries a roll-up date of
+2026-05-07 and could not settle current state. This went back and checked what that
+staleness actually costs. Of 84 rows, 26 are PENDING; six of those are `PENDING ENG` and
+therefore answerable from the repo. **Two are false**, and both are provable from `git tag`
+alone:
+
+- **Go SDK** — the note read that its first git tag was still pending. Seven tags exist,
+  `packages/sdk-go/v0.1.0` through `v0.1.6`.
+- **First gui-v0.1.0 tag** — marked PENDING FOUNDER. Both `gui-v0.1.0` and `gui-v0.1.1`
+  exist.
+
+Both corrected to READY against that evidence. This is the launch gate: a row marked
+PENDING that has shipped is not a harmless lag, it buries the rows that genuinely block.
+
+**One row is deliberately untouched.** The Python SDK row says its first PyPI tag is
+pending, and there is no Python tag in this repo — but `sdk/installation.md` tells customers
+the package is "published on PyPI". One of those is wrong and only PyPI can say which, so
+neither was edited and the banner records the contradiction. Same boundary as D-6's
+visibility query and D-4's certificate.
+
+The other four `PENDING ENG` rows check out as written: the webkit driver row is pending a
+cross-repo dependency rather than a missing file; the Day-1 known-issue list genuinely does
+not exist; and Linux package signing is pending because the release ships unsigned by
+documented posture, which V-1148 established.
+
+**Prior art exists and could not have caught this.**
+`a-shipped-feature-may-not-be-listed-as-deferred` (V-866) enforces exactly this property —
+but for ONE feature, the Tauri deep-link scheme, whose registration it derives. The
+principle generalises and the guard does not. I did not generalise it either: the evidence
+here is git tags, and a shallow CI clone may carry none, so a tag-reading guard would fail
+for the wrong reason. The two arms added hold the corrected text and quote the retired
+claims instead.
+
+**I hit the rule-4 collision again, in the same commit that documents it.** The banner I
+wrote quoted "first git tag pending" while the sentinel I wrote forbade that exact string,
+so the file failed against itself. The rule is that a retraction paraphrases and only a
+sentinel quotes; I have now written that sentence into several entries and still walked
+into it. Banner paraphrased, all three sentinels mutation-proved.
