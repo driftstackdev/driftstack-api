@@ -154,8 +154,10 @@ describe('W574.C /docs/legal/acceptable-use-policy.md content parity', () => {
     expect(body).toMatch(/suspension of Customer's account\./);
     expect(body).toMatch(/## 5\. Enforcement progression/);
     expect(body).toMatch(/Driftstack's enforcement of this AUP follows a graduated progression/);
-    expect(body).toMatch(/1\. \*\*Warning\.\*\* First instance of a non-severe violation/);
-    expect(body).toMatch(/2\. \*\*Suspension\.\*\* A continued or repeated violation following a/);
+    expect(body).toMatch(/1\. \*\*5\.1 Warning\.\*\* First instance of a non-severe violation/);
+    expect(body).toMatch(
+      /2\. \*\*5\.2 Suspension\.\*\* A continued or repeated violation following a/,
+    );
     expect(body).toMatch(/warning, OR a moderately severe first violation/);
     expect(body).toMatch(/the API rejects authenticated requests/);
     expect(body).toMatch(/with HTTP 403 carrying a problem type/);
@@ -168,7 +170,11 @@ describe('W574.C /docs/legal/acceptable-use-policy.md content parity', () => {
     // 403'd.
     expect(body).toMatch(/Driftstack sets `pause_collection` on the/);
     expect(body).toMatch(/voided rather than deferred/);
-    expect(body).toMatch(/3\. \*\*Termination\.\*\* A severe violation under Section 1/);
+    expect(body).toMatch(/3\. \*\*5\.3 Termination\.\*\* A severe violation under Section 1/);
+    // V-1170 — §5.4 cites "Section 5.1–5.3"; the steps had no such identifiers.
+    expect(body, 'the ladder lost its clause identifiers again').not.toMatch(
+      /^2\. \*\*Suspension\.\*\*/m,
+    );
     expect(body).toMatch(/Driftstack terminates the Subscription per Section 16 of the ToS\./);
     expect(body).toMatch(/### 5\.4 Discretion to skip steps/);
     expect(body).toMatch(/Driftstack reserves the right to skip directly to suspension or/);

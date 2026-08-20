@@ -136,9 +136,13 @@ describe('W377.C marketing-site /legal/aup.md content parity', () => {
   });
 
   it('§5 3-step graduated progression: Warning → Suspension → Termination', () => {
-    expect(body).toMatch(/\*\*Warning\.\*\* First instance of a non-severe violation/);
-    expect(body).toMatch(/\*\*Suspension\.\*\* A continued or repeated violation/);
-    expect(body).toMatch(/\*\*Termination\.\*\* A severe violation under Section 1/);
+    expect(body).toMatch(/\*\*5\.1 Warning\.\*\* First instance of a non-severe violation/);
+    expect(body).toMatch(/\*\*5\.2 Suspension\.\*\* A continued or repeated violation/);
+    expect(body).toMatch(/\*\*5\.3 Termination\.\*\* A severe violation under Section 1/);
+    // V-1170 — the steps carried no clause identifiers while §5.4 cited "Section 5.1–5.3".
+    expect(body, 'the ladder lost its clause identifiers again').not.toMatch(
+      /^2\. \*\*Suspension\.\*\*/m,
+    );
   });
 
   it('§5.1 warning: 7-day remediation window', () => {

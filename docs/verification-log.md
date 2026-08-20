@@ -50189,3 +50189,35 @@ and the reflog still held the SHA.
 The absorbed file stays where it is: with a foreign commit on top, rewriting history to fix an
 attribution error would risk far more than the error costs. The file's contents are correct in
 the tree and the peer's commit builds on it.
+
+### V-1170 — three AUP pins V-1169 missed, and the escaping that hid them
+
+V-1169 numbered the AUP enforcement steps and shipped green. The full suite then went red in
+three pin files that froze the unnumbered form:
+
+- `legal-aup-content-parity` — `/\*\*Warning\.\*\* First instance of a non-severe violation/`
+- `docs-legal-acceptable-use-policy-content-parity` — `/1\. \*\*Warning\.\*\* …/`
+- `marketing-site-pages-legal-aup-content-parity` — `/\*\*Warning\.\*\*/`
+
+Rule 2 says enumerate every frozen occurrence with both patterns, and I ran that step. It
+found one pin (the `### 5.4` heading) and missed these three, **because of how I wrote the
+search**: I grepped for `\*\*Warning\.` — which in grep means the literal characters
+`**Warning.` — while a test file contains the _escaped regex_ `\*\*Warning\.\*\*`, i.e. the
+literal characters `\*\*Warning\.`. Backslash-asterisk never matches asterisk. The search was
+looking for the markdown as it appears in the document, in files that never contain markdown.
+
+This is the same artifact class the log already carries seven of, now committed inside the
+step that exists to prevent it. **A pin search has to be written against the syntax of the
+pin, not the syntax of the source.** For markdown-freezing pins that means searching for the
+bare word (`Warning`) and reading the hits, or for the escaped form — never for the raw
+markdown.
+
+The three pins now match the numbered form, and each grew a negative that the retired bare
+form has not returned. Mutation-proved by **adding** `2. **Suspension.**` alongside the
+correct line, per V-1143 — replacing it would trip the positive first and short-circuit
+before the negative is reached. All three fired with the intended message; source restored
+byte-identical from the snapshot, `0 files differ` against HEAD.
+
+Also worth recording: the fix could not go in V-1169's commit, since it was already pushed
+into history with a peer commit on top. Rule 3 wants source and pins in one commit and that
+was the right rule; what defeated it was not knowing the pins existed.

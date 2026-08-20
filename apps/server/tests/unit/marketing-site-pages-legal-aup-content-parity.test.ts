@@ -128,9 +128,9 @@ describe('W505.C apps/marketing-site/src/pages/legal/aup.md content parity', () 
   });
 
   it("Section 5 graduated 3-stage enforcement: Warning (7-day remediation) → Suspension (30-day, 403 + problem+json + Customer-Provided Secrets not deleted + billing pauses) → Termination (Section 16 ToS) — pinned so the 3-stage progression + the suspension-mechanics specificity (403 / errors.driftstack.dev/forbidden / billing-pauses / secrets-preserved) survive (drift to dropping 'secrets NOT deleted' on suspension would force customers to recreate state on remediation; drift to dropping the 7-day-remediation-window would let warnings escalate without time-to-fix)", () => {
-    expect(body).toMatch(/\*\*Warning\.\*\*/);
+    expect(body).toMatch(/\*\*5\.1 Warning\.\*\*/);
     expect(body).toMatch(/a remediation\s*\n?\s*window \(typically 7 days\)/);
-    expect(body).toMatch(/\*\*Suspension\.\*\*/);
+    expect(body).toMatch(/\*\*5\.2 Suspension\.\*\*/);
     expect(body).toMatch(
       /the API rejects authenticated requests\s*\n?\s*with HTTP 403 carrying a problem type\s*\n?\s*`https:\/\/errors\.driftstack\.dev\/forbidden`/,
     );
@@ -144,7 +144,12 @@ describe('W505.C apps/marketing-site/src/pages/legal/aup.md content parity', () 
     expect(body).toMatch(/Driftstack sets `pause_collection` on the/);
     expect(body).toMatch(/voided rather than deferred/);
     expect(body).toMatch(/not\s*\n?\s*billed retroactively on reinstatement/);
-    expect(body).toMatch(/\*\*Termination\.\*\*/);
+    expect(body).toMatch(/\*\*5\.3 Termination\.\*\*/);
+    // V-1170 — §5.4 grants discretion to skip steps in "Section 5.1–5.3", which did not
+    // exist as identifiers until the ladder carried them.
+    expect(body, 'the ladder lost its clause identifiers again').not.toMatch(
+      /^2\. \*\*Suspension\.\*\*/m,
+    );
     expect(body).toMatch(/Driftstack terminates the Subscription per Section 16 of the ToS\./);
   });
 
