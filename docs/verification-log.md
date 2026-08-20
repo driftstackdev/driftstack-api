@@ -46024,3 +46024,50 @@ Mutations: raising the route's per-IP cap without touching the page fails; delet
 paragraph fails. Restored byte-identical, `apps/docs` rebuilt.
 
 `it(` count 7→8. No new file, no ratchet change.
+
+## V-1079 — the count I wrote went stale because of what I did next
+
+Four negatives first, all from sweeps motivated by V-1078's shape.
+
+Constants pinned as source text but unpublished: 29 numeric constants are asserted
+verbatim by content-parity guards; one — `CRYPTO_CHECKOUT_REPLAY_WINDOW_MS` — has no
+figure in the docs, and that is correct. It is a GUI-client constant of 23 hours,
+sitting a deliberate hour under the server's 24-hour crypto-checkout idempotency
+window so the client stops offering replay before the server stops honouring it. My
+first read of it said "23", because the regex took the first number of `23 * 60 * 60 *
+1000`. The server's 24-hour window and the `Idempotent-Replayed: 1` header are both
+documented — the header in five places and in the OpenAPI response declaration.
+
+Response headers: 19 distinct headers the server sets, every one present in the spec or
+the docs. Nothing to fix.
+
+Client enum mirrors: one map keyed by a canonical enum with members missing —
+`PRODUCT_LABEL` omits `free` and `enterprise` — and that is right. `free` is not
+purchasable, `enterprise` is negotiated, and `formatProduct` falls back to the raw
+slug, so nothing renders undefined.
+
+THE E2E SUITE HAS NOT ROTTED, which was worth confirming rather than assuming: it is
+excluded from the default `vitest run`, so the seven specs V-1038..V-1046 added have
+never been executed by the gate I run each turn. Against a disposable database and an
+unused Redis index all 222 tests pass in 45 seconds, including all seven. The harness
+refused the first attempt because `DATABASE_URL` and `REDIS_URL` were unset and it
+would have truncated the shared development database — a good refusal. Index 12 held 8
+keys I could not attribute, so I moved to an empty one rather than flushing them.
+
+THE FINDING is mine. `scripts/verify-suite.mjs` and the blind-spot guard both state
+the Playwright figure, and both read 199 — exact when V-1037 measured it, and made
+wrong by V-1038..V-1046, which add 23 more runtime tests. My own later work
+invalidated my own earlier claim, a day apart, in a file whose entire job is to say
+what this gate does not cover.
+
+It cannot be derived, and the reason is now recorded next to it:
+`the-published-tier-capacity-is-the-one-applied` generates one test per tier from a
+single `test(` call, so a static count reads 7 short of what the suite runs. The
+spec-FILE count beside it IS derived, and an existing arm checks it in both files —
+which is what caught my first correction, because rewrapping the paragraph split
+"36 spec files" across two lines and the regex stopped matching.
+
+Mutations: staling either file's spec-file count fails; adding a spec file without
+updating both fails. Restored byte-identical.
+
+`it(` count 8 unchanged. No new file, no ratchet change.
