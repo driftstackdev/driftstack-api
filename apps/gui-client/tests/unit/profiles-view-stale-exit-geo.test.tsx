@@ -104,7 +104,20 @@ vi.mock('../../src/lib/proxies', () => ({
     ]),
   addProxy: vi.fn(),
   setProxyServerId: vi.fn(() => Promise.resolve()),
-  testProxy: vi.fn(() => Promise.resolve({ reachable: true })),
+  testProxy: vi.fn(() =>
+    // A launch-path stub must model a proxy that ROUTES, not merely one that
+    // answers. The pre-launch gate re-tests and refuses anything unusable, so a
+    // bare { reachable: true } now blocks every launch these suites assert.
+    Promise.resolve({
+      reachable: true,
+      auth_ok: true,
+      udp_associate: true,
+      can_route: true,
+      connect_reply: 0x00,
+      latency_ms: 12,
+      message: 'Working — CONNECT succeeded.',
+    }),
+  ),
   probeProxyExit: vi.fn(() => Promise.resolve(null)),
 }));
 

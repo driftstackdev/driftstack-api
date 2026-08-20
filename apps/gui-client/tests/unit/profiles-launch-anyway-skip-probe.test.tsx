@@ -92,6 +92,23 @@ vi.mock('../../src/lib/profile-bindings', () => ({
 // One local proxy p1 (already synced server-side, so ensureServerProxy returns its
 // serverId without a network call) — proxyIdForLaunch is defined → the proxied
 // create branch runs (where skip_proxy_probe is conditionally added).
+const { testProxyMock } = vi.hoisted(() => ({
+  // Hoisted so a single arm can override the live verdict. Defaults to healthy;
+  // the down-proxy arm sets a non-routing result. vi.mock is hoisted above every
+  // const, so the factory can only close over something vi.hoisted created.
+  testProxyMock: vi.fn(() =>
+    Promise.resolve({
+      reachable: true,
+      auth_ok: true,
+      udp_associate: true,
+      can_route: true,
+      connect_reply: 0x00,
+      latency_ms: 12,
+      message: 'Working — CONNECT succeeded.',
+    }),
+  ),
+}));
+
 vi.mock('../../src/lib/proxies', () => ({
   // Pure predicate — use the real one. A stub here would let a suite
   // disagree with the app about what "usable" means, which is the very
@@ -113,7 +130,28 @@ vi.mock('../../src/lib/proxies', () => ({
     ]),
   addProxy: vi.fn(),
   setProxyServerId: vi.fn(() => Promise.resolve()),
-  testProxy: vi.fn(() => Promise.resolve({ reachable: true })),
+  // The pre-launch gate now RE-TESTS rather than trusting the cache, so this mock
+  // has to model a proxy that is genuinely down — otherwise the fresh probe
+  // overrides the failed cached verdict this suite is about and no confirm fires.
+  // That override is the intended behaviour (a stale failure must not block a proxy
+  // that has since recovered); the suite's subject is the down-proxy path.
+  // The pre-launch gate now RE-TESTS rather than trusting the cache, so this mock is
+  // the verdict each arm acts on — the cached one only matters when a probe cannot
+  // run. Defaults to healthy; the down-proxy arm overrides it per-test. That override
+  // IS the intended behaviour: a stale failure must not block a proxy that recovered,
+  // and a stale success must not launch one that has since stopped routing.
+  testProxy: testProxyMock,
+  __unusedTestProxyDefault: vi.fn(() =>
+    Promise.resolve({
+      reachable: true,
+      auth_ok: true,
+      udp_associate: true,
+      can_route: true,
+      connect_reply: 0x00,
+      latency_ms: 12,
+      message: 'Working — CONNECT succeeded.',
+    }),
+  ),
   probeProxyExit: vi.fn(() => Promise.resolve(null)),
 }));
 
@@ -172,11 +210,61 @@ describe('ProfilesView — "Launch anyway" sends skip_proxy_probe', () => {
     agentCreate.mockClear();
     confirmMock.mockClear();
     confirmMock.mockResolvedValue(true);
+    // Restore the HEALTHY default. mockResolvedValue persists across tests, so the
+    // down-proxy arm's override would otherwise leak into every arm after it — and
+    // the leak is invisible: the next arm just sees an unexplained confirm.
+    testProxyMock.mockReset();
+    testProxyMock.mockResolvedValue({
+      reachable: true,
+      auth_ok: true,
+      udp_associate: true,
+      can_route: true,
+      connect_reply: 0x00,
+      latency_ms: 12,
+      message: 'Working — CONNECT succeeded.',
+    });
     cachedReachable = false;
+  });
+
+  it('CRITICAL a HEALTHY cache does not excuse a proxy that is down NOW. The gate re-tests before every launch, so a cached success cannot carry a proxy whose plan lapsed or whose ruleset changed since. Without the live probe this arm passes on stale evidence — which is the whole reason the customer stopped trusting the Test button.', async () => {
+    cachedReachable = true; // cache says fine…
+    testProxyMock.mockResolvedValue({
+      // …but the proxy authenticates and refuses to route, right now.
+      reachable: true,
+      auth_ok: true,
+      udp_associate: false,
+      can_route: false,
+      connect_reply: 0x02,
+      latency_ms: 12,
+      message: 'Authenticates, but cannot route.',
+    });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Launch' }));
+    await waitFor(() =>
+      expect(
+        confirmMock,
+        'a stale healthy cache launched a proxy that cannot route — the gate is not re-testing',
+      ).toHaveBeenCalled(),
+    );
+    expect(
+      String(confirmMock.mock.calls[0]?.[0] ?? ''),
+      'the warning does not name the routing fault, so it reads as a credential problem',
+    ).toContain('could not route');
   });
 
   it('a FAILED cached probe + "Launch anyway" → create body carries skip_proxy_probe:true', async () => {
     cachedReachable = false;
+    // The gate re-tests before launching, so the LIVE verdict is what it acts on.
+    // Model a proxy that is genuinely down, not merely remembered as down.
+    testProxyMock.mockResolvedValue({
+      reachable: true,
+      auth_ok: true,
+      udp_associate: false,
+      can_route: false,
+      connect_reply: 0x02,
+      latency_ms: 12,
+      message: 'Authenticates, but cannot route.',
+    });
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Launch' }));
     // The override confirm was shown and accepted.

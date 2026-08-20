@@ -14,7 +14,7 @@
 // shared by ProxiesView and ProfilesView so the proxy story is identical
 // everywhere.
 
-import type { ProxyTestResult } from '../lib/proxies';
+import { isProxyUsable, type ProxyTestResult } from '../lib/proxies';
 
 export interface ProxyCapability {
   key: 'webrtc' | 'quic' | 'http2';
@@ -25,7 +25,9 @@ export interface ProxyCapability {
 }
 
 export function proxyCapabilities(result: ProxyTestResult): ProxyCapability[] {
-  const live = result.reachable && result.auth_ok;
+  // Capability chips describe a proxy that can carry traffic. Auth alone is not
+  // that: a proxy can authenticate and refuse every CONNECT.
+  const live = isProxyUsable(result);
   const udp = live && result.udp_associate;
   return [
     {

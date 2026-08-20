@@ -99,6 +99,7 @@ import {
   type ProfileBinding,
 } from '../lib/profile-bindings';
 import {
+  isProxyUsable,
   addProxy,
   listProxies,
   setProxyServerId,
@@ -2241,7 +2242,10 @@ export function ProfilesView({
         password: px.password,
       });
       setProbeCache(await saveProbeResult(px.id, result, Date.now()));
-      if (result.reachable && result.auth_ok) {
+      // Exit-IP probing REQUIRES routing — it makes a real request through the
+      // proxy. Gating it on auth alone meant a non-routing proxy kept whatever exit
+      // geo it had cached, which is the stale-green badge in another costume.
+      if (isProxyUsable(result)) {
         const exit = await probeProxyExit({
           host: px.host,
           port: px.port,
@@ -2378,13 +2382,42 @@ export function ProfilesView({
       // blocks the launch with a 422, silently nullifying the override (#12). The
       // server honors `skip_proxy_probe: true` to bypass the gate for this launch.
       let skipProxyProbe = false;
-      const lastProbe = probeCache[proxy.id];
-      if (
-        !opts.skipProxyDownConfirm &&
-        lastProbe &&
-        (!lastProbe.result.reachable || !lastProbe.result.auth_ok)
-      ) {
-        const reason = !lastProbe.result.reachable ? 'was unreachable' : 'rejected its credentials';
+      // Re-test the proxy NOW rather than trusting whatever the cache remembers.
+      // A proxy's plan lapses, its ruleset changes, its endpoint rotates — and the
+      // cached verdict may predate all of it. Bulk launch keeps using the cache
+      // (skipProxyDownConfirm) because probing N proxies serially would stall the
+      // whole batch; the up-front bulk confirm already covered intent there.
+      // The verdict this gate acts on. Prefer a fresh probe; fall back to the cache.
+      // Deliberately NOT read back out of storage after saving: a cache write that
+      // drops or reshapes the entry would silently discard a verdict we just
+      // measured, and a launch would proceed on no evidence at all.
+      let verdict: ProxyTestResult | undefined = probeCache[proxy.id]?.result;
+      if (!opts.skipProxyDownConfirm) {
+        try {
+          const fresh = await testProxy({
+            host: proxy.host,
+            port: proxy.port,
+            username: proxy.username,
+            password: proxy.password,
+          });
+          verdict = fresh;
+          // Persistence is best-effort and separate from the decision.
+          setProbeCache(await saveProbeResult(proxy.id, fresh, Date.now()));
+        } catch (err) {
+          // A probe that could not RUN is not a verdict. Fall through to whatever
+          // the cache holds rather than blocking a launch on our own failure.
+          console.warn('pre-launch proxy re-test failed; using the cached verdict', err);
+        }
+      }
+      const lastProbe = verdict === undefined ? undefined : { result: verdict };
+      if (!opts.skipProxyDownConfirm && lastProbe && !isProxyUsable(lastProbe.result)) {
+        // Name the actual fault. "Rejected its credentials" sends someone to retype a
+        // password that was accepted; a routing refusal sends them to their provider.
+        const reason = !lastProbe.result.reachable
+          ? 'was unreachable'
+          : !lastProbe.result.auth_ok
+            ? 'rejected its credentials'
+            : 'authenticated but could not route traffic';
         const proceed = await confirm(
           `The proxy "${proxy.label}" ${reason} on its last test, so this session may fail to reach the internet. Launch anyway?`,
           { confirmLabel: 'Launch anyway' },
@@ -3933,8 +3966,7 @@ export function ProfilesView({
                     // would still show a misleading "exits from US 1.2.3.4" — for an
                     // anti-detect tool, a stale exit geo on a dead proxy is a real
                     // hazard. Matches the in-session/reload gate in ProxiesView.
-                    const exitOk =
-                      probe !== undefined && probe.result.reachable && probe.result.auth_ok;
+                    const exitOk = probe !== undefined && isProxyUsable(probe.result);
                     const lat = probe?.result.latency_ms;
                     // latency meter fill: 0–250ms mapped to 0–100% (clamped).
                     const latFill =
@@ -4032,8 +4064,7 @@ export function ProfilesView({
                     // probe being healthy — saveProbeResult preserves prior exit-geo
                     // across a failed re-test, so a down proxy must NOT keep showing a
                     // stale "exits from US 1.2.3.4". Matches the grid card + ProxiesView.
-                    const exitOk =
-                      probe !== undefined && probe.result.reachable && probe.result.auth_ok;
+                    const exitOk = probe !== undefined && isProxyUsable(probe.result);
                     const caps = probe !== undefined ? proxyCapabilities(probe.result) : null;
                     const udp: 'ok' | 'fail' | 'unknown' =
                       caps === null
@@ -5039,7 +5070,7 @@ function CreateProfileModal({
                       <div
                         role="status"
                         className={`flex flex-col gap-1 rounded-sm border px-2 py-1.5 text-2xs ${
-                          testResult.reachable && testResult.auth_ok
+                          isProxyUsable(testResult)
                             ? 'border-status-success/40 bg-status-success/10 text-status-success'
                             : 'border-status-error/40 bg-status-error/10 text-status-error'
                         }`}
