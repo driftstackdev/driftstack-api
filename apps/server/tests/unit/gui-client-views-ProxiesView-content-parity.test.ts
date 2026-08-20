@@ -72,7 +72,7 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
   });
 
   it("CRUD lib delegation: addProxy / listProxies / removeProxy / testProxy / updateProxy / validateDraft + DraftValidation / ProxyConfig / ProxyDraft / ProxyTestResult type imports from '../lib/proxies' — pinned so the CRUD + native-probe layer stays delegated to lib/proxies (view stays presentation-only)", () => {
-    // V-1170 — this was one regex chaining the whole import list in source order, so
+    // V-1171 — this was one regex chaining the whole import list in source order, so
     // adding a symbol at the head of the list broke it while the property it guards was
     // untouched. `isProxyUsable` was added and the pin failed for import ORDER, which is
     // not what "the view stays presentation-only" means. Rewritten as one assertion per
