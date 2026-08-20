@@ -46,4 +46,20 @@ describe('V-079.C auth-flow URL ↔ dashboard route parity', () => {
     const page = pathToPage(cfg.authFlowUrls.magicLink);
     expect(existsSync(page), `dashboard page missing: ${page}`).toBe(true);
   });
+  it('CRITICAL V-1109 every auth-flow URL the config declares lands on a page, not just the three named above. The arms above spell out verifyEmail, passwordReset and magicLink one at a time, so the set they cover is the set someone remembered — a fourth entry added to `authFlowUrls` would point wherever it liked and no arm would look at it. That is how the original bug shipped: the server default and the dashboard route disagreed and nothing cross-checked them.', () => {
+    const urls = Object.entries(cfg.authFlowUrls).filter(
+      (e): e is [string, string] => typeof e[1] === 'string' && e[1].startsWith('http'),
+    );
+    expect(urls.length, 'URL-valued authFlowUrls entries discovered').toBeGreaterThanOrEqual(3);
+
+    const broken = urls
+      .filter(([, url]) => !existsSync(pathToPage(url)))
+      .map(([name, url]) => `${name} -> ${new URL(url).pathname} (no ${pathToPage(url)})`)
+      .sort();
+    expect(
+      broken,
+      'auth-flow URL(s) whose dashboard page does not exist — every email carrying one of these ' +
+        'sends the customer to a 404 at an onboarding or recovery moment:',
+    ).toEqual([]);
+  });
 });

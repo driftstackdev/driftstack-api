@@ -47546,3 +47546,41 @@ probe payload's keys against its route's schema, which needs a hand-written
 route-to-schema map — a new roster that is its own population, which is the exact shape
 this sweep has spent the last three findings removing. V-1092's guard already stops the
 fiction returning to the surfaces a customer reads.
+
+### V-1109 — the guard born from a 404 email link still let the next one through
+
+Continuing the roster sweep. `email-linked-dashboard-pages-exist` exists because W472
+found the team-invite email linking to `/team/accept` when no such page existed —
+invitees 404'd and could not join, and its own header records that "the backend route,
+the email, and the docs all referenced the page; only the page file was missing, and
+nothing cross-checked it".
+
+It fixed that instance and left the population hand-maintained. The header says so
+plainly: "When a new transactional email links to a dashboard path, add it here." A
+table you must remember to update is the same instrument that failed the first time,
+one step further along.
+
+The sibling has the same shape. `auth-url-paths-parity` reads the server config and
+then spells out `verifyEmail`, `passwordReset` and `magicLink` in three separate arms —
+so the set it covers is the set someone remembered, and a fourth entry in
+`config.authFlowUrls` would point wherever it liked with no arm looking at it. That is
+precisely the bug it was written for: the server defaulted to `/auth/verify-email`
+while the dashboard served `/verify-email`, and every verification email pointed at a 404.
+
+Not all of this is derivable, and the fix says which part is. `authFlowUrls` is a
+single declaration, so the three auth-flow links are now iterated rather than named:
+the dashboard test asserts every URL-valued entry lands on a real page, and the server
+table must carry a row for each. The team-invite and status-site rows stay hand-listed
+because no single declaration enumerates them — claiming otherwise would be the
+allowlist-shaped guard this arc keeps rejecting.
+
+Measured before building: the roster is complete today, and the three auth-flow paths
+are all present.
+
+Mutation-proved, restored byte-identical:
+
+- adding a fourth `authFlowUrls` entry pointing at a page that does not exist fails BOTH
+  arms, each naming `deviceApproval -> /device-approve` — the dashboard one reporting
+  the missing `.astro`, the server one reporting the missing table row;
+- deleting the `/verify-email` row while the config still declares it fails as
+  `verifyEmail -> /verify-email`.

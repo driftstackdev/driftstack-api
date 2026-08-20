@@ -15,6 +15,7 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { loadConfig } from '../../src/lib/config.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -45,4 +46,26 @@ describe('W472/W473 transactional-email links resolve to real pages', () => {
       ).toBe(true);
     });
   }
+  it('CRITICAL V-1109 every auth-flow URL the server config declares is in this table. The header says to add a row when a new transactional email links somewhere, which is the instruction that was not followed the last time — W472 found a team-invite link with no page, and its own note is that "nothing cross-checked it". The three auth-flow links ARE declared in one place (`config.authFlowUrls`), so for those the table no longer has to be remembered. The team-invite and status-site rows stay hand-listed because no single declaration enumerates them.', () => {
+    const cfg = loadConfig({
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+      DASHBOARD_ORIGIN: 'https://app.driftstack.local',
+    });
+    const declared = Object.entries(cfg.authFlowUrls)
+      .filter((e): e is [string, string] => typeof e[1] === 'string' && e[1].startsWith('http'))
+      .map(([name, url]) => [name, new URL(url).pathname] as const);
+    expect(declared.length, 'URL-valued authFlowUrls entries discovered').toBeGreaterThanOrEqual(3);
+
+    const rostered = new Set(EMAIL_LINKED_PATHS.map((e) => e.path));
+    const unlisted = declared
+      .filter(([, path]) => !rostered.has(path))
+      .map(([name, path]) => `${name} -> ${path}`)
+      .sort();
+    expect(
+      unlisted,
+      'auth-flow URL(s) the server sends customers to that this table does not cover — the page ' +
+        'behind them is unchecked, which is the exact shape W472 found:',
+    ).toEqual([]);
+  });
 });
