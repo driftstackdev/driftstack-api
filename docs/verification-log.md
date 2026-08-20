@@ -51986,3 +51986,62 @@ Recording the shape rather than only the fix: I reported the first half of this 
 the second half for four, and both were wrong. The failure was not the original analysis, which was
 probably right when written. It was that each report inherited the previous report instead of the
 source, and a claim restated often enough stops being read as a claim at all.
+
+---
+
+## V-1207 — the contract test caught a drift I had introduced myself, two commits earlier
+
+The second of the twenty-nine V-1197 recorded as owed. I picked `OAuthLinksRepo` for its small
+surface and because identity binding is security-relevant. It found something before I finished
+writing it.
+
+**V-1201 changed one implementation of a shared interface and left the other behind.** That commit
+gave `DrizzleOAuthLinksRepo.listForAccount` an `ORDER BY linked_at, id` so the customer's "Connected
+accounts" list stops reordering between page loads. `InMemoryOAuthLinksRepo.listForAccount` still
+returned `rows.filter(...)` — insertion order. Two implementations of one interface, one of them
+changed, and nothing in the suite could see it, because no test compared them.
+
+This is exactly the failure V-1198's template was built for, and the demonstration is empirical
+rather than argued: written first, run before any fix, and the ordering arm red on the in-memory
+half while passing on Drizzle.
+
+```
+before fixing the double:   1 failed | 10 passed     (× in-memory: the list is in insertion order)
+after fixing the double:    11 passed
+```
+
+**Why the ordering arm needs a backdate.** Both implementations stamp `linkedAt` at insert time, so
+insertion order and `linkedAt` order agree in any fixture that merely inserts twice — the arm would
+pass on both and prove nothing about either. `backdate` pushes the second link's `linkedAt` behind
+the first so the two orders DISAGREE, which is the only way the assertion can tell "sorted by
+linkedAt" apart from "whatever order it was written in". Fourth time this session a positive control
+needed forcing to stop being vacuous.
+
+**The security arm is `findByProviderSub`.** It is deliberately account-unscoped — it IS the login
+lookup, mapping an IDP identity onto whichever account holds it — so the only thing separating one
+customer from another is that it matches on BOTH provider and subject. A subject issued by one
+provider resolving a link created for another is an account takeover with no credential involved.
+The contract pins the unscoped-ness alongside it, the same asymmetry V-1198 pinned for
+`findApiKeyUnscoped`, because pinning the escape hatch is what keeps the scoped claim honest.
+
+Mutation-proved in three directions, each printing its applied count:
+
+```
+M1  the DRIZZLE side loses its ORDER BY          drizzle ordering arm red    1 failed | 10 passed
+M2  the DOUBLE loses its sort                    in-memory ordering arm red  1 failed | 10 passed
+M3  findByProviderSub matches on sub alone       provider-confusion arm red  1 failed | 10 passed
+restored (source 0 dirty)                                                    11 passed
+```
+
+M1 and M2 are the pair that matters: the same arm fails on whichever side drifts, which is the
+property a per-implementation test cannot have.
+
+**A fixture bug of my own, caught by the first run.** `backdate` on the Drizzle side passed a bare
+`Date` and a bare uuid string to postgres-js and threw a type error inside the driver rather than
+failing an assertion. Fixed with the explicit `::timestamptz` / `::uuid` casts the repo layer
+already uses for its own raw statements. Worth noting because the failure surfaced as a driver
+stack trace under a test name that suggested an ordering defect — the arm was fine; the fixture
+never ran.
+
+**Owed remaining: 27.** The template now has a second instance and the shape is confirmed on a
+repo whose contract was NOT already correct, which is the case that matters.

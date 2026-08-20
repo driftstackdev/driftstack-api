@@ -24,7 +24,15 @@ export class InMemoryOAuthLinksRepo implements OAuthLinksRepo {
   }
 
   listForAccount(accountId: string): Promise<readonly OAuthLinkRow[]> {
-    return Promise.resolve(this.rows.filter((x) => x.accountId === accountId));
+    // V-1207 — mirrors DrizzleOAuthLinksRepo's `ORDER BY linked_at, id`. Returning insertion
+    // order here agreed with the real repo only until the two orders differed, which is exactly
+    // the kind of silent divergence the shared-interface contract test exists to catch: V-1201
+    // gave the Drizzle side its ORDER BY and left this one behind.
+    return Promise.resolve(
+      this.rows
+        .filter((x) => x.accountId === accountId)
+        .sort((a, b) => a.linkedAt.getTime() - b.linkedAt.getTime() || a.id.localeCompare(b.id)),
+    );
   }
 
   insertLink(input: InsertOAuthLinkInput): Promise<OAuthLinkRow> {
