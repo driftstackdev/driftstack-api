@@ -47970,3 +47970,41 @@ retry-safety gate).
 
 No change to source. Recorded because the honest result of a sweep is sometimes that
 the thing is already held, and the next person should spend their time elsewhere.
+
+### V-1119 — the deferred network-architecture item, and a sentinel that could never fire
+
+The plan's fix stream is exhausted, so this pass took the "Deferred-but-file-these" list
+the re-verification left unassigned. Its first entry is marked "**Its own action**":
+`docs/network-architecture.md`'s Cloudflare-Tunnel / no-inbound-port claim, contradicted
+by `infra/nginx/cloudflare-real-ip.conf` and the 2026-06-13 origin-spoof incident.
+
+Two earlier corrections had already landed in that file and **both stopped at the
+prose**. V-1087 rewrote §1's bullet to say plainly that there is no Cloudflare Tunnel —
+nothing in `infra/` runs `cloudflared`, and `bootstrap.sh` opens 443 inbound. V-809
+rewrote the Overview to say `app.driftstack.dev` is its own Cloudflare Pages project.
+Neither touched the diagrams. The document therefore asserted a Tunnel in two ASCII
+diagrams and one paragraph while denying it in two others, and drew the dashboard as a
+Tunnel hop into the Hetzner VM column it is not served from.
+
+Corrected: the §1 diagram now labels the hop `HTTPS (public)`, the §2 diagram puts
+`app.driftstack.dev` under Cloudflare Pages, and the §2 paragraph says both are Pages
+projects with the dashboard calling the API cross-origin. The fourth occurrence is
+inside the V-052 "Decided architecture" record and was ANNOTATED rather than rewritten,
+following the ADR precedent — the decision that record captures is the mTLS terminator
+placement, which shipped as written; the Tunnel is a premise it reasoned from.
+
+Rule 2 was needed three times inside one arm: the pin froze the old §2 prose in three
+separate assertions, each surfacing only after the previous was fixed. Enumerating every
+`Tunnel` assertion in the file at once is what ended that.
+
+**A sentinel I wrote could never fire.** The negative meant to stop either diagram
+re-labelling the hop used ASCII `\|`, and the diagrams are drawn with U+2502 BOX DRAWINGS
+LIGHT VERTICAL. Restoring `│  Tunnel              │` to the §1 diagram left the whole
+file green. It is `│` now, and the mutation fails as intended. A negative assertion
+that cannot match is indistinguishable from one that is satisfied, and only the mutation
+separates them — the same lesson as V-1117's prefix pins, one character further down.
+
+Mutation-proved, restored byte-identical: the §1 diagram Tunnel label fails the diagram
+negative; the §2 Tunnel prose fails its own negative, isolated by keeping the Pages
+sentence so the positive did not fire first; deleting the Pages-SPA fact fails that
+positive.

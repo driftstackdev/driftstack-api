@@ -49,7 +49,7 @@ the Hetzner VM and the MacStadium-hosted fleet.
 Customer                Cloudflare           Hetzner VM
 SDK / GUI               (proxy + WAF)        (Docker container)
    │                       │                       │
-   │  HTTPS                │  Tunnel              │
+   │  HTTPS                │  HTTPS (public)      │
    ├──────────────────────►│──────────────────────►│  /v1/* + /health + /ready
    │  api.driftstack.dev   │                       │  Fastify @ :7780 (loopback)
    │                       │                       │
@@ -114,15 +114,20 @@ Customer Browser    Cloudflare Pages    Hetzner VM
        ├─────────────────►│                  │  driftstack.dev
        │                  │                  │  docs.driftstack.dev
        │                                     │
-       │  HTTPS           Tunnel             │
-       ├────────────────────────────────────►│  app.driftstack.dev
+       │  HTTPS           │                  │
+       ├─────────────────►│                  │  app.driftstack.dev
                                                 (signup + acceptance + first-key)
 ```
 
 The split between `driftstack.dev` (static marketing) and
-`app.driftstack.dev` (dynamic onboarding + dashboard) keeps the
-marketing site cacheable at the edge while the dynamic surface goes
-through the Tunnel.
+`app.driftstack.dev` (onboarding + dashboard) keeps the marketing site
+cacheable at the edge. Both are Cloudflare Pages projects; the dashboard
+is a static SPA that calls `api.driftstack.dev` cross-origin from the
+browser. V-1119 — this section drew `app.driftstack.dev` as a Tunnel hop
+into the Hetzner VM column. It is neither tunneled nor served from the
+VM, and the Overview above has said so since V-809 — the diagram and this
+paragraph were left behind by that correction and by V-1087's, so the
+document asserted a Tunnel in two places while denying one in a third.
 
 ## §3. Cross-provider data flow
 
@@ -355,8 +360,18 @@ Cost vs benefit at v1:
 1. **mTLS terminator placement: Hetzner-side direct.** Cloudflare
    Tunnel handles edge HTTPS for the public API surface; mTLS
    between Mac Mini fleet and control plane terminates on the
-   Hetzner VM directly. Skips Cloudflare API Shield (paid feature),
-   simpler architecture, fewer moving parts.
+   Hetzner VM directly.
+
+   > **V-1119 — NOT AS SHIPPED (the mTLS placement is; the Tunnel is
+   > not).** No Cloudflare Tunnel exists: nothing in `infra/` runs
+   > `cloudflared`, and `bootstrap.sh` opens 443 inbound. Edge HTTPS is
+   > a Cloudflare proxy to an origin reachable from anywhere, which is
+   > the premise the 2026-06-13 origin-spoof incident invalidated — see
+   > §1. The decision this record captures is the mTLS terminator
+   > placement, and that shipped as written; the Tunnel is a premise it
+   > was reasoned from, left here as the record rather than rewritten. Skips Cloudflare API Shield (paid feature),
+   > simpler architecture, fewer moving parts.
+
 2. **Fleet node identity provisioning: on-device keypair generation
    plus admin-API public-key registration.** Founder provisions the
    Mac Mini → keypair generated on-device (private key never leaves

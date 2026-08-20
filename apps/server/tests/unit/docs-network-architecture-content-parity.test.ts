@@ -11,12 +11,14 @@
 //   • v0.1.0-draft Workstream A foundational, effective 2026-05-03.
 //   • 3 network surfaces: customer↔control-plane + customer↔
 //     marketing + control-plane↔Mac-Mini-fleet (load-bearing).
-//   • §1 control plane: TLS at Cloudflare edge + Tunnel + Hetzner
+//   • §1 control plane: TLS at the Cloudflare edge, proxied to the
+//     Hetzner origin over the public internet (V-1087: not a Tunnel)
 //     VM serves :7780 loopback-only.
 //   • Cloudflare WAF: per-IP rate-limit on unauth + bad-ASN block
 //     on auth surface only.
 //   • §2 marketing: driftstack.dev + docs.driftstack.dev edge-
-//     cacheable; app.driftstack.dev tunneled for dynamic.
+//     cacheable; app.driftstack.dev is its own Pages project too
+//     (V-1119 — this line read "tunneled for dynamic").
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -164,7 +166,7 @@ describe('W548.C /docs/network-architecture.md content parity', () => {
     expect(body).toMatch(/triggers the alert path\./);
   });
 
-  it("§2 marketing-site edge-cacheable + app-tunneled split framing pinned: '## §2. Customer ↔ marketing site' + '`driftstack.dev` and `docs.driftstack.dev` deploy via Cloudflare Pages (Astro static-first build per Workstream B). No backend on the marketing site itself; the signup flow + customer dashboard surface live on the control plane.' + 'driftstack.dev' + 'docs.driftstack.dev' + 'app.driftstack.dev' + '(signup + acceptance + first-key)' + 'The split between `driftstack.dev` (static marketing) and `app.driftstack.dev` (dynamic onboarding + dashboard) keeps the marketing site cacheable at the edge while the dynamic surface goes through the Tunnel.' — pinned so the §2 marketing+docs CF Pages static-first + Workstream-B + signup-on-control-plane + app.driftstack.dev (signup+acceptance+first-key) + edge-cacheable-vs-tunneled split commitment survives", () => {
+  it("§2 marketing-site edge-cacheable split framing pinned (V-1119: was 'app-tunneled', and it is not): '## §2. Customer ↔ marketing site' + '`driftstack.dev` and `docs.driftstack.dev` deploy via Cloudflare Pages (Astro static-first build per Workstream B). No backend on the marketing site itself; the signup flow + customer dashboard surface live on the control plane.' + 'driftstack.dev' + 'docs.driftstack.dev' + 'app.driftstack.dev' + '(signup + acceptance + first-key)' + 'The split between `driftstack.dev` (static marketing) and `app.driftstack.dev` (dynamic onboarding + dashboard) keeps the marketing site cacheable at the edge while the dynamic surface goes through the Tunnel.' — pinned so the §2 marketing+docs CF Pages static-first + Workstream-B + signup-on-control-plane + app.driftstack.dev (signup+acceptance+first-key) + edge-cacheable-vs-tunneled split commitment survives", () => {
     expect(body).toMatch(/## §2\. Customer ↔ marketing site/);
     expect(body).toMatch(/`driftstack\.dev` and `docs\.driftstack\.dev` deploy via Cloudflare/);
     expect(body).toMatch(/Pages \(Astro static-first build per Workstream B\)\./);
@@ -176,9 +178,27 @@ describe('W548.C /docs/network-architecture.md content parity', () => {
     expect(body).toMatch(/app\.driftstack\.dev/);
     expect(body).toMatch(/\(signup \+ acceptance \+ first-key\)/);
     expect(body).toMatch(/The split between `driftstack\.dev` \(static marketing\) and/);
-    expect(body).toMatch(/`app\.driftstack\.dev` \(dynamic onboarding \+ dashboard\) keeps the/);
-    expect(body).toMatch(/marketing site cacheable at the edge while the dynamic surface goes/);
-    expect(body).toMatch(/through the Tunnel\./);
+    // V-1119 — §2 drew app.driftstack.dev as a Tunnel hop into the Hetzner
+    // VM column while the Overview had said since V-809 that it is its own
+    // Cloudflare Pages project, and §1 had said since V-1087 that no Tunnel
+    // exists at all. The document asserted a Tunnel twice and denied it once.
+    expect(body).toMatch(
+      /`app\.driftstack\.dev` \(onboarding \+ dashboard\) keeps the marketing site/,
+    );
+    expect(body, 'the dashboard is a Pages SPA calling the API cross-origin').toMatch(
+      /Both are Cloudflare Pages projects; the dashboard\s*\n?\s*is a static SPA that calls `api\.driftstack\.dev` cross-origin/,
+    );
+    expect(body, 'the §2 Tunnel hop must not return').not.toMatch(
+      /the dynamic surface goes\s*\n?\s*through the Tunnel/,
+    );
+    // The diagrams are drawn with U+2502 BOX DRAWINGS LIGHT VERTICAL, not an
+    // ASCII pipe. V-1119 — the first version of this sentinel used `\|` and
+    // therefore could never fire: restoring `│  Tunnel              │` to the
+    // §1 diagram left the whole file green. Measured, not reasoned.
+    expect(body, 'neither diagram may label the Cloudflare hop a Tunnel again').not.toMatch(
+      /\u2502\s*Tunnel\s|HTTPS\s+Tunnel\s+\u2502/,
+    );
+    expect(body).toMatch(/cacheable at the edge\. Both are Cloudflare Pages projects;/);
   });
 
   it('file exists at canonical path', () => {
