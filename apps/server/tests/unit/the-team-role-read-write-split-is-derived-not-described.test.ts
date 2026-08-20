@@ -151,4 +151,44 @@ describe('V-837 the team-role read/write split is derived, not described', () =>
       /`pgEnum\('team_role', \['member', 'admin'\]\)`/,
     );
   });
+
+  it('V-1097 CRITICAL the route list in the correction block is the routes that exist. V-822 re-headed this section from forward-looking to SHIPPED and enumerated the real endpoints above the original sketch, which is kept verbatim as history. That makes the correction the authoritative half of a document whose other half is deliberately wrong, and nothing was holding it to the source — the enum beside it has been derived since V-851, the paths never were.', () => {
+    const src = readFileSync(resolve(ROUTES, 'team.ts'), 'utf8');
+    const live = [
+      ...src.matchAll(
+        /app\.(get|post|put|patch|delete)\s*(?:<[^(]*>)?\s*\(\s*['"`](\/v1\/team[^'"`]*)['"`]/g,
+      ),
+    ].map((m) => ({ verb: (m[1] ?? '').toUpperCase(), path: m[2] ?? '' }));
+    expect(live.length, 'team route registrations parsed').toBeGreaterThanOrEqual(5);
+
+    const doc = readFileSync(TAXONOMY, 'utf8');
+    const at = doc.indexOf('- **Routes**:');
+    expect(at, 'the correction block no longer lists the routes').toBeGreaterThan(0);
+    const block = doc.slice(at, doc.indexOf('- **Auth**:', at));
+
+    const unlisted = [...new Set(live.map((r) => r.path))].filter((p) => !block.includes(p)).sort();
+    expect(
+      unlisted,
+      'these /v1/team routes are registered but missing from the correction block, which reads as ' +
+        'the complete shipped list precisely because the sketch below it is known to be wrong:',
+    ).toEqual([]);
+
+    // The block also makes a negative claim, and a negative claim about the
+    // surface is the kind that rots without anyone noticing — nothing fails
+    // when an endpoint APPEARS.
+    expect(block, 'the correction no longer states the sketch differs').toMatch(
+      /there is no `PATCH \.\.\.\/role` endpoint/,
+    );
+    expect(
+      live.filter((r) => r.verb === 'PATCH' && /\/role\b/.test(r.path)).map((r) => r.path),
+      'the doc says no PATCH .../role endpoint exists, and one has since been added:',
+    ).toEqual([]);
+
+    // …and the count it states, spelled, against what was parsed.
+    const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'];
+    expect(
+      block,
+      `the correction states a route count that is not ${WORDS[live.length] ?? String(live.length)}`,
+    ).toContain(`${WORDS[live.length] ?? String(live.length)} under \`/v1/team/*\``);
+  });
 });

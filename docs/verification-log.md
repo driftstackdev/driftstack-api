@@ -46955,3 +46955,43 @@ fix, so the "restore" silently reinstated the stale comment and `cmp` reported
 byte-identical against the wrong baseline — a clean tree as the failure mode. Caught
 by re-reading the file, redone against a post-fix snapshot, and the restore verified
 by asserting line 3 reads "Three implementations" rather than trusting `cmp` alone.
+
+### V-1097 — action 23 was already closed; the negative claim in the correction was not guarded
+
+The plan calls B22 the largest batch in its tier: 28 pin occurrences, five source
+edits, a doc that "says the backend is single-user". Almost none of it is outstanding.
+
+- `docs/architecture/team-roles-taxonomy.md` opens by naming the shipped routes and a
+  live `team.astro`, and retracts the old sentence explicitly at :9.
+- The section the plan wants re-headed is already headed "Backend implementation notes
+  (SHIPPED — see the correction below)", with a V-822 block enumerating the six real
+  endpoints above the original sketch.
+- The `/team` UI sentence already reads "surfaces the roles that exist", not "the
+  four-role taxonomy already".
+- `routes/team.ts` was corrected by V-1010; `bootstrap.ts` carries no matching claim.
+- The enum half of the proposed cross-source guard has existed since V-851.
+
+Verified independently rather than taken from the plan: `teamRole` is
+`pgEnum('team_role', ['member', 'admin'])`, the dashboard picker offers exactly those
+two, and `routes/team.ts` registers six handlers over five paths — `POST`/`GET
+/v1/team/invites`, `POST /v1/team/invites/accept`, `GET /v1/team/members`, `GET
+/v1/team/owners`, `DELETE /v1/team/members/:id`. Every figure in the correction block
+is right.
+
+**What was genuinely missing** is narrow and worth having. V-822 turned this document
+into one whose two halves disagree on purpose: a correction that is authoritative, and
+a sketch kept verbatim below it precisely because it is wrong. Nothing held the
+authoritative half to the source. The paths were unguarded, and so was its negative
+claim — "there is no `PATCH .../role` endpoint" — which is the kind that rots in
+silence, because nothing fails when an endpoint APPEARS.
+
+Added to the file that already owns the enum tie. It derives the registrations from
+`routes/team.ts`, requires the correction block to list every path, asserts no
+`PATCH .../role` exists while the doc says none does, and checks the spelled count
+against what was parsed.
+
+Mutation-proved, restored byte-identical: renaming `/v1/team/owners` fails as
+"missing from the correction block"; drifting "six" to "five" fails the count; adding
+a `PATCH .../role` fails the negative claim — proved with the count bumped and the
+path listed first, so the failure could only come from the arm under test rather than
+a neighbour.
