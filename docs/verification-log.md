@@ -50305,3 +50305,48 @@ to `annex-3--sub-processors`, since a hyphen and a space are both just hyphens a
 arm was correct and my probe was a no-op. Re-proved with `Subprocessors`, which does move the
 slug, and again by tightening the spacing around the em-dash. **A mutation that fails to fire
 is a claim about the mutation until the mutation is shown to change the thing under test.**
+
+### V-1173 — three measured negatives, recorded so nobody re-derives them
+
+V-1172 left a thread: the internal legal mirror had drifted from its published twin in a place
+nothing checked. Three follow-on classes were measured. **None is a defect.** Recording them
+because each cost real work to rule out, and an unrecorded negative gets re-derived.
+
+**1. Numbers do not drift between the legal mirrors.** The canonical-draft guard asserts
+structure and explicitly declines prose — it even records that the two privacy copies "differ
+by 342 lines of wording". But numbers are never "adapted for the medium", so a retention period
+or notification deadline differing between copies would be unambiguous. Compared the multiset of
+durations across all four draft/published pairs: **17/17, 3/3, 2/2, 11/11 — identical in every
+pair**, across a document that differs by 342 lines of prose. Percentages and HTTP status codes
+likewise. One apparent difference, a `275` present only in the draft, was `V-275` — an internal
+reference correctly absent from the customer copy, matched by a bare three-digit pattern of
+mine. Artifact, not drift.
+
+**2. Internal references ship in view-source, unevenly, and it is not a disclosure.** Built
+HTML carries internal `V-###`/`W###.C` references: **customer-dashboard 175, admin-panel 8,
+status-site 3, marketing-site 0, docs 0.** Classified rather than counted: 134 sit inside inline
+`<script>`, 41 inside HTML comments, and **0 in visible markup**. Scanned the same regions for
+things that would matter — repo paths, internal hosts or IPs, personal emails, secrets — and
+found none. `MFA_ENCRYPTION_KEY` and `SIGNUP_STORAGE_PROBE_KEY` appear as _names_, never values.
+
+Checked the obvious trap first: all five `dist/` trees were verified **fresh** against their
+sources before any of this was believed, because a stale build would have made this a finding
+about artifacts rather than about what ships.
+
+The asymmetry is partly explained and I am not claiming more than I proved. On marketing, the
+comments that ship come from `BaseLayout` and components; none of `about.astro`'s own survive,
+including its `<!-- V-506 … -->`. Both apps run Astro 7.1.6 with `compressHTML: true`, so
+whatever makes the dashboard behave differently was **not pinned down**. Left unfixed
+deliberately: no secret, no customer-visible text, and mass-editing 175 comment sites in shipped
+UI to change nothing a customer can see is not worth the risk.
+
+**3. The admin-route call from the customer dashboard is deliberate.**
+`DashboardLayout.astro` calls `/v1/admin/audit-log?limit=1` and reads 200-vs-403 as a staff
+check, to decide whether to reveal an admin shortcut. It looked like a customer surface reaching
+into the admin API. It is a capability probe with its reasoning written at the call site, it is
+covered by existing tests, and admin 403s are not a monitored signal in `observability.md` — so
+it is not poisoning an alert channel either.
+
+The reason this entry exists at all: three plausible-looking leads, three negatives, and the
+temptation at each was to find _something_ rather than report nothing. **A sweep that must
+produce a finding will produce one.**
