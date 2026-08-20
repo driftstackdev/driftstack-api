@@ -33902,9 +33902,15 @@
                           "updated_at"
                         ]
                       }
+                    },
+                    "has_more": {
+                      "type": "boolean"
+                    },
+                    "next_cursor": {
+                      "type": ["string", "null"]
                     }
                   },
-                  "required": ["data"]
+                  "required": ["data", "has_more", "next_cursor"]
                 }
               }
             }

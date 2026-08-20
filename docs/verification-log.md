@@ -45804,3 +45804,46 @@ its population by design, which is why this needed its own coverage rather than 
 extension of that file.
 
 `it(` count 15, unchanged — one arm replaced. No new file, no ratchet change.
+
+## V-1074 — the list endpoint that pages, and a contract that says it does not
+
+Two negatives first, both from extending V-1072/V-1073's sweep.
+
+Duplicated helpers: 41 function names are defined in more than one file and 8 have
+differing returned keys, but the customer-visible ones — `publicEntry`, `publicUsage`,
+`toPublic` — each satisfy their OWN route's published response, which is the invariant
+V-1073 settled on. `toRow` / `toRecord` / `rowToRecord` are per-table repo mappers and
+differ by design. Nothing to fix.
+
+List-item shapes: 21 list routes compared their mapped helper against the published
+`data.items` schema. Zero omissions. That closes the response-truth question in three
+shapes — literal returns, direct helper returns, list items.
+
+THE FINDING came from the pagination envelope, and it is the REVERSE of V-1072.
+
+`GET /v1/agent-sessions` returns `{ data, has_more, next_cursor }` — the full keyset
+envelope — and published `{ data }` alone. So the server pages correctly and the
+contract says the list is all there is. A caller typed from that document cannot see
+the cursor, cannot page past the first 100, and has no signal that more exists.
+
+`reference/pagination.md` names agent-sessions among the endpoints carrying `has_more`.
+That sentence is TRUE of the server and FALSE of the published spec, which is why the
+docs needed no change: the fix belongs in `lib/openapi.ts`, and it now publishes the
+same envelope its siblings do.
+
+Worth stating why the docs page survived scrutiny. It divides list endpoints honestly
+— naming which carry `has_more`, and telling customers to treat either `has_more:
+false` or a null cursor as "stop" — so the six routes publishing `next_cursor` without
+`has_more` are documented, not drift. Two admin routes carry `has_more` without being
+named, which is correct for a customer-facing page.
+
+The guard gains the opposite direction. V-1072 asks whether a published field is sent;
+this asks whether a sent envelope key is published. The scope is deliberately narrow —
+only `has_more` and `next_cursor`, because a handler may legitimately send more than it
+documents in general, while the envelope is a contract customers loop on.
+
+Mutations: stripping the envelope from the committed spec fails the new arm; removing
+`has_more` from the handler fails the original one. Restored byte-identical.
+
+`it(` count 2→3. Spec regenerated: 7 insertions, 1 deletion. No new file, no ratchet
+change.

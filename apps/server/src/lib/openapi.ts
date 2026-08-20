@@ -170,6 +170,18 @@ const PaginatedSessionsSchema = z.object({
   next_cursor: z.string().nullable(),
 });
 
+// V-1074 — the agent-session list publishes the full keyset envelope because that
+// is what the handler sends: `{ data, has_more, next_cursor }`. It published `data`
+// alone, so a caller typed from the document could not see the cursor and had no way
+// to page past the first 100 — while reference/pagination.md names agent-sessions
+// among the endpoints carrying `has_more`, which was true of the server and false of
+// the contract.
+const PaginatedAgentSessionsSchema = z.object({
+  data: z.array(AgentSessionSchema),
+  has_more: z.boolean(),
+  next_cursor: z.string().nullable(),
+});
+
 const PaginatedRecipesSchema = z.object({
   data: z.array(RecipeSchema),
   has_more: z.boolean(),
@@ -4182,7 +4194,7 @@ function buildRegistry(): OpenAPIRegistry {
       200: {
         description: 'Agent sessions for the authenticated account.',
         content: {
-          'application/json': { schema: z.object({ data: z.array(AgentSessionSchema) }) },
+          'application/json': { schema: PaginatedAgentSessionsSchema },
         },
       },
       ...errors4xx,

@@ -55,6 +55,9 @@ interface SpecDoc {
   readonly components?: { schemas?: Record<string, Record<string, unknown>> };
 }
 
+/** The keyset envelope reference/pagination.md tells customers to drive. */
+const ENVELOPE = ['has_more', 'next_cursor'] as const;
+
 const spec = (): SpecDoc => JSON.parse(readFileSync(SPEC, 'utf8')) as SpecDoc;
 
 function deref(doc: SpecDoc, s: Record<string, unknown> | undefined): Record<string, unknown> {
@@ -141,6 +144,8 @@ function returnBlocks(body: string): string[] {
 interface Judged {
   readonly key: string;
   readonly missing: string[];
+  /** Envelope keys the handler sends that the document never mentions. */
+  readonly unpublished: string[];
 }
 
 /** Routes whose returns are all plain literals, judged against the published 200/201. */
@@ -196,6 +201,12 @@ function judge(): { compared: Judged[]; skipped: number } {
       compared.push({
         key: `${(m[1] ?? '').toUpperCase()} ${pm[1] ?? ''}`,
         missing: props.filter((p) => required.has(p) && !keys.has(p)).sort(),
+        // Only the pagination envelope is judged in this direction. A handler may
+        // legitimately send more than it documents in general — an internal debug
+        // field, a value the spec models inside a $ref this scan does not expand —
+        // but the envelope is a published contract customers loop on, and a cursor
+        // the document omits is one a typed client cannot reach.
+        unpublished: ENVELOPE.filter((k) => keys.has(k) && !props.includes(k)).sort(),
       });
     }
   }
@@ -226,6 +237,18 @@ describe('V-1072 a published response is the one returned', () => {
       broken,
       'these routes publish a required response field no return statement sets — correct the ' +
         'schema in lib/openapi.ts to the shape the handler sends:',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL no route sends a pagination envelope key the document omits. This is the opposite of the arm above and it hides rather than misleads: the server pages correctly, the contract says the list is all there is, and a caller typed from it cannot reach the cursor. GET /v1/agent-sessions returned has_more and next_cursor while publishing data alone, with the pagination reference naming it among the endpoints that carry has_more.', () => {
+    const hidden = judge()
+      .compared.filter((c) => c.unpublished.length > 0)
+      .map((c) => `${c.key}: sends ${c.unpublished.join(', ')}, publishes neither`)
+      .sort();
+    expect(
+      hidden,
+      'these routes send envelope keys the document does not declare — publish the paginated ' +
+        'schema so a generated client can page:',
     ).toEqual([]);
   });
 });
