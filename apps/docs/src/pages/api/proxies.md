@@ -172,6 +172,14 @@ password, resubmit the full VPN body as you would on create.
 
 `404` if the id isn't one of your proxies.
 
+`409` — `Proxy changed concurrently. Retry the update.` The update is a
+compare-and-set on `scheme`: the route reads the saved proxy, then writes
+only if the scheme is still what it read. If something else changed the
+scheme in between — a second dashboard tab, a concurrent API call — the
+write is refused rather than silently applied to a proxy that is no
+longer the one you edited. Re-read the proxy and reissue the update. A
+`409` here means the row still exists; a `404` means it is gone.
+
 ## Delete
 
 `DELETE /v1/account/me/proxies/{id}` → `204` (idempotent; `404` for an

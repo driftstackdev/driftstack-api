@@ -45491,3 +45491,45 @@ Mutations: overstating the page figure fails it; raising the schema bound with a
 byte-identical.
 
 `it(` count 5→6. No new file, no ratchet change.
+
+## V-1067 — an optimistic-concurrency 409 nobody was told about
+
+Same sweep shape as V-1065/V-1066, aimed at a different error class: every
+`ConflictError` a live `/v1` route can throw. 24 of them.
+
+Attribution needed care and I did not build on the part that failed it. Nine
+conflicts came back attributed to `POST /v1/agent-sessions/:id/handback`, several of
+which are plainly the turn-dispatch path's — the segment-overrun hazard this corpus
+has hit three times. Those were set aside rather than reported.
+
+Of the clean ones, two are documented: the organization slug conflict
+(`api/account.md` names `409 Conflict` beside the slug rules) and the legal-document
+version conflict (`api/legal.md` in two places, with the re-fetch-and-re-accept
+instruction). One is not.
+
+`PUT /v1/account/me/proxies/:id` can return `409 Proxy changed concurrently. Retry the
+update.` and `api/proxies.md` had no mention of `409` at all. The mechanism is a
+compare-and-set: the route reads the proxy, passes `expectedScheme: existing.scheme`
+into the repo update, and the write lands only if the scheme is still what it read.
+Two dashboard tabs, or a concurrent API call, produce a refusal rather than a write
+applied to a proxy the caller no longer recognises.
+
+That is the right behaviour and it is properly covered — `account-me-proxies` drives
+the 409 in an integration arm that reasons explicitly about answering 409 for a row
+that still exists and 404 for one that is gone. The defect was only that no customer
+could learn it. An integration writing updates has no reason to expect an intermittent
+rejection, and without the 404/409 distinction cannot tell "retry" from "stop".
+
+Documented with the mechanism, not just the code: which field the compare-and-set
+watches, why the write is refused, and that a 409 means the row is still there. Guarded
+in `the-saved-proxy-cap-is-published`, which already owns this page's claims, with the
+route side asserted too — the page describes a compare-and-set, so the arm fails if
+`expectedScheme` stops being passed or the conflict stops being thrown.
+
+Mutations: deleting the 409 paragraph fails it; deleting only the 404/409 sentence
+fails it; dropping `expectedScheme` from the route fails it; downgrading the conflict
+to a NotFound fails it. Restored byte-identical, and `apps/docs` rebuilt afterwards —
+now a standing step after any mutation round that `cp`s a page back, since the restore
+bumps mtime past the last build twice running.
+
+`it(` count 4→5. No new file, no ratchet change.
