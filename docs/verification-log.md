@@ -47930,3 +47930,43 @@ map — the crypto-orders SDK pages document a route capped at 200, so a blanket
 would false-fail legitimate copy. A loose ≤200 rule would catch only absurd values while
 reading as complete. That is the allowlist-shaped guard this arc has now declined four
 times.
+
+### V-1118 — four value-vocabulary classes swept, all clean, all already tied
+
+V-1116 found four pages naming a problem type the server cannot send, and the guard
+built for it covers problem types only. This pass took the same question — a value the
+docs cite that must exist in code — through the other enum vocabularies. Nothing was
+wrong, and the reason each is fine is worth recording so the classes are not re-derived.
+
+**Proxy scheme.** `api/proxies.md` says `scheme` is one of
+`socks5 | http | openvpn | wireguard`. Two enums carry proxy schemes and they differ:
+`AccountProxySchemeSchema` (profiles.ts) has all four, while `proxy_kind` on the
+agent-session transport report (agent-sessions.ts) has three and no `http`. The page
+documents SAVED proxies, so it is governed by the four-value schema and is correct. The
+asymmetry itself is real — a saved `http` proxy has no `proxy_kind` representation — but
+the transport report is written by the fleet node, which is outside this repo's scope,
+so it is noted rather than chased.
+
+**Audit-log method.** `audit-log.md` documents
+`{ "method": "password" | "mfa_totp" | "mfa_recovery" }`. All three are emitted:
+`method: 'password'` at `auth-flows.ts:939` and the MFA pair at `:1057`. No documented
+value is unreachable, which is the failure mode `webhook-events` history warns about.
+
+**MFA via.** `"totp" | "recovery"` matches `z.enum(['totp', 'recovery'])` at
+`auth.ts:177/198`.
+
+**Customer audit actions.** 49 declared in `AccountAuditActionSchema`; every one appears
+on the customer page, and every dotted action the page cites is declared. The three
+apparent strays my extraction flagged — `payload.method`, `payload.remaining`,
+`payload.via` — are field paths, not action names.
+
+**And the guard I was about to build already exists.** `account-audit-action-cross-source-invariant:93`
+asserts the page "documents every AccountAuditAction, and invents none", derived from
+the enum in both directions, alongside arms tying the dashboard label map and filter
+dropdown to the same source. Checking prior art before writing is what stopped a
+duplicate; that is the fifth time in this arc it has, after V-1110 (the derived-status
+guard), V-1112 (the per-file arms), V-1109 (the auth-url parity test) and V-1104 (the
+retry-safety gate).
+
+No change to source. Recorded because the honest result of a sweep is sometimes that
+the thing is already held, and the next person should spend their time elsewhere.
