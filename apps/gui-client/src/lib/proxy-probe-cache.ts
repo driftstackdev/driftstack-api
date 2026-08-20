@@ -82,6 +82,12 @@ function cleanEntry(raw: unknown): CachedProbe | null {
       reachable: res.reachable,
       auth_ok: res.auth_ok,
       udp_associate: res.udp_associate,
+      // A cache written before routing was measured has no verdict to restore.
+      // Default to NOT usable rather than inheriting a green badge from an era
+      // when "healthy" meant "authenticated" — a stale optimistic verdict is
+      // the failure this whole change exists to end.
+      can_route: typeof res.can_route === 'boolean' ? res.can_route : false,
+      connect_reply: typeof res.connect_reply === 'number' ? res.connect_reply : 0xff,
       latency_ms: res.latency_ms,
       message: res.message,
     },

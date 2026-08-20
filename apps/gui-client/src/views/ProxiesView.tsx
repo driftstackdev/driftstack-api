@@ -12,6 +12,7 @@ import { RelativeTime } from '../components/RelativeTime';
 import { Skeleton, SkeletonRegion } from '../components/Skeleton';
 import { ProxyCapabilityChips } from '../components/ProxyCapabilities';
 import {
+  isProxyUsable,
   addProxy,
   listProxies,
   removeProxy,
@@ -88,11 +89,17 @@ function formatTestAllSummary(results: ProxyTestResult[]): string {
   if (results.length === 0) {
     return 'No proxy results landed — run Test all again.';
   }
-  const healthy = results.filter((result) => result.reachable && result.auth_ok).length;
+  const healthy = results.filter((result) => isProxyUsable(result)).length;
   const unreachable = results.filter((result) => !result.reachable).length;
   const authFailed = results.filter((result) => result.reachable && !result.auth_ok).length;
+  // Authenticates but will not carry traffic. Counted separately because
+  // "auth failed" sends someone to re-check a password that was accepted.
+  const cannotRoute = results.filter(
+    (result) => result.reachable && result.auth_ok && !result.can_route,
+  ).length;
   const parts = [`${String(healthy)} healthy`];
   if (unreachable > 0) parts.push(`${String(unreachable)} unreachable`);
+  if (cannotRoute > 0) parts.push(`${String(cannotRoute)} can't route`);
   if (authFailed > 0) {
     parts.push(`${String(authFailed)} auth failure${authFailed === 1 ? '' : 's'}`);
   }
@@ -191,7 +198,7 @@ export function ProxiesView(): JSX.Element {
         // misleading "exits from US 1.2.3.4" for a dead proxy. In-session
         // handleTest already drops the exit on a failed probe; this matches that
         // for the reload path.
-        if (c.exitIp !== undefined && c.result.reachable && c.result.auth_ok) {
+        if (c.exitIp !== undefined && isProxyUsable(c.result)) {
           er[id] = {
             ip: c.exitIp,
             country: c.exitCountry ?? null,
@@ -352,7 +359,7 @@ export function ProxiesView(): JSX.Element {
       void saveProbeResult(p.id, result, probedAt).catch(() => undefined);
       // E-2: exit-geo through the proxy. A null result is a genuine probe
       // failure (V-857) rather than a missing dependency, and the card says so.
-      if (result.reachable && result.auth_ok) {
+      if (isProxyUsable(result)) {
         const exit = await probeProxyExit({
           host: p.host,
           port: p.port,
@@ -385,6 +392,10 @@ export function ProxiesView(): JSX.Element {
         reachable: false,
         auth_ok: false,
         udp_associate: false,
+        // A synthesised result is not evidence of routing. Fail closed: an
+        // unknown proxy must never inherit a usable verdict by omission.
+        can_route: false,
+        connect_reply: 0xff,
         latency_ms: 0,
         message: humanizeError(err, "Couldn't test this proxy. Check the details and try again."),
       };
@@ -1246,6 +1257,10 @@ export function ProxyForm({
         reachable: false,
         auth_ok: false,
         udp_associate: false,
+        // A synthesised result is not evidence of routing. Fail closed: an
+        // unknown proxy must never inherit a usable verdict by omission.
+        can_route: false,
+        connect_reply: 0xff,
         latency_ms: 0,
         message: humanizeError(err, "Couldn't test this proxy. Check the details and try again."),
       });

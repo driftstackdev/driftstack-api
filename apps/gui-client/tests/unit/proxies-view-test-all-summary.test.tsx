@@ -10,6 +10,8 @@ const HEALTHY: ProxyTestResult = {
   reachable: true,
   auth_ok: true,
   udp_associate: true,
+  can_route: true,
+  connect_reply: 0x00,
   latency_ms: 30,
   message: 'ok',
 };
@@ -17,6 +19,8 @@ const UNREACHABLE: ProxyTestResult = {
   reachable: false,
   auth_ok: false,
   udp_associate: false,
+  can_route: false,
+  connect_reply: 0xff,
   latency_ms: 0,
   message: 'timed out',
 };
@@ -24,6 +28,8 @@ const AUTH_FAILED: ProxyTestResult = {
   reachable: true,
   auth_ok: false,
   udp_associate: false,
+  can_route: false,
+  connect_reply: 0xff,
   latency_ms: 40,
   message: 'credentials rejected',
 };
@@ -44,6 +50,11 @@ function proxy(id: string, scheme: ProxyConfig['scheme'] = 'socks5'): ProxyConfi
 let stored: ProxyConfig[] = [];
 
 vi.mock('../../src/lib/proxies', () => ({
+  // Pure predicate — use the real one. A stub here would let a suite
+  // disagree with the app about what "usable" means, which is the very
+  // drift this predicate was introduced to remove.
+  isProxyUsable: (r: { reachable: boolean; auth_ok: boolean; can_route: boolean }): boolean =>
+    r.reachable && r.auth_ok && r.can_route,
   listProxies: () => Promise.resolve(stored),
   addProxy: vi.fn(() => Promise.resolve({})),
   removeProxy: (id: string) => removeProxy(id),

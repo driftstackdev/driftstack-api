@@ -25,6 +25,8 @@ describe('testProxy (gui-client/lib/proxies)', () => {
       reachable: true,
       auth_ok: true,
       udp_associate: true,
+      can_route: true,
+      connect_reply: 0x00,
       latency_ms: 42,
       message: 'ok',
     });
@@ -45,6 +47,8 @@ describe('testProxy (gui-client/lib/proxies)', () => {
       reachable: true,
       auth_ok: true,
       udp_associate: false,
+      can_route: true,
+      connect_reply: 0x00,
       latency_ms: 10,
       message: 'ok',
     });
@@ -64,6 +68,8 @@ describe('testProxy (gui-client/lib/proxies)', () => {
       reachable: true,
       auth_ok: false,
       udp_associate: false,
+      can_route: false,
+      connect_reply: 0xff,
       latency_ms: 88,
       message: 'Connected, but the proxy rejected the username/password.',
     };

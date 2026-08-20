@@ -27,6 +27,11 @@ const h = vi.hoisted(() => ({
 // Local stores (Tauri-backed in prod): proxies + their profile bindings live here,
 // not on the server. The view reads them to pick + sync the profile's exit.
 vi.mock('../../src/lib/proxies', () => ({
+  // Pure predicate — use the real one. A stub here would let a suite
+  // disagree with the app about what "usable" means, which is the very
+  // drift this predicate was introduced to remove.
+  isProxyUsable: (r: { reachable: boolean; auth_ok: boolean; can_route: boolean }): boolean =>
+    r.reachable && r.auth_ok && r.can_route,
   listProxies: h.listProxies,
   setProxyServerId: h.setProxyServerId,
 }));

@@ -174,6 +174,11 @@ const PROXIES = [
   { id: 'px_2', label: 'US SOCKS', scheme: 'socks5', host: '5.6.7.8', port: 1080 },
 ];
 vi.mock('../../src/lib/proxies', () => ({
+  // Pure predicate — use the real one. A stub here would let a suite
+  // disagree with the app about what "usable" means, which is the very
+  // drift this predicate was introduced to remove.
+  isProxyUsable: (r: { reachable: boolean; auth_ok: boolean; can_route: boolean }): boolean =>
+    r.reachable && r.auth_ok && r.can_route,
   listProxies: () => Promise.resolve(PROXIES),
   addProxy: vi.fn(() => Promise.resolve({ id: 'p_new' })),
   removeProxy: vi.fn(() => Promise.resolve()),

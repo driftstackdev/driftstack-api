@@ -1724,6 +1724,21 @@ struct ProxyTestResult {
     /// can relay UDP, so QUIC / WebRTC / HTTP-3 route through it instead
     /// of leaking over the host's direct connection.
     udp_associate: bool,
+    /// A real SOCKS5 CONNECT (CMD 0x01) to a public destination succeeded.
+    ///
+    /// This is the verdict that actually answers "can this proxy carry my
+    /// traffic". Everything above it is preamble: a proxy can accept TCP,
+    /// complete the greeting and accept credentials and STILL refuse every
+    /// CONNECT. That is not a corner case — five NodeMaven endpoints did
+    /// exactly that on 2026-08-18, answering 0x02 "not allowed by ruleset"
+    /// to every request while this probe reported "Connected · auth ok" and
+    /// customers launched profiles that could not reach anything.
+    can_route: bool,
+    /// Raw SOCKS5 reply byte from the CONNECT attempt (RFC 1928 §6), kept so
+    /// the UI can say WHY rather than just "failed". 0x00 success, 0x02 not
+    /// allowed by ruleset, 0x03 network unreachable, 0x04 host unreachable,
+    /// 0x05 connection refused, 0x06 TTL expired. 0xFF = no reply read.
+    connect_reply: u8,
     /// Round-trip wall-clock to complete the handshake, in milliseconds.
     latency_ms: u64,
     /// Human-readable summary the GUI shows verbatim under the button.
@@ -1806,6 +1821,8 @@ fn run_socks5_probe(
                     reachable: true,
                     auth_ok: false,
                     udp_associate: false,
+                    can_route: false,
+                    connect_reply: 0xFF,
                     latency_ms: start.elapsed().as_millis() as u64,
                     message: "Connected, but the proxy rejected the username/password.".into(),
                 });
@@ -1816,6 +1833,8 @@ fn run_socks5_probe(
                 reachable: true,
                 auth_ok: false,
                 udp_associate: false,
+                can_route: false,
+                connect_reply: 0xFF,
                 latency_ms: start.elapsed().as_millis() as u64,
                 message: if use_auth {
                     "Server rejected all offered authentication methods.".into()
@@ -1828,6 +1847,76 @@ fn run_socks5_probe(
             return Err(format!(
                 "Server selected unsupported auth method {other:#x}."
             ))
+        }
+    }
+
+    // CONNECT (RFC 1928 §4, CMD 0x01) to a real public destination.
+    //
+    // This is the check that was missing, and its absence is why the Test
+    // button could not be trusted: auth success was being reported as
+    // "Connected", but authenticating and ROUTING are separate permissions on
+    // every commercial proxy. A residential endpoint whose plan has lapsed, or
+    // whose ruleset forbids a destination, authenticates perfectly and then
+    // refuses every CONNECT.
+    //
+    // Destination is 1.1.1.1:443 as a DOTTED IPv4 (ATYP 0x01), deliberately:
+    // a hostname (ATYP 0x03) would make the proxy resolve DNS, so a DNS fault
+    // would be indistinguishable from a routing refusal. Port 443 because a
+    // proxy that allows only 80 is not usable for this product anyway.
+    let connect_req = [0x05u8, 0x01, 0x00, 0x01, 1, 1, 1, 1, 0x01, 0xBB];
+    stream
+        .write_all(&connect_req)
+        .map_err(|e| format!("write CONNECT: {e}"))?;
+    let mut connect_head = [0u8; 4]; // VER REP RSV ATYP
+    let connect_reply = match stream.read_exact(&mut connect_head) {
+        Ok(()) => connect_head[1],
+        Err(_) => 0xFF,
+    };
+    let can_route = connect_reply == 0x00;
+    // Drain the bound address that follows, so the UDP probe below reads its
+    // own reply rather than this one's tail.
+    if connect_reply != 0xFF {
+        let addr_bytes = match connect_head[3] {
+            0x01 => 4 + 2,
+            0x04 => 16 + 2,
+            0x03 => {
+                let mut len = [0u8; 1];
+                if stream.read_exact(&mut len).is_ok() {
+                    len[0] as usize + 2
+                } else {
+                    0
+                }
+            }
+            _ => 0,
+        };
+        if addr_bytes > 0 {
+            let mut sink = vec![0u8; addr_bytes];
+            let _ = stream.read_exact(&mut sink);
+        }
+    }
+    // A CONNECT that succeeded leaves the stream bound to the destination, so
+    // it can no longer carry a UDP ASSOCIATE. Reconnect for that probe rather
+    // than reporting a false negative on UDP.
+    if can_route {
+        stream = TcpStream::connect_timeout(&addr, PROXY_PROBE_TIMEOUT)
+            .map_err(|e| format!("TCP reconnect for UDP probe failed: {e}"))?;
+        stream.set_read_timeout(Some(PROXY_PROBE_TIMEOUT)).ok();
+        stream.set_write_timeout(Some(PROXY_PROBE_TIMEOUT)).ok();
+        stream
+            .write_all(&socks5_greeting(use_auth))
+            .map_err(|e| format!("write greeting (udp): {e}"))?;
+        let mut sel2 = [0u8; 2];
+        stream
+            .read_exact(&mut sel2)
+            .map_err(|e| format!("read greeting (udp): {e}"))?;
+        if sel2[1] == 0x02 {
+            if let (Some(user), Some(pass)) = (username, password) {
+                stream
+                    .write_all(&socks5_userpass(user, pass))
+                    .map_err(|e| format!("write auth (udp): {e}"))?;
+                let mut a2 = [0u8; 2];
+                let _ = stream.read_exact(&mut a2);
+            }
         }
     }
 
@@ -1865,15 +1954,42 @@ fn run_socks5_probe(
     }
 
     let latency_ms = start.elapsed().as_millis() as u64;
-    let message = if udp_associate {
-        "SOCKS5 reachable. UDP ASSOCIATE supported — QUIC / WebRTC / HTTP-3 route through the proxy.".to_string()
+    // The headline is whether traffic can actually LEAVE. UDP support is a
+    // qualifier on a working proxy, never a substitute for one — reporting it
+    // as the verdict is what let an endpoint that refuses every CONNECT read
+    // as healthy.
+    let udp_note = if udp_associate {
+        " UDP ASSOCIATE supported — QUIC / WebRTC / HTTP-3 tunnel through it too."
     } else {
-        "SOCKS5 reachable, but UDP ASSOCIATE is not supported — UDP traffic (QUIC / WebRTC) can't be tunnelled.".to_string()
+        " UDP ASSOCIATE is not supported, so QUIC / WebRTC can't be tunnelled."
+    };
+    let message = if can_route {
+        format!("Working — CONNECT succeeded.{udp_note}")
+    } else {
+        // Name the refusal in the proxy's own words. "Failed" sends someone to
+        // re-check a password that was already accepted; "your plan does not
+        // allow this destination" sends them to their provider.
+        let why = match connect_reply {
+            0x02 => "the proxy refused it: not allowed by its ruleset (usually an expired plan, or a destination/port your provider blocks)",
+            0x03 => "the proxy reported the network as unreachable",
+            0x04 => "the proxy reported the host as unreachable",
+            0x05 => "the proxy's upstream refused the connection",
+            0x06 => "the connection expired (TTL) inside the proxy",
+            0x07 => "the proxy does not support CONNECT",
+            0x08 => "the proxy rejected the address type",
+            0xFF => "the proxy accepted the request and then answered nothing",
+            _ => "the proxy returned an unrecognised SOCKS5 error",
+        };
+        format!(
+            "Authenticates, but cannot route: {why}. Credentials are fine — this proxy will not carry traffic, so a profile launched through it cannot reach anything."
+        )
     };
     Ok(ProxyTestResult {
         reachable: true,
         auth_ok,
         udp_associate,
+        can_route,
+        connect_reply,
         latency_ms,
         message,
     })
@@ -1904,6 +2020,8 @@ async fn proxy_test(
                 reachable: false,
                 auth_ok: false,
                 udp_associate: false,
+                can_route: false,
+                connect_reply: 0xFF,
                 latency_ms: 0,
                 message,
             },
@@ -1914,6 +2032,8 @@ async fn proxy_test(
         reachable: false,
         auth_ok: false,
         udp_associate: false,
+        can_route: false,
+        connect_reply: 0xFF,
         latency_ms: 0,
         message: "Proxy test could not be scheduled — please retry.".to_string(),
     }))

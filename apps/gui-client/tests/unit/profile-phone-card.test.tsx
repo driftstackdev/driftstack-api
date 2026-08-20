@@ -32,6 +32,8 @@ function props(over: Partial<ProfilePhoneCardProps> = {}): ProfilePhoneCardProps
       reachable: true,
       auth_ok: true,
       udp_associate: true,
+      can_route: true,
+      connect_reply: 0x00,
       latency_ms: 42,
       message: 'ok',
     },

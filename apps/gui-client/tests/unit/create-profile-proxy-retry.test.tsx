@@ -88,6 +88,11 @@ vi.mock('../../src/lib/profile-bindings', () => ({
   deleteBinding: vi.fn(() => Promise.resolve()),
 }));
 vi.mock('../../src/lib/proxies', () => ({
+  // Pure predicate — use the real one. A stub here would let a suite
+  // disagree with the app about what "usable" means, which is the very
+  // drift this predicate was introduced to remove.
+  isProxyUsable: (r: { reachable: boolean; auth_ok: boolean; can_route: boolean }): boolean =>
+    r.reachable && r.auth_ok && r.can_route,
   listProxies: () => Promise.resolve([]),
   addProxy: (d: unknown) => addProxy(d),
   removeProxy: vi.fn(() => Promise.resolve()),

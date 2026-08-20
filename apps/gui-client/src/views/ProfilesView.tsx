@@ -4464,6 +4464,10 @@ function CreateProfileModal({
         reachable: false,
         auth_ok: false,
         udp_associate: false,
+        // A synthesised result is not evidence of routing. Fail closed: an
+        // unknown proxy must never inherit a usable verdict by omission.
+        can_route: false,
+        connect_reply: 0xff,
         latency_ms: 0,
         message: 'Enter a host and a port between 1–65535 before testing.',
       });
@@ -4484,6 +4488,10 @@ function CreateProfileModal({
         reachable: false,
         auth_ok: false,
         udp_associate: false,
+        // A synthesised result is not evidence of routing. Fail closed: an
+        // unknown proxy must never inherit a usable verdict by omission.
+        can_route: false,
+        connect_reply: 0xff,
         latency_ms: 0,
         message: humanizeError(err, "Couldn't test this proxy. Check the details and try again."),
       });

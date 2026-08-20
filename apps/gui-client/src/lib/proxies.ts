@@ -792,6 +792,18 @@ export interface ProxyTestResult {
   auth_ok: boolean;
   /** `UDP ASSOCIATE` answered with success — QUIC / WebRTC tunnel works. */
   udp_associate: boolean;
+  /**
+   * A real SOCKS5 CONNECT to a public destination succeeded.
+   *
+   * This is the field that answers "will traffic actually leave". Until it
+   * existed, `reachable && auth_ok` was treated as healthy — and a proxy can
+   * accept TCP, complete the greeting, accept credentials and STILL refuse
+   * every CONNECT. Five endpoints did exactly that on 2026-08-18 while the
+   * Test button called them fine.
+   */
+  can_route: boolean;
+  /** Raw SOCKS5 reply byte from the CONNECT (0x00 ok, 0x02 ruleset, …). */
+  connect_reply: number;
   /** Handshake round-trip in milliseconds. */
   latency_ms: number;
   /** Human-readable summary, safe to render verbatim. */
@@ -839,6 +851,19 @@ export async function probeProxyExit(input: {
   } catch {
     return null;
   }
+}
+
+/**
+ * The single definition of "this proxy is usable".
+ *
+ * One predicate on purpose. The count in the header, the per-row pill and the
+ * decision to keep a cached exit IP each used to spell this out separately as
+ * `reachable && auth_ok`, so adding routing to the verdict meant changing three
+ * places that could drift — and two surfaces disagreeing about whether a proxy
+ * works is exactly how a dead proxy keeps its green badge.
+ */
+export function isProxyUsable(result: ProxyTestResult): boolean {
+  return result.reachable && result.auth_ok && result.can_route;
 }
 
 export async function testProxy(input: {
