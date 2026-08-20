@@ -29,7 +29,17 @@
 //   * Cross-prefix collision if two resources used the same prefix.
 //   * Marketing-prefix-id-sweep (W-NNN) doc-example checks.
 
-import { existsSync, readFileSync } from 'node:fs';
+// V-1112 — the blind spot, named rather than left implicit. This file covers ids
+// built with the PrefixedId helper, and the completeness arm at the end keeps that
+// set honest. It does NOT cover every `<prefix>_<uuid>` the product mints: `agt_`
+// (agent sessions), `mem_`, `inc_` and `tab_` appear as identifier prefixes in
+// comments and in `lib/redact-url.ts`, and none is declared through the helper —
+// so none carries its `prefix_8-4-4-4-12` guarantee and none is checked here.
+// Whether those should move onto the helper is a design question, not a drift; what
+// is not acceptable is a roster that reads as "the product's id prefixes" when it
+// means "the ids built through this one constructor".
+
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -175,5 +185,42 @@ describe('W867 PrefixedId roster cross-source invariant', () => {
         ),
       ),
     ).toBe(true);
+  });
+  it('CRITICAL V-1112 every schema built with the PrefixedId helper is in the roster. The table below is what every arm here iterates, so a ninth PrefixedId schema is not reported as unrostered — it is never looked at, and none of the prefix/UUID-shape assertions reach it. The helper is the whole point: an id built through it carries the `prefix_8-4-4-4-12` guarantee, and an id that merely looks like one carries nothing.', () => {
+    const src = resolve(REPO_ROOT, 'packages/api-types/src');
+    const DECL = /export const (\w+) = PrefixedId\('([a-z_]+)'\)/g;
+    const declared: { schema: string; prefix: string; file: string }[] = [];
+    for (const f of readdirSync(src).filter((n) => n.endsWith('.ts'))) {
+      const body = readFileSync(resolve(src, f), 'utf8');
+      for (const m of body.matchAll(DECL)) {
+        declared.push({ schema: m[1] as string, prefix: m[2] as string, file: f });
+      }
+    }
+    expect(declared.length, 'PrefixedId schemas discovered in api-types').toBeGreaterThanOrEqual(8);
+
+    // Widened deliberately: PREFIXED_IDS is `as const`, so a Set built from it
+    // is keyed on the eight literals and cannot be asked about a parsed string.
+    const rostered = new Set<string>(PREFIXED_IDS.map((e) => e.schema));
+    expect(
+      declared.filter((d) => !rostered.has(d.schema)).map((d) => `${d.schema} ('${d.prefix}')`),
+      'these schemas are built with PrefixedId but have no roster row, so no arm above checks ' +
+        'their prefix or their UUID shape:',
+    ).toEqual([]);
+    expect(
+      PREFIXED_IDS.filter((e) => !declared.some((d) => d.schema === e.schema)).map((e) => e.schema),
+      'roster rows for schemas that are no longer built with PrefixedId:',
+    ).toEqual([]);
+    // That second expectation is a BACKSTOP, not new coverage: the per-file arms
+    // above already fail when a schema stops being built with the helper —
+    // measured, by rewriting SessionEventIdSchema as a bare z.string(). It is
+    // kept because it covers all eight uniformly and says why in one line; it is
+    // not what makes this arm worth having.
+
+    // Prefix and source-file agreement are NOT re-asserted here: the per-file
+    // arms above already fail on a wrong prefix and on a row attributed to the
+    // wrong file — both verified by mutation while writing this. A second copy
+    // of a check that already fires adds no coverage and one more thing to keep
+    // true. What IS new is the direction above: a NEW PrefixedId schema trips
+    // nothing else, because every other arm here counts roster rows.
   });
 });

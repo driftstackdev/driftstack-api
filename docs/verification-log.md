@@ -47667,3 +47667,40 @@ Mutation-proved, restored byte-identical:
   list is unchanged — the direction the per-file counts exist for;
 - a comment mentioning `.header('content-disposition', …)` raises the raw mention count
   to 3 and the census stays at 2, so the strip is doing what it claims.
+
+### V-1112 — the id roster was complete, and only a new id would have proved otherwise
+
+Last roster in the sweep. `prefixed-id-roster-cross-source-invariant` pins eight
+`PrefixedId('x')` schemas — prefix, UUID shape, source file. Measured against the
+declarations: eight declared, eight rostered, exact match. Complete, and unenforced.
+
+The gap is narrow and specific, and finding it took distinguishing my new arm from the
+ones already there. Every other arm in the file counts ROSTER rows, so a NEW
+`PrefixedId` schema trips nothing — the roster still holds five common.ts rows, the
+per-file counts still agree, and the ninth schema simply never gets its prefix or its
+UUID shape checked. That direction is now derived from the declarations.
+
+The two directions I did NOT claim as new: a wrong prefix in a row, and a row
+attributed to the wrong file, both already fail the per-file arms — verified by
+mutation, not assumed, which is why the redundant third assertion I first wrote was
+deleted rather than fixed. A stale row is likewise already caught; that expectation is
+kept as a one-line backstop and the comment says so instead of implying otherwise.
+
+**The blind spot is named.** This file covers ids built through the helper, not every
+`<prefix>_<uuid>` the product mints. `agt_` (agent sessions), `mem_`, `inc_` and `tab_`
+appear as identifier prefixes in comments and in `lib/redact-url.ts`, and none is
+declared through `PrefixedId` — so none carries its `prefix_8-4-4-4-12` guarantee and
+none is checked here. Whether they should move onto the helper is a design question,
+not a drift. What is not acceptable is a roster reading as "the product's id prefixes"
+when it means "the ids built through this one constructor".
+
+Mutation-proved, restored byte-identical: a ninth `PrefixedId('inv')` declaration fails
+as `InvoiceIdSchema ('inv')` with no other arm reacting; rewriting `SessionEventIdSchema`
+as a bare `z.string()` fails the per-file arm, which is how the backstop was shown to be
+a backstop.
+
+**Caught by typecheck, not by the suite.** The first version keyed a `Map`/`Set` on
+`PREFIXED_IDS`, which is `as const`, so the keys narrowed to the eight literals and
+could not be asked about a parsed string. Vitest transpiles without checking and
+reported 13 passing; `npm run typecheck` reported two errors. That is precisely the
+failure `the-server-source-type-checks` exists for, met while writing a guard.
