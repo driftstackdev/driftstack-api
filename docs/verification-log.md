@@ -51367,3 +51367,53 @@ Eighteen real defects, all in the layer where a single SQL predicate carries a p
 service layer trusts and the unit tests cannot see — because those tests drive in-memory repo
 doubles that reimplement the property in TypeScript. That is the structural finding underneath all
 four axes, and it is the reason the same instrument kept working.
+
+### V-1196 — the heuristic applied off the db layer: cache keys and AAD binding, both clean
+
+V-1195 ended on a heuristic worth testing rather than admiring: **the untested invariants are the
+ones nobody would write a story for.** It predicted three of four db-layer axes. This applied it
+above the repo layer, where the same shape exists — one expression carrying a property no ticket
+would ever describe.
+
+**Cache and rate-limit keys — clean by inspection.** Every account-scoped key already carries its
+scope (`rl:${accountId}:${bucketKey}`, `auth:account:${accountId}:v`), and the ones that do not are
+keyed by a secret that IS the identity (`auth:apikey:${sha}`, the MFA challenge token). No probe
+needed: there is nothing to forget.
+
+**Encryption AAD — the real candidate, and fully covered.** Five builders bind a ciphertext to its
+row: `buildMfaTotpSecretAad`, `buildAad` (account proxy), `buildLivekitSecretAad`,
+`buildProfileDekAad`, `buildAdditionalAuthenticatedData` (webhook secret). The property is that a
+ciphertext encrypted for one row cannot be decrypted as another — precisely the kind of thing that
+reads as impossible and therefore goes unwritten.
+
+Neutralised all five to return a context-free constant: **24 assertions across 13 files**. Then
+each individually, because a batch result names the covered set and not its members:
+
+| builder                            | tests that die |
+| ---------------------------------- | -------------- |
+| `buildMfaTotpSecretAad`            | 4              |
+| `buildAad` (account proxy)         | 4              |
+| `buildLivekitSecretAad`            | 6              |
+| `buildProfileDekAad`               | 1              |
+| `buildAdditionalAuthenticatedData` | 4              |
+
+And the arms are named for exactly the property: _rejects same/cross-account relocation_, _rejects
+physical tuple relocation after migration_, _rejects relocation to a different node context / API
+key context / WebSocket URL context_, _binds account, proxy, slot, purpose and master key_. This
+codebase has a relocation test for every encrypted field.
+
+**So the heuristic has a boundary, and finding it is the useful part.** Cryptographic binding is
+implicit in exactly the way tenancy and expiry are — yet it is the best-covered thing in the repo.
+The difference is that whoever wrote these envelopes was _thinking about an attacker moving bytes
+between rows_, and wrote the test in the same sitting. The db-layer predicates were written while
+thinking about a query returning the right rows. **The heuristic is not "implicit properties are
+untested" — it is "properties outside the author's frame at the time of writing are untested."**
+An encryption envelope's frame includes relocation; a `SELECT`'s frame does not include the other
+tenant.
+
+**A process note.** The per-builder loop hit the command timeout mid-run and left a mutant in
+`livekit-secret-encryption.ts`. The routine `grep mutant-aad` + `git status --porcelain` check
+caught it immediately, and the remaining probes were rerun against targeted files instead of the
+full suite. **A mutation loop that dies partway leaves source mutated**, and the only thing between
+that and a committed mutant is checking the tree every time rather than trusting the loop's restore
+step to have run.
