@@ -47214,3 +47214,42 @@ re-add printed afterwards is the same failure with tidier text.
 Mutation-proved, restored byte-identical: restoring the consecutive rewrite-then-push
 sequence fails with the half-applied explanation; moving the re-add below the push fails
 the ordering check specifically.
+
+### V-1102b — action 11 closed, and the security-posture claim tied to the pipeline both ways
+
+Action 11 said `license-activation.md` claims distributed builds "must pass Developer ID
+signature, hardened-runtime, notarisation, and Gatekeeper verification before
+installation". That sentence is gone. The page now states plainly that builds are NOT
+Apple Developer ID code-signed, hardened-runtime or notarised, tells the customer about
+the unidentified-developer warning and the right-click-Open workaround, and — better
+than the plan's proposed copy — distinguishes the Tauri updater signature from Apple
+code signing, which is the distinction a reader would otherwise conflate.
+
+Confirmed against the pipeline rather than taken on trust: `.github/` contains no
+`notarytool`, `APPLE_ID`, `APPLE_CERTIFICATE`, `codesign` or hardened-runtime marker
+anywhere, and `gui-release.yml` records its own "Pre-launch posture: NO OS-level binary
+signing". The platform sentence is right too — the matrix really does build
+`macos-latest`, `ubuntu-22.04` and `windows-latest`, and the page says the Windows and
+Linux bundles are produced but unsupported.
+
+**The plan's proposed guard cannot be used as written.** It asks for: no customer page
+under `apps/docs/src` may contain `/notaris|Developer ID/`. The corrected page contains
+both, necessarily — you cannot say "not Developer ID signed" without the words. A guard
+built from that rule would fail on the fix.
+
+So the tie is two-sided instead, on the state rather than the vocabulary. While `.github/`
+carries no Apple signing marker, the page must keep saying the builds are unsigned and
+keep the workaround. If a marker ever appears, the page must stop saying it — because
+that direction is the one that hurts a customer who has been told to bypass a warning
+they will no longer see, about a signed build described as unsigned. The detection
+vocabulary is deliberately narrow: the Tauri UPDATER key genuinely is a signing key and
+is used here, so a bare `/sign/` would report Apple signing that does not exist.
+
+Mutation-proved, restored byte-identical: restoring the original Gatekeeper sentence
+fails the unsigned-side assertion; injecting a `notarytool` line into the workflow fails
+the signed-side assertion, with the message about the stale workaround; blanking the
+workflow posture line fails its own sentinel.
+
+The first attempt at the middle mutation silently injected nothing — the marker count
+came back 0 and the suite passed, which reads exactly like a guard that works. Counting
+the injected marker before trusting the run is what caught it.

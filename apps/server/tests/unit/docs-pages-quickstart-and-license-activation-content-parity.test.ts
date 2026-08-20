@@ -2,7 +2,7 @@
 // parity. One-hundred-eleventh in the cross-SDK drift-guard series.
 // Pins the top-level onboarding entry-points.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -314,6 +314,62 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     expect(p).toMatch(/\*\*\[Profile management\]\(\/guides\/profile-management\/\)\*\*/);
     expect(p).toMatch(/\*\*\[Session lifecycle\]\(\/guides\/session-lifecycle\/\)\*\*/);
     expect(p).toMatch(/\*\*\[Quickstart\]\(\/quickstart\/\)\*\*/);
+  });
+  it('V-1102b CRITICAL what the page tells customers about code signing is what the release workflow does. This is the claim the sweep opened on: the page used to say distributed builds "must pass Developer ID signature, hardened-runtime, notarisation, and Gatekeeper verification before installation", and none of that exists — no notarytool, no APPLE_ID, no codesign anywhere in .github/. It is a security-posture statement, so both directions are wrong to leave loose. Signing being ADDED without this page changing leaves customers told to bypass a warning they will not see, and told a signed build is unsigned.', () => {
+    const workflows = resolve(REPO_ROOT, '.github/workflows');
+    const ci = readdirSync(workflows)
+      .filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'))
+      .map((f) => readFileSync(resolve(workflows, f), 'utf8'))
+      .join('\n');
+    expect(ci.length, 'workflow files read').toBeGreaterThan(2000);
+
+    // Deliberately narrow: the Tauri UPDATER key really is a signing key and
+    // is used here, so matching a bare /sign/ would report Apple signing that
+    // does not exist. These are the markers an Apple pipeline cannot omit.
+    const APPLE_SIGNING =
+      /notarytool|APPLE_ID|APPLE_CERTIFICATE|APPLE_TEAM_ID|codesign|xcrun altool|hardened.?runtime/i;
+    const signs = APPLE_SIGNING.test(ci);
+    const page = read(LIC);
+
+    if (signs) {
+      expect(
+        page,
+        'the release pipeline now does OS-level Apple signing, so the page must stop telling ' +
+          'customers the builds are unsigned and stop giving them the right-click-Open workaround:',
+      ).not.toMatch(/Builds are \*\*not\*\* Apple Developer ID code-signed/);
+    } else {
+      expect(
+        page,
+        'nothing in .github/ signs or notarises the build, so the page must keep saying so — this ' +
+          'is the sentence that read the opposite way and promised Gatekeeper verification:',
+      ).toMatch(
+        /Builds are \*\*not\*\* Apple Developer ID code-signed, hardened-runtime, or\s*\n?\s*notarised\./,
+      );
+      expect(page, 'the first-launch workaround must stay while the builds are unsigned').toMatch(
+        /unidentified-developer warning/,
+      );
+    }
+
+    // The workflow states the same posture in prose; if it stops, one of the
+    // two sides moved and the reader should be told which.
+    expect(
+      readFileSync(resolve(workflows, 'gui-release.yml'), 'utf8'),
+      'gui-release.yml no longer records its no-OS-signing posture',
+    ).toMatch(/NO OS-level binary signing/);
+
+    // …and the platform sentence, which is true-but-easily-inverted: the
+    // matrix really does build all three, and only macOS is supported.
+    const platforms = [
+      ...readFileSync(resolve(workflows, 'gui-release.yml'), 'utf8').matchAll(
+        /platform: '([^']+)'/g,
+      ),
+    ].map((m) => m[1] ?? '');
+    expect(platforms.length, 'release matrix platforms').toBeGreaterThanOrEqual(3);
+    expect(
+      page,
+      'the matrix still builds Windows and Linux bundles, so the page may not imply they are not ' +
+        'produced — only that they are not supported:',
+    ).toMatch(/also builds Windows/);
   });
 
   it('test file metadata — file exists at canonical path', () => {
