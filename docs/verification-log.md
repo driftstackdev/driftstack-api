@@ -51325,3 +51325,45 @@ the right property, and still never reach the predicate it exists to guard.
 **Axis status.** Tenancy (V-1187–1192), expiry (V-1193) and soft delete are all the same defect
 shape: one SQL predicate carrying a property, a service layer that trusts it, unit tests that
 cannot see it because they drive in-memory doubles. Status filters remain the last unmeasured one.
+
+### V-1195 — status, the fourth axis: clean, and that finishes the sweep
+
+Last invariant with the same shape. 63 status predicates in the db layer; most are user-supplied
+list filters (`if (opts.status) filters.push(...)`) rather than guards, so this probed the three
+sub-classes that carry a property.
+
+**All three came back covered.**
+
+| sub-class                                                   | predicates | assertions that fired                                                              |
+| ----------------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------- |
+| `accounts.status = 'active'` — the suspension/deletion gate | 4          | 29 across both halves; bisected to confirm each of the four is individually caught |
+| `agentSessions.status = 'active'` — CAS before mutation     | 18         | 24                                                                                 |
+| `sessions.status` — creating / ready / busy / terminal      | 10         | 21                                                                                 |
+
+The account-status arms are the most thorough guards this sweep has read anywhere: a SUSPENDED
+account cannot activate MFA, a DELETED account cannot either "because the row survives a soft
+delete", a suspended OWNER produces no team grant, the grant returns when that owner is reinstated
+"because a filter implemented as a destructive cleanup would not", and the filter reads the
+owner's status rather than the member's. Each of those is a distinct failure mode, written out
+separately.
+
+**Why this axis is different, and it is not luck.** Suspension is a _product feature_ with a
+visible promise (AUP §5.2), so it got behavioural tests when it shipped. Session state is a
+concurrency problem, so it got concurrency tests. Tenancy, expiry and soft delete are _implicit_
+properties — nobody writes a story for "account B cannot read account A's row" or "an expired token
+does not work", because they read as things that could not possibly be wrong. **The axes that went
+untested are the ones nobody would think to write a ticket for.**
+
+**Sweep complete — four axes, one method.**
+
+| axis        | outcome                                                                       |
+| ----------- | ----------------------------------------------------------------------------- |
+| tenancy     | 12 holes closed, 2 false alarms retracted (V-1187–1192)                       |
+| expiry      | 2 holes closed — expired web session, expired reset/magic-link token (V-1193) |
+| soft delete | 4 holes closed — trashing freed no cap slot, bin leaked into grid (V-1194)    |
+| status      | 0 holes; densely covered, confirmed by bisect rather than assumed             |
+
+Eighteen real defects, all in the layer where a single SQL predicate carries a property that the
+service layer trusts and the unit tests cannot see — because those tests drive in-memory repo
+doubles that reimplement the property in TypeScript. That is the structural finding underneath all
+four axes, and it is the reason the same instrument kept working.
