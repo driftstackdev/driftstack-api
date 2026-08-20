@@ -48294,3 +48294,43 @@ Mutation-proved: reverting the import docstring fails the offenders arm; making
 resource a same-named route fails the staleness arm. Comment-stripping was proved by
 accident — the first attempt injected the marker into a comment and the detector
 correctly ignored it. Ratchets 2945→2946 and 3111→3112.
+
+### V-1125 — extending the derived guard to the other three surfaces, and it found the twins
+
+V-1124 built the SDK-to-route pairing for TypeScript only, and it found one defect
+immediately. The same filename convention holds on three more surfaces — Python (12
+pairs), Go (12) and the customer API pages (16) — so the guard now covers all four,
+about forty pairs in total.
+
+It found the twins of the defect V-1124 had just fixed. `POST /v1/profiles/import`
+resolves `effectiveAccountIdForWrite` and mints under `owner.id`, and BOTH the Go and
+Python SDKs still said it mints "a fresh profile in the calling account". V-1124 fixed
+TypeScript alone because the guard only reached TypeScript — the same shape as V-1120,
+where B18's TS pin edits were applied and the Python and Go equivalents were not. A
+per-language guard finds per-language defects.
+
+Also corrected: `api/agent-sessions.md`'s 404 row read "session id unknown to the calling
+account". The route gates on `callerCanAccessAgentSession`, so a session owned by a team
+you administer is not unknown to you — it is reachable. The row now says what the 404
+actually means.
+
+**Two candidates were verified CORRECT and exempted with the reason**, not silenced.
+`billing` is the only paired module with mixed scoping — `GET /v1/billing` resolves an
+effective account at `billing.ts:178` while the mutation endpoints do not — so a
+file-wide detector cannot judge its prose line by line, and per-handler attribution is
+what V-1123 got wrong three times running. The page states the split precisely and the
+Python `portal_session()` docstring describes a caller-only route. Both are listed with
+their reason and a staleness arm that fails if either line is reworded, which is the
+idiom this suite already uses for `NOT_THE_NON_TERMINAL_TEST` and the isolation `EXEMPT`
+maps.
+
+**The guard had a real gap, and only a mutation showed it.** For Python it tested each
+line for a leading comment marker, which sees the FIRST line of a docstring and nothing
+after it. The phrase it was built to catch sat on a CONTINUATION line: reverting the
+Python import docstring left the guard green while the defect was reinstated underneath
+it. The detector is docstring-aware now — a small state machine toggling on the triple
+quote — and the same mutation fails as `py:profiles:131`.
+
+Mutation-proved: reverting the Go docstring fails naming `go:profiles:277`; reverting the
+Python one fails naming `py:profiles:131`; rewording the exempted billing sentence fails
+the staleness arm. `go vet` clean, 365 pytest passed, docs rebuilt, rendered gate green.

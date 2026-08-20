@@ -128,7 +128,8 @@ class ProfilesResource:
     def import_(self, body: dict[str, Any]) -> dict[str, Any]:
         """V-480 — import a profile from a v1 export envelope
         (``{"envelope": ..., "name_override"?: ...}``), minting a fresh profile
-        in the calling account. ``import`` is a Python keyword, hence ``import_``."""
+        in the EFFECTIVE account — your own, or the owner you are acting as via
+        ``X-Driftstack-Account``. ``import`` is a Python keyword, hence ``import_``."""
         return self._http.request("POST", "/v1/profiles/import", json_body=coerce_body(body))
 
     def transfer(self, profile_id: str, body: dict[str, Any]) -> dict[str, Any]:

@@ -31,18 +31,54 @@ import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const SDK = resolve(REPO_ROOT, 'packages/sdk-typescript/src/resources');
+const SURFACES: ReadonlyArray<{ label: string; dir: string; ext: string }> = [
+  { label: 'ts', dir: 'packages/sdk-typescript/src/resources', ext: '.ts' },
+  { label: 'py', dir: 'packages/sdk-python/src/driftstack/resources', ext: '.py' },
+  { label: 'go', dir: 'packages/sdk-go', ext: '.go' },
+  { label: 'doc', dir: 'apps/docs/src/pages/api', ext: '.md' },
+];
 const ROUTES = resolve(REPO_ROOT, 'apps/server/src/routes');
+
+/**
+ * Lines that name the calling account CORRECTLY, on a module whose routes are
+ * mixed, with the reason each is right.
+ *
+ * `billing` is the only module in the paired set where some routes resolve an
+ * effective account and others do not, so a file-wide detector cannot judge its
+ * prose line by line — and per-handler attribution is what V-1123 got wrong three
+ * times running. Both entries were checked against the route:
+ *
+ *   `doc:billing` — the page states the split exactly: all `/v1/billing/*` are
+ *   caller-scoped "with one read exception: `GET /v1/billing` honors the
+ *   team-RBAC `X-Driftstack-Account` header". That handler really does resolve an
+ *   effective account (`billing.ts:178`), and the mutation endpoints really do not.
+ *
+ *   `py:billing` — `portal_session()` documents `POST /v1/billing/portal-session`,
+ *   which is caller-only. Naming the calling account there is correct.
+ */
+const CORRECT_AS_WRITTEN: ReadonlyArray<{ prefix: string; needle: string }> = [
+  { prefix: 'doc:billing', needle: 'with one read exception' },
+  { prefix: 'py:billing', needle: 'Stripe Customer Portal session' },
+];
 
 /** SDK resources whose route module carries a different filename. */
 const UNPAIRED = ['account', 'api-keys', 'audit-log', 'crypto-orders', 'egress', 'mfa', 'usage'];
 
-/** Resource names that exist on both sides, so the pairing is derived. */
-function pairedResources(): string[] {
-  const sdk = readdirSync(SDK)
-    .filter((f) => f.endsWith('.ts'))
-    .map((f) => f.slice(0, -3));
-  return sdk.filter((n) => existsSync(resolve(ROUTES, `${n}.ts`))).sort();
+/** Every (surface, resource) pair whose name matches a route module. */
+function pairedFiles(): { label: string; resource: string; path: string }[] {
+  const out: { label: string; resource: string; path: string }[] = [];
+  for (const s of SURFACES) {
+    const dir = resolve(REPO_ROOT, s.dir);
+    if (!existsSync(dir)) continue;
+    for (const f of readdirSync(dir).filter((n) => n.endsWith(s.ext) && !n.includes('_test'))) {
+      // Python uses snake_case filenames for hyphenated route modules.
+      const resource = f.slice(0, -s.ext.length).replace(/_/g, '-');
+      if (existsSync(resolve(ROUTES, `${resource}.ts`))) {
+        out.push({ label: s.label, resource, path: resolve(dir, f) });
+      }
+    }
+  }
+  return out;
 }
 
 /**
@@ -62,29 +98,60 @@ function resolvesEffective(resource: string): boolean {
   );
 }
 
-/** Doc-comment lines in an SDK resource that promise calling-account scoping. */
-function callingAccountLines(resource: string): string[] {
-  const src = readFileSync(resolve(SDK, `${resource}.ts`), 'utf8');
+/** Lines on a paired surface that promise calling-account scoping. */
+function callingAccountLines(file: { label: string; resource: string; path: string }): string[] {
+  const src = readFileSync(file.path, 'utf8');
+  // Which lines count as prose a reader sees.
+  //
+  // Markdown has no comment syntax, so every line counts. Python needed a state
+  // machine rather than a per-line test: V-1125 measured it, and a filter keyed on
+  // a leading marker sees only the FIRST line of a docstring — the phrase this was
+  // built to catch sat on a CONTINUATION line, so the guard stayed green while the
+  // defect was reintroduced under it.
+  const lines = src.split('\n');
+  const prose = new Set<number>();
+  let inDoc = false;
+  lines.forEach((l, i) => {
+    if (file.label === 'doc') {
+      prose.add(i);
+      return;
+    }
+    if (file.label === 'py') {
+      const fences = (l.match(/"""/g) ?? []).length;
+      if (inDoc || fences > 0 || /^\s*#/.test(l)) prose.add(i);
+      if (fences % 2 === 1) inDoc = !inDoc;
+      return;
+    }
+    // ts / go — block and line comments, continuation lines included.
+    if (/^\s*(\/\*\*|\*|\/\/)/.test(l)) prose.add(i);
+  });
   return (
-    src
-      .split('\n')
+    lines
       .map((l, i) => [l, i + 1] as const)
-      .filter(([l]) => /^\s*(\/\*\*|\*|\/\/)/.test(l))
-      .filter(([l]) => /\bthe calling account\b|\bcalling account's\b/.test(l))
+      .filter(([, n]) => prose.has(n - 1))
+      .filter(([l]) =>
+        /\bthe calling account\b|\bcalling account's\b|\bthe caller's account\b/.test(l),
+      )
+      // "With no header, the calling account remains the owner" is the one sentence
+      // where naming the caller is exactly right.
+      .filter(([l]) => !/With no header/.test(l))
       // A retraction has to be able to name what it retracts.
       .filter(([l]) => !/V-\d{3,4}/.test(l))
-      .map(([l, n]) => `${resource}.ts:${String(n)} ${l.trim().slice(0, 72)}`)
+      .map(([l, n]) => `${file.label}:${file.resource}:${String(n)} ${l.trim().slice(0, 64)}`)
   );
 }
 
 describe('V-1124 an SDK may not say calling account for an effective-scoped route', () => {
   it('CRITICAL the pairing really resolved, and both detectors discriminate. The comparison below reports an ABSENCE, so a pairing that matched nothing would report every SDK clean having read none of them.', () => {
-    const paired = pairedResources();
+    const paired = pairedFiles();
     expect(
       paired.length,
-      'SDK resources paired to a same-named route module',
-    ).toBeGreaterThanOrEqual(10);
-    expect(paired, 'the webhooks pairing is the one V-1122 turned on').toContain('webhooks');
+      'surface files paired to a same-named route module',
+    ).toBeGreaterThanOrEqual(40);
+    expect(
+      new Set(paired.map((p) => p.label)).size,
+      'all four surfaces contribute pairs — ts, py, go and the customer docs',
+    ).toBe(4);
 
     // The effective-account detector must separate the two known cases.
     expect(resolvesEffective('webhooks'), 'webhooks resolves an effective account').toBe(true);
@@ -92,9 +159,12 @@ describe('V-1124 an SDK may not say calling account for an effective-scoped rout
   });
 
   it('CRITICAL no SDK resource promises calling-account scoping for a route that resolves an effective account. Under X-Driftstack-Account a team admin acts as the owner, so this sentence tells a customer the wrong data comes back — and it reads as a reassurance, which is how it survived being corrected five times.', () => {
-    const offenders = pairedResources()
-      .filter((r) => resolvesEffective(r))
-      .flatMap((r) => callingAccountLines(r))
+    const offenders = pairedFiles()
+      .filter((f) => resolvesEffective(f.resource))
+      .flatMap((f) => callingAccountLines(f))
+      .filter(
+        (l) => !CORRECT_AS_WRITTEN.some((e) => l.startsWith(e.prefix) && l.includes(e.needle)),
+      )
       .sort();
     expect(
       offenders,
@@ -111,5 +181,17 @@ describe('V-1124 an SDK may not say calling account for an effective-scoped rout
         'UNPAIRED so the derived check covers them:',
     ).toEqual([]);
     expect(stillUnpaired.length, 'resources genuinely outside the pairing').toBe(UNPAIRED.length);
+  });
+  it('CRITICAL the correct-as-written list holds no stale entry. An exemption for a line that has since been reworded excuses nothing while quietly narrowing the check — and these two are the only reason a mixed-scoping module can be in the paired set at all.', () => {
+    const all = pairedFiles()
+      .filter((f) => resolvesEffective(f.resource))
+      .flatMap((f) => callingAccountLines(f));
+    const stale = CORRECT_AS_WRITTEN.filter(
+      (e) => !all.some((l) => l.startsWith(e.prefix) && l.includes(e.needle)),
+    ).map((e) => `${e.prefix} :: ${e.needle}`);
+    expect(
+      stale.sort(),
+      'listed as correct-as-written but no such line exists any more — drop the entry:',
+    ).toEqual([]);
   });
 });

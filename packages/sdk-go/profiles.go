@@ -274,7 +274,8 @@ type ImportProfileRequest struct {
 	NameOverride string `json:"name_override,omitempty"`
 }
 
-// Import mints a fresh profile in the calling account from a v1 export
+// Import mints a fresh profile in the EFFECTIVE account — the caller's own,
+// or the owner they are acting as via X-Driftstack-Account — from a v1 export
 // envelope. Tier-cap + name-conflict semantics match Create; importing an
 // envelope from a different account is permitted (file-based transfer).
 func (r *ProfilesResource) Import(ctx context.Context, body *ImportProfileRequest) (*Profile, error) {
