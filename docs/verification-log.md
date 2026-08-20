@@ -49532,3 +49532,39 @@ Two things worth carrying forward: **check `--stat` after every commit in a shar
 because the pathspec you passed is not proof of what landed; and `reset --soft` plus
 `restore --staged` is the correction that preserves a concurrent writer's work exactly,
 where `reset --hard` would have destroyed it.
+
+### V-1155 — three catalog rows re-verified; the catalog itself is not the defect
+
+V-1154 found real staleness in the launch checklist, so I took the same method to
+`architecture/v294-feature-catalog.md`, which carries 41 DEFERRED rows. Two looked wrong
+immediately and both check out as wrong:
+
+- **Profile cleanup operations** — marked DEFERRED. Three real handlers ship:
+  `/v1/profiles/trash`, `/v1/profiles/:id/restore`, `/v1/profiles/:id/purge`, each calling
+  through to the service, with no stub registration anywhere in `routes/profiles.ts`.
+- **Twitter / Slack notifications** — marked DEFERRED. Slack is wired:
+  `BROADCAST_SLACK_WEBHOOK_URL` in `bootstrap.ts` feeding `publishBroadcast` on the
+  notification event bus. Twitter is not wired at all. So the row is neither DEFERRED nor
+  SHIPPED — it is the catalog's own IN-FLIGHT.
+
+**And a third that is correctly DEFERRED, which is the one that matters.** "Profile state
+cleanup UI" sits in a separate row from the operations, and there is no profiles page in
+the customer dashboard at all. The catalog was right to split routes from UI, and right
+about the UI.
+
+**I did not correct any of them, because the document is honest about itself.** Its banner
+states the basis — cross-referenced against the verification log at V-293, 578 entries
+behind — says plainly "this is not a claim that the table is wrong… a row here is evidence
+of what was true at V-293 and nothing more", records that V-868 corrected the deep-link row
+ALONE and that the others have not been re-verified, and instructs the reader to check a
+row against source before acting on it. Rows going stale is the documented behaviour of a
+snapshot, and `a-status-document-declares-how-stale-it-is` already enforces that the
+admission and its checkable basis stay present.
+
+**That is the difference from V-1154 and it is worth stating.** The launch checklist made
+no such admission, and it is the launch gate — a false PENDING there buries a real blocker.
+This catalog is a scope artifact that says what it is. The same stale row is a defect in
+one document and expected in the other, and which it is depends on what the document claims
+to be, not on how wrong the row is.
+
+What is left behind is small and real: three of the "not re-verified" rows now are.
