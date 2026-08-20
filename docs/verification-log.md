@@ -46674,3 +46674,26 @@ void contrast is deliberately left as history under its banner, and the Python/G
 recipes docstrings are an owner's call on whether "returns 404 by design" needs the
 team-admin qualifier — ambiguous rather than false, and no cross-SDK recipes parity
 test exists, so a one-SDK edit would red nothing and prove nothing.
+
+### V-1090 addendum — I tried to generalise it and the signal was not there
+
+V-1090 is an attractive shape: two guards over one declaration, one a member behind,
+green because the healthy one carries it. So I swept for others — members asserted by
+one guard over a source file but not by its sibling.
+
+30 hits, and the first ones I read were all division of labour rather than drift.
+`scope` / `since` / `limit` on `services/incidents.ts` belong to a query-args
+declaration that `incidents-v295a-cross-source-invariant` owns, while
+`services-incidents-content-parity` covers `IncidentRow`, `IncidentUpdateRow` and the
+write semantics. Neither is behind; they cover different things in the same file.
+`lib/stripe-api.ts` splits the same way — one guard owns the options interface, the
+other the error shape.
+
+What made V-1090 real was narrower than what I measured: BOTH guards named the same
+interface, and one listed fewer of its members. My extraction cannot tell which
+declaration a member belongs to, so it conflates "different scope" with "behind", and
+a declaration-aware version is real work for an unknown yield.
+
+So no guard was built and no claim was made from those 30. Recorded because the shape
+will look promising again to whoever reads V-1090 next, and the reason it does not
+generalise is not obvious from the finding itself.
