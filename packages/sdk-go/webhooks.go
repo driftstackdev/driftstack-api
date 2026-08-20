@@ -128,8 +128,10 @@ func (r *WebhooksResource) IterateDeliveries(ctx context.Context, webhookID stri
 }
 
 // ReplayDelivery is V-307 — resets a webhook delivery to pending so the
-// worker re-fires it. Account-scoped: the delivery must belong to an
-// endpoint the calling account owns.
+// worker re-fires it. Scoped to the EFFECTIVE account: the delivery must
+// belong to an endpoint the caller's own account owns, or one owned by the
+// account they are acting as via X-Driftstack-Account (replay re-fires, so
+// it takes the write gate — team act-as requires admin).
 func (r *WebhooksResource) ReplayDelivery(ctx context.Context, deliveryID string) (*WebhookDelivery, error) {
 	var out WebhookDelivery
 	if err := r.client.do(ctx, requestOptions{

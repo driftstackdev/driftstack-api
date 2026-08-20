@@ -1485,7 +1485,8 @@ function buildRegistry(): OpenAPIRegistry {
         content: { 'application/json': { schema: WebhookDeliverySchema } },
       },
       404: {
-        description: 'Delivery not found or not owned by the calling account.',
+        description:
+          'Delivery not found, or not owned by the effective account (your own, or the owner you are acting as via X-Driftstack-Account).',
         content: problemContent,
       },
       ...errors4xx,

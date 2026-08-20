@@ -120,9 +120,17 @@ describe('W593.A packages/sdk-go/webhooks.go content parity', () => {
       /\/\/ ReplayDelivery is V-307 — resets a webhook delivery to pending so the/,
     );
     expect(body).toMatch(
-      /\/\/ worker re-fires it\. Account-scoped: the delivery must belong to an/,
+      /\/\/ worker re-fires it\. Scoped to the EFFECTIVE account: the delivery must/,
     );
-    expect(body).toMatch(/\/\/ endpoint the calling account owns\./);
+    // V-1122 — the replay is scoped to the EFFECTIVE account: the route
+    // resolves effectiveAccountIdForWrite, so a team admin replays the
+    // owner's delivery. Six surfaces said "the calling account".
+    expect(body).toMatch(
+      /\/\/ belong to an endpoint the caller's own account owns, or one owned by the/,
+    );
+    expect(body, 'the calling-account claim must not return').not.toMatch(
+      /\/\/ endpoint the calling account owns\./,
+    );
     expect(body).toMatch(
       /func \(r \*WebhooksResource\) ReplayDelivery\(ctx context\.Context, deliveryID string\) \(\*WebhookDelivery, error\)/,
     );

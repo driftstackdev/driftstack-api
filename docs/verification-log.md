@@ -48115,3 +48115,43 @@ was built after a measured case where changing a published bound from `.max(2048
 Regenerated: one line changed, the snapshots-list description. That is the companion
 step for any `openapi.ts` edit and it belongs in the same commit as the edit — this one
 is a follow-up only because I missed it, and the guard is what caught me.
+
+### V-1122 — the webhook replay scope, wrong on six surfaces in four spellings
+
+The claim V-1121 named but did not fix. `POST /v1/webhook-deliveries/:id/replay` resolves
+`effectiveAccountIdForWrite`, so a team ADMIN replays the OWNER's delivery — and the
+service comment on `replayDeliveryAsCustomer` has said exactly that since S32, which is
+the audit that wired it. Six surfaces around it still said the calling account:
+
+- `routes/webhooks.ts:277` — "404s if the delivery isn't owned by the calling account"
+- `lib/openapi.ts:1488` — "Delivery not found or not owned by the calling account"
+- `apps/docs/src/pages/webhooks/replay.md` — "an endpoint **your account** owns"
+- the TypeScript, Python and Go SDKs — "an endpoint the calling account owns"
+
+Four spellings of one sentence: "isn't owned by", "not owned by", "your account owns",
+"the calling account owns". The route's own comment sat twenty lines above a gate that
+contradicted it, and the service twenty lines below stated the rule correctly — a
+three-layer disagreement inside one request path.
+
+The corrected text says more than the old one did, because the accurate rule has two
+halves the originals never carried: without the header the delivery must be your own and
+the key needs `account_owner`; with it, the delivery is the owner's and you must hold
+`admin` on that team — replay re-fires a delivery, so it takes the write gate rather than
+the read-only act-as `listDeliveries` uses.
+
+Two pins had to be SPLIT rather than edited: the TypeScript and Python arms each ran a
+single chained regex from the `V-307` anchor (TS) or the `def` line (Python) through the
+scope sentence, so correcting the scope broke a pin about the verb and the signature.
+That is the third and fourth time this arc — V-1092 on the auth resource, V-1121 on
+snapshots — and the shape is always the same: an assertion that spans a stable anchor and
+a volatile claim fails for the wrong reason when the claim is corrected.
+
+The docs pin was left whitespace-tolerant. Its own comment records why: it previously
+hardcoded single spaces and failed on a re-wrap, "a cosmetic reflow, with the pinned
+claim completely intact", which teaches people to avoid rewrapping rather than to keep
+the claim true.
+
+Mutation-proved, restored byte-identical: reverting the route comment, the customer page,
+and the Go docstring each fails its own arm. `openapi.json` regenerated in the same
+commit this time — the step V-1121's addendum recorded. `go vet` clean, ruff clean, docs
+rebuilt, rendered gate green, 0 tsc errors.

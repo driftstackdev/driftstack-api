@@ -156,7 +156,10 @@ describe('W439.A apps/server/src/routes/webhooks.ts content parity', () => {
 
   it("V-307 customer self-service replay framing pinned: account-scoped; 404s if delivery not owned by calling account; different from admin /v1/admin/webhook-deliveries/:id/replay which can replay any account's delivery; 200 with publicDelivery(updated)", () => {
     expect(body).toMatch(
-      /\/\/ V-307 — customer self-service replay\. Different from the admin\s*\n?\s*\/\/ \/v1\/admin\/webhook-deliveries\/:id\/replay \(which can replay any\s*\n?\s*\/\/ account's delivery\): this one is account-scoped and 404s if the\s*\n?\s*\/\/ delivery isn't owned by the calling account\./,
+      // V-1122 — the replay is scoped to the EFFECTIVE account: the route
+      // resolves effectiveAccountIdForWrite, so a team admin replays the
+      // owner's delivery. Six surfaces said "the calling account".
+      /\/\/ V-307 — customer self-service replay\. Different from the admin\s*\n?\s*\/\/ \/v1\/admin\/webhook-deliveries\/:id\/replay \(which can replay any\s*\n?\s*\/\/ account's delivery\): this one is scoped to the EFFECTIVE account/,
     );
     // Fable audit-2 2026-07-08 (C5) — replay RE-FIRES the delivery (a write), so
     // it takes the admin-only-on-team gate (effectiveAccountIdForWrite throws for

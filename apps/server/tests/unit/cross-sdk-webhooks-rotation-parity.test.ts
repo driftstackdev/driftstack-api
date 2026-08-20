@@ -80,10 +80,10 @@ describe('W702 cross-SDK V-359/V-307/V-351/V-356 webhooks rotation + replay pari
     const go = read(GO_WH);
 
     expect(ts).toMatch(
-      /Account-scoped: the delivery must belong to[\s\S]{0,40}an endpoint the calling account owns/,
+      /Scoped to the EFFECTIVE account: the delivery[\s\S]{0,80}must belong to an endpoint your own account owns/,
     );
     expect(go).toMatch(
-      /Account-scoped: the delivery must belong to an\s*\n?\s*\/\/\s*endpoint the calling account owns/,
+      /Scoped to the EFFECTIVE account: the delivery must\s*\n?\s*\/\/\s*belong to an endpoint the caller's own account owns/,
     );
   });
 

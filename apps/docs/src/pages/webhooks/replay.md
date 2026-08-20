@@ -17,8 +17,12 @@ yourself rather than emailing support.
 
 Resets the delivery to `pending` so the worker re-fires it on the next
 poll cycle — up to 60 seconds, since the delivery worker polls once a
-minute. Account-scoped: the delivery must belong to a webhook endpoint
-your account owns. Returns the updated delivery.
+minute. Scoped to the **effective** account: the delivery must belong to
+a webhook endpoint your own account owns, or one owned by the account you
+are acting as via `X-Driftstack-Account`. Replay re-fires the delivery, so
+it takes the write gate — acting as a team owner requires `admin` on that
+team, and without the header your key needs `account_owner`. Returns the
+updated delivery.
 
 Request body: `{}` (empty).
 

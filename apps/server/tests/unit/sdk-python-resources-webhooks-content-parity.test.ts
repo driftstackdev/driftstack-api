@@ -136,8 +136,12 @@ describe('W584.A packages/sdk-python/src/driftstack/resources/webhooks.py conten
   });
 
   it('Sync replay_delivery — V-307 POST /v1/webhook-deliveries/{quoted_id}/replay. CRITICAL: "Resets the delivery to pending so the worker re-fires it" + "Account-scoped: the delivery must belong to an endpoint the calling account owns." Without the account-scope check, customers could replay deliveries for OTHER tenants\' endpoints — that\'s a cross-tenant data leak. Drift to dropping the account-scoping framing would weaken the contract.', () => {
-    expect(body).toMatch(
-      /def replay_delivery\(self, delivery_id: str\) -> WebhookDelivery:\s*\n\s*"""V-307 — replay a webhook delivery\.\s*\n\s*\n\s*Resets the delivery to ``pending`` so the worker re-fires it\.\s*\n\s*Account-scoped: the delivery must belong to an endpoint the\s*\n\s*calling account owns\.\s*\n\s*"""/,
+    // V-1122 — signature and docstring asserted separately; the chained
+    // form coupled the scope sentence to the def line.
+    expect(body).toMatch(/def replay_delivery\(self, delivery_id: str\) -> WebhookDelivery:/);
+    expect(body).toMatch(/Scoped to the EFFECTIVE account: the delivery must belong to an/);
+    expect(body, 'the calling-account claim must not return').not.toMatch(
+      /endpoint the\s*\n?\s*calling account owns/,
     );
     expect(body).toMatch(
       /data = self\._http\.request\(\s*\n\s*"POST",\s*\n\s*f"\/v1\/webhook-deliveries\/\{quote\(delivery_id, safe=''\)\}\/replay",\s*\n\s*json_body=\{\},\s*\n\s*\)/,

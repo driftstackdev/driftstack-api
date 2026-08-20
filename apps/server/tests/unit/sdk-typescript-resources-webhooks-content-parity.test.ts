@@ -146,8 +146,13 @@ describe('W425.B packages/sdk-typescript/src/resources/webhooks.ts content parit
   });
 
   it('V-307 replayDelivery verb — POST /v1/webhook-deliveries/${encodeURIComponent(deliveryId)}/replay (NOT under /v1/webhooks/...). CRITICAL: path-anomaly is deliberate — callers can replay a delivery by id ALONE without knowing the parent endpoint id (e.g. when a delivery_id was logged in customer infra and they want to replay it). + account-scoping framing: "the delivery must belong to an endpoint the calling account owns" — load-bearing cross-tenant guard.', () => {
-    expect(body).toMatch(
-      /\*\s*V-307 — replay a webhook delivery\. Resets the delivery to pending \+\s*\n?\s*\*\s*the worker re-fires it\. Account-scoped: the delivery must belong to\s*\n?\s*\*\s*an endpoint the calling account owns\. Useful when the customer's\s*\n?\s*\*\s*downstream had a brief outage and wants to re-fire the failed deliveries\./,
+    // V-1122 — asserted in pieces: the chained form ran from the V-307
+    // anchor through the scope sentence, so correcting the scope broke a
+    // pin about the verb.
+    expect(body).toMatch(/\*\s*V-307 — replay a webhook delivery\. Resets the delivery to pending/);
+    expect(body).toMatch(/Scoped to the EFFECTIVE account: the delivery/);
+    expect(body, 'the calling-account claim must not return').not.toMatch(
+      /an endpoint the calling account owns/,
     );
     expect(body).toMatch(
       /replayDelivery\(deliveryId: string\): Promise<WebhookDelivery> \{\s*\n?\s*return this\.http\.request<WebhookDelivery>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: `\/v1\/webhook-deliveries\/\$\{encodeURIComponent\(deliveryId\)\}\/replay`,\s*\n?\s*body: \{\},\s*\n?\s*\}\);\s*\n?\s*\}/,

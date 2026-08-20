@@ -38,14 +38,14 @@ describe('docs webhooks/replay content parity', () => {
     expect(body).toMatch(/Request body: `\{\}` \(empty\)/);
   });
 
-  it("account-scoped ownership check pinned: 'delivery must belong to a webhook endpoint your account owns' — drift to cross-account replay would be a real privilege-escalation bug; pinning ensures the doc + the route stay aligned", () => {
+  it("V-1122 effective-account ownership check pinned (was 'your account owns', which is the calling account and wrong under act-as) — drift to cross-account replay would be a real privilege-escalation bug; pinning ensures the doc + the route stay aligned", () => {
     // Whitespace-tolerant throughout. This pin previously hardcoded single
     // spaces after one `\s+`, so it failed when the paragraph was re-wrapped
     // around a corrected sentence — a cosmetic reflow, with the pinned claim
     // completely intact. A pin that breaks on line-wrap position teaches people
     // to avoid rewrapping rather than to keep the claim true.
     expect(body).toMatch(
-      /Account-scoped:\s+the\s+delivery\s+must\s+belong\s+to\s+a\s+webhook\s+endpoint\s+your\s+account\s+owns/,
+      /Scoped\s+to\s+the\s+\*\*effective\*\*\s+account:\s+the\s+delivery\s+must\s+belong\s+to/,
     );
   });
 

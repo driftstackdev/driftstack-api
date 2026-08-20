@@ -114,8 +114,10 @@ export class WebhooksResource {
 
   /**
    * V-307 — replay a webhook delivery. Resets the delivery to pending +
-   * the worker re-fires it. Account-scoped: the delivery must belong to
-   * an endpoint the calling account owns. Useful when the customer's
+   * the worker re-fires it. Scoped to the EFFECTIVE account: the delivery
+   * must belong to an endpoint your own account owns, or one owned by the
+   * account you are acting as via `X-Driftstack-Account` (replay re-fires,
+   * so it takes the write gate — team act-as requires `admin`). Useful when the customer's
    * downstream had a brief outage and wants to re-fire the failed deliveries.
    */
   replayDelivery(deliveryId: string): Promise<WebhookDelivery> {

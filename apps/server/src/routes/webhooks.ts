@@ -273,8 +273,14 @@ export function registerWebhookRoutes(app: FastifyInstance, opts: WebhookRoutesO
 
   // V-307 — customer self-service replay. Different from the admin
   // /v1/admin/webhook-deliveries/:id/replay (which can replay any
-  // account's delivery): this one is account-scoped and 404s if the
-  // delivery isn't owned by the calling account.
+  // account's delivery): this one is scoped to the EFFECTIVE account and
+  // 404s otherwise — your own, or the owner you are acting as via
+  // X-Driftstack-Account.
+  //
+  // V-1122 — this read "the calling account". The gate below resolves
+  // effectiveAccountIdForWrite, so a team ADMIN replays the owner's
+  // delivery; the service comment on replayDeliveryAsCustomer has said so
+  // since S32 and this one was left behind.
   app.post<{ Params: { deliveryId: string } }>(
     '/v1/webhook-deliveries/:deliveryId/replay',
     { preHandler: [app.requireAuth, app.rateLimit('global')] },
