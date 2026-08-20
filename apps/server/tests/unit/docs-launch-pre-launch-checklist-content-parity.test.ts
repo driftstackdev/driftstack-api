@@ -139,4 +139,27 @@ describe('W552.A /docs/launch/pre-launch-checklist.md content parity', () => {
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });
+
+  it('V-1083 CRITICAL the test-coverage row points at the maintained ratchets instead of freezing a count. The page carries a staleness warning saying that quoting a fixed number is itself the failure it is about, and this row quoted one anyway — measured with the DB-gated integration files running, and ~230 files behind within nine days.', () => {
+    expect(body, 'the row no longer points at the ratchets').toMatch(
+      /`EXPECTED_TEST_FILES` \/ `EXPECTED_TEST_FILES_ALL`/,
+    );
+    expect(body, 'the reason the pointer replaced a number is gone').toMatch(
+      /read them rather than\s*\n?\s*a figure frozen here/,
+    );
+
+    // The frozen pair must not come back. A row that quotes a file count and a
+    // test count is the shape that went stale.
+    expect(body, 'the test-coverage row quotes a frozen file/test count again').not.toMatch(
+      /\d{4} files \/ [\d,]+ tests pass repo-wide/,
+    );
+
+    // …and the constants it points at must still exist under those names.
+    const gate = readFileSync(resolve(REPO_ROOT, 'scripts/verify-suite.mjs'), 'utf8');
+    for (const name of ['EXPECTED_TEST_FILES', 'EXPECTED_TEST_FILES_ALL']) {
+      expect(gate, `${name} is no longer exported, so the pointer is dangling`).toMatch(
+        new RegExp(`export const ${name} = \\d+;`),
+      );
+    }
+  });
 });

@@ -46238,3 +46238,50 @@ export half while keeping the qualifier fails; removing the zero-rows evidence f
 Restored byte-identical.
 
 `it(` counts 6 and 6, unchanged. No new file, no ratchet change.
+
+## V-1083 — the one row that tried to be current, and went stale fastest
+
+Continued V-1082 onto readiness docs. `docs/launch/pre-launch-checklist.md` already
+handles its own staleness well: a V-750 warning from 2026-08-10 states the roll-up is
+a 2026-05 snapshot, that the page has not been re-rolled, and — the part worth
+quoting — that "quoting a fixed number here would itself go stale, which is the
+failure this warning is about", so it deliberately declines to state how far behind it
+is.
+
+One row did quote a number anyway, and it is the row that went stale fastest. The
+test-coverage cell read "2766 files / 28,486 tests pass repo-wide (2026-08-10,
+Postgres + Redis wired…)". The suite now collects 2996 files and 30,138 passing tests
+— roughly 230 files and 1,650 more, within nine days, some of it mine. The warning
+directly above it describes exactly this, which is what makes the row worth fixing
+rather than merely refreshing.
+
+TWO THINGS I CHECKED BEFORE TOUCHING IT.
+
+The old figure is not comparable to a plain `vitest run`. It was measured with
+Postgres and Redis wired so the DB-gated integration files executed; my run skips 113
+files. 98 integration files gate on `DATABASE_URL` and write, so reproducing that
+measurement needs a migrated disposable database — the same care the e2e harness
+enforces for itself. Substituting my number for theirs would have been the wrong-key
+error with a fresh coat.
+
+And the row is unpinned: the checklist's content-parity guard does not assert it. So
+the frozen figure had nothing holding it and nothing reporting it.
+
+The cell now points at `EXPECTED_TEST_FILES` / `EXPECTED_TEST_FILES_ALL` in
+`scripts/verify-suite.mjs` — ratchets raised in the same commit that adds a file, and
+themselves guarded — rather than carrying a figure of its own. That is the page's own
+reasoning applied to the row that broke it, and the same move as V-1057: the number is
+gone rather than corrected, because a corrected number rots identically.
+
+The new arm asserts the pointer, its reason clause, that no `NNNN files / NN,NNN
+tests` pair returns, and that both constants still exist under those names, so the
+pointer cannot dangle silently.
+
+A mutation missed and the assert caught it: my first attempt at removing the reason
+clause targeted a two-line form, and the cell is a single-line table cell. Retried
+against the real text, it fails as intended.
+
+Mutations: restoring a frozen count fails; dropping the reason clause fails; renaming
+a ratchet in the gate fails. Restored byte-identical.
+
+`it(` count 6→7. No new file, no ratchet change.
