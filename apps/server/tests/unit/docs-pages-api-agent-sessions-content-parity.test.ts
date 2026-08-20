@@ -202,4 +202,30 @@ describe('docs/pages/api/agent-sessions content parity', () => {
       /err instanceof RateLimitedError \|\| !wantsEventStream/,
     );
   });
+
+  it('V-1080 CRITICAL the collection list is documented, with its envelope and its admin-only team rule. It is a live customer endpoint that all three SDKs wrap as list(), and until now the only mention anywhere in the docs was the RBAC exception V-1068 added — so a customer reading this page could not learn the endpoint exists, let alone that it pages.', () => {
+    expect(body, 'the List section is gone').toMatch(/## List\s*\n\s*\n`GET \/v1\/agent-sessions`/);
+    expect(body, 'the pagination envelope is no longer stated').toMatch(
+      /\{ data, has_more, next_cursor \}/,
+    );
+    expect(body, 'the page-size-not-ceiling clarification is gone').toMatch(
+      /that is the page size, not a ceiling/,
+    );
+    expect(body, 'the admin-only team rule is no longer stated here').toMatch(
+      /Team members need the `admin` role here/,
+    );
+
+    // The spec summary must not go back to describing a hard cap, which is what it
+    // said while the response published `data` alone.
+    const spec = readFileSync(resolve(REPO_ROOT, 'packages/sdk-python/openapi.json'), 'utf8');
+    const doc = JSON.parse(spec) as {
+      paths: Record<string, Record<string, { summary?: string }>>;
+    };
+    const summary = doc.paths['/v1/agent-sessions']?.['get']?.summary ?? '';
+    expect(summary, 'the list summary is missing').not.toBe('');
+    expect(summary, 'the summary describes a hard cap again').not.toMatch(/capped at 100\)/);
+    expect(summary, 'the summary no longer says it is cursor-paginated').toMatch(
+      /cursor-paginated/,
+    );
+  });
 });

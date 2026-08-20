@@ -169,6 +169,24 @@ inconsistent (a detectable signal). `latitude` is `-90..90`, `longitude` is
 `-180..180`, and the optional `accuracy` is in meters (omit for the device
 default). Out-of-range values are rejected (`400`).
 
+## List
+
+`GET /v1/agent-sessions`
+
+Your agent sessions, newest first, cursor-paginated. Returns the standard
+envelope: `{ data, has_more, next_cursor }`. `limit` defaults to 50 and
+caps at 100 — that is the page size, not a ceiling on what you can reach;
+pass the prior page's `next_cursor` to continue. All three SDKs wrap this
+as `list()`, with `iterate()` to walk every page.
+
+Requires `read:sessions`, broad `read`, or `account_owner`.
+
+**Team members need the `admin` role here**, unlike the plain session
+list. An agent session carries the model transcript and live control
+state, so the collection is not widened to read-only members — a `member`
+acting on an owner gets `403`. See
+[Team RBAC](/guides/team-rbac/#role-gating).
+
 ## Get
 
 `GET /v1/agent-sessions/{id}`

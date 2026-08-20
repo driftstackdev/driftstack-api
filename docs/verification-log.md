@@ -46071,3 +46071,48 @@ Mutations: staling either file's spec-file count fails; adding a spec file witho
 updating both fails. Restored byte-identical.
 
 `it(` count 8 unchanged. No new file, no ratchet change.
+
+## V-1080 — a live endpoint with no section, and the prose my own fix left behind
+
+Verified the other two counts in the paragraph V-1079 corrected, the same way: the Go
+SDK runs 236 tests and the Python SDK 365 passed with 4 skipped, both exactly as
+stated. Only the Playwright figure had gone stale, and that one I had staled myself.
+
+Then a check on my own recent work. V-1074 added `has_more` and `next_cursor` to the
+published `GET /v1/agent-sessions` response; the question was whether the generated
+SDKs needed to follow. They did not — the Python resource returns an untyped dict and
+its docstring ALREADY described the full envelope, including that the endpoint "was a
+non-paginated `{data}` hard-capped at 100, leaving older sessions unreachable", and
+that it mirrors the TS and Go SDKs. All three already paged it. The spec was the only
+side that was wrong, which is what V-1074 concluded and this corroborates.
+
+TWO THINGS THAT PARAGRAPH EXPOSED.
+
+The spec summary still read "capped at 100" — accurate while the response published
+`data` alone, and misleading the moment the envelope shipped, because it now reads as
+a ceiling on what a customer can reach rather than the page size. Corrected to say
+cursor-paginated with a per-page cap.
+
+And `GET /v1/agent-sessions` has no section on its own API page. The page documents
+Create, Get, Message, Close, LiveKit, the transcript stream, mode, input-event and
+takeover — not the list. The only mention of it anywhere in the docs was the RBAC
+exception V-1068 added. So a customer reading the agent-sessions page could not learn
+the endpoint exists, while all three SDKs wrap it as `list()` with `iterate()`. Now
+documented with its envelope, its page-size semantics, and the admin-only team rule
+that makes it differ from the plain session list.
+
+WHY NO GUARD CAUGHT IT. `every-published-customer-path-is-documented-or-declared`
+matches published paths against path STRINGS in the docs, so the documented
+`POST /v1/agent-sessions` makes the collection path "mentioned" and the undocumented
+`GET` invisible. That is method-blindness, not neglect — and I did not extend the
+guard, because measuring the method-aware population honestly needs both sides
+normalised: my first attempt reported 56 operations, my second 48, and both were
+wrong. A trailing `\b` cannot match after a path ending in `}`, and the docs write
+`:id` where the spec writes `{id}`. A number I could not trust was not a basis for
+changing a guard, so the finding was verified by reading the page instead.
+
+Mutations: removing the List section fails; dropping only the admin-only rule fails;
+reverting the spec summary to the hard cap fails. Restored byte-identical, docs
+rebuilt.
+
+`it(` count 12→13. No new file, no ratchet change.

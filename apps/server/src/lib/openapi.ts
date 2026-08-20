@@ -4187,7 +4187,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/v1/agent-sessions',
     summary:
-      "List the account's agent chat sessions (newest first, capped at 100) (requires `read:sessions`, broad `read`, or `account_owner`)",
+      "List the account's agent chat sessions (newest first, cursor-paginated; `limit` caps at 100 per page) (requires `read:sessions`, broad `read`, or `account_owner`)",
     tags: ['agent-chat'],
     security: auth,
     responses: {
