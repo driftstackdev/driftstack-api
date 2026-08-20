@@ -61,8 +61,27 @@ jobs:
 
       - name: Setup Rust (with rust-toolchain.toml pin per V-240)
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      # The `targets:` input above used to carry the two Apple targets and it
+      # silently did nothing useful: dtolnay/rust-toolchain adds targets to the
+      # toolchain IT installs (stable), while src-tauri/rust-toolchain.toml pins
+      # 1.95.0 and overrides every cargo invocation under that directory. So the
+      # targets landed on stable, the build ran on 1.95.0, and the first release
+      # ever cut died with:
+      #
+      #   failed to build x86_64-apple-darwin binary: Target x86_64-apple-darwin
+      #   is not installed (installed targets: aarch64-apple-darwin)
+      #
+      # Add them to the PINNED toolchain instead, from inside the directory the
+      # pin governs so rustup resolves the same toolchain cargo will. Kept out of
+      # rust-toolchain.toml deliberately: putting Apple targets there would make
+      # the Windows and Linux legs download macOS std libs they never link.
+      - name: Add universal macOS targets to the pinned toolchain
+        if: matrix.platform == 'macos-latest'
+        working-directory: apps/gui-client/src-tauri
+        run: |
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          rustup show
 
       - name: Cache Rust deps
         uses: Swatinem/rust-cache@v2
@@ -87,6 +106,22 @@ jobs:
 
       - name: Build SDK (transitive dep of gui-client)
         run: npm run build --workspace packages/sdk-typescript
+
+      # A tag that disagrees with the app version ships a DEAD updater: the
+      # assets are named for the app version, latest.json advertises the app
+      # version, and every install already running that version is told it is
+      # current. gui-v0.1.0 was cut against version 0.0.1 and did exactly that.
+      # Fail the release instead of publishing something that can never update.
+      - name: Tag must match the app version
+        shell: bash
+        run: |
+          app_version=$(node -p "require('./apps/gui-client/src-tauri/tauri.conf.json').version")
+          expected="gui-v${app_version}"
+          if [ "${GITHUB_REF_NAME}" != "$expected" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match the app version (${app_version}). Expected ${expected}. Bump apps/gui-client/{package.json,src-tauri/tauri.conf.json,src-tauri/Cargo.toml} or retag."
+            exit 1
+          fi
+          echo "tag ${GITHUB_REF_NAME} matches app version ${app_version}"
 
       - name: Replace TAURI_UPDATER_PUBKEY placeholder
         shell: bash

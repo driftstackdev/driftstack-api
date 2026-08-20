@@ -80,12 +80,11 @@ describe('W542.C /.github/workflows/gui-release.yml content parity', () => {
     expect(body).toMatch(/runs-on: \$\{\{ matrix\.platform \}\}/);
   });
 
-  it("Setup-Rust-with-macOS-universal-targets framing pinned: 'Setup Rust (with rust-toolchain.toml pin per V-240)' + 'uses: dtolnay/rust-toolchain@stable' + 'with: targets: ${{ matrix.platform == \\'macos-latest\\' && \\'aarch64-apple-darwin,x86_64-apple-darwin\\' || \\'\\' }}' + 'uses: Swatinem/rust-cache@v2 with workspaces: apps/gui-client/src-tauri -> target' + Linux apt-deps: 'libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev' — pinned so the V-240 rust-toolchain-pin + macOS-only-aarch64+x86_64 target install + Swatinem/rust-cache-v2 + Linux-5-apt-dep (no pkg-config in this workflow — that's gui-build-check-only) commitment survives", () => {
+  it("Setup-Rust-with-macOS-universal-targets framing pinned: 'Setup Rust (with rust-toolchain.toml pin per V-240)' + 'uses: dtolnay/rust-toolchain@stable' + a `rustup target add aarch64-apple-darwin x86_64-apple-darwin` step that runs with `working-directory: apps/gui-client/src-tauri` + 'uses: Swatinem/rust-cache@v2 with workspaces: apps/gui-client/src-tauri -> target' + Linux apt-deps: 'libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev' — pinned so the V-240 rust-toolchain-pin + macOS-only-aarch64+x86_64 target install + Swatinem/rust-cache-v2 + Linux-5-apt-dep (no pkg-config in this workflow — that's gui-build-check-only) commitment survives.\n\n⚠️ This arm used to pin the `targets:` INPUT to dtolnay/rust-toolchain, and that input never worked: the action adds targets to the toolchain IT installs (stable), while src-tauri/rust-toolchain.toml pins 1.95.0 for every cargo call under that directory. The first release ever cut died with `Target x86_64-apple-darwin is not installed (installed targets: aarch64-apple-darwin)` — with this pin green the whole time, because it recorded what the file SAID rather than whether it worked. It now pins the mechanism that actually installs the targets, including the working-directory that makes rustup resolve the pinned toolchain.", () => {
     expect(body).toMatch(/Setup Rust \(with rust-toolchain\.toml pin per V-240\)/);
     expect(body).toMatch(/uses: dtolnay\/rust-toolchain@stable/);
-    expect(body).toMatch(
-      /targets: \$\{\{ matrix\.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' \|\| '' \}\}/,
-    );
+    expect(body).toMatch(/rustup target add aarch64-apple-darwin x86_64-apple-darwin/);
+    expect(body).toMatch(/working-directory: apps\/gui-client\/src-tauri/);
     expect(body).toMatch(/uses: Swatinem\/rust-cache@v2/);
     expect(body).toMatch(/workspaces: 'apps\/gui-client\/src-tauri -> target'/);
     expect(body).toMatch(
