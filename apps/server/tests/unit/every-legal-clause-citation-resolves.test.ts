@@ -109,7 +109,8 @@ interface Clauses {
 function clausesOf(txt: string): Clauses {
   const sections = new Set<string>();
   const annexes = new Set<string>();
-  for (const m of txt.matchAll(/^#{2,4}\s*([0-9]+(?:\.[0-9]+)*)\.?\s+\S/gm)) sections.add(m[1] ?? '');
+  for (const m of txt.matchAll(/^#{2,4}\s*([0-9]+(?:\.[0-9]+)*)\.?\s+\S/gm))
+    sections.add(m[1] ?? '');
   for (const m of txt.matchAll(/^\s*(?:[0-9]+\.\s+)?\*\*([0-9]+(?:\.[0-9]+)+)\s+\S/gm))
     sections.add(m[1] ?? '');
   for (const m of txt.matchAll(/^\s*([0-9]+(?:\.[0-9]+)+)\s+\*\*/gm)) sections.add(m[1] ?? '');
@@ -200,9 +201,10 @@ function citations(): { all: Citation[]; unresolved: string[] } {
 describe('V-1169 every legal clause citation resolves', () => {
   it('CRITICAL the resolver finds the citations it is supposed to check, and points each at the right document. Four earlier versions produced clean-looking lists of broken citations over documents that were correct — a mis-targeted resolver reads exactly like a working one, so these name citations that must be found AND must resolve rather than counting how many were.', () => {
     const { all } = citations();
-    expect(all.length, 'no clause citations extracted — the legal corpus or the pattern moved').toBeGreaterThan(
-      100,
-    );
+    expect(
+      all.length,
+      'no clause citations extracted — the legal corpus or the pattern moved',
+    ).toBeGreaterThan(100);
 
     const key = (c: Citation): string => `${c.target} ${c.kind} ${c.num}`;
     const found = new Set(all.map(key));
@@ -225,9 +227,10 @@ describe('V-1169 every legal clause citation resolves', () => {
   });
 
   it('CRITICAL every numbered clause cited anywhere in the legal corpus exists in the document it names. A pointer a reader cannot follow reads as precision — and these point at the clauses a customer needs when disputing a suspension, objecting to a sub-processor, or checking a breach-notification deadline.', () => {
-    expect(citations().unresolved.sort(), 'legal citations pointing at clauses that do not exist').toEqual(
-      [],
-    );
+    expect(
+      citations().unresolved.sort(),
+      'legal citations pointing at clauses that do not exist',
+    ).toEqual([]);
   });
 
   it('CRITICAL the AUP enforcement ladder still carries clause identifiers on all three steps. §5.4 grants Driftstack discretion to skip steps in this ladder, so a customer disputing a suspension has to be able to name the step that was skipped — and shipped code in billing, admin-accounts and bootstrap cites §5.2 by number.', () => {
@@ -236,7 +239,9 @@ describe('V-1169 every legal clause citation resolves', () => {
       'docs/legal/acceptable-use-policy.md',
     ]) {
       const body = readFileSync(resolve(REPO_ROOT, rel), 'utf8');
-      expect(body, `${rel} lost the warning step identifier`).toMatch(/^1\. \*\*5\.1 Warning\.\*\*/m);
+      expect(body, `${rel} lost the warning step identifier`).toMatch(
+        /^1\. \*\*5\.1 Warning\.\*\*/m,
+      );
       expect(body, `${rel} lost the suspension step identifier`).toMatch(
         /^2\. \*\*5\.2 Suspension\.\*\*/m,
       );

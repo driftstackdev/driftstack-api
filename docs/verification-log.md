@@ -50143,13 +50143,13 @@ to be able to name the step that was skipped.
 **Four resolver versions were wrong before one was right**, and every one of them produced a
 clean-looking list of broken citations over documents that were correct:
 
-| version | claimed broken | why it was wrong |
-| --- | --- | --- |
-| headings only | 31 | sub-clauses are inline bold leads (`12.1 **Driftstack indemnifies…**`), not headings |
-| + inline leads | 5 | line-scoped context missed a document name wrapped to the next line |
-| + paragraph ctx | 3 | `this DPA` earlier in the sentence hijacked "Section 13 **of the Terms of Service**" |
-| + qualifier rule | 2 | `ToS Section 13.3(3)` — `(3)` sits between the number and its qualifier, so the name **preceding** the citation had to be consulted |
-| + preceding name | **0** | — |
+| version          | claimed broken | why it was wrong                                                                                                                    |
+| ---------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| headings only    | 31             | sub-clauses are inline bold leads (`12.1 **Driftstack indemnifies…**`), not headings                                                |
+| + inline leads   | 5              | line-scoped context missed a document name wrapped to the next line                                                                 |
+| + paragraph ctx  | 3              | `this DPA` earlier in the sentence hijacked "Section 13 **of the Terms of Service**"                                                |
+| + qualifier rule | 2              | `ToS Section 13.3(3)` — `(3)` sits between the number and its qualifier, so the name **preceding** the citation had to be consulted |
+| + preceding name | **0**          | —                                                                                                                                   |
 
 Two of those five "defects" I had already half-believed. The one that stayed through every
 version was the AUP, which is the one that was real.
@@ -50158,3 +50158,34 @@ The guard asserts that specific known-good citations **resolve** — one per tar
 rather than only that the broken list is empty. A resolver that quietly stopped matching
 would otherwise report the whole corpus honest, which is precisely how the first four
 versions looked from the outside.
+
+#### V-1169 addendum — a reset that undid someone else's commit
+
+Two things went wrong at commit time, both from one cause: `lint-staged` stashes the working
+tree, runs the formatters, and restores — and its restore hit `index.lock` because a peer was
+committing at that moment. It reported `[FAILED] Applying modifications from tasks` and the
+commit proceeded anyway.
+
+So V-1169 landed **unformatted** (the prettier output existed on disk but never reached the
+commit), and it **absorbed the peer's untracked gui-client test file** — the same absorption
+recorded in the V-1154 addendum, from the same mechanism, despite explicit pathspecs. Caught
+again by reading `git show --stat` and seeing a `create mode` line for a file I never named.
+
+**The dangerous part was the fix, not the fault.** `git reset --soft HEAD~1` is what V-1154
+used to unpick this. In the interval between my commit and my reading of the `--stat`, a peer
+had committed **on top**. So `HEAD~1` was no longer my commit — the reset silently undid
+**theirs**, and `git restore --staged` then unpicked one of their files. The tell was the
+staged list: 35 gui-client files I had never touched, and none of mine.
+
+Recovered with `git reset <their-sha>` (mixed — never `--hard` with unverified work in the
+tree). Their commit, all 35 files and their new test, verified byte-identical afterwards.
+
+The rule already on file — never `--amend` when a foreign commit is on top — is really a rule
+about **HEAD-relative surgery of any kind** in a shared worktree. `HEAD~1` is a guess about
+who committed last, and in this tree that guess is wrong often enough to matter. Name the SHA,
+or check `git log -1` first. Nothing was lost here, but only because the reset was `--soft`
+and the reflog still held the SHA.
+
+The absorbed file stays where it is: with a foreign commit on top, rewriting history to fix an
+attribution error would risk far more than the error costs. The file's contents are correct in
+the tree and the peer's commit builds on it.
