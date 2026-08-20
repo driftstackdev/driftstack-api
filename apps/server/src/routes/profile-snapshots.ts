@@ -81,6 +81,11 @@ function publicProfile(p: ProfileRecord): Record<string, unknown> {
     archetype: p.archetype,
     description: p.description,
     last_used_at: p.lastUsedAt ? p.lastUsedAt.toISOString() : null,
+    // V-1073 — these two were added to the profiles.ts mapper by doc-150 item 5 and
+    // never to this copy, so the restore response omitted two fields the published
+    // 200 marks required. Customer-safe metadata only: a byte count and a timestamp.
+    size_bytes: p.sizeBytes,
+    last_saved_at: p.lastSavedAt ? p.lastSavedAt.toISOString() : null,
     created_at: p.createdAt.toISOString(),
     updated_at: p.updatedAt.toISOString(),
   };

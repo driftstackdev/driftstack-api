@@ -45759,3 +45759,48 @@ byte-identical.
 
 `it(` count 2 in a new file. Spec regenerated: 20 insertions, 8 deletions. Ratchets
 2942→2943 and 3108→3109.
+
+## V-1073 — the response-truth sweep, one level deeper, into the helpers
+
+V-1072's guard judges only handlers that return an object literal, and skips
+helper-built responses. That skip is most of the customer-facing surface: profiles,
+sessions, webhooks and accounts all return a mapper. So the obvious follow-up was to
+resolve the mapper and compare ITS literal against the published response.
+
+15 such mappers cover 23 comparable routes. One real defect:
+
+`POST /v1/profile-snapshots/:id/restore` publishes a 200 requiring nine fields,
+including `size_bytes` and `last_saved_at`, and its `publicProfile` returned seven.
+A customer restoring a snapshot got a profile object missing two fields the document
+marks required; a typed SDK exposes them as non-optional and they are undefined at
+runtime.
+
+The cause is a duplicated mapper. `publicProfile` exists twice — `routes/profiles.ts`
+and `routes/profile-snapshots.ts` — and doc-150 item 5 added the sealed-store size and
+save-back timestamp to the first copy only. The same one-rule-several-copies shape as
+V-1056 and V-1059.
+
+THE PIN WAS PART OF THE PROBLEM. `routes-profile-snapshots-content-parity` froze the
+mapper with a title reading "mirrors profiles.ts: 7 fields" — a mirror claim that had
+stopped being true, over a regex that kept agreeing with the smaller copy. Replaced
+with a derived check.
+
+I NEARLY OVER-CORRECTED, and the failing run is what stopped it. My first derived arm
+required this mapper to carry every key the profiles.ts one does. That fails on five
+more — `folder`, `tags`, `icon`, `note`, `deleted_at` — and those are NOT missing:
+the restore contract does not publish them, because the two responses are deliberately
+different shapes. Requiring the mappers to match would have forced fields into a
+response the document never asks for. The arm now compares against the route's OWN
+published 200, read from the committed spec.
+
+A NINTH INSTRUMENT FAILURE preceded all of it. Keying mappers by name across the whole
+tree let the two `publicProfile` definitions collide, and whichever the glob hit last
+won — which reported seven routes broken, six of them spuriously. Resolving helpers
+within the declaring file left one candidate, and that one was real.
+
+Mutations: removing both fields fails the arm; removing only `size_bytes` fails it.
+V-1072's guard stays green throughout, correctly — a helper-built response is outside
+its population by design, which is why this needed its own coverage rather than an
+extension of that file.
+
+`it(` count 15, unchanged — one arm replaced. No new file, no ratchet change.

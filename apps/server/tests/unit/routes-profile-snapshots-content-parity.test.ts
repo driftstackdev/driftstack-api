@@ -80,10 +80,66 @@ describe('W438.C apps/server/src/routes/profile-snapshots.ts content parity', ()
     );
   });
 
-  it('publicProfile mapper (mirrors profiles.ts: 7 fields incl. last_used_at nullable + 2 timestamps)', () => {
-    expect(body).toMatch(
-      /function publicProfile\(p: ProfileRecord\): Record<string, unknown> \{\s*\n?\s*return \{\s*\n?\s*id: `prof_\$\{p\.id\}`,\s*\n?\s*name: p\.name,\s*\n?\s*archetype: p\.archetype,\s*\n?\s*description: p\.description,\s*\n?\s*last_used_at: p\.lastUsedAt \? p\.lastUsedAt\.toISOString\(\) : null,\s*\n?\s*created_at: p\.createdAt\.toISOString\(\),\s*\n?\s*updated_at: p\.updatedAt\.toISOString\(\),\s*\n?\s*\};\s*\n?\s*\}/,
-    );
+  it('V-1073 publicProfile mapper carries every key the profiles.ts mapper does, compared rather than restated. The old title claimed it mirrored that file at 7 fields while profiles.ts had gained size_bytes and last_saved_at with doc-150 item 5 — so the restore response omitted two fields its published 200 marks required, and a frozen 7-field regex kept agreeing with the smaller copy.', () => {
+    const keysOf = (src: string): Set<string> => {
+      const at = src.indexOf('function publicProfile(');
+      expect(at, 'publicProfile is no longer declared').toBeGreaterThan(-1);
+      const open = src.indexOf('{', src.indexOf('return', at));
+      let depth = 0;
+      let block = '';
+      for (let i = open; i < src.length; i += 1) {
+        if (src[i] === '{') depth += 1;
+        else if (src[i] === '}') {
+          depth -= 1;
+          if (depth === 0) {
+            block = src.slice(open + 1, i);
+            break;
+          }
+        }
+      }
+      const withoutComments = block.replace(/\/\/[^\n]*/g, '');
+      return new Set(
+        [...withoutComments.matchAll(/^\s*([a-z_][a-z0-9_]*)\s*:/gm)].map((x) => x[1]!),
+      );
+    };
+
+    const here = keysOf(body);
+    expect(here.size, 'this mapper parsed to no keys').toBeGreaterThanOrEqual(9);
+
+    // Compared against the route's OWN published 200, not against the profiles.ts
+    // mapper. The two responses are deliberately different shapes — profiles
+    // publishes folder / tags / icon / note / deleted_at and the restore contract
+    // does not — so requiring the mappers to match would force fields into a
+    // response the document never asks for. What must hold is that this mapper
+    // covers what THIS route promises.
+    const spec = JSON.parse(
+      readFileSync(resolve(REPO_ROOT, 'packages/sdk-python/openapi.json'), 'utf8'),
+    ) as {
+      paths: Record<string, Record<string, { responses?: Record<string, unknown> }>>;
+      components: { schemas: Record<string, { required?: string[] }> };
+    };
+    const ok = spec.paths['/v1/profile-snapshots/{id}/restore']?.['post']?.responses?.['200'] as
+      | { content?: { 'application/json'?: { schema?: { $ref?: string; required?: string[] } } } }
+      | undefined;
+    const schema = ok?.content?.['application/json']?.schema;
+    const required =
+      schema?.$ref !== undefined
+        ? (spec.components.schemas[schema.$ref.split('/').pop() ?? '']?.required ?? [])
+        : (schema?.required ?? []);
+
+    expect(
+      required.length,
+      'the restore 200 publishes no required fields to compare',
+    ).toBeGreaterThanOrEqual(9);
+    expect(
+      required.filter((k) => !here.has(k)).sort(),
+      'the restore response publishes these as required and this mapper never sets them:',
+    ).toEqual([]);
+
+    // The two the drift actually cost, named so a future reader sees the case.
+    for (const key of ['size_bytes', 'last_saved_at']) {
+      expect(here.has(key), `publicProfile no longer returns ${key}`).toBe(true);
+    }
   });
 
   it('ProfileSnapshotsRoutesDeps: service + profilesService + authRepo', () => {
