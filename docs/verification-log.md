@@ -46409,3 +46409,30 @@ claim V-812 corrected — fails the pin. Restored byte-identical, docs rebuilt.
 Worth carrying forward: "run what nothing runs" has now produced two findings
 (V-1079's stale count from the e2e suite, this one from a CI stage), while five
 consecutive sweeps of already-guarded surfaces produced none.
+
+### V-1085 addendum — the rest of the gate, and one environment-only failure
+
+Having found one red stage, I ran the remainder of `build-test` rather than stopping
+at the first.
+
+`typecheck` green across every workspace. `lint` green, including the subprocessor
+mirror check it chains (12 public entries against 13 DPA Annex 3 rows, all matched).
+`format:check` green. `check:rendered-product-status` green after the fix above, 212
+HTML files across 6 apps.
+
+`npm run build` exits 1 locally and that is NOT a defect: `admin-panel` and
+`customer-dashboard` refuse a production build without `PUBLIC_API_BASE_URL`, which is
+the correct behaviour — a dashboard built against an unset API origin is worse than one
+that refuses to build. CI supplies it at the step level
+(`vars.PUBLIC_API_BASE_URL || 'https://api.driftstack.dev'`), and with that variable
+set the whole build is green with zero errors. Checked before reporting, because "the
+build is broken" would have been a wrong and alarming claim.
+
+The remaining CI jobs were already executed this session: `python-sdk` (365 passed, 4
+skipped), `go-sdk` (236), and the Playwright e2e suite (222). `bench-regression` is the
+fifth and is not run here — it is a performance job whose failure mode is a timing
+regression, not a correctness claim, and running it on a laptop against a shared
+machine would produce a number worth nothing.
+
+So the full `build-test` sequence is green end to end, and the one stage that was red
+is fixed.
