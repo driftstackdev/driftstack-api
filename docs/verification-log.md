@@ -50789,3 +50789,35 @@ remembered, not because anything checked.
 
 Still unchanged: neither superseding ADR exists, and this does not write them. Five surfaces now
 say the decision was reversed; none says why.
+
+#### V-1183 addendum — ADR-005 and ADR-006 checked and left alone, and one item escalated
+
+Applying the same enumeration to the other two qualified ADRs. Both appear in the architecture
+cross-reference alongside the two just corrected, and **neither is the same defect.**
+
+**ADR-005 — left alone.** Its reality check is precise: `GET /metrics` ships a Prometheus
+exposition endpoint, so the METRICS sentence is overtaken, but "the structured-LOG half is
+unaffected — Pino still writes to stdout and Sentry still ingests it, exactly as decided." The
+cross-reference reads "Sentry-first observability destination", which is still true of logs and
+half-true of metrics. That is ambiguity, not a reversal, and a reader following the link lands on
+the notice immediately. Marking it would be manufacturing a finding to match a pattern.
+
+**ADR-006 — left alone, because it is already tracked harder than a marker would.** The
+cross-reference reads "Audit-log retention pattern (90d hot Postgres / R2 archive / 7y total)".
+The pattern is designed and **has never run**: `audit_archive_runs` has zero rows, nothing
+constructs `AuditArchiveService`, and `tick-services-are-wired-invariant` lists it in
+`NOT_WIRED_PENDING_DECISION` with the reason spelled out. V-1006 put the same qualifier in the
+service header — "SCHEDULING IS THE DESIGN, NOT THE STATE" — after finding that two files knew
+while a third claimed otherwise. Three surfaces already say it. The ADR's own Status says PARTLY
+SHIPPED.
+
+**What that leaves is not a documentation defect but an open decision, and it deserves surfacing.**
+V-1006 states it exactly: the five tables ADR-006 covers have **no retention bound today**, and the
+privacy policy's "session metadata — 90 days operational" line has this unrun sweep as its **sole
+enforcer**. So a published privacy commitment currently has no mechanism behind it. Whether to wire
+the archiver or amend the policy is **D-7**, recorded as open.
+
+That is a customer-facing commitment with a legal surface, and it cannot be closed by a doc edit —
+wiring it deletes production rows after an R2 upload, and amending it changes a published policy.
+Adding it to the items that need a human, alongside D-4, D-6, D-10, D-12, D-16 and the counsel
+review from V-1163/V-1164. Recorded here so it is escalated rather than re-derived.
