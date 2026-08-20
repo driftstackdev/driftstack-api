@@ -57,7 +57,7 @@ describe('W582.C packages/sdk-python/src/driftstack/resources/profiles.py conten
     expect(body).toMatch(/^from driftstack\.resources\._common import coerce_body$/m);
   });
 
-  it('_encode_query helper — skip-None + str(v)-coerce + urlencode. Same shape across profiles + profile_snapshots + audit_log (3 resources own their own helper per file to avoid cross-resource coupling).', () => {
+  it('_encode_query helper — skip-None + str(v)-coerce + urlencode. Same shape across profiles + profile_snapshots + audit_log (each owns its own helper per file to avoid cross-resource coupling).', () => {
     expect(body).toMatch(/^def _encode_query\(query: dict\[str, Any\]\) -> str:$/m);
     expect(body).toMatch(
       /items: list\[tuple\[str, str\]\] = \[\]\s*\n\s*for key, value in query\.items\(\):\s*\n\s*if value is None:\s*\n\s*continue\s*\n\s*items\.append\(\(key, str\(value\)\)\)\s*\n\s*return urlencode\(items\)/,

@@ -72,31 +72,19 @@ describe('W778 docs /sdk/installation content parity', () => {
     expect(p).toMatch(/maxDelayMs: 10_000,/);
   });
 
-  it('CRITICAL TS resource catalog pinned — 16 resources matching the W775 SDK-index identical-resource-shapes claim. Drift to dropping a resource would silently break SDK consumers.', () => {
-    const p = read(PAGE);
-
-    // Top-level resources.
-    const resources = [
-      'client.sessions',
-      'client.profiles',
-      'client.profileSnapshots',
-      'client.apiKeys',
-      'client.webhooks',
-      'client.auth',
-      'client.auditLog',
-      'client.legal',
-      'client.mfa',
-      'client.team',
-      'client.emailPreferences',
-      'client.billing',
-      'client.cryptoOrders',
-      'client.usage',
-      'client.account',
-    ];
-    for (const res of resources) {
-      expect(p, `resource ${res}`).toMatch(new RegExp(`${res.replace(/\./g, '\\.')}\\.`));
-    }
-  });
+  // V-1131 — a SECOND hand-listed roster lived here, and V-1130 walked straight past
+  // it while fixing the first one in this same file. Its title named a resource count
+  // one higher than the list printed beneath it, and both fell short of what
+  // `client.ts` actually ships: wrong about its own length and wrong about the SDK,
+  // in a title that read as a deliberate figure. It asserted a strict subset of what
+  // the derived TypeScript arm below now proves, matching `client.X.` identically, so
+  // it is deleted rather than renumbered — correcting the figure would have preserved
+  // the shape that produced a wrong one twice over.
+  //
+  // The figure was quoted verbatim in this note at first, which made the note itself
+  // an offender the instant `resources` joined the detector's noun list in
+  // `a-parity-pin-cannot-freeze-a-claim-that-expires`. A retraction paraphrases; only
+  // a negative sentinel quotes.
 
   it('CRITICAL TS sessions 9-action catalog pinned — create/list/iterate/navigate/interact/wait/getState/capture/destroy. Matches W761 /api/sessions 6-action lifecycle + list+iterate convenience.', () => {
     const p = read(PAGE);

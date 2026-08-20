@@ -62,7 +62,7 @@ const FUTURE_TENSE =
  * are durations, not inventories, and are none of this guard's business.
  */
 const HAND_MAINTAINED_COUNT =
-  /\b(?:two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d{1,3})\s+(?:route modules|modules|accessors|buckets|implementations|endpoints|kinds|drivers|templates|files|tables|arms|categories|scopes|states|phases|sweeps|timers|chains|fields|columns)\b/i;
+  /\b(?:two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d{1,3})\s+(?:route modules|modules|resources|accessors|buckets|implementations|endpoints|kinds|drivers|templates|files|tables|arms|categories|scopes|states|phases|sweeps|timers|chains|fields|columns)\b/i;
 
 /**
  * MEASURED 2026-08-17 with a CORRECT extractor. May only fall; raising either is
@@ -79,6 +79,21 @@ const HAND_MAINTAINED_COUNT =
  * reason: I edited a pin and did not re-run this file. The note has now failed
  * to change my behaviour twice, which says the note is not the mechanism. The
  * arm is.
+ *
+ * NOUN LIST WIDENED by V-1131: `resources` joined the count nouns below. It was absent,
+ * which meant a pin titled with a resource count was invisible to this file — and
+ * "resources" is exactly the noun the SDK surface uses, so the blind spot sat over the
+ * case this file's own header cites as motivating. Measured before and after: the
+ * widening admitted exactly ONE file — `sdk-python-resources-profiles-content-parity`,
+ * whose title froze a count of the very resources it had already named one clause
+ * earlier. Dropping that redundant numeral took it straight back out, so the ceiling did
+ * NOT rise to absorb the widening. A detector correction that needs the ceiling raised in
+ * order to land is a detector correction hiding an offender.
+ *
+ * I first assumed the admitted file was V-1131's own retraction note, which had quoted
+ * the stale figure verbatim. That note WAS a rule-4 violation and was paraphrased — but
+ * it was not the delta. Diffing the two offender sets was. An assumption about which
+ * member a measurement added is not a measurement, and this one was wrong.
  *
  * Ratcheted 91 → 90 by V-1130, which retired the SDK-installation pin's hand-listed
  * thirteen-accessor roster. That one was the offender shape in its purest form: the

@@ -48544,3 +48544,37 @@ example — so this ceiling moving is that example finally being closed rather t
 Also worth recording: the background task reported **exit code 0** while the suite carried
 a real failure, because the command ended with an `echo` whose status masked vitest's. The
 summary line is the evidence; the exit code was not.
+
+### V-1131 — a second roster in the file V-1130 had just fixed, and the blind spot that hid it
+
+V-1130 said "only one such pin survives" of D-14's four alleged wrong accessor counts.
+That was wrong, and the counter-example was in the file V-1130 had just edited: a second
+hand-listed roster, whose title named a resource count one higher than the list printed
+beneath it, with both short of what `client.ts` ships. Wrong about its own length and
+wrong about the SDK. It asserted a strict subset of what V-1130's derived TypeScript arm
+proves, matching `client.X.` identically, so it is deleted rather than renumbered —
+correcting the figure preserves the shape that produced a wrong one twice.
+
+**Why nothing caught it, measured rather than asserted.** The parity-pin meta-guard's
+count-noun list held `modules`, `accessors`, `buckets`, `drivers` and sixteen more — but
+not `resources`, which is exactly the noun the SDK surface uses. So a pin titled with a
+resource count was structurally invisible to the guard whose header cites an accessor
+miscount as its motivating example. Widened here.
+
+Widening a detector is where a ceiling quietly absorbs new offenders, so I diffed the
+offender sets before and after instead of trusting the delta. It admitted exactly ONE
+file, `sdk-python-resources-profiles-content-parity`, whose title froze a count of the
+three resources it had already named one clause earlier. The numeral was redundant;
+dropping it took the file back out. **The ceiling did not move** — a detector correction
+that needs its ceiling raised to land is a detector correction hiding an offender.
+
+Mutation-proved after the fact: injecting a resource count into a pin title takes the
+population to 91 and fires the tight arm.
+
+**I was wrong about the delta and the diff corrected me.** I assumed the admitted file was
+this finding's own retraction note, which had quoted the stale figure verbatim. That note
+was a real rule-4 violation and is now paraphrased — but it was not the delta. An
+assumption about which member a measurement added is not a measurement.
+
+Two corrections in one arc now, both to my own prior claim: V-1130's "only one survives"
+here, and V-1129's line numbers. The report is not the only thing carrying stale claims.
