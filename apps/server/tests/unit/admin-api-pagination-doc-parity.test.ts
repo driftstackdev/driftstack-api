@@ -4,7 +4,7 @@
 // Pins the response envelope (`orders` + `next_cursor`), the
 // max-limit value, and the cursor opacity guidance.
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -35,6 +35,7 @@ const CURSOR_ROUTE_PATHS = [
   ['crypto-orders', 'admin-crypto-orders.ts'],
   ['webhook-dlq', 'admin-webhooks.ts'],
   ['rate-limit-overrides', 'admin-rate-limit-overrides.ts'],
+  ['incidents', 'admin-incidents.ts'],
 ] as const;
 
 function read(path: string): string {
@@ -91,5 +92,29 @@ describe('W225.A admin-api-pagination doc parity', () => {
       /<code>\(created_at, order_id\)<\/code>,\s*<code>orders<\/code>[^]*apply specifically to crypto orders/,
     );
     expect(doc).not.toMatch(/will roll out|assume an\s*endpoint does NOT paginate/i);
+  });
+  it('CRITICAL V-1113 every admin route returning next_cursor is in the table above. That arm iterates the table, so its "every current cursor list route" only ever meant "every route someone listed" — and it meant seven of eight. GET /v1/admin/incidents returns { data, next_cursor } and appeared nowhere on the page whose whole subject is how to page the admin API, with three separate lists (this table and two sibling pins) freezing the same gap.', () => {
+    const routesDir = join(REPO, 'apps', 'server', 'src', 'routes');
+    const live: string[] = [];
+    for (const f of readdirSync(routesDir).filter((n) => n.endsWith('.ts'))) {
+      // Comments stripped first — the prose around these handlers discusses
+      // next_cursor by name, and a sentence is not a route.
+      const src = readFileSync(join(routesDir, f), 'utf8').replace(/\/\/[^\n]*/g, '');
+      if (!/next_cursor:/.test(src)) continue;
+      for (const m of src.matchAll(/'\/v1\/admin\/([a-z-]+)'/g)) live.push(m[1] as string);
+    }
+    const unique = [...new Set(live)].sort();
+    expect(unique.length, 'admin routes returning next_cursor').toBeGreaterThanOrEqual(8);
+
+    const rostered = new Set<string>(CURSOR_ROUTE_PATHS.map(([name]) => name));
+    expect(
+      unique.filter((n) => !rostered.has(n)),
+      'these admin routes return next_cursor but are in no row, so nothing requires the pagination ' +
+        'page to document how to page them:',
+    ).toEqual([]);
+    expect(
+      [...rostered].filter((n) => !unique.includes(n)).sort(),
+      'rows for admin routes that no longer return next_cursor:',
+    ).toEqual([]);
   });
 });

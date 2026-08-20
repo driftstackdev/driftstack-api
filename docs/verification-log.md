@@ -47704,3 +47704,39 @@ a backstop.
 could not be asked about a parsed string. Vitest transpiles without checking and
 reported 13 passing; `npm run typecheck` reported two errors. That is precisely the
 failure `the-server-source-type-checks` exists for, met while writing a guard.
+
+### V-1113 — "every current cursor list route" meant every route someone listed
+
+Last roster in the sweep, and the only one whose incompleteness was a live
+documentation gap rather than a latent one.
+
+`admin-api-pagination-doc-parity` has an arm titled "documents every current cursor list
+route that returns next_cursor". It iterates `CURSOR_ROUTE_PATHS` — seven entries — and
+for each checks the route registers the path, returns `next_cursor`, and appears on the
+published page. Every one passes. The word doing the damage is "every": the arm's
+population is the table, so what it verifies is that seven listed routes are documented,
+not that the documented set is the real one.
+
+Measured: **eight** admin route files return `next_cursor`.
+`GET /v1/admin/incidents` returns `{ data, next_cursor }` from
+`admin-incidents.ts:286-308` and appears nowhere in
+`apps/marketing-site/src/pages/docs/admin-api-pagination.astro` — zero occurrences on
+the page whose entire subject is how to page the admin API. An operator or integrator
+reading it to learn which admin lists are cursor-paginated gets seven of eight, with no
+signal that a page exists at all for the eighth.
+
+Rule 2 mattered: the same seven-route list is frozen in THREE places — this table and
+two sibling pins (`docs-admin-api-pagination-parity` on the marketing side,
+`marketing-site-pages-docs-admin-api-pagination-content-parity` on the server side),
+both `toContain` subset checks that would have stayed green forever. All three now carry
+the row, and the page carries the entry.
+
+The completeness arm derives the population: any admin route returning `next_cursor`
+must have a row, and no row may name a route that no longer does. Comments are stripped
+first — the prose around these handlers discusses `next_cursor` by name.
+
+Mutation-proved, restored byte-identical: removing the incidents row fails the new arm;
+removing the page entry while keeping the row fails the pre-existing arm, so page and
+table are coupled in both directions; a ninth cursor route fails naming
+`webhook-replays`. Marketing rebuilt and the rendered page verified to carry the entry;
+`check:rendered-product-status` passes across 212 files.

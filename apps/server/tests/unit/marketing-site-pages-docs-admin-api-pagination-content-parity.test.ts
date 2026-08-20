@@ -102,6 +102,9 @@ describe('W508.B apps/marketing-site/src/pages/docs/admin-api-pagination.astro c
       '/v1/admin/crypto-orders',
       '/v1/admin/webhook-dlq',
       '/v1/admin/rate-limit-overrides',
+      // V-1113 — returns { data, next_cursor } like the rest; the page listed
+      // seven of the eight cursor routes and three separate lists froze the gap.
+      '/v1/admin/incidents',
     ]) {
       expect(body).toContain(`<code>GET ${route}</code>`);
     }
