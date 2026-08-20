@@ -256,13 +256,23 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
     expect(writeScopeMatches).toBeGreaterThanOrEqual(3);
   });
 
-  it('CRITICAL Source-of-truth pointers pinned — routes/profile-snapshots.ts + services/profile-snapshots.ts + packages/api-types/src/profile-snapshots.ts.', () => {
+  // V-1143 — the third pointer named a file that does not exist. `api-types` has no
+  // snapshot module at all; the ProfileSnapshot schemas are declared in `profiles.ts`.
+  // This pin froze the wrong path, so the page could not be corrected without a red —
+  // the shape where a guard holds a false claim in place rather than catching one.
+  it('CRITICAL Source-of-truth pointers pinned — the two server modules plus the api-types module that actually declares the ProfileSnapshot schemas. A pointer a reader cannot open is worse than no pointer: it reads as precision.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/Routes: `apps\/server\/src\/routes\/profile-snapshots\.ts`\./);
     expect(p).toMatch(/`apps\/server\/src\/services\/profile-/);
     expect(p).toMatch(/snapshots\.ts`/);
-    expect(p).toMatch(/`packages\/api-types\/src\/profile-snapshots\.ts`/);
+    expect(p).toMatch(/`packages\/api-types\/src\/profiles\.ts`/);
+
+    // V-1143 negative — the module named here until now never existed. Quoted so the
+    // dead path cannot come back; the retraction above paraphrases it.
+    expect(p, 'the non-existent api-types snapshot module is cited again').not.toMatch(
+      /api-types\/src\/profile-snapshots\.ts/,
+    );
   });
 
   it('CRITICAL 5-endpoint canonical action set — POST capture + GET per-profile list + GET cross-account list + GET single + POST restore + DELETE.', () => {

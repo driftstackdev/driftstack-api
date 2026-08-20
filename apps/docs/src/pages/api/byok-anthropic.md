@@ -138,8 +138,7 @@ ciphertext]`. Storage column: `accounts.byok_anthropic_key_blob`
 (bytea).
 
 Rotation of `MFA_ENCRYPTION_KEY` invalidates every existing BYOK
-key — customers re-set after the rotation runbook fires (see
-docs/runbooks/mfa-encryption-key-rotation.md).
+key — customers re-set their key after such a rotation.
 
 ## TTL + rotation reminders
 

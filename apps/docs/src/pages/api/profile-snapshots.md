@@ -275,4 +275,4 @@ Routes: `apps/server/src/routes/profile-snapshots.ts`. Service
 
 - tier-cap enforcement: `apps/server/src/services/profile-
 snapshots.ts`. Schema:
-  `packages/api-types/src/profile-snapshots.ts`.
+  `packages/api-types/src/profiles.ts`.

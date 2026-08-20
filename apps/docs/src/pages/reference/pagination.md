@@ -174,7 +174,7 @@ Per-endpoint `limit` ranges:
 ## Source of truth
 
 Cursor encoding lives in the per-resource repo (e.g.
-`apps/server/src/db/audit-log-repo.ts`). The repo is the only
+`apps/server/src/db/account-audit-repo.ts`). The repo is the only
 place that produces or consumes the cursor format; route handlers
 treat it as a pass-through string. SDKs forward `cursor` /
 `next_cursor` unchanged.

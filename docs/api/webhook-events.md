@@ -51,7 +51,7 @@ Headers:
 
 Retry policy: 6 attempts (the initial delivery plus 5 retries) with
 exponential backoff at 1m, 5m, 15m, 30m, 60m. Final failures land in DLQ
-(see `docs/api/webhooks.md` and the admin /webhook-dlq page).
+and can be re-sent from [Replay](/webhooks/replay/).
 
 Idempotency: every delivery includes the same `<uuid>` id. Customers
 should dedup on this id — the same event may be re-delivered after a

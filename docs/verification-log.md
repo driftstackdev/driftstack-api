@@ -49023,3 +49023,50 @@ returned nothing on macOS while the same pattern without the bounded prefix retu
 matches. Bounded repetition plus `-o` in BSD grep silently found nothing, which is
 indistinguishable from absence — I read it as "no occurrences" for one step. Python for
 context extraction from here.
+
+### V-1143 — four customer pages cited repo files that do not exist
+
+V-1141 fixed the runbook path guard; this asks the same question of the documentation
+customers actually read. `every-runbook-path-resolves` covers `docs/runbooks/**` on the
+reasoning that whoever follows a runbook is mid-incident. Nothing asked it of
+`apps/docs/src/pages/**`. Four citations there pointed at files that do not exist:
+
+- `api/profile-snapshots.md` cited `packages/api-types/src/profile-snapshots.ts`. There is
+  no snapshot module in `api-types` at all — the schemas are declared in `profiles.ts`.
+- `reference/pagination.md` cited `apps/server/src/db/audit-log-repo.ts`. The repos are
+  `account-audit-repo.ts` and `admin-audit-repo.ts`; the page is about the customer audit
+  log, so it now names the account one.
+- `webhooks/events.md` cited `docs/api/webhooks.md`, which has never existed under that
+  name, and pointed customers at an admin-only DLQ page besides. Replaced with the
+  customer-facing Replay page.
+- `api/byok-anthropic.md` cited `docs/runbooks/mfa-encryption-key-rotation.md` — a runbook
+  that does not exist, and an internal path a customer could not open if it did. The fact
+  it was carrying survives; the pointer is gone.
+
+**One was held in place by a pin.** `docs-pages-api-profile-snapshots-content-parity`
+froze `packages/api-types/src/profile-snapshots.ts` in an assertion AND named it in the
+test title, so the page could not be corrected without going red — a guard holding a false
+claim rather than catching one. Corrected with a negative sentinel over the dead path.
+
+**The mirror caught me.** `webhooks/events.md` is byte-identical to `docs/api/webhook-events.md`
+apart from six lines of Astro frontmatter, and I edited one side. The mirror parity test
+failed on the next run. The pin enumeration had surfaced that test; what I had not drawn
+from it was that the file it compares against needed the same edit.
+
+**A negative sentinel needs the right mutation, and my first one was wrong.** I proved it by
+REPLACING the corrected path with the retired one — which fails the positive assertion above
+it and short-circuits, so the negative never ran and my grep for its message returned zero.
+Read carelessly that looks like a dead sentinel. The mutation that actually exercises a
+negative is to ADD the retired string while leaving the correct one intact, which is the
+scenario it guards. Re-proved that way: it fires.
+
+Guard added over `apps/docs/src/pages` only. The internal `docs/` tree carries 41
+unresolved citations — design notes and dated session logs naming files that have since
+moved — and holding a historical note to today's tree is the wrong bar. Customer
+documentation describes what ships now.
+
+**Recorded, not actioned:** nine citations in customer pages point into the internal `docs/`
+tree, all of which resolve and none of which a customer can open. Four SDK quickstarts cite
+`docs/internal/cross-agent-control-plane-contract.md`. Whether customer pages should name
+internal documents at all is an editorial call across eight pages, and not one to take
+inside a path-resolution fix.
