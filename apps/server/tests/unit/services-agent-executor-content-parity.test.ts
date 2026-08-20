@@ -46,9 +46,43 @@ describe('services/agent-executor content parity', () => {
     expect(body, 'the stub-only framing must not return').not.toMatch(
       /This slice ships the deterministic stub variant/,
     );
-    // The halt-on-first-failure claim was TRUE and is kept, now derived from the
-    // code rather than only asserted in prose.
-    expect(body).toMatch(/if \(result\.kind === 'failure'\) return \{ results, ok: false \};/);
+    // V-1099 — "derived from the code" was derived from HALF the code. The
+    // header said "Both real executors halt on the first failing intent" and
+    // this assertion read the RealAgentExecutor line, where it is true. The
+    // control-plane executor exempts a failed `wait` (#139), so the claim was
+    // false of the implementation production actually selects, and the arm that
+    // called itself derived could not see it. Both halt conditions are read
+    // now, each from the file that owns it.
+    expect(body, 'RealAgentExecutor no longer halts on any failure').toMatch(
+      /if \(result\.kind === 'failure'\) return \{ results, ok: false \};/,
+    );
+    const controlPlane = read(
+      resolve(REPO_ROOT, 'apps/server/src/services/agent-executor-control-plane.ts'),
+    );
+    expect(
+      controlPlane,
+      'the control-plane executor no longer exempts a failed wait, so the header and the interface ' +
+        'contract should lose the exception they now describe',
+    ).toMatch(/if \(result\.result\.kind === 'failure' && intent\.kind !== 'wait'\) break;/);
+
+    // Its own header said the opposite, forty lines above that line, and no
+    // pin held it — so the file implementing the exception documented itself
+    // as having none.
+    expect(controlPlane, 'the control-plane header no longer records its own exception').toMatch(
+      /HALT on the first failure, EXCEPT a failed `wait` \(#139\)/,
+    );
+    expect(
+      controlPlane,
+      'the unqualified halt claim must not return to the file that takes the exception',
+    ).not.toMatch(/accumulate; HALT on the first failure \(matches the AgentExecutor contract\)\./);
+
+    // …and the header must describe the difference rather than either half.
+    expect(body, 'the header no longer names the disagreement').toMatch(
+      /They do NOT agree on what halts a plan otherwise/,
+    );
+    expect(body, 'the both-executors-halt claim must not return').not.toMatch(
+      /Both real executors halt on the first failing intent/,
+    );
   });
 
   it("Why-not-HTTP-fetch framing pinned: 'the agent layer runs in the same process as the routes; round-tripping through HTTP would double the latency budget + lose typed-error context. AI-B2.b dispatches against the in-process SessionsService instead.' — pinned so the same-process + double-latency-bad + lose-typed-errors rationale + AI-B2.b-uses-in-process-SessionsService dispatch contract stay documented", () => {
@@ -87,8 +121,17 @@ describe('services/agent-executor content parity', () => {
 
   it("AgentExecutor interface contract pinned: 'Run a plan's intents in order. Halts on first failure (returns partial results). Never throws — failures surface as IntentResult discriminants instead. AI-B2.b will accept an optional cancellation signal and propagate it to the underlying SessionsService dispatch.' — pinned so the in-order + halt-on-failure + never-throws + AI-B2.b-cancellation-signal-future-feature all stay documented", () => {
     expect(body).toMatch(/export interface AgentExecutor \{/);
+    // V-1099 — the contract now carries the exception the control-plane
+    // implementation takes, so the sentence is asserted in two pieces rather
+    // than as one span the exception splits.
     expect(body).toMatch(
-      /\* Run a plan's intents in order\. Halts on first failure \(returns\s*\n?\s*\*\s+partial results\)\. Never throws — failures surface as\s*\n?\s*\*\s+IntentResult discriminants instead\./,
+      /\* Run a plan's intents in order\. Halts on first failure \(returns\s*\n?\s*\*\s+partial results\)/,
+    );
+    expect(body, 'the interface contract no longer records the wait exception').toMatch(
+      /control-plane executor continues past a failed `wait` \(#139\)/,
+    );
+    expect(body).toMatch(
+      /Never throws — failures surface as\s*\n?\s*\*\s+IntentResult discriminants instead\./,
     );
     expect(body).toMatch(
       /\* AI-B2\.b will accept an optional cancellation signal and\s*\n?\s*\*\s+propagate it to the underlying SessionsService dispatch\./,

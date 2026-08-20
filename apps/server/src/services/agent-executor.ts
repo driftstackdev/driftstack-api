@@ -11,9 +11,23 @@
 // SessionsService. `ControlPlaneAgentExecutor` in
 // agent-executor-control-plane.ts is a third.
 //
-// Both real executors halt on the first failing intent —
-// `if (result.kind === 'failure') return { results, ok: false }` — and
-// halt BEFORE dispatching an unapproved consequential action (W443/W445).
+// Both real executors halt BEFORE dispatching an unapproved consequential
+// action (W443/W445). They do NOT agree on what halts a plan otherwise:
+//
+//   RealAgentExecutor          halts on ANY failing intent —
+//                              `if (result.kind === 'failure') return
+//                              { results, ok: false }`
+//   ControlPlaneAgentExecutor  halts on a failing intent EXCEPT a `wait`
+//                              (#139) — `if (result.result.kind ===
+//                              'failure' && intent.kind !== 'wait') break`
+//
+// V-1099 — this block read "Both real executors halt on the first failing
+// intent" and quoted only the first line, which is true of one of the two.
+// A `wait` is best-effort: timing out means the condition was not observed,
+// not that the plan is void, and an action that actually depended on the
+// awaited state fails on its own with a clearer reason. Losing the rest of
+// the plan to a wait timeout is the failure #139 fixed, and the header said
+// the opposite.
 //
 // V-808 — this header used to say the slice shipped only the stub and
 // that a later follow-up would replace it. RealAgentExecutor is exported
@@ -193,7 +207,10 @@ export async function executionMayContinue(check: ExecuteArgs['shouldContinue'])
 export interface AgentExecutor {
   /**
    * Run a plan's intents in order. Halts on first failure (returns
-   * partial results). Never throws — failures surface as
+   * partial results), with one implementation-level exception: the
+   * control-plane executor continues past a failed `wait` (#139), since a
+   * wait that times out means the condition was not observed rather than
+   * that the plan is void. Never throws — failures surface as
    * IntentResult discriminants instead.
    *
    * AI-B2.b will accept an optional cancellation signal and

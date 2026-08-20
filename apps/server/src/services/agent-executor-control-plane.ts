@@ -6,7 +6,14 @@
 //       → serializeIntentDispatch (base64 wire envelope)
 //       → IntentDispatcher.dispatch (the correlator → WSS → IntentResult)
 //       → intentResultToCustomer (ParsedIntentResult → customer IntentResult)
-//     accumulate; HALT on the first failure (matches the AgentExecutor contract).
+//     accumulate; HALT on the first failure, EXCEPT a failed `wait` (#139),
+//     which is best-effort and does not abort the plan.
+//
+// V-1099 — this line read "HALT on the first failure (matches the
+// AgentExecutor contract)" in the file that implements the exception, forty
+// lines above `if (result.result.kind === 'failure' && intent.kind !== 'wait')`.
+// The contract in agent-executor.ts now records the exception too, so the
+// parenthetical is true again by being unnecessary.
 //
 // This is the CORRECT-LAYER successor to RealAgentExecutor (agent-executor.ts),
 // which dispatched to the local driver — the architecture-superseded path

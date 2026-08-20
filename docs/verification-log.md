@@ -47034,3 +47034,47 @@ the routes directory holds 61".
 **Process note.** The first insertion landed before the closing brace of the preceding
 arm, which quietly moved the C/D/E assertions into the new one — the tests still
 passed. Caught by the rule-5 `it(` count and re-done at the correct boundary.
+
+### V-1099 — "derived from the code" was derived from half the code
+
+`agent-executor.ts` opened by saying:
+
+> Both real executors halt on the first failing intent —
+> `if (result.kind === 'failure') return { results, ok: false }`
+
+That quoted line is `agent-executor.ts:348`, and for `RealAgentExecutor` it is exact.
+The other real executor does not do it. `agent-executor-control-plane.ts:173` reads
+`if (result.result.kind === 'failure' && intent.kind !== 'wait') break`, and skips a
+`wait` it cannot even map at :152. A wait is best-effort: timing out means the
+condition was not observed, not that the plan is void, and an action that truly
+depended on the awaited state fails on its own with a clearer reason. Losing the rest
+of a plan to a wait timeout is what #139 fixed — and the module header asserted the
+opposite behaviour for the executor production selects (`bootstrap.ts:1343` picks
+`ControlPlaneAgentExecutor` when `fleetControlPlaneEnabled`, and
+`infra/env-templates/production.env` sets `FLEET_CONTROL_PLANE_ENABLED=true`).
+
+**The pin is the interesting part.** It did not merely assert prose — it had been
+upgraded, and its own comment says so: "The halt-on-first-failure claim was TRUE and is
+kept, now derived from the code rather than only asserted in prose." It derived it from
+`agent-executor.ts`, the file it already had open, which is the half where the claim
+holds. A guard that reads one implementation cannot judge a sentence that says "both".
+Being derived made it more convincing and no more correct.
+
+Rule 2 found the third occurrence, and it is the worst of them:
+`agent-executor-control-plane.ts:9` said "accumulate; HALT on the first failure
+(matches the AgentExecutor contract)" — in the file that implements the exception,
+forty lines above the line that takes it. No pin held that header, so it was a free
+correction that nothing would ever have failed on.
+
+Fixed together: the module header now tabulates the two behaviours rather than
+asserting one; the `AgentExecutor` interface contract records the implementation-level
+exception; the control-plane header states its own; and the pin reads BOTH halt
+conditions, each from the file that owns it, with negatives on both retired sentences.
+The `docs/internal/cross-agent-control-plane-contract.md` mentions were checked and
+left — they are scoped to `RealAgentExecutor`, where halt-on-any-failure is true.
+
+Mutation-proved, restored byte-identical and confirmed by content: restoring the false
+header fails the disagreement arm; removing the `wait` exemption from the control-plane
+code fails the arm that now reads it, with a message saying the two documents should
+lose the exception too; restoring the self-contradicting control-plane header fails its
+own sentinel; deleting the exception from the interface contract fails that one.
