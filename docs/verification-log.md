@@ -46322,3 +46322,50 @@ the line and chose the delimiter that collides. lint-staged reverted cleanly, so
 nothing partial landed. Same family as the emphasis-marker break in V-1065: prettier
 owns the quoting, so prose that contains a quote character is a hazard in a pinned
 string. The phrase is now apostrophe-free.
+
+## V-1084 — three readiness claims and a price table, all of them true
+
+A turn with no defect found. Recording what was checked, because the alternative is
+checking it again.
+
+READINESS ROWS. The pre-launch checklist carries 68 status rows, 60 of them READY.
+The dangerous direction is a READY that is not, so rather than sampling blind I went
+where I already held evidence: V-1082 had just established that the 90-day audit
+archiver has never run. No row claims audit RETENTION is ready — the audit row
+(V-216 + V-354) covers `GET /v1/account/audit-log`, the read surface, which genuinely
+shipped. No contradiction.
+
+THE PRIVACY POLICY'S THREE RETENTION PROMISES, each traced to a mechanism:
+
+Authentication data, 90 days after revocation — enforced, and already guarded by
+`a-retention-promise-matches-what-the-sweeper-does`, whose own history records a
+real prior finding: the row said "then deleted" while the sweeper ran an UPDATE.
+
+Session metadata, 90 days operational — NOT enforced. Same `AuditArchiveService`
+V-1082 annotated, and already carried by two dedicated guards plus the tick-services
+invariant. My ADR note joined an existing story rather than duplicating it.
+
+Status-subscriber address, purged 90 days after unsubscribe — enforced.
+`processPurge` is wired through `wireDailyMaintenanceSweep` with its own job type
+and runs daily. Worth noting what its neighbouring comment records: migration 0027
+reserved a `status_subscriber.purged` audit enum value that nothing has ever
+written, because an anonymous subscriber sweep has no actor row to attribute, so the
+log line is the only evidence the purge ran — already recorded against the
+admin-audit reachability guard.
+
+MARKETING PRICES against `TIER_MONTHLY_PRICE_CENTS`: all six paid tiers agree —
+solo $79, team $249, agency $699, api_starter $149, api_builder $499, api_scale
+$1,499.
+
+TWO INSTRUMENT ARTIFACTS, both mine, both caught by reading rather than by the number
+looking wrong. The price extractor first reported `api_scale: 1`, because the source
+writes `1_499` with a numeric separator and `[\d.]+` stops at the underscore — a
+mismatch against $1,499 that would have read as a serious pricing defect. And an
+earlier pass over the same file reported a spread of unrelated numbers because the
+pattern matched any `price|amount|monthly` field rather than `monthlyUsd`.
+
+The honest summary of this arc's position: the customer-facing surfaces are saturated.
+Each recent turn has needed more machinery to surface less, and across the arc the
+instrument has been wrong more often than the code — seventeen artifacts now, every
+one caught by reading the source instead of trusting a count. Negatives with their
+evidence are most of the remaining value.
