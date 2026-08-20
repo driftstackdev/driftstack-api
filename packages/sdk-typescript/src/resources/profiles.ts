@@ -72,7 +72,8 @@ export class ProfilesResource {
     });
   }
 
-  /** List profiles for the calling account. Cursor-paginated. */
+  /** List profiles for the EFFECTIVE account — your own, or the owner you
+   *  are acting as via `X-Driftstack-Account`. Cursor-paginated. */
   list(query: PaginationQueryInput = {}): Promise<ProfilesListPage> {
     return this.http.request<ProfilesListPage>({
       method: 'GET',
@@ -85,7 +86,7 @@ export class ProfilesResource {
   }
 
   /**
-   * Lazily iterate every profile for the calling account, walking
+   * Lazily iterate every profile for the EFFECTIVE account, walking
    * cursor pages automatically. See `iteratePaginated` for semantics.
    */
   iterate(opts: { limit?: number } = {}): AsyncGenerator<Profile, void, void> {

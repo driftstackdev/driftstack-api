@@ -178,7 +178,7 @@ class SessionsResource:
         return parse_model(SessionsListPage, data)
 
     def iterate(self, *, limit: int | None = None) -> Iterator[Session]:
-        """Lazily walk every session for the calling account.
+        """Lazily walk every session for the EFFECTIVE account.
 
         Wraps :meth:`list` with cursor handoff so callers can write::
 

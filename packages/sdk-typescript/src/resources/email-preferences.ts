@@ -17,7 +17,7 @@ import type { HttpClient } from '../http.js';
 export class EmailPreferencesResource {
   constructor(private readonly http: HttpClient) {}
 
-  /** Read all opt-out toggles for the calling account. Defaults to opted-in for unset rows. */
+  /** Read all opt-out toggles for the EFFECTIVE account. Defaults to opted-in for unset rows. */
   list(): Promise<ListEmailPreferencesResponse> {
     return this.http.request<ListEmailPreferencesResponse>({
       method: 'GET',

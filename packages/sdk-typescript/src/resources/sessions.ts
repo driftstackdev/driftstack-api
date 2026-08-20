@@ -52,7 +52,7 @@ export class SessionsResource {
   }
 
   /**
-   * Lazily iterate every session for the calling account, walking
+   * Lazily iterate every session for the EFFECTIVE account, walking
    * cursor pages automatically. `opts.limit` controls per-page size;
    * the iterator transparently fetches the next page once the current
    * one is exhausted, and stops on `next_cursor: null`.

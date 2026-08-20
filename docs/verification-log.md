@@ -48219,3 +48219,33 @@ documents as the right default.
 
 Mutation-proved: all nine reverted individually, each caught by its own arm, each restored
 byte-identical. `go vet` clean, ruff clean, 0 tsc errors.
+
+### V-1123 addendum — my mutation loop restored from a pre-fix snapshot and reverted every fix
+
+V-1123 committed the nine corrected PINS with none of the nine corrected SOURCES, and the
+full suite caught it: ten failures, every one an arm asserting a docstring that was no
+longer there.
+
+The cause is a process error I have made before and written up before. The snapshots were
+taken at the START of the batch, before the source edits. The mutation loop then restored
+each file with `cp $SNAP/$base $src` — which put back the PRE-FIX text. Worse, its own
+verification step compared the restored file against that same pre-fix snapshot and
+reported `restored=yes` for all eight. The loop was internally consistent and completely
+wrong.
+
+This is V-1096 exactly: "the first mutation round restored from a snapshot taken BEFORE
+the fix, so the restore silently reinstated the stale comment and `cmp` reported
+byte-identical against the wrong baseline — a clean tree as the failure mode." I recorded
+that lesson, then automated the same mistake across eight files at once. Scripting the
+loop is what made it worse: doing it by hand, the missing text would have been visible in
+the next grep.
+
+The rule that actually prevents it, stated as a check rather than a caution: a
+mutation-restore snapshot must be taken AFTER the fix and BEFORE the mutation, and the
+restore must be verified against the FIXED content — assert the corrected string is
+present, not merely that the file matches some baseline. `cmp` against a snapshot proves
+only that two files agree; it cannot tell you they agree on the right thing.
+
+Repaired: all ten source corrections re-applied, all nine pins pass against them, full
+suite 3111 files green, `go vet` and ruff clean, 0 tsc errors. The nine mutations were
+re-run against the correct baseline before this commit.

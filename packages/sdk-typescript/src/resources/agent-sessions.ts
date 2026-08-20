@@ -393,7 +393,7 @@ export class AgentSessionsResource {
   }
 
   /**
-   * Lazily iterate every agent session for the calling account, walking
+   * Lazily iterate every agent session for the EFFECTIVE account, walking
    * cursor pages automatically (newest first). See `iteratePaginated` for
    * semantics. Replaces the old hard 100-cap — a busy account can now reach
    * its full AI-session history.

@@ -39,7 +39,8 @@ export class WebhooksResource {
     });
   }
 
-  /** List webhook endpoints for the calling account. Plaintext is never returned. */
+  /** List webhook endpoints for the EFFECTIVE account — your own, or the owner
+   *  you are acting as via `X-Driftstack-Account`. Plaintext is never returned. */
   list(): Promise<WebhookEndpointList> {
     return this.http.request<WebhookEndpointList>({
       method: 'GET',

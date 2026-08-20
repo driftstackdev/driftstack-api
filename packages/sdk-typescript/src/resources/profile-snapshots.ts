@@ -62,7 +62,7 @@ export class ProfileSnapshotsResource {
   }
 
   /**
-   * Lazily iterate every snapshot for the calling account, walking
+   * Lazily iterate every snapshot for the EFFECTIVE account, walking
    * cursor pages automatically. See `iteratePaginated` for semantics.
    */
   iterate(opts: { limit?: number } = {}): AsyncGenerator<ProfileSnapshot, void, void> {

@@ -28,7 +28,7 @@ type SetEmailPreferenceRequest struct {
 	OptedIn   bool   `json:"opted_in"`
 }
 
-// List returns all opt-out toggles for the calling account. Defaults
+// List returns all opt-out toggles for the EFFECTIVE account. Defaults
 // opted-in for unset rows.
 func (r *EmailPreferencesResource) List(ctx context.Context) (*ListEmailPreferencesResponse, error) {
 	var out ListEmailPreferencesResponse

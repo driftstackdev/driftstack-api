@@ -65,7 +65,8 @@ export interface AuditLogExportResponse {
 export class AuditLogResource {
   constructor(private readonly http: HttpClient) {}
 
-  /** List audit-log entries for the calling account, newest-first. */
+  /** List audit-log entries for the EFFECTIVE account — your own, or the
+   *  owner you are acting as via `X-Driftstack-Account` — newest-first. */
   list(query: AuditLogQuery = {}): Promise<AuditLogListPage> {
     return this.http.request<AuditLogListPage>({
       method: 'GET',
