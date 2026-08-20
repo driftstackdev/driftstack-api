@@ -598,6 +598,29 @@ function parseTierPrices(raw: string): Record<string, { monthly: string; annual:
       throw new Error(`DRIFTSTACK_TIER_PRICE_IDS.${tier} must be a string or {monthly, annual}`);
     }
   }
+  // V-1201/1202 — a price id may repeat WITHIN a tier (the legacy flat shape above
+  // deliberately synthesises monthly === annual) but never ACROSS tiers. Bootstrap builds the
+  // reverse map as `priceToTier[prices.monthly] = tier; priceToTier[prices.annual] = tier;`, so
+  // a duplicate resolves to whichever tier is iterated LAST, and the Stripe webhook then writes
+  // that tier onto the subscriber — a customer silently placed on the wrong plan by a
+  // copy-paste in one env var, with no error anywhere. Fail fast at boot, like every other
+  // malformed-input case in this function.
+  const tierByPrice = new Map<string, string>();
+  for (const [tier, prices] of Object.entries(out)) {
+    // Deliberately NOT de-duplicated per tier: `owner !== tier` below is the single rule that
+    // allows within-tier reuse, and a Set here would silently absorb that case so no test could
+    // tell the two apart. Found by mutation — the positive control could not fail.
+    for (const priceId of [prices.monthly, prices.annual]) {
+      const owner = tierByPrice.get(priceId);
+      if (owner !== undefined && owner !== tier) {
+        throw new Error(
+          `DRIFTSTACK_TIER_PRICE_IDS: price id ${priceId} is mapped to both ${owner} and ${tier}; ` +
+            'a price id must identify exactly one tier or the Stripe webhook cannot tell them apart',
+        );
+      }
+      tierByPrice.set(priceId, tier);
+    }
+  }
   return out;
 }
 

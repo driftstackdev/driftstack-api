@@ -51729,3 +51729,64 @@ M1 is the one that proves two things at once: that the fix in this commit is loa
 the detector notices a read losing its order. M3 cascades on purpose — a dead detector empties the
 scan, so the allowlist agrees with it and only the self-check arm can tell you why the repo suddenly
 looks clean.
+
+---
+
+## V-1202 — one env-var copy-paste puts a paying customer on the wrong plan
+
+V-1201's lesson generalises: a last-write-wins fold is only safe when something stops two rows
+contesting the same key. There, five folds were acquitted by a unique index. So I swept for folds
+whose key has NO constraint behind it.
+
+`account_email_preferences` came back safe — `(account_id, event_type)` is the primary key, the
+sixth time this session a constraint has closed one of these.
+
+**The one that is not backed by anything is in config.** `bootstrap.ts` builds the Stripe reverse
+map:
+
+```
+priceToTier[prices.monthly] = tier;
+priceToTier[prices.annual]  = tier;
+```
+
+from `config.stripe.tierPrices`, parsed by `parseTierPrices` out of `DRIFTSTACK_TIER_PRICE_IDS`.
+That parser validated SHAPE only — each value a string or `{monthly, annual}` — and the Zod schema
+is a plain `z.record`, so neither checks anything across keys.
+
+If one price id appears under two tiers, the fold resolves it to whichever tier is iterated LAST.
+`StripeWebhooksService` then reads `this.config.priceToTier[priceId]` and writes that tier onto the
+subscriber. A copy-paste when adding a tier — the most likely way that env var is ever edited —
+silently places customers on the wrong plan. Nothing throws, nothing logs; the webhook handler only
+warns when a price id is ABSENT from the map, never when it is ambiguous.
+
+**The fix is at the parser**, matching the fail-fast posture its own header already claims
+("Throws on malformed input so a misconfigured deploy fails fast at boot"), and it names both tiers
+so a bad deploy is diagnosable — the same reason the existing arm gives for naming the offending
+tier.
+
+**The subtlety, and a vacuous test caught by mutation.** A price id may legally repeat WITHIN a
+tier: the legacy flat shape (`"tier": "price_x"`) deliberately synthesises `monthly === annual`, and
+an existing arm pins that behaviour. So the rule is "no price id maps to two DISTINCT tiers", not
+"no price id appears twice".
+
+My first implementation iterated `new Set([prices.monthly, prices.annual])`, and my positive control
+asserted the flat shape still parses. Mutating the check from `owner !== undefined && owner !== tier`
+to `owner !== undefined` **did not fail** — the Set had already collapsed the within-tier duplicate,
+so no test could distinguish the two implementations. The control could not fail, which makes it
+worth nothing.
+
+Removing the Set puts the whole rule in one place, `owner !== tier`, where a test can reach it:
+
+```
+M1  the cross-tier throw removed        -> duplicate arm red        1 failed | 8 passed
+M2  check counts repeats, not tiers     -> flat-shape arm red       2 failed | 7 passed
+restored                                                            9 passed
+```
+
+M2 reds two arms — my control and the pre-existing legacy-flat-shape arm, which is the right
+answer: they describe the same behaviour and should fail together. Before removing the Set, M2 red
+nothing at all.
+
+The lesson is the one this log keeps relearning from a different direction: a redundant safeguard
+is not free. The Set and the tier comparison both implemented "within-tier reuse is fine", and the
+overlap made the real rule untestable.

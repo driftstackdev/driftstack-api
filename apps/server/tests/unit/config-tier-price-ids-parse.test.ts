@@ -77,6 +77,25 @@ describe('DRIFTSTACK_TIER_PRICE_IDS parsing', () => {
     ).toBe('price_only_monthly');
   });
 
+  it('CRITICAL a price id mapped to TWO tiers is rejected at boot. Bootstrap builds the reverse map as priceToTier[id] = tier, so a duplicate resolves to whichever tier is iterated last and the Stripe webhook writes THAT tier onto the subscriber — a customer silently placed on the wrong plan by a copy-paste in one env var.', () => {
+    expect(() =>
+      tierPrices(
+        JSON.stringify({
+          solo_manual: { monthly: 'price_shared', annual: 'price_solo_a' },
+          api_starter: { monthly: 'price_shared', annual: 'price_api_a' },
+        }),
+      ),
+    ).toThrow(/mapped to both solo_manual and api_starter/);
+  });
+
+  it('CRITICAL the duplicate check is ACROSS tiers only — one tier may legally reuse a single price id for both cadences. The legacy flat shape synthesises monthly === annual on purpose, so a check that merely counted repeats would reject the shape this parser exists to accept.', () => {
+    const parsed = tierPrices(JSON.stringify({ solo_manual: 'price_solo_only' }));
+    expect(
+      parsed?.solo_manual,
+      'the legacy flat shape stopped parsing — the duplicate check is counting repeats rather than distinct tiers',
+    ).toEqual({ monthly: 'price_solo_only', annual: 'price_solo_only' });
+  });
+
   it('CRITICAL a non-object JSON payload is rejected at boot', () => {
     expect(
       () => tierPrices('"just-a-string"'),
