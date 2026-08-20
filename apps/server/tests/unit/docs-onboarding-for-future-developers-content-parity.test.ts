@@ -11,7 +11,9 @@
 //   • 6-command first-run setup (git clone + nvm use + npm install +
 //     docker compose up + db:migrate + db:seed).
 //   • Daily dev loop: server :3000 + marketing-site :4321 +
-//     customer-dashboard :4322.
+//     customer-dashboard :5173. (V-1177 — this said 4322, which is the
+//     DOCS site's port; the dashboard's dev script is `astro dev --port
+//     5173`, and the assertion below has always pinned 5173.)
 //   • Verification chain: typecheck + lint + format:check + test +
 //     build.
 //   • E2E: workers:1 + DROP+re-create schema per suite.

@@ -50486,3 +50486,27 @@ returns the owning guard immediately, and did once I ran it.
 
 Cost of not doing that first: two full measurement passes, each with its own artifact-hunting
 detour. Recorded so the next sweep starts with the grep.
+
+### V-1177 — a guard's header gave the customer dashboard the docs site's port
+
+Noticed while editing the file for V-1175. The header of
+`docs-onboarding-for-future-developers-content-parity` summarised the dev loop as
+"server :3000 + marketing-site :4321 + **customer-dashboard :4322**". Its own `it(` title and
+assertion on the next screen both say **5173**, and have for as long as the assertion has
+existed — so the test was right and its documentation was wrong.
+
+Verified against source rather than inferred: the dev ports are marketing-site 4321,
+**customer-dashboard 5173**, **docs 4322**, status-site 4323, admin-panel 5174. `4322` is the
+**docs site's** port, so the header did not merely go stale — it attributed one app's port to
+another.
+
+Checked repo-wide before fixing the file in hand, per the rule that a scope fix is repo-wide and
+not the named file: every other `4322` in the repo is correct (`apps/docs/package.json`, the
+guard pinning it, and `self-hosted-mac-local.md`'s "Docs site … 4322" row). Exactly one line was
+wrong.
+
+Small, and worth recording anyway because of its shape: **prose inside a guard that contradicts
+the guard's own assertion**. Someone updated the assertion and the `it(` title to 5173 and left
+the header behind. A header is the first thing read and the last thing verified, and nothing
+tests it — the same class as V-1165's structural-drift rule (a restatement that names no clause)
+and the correcting-a-comment rule. When an assertion changes, its header is part of the change.
