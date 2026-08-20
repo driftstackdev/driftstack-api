@@ -45708,3 +45708,54 @@ Mutations: injecting a hand-validated write fails the unlisted arm; converting
 fails the stale arm. Restored byte-identical.
 
 `it(` count 3 in a new file. Ratchets 2941→2942 and 3107→3108.
+
+## V-1072 — two routes published a response shape their handler has never returned
+
+V-1063 closed the request direction of spec-versus-code. The response direction had
+per-route guards for three endpoints and nothing general.
+
+TWO REAL DEFECTS, both in `lib/openapi.ts`:
+
+`POST /v1/admin/sessions/:id/destroy` published `z.object({ ok: z.literal(true) })`
+and returns `{ id, status, destroyed_at }`.
+
+`POST /v1/admin/api-keys/:id/revoke` published the same placeholder and returns
+`{ id, revoked_at }`.
+
+A caller typed from that document reads `.ok`, gets undefined, and cannot reach the id
+or the timestamp at all — those fields are outside the generated type. The server was
+never in doubt: `admin-force-actions` asserts the real shapes in six arms, which is
+also how I confirmed which side was wrong before touching anything. Both now publish
+what the handler sends, `destroyed_at` nullable because the handler falls back to null.
+
+FOUR INSTRUMENT FAILURES, and they are most of what this batch cost.
+
+1. Shorthand properties. `{ country, region }` sets `country`; a `key:` regex says
+   it does not. `GET /v1/egress/echo` was a finding for this reason alone.
+2. The first `return {` is not the response. `GET /v1/account/rate-limits` returns
+   an override branch first and `{ tier, buckets }` last.
+3. Registration-to-next-registration is not the handler. That span swallows any
+   module-level helper between two routes — the span for
+   `PUT /v1/account/me/organization` is 7.5k characters and contains a proxy mapper
+   whose return the scan read as the route's. Bounding at the registration call's
+   own parentheses fixed it.
+4. Comments inside the literal hide the keys after them. The segment following a
+   comma begins with `//`, the key matcher anchors at the start, and the real key
+   two lines down is dropped. `GET /v1/account/me` annotates seven fields and every
+   one read as unset; `bundled-llm-status` likewise.
+
+Each round produced findings that were entirely the instrument, and each was resolved
+by reading the route rather than adjusting the threshold. Of the candidates the four
+versions produced, exactly two survived — the two above.
+
+The guard skips handlers whose response is helper- or spread-built rather than
+guessing, and asserts the skip count is non-zero so that limitation stays visible
+instead of reading as full coverage.
+
+Mutations: restoring the `{ ok }` placeholder in the committed spec fails; deleting
+`destroyed_at` from the handler fails; removing the comment-stripping — the fix for
+failure 4 — fails, so the instrument correction is itself guarded. Restored
+byte-identical.
+
+`it(` count 2 in a new file. Spec regenerated: 20 insertions, 8 deletions. Ratchets
+2942→2943 and 3108→3109.

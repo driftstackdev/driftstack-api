@@ -22954,12 +22954,16 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "ok": {
-                      "type": "boolean",
-                      "enum": [true]
+                    "id": {
+                      "type": "string",
+                      "description": "Prefixed API key id: key_<uuid>."
+                    },
+                    "revoked_at": {
+                      "type": "string",
+                      "format": "date-time"
                     }
                   },
-                  "required": ["ok"]
+                  "required": ["id", "revoked_at"]
                 }
               }
             }
@@ -23139,12 +23143,20 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "ok": {
-                      "type": "boolean",
-                      "enum": [true]
+                    "id": {
+                      "type": "string",
+                      "description": "Prefixed session id: ses_<uuid>."
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["destroyed"]
+                    },
+                    "destroyed_at": {
+                      "type": ["string", "null"],
+                      "format": "date-time"
                     }
                   },
-                  "required": ["ok"]
+                  "required": ["id", "status", "destroyed_at"]
                 }
               }
             }

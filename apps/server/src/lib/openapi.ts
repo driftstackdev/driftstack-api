@@ -2839,8 +2839,18 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     responses: {
       200: {
+        // V-1072 — was `z.object({ ok: z.literal(true) })`, a shape the handler has
+        // never returned. It answers the revoked key's prefixed id and the persisted
+        // revocation timestamp, which `admin-force-actions` asserts in three arms.
         description: 'Key revoked. Idempotent.',
-        content: { 'application/json': { schema: z.object({ ok: z.literal(true) }) } },
+        content: {
+          'application/json': {
+            schema: z.object({
+              id: z.string().describe('Prefixed API key id: key_<uuid>.'),
+              revoked_at: z.string().datetime({ offset: true }),
+            }),
+          },
+        },
       },
       ...errors4xx,
       404: { description: 'API key not found.', content: problemContent },
@@ -2854,8 +2864,19 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     responses: {
       200: {
+        // V-1072 — same placeholder as the revoke route above, and equally never
+        // returned. `destroyed_at` is nullable because the handler falls back to
+        // null when the row carries no timestamp.
         description: 'Session destroyed. Idempotent against already-destroyed sessions.',
-        content: { 'application/json': { schema: z.object({ ok: z.literal(true) }) } },
+        content: {
+          'application/json': {
+            schema: z.object({
+              id: z.string().describe('Prefixed session id: ses_<uuid>.'),
+              status: z.literal('destroyed'),
+              destroyed_at: z.string().datetime({ offset: true }).nullable(),
+            }),
+          },
+        },
       },
       ...errors4xx,
       404: { description: 'Session not found.', content: problemContent },
