@@ -110,7 +110,7 @@ describe('W426.C packages/sdk-typescript/src/resources/profile-snapshots.ts cont
 
   it('iterate verb — V-118 cursor walker over the ACCOUNT-WIDE list (NOT per-profile). AsyncGenerator<ProfileSnapshot, void, void> via iteratePaginated. CRITICAL: iterate calls this.list() (account-wide), NOT this.listForProfile() — drift to a per-profile iterate would conflict with the existing listForProfile pagination + would require a profileId parameter (breaking the convenience UX).', () => {
     expect(body).toMatch(
-      /\*\s*Lazily iterate every snapshot for the calling account, walking\s*\n?\s*\*\s*cursor pages automatically\. See `iteratePaginated` for semantics\./,
+      /\*\s*Lazily iterate every snapshot for the EFFECTIVE account, walking\s*\n?\s*\*\s*cursor pages automatically\. See `iteratePaginated` for semantics\./,
     );
     expect(body).toMatch(
       /iterate\(opts: \{ limit\?: number \} = \{\}\): AsyncGenerator<ProfileSnapshot, void, void> \{\s*\n?\s*return iteratePaginated<ProfileSnapshot>\(\(cursor\) =>\s*\n?\s*this\.list\(\{\s*\n?\s*\.\.\.\(opts\.limit !== undefined \? \{ limit: opts\.limit \} : \{\}\),\s*\n?\s*\.\.\.\(cursor !== null \? \{ cursor \} : \{\}\),\s*\n?\s*\}\),\s*\n?\s*\);\s*\n?\s*\}/,

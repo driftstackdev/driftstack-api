@@ -87,7 +87,9 @@ describe('W427.C packages/sdk-typescript/src/resources/profiles.ts content parit
   });
 
   it('list verb — GET /v1/profiles with PaginationQueryInput → Promise<ProfilesListPage>. "Cursor-paginated" framing pinned. 2 conditional spreads (limit + cursor) using `!== undefined ? { ... } : {}` pattern — drift to `?? defaults` would client-side-default instead of deferring to server.', () => {
-    expect(body).toMatch(/\/\*\* List profiles for the calling account\. Cursor-paginated\. \*\//);
+    expect(body).toMatch(
+      /\/\*\* List profiles for the EFFECTIVE account — your own, or the owner you\s*\n?\s*\*\s*are acting as via `X-Driftstack-Account`\. Cursor-paginated\./,
+    );
     expect(body).toMatch(
       /list\(query: PaginationQueryInput = \{\}\): Promise<ProfilesListPage> \{\s*\n?\s*return this\.http\.request<ProfilesListPage>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/profiles',\s*\n?\s*query: \{\s*\n?\s*\.\.\.\(query\.limit !== undefined \? \{ limit: query\.limit \} : \{\}\),\s*\n?\s*\.\.\.\(query\.cursor !== undefined \? \{ cursor: query\.cursor \} : \{\}\),\s*\n?\s*\},\s*\n?\s*\}\);\s*\n?\s*\}/,
     );
@@ -95,7 +97,7 @@ describe('W427.C packages/sdk-typescript/src/resources/profiles.ts content parit
 
   it('V-118 iterate verb — AsyncGenerator<Profile, void, void> via iteratePaginated over this.list(). Delegates to list() (NO direct wire call) so the cursor walking shares the same pagination logic. opts.limit re-threaded per page + cursor !== null guard correctly omits cursor on first page.', () => {
     expect(body).toMatch(
-      /\*\s*Lazily iterate every profile for the calling account, walking\s*\n?\s*\*\s*cursor pages automatically\. See `iteratePaginated` for semantics\./,
+      /\*\s*Lazily iterate every profile for the EFFECTIVE account, walking\s*\n?\s*\*\s*cursor pages automatically\. See `iteratePaginated` for semantics\./,
     );
     expect(body).toMatch(
       /iterate\(opts: \{ limit\?: number \} = \{\}\): AsyncGenerator<Profile, void, void> \{\s*\n?\s*return iteratePaginated<Profile>\(\(cursor\) =>\s*\n?\s*this\.list\(\{\s*\n?\s*\.\.\.\(opts\.limit !== undefined \? \{ limit: opts\.limit \} : \{\}\),\s*\n?\s*\.\.\.\(cursor !== null \? \{ cursor \} : \{\}\),\s*\n?\s*\}\),\s*\n?\s*\);\s*\n?\s*\}/,

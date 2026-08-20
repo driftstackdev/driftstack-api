@@ -165,7 +165,7 @@ describe('W583.B packages/sdk-python/src/driftstack/resources/sessions.py conten
 
   it('Sync iterate — Iterator[Session] lazy walk + limit keyword-only re-threaded per page via fetch_page. CRITICAL: limit re-applied on EVERY page (not just the first), otherwise subsequent pages would default to server-side limit and the customer-requested batch size would silently grow mid-walk. Docstring example pinned: `for session in client.sessions.iterate(limit=50): ...`', () => {
     expect(body).toMatch(
-      /def iterate\(self, \*, limit: int \| None = None\) -> Iterator\[Session\]:\s*\n\s*"""Lazily walk every session for the calling account\.\s*\n\s*\n\s*Wraps :meth:`list` with cursor handoff so callers can write::\s*\n\s*\n\s*for session in client\.sessions\.iterate\(limit=50\):\s*\n\s*\.\.\.\s*\n\s*"""/,
+      /def iterate\(self, \*, limit: int \| None = None\) -> Iterator\[Session\]:\s*\n\s*"""Lazily walk every session for the EFFECTIVE account\.\s*\n\s*\n\s*Wraps :meth:`list` with cursor handoff so callers can write::\s*\n\s*\n\s*for session in client\.sessions\.iterate\(limit=50\):\s*\n\s*\.\.\.\s*\n\s*"""/,
     );
     expect(body).toMatch(
       /def fetch_page\(cursor: str \| None\) -> SessionsListPage:\s*\n\s*params: dict\[str, Any\] = \{\}\s*\n\s*if limit is not None:\s*\n\s*params\["limit"\] = limit\s*\n\s*if cursor is not None:\s*\n\s*params\["cursor"\] = cursor\s*\n\s*return self\.list\(params\)/,

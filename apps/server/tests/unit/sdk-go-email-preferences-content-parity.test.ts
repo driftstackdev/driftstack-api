@@ -33,7 +33,7 @@ describe('W592.C packages/sdk-go/email_preferences.go content parity', () => {
       /^type EmailPreference struct \{\s*\n\s*EventType string `json:"event_type"`\s*\n\s*OptedIn\s+bool\s+`json:"opted_in"`\s*\n\}/m,
     );
     expect(body).toMatch(
-      /\/\/ List returns all opt-out toggles for the calling account\. Defaults/,
+      /\/\/ List returns all opt-out toggles for the EFFECTIVE account\. Defaults/,
     );
     expect(body).toMatch(/\/\/ opted-in for unset rows\./);
     expect(body).toMatch(/path:\s+"\/v1\/account\/email-preferences",/);

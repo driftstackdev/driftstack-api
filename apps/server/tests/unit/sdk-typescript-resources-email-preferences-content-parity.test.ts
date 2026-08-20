@@ -87,9 +87,9 @@ describe('W429.A packages/sdk-typescript/src/resources/email-preferences.ts cont
     expect(body).toMatch(/constructor\(private readonly http: HttpClient\) \{\}/);
   });
 
-  it('list verb — GET /v1/account/email-preferences. JSDoc: "Read all opt-out toggles for the calling account. Defaults to opted-in for unset rows." CRITICAL: "Defaults to opted-in for unset rows" — drift to opt-out-by-default would silently mute every customer\'s non-critical emails.', () => {
+  it('list verb — GET /v1/account/email-preferences. JSDoc: "Read all opt-out toggles for the EFFECTIVE account. Defaults to opted-in for unset rows." CRITICAL: "Defaults to opted-in for unset rows" — drift to opt-out-by-default would silently mute every customer\'s non-critical emails.', () => {
     expect(body).toMatch(
-      /\/\*\* Read all opt-out toggles for the calling account\. Defaults to opted-in for unset rows\. \*\//,
+      /\/\*\* Read all opt-out toggles for the EFFECTIVE account\. Defaults to opted-in for unset rows\. \*\//,
     );
     expect(body).toMatch(
       /list\(\): Promise<ListEmailPreferencesResponse> \{\s*\n?\s*return this\.http\.request<ListEmailPreferencesResponse>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/account\/email-preferences',\s*\n?\s*\}\);\s*\n?\s*\}/,

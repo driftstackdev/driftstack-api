@@ -97,7 +97,7 @@ describe('W425.B packages/sdk-typescript/src/resources/webhooks.ts content parit
 
   it('list verb — GET /v1/webhooks → WebhookEndpointList. CRITICAL: "Plaintext is never returned" — drift to including plaintext on list would leak ALL signing secrets on every list call. NO admin-scope requirement (read-only verb).', () => {
     expect(body).toMatch(
-      /\/\*\* List webhook endpoints for the calling account\. Plaintext is never returned\. \*\//,
+      /\/\*\* List webhook endpoints for the EFFECTIVE account — your own, or the owner\s*\n?\s*\*\s*you are acting as via `X-Driftstack-Account`\. Plaintext is never returned\./,
     );
     expect(body).toMatch(
       /list\(\): Promise<WebhookEndpointList> \{\s*\n?\s*return this\.http\.request<WebhookEndpointList>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/webhooks',\s*\n?\s*\}\);\s*\n?\s*\}/,

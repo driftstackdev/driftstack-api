@@ -221,4 +221,11 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
     );
     expect(body).not.toMatch(/false = the request must\s*\n?\s*\*\s+change first/);
   });
+  it('V-1123 CRITICAL the iterate() docstring names the EFFECTIVE account. `GET /v1/agent-sessions` scopes on `effective.accountId`, so a team admin acting as an owner walks the OWNER\'s sessions — this docstring said "the calling account" and had no pin at all, which is why the sweep that corrected its eight siblings had nothing to fail.', () => {
+    const body = read(LIB);
+    expect(body).toMatch(/Lazily iterate every agent session for the EFFECTIVE account, walking/);
+    expect(body, 'the calling-account claim must not return').not.toMatch(
+      /iterate every agent session for the calling account/,
+    );
+  });
 });

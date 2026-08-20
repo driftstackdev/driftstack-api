@@ -89,7 +89,7 @@ describe('W424.C packages/sdk-typescript/src/resources/sessions.ts content parit
 
   it('CRITICAL V-118 iterate JSDoc — AsyncGenerator<Session, void, void>. 4-line invariant: walks cursor pages automatically + opts.limit controls per-page size + transparent next-page fetch on exhaustion + stops on `next_cursor: null`. Drift to dropping the stop-on-null framing would let iterators run forever on a misconfigured server. In-JSDoc `for await` example pinned per-line — load-bearing customer-facing guidance for the consumer pattern.', () => {
     expect(body).toMatch(
-      /\*\s*Lazily iterate every session for the calling account, walking\s*\n?\s*\*\s*cursor pages automatically\. `opts\.limit` controls per-page size;\s*\n?\s*\*\s*the iterator transparently fetches the next page once the current\s*\n?\s*\*\s*one is exhausted, and stops on `next_cursor: null`\./,
+      /\*\s*Lazily iterate every session for the EFFECTIVE account, walking\s*\n?\s*\*\s*cursor pages automatically\. `opts\.limit` controls per-page size;\s*\n?\s*\*\s*the iterator transparently fetches the next page once the current\s*\n?\s*\*\s*one is exhausted, and stops on `next_cursor: null`\./,
     );
     expect(body).toMatch(
       /\*\s*for await \(const session of client\.sessions\.iterate\(\{ limit: 50 \}\)\) \{\s*\n?\s*\*\s*console\.log\(session\.id\);\s*\n?\s*\*\s*\}/,

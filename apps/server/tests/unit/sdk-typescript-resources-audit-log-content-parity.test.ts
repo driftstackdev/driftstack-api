@@ -147,7 +147,7 @@ describe('W426.B packages/sdk-typescript/src/resources/audit-log.ts content pari
 
   it('list verb — GET /v1/account/audit-log with AuditLogQuery default-empty parameter. CRITICAL: 3 conditional-spread query params (limit + cursor + action) using `!== undefined ? { ... } : {}` pattern. Drift to `?? defaults` would client-side-default instead of deferring to server-side defaults, breaking the server-as-source-of-truth contract. "newest-first" ordering pinned.', () => {
     expect(body).toMatch(
-      /\/\*\* List audit-log entries for the calling account, newest-first\. \*\//,
+      /\/\*\* List audit-log entries for the EFFECTIVE account — your own, or the\s*\n?\s*\*\s*owner you are acting as via `X-Driftstack-Account` — newest-first\./,
     );
     expect(body).toMatch(
       /list\(query: AuditLogQuery = \{\}\): Promise<AuditLogListPage> \{\s*\n?\s*return this\.http\.request<AuditLogListPage>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/account\/audit-log',\s*\n?\s*query: \{\s*\n?\s*\.\.\.\(query\.limit !== undefined \? \{ limit: query\.limit \} : \{\}\),\s*\n?\s*\.\.\.\(query\.cursor !== undefined \? \{ cursor: query\.cursor \} : \{\}\),\s*\n?\s*\.\.\.\(query\.action !== undefined \? \{ action: query\.action \} : \{\}\),\s*\n?\s*\},\s*\n?\s*\}\);\s*\n?\s*\}/,

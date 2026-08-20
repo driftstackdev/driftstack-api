@@ -48176,3 +48176,46 @@ changing.
 
 Fixed with a negative on the old prefix and mutation-proved: reverting the page fails
 the new assertion. Six pins in the parent commit, this one behind it, all discriminating.
+
+### V-1123 — finishing the calling-vs-effective class, and three wrong extraction keys
+
+V-1121 and V-1122 were both instances of one claim: an SDK or doc saying a list is scoped
+to the CALLING account where the route resolves an EFFECTIVE one. V-1121's enumeration
+surfaced a tail of twenty-one similar docstrings that I never classified. This finishes
+that.
+
+**The verification mattered more than the fix, because I got the key wrong three times.**
+
+1. A 20-line window after each registration reported webhooks, sessions, agent-sessions
+   and account-audit as having NO scoping at all — the handlers are longer than that.
+2. Widened, it reported profiles and agent-sessions as effective-scoped — a false
+   positive, from the window running into the NEXT handler.
+3. Narrowed to an `effectiveAccountId:` option key, it reported profiles and
+   agent-sessions as caller-scoped — a false NEGATIVE, because those two pass
+   `effective.accountId` positionally (`accountId: effective.accountId`,
+   `listPageByAccount(effective.accountId, …)`) rather than through a named option.
+
+Three passes, three different answers, and the wrong one in either direction would have
+produced a confident change: pass 2 would have left two real defects, pass 3 would have
+"fixed" two correct docstrings. Reading the actual scoping line is what settled it.
+
+Final classification, each verified individually:
+
+- **Effective-scoped, docstring was wrong (9):** profiles list + iterate, agent-sessions
+  iterate, audit-log list, email-preferences read (TS + Go), webhooks list, sessions
+  iterate (TS + Python), profile-snapshots iterate.
+- **Caller-scoped, docstring correct — deliberately untouched (11):** recipes list +
+  iterate (V-1101), team ListOwners, legal required (all three SDKs), saved proxies (all
+  three SDKs), MFA status, billing portal. `/v1/legal/required` and
+  `/v1/account/me/proxies` were read directly to confirm.
+
+The ninth had no pin at all, which is why the sweep that corrected its eight siblings had
+nothing to fail on it — an assertion was added rather than leaving the fix unguarded.
+
+Three pins needed relaxing rather than rewriting: adding the "your own, or the owner you
+are acting as" clause rewrapped those docstrings, and the assertions pinned the single-line
+form. They are line-tolerant now, which is the property the webhooks-replay pin already
+documents as the right default.
+
+Mutation-proved: all nine reverted individually, each caught by its own arm, each restored
+byte-identical. `go vet` clean, ruff clean, 0 tsc errors.
