@@ -50221,3 +50221,41 @@ byte-identical from the snapshot, `0 files differ` against HEAD.
 Also worth recording: the fix could not go in V-1169's commit, since it was already pushed
 into history with a peer commit on top. Rule 3 wants source and pins in one commit and that
 was the right rule; what defeated it was not knowing the pins existed.
+
+### V-1171 — a chained import pin that failed for order, and passed for the wrong module
+
+The suite's last red was not mine: a peer's commit added `isProxyUsable` to `ProxiesView`'s
+imports, and `gui-client-views-ProxiesView-content-parity` broke. The pin was **one regex
+chaining the entire import list in source order**, so a symbol added at the head of the list
+failed it — while the property it guards ("the view stays presentation-only and delegates CRUD
+to `lib/proxies`") was untouched. The pin failed for import ORDER, which is not what it means.
+
+Rewritten as one assertion per delegated symbol: order-independent, additive-safe, and failing
+only when a symbol actually stops being delegated. Twelve symbols, each named in its own
+message.
+
+**The rewrite shipped a bug that a mutation message caught.** My first version captured the
+import block with `/import \{([\s\S]*?)\} from '\.\.\/lib\/proxies';/`. Lazy or not, that
+starts at the FIRST `import {` in the file and runs to the proxies module, swallowing the React
+and component imports on the way. The mutation output read:
+
+```
+expected [ 'useCallback', 'useEffect', …(14) ] to include 'testProxy'
+```
+
+`useCallback` credited to `../lib/proxies`. The assertions still passed, because every symbol
+was somewhere in that oversized span — so it would have passed with a delegated symbol moved to
+a _different module_, which is exactly the drift it exists to catch. `[^}]*` fixes it by
+refusing to cross a closing brace.
+
+That is V-1166's lesson holding a second time: the arm FIRED, and the firing was not the
+evidence — the message was. A mutation that fires for the wrong reason is a green light on a
+broken instrument.
+
+Proved on three mutations: dropping `testProxy` from the import, removing the import block
+entirely, and **moving `testProxy` to another module** — the false-agreement case the original
+capture allowed. All three fail now; the peer's source restored byte-identical, `0 files
+differ` against HEAD.
+
+Fixing a red left by another agent's commit is inside scope here only because the pin lives in
+`apps/server/tests`. The source was read, never edited.

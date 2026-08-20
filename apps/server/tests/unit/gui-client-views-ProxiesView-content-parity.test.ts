@@ -72,9 +72,44 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
   });
 
   it("CRUD lib delegation: addProxy / listProxies / removeProxy / testProxy / updateProxy / validateDraft + DraftValidation / ProxyConfig / ProxyDraft / ProxyTestResult type imports from '../lib/proxies' — pinned so the CRUD + native-probe layer stays delegated to lib/proxies (view stays presentation-only)", () => {
-    expect(body).toMatch(
-      /import \{\s*\n?\s*addProxy,\s*\n?\s*listProxies,\s*\n?\s*removeProxy,\s*\n?\s*resolveEndpoint,\s*\n?\s*testProxy,\s*\n?\s*updateProxy,\s*\n?\s*validateDraft,\s*\n?\s*type DraftValidation,\s*\n?\s*type EndpointResolveResult,\s*\n?\s*type ProxyConfig,\s*\n?\s*type ProxyDraft,\s*\n?\s*type ProxyTestResult,\s*\n?\s*\} from '\.\.\/lib\/proxies';/,
+    // V-1170 — this was one regex chaining the whole import list in source order, so
+    // adding a symbol at the head of the list broke it while the property it guards was
+    // untouched. `isProxyUsable` was added and the pin failed for import ORDER, which is
+    // not what "the view stays presentation-only" means. Rewritten as one assertion per
+    // delegated symbol: order-independent, additive-safe, and it now fails only when a
+    // symbol actually stops being delegated.
+    // `[^}]*` and not `[\s\S]*?`: the lazy form starts at the FIRST `import {` in the file
+    // and runs to the proxies module, swallowing the React and component imports on the
+    // way — which credited `useCallback` to ../lib/proxies and would have passed even if a
+    // delegated symbol moved to another module. Caught by reading a mutation's message
+    // rather than only its firing.
+    const block = /import \{([^}]*)\} from '\.\.\/lib\/proxies';/.exec(body);
+    expect(
+      block,
+      'the ../lib/proxies import block is gone — the view may have inlined the CRUD layer',
+    ).not.toBeNull();
+    const imported = new Set(
+      (block?.[1] ?? '')
+        .split(',')
+        .map((s) => s.trim().replace(/^type\s+/, ''))
+        .filter((s) => s.length > 0),
     );
+    for (const symbol of [
+      'addProxy',
+      'listProxies',
+      'removeProxy',
+      'resolveEndpoint',
+      'testProxy',
+      'updateProxy',
+      'validateDraft',
+      'DraftValidation',
+      'EndpointResolveResult',
+      'ProxyConfig',
+      'ProxyDraft',
+      'ProxyTestResult',
+    ]) {
+      expect([...imported], `${symbol} is no longer delegated to ../lib/proxies`).toContain(symbol);
+    }
   });
 
   it('pins honest protected-local and encrypted account-sync empty-state copy plus the Add CTA', () => {
