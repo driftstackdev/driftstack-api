@@ -62,25 +62,20 @@ Authorization and role checks happen before the owner bucket is read.
 
 ## Per-tier defaults
 
-| Tier            | global capacity | global refill (rps) | sessions:create capacity | sessions:create refill (rps) | agent_sessions:message capacity | agent_sessions:message refill (rps) |
-| --------------- | --------------- | ------------------- | ------------------------ | ---------------------------- | ------------------------------- | ----------------------------------- |
-| `free`          | 60              | 1                   | 5                        | 1/60 (1 per minute)          | 20                              | 1/5 (12 per minute)                 |
-| `solo_manual`   | 120             | 2                   | 10                       | 1/30 (2 per minute)          | 40                              | 1/3 (20 per minute)                 |
-| `team_manual`   | 360             | 6                   | 20                       | 1/10 (6 per minute)          | 100                             | 1                                   |
-| `agency_manual` | 1,800           | 30                  | 60                       | 1                            | 300                             | 3                                   |
-| `api_starter`   | 240             | 4                   | 15                       | 1/20 (3 per minute)          | 60                              | 1/2 (30 per minute)                 |
-| `api_builder`   | 1,800           | 30                  | 60                       | 1                            | 300                             | 3                                   |
-| `api_scale`     | 6,000           | 100                 | 120                      | 2                            | 1,000                           | 10                                  |
-| `enterprise`    | 60,000          | 1,000               | 600                      | 10                           | 10,000                          | 100                                 |
+| Tier            | global capacity | global refill (rps) | sessions:create capacity | sessions:create refill (rps) | agent_sessions:message capacity | agent_sessions:message refill (rps) | agent_sessions:input_event capacity | agent_sessions:input_event refill (rps) |
+| --------------- | --------------- | ------------------- | ------------------------ | ---------------------------- | ------------------------------- | ----------------------------------- | ----------------------------------- | --------------------------------------- |
+| `free`          | 60              | 1                   | 5                        | 1/60 (1 per minute)          | 20                              | 1/5 (12 per minute)                 | 240                                 | 60                                      |
+| `solo_manual`   | 120             | 2                   | 10                       | 1/30 (2 per minute)          | 40                              | 1/3 (20 per minute)                 | 360                                 | 90                                      |
+| `team_manual`   | 360             | 6                   | 20                       | 1/10 (6 per minute)          | 100                             | 1                                   | 480                                 | 120                                     |
+| `agency_manual` | 1,800           | 30                  | 60                       | 1                            | 300                             | 3                                   | 600                                 | 150                                     |
+| `api_starter`   | 240             | 4                   | 15                       | 1/20 (3 per minute)          | 60                              | 1/2 (30 per minute)                 | 360                                 | 90                                      |
+| `api_builder`   | 1,800           | 30                  | 60                       | 1                            | 300                             | 3                                   | 600                                 | 150                                     |
+| `api_scale`     | 6,000           | 100                 | 120                      | 2                            | 1,000                           | 10                                  | 1,200                               | 300                                     |
+| `enterprise`    | 60,000          | 1,000               | 600                      | 10                           | 10,000                          | 100                                 | 12,000                              | 3,000                                   |
 
 Capacity = max burst size before the next refill kicks in.
 Refill = sustained rate (tokens per second). Effective sustained
 RPS for a default-cost call is the `refill` column.
-
-`agent_sessions:input_event` scales per tier too (capacity / refill):
-`free` 240 / 60, `solo_manual` 360 / 90, `team_manual` 480 / 120,
-`agency_manual` 600 / 150, `api_starter` 360 / 90, `api_builder`
-600 / 150, `api_scale` 1,200 / 300, `enterprise` 12,000 / 3,000.
 
 ## What happens when you hit the cap
 

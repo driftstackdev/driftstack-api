@@ -119,18 +119,30 @@ describe('W254.A docs/reference/rate-limits ↔ TIER_RATE_LIMIT_DEFAULTS parity'
     }
   });
 
-  it('every agent_sessions:input_event capacity / refill (prose line) matches TIER_RATE_LIMIT_DEFAULTS', () => {
-    // The input_event values live in a prose line ("`tier` cap / refill,
-    // ...") below the table, not a table column. Tier-anchored so duplicate
-    // value pairs (e.g. solo_manual == api_starter == 360/90) don't alias;
-    // `\s*` spans the prose line-wrap.
+  it('every agent_sessions:input_event capacity / refill matches TIER_RATE_LIMIT_DEFAULTS', () => {
+    // V-1091: these used to live in a prose line below the table while the
+    // other three buckets had columns, so this arm matched prose. They are
+    // table columns [8] and [9] now — one home per number, which is what
+    // stops a later edit from updating the table and leaving the prose.
+    const rowByTier = new Map<string, string[]>();
+    for (const line of doc.split('\n')) {
+      if (!line.trimStart().startsWith('|')) continue;
+      const cells = line.split('|').map((c) => c.trim());
+      const tierCell = cells[1]?.replace(/`/g, '');
+      if (tierCell && (tiers as string[]).includes(tierCell)) rowByTier.set(tierCell, cells);
+    }
+
     for (const t of tiers) {
       const cfg = TIER_RATE_LIMIT_DEFAULTS[t as keyof typeof TIER_RATE_LIMIT_DEFAULTS];
       const ie = cfg['agent_sessions:input_event'];
-      const cap = ie.capacity.toLocaleString('en-US').replace(/,/g, ',?');
-      const refill = ie.refill_per_second.toLocaleString('en-US').replace(/,/g, ',?');
-      const re = new RegExp(`\`${t}\`\\s*${cap}\\s*/\\s*${refill}`);
-      expect(doc, `input_event cap/refill mismatch for ${t}`).toMatch(re);
+      const cells = rowByTier.get(t);
+      expect(cells, `no rate-limit table row found for tier ${t}`).toBeDefined();
+      expect(cells?.[8], `input_event capacity mismatch for ${t}`).toBe(
+        ie.capacity.toLocaleString('en-US'),
+      );
+      expect(cells?.[9], `input_event refill mismatch for ${t}`).toBe(
+        ie.refill_per_second.toLocaleString('en-US'),
+      );
     }
   });
 

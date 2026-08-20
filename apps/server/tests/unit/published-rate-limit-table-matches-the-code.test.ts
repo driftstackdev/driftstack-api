@@ -47,18 +47,40 @@ const DOC = resolve(
   'rate-limits.md',
 );
 
-/** Columns of the published table, in order, mapped to the bucket they state. */
-const COLUMNS: {
-  bucket: 'global' | 'sessions:create' | 'agent_sessions:message';
-  field: 'capacity' | 'refill_per_second';
-}[] = [
-  { bucket: 'global', field: 'capacity' },
-  { bucket: 'global', field: 'refill_per_second' },
-  { bucket: 'sessions:create', field: 'capacity' },
-  { bucket: 'sessions:create', field: 'refill_per_second' },
-  { bucket: 'agent_sessions:message', field: 'capacity' },
-  { bucket: 'agent_sessions:message', field: 'refill_per_second' },
-];
+interface Column {
+  readonly bucket: string;
+  readonly field: 'capacity' | 'refill_per_second';
+}
+
+/**
+ * Columns of the published table, in order, READ FROM ITS OWN HEADER.
+ *
+ * V-1091: this list used to be written out here, six entries for three buckets.
+ * A hard-coded column list judges the columns it names and is blind to a bucket
+ * that has none — which is exactly what had happened. `agent_sessions:input_event`
+ * was enforced by the limiter, named in the page's own "Four bucket keys" section,
+ * and absent from the per-tier table, and every arm here passed because the list
+ * never mentioned it. A missing column is the failure this file exists to catch and
+ * it was the one shape it could not see.
+ *
+ * So the columns are parsed from the header instead, and the arm below requires the
+ * bucket set they cover to equal the bucket set the limiter defines. Adding a bucket
+ * to TIER_RATE_LIMIT_DEFAULTS now fails this file until the table carries it.
+ */
+function columns(): Column[] {
+  const md = readFileSync(DOC, 'utf8');
+  const header = md.split('\n').find((l) => /^\|\s*Tier\s*\|/.test(l));
+  if (header === undefined) return [];
+  const out: Column[] = [];
+  for (const cell of header.split('|').slice(2, -1)) {
+    const m = /^\s*(.+?)\s+(capacity|refill \(rps\))\s*$/.exec(cell);
+    if (m === null) continue;
+    out.push({ bucket: m[1]!, field: m[2] === 'capacity' ? 'capacity' : 'refill_per_second' });
+  }
+  return out;
+}
+
+const COLUMNS: Column[] = columns();
 
 /**
  * Read one published cell as a number.
@@ -115,6 +137,29 @@ describe('the published rate-limit table matches the limiter', () => {
       1 / 60,
       10,
     );
+
+    // The header parse is load-bearing in a way the row parse is not. Columns that
+    // come back empty make every row read as zero values, the row count still
+    // matches, and the comparison arm loops over nothing — a green from a table
+    // that was never read.
+    expect(COLUMNS.length, 'columns parsed from the table header').toBeGreaterThanOrEqual(6);
+  });
+
+  it('CRITICAL every bucket the limiter enforces has columns on the page. V-1091: the column list used to be hard-coded here and named three of the four buckets, so `agent_sessions:input_event` — enforced, and named in the "Four bucket keys" section of this very page — was missing from the per-tier table with every arm green. A hard-coded list judges what it names; a bucket with no column is the one shape it cannot report.', () => {
+    const defaults = TIER_RATE_LIMIT_DEFAULTS as Record<string, Record<string, unknown>>;
+    const enforced = Object.keys(defaults[Object.keys(defaults)[0]!] ?? {});
+    const documented = new Set(COLUMNS.map((c) => c.bucket));
+    expect(enforced.length, 'bucket keys the limiter defines').toBeGreaterThanOrEqual(4);
+    expect(
+      enforced.filter((b) => !documented.has(b)).sort(),
+      'bucket(s) the limiter enforces with no column in the per-tier table — a customer reading ' +
+        'this page cannot find the limit at all, and the figures that are here look complete:',
+    ).toEqual([]);
+    expect(
+      [...documented].filter((b) => !enforced.includes(b)).sort(),
+      'column(s) for a bucket the limiter does not define — the page is publishing a limit ' +
+        'nothing applies:',
+    ).toEqual([]);
   });
 
   it('CRITICAL every tier the limiter knows appears in the published table. A tier missing from the page is a customer with no published limits at all, which is worse than a wrong number because there is nothing to be wrong.', () => {

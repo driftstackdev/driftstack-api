@@ -284,13 +284,22 @@ export const MAX_SESSION_MINUTES_PER_TIER: Record<AccountTier, number | null> = 
 /**
  * V-219 — per-tier rate-limit defaults (token-bucket capacity + refill).
  *
- * One config per `(tier, bucketKey)`. Two bucket keys are defined today:
+ * One config per `(tier, bucketKey)`. Four bucket keys are defined today:
  *
  *   - `global` — every authenticated `/v1/*` call consumes this bucket.
  *     Protects against accidental DDoS / runaway scripts.
  *   - `sessions:create` — `POST /v1/sessions` only. Lower cap because
  *     session creation is the most expensive op in the system (driver
  *     allocation, archetype hydration, fingerprint pinning).
+ *   - `agent_sessions:message` — `POST /v1/agent-sessions/:id/message`. A
+ *     turn costs model tokens, so this is capped well under `global`.
+ *   - `agent_sessions:input_event` — the raw screen-coordinate stream from
+ *     the manual-control overlay. Capacities are the largest of the four
+ *     because a single drag emits events continuously.
+ *
+ * The count above is not decorative: it was stale at two for the whole life
+ * of the two agent buckets, and the per-tier table in the customer docs was
+ * missing `agent_sessions:input_event` for the same span (V-1091).
  *
  * Capacity = max burst size. Refill = sustained rate (tokens/sec). The
  * effective sustained RPS for a default-cost call is `refillPerSecond`.

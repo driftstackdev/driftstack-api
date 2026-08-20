@@ -46697,3 +46697,53 @@ a declaration-aware version is real work for an unknown yield.
 So no guard was built and no claim was made from those 30. Recorded because the shape
 will look promising again to whoever reads V-1090 next, and the reason it does not
 generalise is not obvious from the finding itself.
+
+### V-1091 — a doc-comment count went stale, and the guard for the table could not see a missing column
+
+Finding 30 alleged a stale code comment plus a missing table row. The first half is
+real, the second is not what the report said, and the third thing is the one worth
+recording.
+
+**Real.** `packages/api-types/src/common.ts` introduced the per-tier rate-limit
+defaults with "Two bucket keys are defined today" and described `global` and
+`sessions:create`. Four are enforced — `agent_sessions:message` and
+`agent_sessions:input_event` were added later and the preamble was never updated.
+Two test files had frozen the same stale count: `v219-rate-limit-defaults-parity`
+titled an arm "2-bucket-key roster framing pinned" and warned that "drift to adding a
+3rd bucket key here would mismatch W704 + W713 cross-SDK guards", which by then had
+already happened twice with nothing mismatching; the docs baseline pinned "the two
+bucket keys (global + sessions:create)". Both now derive the roster from the constant.
+
+**Not as reported.** The customer page was not missing the numbers. Every
+`agent_sessions:input_event` capacity and refill was published per tier, in a prose
+line below the table, and pinned to the constant by an existing arm. A customer could
+find the limit. What was actually wrong is smaller: one bucket stated its figures in
+prose while the other three had table columns. The values were consolidated into the
+table and the prose line dropped, so each number has one home. The report called this
+a missing row; verifying it before writing found the numbers already there and
+correct, which is the fourth time a stated defect has changed shape on inspection.
+
+**The instrument.** `published-rate-limit-table-matches-the-code` carried its column
+list as a literal — six entries naming three buckets. A hard-coded column list judges
+the columns it names, so a bucket with no column at all is the one shape it cannot
+report, and that was precisely the state of the page. The list is parsed from the
+table header now and an arm requires the bucket set it covers to equal the bucket set
+the limiter defines. Measured: dropping the two new columns leaves the old version
+green and fails the new one by name.
+
+Mutation-proved, restored byte-identical from a scratchpad snapshot: dropping the
+input_event columns fails the coverage arm; a wrong `api_scale` capacity fails the
+value arm; reverting the comment to "Two bucket keys" fails the roster arm; removing
+the bucket from the page bullets fails the baseline arm.
+
+### V-1091 addendum — finding 24 settled as housekeeping
+
+The plan set its own criterion for the gui-client audit doc: grep for
+`audit-current-state` in `docs/launch/`, CI and the release checklists — if nothing
+gates on it, a housekeeping commit; if something does, a false-green launch gate.
+
+Nothing gates. The only references repo-wide are this log and
+`docs-gui-client-audit-current-state-content-parity`, its own parity guard. Nothing in
+`docs/launch/`, `.github/`, `docs/runbooks/`, `docs/deployment/`, `scripts/` or
+`package.json` reads it. Recorded so the finding is not re-opened at launch severity;
+the content question behind it is D-11 and stays with the owner.

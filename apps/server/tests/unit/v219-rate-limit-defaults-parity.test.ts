@@ -5,13 +5,18 @@
 // the source of truth for token-bucket capacity + refill per
 // (tier, bucketKey) pair.
 //
-// The 2 bucket keys (global, sessions:create) match the W704 +
-// W713 + W706 cross-SDK rate-limit roster. Drift here would silently
-// change customer rate limits without dashboard / SDK notification.
+// The bucket keys match the W704 + W713 + W706 cross-SDK rate-limit
+// roster. Drift here would silently change customer rate limits without
+// dashboard / SDK notification.
+//
+// V-1091: this said "The 2 bucket keys (global, sessions:create)" while
+// four were enforced. A count written into a comment is a claim that goes
+// stale in silence, so the roster arm below derives it.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { TIER_RATE_LIMIT_DEFAULTS } from '@driftstack/api-types';
 import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -33,8 +38,22 @@ describe('W731 V-219 TIER_RATE_LIMIT_DEFAULTS parity', () => {
     expect(c).toMatch(/V-219 — per-tier rate-limit defaults \(token-bucket capacity \+ refill\)/);
   });
 
-  it("CRITICAL 2-bucket-key roster framing pinned — 'global' (every authenticated /v1/*) + 'sessions:create' (POST /v1/sessions only). Drift to adding a 3rd bucket key here would mismatch W704 + W713 cross-SDK guards.", () => {
+  it("CRITICAL the bucket-key roster in the doc comment lists every bucket the constant defines. V-1091: this arm used to pin a two-key roster and warn that a third would mismatch the cross-SDK guards — by then four existed, nothing had mismatched, and the comment still said 'Two bucket keys are defined today'. The count is derived from the constant now, so a fifth cannot be described here as anything else.", () => {
     const c = read(COMMON);
+    const keys = Object.keys(
+      TIER_RATE_LIMIT_DEFAULTS[
+        Object.keys(TIER_RATE_LIMIT_DEFAULTS)[0] as keyof typeof TIER_RATE_LIMIT_DEFAULTS
+      ],
+    );
+    const spelled = ['zero', 'one', 'Two', 'Three', 'Four', 'Five', 'Six'][keys.length];
+    expect(c, 'the roster preamble no longer states the live bucket count').toContain(
+      `${spelled} bucket keys are defined today:`,
+    );
+    for (const k of keys) {
+      expect(c, `bucket key ${k} is enforced but absent from the roster comment`).toContain(
+        `\`${k}\``,
+      );
+    }
     expect(c).toMatch(/`global` — every authenticated `\/v1\/\*` call consumes this bucket/);
     expect(c).toMatch(/`sessions:create` — `POST \/v1\/sessions` only\./);
     expect(c).toMatch(/Lower cap because\s*\n\s*\*\s*session creation is the most expensive op/);
