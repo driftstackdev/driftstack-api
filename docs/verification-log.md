@@ -49768,3 +49768,24 @@ running the part that fits the terminal answers a smaller question than the one 
 Nothing needed fixing — every job is green. What changed is that "green" now means the
 whole gating surface rather than a fifth of it, which is the claim the gate's own comment
 has been warning against being made loosely since long before this arc.
+
+**Addendum — the orphan-script sweep, and a "finding" that was my own log-parsing.** Asked
+whether any verification script exists that nothing invokes, on the reasoning that an unrun
+check is a check nobody has. Of 63 scripts, 54 are referenced by neither `package.json` nor
+any workflow — but that number means little: most are operational tools meant to be run by
+hand (deploy, chaos scenarios, the V-278/V-528 cutover scripts), and the repo documents 31
+of them.
+
+The subset that would matter is `scripts/tests/**`, because a test file nothing collects
+never runs. I grepped the last full-suite log for those paths, got **zero**, and had nine
+apparently-uncollected test files — which reads as a serious hole. It is not: vitest does
+not print a path for a passing file, so the log was the wrong instrument.
+`vitest.node.config.ts` includes `scripts/tests/**/*.test.ts` explicitly, and running them
+directly gives **9 files, 76 tests, all passing**.
+
+That is the third measurement artifact of my own in this one turn — after running
+`npm run bench` when the check is `bench:check-regression`, and before that `mypy src` for
+`mypy src examples`. Each produced a confident-looking result about the wrong question. The
+pattern is consistent enough to name: **when a scan reports an alarming absence, suspect the
+scan before the repo** — absence is exactly what a wrong key, a narrow command, or an
+unsuitable log produces.
