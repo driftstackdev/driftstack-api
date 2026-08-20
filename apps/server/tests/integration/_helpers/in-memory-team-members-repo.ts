@@ -163,14 +163,20 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
 
   // eslint-disable-next-line @typescript-eslint/require-await
   async listMembers(ownerAccountId: string): Promise<TeamMemberRow[]> {
-    return this.members.filter((m) => m.ownerAccountId === ownerAccountId);
+    // V-1209 — mirrors DrizzleTeamMembersRepo's `ORDER BY created_at DESC`. Write order is not
+    // merely a different order here, it is the REVERSE one, so a unit test asserting this list
+    // was asserting it upside down relative to what the customer is shown.
+    return this.members
+      .filter((m) => m.ownerAccountId === ownerAccountId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await
   async listPendingInvites(ownerAccountId: string): Promise<TeamInviteRow[]> {
-    return this.invites.filter(
-      (inv) => inv.ownerAccountId === ownerAccountId && inv.acceptedAt === null,
-    );
+    // V-1209 — mirrors `ORDER BY created_at DESC`, same reversal as listMembers above.
+    return this.invites
+      .filter((inv) => inv.ownerAccountId === ownerAccountId && inv.acceptedAt === null)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await

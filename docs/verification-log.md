@@ -52091,3 +52091,63 @@ restored (source 0 dirty)                                                 11 pas
 **Owed remaining: 26.** Both halves of the V-1201 drift are now closed, and the pattern that found
 them is worth stating plainly: after a contract test catches a drift, the next question is not
 "what else is owed" but "what else did that same commit touch".
+
+---
+
+## V-1209 — sweeping for the class instead of waiting to trip over it, and a control that could not fail
+
+V-1207 and V-1208 each found one instance of a double drifting from its Drizzle sibling's ordering.
+Rather than wait for a third, I swept every pair: for each Drizzle method carrying an `ORDER BY`,
+does its double impose the same order?
+
+**Eight candidates, three of them my own false positives.** `in-memory-billing.ts` implements
+max-`createdAt` selection with a loop rather than `.sort(`, and documents that it mirrors the SQL
+(V-741, V-767) — my detector keyed on `.sort(` and could not see it. Checking each candidate against
+its source instead of trusting the count is the same discipline the batch rules impose on the sweep
+report, applied to a sweep I wrote myself.
+
+Four are real:
+
+```
+platform-secrets-repo::listMeta                    double returns Map values unordered
+team-members-repo::listMembers                     double returns write order
+team-members-repo::listPendingInvites              double returns write order
+webhooks-repo::findEndpointsNeedingForceRotation   double breaks at `limit` in Map order
+```
+
+The webhooks one is worth naming separately: its double filters and applies `limit` correctly, so
+the divergence is not presentation. Order plus a limit is SELECTION — the real repo rotates the
+oldest secrets first, the double rotates arbitrary ones.
+
+**This entry closes the team-members pair**, the customer-visible one. The divergence there is not
+merely a different order but the REVERSE one: `ORDER BY created_at DESC` against write order, so a
+unit test asserting the team list was asserting it upside down relative to what the customer sees.
+
+**The control could not fail, and the run said so.** My first draft backdated the SECOND-written row,
+which makes write order `[first, second]` and newest-first `[first, second]` coincide. All nine arms
+passed — against a double that does not order at all. Only the sweep that found the pair contradicted
+it. Backdating the FIRST row makes the two orders disagree in both positions:
+
+```
+draft (backdate second):  9 passed          <- vacuous, and it looked like a clean result
+fixed (backdate first):   2 failed | 7 passed   (× in-memory member + invite lists)
+after fixing the double:  9 passed
+```
+
+That is the sixth vacuous positive control this session. The pattern is now specific enough to state
+as a rule: when an arm asserts an ORDER, the fixture must make the two candidate orders disagree in
+EVERY position, and the way to check is to run it against the unfixed implementation first. An arm
+written after the fix cannot tell you this.
+
+Mutation-proved, each printing its applied count:
+
+```
+M1  DRIZZLE listMembers loses its ORDER BY       1 failed | 8 passed
+M2  the DOUBLE loses its member sort             1 failed | 8 passed
+M3  listPendingInvites stops excluding accepted  1 failed | 8 passed
+restored (source 0 dirty)                        9 passed
+```
+
+**Owed remaining: 25**, and two of the four measured divergences are still open —
+`platform-secrets::listMeta` and `webhooks::findEndpointsNeedingForceRotation`. They are named here
+rather than left implicit, because a measurement reported without its residue reads as completion.
