@@ -45381,3 +45381,21 @@ directions: understating one tier on the page fails it, deleting the enterprise 
 fails two arms, and raising the cap in source WITH a dist rebuild fails it.
 
 `it(` count 4 in a new file. Ratchets 2939→2940 and 3105→3106.
+
+### V-1065 addendum — the commit hook reformatted the claim I had just pinned
+
+The first V-1065 run after committing went red on its own VPN arm. Attribution first,
+per the standing rule: `git status` showed the file as mine, not a peer's.
+
+Cause: lint-staged's prettier reflowed `api/proxies.md` during the commit and
+normalised markdown emphasis, rewriting `*or*` to `_or_`. My assertion pinned the
+asterisk spelling, so a formatting pass — not a change of claim — turned it red.
+
+Same family as the stale-index churn this hook produces on `verification-log.md`, but
+sharper: that one is noise, this one was a guard failing for a reason unrelated to
+what it guards. The assertion now matches `[*_]or[*_]`, and the file says why, because
+the next person to pin markdown emphasis will hit the same thing.
+
+Re-proved after the change: deleting the null clause still fails the arm. `apps/docs`
+rebuilt afterwards so the dist-freshness guard sees an artifact that postdates the
+page.

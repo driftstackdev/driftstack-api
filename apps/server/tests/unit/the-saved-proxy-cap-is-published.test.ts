@@ -97,8 +97,11 @@ describe('V-1065 the saved proxy cap is published', () => {
     expect(body, 'the VPN password exception is gone from the update section').toMatch(
       /VPN proxies are different/,
     );
+    // The emphasis marker is prettier's business — it rewrites `*or*` to `_or_`
+    // when it reflows the file, and pinning either spelling makes this arm fail on
+    // a formatting pass rather than on a claim changing. Match the words.
     expect(body, 'the page no longer says null is refused too').toMatch(
-      /a new value \*or\* `null`/,
+      /a new value [*_]or[*_] `null`/,
     );
 
     // The three unconditional bullets must not come back: they were true only for
