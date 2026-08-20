@@ -90,9 +90,15 @@ header. The history matters; the number is part of the record.
 - [ADR-002](ADR-002-stripe-only-payment-processing.md) — Stripe-only
   payment processing at launch (architectural deviation from Mollie-primary
   - Stripe-backup plan).
+    **Contradicted by the shipped system since 2026-08-10** — a customer-facing
+    crypto rail ships alongside Stripe. See the reality check in the ADR; a
+    superseding ADR is owed and has no author yet.
 - [ADR-003](ADR-003-paid-trial-pack-replaces-free-tier.md) — $2.99
   paid trial pack replaces the free tier (explicit deviation from
   parent driftstack repo file 127 §6).
+  **Reversed by the shipped system since 2026-08-10** — the trial pack was
+  retired 2026-05-27 and `free` is a live tier. See the reality check in the
+  ADR; a superseding ADR is owed and has no author yet.
 - [ADR-004](ADR-004-pricing-restructure-two-ladder.md) — Pricing
   restructure to two-ladder concurrent-only (explicit deviation from
   parent driftstack repo file 127 single-ladder hours-with-overage

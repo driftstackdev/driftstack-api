@@ -16,6 +16,13 @@
 //     D-NNN entries.
 //   • Index pins ADR-001 + ADR-002 + ADR-003 + ADR-004 (ADR-005 +
 //     ADR-006 still Proposed and not yet listed).
+//
+// V-1181 — the index described ADR-002 and ADR-003 as plain accepted decisions
+// while each ADR's own Status line has said CONTRADICTED / REVERSED BY THE
+// SHIPPED SYSTEM since V-750 (2026-08-10). The bodies were corrected and the
+// index was not, so the surface this guard exists to protect — the one it calls
+// the review pointer — presented two reversed decisions as current. The index
+// now carries each ADR's own verdict, and the arms below hold it there.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -90,11 +97,20 @@ describe('W551.C /docs/adr/README.md content parity', () => {
     expect(body).toMatch(
       /- \[ADR-002\]\(ADR-002-stripe-only-payment-processing\.md\) — Stripe-only/,
     );
+    // V-1181 — the index must carry the ADR's own verdict, not just its title.
+    expect(body).toMatch(/\*\*Contradicted by the shipped system since 2026-08-10\*\*/);
+    expect(body, 'the ADR-002 index entry dropped its contradiction marker').toMatch(
+      /Stripe-backup plan\)\.\s*\n\s*\*\*Contradicted by the shipped system/,
+    );
     expect(body).toMatch(
       /payment processing at launch \(architectural deviation from Mollie-primary/,
     );
     expect(body).toMatch(
       /- \[ADR-003\]\(ADR-003-paid-trial-pack-replaces-free-tier\.md\) — \$2\.99/,
+    );
+    expect(body).toMatch(/\*\*Reversed by the shipped system since 2026-08-10\*\*/);
+    expect(body, 'the ADR-003 index entry dropped its reversal marker').toMatch(
+      /file 127 §6\)\.\s*\n\s*\*\*Reversed by the shipped system/,
     );
     expect(body).toMatch(
       /paid trial pack replaces the free tier \(explicit deviation from\s*\n?\s*parent driftstack repo file 127 §6\)\./,

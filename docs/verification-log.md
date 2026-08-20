@@ -50669,3 +50669,43 @@ Re-attributing a published measurement to a different device is not a documentat
 be asserting that the rig was measured on hardware I have no evidence it ran on. The stale-slug
 class stops at prose that names the _locked default_. Flagging it here so the distinction is on
 record rather than rediscovered as a finding.
+
+### V-1181 — the ADR index showed two reversed decisions as current
+
+V-1180's mechanism — a fact changes, every assertion tracks it, prose does not — has a second
+direction: the DETAIL gets corrected and the INDEX does not.
+
+`docs/adr/ADR-002` and `ADR-003` both carry prominent verdicts in their own Status lines, added
+by V-750 on 2026-08-10:
+
+- **ADR-002** "Stripe-only payment processing at launch" — _CONTRADICTED BY THE SHIPPED SYSTEM_.
+  A customer-facing crypto rail ships alongside Stripe: eight `/v1/billing/crypto-*` routes, a
+  signature-verified IPN ingress, `crypto_orders` + `crypto_entitlements` tables.
+- **ADR-003** "$2.99 paid trial pack replaces the free tier" — _REVERSED BY THE SHIPPED SYSTEM_.
+  Both halves: the trial pack was retired 2026-05-27, and `free` is a live value in
+  `AccountTierSchema`.
+
+Each ADR says this at the top, in bold, with a reality-check block underneath. **The README index
+said neither.** It listed both as plain accepted decisions — and its guard pinned those summary
+lines verbatim, so the index could not be corrected without a red. The guard's own header
+describes that index as the review pointer it exists to protect, which is precisely what makes
+the omission matter: the surface someone scans to learn what was decided showed two decisions
+that the system had already gone the other way on.
+
+Both entries now carry their ADR's own verdict, and the arms hold it there. The assertions check
+**adjacency**, not mere presence — a marker sitting anywhere in the file would otherwise satisfy a
+substring test while the entry it belongs to reads as current. Proved by mutation: stripping each
+marker fails its arm, and moving a marker away from its entry while leaving it in the file fails
+the adjacency arm specifically.
+
+**Deliberately not changed: ADR-005 and ADR-006 are absent from the index.** That looked like a
+third gap — six ADR files, four index entries — and it is documented rather than accidental: the
+guard states "ADR-005 + ADR-006 still Proposed and not yet listed", and both still carry
+`Proposed` in their Status lines. It is a stated editorial rule, not drift. Worth noting that
+ADR-006 is now marked _PARTLY SHIPPED as of 2026-08-19_, so the rule may deserve revisiting — but
+that is an editorial call about what an index is for, and belongs to whoever owns the convention.
+
+What neither ADR has is a superseding record. Both say so themselves: "a superseding ADR is owed
+and has no author yet." That is unchanged here — writing the rationale for reversing a
+contractual decision is not a documentation fix, and this entry does not pretend otherwise. It
+makes the index tell the truth the ADRs already tell.
