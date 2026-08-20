@@ -47396,3 +47396,28 @@ Python pin must name the driftstack-sdk distribution"; renaming the distribution
 `pyproject.toml` to `driftstack-client` fails the same arm naming the NEW distribution,
 which is the direction that matters — the doc now follows packaging rather than
 recording what it said once.
+
+### V-1105 addendum — the contradiction detector generalises badly, and here is the measurement
+
+V-1105 was found by hand, but its shape looks mechanical: one pin asserts
+`.not.toMatch(X)` while another asserts `.toMatch(X)`. That is worth a detector if it
+works, so it was built and measured rather than assumed.
+
+Across 2399 test files: 41,509 positive patterns, 1,591 negative. Matching a negative
+against any positive elsewhere produces a long list, and the first entries are all
+nonsense — a marketing-header `href` pattern "banned" by the header pin and "required"
+by `webhook-target-guard.test.ts`, a Drizzle `.set({...})` fragment paired across two
+unrelated invariants. The reason is structural, not tunable: two pins may legitimately
+require and forbid the same string when they guard DIFFERENT documents, which is the
+normal case, not the defect. "Page A must not say X" and "page B must say X" is how a
+customer page and an internal record are supposed to differ.
+
+The contradiction is only a defect when the two documents are supposed to agree. So the
+sound version intersects the collision with the mirror pairs from the sweep above —
+same-claim, linked-document — and that returns **0**, meaning V-1105 was the only
+instance and it is closed.
+
+Recorded because the unsound version looks compelling and would ship with an allowlist
+that grows faster than the signal, which is the third time in this arc a plausible
+whole-repo guard has failed the same way (V-814's proximity scan, action 37's phantom
+paths, this).
