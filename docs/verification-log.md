@@ -51238,3 +51238,48 @@ reads (4), profiles countByAccount / findByAccountAndName / transferAtomic sourc
 findEndpoint / rotateSecret / deliveryCounts, and billing findActiveSubscription. **Two false
 alarms retracted**, both this shape. Every closed arm was proved against its own predicate, which
 is how the one vacuous arm in V-1191 was caught.
+
+### V-1193 — expiry, the second axis: an expired session and an expired reset link both resolved
+
+The account-boundary sweep is finished, so the same instrument moved to the next invariant with
+the same shape — where a single SQL predicate IS the whole guarantee. **Expiry.** Eighteen
+`expiresAt` comparisons in the db layer; nine of them are `gt(expiresAt, now)` guards rather than
+sweeper selections. Neutralised by replacing the bound with `new Date(0)`, which keeps the
+comparison, the column and the types and only removes the meaning.
+
+**Seven of the nine died immediately** — expired rate-limit override, expired session activating
+MFA, expired pending OAuth link, expired OAuth access token, expired API key killing its bound
+token, and the caller's-clock arm. Good coverage.
+
+**Two did not, and both are authentication:**
+
+- **`findActiveWebSession`** — the lookup behind session auth. Its own interface doc promises it
+  "returns null if not found, **expired**, or revoked", and `auth.ts` treats that as authoritative:
+  no caller re-checks. So this predicate is the entire expiry enforcement for web sessions, and an
+  expired session token authenticated.
+- **`findActiveAuthToken`** — what stands between a stale **password-reset** or **magic-link** URL
+  and a live account. `verifyEmail` and its siblings do nothing but `if (row === null) throw`. So
+  an expired reset link still resolved, for every flow kind.
+
+Each left **all 3,276 integration tests green**.
+
+**Why nothing caught them, and it is not an oversight.** The unit tests for these flows drive the
+in-memory repo doubles, and those doubles implement their own expiry in TypeScript — so they pass
+whatever the SQL does. The same structural blind spot the ownership guard recorded for tenancy:
+_"those tests drive a repo DOUBLE, so they exercise the service check and never the SQL."_ A
+predicate that only exists in Drizzle can only be tested against Postgres.
+
+Both closed, each with a **positive control** first — a live session and a live token per flow
+kind must resolve — because an assertion that an expired credential returns null passes just as
+well against a lookup that returns null for everything. The token arm loops all three kinds
+(`password_reset`, `magic_link`, `email_verify`) since `kind` selects the table, so one kind
+passing says nothing about the other two.
+
+Mutation-proved individually: neutralising `findActiveAuthToken` reds only the token file,
+neutralising `findActiveWebSession` reds only the session file. Clean attribution in both
+directions.
+
+**The axis generalises.** Tenancy and expiry are the same defect shape — a lone predicate carrying
+a security property, with the service layer trusting it and the unit tests unable to see it.
+`notDeleted` and status filters are the same shape again and remain unmeasured; recorded as the
+next axis rather than left implied.

@@ -59,6 +59,47 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       ).not.toBeNull();
     });
 
+    it('CRITICAL an EXPIRED auth token does not resolve, for every flow kind. `findActiveAuthToken` is what stands between a stale password-reset or magic-link URL and a live account: the caller does nothing but `if (row === null) throw`, so this predicate IS the expiry. Neutralising it left all 3,276 integration tests green — the unit tests drive an in-memory repo that implements its own expiry, so none of them can see the SQL.', async () => {
+      if (!dbReachable || !client) return;
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`token-expiry-${accountId}@test.local`})`;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleAuthFlowsRepo({ client, db, close: async () => {} });
+
+      for (const kind of ['password_reset', 'magic_link', 'email_verify'] as const) {
+        const liveHash = `live-${kind}-${accountId}`;
+        const deadHash = `dead-${kind}-${accountId}`;
+        await repo.insertAuthToken({
+          kind,
+          accountId,
+          tokenHash: liveHash,
+          expiresAt: new Date(Date.now() + 60_000),
+          requestedFromIp: null,
+        });
+        await repo.insertAuthToken({
+          kind,
+          accountId,
+          tokenHash: deadHash,
+          expiresAt: new Date(Date.now() - 60_000),
+          requestedFromIp: null,
+        });
+
+        // Positive control per kind: the table is chosen by `kind`, so a live token
+        // proves this iteration is reading the table the dead one was written to.
+        expect(
+          (await repo.findActiveAuthToken({ kind, tokenHash: liveHash, now: new Date() }))
+            ?.accountId,
+          `a LIVE ${kind} token did not resolve — the check below would prove nothing`,
+        ).toBe(accountId);
+
+        expect(
+          await repo.findActiveAuthToken({ kind, tokenHash: deadHash, now: new Date() }),
+          `an expired ${kind} token still resolved`,
+        ).toBeNull();
+      }
+    });
+
     it('two sibling claims yield one winner and consume the entire family', async () => {
       if (!dbReachable || !client) return;
       const accountId = randomUUID();

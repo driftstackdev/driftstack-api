@@ -124,6 +124,47 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       ).toBeNull();
     });
 
+    it('CRITICAL an EXPIRED web session does not authenticate. `findActiveWebSession` is the lookup behind session auth, and its own interface doc promises it "returns null if not found, EXPIRED, or revoked" — the caller does not re-check, so this predicate is the entire expiry enforcement. Neutralising it left all 3,276 integration tests green.', async () => {
+      if (!dbReachable || !client) return;
+      const c = client;
+      const db = drizzle(c) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleAuthFlowsRepo({ client: c, db, close: async () => {} });
+
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await c`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`expiry-${accountId}@test.local`})`;
+
+      const liveHash = `hash-${randomUUID()}`;
+      const deadHash = `hash-${randomUUID()}`;
+      await repo.insertWebSession({
+        accountId,
+        tokenHash: liveHash,
+        authEpoch: 0,
+        expiresAt: new Date(Date.now() + 60_000),
+        issuedFromIp: null,
+        userAgent: null,
+      });
+      await repo.insertWebSession({
+        accountId,
+        tokenHash: deadHash,
+        authEpoch: 0,
+        expiresAt: new Date(Date.now() - 60_000),
+        issuedFromIp: null,
+        userAgent: null,
+      });
+
+      // Positive control: without it, an always-null lookup would pass the real check below.
+      expect(
+        (await repo.findActiveWebSession({ tokenHash: liveHash, now: new Date() }))?.accountId,
+        'a LIVE session did not authenticate — the check below would prove nothing',
+      ).toBe(accountId);
+
+      expect(
+        await repo.findActiveWebSession({ tokenHash: deadHash, now: new Date() }),
+        'an expired web session still authenticated',
+      ).toBeNull();
+    });
+
     it('CRITICAL bulk revoke stops at the account boundary, spares the current session, and is idempotent', async () => {
       // `revokeAllWebSessionsExcept` is what "log out my other devices" runs. Its
       // three predicates are the whole security of that action:
