@@ -46196,3 +46196,45 @@ Webhook PAYLOAD fields, which V-1052 never covered — it compared event names o
 and the example on the page is precisely the `session_timeout` case. Accurate.
 
 A turn of negatives is worth recording when the alternative is deriving them again.
+
+## V-1082 — two decision records that read as undecided while the system moved
+
+Shifted to a surface this arc had barely touched: the ADRs. ADR-002 and ADR-003
+already carry explicit "contradicted / reversed by the shipped system" annotations, so
+the repo has a house pattern for exactly this. ADR-001 and ADR-004 are Accepted and
+match. The two marked as awaiting review are the ones that had drifted.
+
+ADR-006 (audit log retention + export) reads as undecided, and a reader takes that to
+mean nothing in it exists. One of its three parts does. The EXPORT shipped as
+`GET /v1/account/audit-log/export?format=csv|json` under V-297 and is the documented
+GDPR Article 20 path. The 90-day hot retention is NOT enforced and the R2 archive has
+NOT run — the same `AuditArchiveService` implements both, it is complete and tested,
+and nothing constructs it: bootstrap never calls it and `audit_archive_runs` holds
+zero rows. Those five tables have no retention bound today.
+
+That gap is a decision rather than a wiring oversight, and it cuts both ways — the
+privacy policy promises a 90-day operational retention with no mechanism behind it,
+while the shipped export promises data subjects their full audit history, so choosing
+one narrows the other. `tick-services-are-wired-invariant` already carries that finding
+against the code (V-1049); the record now carries it too, and the two move together.
+
+ADR-005 (observability, Sentry-first) decides that Sentry is the primary METRICS
+destination, defers a second destination, and says to skip dedicated metrics
+primitives at launch. `GET /metrics` ships a Prometheus exposition endpoint whose own
+header names VictoriaMetrics, Prometheus and Grafana Agent as its scrapers, gated on
+`METRICS_SCRAPE_TOKEN` and answering 503 when unset. That is a second metrics
+destination, in production, deferred by the record. The structured-LOG half is
+untouched — Pino still writes to stdout and Sentry still ingests it — so only the
+metrics sentence is annotated, not the whole decision.
+
+Both pins froze the old status string verbatim, which is why the drift survived: a
+text pin asserts what its author wrote. Each now asserts the halves SEPARATELY, so a
+status that says "partly shipped" without naming which part fails, and so does one
+that drops the qualifier while keeping the word. That distinction is the whole point —
+"partly shipped" with no detail is no more useful than the bare status it replaced.
+
+Mutations: reverting ADR-005 to a bare pending status fails; dropping ADR-006's
+export half while keeping the qualifier fails; removing the zero-rows evidence fails.
+Restored byte-identical.
+
+`it(` counts 6 and 6, unchanged. No new file, no ratchet change.

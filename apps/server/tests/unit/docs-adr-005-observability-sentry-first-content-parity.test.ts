@@ -36,7 +36,24 @@ describe('W551.A /docs/adr/ADR-005-observability-sentry-first.md content parity'
     expect(body).toMatch(
       /^# ADR-005 — Observability metrics destination \+ format \(Sentry-first\)$/m,
     );
-    expect(body).toMatch(/\*\*Status:\*\* Proposed \(pending founder review\)/);
+    // V-1082 — the status now records that the metrics half is overtaken. Both
+    // halves are asserted separately so the qualifier cannot be dropped while the
+    // word "Proposed" survives, which is how the record read as undecided while a
+    // second metrics destination shipped.
+    expect(body).toMatch(/\*\*Status:\*\* Proposed —/);
+    expect(body, 'the metrics-half retraction is gone').toMatch(
+      /METRICS half is CONTRADICTED BY THE SHIPPED\s*\n?\s*SYSTEM/,
+    );
+    expect(body, 'the page no longer says the log half is unaffected').toMatch(
+      /The structured-LOG half is unaffected/,
+    );
+    expect(body, 'the shipped scrape endpoint is no longer named').toMatch(
+      /`GET \/metrics` ships a Prometheus exposition endpoint/,
+    );
+    expect(
+      body,
+      'ADR-005 reads as simply pending again, with nothing recording the shipped scrape endpoint',
+    ).not.toMatch(/\*\*Status:\*\* Proposed \(pending [a-z]+ review\)/);
     expect(body).toMatch(/\*\*Date:\*\* 2026-05-03/);
     expect(body).toMatch(
       /\*\*Tier:\*\* Architectural \(Workstream-level decision; surfaces for review per Decision authority\)/,

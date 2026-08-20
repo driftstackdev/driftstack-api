@@ -36,7 +36,23 @@ describe('W551.B /docs/adr/ADR-006-audit-log-retention-export.md content parity'
 
   it("Header + Status-Proposed + Related-V framing pinned: '# ADR-006 — Audit log retention + export' + '**Status:** Proposed (pending founder review)' + '**Date:** 2026-05-03' + '**Tier:** Architectural (workflow + storage decision; surfaces for review per Decision authority)' + '**Related V-entry:** V-095 (this proposal). Touches `admin_audit_log` (D-025), `processed_stripe_events` (V-080), `legal_acceptances` (V-046), `webhook_deliveries` (Phase 5).' — pinned so the ADR-006-Proposed-2026-05-03 + workflow+storage-Architectural + V-095-this-proposal + 4-table-inventory commitment survives", () => {
     expect(body).toMatch(/^# ADR-006 — Audit log retention \+ export$/m);
-    expect(body).toMatch(/\*\*Status:\*\* Proposed \(pending founder review\)/);
+    // V-1082 — one of the three parts is live and the other two are built and
+    // unrun. Each half is asserted separately: a status saying "partly shipped"
+    // without naming WHICH part is no more useful than the bare "Proposed" it
+    // replaced.
+    expect(body).toMatch(/\*\*Status:\*\* Proposed — \*\*but PARTLY SHIPPED/);
+    expect(body, 'the shipped export is no longer named').toMatch(/\*\*Export — SHIPPED\.\*\*/);
+    expect(body, 'the unenforced retention is no longer named').toMatch(
+      /\*\*90-day hot retention — NOT ENFORCED\.\*\*/,
+    );
+    expect(body, 'the zero-rows evidence is gone').toMatch(/`audit_archive_runs` holds zero rows/);
+    expect(body, 'the both-ways framing of the decision is gone').toMatch(
+      /Choosing one\s*\n?>?\s*narrows the other/,
+    );
+    expect(
+      body,
+      'ADR-006 reads as simply pending again, hiding that the export has shipped',
+    ).not.toMatch(/\*\*Status:\*\* Proposed \(pending [a-z]+ review\)/);
     expect(body).toMatch(/\*\*Date:\*\* 2026-05-03/);
     expect(body).toMatch(
       /\*\*Tier:\*\* Architectural \(workflow \+ storage decision; surfaces for review per Decision authority\)/,

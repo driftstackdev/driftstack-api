@@ -1,9 +1,25 @@
 # ADR-005 — Observability metrics destination + format (Sentry-first)
 
-**Status:** Proposed (pending founder review)
-**Date:** 2026-05-03
-**Tier:** Architectural (Workstream-level decision; surfaces for review per Decision authority)
-**Related V-entry:** V-094 (this proposal). Touches V-058 (Sentry SDK), V-085 / V-091 / V-092 / V-093 (the structured logs that flow through the chosen destination).
+**Status:** Proposed — **but the METRICS half is CONTRADICTED BY THE SHIPPED
+SYSTEM as of 2026-08-19. The structured-log half stands; see the reality check
+below.**
+
+> ### ⚠️ 2026-08-19 reality check (V-1082)
+>
+> The decision below says Sentry is the primary **metrics** destination and that a
+> second observability destination is deferred, and point 5 says to skip dedicated
+> metrics primitives at launch.
+>
+> `GET /metrics` ships a Prometheus exposition endpoint — its own header names
+> VictoriaMetrics, Prometheus and Grafana Agent as the scrapers, gated on
+> `METRICS_SCRAPE_TOKEN` and answering `503` when that is unset. That is a second
+> metrics destination, in production, deferred by this record.
+>
+> The structured-LOG half is unaffected: Pino still writes to stdout and Sentry
+> still ingests it, exactly as decided. Only the metrics sentence is overtaken.
+> **Date:** 2026-05-03
+> **Tier:** Architectural (Workstream-level decision; surfaces for review per Decision authority)
+> **Related V-entry:** V-094 (this proposal). Touches V-058 (Sentry SDK), V-085 / V-091 / V-092 / V-093 (the structured logs that flow through the chosen destination).
 
 ## Context
 

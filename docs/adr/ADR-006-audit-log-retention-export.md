@@ -1,9 +1,31 @@
 # ADR-006 — Audit log retention + export
 
-**Status:** Proposed (pending founder review)
+**Status:** Proposed — **but PARTLY SHIPPED as of 2026-08-19. One of the three
+parts is live and the other two are built and unrun; see the reality check below.**
 **Date:** 2026-05-03
-**Tier:** Architectural (workflow + storage decision; surfaces for review per Decision authority)
-**Related V-entry:** V-095 (this proposal). Touches `admin_audit_log` (D-025), `processed_stripe_events` (V-080), `legal_acceptances` (V-046), `webhook_deliveries` (Phase 5).
+
+> ### ⚠️ 2026-08-19 reality check (V-1082)
+>
+> This record still reads as undecided, and a reader takes that to mean nothing
+> here exists. One third of it does.
+>
+> - **Export — SHIPPED.** `GET /v1/account/audit-log/export?format=csv|json` has
+>   been live since V-297 and is documented as the GDPR Article 20 portability
+>   path.
+> - **90-day hot retention — NOT ENFORCED.** `AuditArchiveService` implements it
+>   across five tables and is tested, but nothing constructs it: bootstrap never
+>   calls it and `audit_archive_runs` holds zero rows. Those tables have no
+>   retention bound today.
+> - **R2 archive — NOT RUN**, for the same reason: it is the same service.
+>
+> The gap is a decision, not a wiring oversight. Turning the archiver on DELETES
+> production rows after an R2 upload, and it cuts both ways — the privacy policy
+> promises 90-day operational retention that has no mechanism behind it, while the
+> same export above promises data subjects their full audit history. Choosing one
+> narrows the other. `tick-services-are-wired-invariant` carries the same finding
+> against the code (V-1049), so this note and that guard move together.
+> **Tier:** Architectural (workflow + storage decision; surfaces for review per Decision authority)
+> **Related V-entry:** V-095 (this proposal). Touches `admin_audit_log` (D-025), `processed_stripe_events` (V-080), `legal_acceptances` (V-046), `webhook_deliveries` (Phase 5).
 
 ## Context
 
