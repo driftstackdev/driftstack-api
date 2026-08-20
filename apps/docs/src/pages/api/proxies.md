@@ -152,6 +152,8 @@ The `config_blob` / `private_key` are write-only — the response returns
 `has_secret: true`, never the secret. VPN proxies require encryption to
 be configured server-side; if it isn't, create returns `503`.
 
+Required scope: `account_owner` — a broad `write` key is not sufficient.
+
 ## Update
 
 `PUT /v1/account/me/proxies/{id}`
@@ -180,10 +182,14 @@ write is refused rather than silently applied to a proxy that is no
 longer the one you edited. Re-read the proxy and reissue the update. A
 `409` here means the row still exists; a `404` means it is gone.
 
+Required scope: `account_owner` — a broad `write` key is not sufficient.
+
 ## Delete
 
 `DELETE /v1/account/me/proxies/{id}` → `204` (idempotent; `404` for an
 unknown id).
+
+Required scope: `account_owner` — a broad `write` key is not sufficient.
 
 ## Test a proxy
 
@@ -220,6 +226,8 @@ Two cases fall back to a plain TCP-reachability check, which confirms the port
 answers and nothing more: an `openvpn` or `wireguard` wire (there is no
 `host:port` to dial for the tunnel itself), and a deployment with no proxy
 connectivity probe configured.
+
+Required scope: `account_owner` — a broad `write` key is not sufficient.
 
 ## Route a session through a proxy
 

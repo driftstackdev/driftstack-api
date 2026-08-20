@@ -143,4 +143,32 @@ describe('V-1065 the saved proxy cap is published', () => {
       'the update no longer passes expectedScheme, so there is no compare-and-set to document',
     ).toMatch(/expectedScheme: existing\.scheme/);
   });
+  it('CRITICAL V-1115 every documented proxy endpoint states the scope it enforces. All five saved-proxy routes require `account_owner`, which a broad `write` key does NOT satisfy, and the page stated it under List alone — so a customer reading Create, Update, Delete or Test saw no scope requirement, minted a `write` key for their automation, and got a 403 the page had not warned about. The requirement is read off the route rather than restated, so the sentence cannot outlive the enforcement.', () => {
+    const route = readFileSync(ROUTE, 'utf8');
+    const enforced = [
+      ...route.matchAll(
+        /'(\/v1\/account\/me\/proxies[^']*)',\s*\n\s*\{[^}]*requireScope\('([a-z_]+)'\)/g,
+      ),
+    ].map((m) => ({ path: m[1] as string, scope: m[2] as string }));
+    expect(enforced.length, 'saved-proxy routes with a scope gate').toBeGreaterThanOrEqual(5);
+
+    const scopes = [...new Set(enforced.map((e) => e.scope))];
+    expect(scopes, 'the saved-proxy routes no longer agree on one scope').toEqual([
+      'account_owner',
+    ]);
+
+    // One "Required scope" line per documented endpoint section. `Resource
+    // shape`, `Route a session through a proxy` and `Why a launch is refused`
+    // are prose, not endpoints, so the count is the endpoint sections.
+    const page = doc();
+    const stated = (page.match(/Required scope: `account_owner`/g) ?? []).length;
+    expect(
+      stated,
+      'a documented saved-proxy endpoint is missing its scope line — List, Create, Update, Delete ' +
+        'and Test each enforce account_owner:',
+    ).toBeGreaterThanOrEqual(5);
+    expect(page, 'the write-key caveat is gone, which is the part that stops the 403').toMatch(
+      /a broad `write` key is not sufficient/,
+    );
+  });
 });

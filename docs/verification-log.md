@@ -47784,3 +47784,42 @@ arm by name; deleting the Profile snapshots row fails the extended loop. The fir
 attempt at that last mutation deleted nothing — a perl delimiter clash with the escaped
 pipes — and the suite passed, which is indistinguishable from a guard that does not work
 until the row count is checked.
+
+### V-1115 — the scope a customer must mint, stated for one of five endpoints
+
+Following V-1114's shape into the most repeated per-endpoint claim in the docs:
+"Required scope". Fourteen claims across five pages, and all fourteen are TRUE —
+verified individually against enforcement, including the four on `byok-anthropic.md`
+(GET is broad `read`, the rest `account_owner`) and the two on `email-preferences.md`,
+whose routes carry no `requireScope` at all because the gate lives in the service as
+`throwIfMissingScope(ctx, 'account_owner')` — pinned there by a text assertion, so
+deleting it fails.
+
+Two adjacent measurements, both clean, recorded so they are not re-run:
+
+- Scopes are NOT machine-readable. The spec's `security` names a bearer scheme, not
+  scopes, so no generated client can carry a scope requirement. That is a design
+  question, not a drift.
+- Thirty operations declare no `security`, and all thirty are genuinely anonymous. The
+  one that looked wrong — `POST /v1/oauth/introspect`, which answers 401 where the other
+  public writes answer 400 — is correct: RFC 7662 client credentials arrive as
+  `client_id`/`client_secret` in the BODY (`IntrospectBody`), which OpenAPI models in
+  `requestBody`, not `security`. The 401 was my marker payload being rejected as an
+  invalid client.
+
+**The finding is on `api/proxies.md`.** All five saved-proxy routes enforce
+`requireScope('account_owner')` — verified at `account-me.ts:581/593/652/736/761` — and
+the page stated the requirement under `## List` alone. A customer reading Create,
+Update, Delete or Test saw no scope requirement at all. `account_owner` is not satisfied
+by a broad `write` key, so the concrete outcome is minting a `write` key for automation
+and getting a 403 the page never warned about. The four sections now carry the line, and
+it names the caveat that prevents the mistake.
+
+The guard reads the requirement off the route rather than restating it: the five
+registrations must agree on one scope, and the page must state it once per documented
+endpoint. So the sentence cannot outlive the enforcement it describes.
+
+Mutation-proved, restored byte-identical: removing one section's line fails as
+"expected 4 to be greater than or equal to 5"; widening a route's gate to broad `write`
+fails as "the saved-proxy routes no longer agree on one scope: expected
+[ 'write', 'account_owner' ]".
