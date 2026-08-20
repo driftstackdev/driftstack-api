@@ -20,14 +20,24 @@
 // misconception a second time. The corrected command was run before being written down: it
 // produces a 2.0 MB OpenAPI 3.1.0 document with 196 paths.
 //
-// ── Scope: fenced blocks only, and why that is a rule rather than a shortcut ──
+// ── Scope, corrected in V-1178: fenced blocks were not the whole instruction surface ──
 //
-// Prose mentions are excluded (44 of them). You cannot paste a sentence into a shell, and
-// documentation legitimately DISCUSSES commands — `docs/gui-client/audit-current-state.md`
-// describes what `npm run tauri:dev` does, and a proposal describes a `drizzle:generate`
-// script it is asking to have created. Holding descriptive prose to the current script
-// inventory would fail those correctly-written lines. A fenced block is different: it is an
-// instruction, and it either works or it does not.
+// This originally covered fenced blocks ONLY, reasoning that you cannot paste a sentence into
+// a shell and that documentation legitimately DISCUSSES commands. The second half of that is
+// right; the first half drew the line in the wrong place.
+//
+// `docs/runbooks/self-hosted-mac-local.md` carries a six-row TABLE of
+// `| Surface | Command | URL |` — `npm run dev:dashboard` → `http://localhost:5173` — and that
+// is an instruction by any reading. It is also invisible to a fenced-block scan. Measured:
+// **42** backticked `npm run` citations sit outside fenced blocks against **28** inside, so
+// the larger half of the population was the unguarded half.
+//
+// So inline backticked commands are checked too, against the ROOT scripts (prose carries no
+// `cd` context to resolve against). Backticking is not by itself a claim of runnability, which
+// is why the two genuinely descriptive cases are exempted BY NAME with their reasons rather
+// than by widening the pattern until they pass. Both were verified at the citation site, and
+// an arm below fails if either stops being descriptive — an allowlist nobody rechecks stops
+// meaning "reviewed" and starts meaning "ignored".
 //
 // ── `cd` is tracked, because ignoring it manufactures findings ──────────────
 //
@@ -102,6 +112,26 @@ const SCRIPT_PATH =
   /\b(?:npx\s+tsx|tsx|node|bash|sh)\s+((?:apps|packages|scripts|operations)\/[\w./-]+\.(?:ts|mjs|js|sh))/g;
 const CD = /^\s*cd\s+([\w./\\@-]+)/gm;
 
+/** Backticked `npm run <script>` outside any fenced block — runbook tables, checklists. */
+const INLINE = /`(?:npm|pnpm|yarn) run ([a-zA-Z0-9:_-]+)[^`]*`/g;
+const FENCED_BLOCK = /```[\s\S]*?```/g;
+
+/**
+ * Inline citations that DESCRIBE a command rather than instruct you to run it. Each was read
+ * at its citation site; the arm below re-checks that the reason still holds, because an
+ * allowlist nobody rechecks stops meaning "reviewed" and starts meaning "ignored".
+ */
+const DESCRIPTIVE: ReadonlyMap<string, string> = new Map([
+  [
+    'docs/gui-client/audit-current-state.md::tauri:dev',
+    "a status page for the gui-client listing that package's own scripts and what each opens",
+  ],
+  [
+    'docs/proposals/td-002-drizzle-kit-reinstatement.md::drizzle:generate',
+    'a proposal asking for this script to be CREATED — it is meant not to exist yet',
+  ],
+]);
+
 interface Cited {
   page: string;
   command: string;
@@ -119,10 +149,22 @@ function cwdBefore(block: string, at: number): string {
   return cwd;
 }
 
-function citations(): { npm: Cited[]; paths: Cited[] } {
+function citations(): { npm: Cited[]; paths: Cited[]; inline: Cited[] } {
   const npm: Cited[] = [];
   const paths: Cited[] = [];
+  const inline: Cited[] = [];
   for (const page of instructionPages()) {
+    // Inline citations are read from the page with fenced blocks stripped, so a command
+    // never counts twice.
+    for (const m of read(page).replace(FENCED_BLOCK, '').matchAll(INLINE)) {
+      inline.push({
+        page,
+        command: m[0].replace(/`/g, '').trim(),
+        script: m[1] ?? '',
+        workspace: undefined,
+        cwd: '',
+      });
+    }
     for (const block of read(page).matchAll(FENCE)) {
       const body = block[1] ?? '';
       for (const m of body.matchAll(NPM_RUN)) {
@@ -145,7 +187,7 @@ function citations(): { npm: Cited[]; paths: Cited[] } {
       }
     }
   }
-  return { npm, paths };
+  return { npm, paths, inline };
 }
 
 describe('V-1175 every command the docs tell you to run exists', () => {
@@ -188,6 +230,43 @@ describe('V-1175 every command the docs tell you to run exists', () => {
       [...new Set(broken)].sort(),
       'documented commands naming a script that does not exist',
     ).toEqual([]);
+  });
+
+  it('CRITICAL every backticked `npm run` outside a fenced block names a real root script, or is one of two citations recorded as descriptive. A runbook table of `| Surface | Command | URL |` rows is an instruction, and it is invisible to a fenced-block scan — 42 of these sit outside fences against 28 inside, so this was the larger half of the population and the unguarded one.', () => {
+    const root = scriptsOf('package.json');
+    const { inline } = citations();
+    expect(inline.length, 'no inline backticked commands extracted').toBeGreaterThan(25);
+    // The row that made this arm necessary.
+    expect(
+      inline.some(
+        (c) => c.page.endsWith('self-hosted-mac-local.md') && c.script === 'dev:dashboard',
+      ),
+      'the self-hosted runbook table is no longer being read',
+    ).toBe(true);
+
+    const broken = inline
+      .filter((c) => !root.has(c.script) && !DESCRIPTIVE.has(`${c.page}::${c.script}`))
+      .map((c) => `${c.page}: \`${c.command}\``);
+    expect(
+      [...new Set(broken)].sort(),
+      'inline commands naming a script that does not exist',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL the descriptive-citation exemptions still describe rather than instruct. Each is exempt because the doc discusses a command instead of telling you to run it; if one becomes a real root script, or its citation disappears, the exemption has outlived its reason and should go rather than sit there granting silence.', () => {
+    const root = scriptsOf('package.json');
+    const { inline } = citations();
+    const stale: string[] = [];
+    for (const [key, why] of DESCRIPTIVE) {
+      const [page, script] = key.split('::');
+      if (!inline.some((c) => c.page === page && c.script === script)) {
+        stale.push(`${key} — citation is gone; drop the exemption (${why})`);
+      } else if (root.has(script ?? '')) {
+        stale.push(`${key} — now a real root script; the exemption is obsolete`);
+      }
+    }
+    expect(stale.sort(), 'descriptive-citation exemptions that no longer hold').toEqual([]);
+    expect(DESCRIPTIVE.size, 'the descriptive allowlist grew without review').toBe(2);
   });
 
   it('CRITICAL every script file a fenced block invokes directly exists on disk. These are the commands that survive a script being renamed in package.json, so they are what documentation reaches for — and nothing was checking them outside the runbook tree.', () => {

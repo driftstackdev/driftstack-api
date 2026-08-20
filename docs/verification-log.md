@@ -50510,3 +50510,44 @@ the guard's own assertion**. Someone updated the assertion and the `it(` title t
 the header behind. A header is the first thing read and the last thing verified, and nothing
 tests it — the same class as V-1165's structural-drift rule (a restatement that names no clause)
 and the correcting-a-comment rule. When an assertion changes, its header is part of the change.
+
+### V-1178 — my own guard drew the instruction boundary in the wrong place
+
+V-1175 shipped `every-command-the-docs-tell-you-to-run-exists` scoped to **fenced blocks only**,
+with a justification I still believe half of: documentation legitimately _discusses_ commands, so
+holding free prose to the current script inventory would fail correctly-written lines.
+
+The other half was wrong, and I found it by chasing an unrelated question. Checking every
+`localhost:PORT` claim in the repo against the configured dev ports — all correct, marketing 4321,
+dashboard 5173, docs 4322, status 4323, admin 5174 — I noticed _where_ those claims live:
+
+```
+| Surface            | Command                 | URL                     |
+| Customer dashboard | `npm run dev:dashboard` | <http://localhost:5173> |
+```
+
+A six-row table in `docs/runbooks/self-hosted-mac-local.md`. That is an instruction by any
+reading, and a fenced-block scan cannot see it. **Measured: 42 backticked `npm run` citations
+outside fenced blocks against 28 inside — the larger half of the population was the unguarded
+half**, and it is the half a runbook actually uses.
+
+All 42 resolve today, so nothing was broken. The guard now covers them anyway, because a renamed
+root script would take that table down silently.
+
+**Backticking is not itself a claim of runnability**, which is the part that needs care. Two
+citations are genuinely descriptive: a gui-client status page listing that package's own scripts
+and what each one opens, and a proposal asking for `drizzle:generate` to be **created** — a script
+that is _meant_ not to exist yet. Both are exempted by name with their reason rather than by
+widening the pattern until they pass, and a second arm re-checks that each reason still holds: if
+an exempted script becomes real, or its citation disappears, the exemption has outlived itself.
+The repo's own idiom — `NOT_IN_THE_CONTRACT`, `KNOWN_UNREAD`, `INTENTIONALLY_UNPUBLISHED_OPERATIONS`
+all pair an allowlist with an arm that keeps it honest.
+
+The lesson is about scope justifications, not commands. **"Fenced blocks only" sounded principled
+and was load-bearing, so nobody — including me, writing it — would have re-examined it.** A stated
+rationale is the most durable thing in a guard and the least tested; it survives precisely because
+it reads as settled. What exposed it was not review but a different question walking past the same
+files.
+
+Ports themselves: all claims correct, all six runbook commands exist. An honest negative, reached
+cheaply because the prior-art content-grep from V-1176 ran first this time.
