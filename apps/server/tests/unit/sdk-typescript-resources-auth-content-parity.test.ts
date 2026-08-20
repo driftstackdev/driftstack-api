@@ -142,7 +142,7 @@ describe('W425.A packages/sdk-typescript/src/resources/auth.ts content parity', 
     );
   });
 
-  it('Session lifecycle — refresh (POST /v1/auth/refresh; exchange refresh_token for new access_token + rotated refresh_token; defends against replay) + logout (POST /v1/auth/logout; revokes calling session server-side; idempotent so re-logout is a no-op).', () => {
+  it('Session lifecycle — refresh (POST /v1/auth/refresh; exchanges the supplied session token for a new one, revoking the old row and minting a fresh one, so a replay of the old token fails) + logout (POST /v1/auth/logout; revokes the token supplied IN THE BODY rather than the session the call authenticated with; no-ops on an unknown or already-revoked token). V-1092: this title used to describe an OAuth refresh_token-for-access_token exchange, which is not the product — RefreshSessionRequest carries the single key `token` and there is no refresh_token anywhere outside redaction denylists.', () => {
     expect(body).toMatch(
       /refresh\(body: RefreshSessionRequest\): Promise<RefreshSessionResponse> \{\s*\n?\s*return this\.http\.request<RefreshSessionResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/refresh',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
     );

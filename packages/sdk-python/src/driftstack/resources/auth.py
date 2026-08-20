@@ -52,9 +52,23 @@ class AuthResource:
         )
 
     def refresh(self, body: dict[str, Any]) -> dict[str, Any]:
+        """Exchange the supplied session token for a new one.
+
+        ``body`` carries a single key, ``token``. The old session row is
+        revoked and a fresh one minted, so the token passed in here is
+        useless afterwards and a replay of it fails. The response carries
+        ``session``; read the new plaintext token from it.
+        """
         return self._http.request("POST", "/v1/auth/refresh", json_body=coerce_body(body))
 
     def logout(self, body: dict[str, Any]) -> dict[str, Any]:
+        """Revoke the session token supplied in ``body``.
+
+        ``body`` carries a single key, ``token``. This revokes THAT token,
+        not the session the call authenticated with, so a caller can revoke
+        any session whose token it holds. Idempotent: logging out an unknown
+        or already-revoked token is a no-op rather than an error.
+        """
         return self._http.request("POST", "/v1/auth/logout", json_body=coerce_body(body))
 
     def mfa_challenge(self, body: dict[str, Any]) -> dict[str, Any]:

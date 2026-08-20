@@ -46747,3 +46747,46 @@ Nothing gates. The only references repo-wide are this log and
 `docs/launch/`, `.github/`, `docs/runbooks/`, `docs/deployment/`, `scripts/` or
 `package.json` reads it. Recorded so the finding is not re-opened at launch severity;
 the content question behind it is D-11 and stays with the owner.
+
+### V-1092 — the session surface described as an OAuth token pair it has never been
+
+Two pin titles said `POST /v1/auth/refresh` exchanges a `refresh_token` for a new
+`access_token` plus a rotated `refresh_token`. The request schema carries one key:
+
+```
+RefreshSessionRequestSchema = z.object({ token: z.string().min(32).max(256) })
+```
+
+and the response is `{ session }`. `refresh_token` exists nowhere in the product
+except redaction denylists — which list other vendors' field names defensively — and
+`docs/decisions.md`, where it is explicitly what v1 does not do. The TypeScript title
+carried a second falsehood the report did not mention: logout "revokes calling
+session", where the handler revokes `parsed.data.token`, the token in the BODY. That
+difference is the whole revoke-from-email flow, and the Go pin has stated it
+correctly all along, reason included.
+
+**The report was wrong about the impact.** It claimed a Python customer reads this in
+a docstring. There was no docstring — the false sentence lived only in two vitest
+titles, and `apps/docs/src/pages/api/auth.md` is correct. What is true is subtler and
+worth more: the Python methods take and return `dict[str, Any]`, so nothing in that
+SDK names the body key at all. Both now carry a docstring saying the key is `token`,
+that refresh revokes the old row and mints a new one, and that logout revokes the
+supplied token rather than the calling session.
+
+The gating pin required the `return` to follow the signature immediately, so
+documenting either method would have broken it. Split into separate signature and
+call-site assertions, plus assertions on the docstrings themselves.
+
+**Guard.** The wrong description is the plausible one: every OAuth surface a developer
+has met works the way those titles said, and an untyped Python body contradicts
+nothing, so this gets re-derived rather than noticed. `the-session-token-is-not-an-oauth-token-pair`
+ties the vocabulary to the schema — while the request carries one key, no SDK auth
+surface or auth pin may name `refresh_token` or `access_token`, with lines carrying
+the finding id exempt so a retraction can still name what it retracts. If a refresh
+grant is ever built the schema gains a key and the guard stops objecting.
+
+Mutation-proved: an OAuth-vocabulary comment in the Python resource fails the
+vocabulary arm by file and line; an unresolvable surface path fails the read arm
+rather than passing over nothing; deleting the logout docstring distinction fails the
+logout arm. Restored byte-identical from a scratchpad snapshot. Ratchets 2943→2944 and
+3109→3110 for the one file added.

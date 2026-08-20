@@ -124,12 +124,29 @@ describe('W583.A packages/sdk-python/src/driftstack/resources/auth.py content pa
     );
   });
 
-  it('Sync session lifecycle — refresh + logout. refresh: POST /v1/auth/refresh (exchange refresh_token for new access_token + rotated refresh_token; defends against replay). logout: POST /v1/auth/logout (revokes the calling session server-side; idempotent so re-logout is a no-op).', () => {
+  it('Sync session lifecycle — refresh + logout. refresh: POST /v1/auth/refresh exchanges the supplied session token for a new one, revoking the old row and minting a fresh one so a replay of the old token fails. logout: POST /v1/auth/logout revokes the token supplied IN THE BODY rather than the session the call authenticated with, and no-ops on an unknown or already-revoked token. V-1092: this title used to describe an OAuth refresh_token-for-access_token exchange and a logout that revoked the calling session. Neither is the product — RefreshSessionRequestSchema carries the single key `token`, the handler revokes `parsed.data.token`, and the Go pin has described both correctly all along.', () => {
+    // Signature and call site are asserted separately so the method may carry
+    // a docstring between them. The single regex this replaced required the
+    // `return` to follow the signature immediately, which made documenting
+    // either method break the pin — and these two are `dict[str, Any]` in and
+    // out, so the docstring is the only place a caller learns the key is
+    // `token`.
+    expect(body).toMatch(/def refresh\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:/);
     expect(body).toMatch(
-      /def refresh\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:\s*\n\s*return self\._http\.request\("POST", "\/v1\/auth\/refresh", json_body=coerce_body\(body\)\)/,
+      /return self\._http\.request\("POST", "\/v1\/auth\/refresh", json_body=coerce_body\(body\)\)/,
     );
+    expect(body).toMatch(/def logout\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:/);
     expect(body).toMatch(
-      /def logout\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:\s*\n\s*return self\._http\.request\("POST", "\/v1\/auth\/logout", json_body=coerce_body\(body\)\)/,
+      /return self\._http\.request\("POST", "\/v1\/auth\/logout", json_body=coerce_body\(body\)\)/,
+    );
+
+    // The docstrings themselves, since they are now the customer-facing
+    // contract for a body this SDK does not type.
+    expect(body, 'the refresh docstring no longer names the body key').toMatch(
+      /Exchange the supplied session token for a new one[\s\S]{0,200}single key, ``token``/,
+    );
+    expect(body, 'the logout docstring no longer says which token is revoked').toMatch(
+      /revokes THAT token,\s*\n\s*not the session the call authenticated with/,
     );
   });
 
