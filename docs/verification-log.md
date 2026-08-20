@@ -48826,3 +48826,45 @@ name, and the SDKs do not name every class alike: the reference row for `tier-li
 classes DO share names across all three, which is what makes the comparison meaningful —
 and `sdk-versioning.md` requires that of the error hierarchy. Whether the non-retryable
 classes are supposed to share names too is a separate question this does not answer.
+
+### V-1138 — the cross-SDK lockstep policy asserted a naming rule two classes deliberately break
+
+Fell out of V-1137. The error reference's row for `tier-limit` reads `TierLimitError` in
+TypeScript and `QuotaExceededError` in Python — so the SDKs do not name every error class
+alike, while `sdk-versioning.md` lists in its MUST-stay-in-lockstep section that the error
+classes "exist with the same names in each".
+
+Derived from the three problem-type registries rather than the doc table: 30 slugs are
+present in all three, and **exactly two** diverge.
+
+- `tier-limit` — `TierLimitError` / `QuotaExceededError` / `QuotaExceededError`. Already
+  acknowledged in the TypeScript source, which names the Python and Go class in a comment.
+- `driver-not-integrated` — a dedicated class only in TypeScript. Python's registry maps
+  it to `DriverError` and Go's builder returns the same struct, both explicitly. **That is
+  more than a name**: in those two SDKs a caller cannot distinguish it from `driver-error`
+  by class at all, only by reading the problem-type URI. A TypeScript caller can catch
+  them separately. The policy said that difference did not exist.
+
+Both are deliberate registry decisions, and converging either is a rename of a published
+class — a MAJOR bump with a deprecation cycle under this same document. **That decision is
+not taken here.** What is: the policy now describes what ships, and the guard holds the
+exception set at exactly two.
+
+**Both copies.** The bullet is byte-identical in the internal policy and in the
+customer-facing `apps/docs/src/pages/sdk/versioning.md`, at the same line numbers.
+Correcting one would have left a customer reading the false version, which is the copy
+that matters. Both fixed, both given a negative sentinel quoting the retired sentence.
+
+**I made the V-1134 mistake again, in the same session.** Grepping the pins for the retired
+sentence, I piped through `head -2` and fixed the two occurrences it showed. A third — a
+positive assertion freezing the exact sentence, in a file I had already edited — was below
+the cut, and the suite caught it. The lesson from four findings ago was recorded and not
+applied: **enumerate, then read the whole enumeration.** Truncating it produces a list that
+looks complete and is not.
+
+**The extractor was wrong twice before it was right, and the tell was arithmetic.** Go maps
+URIs to builder FUNCTIONS whose names drop the `Error` suffix their structs carry, so
+naming Go classes from builders reported 29 of 30 slugs divergent. Twenty-nine of thirty is
+not a finding, it is a broken extractor. Resolving the builder body got 23 of 32; the other
+nine assemble fields over several lines, so the scan has to cover the whole function. Only
+then does it settle at two — which is what the reference table had said from the start.

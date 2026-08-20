@@ -147,7 +147,19 @@ describe('W777 docs /sdk/versioning content parity', () => {
 
     expect(p).toMatch(/Resource names \+ method names\. `client\.sessions\.create\(\)` exists in/);
     expect(p).toMatch(/Error class hierarchy\. `RateLimitError` \/ `InvalidKeyError` \//);
-    expect(p).toMatch(/`SessionTimeoutError` \/ etc\. exist with the same names in each\./);
+
+    // V-1138 negative — two problem types deliberately carry different class
+    // names across the SDKs, so the unqualified lockstep claim was false. Quoted
+    // here so it cannot return; the corrected bullet paraphrases it.
+    expect(p, 'the unqualified same-names-in-each claim is back').not.toMatch(
+      /exist with the same names in each/,
+    );
+    // V-1138 — this froze the unqualified claim. Two problem types deliberately carry
+    // different class names across the SDKs, so the page now names them; the anchor
+    // kept here is the stable half of the sentence.
+    expect(p).toMatch(/`SessionTimeoutError` \/ etc\. exist in all three/);
+    expect(p).toMatch(/`QuotaExceededError` in Python and Go/);
+    expect(p).toMatch(/`driver-not-integrated`/);
     expect(p).toMatch(
       /Webhook signature verification helper\. `verifyWebhookSignature` in\s*\n?\s+TS, `verify_webhook_signature` in Python, `VerifyWebhookSignature`\s*\n?\s+in Go\./,
     );

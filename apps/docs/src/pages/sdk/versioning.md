@@ -104,7 +104,15 @@ The three SDKs MUST stay in lockstep on:
 - Resource names + method names. `client.sessions.create()` exists in
   all three with semantically equivalent behavior.
 - Error class hierarchy. `RateLimitError` / `InvalidKeyError` /
-  `SessionTimeoutError` / etc. exist with the same names in each.
+  `SessionTimeoutError` / etc. exist in all three, under one name
+  wherever the SDKs share one. Two problem types deliberately do not:
+  `tier-limit` is `TierLimitError` in TypeScript but
+  `QuotaExceededError` in Python and Go, and `driver-not-integrated`
+  has a dedicated class only in TypeScript — Python and Go map that
+  problem type onto `DriverError`, so a caller there cannot tell it
+  apart from a driver failure by class. Both are explicit entries in
+  each SDK's problem-type registry. A THIRD divergence would be drift,
+  and is what the cross-source invariant guards.
 - Webhook signature verification helper. `verifyWebhookSignature` in
   TS, `verify_webhook_signature` in Python, `VerifyWebhookSignature`
   in Go.

@@ -105,6 +105,13 @@ describe('W558.B /docs/architecture/sdk-versioning.md content parity', () => {
       /- Resource names \+ method names\. `client\.sessions\.create\(\)` exists in/,
     );
     expect(body).toMatch(/- Error class hierarchy\. `RateLimitError` \/ `InvalidKeyError` \//);
+
+    // V-1138 negative — two problem types deliberately carry different class
+    // names across the SDKs, so the unqualified lockstep claim was false. Quoted
+    // here so it cannot return; the corrected bullet paraphrases it.
+    expect(body, 'the unqualified same-names-in-each claim is back').not.toMatch(
+      /exist with the same names in each/,
+    );
     expect(body).toMatch(/`SessionTimeoutError` \/ etc\./);
     expect(body).toMatch(/- Webhook signature verification helper\. `verifyWebhookSignature` in/);
     expect(body).toMatch(/TS, `verify_webhook_signature` in Python, `VerifyWebhookSignature`/);
