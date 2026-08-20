@@ -51534,3 +51534,75 @@ finding in prose — a figure exact when written — and here the guard, not a l
 mechanical rather than a design question. The design call V-1197 flagged is answered by where this
 file sits: the contract lives beside the integration tests, not in the unit tier, because half of it
 requires a real database.
+
+---
+
+## V-1199 — a correctness held in four call sites, and invisible at the thing that depends on it
+
+Hunting divergence between the in-memory doubles and their Drizzle counterparts (the V-1198 axis),
+I looked at email handling and found what looked like a live defect:
+
+```
+auth-flows-repo.ts:143   canonicalEmail: canonicalizeEmailForDedup(args.email.trim().toLowerCase())
+auth-flows.ts:661        const canonicalEmail = canonicalizeEmailForDedup(email);   // raw parameter
+```
+
+The write path canonicalises a _lowercased_ address; the lookup canonicalises the parameter as
+given. And `canonicalizeEmailForDedup` neither trims nor lowercases — its Gmail test is
+`domain === 'gmail.com'`, which a capital G fails outright, so `Foo.Bar@Gmail.com` canonicalises to
+itself instead of to `foobar@gmail.com`.
+
+**It is not a defect, and I checked before writing anything.** `findAccountByEmailOrCanonical` is
+private, has exactly four callers, and every one of them normalises first:
+
+```
+resendSignupVerification:770   const email = args.email.trim().toLowerCase();
+login:890                      this.findAccountByEmailOrCanonical(args.email.trim().toLowerCase())
+requestMagicLink:1063          const email = args.email.trim().toLowerCase();
+requestPasswordReset:1149      const email = args.email.trim().toLowerCase();
+```
+
+My first reading — that `signup` was affected — was also wrong: it normalises into a local at
+line 670 and canonicalises _that_. Retracted before it went any further.
+
+**What is real is the shape.** The property is correct by CONVENTION, held in four call sites, and
+invisible at the helper that depends on it. A fifth caller that forgets loses the canonical half of
+the lookup, and these paths deliberately return a generic "if that address exists" result to avoid
+account enumeration — so the failure is silent. A customer whose stored address is a dot-form would
+simply never receive the reset mail, with nothing logged and nothing raised.
+
+**Prior art, and why this is not it.** `canonical-email-sql-matches-the-runtime-drizzle.test.ts`
+already pins `args.email.trim().toLowerCase()` — but scoped to `signup`, the WRITE path, because
+what that arm protects is the lowercase precondition the stored data rests on. Its own comment
+notes that "four other methods lowercase too" and does not pin them. Those four are the READ paths.
+Grepping the prior art first is what kept this from being a duplicate.
+
+**The guard** is `apps/server/tests/integration/account-recovery-resolves-a-gmail-dot-variant.test.ts`
+— three behavioural arms driving the real service, plus a static arm over every call site.
+
+The fixture registers `foo.bar@gmail.com` and looks it up as `FooBar@Gmail.com`: dots dropped AND
+capitals added. The dots matter. Looking it up as `Foo.Bar@Gmail.com` would have proved nothing —
+that lowercases to the stored literal, so the LITERAL half resolves it and the arm would pass with
+canonicalisation entirely broken. Dropping the dots is what makes the canonical lookup the only
+route to the account. That is the same vacuity trap as V-1191 and V-1194, caught this time before
+the arm was written rather than after.
+
+Mutation-proved, one caller at a time:
+
+```
+M1 requestPasswordReset      stops normalising -> reset arm + static arm red   2 failed | 2 passed
+M2 requestMagicLink          stops normalising -> magic arm + static arm red   2 failed | 2 passed
+M3 resendSignupVerification  stops normalising -> resend arm + static arm red  2 failed | 2 passed
+M4 login                     passes args.email -> STATIC ARM ALONE red         1 failed | 3 passed
+restored (source 0 dirty)                                                      4 passed
+```
+
+M4 is the one worth reading. `login` has no behavioural arm here, and its failure mode is the worst
+of the four — a customer who cannot sign in at all. The static arm is the only thing covering it,
+and M4 is the proof that it does. It is also what covers the caller added tomorrow.
+
+**A defect of my own, caught by the run.** The static arm's first version captured the call argument
+with `\(([^)]*)\)`, which stops at the first `)` — so `args.email.trim().toLowerCase()` was captured
+as `args.email.trim(`, and it reported `login` as an offender. A false positive in a guard written
+to catch false negatives. Same capture-boundary class as V-1171's lazy `[\s\S]*?`; fixed by allowing
+one level of nesting, `((?:[^()]|\([^()]*\))*)`.
