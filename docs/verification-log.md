@@ -51886,3 +51886,50 @@ restored (source 0 dirty)                                                    3 p
 
 Both mutations printed their applied count before running, per the V-1203 correction — a mutation
 that never landed looks exactly like one the tests survived.
+
+---
+
+## V-1205 — retracting a claim of my own that I had carried for three turns
+
+While checking the retention scrubber for defects ahead of any decision on D-7, I verified the
+premise I had been repeating rather than inheriting it. It is wrong.
+
+I have been reporting D-7 as: the published "session metadata — 90 days operational" commitment has
+no working enforcement, its only enforcer has never run, and turning it on would delete production
+rows. Every part of that is stale.
+
+What is actually there, from V-759:
+
+```
+bootstrap.ts:1711  new RetentionScrubSweeperService({ repo: new DrizzleRetentionScrubRepo(…) })
+bootstrap.ts:1715  registerRetentionScrubJob({ scheduledJobs, sweeper, logger })
+bootstrap.ts:1720  await enqueueNextRetentionScrub({ scheduledJobs })      // unconditional
+retention-scrub-repo.ts:65   export const RETENTION_WINDOW_DAYS = 90;
+```
+
+Registered and enqueued on every boot with no flag gate, daily interval, re-arming itself, and
+alarming on a failed step because a failure means data held past its disclosed window. The window
+constant is 90, matching the published table rows for session metadata and for authentication data
+after revocation.
+
+It also does not delete, which was the specific risk I attached to enabling it. It ANONYMISES —
+`sessions.label` / `sessions.metadata` nulled, `api_keys.name` replaced with a sentinel — because
+`usage_records` cascades from `sessions` and §9 requires billing data be kept seven years, and
+revoked `api_keys` are RESTRICT-referenced by `admin_audit_log` so the row cannot be removed at all.
+§9's closing paragraph authorises anonymisation as the alternative. Only `session_operations` is
+deleted, and the comment says why: nothing references it.
+
+**And the guards I was about to write already exist.** `privacy-retention-window-matches-the-sweeper`
+pins every published window against `RETENTION_WINDOW_DAYS` across both published copies, checks its
+own extraction found the rows, and pins that §9 still authorises anonymisation.
+`retention-sweeps-are-unconditional-invariant` pins that the retention job is not gated behind a
+flag. Grepping prior art first is what stopped this becoming a duplicate of both.
+
+**Scope of the retraction, stated precisely.** What I verified is that the three surfaces the
+sweeper covers — session metadata, session operations, revoked api-key names — are enforced at 90
+days, wired unconditionally, and guarded. I did NOT re-verify the separate half of D-7 about other
+tables carrying no retention bound; that may still stand, and nothing here speaks to it.
+
+The lesson is not new but it is mine this time: a claim repeated across turns stops being read as a
+claim. This one survived three reports because each one inherited it from the last rather than from
+the source. The instrument for that is the same as for everything else here — go look.
