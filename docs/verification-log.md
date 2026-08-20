@@ -51283,3 +51283,45 @@ directions.
 a security property, with the service layer trusting it and the unit tests unable to see it.
 `notDeleted` and status filters are the same shape again and remain unmeasured; recorded as the
 next axis rather than left implied.
+
+### V-1194 — soft delete, the third axis: trashing freed nothing and the bin leaked into the grid
+
+Third invariant with the same shape. `notDeleted` is ONE shared const in `profiles-repo` used at
+nine sites — which is exactly the structure that hides gaps, because neutralising the const at its
+definition fires plenty and says nothing about the individual call sites.
+
+Neutralising the const fired **eight** assertions (update, delete, restore and its four quota
+arms, transfer, sumSizeBytes). Neutralising **only the five sites those did not name** left all
+**3,278 integration tests green**. Four reachable, now closed:
+
+- **`countByAccount`** — the input to the profile cap. Trashing is the documented way to free a
+  slot; the repo comment beside it says trashed profiles do not count toward the quota. Unfiltered,
+  a customer who trashed a profile to make room is refused anyway, with nothing saying why.
+- **`list`** — trashed rows in the live grid. `listTrashed` is a separate read for the recycle bin,
+  so this is the same profile appearing in two places with two different meanings.
+- **`touch` and `recordSave`** — writes landing on a trashed row, reviving its usage timestamp and
+  size while the customer believes it is in the bin. The repo states the intent beside `recordSave`:
+  scoped and notDeleted like `touch`, a no-op for a wrong-account or trashed id.
+
+**Two of my own arms were vacuous, and only the per-site proof exposed them.**
+
+The write arm asserted a trashed profile's `last_used_at` and `size_bytes` stay null — which a repo
+that wrote _nothing at all_ would also satisfy. It now writes to a LIVE profile first and asserts
+both landed.
+
+Worse, the `list` arm missed the branch it was aimed at. `list` carries `notDeleted` **twice** —
+once in the cursor-paged `WHERE` and once in the unpaged one — and an unpaged assertion never
+executes the cursor branch. Adding a paged read was still not enough: all four fixtures are
+inserted in the same instant, so with `(created_at desc, id desc)` ordering the trashed row landed
+wherever its random UUID put it, and page 2 often did not contain it even unfiltered. Only after
+pinning `created_at` to explicit offsets — so `gone` is deterministically ON page 2 — did the
+mutation die.
+
+That is the sharper form of V-1191's lesson. There, an absence proved nothing because the row
+would not have been present anyway. Here it proved nothing because **the fixture never put the row
+where the branch under test would have returned it.** A test can exercise the right method, assert
+the right property, and still never reach the predicate it exists to guard.
+
+**Axis status.** Tenancy (V-1187–1192), expiry (V-1193) and soft delete are all the same defect
+shape: one SQL predicate carrying a property, a service layer that trusts it, unit tests that
+cannot see it because they drive in-memory doubles. Status filters remain the last unmeasured one.

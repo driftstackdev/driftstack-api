@@ -433,6 +433,136 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
     // NULL→0, excludes trashed (notDeleted), scoped to the account. The
     // in-memory repo + service tests cover the math; this pins the actual
     // COALESCE(sum(...))::bigint SQL + the notDeleted filter on the driver.
+    // ── V-1194 — the soft-delete axis. `notDeleted` is one shared const used at nine
+    // sites; neutralising it fired eight assertions, so the exclusion is well covered for
+    // update / delete / restore / transfer / sumSizeBytes. Neutralising ONLY the five sites
+    // those assertions did not name left all 3,278 integration tests green. These four are
+    // the reachable ones.
+
+    it('CRITICAL countByAccount excludes trashed profiles. Trashing is the documented way to free a slot — the repo comment beside it says trashed profiles do not count toward the quota — so if they still counted, a customer who trashed a profile to make room would be refused anyway, and nothing would say why.', async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI)
+          throw new Error('real-PG trashed-count test: database unreachable in CI');
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleProfilesRepo({ client, db, close: async () => {} });
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`cnt-${accountId}@test.local`})`;
+      const base = { archetype: 'iphone17_ios18_7_safari26_4', description: null };
+
+      const live = await repo.insert({ accountId, name: 'live', ...base });
+      const gone = await repo.insert({ accountId, name: 'gone', ...base });
+      expect(await repo.countByAccount(accountId), 'both profiles should count while live').toBe(2);
+
+      expect(await repo.delete({ id: gone.id, accountId }), 'the trash call did not take').toBe(
+        true,
+      );
+      expect(
+        await repo.countByAccount(accountId),
+        'a trashed profile still counted toward the cap, so trashing frees nothing',
+      ).toBe(1);
+      void live;
+    });
+
+    it('CRITICAL list excludes trashed profiles. `listTrashed` is a separate read for the recycle bin, so a trashed row appearing in the live grid is not a cosmetic slip — it is the same profile shown in two places with two different meanings.', async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI)
+          throw new Error('real-PG trashed-list test: database unreachable in CI');
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleProfilesRepo({ client, db, close: async () => {} });
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`lst-${accountId}@test.local`})`;
+      const base = { archetype: 'iphone17_ios18_7_safari26_4', description: null };
+
+      const live = await repo.insert({ accountId, name: 'live-one', ...base });
+      const gone = await repo.insert({ accountId, name: 'gone-one', ...base });
+      const second = await repo.insert({ accountId, name: 'live-two', ...base });
+      const third = await repo.insert({ accountId, name: 'live-three', ...base });
+      await repo.delete({ id: gone.id, accountId });
+
+      // Ordering is (created_at desc, id desc) and these four rows are inserted in the
+      // same instant, so without explicit timestamps the trashed row lands anywhere and
+      // the cursor branch may never be asked to exclude it. Pin the order so `gone` is
+      // deterministically ON page 2.
+      for (const [p, offset] of [
+        [third, 0],
+        [second, 1],
+        [gone, 2],
+        [live, 3],
+      ] as const) {
+        await client`UPDATE profiles SET created_at = now() - ${`${offset} seconds`}::interval
+                     WHERE id = ${p.id}`;
+      }
+
+      // The CURSOR branch builds its own WHERE, so an unpaged check leaves it
+      // untested — the two branches carry the notDeleted filter separately.
+      const page1 = await repo.list({ accountId, limit: 2 });
+      expect(
+        page1.data.map((r) => r.id),
+        'page 1 leaked the trashed profile',
+      ).not.toContain(gone.id);
+      expect(page1.nextCursor, 'no second page to test the cursor branch with').not.toBeNull();
+      const page2 = await repo.list({ accountId, limit: 2, cursor: page1.nextCursor ?? undefined });
+      expect(
+        page2.data.map((r) => r.id),
+        'a cursor-paged read leaked the trashed profile',
+      ).not.toContain(gone.id);
+      expect(
+        [...page1.data, ...page2.data].map((r) => r.id),
+        'the paged reads never returned the later live rows, so the cursor branch did nothing',
+      ).toEqual(expect.arrayContaining([second.id, third.id]));
+
+      const ids = (await repo.list({ accountId })).data.map((r) => r.id);
+      expect(ids, 'the live profile is missing — the check below would prove nothing').toContain(
+        live.id,
+      );
+      expect(ids, 'a trashed profile appeared in the live listing').not.toContain(gone.id);
+      expect(
+        (await repo.listTrashed({ accountId })).map((r) => r.id),
+        'the trashed profile is not in the recycle bin either, so the fixture never trashed',
+      ).toContain(gone.id);
+    });
+
+    it('CRITICAL touch and recordSave are no-ops on a trashed profile. The repo says so beside recordSave — scoped and notDeleted like touch, a no-op for a wrong-account or trashed id — and a write that lands on a trashed row revives its usage timestamps and size while the customer believes it is in the bin.', async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI)
+          throw new Error('real-PG trashed-write test: database unreachable in CI');
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleProfilesRepo({ client, db, close: async () => {} });
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`tch-${accountId}@test.local`})`;
+      const base = { archetype: 'iphone17_ios18_7_safari26_4', description: null };
+
+      const gone = await repo.insert({ accountId, name: 'trashed-writes', ...base });
+      await repo.delete({ id: gone.id, accountId });
+
+      // Positive control: a LIVE profile does accept both writes, so a repo that
+      // silently wrote nothing at all could not satisfy the assertions below.
+      const live = await repo.insert({ accountId, name: 'live-writes', ...base });
+      await repo.touch({ id: live.id, accountId, at: new Date() });
+      await repo.recordSave({ id: live.id, accountId, at: new Date(), sizeBytes: 4242 });
+      const [liveRow] = await client<{ last_used_at: Date | null; size_bytes: string | null }[]>`
+        SELECT last_used_at, size_bytes FROM profiles WHERE id = ${live.id}`;
+      expect(liveRow?.last_used_at, 'a live profile did not accept touch').not.toBeNull();
+      // size_bytes is a bigint; postgres-js hands it back as a string.
+      expect(Number(liveRow?.size_bytes), 'a live profile did not accept recordSave').toBe(4242);
+
+      await repo.touch({ id: gone.id, accountId, at: new Date() });
+      await repo.recordSave({ id: gone.id, accountId, at: new Date(), sizeBytes: 9999 });
+      const [goneRow] = await client<{ last_used_at: Date | null; size_bytes: string | null }[]>`
+        SELECT last_used_at, size_bytes FROM profiles WHERE id = ${gone.id}`;
+      expect(goneRow?.last_used_at, 'touch landed on a trashed profile').toBeNull();
+      expect(goneRow?.size_bytes, 'recordSave landed on a trashed profile').toBeNull();
+    });
+
     it('sumSizeBytesByAccount: COALESCE NULL→0, account-scoped, excludes trashed', async () => {
       if (!dbReachable || !client) {
         if (process.env.CI) {
