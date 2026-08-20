@@ -45578,3 +45578,47 @@ Mutations: restoring the unqualified bullet fails the arm; deleting the exceptio
 paragraph fails it. Restored byte-identical, `apps/docs` rebuilt.
 
 `it(` count 26 unchanged. No new file, no ratchet change.
+
+## V-1069 — the direction V-837 structurally cannot check, and my first attempt at it was a false green
+
+V-837 derives the team-role split and asks whether every role check is a write gate.
+That catches a gate in the wrong place. It cannot catch a gate that is ABSENT, because
+an absent check contributes nothing to the list it partitions: a new route that
+resolves an effective account and forgets the role check leaves every V-837 arm green
+while a `member` mutates an owner's account.
+
+MEASURED: 47 live `/v1` writes resolve an effective account, and all 47 carry one of
+five gates — 18 `effectiveAccountIdForWrite`, 12 `callerCanAccessAgentSession`, 8
+`effectiveAccountIdForLiveOperation`, 6 inline `role !== 'admin'`, 3
+`effectiveAccountIdForKeyWrite`. No hole. The value is in refusing the forty-eighth.
+
+MY FIRST VERSION WAS A FALSE GREEN, and a mutation is the only reason I know. It
+detected "team-scoped" using the same tokens that count as gates. 22 of the 47 — every
+profiles, webhooks and api-keys write — are visible ONLY through their gating helper,
+because that helper is what reads the header. Deleting the gate therefore removed the
+route from the population rather than reporting it, and the arm passed. That is
+precisely the failure the file exists to prevent, wearing a pass as a disguise.
+
+The rewrite separates the vocabularies — scope markers chosen so none is also a gate —
+and pins the population as well as deriving it. A roster records the gate each write
+carries; the scan recomputes it; the two must agree. A deletion changes that route's
+answer, an addition puts an unregistered path in the scan, and either way someone has
+to come and say which.
+
+The gate vocabulary is READ OUT OF V-837 rather than restated, so the two files cannot
+drift into different ideas of what counts, and an arm fails if the list cannot be found.
+
+THREE MUTATIONS MISSED BEFORE ONE LANDED, each looking like a passing guard. The first
+neutered a `callerCanAccessAgentSession` call under `GET /v1/agent-sessions/:id` — a
+read, excluded by the writes filter. The second renamed one occurrence in a segment
+that held another. The third hit the helper DEFINITION rather than a call site, so
+every call still carried the token. Only after locating a specific call site under a
+specific write did the guard go red. "The mutation did not fire" kept having the second
+reading, and taking the first would have shipped a weaker file three separate times.
+
+Final mutations, all against real routes: neutering the gate under `POST /v1/profiles`
+— the case that was green before the rewrite — fails; under `POST /v1/api-keys` fails;
+injecting an ungated team-scoped write fails two arms; emptying V-837's helper list
+fails two. Restored byte-identical.
+
+`it(` count 5 in a new file. Ratchets 2940→2941 and 3106→3107.
