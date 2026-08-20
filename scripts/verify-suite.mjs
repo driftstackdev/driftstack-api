@@ -49,7 +49,7 @@ export const EXPECTED_TEST_FILES = 2953;
  * successful run, because a gate that does not name its own blind spot gets read
  * as covering everything.
  */
-export const EXPECTED_TEST_FILES_ALL = 3119;
+export const EXPECTED_TEST_FILES_ALL = 3120;
 
 /**
  * The CI jobs this gate does NOT run, with how to run each locally.

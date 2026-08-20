@@ -509,6 +509,22 @@ interface SessionQuery {
    *  `null` means this is the deliberate in-app/account-key path; `0` means a
    *  malformed generation was supplied and control must remain fail-closed. */
   controlGeneration: number | null;
+  /**
+   * Per-session control key carried IN THE QUERY, for the in-process simulator
+   * window only (Windows/Linux, where no separate Simulator app exists).
+   *
+   * The separate app must never receive a key this way: it is launched as its own
+   * PROCESS, and anything in its argv is world-readable in the process list — which
+   * is exactly why Rust consumes ck/cke from an owner-only 0600 handoff file and
+   * hands JavaScript only a non-secret generation. That threat does not exist here.
+   * An in-process WebviewWindow's URL never reaches argv, never reaches the process
+   * list, and is readable only by this app's own bundle — the window renders our
+   * `index.html` and shows the device as a WebRTC video track, so no remote DOM
+   * ever executes in it.
+   *
+   * Empty string when absent, which is every macOS launch.
+   */
+  controlKey: string;
   /** PUBLIC API base URL handed off at launch (`base=`). The SEPARATE Simulator
    *  app's own store may be empty → loadSettings() would default to
    *  localhost:3000 and every control call fails. SimulatorWindow persists this
@@ -542,9 +558,17 @@ export function controlAuthBoundaryForQuery(
   sessionId: string,
   controlGeneration: number | null,
   baseUrl: string,
+  controlKey = '',
 ):
   | { auth: ControlAuth; needsNativeLoad: false }
   | { auth: ControlAuth; needsNativeLoad: true; generation: number } {
+  // In-process window: no separate process exists to hand a key to, so it arrives
+  // in the query. Admissible ONLY when no native generation was supplied — a query
+  // carrying a generation is the separate-app path and stays fail-closed exactly as
+  // before, so this branch can never widen it.
+  if (controlGeneration === null && controlKey !== '') {
+    return { auth: controlAuthWith(controlKey, baseUrl, false), needsNativeLoad: false };
+  }
   if (controlGeneration === null) return { auth: null, needsNativeLoad: false };
   const auth = controlAuthWith('', baseUrl, true);
   if (sessionId === '' || controlGeneration <= 0) return { auth, needsNativeLoad: false };
@@ -555,7 +579,10 @@ export function controlAuthBoundaryForQuery(
  *  own `location.search`; the relaunch `ds-session` event passes a fresh query
  *  string so the window can switch session IN PLACE (without a reload that
  *  would tear down the live LiveKit Room). */
-function infoFromQuery(search: string = window.location.search): SessionQuery {
+/** Exported for tests: the parse step is where `ck` either reaches the boundary or is
+ *  silently dropped, and a boundary tested with a hand-passed key proves nothing about
+ *  whether the query is read at all. */
+export function infoFromQuery(search: string = window.location.search): SessionQuery {
   const q = new URLSearchParams(search);
   const ws_url = q.get('ws');
   const token = q.get('token');
@@ -580,6 +607,9 @@ function infoFromQuery(search: string = window.location.search): SessionQuery {
         : 0;
   // PUBLIC API host handed off at launch (see SessionQuery.baseUrl).
   const baseUrl = q.get('base') ?? '';
+  // Present only for the in-process window (see SessionQuery.controlKey). On the
+  // separate-app path Rust strips it before the WebView is created, so this is ''.
+  const controlKey = q.get('ck') ?? '';
   if (ws_url === null || token === null || ws_url === '' || token === '') {
     return {
       info: null,
@@ -589,6 +619,7 @@ function infoFromQuery(search: string = window.location.search): SessionQuery {
       sessionId,
       countryCode,
       controlGeneration,
+      controlKey,
       baseUrl,
     };
   }
@@ -602,6 +633,7 @@ function infoFromQuery(search: string = window.location.search): SessionQuery {
     sessionId,
     countryCode,
     controlGeneration,
+    controlKey,
     baseUrl,
   };
 }
@@ -2726,6 +2758,7 @@ export function SimulatorWindow(): JSX.Element {
     sessionId,
     countryCode,
     controlGeneration,
+    controlKey,
     baseUrl,
   } = query;
   // Join tokens and control credentials are needed only for the synchronous
@@ -2753,8 +2786,8 @@ export function SimulatorWindow(): JSX.Element {
   // remains a non-null fail-closed sentinel and never falls back to an account
   // API key. Only the deliberate in-app path (no cg) uses null/account auth.
   const controlAuthBoundary = useMemo(
-    () => controlAuthBoundaryForQuery(sessionId, controlGeneration, baseUrl),
-    [sessionId, controlGeneration, baseUrl],
+    () => controlAuthBoundaryForQuery(sessionId, controlGeneration, baseUrl, controlKey),
+    [sessionId, controlGeneration, baseUrl, controlKey],
   );
   const [loadedControlAuth, setLoadedControlAuth] = useState<{
     sessionId: string;
