@@ -152,6 +152,32 @@ describe('W547.A /docs/onboarding-for-future-developers.md content parity', () =
     );
   });
 
+  // V-1175 — this section told a new developer to run `npm run dump-openapi --workspace
+  // apps/server`, and apps/server has no such script; the command exits with `npm error
+  // Missing script`. It was wrong twice over: `dump-openapi.ts` takes an output PATH argument
+  // and writes the file with `writeFile`, so the `> openapi.json` redirect would have captured
+  // an empty file even had the script existed. Both halves are pinned, and the retired form is
+  // held out — an onboarding page is the one document whose reader cannot tell a broken command
+  // from their own mistake.
+  it('Generate-the-OpenAPI-spec framing pinned: the tsx entry point invoked with an output-path argument, plus the note that the path is an argument rather than a redirect — pinned so the command stays runnable and the redirect misconception does not come back', () => {
+    expect(body).toMatch(/### Generate the OpenAPI spec/);
+    expect(body).toMatch(/npx tsx apps\/server\/src\/lib\/dump-openapi\.ts openapi\.json/);
+    expect(body).toMatch(
+      /The path is an argument, not a redirect — the script writes the file itself/,
+    );
+    expect(body).toMatch(/`npm run sdk:python:dump-spec` is the same script wired to the path/);
+
+    expect(body, 'the missing dump-openapi npm script is being recommended again').not.toMatch(
+      /npm run dump-openapi/,
+    );
+    expect(body, 'the spec dump is being redirected again').not.toMatch(
+      /dump-openapi[^\n]*>\s*openapi\.json/,
+    );
+    expect(body, 'the redirect aside came back').not.toMatch(
+      /wherever your shell wants the redirect/,
+    );
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

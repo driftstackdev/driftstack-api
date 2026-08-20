@@ -50397,3 +50397,53 @@ reviewed exemption list. My source-regex attempt reported 96 documented-not-regi
 registered-not-documented; both numbers were artifacts of `{id}` versus `:id` and of route
 files that register on an instance not named `app`. The guard's own measurement — 244
 registered, 232 documented, 19 exempt — is the true one.
+
+### V-1175 — the onboarding page's OpenAPI command does not exist, and was wrong twice
+
+`every-runbook-path-resolves` (V-1141/V-1145) established that a repo PATH cited in
+documentation must resolve. **Commands were never covered**, and they fail worse: a broken path
+gives "no such file" against something the reader can go look for, while a broken npm script
+gives `npm error Missing script` — which reads, to a new developer, as _their own environment
+being wrong_.
+
+`docs/onboarding-for-future-developers.md` told new developers to run:
+
+```
+npm run dump-openapi --workspace apps/server > openapi.json
+```
+
+`apps/server` has no `dump-openapi` script — its scripts are build, dev, start, pretest, test,
+test:e2e, typecheck, db:migrate, db:seed. **Verified by running it**: `npm error Missing
+script`.
+
+**It was wrong a second time, independently.** `dump-openapi.ts` takes an output PATH argument
+and writes the file itself with `writeFile`, printing where it put it — its own header says
+`Run with: tsx src/lib/dump-openapi.ts <output-path>`. The `> openapi.json` redirect would have
+captured an empty file even had the script existed, and the aside underneath ("Or wherever your
+shell wants the redirect") taught the misconception a second time. Both were replaced. The
+corrected command was **run before being written down**: 2.0 MB, OpenAPI 3.1.0, 196 paths.
+
+**Scope is fenced blocks only, and that is a rule rather than a shortcut.** 44 prose mentions
+are excluded, because you cannot paste a sentence into a shell and documentation legitimately
+_discusses_ commands — one page describes what `npm run tauri:dev` does, and a proposal
+describes a `drizzle:generate` script it is asking to have created. Holding descriptive prose to
+the current inventory would fail those correctly-written lines.
+
+**`cd` is tracked, because ignoring it manufactures findings.** `npm run tauri build` is not a
+root script and three blocks run it — each after `cd apps/gui-client`, which makes it correct.
+My first scan called all three broken. The second still called the Windows one broken, because
+that block says `cd apps\gui-client` with a backslash. Both were the scanner. Of **122 initially
+flagged, 121 were mine**: `--workspace` accepts a path as well as a package name, `-w` needs to
+consume its trailing space, history files are not instructions, and `cd` decides where a command
+runs.
+
+Also guarded alongside: 28 direct `tsx`/`node`/`bash` invocations of repo script files in fenced
+blocks. All resolve — including the one this entry introduces, which sits outside the runbook
+tree that V-1145 covers.
+
+**A slip worth recording.** The mutation loop restored from a snapshot taken _before_ the fix,
+so each `cp` silently reverted my own correction; the final "restored" run failed and the guard
+was right. The existing rule is _restore byte-identical from a scratchpad snapshot, never git
+checkout_. The missing half: **the snapshot has to be of the state you intend to return to.**
+After a fix, that is the post-fix file, not the pristine one — otherwise the restore is itself a
+mutation, and a green run afterwards would have meant the fix was gone.

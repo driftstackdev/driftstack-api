@@ -160,10 +160,12 @@ NEVER set live-mode Stripe keys in your local `.env`. Live keys go through SSH-w
 It's auto-generated at runtime from the Zod schemas in `packages/api-types/`. Hit `/openapi.json` against a running dev server. To dump to a file:
 
 ```bash
-npm run dump-openapi --workspace apps/server > openapi.json
+npx tsx apps/server/src/lib/dump-openapi.ts openapi.json
 ```
 
-(Or wherever your shell wants the redirect.)
+The path is an argument, not a redirect — the script writes the file itself and prints where it
+put it. `npm run sdk:python:dump-spec` is the same script wired to the path the Python SDK build
+expects.
 
 ## When something's broken
 
