@@ -45,7 +45,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { AVATAR_MAX_BYTES } from '@driftstack/api-types';
+import { AVATAR_MAX_BYTES, OpenVpnProxyConfigSchema } from '@driftstack/api-types';
 import { describe, expect, it } from 'vitest';
 import { binarySizeLabel } from '../../src/lib/binary-size-label.js';
 import {
@@ -59,6 +59,7 @@ const ROUTE = resolve(REPO, 'apps', 'server', 'src', 'routes', 'agent-sessions.t
 const DOC = resolve(REPO, 'apps', 'docs', 'src', 'pages', 'api', 'agent-sessions.md');
 const ACCOUNT_DOC = resolve(REPO, 'apps', 'docs', 'src', 'pages', 'api', 'account.md');
 const ACCOUNT_ROUTE = resolve(REPO, 'apps', 'server', 'src', 'routes', 'account-me.ts');
+const PROXIES_DOC = resolve(REPO, 'apps', 'docs', 'src', 'pages', 'api', 'proxies.md');
 
 interface Cap {
   /** The default the route applies when nothing is injected. */
@@ -162,5 +163,41 @@ describe('the documented upload caps are the enforced ones', () => {
       accountRoute,
       'the avatar rejection message no longer interpolates the constant, so it can drift from it',
     ).toContain('Max ${AVATAR_MAX_BYTES} bytes.');
+  });
+
+  it('CRITICAL V-1066 the .ovpn size the proxies page publishes is the bound the schema applies, read off the schema rather than restated. The source side is covered behaviourally — a too-large blob is rejected in api-types-egress-content-parity — so raising the cap fails there and forces a visit, and the prose is the copy that gets left behind.', () => {
+    // `.refine()` wraps the string in a ZodEffects, so the length checks are not
+    // on the outer object — walk down to the schema that carries them. Reading a
+    // missing `checks` as "no bound" is how a derived check quietly stops
+    // deriving anything, so the assertion below insists a bound was found.
+    const maxOf = (node: unknown, depth = 0): number | undefined => {
+      if (depth > 8) return undefined;
+      const def = (node as { _def?: Record<string, unknown> })._def;
+      const checks = def?.['checks'] as { kind: string; value?: number }[] | undefined;
+      const found = checks?.find((c) => c.kind === 'max')?.value;
+      if (found !== undefined) return found;
+      for (const key of ['schema', 'innerType', 'in', 'out']) {
+        const next = def?.[key];
+        if (next !== undefined) {
+          const deeper = maxOf(next, depth + 1);
+          if (deeper !== undefined) return deeper;
+        }
+      }
+      return undefined;
+    };
+    const max = maxOf(OpenVpnProxyConfigSchema.shape.config_blob);
+    expect(
+      max,
+      'OpenVpnProxyConfigSchema.config_blob no longer carries a max bound',
+    ).toBeGreaterThan(0);
+
+    const proxiesDoc = readFileSync(PROXIES_DOC, 'utf-8');
+    const claimed = /up to ([\d.]+ [KMG]i?B)\)/.exec(proxiesDoc)?.[1];
+    expect(claimed, 'the .ovpn size claim is no longer on api/proxies.md').toBeTruthy();
+    expect(
+      claimed,
+      `api/proxies.md publishes ${String(claimed)} for config_blob but the schema bounds it at ` +
+        `${binarySizeLabel(max ?? 0)}`,
+    ).toBe(binarySizeLabel(max ?? 0));
   });
 });

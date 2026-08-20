@@ -45445,3 +45445,49 @@ run with the rebuild after V-1065 taught me a source-only edit moves nothing; re
 the route's comparison with a literal fails the second arm. Restored byte-identical.
 
 `it(` count 3→5. No new file, no ratchet change.
+
+## V-1066b — the rest of the published figures, and two more instrument flaws
+
+Having connected the avatar cap, the obvious question was which other published
+numbers are hand-mirrored constants with nothing joining them. So: every figure with a
+unit across the 60 customer doc pages, matched by magnitude against every exported
+constant.
+
+MOST OF THE OUTPUT IS COINCIDENCE, and saying so is the finding. `2 MiB` on
+`api/account.md` matches `OPENVPN_MAX_UTF8_BYTES` as readily as `AVATAR_MAX_BYTES`;
+`emails.md`'s "renews in 7 days" matches `PRESIGN_MAX_TTL_SECONDS` and is in fact
+Stripe's own upcoming-invoice notice, not our constant at all. Magnitude equality is
+not evidence of a relationship, so every row had to be read rather than counted.
+
+ONE SURVIVED. `api/proxies.md` states an `.ovpn` `config_blob` is accepted "up to 256
+KiB", and `OpenVpnProxyConfigSchema` bounds it at `256 * 1024`. Correct today, and
+joined by nothing. Milder than the avatar case because the source side is covered
+BEHAVIOURALLY — `api-types-egress-content-parity` rejects an oversized blob through
+`safeParse`, so raising the bound fails there and forces a visit. The prose is still
+the copy that gets left behind.
+
+A SECOND `config_blob` DECLARATION LOOKED LIKE A HOLE AND WAS NOT. `egress.ts` also
+has `InlineOpenVpnWireSchema.config_blob: z.string().min(1)` with no maximum, which
+reads as an unbounded path around the cap. It is the server→harness WIRE format, not
+customer input, and its own comment says so. Checked before claiming.
+
+TWO INSTRUMENT FLAWS, both mine, both in this batch.
+
+The figure regex required two or more digits for a bare number, so `2 GiB` and `2 MiB`
+— the avatar cap and the per-session lifetime cap, the two I most wanted — were
+invisible in the first pass. That is the fourth time in this arc that an instrument
+under-reported and the report read as a clean negative.
+
+Then the arm itself failed on first run: `config_blob` is
+`.string().min(1).max(...).refine(...).refine(...)`, and a `.refine()` wraps the
+string in a ZodEffects, so `_def.checks` is not on the outer node. The fix walks down
+through `schema` / `innerType` / `in` / `out`, and an assertion insists a bound was
+FOUND — because reading a missing `checks` as "no bound" is exactly how a derived
+check quietly stops deriving anything. Mutation M3 removes the `.max()` entirely and
+fails the arm, which is what proves that assertion is doing work.
+
+Mutations: overstating the page figure fails it; raising the schema bound with an
+`api-types` rebuild and a stale page fails it; deleting the bound fails it. Restored
+byte-identical.
+
+`it(` count 5→6. No new file, no ratchet change.
