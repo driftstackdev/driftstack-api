@@ -595,7 +595,7 @@ meaning of Article 4(12) GDPR:
    accompanied by reasons for the delay (Article 33(1) GDPR).
 2. **Notification to Customer (where Driftstack is Processor).**
    Driftstack notifies Customer without undue delay (target: within
-   48 hours of becoming aware), per the DPA Section 7.
+   48 hours of becoming aware), per the DPA Section 6.1.
 3. **Notification to Data Subjects (where Driftstack is Controller
    and Article 34 applies).** Driftstack communicates the breach to
    affected Data Subjects without undue delay where the breach is

@@ -50000,3 +50000,38 @@ Noted and deliberately not inflated: the settings page offers a renewal-reminder
 while crypto entitlements have no renewal, so a crypto-only customer can enable an email they
 will never receive. The description says "each subscription renewal" and a crypto entitlement
 is not a subscription, so it is accurate by omission rather than wrong.
+
+### V-1166 — the privacy policy sent breach-notification readers to the wrong DPA section
+
+V-1165 ended with a rule: a restatement that names the clause it implements cannot silently
+disagree with it. That rule has a precondition I did not test — the name has to be right.
+Applying the binding-clause method to the DPA found a case where it was not.
+
+The privacy policy's breach section says Driftstack notifies Customer "without undue delay
+(target: within 48 hours of becoming aware), **per the DPA Section 7**". **DPA Section 7 is
+`Records of Processing`.** The clause meant is `6.1 Notification to Customer`, under
+`6. Personal Data breaches`. A reader following that pointer mid-breach lands on
+records-keeping obligations.
+
+**Not a stale number from a renumbering.** Checked every revision of the DPA back to
+2026-07-13: `6.1 Notification to Customer` has carried that heading throughout, and Section 7
+has been `Records of Processing` throughout. It was wrong when written — in **both** published
+copies, `apps/marketing-site/src/pages/legal/privacy.md` and `docs/legal/privacy-policy.md`,
+which an existing guard requires to match each other. Corrected both to `Section 6.1`, the
+precise clause rather than the section, per V-1165's lesson.
+
+**The guard derives the check.** It reads the section number OUT of the policy and asserts the
+DPA heading at that number is the notification clause, so a future DPA renumbering fails here
+instead of quietly re-pointing the citation at whatever moved into that slot — which is the
+exact failure the original citation demonstrates. Three arms, all mutation-proved: reverting
+the number, correcting only one copy, and deleting the citation.
+
+**One arm was right for the wrong reason, and mutation-proving caught it.** Reverting to
+Section 7 failed as _"Section 7 has no heading"_ — because my regex required whitespace after
+the number while the DPA writes top-level sections as `## 7. Records…` with a period and
+sub-clauses as `### 6.1 Notification…` without. The failure was real and its stated reason was
+false, which in a guard is its own defect: a future reader would have been told a section that
+plainly exists does not. Fixed to accept both shapes; it now reports
+_"DPA Section 7 is 'Records of Processing' — not the clause that notifies the Customer"_.
+Mutation-proving is not just for confirming a sentinel fires — it is the only way to read the
+message it fires with.
