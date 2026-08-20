@@ -22,6 +22,22 @@
 // That ties the two spellings together through the schema, so the guard cannot drift
 // with either side.
 //
+// ── V-1070: deriving alone was a false green ──────────────────────────────
+//
+// The first version of this file derived the site list and compared each set. That
+// catches a site whose set is WRONG and cannot catch one that is GONE: deleting a
+// filter outright removes it from the population instead of reporting it, and the
+// arm passes. Measured — removing the `notInArray` from agent-sessions-repo, which
+// makes that query hand destroyed sessions back to a customer, left all three arms
+// green. The floor did not help either, since four remaining sites still cleared a
+// `> 3` bound.
+//
+// So the population is pinned as well as derived. EXPECTED_SITES records how many
+// of these filters each file carries; a deletion drops the count and an addition
+// raises it, and either way someone has to come here and say which. This is the
+// same correction V-1069 made to itself, applied to the guard that had shipped with
+// the flaw already in it.
+//
 // ── The one site that is deliberately different ────────────────────────────
 //
 // sessions-repo.ts also has `notInArray(status, ['busy', 'destroyed', 'errored'])`,
@@ -49,6 +65,18 @@ const SESSIONS_REPO = resolve(SRC, 'db/sessions-repo.ts');
  * claimant cannot take a session mid-use. Deliberately stricter than non-terminal.
  */
 const NOT_THE_NON_TERMINAL_TEST: ReadonlySet<string> = new Set(['busy,destroyed,errored']);
+
+/**
+ * How many `notInArray(<x>.status, [...])` filters each file carries.
+ *
+ * Pinned because the derived arms below can only judge a filter they can see. A
+ * query that drops its filter stops being visible and starts returning terminal
+ * sessions, which is the more damaging of the two failures.
+ */
+const EXPECTED_SITES: Readonly<Record<string, number>> = {
+  'db/agent-sessions-repo.ts': 1,
+  'db/sessions-repo.ts': 4,
+};
 
 function serverFiles(): string[] {
   const out: string[] = [];
@@ -143,6 +171,27 @@ describe('V-1059 every non-terminal session query agrees', () => {
       [...NOT_THE_NON_TERMINAL_TEST].filter((k) => !live.has(k)).sort(),
       'listed as deliberately different from the non-terminal test, but no query spells it that ' +
         'way any more — drop the entry:',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL no file has quietly lost a non-terminal filter. Deleting one removes it from every derived arm above rather than failing them — measured, and it left this file green while an agent-session query returned destroyed sessions. The count is what makes a deletion visible.', () => {
+    const perFile = new Map<string, number>();
+    for (const site of notInArraySites()) {
+      const key = site.file.replace('apps/server/src/', '');
+      perFile.set(key, (perFile.get(key) ?? 0) + 1);
+    }
+    const drifted: string[] = [];
+    for (const [file, expected] of Object.entries(EXPECTED_SITES)) {
+      const actual = perFile.get(file) ?? 0;
+      if (actual !== expected) drifted.push(`${file}: expected ${expected}, found ${actual}`);
+    }
+    for (const [file, actual] of perFile) {
+      if (!(file in EXPECTED_SITES)) drifted.push(`${file}: ${actual} unregistered filter(s)`);
+    }
+    expect(
+      drifted.sort(),
+      'the session-status filter population changed — a removed filter means that query now returns ' +
+        'terminal sessions; a new one belongs in EXPECTED_SITES:',
     ).toEqual([]);
   });
 });

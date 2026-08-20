@@ -45622,3 +45622,44 @@ injecting an ungated team-scoped write fails two arms; emptying V-837's helper l
 fails two. Restored byte-identical.
 
 `it(` count 5 in a new file. Ratchets 2940→2941 and 3106→3107.
+
+## V-1070 — the same false green in a guard I had already shipped
+
+V-1069 found that a guard whose POPULATION is detected by the same token it ASSERTS
+cannot report a deletion: the item leaves the set instead of failing. That is a shape,
+not an incident, so the honest next step was to check my own earlier guards for it
+rather than wait for one to matter.
+
+`every-non-terminal-session-query-agrees` (V-1059) has it. Its population is the
+`notInArray(<x>.status, [...])` sites and its property is that each set equals the
+derived terminal set. Deleting a filter outright removes the site from the population.
+
+MEASURED rather than reasoned: removing the `notInArray` from
+`db/agent-sessions-repo.ts` — which makes that query hand destroyed sessions back to a
+customer — left all three arms green. The floor did not help, because four remaining
+sites still cleared a `> 3` bound. The guard was written three sessions ago and shipped
+with the flaw already in it.
+
+The consequence ordering is worth stating: a filter with the WRONG set returns some
+terminal sessions, and the old arms catch that. A filter that is GONE returns all of
+them, and nothing caught that. The more damaging failure was the invisible one.
+
+Fixed the same way V-1069 fixed itself: `EXPECTED_SITES` pins how many of these
+filters each file carries, alongside the derivation rather than replacing it. A
+deletion drops a count, an addition raises one or introduces an unregistered file, and
+either way somebody has to come and say which.
+
+Mutations, all against real repo source: deleting the agent-sessions filter — the case
+that was green — fails; deleting one from sessions-repo fails; injecting an
+unregistered filter in a third file fails; and narrowing a set to `['destroyed']`
+still fails the original equality arm, so the derived half was not weakened by adding
+the pinned half. Restored byte-identical.
+
+Checked the rest of my recent guards for the same shape and they do not have it, for
+reasons worth recording so this is not re-audited: V-1052 takes its population from the
+declared webhook enum, V-1055 from bootstrap's constructions, V-1065 from the doc table
+whose row count is asserted against the tier roster, and V-1066's arms fail outright
+when the sentence they parse is absent. In each the population survives the removal of
+the thing being asserted.
+
+`it(` count 3→4. No new file, no ratchet change.
