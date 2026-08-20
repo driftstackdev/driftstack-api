@@ -47421,3 +47421,46 @@ Recorded because the unsound version looks compelling and would ship with an all
 that grows faster than the signal, which is the third time in this arc a plausible
 whole-repo guard has failed the same way (V-814's proximity scan, action 37's phantom
 paths, this).
+
+### V-1106 — the one cross-account isolation guard whose route table nobody checked
+
+Swept the class behind V-1069, V-1070, V-1093 and V-1103: a guard whose hand-written
+roster IS its own population, so a member missing from the list is not reported — it is
+simply not looked at. 140 rosters of five or more entries are iterated in assertions
+across the suite; 77 sit in files that never derive a population from source. The
+highest-consequence ones are the four cross-account isolation guards, which are what
+proves an ownership check exists at all — V-1104 used one of them to measure exactly
+that.
+
+Three of the four already derive their census from `fx.app.printRoutes()` and fail when
+a registered `:id` route is absent from the table. **`cross-account-session-isolation`
+did not.** Its `SESSION_ROUTES` and `CAPABILITY_GATED` tables happen to be complete
+today — measured, all eleven `/v1/sessions/:id` routes present — but nothing enforced
+it, and this is the core browser-session surface: navigate, interact, capture, extract,
+gui-input, login, search, wait, state. A route added to `sessions.ts` tomorrow would
+ship with no cross-account arm, and the file would stay green.
+
+The arm added follows the three siblings exactly, including their two hard-won details:
+it builds its own fixture rather than reusing whatever a previous arm left in `fx`
+(reading a closed instance's route tree happens to work, so order-dependence would
+surface as a throw rather than a failure), and it asserts a census floor so a wrong
+parameter name in the base path cannot match nothing and pass while checking nothing.
+
+Mutation-proved, restored byte-identical:
+
+- dropping `/capture` from the table fails, naming it;
+- adding `GET /v1/sessions/:id/secrets` to `sessions.ts` — the realistic case — fails
+  with `expected [ 'GET /v1/sessions/:id/secrets' ] to deeply equal []`, and the
+  injection typechecked cleanly, so the failure is the guard and not a compile artifact;
+- changing the base path to `:sessionId` fails the census floor with "found 0 routes,
+  expected at least 11 … which would make this census pass while checking nothing".
+
+**Two false leads on the way, both caught before they were written up.** The first
+measurement of roster coverage compared full `/v1/...` literals and reported 15 agent
+routes uncovered; the tables store `suffix` fragments composed at the `it.each`, so all
+15 were covered. The second reported `DELETE /v1/profiles/:id` and
+`/downloads/content` uncovered; the first is a standalone arm rather than a table row,
+and the second is in the table with a query string my comparison stripped. Both would
+have been confident, specific, wrong security findings. The detector for "which files
+lack a completeness arm" was also wrong at first — it grepped one phrasing and reported
+the profile guard as missing an arm it has, worded differently.

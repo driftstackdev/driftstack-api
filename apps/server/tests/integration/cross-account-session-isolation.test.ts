@@ -30,6 +30,7 @@ import {
   seedAdditionalAccount,
   type TestAppFixture,
 } from './_helpers/build-test-app.js';
+import { assertCensusSaw, opsUnder } from './_helpers/registered-ops.js';
 
 let fx: TestAppFixture;
 
@@ -212,4 +213,26 @@ describe("account B cannot reach account A's session on any route", () => {
       ).toBe(503);
     },
   );
+  it('CRITICAL V-1106 a new /v1/sessions/:id route must be in SESSION_ROUTES or CAPABILITY_GATED, or its ownership check ships untested. Both tables are hand-written and were complete when measured — but a table that is also its own population cannot report a route missing from it, so the next route added to sessions.ts would get no cross-account arm and nothing would say so. The three sibling isolation guards (agent-session, profile, crypto-order) each derive this census already; this file was the one that did not.', async () => {
+    // Own fixture rather than whatever a previous arm left in `fx` — reading a
+    // closed instance's route tree happens to work, so the order-dependence
+    // would surface as this arm throwing rather than failing.
+    fx = await buildTestApp();
+    const registered = opsUnder(fx.app.printRoutes({ commonPrefix: false }), '/v1/sessions/:id');
+    // A base path whose parameter name is wrong matches nothing and would pass
+    // while checking nothing.
+    assertCensusSaw(registered, '/v1/sessions/:id', 11);
+
+    // Query strings in a table entry are fixture detail, not route identity.
+    const covered = new Set(
+      [...SESSION_ROUTES, ...CAPABILITY_GATED].map(
+        (r) => `${r.method} /v1/sessions/:id${r.suffix.split('?')[0] ?? ''}`,
+      ),
+    );
+    const missing = registered.filter((op) => !covered.has(op));
+    expect(
+      missing,
+      `these :id routes have no cross-account arm:\n  ${missing.join('\n  ')}`,
+    ).toEqual([]);
+  });
 });
