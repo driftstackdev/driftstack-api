@@ -47631,3 +47631,39 @@ arm naming `internal-atlas-priority.ts`; drifting the advertised max to 2000 fai
 mutation edited nothing — the file already contained two `max(2000)` elsewhere and my
 pattern was not anchored to the constant — and the suite passed, which reads exactly
 like a guard that does not work.
+
+### V-1111 — the guard that exists because a sender went undeclared could not see a new sender
+
+Last of the roster sweep. `an-attachment-declares-its-filename-header` was written for
+V-941: three endpoints sent `Content-Disposition` and the document declared it for one.
+Its own header quotes the principle from the endpoint that had it right — "the
+description above has always MENTIONED this header, but prose is not something a code
+generator can use."
+
+It fixed those three and left the population hand-written, so a fourth sender would be
+in exactly the state V-941 found: sending the header, undeclared in the spec, and not
+reported — because the table is what the document side is compared against, and a route
+with no row is never looked at.
+
+Measured complete first, and the measurement needed two corrections. Grepping
+`Content-Disposition` in the routes returned a single comment, because the code sends it
+lowercase via `.header('content-disposition', …)`. Case-insensitively there are FOUR
+send sites across THREE files against three rostered paths — which looks like a missing
+row and is not: `/v1/account/audit-log/export` sends it once per format branch, `.csv`
+and `.json`, and the spec declares the header at response level, so both branches are
+covered by one declaration. Checked directly rather than inferred.
+
+The arm derives the senders and pins per-file counts. Counts rather than a bare file
+list because one endpoint can send from two branches, so a THIRD branch appearing inside
+an already-rostered file keeps the file list identical — the case a file-level check
+cannot see. Comments are stripped before counting: the prose beside these handlers
+discusses the header by name, and counting a sentence as a send site is how a census
+reports coverage it does not have.
+
+Mutation-proved, restored byte-identical:
+
+- a new route file sending the header fails naming `profiles.ts`;
+- a third branch inside `account-audit.ts` fails as "expected 2, found 3" while the file
+  list is unchanged — the direction the per-file counts exist for;
+- a comment mentioning `.header('content-disposition', …)` raises the raw mention count
+  to 3 and the census stays at 2, so the strip is doing what it claims.

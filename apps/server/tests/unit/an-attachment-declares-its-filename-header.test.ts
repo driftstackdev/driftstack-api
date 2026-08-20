@@ -21,7 +21,7 @@
 // from "completing the set" and turning an inline receipt into a download.
 
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -102,5 +102,50 @@ describe('V-941 an attachment declares its filename header', () => {
       readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes/billing-crypto-orders.ts'), 'utf8'),
       'and it still replies inline text/plain',
     ).toMatch(/reply\.type\('text\/plain; charset=utf-8'\)\.send\(/);
+  });
+  it('CRITICAL V-1111 every route that sends Content-Disposition is in this table, and none has grown a second attachment quietly. The table is what the document side is compared against, so a route sending the header without a row here is not reported as undeclared — it is never looked at, which is the state V-941 found: three endpoints sent it and the spec declared it for one. Counts are per file because one endpoint can send it from two branches (the audit-log export does, once per format) and a bare file list would not see a THIRD branch appear.', () => {
+    const routesDir = resolve(REPO_ROOT, 'apps/server/src/routes');
+    const SEND = /\.header\(\s*'content-disposition'/gi;
+    const live = new Map<string, number>();
+    for (const f of readdirSync(routesDir).filter((n) => n.endsWith('.ts'))) {
+      // Comments are stripped first: the prose beside these handlers discusses
+      // the header by name, and counting a sentence as a send site is how a
+      // census like this reports coverage it has not got.
+      const src = readFileSync(resolve(routesDir, f), 'utf8').replace(/\/\/[^\n]*/g, '');
+      const n = (src.match(SEND) ?? []).length;
+      if (n > 0) live.set(`apps/server/src/routes/${f}`, n);
+    }
+    expect(live.size, 'route files sending Content-Disposition').toBeGreaterThanOrEqual(3);
+
+    const rostered = new Set(ATTACHMENTS.map((a) => a.routeFile));
+    expect(
+      [...live.keys()].filter((f) => !rostered.has(f)).sort(),
+      'these route files send Content-Disposition but have no row, so nothing checks the document ' +
+        'declares it for them:',
+    ).toEqual([]);
+    expect(
+      [...rostered].filter((f) => !live.has(f)).sort(),
+      'rows for route files that no longer send the header at all:',
+    ).toEqual([]);
+
+    // Per-file send-site counts. A new attachment added inside an
+    // already-rostered file keeps the file list identical and would otherwise
+    // be invisible.
+    const EXPECTED_SITES: Readonly<Record<string, number>> = {
+      'apps/server/src/routes/account-audit.ts': 2,
+      'apps/server/src/routes/admin-crypto-orders.ts': 1,
+      'apps/server/src/routes/billing-crypto-orders.ts': 1,
+    };
+    const drifted: string[] = [];
+    for (const [file, n] of live) {
+      const want = EXPECTED_SITES[file];
+      if (want === undefined) drifted.push(`${file}: ${String(n)} unregistered send site(s)`);
+      else if (want !== n) drifted.push(`${file}: expected ${String(want)}, found ${String(n)}`);
+    }
+    expect(
+      drifted.sort(),
+      'the Content-Disposition send-site population changed — a new attachment needs a row and a ' +
+        'declared header, a removed one needs its row dropped:',
+    ).toEqual([]);
   });
 });
