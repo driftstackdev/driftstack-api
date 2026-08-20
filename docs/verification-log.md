@@ -49961,3 +49961,42 @@ the right answer; it is the parenthetical read alone that misleads. Whether to d
 data", drop the number, or align it is a drafting decision for counsel, whose review of the
 legal pages `docs/launch/pre-launch-checklist.md` still lists as outstanding. Recorded with the
 row-by-row comparison so that review does not have to build it.
+
+### V-1165 — the binding-clause sweep, completed: six clauses, two findings, and what stopped the other four drifting
+
+V-1163 and V-1164 came out of one method — read the clause that binds, then check what
+restates it. This finishes that pass over every Terms clause carrying a concrete quantity, so
+the vein is bounded rather than left half-worked.
+
+**Six clauses. Two produced findings, both already recorded:** §8.7 (refunds) in V-1163, where
+the billing FAQ's "beyond a brief evaluation" grants what the policy's "not yet initiated a
+Session" withholds; and §14.5.4 in V-1164, where "typically 30 days post-termination for
+content data" matches no row of the eleven-row schedule it defers to.
+
+**The other four are clean, and one of them shows why.**
+
+- **§9.2 (SLA)** — the strongest result. `docs/sla-policy.astro` states 99.9% monthly
+  availability with Severity-1 first response of 4 hours on `api_scale` and 1 hour on
+  `enterprise`, matching the binding text exactly. It does not merely happen to agree: the
+  page says the column "is the ToS §9.2 grant". **Explicit deference is what stopped this one
+  drifting**, and it is the difference between this clause and §14.5.4, where a number was
+  restated in a parenthetical with nothing pointing back.
+- **§9.3 (maintenance)** — the 48-hour notice is stated only in the Terms. The status page is
+  the announcement CHANNEL, not a restatement, so there is nothing to diverge. The 48-hour
+  figures elsewhere in the DPA and privacy policy are breach notification, an unrelated
+  subject that a careless grep would have merged with this one.
+- **§8.5 (late payment) and §8.6 (disputes)** — not restated on any customer surface. The
+  nearest match, the billing FAQ's "there is no grace period", is about crypto prepaid
+  entitlements expiring within ~15 minutes, a different mechanic from card invoicing with
+  past-due interest.
+
+**The design lesson is worth more than the two findings.** Every clean clause is clean for one
+of two structural reasons: it is stated once and never restated, or its restatement names the
+clause it implements. Both findings are restatements that named nothing. A pin freezing a
+restatement cannot see the original; a sentence pointing at the original cannot silently
+disagree with it.
+
+Noted and deliberately not inflated: the settings page offers a renewal-reminder preference
+while crypto entitlements have no renewal, so a crypto-only customer can enable an email they
+will never receive. The description says "each subscription renewal" and a crypto entitlement
+is not a subscription, so it is accurate by omission rather than wrong.
