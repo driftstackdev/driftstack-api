@@ -49568,3 +49568,22 @@ one document and expected in the other, and which it is depends on what the docu
 to be, not on how wrong the row is.
 
 What is left behind is small and real: three of the "not re-verified" rows now are.
+
+**Addendum — the action queue, measured, and V-872's diagnosis confirmed.** Took the same
+method to `docs/founder-action-queue.md`. Fourteen repo paths are cited and thirteen
+resolve; the fourteenth, `docs/archive/founder-action-queue-resolved.md`, does not, and
+neither does `docs/archive/`. That reads like a broken pointer and is not: the queue's
+process says resolved entries sit for 30 days "then archive into" that file, and **zero
+entries have ever been marked RESOLVED** — the single occurrence of the word is the process
+description itself. Nothing has ever been archived, so the destination has never needed to
+exist.
+
+The measurement does confirm V-872's diagnosis exactly. That banner says "'Updated as items
+resolve' is an intention, not a record… which is exactly how a resolved item stays unmarked
+indefinitely", and V-871 had already found a brand-asset item that shipped 2026-07-07 and
+sat unmarked. Zero RESOLVED entries against at least one demonstrably completed item is that
+claim in numbers.
+
+No fix. The queue is the outside-engineering list — credentials, billing, legal authority —
+so its items are external by construction, the same boundary as D-4, D-6 and the crypto
+confirmation thresholds. What the repo could answer, it answered.
