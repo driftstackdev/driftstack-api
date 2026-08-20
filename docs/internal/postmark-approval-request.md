@@ -5,6 +5,34 @@
 **Server:** driftstack-transactional (ID 19089808)
 **Sender domain:** driftstack.dev (DKIM + Return-Path verified)
 
+> **⚠ V-1140 — these are the answers submitted on 2026-05-09, and they do not
+> describe one category of mail the server sends.** Annotated rather than
+> rewritten: this file records what went to a sub-processor, so the answers
+> below are left as submitted.
+>
+> `services/incident-notifications.ts` fans status-incident mail to every
+> confirmed status-page subscriber, each with a freshly rotated personal
+> unsubscribe URL, on the default `outbound` transactional stream —
+> `messageStream = 'outbound'` in `services/email.ts`, never overridden
+> anywhere in `apps/server/src`. Q2 lists the status-page subscription
+> CONFIRMATION but not the incident mail itself, and states that every message
+> is triggered by a customer-initiated action or a per-account lifecycle event.
+> An incident fan-out is neither. Q3 repeats the claim under Segmentation.
+>
+> This is not a case of the product changing afterwards:
+> `incident-notifications.ts` and `status-subscribers.ts` both landed
+> 2026-05-07, two days before this submission.
+>
+> Whether those templates should move to a broadcast stream, or whether written
+> confirmation should be obtained that double-opt-in status notifications may
+> ride `outbound`, is **D-8** — open, and owned by whoever holds the Postmark
+> account. This note takes neither option. It exists so that question is not
+> settled by reading a document that never mentions the mail.
+>
+> One further caveat: Q2's list is no longer verbatim-as-submitted. V-798
+> removed three rows naming mail the product cannot send, with its reasoning
+> recorded inline below; git history is the only exact record of the original.
+
 ## Why we requested approval
 
 Postmark's pre-approval anti-abuse policy restricts new accounts to

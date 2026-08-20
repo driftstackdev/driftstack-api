@@ -139,4 +139,43 @@ describe('W563.B /docs/internal/postmark-approval-request.md content parity', ()
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });
+
+  // V-1140 — this file records answers submitted to a sub-processor on 2026-05-09.
+  // They say every message is triggered by a customer-initiated action or a
+  // per-account lifecycle event, and that there are no broadcasts. The server also
+  // fans status-incident mail to every confirmed subscriber, each with a rotated
+  // personal unsubscribe URL, on the transactional `outbound` stream. Q2 lists the
+  // subscription CONFIRMATION and not that mail.
+  //
+  // The answers are deliberately left as submitted — rewriting them would falsify
+  // the record of what a vendor was told. The banner is what carries the
+  // correction, so the banner is what has to be held.
+  it('CRITICAL the correction banner is present. Without it this document reads as an accurate description of every message the server sends, and D-8 — whether the status templates belong on a broadcast stream — would be decided against a list that never mentions the mail in question.', () => {
+    const body = read(LIB);
+    expect(body, 'the V-1140 correction banner was removed').toMatch(/V-1140/);
+    expect(body, 'the banner no longer names the uncovered category').toMatch(
+      /incident-notifications\.ts/,
+    );
+    expect(body, 'the banner no longer records that the fan-out predates the submission').toMatch(
+      /2026-05-07, two days before this submission/,
+    );
+  });
+
+  it('CRITICAL the transactional stream is still the only one used. The banner asserts `outbound` is never overridden; if a broadcast stream is ever wired the banner becomes the stale half of this document and should be revisited rather than left asserting a resolved question is open.', () => {
+    const email = read(resolve(REPO_ROOT, 'apps/server/src/services/email.ts'));
+    expect(email, 'the outbound default moved out of email.ts').toMatch(
+      /messageStream = 'outbound'/,
+    );
+    const overrides = [...email.matchAll(/messageStream:\s*'(\w+)'/g)].map((m) => m[1] ?? '');
+    expect(
+      overrides,
+      'a message stream is now set explicitly — the banner needs revisiting',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL the subscriber fan-out the banner describes still exists. If incident mail stops going to a subscriber list, the whole basis of the correction is gone and this note should be retired deliberately, not left standing over behaviour that no longer happens.', () => {
+    const fan = read(resolve(REPO_ROOT, 'apps/server/src/services/incident-notifications.ts'));
+    expect(fan, 'the confirmed-subscriber snapshot is gone').toMatch(/confirmed-subscriber list/);
+    expect(fan, 'the per-subscriber unsubscribe rotation is gone').toMatch(/unsubscribe/i);
+  });
 });

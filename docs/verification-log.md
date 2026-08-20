@@ -48909,3 +48909,47 @@ guard, or keeping it live and accepting that assertions move with every GUI land
 churn cost was the argument for (a), and it only applies to a LIVE document. V-801 froze
 this one, so the body stops moving and the 117 assertions stop churning on their own. The
 GUI owner can still delete the guard; there is now just no cost forcing it.
+
+### V-1140 — the Postmark submission does not describe the mail the server actually broadcasts
+
+D-8 says the status-incident fan-out is list mail with an unsubscribe link riding a
+transactional stream, and warns specifically: do not delete the three false rows and leave
+the "no broadcasts" sentence standing. **That is exactly the state that exists** — V-798
+removed the three rows and the sentence is still there.
+
+Verified end to end:
+
+- `services/incident-notifications.ts` snapshots the confirmed-subscriber list and, per
+  subscriber, rotates the unsubscribe token and sends with a fresh personal unsubscribe
+  URL. That is list mail with an unsubscribe.
+- It rides `outbound`. `messageStream = 'outbound'` is the default in `services/email.ts`
+  and there is **no override anywhere** in `apps/server/src` — enumerated in full, not
+  sampled.
+- Q2 lists "Status-page subscription confirmation (double opt-in)" — the CONFIRMATION —
+  and not the incident mail itself, while asserting every message is triggered by a
+  customer-initiated action or a per-account lifecycle event. An incident fan-out is
+  neither, and Q3 repeats the claim under Segmentation.
+
+**A timeline the plan did not establish, and it changes the story.** This is not a case of
+the product outgrowing an accurate submission: `incident-notifications.ts` and
+`status-subscribers.ts` both landed **2026-05-07**, and the answers were submitted
+**2026-05-09**. The mail existed two days before the form was filled in.
+
+**Annotated, not rewritten, and that distinction is the whole point.** The file header says
+"Submitted: 2026-05-09" under a heading reading "Form answers submitted". Editing the
+answers to match reality would falsify the record of what a vendor was told — the failure
+mode is the opposite of the usual one here, where making a doc true is the fix. So the
+answers stand and a banner carries the correction, the same shape V-801 used on the
+gui-client audit. The banner also flags that Q2 is no longer verbatim: V-798's deletion of
+three rows means git history is the only exact record of the original text.
+
+Three arms added to the existing pin, each mutation-proved: the banner and its timeline
+sentence must be present; `outbound` must remain the only stream used, derived by
+enumerating overrides so wiring a broadcast stream turns this red rather than leaving a
+correction standing over a resolved question; and the subscriber fan-out must still exist,
+so retiring the note becomes deliberate.
+
+**D-8 itself is untouched.** Moving the four templates to a broadcast stream, or obtaining
+written confirmation that double-opt-in status notifications may ride `outbound`, remains
+the call of whoever holds the Postmark account. What changed is that the question can no
+longer be answered by reading a document that never mentions the mail.
