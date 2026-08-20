@@ -52151,3 +52151,60 @@ restored (source 0 dirty)                        9 passed
 **Owed remaining: 25**, and two of the four measured divergences are still open —
 `platform-secrets::listMeta` and `webhooks::findEndpointsNeedingForceRotation`. They are named here
 rather than left implicit, because a measurement reported without its residue reads as completion.
+
+---
+
+## V-1210 — order plus a limit is selection, and a second divergence measured but not half-fixed
+
+The fifth of the twenty-nine, closing the first of the two divergences V-1209 measured and left
+open. This is the consequential one:
+
+```
+DrizzleWebhooksRepo   .orderBy(webhookEndpoints.secretCreatedAt).limit(args.limit)
+InMemoryWebhooksRepo  for (const r of this.endpoints.values()) … if (out.length >= limit) break;
+```
+
+The double filtered correctly and honoured the limit — that part was faithful. What differed is
+WHICH endpoints came back when more were eligible than the limit allowed. Ordering plus a limit is
+SELECTION, and the endpoints most overdue for rotation are exactly the ones arbitrary iteration can
+keep skipping, tick after tick. The double now sorts by `secretCreatedAt` before slicing.
+
+**What was already guarded, stated plainly.** `db-webhooks-force-rotation-selection-drizzle.test.ts`
+pins the Drizzle side thoroughly, including that the due set is oldest-first and the limit is
+honoured. The Drizzle half was never the gap. Nothing guarded the double, and nothing compared the
+two — that comparison is the entire value here, and presenting the Drizzle arms as new coverage
+would be dishonest.
+
+**A second divergence, found by my own broken fixture, measured and left open.** The first run
+failed with `Webhook signing secret must match whsec_<32 lowercase base32 characters>` — from the
+Drizzle half only. The real repo validates the secret before storing; the double accepts any string,
+so unit tests build endpoints production would refuse.
+
+I enforced it in the double, ran the full suite, and it red **43 tests across six files**. The suite
+carries 72 `secret: '…'` literals — `'whsec_test'`, `'secrettest456'`, `'s'`, `''` — and several are
+invalid ON PURPOSE because they test rejection. So tightening the double is right, and it is its own
+piece of work with its own fixture sweep and its own judgement about which literals are deliberate.
+Doing it as a side effect of an ordering fix would have meant rewriting six files of unrelated tests
+late in a long session.
+
+Reverted: the double's validation, the `validatePlaintext` → `assertValidWebhookSecret` export it
+required, and the contract arm that asserted it. What shipped is the ordering fix, fully proved. The
+divergence is recorded here with its blast radius so the decision to tighten is explicit rather than
+implied — a finding named with its cost is actionable; a finding half-applied is a broken suite.
+
+**Two vacuity traps in one file, both caught by running before fixing.** First: creating the three
+endpoints in age order makes Map iteration coincide with secret age, and every arm passed against a
+double that never sorts. Creating them middle, newest, oldest breaks the coincidence. Second: the
+sweep is PLATFORM-WIDE — it takes no account id, because force-rotation is an operator action across
+every customer — so rows seeded by other arms on the shared database landed in each result. Every
+assertion now scopes to its own account; without that the arms pass or fail on whatever else is in
+the table, which is a flake dressed as a contract.
+
+```
+M1  DRIZZLE loses its ORDER BY           1 failed | 8 passed
+M2  the DOUBLE reverts to break-at-limit 1 failed | 8 passed
+restored (source 0 dirty)                9 passed
+```
+
+**Owed remaining: 24**, plus two named items: `platform-secrets::listMeta` from the V-1209
+measurement, and the webhook-secret validation divergence above.

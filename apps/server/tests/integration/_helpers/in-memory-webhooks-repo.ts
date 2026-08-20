@@ -202,9 +202,13 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
       if (r.forceRotatedAt !== null) continue;
       if (r.secretCreatedAt >= cutoff) continue;
       out.push({ ...r, accountEmail: null });
-      if (out.length >= args.limit) break;
     }
-    return Promise.resolve(out);
+    // V-1210 — mirrors DrizzleWebhooksRepo's `ORDER BY secret_created_at` BEFORE `limit`. Breaking
+    // out of Map iteration at the limit filtered correctly and selected arbitrarily, so the
+    // endpoints most overdue for rotation were the ones this could keep skipping. Order combined
+    // with a limit is selection, not presentation.
+    out.sort((a, b) => a.secretCreatedAt.getTime() - b.secretCreatedAt.getTime());
+    return Promise.resolve(out.slice(0, args.limit));
   }
 
   forceRotateSecret(input: {
