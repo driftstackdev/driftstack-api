@@ -163,7 +163,14 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     expect(body).toMatch(/`POST \/v1\/webhook-deliveries\/:deliveryId\/replay`/);
     expect(body).toMatch(/Resets the delivery to `pending` so the worker re-fires it on the next/);
     expect(body).toMatch(/poll cycle — up to 60 seconds/);
-    expect(body).toMatch(/Account-scoped: the delivery must belong/);
+    // V-1122 — the replay is scoped to the EFFECTIVE account, not the calling
+    // one. This pin anchored on "Account-scoped:" rather than the ownership
+    // clause, which is why the sweep that corrected the other six surfaces did
+    // not reach it — a fifth spelling of the same claim.
+    expect(body).toMatch(/Scoped to the \*\*effective\*\* account: the delivery must belong/);
+    expect(body, 'the account-scoped wording must not return').not.toMatch(
+      /Account-scoped: the delivery must belong/,
+    );
     expect(body).toMatch(/Request body: `\{\}` \(empty\)\./);
     expect(body).toMatch(/"status": "pending",/);
     expect(body).toMatch(/"attempts": 0,/);

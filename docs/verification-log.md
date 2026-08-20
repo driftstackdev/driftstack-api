@@ -48155,3 +48155,24 @@ Mutation-proved, restored byte-identical: reverting the route comment, the custo
 and the Go docstring each fails its own arm. `openapi.json` regenerated in the same
 commit this time — the step V-1121's addendum recorded. `go vet` clean, ruff clean, docs
 rebuilt, rendered gate green, 0 tsc errors.
+
+### V-1122 addendum — a seventh pin, anchored on a fifth spelling
+
+The suite went red after V-1122: `docs-site-reference-webhooks-content-parity:166` also
+froze the replay claim. My rule-2 enumeration searched the OWNERSHIP clause — "calling
+account owns", "your account owns", "owned by the calling account" — and this pin
+anchors on the phrase before it, `/Account-scoped: the delivery must belong/`, dropping
+the clause entirely.
+
+So the same sentence was frozen in seven places across five spellings, and the fifth is
+not a variant of the claim at all — it is the claim's PREFIX, which no pattern built
+from the claim's wording can match. Grepping the corrected side would have found it;
+grepping only what I was replacing did not.
+
+That is the practical addition to the rule this arc has been sharpening: after fixing a
+claim, grep for what the OLD text said AND for the stable phrase around it, because a
+pin is free to anchor anywhere in the sentence — including on the half that is not
+changing.
+
+Fixed with a negative on the old prefix and mutation-proved: reverting the page fails
+the new assertion. Six pins in the parent commit, this one behind it, all discriminating.
