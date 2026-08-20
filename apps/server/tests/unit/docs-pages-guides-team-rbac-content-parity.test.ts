@@ -150,8 +150,18 @@ describe('W783 docs /guides/team-rbac content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /\*\*Persisted metadata reads\*\* \(including session list\/detail\): both\s*\n?\s+`member` and `admin` allowed\./,
+      /\*\*Persisted metadata reads\*\* on `\/v1\/sessions` \(list and detail\): both\s*\n?\s+`member` and `admin` allowed\./,
     );
+    // V-1068 — the bullet used to say "including session list/detail" without
+    // qualification, which is false for agent sessions: GET /v1/agent-sessions
+    // is admin-only because it carries transcripts and live control state.
+    expect(p, 'the agent-session read exception is no longer stated').toMatch(
+      /`GET \/v1\/agent-sessions`\s*\n?\s*requires `admin` even though it is a read/,
+    );
+    expect(
+      p,
+      'the guide again says session reads are open to member without excepting agent sessions',
+    ).not.toMatch(/\*\*Persisted metadata reads\*\* \(including session list\/detail\)/);
     expect(p).toMatch(
       /\*\*Live session state\*\* \(`GET \/v1\/sessions\/:id\/state`\): `admin` only\./,
     );

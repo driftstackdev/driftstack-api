@@ -116,8 +116,13 @@ curl -X POST https://api.driftstack.dev/v1/sessions \
 
 Role gating:
 
-- **Persisted metadata reads** (including session list/detail): both
+- **Persisted metadata reads** on `/v1/sessions` (list and detail): both
   `member` and `admin` allowed.
+- **Agent-session reads are the exception.** `GET /v1/agent-sessions`
+  requires `admin` even though it is a read: an agent session carries the
+  model transcript and live control state, so the collection is not
+  widened to read-only members. A `member` acting on an owner gets `403`
+  there while the plain session list still works.
 - **Live session state** (`GET /v1/sessions/:id/state`): `admin` only.
   It claims the driver and returns cookies/local storage; `member` gets
   `403` before any session or driver mutation.

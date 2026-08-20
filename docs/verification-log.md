@@ -45533,3 +45533,48 @@ now a standing step after any mutation round that `cp`s a page back, since the r
 bumps mtime past the last build twice running.
 
 `it(` count 4→5. No new file, no ratchet change.
+
+## V-1068 — the RBAC guide promised members a read the server refuses
+
+Third pass of the enumerate-an-error-class sweep, on `ForbiddenError`. 21 conditions
+across the live `/v1` surface, dominated by one rule: acting on a team owner requires
+the `admin` role for a specific set of operations.
+
+`guides/team-rbac.md` states that rule in three bullets, and two are exactly right.
+Live session state is admin-only, matching `effectiveAccountIdForLiveOperation` in
+routes/sessions.ts, whose own comment gives the reason — it exposes cookies and
+localStorage and owns the driver. Write endpoints are admin-only. Verified per route
+rather than taken from the page: `GET /v1/sessions` and `GET /v1/sessions/:id` carry
+no role check, `GET /v1/sessions/:id/state` is gated. The guide describes those three
+correctly.
+
+The third bullet said "Persisted metadata reads (including session list/detail): both
+member and admin allowed", and that is false for agent sessions. `GET
+/v1/agent-sessions` refuses a non-admin membership with 403. The behaviour is
+deliberate and the source says why at the gate: an agent session carries the model
+transcript and live control state, so the collection is not widened to read-only
+members.
+
+So an owner granting `member` for read-only visibility — which the same guide
+recommends, "use role: 'member' for read-only access" — gets a role that can list
+sessions and cannot list agent sessions, with nothing saying so. The page now names
+the exception and the reason beside the general rule.
+
+`routes/sessions.ts` carries a similar sentence and is NOT changed: it says persisted
+metadata reads remain available to team members, scoped to that file, where it is
+true. Only the guide generalised across both surfaces.
+
+Two things checked that did not become claims. There is no live `GET
+/v1/agent-sessions/:id` at all — the only registration is in
+`registerAgentSessionsDisabledRoutes` — so "detail" has no agent-session counterpart
+to gate. And nine of the 24 conflicts in the V-1067 sweep were attributed to the
+handback registration when several plainly belong to the turn-dispatch path; that is
+the segment-overrun hazard, and I set them aside rather than reporting them.
+
+A pin edit failed on first run because I wrote `body` where that file names its
+document variable `p` — caught by the run, not by review.
+
+Mutations: restoring the unqualified bullet fails the arm; deleting the exception
+paragraph fails it. Restored byte-identical, `apps/docs` rebuilt.
+
+`it(` count 26 unchanged. No new file, no ratchet change.
