@@ -47164,3 +47164,53 @@ wording is now the wrong one; calling `resolveProfileBinding` with the caller in
 the owner fails separately. The first attempt at the first mutation tripped an earlier
 anti-enumeration assertion instead of the sentinel under test, so it was re-run
 surgically — a failing arm is not proof that the arm you meant fired.
+
+### V-1102 — the script stopped claiming the push; the runbook still told you to make it
+
+Four batches checked this pass. Three were already closed and are recorded here so they
+are not re-opened:
+
+- **Action 33** (ADR-004's 402 profile-cap). Closed by V-814: `TierLimitError` is 429,
+  the source comments carry the correction, ADR-004 has its dated banner, and
+  `a-documented-error-status-is-derived-from-its-class` already implements the exact
+  cross-source guard the plan proposed — including the sweep for any surface pairing the
+  profile cap with a payment-required status. The 402s that remain are
+  `bundled-llm-budget-exhausted`, which really is a 402.
+- **Action 38a** (`schema.ts` "mock data only"). Closed by V-826, negative in place;
+  `team.astro` contains no occurrence of "mock" and calls `/v1/team/*` directly.
+- **Action 32** (pair-mode heartbeat scheduling). Closed: the header reads "Scheduling:
+  WIRED" with the interval constant named, and bootstrap carries
+  `PAIR_MODE_HEARTBEAT_SWEEP_INTERVAL_MS = 5_000`. The plan flagged an operational
+  hazard — an operator using `DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS` would not stop
+  this sweep — but checked against the operator-facing text, `docs/deployment/env-vars.md`
+  scopes it to "the periodic API-key / webhook-secret rotation reminders" and the boot
+  log says the same. No false expectation is invited, so nothing was invented to fix.
+
+**Action 13 had a residual, and it is in the half nobody guarded.** V-817 corrected
+`scripts/v528-scrub-violators.sh`, which now says it rewrites history locally and does
+NOT push, prints the manual `git remote add origin` step, and carries a retraction
+explaining why the old wording was the dangerous direction. A guard —
+`a-script-may-not-claim-a-push-it-never-makes` — holds the script to it.
+
+The runbook was left behind. `docs/internal/v528-repo-privatization-runbook.md` listed:
+
+```
+scripts/v528-scrub-violators.sh --confirm
+# After history rewrite, push forced:
+git push --force origin main
+```
+
+Two consecutive commands with nothing between them, and `git filter-repo` removes the
+`origin` remote by default. An operator working the runbook — which is the document with
+the checkboxes, not the script's own trailing output — hits "'origin' does not appear to
+be a git repository" at the point where the remediation is half-applied: history
+rewritten locally, the violator commits still live on the remote, and a ticked step
+saying otherwise. The script's guard could not see this, because the script is right.
+
+Fixed the runbook and extended the guard to the document rather than only the script.
+The new arm requires the re-add to be present AND to come before the push, since a
+re-add printed afterwards is the same failure with tidier text.
+
+Mutation-proved, restored byte-identical: restoring the consecutive rewrite-then-push
+sequence fails with the half-applied explanation; moving the re-add below the push fails
+the ordering check specifically.

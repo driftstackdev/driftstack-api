@@ -111,4 +111,32 @@ describe('V-1009 a script may not claim a push it never makes', () => {
       'the printed completion steps no longer warn that filter-repo dropped origin',
     ).toMatch(/git remote add origin/);
   });
+
+  it('V-1102 CRITICAL the RUNBOOK carries the re-add too, not just the script. The arm above checks what the script prints at the end of a run; this checks the document the operator is actually working through, which listed the rewrite and the force-push as consecutive commands with nothing between them. Following it verbatim fails on a remote filter-repo has just deleted, at the point where the remediation is half-applied — history rewritten locally, violator commits still live on the remote, and a ticked checkbox saying otherwise.', () => {
+    const runbook = readFileSync(
+      resolve(REPO_ROOT, 'docs/internal/v528-repo-privatization-runbook.md'),
+      'utf8',
+    );
+    const at = runbook.indexOf('scripts/v528-scrub-violators.sh --confirm');
+    expect(at, 'the runbook no longer names the scrub invocation').toBeGreaterThan(0);
+    const block = runbook.slice(at, runbook.indexOf('```', at));
+
+    expect(
+      block,
+      'the runbook goes from the rewrite straight to the force-push, but filter-repo removed origin ' +
+        'by default — the push fails and the scrub is left half-applied:',
+    ).toMatch(/git remote add origin/);
+
+    // Order matters as much as presence: a re-add printed after the push is
+    // the same failure with tidier text.
+    const reAdd = block.indexOf('git remote add origin');
+    const push = block.indexOf('git push --force origin main');
+    expect(reAdd, 'the runbook no longer re-adds the remote before pushing').toBeGreaterThan(-1);
+    expect(push, 'the runbook no longer shows the force-push').toBeGreaterThan(-1);
+    expect(
+      reAdd < push,
+      'the runbook re-adds origin AFTER the force-push, so the push still runs against a remote ' +
+        'that does not exist yet',
+    ).toBe(true);
+  });
 });

@@ -188,8 +188,12 @@ scripts/v528-scrub-violators.sh
 scripts/v528-scrub-violators.sh --confirm
 # (script prompts for "scrub-violators" confirmation token)
 
-# After history rewrite, push forced:
+# After history rewrite. The script does NOT push, and filter-repo removes
+# the origin remote by default — so re-add it FIRST or the push below fails
+# with "'origin' does not appear to be a git repository".
+git remote add origin git@github.com:driftstackdev/driftstack-api.git
 git push --force origin main
+git push --force origin --tags  # if any tags carried violator messages
 ```
 
 The script applies plain-text message replacements via filter-repo:
