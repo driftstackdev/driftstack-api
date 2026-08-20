@@ -46790,3 +46790,52 @@ vocabulary arm by file and line; an unresolvable surface path fails the read arm
 rather than passing over nothing; deleting the logout docstring distinction fails the
 logout arm. Restored byte-identical from a scratchpad snapshot. Ratchets 2943→2944 and
 3109→3110 for the one file added.
+
+### V-1093 — the cross-SDK roster was its own population, and Python was never checked at all
+
+Actions 35/36 alleged that four pin files freeze four different wrong accessor counts
+(15/16/17/18) against the same nineteen. Checking each:
+
+- **15** — `a-parity-pin-cannot-freeze-a-claim-that-expires` cites "an sdk-go client
+  claiming 15 resource accessors against 19 (V-811)". That is a historical citation of
+  a closed finding, correct as history. Editing it would have corrupted the record.
+- **18** — `sdk-client-constructor-cross-sdk-parity` says "all 18 required resource
+  accessors". Accurate about its own list, which really does hold eighteen.
+- **14** — `sdk-python-client-content-parity` genuinely stale, and stale twice: the
+  number sat above a list of fifteen names while the client carried nineteen.
+- The fourth was `sdk-go-client-content-parity`, which already derives and says so.
+
+So the count framing was mostly wrong. What is underneath it is worse than a wrong
+number.
+
+**The roster is the population.** Eighteen entries, nineteen resources: `archetypes`
+was on all three clients and in no arm. Every other arm in the file loops over that
+list, so a resource missing from it is not reported missing — it is not looked at.
+
+**And Python was not being checked at all.** The loop asserts a TypeScript property
+and a Go struct field per entry. For Python it then asserts four import lines —
+sessions, billing, egress, agent_sessions — and no accessor assignment whatsoever.
+Imports cannot substitute: sync and async classes are imported on one line, so the
+import survives deleting either assignment.
+
+Measured rather than argued, on the pin as it stood at HEAD:
+
+| deletion                                         | result                                   |
+| ------------------------------------------------ | ---------------------------------------- |
+| `readonly archetypes` from the TypeScript client | 2 failures (a TS-specific pin caught it) |
+| `self.archetypes` from the Python sync client    | **1946 files green, zero failures**      |
+
+The Python client losing an accessor is an `AttributeError` for any customer calling
+it, and nothing in the repository said so.
+
+Both closed. `archetypes` joins the roster; a completeness arm derives the surface
+from the Go client struct and requires every member to be rostered; a new arm asserts
+each roster member is instantiated on both the sync and async Python clients, deriving
+the snake_case field from the TypeScript name. The count is gone from the title, since
+a stated size reads as coverage while saying nothing about the surface.
+
+Mutation-proved, restored byte-identical: dropping `archetypes` from the roster fails
+the completeness arm by name; deleting the sync assignment fails the Python arm as
+`sync: self.archetypes = ArchetypesResource(self._http)`; deleting an async one fails
+it as `async: self.recipes = AsyncRecipesResource(self._http)`. The negative control
+matters most — the same Python deletion against the HEAD pin passes.

@@ -9,9 +9,15 @@
 //     + http_client kwarg-only.
 //   • DEFAULT_BASE_URL = https://api.driftstack.dev.
 //   • _validate_api_key TypeError-raises for falsy/non-string.
-//   • 14 resource accessors: sessions / api_keys / usage / webhooks /
-//     profiles / profile_snapshots / billing / crypto_orders / auth /
-//     account / mfa / audit_log / email_preferences / legal / team.
+//   • Resource accessors: sessions / archetypes / api_keys / usage /
+//     webhooks / profiles / profile_snapshots / billing / crypto_orders /
+//     auth / account / mfa / audit_log / email_preferences / legal /
+//     team / egress / agent_sessions / recipes.
+//     V-1093: this read "14 resource accessors" above a list of fifteen
+//     names, while the client carried nineteen — archetypes, egress,
+//     agent_sessions and recipes had all landed since. A count written
+//     beside the list it counts goes stale twice over, so it is gone;
+//     sdk-client-constructor-cross-sdk-parity derives the roster.
 //   • Sync: close + __enter__ + __exit__; Async: aclose + __aenter__
 //     + __aexit__.
 

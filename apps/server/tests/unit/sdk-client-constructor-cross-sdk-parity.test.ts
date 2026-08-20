@@ -24,8 +24,19 @@ const GO = resolve(REPO_ROOT, 'packages/sdk-go/client.go');
 // on the top-level client in all 3 SDKs. Drift to dropping any would
 // orphan a documented surface area. Adding a new resource = cross-SDK
 // lift (all 3 SDKs land in the same commit); count grows in lockstep.
+//
+// V-1093: the roster is also the population, so for as long as a resource was
+// missing from it nothing here could say so. `archetypes` was on all three
+// clients and absent from this list, which meant deleting it from the
+// TypeScript or Python client left every arm below green. The completeness arm
+// at the end of this file derives the surface from the Go client struct and
+// requires each member to appear here, so the roster can no longer sit behind
+// the thing it is meant to guard. The three naming conventions still need a
+// hand-written mapping — Go `APIKeys`, TS `apiKeys`, Python `api_keys` is not
+// derivable by rule — but which resources exist is not a judgement call.
 const REQUIRED_RESOURCES = [
   ['sessions', 'SessionsResource', 'Sessions'],
+  ['archetypes', 'ArchetypesResource', 'Archetypes'],
   ['apiKeys', 'ApiKeysResource', 'APIKeys'],
   ['usage', 'UsageResource', 'Usage'],
   ['webhooks', 'WebhooksResource', 'Webhooks'],
@@ -79,7 +90,7 @@ describe('W819 cross-SDK client constructor parity', () => {
 
   // ─── 15-required-resource-accessor set ────────────────────────
 
-  it('CRITICAL all 18 required resource accessors exist on each SDK client. Drift to dropping any would orphan a documented customer surface. Wave 1119: EGRESS (egress, all 3 SDKs at commit b4c27598) + AI-CHAT (agentSessions, all 3 SDKs at the AI-D slice) + AI-B4 RECIPES (recipes, all 3 SDKs at this Q.5.d cross-SDK lift).', () => {
+  it('CRITICAL every required resource accessor exists on each SDK client. Drift to dropping any would orphan a documented customer surface. Wave 1119: EGRESS (egress, all 3 SDKs at commit b4c27598) + AI-CHAT (agentSessions, all 3 SDKs at the AI-D slice) + AI-B4 RECIPES (recipes, all 3 SDKs at this Q.5.d cross-SDK lift). V-1093: the title stated a roster size, which was accurate about the list and silent about the surface — the list was a resource short of what the clients carry, and a stated size reads as coverage.', () => {
     const ts = read(TS);
     const py = read(PY);
     const go = read(GO);
@@ -184,6 +195,52 @@ describe('W819 cross-SDK client constructor parity', () => {
     expect(p).toMatch(
       /apiKey +string\s*\n\s+baseURL string\s*\n(\s*\/\/[^\n]*\n)*\s+effectiveAccount string\s*\n\s+http +\*http\.Client\s*\n(\s*\/\/[^\n]*\n)*\s+timeout +time\.Duration\s*\n\s+retry +RetryConfig/,
     );
+  });
+
+  it('CRITICAL every required resource is instantiated on both Python clients. V-1093: the Python half of the arm above asserts four import lines and nothing else, so no accessor assignment was checked at all — deleting `self.archetypes` from the sync client left the ENTIRE unit suite green, 1946 files, while the same deletion in TypeScript failed two. Imports cannot stand in for the assignment: sync and async classes are imported on one line, so the import survives either deletion.', () => {
+    const py = read(PY);
+    const snake = (ts: string): string => ts.replace(/([A-Z])/g, (c) => `_${c.toLowerCase()}`);
+    const missing: string[] = [];
+    for (const [tsName, tsClass] of REQUIRED_RESOURCES) {
+      const field = snake(tsName);
+      if (!py.includes(`self.${field} = ${tsClass}(self._http)`)) {
+        missing.push(`sync: self.${field} = ${tsClass}(self._http)`);
+      }
+      if (!py.includes(`self.${field} = Async${tsClass}(self._http)`)) {
+        missing.push(`async: self.${field} = Async${tsClass}(self._http)`);
+      }
+    }
+    expect(
+      missing.sort(),
+      'these resource accessors are required of every SDK but are not assigned on the Python ' +
+        'client — a customer calling one gets AttributeError, and until now nothing said so:',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL every resource the Go client exposes appears in the required roster. V-1093: the roster above is the population every other arm loops over, so a resource missing from it is not reported as missing — it is simply not looked at. `archetypes` sat in that blind spot on all three clients, and deleting it from the TypeScript or Python client would have left this file green. Deriving the surface from the Go struct is what makes an omission visible.', () => {
+    const go = read(GO);
+    const at = go.indexOf('// Resource accessors (filled in by New).');
+    expect(at, 'the Go accessor block header moved — nothing was derived').toBeGreaterThan(0);
+    const block = go.slice(at, go.indexOf('\n}', at));
+    const onStruct = [...block.matchAll(/^\t([A-Z]\w*)\s+\*\w+Resource$/gm)].map((m) => m[1]!);
+
+    expect(onStruct.length, 'resource accessors parsed off the Go client struct').toBeGreaterThan(
+      15,
+    );
+
+    // Widened deliberately: `as const` makes this a Set of the eighteen literals,
+    // and asking such a Set whether it holds a parsed string is a type error rather
+    // than the question this arm exists to ask.
+    const rostered = new Set<string>(REQUIRED_RESOURCES.map(([, , goName]) => goName));
+    expect(
+      onStruct.filter((n) => !rostered.has(n)).sort(),
+      'these resources exist on the Go client but are in no cross-SDK arm above, so dropping one ' +
+        'from the TypeScript or Python client would go unreported — add each to REQUIRED_RESOURCES:',
+    ).toEqual([]);
+    expect(
+      [...rostered].filter((n) => !onStruct.includes(n)).sort(),
+      'these are required of all three SDKs but the Go client no longer carries them:',
+    ).toEqual([]);
   });
 
   it('test file metadata — file exists at canonical path', () => {
