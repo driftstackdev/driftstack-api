@@ -48374,3 +48374,37 @@ Mutation-proved across all three languages: reverting the Go, Python and TypeScr
 docstrings each fails the guard by file and line, and the Python case exercises the
 docstring-aware detector V-1125 had to build. `go vet` clean, 365 pytest passed, 0 tsc
 errors, suite 3112 files green.
+
+### V-1127 — the registered-but-undocumented sweep, clean, and why no guard follows
+
+Last entry closed by calling the calling-account class spent unless its guard fires, so
+this pass took the pairing infrastructure to a different property: V-1113 found
+`/v1/admin/incidents` missing from the pagination page by hand, and the same
+doc-page-to-route pairing can ask it systematically — is every REGISTERED route
+documented on its paired page?
+
+Seven candidates across sixteen paired pages, and all seven are correctly absent:
+
+- `GET /v1/agent-sessions/:id/gui-control-key` and `POST /v1/sessions/:id/gui-input` are
+  not in the published spec at all. They are the L-001 GUI control plane, which is the
+  subject of D-16 and not customer surface, so a customer page is the wrong place for
+  them. (Note the D-16 nuance survives: `InputEventSchema` IS barrel-exported and
+  published; the ROUTES are not. That is the decision's business, not this sweep's.)
+- The five `/v1/admin/oauth/clients*` paths are admin, which the existing guard excludes
+  by design — and their presence in the SDK-shipped spec is already V-824's recorded
+  finding, examined and written up rather than open.
+
+**No guard follows, and the reason is worth stating.** The direction I measured —
+registered → documented — genuinely is not covered by
+`every-published-customer-path-is-documented-or-declared`, whose population is the
+published spec. But the gap between them can only contain a route that is registered,
+customer-facing, and absent from the spec, and that combination is itself the defect
+V-824 investigated. Two guards already meet in the middle: V-847 covers spec → docs,
+V-824 covers docs → spec. A third for the empty middle would be the shape this arc has
+declined six times.
+
+That distinguishes it from V-1107, where the CSP roster was also complete today but
+nothing at all enforced it. Here something does.
+
+Second consecutive clean sweep after V-1118. Recorded so the next reader spends their
+time on the D-items rather than re-deriving this.
