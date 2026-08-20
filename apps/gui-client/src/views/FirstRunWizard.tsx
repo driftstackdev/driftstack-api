@@ -120,8 +120,26 @@ export function FirstRunWizard({ onComplete }: FirstRunWizardProps): JSX.Element
   return (
     <div className="flex h-screen w-screen flex-col bg-surface-base">
       <TitleBar subtitle="setup" />
-      <main className="flex flex-1 items-center justify-center overflow-auto p-8">
-        <div className="w-full max-w-xl">
+      {/*
+        `items-center` centres the card on the cross axis, which is right until the card
+        is TALLER than the viewport. Then centring pushes its top ABOVE the scroll
+        origin, and scrollTop cannot go below 0 — so the overflow is unreachable rather
+        than scrollable. The profile step renders 81 archetype cards with no height cap,
+        which on a laptop viewport put the heading and the profile-name input roughly
+        2500px above the top of the scrollable area. Measured in headless Chromium (the
+        WebView2 engine family): child height 5814px, child top -2508px, scrollHeight
+        3300 against 5814 of content.
+        The visible result was the reported bug: a wall of archetypes with the
+        explanatory text missing and a permanently greyed-out Create button — greyed
+        because `disabled={submitting || name.trim().length === 0}` and the name input
+        was in the clipped region, so it could never be typed into. autoFocus did not
+        rescue it either; the browser does not scroll a focused element into a region
+        that negative scrollTop cannot reach.
+        `items-start` with `my-auto` keeps the centring for cards that FIT and degrades
+        to top-aligned, fully scrollable, when they do not.
+      */}
+      <main className="flex flex-1 items-start justify-center overflow-auto p-8">
+        <div className="my-auto w-full max-w-xl">
           {step !== 'done' && <Stepper current={step} />}
           {step === 'welcome' && <WelcomeStep onNext={() => setStep('mode')} />}
           {step === 'mode' && (
