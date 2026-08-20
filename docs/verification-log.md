@@ -50914,3 +50914,58 @@ possible false lead, because it looks like the mutation found something.
 
 Cost: ~12 minutes of suite time across two full runs. Recorded so the next sweep spends it
 somewhere else.
+
+### V-1186 — local mutation testing manufactures coverage holes, and nearly published three
+
+Continued V-1185's method into boundary flips — the classic survivor, because a suite usually
+tests "valid works" and "invalid rejected" and rarely the exact edge. Five `>=` → `>` mutations on
+tier-cap checks, one per module: the Redis rate-limit Lua, and the webhook / proxy / agent-session
+/ profile repo caps.
+
+**The first result was wrong, and it was wrong in the direction that produces findings.** A full
+local `npx vitest run` reported:
+
+- agent-session cap — caught, four behavioural tests
+- rate-limit Lua — caught, but by **content-parity pins only**, i.e. the boundary looked pinned as
+  TEXT with no test exercising it
+- webhook cap, proxy cap, profile cap — **not caught at all**
+
+Three uncaught cap boundaries would be a serious finding: a customer creating one resource past
+their tier cap, unnoticed. I was one write-up away from filing it.
+
+**All four readings were artifacts of running without a database.** The suite skips **113 files**
+locally, and those files are precisely the behavioural DB/Redis tests that make cap and
+rate-limiting properties provable. Postgres and Redis were already up on this machine; with
+`DATABASE_URL` and `REDIS_URL` exported, every one of the six mutations dies:
+
+| mutation                | what actually kills it                                                                              |
+| ----------------------- | --------------------------------------------------------------------------------------------------- |
+| rate-limit Lua `>=`→`>` | `redis-rate-limit-lua-token-bucket` — 4 tests                                                       |
+| webhook cap             | `db-webhooks-concurrency-drizzle` — "5 concurrent inserts on a limit-1 account yield EXACTLY 1 row" |
+| proxy cap               | `db-account-proxies-hardening-drizzle` — "serializes a five-way limit-1 race"                       |
+| profile cap             | `db-profiles-repo-keyset-drizzle` — "exactly `limit` succeed (no over-create past the cap)"         |
+| agent-session cap       | `db-agent-sessions-active-cap-drizzle` — 4 tests                                                    |
+
+Every one is a CONCURRENCY test asserting the exact edge under racing inserts, which is a stronger
+property than the boundary I was probing.
+
+**A second, compounding artifact: I narrowed to the wrong file.** Hunting for the webhook cap test
+I ran `db-webhooks-endpoint-update-drizzle` (7 passed) and concluded there was none. The cap tests
+for the four resources are named `-concurrency-`, `-hardening-`, `-keyset-` and `-active-cap-`
+respectively — four conventions for one property — so guessing the filename fails, and a
+guessed-filename miss reads exactly like an absence.
+
+**The rule this changes.** `measure-guard-coverage-by-mutation-first` says mutate before believing
+a guard covers something. It needs a precondition: **a mutation sweep run without the gated
+services measures the local subset, not the suite** — and it fails toward the exciting answer,
+because a skipped test cannot fail. Export `DATABASE_URL` and `REDIS_URL` before any mutation
+sweep, or state plainly that the result covers 3013 of 3126 files and that every "hole" is a
+hypothesis until re-run with them.
+
+V-1185's conclusion is unaffected: it reported no holes, and a missing test can only fabricate a
+hole, never conceal one. But its method was luckier than it was careful — the crypto paths it
+probed happen to be covered by in-memory-fake tests that run locally.
+
+No defect. Six mutations, six kills, all behavioural. Recorded because the near-miss is the
+finding: I had three fabricated holes in hand and the only thing between them and this log was
+checking whether the tests that would catch them had run.
