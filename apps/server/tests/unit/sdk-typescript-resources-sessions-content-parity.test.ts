@@ -81,7 +81,14 @@ describe('W424.C packages/sdk-typescript/src/resources/sessions.ts content parit
   });
 
   it('list verb — GET /v1/sessions with PaginationQueryInput → Promise<SessionsListPage>. CRITICAL "newest first" ordering pinned in JSDoc — drift to oldest-first would invert pagination semantics customers anchor their "show me my recent sessions" UX on. Conditional-spread on limit + cursor defers to server-side defaults.', () => {
-    expect(body).toMatch(/\/\*\* List sessions for the current account, newest first\. \*\//);
+    // V-1126 — the sixth spelling of one claim: "the current account". The
+    // route resolves an effective one.
+    expect(body).toMatch(
+      /\/\*\* List sessions for the EFFECTIVE account — your own, or the owner you are/,
+    );
+    expect(body, 'the current-account claim must not return').not.toMatch(
+      /List sessions for the current account/,
+    );
     expect(body).toMatch(
       /list\(query: PaginationQueryInput = \{\}\): Promise<SessionsListPage> \{\s*\n?\s*return this\.http\.request<SessionsListPage>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/sessions',\s*\n?\s*query: \{\s*\n?\s*\.\.\.\(query\.limit !== undefined \? \{ limit: query\.limit \} : \{\}\),\s*\n?\s*\.\.\.\(query\.cursor !== undefined \? \{ cursor: query\.cursor \} : \{\}\),\s*\n?\s*\},\s*\n?\s*\}\);\s*\n?\s*\}/,
     );

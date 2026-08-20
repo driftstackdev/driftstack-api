@@ -55,7 +55,7 @@ describe('W589.B packages/sdk-go/sessions.go content parity', () => {
 
   it('List — GET /v1/sessions + 2-param conditional-set-on-non-zero query (limit / cursor) with strconv.Itoa for the int + "newest first" ordering invariant pinned in the doc-comment', () => {
     expect(body).toMatch(
-      /\/\/ List returns a page of sessions for the current account, newest first\./,
+      /\/\/ List returns a page of sessions for the EFFECTIVE account — the caller's own,/,
     );
     expect(body).toMatch(/\/\/ Pass nil for defaults\./);
     expect(body).toMatch(

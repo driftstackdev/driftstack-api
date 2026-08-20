@@ -48334,3 +48334,43 @@ quote — and the same mutation fails as `py:profiles:131`.
 Mutation-proved: reverting the Go docstring fails naming `go:profiles:277`; reverting the
 Python one fails naming `py:profiles:131`; rewording the exempted billing sentence fails
 the staleness arm. `go vet` clean, 365 pytest passed, docs rebuilt, rendered gate green.
+
+### V-1126 — a sixth spelling, and the guard that could not see it
+
+V-1125 closed with "a per-language guard finds per-language defects", so this turn
+applied that to my own V-1123 batch, which fixed eight TypeScript docstrings and only one
+each in Go and Python. The twins existed. They were invisible because Go and Python
+prefer a different phrase.
+
+**"the current account"** — a sixth spelling of one claim, after "the calling account",
+"calling account's", "the caller's account", "your account owns" and "owned by the
+calling account". Five live instances on effective-scoped routes:
+
+- `sdk-go/sessions.go:31`, `sdk-go/webhooks.go:31`
+- `sdk-python/.../sessions.py:176`, `sdk-python/.../profiles.py:42`
+- `sdk-typescript/.../sessions.ts:42`
+
+The TypeScript one is the sharp detail: V-1123 corrected `sessions.ts:55` ("iterate every
+session for the calling account") and left `sessions.ts:42` ("List sessions for the
+current account") thirteen lines above it. Same file, same resource, same defect, one
+sweep — and the pattern list decided which of the two I saw.
+
+The guard from V-1124/V-1125 could not have caught any of them: its vocabulary was built
+from the five spellings known at the time, which is the same trap in a more durable form.
+It carries all six now, with the reasoning written down so the next person adding a
+spelling understands the list is empirical rather than exhaustive.
+
+**Deliberately excluded: "the account's X"** — six further hits (`the account's agent
+sessions`, `the account's trashed profiles`). That phrasing names no particular account,
+so it is vague rather than wrong, and the two `api/billing.md` hits it also matched are
+describing internal behaviour, not promising a scope. Widening to catch them would flag
+correct prose, which is the allowlist pressure this arc has declined five times.
+
+Two pins needed splitting again — the Python `list()` arms each spanned `def` line and
+docstring, so correcting the scope broke a pin about the signature. Fifth and sixth time
+this arc: V-1092, V-1121, V-1122 twice, and now these.
+
+Mutation-proved across all three languages: reverting the Go, Python and TypeScript
+docstrings each fails the guard by file and line, and the Python case exercises the
+docstring-aware detector V-1125 had to build. `go vet` clean, 365 pytest passed, 0 tsc
+errors, suite 3112 files green.

@@ -28,7 +28,8 @@ func (r *WebhooksResource) Create(ctx context.Context, body *CreateWebhookReques
 	return &out, nil
 }
 
-// List webhook endpoints for the current account.
+// List webhook endpoints for the EFFECTIVE account — the caller's own, or the
+// owner they are acting as via X-Driftstack-Account.
 func (r *WebhooksResource) List(ctx context.Context) (*WebhookEndpointList, error) {
 	var out WebhookEndpointList
 	if err := r.client.do(ctx, requestOptions{

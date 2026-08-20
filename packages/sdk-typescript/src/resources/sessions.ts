@@ -39,7 +39,8 @@ export class SessionsResource {
     return this.http.request<Session>({ method: 'POST', path: '/v1/sessions', body });
   }
 
-  /** List sessions for the current account, newest first. */
+  /** List sessions for the EFFECTIVE account — your own, or the owner you are
+   *  acting as via `X-Driftstack-Account` — newest first. */
   list(query: PaginationQueryInput = {}): Promise<SessionsListPage> {
     return this.http.request<SessionsListPage>({
       method: 'GET',

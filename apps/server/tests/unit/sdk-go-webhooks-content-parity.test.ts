@@ -53,7 +53,14 @@ describe('W593.A packages/sdk-go/webhooks.go content parity', () => {
   });
 
   it('List — GET /v1/webhooks, account-scoped (current account only) pinned', () => {
-    expect(body).toMatch(/\/\/ List webhook endpoints for the current account\./);
+    // V-1126 — the sixth spelling of one claim: "the current account". The
+    // route resolves an effective one.
+    expect(body).toMatch(
+      /\/\/ List webhook endpoints for the EFFECTIVE account — the caller's own, or the/,
+    );
+    expect(body, 'the current-account claim must not return').not.toMatch(
+      /\/\/ List webhook endpoints for the current account\./,
+    );
     expect(body).toMatch(
       /func \(r \*WebhooksResource\) List\(ctx context\.Context\) \(\*WebhookEndpointList, error\)/,
     );

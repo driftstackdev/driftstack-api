@@ -28,7 +28,8 @@ func (r *SessionsResource) Create(ctx context.Context, body *CreateSessionReques
 	return &out, nil
 }
 
-// List returns a page of sessions for the current account, newest first.
+// List returns a page of sessions for the EFFECTIVE account — the caller's own,
+// or the owner they are acting as via X-Driftstack-Account — newest first.
 // Pass nil for defaults.
 func (r *SessionsResource) List(ctx context.Context, query *ListSessionsQuery) (*SessionsListPage, error) {
 	var out SessionsListPage

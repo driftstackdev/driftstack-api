@@ -173,7 +173,11 @@ class SessionsResource:
         return parse_model(CreateSessionResponse, data)
 
     def list(self, query: PaginationQuery | dict[str, Any] | None = None) -> SessionsListPage:
-        """List sessions for the current account, newest first."""
+        """List sessions for the EFFECTIVE account, newest first.
+
+        Your own account, or the owner you are acting as via
+        ``X-Driftstack-Account``.
+        """
         data = self._http.request("GET", "/v1/sessions", params=coerce_query(query))
         return parse_model(SessionsListPage, data)
 

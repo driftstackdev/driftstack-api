@@ -39,7 +39,11 @@ class ProfilesResource:
         return self._http.request("POST", "/v1/profiles", json_body=coerce_body(body))
 
     def list(self, *, limit: int | None = None, cursor: str | None = None) -> dict[str, Any]:
-        """List profiles for the current account."""
+        """List profiles for the EFFECTIVE account.
+
+        Your own account, or the owner you are acting as via
+        ``X-Driftstack-Account``.
+        """
         qs = _encode_query({"limit": limit, "cursor": cursor})
         path = "/v1/profiles" + (f"?{qs}" if qs else "")
         return self._http.request("GET", path)

@@ -158,8 +158,13 @@ describe('W583.B packages/sdk-python/src/driftstack/resources/sessions.py conten
   });
 
   it('Sync list — GET /v1/sessions with PaginationQuery → SessionsListPage. "newest first" ordering pinned in docstring (drift to oldest-first would silently invert pagination semantics and confuse callers who rely on cursor-walking the recent end).', () => {
-    expect(body).toMatch(
-      /def list\(self, query: PaginationQuery \| dict\[str, Any\] \| None = None\) -> SessionsListPage:\s*\n\s*"""List sessions for the current account, newest first\."""\s*\n\s*data = self\._http\.request\("GET", "\/v1\/sessions", params=coerce_query\(query\)\)\s*\n\s*return parse_model\(SessionsListPage, data\)/,
+    // V-1126 — signature and docstring asserted separately. The chained form
+    // spanned both, so correcting the scope broke a pin about the def line —
+    // the fifth time this arc.
+    expect(body).toMatch(/def list\(self, query: PaginationQuery/);
+    expect(body).toMatch(/for the EFFECTIVE account/);
+    expect(body, 'the current-account claim must not return').not.toMatch(
+      /for the current account/,
     );
   });
 

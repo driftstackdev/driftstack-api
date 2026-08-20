@@ -79,8 +79,13 @@ describe('W582.C packages/sdk-python/src/driftstack/resources/profiles.py conten
   });
 
   it('list (sync) — GET /v1/profiles with kwarg-only (limit/cursor) + _encode_query + conditional "?qs" suffix. Same path-builder pattern as profile_snapshots.list / audit_log.list — cross-resource consistency.', () => {
-    expect(body).toMatch(
-      /def list\(self, \*, limit: int \| None = None, cursor: str \| None = None\) -> dict\[str, Any\]:\s*\n\s*"""List profiles for the current account\."""\s*\n\s*qs = _encode_query\(\{"limit": limit, "cursor": cursor\}\)\s*\n\s*path = "\/v1\/profiles" \+ \(f"\?\{qs\}" if qs else ""\)\s*\n\s*return self\._http\.request\("GET", path\)/,
+    // V-1126 — signature and docstring asserted separately. The chained form
+    // spanned both, so correcting the scope broke a pin about the def line —
+    // the fifth time this arc.
+    expect(body).toMatch(/def list\(self, \*, limit/);
+    expect(body).toMatch(/for the EFFECTIVE account/);
+    expect(body, 'the current-account claim must not return').not.toMatch(
+      /for the current account/,
     );
   });
 

@@ -129,8 +129,19 @@ function callingAccountLines(file: { label: string; resource: string; path: stri
     lines
       .map((l, i) => [l, i + 1] as const)
       .filter(([, n]) => prose.has(n - 1))
+      // Six spellings so far, each found only after the previous fix shipped: "the
+      // calling account", "calling account's", "the caller's account", "your account
+      // owns", "owned by the calling account", and — V-1126 — "the current account",
+      // which the Go and Python SDKs preferred and which no pattern built from the
+      // first five could match.
+      //
+      // NOT included: "the account's X". That names no particular account, so it is
+      // vague rather than wrong — the judgement the plan applied to the ambiguous
+      // recipes docstrings applies here too.
       .filter(([l]) =>
-        /\bthe calling account\b|\bcalling account's\b|\bthe caller's account\b/.test(l),
+        /\bthe calling account\b|\bcalling account's\b|\bthe caller's account\b|\bthe current account\b|\bcurrent account's\b/.test(
+          l,
+        ),
       )
       // "With no header, the calling account remains the owner" is the one sentence
       // where naming the caller is exactly right.
