@@ -51463,3 +51463,74 @@ double and the Drizzle repo agree. That is 29 doubles' worth of work and a desig
 where the contract lives, which is not something to start at the end of a sweep. The six arms added
 in V-1187/1193 close the specific predicates; the general remedy is recorded here as owed, not as
 done.
+
+---
+
+## V-1198 — the contract test V-1197 recorded as owed, built for one repo as the template
+
+V-1197 closed with the general remedy named and deliberately not started: _a contract test executed
+against BOTH implementations, so one suite proves the double and the Drizzle repo agree._ It was
+recorded as owed because 29 doubles is real work and "where the contract lives" is a design call.
+
+Two facts make the first one cheap rather than a redesign:
+
+```
+class InMemoryApiKeysRepo implements ApiKeysRepo
+class DrizzleApiKeysRepo  implements ApiKeysRepo
+```
+
+The pair already shares an interface. So the assertions can be written once and parameterised over a
+factory, and the file that does it is `apps/server/tests/integration/api-keys-repo-contract.test.ts`
+— four contract arms run against each implementation, plus a reachability arm: 9 tests from 5 `it(`
+blocks.
+
+The arms are `findApiKey` account-scoped; `listApiKeys` scoped _and_ returning the asking account's
+own keys (an implementation returning nothing at all would satisfy the exclusion on its own);
+`findApiKeyUnscoped` genuinely unscoped; `revokeApiKeyAtomic` refusing a foreign account and leaving
+the key live.
+
+The unscoped arm is deliberate and is the reason the scoped arm means anything. `findApiKeyUnscoped`
+sits one method below `findApiKey`, differs by a single clause, and is SUPPOSED to ignore the
+account. A regression that collapsed the two would otherwise read as the scoped path simply working.
+
+**What this adds over V-1187.** Those arms pin the Drizzle predicates directly and they stay — this
+does not replace them. What it adds is the AGREEMENT. Proved by mutating each side alone:
+
+```
+M1: neutralise the DRIZZLE scoping only
+    eq(apiKeys.accountId, accountId) -> eq(apiKeys.accountId, apiKeys.accountId)
+    × CRITICAL findApiKey is account-scoped …      Tests  1 failed | 8 passed (9)
+
+M2: neutralise the IN-MEMORY double only
+    return Promise.resolve(r && r.accountId === accountId ? r : null);
+      -> return Promise.resolve(r ?? null);
+    × CRITICAL findApiKey is account-scoped …      Tests  1 failed | 8 passed (9)
+
+restored (source 0 dirty)                          Tests  9 passed (9)
+```
+
+Both directions red the same arm. That is the property V-1187's arms could not have: tighten the
+double, loosen the SQL, or fix one and not the other, and this fails on whichever side drifted. A
+property living in two implementations needs a test that names both.
+
+The Drizzle half is DB-gated exactly as its siblings are — quiet skip locally without
+`DATABASE_URL`, hard failure in CI — because a vacuous pass on a boundary contract reports the
+property as proven when nothing ran. The in-memory half always runs.
+
+**A second finding, from the suite rather than the mutation.** The first full run after adding the
+file went red on `a-gate-that-does-not-name-its-blind-spot-reads-as-total.test.ts`:
+
+```
+AssertionError: the gate says 99 files gate on DATABASE_URL; there are 100
+```
+
+That guard derives the skip shares by walking the tree and holds `scripts/verify-suite.mjs`'s prose
+to them, so adding a DB-gated file obliged the stated share to move 99 → 100. Nothing was broken;
+the guard did the job it was written for, catching a count that would otherwise have gone stale the
+moment its population changed. Worth recording because it is the same failure mode this log keeps
+finding in prose — a figure exact when written — and here the guard, not a later audit, caught it.
+
+**Still owed:** the remaining 28 doubles. The template now exists and the shape is known, so each is
+mechanical rather than a design question. The design call V-1197 flagged is answered by where this
+file sits: the contract lives beside the integration tests, not in the unit tier, because half of it
+requires a real database.
