@@ -218,5 +218,99 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         SELECT deleted_at FROM profiles WHERE id = ${id}`;
       expect(afterOwnerRestore?.deleted_at ?? null).toBeNull();
     });
+
+    // ── V-1190 — the same sweep, one method at a time. Neutralising ALL 22 account
+    // predicates in this repo fired 11 assertions, which names most methods as covered.
+    // Neutralising only the SIX they did not name left the integration suite green apart
+    // from one assertion, and bisecting the six showed that assertion covers exactly ONE
+    // of them (`recordSave`). These three were reachable, unguarded, and silent.
+
+    it('CRITICAL countByAccount counts only the asking account. It is the input to the profile cap, so unscoped it sums the whole platform: a customer is refused a profile they are entitled to because OTHER customers have profiles, and the refusal is indistinguishable from their own cap being full.', async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI)
+          throw new Error('real-PG tenant-scope test: database unreachable in CI');
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleProfilesRepo({ client, db, close: async () => {} });
+      const owner = randomUUID();
+      const other = randomUUID();
+      seeded.push(owner, other);
+      await client`INSERT INTO accounts (id, email) VALUES (${owner}, ${`count-owner-${owner}@test.local`})`;
+      await client`INSERT INTO accounts (id, email) VALUES (${other}, ${`count-other-${other}@test.local`})`;
+      await client`INSERT INTO profiles (account_id, name) VALUES (${other}, ${`other-${other}`})`;
+
+      expect(
+        await repo.countByAccount(owner),
+        "another account's profiles counted toward this one",
+      ).toBe(0);
+      await client`INSERT INTO profiles (account_id, name) VALUES (${owner}, ${`mine-${owner}`})`;
+      expect(await repo.countByAccount(owner), 'the account cannot count its own profile').toBe(1);
+    });
+
+    it("CRITICAL findByAccountAndName does not reach across accounts. Names are customer-chosen and often obvious, so an unscoped lookup turns a guessed label into another account's profile row without needing its id at all.", async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI)
+          throw new Error('real-PG tenant-scope test: database unreachable in CI');
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleProfilesRepo({ client, db, close: async () => {} });
+      const owner = randomUUID();
+      const stranger = randomUUID();
+      seeded.push(owner, stranger);
+      await client`INSERT INTO accounts (id, email) VALUES (${owner}, ${`name-owner-${owner}@test.local`})`;
+      await client`INSERT INTO accounts (id, email) VALUES (${stranger}, ${`name-stranger-${stranger}@test.local`})`;
+      const shared = `shared-label-${owner}`;
+      await client`INSERT INTO profiles (account_id, name) VALUES (${owner}, ${shared})`;
+
+      expect((await repo.findByAccountAndName({ accountId: owner, name: shared }))?.name).toBe(
+        shared,
+      );
+      expect(
+        await repo.findByAccountAndName({ accountId: stranger, name: shared }),
+        "a stranger resolved another account's profile by name",
+      ).toBeNull();
+    });
+
+    it("CRITICAL transferAtomic cannot claim a source profile owned by someone else. The source claim is an UPDATE that retires the row before inserting the destination copy, so an unscoped claim does not merely read another account's profile — it MOVES it, retiring the original in the victim's account.", async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI)
+          throw new Error('real-PG tenant-scope test: database unreachable in CI');
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleProfilesRepo({ client, db, close: async () => {} });
+      const victim = randomUUID();
+      const attacker = randomUUID();
+      seeded.push(victim, attacker);
+      await client`INSERT INTO accounts (id, email) VALUES (${victim}, ${`xfer-victim-${victim}@test.local`})`;
+      await client`INSERT INTO accounts (id, email) VALUES (${attacker}, ${`xfer-attacker-${attacker}@test.local`})`;
+      const [row] = await client`
+        INSERT INTO profiles (account_id, name) VALUES (${victim}, ${`victim-${victim}`}) RETURNING id`;
+      const sourceId = row?.id as string;
+
+      const result = await repo.transferAtomic({
+        source: { id: sourceId, accountId: attacker },
+        insert: {
+          accountId: attacker,
+          name: `stolen-${attacker}`,
+          archetype: 'iphone17_ios18_7_safari26_4',
+          description: null,
+        },
+        limit: null,
+      });
+      expect(result, 'the attacker transferred a profile they do not own').toEqual({
+        sourceAlreadyRetired: true,
+      });
+
+      const [after] =
+        await client`SELECT account_id, deleted_at FROM profiles WHERE id = ${sourceId}`;
+      expect(
+        after?.deleted_at ?? null,
+        "the victim's profile was retired by the transfer",
+      ).toBeNull();
+      expect(after?.account_id, "the victim's profile changed hands").toBe(victim);
+    });
   },
 );

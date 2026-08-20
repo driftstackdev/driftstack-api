@@ -51106,3 +51106,46 @@ what the previous one's shortcut hid. The first closed two repos. The second clo
 team-members, and cleared four repos by name. The third read the rosters and found the covered
 method was the delete in both. **A repo is not a unit of coverage; a method is** — and "this repo
 appears in a guard" answers a question nobody asked.
+
+### V-1190 — per-method, in the biggest repo: three more uncovered, one of them a move
+
+V-1189 ended on "a repo is not a unit of coverage; a method is." `profiles-repo` is the largest
+surface in the codebase — **22 account predicates across 15 methods** — so it is where that
+distinction pays or does not.
+
+**The bisect.** Neutralising all 22 fired 11 assertions, which names most methods as covered
+(insertWithLimit, keyset paging, sumSizeBytesByAccount, update, listTrashed, findById, touch,
+getWrappedDek, delete, restore, purgeTrashed). Neutralising only the **six** those assertions did
+not name left the integration suite green except one assertion — and bisecting the six one at a
+time showed that assertion covers exactly **one** of them, `recordSave`. The other five were
+silent.
+
+**Three were reachable and are now closed:**
+
+- **`countByAccount`** — the input to the profile cap. Unscoped it counts the whole platform, so a
+  customer is refused a profile they are entitled to because OTHER customers have profiles, and the
+  refusal is indistinguishable from their own cap being full. Same shape the reads guard already
+  records for bundled-LLM spend, in a different repo.
+- **`findByAccountAndName`** — names are customer-chosen and often obvious, so an unscoped lookup
+  turns a guessed label into another account's profile row without needing its id at all.
+- **`transferAtomic`'s source claim** — the severe one. The claim is an UPDATE that retires the
+  source row before inserting the destination copy, so an unscoped claim does not merely READ
+  another account's profile: it **moves** it, retiring the original in the victim's account. The
+  arm asserts both halves — the transfer is refused, AND the victim's row is still live and still
+  theirs afterwards.
+
+Each mutation-proved individually against its own predicate, so no arm is passing on another's
+behalf.
+
+**Two left deliberately open, with reasons.** `verifyBootEncryptionKey`'s predicate is a
+boot-time self-check against a row the process already owns, not a tenancy boundary, and
+`transferAtomic`'s other predicate is the destination-side cap pre-count, which is the
+`countByAccount` property one call frame down. Neither is a hole; both are named here so the next
+pass does not re-derive them.
+
+**On the method.** Four passes now, and each one found what the previous pass's unit of analysis
+hid: pass one took two repos, pass two took a repo at a time, pass three read the rosters and found
+the covered method was the DELETE, pass four bisected inside a single repo and found five silent
+methods behind eleven loud ones. **A green suite under a whole-repo mutation says the repo has some
+coverage — it says nothing about which method.** The bisect is cheap: one run to see what fires,
+one to confirm the remainder, then one file per candidate.
