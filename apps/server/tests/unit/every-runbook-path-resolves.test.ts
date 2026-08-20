@@ -28,14 +28,13 @@
 // (/opt/driftstack/api/.env); neither is verifiable from here, and pretending
 // otherwise would make this fail for reasons it cannot fix.
 
-import { readdirSync, existsSync, readFileSync } from 'node:fs';
+import { readdirSync, statSync, existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const RUNBOOKS = resolve(REPO_ROOT, 'docs', 'runbooks');
 
 /**
  * Repo-relative paths a runbook names. Anchored on the workspace roots so a
@@ -50,10 +49,33 @@ const REPO_PATH =
   // not exist. The runbook was correct; the extractor truncated it.
   /(?:^|[\s`(])((?:apps|packages|scripts|docs|operations)\/[A-Za-z0-9_./-]+\.(?:json|mjs|ts|js|sh|sql|md))(?![A-Za-z0-9])/g;
 
+/**
+ * V-1145 — the population was `docs/runbooks/*.md`, which defines a runbook by the
+ * directory it sits in rather than by what it is. Seven runbook-named documents live
+ * elsewhere in `docs/` — including `deployment/dr-runbook.md`, the disaster-recovery
+ * procedure, which cited a `docs/deployment/dns.md` that exists nowhere. The rationale
+ * for this file is that whoever follows a runbook is mid-incident; a DR runbook is the
+ * strongest case for it and was the least covered.
+ *
+ * Dated documents are excluded. A file named `2026-06-09-go-live-runbook.md` is a record
+ * of a day, not a procedure anyone will follow again, and holding it to today's tree is
+ * the same wrong bar V-1143 declined for the internal docs at large.
+ */
 function runbookFiles(): string[] {
-  return readdirSync(RUNBOOKS)
-    .filter((f) => f.endsWith('.md'))
-    .map((f) => resolve(RUNBOOKS, f));
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir)) {
+      const full = resolve(dir, entry);
+      if (statSync(full).isDirectory()) walk(full);
+      else if (entry.endsWith('.md')) out.push(full);
+    }
+  };
+  walk(resolve(REPO_ROOT, 'docs'));
+  return out.filter((f) => {
+    const rel = f.slice(REPO_ROOT.length + 1);
+    if (/\/20\d\d-\d\d-\d\d/.test('/' + rel)) return false;
+    return rel.startsWith('docs/runbooks/') || /runbook/i.test(rel.split('/').pop() ?? '');
+  });
 }
 
 function citedPaths(): Map<string, string[]> {
@@ -61,7 +83,7 @@ function citedPaths(): Map<string, string[]> {
   for (const file of runbookFiles()) {
     for (const m of readFileSync(file, 'utf8').matchAll(REPO_PATH)) {
       const p = (m[1] ?? '').replace(/[.,;:`]+$/, '');
-      out.set(p, [...(out.get(p) ?? []), file.slice(RUNBOOKS.length + 1)]);
+      out.set(p, [...(out.get(p) ?? []), file.slice(REPO_ROOT.length + 1)]);
     }
   }
   return out;

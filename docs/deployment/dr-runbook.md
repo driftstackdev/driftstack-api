@@ -543,7 +543,7 @@ regional outage requires cross-region failover.
    clean state — but doubled because we need both prod and staging.
 3. **Update DNS** at Cloudflare to point `api.driftstack.dev` and
    `staging-api.driftstack.dev` at the new IPs. TTL is 60s on
-   these records (per `docs/deployment/dns.md`); propagation is
+   these records, set in the Cloudflare dashboard; propagation is
    under 2 min.
 4. **Verify TLS** with the Cloudflare Full (strict) posture from
    V-278.M — the Let's Encrypt cert lives on the host filesystem,

@@ -49107,3 +49107,41 @@ proves nothing. The positive is proved separately by removing the privacy-policy
 notes really do cover the notifications SSE route including its auth. Eight accurate
 pointers a customer cannot open is an editorial question; one pointer to a procedure that
 does not exist was a defect, and only checking the content told them apart.
+
+### V-1145 — the runbook guard defined "runbook" by directory, and missed the DR procedure
+
+**First, a correction to V-1143.** I justified scoping the customer-doc path guard away
+from `docs/**` by saying its unresolved citations are "mostly dated session logs — design
+notes and dated session logs naming files that have since moved". That was asserted, not
+measured. Measured: of 44 unresolved citations, **16 are in dated logs and 28 are not** —
+they sit in architecture docs, ADRs, proposals, onboarding, and runbooks. The scoping
+decision still stands, but the reason I gave for it was wrong, and a reader would have
+taken it as measured.
+
+Checking the 28 turned up something that matters. `every-runbook-path-resolves` collects
+its population with `readdirSync(docs/runbooks)` — it defines a runbook as a file in a
+directory rather than as a kind of document. Seven runbook-named documents live elsewhere
+under `docs/`, and the guard has never read any of them. Among them:
+`docs/deployment/dr-runbook.md`, the disaster-recovery procedure.
+
+It cited `docs/deployment/dns.md` for the record TTLs during a DNS cutover. No DNS document
+exists anywhere in `docs/`, and the content is not elsewhere either. This file's own stated
+rationale is that whoever follows a runbook is mid-incident — the DR runbook is the
+strongest case for that, and it was the least covered. Corrected to name where the setting
+actually lives (the Cloudflare dashboard) rather than a document that does not.
+
+Population widened to any `docs/**` file whose name says runbook, plus everything already
+in `docs/runbooks/`. Dated documents are excluded on purpose: `2026-06-09-go-live-runbook.md`
+is a record of a day, not a procedure anyone follows again, and holding it to today's tree
+is the wrong bar — the same judgement V-1143 made for the internal tree, this time with the
+measurement behind it. That exclusion is load-bearing: the one other unresolved citation in
+this set, `scripts/run-self-serve-daemon.sh`, is in a dated watch-stack runbook.
+
+Both directions proved: a broken citation injected into `dr-runbook.md` now fails the guard
+and is reported with its repo-relative path, and the same injection into a dated runbook
+does not. Coverage went from 14 files to 21.
+
+Two false positives in the 28 are worth naming so nobody chases them:
+`apps/server/src/db/migrations/NNNN_descriptive_name.sql` and
+`docs/incidents/YYYYMMDD-load-test-anomaly.md` are deliberate placeholders in an onboarding
+guide and a methodology doc. A path-resolution scan cannot tell a template from a citation.
