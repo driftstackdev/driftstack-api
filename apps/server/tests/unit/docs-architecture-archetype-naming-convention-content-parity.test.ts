@@ -1,16 +1,16 @@
 // W559.A — drift guard for /docs/architecture/archetype-naming-convention.md.
 // V-136 archetype-identifier shape. Drift here either weakens the
 // dual-iOS+Safari-version-axis discipline (Apple ships Safari indep-
-// of iOS major), drops the iphone16pro_ios18_7_safari26_4 locked
+// of iOS major), drops the iphone17_ios18_7_safari26_4 locked
 // archetype, or loosens the 5-step iOS-major-bump coordination
 // across api-types + marketing + mocks + integration-fakes + server.
 //
 //   • V-136. Locked 2026-05-05. Driftstack engineering owner.
 //   • Identifier shape: <device_family>_<device_model>_ios<major>_
 //     <minor>_safari<safari_major>_<safari_minor>.
-//   • Locked archetype: iphone16pro_ios18_7_safari26_4.
+//   • Locked archetype: iphone17_ios18_7_safari26_4.
 //   • iOS 18.7 with Safari 26.4 — pre-V-136 used fictional ios26_4_1.
-//   • Display label via packages/api-types/common.ts:
+//   • Display label via packages/api-types/src/common.ts:
 //     ARCHETYPE_DISPLAY_LABEL.
 //   • 5-step bump coordination across 5 surfaces.
 //   • 4-don't-include (patch + build + region + profile-id).
@@ -42,7 +42,12 @@ describe('W559.A /docs/architecture/archetype-naming-convention.md content parit
       /<device_family>_<device_model>_ios<major>_<minor>_safari<safari_major>_<safari_minor>/,
     );
     expect(body).toMatch(/For the currently-locked archetype:/);
-    expect(body).toMatch(/iphone16pro_ios18_7_safari26_4/);
+    // V-1180 — the 2026-06-11 cutover moved the locked default iphone16pro → iphone17.
+    // This pin froze the pre-cutover value, so the doc could not be corrected without a red.
+    expect(body).toMatch(/iphone17_ios18_7_safari26_4/);
+    expect(body, 'the doc names the pre-cutover archetype as currently locked again').not.toMatch(
+      /For the currently-locked archetype:\s*\n+```\n+iphone16pro_ios18_7_safari26_4/,
+    );
   });
 
   it("4-component + Safari-required framing pinned: '`device_family` — `iphone` for iPhone, `ipad` for iPad. Lowercase, no' + '`device_model` — `16pro`, `15`, `air`, `mini`, etc. Lowercase, no' + 'Drop \"Pro\" capitalization for parity with other identifiers.' + '`ios<major>_<minor>` — Apple's iOS version that the device is running.' + 'Major + minor only; patch version is **not** part of the identifier' + '(patches don't change the WebKit fingerprint surface enough to differentiate).' + '`safari<major>_<minor>` — Safari version. **Required** because Apple ships' + 'Safari independently of iOS major. Two devices on the same iOS may run' + 'different Safari builds; the archetype must distinguish them.' — pinned so the 4-component-iphone/ipad-lowercase + Pro-capitalization-dropped + patch-NOT-part + Safari-required-Apple-ships-independently commitment survives", () => {
@@ -69,7 +74,11 @@ describe('W559.A /docs/architecture/archetype-naming-convention.md content parit
 
   it("Display label + 5-step bump framing pinned: '## Display label' + 'iPhone 16 Pro / iOS 18.7 / Safari 26.4' + 'Mapped from identifier in `packages/api-types/src/common.ts:ARCHETYPE_DISPLAY_LABEL`.' + 'Marketing-site, customer-dashboard, admin-panel, and GUI client all import' + '`archetypeDisplayLabel(id)` rather than rendering the raw identifier.' + '## When the locked archetype changes' + 'Every iOS major version bump (iOS 19, iOS 20, ...) requires a coordinated' + '**`packages/api-types/src/common.ts`** — update `LOCKED_ARCHETYPE_ID`' + '**Customer-facing copy** in `apps/marketing-site/`:' + '**Mock data** in `apps/customer-dashboard/src/data/mocks.ts`' + '**Integration test fakes** under `apps/server/tests/integration/_helpers/`' + '**Server-side archetype validation** wherever the identifier is hardcoded' + '`apps/server/src/services/sessions.ts`' — pinned so the iPhone-16-Pro/iOS-18.7/Safari-26.4-display + ARCHETYPE_DISPLAY_LABEL-from-common.ts + 4-surface-import + 5-step-iOS-major-bump-coordination commitment survives", () => {
     expect(body).toMatch(/## Display label/);
-    expect(body).toMatch(/iPhone 16 Pro \/ iOS 18\.7 \/ Safari 26\.4/);
+    // V-1180 — matches LOCKED_ARCHETYPE_DISPLAY_LABEL in packages/api-types/src/common.ts.
+    expect(body).toMatch(/iPhone 17 \/ iOS 18\.7 \/ Safari 26\.4/);
+    expect(body, 'the customer-facing label reverted to the pre-cutover device').not.toMatch(
+      /The human-readable customer-facing label is:\s*\n+```\n+iPhone 16 Pro \//,
+    );
     expect(body).toMatch(
       /Mapped from identifier in `packages\/api-types\/src\/common\.ts:ARCHETYPE_DISPLAY_LABEL`\./,
     );

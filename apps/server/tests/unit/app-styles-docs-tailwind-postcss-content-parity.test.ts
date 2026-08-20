@@ -1,8 +1,19 @@
-// W626 — drift guard for 6 small styling-side meta files:
+// W626 — drift guard for 5 small styling-side meta files:
 //  - 3 base.css (admin-panel + customer-dashboard + docs).
-//  - docs/tailwind.config.mjs (V-254 typography plugin + palette).
 //  - gui-client/postcss.config.js (minimal pass-through).
 //  - gui-client/src/styles/index.css (GUI dark-mode brand atoms).
+//
+// V-1180 — this said SIX, and listed `docs/tailwind.config.mjs (V-254 typography plugin +
+// palette)` as one of them. Commit 337e07519 migrated the docs site to Astro 6 + Tailwind v4,
+// which is CSS-first: the JS config file was deleted, and the typography plugin and palette
+// now live in `apps/docs/src/styles/base.css` as `@import 'tailwindcss'` +
+// `@plugin '@tailwindcss/typography'` — both of which the base.css arms below already pin.
+//
+// No assertion in this file ever read a tailwind config, so nothing failed when it went away.
+// The header simply kept claiming coverage of a file that had stopped existing, which is the
+// worse outcome: someone auditing what is guarded reads the list, not the assertions. The last
+// arm now derives the guarded set from the file itself, so the count and the list cannot drift
+// apart again.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -203,5 +214,38 @@ describe('W626 app styles + docs tailwind + postcss content parity', () => {
     expect(body).toMatch(/\.form-input \{/);
     expect(body).toMatch(/@apply w-full rounded bg-surface-inset px-2\.5 py-1\.5 text-sm/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/gui-client/src/styles/index.css'))).toBe(true);
+  });
+
+  // V-1180 — the header used to list a sixth file that had been deleted, and nothing noticed
+  // because no assertion read it. This derives the guarded set out of THIS FILE rather than
+  // restating it, so the header's count and the assertions cannot drift apart again: adding a
+  // file to the guard without listing it, or listing one without guarding it, fails here.
+  it('CRITICAL the set of files this guard actually reads is the set its header claims. A header is what an auditor reads to learn what is covered; the assertions are what covers it. When those two disagree the header wins the audit and loses the drift, which is how a deleted tailwind config stayed on the list.', () => {
+    const self = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    const guarded = [
+      ...new Set([...self.matchAll(/resolve\(REPO_ROOT, '([^']+)'\)/g)].map((m) => m[1] ?? '')),
+    ].sort();
+
+    expect(guarded, 'the guarded-file set changed — update the header list and count').toEqual([
+      'apps/admin-panel/src/styles/base.css',
+      'apps/customer-dashboard/src/styles/base.css',
+      'apps/docs/src/styles/base.css',
+      'apps/gui-client/postcss.config.js',
+      'apps/gui-client/src/styles/index.css',
+    ]);
+
+    // Every guarded file is real, and the header's count matches the set.
+    for (const rel of guarded) {
+      expect(existsSync(resolve(REPO_ROOT, rel)), `${rel} is guarded but does not exist`).toBe(
+        true,
+      );
+    }
+    expect(self, 'the header count no longer matches the guarded set').toMatch(
+      new RegExp(`drift guard for ${guarded.length} small styling-side meta files`),
+    );
+    // The deleted config must not creep back into the header without coming back to disk.
+    expect(self, 'the deleted docs tailwind config is being listed as guarded again').not.toMatch(
+      /^\/\/ {2}- docs\/tailwind\.config\.mjs/m,
+    );
   });
 });

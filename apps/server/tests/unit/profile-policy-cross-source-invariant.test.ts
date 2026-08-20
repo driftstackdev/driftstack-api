@@ -23,8 +23,13 @@
 //
 // stays in lockstep across:
 //   - packages/api-types/src/profiles.ts (Zod canonical).
-//   - apps/customer-dashboard/src/pages/profiles.astro
-//     (V-312/V-313 button wiring + import placeholder).
+//
+// V-1180 — this list also named `apps/customer-dashboard/src/pages/profiles.astro
+// (V-312/V-313 button wiring + import placeholder)`. That page was removed on 2026-07-02 when
+// the snapshot/clone/import wiring moved to the desktop GUI under the account-portal IA, and
+// the arms that read it went with it — the removal is recorded further down this file, at the
+// point where those arms used to be. Only the header kept listing it, so the two halves of the
+// same file disagreed about what this invariant spans.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

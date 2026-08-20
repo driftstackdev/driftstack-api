@@ -50586,3 +50586,63 @@ with a pattern shaped by how I imagine the code looks rather than how the format
 
 Use `grep -A2`, or match the identifier alone and read the hits. Which is the rule already:
 **enumerate, then read the enumeration.**
+
+### V-1180 — the architecture doc named the wrong locked device, and a pin froze it there
+
+Started from a mechanical question — do the repo paths cited in test-file HEADERS resolve? 1133
+citations, 37 unresolved. Most were explainable (11 are redirect tombstones whose whole purpose
+is asserting a page stays deleted; 4 are the broken citations `a-customer-doc-may-not-cite-a-file-
+that-does-not-exist` records fixing; some are doc-site route shorthand). One was a plain typo:
+`packages/api-types/common.ts`, missing `src/`.
+
+**Chasing that typo found the real defect.** The same header says
+"Locked archetype: `iphone16pro_ios18_7_safari26_4`". `packages/api-types/src/common.ts` says:
+
+```
+// iphone16pro_ios18_7_safari26_4 to iphone17_ios18_7_safari26_4 — the single
+// real-device-verified ("PASS") archetype …
+export const LOCKED_ARCHETYPE_ID = 'iphone17_ios18_7_safari26_4';
+export const LOCKED_ARCHETYPE_DISPLAY_LABEL = 'iPhone 17 / iOS 18.7 / Safari 26.4';
+```
+
+`docs/architecture/archetype-naming-convention.md` claimed, in the present tense: "For the
+**currently-locked** archetype: `iphone16pro_ios18_7_safari26_4`", and "The human-readable
+**customer-facing** label is: `iPhone 16 Pro / iOS 18.7 / Safari 26.4`". The cutover was
+**2026-06-11**. The doc had been wrong for two months, and the label it names is the one the
+marketing site, customer dashboard, admin panel and GUI all render.
+
+**Its content-parity guard pinned both stale strings** — `toMatch(/iphone16pro_ios18_7_safari26_4/)`
+and `toMatch(/iPhone 16 Pro \/ iOS 18\.7 \/ Safari 26\.4/)` — so the doc could not be corrected
+without a red. The frozen-false-claim pattern again: the pin was doing exactly its job, holding
+the document steady, and what it held steady was wrong.
+
+**Why nothing caught it.** Two invariants own this identifier and both are correct.
+`locked-archetype-slug-cross-source-invariant` asserts `iphone17` across the two DB defaults,
+`docs/api/profiles.md` and bootstrap. `locked-archetype-id-cross-source-invariant` pins it across
+api-types, integration scenarios, cross-SDK examples, marketing-site, dashboard and admin mocks.
+**Neither lists `docs/architecture/`.** The architecture doc sat in the gap between two guards
+that each looked complete.
+
+A detail worth keeping: that second invariant's header records the identical failure — "it named
+the pre-2026-06-11 `iphone16pro…` until **2026-08-16**; the arms have tracked the cutover since it
+happened, but this description had not." Somebody fixed that same stale-description class four
+days ago, in a neighbouring file. **The cutover updated every assertion and almost no prose**, and
+prose is what the next engineer reads.
+
+Corrected the doc (with the cutover and the back-compat reason stated, since `iphone16pro` is
+retained as a `reference` baseline and remains a valid archetype in ~200 test fixtures that must
+NOT change), repointed both pins, and added negatives keyed to the surrounding sentence so a
+revert fails rather than a bare mention of the old slug — which the doc still legitimately
+contains.
+
+Also fixed in the same commit, both found by the header scan: a guard header listing
+`docs/tailwind.config.mjs` among "6 small styling-side meta files" when Tailwind v4's CSS-first
+migration (`337e07519`) deleted it and the guard reads 5; and a lockstep list naming
+`customer-dashboard/src/pages/profiles.astro`, removed 2026-07-02, with the removal recorded
+further down that same file. The styles guard now derives its guarded set from its own source and
+pins the count, so header and assertions cannot drift apart again.
+
+**On the scan that started this: it is not worth building as a guard.** A header that documents a
+deletion must NAME the deleted path — the tombstones do, and my own corrections above now do too.
+"Every path cited in a header resolves" would fight the correct practice. The signal was worth
+one sweep, not a permanent arm.

@@ -14,8 +14,15 @@ on iOS major bumps.
 For the currently-locked archetype:
 
 ```
-iphone16pro_ios18_7_safari26_4
+iphone17_ios18_7_safari26_4
 ```
+
+The locked default moved from `iphone16pro_ios18_7_safari26_4` to
+`iphone17_ios18_7_safari26_4` at the 2026-06-11 cutover: iPhone 17 is the
+real-device-verified archetype, and `iphone16pro` is retained as a scaffolded
+`reference` baseline so labels still resolve for profiles already created against it.
+A profile keeps the archetype it was created with — see
+`docs/guides/profile-management.md`.
 
 - `device_family` — `iphone` for iPhone, `ipad` for iPad. Lowercase, no
   punctuation.
@@ -33,7 +40,7 @@ iphone16pro_ios18_7_safari26_4
 The human-readable customer-facing label is:
 
 ```
-iPhone 16 Pro / iOS 18.7 / Safari 26.4
+iPhone 17 / iOS 18.7 / Safari 26.4
 ```
 
 Mapped from identifier in `packages/api-types/src/common.ts:ARCHETYPE_DISPLAY_LABEL`.
