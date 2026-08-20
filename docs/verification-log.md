@@ -46608,3 +46608,27 @@ and `check:rendered-product-status` still passes across 212 files — checked be
 this page renders and V-1085 was about markers leaking into exactly this app.
 
 `it(` count 26→27. No new file, no ratchet change.
+
+### V-1089 addendum — naming an exempted path counts as documenting it
+
+The full suite after V-1089 went red on `every-published-customer-path-is-documented-
+or-declared`: "a path that HAS been documented must come off the list."
+
+Mine. My Sessions row read "every `/v1/sessions` route except
+`/v1/sessions/{id}/proxy`" — and that path sits in `UNDOCUMENTED_BY_DESIGN` with the
+reason that documenting it "would advertise a feature that cannot be used". The guard
+cannot tell the difference between documenting an endpoint and naming it as an
+exception, and it should not have to: both put the string in front of a customer, and
+the string is the thing the exemption exists to keep out.
+
+Removing the exemption was the wrong repair, because the route is still the
+permanently-503 one V-1047 and V-1048 recorded. The row now says "every `/v1/sessions`
+route you can call", which is true, is what a customer needs, and stops re-advertising
+a route that answers 503 on every path through it.
+
+Also: my first attempt at this edit failed its own assert, because prettier had
+re-padded the table's columns during the commit and my exact-match string no longer
+existed. Read the line, matched the phrase rather than the padded cell.
+
+Mutation: naming the exempted path in the guide again fails the guard. Restored
+byte-identical, docs rebuilt.
