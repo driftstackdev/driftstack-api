@@ -49819,3 +49819,37 @@ heading for a rule that treated both the same and would have demanded notes nobo
 Also checked and clean: `scripts/migration-immutability-check.mjs` looked orphaned but is
 invoked by `deploy-bridge.sh` — correctly at deploy time, because it compares APPLIED
 migrations against files and needs a live database, which CI has no reason to hold.
+
+### V-1162 — the status site read end-to-end: every claim it makes is true
+
+`apps/status-site` is what customers read during an incident, and it is the one
+customer-facing app this arc had not examined. Read it the way V-1153 read the webhook
+path.
+
+**Every route it calls is registered.** It uses four — `/v1/status/incidents`,
+`/v1/status/subscribe`, `/v1/status/subscribe/confirm`, `/v1/status/subscribe/unsubscribe`
+— against eight registered under `/v1/status`. Nothing it fetches is missing.
+
+**Every source-checkable claim it prints is true.**
+
+- _"the last 90 days"_ on the history page: it requests
+  `/v1/status/incidents?window=90d&limit=100`, and the route computes
+  `window === '90d' ? 90 : 30` days. The page asks for the window it advertises and the
+  server honours it.
+- _"the last 30 days of resolved history"_ on the home page: it sends no `window`, and the
+  same expression defaults to 30. The two pages agree with each other and with the server
+  because one number drives both.
+- _"records its own health-probe history (timestamp, success, latency) for 30 days"_ — the
+  one worth checking hardest, being a retention claim about data collection.
+  `HealthProbeService` defaults `retentionMs` to 30 days, prunes hourly via
+  `pruneOlderThan`, and `bootstrap.ts` constructs it without overriding that value. Checked
+  the construction site specifically, because a default is only the effective value if
+  nothing passes another.
+
+The remaining figure, "if it doesn't arrive within 5 minutes, check your spam folder", is an
+operational expectation about mail delivery rather than a claim about this system, and no
+source constant can confirm or refute it.
+
+No defect. Recorded because a customer-facing app verified end to end is worth as much as a
+fix, and because the 90/30 pairing is a small piece of good design: the two pages cannot
+drift apart, since the same server expression decides both.
