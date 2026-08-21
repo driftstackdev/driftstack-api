@@ -1261,3 +1261,57 @@ and first-failure claims are separate on purpose, and an implementation collapsi
 "welcome email sent" flag silences the success notice for every customer whose first session failed.
 
 **Owed remaining: 14.**
+
+---
+
+## V-1226 — the third way a session dies, and the one that leaves no trace
+
+Sixteenth of the twenty-nine, on the hot auth path. `findActiveWebSession` is what turns a cookie
+into an authenticated request, and three separate things stop it — but only two of them look like
+stopping it.
+
+Expiry and revocation are the visible two, and V-1193 found an expired web session authenticating,
+so both are pinned rather than assumed.
+
+**The auth epoch is the third, and it writes nothing to the session row.** `setPassword` bumps
+`accounts.auth_epoch`; every session carrying the old epoch stops matching the join, with
+`revoked_at` still NULL on every one of them. That is how a password change signs out every other
+device — and an implementation checking only expiry and revocation would keep authenticating exactly
+the sessions a customer resets their password to kill.
+
+The epoch arm asserts BOTH halves: the session stops resolving AND it was not revoked. "No longer
+authenticates" alone is equally satisfied by an implementation that revokes everything, which is a
+different and also defensible design whose behaviour differs everywhere else revocation is visible.
+
+**A live trap found on the way, recorded rather than removed.** `InMemoryAuthRepo` carries its own
+`findActiveWebSession` fallback that checks expiry and revocation and knows nothing about epochs.
+It is unreachable today — `buildTestApp` wires `setWebSessionFinder` to the auth-flows double, which
+does compare epochs, and the local seeding seam `upsertWebSession` has **zero callers**. But a
+future test seeding through that seam gets a session that survives a password change and nothing
+would say so. Left in place — it is another agent's helper and the removal is theirs — and
+documented at the seam, pointing at the contract that pins the real behaviour.
+
+```
+M1  DRIZZLE drops the auth-epoch join condition   1 failed | 8 passed
+M2  the DOUBLE drops the epoch comparison         1 failed | 8 passed
+M3  the DOUBLE stops checking expiry              1 failed | 8 passed
+restored (source 0 dirty)                         9 passed
+```
+
+**Both M2 and M3 failed to land on the first attempt, in different ways worth separating.** M2
+aborted on its occurrence-count assertion — the string appears twice — so nothing was written and
+the green run afterwards meant nothing; the assert did its job. M3 was worse: it applied to 1 of 2
+occurrences and the suite stayed GREEN, because the line it removed was a token-expiry check in a
+DIFFERENT method. A mutation that lands on the wrong site is indistinguishable from one the tests
+survived, and the only tell was that the count said "1 of 2". Re-run against the exact lines inside
+`findActiveWebSession`, both red.
+
+That is the same lesson as V-1203 sharpened once more: asserting the count is necessary but not
+sufficient. When a pattern appears more than once, the mutation has to name WHICH one.
+
+**And the type-check gate caught a third thing.** `insertWebSession` returns
+`WebSessionRow | null` and the fixture dereferenced it directly. All nine arms passed under vitest,
+because esbuild strips types without checking them — the same catch as V-1214, on a different file.
+Three separate failures in one contract, none of which a green vitest run would have shown.
+
+**Owed remaining: 13.**

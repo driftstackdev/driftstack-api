@@ -114,6 +114,17 @@ export class InMemoryAuthRepo implements AccountAuthRepo {
     this.webSessionsByTokenHash.set(row.tokenHash, row);
   }
 
+  /**
+   * V-1226 — the local fallback below knows about expiry and revocation and NOTHING about auth
+   * epochs. `DrizzleAuthRepo` joins `accounts.auth_epoch = web_sessions.auth_epoch`, so a password
+   * change invalidates every existing session without revoking any of them; a session seeded
+   * through `upsertWebSession` survives that here and would keep authenticating.
+   *
+   * It is unreachable today — `buildTestApp` wires `setWebSessionFinder` to the auth-flows double,
+   * which DOES compare epochs, and `upsertWebSession` has no callers. Kept because the seam is
+   * documented as a direct-seeding path, but anything testing session INVALIDATION must go through
+   * the finder. See `web-session-authority-repo-contract.test.ts` for the pinned behaviour.
+   */
   findActiveWebSession(args: { tokenHash: string; now: Date }): Promise<WebSessionAuthRow | null> {
     if (this.webSessionFinder) return this.webSessionFinder.findActiveWebSession(args);
     const row = this.webSessionsByTokenHash.get(args.tokenHash);
