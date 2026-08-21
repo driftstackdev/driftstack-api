@@ -1,0 +1,211 @@
+// V-1222 — one contract for the profile trash/cap boundary, against BOTH implementations of
+// `ProfilesRepo`.
+//
+// The thirteenth of the twenty-nine, and the interesting thing about it is that it states the
+// OPPOSITE rule to V-1219 in the same codebase:
+//
+//   session cap   counts a session whose STATUS is terminal but which was never destroyed
+//                 -> an errored session still holds a slot
+//   profile cap   excludes a profile that has been trashed
+//                 -> a trashed profile frees a slot
+//
+// Both are correct and the difference is not an inconsistency: a session row may correspond to a
+// driver session that still exists somewhere, so the platform cannot reclaim the slot on status
+// alone, whereas a trashed profile is inert — its row, DEK and sealed blob survive only for
+// restore and purge. But two caps with two meanings of "still counts", a few files apart, is
+// exactly the pair someone harmonises in the wrong direction. Pinning both is what makes the
+// asymmetry deliberate rather than accidental.
+//
+// V-1194 found real defects on this exact boundary — trashing freed no cap slot, and the bin leaked
+// into the live grid — and fixed the Drizzle side. Whether the double reflected those fixes was
+// never asserted; it does, and this file is what keeps that true.
+//
+// THE BIN ARM IS LOAD-BEARING. "Trashed profiles are hidden from findById and list" is satisfied by
+// an implementation that simply deletes the row, which would silently turn a recoverable trash into
+// a destructive delete. Asserting the profile is still in `listTrashed` — and that `restore` brings
+// it back into both the count and the live list — is what separates hidden from gone.
+
+import { randomUUID } from 'node:crypto';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/postgres-js';
+
+import type { ProfilesRepo } from '../../src/services/profiles.js';
+import { DrizzleProfilesRepo } from '../../src/db/profiles-repo.js';
+import { InMemoryProfilesRepo } from './_helpers/in-memory-profiles-repo.js';
+import type * as schema from '../../src/db/schema.js';
+
+const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
+const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
+const ARCHETYPE = 'iphone17_ios18_7_safari26_4';
+
+let client: ReturnType<typeof postgres> | null = null;
+let dbReachable = false;
+const seeded: string[] = [];
+
+beforeAll(async () => {
+  const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
+  try {
+    await probe`SELECT 1 FROM profiles LIMIT 0`;
+    dbReachable = true;
+  } catch {
+    /* the Drizzle half skips; the in-memory half still runs */
+  }
+  await probe.end({ timeout: 1 }).catch(() => {});
+  if (dbReachable) client = postgres(DB_URL, { max: 2 });
+});
+
+afterAll(async () => {
+  if (client) {
+    for (const a of seeded) {
+      await client`DELETE FROM profiles WHERE account_id = ${a}::uuid`.catch(() => {});
+      await client`DELETE FROM accounts WHERE id = ${a}`.catch(() => {});
+    }
+    await client.end({ timeout: 5 });
+  }
+});
+
+interface Subject {
+  repo: ProfilesRepo;
+  account: () => Promise<string>;
+}
+
+function inMemorySubject(): Subject {
+  return {
+    repo: new InMemoryProfilesRepo(),
+    account: () => Promise.resolve(randomUUID()),
+  };
+}
+
+function drizzleSubject(): Subject {
+  const c = client;
+  if (!c) throw new Error('no client');
+  const db = drizzle(c) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+  return {
+    repo: new DrizzleProfilesRepo({ client: c, db, close: async () => {} }),
+    account: async () => {
+      const id = randomUUID();
+      seeded.push(id);
+      await c`INSERT INTO accounts (id, email) VALUES (${id}, ${`prof-${id}@test.local`})`;
+      return id;
+    },
+  };
+}
+
+async function addProfile(s: Subject, accountId: string, name: string): Promise<string> {
+  const row = await s.repo.insert({
+    accountId,
+    name,
+    archetype: ARCHETYPE,
+    description: null,
+  });
+  return row.id;
+}
+
+const liveIds = async (s: Subject, accountId: string): Promise<string[]> =>
+  (await s.repo.list({ accountId })).data.map((r) => r.id);
+
+function profileTrashCapContract(label: string, make: () => Subject, enabled: () => boolean): void {
+  describe(`ProfilesRepo trash/cap contract — ${label}`, () => {
+    it('CRITICAL trashing a profile FREES a cap slot, in both. This is the opposite of the session cap, which keeps counting an errored session that was never destroyed — a trashed profile is inert, so the slot comes back. V-1194 found this exact boundary wrong once already.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const account = await s.account();
+      const id = await addProfile(s, account, `keep-${randomUUID().slice(0, 8)}`);
+      expect(await s.repo.countByAccount(account), 'the new profile did not count').toBe(1);
+
+      expect(await s.repo.delete({ id, accountId: account }), 'the trash call failed').toBe(true);
+
+      expect(
+        await s.repo.countByAccount(account),
+        'trashing the profile did not release its cap slot',
+      ).toBe(0);
+    });
+
+    it('CRITICAL a trashed profile is hidden from findById and list, in both. The bin must not leak into the live grid — V-1194 found it doing exactly that.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const account = await s.account();
+      const kept = await addProfile(s, account, `kept-${randomUUID().slice(0, 8)}`);
+      const binned = await addProfile(s, account, `binned-${randomUUID().slice(0, 8)}`);
+      await s.repo.delete({ id: binned, accountId: account });
+
+      expect(
+        await s.repo.findById({ id: binned, accountId: account }),
+        'a trashed profile resolved through the live read',
+      ).toBeNull();
+      expect(await liveIds(s, account), 'the bin leaked into the live list').toEqual([kept]);
+    });
+
+    it('CRITICAL a trashed profile is still IN the bin, in both. Without this arm the two above are satisfied by an implementation that hard-deletes the row, turning a recoverable trash into a destructive delete with the same observable surface.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const account = await s.account();
+      const binned = await addProfile(s, account, `binned-${randomUUID().slice(0, 8)}`);
+      await s.repo.delete({ id: binned, accountId: account });
+
+      expect(
+        (await s.repo.listTrashed({ accountId: account })).map((r) => r.id),
+        'the trashed profile is not in the bin — it was destroyed, not trashed',
+      ).toEqual([binned]);
+    });
+
+    it('CRITICAL restore returns the profile to the count AND the live list, in both. A restore that brought the row back without releasing it from the bin, or without restoring its cap slot, would leave the customer a profile they can see and cannot use.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const account = await s.account();
+      const id = await addProfile(s, account, `back-${randomUUID().slice(0, 8)}`);
+      await s.repo.delete({ id, accountId: account });
+
+      expect(
+        await s.repo.restore({ id, accountId: account }),
+        'restore did not report success',
+      ).toBe('restored');
+
+      expect(await s.repo.countByAccount(account), 'the restored profile does not count').toBe(1);
+      expect(
+        await liveIds(s, account),
+        'the restored profile is missing from the live list',
+      ).toEqual([id]);
+      expect(
+        await s.repo.listTrashed({ accountId: account }),
+        'the restored profile is still in the bin',
+      ).toEqual([]);
+    });
+
+    it("CRITICAL the cap and the bin are account-scoped, in both. A neighbour's profiles counting against this account's limit would refuse a customer a profile they are entitled to, and a neighbour's bin is somebody else's data.", async () => {
+      if (!enabled()) return;
+      const s = make();
+      const owner = await s.account();
+      const stranger = await s.account();
+      const theirs = await addProfile(s, stranger, `theirs-${randomUUID().slice(0, 8)}`);
+      await s.repo.delete({ id: theirs, accountId: stranger });
+      await addProfile(s, stranger, `live-${randomUUID().slice(0, 8)}`);
+
+      expect(
+        await s.repo.countByAccount(owner),
+        "another account's profile counted against this cap",
+      ).toBe(0);
+      expect(
+        await s.repo.listTrashed({ accountId: owner }),
+        "another account's bin was visible",
+      ).toEqual([]);
+    });
+  });
+}
+
+profileTrashCapContract('in-memory double', inMemorySubject, () => true);
+
+describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
+  'ProfilesRepo trash/cap contract — real',
+  () => {
+    it('CRITICAL the database is reachable, so the Drizzle half below is not silently empty', () => {
+      if (!process.env.CI && !dbReachable) return;
+      expect(dbReachable, `could not reach ${DB_URL} — the contract would not be exercised`).toBe(
+        true,
+      );
+    });
+
+    profileTrashCapContract('drizzle', drizzleSubject, () => dbReachable);
+  },
+);

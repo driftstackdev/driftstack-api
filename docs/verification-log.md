@@ -1109,3 +1109,47 @@ an earlier reset link survived. M3 covers the `(id, accountId)` pairing, so an i
 elsewhere cannot be redeemed against an account that does not own it.
 
 **Owed remaining: 17.**
+
+---
+
+## V-1222 — two caps, two meanings of "still counts", and that is correct
+
+Thirteenth of the twenty-nine. What makes it worth writing is that it states the OPPOSITE rule to
+V-1219, three days of log entries apart:
+
+```
+session cap   counts a session whose STATUS is terminal but which was never destroyed
+              -> an errored session STILL HOLDS a slot
+profile cap   excludes a profile that has been trashed
+              -> a trashed profile FREES a slot
+```
+
+Both are right, and the difference is not sloppiness. A session row may correspond to a driver
+session that still exists somewhere, so the platform cannot reclaim the slot on status alone. A
+trashed profile is inert: its row, DEK and sealed blob survive only for restore and purge. But two
+caps with two meanings of "still counts", a few files apart, is exactly the pair someone harmonises
+in the wrong direction while tidying. Pinning both is what makes the asymmetry deliberate rather
+than accidental — and neither pin says so on its own, which is why both entries name the other.
+
+**V-1194 got this boundary wrong once already** — trashing freed no cap slot, and the bin leaked
+into the live grid — and fixed the Drizzle side. Whether the double reflected those fixes was never
+asserted. It does. This is what keeps that true.
+
+**The bin arm is the load-bearing one.** "Trashed profiles are hidden from findById and list" is
+satisfied by an implementation that hard-deletes the row — same observable surface, and a
+recoverable trash silently becomes a destructive delete. Asserting the profile is still in
+`listTrashed`, and that `restore` returns it to both the count and the live list, is what separates
+hidden from gone. M3 confirms it: making the double `rows.delete(id)` instead of stamping
+`deletedAt` reds the bin arm and the restore arm while the two hiding arms stay green.
+
+```
+M1  DRIZZLE cap counts trashed again (the V-1194 defect)   cap arm reds, 1 failed | 10 passed
+M2  the DOUBLE cap counts trashed                          cap arm reds, 1 failed | 10 passed
+M3  the DOUBLE hard-deletes instead of trashing            bin + restore red, 2 failed | 9 passed
+restored (source 0 dirty)                                  11 passed
+```
+
+M1 and M2 are the matched pair — whichever side stops excluding trashed rows, the same arm reports
+the slot was not released.
+
+**Owed remaining: 16.**
