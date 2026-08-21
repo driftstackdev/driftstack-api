@@ -1315,3 +1315,61 @@ because esbuild strips types without checking them — the same catch as V-1214,
 Three separate failures in one contract, none of which a green vitest run would have shown.
 
 **Owed remaining: 13.**
+
+---
+
+## V-1227 — filter first, then take the newest, and the fixture that makes the difference visible
+
+Seventeenth of the twenty-nine. Three lookups sit on the entitlement path and differ only in which
+statuses they accept, so what they share is an ORDER OF OPERATIONS:
+
+```
+findActiveSubscription      status ∈ {active, trialing}           -> newest of those
+findCollectingSubscription  status ∈ {active, trialing, past_due} -> newest of those
+findCurrentSubscription     any status                            -> newest overall
+```
+
+Filter FIRST, then take the newest of what survives. Reversed — newest row first, then check its
+status — a customer who cancelled and resubscribed reads as having no active subscription, because
+the cancelled row is newest and fails the status test.
+
+That inversion is a recorded defect, and the double's own comment is the best statement of it: the
+old guard "read the newest ROW regardless of status, so a canceled row sorting newer than a live one
+let a second concurrently-billed subscription through", and the twin had the same bug, "which is why
+no existing test could catch it". Fixed in V-741 and V-767; nothing pinned the fix across the pair
+until now.
+
+**The fixture puts the cancelled row NEWEST on purpose.** With the live row newest, filter-first and
+filter-second agree and the arm proves nothing — the fourth time this session a fixture's ordering
+decided whether an assertion could fail at all.
+
+`findCurrentSubscription` is pinned alongside them BECAUSE it must not filter: it is the lookup that
+should return the cancelled row, backing customer-facing copy about what happened to a subscription.
+Without it, "filter first" is satisfied by an implementation that filters everywhere, including
+where it must not.
+
+```
+M1  DRIZZLE findActive drops its status filter    2 failed | 9 passed
+M2  the DOUBLE findActive drops its status filter 2 failed | 9 passed
+M3  the DOUBLE findCurrent starts filtering       1 failed | 10 passed
+restored (source 0 dirty)                         11 passed
+```
+
+**M2 and M3 both aborted on their first attempt, and that is the point.** M2's substring matched two
+lines — the `past_due` variant contains the shorter string as a prefix — and M3's line offset was
+simply wrong. Both asserts fired BEFORE writing, so nothing was mutated and the green runs that
+followed proved nothing about the arms. Re-run against exact line numbers with the target line
+printed, both red.
+
+This is the rule from V-1226 working one entry after it was written: assert the count, name WHICH
+occurrence, and print the line you are about to change. Two mutations that never landed would
+otherwise have read as two arms that are not load-bearing.
+
+**The type-check gate caught two more, in the same file.** The account snapshot was missing `name`
+and `tier`, and `DrizzleBillingRepo` takes `Pick<Database, 'db'>` — no `client`, no `close` — while
+the fixture passed all three. Eleven arms passed under vitest either way, because esbuild strips
+types without checking them. That is the third contract in a row where `the-server-source-type-checks`
+found something a green vitest run showed no sign of, which is worth stating plainly: for these
+files a green vitest run is not evidence the fixture is well-formed.
+
+**Owed remaining: 12.**
