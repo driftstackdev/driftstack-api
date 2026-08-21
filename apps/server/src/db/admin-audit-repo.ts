@@ -61,7 +61,21 @@ export class DrizzleAdminAuditLogRepo implements AdminAuditLogRepo {
       const [cursorRow] = await this.database.db
         .select({ timestamp: adminAuditLog.timestamp, id: adminAuditLog.id })
         .from(adminAuditLog)
-        .where(eq(adminAuditLog.id, filters.cursor))
+        // V-1249 — scoped by adminAccountId WHEN one was given, mirroring
+        // api-keys-repo and profile-snapshots-repo. Unscoped, a cursor naming another
+        // operator's entry still resolves to a real (timestamp, id), so a caller
+        // filtering by operator A while holding a cursor from operator B's listing gets
+        // its own page silently mis-positioned — entries skipped or repeated, with no
+        // error. Staff can already list the whole log, so this is about the caller
+        // getting a correct page rather than about hiding anything from them.
+        .where(
+          filters.adminAccountId === undefined
+            ? eq(adminAuditLog.id, filters.cursor)
+            : and(
+                eq(adminAuditLog.id, filters.cursor),
+                eq(adminAuditLog.adminAccountId, filters.adminAccountId),
+              ),
+        )
         .limit(1);
       if (cursorRow) {
         const keyset = or(

@@ -69,10 +69,15 @@ export class InMemoryAdminAuditLogRepo implements AdminAuditLogRepo {
     // "start from the top", handing back entries the caller had already exported.
     filtered.sort((a, b) => -compareAuditKey(a, b));
     const page = keysetPage({
-      // UNSCOPED, matching DrizzleAdminAuditLogRepo, whose anchor lookup is
-      // `eq(adminAuditLog.id, cursor)` with no adminAccountId term. Mirrored rather
-      // than corrected: changing it is a production decision, not a fixture one.
-      anchorSet: [...this.rows].sort((a, b) => -compareAuditKey(a, b)),
+      // V-1249 — scoped by adminAccountId when one was given, matching the repo's
+      // anchor lookup now that it scopes too. V-1243 mirrored the unscoped version and
+      // recorded the gap rather than deciding it in a fixture; the decision was then
+      // made in the repo, and this follows it.
+      anchorSet: [...this.rows]
+        .filter((r) =>
+          filters.adminAccountId === undefined ? true : r.adminAccountId === filters.adminAccountId,
+        )
+        .sort((a, b) => -compareAuditKey(a, b)),
       rows: filtered,
       cursor: filters.cursor,
       limit: filters.limit,

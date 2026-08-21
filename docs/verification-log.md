@@ -2519,3 +2519,53 @@ No ratchet change: no new file, `it(` count unchanged at 13.
 
 Still open: `DrizzleAdminAuditLogRepo`'s cursor-anchor lookup is unscoped where
 `profile-snapshots-repo.ts` documents why it scopes its own.
+
+## V-1249 — the last unscoped cursor anchor, and an arm that passed until the fixture was reordered
+
+V-1243 mirrored `DrizzleAdminAuditLogRepo`'s unscoped cursor-anchor lookup into the double rather
+than correcting it, on the grounds that a fixture is the wrong place to decide production
+behaviour, and recorded it as open. Deciding it now.
+
+`profile-snapshots-repo.ts` documents why IT scopes its anchor, and `api-keys-repo.ts` and
+`sessions-repo.ts` both do the same conditional scoping. Admin audit was the last one that did not:
+
+```
+api-keys-repo.ts        opts.accountId === undefined ? eq(id, cursor) : and(eq(id, cursor), eq(accountId, …))
+profile-snapshots-repo  and(eq(id, cursor), eq(accountId, args.accountId))
+admin-audit-repo.ts     eq(adminAuditLog.id, filters.cursor)                            <- unscoped
+```
+
+`adminAccountId` is optional on this listing, so the fix is the conditional form: scope the anchor
+when a filter was given, leave it alone when the caller is listing everything.
+
+**What this is and is not.** Unscoped, a cursor naming another operator's entry resolves to a real
+`(timestamp, id)`, so a caller filtering by operator A while holding a cursor from B's listing has
+its page silently mis-positioned. It is a CORRECTNESS fix for the caller. The id-exists oracle
+argument that applies to snapshots is much weaker here — staff can already list the whole log — and
+overclaiming it would be the kind of inflated finding this campaign keeps retracting.
+
+No pin needed rewriting: the guards over this repo freeze the keyset COMPARISON
+(`lt(adminAuditLog.timestamp, …)`, `lt(adminAuditLog.id, cursorRow.id)`) and the CTE shape, not the
+anchor lookup's WHERE. Enumerated with all three patterns before touching anything.
+
+**The arm I wrote to prove it passed both mutations.** First version stamped the foreign entry LAST.
+The page is timestamp DESC and the keyset selects rows strictly OLDER than the anchor — so a
+foreign entry at the newest position excludes nothing, both implementations returned all three of
+my entries, and reverting the scoping changed nothing. The arm asserted a true thing that could not
+fail.
+
+Fixed by stamping the foreign entry in the MIDDLE of mine. An unscoped anchor then resolves to it
+and drops every entry of mine newer than it — two rows returned where three are owed.
+
+```
+N1' DRIZZLE anchor back to unscoped   "a foreign cursor moved this operator's page"  1 failed | 12 passed
+N2' DOUBLE anchorSet back to unscoped  same arm, in-memory half                      1 failed | 12 passed
+restored (both files 0 dirty, sha equal)                                             13 passed
+```
+
+Third time this session a mutation has come back green and been the actual finding — V-1237's inert
+de-indent, V-1246's fully-derived arm, and now a fixture ordered so the defect could not show. The
+pattern is the same each time: the arm asserted something true, and the mutation was the only thing
+that could reveal it was not asserting the thing that mattered.
+
+Cursor-anchor scoping is now consistent across every repo that pages. No ratchet change.

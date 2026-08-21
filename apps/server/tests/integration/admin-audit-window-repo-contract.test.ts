@@ -200,6 +200,38 @@ function adminAuditWindowContract(
       ).toEqual([own.id]);
     });
 
+    it("CRITICAL a cursor naming ANOTHER operator's entry does not move this operator's page, in both. The cursor-anchor lookup is scoped by adminAccountId when one was given, so a foreign id resolves to nothing and the page starts at the beginning. Unscoped it resolves to a real (timestamp, id) belonging to somebody else, and this caller's page is silently mis-positioned — entries skipped or repeated, no error anywhere. Staff can already list the whole log, so what this protects is the correctness of the page, not its confidentiality.", async () => {
+      if (!enabled()) return;
+      const s = make();
+      const mine = await s.staff();
+      const other = await s.staff();
+
+      // The foreign entry is stamped in the MIDDLE of mine, and that placement is the
+      // whole arm. The page is timestamp DESC and the keyset selects rows strictly
+      // OLDER than the anchor, so a foreign entry stamped last would exclude nothing
+      // and the arm would pass against the unscoped lookup it exists to catch — which
+      // is exactly what the first version of it did. From the middle, an unscoped
+      // anchor drops every entry of mine newer than it.
+      const first = await act(s, mine);
+      await new Promise((r) => setTimeout(r, 5));
+      const second = await act(s, mine);
+      await new Promise((r) => setTimeout(r, 5));
+      const foreign = await act(s, other);
+      await new Promise((r) => setTimeout(r, 5));
+      const third = await act(s, mine);
+
+      const page = await s.repo.list({
+        adminAccountId: mine.adminAccountId,
+        limit: 100,
+        cursor: foreign.id,
+      });
+
+      expect(
+        [...page.items.map((r) => r.id)].sort(),
+        "a foreign cursor moved this operator's page instead of being ignored",
+      ).toEqual([first.id, second.id, third.id].sort());
+    });
+
     it('CRITICAL an entry is recorded and readable back at all, in both. Without this the window arms are satisfied by an implementation that stores nothing and returns an empty page for every query.', async () => {
       if (!enabled()) return;
       const s = make();
