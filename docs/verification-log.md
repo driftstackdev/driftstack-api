@@ -1012,3 +1012,49 @@ Different callers read them — the dashboard lists, the cap counts — and a cu
 sessions while being refused a third at a limit of five is looking at two answers to one question.
 
 **Owed remaining: 19.**
+
+---
+
+## V-1220 — a replay guard written two ways, and the boundary that would open it
+
+Eleventh of the twenty-nine. `consumeTotpCounter` is what stops a TOTP code being used twice inside
+its own validity window. A code is valid for a 30-second step, so without a monotonic counter claim
+an attacker who observes one — over a shoulder, in a screenshot, in a log — has the rest of that
+window to replay it. The claim is the whole defence.
+
+The two implementations express the same rule in different shapes, which is precisely the pair worth
+pinning:
+
+```
+Drizzle  UPDATE … WHERE account_id = $1
+           AND (last_used_totp_counter IS NULL OR last_used_totp_counter < $counter)
+         RETURNING account_id          -> result.length > 0
+
+double   if (r.lastUsedTotpCounter !== null && r.lastUsedTotpCounter >= args.counter) return false
+```
+
+A conditional UPDATE whose row count is the answer, against a guard clause. `NULL or strictly less`
+and `not (non-null and >=)` are the same rule, and nothing asserted that they were.
+
+**The failure that matters is the boundary, and it is invisible from a happy path.** Written `<=` in
+the SQL or `>` in the double, the SAME counter is admitted a second time and the replay window
+reopens — while first use, rewind and advance all still behave. So the arms are the four cases the
+predicate can face rather than one success path:
+
+```
+M1  DRIZZLE  <  becomes <=     the replay arm reds        1 failed | 10 passed
+M2  double   >= becomes >      the replay arm reds        1 failed | 10 passed
+M3  double refuses everything after the first             advance arm reds, 1 failed | 10 passed
+restored (source 0 dirty)                                 11 passed
+```
+
+M1 and M2 are the matched pair this whole exercise is for: the same off-by-one on either side fails
+the same arm. M3 is the control that stops the other three being satisfied by an implementation that
+refuses every code after the first — which is not a security hole but locks the customer out on
+their next login, and would otherwise look like three passing security arms.
+
+The fifth arm pins that the claim is per-enrolment. A counter shared across accounts would let one
+customer's successful login refuse another customer's identical step, on the same 30-second boundary
+every authenticator in the world lands on.
+
+**Owed remaining: 18.**
