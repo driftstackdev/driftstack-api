@@ -9,6 +9,10 @@ import type {
   ProfileSnapshotsRepo,
 } from '../../../src/services/profile-snapshots.js';
 import { keysetPage } from './keyset-page.js';
+import {
+  SNAPSHOT_PAGE_DEFAULT,
+  SNAPSHOT_PAGE_MAX,
+} from '../../../src/db/profile-snapshots-repo.js';
 
 /**
  * Ascending `(createdAt, id)`. The previous sort compared ids with `localeCompare`; this
@@ -46,7 +50,10 @@ export class InMemoryProfileSnapshotsRepo implements ProfileSnapshotsRepo {
   }
 
   list(args: ListSnapshotsArgs): Promise<ListSnapshotsPage> {
-    const limit = Math.min(args.limit ?? 50, 100);
+    // V-1246 — read from DrizzleProfileSnapshotsRepo rather than restated. It used to be
+    // `Math.min(args.limit ?? 50, 100)`: the same two numbers on both sides, agreeing only
+    // until one of them moved.
+    const limit = Math.min(args.limit ?? SNAPSHOT_PAGE_DEFAULT, SNAPSHOT_PAGE_MAX);
     // V-1243 — keyset via the shared helper. Resolving the cursor with findIndex inside
     // the parentProfileId-filtered array returns -1 whenever the caller pages with a
     // different drill-down than the one that issued the cursor, and the slice read that

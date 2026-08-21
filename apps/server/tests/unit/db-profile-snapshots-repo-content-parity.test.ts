@@ -8,7 +8,8 @@
 //   • toRow: 10-field ProfileSnapshotRecord (stateBlob defaulted
 //     to {} when DB NULL).
 //   • insert: 7-field values + returning(); throws on no-row.
-//   • list pagination framing: min(limit ?? 50, 100) cap; composite
+//   • list pagination framing: min(limit ?? SNAPSHOT_PAGE_DEFAULT, SNAPSHOT_PAGE_MAX) cap,
+//     both exported for the in-memory double (V-1246); composite
 //     cursor over (createdAt, id) via OR(lt(createdAt, c.createdAt),
 //     and(eq(createdAt, c.createdAt), lt(id, c.id))) — required
 //     because multiple snapshots can share the same createdAt.
@@ -56,9 +57,9 @@ describe('W444.A apps/server/src/db/profile-snapshots-repo.ts content parity', (
     );
   });
 
-  it('list: limit cap = Math.min(args.limit ?? 50, 100); filters seeded with eq(accountId); optional eq(parentProfileId)', () => {
+  it('list: limit cap = Math.min(args.limit ?? SNAPSHOT_PAGE_DEFAULT, SNAPSHOT_PAGE_MAX), both EXPORTED (V-1246 — the in-memory double imports them, so the export keyword is load-bearing); filters seeded with eq(accountId); optional eq(parentProfileId)', () => {
     expect(body).toMatch(
-      /const limit = Math\.min\(args\.limit \?\? 50, 100\);\s*\n?\s*const filters = \[eq\(profileSnapshots\.accountId, args\.accountId\)\];\s*\n?\s*if \(args\.parentProfileId !== undefined\) \{\s*\n?\s*filters\.push\(eq\(profileSnapshots\.parentProfileId, args\.parentProfileId\)\);\s*\n?\s*\}/,
+      /const limit = Math\.min\(args\.limit \?\? SNAPSHOT_PAGE_DEFAULT, SNAPSHOT_PAGE_MAX\);\s*\n?\s*const filters = \[eq\(profileSnapshots\.accountId, args\.accountId\)\];\s*\n?\s*if \(args\.parentProfileId !== undefined\) \{\s*\n?\s*filters\.push\(eq\(profileSnapshots\.parentProfileId, args\.parentProfileId\)\);\s*\n?\s*\}/,
     );
   });
 

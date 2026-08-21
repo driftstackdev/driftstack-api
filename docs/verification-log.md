@@ -2377,3 +2377,46 @@ nothing. Re-run with `${=VAR}`. Third time this session that zsh's lack of word-
 into a silent no-op.
 
 Still owed on this class: the profile-snapshots pair, same shape.
+
+## V-1246 — the last page-size pair, and a negative that proved nothing until it was rebuilt
+
+Third and last of the pairs V-1244 enumerated. `profile-snapshots-repo.ts` and its double both
+carried `Math.min(args.limit ?? 50, 100)`; named `SNAPSHOT_PAGE_DEFAULT` / `_MAX`, exported, and the
+double imports them. Separate constants again — all three listings cap at 100 today, and one shared
+constant would mean raising the snapshot page silently raised the customer profile list and the
+staff account browser with it.
+
+Three frozen occurrences updated in this commit: the content-parity chained regex, the v312
+cross-source pin, and the behavioural arm in `db-profile-snapshot-restore-dek-drizzle.test.ts`,
+which now derives both its seed count and its expectation from the constant.
+
+**The first N3 passed, and reading it as proof would have been wrong.** The plan was: move the repo
+cap to 7, put the literal back in the double, run the behavioural arm. It reported `2 passed`. Two
+separate reasons, both worth stating:
+
+1. That file does not touch the double at all, so half the mutation was invisible to it.
+2. Its seed count AND its expectation both derive from the constant, so moving the constant moves
+   them together and the arm stays green. That is the arm working as intended — it follows the cap
+   rather than freezing it — but it means the arm cannot detect a change TO the cap, and a green
+   run there says nothing about the double.
+
+So the negative was rebuilt rather than recorded. Which exposed the actual gap: **nothing anywhere
+asserted that the snapshots DOUBLE clamps to the same number the repo does.** Two arms added to the
+parentage contract, which drives both implementations, importing the constants rather than naming
+100 — they pin that both sides clamp to the SAME cap, which is precisely what stopped being
+guaranteed once each carried its own literal.
+
+```
+N1  drop `export` on both constants          the v312 pin              1 failed | 16 passed
+N2  inline the literals at the call site     both text pins            2 failed | 15 passed
+N3' repo cap 7 AND double back to a literal  both new contract arms    2 failed | 13 passed
+N4  double back to a literal, cap UNCHANGED  passes, and should        15 passed
+restored (both files 0 dirty, sha equal)                               17 passed / 15 passed
+```
+
+N4 is recorded deliberately. Restoring the literal on its own passes, because 100 is what the
+constant says today — which is the whole reason the honest negative is the PAIR of edits. A single
+edit cannot separate a fixture that reads the constant from one that happens to agree with it.
+
+Page-size class now closed: three pairs, three sets of exported constants, and every arm that
+touches a cap derives it. No ratchet change — arms added to existing files, no new file.

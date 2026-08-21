@@ -32,7 +32,11 @@ import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 
 import type { ProfileSnapshotsRepo } from '../../src/services/profile-snapshots.js';
-import { DrizzleProfileSnapshotsRepo } from '../../src/db/profile-snapshots-repo.js';
+import {
+  DrizzleProfileSnapshotsRepo,
+  SNAPSHOT_PAGE_DEFAULT,
+  SNAPSHOT_PAGE_MAX,
+} from '../../src/db/profile-snapshots-repo.js';
 import { InMemoryProfileSnapshotsRepo } from './_helpers/in-memory-profile-snapshots-repo.js';
 import type * as schema from '../../src/db/schema.js';
 
@@ -160,6 +164,30 @@ function snapshotContract(label: string, make: () => Subject, enabled: () => boo
         (await s.repo.list({ accountId: t.accountId })).data.map((r) => r.id),
         'the snapshot list is oldest-first — a restore picker putting the oldest state on top',
       ).toEqual([second, first]);
+    });
+
+    it('CRITICAL an over-large page is clamped to the repo page cap, in both. The arm imports SNAPSHOT_PAGE_MAX rather than naming 100, so it follows the cap instead of becoming another copy of it — what it pins is that BOTH implementations clamp to the same number, which is exactly what stopped being guaranteed when each carried its own literal.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const t = await s.tenant();
+      for (let i = 0; i < SNAPSHOT_PAGE_MAX + 1; i += 1) await snap(s, t, `cap-${String(i)}`);
+
+      const page = await s.repo.list({ accountId: t.accountId, limit: SNAPSHOT_PAGE_MAX + 500 });
+      expect(page.data.length, 'the oversized limit was not clamped to the cap').toBe(
+        SNAPSHOT_PAGE_MAX,
+      );
+    });
+
+    it('CRITICAL an omitted limit falls back to the repo page default, in both. The default decides what an unparameterised snapshot list returns, so the two implementations disagreeing means every test on the double measures a page size no customer is served.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const t = await s.tenant();
+      for (let i = 0; i < SNAPSHOT_PAGE_DEFAULT + 1; i += 1) await snap(s, t, `def-${String(i)}`);
+
+      const page = await s.repo.list({ accountId: t.accountId });
+      expect(page.data.length, 'the default page size does not match the repo default').toBe(
+        SNAPSHOT_PAGE_DEFAULT,
+      );
     });
 
     it("CRITICAL delete is account-scoped, in both. Otherwise a known snapshot id is enough to destroy another customer's restore point.", async () => {

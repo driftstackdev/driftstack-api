@@ -59,7 +59,11 @@ describe('W1011 db/profile-snapshots-repo V-312 cross-source invariant', () => {
 
   it('CRITICAL list 50/100 limit clamp + parentProfileId optional filter + compound (createdAt, id) cursor.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/profile-snapshots-repo.ts'));
-    expect(p).toMatch(/const limit = Math\.min\(args\.limit \?\? 50, 100\);/);
+    expect(p).toMatch(/export const SNAPSHOT_PAGE_DEFAULT = 50;/);
+    expect(p).toMatch(/export const SNAPSHOT_PAGE_MAX = 100;/);
+    expect(p).toMatch(
+      /const limit = Math\.min\(args\.limit \?\? SNAPSHOT_PAGE_DEFAULT, SNAPSHOT_PAGE_MAX\);/,
+    );
     expect(p).toMatch(/if \(args\.parentProfileId !== undefined\) \{/);
     expect(p).toMatch(
       /filters\.push\(eq\(profileSnapshots\.parentProfileId, args\.parentProfileId\)\);/,

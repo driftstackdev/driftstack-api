@@ -12,6 +12,7 @@ import {
 import { ProfileSnapshotsService } from '../../src/services/profile-snapshots.js';
 import { ProfilesService } from '../../src/services/profiles.js';
 import type * as schema from '../../src/db/schema.js';
+import { SNAPSHOT_PAGE_MAX } from '../../src/db/profile-snapshots-repo.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
 const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
@@ -111,10 +112,12 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       await client`
         INSERT INTO profile_snapshots (account_id, label, parent_archetype, parent_name)
         SELECT ${accountId}, 'cap-snap-' || g, 'arch', 'parent'
-        FROM generate_series(1, 101) g`;
+        FROM generate_series(1, ${SNAPSHOT_PAGE_MAX + 1}) g`;
 
       const page = await snapshotsRepo.list({ accountId, limit: 5000 });
-      expect(page.data.length, 'the oversized limit was clamped to the cap').toBe(100);
+      expect(page.data.length, 'the oversized limit was clamped to the cap').toBe(
+        SNAPSHOT_PAGE_MAX,
+      );
     });
 
     it('atomically stores a fresh v2 wrapper bound to the returned account+profile identity', async () => {

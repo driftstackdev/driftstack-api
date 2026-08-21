@@ -27,6 +27,16 @@ function toRow(r: typeof profileSnapshots.$inferSelect): ProfileSnapshotRecord {
   };
 }
 
+// V-1246 — the snapshot listing's page size, named and exported so the in-memory double
+// reads THESE numbers rather than keeping its own `Math.min(args.limit ?? 50, 100)`. Last of
+// the three pairs V-1244 enumerated; the other two were profiles and admin-accounts.
+//
+// Its own constants on purpose. All three listings cap at 100 today, and a single shared
+// constant would mean raising the snapshot page silently raised the customer profile list
+// and the staff account browser with it.
+export const SNAPSHOT_PAGE_DEFAULT = 50;
+export const SNAPSHOT_PAGE_MAX = 100;
+
 export class DrizzleProfileSnapshotsRepo implements ProfileSnapshotsRepo {
   constructor(private readonly database: Database) {}
 
@@ -78,7 +88,7 @@ export class DrizzleProfileSnapshotsRepo implements ProfileSnapshotsRepo {
   }
 
   async list(args: ListSnapshotsArgs): Promise<ListSnapshotsPage> {
-    const limit = Math.min(args.limit ?? 50, 100);
+    const limit = Math.min(args.limit ?? SNAPSHOT_PAGE_DEFAULT, SNAPSHOT_PAGE_MAX);
     const filters = [eq(profileSnapshots.accountId, args.accountId)];
     if (args.parentProfileId !== undefined) {
       filters.push(eq(profileSnapshots.parentProfileId, args.parentProfileId));
