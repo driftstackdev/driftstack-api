@@ -52310,3 +52310,58 @@ only reset the clock on the same failure.
 
 **Owed remaining: 23**, with no named side items outstanding. All four V-1209 divergences and both
 V-1210 findings are closed.
+
+---
+
+## V-1213 — the truncate-before-ordering class, third instance, on a work queue
+
+Two findings this batch: one sweep that came back empty, and one contract that did not.
+
+**The empty sweep, recorded so nobody re-derives it.** V-1212 closed a divergence where the double
+skipped validation the real repo enforces. I swept every pair for more of that class: Drizzle methods
+that raise where the double never does. The naive query returned 27 hits, and **26 of them are not
+the class** — they are internal invariant guards ("insert returned no row") for states a double
+cannot reproduce, and a double correctly has no equivalent. Filtering to caller-triggerable input
+validation left `recipes-repo` and `account-proxies-repo` (neither has a double at all) and
+`profiles-repo`'s wrapped-DEK precondition — which the double already enforces, with the identical
+message. So the webhook secret was the only instance of that class, and it is closed. Reporting the
+27 would have been reporting my heuristic, not the repo.
+
+**The contract that did find something.** `ScheduledJobsRepo`, seventh of the twenty-nine, and the
+third instance of the truncate-before-ordering class V-1210 named — the worst of the three, because
+the list being truncated is a work queue:
+
+```
+Drizzle   SELECT id … WHERE run_at <= $now ORDER BY run_at ASC LIMIT $batchSize FOR UPDATE SKIP LOCKED
+double    for (const r of this.rows.values()) { if (due.length >= batchSize) break; … }
+          due.sort((a, b) => a.runAt - b.runAt)      // AFTER truncating
+```
+
+The double sorted — its comment says "for deterministic order" — but it sorted the batch it had
+already chosen. Under a backlog the real repo takes the oldest due jobs and the double took an
+arbitrary subset. A job the Map iteration keeps passing over is not served late; nothing else
+advances it, so it can starve while the queue drains around it.
+
+**The arm asserts the SET, not the returned order — and that correction came from the run.** My
+first version asserted the array order and failed on BOTH halves. The Drizzle repo returned the
+right rows newest-first: `ORDER BY … LIMIT` governs which rows get locked, and the outer
+`UPDATE … RETURNING` promises nothing about the order it hands them back. Pinning that order would
+have frozen an accident of the statement rather than the property that decides which work gets done.
+
+```
+M1  DRIZZLE loses ORDER BY run_at             1 failed | 10 passed
+M2  the DOUBLE truncates without sorting      1 failed | 10 passed   (the original defect)
+M3  the DOUBLE stops deduping null accounts   1 failed | 10 passed
+restored (source 0 dirty)                     11 passed
+```
+
+M2 took two attempts, and the first attempt is the more useful record: reversing the batch changed
+the ORDER and the arm stayed green, exactly as designed, because the arm asserts the set. The
+mutation was wrong, not the arm. A mutation that fails to red is a claim about the test that has to
+be checked before it is believed.
+
+M3 covers the NULL-account dedup branch specifically. Every platform-wide recurring sweep enqueues
+with `accountId: null`, so the real repo takes an `isNull()` branch there rather than `eq()`; a
+double deduping only non-null accounts would let a self-rearming job pile up a queue of itself.
+
+**Owed remaining: 22.**

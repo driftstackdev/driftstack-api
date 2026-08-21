@@ -83,7 +83,6 @@ export class InMemoryScheduledJobsRepo implements ScheduledJobsRepo {
   claimDue(opts: { batchSize: number; now: Date; workerId: string }): Promise<ScheduledJobRow[]> {
     const due: InMemoryRow[] = [];
     for (const r of this.rows.values()) {
-      if (due.length >= opts.batchSize) break;
       if (r.completedAt !== null || r.failedAt !== null) continue;
       if (r.runAt.getTime() > opts.now.getTime()) continue;
       // Skip if currently locked + lock is fresh.
@@ -93,11 +92,15 @@ export class InMemoryScheduledJobsRepo implements ScheduledJobsRepo {
       }
       due.push(r);
     }
-    // Sort by runAt ASC for deterministic order.
+    // V-1213 — sort BEFORE applying the batch limit, mirroring the Drizzle repo's
+    // `ORDER BY run_at ASC LIMIT $batchSize`. This used to break out of the loop at batchSize and
+    // sort what it had already taken, which orders an arbitrary subset: under a backlog the oldest
+    // due job could be passed over indefinitely, and nothing else would advance it.
     due.sort((a, b) => a.runAt.getTime() - b.runAt.getTime());
+    const batch = due.slice(0, opts.batchSize);
 
     const claimed: ScheduledJobRow[] = [];
-    for (const r of due) {
+    for (const r of batch) {
       const updated: InMemoryRow = {
         ...r,
         lockedBy: opts.workerId,
