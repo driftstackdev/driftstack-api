@@ -230,8 +230,13 @@ export function ProxiesView(): JSX.Element {
     saveInFlightRef.current = true;
     setSaving(true);
     try {
+      // Which proxy, if any, to test once this save lands. The moment a customer
+      // enters a proxy is the moment to find out it cannot route — not the moment
+      // they launch a profile through it and watch the session fail.
+      let testAfterSave: 'added' | 'edited' | null = null;
       if (editor.kind === 'add') {
         await addProxy(draft);
+        testAfterSave = 'added';
       } else if (editor.kind === 'edit') {
         const editId = editor.id;
         const prev = state.proxies.find((p) => p.id === editId);
@@ -252,12 +257,41 @@ export function ProxiesView(): JSX.Element {
           void invalidateProbe(editId).catch(() => undefined);
           setTestResults((r) => dropKey(r, editId));
           setExitResults((r) => dropKey(r, editId));
+          // Invalidating alone leaves the row with NO verdict, which reads as
+          // "untested" rather than "the endpoint changed" — and the next launch
+          // is where that gets discovered. Re-test instead.
+          testAfterSave = 'edited';
         }
       }
       await refresh();
       // Keep the form mounted and locked through refresh so the customer never
       // sees an editable draft while the just-saved registry is still settling.
+      const editedId = editor.kind === 'edit' ? editor.id : null;
       setEditor({ kind: 'idle' });
+      if (testAfterSave !== null) {
+        // Re-list rather than reading component state: setState from refresh has
+        // not committed yet, so state.proxies here is still the PREVIOUS registry
+        // and would not contain a row that was just added.
+        const fresh = await listProxies().catch(() => null);
+        const target =
+          fresh === null
+            ? undefined
+            : testAfterSave === 'added'
+              ? // addProxy does not return the created row, so match on the tuple
+                // the customer just entered. Host+port+username is what identifies
+                // an endpoint here; two rows differing only by password would be
+                // the same endpoint anyway.
+                fresh.find(
+                  (p) =>
+                    p.host === draft.host && p.port === draft.port && p.username === draft.username,
+                )
+              : fresh.find((p) => p.id === editedId);
+        // Best-effort and deliberately NOT inside the save's try: a probe that
+        // cannot run must never make a successful save look failed. handleTest
+        // owns its own epoch guard, so an edit or removal landing mid-probe
+        // discards the result rather than writing it to the wrong row.
+        if (target !== undefined) void handleTest(target).catch(() => undefined);
+      }
     } catch (err) {
       setState((s) => ({
         ...s,
