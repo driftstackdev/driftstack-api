@@ -35,7 +35,10 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 
 import { AccountTierSchema, type AccountTier } from '@driftstack/api-types';
 import type { AccountsAdminRepo } from '../../src/services/admin-accounts.js';
-import { DrizzleAccountsAdminRepo } from '../../src/db/admin-accounts-repo.js';
+import {
+  ADMIN_ACCOUNTS_PAGE_MAX,
+  DrizzleAccountsAdminRepo,
+} from '../../src/db/admin-accounts-repo.js';
 import { InMemoryAccountsAdminRepo } from './_helpers/in-memory-admin-accounts-repo.js';
 import { InMemoryAuthRepo } from './_helpers/in-memory-auth-repo.js';
 import type { AccountRow } from '../../src/services/auth.js';
@@ -46,6 +49,15 @@ const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftsta
 const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
 
 const T0 = new Date('2026-08-20T12:00:00.000Z');
+// V-1245 — the counter arms date their fixtures into the FAR FUTURE, and that is the whole
+// reason they are deterministic. `countCreatedSince` takes no account filter: it counts the
+// whole table. Measured across a window that starts in the past, the delta picks up every
+// account any concurrently-running test file inserts or deletes — which is how these two arms
+// came to report a NEGATIVE delta (-2 where 1 was expected) under a nine-file parallel run,
+// while passing alone and passing in pairs. Anchoring the window past every other fixture's
+// `now()` scopes an unscopeable counter to exactly the rows this file seeded.
+const FAR = new Date('2099-06-01T12:00:00.000Z');
+const farAt = (n: number): Date => new Date(FAR.getTime() - n * 60_000);
 /** Newest first, so `at(0)` is the head of a created_at DESC page. */
 const at = (n: number): Date => new Date(T0.getTime() - n * 60_000);
 
@@ -239,10 +251,12 @@ function adminAccountsListContract(
     it('CRITICAL `limit` is capped at 100 however large a limit is asked for, in both. The cap is the only thing standing between a staff query and the whole accounts table in one response, and it is invisible until someone asks for more than a hundred.', async () => {
       if (!enabled()) return;
       const s = make();
-      await s.seedMany(Array.from({ length: 101 }, (_, i) => ({ createdAt: at(i) })));
+      await s.seedMany(
+        Array.from({ length: ADMIN_ACCOUNTS_PAGE_MAX + 1 }, (_, i) => ({ createdAt: at(i) })),
+      );
 
       const p = await page(s, { limit: 1000 });
-      expect(p.data.length, 'a limit above the cap was honoured').toBe(100);
+      expect(p.data.length, 'a limit above the cap was honoured').toBe(ADMIN_ACCOUNTS_PAGE_MAX);
       expect(p.hasMore, 'the capped page did not report more to come').toBe(true);
     });
 
@@ -292,8 +306,8 @@ function adminAccountsListContract(
     it('CRITICAL countCreatedSince is INCLUSIVE of an account created exactly at `since`, in both. Asserted as a delta because the counter has no scope and the table holds other rows.', async () => {
       if (!enabled()) return;
       const s = make();
-      const before = await s.repo.countCreatedSince(at(0));
-      const a = await single(s, { createdAt: at(0) });
+      const before = await s.repo.countCreatedSince(farAt(0));
+      const a = await single(s, { createdAt: farAt(0) });
 
       expect(
         (await s.repo.countCreatedSince(a.createdAt)) - before,
@@ -304,10 +318,10 @@ function adminAccountsListContract(
     it('CRITICAL countCreatedSince EXCLUDES an account created before the window, in both. Without this the inclusive arm above is satisfied by a counter that ignores `since` and counts the table.', async () => {
       if (!enabled()) return;
       const s = make();
-      const a = await single(s, { createdAt: at(5) });
+      const a = await single(s, { createdAt: farAt(5) });
       const justAfter = new Date(a.createdAt.getTime() + 1);
       const before = await s.repo.countCreatedSince(justAfter);
-      await single(s, { createdAt: at(6) });
+      await single(s, { createdAt: farAt(6) });
 
       expect(
         (await s.repo.countCreatedSince(justAfter)) - before,

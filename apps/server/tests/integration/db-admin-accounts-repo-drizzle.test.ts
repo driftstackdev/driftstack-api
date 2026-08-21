@@ -80,6 +80,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AccountTierSchema } from '@driftstack/api-types';
 import { DrizzleAccountsAdminRepo } from '../../src/db/admin-accounts-repo.js';
 import * as schema from '../../src/db/schema.js';
+import { ADMIN_ACCOUNTS_PAGE_MAX } from '../../src/db/admin-accounts-repo.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
 const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
@@ -336,7 +337,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
 
     it('CRITICAL list caps the page size at 100 however large a limit it is handed. Added 2026-08-15 after a mutation removing `Math.min(args.limit ?? 50, 100)` left every other arm green — no arm had ever asked for more than 100. The HTTP schema caps `limit` at 100 too, so this is defence-in-depth rather than the only gate, and that is exactly why it needs its own arm: nothing on the request path would notice it going, and the day a second caller reaches this repo without a Zod schema in front of it, one request pulls the whole accounts table into memory.', async () => {
       if (!dbReachable || !repo || !client) return;
-      // 101 rows in one statement — enough to exceed the cap, cheap enough not
+      // One row past the cap, in one statement — enough to exceed it, cheap enough not
       // to add a hundred round-trips. Swept by MARKER in afterAll.
       await client`
         INSERT INTO accounts (id, email, name, tier, status, created_at, updated_at)
@@ -344,10 +345,12 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
                ${`${MARKER}-bulk-`} || g || '@example.test',
                ${'Admin Repo Bulk Fixture'},
                'free'::account_tier, 'active'::account_status, now(), now()
-        FROM generate_series(1, 101) g`;
+        FROM generate_series(1, ${ADMIN_ACCOUNTS_PAGE_MAX + 1}) g`;
 
       const page = await repo.list({ emailContains: MARKER, limit: 5000 });
-      expect(page.data.length, 'the oversized limit was clamped to the cap').toBe(100);
+      expect(page.data.length, 'the oversized limit was clamped to the cap').toBe(
+        ADMIN_ACCOUNTS_PAGE_MAX,
+      );
       // Independent of the length: the look-ahead row is what sets hasMore, and
       // an uncapped limit swallows it, so this flips too rather than merely
       // restating the assertion above.

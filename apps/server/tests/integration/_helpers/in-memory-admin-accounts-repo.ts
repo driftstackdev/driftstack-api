@@ -12,6 +12,10 @@ import type {
 import type { AccountRow } from '../../../src/services/auth.js';
 import { parseUuidCursor } from '../../../src/lib/keyset-cursor.js';
 import type { InMemoryAuthRepo } from './in-memory-auth-repo.js';
+import {
+  ADMIN_ACCOUNTS_PAGE_DEFAULT,
+  ADMIN_ACCOUNTS_PAGE_MAX,
+} from '../../../src/db/admin-accounts-repo.js';
 
 /**
  * Ascending `(createdAt, id)` — the sort negates it for the created_at DESC, id DESC
@@ -53,7 +57,10 @@ export class InMemoryAccountsAdminRepo implements AccountsAdminRepo {
   }
 
   list(args: ListAccountsArgs): Promise<ListAccountsPage> {
-    const limit = Math.min(args.limit ?? 50, 100);
+    // V-1245 — the page size is read from DrizzleAccountsAdminRepo rather than restated.
+    // It used to be `Math.min(args.limit ?? 50, 100)`: the same two numbers on both sides,
+    // correct only for as long as nobody moved either.
+    const limit = Math.min(args.limit ?? ADMIN_ACCOUNTS_PAGE_DEFAULT, ADMIN_ACCOUNTS_PAGE_MAX);
     const all = this.authRepo.allAccounts();
 
     let filtered = all;

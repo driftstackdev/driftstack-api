@@ -2318,3 +2318,62 @@ Also recorded from V-1243 and still open: `DrizzleAdminAuditLogRepo`'s cursor-an
 unscoped where `profile-snapshots-repo.ts` documents why it scopes its own.
 
 No ratchet change: two arms added to an existing file, no new file.
+
+## V-1245 — the staff page size, and a flake of my own that only a parallel run could show
+
+V-1244 fixed the profiles half of the page-size class and queued the other two pairs. This closes
+admin-accounts: both the repo and its double carried `Math.min(args.limit ?? 50, 100)`, so the two
+agreed only until somebody edited one. Named `ADMIN_ACCOUNTS_PAGE_DEFAULT` / `_MAX`, exported, and
+the double imports them. Its own constants, not shared with the profiles or snapshot listings — the
+same reasoning as V-1244: three product limits that coincide at 100 today, and folding them together
+would mean raising one silently raised the others.
+
+Four frozen occurrences, enumerated with all three patterns (import path, quoted basename, and the
+regex-escaped expression) and updated in this commit:
+
+```
+db-admin-accounts-repo-content-parity.test.ts        text pin + title + header
+db-admin-accounts-repo-cross-source-invariant.test.ts  text pin + title + header
+db-admin-accounts-repo-drizzle.test.ts               behavioural: 101 seeds, expects 100
+admin-accounts-list-repo-contract.test.ts            behavioural: 101 seeds, expects 100
+```
+
+The two behavioural arms now derive BOTH the seed count and the expectation from the constant, so
+they follow the cap instead of becoming the fifth and sixth copies of it.
+
+```
+N1  drop `export` on both constants        both text pins    2 failed | 22 passed
+N2  inline the literals at the call site   both text pins    2 failed | 22 passed
+N3  repo cap 7 AND double back to literal  the contract arm  1 failed | 24 passed
+restored (both files 0 dirty, sha equal)                     24 passed / 25 passed
+```
+
+**A flake of mine, surfaced by running nine files together.** Two `countCreatedSince` arms failed
+with a NEGATIVE delta — `expected -2 to be 1`. They passed alone, and passed as a pair, at both the
+old and new revisions, so the change was not the cause. The cause is that `countCreatedSince` takes
+no account filter: it counts the whole table. My window started yesterday, so the delta picked up
+every account every parallel test file inserted or deleted in between, and a concurrent sweep
+deleting its fixtures drove the count DOWN.
+
+Fixed by dating the counter fixtures into the far future and anchoring the window there, past every
+other fixture's `now()`. That scopes an unscopeable counter to exactly the rows this file seeded.
+Verified over five consecutive nine-file runs rather than one, because a single green run does not
+retire a race.
+
+The `countByStatus` and `countByTier` deltas have the same shape and cannot be fixed the same way —
+those counters have no time parameter to anchor. Their exposure is far smaller: two queries with one
+insert between them, rather than a window spanning the whole run. Recorded rather than left implied.
+
+**I broke rule 6 and it cost exactly what the rule exists to prevent.** Restoring a mutated fixture,
+I reached for `git checkout -- <file>` instead of a scratchpad snapshot. That file held UNCOMMITTED
+work — the double's wiring from earlier in this same batch — and the checkout discarded it silently.
+Caught by grepping for the constant afterwards rather than by anything failing. Re-applied, then
+snapshotted properly. A mutation harness that restores from git is only safe when the file is clean,
+which during a batch it never is.
+
+Two of the mutation runs also printed no summary at all: `mut "$A $B"` passes two paths as ONE
+argument, vitest matches nothing, and a run that tested nothing looks like a run that printed
+nothing. Re-run with `${=VAR}`. Third time this session that zsh's lack of word-splitting has turned
+into a silent no-op.
+
+Still owed on this class: the profile-snapshots pair, same shape.

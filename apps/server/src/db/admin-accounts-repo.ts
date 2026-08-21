@@ -12,6 +12,18 @@ import type { Database } from './client.js';
 import { accounts } from './schema.js';
 import { parseUuidCursor } from '../lib/keyset-cursor.js';
 
+// V-1245 — the staff account browser's page size, named and exported so the in-memory
+// double reads THESE numbers instead of keeping its own `Math.min(args.limit ?? 50, 100)`.
+// Both sides carried the literal, so the two agreed only until somebody edited one, and
+// every test standing on the double would have gone on asserting the old cap.
+//
+// Its own constants, NOT shared with the customer profile listing or the snapshot listing,
+// which carry the same two numbers today. Those are separate product limits that merely
+// coincide; one constant across all three would mean raising the staff page size silently
+// raised what customers get too.
+export const ADMIN_ACCOUNTS_PAGE_DEFAULT = 50;
+export const ADMIN_ACCOUNTS_PAGE_MAX = 100;
+
 export class DrizzleAccountsAdminRepo implements AccountsAdminRepo {
   constructor(private readonly database: Database) {}
 
@@ -51,7 +63,7 @@ export class DrizzleAccountsAdminRepo implements AccountsAdminRepo {
   }
 
   async list(args: ListAccountsArgs): Promise<ListAccountsPage> {
-    const limit = Math.min(args.limit ?? 50, 100);
+    const limit = Math.min(args.limit ?? ADMIN_ACCOUNTS_PAGE_DEFAULT, ADMIN_ACCOUNTS_PAGE_MAX);
 
     const filters: SQL[] = [];
     if (args.status !== undefined) filters.push(eq(accounts.status, args.status));

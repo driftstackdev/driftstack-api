@@ -10,7 +10,7 @@
 //
 //   status 3-value union — 'active' | 'suspended' | 'deleted'.
 //
-//   list 50/100 limit clamp — Math.min(args.limit ?? 50, 100).
+//   list 50/100 limit clamp, now named ADMIN_ACCOUNTS_PAGE_* and exported (V-1245) — Math.min(args.limit ?? 50, 100).
 //
 //   list 3-filter — status (eq) + tier (eq) + emailContains
 //     (ilike(accounts.email, `%${lowercased}%`)).
@@ -99,9 +99,13 @@ describe('W1005 db/admin-accounts-repo cross-source invariant', () => {
 
   // ─── list 50/100 limit clamp ─────────────────────────────────
 
-  it('CRITICAL list limit clamp — Math.min(args.limit ?? 50, 100). The 50-default + 100-max keeps admin pagination bounded.', () => {
+  it('CRITICAL list limit clamp — Math.min(args.limit ?? ADMIN_ACCOUNTS_PAGE_DEFAULT, ADMIN_ACCOUNTS_PAGE_MAX). The 50-default + 100-max keeps admin pagination bounded. V-1245 — named and exported so the in-memory double reads them rather than carrying a second copy of the same two numbers.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/admin-accounts-repo.ts'));
-    expect(p).toMatch(/const limit = Math\.min\(args\.limit \?\? 50, 100\);/);
+    expect(p).toMatch(/export const ADMIN_ACCOUNTS_PAGE_DEFAULT = 50;/);
+    expect(p).toMatch(/export const ADMIN_ACCOUNTS_PAGE_MAX = 100;/);
+    expect(p).toMatch(
+      /const limit = Math\.min\(args\.limit \?\? ADMIN_ACCOUNTS_PAGE_DEFAULT, ADMIN_ACCOUNTS_PAGE_MAX\);/,
+    );
   });
 
   // ─── list 3-filter ───────────────────────────────────────────

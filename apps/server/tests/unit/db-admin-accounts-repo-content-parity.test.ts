@@ -7,7 +7,8 @@
 //
 //   • Updates accounts.tier / accounts.status framing pinned.
 //   • findById + setTier (returning) + setStatus (returning).
-//   • list: limit cap Math.min(args.limit ?? 50, 100).
+//   • list: limit cap Math.min(args.limit ?? ADMIN_ACCOUNTS_PAGE_DEFAULT, ADMIN_ACCOUNTS_PAGE_MAX),
+//     both exported for the in-memory double (V-1245).
 //   • Filters: status eq, tier eq, emailContains via ilike with
 //     '%${lowerCased}%' pattern.
 //   • Composite cursor over (createdAt, id) — same as profile-
@@ -72,8 +73,12 @@ describe('W445.B apps/server/src/db/admin-accounts-repo.ts content parity', () =
     );
   });
 
-  it("list: limit cap = Math.min(args.limit ?? 50, 100); filters with status eq + tier eq + emailContains via ilike '%${lower}%' (length > 0 guard)", () => {
-    expect(body).toMatch(/const limit = Math\.min\(args\.limit \?\? 50, 100\);/);
+  it("list: limit cap = Math.min(args.limit ?? ADMIN_ACCOUNTS_PAGE_DEFAULT, ADMIN_ACCOUNTS_PAGE_MAX), with both constants EXPORTED (V-1245 — the in-memory double imports them, so the export keyword is load-bearing); filters with status eq + tier eq + emailContains via ilike '%${lower}%' (length > 0 guard)", () => {
+    expect(body).toMatch(/export const ADMIN_ACCOUNTS_PAGE_DEFAULT = 50;/);
+    expect(body).toMatch(/export const ADMIN_ACCOUNTS_PAGE_MAX = 100;/);
+    expect(body).toMatch(
+      /const limit = Math\.min\(args\.limit \?\? ADMIN_ACCOUNTS_PAGE_DEFAULT, ADMIN_ACCOUNTS_PAGE_MAX\);/,
+    );
     expect(body).toMatch(
       /if \(args\.status !== undefined\) filters\.push\(eq\(accounts\.status, args\.status\)\);\s*\n?\s*if \(args\.tier !== undefined\) filters\.push\(eq\(accounts\.tier, args\.tier\)\);\s*\n?\s*if \(args\.emailContains !== undefined && args\.emailContains\.length > 0\) \{\s*\n?\s*filters\.push\(ilike\(accounts\.email, `%\$\{args\.emailContains\.toLowerCase\(\)\}%`\)\);\s*\n?\s*\}/,
     );
