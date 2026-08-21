@@ -2068,4 +2068,77 @@ the invalid values happily, so the Drizzle half is what found it.
 
 Ratchets: 2992 → 2993, 3159 → 3160, DATABASE_URL gate 127 → 128, conditional skips 169 → 170.
 
-**Owed remaining: 0. All twenty-nine double/repo pairs now carry a contract.**
+**Owed remaining: 0 against the twenty-nine that were on the list.** Superseded by V-1241: that
+closing count was taken from the number of contract FILES, and enumerating the doubles afterwards
+turned up one pair with no contract at all. The totals matched while the coverage did not.
+
+## V-1241 — the thirtieth pair, which a matching total had hidden
+
+V-1240 closed this campaign by reporting the full set covered. That count came from the number of
+contract FILES, and it was wrong. Enumerating the doubles instead of counting them:
+
+```
+29 doubles.  29 contract files.  Not a bijection.
+  InMemoryAuthRepo        named by 3 contracts   (pulled in as a collaborator)
+  InMemoryAuthFlowsRepo   named by 2
+  InMemoryRateLimitOverridesRepo   named by NONE
+```
+
+`DrizzleRateLimitOverridesRepo` is wired in `bootstrap.ts` and serving production. The totals
+matched exactly while one live pair had no contract at all — which is the entire argument for
+enumerating a set rather than reporting its size, arrived at the hard way one entry after
+declaring the work finished.
+
+**Precision the database cannot hold.** `refill_per_second_centi` is an INTEGER of hundredths:
+
+```
+Drizzle  write  Math.max(1, Math.round(refillPerSecond * 100))    read  centi / 100
+double   write  input.refillPerSecond                             read  the same float back
+```
+
+The double answered with whatever the caller passed; the column answers with what it can store. A
+test asserting a refill of 1.234 passed while production served 1.23. Worse, `Math.max(1, …)` floors
+any rate below half a centi — INCLUDING ZERO — at 0.01, because a bucket that never refills is a
+permanent lockout rather than a rate limit. The double reported 0 for that: the exact lockout the
+floor exists to prevent, in the one place a test would have looked for it.
+
+Both now call the exported `quantizeRefillPerSecond`, and so does the contract. Asserting a literal
+1.23 in the test would have made it a third copy of the rounding rule — the V-1238 and V-1240
+finding a third time, which is why the helper was exported rather than the number duplicated again.
+
+**And the V-1237 paging split, in a repo where it is easier to hit.** The double resolved its
+cursor with `findIndex` inside the already-filtered array; `findIndex` returns -1 when the cursor
+row no longer passes the filter, which the slice read as "start from the top". In V-1237 that
+needed an admin to suspend an account between pages. Here the filter is `expiresAt > now`, so the
+cursor row leaves the set BY ITSELF: page one at 10:00, page two at 10:01 after the boundary
+override lapsed, and page two re-lists overrides already seen. No one has to do anything.
+
+```
+M1  double stores the caller's float          quantised + zero arms       2 failed | 21 passed
+M2  double cursor boundary < becomes <=       expired-cursor + partition  2 failed | 21 passed
+M3  double re-set resets createdAt            the createdAt arm           1 failed | 22 passed
+M4  double lists expired as active            the expiry arm              1 failed | 22 passed
+M5  DRIZZLE drops the one-centi floor         the zero arm, BOTH halves   2 failed | 21 passed
+M6  DRIZZLE drops the expiry filter           the expiry arm              1 failed | 22 passed
+restored (both files 0 dirty, sha equal)                                  23 passed
+```
+
+M5 reddens both halves from a single edit, which is the point of the shared helper: there is one
+place left to get this wrong.
+
+**Four frozen occurrences, enumerated with both grep patterns before any edit.** Moving the
+arithmetic into `toRefillCenti` broke content-parity pins that had frozen the literal expression in
+`db-rate-limit-overrides-repo-content-parity.test.ts` and
+`db-rate-limit-overrides-repo-v016-cross-source-invariant.test.ts` — two pins each, on the floor and
+on the read-side divide. Repointed at the new home, `it(` counts unchanged at 8 and 9, and both
+test TITLES updated too: they quoted the old expression, and a title that describes code that no
+longer exists is the same defect as a comment that does. Three negatives, each reddening both
+guards: remove the floor, inline the scale in `toRecord`, inline the call site.
+
+`setByKeyId` is NOT NULL and typed `string`, so the first draft's `null` was a type error — found by
+`tsc`, again, after a vitest run had already reported the arm failing for what looked like a
+different reason. Second time this turn that a green-or-red vitest result said nothing about types.
+
+Ratchets: 2993 → 2994, 3160 → 3161, DATABASE_URL gate 128 → 129, conditional skips 170 → 171.
+
+**Owed remaining: 0, and this time the set was enumerated rather than counted.**

@@ -66,11 +66,16 @@ describe('W1009 db/rate-limit-overrides-repo V-016 cross-source invariant', () =
     expect(p).toMatch(/async listAll\(opts: \{/);
   });
 
-  it("CRITICAL V-016 centi-rate quantization — 'refillCenti = Math.max(1, Math.round(input.refillPerSecond * 100))'. The max(1) floor prevents 0-refill edge case.", () => {
+  it("CRITICAL V-016 centi-rate quantization, now via toRefillCenti — 'Math.max(1, Math.round(refillPerSecond * REFILL_CENTI_SCALE))'. The max(1) floor prevents the 0-refill edge case, which is a permanent lockout rather than a rate limit.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/rate-limit-overrides-repo.ts'));
+    expect(p).toMatch(/const REFILL_CENTI_SCALE = 100;/);
+    // V-1241 — the floor and the scale now live in `toRefillCenti`, which the in-memory
+    // double and the parity contract import rather than restate. The invariant this arm
+    // guards is unchanged: max(1) still prevents a zero refill, which is a permanent lockout.
     expect(p).toMatch(
-      /const refillCenti = Math\.max\(1, Math\.round\(input\.refillPerSecond \* 100\)\);/,
+      /return Math\.max\(1, Math\.round\(refillPerSecond \* REFILL_CENTI_SCALE\)\);/,
     );
+    expect(p).toMatch(/const refillCenti = toRefillCenti\(input\.refillPerSecond\);/);
   });
 
   it('CRITICAL upsert onConflictDoUpdate target — [accountId, bucketKey] compound + 6-field SET.', () => {
@@ -129,7 +134,7 @@ describe('W1009 db/rate-limit-overrides-repo V-016 cross-source invariant', () =
     expect(p).toMatch(/accountId: r\.accountId,/);
     expect(p).toMatch(/bucketKey: r\.bucketKey,/);
     expect(p).toMatch(/capacity: r\.capacity,/);
-    expect(p).toMatch(/refillPerSecond: r\.refillPerSecondCenti \/ 100,/);
+    expect(p).toMatch(/refillPerSecond: r\.refillPerSecondCenti \/ REFILL_CENTI_SCALE,/);
     expect(p).toMatch(/reason: r\.reason,/);
     expect(p).toMatch(/expiresAt: r\.expiresAt,/);
     expect(p).toMatch(/setByKeyId: r\.setByKeyId,/);

@@ -46,10 +46,14 @@ describe('W444.B apps/server/src/db/rate-limit-overrides-repo.ts content parity'
     expect(body).toMatch(/import \{ rateLimitOverrides \} from '\.\/schema\.js';/);
   });
 
-  it('upsert centi-scale floor: refillCenti = Math.max(1, Math.round(input.refillPerSecond * 100))', () => {
+  it('upsert centi-scale floor, now via toRefillCenti: Math.max(1, Math.round(refillPerSecond * REFILL_CENTI_SCALE))', () => {
+    expect(body).toMatch(/const REFILL_CENTI_SCALE = 100;/);
+    // V-1241 — the arithmetic moved into `toRefillCenti` so the double and the contract
+    // can share it instead of each restating it. Same floor, same scale, one home.
     expect(body).toMatch(
-      /const refillCenti = Math\.max\(1, Math\.round\(input\.refillPerSecond \* 100\)\);/,
+      /return Math\.max\(1, Math\.round\(refillPerSecond \* REFILL_CENTI_SCALE\)\);/,
     );
+    expect(body).toMatch(/const refillCenti = toRefillCenti\(input\.refillPerSecond\);/);
   });
 
   it("upsert: 7-field values (accountId + bucketKey + capacity + refillPerSecondCenti + reason nullable + expiresAt + setByKeyId); onConflictDoUpdate target=[accountId, bucketKey] + updatedAt:new Date() on conflict; throws 'rate_limit_overrides upsert returned no row'", () => {
@@ -85,7 +89,7 @@ describe('W444.B apps/server/src/db/rate-limit-overrides-repo.ts content parity'
 
   it('toRecord: read-side divides centi by 100 (refillPerSecond: r.refillPerSecondCenti / 100); 9-field record', () => {
     expect(body).toMatch(
-      /function toRecord\(r: typeof rateLimitOverrides\.\$inferSelect\): RateLimitOverrideRecord \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*accountId: r\.accountId,\s*\n?\s*bucketKey: r\.bucketKey,\s*\n?\s*capacity: r\.capacity,\s*\n?\s*refillPerSecond: r\.refillPerSecondCenti \/ 100,\s*\n?\s*reason: r\.reason,\s*\n?\s*expiresAt: r\.expiresAt,\s*\n?\s*setByKeyId: r\.setByKeyId,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*updatedAt: r\.updatedAt,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function toRecord\(r: typeof rateLimitOverrides\.\$inferSelect\): RateLimitOverrideRecord \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*accountId: r\.accountId,\s*\n?\s*bucketKey: r\.bucketKey,\s*\n?\s*capacity: r\.capacity,\s*\n?\s*refillPerSecond: r\.refillPerSecondCenti \/ REFILL_CENTI_SCALE,\s*\n?\s*reason: r\.reason,\s*\n?\s*expiresAt: r\.expiresAt,\s*\n?\s*setByKeyId: r\.setByKeyId,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*updatedAt: r\.updatedAt,\s*\n?\s*\};\s*\n?\s*\}/,
     );
   });
 

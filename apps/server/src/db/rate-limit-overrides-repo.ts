@@ -11,11 +11,36 @@ import type { Database } from './client.js';
 import { rateLimitOverrides } from './schema.js';
 import { parseUuidCursor } from '../lib/keyset-cursor.js';
 
+// V-1241 — `refill_per_second_centi` is an INTEGER column holding hundredths, so a
+// requested refill rate does not survive a round-trip unchanged. Exported because the
+// in-memory double stored the caller's float verbatim and therefore promised a
+// precision the database cannot hold: a test asserting 1.234 passed against the double
+// while production served 1.23, and a refill of 0 read back as 0.01 rather than 0.
+// One helper, used by the repo, the double, and the contract.
+const REFILL_CENTI_SCALE = 100;
+
+/** Hundredths actually written to the column. Floors at 1 — never zero, see below. */
+export function toRefillCenti(refillPerSecond: number): number {
+  return Math.max(1, Math.round(refillPerSecond * REFILL_CENTI_SCALE));
+}
+
+/**
+ * What a requested refill rate becomes once stored and read back.
+ *
+ * Two lossy steps, both deliberate. `Math.round` quantises to hundredths, so 1.234
+ * serves as 1.23. `Math.max(1, …)` means a rate below half a centi — including ZERO —
+ * becomes 0.01 rather than 0: an override cannot express "never refills", because a
+ * bucket that never refills is a permanent lockout rather than a rate limit.
+ */
+export function quantizeRefillPerSecond(refillPerSecond: number): number {
+  return toRefillCenti(refillPerSecond) / REFILL_CENTI_SCALE;
+}
+
 export class DrizzleRateLimitOverridesRepo implements RateLimitOverridesRepo {
   constructor(private readonly database: Database) {}
 
   async upsert(input: SetOverrideInput): Promise<RateLimitOverrideRecord> {
-    const refillCenti = Math.max(1, Math.round(input.refillPerSecond * 100));
+    const refillCenti = toRefillCenti(input.refillPerSecond);
     const [row] = await this.database.db
       .insert(rateLimitOverrides)
       .values({
@@ -113,7 +138,7 @@ function toRecord(r: typeof rateLimitOverrides.$inferSelect): RateLimitOverrideR
     accountId: r.accountId,
     bucketKey: r.bucketKey,
     capacity: r.capacity,
-    refillPerSecond: r.refillPerSecondCenti / 100,
+    refillPerSecond: r.refillPerSecondCenti / REFILL_CENTI_SCALE,
     reason: r.reason,
     expiresAt: r.expiresAt,
     setByKeyId: r.setByKeyId,
