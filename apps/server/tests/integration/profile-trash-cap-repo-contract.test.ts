@@ -122,6 +122,61 @@ function profileTrashCapContract(label: string, make: () => Subject, enabled: ()
       ).toBe(0);
     });
 
+    it('CRITICAL an account AT its cap is told it is at its cap, even when the same request is also malformed, in both. Production reaches the wrapped-DEK validation only while building the row — `preallocatedProfileId` is evaluated inside .values(), after the count — so Postgres answers limitExceeded and the double threw instead. Two different refusals for one request is the kind of divergence that makes a service test agree with a fixture and disagree with the database.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const account = await s.account();
+      await addProfile(s, account, `at-cap-${randomUUID().slice(0, 8)}`);
+
+      const outcome = await s.repo.insertWithLimit(
+        {
+          accountId: account,
+          name: `over-${randomUUID().slice(0, 8)}`,
+          archetype: ARCHETYPE,
+          description: null,
+          // Malformed on purpose: a wrapped DEK with no preallocated id. The cap is reached
+          // first, so this never gets looked at.
+          wrappedDek: 'dek-without-a-preallocated-id',
+        },
+        1,
+      );
+
+      expect(outcome, 'the cap refusal did not come back as a value').toMatchObject({
+        limitExceeded: true,
+      });
+    });
+
+    it('CRITICAL a transfer whose insert fails leaves the SOURCE profile live, in both. The whole transfer is one transaction in production, so a failed insert rolls the retirement back; the double retired the source with a plain write and then delegated, leaving a profile retired with no successor. Postgres cannot reach that state, and a fixture that can teaches every test standing on it that a failed transfer is allowed to lose the original.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const account = await s.account();
+      const sourceId = await addProfile(s, account, `src-${randomUUID().slice(0, 8)}`);
+
+      await expect(
+        s.repo.transferAtomic({
+          source: { id: sourceId, accountId: account },
+          insert: {
+            accountId: account,
+            name: `dst-${randomUUID().slice(0, 8)}`,
+            archetype: ARCHETYPE,
+            description: null,
+            wrappedDek: 'dek-without-a-preallocated-id',
+          },
+          limit: null,
+        }),
+        'the malformed transfer was accepted — the arm below would prove nothing',
+      ).rejects.toThrow();
+
+      expect(
+        await s.repo.findById({ id: sourceId, accountId: account }),
+        'the source profile was retired by a transfer that failed',
+      ).not.toBeNull();
+      expect(
+        await liveIds(s, account),
+        'the source profile left the live list after a failed transfer',
+      ).toContain(sourceId);
+    });
+
     it('CRITICAL a trashed profile is hidden from findById and list, in both. The bin must not leak into the live grid — V-1194 found it doing exactly that.', async () => {
       if (!enabled()) return;
       const s = make();

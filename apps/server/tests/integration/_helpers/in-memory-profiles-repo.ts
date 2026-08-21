@@ -71,7 +71,7 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
    *  claim's checked result are the whole point — a double that inserted first,
    *  or ignored the claim, would let the concurrency bug this method exists to
    *  fix pass in every test that uses this repo. */
-  transferAtomic(args: {
+  async transferAtomic(args: {
     source: { id: string; accountId: string };
     insert: NewProfileInput;
     limit: number | null;
@@ -91,18 +91,32 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
     if (!src || src.accountId !== args.source.accountId || src.deletedAt !== null) {
       return Promise.resolve({ sourceAlreadyRetired: true as const });
     }
+    // V-1274 — production runs the whole transfer in ONE transaction, so an insert that throws
+    // rolls the retirement back and the source is still live. This double retired the source with
+    // a plain `set` and then delegated, so a failed insert left a profile retired with no
+    // successor — a state Postgres cannot reach, and the shape of it is silent data loss. Proven
+    // both ways against a real database: production answers `threw / sourceLive=true`, this
+    // answered `threw / sourceLive=false`.
+    const prior = { ...src };
     const now = new Date();
     this.rows.set(args.source.id, { ...src, deletedAt: now, updatedAt: now });
-    return this.insertWithLimit(args.insert, null);
+    try {
+      return await this.insertWithLimit(args.insert, null);
+    } catch (err) {
+      this.rows.set(args.source.id, prior);
+      throw err;
+    }
   }
 
   insertWithLimit(
     input: NewProfileInput,
     limit: number | null,
   ): Promise<{ record: ProfileRecord } | { limitExceeded: true; current: number }> {
-    if (input.wrappedDek != null && input.id === undefined) {
-      throw new Error('a profile with a wrapped DEK requires a preallocated id');
-    }
+    // V-1274 — the cap check comes FIRST, because production reaches this validation only when it
+    // builds the row: `preallocatedProfileId(input)` is evaluated inside `.values({...})`, after
+    // the count. So an account at its cap sending a wrapped DEK with no preallocated id gets
+    // `{ limitExceeded }` from Postgres, and used to get a THROWN error from here — the double
+    // refusing, by a different failure mode, a request production answers.
     if (limit !== null) {
       let current = 0;
       // Anti-abuse: count LIVE + TRASHED against the cap (mirrors prod
@@ -111,6 +125,9 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
       if (current >= limit) {
         return Promise.resolve({ limitExceeded: true as const, current });
       }
+    }
+    if (input.wrappedDek != null && input.id === undefined) {
+      throw new Error('a profile with a wrapped DEK requires a preallocated id');
     }
     const now = new Date();
     const row: ProfileRecord = {

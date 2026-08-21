@@ -3730,3 +3730,61 @@ green suite is not a typecheck.
 Suites: guard 7 passed; incident contract 17 passed both halves; the eight `insertWithLimit`
 consumers 117 passed; neighbours 50 passed. No test files added, so the `EXPECTED_TEST_FILES`
 ratchets are untouched.
+
+---
+
+## V-1274b — the profiles double could reach a state Postgres cannot: a retired profile with no successor
+
+Two divergences in `in-memory-profiles-repo`, both from the same cause and both **proven on both
+sides against a real database** rather than read off the source.
+
+Production validates a wrapped DEK inside `preallocatedProfileId(input)`, which is evaluated where
+the row is BUILT — inside `.values({...})`, after the cap count and, in `transferAtomic`, after the
+source has been retired. The double hoisted that check to the top of `insertWithLimit`. Same rule,
+different position, and position is the whole finding.
+
+```
+A  at-cap + wrappedDek with no preallocated id
+     production   {"limitExceeded":true,"current":1}
+     double       THREW a profile with a wrapped DEK requires a preallocated id
+
+B  transferAtomic whose insert is malformed
+     production   threw / sourceLive=true      (one transaction; the retire rolls back)
+     double       threw / sourceLive=false     (retired, no successor)
+```
+
+**B is the one that matters.** The double retired the source with a plain `set` and then delegated,
+so a failed insert left the account holding a soft-deleted profile and nothing in its place. Postgres
+cannot produce that, and a fixture that can teaches every test standing on it that losing the
+original is an acceptable outcome of a failed transfer. The double now captures the row before
+retiring and puts it back if the insert throws — a model of the rollback rather than a bet that
+nothing downstream can fail. A is smaller but the same species: one request, two different refusals,
+so a service test can agree with the fixture and disagree with the database.
+
+Contract arms on `profile-trash-cap-repo-contract`, both halves, each mutation-proven:
+
+```
+M5  hoist the validation back above the cap check   in-memory RED, drizzle GREEN
+M6  drop the rollback from transferAtomic           in-memory RED "the source profile was
+                                                    retired by a transfer that failed",
+                                                    drizzle GREEN
+```
+
+**Both mutations silently failed to apply on the first attempt, and the suite went green.** M5's
+`python` assert aborted (`validation block x2` — `insert()` carries the identical check, so the
+anchor was not unique) and M6's `perl -0777 -pe 's/\Q…\E/'` never matched, because `\Q` quotes the
+`\n` escapes into literal backslash-n. Nothing was mutated, and both runs reported 15 passed — a
+green that says only that the file was never edited. The fix is procedural and now standing: **print
+a marker proving the mutation landed BEFORE running the suite**, never after. The M6 line
+`rollback lines remaining = 0 (expect 0)` is that marker; the first attempt printed `1` and I ran
+vitest anyway.
+
+Verified clean on the way past, recorded because a negative result is a result:
+`sumSizeBytesByAccount` sums LIVE rows only on both sides, and the hoarding hole that opens (trash a
+large profile to free reported quota) was closed on 2026-06-30 by re-checking the quota on `restore`
+— so the "live bytes ≤ cap" invariant holds at every instant and the asymmetry with the profile
+COUNT cap, which deliberately includes trashed rows, is coherent rather than an oversight.
+`transferAtomic`'s cap ordering, its source-claim predicate and `preallocatedProfileId` itself agree
+between the two.
+
+Suites: 11 files, 154 passed, `tsc` clean.
