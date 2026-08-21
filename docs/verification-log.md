@@ -3375,3 +3375,53 @@ drift and nothing to fix — module-private is correct there.
 
 No code changed beyond the comment. The finding is that the next obvious step is a mistake, which is
 worth a log entry precisely because it looks like work that should be done.
+
+## V-1268 — measuring the doubles' dead surface, and being wrong four times on the way
+
+The parity classes are swept and four are guarded, so the question worth asking is not "what else
+diverges" but "what could diverge with nothing to notice". A double method that no test, no other
+double and no production path ever calls is exactly that.
+
+**Result: 4 of 260 double methods have no caller anywhere.** The fixtures this campaign has been
+correcting all session are, on this measure, essentially fully exercised. That is a positive
+verification rather than a to-do list, and it is worth recording as one.
+
+**Getting to that number took four corrections, each a different mechanism.**
+
+```
+1st run   11 dead   corpus excluded _helpers — but doubles call each other
+                    (in-memory-rate-limit-overrides calls authRepo.clearRateLimitOverride)
+2nd run    8 dead   corpus excluded production — most repo methods are reached through a
+                    service, never named in test source at all
+3rd run    5 dead   a "reference" was a COMMENT: the web-session contract says in prose that
+                    `upsertWebSession` has zero callers, which my grep counted as a caller
+4th run    4 dead   `activateMfaEnrollmentSession` was an INTERFACE member declared inside the
+                    double's own file, which my `^  method(` extractor read as a class method.
+                    It is called, through the MfaSessionAuthority collaborator.
+```
+
+Four instruments, four different ways of being wrong, and each intermediate number looked like an
+answer. This is V-1252's lesson at a third remove: a grep is a hypothesis, a count is worth what
+the reading behind it is worth, and the tool that produces the count needs the same scrutiny as the
+claim.
+
+**Only ONE of the four was safe to delete.** `setMinter` writes a map that `insertApiKey` already
+populates on the real path, so removing it changes nothing. Removed.
+
+The other three are the sole writers of state that live code reads:
+
+```
+seedMintedApiKey   only writer of `mintedApiKeys`, read by removeMemberWithInvites
+upsertWebSession   only writer of `webSessionsByTokenHash`, read by three fallback paths
+revokeWebSessionById  reads that same map
+```
+
+Deleting those would not remove dead code. It would leave live methods whose bodies can never do
+anything — which compiles, passes, and reads as working. Demonstrated rather than argued: removing
+`seedMintedApiKey` leaves `tsc` at 0 and the team-members contract green at 11 passed. Nothing goes
+red; the code just quietly stops being able to return anything.
+
+So they are annotated at their definitions with why they are kept, because "this has no callers,
+delete it" is the obvious next move and it is wrong here. The annotation is the durable part — the
+next person to measure dead surface finds the answer at the seam rather than repeating the four
+runs above.

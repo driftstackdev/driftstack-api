@@ -112,7 +112,14 @@ export class InMemoryAuthRepo implements AccountAuthRepo {
     this.overrides.get(accountId)?.delete(bucketKey);
   }
 
-  // V-168 — web session test seam.
+  /**
+   * V-168 — web session test seam. V-1268: no caller today, kept deliberately.
+   *
+   * It is the only writer of `webSessionsByTokenHash`, which the local fallbacks in
+   * `findActiveWebSession`, `touchWebSessionLastUsed` and `revokeWebSessionById` all read. With
+   * no writer those paths cannot return a row, so removing this seam would not delete dead code
+   * — it would leave three methods whose bodies can never do anything, which reads as working.
+   */
   upsertWebSession(row: WebSessionAuthRow & { tokenHash: string }): void {
     this.webSessionsByTokenHash.set(row.tokenHash, row);
   }

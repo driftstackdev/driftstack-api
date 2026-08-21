@@ -268,6 +268,13 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
     revoked: boolean;
   }[] = [];
 
+  /**
+   * V-1268 — no caller today, and kept deliberately. It is the ONLY writer of `mintedApiKeys`,
+   * which `removeMemberWithInvites` reads, so deleting it would not remove dead code — it would
+   * make live code unreachable and silently change what that method can return. Measured, not
+   * assumed: a dead-surface scan flagged it, and following the read is what distinguished a
+   * dead seam from the sole entry point to a live one.
+   */
   seedMintedApiKey(input: {
     id: string;
     accountId: string;

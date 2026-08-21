@@ -72,11 +72,6 @@ export class InMemoryApiKeysRepo implements ApiKeysRepo {
 
   private readonly minterByKeyId = new Map<string, string>();
 
-  /** V-727 — test seam: record a minter for a key created outside insertApiKey. */
-  setMinter(keyId: string, minterAccountId: string): void {
-    this.minterByKeyId.set(keyId, minterAccountId);
-  }
-
   // V-727 — mirrors the Drizzle sibling: keys minted BY this account, wherever
   // they live. Deliberately NOT filtered by accountId.
   listApiKeysMintedBy(minterAccountId: string): Promise<ApiKeyRow[]> {
