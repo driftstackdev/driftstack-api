@@ -3788,3 +3788,43 @@ COUNT cap, which deliberately includes trashed rows, is coherent rather than an 
 between the two.
 
 Suites: 11 files, 154 passed, `tsc` clean.
+
+---
+
+## V-1275 — bounding the two classes V-1274b opened, both negative
+
+A torn write in a double is worth generalising, so both mechanisms behind it were swept.
+
+**Transactional production method, multi-write double, no rollback.** Thirty-one production repo
+methods run inside `db.transaction(...)` and have a paired double. Nine of those doubles perform
+more than one mutating write with no restore path:
+
+```
+api-keys::rotateApiKeyAtomic  incidents::createWithInitialUpdate  mfa::deleteForAccount
+mfa::replaceRecoveryCodesIfCurrent  platform-secrets::upsert  team-members::removeMemberWithInvites
+webhooks::recordDelivered  webhooks::recordDlq  webhooks::recordRetry
+```
+
+**None is a defect.** A missing rollback only matters if something between the first and last write
+can fail, and in all nine every refusal — not-found, revoked, expired, wrong account — is decided
+before the first write, after which only map assignments remain. `rotateApiKeyAtomic`, the widest at
+three writes, was read by hand to check the instrument rather than trusting it. So the class is
+bounded at one: `transferAtomic` was singular in DELEGATING to a method that throws, and the two
+doubles that already model a rollback (`transferAtomic` now, `destroySessionSerialized` since
+earlier) are the whole population. A guard on "multi-write without rollback" would flag nine correct
+implementations, which is the V-1267 rejection again.
+
+**Throwing helper evaluated inside a query builder.** The mechanism that made position matter is
+that `preallocatedProfileId` is called from inside `.values({...})`, so its throw happens after the
+count rather than before it. Eight throwing module-level helpers exist across seven files in
+`src/db`; exactly one is called from inside a query-builder argument, and all three of its call
+sites are in `profiles-repo`. Two are the methods V-1274b repaired. The third is plain `insert()`,
+which goes straight to the insert with no earlier return path — so the double validating up front is
+observationally identical there, and it is left alone.
+
+Two sweeps, two negatives, and the reason each is a negative is recorded so the next pass does not
+re-derive it. The measurement instrument was wrong once on the way and the wrongness is the usual
+one: a non-greedy body regex stopped at the closing brace of a multi-line ARGUMENT object rather
+than the method body, under-reporting write counts across the board. Extracting the body by
+"the first line that is exactly two spaces and a brace" fixed it, and the corrected sweep found
+three multi-write doubles the first run had scored as zero.
