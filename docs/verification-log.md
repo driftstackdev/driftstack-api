@@ -920,3 +920,44 @@ is not the one that caused the drift, and attributing it to this contract alone 
 wrong.
 
 **Owed remaining: 20.**
+
+---
+
+## V-1218 — a sweep and three spot-checks that found nothing, written down so they are not redone
+
+V-1217 found the usage double summing rows the real repo excludes with `ne()` predicates. That is a
+class, so I swept it: Drizzle methods carrying an exclusion predicate (`ne`, `not`, `notInArray`,
+`NOT IN`, `<>`) whose double filters nothing.
+
+**One hit, and it is my own detector's fault.** `webhooks-repo::resetDeliveryToPending` excludes
+`ne(status, 'in_flight')`, and the double does too — as an early return:
+
+```
+if (!row || row.status === 'in_flight') return Promise.resolve(null);
+```
+
+My regex looked for `!==`, `!=`, `continue;` or `.filter(`, and a guard written with `===` and an
+early return matched none of them. Verified rather than reported, which is the fifth time this
+session a detector of mine has over-reported and the check has been to read the source.
+
+**Three pairs spot-checked while choosing the next contract, all faithful:**
+
+- `sessions-repo::countActiveSessions` — the cap that enforces concurrent-session limits keys on
+  `destroyedAt IS NULL`, NOT on status, so a session in a terminal status that was never destroyed
+  still holds a slot. The double keys on exactly that. This one is worth naming because "active"
+  meaning two different things in two places is precisely how a cap leaks.
+- `rate-limit-overrides-repo::listAll` — keyset pagination on `(createdAt desc, id desc)`. Both
+  agree, INCLUDING the edge case where the cursor row has since been deleted: Drizzle looks the
+  cursor row up and only adds the keyset filter `if (c)`, the double uses `findIndex` and only
+  slices `if (idx >= 0)`, so both fall back to page one rather than returning nothing. Different
+  mechanisms, same behaviour.
+- `legal-repo::latestAcceptancesForAccount` — the `accepted_at DESC, id DESC` tiebreak that decides
+  which terms version a customer is recorded as accepting. The double sorts identically and
+  documents that it mirrors the production query.
+
+**Nothing to fix, so nothing was changed.** Recording it because the alternative is that the next
+person to notice the usage divergence sweeps the same class again, and because "we found nothing"
+and "we did not look" are indistinguishable from the outside — the same reason V-1203 recorded an
+empty raw-SQL gap rather than staying quiet about it.
+
+**Owed remaining: 20**, unchanged — this batch closed a class rather than a contract.
