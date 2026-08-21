@@ -1568,3 +1568,47 @@ read `Failed to start forks worker` as a test failure — count it, and if the c
 failed-file count, the machine is the defect.
 
 **Owed remaining: 9.**
+
+---
+
+## V-1231 — an inclusive boundary, and the first contract where the interface handed the value back
+
+Twenty-first of the twenty-nine. `countActionsSince(accountId, action, since)` answers "how many
+times has this account done this in the last window?", which is what abuse and rate-of-change
+controls read. Under-report and the control does not fire; over-report and a customer is locked out
+for activity they did not perform.
+
+```
+Drizzle  count(*) WHERE account_id = $1 AND action = $2 AND timestamp >= $since
+double   rows.filter(r => r.accountId === … && r.action === … && r.timestamp >= since).length
+```
+
+**The boundary is INCLUSIVE on both sides, and that is the arm worth having.** Off by one changes
+the count by exactly the entry sitting on the window edge — which is the entry a caller passing "the
+timestamp of the last thing I saw" is asking about.
+
+**And unlike the last two contracts, it is testable through the shared interface.** V-1228 and
+V-1229 both hit the same wall: the repo stamps the timestamp itself, and a JavaScript millisecond
+`Date` does not tie where a Postgres microsecond `timestamptz` does, so a fixture cannot force the
+boundary and the property had to move to a DB-only arm. Here `insert` RETURNS the row, so the test
+reads the stamp back and passes it as `since`. Exact on both sides, no race, no workaround. Worth
+recording as the counter-example: the wall in those two entries was a property of those interfaces,
+not a general limit on contract tests.
+
+```
+M1   DRIZZLE gte -> gt              5 failed | 6 passed   -- see below
+M1b  DRIZZLE boundary shifted +1ms  4 failed | 7 passed   (clean)
+M2   the DOUBLE >= -> >             4 failed | 7 passed
+M3   the DOUBLE ignores the action  1 failed | 10 passed
+restored (source 0 dirty)           11 passed
+```
+
+M1 is reported as it behaved and then replaced. `gt` is not imported in that module, so substituting
+it made the identifier undefined and every Drizzle arm errored — the arm depends on that clause, but
+the mutation proved compilation rather than boundary semantics. M1b shifts `since` by a millisecond
+instead, which is exclusive-by-construction and needs no import, and it reds precisely the inclusive
+arm. Same correction as V-1228's M4, applied deliberately this time rather than noticed afterwards.
+
+M2 and M3 are the pair that matter: whichever side loses the inclusive boundary, the same arm fails.
+
+**Owed remaining: 8.**
