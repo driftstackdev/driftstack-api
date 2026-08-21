@@ -1,21 +1,18 @@
-# Verification log
+# Driftstack API — Verification Log
 
-Append-only record of what was verified, what was found, and what was retracted. One entry per
-finding, newest at the bottom.
+This log records every verification of empirical reality (build cycles, test runs, infrastructure assumptions) and every discrepancy between intent and behaviour. Entries are append-only and dated.
 
-**Entries up to and including V-1200 are in
-[`verification-log-archive-through-v1200.md`](./verification-log-archive-through-v1200.md).** They
-were moved there on 2026-08-20 because this file had reached 52,429 lines / 3.4 MB and Prettier —
-which the pre-commit hook runs with an 8 GB heap — began failing with
-`Ineffective mark-compacts near heap limit` on it. A 16 GB heap still parses it, but this machine
-HAS 16 GB, so raising the limit would hand one hook process the whole machine. Splitting fixes the
-cause rather than muting the tool.
+When intent and reality disagree: reality wins, code reflects reality, planning is updated, the change is recorded here.
 
-The archive is frozen: nothing is edited there again, only read. It is listed in `.prettierignore`
-for the same reason the lockfiles are — reformatting it would produce a large meaningless diff on a
-file nobody is supposed to touch.
+Format: `V-NNN — title`. Date in body.
 
----
+> **Split 2026-08-20.** Entries up to and including V-1200 are in
+> [`verification-log-archive-through-v1200.md`](./verification-log-archive-through-v1200.md). This
+> file had reached 52,429 lines / 3.4 MB and Prettier — which the pre-commit hook runs with an 8 GB
+> heap — began failing on it with `Ineffective mark-compacts near heap limit`. A 16 GB heap parses
+> it, but this machine HAS 16 GB, so raising the limit would hand one hook process the whole
+> machine. The archive is frozen and listed in `.prettierignore`; the charter above still governs
+> both halves, and the guards that read this log read both.
 
 ---
 
@@ -777,3 +774,41 @@ checking them, so the file was green and wrong at the same time. It is the reaso
 and worth recording each time it catches something rather than treating a green vitest run as proof.
 
 **Owed remaining: 21.**
+
+---
+
+## V-1215 — splitting a file is an interface change, and three readers depended on it
+
+V-1214 split this log because Prettier could no longer parse it under the pre-commit hook's 8 GB
+heap. That commit landed green on the hook and red on the suite, because I checked for readers AFTER
+splitting rather than before. There were three.
+
+```
+a-verification-log-number-resolves-to-one-finding.test.ts   uniqueness across every V-number
+docs-verification-log-content-parity.test.ts                the charter + historical V-anchors
+every-command-the-docs-tell-you-to-run-exists.test.ts       excludes history by filename pattern
+```
+
+That is rule 2 of this sweep — enumerate every occurrence with BOTH patterns before touching the
+thing — applied to a file rather than a symbol, and I did not apply it. Moving 1081 entries out of a
+file is an interface change to everything that reads it.
+
+**The worst of the three was self-inflicted.** I replaced the log's header with wording of my own.
+That header is a pinned charter — "reality wins, code reflects reality, planning is updated" — and
+rewriting it is not a formatting choice, it is editing the document's constitution while claiming to
+reorganise it. The original is restored verbatim and the split note now sits BELOW it, where a note
+belongs.
+
+**The two guards that read the log now read both halves.** This matters more than it looks: the
+uniqueness invariant spans the whole history, so a guard reading only the live tail would let a
+V-number be reused the moment its first use aged into the archive — the exact point at which a human
+reader is least able to notice the collision. Proved by appending a `## V-900` heading to the live
+file, a number that exists only in the archive: the guard reds. Restored, green.
+
+The third needed no logic change, only its `HISTORY` filename pattern extended to cover
+`verification-log-archive-*.md`. It already excluded the log for the right reason — a command that
+was correct when written is not a defect now — and the archive is the same record under a new name.
+
+**Suite: 3138 files, 30904 passed, 0 failed.** The split stands: entries through V-1200 archived and
+frozen, the live file formats in 58ms under the hook's heap, and nothing was dropped — 1081 entries
+in the archive, 15 live, charter intact.

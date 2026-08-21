@@ -38,6 +38,19 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const LOG = resolve(REPO_ROOT, 'docs/verification-log.md');
+/**
+ * V-1215 — the log was split on 2026-08-20: entries through V-1200 moved to a frozen archive
+ * because Prettier could no longer parse a 3.4 MB markdown file under the pre-commit hook's 8 GB
+ * heap. The uniqueness invariant spans the WHOLE history, not the live tail, so every arm below
+ * reads both halves. Reading only the live file would have let a number be reused the moment its
+ * first use aged into the archive — which is precisely when a reader is least able to notice.
+ */
+const ARCHIVE = resolve(REPO_ROOT, 'docs/verification-log-archive-through-v1200.md');
+
+/** Both halves, concatenated. The archive is frozen; the live file is where entries are appended. */
+function wholeLog(): string {
+  return `${readFileSync(ARCHIVE, 'utf8')}\n${readFileSync(LOG, 'utf8')}`;
+}
 
 interface Shared {
   /** Why more than one heading carries this number. */
@@ -79,7 +92,7 @@ const SHARED_NUMBERS: Record<number, Shared> = {
 
 /** Headings in the canonical `## V-<n> ` form, as [number, heading] pairs. */
 function canonicalHeadings(): Array<readonly [number, string]> {
-  return readFileSync(LOG, 'utf8')
+  return wholeLog()
     .split('\n')
     .map((l) => /^## V-(\d+) /.exec(l))
     .filter((m): m is RegExpExecArray => m !== null)
@@ -97,7 +110,10 @@ function duplicatedNumbers(): number[] {
 
 describe('V-858 a verification-log number resolves to one finding', () => {
   it('CRITICAL the log really parses into headings. Both arms below compare sets, so an empty parse would report no duplicates over no entries — the shape this guard exists because V-856 shipped.', () => {
-    expect(statSync(LOG).size, 'the log file').toBeGreaterThan(500_000);
+    expect(
+      statSync(ARCHIVE).size + statSync(LOG).size,
+      'the log file (archive + live)',
+    ).toBeGreaterThan(500_000);
     expect(canonicalHeadings().length, 'canonical `## V-<n> ` headings').toBeGreaterThan(700);
   });
 
@@ -120,7 +136,7 @@ describe('V-858 a verification-log number resolves to one finding', () => {
   });
 
   it('CRITICAL a number whose entries are unrelated carries a note telling a reader which one they want. This is the V-759 case and the only one that damages a citation: two findings with nothing in common behind one number. The note is the whole remedy available, since append-only rules renumbering out.', () => {
-    const log = readFileSync(LOG, 'utf8');
+    const log = wholeLog();
     const missing = Object.entries(SHARED_NUMBERS)
       .filter(([, v]) => v.needsNote)
       .map(([n]) => Number(n))

@@ -29,13 +29,20 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const LIB = resolve(REPO_ROOT, 'docs/verification-log.md');
+/**
+ * V-1215 — the log was split on 2026-08-20 and the historical V-anchors this file pins now live in
+ * the frozen archive. The pins describe the whole log, not its live tail, so the body below is both
+ * halves concatenated. Repointing them at the live file alone would have quietly dropped every
+ * anchor from V-001 to V-1200 while still reporting green.
+ */
+const ARCHIVE = resolve(REPO_ROOT, 'docs/verification-log-archive-through-v1200.md');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
 describe('W549.B /docs/verification-log.md content parity', () => {
-  const body = read(LIB);
+  const body = `${read(LIB)}\n${read(ARCHIVE)}`;
 
   it("Header + append-only + reality-wins charter framing pinned: '# Driftstack API — Verification Log' + 'This log records every verification of empirical reality (build cycles, test runs, infrastructure assumptions) and every discrepancy between intent and behaviour. Entries are append-only and dated.' + 'When intent and reality disagree: reality wins, code reflects reality, planning is updated, the change is recorded here.' + 'Format: `V-NNN — title`. Date in body.' — pinned so the empirical-reality-verification + append-only-dated + reality-wins-not-intent + V-NNN-format commitment survives", () => {
     expect(body).toMatch(/^# Driftstack API — Verification Log$/m);
