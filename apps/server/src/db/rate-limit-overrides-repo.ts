@@ -17,7 +17,12 @@ import { parseUuidCursor } from '../lib/keyset-cursor.js';
 // precision the database cannot hold: a test asserting 1.234 passed against the double
 // while production served 1.23, and a refill of 0 read back as 0.01 rather than 0.
 // One helper, used by the repo, the double, and the contract.
-const REFILL_CENTI_SCALE = 100;
+// V-1266 — exported. `auth-repo.ts` reads the same `rate_limit_overrides` rows on the auth
+// path and divided by a hardcoded 100 of its own, so the storage scale for this column lived
+// in two production modules. Moving it here to 1000 would have left the auth path reporting
+// every override ten times too permissive — on the read that actually enforces rate limits —
+// while this module and its double agreed with each other perfectly.
+export const REFILL_CENTI_SCALE = 100;
 
 /** Hundredths actually written to the column. Floors at 1 — never zero, see below. */
 export function toRefillCenti(refillPerSecond: number): number {

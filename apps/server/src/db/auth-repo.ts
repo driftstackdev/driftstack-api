@@ -13,6 +13,7 @@ import type { AccountOrganization } from '@driftstack/api-types';
 import type { Database } from './client.js';
 import { isUniqueViolation } from '../lib/pg-error.js';
 import { accounts, apiKeys, rateLimitOverrides, teamMembers, webSessions } from './schema.js';
+import { REFILL_CENTI_SCALE } from './rate-limit-overrides-repo.js';
 
 // Throttle window for the per-request api_keys.last_used_at write — at most
 // one update per key per this interval, so the hot auth path doesn't write a
@@ -60,7 +61,7 @@ export class DrizzleAccountAuthRepo implements AccountAuthRepo {
       // Centi-rate stored as 100x; multiply back. See V-016 for the
       // quantization caveat (1/60 → 2 → 1/50 effective). Acceptable
       // until/unless an exact-match requirement emerges.
-      refillPerSecond: r.refillPerSecondCenti / 100,
+      refillPerSecond: r.refillPerSecondCenti / REFILL_CENTI_SCALE,
       expiresAt: r.expiresAt,
     }));
   }

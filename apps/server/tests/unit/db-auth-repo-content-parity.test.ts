@@ -9,7 +9,8 @@
 //   • findApiKeyByPrefix: eq(keyPrefix) + limit 1.
 //   • getAccount: id-only lookup + limit 1.
 //   • findActiveRateLimitOverrides: and(accountId, gt(expiresAt, now));
-//     refillPerSecondCenti / 100 — V-016 centi-rate divide-back.
+//     refillPerSecondCenti / REFILL_CENTI_SCALE — V-016 centi-rate divide-back, reading the
+//     scale from the repo that owns the column rather than repeating it (V-1266).
 //   • touchApiKeyLastUsed: 30s-staleness skip rationale.
 //   • findActiveWebSession: triple and(tokenHash, gt(expiresAt, now),
 //     isNull(revokedAt)) + limit 1; 7-field WebSessionAuthRow incl.
@@ -70,7 +71,10 @@ describe('W448.B apps/server/src/db/auth-repo.ts content parity', () => {
     expect(body).toMatch(
       /\/\/ Centi-rate stored as 100x; multiply back\. See V-016 for the\s*\n?\s*\/\/ quantization caveat \(1\/60 → 2 → 1\/50 effective\)\. Acceptable\s*\n?\s*\/\/ until\/unless an exact-match requirement emerges\./,
     );
-    expect(body).toMatch(/refillPerSecond: r\.refillPerSecondCenti \/ 100,/);
+    expect(body).toMatch(
+      /import \{ REFILL_CENTI_SCALE \} from '\.\/rate-limit-overrides-repo\.js';/,
+    );
+    expect(body).toMatch(/refillPerSecond: r\.refillPerSecondCenti \/ REFILL_CENTI_SCALE,/);
   });
 
   it("touchApiKeyLastUsed: 30s staleness rationale 'Skip the write if last_used_at was set within the last 30s — saves a row update on every authenticated request.'", () => {

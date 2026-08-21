@@ -3288,3 +3288,51 @@ restored (0 dirty, sha equal)                             3 passed
 Nothing about V-1263's substance changes — the four copies are still one, and the arm underneath is
 still there. What changed is that the tree was red between two commits, and it was red because I
 verified a change against the consumers I could name.
+
+## V-1266 — a storage scale restated between two production modules, which no guard could see
+
+V-1260's guard compares a double against ITS OWN repo. That shape cannot see a value restated
+between two production modules, and enumerating repos that do arithmetic on a column value turned
+one up:
+
+```
+rate-limit-overrides-repo.ts   REFILL_CENTI_SCALE = 100, used in three places   (V-1241)
+auth-repo.ts                   r.refillPerSecondCenti / 100                     hardcoded
+```
+
+Both read the same `rate_limit_overrides` rows. V-1241 named and centralised the scale in the repo
+that owns that table and stopped there, because the double was the thing being fixed — and the
+second production reader was never in that frame.
+
+**This one is a production risk rather than a fixture one.** `auth-repo.findActiveRateLimitOverrides`
+is the read that feeds actual rate limiting. Moving the scale to 1000 in the owning repo would have
+left the auth path dividing by 100 and reporting every override ten times too permissive, while the
+owning repo and its double agreed with each other perfectly. Exported from the owner; `auth-repo`
+imports it.
+
+No new module this time, and deliberately: unlike V-1263's subscription set, this value has a clear
+owner — the repo for the table whose column it encodes — so importing from it does not make anything
+an accidental owner. That also avoids adding a file under `src/db/`, which is what reddened the tree
+last commit.
+
+Three occurrences updated in this commit: the two auth pins that quoted `/ 100` and a header comment
+that described it.
+
+```
+N1  auth-repo back to a hardcoded 100        both auth pins       2 failed | 24 passed
+N2  drop the export                          tsc exit 2, TS2459   "does not export REFILL_CENTI_SCALE"
+N3  scale 1000 AND auth-repo keeps its 100   both auth pins       2 failed | 47 passed
+restored (both files 0 dirty, sha equal)                          43 passed
+```
+
+**What protects this is a text pin and the type system, not a behavioural arm — worth stating.** The
+in-memory auth double never sees centis: it stores overrides already de-scaled, so no contract
+exercises the auth-side divide. N2 is the strongest of the three precisely because it is not a text
+match — removing the export fails compilation, so the two modules cannot silently drift apart
+without `tsc` saying so. N3 reds the pins rather than an assertion about behaviour, and the
+rate-limit contract stays green throughout because it derives from the constant, which is the
+V-1246 shape doing what it should.
+
+Also checked, and clean: the other three repos doing arithmetic on a column (`termDays * 24`,
+`cadenceSeconds * 1000`) are unit conversions, not policy — a day has 24 hours regardless of who
+writes it down.

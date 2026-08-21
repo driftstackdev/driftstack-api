@@ -86,7 +86,11 @@ describe('W993 db/auth-repo V-016 + V-298a cross-source invariant', () => {
     expect(p).toMatch(/\/\/ Centi-rate stored as 100x; multiply back\. See V-016 for the/);
     expect(p).toMatch(/\/\/ quantization caveat \(1\/60 → 2 → 1\/50 effective\)\. Acceptable/);
     expect(p).toMatch(/\/\/ until\/unless an exact-match requirement emerges\./);
-    expect(p).toMatch(/refillPerSecond: r\.refillPerSecondCenti \/ 100,/);
+    // V-1266 — the divide-back reads the scale from rate-limit-overrides-repo, which owns
+    // the column's encoding, rather than repeating 100 here. Both halves pinned: the import
+    // is what makes the two modules move together.
+    expect(p).toMatch(/import \{ REFILL_CENTI_SCALE \} from '\.\/rate-limit-overrides-repo\.js';/);
+    expect(p).toMatch(/refillPerSecond: r\.refillPerSecondCenti \/ REFILL_CENTI_SCALE,/);
   });
 
   // ─── findActiveRateLimitOverrides active-window ──────────────
