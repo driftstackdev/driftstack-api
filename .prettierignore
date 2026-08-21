@@ -26,3 +26,8 @@ apps/docs/.astro/
 apps/docs/dist/
 apps/status-site/.astro/
 apps/status-site/dist/
+
+# Frozen verification-log archive. Append-only history, never hand-edited again, and large
+# enough that Prettier needs more heap than the pre-commit hook gives it. Same rationale as the
+# lockfiles above: reformatting produces a large meaningless diff on a file nobody should touch.
+docs/verification-log-archive-through-v1200.md
