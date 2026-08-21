@@ -28,7 +28,7 @@ async function setupRepoWithEndpoint(): Promise<{
   const endpoint = await repo.insertEndpoint({
     accountId: 'acc-1',
     url: 'https://customer.test/hook',
-    secret: 'whsec_test_test_test_test_test_test_te',
+    secret: 'whsec_testaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     secretPrefix: 'whsec_test_t',
     events: ['session.completed'],
     description: null,

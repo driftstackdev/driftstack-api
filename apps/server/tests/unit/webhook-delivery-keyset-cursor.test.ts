@@ -13,7 +13,7 @@ async function seedEndpoint(repo: InMemoryWebhooksRepo): Promise<string> {
   const ep = await repo.insertEndpoint({
     accountId: 'acc_1',
     url: 'https://customer.test/hook',
-    secret: 'whsec_x',
+    secret: 'whsec_xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     secretPrefix: 'whsec_x',
     events: ['session.completed'],
     description: null,

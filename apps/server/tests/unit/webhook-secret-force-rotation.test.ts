@@ -42,7 +42,7 @@ describe('Arc 3 v2-#28 sub-slice 28.2 WebhookSecretForceRotationService', () => 
     const fresh = await repo.insertEndpoint({
       accountId: 'acc_1',
       url: 'https://customer.test/hook-fresh',
-      secret: 'whsec_fresh',
+      secret: 'whsec_freshaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       secretPrefix: 'whsec_fres',
       events: ['session.completed'],
       description: null,
@@ -50,7 +50,7 @@ describe('Arc 3 v2-#28 sub-slice 28.2 WebhookSecretForceRotationService', () => 
     const aged = await repo.insertEndpoint({
       accountId: 'acc_1',
       url: 'https://customer.test/hook-aged',
-      secret: 'whsec_aged',
+      secret: 'whsec_agedaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       secretPrefix: 'whsec_aged',
       events: ['session.completed'],
       description: null,
@@ -76,12 +76,12 @@ describe('Arc 3 v2-#28 sub-slice 28.2 WebhookSecretForceRotationService', () => 
     // The aged endpoint's secret should have changed; grace window
     // populated; forceRotatedAt stamped.
     const after = await repo.findEndpoint(aged.id, 'acc_1');
-    expect(after?.secret).not.toBe('whsec_aged');
+    expect(after?.secret).not.toBe('whsec_agedaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
     expect(after?.forceRotatedAt).toEqual(NOW);
     expect(after?.graceWindowEndsAt).toEqual(new Date(NOW.getTime() + 7 * 24 * 60 * 60 * 1000));
     // Fresh endpoint untouched.
     const freshAfter = await repo.findEndpoint(fresh.id, 'acc_1');
-    expect(freshAfter?.secret).toBe('whsec_fresh');
+    expect(freshAfter?.secret).toBe('whsec_freshaaaaaaaaaaaaaaaaaaaaaaaaaaa');
   });
 
   it('second tick is a no-op — force_rotated_at filter prevents re-rotation', async () => {
@@ -89,7 +89,7 @@ describe('Arc 3 v2-#28 sub-slice 28.2 WebhookSecretForceRotationService', () => 
     const aged = await repo.insertEndpoint({
       accountId: 'acc_1',
       url: 'https://customer.test/hook',
-      secret: 'whsec_aged',
+      secret: 'whsec_agedaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       secretPrefix: 'whsec_aged',
       events: ['session.completed'],
       description: null,
@@ -121,7 +121,7 @@ describe('Arc 3 v2-#28 sub-slice 28.2 WebhookSecretForceRotationService', () => 
     const ep = await repo.insertEndpoint({
       accountId: 'acc_1',
       url: 'https://customer.test/hook',
-      secret: 'whsec_aged',
+      secret: 'whsec_agedaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       secretPrefix: 'whsec_aged',
       events: ['session.completed'],
       description: null,
@@ -139,9 +139,9 @@ describe('Arc 3 v2-#28 sub-slice 28.2 WebhookSecretForceRotationService', () => 
     // Force-rotation moves the customer's original (still-deployed) secret into
     // the grace slot; `secret` becomes the SERVER-minted force secret the
     // customer only ever received as a prefix (never deployed).
-    expect(postForce?.secretPrev).toBe('whsec_aged');
+    expect(postForce?.secretPrev).toBe('whsec_agedaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
     const forceSecret = postForce?.secret;
-    expect(forceSecret).not.toBe('whsec_aged');
+    expect(forceSecret).not.toBe('whsec_agedaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
 
     await repo.rotateSecret({
       id: ep.id,
@@ -161,7 +161,7 @@ describe('Arc 3 v2-#28 sub-slice 28.2 WebhookSecretForceRotationService', () => 
     // BOTH would fail the customer's verifier (still on whsec_aged) → dropped
     // deliveries until they finish rolling out the new secret.
     expect(postManual?.secret).toBe('whsec_customer_rotated_value_padded_____');
-    expect(postManual?.secretPrev).toBe('whsec_aged');
+    expect(postManual?.secretPrev).toBe('whsec_agedaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
     expect(postManual?.secretPrev).not.toBe(forceSecret);
   });
 
@@ -170,7 +170,7 @@ describe('Arc 3 v2-#28 sub-slice 28.2 WebhookSecretForceRotationService', () => 
     const aged = await repo.insertEndpoint({
       accountId: 'acc_1',
       url: 'https://customer.test/hook',
-      secret: 'whsec_aged',
+      secret: 'whsec_agedaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       secretPrefix: 'whsec_aged',
       events: ['session.completed'],
       description: null,

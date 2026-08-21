@@ -23,13 +23,11 @@
 // The exclusion arms are here because each one is a reason an endpoint would silently never rotate:
 // disabled, already force-rotated, or a secret younger than the threshold.
 //
-// A SECOND divergence surfaced here and is deliberately NOT pinned in this file. The real repo
-// refuses a secret that is not `whsec_` + 32 lowercase base32; the double accepts any string, so
-// unit tests build endpoints production would reject. Enforcing it in the double reds 43 tests
-// across six files — 72 secret literals, several of them invalid ON PURPOSE because they test
-// rejection. Tightening the double is right and is its own piece of work with its own fixture
-// sweep, not a side effect of an ordering fix. Measured and recorded in V-1210 rather than
-// half-applied.
+// V-1212 added the second arm below. The real repo refuses a secret that is not `whsec_` + 32
+// lowercase base32; the double accepted any string, so unit tests built endpoints production would
+// reject. V-1210 measured that enforcing it reds 43 tests across seven files and deferred it; the
+// actual scope turned out to be 13 fixture literals, because the other 59 of the 72 belong to
+// encryption-module tests that never touch the double.
 
 import { randomBytes, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -206,6 +204,24 @@ function forceRotationContract(label: string, make: () => Subject, enabled: () =
         middle,
         newest,
       ]);
+    });
+
+    it('CRITICAL a malformed signing secret is rejected by both, and rejected as a REJECTION rather than a synchronous throw. The real repo validates before storing; a double that accepted anything let unit tests build endpoints production refuses, and thirteen fixtures across seven files were doing exactly that.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const account = await s.account();
+
+      await expect(
+        s.repo.insertEndpoint({
+          accountId: account,
+          url: 'https://customer.test/hook-malformed',
+          secret: 'whsec_NOT-BASE32',
+          secretPrefix: 'whsec_bad',
+          events: ['session.completed'],
+          description: null,
+        }),
+        'a malformed signing secret was stored',
+      ).rejects.toThrow(/base32/i);
     });
 
     it('CRITICAL a disabled endpoint is never selected, in both. Rotating a secret for an endpoint nobody delivers to spends the sweep budget on rows that cannot benefit from it.', async () => {

@@ -846,7 +846,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
     await fx.webhooksRepo.insertEndpoint({
       accountId: fx.accountId,
       url: 'https://self.example.test/hook',
-      secret: 'whsec_self_secret_padded_to_32+chars',
+      secret: 'whsec_selfsecretaaaaaaaaaaaaaaaaaaaaaa',
       secretPrefix: 'whsec_self',
       events: ['session.completed'],
       description: 'self-hook',
@@ -854,7 +854,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
     await fx.webhooksRepo.insertEndpoint({
       accountId: OWNER_ACCOUNT_ID,
       url: 'https://owner.example.test/hook-1',
-      secret: 'whsec_owner1_secret_padded_to_32+chars',
+      secret: 'whsec_owneroneaaaaaaaaaaaaaaaaaaaaaaaa',
       secretPrefix: 'whsec_o1',
       events: ['session.completed'],
       description: 'owner-hook-1',
@@ -862,7 +862,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
     await fx.webhooksRepo.insertEndpoint({
       accountId: OWNER_ACCOUNT_ID,
       url: 'https://owner.example.test/hook-2',
-      secret: 'whsec_owner2_secret_padded_to_32+chars',
+      secret: 'whsec_ownertwoaaaaaaaaaaaaaaaaaaaaaaaa',
       secretPrefix: 'whsec_o2',
       events: ['session.completed'],
       description: 'owner-hook-2',

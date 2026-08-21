@@ -23,7 +23,7 @@ async function seedEndpoint(repo: InMemoryWebhooksRepo) {
   return repo.insertEndpoint({
     accountId: ACCOUNT_ID,
     url: 'https://customer.test/hook',
-    secret: 'whsec_orig_orig_orig_orig_orig_orig_or',
+    secret: 'whsec_origaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     secretPrefix: 'whsec_orig_',
     events: ['session.completed'],
     description: null,

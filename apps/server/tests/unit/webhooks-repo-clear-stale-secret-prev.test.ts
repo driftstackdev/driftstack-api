@@ -15,7 +15,7 @@ async function seedEndpoint(repo: InMemoryWebhooksRepo) {
   return repo.insertEndpoint({
     accountId: ACCOUNT_ID,
     url: 'https://customer.test/hook',
-    secret: 'whsec_test_test_test_test_test_test_te',
+    secret: 'whsec_testaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     secretPrefix: 'whsec_test_t',
     events: ['session.completed'],
     description: null,
@@ -94,7 +94,9 @@ describe('v2-#29 clearStaleSecretPrev', () => {
       const ep = await repo.insertEndpoint({
         accountId: ACCOUNT_ID,
         url: `https://customer.test/hook-${i.toString()}`,
-        secret: `whsec_old_${i.toString()}_old_${i.toString()}_old_old_old_old_old`,
+        // base32 alphabet is a-z2-7, so the loop index is encoded as a LETTER: 0 and 1 are not
+        // valid characters and would fail the same validation this fixture exists to satisfy.
+        secret: `whsec_old${String.fromCharCode(97 + i)}${'a'.repeat(28)}`,
         secretPrefix: `whsec_old_${i.toString()}`,
         events: ['session.completed'],
         description: null,

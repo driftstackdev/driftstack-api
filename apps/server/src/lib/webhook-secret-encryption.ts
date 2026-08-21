@@ -50,7 +50,11 @@ function buildAdditionalAuthenticatedData(context: WebhookSecretEncryptionContex
   );
 }
 
-function validatePlaintext(value: string): string {
+/**
+ * V-1212 — exported so the in-memory `WebhooksRepo` double enforces the SAME rule instead of
+ * carrying a second copy of the regex. A duplicated rule is how the two drifted in the first place.
+ */
+export function assertValidWebhookSecret(value: string): string {
   const bytes = Buffer.from(value, 'utf8');
   if (bytes.toString('utf8') !== value) {
     throw new Error('Webhook signing secret is not exact UTF-8.');
@@ -92,7 +96,7 @@ function decryptV2Payload(
   if (!Buffer.from(plaintext, 'utf8').equals(plaintextBytes)) {
     throw new Error('Webhook signing secret plaintext is not exact UTF-8.');
   }
-  return validatePlaintext(plaintext);
+  return assertValidWebhookSecret(plaintext);
 }
 
 /** Encrypt a signing secret for one stable account + endpoint tuple. */
@@ -101,7 +105,7 @@ export function encryptWebhookSecret(
   encryptionKeyBase64: string,
   context: WebhookSecretEncryptionContext,
 ): string {
-  const validated = validatePlaintext(plaintext);
+  const validated = assertValidWebhookSecret(plaintext);
   const iv = randomBytes(GCM_IV_BYTES);
   const cipher = createCipheriv('aes-256-gcm', decodeKey(encryptionKeyBase64), iv);
   cipher.setAAD(buildAdditionalAuthenticatedData(context));
@@ -151,5 +155,5 @@ export function convertWebhookSecretToV2(
     }
     plaintext = stored;
   }
-  return encryptWebhookSecret(validatePlaintext(plaintext), encryptionKeyBase64, context);
+  return encryptWebhookSecret(assertValidWebhookSecret(plaintext), encryptionKeyBase64, context);
 }

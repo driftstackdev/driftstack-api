@@ -52260,3 +52260,53 @@ confirmation, and neither had a cross-implementation pin.
 **Owed remaining: 23.** All four divergences from the V-1209 sweep are now closed. The webhook-secret
 validation divergence from V-1210 stays open with its measured cost: 43 tests across six files,
 72 secret literals, several invalid on purpose.
+
+---
+
+## V-1212 — doing the deferred work, and the measurement that was five times too large
+
+V-1210 found that the in-memory `WebhooksRepo` double accepts any string as a signing secret while
+the real repo refuses anything that is not `whsec_` + 32 lowercase base32. I enforced it, saw
+**43 tests across seven files** go red, reverted, and recorded it as its own piece of work.
+
+Deferring with a measurement means doing it next, not never. This is that.
+
+**The measurement was right about the failures and wrong about the scope.** I reported "72 secret
+literals" as the blast radius. The actual work was **13 literals across seven files** — the other 59
+belong to `webhook-secret-encryption.test.ts` and its siblings, which exercise the encryption module
+directly and never touch the double. Several of those 59 are invalid ON PURPOSE because they test
+rejection, and none of them needed to change. Counting the population instead of the affected subset
+made the job look five times larger than it was, which is exactly the kind of number that turns a
+deferral into a permanent one.
+
+Every one of the 13 was incidental — a fixture that needed _a_ secret, not one testing format. They
+now carry `whsec_` + 32 base32 characters with their readable stems kept (`whsec_agedaaa…`), so the
+tests still say what they are about.
+
+**Three follow-on failures the first pass did not predict**, each worth naming:
+
+- Two assertions still compared against the OLD literal. Changing an input without changing what the
+  test claims about it produces a test that passes for a reason nobody chose.
+- One fixture built its secret from a template literal, `whsec_old_${i}_…`. The loop index is a
+  DIGIT, and the base32 alphabet is `a-z2-7` — `0` and `1` are not in it. The index is now encoded
+  as a letter. A generated fixture has to satisfy the same rule as a literal one, and generation is
+  where that is easiest to forget.
+
+**The double rejects the same WAY, not just the same cases.** The Drizzle method is `async`, so its
+validation failure arrives as a rejected promise; the double's `insertEndpoint` is synchronous, and
+a synchronous throw would need different handling at every call site. That is its own divergence, so
+it is pinned separately:
+
+```
+M1  the double stops validating                     1 failed | 10 passed
+M2  the double throws SYNCHRONOUSLY instead         1 failed | 10 passed
+restored                                            11 passed
+full suite                                          3136 files, 30880 passed, 0 failed
+```
+
+The double now calls the exported `assertValidWebhookSecret` rather than carrying its own copy of
+the regex — a duplicated rule is how these two drifted in the first place, and a second copy would
+only reset the clock on the same failure.
+
+**Owed remaining: 23**, with no named side items outstanding. All four V-1209 divergences and both
+V-1210 findings are closed.

@@ -6,6 +6,7 @@ import {
   encodeDeliveryCursor,
   type DeliveryCursor,
 } from '../../../src/lib/keyset-cursor.js';
+import { assertValidWebhookSecret } from '../../../src/lib/webhook-secret-encryption.js';
 import type {
   EndpointDeliveryCounts,
   ListDeliveriesPage,
@@ -41,6 +42,15 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
   private readonly deliveries = new Map<string, WebhookDeliveryRow>();
 
   insertEndpoint(input: NewWebhookEndpointInput): Promise<WebhookEndpointRow> {
+    // V-1212 — the real repo refuses a secret that is not `whsec_` + 32 lowercase base32, so a
+    // double accepting anything let unit tests build endpoints production would reject. Returned
+    // as a REJECTION rather than a synchronous throw, because the Drizzle method is `async` and a
+    // synchronous throw would need different handling at every call site — its own divergence.
+    try {
+      assertValidWebhookSecret(input.secret);
+    } catch (err) {
+      return Promise.reject(err instanceof Error ? err : new Error(String(err)));
+    }
     const now = new Date();
     const row: WebhookEndpointRow = {
       id: randomUUID(),
