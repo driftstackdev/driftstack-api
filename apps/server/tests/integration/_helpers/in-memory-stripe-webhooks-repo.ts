@@ -7,6 +7,7 @@ import {
   isCryptoTierUpgrade,
   tierActivationRank,
 } from '../../../src/services/crypto-tier-activation.js';
+import { ACTIVE_SUBSCRIPTION_STATUSES } from '../../../src/db/subscription-status-sets.js';
 
 interface LedgerRow {
   eventId: string;
@@ -57,6 +58,13 @@ interface CryptoEntitlementRow {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+// V-1263 — the billed-status set is READ from the shared module, not restated. Both call sites
+// below used to spell out `s.status === 'active' || s.status === 'trialing'`, which is the same
+// decision the Drizzle repo makes and the same one admin-billing makes — four copies across
+// three files before this. Stripe keeps charging a `past_due` subscription through its retry
+// window, so a third member is a plausible edit, and it has to reach every one of them.
+const BILLED_STATUSES: readonly string[] = ACTIVE_SUBSCRIPTION_STATUSES;
 
 export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
   private readonly events = new Map<string, LedgerRow>();
@@ -243,9 +251,7 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
     // Best remaining active/trialing subscription for the account (most-recently
     // updated wins), else the fallback — mirrors the Drizzle query.
     const remaining = Array.from(this.subs.values())
-      .filter(
-        (s) => s.accountId === args.accountId && (s.status === 'active' || s.status === 'trialing'),
-      )
+      .filter((s) => s.accountId === args.accountId && BILLED_STATUSES.includes(s.status))
       .sort((x, y) => y.updatedAt.getTime() - x.updatedAt.getTime());
     // C1 — floor against the highest-ranked UNEXPIRED crypto entitlement (mirrors
     // the Drizzle gt(expiresAt, at) union). No rows → byte-identical to before.
@@ -270,7 +276,7 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
     if (!a) return Promise.resolve({ previousTier: null, appliedTier: null });
     const previousTier = a.tier;
     const active = Array.from(this.subs.values()).filter(
-      (s) => s.accountId === args.accountId && (s.status === 'active' || s.status === 'trialing'),
+      (s) => s.accountId === args.accountId && BILLED_STATUSES.includes(s.status),
     );
     let appliedTier: AccountTier | null = null;
     for (const row of active) {

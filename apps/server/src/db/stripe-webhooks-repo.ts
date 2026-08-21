@@ -8,6 +8,7 @@ import type { StripeWebhooksRepo } from '../services/stripe-webhooks.js';
 import { isCryptoTierUpgrade, tierActivationRank } from '../services/crypto-tier-activation.js';
 import type { Database } from './client.js';
 import { accounts, cryptoEntitlements, processedStripeEvents, subscriptions } from './schema.js';
+import { ACTIVE_SUBSCRIPTION_STATUSES } from './subscription-status-sets.js';
 
 export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
   constructor(private readonly database: Database) {}
@@ -239,7 +240,7 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
         .where(
           and(
             eq(subscriptions.accountId, args.accountId),
-            inArray(subscriptions.status, ['active', 'trialing']),
+            inArray(subscriptions.status, [...ACTIVE_SUBSCRIPTION_STATUSES]),
           ),
         )
         .orderBy(desc(subscriptions.updatedAt))
@@ -298,7 +299,7 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
         .where(
           and(
             eq(subscriptions.accountId, args.accountId),
-            inArray(subscriptions.status, ['active', 'trialing']),
+            inArray(subscriptions.status, [...ACTIVE_SUBSCRIPTION_STATUSES]),
           ),
         );
       // Highest-RANKED active/trialing tier — seeded from the active set only

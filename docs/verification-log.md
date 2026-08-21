@@ -3169,3 +3169,45 @@ twice and its double restates it twice, while V-1238 already exported
 three files. The fix needs a home decision: importing a constant from one repo module into another
 is the low-churn option and reads oddly, and the alternative is a neutral module that does not exist
 yet. Recorded rather than guessed at.
+
+## V-1263 — one policy set that lived in four places, and the arm that was missing under it
+
+V-1262 recorded this as needing a home decision rather than guessing at one. Deciding it.
+
+`['active', 'trialing']` — which subscription statuses Stripe actually bills — existed four times
+across three files: exported from `admin-billing-repo.ts` (V-1238), written inline TWICE in
+`stripe-webhooks-repo.ts`, and restated TWICE in that repo's double.
+
+**The home could not be `admin-billing-repo`.** A Stripe webhook handler reaching into the admin
+cockpit's repo for a billing rule makes that module the accidental owner of something it does not
+own. The set describes the `subscriptions` table, which both repos read, so it now lives in
+`src/db/subscription-status-sets.ts` — a module named for what it holds and owning nothing else.
+`admin-billing-repo` re-exports it so the importers V-1238 created keep resolving unchanged, which
+kept the pin surface at zero.
+
+**Both first mutations passed, and the second one was the finding.** Adding `past_due` to the shared
+set changes nothing in the admin-billing contract, because that contract derives its billed and
+unbilled cases FROM the constant — the V-1246 shape, working as intended. But making the stripe
+double restate a wrong set also changed nothing, and that is not by design: **nothing anywhere
+exercised the billed-status filter on the stripe pair.** Its contract's Subject is a narrow façade
+that never exposed the two methods that apply it.
+
+So the Subject grew a subscription seeder and `setAccountTierToBestActive`, and the arm is the
+concrete workflow: a customer paying for `solo_manual` with a CANCELED `team_manual` subscription
+must not be raised to the higher tier.
+
+```
+N2' double restates a wrong billed set    "a canceled subscription decided the tier"  1 failed | 14 passed
+N3  DRIZZLE stops filtering by status     same arm, production side                   1 failed | 14 passed
+restored (both files 0 dirty, sha equal)                                              15 passed
+```
+
+Four copies became one, and the behaviour under it is now asserted on both implementations rather
+than on neither.
+
+**A flake found while verifying, and attributed before investigating.** Running the 34 consumers
+together, `admin-billing-active-tier-repo-contract` failed about one run in four with
+`expected +0 to be 1`. `git status` says that file is untouched by this batch: its arms are plain
+before/after deltas on `countActiveSubscriptionsByTier`, which is unfiltered and table-wide — the
+same class as V-1248 and V-1261, and pre-existing since V-1238. It is the next thing to fix, not a
+consequence of this one.

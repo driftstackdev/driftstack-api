@@ -31,6 +31,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { DrizzleStripeWebhooksRepo } from '../../src/db/stripe-webhooks-repo.js';
 import { InMemoryStripeWebhooksRepo } from './_helpers/in-memory-stripe-webhooks-repo.js';
 import type * as schema from '../../src/db/schema.js';
+import { subscriptions } from '../../src/db/schema.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
 const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
@@ -84,6 +85,19 @@ interface LedgerSubject {
   }) => Promise<{ previousTier: string | null; applied: boolean }>;
   /** Seeds an account at `tier` and returns its id. */
   account: (tier: 'free' | 'solo_manual' | 'team_manual') => Promise<string>;
+  /**
+   * V-1263 — seeds one subscription-mirror row. Added because nothing exercised the BILLED-status
+   * filter: the double could restate that set wrongly and every arm here stayed green.
+   */
+  subscription: (args: {
+    accountId: string;
+    tier: 'solo_manual' | 'team_manual';
+    status: 'active' | 'canceled';
+  }) => Promise<void>;
+  setAccountTierToBestActive: (args: {
+    accountId: string;
+    at: Date;
+  }) => Promise<{ previousTier: string | null; appliedTier: string | null }>;
 }
 
 function eventId(): string {
@@ -106,6 +120,21 @@ function inMemorySubject(): LedgerSubject {
       repo.registerAccount({ accountId: id, stripeCustomerId: null, tier });
       return Promise.resolve(id);
     },
+    subscription: (a) => {
+      void repo.upsertSubscription({
+        accountId: a.accountId,
+        stripeSubscriptionId: `sub_${randomUUID().slice(0, 12)}`,
+        stripePriceId: `price_${a.tier}`,
+        tier: a.tier,
+        status: a.status,
+        currentPeriodEnd: null,
+        cancelAtPeriodEnd: false,
+        canceledAt: null,
+        at: NOW,
+      });
+      return Promise.resolve();
+    },
+    setAccountTierToBestActive: (a) => repo.setAccountTierToBestActive(a),
   };
 }
 
@@ -126,6 +155,18 @@ function drizzleSubject(): LedgerSubject {
               VALUES (${id}, ${`stripe-contract-${id}@test.local`}, ${tier})`;
       return id;
     },
+    // Through Drizzle's insert, not a raw template: `tier` and `status` are Postgres ENUMS and
+    // postgres-js mis-serialises them in a mixed parameter list (V-1237).
+    subscription: async (a) => {
+      await db.insert(subscriptions).values({
+        accountId: a.accountId,
+        stripeSubscriptionId: `sub_${randomUUID().slice(0, 12)}`,
+        stripePriceId: `price_${a.tier}`,
+        tier: a.tier,
+        status: a.status,
+      });
+    },
+    setAccountTierToBestActive: (a) => repo.setAccountTierToBestActive(a),
   };
 }
 
@@ -216,6 +257,26 @@ function stripeLedgerContract(
       expect(result.applied, 'a genuine upgrade was refused').toBe(true);
       expect(result.previousTier, 'the previous tier was not reported').toBe('free');
       expect(await s.getAccountTier(account), 'the upgrade did not persist').toBe('team_manual');
+    });
+
+    it("CRITICAL only BILLED subscriptions decide the account's tier, in both. A canceled subscription at a higher tier must not raise the account: the billed set is what separates a customer who is paying from one who stopped, and it was written in four places across three files before it had one home. If the double restated that set differently from the repo, this is the arm that notices.", async () => {
+      if (!enabled()) return;
+      const s = make();
+      const account = await s.account('free');
+      // Paying for the lower tier; the higher one is cancelled and must not count.
+      await s.subscription({ accountId: account, tier: 'solo_manual', status: 'active' });
+      await s.subscription({ accountId: account, tier: 'team_manual', status: 'canceled' });
+
+      const applied = await s.setAccountTierToBestActive({ accountId: account, at: NOW });
+
+      expect(
+        applied.appliedTier,
+        'a canceled subscription decided the tier — the billed-status filter is not being applied',
+      ).toBe('solo_manual');
+      expect(
+        await s.getAccountTier(account),
+        'the account was left on a tier it is not paying for',
+      ).toBe('solo_manual');
     });
 
     it('CRITICAL setAccountTierIfUpgrade refuses to LOWER a tier and leaves it untouched, in both. A late or out-of-order Stripe delivery for a cheaper plan must not strip entitlements the customer is still paying for, and `applied: false` is what tells the caller nothing happened.', async () => {
