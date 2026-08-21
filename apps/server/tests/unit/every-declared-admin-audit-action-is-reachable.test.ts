@@ -30,6 +30,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { codeOnly } from './_helpers/code-only.js';
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src');
 const DECLARATION = resolve(SRC, 'services', 'admin-audit.ts');
@@ -65,10 +66,19 @@ function tsFilesUnder(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-/** Source with block and line comments removed — a mention is not an emission. */
+/**
+ * Source with block and line comments removed — a mention is not an emission.
+ *
+ * V-1256 — via the SHARED scanner. The private block-comment pass that used to open this
+ * function ran before line comments and could not tell that the `/*` in
+ * `// … /v1/agent-sessions/* routes` sits inside one, so it opened a comment there and closed
+ * it far below: all 61 imports of that route file vanished, and this guard walks `src`.
+ * Eighteen files carry that shape. `code-only.ts` models line comments, string and regex
+ * literals, and preserves line numbers.
+ */
 function executableText(path: string): string {
   const raw = readFileSync(path, 'utf8');
-  const withoutBlocks = raw.replace(/\/\*[\s\S]*?\*\//g, '');
+  const withoutBlocks = codeOnly(raw);
   return withoutBlocks
     .split('\n')
     .map((line) => line.replace(/\/\/.*$/, ''))

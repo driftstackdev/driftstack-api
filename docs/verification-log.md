@@ -2841,3 +2841,56 @@ asserts the reported line survives stripping.
 hypothesis can be well-formed, correctly executed, and still aimed at the wrong side of the defect.
 Three doubles matched a mutation-shaped query and I read that as the population. Ratchets 2996 →
 2997, 3163 → 3164.
+
+## V-1256 — three guards were scanning an empty string and reporting nothing wrong
+
+V-1254 repointed the cursor guard at the shared comment scanner and stopped there. The private
+stripper it had been carrying was not the only copy.
+
+**Verified, not assumed, and my first two enumerations were both wrong.** A grep for the block-comment
+regex returned ten guards — but one of them, `every-env-var-the-server-reads-is-documented`, matched
+in PROSE: its comment explains at length that it deliberately does NOT strip comments, because a
+naive strip once swallowed fourteen real reads in `bootstrap.ts`. Re-running with the comment lines
+excluded then returned nothing at all, because adding `-E` to that grep changed the escaping dialect
+and the pattern stopped matching. Only the third attempt, run against a known-true control, gave the
+real answer: nine private strippers, one prose mention.
+
+**The damage, measured on real files.** The private pass runs block comments FIRST, so it cannot tell
+that the `/*` in `// AI-D — /v1/agent-sessions/* routes` is inside a line comment. It opens a comment
+there and closes it at the next `*/`:
+
+```
+routes/agent-sessions.ts     imports: 61 in source   0 after the private strip   61 after codeOnly
+lib/internal-fleet-auth.ts   imports:  3             0                            3
+```
+
+Eighteen files under `apps/server/src` carry that shape, nearly all route paths with a wildcard.
+Three of the nine guards walk directories containing them: the routes-response guard, the
+admin-audit-reachability guard, and the bootstrap-wiring guard. All three were reading an empty
+string for those files and reporting nothing wrong — a guard that passes because it saw nothing.
+
+Repointed at `codeOnly`, which models line comments, string literals and regex literals, and keeps
+line numbers.
+
+**Stripping ORDER is what decides this, and two of the nine get it right by accident.**
+`no-ts-vocabulary-outgrows-its-database-enum` and `schema-enums-match-their-migration-history` strip
+LINE comments first, which removes the whole `// … /* …` line before the block pass runs. They are
+not exposed to this failure. Recorded because it is the difference between a correct guard and a
+lucky one, and the luck is one refactor deep.
+
+```
+N1  restore the private block-first stripper   "scanning nothing": +0 where 61   1 failed | 3 passed
+N2  stripper becomes a pass-through            the prose-is-not-code arms        1 failed | 3 passed
+restored (0 dirty, sha equal)                                                     4 passed
+```
+
+N1 is the arm worth keeping: it asserts the stripper still sees into the specific file that breaks
+it, rather than asserting the stripper is a particular implementation. A plain revert of the three
+repointings would NOT have failed anything — the blindness is latent, nothing those guards check
+currently lives in the blanked files — so proving the change is load-bearing needed an arm about the
+blindness itself.
+
+**Still owed, enumerated:** three more block-first TS strippers —
+`the-built-api-types-agrees-with-its-source`, `the-egress-claim-gate-has-one-definition`,
+`a-field-count-in-a-test-title-is-derived`. Same fix. `migrations-destructive-statements-are-declared`
+strips SQL rather than TypeScript and `codeOnly` does not apply to it.

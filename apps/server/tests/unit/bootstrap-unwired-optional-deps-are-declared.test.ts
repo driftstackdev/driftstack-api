@@ -31,6 +31,7 @@ import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { codeOnly } from './_helpers/code-only.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -95,8 +96,15 @@ const sourceFiles = walk(SRC).filter((f) => f.endsWith('.ts'));
 const allSource = sourceFiles.map((f) => readFileSync(f, 'utf8')).join('\n');
 const bootstrapSource = readFileSync(BOOTSTRAP, 'utf8');
 
+// V-1256 — comment stripping is the SHARED scanner. The private `/\*[\s\S]*?\*\//`
+// pass that used to live here runs BEFORE line comments and cannot tell that the `/*`
+// in `// … /v1/agent-sessions/* routes` is inside one, so it opens a comment there and
+// closes it at the next `*/` far below. Measured on that file: all 61 imports vanished,
+// and on `lib/internal-fleet-auth.ts` all 3. Eighteen files under `apps/server/src`
+// carry that shape, nearly all route paths with a wildcard. `code-only.ts` models line
+// comments, string literals and regex literals, and keeps line numbers (V-1254).
 function stripComments(text: string): string {
-  return text.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+  return codeOnly(text);
 }
 
 /** Balanced text starting at an opening bracket index. */

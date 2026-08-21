@@ -44,6 +44,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { codeOnly } from './_helpers/code-only.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -87,8 +88,15 @@ function callBody(src: string, openParen: number): string | null {
  * start, and the real key two lines down is dropped. Measured — `GET /v1/account/me`
  * annotates seven of its fields and every one of them read as unset.
  */
+// V-1256 — comment stripping is the SHARED scanner. The private `/\*[\s\S]*?\*\//`
+// pass that used to live here runs BEFORE line comments and cannot tell that the `/*`
+// in `// … /v1/agent-sessions/* routes` is inside one, so it opens a comment there and
+// closes it at the next `*/` far below. Measured on that file: all 61 imports vanished,
+// and on `lib/internal-fleet-auth.ts` all 3. Eighteen files under `apps/server/src`
+// carry that shape, nearly all route paths with a wildcard. `code-only.ts` models line
+// comments, string literals and regex literals, and keeps line numbers (V-1254).
 function stripComments(block: string): string {
-  return block.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  return codeOnly(block);
 }
 
 /** Keys of an object literal, counting shorthand; reports whether it spreads. */
@@ -214,6 +222,18 @@ function judge(): { compared: Judged[]; skipped: number } {
 }
 
 describe('V-1072 a published response is the one returned', () => {
+  it("CRITICAL the comment stripper does not blank a route file whose header contains a wildcard path. `routes/agent-sessions.ts` opens with `// AI-D — /v1/agent-sessions/* routes`; a block-comment pass that runs first cannot tell that `/*` is inside a LINE comment, so it opens a comment there and closes it at the next `*/` far below. Measured: all 61 of that file's imports disappeared, and this guard walks every file in that directory — it was scanning an empty string and reporting nothing wrong. Eighteen files under apps/server/src carry the same shape.", () => {
+    const raw = readFileSync(resolve(ROUTES, 'agent-sessions.ts'), 'utf8');
+    const rawImports = (raw.match(/^import\s/gm) ?? []).length;
+    expect(rawImports, 'the fixture file stopped having imports to lose').toBeGreaterThan(20);
+
+    const stripped = stripComments(raw);
+    expect(
+      (stripped.match(/^import\s/gm) ?? []).length,
+      'the stripper swallowed the file body — this guard is scanning nothing',
+    ).toBe(rawImports);
+  });
+
   it('CRITICAL the scan compares a real population and the literal reader handles both property forms. A key extractor blind to shorthand reports every `{ country, region }` handler as broken, which is how the first version of this scan produced three findings that were all itself.', () => {
     const { compared, skipped } = judge();
     expect(compared.length, 'routes judged against a published response').toBeGreaterThanOrEqual(
