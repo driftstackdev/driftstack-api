@@ -859,3 +859,64 @@ over budget. Reported as it behaved rather than as a clean single-arm kill.
 memory, and the budget is a proxy chosen from two data points — one file that works at 440 KB and one
 that died at 3.4 MB. If the parser gets cheaper or a pathological 900 KB file appears, the number is
 wrong in one direction or the other. It is a tripwire with room, not a model.
+
+---
+
+## V-1217 — the double was counting usage production never counts
+
+Ninth of the twenty-nine, and a real divergence on a metered path:
+
+```
+DrizzleUsageRepo   ne(recordType, 'session_minute'), ne(…, 'agent_decomposer'),
+                   ne(…, 'agent_decomposer_bundled')      -- excluded from the SUM
+InMemoryUsageRepo  totals[e.recordType] += e.quantity     -- every stored row, no exclusions
+```
+
+Two exclusions, two different reasons:
+
+- `session_minute` is LIFECYCLE-DERIVED. Production computes it from real session lifetimes in the
+  `sessions` table and never sums stored `session_minute` rows. A double that sums them reports
+  metered minutes a customer was never charged for.
+- `agent_decomposer` and `agent_decomposer_bundled` are internal accounting, excluded outright with
+  nothing added back, so counting them inflates a customer-visible total with rows they should never
+  see.
+
+**The limitation is stated in the double rather than papered over.** It has no sessions to derive
+minutes FROM, so it omits `session_minute` where production reports a derived figure. Excluding the
+stored rows makes the two agree about what must NOT be summed; it does not make the double a source
+of lifecycle minutes. The arm asserts the stored quantity is not counted — which both can satisfy
+honestly — rather than a derived value the double cannot produce.
+
+Applying the exclusions broke nothing: the full server suite stayed green, so no test depended on
+the double counting rows production drops.
+
+```
+M1  the DOUBLE reverts to counting everything   2 failed | 9 passed   (the original defect)
+M2  DRIZZLE stops excluding session_minute      11 passed             -- see below
+M3  the DOUBLE stops counting real usage        2 failed | 9 passed   (positive control)
+restored                                        11 passed
+```
+
+**M2 stayed green, and the reason is in the source rather than in the test.** `totalsForPeriod` ends
+with `totals.session_minute = lifecycleRows[0]?.total_minutes ?? 0`, an unconditional assignment
+after the loop, carrying the comment "legacy session_minute ledger row must never replace lifecycle
+truth". So the Drizzle side has the SQL exclusion AND an overwrite that absorbs it; removing either
+alone changes no behaviour, and no test can separate them.
+
+That is the V-1202 shape again — a redundant safeguard makes the real rule untestable — but the
+verdict is different. There the redundancy was mine and I removed it. Here both layers are
+deliberate and documented, and defence in depth on the figure a customer is billed against is worth
+more than a mutation score. Recorded as a limit on what M2 proves, not filed as a defect.
+
+M3 matters as much as M1: without a positive control, "excludes the internal types" is satisfied by
+an implementation that counts nothing at all.
+
+**A cumulative drift the last nine contracts caused, caught on this one.** The full run failed
+`no-permanently-skipped-tests`: its header states how many conditional skips the repo has, and the
+guard tolerates a drift of 10 before failing. Every DB-gated contract in this sweep adds skips, so
+the stated 144 had quietly become a real 155 — no single commit moved it far enough to trip, and the
+tenth did. Updated to 155. Worth noting because a tolerance band means the commit that finally reds
+is not the one that caused the drift, and attributing it to this contract alone would have been
+wrong.
+
+**Owed remaining: 20.**

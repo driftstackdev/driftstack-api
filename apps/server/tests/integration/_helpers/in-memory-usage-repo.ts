@@ -14,6 +14,24 @@ export interface UsageEvent {
   recordedAt: Date;
 }
 
+/**
+ * V-1217 — mirrors DrizzleUsageRepo. `session_minute` is LIFECYCLE-DERIVED: production computes it
+ * from real session lifetimes in the `sessions` table and never sums stored `session_minute` usage
+ * rows, so summing them here reported minutes production would not. The two `agent_decomposer`
+ * types are internal accounting and are excluded outright with nothing added back.
+ *
+ * LIMITATION, stated rather than hidden: this double has no sessions to derive minutes FROM, so it
+ * omits `session_minute` entirely where production would report a derived figure. Excluding the
+ * stored rows makes the two agree about what must NOT be counted; it does not make this double a
+ * source of lifecycle minutes, and a test needing those has to use the real repo.
+ */
+const LIFECYCLE_DERIVED_RECORD_TYPE = 'session_minute';
+const INTERNAL_RECORD_TYPES: readonly string[] = ['agent_decomposer', 'agent_decomposer_bundled'];
+
+function isExcludedFromAggregation(recordType: string): boolean {
+  return recordType === LIFECYCLE_DERIVED_RECORD_TYPE || INTERNAL_RECORD_TYPES.includes(recordType);
+}
+
 export class InMemoryUsageRepo implements UsageRepo {
   private readonly events: UsageEvent[] = [];
 
@@ -26,6 +44,7 @@ export class InMemoryUsageRepo implements UsageRepo {
     for (const e of this.events) {
       if (e.accountId !== accountId) continue;
       if (e.recordedAt < periodStart || e.recordedAt >= periodEnd) continue;
+      if (isExcludedFromAggregation(e.recordType)) continue;
       totals[e.recordType] = (totals[e.recordType] ?? 0) + e.quantity;
     }
     return Promise.resolve({ totals });
@@ -40,6 +59,7 @@ export class InMemoryUsageRepo implements UsageRepo {
     for (const e of this.events) {
       if (e.accountId !== accountId) continue;
       if (e.recordedAt < fromDate || e.recordedAt >= toDate) continue;
+      if (isExcludedFromAggregation(e.recordType)) continue;
       const dateStr = e.recordedAt.toISOString().slice(0, 10);
       const bucket = byDate.get(dateStr) ?? {};
       bucket[e.recordType] = (bucket[e.recordType] ?? 0) + e.quantity;
