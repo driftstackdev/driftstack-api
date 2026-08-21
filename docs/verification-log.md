@@ -1439,3 +1439,59 @@ identifier that is not imported, so the Drizzle arms error rather than merely di
 demonstrates the arm depends on that clause; it does not isolate ordering from compilation.
 
 **Owed remaining: 11.**
+
+---
+
+## V-1229 — a sweep whose premise I had wrong, and a tiebreak tested where it can be tested
+
+**The sweep, and the correction.** V-1228 found a flaky ordering arm caused by the double stamping
+millisecond `Date`s where Postgres stores microseconds. That is a mechanism, so I swept for other
+tests exposed to it: seven doubles stamp `createdAt` and sort by it, and two of those —
+team-members and status-subscribers — carry NO id tiebreak.
+
+**No latent flakes.** Every existing order assertion against those two is a single-element array —
+a filtering check, not an ordering one — and my own V-1209 arms backdate one row, so the timestamps
+differ on both sides.
+
+**And my framing of the two as "outliers" was wrong.** I was about to add tiebreaks to make them
+match the other five. Reading the convention first: `api-keys-repo` has BOTH shapes — `orderBy(desc(createdAt))`
+on its simple lists and `orderBy(desc(createdAt), desc(id))` on its keyset-paginated one. The
+tiebreak is there because keyset pagination REQUIRES a total order, not as a house style. Team-members
+is non-paginated and follows the simple pattern correctly. Changing only it would have created the
+inconsistency I thought I had found. Left alone.
+
+What remains true and unfixed is narrow: for a non-paginated list, tie order is unspecified in
+Postgres and happens to be insertion order in the double. Reaching it needs two rows written in one
+transaction, since `now()` is transaction-scoped. Recorded rather than acted on.
+
+**The contract.** `LegalRepo`, nineteenth of the twenty-nine — which version of each document a
+customer is recorded as accepting, i.e. the record produced if anyone ever has to show that a
+specific human agreed to a specific text.
+
+```
+Drizzle  SELECT DISTINCT ON (document_key) … ORDER BY document_key, accepted_at DESC, id DESC
+double   sort by (acceptedAt DESC, id DESC), then first-hit-per-documentKey wins
+```
+
+`DISTINCT ON` and a first-hit loop over a sorted list are not obviously the same thing, and nothing
+asserted they resolve to the same row.
+
+**The tiebreak is tested where it can be tested honestly.** `accepted_at` is not monotonic-unique —
+a customer clicking through terms and privacy in one request produces two rows with one timestamp —
+but a tie CANNOT be forced through the shared interface, because `recordAcceptance` stamps the time
+itself and the two implementations do not tie at the same resolution. That is V-1228's lesson applied
+before writing the arm rather than after: the shared arms assert what is deterministic on both (with
+distinct timestamps, newest wins), and the tie is exercised in the Drizzle-only block by writing two
+rows with an identical `accepted_at` and deliberately chosen low/high uuids.
+
+```
+M1  DRIZZLE drops the id DESC tiebreak       tie arm reds        1 failed | 9 passed
+M2  DRIZZLE resolves oldest-first            newest arm reds     1 failed | 9 passed
+M3  the DOUBLE resolves oldest-first         newest arm reds     1 failed | 9 passed
+M4  the DOUBLE collapses document keys       independence reds   1 failed | 9 passed
+restored (source 0 dirty)                                        10 passed
+```
+
+M2 and M3 are the matched pair. M1 can only exist on one side, and says so.
+
+**Owed remaining: 10.**
