@@ -11,6 +11,7 @@ import type {
   TeamMembership,
   WebSessionAuthRow,
 } from '../../../src/services/auth.js';
+import { API_KEY_LAST_USED_THROTTLE_MS } from '../../../src/db/auth-repo.js';
 
 export interface WebSessionFinder {
   findActiveWebSession(args: { tokenHash: string; now: Date }): Promise<WebSessionAuthRow | null>;
@@ -72,10 +73,12 @@ export class InMemoryAuthRepo implements AccountAuthRepo {
 
   touchApiKeyLastUsed(id: string, at: Date): Promise<void> {
     const row = this.keysById.get(id);
-    // Mirror DrizzleAccountAuthRepo's 30s throttle so in-memory and Drizzle
-    // stay behaviorally consistent (an unthrottled in-memory write previously
-    // masked the Drizzle write-once bug where last_used_at never updated).
-    const THROTTLE_MS = 30_000;
+    // V-1240 — the throttle window is READ from DrizzleAccountAuthRepo rather than
+    // restated here. It used to be a local `const THROTTLE_MS = 30_000` with a comment
+    // saying it mirrored that one: the same number twice, consistent only until one
+    // side moved. The throttle has to exist at all because an unthrottled in-memory
+    // write once masked a real Drizzle bug where last_used_at never updated.
+    const THROTTLE_MS = API_KEY_LAST_USED_THROTTLE_MS;
     if (row && (row.lastUsedAt === null || row.lastUsedAt.getTime() < at.getTime() - THROTTLE_MS)) {
       const updated: ApiKeyRow = { ...row, lastUsedAt: at };
       this.keysById.set(id, updated);

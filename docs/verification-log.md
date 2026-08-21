@@ -2013,3 +2013,59 @@ only way to tell them apart is to re-run the two guards once the tree has stoppe
 Ratchets: 2990 → 2992, 3157 → 3159, DATABASE_URL gate 124 → 127, conditional skips 167 → 169.
 
 **Owed remaining: 1** — `AccountAuthRepo`.
+
+## V-1240 — the last of the twenty-nine, and the same duplicated number one file over
+
+Twenty-ninth of the twenty-nine. `findApiKeyByPrefix` is the first step of authenticating every API
+request; `touchApiKeyLastUsed` is the write that follows, and it is throttled so the hot auth path
+does not update a row on every authenticated request.
+
+**A throttle and a broken write are the same observation.** From one call, both leave `last_used_at`
+where it was. Only calling twice and moving the clock separates them — and that is not hypothetical
+here: the double did not throttle originally, and an unthrottled double MASKED a real Drizzle bug in
+which `last_used_at` never updated at all. So the contract asserts a write that must land, a write
+that must not, and the boundary between them.
+
+**The same finding as V-1238, one file over.** `API_KEY_LAST_USED_THROTTLE_MS = 30_000` was
+module-private, and the double carried its own `const THROTTLE_MS = 30_000` under a comment saying
+it mirrored that one. An acknowledged duplicate is still a duplicate: two numbers that agree until
+someone edits one, and widening the window would have left every test on the double asserting the
+old cadence. Exported; both sides read it, and so does this contract — hardcoding 30_000 in the test
+would have made it the third copy. The boundary arm derives from the constant, so moving the window
+moves the arm.
+
+The boundary is STRICT on both sides — a touch exactly one window later is still throttled. That is
+the difference between "at least 30s apart" and "more than 30s apart", and it is worth pinning
+precisely because either reading looks defensible alone.
+
+**Prior art, checked before writing rather than after.** `db-auth-repo-last-used-throttle-drizzle.ts`
+already covers this write — but Drizzle-only, in a single `it` carrying three behaviours, with no
+in-memory arm and no boundary case. It establishes that the repo works; it cannot establish that the
+two implementations agree, which is what this campaign is for. Its 10s/40s offsets are only correct
+for a 30s window, but they fail LOUDLY if the window moves, so they were left alone.
+
+```
+M1  double: window becomes 0                  inside-window + boundary arms  2 failed | 14 passed
+M2  double: boundary < becomes <=             the strict-boundary arm        1 failed | 15 passed
+M3  double: never-used key is skipped         first-touch + 3 dependents     4 failed | 12 passed
+M4  DRIZZLE: window sign flipped, no throttle  inside-window + boundary       2 failed | 14 passed
+M5  DRIZZLE: isNull arm retargeted, no throttle inside-window + boundary      2 failed | 14 passed
+restored (both files 0 dirty, sha equal)                                     16 passed
+```
+
+**M3 first went in by deleting the `lastUsedAt === null ||` branch, and that proof was worthless** —
+it made the next term dereference null, so the arm reddened on a TypeError. Same mistake as V-1237's
+first M6, two entries apart: a mutation that CRASHES proves the file runs, not that the assertion
+discriminates. Redone as `!== null &&`, which skips a never-used key without throwing.
+
+**`tsc` caught what a green vitest run could not.** The first version omitted `createdAt` from the
+seeded `ApiKeyRow`. All 16 tests passed — esbuild strips types, so a structurally invalid literal
+runs perfectly well — and `tsc -p tsconfig.test.json` exited 2. A vitest pass is not a type check.
+
+The scope fixture also had to be corrected: `scopes` is a Postgres ENUM array (`api_key_scope`), and
+'profiles:read' is not a member — the enum spells it 'read:profiles'. The in-memory half accepted
+the invalid values happily, so the Drizzle half is what found it.
+
+Ratchets: 2992 → 2993, 3159 → 3160, DATABASE_URL gate 127 → 128, conditional skips 169 → 170.
+
+**Owed remaining: 0. All twenty-nine double/repo pairs now carry a contract.**

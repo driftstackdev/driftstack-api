@@ -1,6 +1,6 @@
 // No test is skipped unconditionally.
 //
-// A conditional skip is fine and this repo uses 169 of them: `describe.skipIf`
+// A conditional skip is fine and this repo uses 170 of them: `describe.skipIf`
 // on a missing DATABASE_URL means "this needs Postgres", which is a real,
 // re-evaluated condition. An UNCONDITIONAL `it.skip` is different — it never
 // runs again, on any machine, ever, and the suite reports it as a skip rather

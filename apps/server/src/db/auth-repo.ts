@@ -17,7 +17,14 @@ import { accounts, apiKeys, rateLimitOverrides, teamMembers, webSessions } from 
 // Throttle window for the per-request api_keys.last_used_at write — at most
 // one update per key per this interval, so the hot auth path doesn't write a
 // row on every authenticated request. See touchApiKeyLastUsed.
-const API_KEY_LAST_USED_THROTTLE_MS = 30_000;
+// V-1240 — exported so the in-memory double can throttle on THIS number instead of
+// keeping its own copy of it. The double held a second `const THROTTLE_MS = 30_000`
+// and a comment saying it mirrored this one, which is an acknowledged duplicate: the
+// two agreed only while nobody edited either. Widening the window here would have
+// left every test standing on the double asserting the old cadence — and the reason
+// the double throttles at all is that an unthrottled one once masked a real Drizzle
+// bug where last_used_at never updated.
+export const API_KEY_LAST_USED_THROTTLE_MS = 30_000;
 
 export class DrizzleAccountAuthRepo implements AccountAuthRepo {
   constructor(private readonly database: Database) {}
