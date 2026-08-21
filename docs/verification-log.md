@@ -3990,3 +3990,55 @@ an alias for the constant exported in V-1263 rather than a fourth restatement of
 `gt(expiresAt, at)` filter in the tier floor already excludes revoked rows and the boundary is
 strict on both sides; and `listExpiredUnprocessedCryptoEntitlements` agrees on filter, ordering and
 limit.
+
+---
+
+## V-1278 — 79 invariants are asserted on one implementation only, and the first one opened had a real divergence
+
+V-1276 and V-1277 were both the same shape: a behaviour pinned against ONE of two implementations,
+which reads like coverage and is not parity. That shape is measurable, so it was measured.
+
+Across the 194 methods that exist on both a Drizzle repo and its double, **79 are exercised by a
+`db-*-drizzle` file and by no contract at all.** Ranked:
+
+```
+webhooks-repo 14   sessions-repo 11   profiles-repo 8   auth-flows-repo 7
+stripe-webhooks-repo 6   auth-repo 6   team-members-repo 5   scheduled-jobs-repo 4   mfa-repo 3
+```
+
+This is a sharper instrument than the V-1269 coverage count. "Uncovered" includes methods nobody has
+tested at all, which are honestly unknown. These 79 are worse: a Drizzle test exists, so the method
+reads as tested, while the double it shares an interface with is free to disagree — and the double is
+what the service and route tests actually run against.
+
+**The first one opened had a divergence.** `team-members-repo::acceptInviteAtomic`, taken for being
+security-shaped, turned out to diverge on something quieter. `member_email` is NOT a column on
+`team_members`: production returns `attachMemberEmail(row, input.memberEmail)`, so the address on the
+returned membership is always the one the CALLER presented. The double stored the address at
+creation and returned that on the existing-member path, so re-accepting an invite after the member
+changed their email handed back the OLD one — on the single path where the caller has just supplied
+the current address. Re-inviting an existing member is how a role change is performed, so this is the
+ordinary path rather than an edge.
+
+Proven on the double before the fix (`email=old@x.test role=admin` — the role refreshed correctly
+while the address did not), and production's side is a single unambiguous return with no column to
+read a stale value from.
+
+Two arms added to the existing `team-members-repo-contract`, both mutation-proven:
+
+```
+M13  drop the caller-presented email        in-memory RED "carried an address the caller did not
+                                            present", drizzle GREEN
+M14  drop the token-hash comparison         in-memory RED "an invite was accepted against the
+                                            wrong token hash", drizzle GREEN
+```
+
+M14's arm covers the compare-and-swap the method exists for: the accept must match the exact
+presented credential, so a stale link whose invite was re-issued misses rather than accepting on the
+id alone. It was absent from the contract, which is how the one-sided count is 79 rather than 0.
+
+**Verified clean on the way past:** `auth-flows-repo::consumeAuthToken` — the single-use claim that
+decides whether a magic link or reset token can be replayed — matches exactly, both returning true
+only for the first consume of an unconsumed row.
+
+Suites: 10 files, 117 passed, `tsc` clean.

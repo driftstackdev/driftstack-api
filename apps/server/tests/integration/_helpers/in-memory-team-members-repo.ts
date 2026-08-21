@@ -159,7 +159,13 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
       existing.role = invite.role;
       existing.invitedAt = invite.createdAt;
       existing.invitedByAccountId = invite.invitedByAccountId;
-      return snapRow(existing);
+      // V-1278 — memberEmail is NOT a `team_members` column. Production never stores it: the
+      // Drizzle path returns `attachMemberEmail(row, input.memberEmail)`, so the address on the
+      // returned row is always the one the CALLER presented. This fixture kept the address the
+      // membership was created with, so re-accepting an invite after the member changed their
+      // email handed back the old address — the stale one, from the one path where the caller has
+      // just told the repo the current one.
+      return snapRow({ ...existing, memberEmail: input.memberEmail });
     }
     const row: TeamMemberRow = {
       id: randomUUID(),

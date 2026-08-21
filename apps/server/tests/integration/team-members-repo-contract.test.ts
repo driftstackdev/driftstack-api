@@ -142,8 +142,71 @@ async function addInvite(s: Subject, owner: string, email: string): Promise<stri
   return row.id;
 }
 
+/** As `addInvite`, but hands back the token hash — the credential the accept path compares. */
+async function addInviteReturningHash(
+  s: Subject,
+  owner: string,
+  email: string,
+): Promise<{ id: string; tokenHash: string }> {
+  const tokenHash = `hash-${randomUUID()}`;
+  const row = await s.repo.upsertInvite({
+    ownerAccountId: owner,
+    inviteeEmail: email,
+    role: 'member',
+    inviteTokenHash: tokenHash,
+    inviteExpiresAt: new Date(Date.now() + 86_400_000),
+    invitedByAccountId: null,
+  });
+  return { id: row.id, tokenHash };
+}
+
 function teamMembersRepoContract(label: string, make: () => Subject, enabled: () => boolean): void {
   describe(`TeamMembersRepo contract — ${label}`, () => {
+    it('CRITICAL accepting an invite as an EXISTING member refreshes the role and reports the email the caller presented, in both. `member_email` is not a `team_members` column — the Drizzle path attaches whatever the caller passed to the row it returns — so a fixture that stores the address at creation hands back a stale one on the single path where the caller has just supplied the current address. Re-inviting an existing member to change their role is the normal way roles are changed, so this is the ordinary case, not an edge.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const owner = await s.account();
+      const member = await s.account();
+
+      await addMember(s, owner, member);
+      const invite = await addInviteReturningHash(s, owner, 'renamed@test.local');
+
+      const accepted = await s.repo.acceptInviteAtomic({
+        inviteId: invite.id,
+        inviteTokenHash: invite.tokenHash,
+        memberAccountId: member,
+        memberEmail: 'renamed@test.local',
+        acceptedAt: new Date(),
+      });
+
+      expect(accepted, 'accepting a valid invite returned no membership').not.toBeNull();
+      expect(
+        accepted?.memberEmail,
+        'the returned membership carried an address the caller did not present',
+      ).toBe('renamed@test.local');
+      expect(accepted?.memberAccountId, 'the membership was attributed to another account').toBe(
+        member,
+      );
+    });
+
+    it('CRITICAL an invite whose token hash does not match is NOT accepted, in both. The compare-and-swap is on the exact presented credential, so a stale link — one whose invite was re-issued with a fresh token — must miss rather than accept on the strength of the id alone.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const owner = await s.account();
+      const member = await s.account();
+      const inviteId = await addInvite(s, owner, 'invitee@test.local');
+
+      const accepted = await s.repo.acceptInviteAtomic({
+        inviteId,
+        inviteTokenHash: 'hash-that-was-never-issued',
+        memberAccountId: member,
+        memberEmail: 'invitee@test.local',
+        acceptedAt: new Date(),
+      });
+
+      expect(accepted, 'an invite was accepted against the wrong token hash').toBeNull();
+    });
+
     it('CRITICAL an invite handed to the caller is a SNAPSHOT — a later write does not reach into it, in both. Postgres cannot mutate a row the caller already holds. A fixture that can makes every before/after comparison against it read "nothing changed", because `before` and `after` are the same object, and the arm then passes forever asserting nothing.', async () => {
       if (!enabled()) return;
       const s = make();
