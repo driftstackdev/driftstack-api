@@ -812,3 +812,50 @@ was correct when written is not a defect now — and the archive is the same rec
 **Suite: 3138 files, 30904 passed, 0 failed.** The split stands: entries through V-1200 archived and
 frozen, the live file formats in 58ms under the hook's heap, and nothing was dropped — 1081 entries
 in the archive, 15 live, charter intact.
+
+---
+
+## V-1216 — the warning that did not exist when the log outgrew the hook
+
+V-1214 and V-1215 dealt with a file that grew until Prettier could not parse it under the
+pre-commit hook's 8 GB heap. Nothing warned first. The file crossed a line and the next commit that
+touched it — which, during this sweep, is every commit — failed inside a V8 out-of-memory stack
+trace rather than at anything resembling a rule.
+
+**First, whether anything else is close. Measured at the hook's own heap, not guessed:**
+
+```
+packages/sdk-python/openapi.json                    1.95 MB   OK  0.38s
+docs/internal/A2-PRODUCTION-READINESS-ASSESSMENT.md  440 KB   OK  0.47s
+apps/gui-client/src/views/SimulatorWindow.tsx        467 KB   OK  0.32s
+apps/server/src/lib/openapi.ts                       270 KB   OK  0.26s
+```
+
+Nothing else is near it. JSON and TypeScript are cheap — a 1.95 MB JSON checks in under half a
+second — and it is markdown's parser that blows up, somewhere between 440 KB and the 3.4 MB that
+killed the hook. So the answer to "is this about to happen again" is no, and that is worth stating
+rather than leaving as an assumption.
+
+**The guard is the signal that was missing.** A budget of 1.5 MB on markdown that the hook actually
+formats: well above every real file, far below the size that broke it, so it fires as a nudge to
+split rather than as an emergency. It reads `.prettierignore` instead of restating it, because a
+private copy would keep passing after the real list changed and this guard would then be enforcing a
+rule the hook no longer follows.
+
+The second arm is deliberately two-sided: the frozen archive MUST be ignored, and the live log must
+NOT be. An ignore pattern that widened to catch the live file would silently drop it from formatting
+altogether — the opposite failure, and a quieter one.
+
+```
+M1  a formatted markdown file crosses the budget   named as oversized      1 failed | 2 passed
+M2  the frozen archive is un-ignored               ignore arm + budget arm 2 failed | 1 passed
+restored                                           3 passed
+```
+
+M2 reds two arms rather than one, and correctly: an un-ignored 3.4 MB archive is both un-ignored and
+over budget. Reported as it behaved rather than as a clean single-arm kill.
+
+**What this does not do**, stated so nobody reads more into it: it does not measure Prettier's
+memory, and the budget is a proxy chosen from two data points — one file that works at 440 KB and one
+that died at 3.4 MB. If the parser gets cheaper or a pathological 900 KB file appears, the number is
+wrong in one direction or the other. It is a tripwire with room, not a model.
