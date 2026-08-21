@@ -3336,3 +3336,42 @@ V-1246 shape doing what it should.
 Also checked, and clean: the other three repos doing arithmetic on a column (`termDays * 24`,
 `cadenceSeconds * 1000`) are unit conversions, not policy — a day has 24 hours regardless of who
 writes it down.
+
+## V-1267 — a guard prototyped, measured, and deliberately not built
+
+V-1266 found a policy value restated between two PRODUCTION modules, which V-1260's guard cannot
+see: it compares a double to its own repo. The obvious extension is to flag any `src/db` module
+carrying a literal equal to another module's exported constant. Prototyped before writing it, which
+is the only reason it did not get built.
+
+```
+exported numeric policy constants in src/db:  11
+other db files carrying one of those literals in arithmetic or a comparison:  34 hits
+```
+
+Every one is noise, and not the kind that tuning fixes. Every page constant in this codebase is 50
+or 100, so `ADMIN_ACCOUNTS_PAGE_MAX`, `SNAPSHOT_PAGE_MAX`, `MAX_PAGE`, `INCIDENT_PAGE_DEFAULT` and
+`REFILL_CENTI_SCALE` all collide with each other by value.
+
+**And flagging them would have been actively wrong.** V-1244 through V-1246 decided DELIBERATELY
+that the customer profile page, the staff account browser and the snapshot list are separate product
+limits that happen to coincide — one shared constant would mean raising one silently raised the
+others. A guard on equal values would flag exactly those four pairs and push toward the coupling
+those entries refused on purpose. It would be a guard arguing against its own campaign.
+
+What made V-1266 a real finding is not that two modules share the number 100. It is that both read
+the SAME TABLE COLUMN, so its storage encoding is one fact with two readers. That is not expressible
+as "same literal", and no amount of threshold-fiddling turns one into the other.
+
+The reasoning now sits in the guard file rather than only here, because "why doesn't this compare
+repos to each other?" is the obvious question and the answer belongs where it is asked. The repo
+reached the same conclusion once before: V-908 tried scoring matchers to find weak assertions and
+abandoned it because a matcher census cannot tell a precondition from a weak assertion. A signal
+that cannot tell two things apart is not a weaker guard, it is a wrong one.
+
+**Also checked and clean.** `recipes-repo.ts` names its own `DEFAULT_RECIPE_PAGE` / `MAX_RECIPE_PAGE`
+and appeared in the prototype's hits. It has no in-memory double at all, so there is no pair to
+drift and nothing to fix — module-private is correct there.
+
+No code changed beyond the comment. The finding is that the next obvious step is a mistake, which is
+worth a log entry precisely because it looks like work that should be done.

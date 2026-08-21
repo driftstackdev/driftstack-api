@@ -18,6 +18,25 @@
 // names), so a string rule would be noise rather than signal. Five of the six historical instances
 // are covered; the sixth is named here so nobody reads a green run as more than it is.
 
+// WHY THIS COMPARES A DOUBLE TO ITS OWN REPO AND NOT REPOS TO EACH OTHER.
+//
+// V-1266 found a policy value restated between two PRODUCTION modules — `auth-repo` divided by a
+// hardcoded 100 where `rate-limit-overrides-repo` had named the same storage scale — and this
+// guard was blind to it by construction. The obvious extension is to flag any db module carrying
+// a literal equal to another module's exported constant. It was prototyped and rejected: 34 hits,
+// essentially all noise.
+//
+// The reason is not tuning. Every page constant in this codebase is 50 or 100, and V-1244 through
+// V-1246 established DELIBERATELY that the customer profile page, the staff account browser and
+// the snapshot list are separate product limits that merely coincide — folding them into one
+// constant would mean raising one silently raised the others. A guard on equal values would flag
+// exactly those and push toward the coupling that was refused on purpose.
+//
+// What made V-1266 real was not the shared number, it is that both modules read the SAME TABLE
+// COLUMN, and that is not expressible as "same literal". The repo's own V-908 reached the same
+// conclusion about scoring matchers to find weak assertions, and abandoned it for the same reason:
+// a signal that cannot tell two things apart is not a weaker guard, it is a wrong one.
+
 import { readFileSync, existsSync } from 'node:fs';
 import { readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
