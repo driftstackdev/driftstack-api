@@ -1201,3 +1201,63 @@ before re-confirming, because otherwise "the address is on the confirmed list at
 satisfied by an unsubscribe that never happened.
 
 **Owed remaining: 15.**
+
+---
+
+## V-1225 — a fourth way to say "only once", and a claim sweep that came back clean
+
+**The sweep first.** V-1224 noticed that three contracts had pinned the same single-use guarantee
+through three unrelated mechanisms. That raised the obvious question: is any claim in the db layer
+implemented as read-then-write instead of an atomic conditional, which two concurrent requests would
+both win?
+
+My first detector said 14 of 32 claim-shaped writes were unguarded. **It was wrong about all of
+them** — its "guarded" pattern looked for `isNull(` and missed both `notDeleted` (a named const) and
+`eq(lockedBy, workerId)`. Re-run with a precise definition — a claim is unguarded when its `WHERE`
+contains ONLY row identity — it found three:
+
+```
+byok-anthropic-repo::clear           Promise<void>
+byok-anthropic-repo::touchLastUsed   Promise<void>
+fleet-nodes-repo::revoke             Promise<void>
+```
+
+All three return `void`. No caller can branch on whether it won, so a concurrent double-write is
+unobservable and the missing guard is correct rather than a defect. The class is clean. That is the
+seventh detector of mine this session to over-report, and the seventh time the verdict came from
+reading the source rather than the count.
+
+**The contract.** `AccountLifecycleRepo`, fifteenth of the twenty-nine, where every method answers
+"am I the caller that gets to send this email?" and the cost of a wrong answer is a customer mailed
+twice or not at all. It adds a FOURTH shape of the same guarantee:
+
+```
+V-1220  compare a monotonic counter   last_used_totp_counter < $n
+V-1221  stamp a consumed_at           SET consumed_at WHERE consumed_at IS NULL
+V-1224  null the token matched on     SET confirm_token_hash = NULL WHERE hash = $x
+V-1225  win an INSERT                 ON CONFLICT (stripe_event_id, kind) DO NOTHING RETURNING …
+```
+
+Four mechanisms, one promise, no shared code. None is covered by another's test, and a reader who
+has internalised one shape will not recognise the next as the same thing.
+
+**The composite key is the arm that matters.** `claimBillingEmail` dedups on (event, KIND), not on
+the event alone — one Stripe event legitimately drives more than one kind of mail. Keyed on the
+event, the first kind sent suppresses every other kind for that event: a customer charged and never
+told, because the renewal reminder went out first. The SQL names both columns as its conflict
+target; the double keys a Set on `${stripeEventId}:${kind}`. Same key, no shared code, nothing
+asserting they agreed.
+
+```
+M1  DRIZZLE billing claim keys on the event alone   2 failed | 9 passed
+M2  the DOUBLE keys on the event alone              1 failed | 10 passed
+M3  DRIZZLE first-failure drops its isNull guard    1 failed | 10 passed
+M4  the DOUBLE collapses the two flags into one     1 failed | 10 passed
+restored (source 0 dirty)                           11 passed
+```
+
+M4 is the arm I would not have written without asking what the columns are for: the first-success
+and first-failure claims are separate on purpose, and an implementation collapsing them into one
+"welcome email sent" flag silences the success notice for every customer whose first session failed.
+
+**Owed remaining: 14.**
