@@ -286,10 +286,15 @@ export function ProxiesView(): JSX.Element {
                     p.host === draft.host && p.port === draft.port && p.username === draft.username,
                 )
               : fresh.find((p) => p.id === editedId);
-        // Best-effort and deliberately NOT inside the save's try: a probe that
-        // cannot run must never make a successful save look failed. handleTest
-        // owns its own epoch guard, so an edit or removal landing mid-probe
-        // discards the result rather than writing it to the wrong row.
+        // Best-effort: a probe that cannot run must never make a successful save
+        // look failed. This block IS inside the save's try — it has to be, so it
+        // runs only on a save that actually landed — so the isolation comes from
+        // the two catches above and below, not from the structure: `listProxies`
+        // degrades to null and the probe is fire-and-forget. Drop either catch
+        // and a proxy that saved fine reports "Couldn't save this proxy", which
+        // is the one outcome this whole path exists to avoid.
+        // handleTest owns its own epoch guard, so an edit or removal landing
+        // mid-probe discards the result rather than writing it to the wrong row.
         if (target !== undefined) void handleTest(target).catch(() => undefined);
       }
     } catch (err) {

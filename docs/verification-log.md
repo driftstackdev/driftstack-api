@@ -1821,3 +1821,53 @@ it is the third distinct arrangement now: some repos let the caller choose the t
 stamp back, and some do neither and force a DB-only arm.
 
 **Owed remaining: 4.**
+
+## V-1236 — a chained regex froze the gap between two statements, not the statements
+
+A peer landed `089264371` ("Test a proxy the moment it is entered, not the moment it is needed") —
+34 lines into `apps/gui-client/src/views/ProxiesView.tsx`, no tests, no ratchet — and left the
+suite red on `gui-client-views-ProxiesView-content-parity.test.ts`. I deferred it last turn because
+that file was being written concurrently; the commit is now 12 minutes old with nothing since and
+the file is clean in the tree, so it is safe to take.
+
+**The source was right and the pin was wrong.** The assertion was one regex chained across a whole
+branch:
+
+```
+if \(editor\.kind === 'add'\) \{\s*\n?\s*await addProxy\(draft\);\s*\n?\s*\} else if \(…'edit'\) \{
+```
+
+That freezes the ADJACENCY of the call and the `} else if`, so a statement added inside the branch —
+here `testAfterSave = 'added';` — reads as a removed dispatch. The failure message says the add path
+is gone when the add path is fine. Split into two independent branch anchors: what happens between
+them is the branch's own business.
+
+**The comment on the new code described a mechanism that is not there.** It claimed the post-save
+probe is "deliberately NOT inside the save's try". It is inside it — `try` at 232, `catch` at 295,
+the block at 271. And it must be, or it would run after a save that failed. What actually stops a
+failed probe reporting a successful save as failed is two catches: `listProxies().catch(() => null)`
+and `void handleTest(target).catch(() => undefined)`. Anyone trusting the comment could delete either
+one and reintroduce exactly the bug the comment says cannot happen. Comment corrected to name the
+real mechanism; both catches pinned individually, because they are load-bearing rather than habit.
+
+**A sentinel of mine was vacuous and the first mutation hid it.** To pin that a label-only rename
+does not re-probe, I wrote `if \(connChanged\) \{[\s\S]{0,600}?testAfterSave = 'edited';`. My first
+M3 de-indented the assignment, the suite stayed green, and that reads as "the arm is not
+load-bearing" — but de-indenting does not move a statement out of a block, so the mutation was
+testing nothing. The real defect was worse: `[\s\S]*?` spans the branch's closing brace, so the
+regex matches just as happily with the line moved OUT of the branch. Rewritten as
+`(?:(?!\n {8}\})[\s\S])*?`, which forbids that brace in the gap, and re-proved by actually
+relocating the statement below it.
+
+```
+M1  drop listProxies().catch          "await listProxies().catch(() => null)"    1 failed | 11 passed
+M2  drop handleTest().catch           the fire-and-forget pin                    1 failed | 11 passed
+M3  de-indent the assignment          NOTHING — the mutation was inert           12 passed
+M3' MOVE it below the closing brace   the tightened nesting pin                  1 failed | 11 passed
+M4  remove the add dispatch           the split add-branch anchor                1 failed | 11 passed
+restored (source 0 dirty, sha equal)                                             12 passed
+```
+
+Both `tsc -p apps/server/tsconfig.test.json` and `tsc -p apps/gui-client/tsconfig.json` exit 0 —
+read as exit codes, not as empty output, and not through a pipe into `tail`, where `$?` is `tail`'s
+status and always 0. No ratchet change: one `it()` added to an existing file, no new file.

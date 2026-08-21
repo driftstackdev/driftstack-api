@@ -57,10 +57,14 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
     expect(body).toMatch(
       /const \[editor, setEditor\] = useState<\s*\n?\s*\{ kind: 'idle' \} \| \{ kind: 'add' \} \| \{ kind: 'edit'; id: string \}\s*\n?\s*>\(\{ kind: 'idle' \}\);/,
     );
-    // dispatch on editor.kind: add → addProxy, edit → updateProxy(editId, …)
-    expect(body).toMatch(
-      /if \(editor\.kind === 'add'\) \{\s*\n?\s*await addProxy\(draft\);\s*\n?\s*\} else if \(editor\.kind === 'edit'\) \{/,
-    );
+    // dispatch on editor.kind: add → addProxy, edit → updateProxy(editId, …).
+    // Pinned as two independent branch anchors rather than one regex chained
+    // across the whole block. What sits BETWEEN the call and the `} else if` is
+    // the branch's own business, and freezing that adjacency makes any statement
+    // added inside the branch read as a REMOVED dispatch — which is what this
+    // assertion did report when the post-save probe was added.
+    expect(body).toMatch(/if \(editor\.kind === 'add'\) \{\s*\n\s*await addProxy\(draft\);/);
+    expect(body).toMatch(/\} else if \(editor\.kind === 'edit'\) \{/);
     expect(body).toContain('const editId = editor.id;');
     expect(body).toContain('await updateProxy(editId, draft);');
     // edit path drops the cached probe when the connection target changed
@@ -198,6 +202,40 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
     expect(body).toMatch(
       /function Field\(\{\s*\n?\s*label,\s*\n?\s*error,\s*\n?\s*children,\s*\n?\s*\}: \{\s*\n?\s*label: string;\s*\n?\s*error\?: string;\s*\n?\s*children: React\.ReactNode;\s*\n?\s*\}\): JSX\.Element \{/,
     );
+  });
+
+  it('post-save probe: a saved proxy is tested immediately — on add always, on edit only when the connection target changed; the row is resolved from a FRESH list because refresh() state has not committed; and BOTH failure paths are swallowed so a probe that cannot run never reports a successful save as failed', () => {
+    // A label-only rename must NOT re-probe: same endpoint, and the cached
+    // verdict still describes it. So the edit path arms the probe inside the
+    // connChanged branch, not beside it.
+    expect(body).toContain("let testAfterSave: 'added' | 'edited' | null = null;");
+    expect(body).toContain("testAfterSave = 'added';");
+    expect(body).toContain("testAfterSave = 'edited';");
+    // The `(?!\n {8}\})` is the whole assertion: it forbids the branch's own
+    // closing brace between the `if` and the assignment. A plain `[\s\S]*?` gap
+    // spans that brace, so it matches just as happily when the line has been
+    // moved OUT of the branch — i.e. it would pin nothing. Verified by moving
+    // the statement below the brace and watching this fail.
+    expect(body).toMatch(/if \(connChanged\) \{(?:(?!\n {8}\})[\s\S])*?testAfterSave = 'edited';/);
+
+    // Resolved from a fresh list, not `state.proxies`: setState from refresh()
+    // has not committed, so component state is still the PREVIOUS registry and
+    // would not contain the row that was just added.
+    expect(body).toContain('const fresh = await listProxies()');
+    expect(body).toMatch(/const target =\s*\n?\s*fresh === null/);
+    // addProxy does not return the created row, so the added one is matched on
+    // the endpoint tuple the customer just entered.
+    expect(body).toContain('p.host === draft.host && p.port === draft.port');
+    expect(body).toContain('fresh.find((p) => p.id === editedId)');
+    // `editedId` is read off the editor BEFORE it is reset to idle.
+    expect(body).toMatch(/const editedId =[\s\S]{0,120}?setEditor\(\{ kind: 'idle' \}\);/);
+
+    // This block sits inside the save's try, so these two catches are the ONLY
+    // thing stopping a failed probe from surfacing as "Couldn't save this
+    // proxy" on a proxy that saved fine. They are load-bearing, not defensive
+    // habit — hence pinned individually.
+    expect(body).toContain('await listProxies().catch(() => null)');
+    expect(body).toContain('void handleTest(target).catch(() => undefined)');
   });
 
   it('file exists at canonical path', () => {
