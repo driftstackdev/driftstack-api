@@ -1682,3 +1682,47 @@ This is the same shape as every vacuous-arm finding in this log, turned on my ow
 that cannot fail reads identically to a check that passed.
 
 **Owed remaining: 7.**
+
+---
+
+## V-1233 — two asymmetric edges, and the property that makes them correct together
+
+Twenty-third of the twenty-nine. The staff-action trail — who did what to which customer — read a
+window at a time: an export, a review, a page between two timestamps.
+
+```
+Drizzle  gte(timestamp, from)   AND   lt(timestamp, to)
+double   timestamp >= fromMs    &&    timestamp <  toMs
+```
+
+`from` inclusive, `to` exclusive. Either edge alone looks arbitrary, and that is why the asymmetry
+is easy to "tidy". What makes it correct is the consequence: adjacent windows `[a, b)` and `[b, c)`
+PARTITION the log — every entry in exactly one, none counted twice, none dropped between pages.
+
+Make `to` inclusive and the boundary entry appears in two consecutive exports; make `from` exclusive
+and it appears in neither. Both are silent, and both corrupt a record whose only job is to be an
+accurate account of what staff did. So the third arm asserts the partition DIRECTLY — the two
+windows, their contents, and an explicit check that their intersection is empty — rather than
+trusting that two individually-plausible edges compose.
+
+```
+M1  DRIZZLE `to` becomes inclusive     2 failed | 9 passed   (the `to` arm AND the partition arm)
+M2  the DOUBLE `to` becomes inclusive  2 failed | 9 passed
+M3  the DOUBLE `from` becomes exclusive  "stamped exactly at `from` was excluded"  1 failed | 10 passed
+restored (source 0 dirty)              11 passed
+```
+
+M1 and M2 red two arms each, which is the right shape: an inclusive `to` is visible both as the
+boundary entry appearing in a window that should exclude it AND as the intersection of two adjacent
+windows becoming non-empty. The partition arm is not redundant with the edge arms — it is the one
+that would still fail if someone "fixed" both edges to be inclusive, which is self-consistent and
+still wrong.
+
+**The corrected type check earned its keep immediately.** Running
+`tsc --noEmit -p apps/server/tsconfig.test.json` — the project that actually covers tests, per the
+V-1232 correction — caught FOUR errors in this file before a single test ran: `admin.support_note`
+is not a member of `AdminAuditAction`, `ListAuditFilters.limit` is required, and `ListAuditPage`
+exposes `items` rather than `data`. The old command would have reported all four as clean, and the
+suite would have found them twenty minutes later.
+
+**Owed remaining: 6.**
