@@ -17,6 +17,18 @@ function parseClaimedRunAt(value: unknown): Date {
   return parsed;
 }
 
+// V-1247 — how long a held lock may go untouched before another worker may reclaim the
+// job. Exported because the in-memory double carried its own `const STALE_LOCK_MS =
+// 5 * 60_000`: the same policy window written twice, agreeing only until somebody widened
+// one of them. Widening it here would have left the double reclaiming after five minutes
+// while production waited longer, and every test standing on the double would have gone on
+// asserting the old cadence and agreeing with itself.
+//
+// This is a RECOVERY window, not a timeout: it decides how long a job sits unworked after
+// a worker dies mid-flight. Too short and two workers run the same job concurrently; too
+// long and a crashed worker's jobs stall for that long.
+export const SCHEDULED_JOB_STALE_LOCK_MS = 5 * 60_000;
+
 export class DrizzleScheduledJobsRepo implements ScheduledJobsRepo {
   constructor(private readonly database: Database) {}
 
@@ -94,7 +106,7 @@ export class DrizzleScheduledJobsRepo implements ScheduledJobsRepo {
     // Sending the ISO string passes through transparentParser unchanged
     // and postgres parses it as timestamptz on the server.
     const nowIso = opts.now.toISOString();
-    const lockStaleAtIso = new Date(opts.now.getTime() - 5 * 60_000).toISOString();
+    const lockStaleAtIso = new Date(opts.now.getTime() - SCHEDULED_JOB_STALE_LOCK_MS).toISOString();
     const result = await this.database.db.execute<{
       id: string;
       job_type: string;

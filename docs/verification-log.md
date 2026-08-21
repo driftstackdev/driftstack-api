@@ -2420,3 +2420,51 @@ edit cannot separate a fixture that reads the constant from one that happens to 
 
 Page-size class now closed: three pairs, three sets of exported constants, and every arm that
 touches a cap derives it. No ratchet change — arms added to existing files, no new file.
+
+## V-1247 — a recovery window written twice, and the arm that should have existed
+
+The page-size class is closed, so the same enumeration was run over the doubles' other named
+constants — numeric literals with comments stripped, then each candidate checked against its repo.
+Four of the five were unit conversions (`MS_PER_DAY`, `DAY_MS`): a day is a day, and two sides
+computing 86,400,000 cannot meaningfully drift. One was a policy value:
+
+```
+src/db/scheduled-jobs-repo.ts:97   new Date(opts.now.getTime() - 5 * 60_000)   inlined
+_helpers/in-memory-scheduled-jobs  const STALE_LOCK_MS = 5 * 60_000;           its own copy
+```
+
+This is the lock-staleness override: how long a held lock may go untouched before another worker
+may reclaim the job. It is a RECOVERY window, not a timeout — too short and two workers run the
+same job at once, too long and a crashed worker's jobs stall for that long. Written twice, it would
+have agreed only until somebody widened one, and widening production would have left every test on
+the double asserting the old cadence and agreeing with itself.
+
+Named `SCHEDULED_JOB_STALE_LOCK_MS`, exported, and the double reads it.
+
+**The pins here did not need rewriting, which is worth stating because it is unusual.** Three
+guards cover this code — a content-parity SQL chain, a v202d cross-source pin, and the
+`drizzle-date-param` structural allow-list — and none quotes the arithmetic. They pin the SQL clause
+`AND (locked_by IS NULL OR locked_at < ${lockStaleAtIso})`, the CTE structure, and the set of
+interpolated variable NAMES. All three survive untouched because the variable kept its name and the
+clause kept its shape. Only a test TITLE described the old expression, and it was corrected: a title
+quoting code that no longer exists misleads exactly as a stale comment does.
+
+**Nothing asserted this behaviour on both sides.** The contract had six arms and none touched
+locking; the only stale-lock coverage was a Drizzle-only fixture. So the constant could have drifted
+with nothing to catch it, which is the same gap V-1246 found for the snapshot cap. Two arms added,
+importing the window rather than writing five minutes.
+
+```
+N1  repo window 60m AND double back to 5m   the within-window arm    1 failed | 14 passed
+N2  repo drops the override (locks forever)  the reclaim arm          1 failed | 14 passed
+N3  double stops honouring locks at all      both arms                2 failed | 13 passed
+restored (both files 0 dirty, sha equal)                              15 passed
+```
+
+N1 is the pair of edits that reintroduces the drift, for the reason recorded in V-1246: a single
+edit cannot separate a fixture that reads the constant from one that merely agrees with it today.
+
+Class status: three page-size pairs closed (V-1244, V-1245, V-1246), the billed-status set
+(V-1238), the api-key throttle (V-1240), the centi scale (V-1241), and now the stale-lock window.
+Every remaining named constant in the doubles is a unit conversion. No ratchet change — arms added
+to an existing file.

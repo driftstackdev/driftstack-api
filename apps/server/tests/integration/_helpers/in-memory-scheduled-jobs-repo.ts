@@ -6,6 +6,7 @@ import type {
   ScheduledJobRow,
   ScheduledJobsRepo,
 } from '../../../src/services/scheduled-jobs.js';
+import { SCHEDULED_JOB_STALE_LOCK_MS } from '../../../src/db/scheduled-jobs-repo.js';
 
 interface InMemoryRow {
   id: string;
@@ -23,7 +24,9 @@ interface InMemoryRow {
   createdAt: Date;
 }
 
-const STALE_LOCK_MS = 5 * 60_000;
+// V-1247 — the stale-lock window is read from DrizzleScheduledJobsRepo rather than
+// restated. It used to be its own `5 * 60_000`: the same policy window twice over.
+const STALE_LOCK_MS = SCHEDULED_JOB_STALE_LOCK_MS;
 
 export class InMemoryScheduledJobsRepo implements ScheduledJobsRepo {
   private readonly rows = new Map<string, InMemoryRow>();

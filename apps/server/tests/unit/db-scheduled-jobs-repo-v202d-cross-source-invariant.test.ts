@@ -100,7 +100,7 @@ describe('W1014 db/scheduled-jobs-repo V-202d cross-source invariant', () => {
     expect(p).toMatch(/\/\/ gives us back the claimed rows\./);
   });
 
-  it("CRITICAL claimDue 5-minute lock-staleness override — '(locked_by IS NULL OR locked_at < ${now - 5*60000})'. The 5-min override lets a fresh worker steal locks from dead workers.", () => {
+  it("CRITICAL claimDue lock-staleness override — '(locked_by IS NULL OR locked_at < ${lockStaleAtIso})', where the window is the exported SCHEDULED_JOB_STALE_LOCK_MS (five minutes) rather than arithmetic inlined at the call site (V-1247). The 5-min override lets a fresh worker steal locks from dead workers.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/scheduled-jobs-repo.ts'));
     expect(p).toMatch(/AND \(locked_by IS NULL OR locked_at < \$\{lockStaleAtIso\}\)/);
   });

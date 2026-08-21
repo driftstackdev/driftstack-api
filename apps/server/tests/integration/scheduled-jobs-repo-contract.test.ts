@@ -35,7 +35,10 @@ import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 
 import type { ScheduledJobsRepo } from '../../src/services/scheduled-jobs.js';
-import { DrizzleScheduledJobsRepo } from '../../src/db/scheduled-jobs-repo.js';
+import {
+  DrizzleScheduledJobsRepo,
+  SCHEDULED_JOB_STALE_LOCK_MS,
+} from '../../src/db/scheduled-jobs-repo.js';
 import { InMemoryScheduledJobsRepo } from './_helpers/in-memory-scheduled-jobs-repo.js';
 import type * as schema from '../../src/db/schema.js';
 
@@ -110,6 +113,41 @@ async function enqueue(s: Subject, runAt: Date, dedup = false): Promise<void> {
 
 function scheduledJobsContract(label: string, make: () => Subject, enabled: () => boolean): void {
   describe(`ScheduledJobsRepo contract — ${label}`, () => {
+    it('CRITICAL a lock held LONGER than the stale window is reclaimable, in both. This is crash recovery: a worker that dies mid-job leaves locked_by set forever, and without the override that job is never worked again. The window is imported rather than written as five minutes here, so widening it moves this arm with it instead of leaving a third copy behind.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      await enqueue(s, new Date(NOW.getTime() - 1 * MIN));
+
+      const first = await s.repo.claimDue({ batchSize: 10, now: NOW, workerId: 'dead-worker' });
+      expect(
+        first.filter((r) => r.jobType === s.jobType).length,
+        'the job was not claimable to begin with',
+      ).toBe(1);
+
+      // `dead-worker` never finishes. Past the stale window, another worker may take it.
+      const past = new Date(NOW.getTime() + SCHEDULED_JOB_STALE_LOCK_MS + 1_000);
+      const second = await s.repo.claimDue({ batchSize: 10, now: past, workerId: 'w2' });
+      expect(
+        second.filter((r) => r.jobType === s.jobType).length,
+        'a lock held past the stale window was never reclaimed — a crashed worker strands the job',
+      ).toBe(1);
+    });
+
+    it('CRITICAL a lock held for LESS than the stale window is NOT reclaimable, in both. Without this the arm above is satisfied by an implementation that ignores locks entirely, which is two workers running the same job at once — the failure the lock exists to prevent.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      await enqueue(s, new Date(NOW.getTime() - 1 * MIN));
+
+      await s.repo.claimDue({ batchSize: 10, now: NOW, workerId: 'w1' });
+
+      const within = new Date(NOW.getTime() + SCHEDULED_JOB_STALE_LOCK_MS - 1_000);
+      const second = await s.repo.claimDue({ batchSize: 10, now: within, workerId: 'w2' });
+      expect(
+        second.filter((r) => r.jobType === s.jobType).length,
+        'a job still inside its lock window was claimed by a second worker',
+      ).toBe(0);
+    });
+
     it('CRITICAL under a backlog claimDue takes the OLDEST due jobs, in both. The real repo orders by run_at before applying the batch limit; the double truncated Map iteration and sorted what was left, so a job the iteration keeps passing over is not served late — nothing advances it, and it can starve while the queue drains around it.', async () => {
       if (!enabled()) return;
       const s = make();
