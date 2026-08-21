@@ -3884,3 +3884,62 @@ trio still has no shared contract, which is exactly the structure that would hav
 the repo was fixed. `webhooks-repo` remains the widest coverage gap on the V-1269 list.
 
 Suites: 11 files, 176 passed, `tsc` clean.
+
+---
+
+## V-1276 — the contract that would have caught V-1274c on the day the repo was fixed
+
+V-1274c closed by naming what was still missing: the three delivery-outcome writers were asserted on
+both sides, but as separate arms in separate files. That is the structure that let the divergence
+live. The counter semantics sat in a Drizzle-only integration test; the fence and the worker
+behaviour sat in unit arms driving the double. **Neither could see the other**, so when the Drizzle
+repo stopped counting retries as failed deliveries, every arm stayed green: the Drizzle test asserted
+the new behaviour, the double kept the old one, and both were right about themselves.
+
+`webhook-delivery-outcome-repo-contract.test.ts` runs SEVEN arms against both implementations:
+
+```
+the arrangement really yields an in_flight delivery on a zeroed endpoint
+a RETRY does not advance consecutive_failures
+a DLQ advances it exactly once
+a lifecycle of five retries then a DLQ counts as ONE failed delivery
+a SUCCESS zeroes it
+a late write from a stalled worker is a no-op once the row is finalised
+a write for a delivery nobody claimed is a no-op
+```
+
+The first is there because every other arm is about what happens to a CLAIMED row: an arrangement
+that quietly produced a pending one would make the two fence arms pass by describing the wrong
+situation, and the counter arms would be measuring a no-op. It asserts the setup, not the subject.
+
+**The arrangement is a subject seam rather than `claim()`, and the reason is the shared table.** Both
+invariants need an in_flight delivery, and claiming is the obvious way to get one. That is safe on
+the double, whose state is process-local, but `DrizzleWebhooksRepo.claim` takes due rows from the
+WHOLE `webhook_deliveries` table — it would claim and then finalise rows belonging to every other
+file running concurrently. So each subject arranges its own in_flight row (the double claims, Drizzle
+inserts straight to `in_flight`) and only the BEHAVIOUR under test crosses the shared interface.
+Everything the arms read — `findEndpointById`, `findDeliveryById` — is on `WebhooksRepo`, so no arm
+reaches around the interface to raw SQL.
+
+Mutation-proven by re-introducing the two defects V-1274c fixed, which is the only proof that
+matters for a contract written after the fact:
+
+```
+M9   restore the increment on the retry path   3 in-memory arms RED (retry, lifecycle,
+                                               unclaimed), drizzle GREEN
+M10  drop the in_flight fence                  2 in-memory arms RED (stale write, unclaimed),
+                                               drizzle GREEN
+```
+
+Both mutations printed a marker proving they landed before the suite ran.
+
+**Four pinned numbers moved, each measured rather than incremented.** `EXPECTED_TEST_FILES`
+2999 → 3000, `EXPECTED_TEST_FILES_ALL` 3166 → 3167, the prose "129 test files gate on DATABASE_URL"
+→ 130, and "this repo uses 171 of them" → 172. The 129 looked stale at first: the exact
+`skipIf(!process.env.CI && !process.env.DATABASE_URL)` string appears in only 128 files at HEAD. It
+is not stale — one file writes the same gate through local aliases as `skipIf(!CI && !DATABASE_URL)`,
+and counting every form gives exactly 129. Incrementing on the first grep would have written a wrong
+number into a gate whose whole job is to be exact.
+
+Full suite: 3167 files, 31279 passed | 16 skipped — the collected count matching the raised ratchet
+rather than merely exceeding it.
