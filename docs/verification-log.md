@@ -52208,3 +52208,55 @@ restored (source 0 dirty)                9 passed
 
 **Owed remaining: 24**, plus two named items: `platform-secrets::listMeta` from the V-1209
 measurement, and the webhook-secret validation divergence above.
+
+---
+
+## V-1211 — the last of the four, and a shape claim the type system does not enforce
+
+The sixth of the twenty-nine, closing the final ordering divergence the V-1209 sweep measured:
+
+```
+DrizzlePlatformSecretsRepo.listMeta   .orderBy(platformSecrets.name)
+InMemoryPlatformSecretsRepo.listMeta  [...this.meta.values()]        // Map insertion order
+```
+
+Demonstrated before fixing: the ordering arm red on the in-memory half, passed on Drizzle, then
+9 passed once the double sorted by name.
+
+**The fixture writes the z-name first**, because writing them alphabetically makes Map insertion
+order coincide with name order and the arm would pass against an implementation that never sorts.
+Third time this session the DIRECTION of a fixture decided whether an ordering arm could fail at
+all, after V-1209's backdate and V-1210's creation order. It is now a standing check rather than a
+lesson: write the fixture so the two candidate orders disagree, then run it against the unfixed
+implementation before fixing anything.
+
+**The second arm is the one worth more than the ordering.** This double's own header claims
+`listMeta` never exposes ciphertext, "same contract as the drizzle repo's metadata-only select".
+That is a claim about RUNTIME SHAPE, and `PlatformSecretMeta` not declaring the field does not
+enforce it: a `.select()` with no projection returns every column, and the extra key rides along
+behind a type asserting it cannot be there. `platform_secrets.ciphertext` holds the decryptable
+platform credentials. So the arm reads the actual keys of the returned objects and rejects anything
+matching `/cipher|secret|blob|payload|plaintext/i` — the same reason V-1204 refuses to trust
+`sql<number>`.
+
+Both implementations pass it today; there is no leak. The arm exists because the projection is the
+only thing preventing one, and nothing else in the suite was watching it.
+
+```
+M1  DRIZZLE loses its ORDER BY              1 failed | 8 passed
+M2  the DOUBLE loses its sort               1 failed | 8 passed
+M3  DRIZZLE selects every column            2 failed | 7 passed   (the shape arm among them)
+restored (source 0 dirty)                   9 passed
+```
+
+M3 is a crude mutation — injecting a bare `.select()` disturbs more than the projection, so it reds
+two arms rather than one. It is reported that way rather than as a clean single-arm kill.
+
+**Also pinned here**, because a contract is cheaper to write once than to revisit: `upsert` reports
+`created` then `updated` for the same name and actually replaces the stored ciphertext, and `remove`
+distinguishes removing something from removing nothing. Both are outcomes an operator reads as
+confirmation, and neither had a cross-implementation pin.
+
+**Owed remaining: 23.** All four divergences from the V-1209 sweep are now closed. The webhook-secret
+validation divergence from V-1210 stays open with its measured cost: 43 tests across six files,
+72 secret literals, several invalid on purpose.

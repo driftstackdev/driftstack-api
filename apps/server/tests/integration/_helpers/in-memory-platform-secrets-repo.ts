@@ -14,7 +14,9 @@ export class InMemoryPlatformSecretsRepo implements PlatformSecretsRepo {
   private readonly meta = new Map<string, PlatformSecretMeta>();
 
   listMeta(): Promise<PlatformSecretMeta[]> {
-    return Promise.resolve([...this.meta.values()]);
+    // V-1211 — mirrors DrizzlePlatformSecretsRepo's `ORDER BY name`. Map insertion order agreed
+    // with the real repo only while secrets happened to be written alphabetically.
+    return Promise.resolve([...this.meta.values()].sort((a, b) => a.name.localeCompare(b.name)));
   }
 
   getCiphertext(name: string): Promise<Buffer | null> {
