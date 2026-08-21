@@ -1773,3 +1773,51 @@ exactly that instant through the shared interface. Third contract running to tha
 `tsc -p tsconfig.test.json` was clean first time — this time verified by exit code.
 
 **Owed remaining: 5.**
+
+---
+
+## V-1235 — the string that TypeScript says is a number, caught at runtime
+
+Twenty-fifth of the twenty-nine. `countByTargetSince` is what the SLA report reads — ok versus
+failed probes per target over a window, plus when each target last failed. Those numbers become an
+uptime figure on a page customers read to decide whether the platform is behaving.
+
+**The first property is invisible to TypeScript.**
+
+```
+Drizzle  count(*) filter (where ok = true)  ->  declared sql<string>, then Number(...)
+double   cur.okCount += 1                   ->  a number all along
+```
+
+The SQL count is a bigint and postgres-js returns bigints as STRINGS. The repo is honest about it —
+the annotation says `sql<string>` and the mapping calls `Number()` — but that honesty is a
+convention, not a guarantee. Drop the conversion and the field is TYPED `number` while HOLDING
+`"7"`; the first arithmetic concatenates, `okCount + failCount` becomes `"70"`, and the uptime
+percentage derived from it is nonsense that still renders.
+
+So the arm checks `typeof` at RUNTIME, which is the only place the difference exists. M1 confirms
+it: replacing `Number(r.okCount)` with a cast produced `expected 'string' to be 'number'` — a defect
+no type checker in this repo can see, caught by an assertion about the value rather than the type.
+This is V-1204 from the consuming side: that guard requires the cast in the SQL, this one requires
+the conversion to survive to the caller.
+
+**Last-failure is not last-probe.** Computed as `max(probed_at)` overall rather than
+`max(probed_at) filter (where ok = false)`, a target that failed and then RECOVERED reports its
+recovery moment as the last failure — the incident reads as still happening after it is over. M2 and
+M3 are the matched pair on that, one per implementation, and M3 reds a second arm too: the same
+mutation gives a never-failed target a phantom failure time.
+
+```
+M1  DRIZZLE drops Number()                 "okCount is not a number at runtime"  1 failed | 12 passed
+M2  DRIZZLE lastFailureAt = last probe     "followed the recovery"               1 failed | 12 passed
+M3  the DOUBLE tracks any probe            same arm + phantom failure time       2 failed | 11 passed
+M4  the DOUBLE boundary >= becomes >       "not inclusive-start"                 1 failed | 12 passed
+restored (source 0 dirty)                                                        13 passed
+```
+
+`recordProbe` takes `probedAt` as a parameter, so unlike the previous four contracts the timestamps
+are chosen outright — every boundary arm is exact without reading a stamp back. Worth noting because
+it is the third distinct arrangement now: some repos let the caller choose the time, some hand the
+stamp back, and some do neither and force a DB-only arm.
+
+**Owed remaining: 4.**
