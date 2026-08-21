@@ -1935,3 +1935,81 @@ DB-only-arm, and now unscoped-so-measure-the-delta.
 Ratchets: 2989 → 2990, 3156 → 3157, conditional skips 166 → 167.
 
 **Owed remaining: 3.**
+
+## V-1238 — two lists of the same two strings
+
+Twenty-seventh of the twenty-nine. `AdminBillingRepo.countActiveSubscriptionsByTier` produces the
+paying-customer count per tier on the admin cockpit. The Drizzle repo filtered on a module-private
+`ACTIVE_SUBSCRIPTION_STATUSES = ['active', 'trialing']`; the in-memory double restated the same set
+as `s.status === 'active' || s.status === 'trialing'`.
+
+Nothing is wrong today — the lists agree. Nothing would have reported the day they stopped. Stripe
+keeps billing a `past_due` subscription through its retry window, so a third billed status is a
+plausible edit rather than a hypothetical one, and making it would have moved the real revenue
+figure while every test standing on the double went on asserting the old one and agreeing with
+itself. Exported the constant; the double reads it.
+
+**The contract derives both sets rather than naming them.** Billed comes from the constant, unbilled
+is `subscriptionStatus.enumValues` minus it, and `it.each` covers each. A status added to either
+enum extends the contract on its own instead of quietly falling outside it — a test that hardcoded
+'active' and 'trialing' would have been a third copy of the list this entry is about.
+
+`it.each` over an EMPTY array registers zero tests and reports green, so a derivation that produced
+nothing would look like a passing contract rather than an absent one. Two ungated arms guard that:
+both sets non-empty, and the two together partitioning the enum exactly.
+
+```
+M1  double: only 'active' counts             the trialing arm                2 failed | 25 passed
+M2  double: an unbilled status counts         the canceled/past_due arms      5 failed | 22 passed
+M3  double: stops zero-filling tiers          enum-key + attribution         11 failed | 16 passed
+M4  DRIZZLE: drop the ::int cast              "not a number at runtime"       1 failed | 26 passed
+M5  DRIZZLE: drop the status filter           six unbilled arms               6 failed | 21 passed
+restored (both files 0 dirty, sha equal)                                     27 passed
+```
+
+## V-1239 — a test that corrupted the prices it was checking
+
+Twenty-eighth of the twenty-nine. `PricingRepo` is two methods over a table whose primary key is
+`tier`, so a re-edit must REPLACE rather than accumulate — on the Drizzle side that is the
+`ON CONFLICT (tier)` target, on the double it is `Map.set`. Six arms, including a price of ZERO
+surviving as zero rather than being swallowed by a truthiness check, which is the value a comped
+tier has and the value a `|| default` silently replaces with the old number.
+
+Neither side orders `listAll`, and no arm asserts an order: `pricing-repo.ts::listAll` is already in
+the reviewed-unordered list, because every consumer folds the rows into a map keyed by the primary
+key. Asserting an order would freeze a property the repo does not promise.
+
+**The first draft corrupted the local database, and the second draft hid it.** `pricing` is a
+seeded global config table, so the fixture snapshots it and restores it. That restore shared a
+connection pool with the repo under test, deadlocked, and was killed by vitest's 10-second hook
+timeout — leaving `api_starter` at 4900 and `api_scale` at 19900 where migration 0067 seeds 14900
+and 149900. The next run then snapshotted the corrupted values and faithfully restored THEM, so the
+damage presented as a clean pass, and the row COUNT was right the whole time.
+
+It was caught by comparing the values against the migration rather than counting rows. Repaired all
+six tiers to their seeded values and verified.
+
+Three fixes, in order of how much they matter:
+
+1. The contract now writes to `free` and `enterprise` — the two tiers migration 0067 does NOT seed.
+   The worst a dead hook can now leave is two rows that were never there, instead of two prices
+   that are wrong and look right. Choosing the blast radius beats restoring it correctly.
+2. The restore closes the repo's pool FIRST and runs on a connection of its own, so it cannot queue
+   behind connections that pool never frees.
+3. The snapshot/restore stays as well. Defence in depth on a global config table is cheap.
+
+```
+M6  double: a zero price is dropped           "a zero price was dropped"      1 failed | 12 passed
+M7  DRIZZLE: re-edit does nothing on conflict  the replace/zero/tier arms     4 failed |  9 passed
+restored (both files 0 dirty, sha equal)                                     13 passed
+```
+
+**Do not create test files while the suite is running.** The full run this turn reported
+`2 failed | 3155 passed (3157)` — collection matched the ratchet exactly, and both failures were
+guards that count test files ON DISK at execution time, reacting to two contract files written
+while the run was in flight. Real breakage and this artefact look identical in the summary; the
+only way to tell them apart is to re-run the two guards once the tree has stopped moving. They pass.
+
+Ratchets: 2990 → 2992, 3157 → 3159, DATABASE_URL gate 124 → 127, conditional skips 167 → 169.
+
+**Owed remaining: 1** — `AccountAuthRepo`.

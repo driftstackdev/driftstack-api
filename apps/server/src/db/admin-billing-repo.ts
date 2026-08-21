@@ -8,7 +8,15 @@ import type { Database } from './client.js';
 import { subscriptions } from './schema.js';
 
 // Subscription statuses Stripe actively bills — the "paying" set.
-const ACTIVE_SUBSCRIPTION_STATUSES = ['active', 'trialing'] as const;
+//
+// V-1238 — exported so the in-memory double can read THIS list rather than keep
+// its own copy of it. The double used to hardcode `status === 'active' ||
+// status === 'trialing'`, which agreed with this line only for as long as nobody
+// edited either one. Adding a billed status here (Stripe grants `past_due` a
+// retry window in which the subscription is still charged) would have changed the
+// revenue figure the admin cockpit shows while every test using the double went
+// on reporting the old number, and agreeing with itself.
+export const ACTIVE_SUBSCRIPTION_STATUSES = ['active', 'trialing'] as const;
 
 // W197 — only the `db` handle is read; narrow the dependency so e2e
 // fixtures stay composable without the full Database envelope.
