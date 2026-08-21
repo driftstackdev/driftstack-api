@@ -1495,3 +1495,76 @@ restored (source 0 dirty)                                        10 passed
 M2 and M3 are the matched pair. M1 can only exist on one side, and says so.
 
 **Owed remaining: 10.**
+
+---
+
+## V-1230 — a fixture bug wearing a finding's clothes
+
+Twentieth of the twenty-nine. Two properties that fail in opposite directions, and one lesson about
+how I nearly misread my own test.
+
+**Visibility is a disclosure boundary.** `incidents.public` decides whether an incident reaches the
+public status page, and `get(id, { publicOnly })` is what stops an internal incident — carrying
+which customer tripped it, which node, what the operator suspects — from reaching an unauthenticated
+reader who guesses an id. The status page is the one surface with no authentication in front of it,
+so that predicate is the whole control.
+
+**The create invariant fails the other way.** `createWithInitialUpdate` writes the incident and its
+first update together, so an incident never exists with zero updates. The Drizzle repo treats a
+missing initial update as unreachable and throws — right posture for a state nothing should produce,
+and also the reason nothing ever checks that the write produces one. A double that created the
+incident and forgot the update satisfies every test that only reads the incident, and the status page
+renders an incident with no story attached.
+
+**The near-miss.** The first run reported `expected +0 to be 1` on exactly that arm — the in-memory
+double appearing to create an incident with no initial update, which is the defect the arm was
+written to catch. It was my fixture. `createWithInitialUpdate` returns
+`{ outcome, incident, update }`, not the incident row, so `row.id` was `undefined` and
+`listUpdates(undefined)` returned nothing. The double writes the update correctly on line 83.
+
+Worth recording because the failure was indistinguishable from a real find, and the tempting move
+was to write it up as one. The check that settled it took one grep of the double's body. **A red arm
+is a claim about the code that has to be verified exactly as carefully as a green one** — the same
+discipline as V-1188, where a composite primary key made a "hole" unreachable, arriving from the
+opposite direction.
+
+`tsc` did NOT catch this one, which is worth stating after two entries praising it: the shape error
+was inside an inferred return type the arm then destructured, not at an annotated boundary. Running
+`tsc` first is a filter, not a proof.
+
+```
+M1  DRIZZLE get() drops the publicOnly predicate       1 failed | 10 passed
+M2  the DOUBLE get() drops its publicOnly guard        1 failed | 10 passed
+M3  the DOUBLE creates without its initial update      2 failed | 9 passed
+restored (source 0 dirty)                              11 passed
+```
+
+M1 and M2 are the matched pair on the disclosure boundary. M3 reds both the create arm and the
+scoping arm, because the scoping arm asserts the incident's own update is present — reported as it
+behaved rather than as a single-arm kill.
+
+Two other fixture errors the first run surfaced: `degraded` is not a member of `incident_severity`
+(`minor | major | outage`), and the update body field is `message`, not `body`. Both were caught by
+Postgres and by an assertion respectively, not by the type checker.
+
+**A run-environment finding, because it cost more than the contract did.** Verifying this entry
+took six full-suite attempts. The first hit the 10-minute tool cap and was SIGTERMed, which orphaned
+a Postgres transaction holding `SELECT … FOR UPDATE` — every later test touching that row blocked,
+and one reported a 950-second duration. I cleared that, then made it worse: `pkill -f vitest`
+matched the shell wrapper and NOT the re-parented node process, so a 32-minute-old suite kept running
+while I started another. Two full suites against one database on a 16 GB machine drove swap to
+3.58 GB of 5.12 GB, and every subsequent run failed with `[vitest-pool]: Failed to start forks
+worker` — 14 such errors matching exactly 14 ailed\ files, which are starvation and not
+assertions.
+
+The fix that worked is worth keeping: **`--maxWorkers=4` completes the suite in 294s with zero
+starvation**, where default parallelism could not finish at all under memory pressure. Baseline at
+full parallelism on a healthy machine is ~197s, so the constrained run costs about 50% wall-clock and
+buys reliability. `--minWorkers` is not a valid flag in vitest 4.1.10 and fails the run outright.
+
+Two operational rules from this: verify `pkill` by PID before starting another suite, because a run
+you think you stopped will halve your database throughput and poison every read after it; and never
+read `Failed to start forks worker` as a test failure — count it, and if the count matches the
+failed-file count, the machine is the defect.
+
+**Owed remaining: 9.**
