@@ -2468,3 +2468,54 @@ Class status: three page-size pairs closed (V-1244, V-1245, V-1246), the billed-
 (V-1238), the api-key throttle (V-1240), the centi scale (V-1241), and now the stale-lock window.
 Every remaining named constant in the doubles is a unit conversion. No ratchet change — arms added
 to an existing file.
+
+## V-1248 — a measurement that can tell interference from a defect
+
+V-1245 fixed the `countCreatedSince` flake by anchoring its window past every other fixture's
+`now()`, and recorded that `countByStatus` and `countByTier` share the shape with no time parameter
+to anchor against. Closing that.
+
+There is no way to scope those two: they count the whole table. But the interference is
+DETECTABLE, which is nearly as good. A clean measurement has a known shape — the bucket I seeded
+moves by exactly what I seeded, and every other bucket does not move at all. Any other vector means
+somebody else wrote inside the window, so the reading is discarded and the arm re-runs on fresh
+fixtures, up to five times.
+
+Two side effects worth having:
+
+- The arms got STRONGER, not just steadier. The tier arm used to check two buckets — the seeded
+  one and one control. It now asserts the whole eight-tier vector, so an implementation that
+  dribbles a count into a third tier is caught rather than ignored.
+- A failure now carries the observed delta, which the old `toBe(1)` did not.
+
+**My first version of the failure message was itself the defect this contract exists to catch.** It
+said, unconditionally, that a concurrent writer had moved a bucket inside every window. Mutating the
+double to miscount — a real, deterministic defect — produced that message, blaming the database for
+something the fixture had done. Exactly the misattribution class: a message asserting a cause it
+cannot know.
+
+It can know, though, and the attempts contain the evidence. A dirty vector identical across all five
+attempts is deterministic, and no concurrent writer reproduces the same interference five times
+running; a vector that varies is interference. The helper now reports which:
+
+```
+M1  double counts every account under one tier   "the counter is MISCOUNTING"   1 failed | 24 passed
+M2  double ignores the status it was asked for   "the counter is MISCOUNTING"   1 failed | 24 passed
+M3  double stops zero-filling the tier map       the structural arm             2 failed | 23 passed
+restored (0 dirty, sha equal)                                                   25 passed
+```
+
+M1 and M2 are the ones that matter here: both are genuine deterministic defects, and both are now
+reported as miscounts rather than as a busy database. Verified over four consecutive nine-file runs.
+
+**A process note, because it nearly shipped wrong.** The first attempt to rewrite the helper failed
+its own occurrence assert — Prettier had reflowed the block after I wrote it, so the match string
+was stale — and the three runs AFTERWARDS were exercising the old helper while appearing to confirm
+the new one. The assert caught it; without one, `s.replace(old, new)` silently changing nothing
+would have produced three green runs that proved nothing about the code I thought I had written.
+Re-done by line number against the reflowed text.
+
+No ratchet change: no new file, `it(` count unchanged at 13.
+
+Still open: `DrizzleAdminAuditLogRepo`'s cursor-anchor lookup is unscoped where
+`profile-snapshots-repo.ts` documents why it scopes its own.

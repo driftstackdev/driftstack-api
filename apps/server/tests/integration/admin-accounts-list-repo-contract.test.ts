@@ -173,6 +173,59 @@ function drizzleSubject(): Subject {
   };
 }
 
+/**
+ * V-1248 — `countByStatus` and `countByTier` take no filter at all: they count the whole table.
+ * A delta measured around a seed therefore races every other test file writing to `accounts`,
+ * and unlike `countCreatedSince` there is no time parameter to anchor the window past them.
+ *
+ * What CAN be done is detect the interference rather than hope it away. A clean measurement has
+ * a known shape — the bucket I seeded moves by exactly the amount I seeded, and every other
+ * bucket does not move at all. Any other vector means somebody else wrote inside my window, so
+ * the reading is discarded and the whole arm re-run on fresh fixtures.
+ *
+ * After `ATTEMPTS` dirty readings it FAILS, and the message carries the observed vector — which
+ * is the difference between "this counter is broken" and "this database was too busy to measure",
+ * a distinction the previous version could not make and reported as the former.
+ */
+const ATTEMPTS = 5;
+
+async function cleanDelta<K extends string>(
+  read: () => Promise<Record<K, number>>,
+  seed: () => Promise<void>,
+  expected: Partial<Record<K, number>>,
+): Promise<void> {
+  const seen: string[] = [];
+  for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
+    const before = await read();
+    await seed();
+    const after = await read();
+
+    const delta = {} as Record<K, number>;
+    for (const k of Object.keys(after) as K[]) delta[k] = after[k] - before[k];
+
+    const dirty = (Object.keys(delta) as K[]).filter((k) => delta[k] !== (expected[k] ?? 0));
+    if (dirty.length === 0) return;
+    seen.push(
+      dirty.map((k) => `${k}: ${String(delta[k])} (want ${String(expected[k] ?? 0)})`).join(', '),
+    );
+  }
+
+  // Which of the two it is can be READ OFF the attempts rather than guessed. A dirty vector that
+  // is identical every time is deterministic, so it is the counter miscounting; one that varies
+  // is another writer landing inside the window. Saying "a concurrent writer moved a bucket"
+  // unconditionally would blame the database for a genuine defect — the exact misattribution
+  // this contract exists to catch elsewhere, and what the first version of this message did.
+  const stable = seen.every((v) => v === seen[0]);
+  throw new Error(
+    stable
+      ? `the counter is MISCOUNTING: the same wrong delta appeared in all ${String(ATTEMPTS)} ` +
+          `attempts, which no concurrent writer would reproduce exactly. Delta: ${seen[0] ?? ''}`
+      : `no clean reading in ${String(ATTEMPTS)} attempts. These counters are unfiltered and ` +
+          `table-wide, and the deltas VARIED between attempts, so another writer landed inside ` +
+          `every measurement window: ${seen.join(' | ')}`,
+  );
+}
+
 function adminAccountsListContract(
   label: string,
   make: () => Subject,
@@ -332,14 +385,23 @@ function adminAccountsListContract(
     it('CRITICAL countByStatus counts only the status asked for, in both. It feeds the suspended-account figure on the staff overview, and folding statuses together reports a healthy platform as one in trouble or the reverse.', async () => {
       if (!enabled()) return;
       const s = make();
-      const before = await s.repo.countByStatus('suspended');
-      await single(s, { createdAt: at(0), status: 'active' });
-      await single(s, { createdAt: at(1), status: 'suspended' });
+      const STATUSES = ['active', 'suspended', 'deleted'] as const;
 
-      expect(
-        (await s.repo.countByStatus('suspended')) - before,
-        'the status filter did not scope the count',
-      ).toBe(1);
+      // One active and one suspended account: the suspended bucket must move by one and the
+      // active bucket by one, and `deleted` must not move at all. Asserting the whole vector
+      // is what makes the arm about SCOPING rather than about counting.
+      await cleanDelta(
+        async () => {
+          const out = {} as Record<(typeof STATUSES)[number], number>;
+          for (const st of STATUSES) out[st] = await s.repo.countByStatus(st);
+          return out;
+        },
+        async () => {
+          await single(s, { createdAt: at(0), status: 'active' });
+          await single(s, { createdAt: at(1), status: 'suspended' });
+        },
+        { active: 1, suspended: 1 },
+      );
     });
 
     it('CRITICAL countByTier reports EVERY tier in the enum, including tiers no account holds, in both. The overview renders one row per key it is given, so a tier missing from the map disappears from the page entirely rather than showing a zero — and a tier added to the enum later must appear without anyone remembering to add it here.', async () => {
@@ -359,16 +421,17 @@ function adminAccountsListContract(
     it('CRITICAL countByTier attributes an account to its OWN tier, in both. Without this the zero-fill arm above is satisfied by a map of eight zeroes that never counts anything.', async () => {
       if (!enabled()) return;
       const s = make();
-      const before = await s.repo.countByTier();
-      await single(s, { createdAt: at(0), tier: 'agency_manual' });
-      const after = await s.repo.countByTier();
 
-      expect(
-        after.agency_manual - before.agency_manual,
-        'the seeded account was not counted under its own tier',
-      ).toBe(1);
-      expect(after.enterprise - before.enterprise, 'it was also counted under another tier').toBe(
-        0,
+      // The whole tier vector, not just two buckets: the seeded tier moves by one and every
+      // other tier — all seven of them — must not move at all. That is a stronger statement
+      // than the old pair of assertions, and it is also what makes an interfered-with reading
+      // recognisable rather than indistinguishable from a real miscount.
+      await cleanDelta(
+        () => s.repo.countByTier(),
+        async () => {
+          await single(s, { createdAt: at(0), tier: 'agency_manual' });
+        },
+        { agency_manual: 1 },
       );
     });
   });
