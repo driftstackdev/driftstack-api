@@ -58,8 +58,8 @@ describe('W446.B apps/server/src/db/profiles-repo.ts content parity', () => {
     expect(body).toContain('wrapProfileDek,');
   });
 
-  it('DEFAULT_PAGE = 50; MAX_PAGE = 100 constants', () => {
-    expect(body).toMatch(/const DEFAULT_PAGE = 50;\s*\n?\s*const MAX_PAGE = 100;/);
+  it('DEFAULT_PAGE = 50; MAX_PAGE = 100 constants, and both are EXPORTED. V-1244 — the in-memory double imports these rather than restating the numbers, so the export keyword is load-bearing: drop it and the double falls back to a private copy that agrees only until someone changes the page size here.', () => {
+    expect(body).toMatch(/export const DEFAULT_PAGE = 50;\s*\n?\s*export const MAX_PAGE = 100;/);
   });
 
   it('toRecord: full ProfileRecord (id + accountId + name + archetype + description + folder + tags + icon + note + lastUsedAt + sizeBytes + lastSavedAt + created/updated_at + deletedAt)', () => {

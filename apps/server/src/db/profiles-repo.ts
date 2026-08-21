@@ -28,8 +28,18 @@ import {
   wrapProfileDek,
 } from '../lib/profile-key-hierarchy.js';
 
-const DEFAULT_PAGE = 50;
-const MAX_PAGE = 100;
+// V-1244 — exported so the in-memory double reads THESE numbers rather than keeping its
+// own `Math.min(args.limit ?? 50, 100)`. Naming them here was already a decision that the
+// page size should have one home; the fixture never got the message, so raising MAX_PAGE
+// would have served larger pages in production while every test on the double went on
+// asserting the old cap, and agreeing with itself.
+//
+// Deliberately NOT shared with the admin-accounts or profile-snapshots listings, which
+// carry the same two numbers today. Those are separate product limits that happen to
+// coincide; one constant across all three would mean raising the customer profile page
+// silently raised the staff account browser too.
+export const DEFAULT_PAGE = 50;
+export const MAX_PAGE = 100;
 const MAX_PROFILE_DEK_MIGRATION_BATCH = 500;
 
 // L4b recycle bin — every customer-facing read path excludes soft-deleted

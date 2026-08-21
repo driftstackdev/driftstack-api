@@ -9,6 +9,7 @@ import type {
   ProfileUpdates,
   ProfilesRepo,
 } from '../../../src/services/profiles.js';
+import { DEFAULT_PAGE, MAX_PAGE } from '../../../src/db/profiles-repo.js';
 
 export class InMemoryProfilesRepo implements ProfilesRepo {
   // L4b — rows carry deletedAt (NULL = live, Date = trashed), mirroring the
@@ -154,7 +155,11 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
   }
 
   list(args: ListProfilesArgs): Promise<ListProfilesPage> {
-    const limit = Math.min(args.limit ?? 50, 100);
+    // V-1244 — the page size is read from DrizzleProfilesRepo rather than restated. It
+    // used to be `Math.min(args.limit ?? 50, 100)`: the same two numbers the repo had
+    // already bothered to NAME, copied into the fixture where a change to either would
+    // never reach them.
+    const limit = Math.min(args.limit ?? DEFAULT_PAGE, MAX_PAGE);
     // FIX 3 — resolve the cursor keyset POSITION against the account's full
     // ordered set (live + trashed), mirroring the prod repo dropping the
     // notDeleted filter on the cursor-anchor lookup. The cursor id is the prior

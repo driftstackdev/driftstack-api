@@ -16,6 +16,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { InMemoryProfilesRepo } from '../integration/_helpers/in-memory-profiles-repo.js';
+import { DEFAULT_PAGE, MAX_PAGE } from '../../src/db/profiles-repo.js';
 
 const ACC = 'acc_boundary';
 const NEW = (name: string) => ({
@@ -93,5 +94,30 @@ describe('FIX 3 — DrizzleProfilesRepo.list trashed-boundary cursor (in-memory 
     // (boundaries that got trashed after being returned are still in `collected`
     // because they were returned in `data` BEFORE being trashed as a cursor).
     expect(collected).toEqual(expectedLiveDesc);
+  });
+
+  // V-1244 — the page size, which the double used to restate as `Math.min(args.limit ?? 50, 100)`.
+  // These arms import the repo's constants rather than naming 50 and 100, so they follow the page
+  // size instead of freezing it. What they pin is the WIRING: that the double clamps to the repo's
+  // MAX_PAGE and defaults to the repo's DEFAULT_PAGE, whatever those are. Proved by setting the
+  // repo constant to a different number and putting the literal back in the double — the pair of
+  // edits it would take to reintroduce the drift — and watching these fail.
+  it('CRITICAL the double clamps an over-large page to the repo MAX_PAGE. A fixture with its own cap serves a different page size than production the moment either number moves, and every test standing on it keeps asserting the old one.', async () => {
+    const repo = new InMemoryProfilesRepo();
+    for (let i = 0; i < MAX_PAGE + 1; i += 1) await repo.insert(NEW(`p-${String(i)}`));
+
+    const page = await repo.list({ accountId: ACC, limit: MAX_PAGE + 500 });
+    expect(page.data.length, 'the double did not clamp to the repo page cap').toBe(MAX_PAGE);
+    expect(page.hasMore, 'the clamped page did not report more to come').toBe(true);
+  });
+
+  it('CRITICAL the double falls back to the repo DEFAULT_PAGE when no limit is given. The default decides what an unparameterised list returns, so a fixture disagreeing with production means every such test measures a page size no customer ever sees.', async () => {
+    const repo = new InMemoryProfilesRepo();
+    for (let i = 0; i < DEFAULT_PAGE + 1; i += 1) await repo.insert(NEW(`d-${String(i)}`));
+
+    const page = await repo.list({ accountId: ACC });
+    expect(page.data.length, 'the double did not default to the repo page default').toBe(
+      DEFAULT_PAGE,
+    );
   });
 });

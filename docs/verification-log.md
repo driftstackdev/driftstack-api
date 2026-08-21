@@ -2261,3 +2261,60 @@ Class now closed: 6 sites converted, 3 already correct, 1 guard, and the shared 
 its own arms in V-1242.
 
 Ratchets: 2995 → 2996, 3162 → 3163.
+
+## V-1244 — a constant that was named to have one home, and a fixture that never got the message
+
+The restated-constant class again (V-1238 billed statuses, V-1240 throttle window, V-1241 centi
+scale), found this time by enumerating rather than by stumbling. Scanning the doubles for numeric
+literals, with comments stripped, turned up the page size:
+
+```
+src/db/profiles-repo.ts           const DEFAULT_PAGE = 50; const MAX_PAGE = 100;   NAMED
+_helpers/in-memory-profiles-repo  Math.min(args.limit ?? 50, 100)                  copied
+
+src/db/admin-accounts-repo.ts     Math.min(args.limit ?? 50, 100)                  literal
+_helpers/in-memory-admin-accounts Math.min(args.limit ?? 50, 100)                  literal
+
+src/db/profile-snapshots-repo.ts  Math.min(args.limit ?? 50, 100)                  literal
+_helpers/in-memory-profile-snaps  Math.min(args.limit ?? 50, 100)                  literal
+```
+
+**Profiles is the sharp one, and this entry fixes it.** That repo had already gone to the trouble of
+NAMING both numbers — which is a decision that the page size should have one home — and the fixture
+still carried a copy. Raising `MAX_PAGE` would have served larger pages in production while every
+test standing on the double went on asserting the old cap and agreeing with itself. Exported; the
+double imports them.
+
+**Deliberately not one shared constant across all three.** They carry the same two numbers today,
+but a customer profile page, a staff account browser and a snapshot list are separate product
+limits that merely coincide. Folding them together would mean raising one silently raised the other
+two — a worse defect than the one being fixed, and harder to see.
+
+```
+N1  drop the `export` keyword                      the content-parity pin    1 failed | 15 passed
+N2  repo MAX_PAGE = 7 AND the double back to 100   the clamp arm             1 failed |  3 passed
+restored (both files 0 dirty, sha equal)                                     16 passed / 4 passed
+```
+
+N2 is deliberately the PAIR of edits it would take to reintroduce the drift, because either alone
+proves less: moving the constant alone moves the double with it (that is the fix working), and
+restoring the literal alone happens to agree with the current value. Only both together separate
+them, which is exactly the situation the old code was one edit away from.
+
+**The two arms import the constants rather than naming 50 and 100.** They pin the WIRING — that the
+double clamps to whatever the repo's `MAX_PAGE` is — not the values, so raising the page size moves
+the arms with it instead of leaving a third copy to update.
+
+The `export` is now load-bearing, so the content-parity pin was updated to require it, in this same
+commit, with N1 as its negative.
+
+**Still owed on this class, enumerated not forgotten:** the admin-accounts and profile-snapshots
+pairs each restate `50, 100` in BOTH repo and double. Same drift risk, one step earlier — nothing is
+named on either side. Fixing them means introducing constants and updating roughly six pins that
+quote `Math.min(args.limit ?? 50, 100)` verbatim across four guard files. Worth doing, and larger
+than it looks; recorded here so it is a queued item rather than a thing I noticed and dropped.
+
+Also recorded from V-1243 and still open: `DrizzleAdminAuditLogRepo`'s cursor-anchor lookup is
+unscoped where `profile-snapshots-repo.ts` documents why it scopes its own.
+
+No ratchet change: two arms added to an existing file, no new file.
