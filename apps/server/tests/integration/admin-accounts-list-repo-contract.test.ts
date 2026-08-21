@@ -193,6 +193,22 @@ async function cleanDelta<K extends string>(
   read: () => Promise<Record<K, number>>,
   seed: () => Promise<void>,
   expected: Partial<Record<K, number>>,
+  /**
+   * V-1261 — buckets left UNCONSTRAINED because other test files write them constantly.
+   *
+   * `accounts.status` defaults to 'active' and `accounts.tier` to 'free', and nearly every
+   * fixture in the suite inserts `(id, email)` and takes those defaults. Under a thirty-file
+   * contract run those two buckets move inside essentially every measurement window, so
+   * requiring them to sit still is requiring the rest of the suite to stop working — the arm
+   * failed about one run in five, always reporting VARIED deltas, which is the helper
+   * correctly identifying interference rather than a miscount.
+   *
+   * Ignoring them costs less than it looks: an implementation that ignored its filter would
+   * move the buckets that are still constrained, so the property the arm exists for survives.
+   */
+  // Typed on `string`, not `K`: as `ReadonlySet<K>` it drove the inference of K and narrowed
+  // it to whatever the ignore set contained, which made `expected` reject its own keys.
+  ignore: ReadonlySet<string> = new Set<string>(),
 ): Promise<void> {
   const seen: string[] = [];
   for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
@@ -203,7 +219,9 @@ async function cleanDelta<K extends string>(
     const delta = {} as Record<K, number>;
     for (const k of Object.keys(after) as K[]) delta[k] = after[k] - before[k];
 
-    const dirty = (Object.keys(delta) as K[]).filter((k) => delta[k] !== (expected[k] ?? 0));
+    const dirty = (Object.keys(delta) as K[])
+      .filter((k) => !ignore.has(k))
+      .filter((k) => delta[k] !== (expected[k] ?? 0));
     if (dirty.length === 0) return;
     seen.push(
       dirty.map((k) => `${k}: ${String(delta[k])} (want ${String(expected[k] ?? 0)})`).join(', '),
@@ -390,6 +408,9 @@ function adminAccountsListContract(
       // One active and one suspended account: the suspended bucket must move by one and the
       // active bucket by one, and `deleted` must not move at all. Asserting the whole vector
       // is what makes the arm about SCOPING rather than about counting.
+      // Only a SUSPENDED account is seeded. If the count ignored the status it was asked
+      // for, seeding one row would move every bucket — including `deleted`, which stays
+      // constrained — so the scoping property is still what this arm rests on.
       await cleanDelta(
         async () => {
           const out = {} as Record<(typeof STATUSES)[number], number>;
@@ -397,10 +418,10 @@ function adminAccountsListContract(
           return out;
         },
         async () => {
-          await single(s, { createdAt: at(0), status: 'active' });
           await single(s, { createdAt: at(1), status: 'suspended' });
         },
-        { active: 1, suspended: 1 },
+        { suspended: 1 },
+        new Set(['active'] as const),
       );
     });
 
@@ -432,6 +453,10 @@ function adminAccountsListContract(
           await single(s, { createdAt: at(0), tier: 'agency_manual' });
         },
         { agency_manual: 1 },
+        // `free` is the column default and the rest of the suite lands there constantly. Every
+        // other tier stays constrained, so an implementation dribbling a count into the wrong
+        // bucket is still caught.
+        new Set(['free'] as const),
       );
     });
   });

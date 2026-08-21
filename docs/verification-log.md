@@ -3071,3 +3071,48 @@ did. A failure count is not an attribution.
 
 Guarded classes now: positional cursors (V-1243), aliasing reads (V-1255), hand-rolled comment
 stripping (V-1258), restated policy numbers (here). Ratchets 2998 → 2999, 3165 → 3166.
+
+## V-1261 — running all thirty contracts together found a flake in the one that guards against flakes
+
+With every class guarded, the next thing worth verifying was the campaign's own central claim: that
+each contract really does drive BOTH implementations. Running all thirty together confirms it —
+thirty reachability arms, a hundred and eighty Drizzle describe blocks, 394 tests — and turned up a
+failure that does not appear when the files run alone.
+
+`countByStatus counts only the status asked for` failed about one run in five. That is V-1248's own
+arm, the one written to make an unscopeable counter measurable.
+
+**Its attribution logic was right, which is how the cause was found.** The message read: deltas
+VARIED between attempts, so another writer landed inside every measurement window — not
+MISCOUNTING. The helper correctly distinguished interference from a defect under real interference,
+which is the property V-1248 built it for and could only test synthetically at the time.
+
+**The cause is the column defaults.** `accounts.status` defaults to `'active'` and `accounts.tier`
+to `'free'`, and nearly every fixture in the suite inserts `(id, email)` and takes them. Under a
+thirty-file run those two buckets move inside essentially every window, so five attempts is not
+enough and never would be — requiring them to sit still is requiring the rest of the suite to stop
+working.
+
+So `cleanDelta` gained an `ignore` set, and the two arms leave exactly those two buckets
+unconstrained. Everything else stays constrained, which is what preserves the property:
+
+```
+M1  countByStatus ignores its filter        caught — `deleted` still constrained   MISCOUNTING
+M2  countByTier files everything as 'free'  caught — agency_manual never moves     MISCOUNTING
+```
+
+M2 is the one worth reading twice. It hides the miscount in the bucket the arm no longer watches,
+and the arm still catches it — because the seeded tier failing to move is itself the signal. The
+ignore list removes a constraint, not the assertion.
+
+Eight consecutive thirty-file runs clean, from roughly one failure in five.
+
+**A typing detail that cost a compile.** `ignore: ReadonlySet<K>` drove the inference of `K` and
+narrowed it to whatever the ignore set contained, so `expected` then rejected its own keys. Typed on
+`string` it stops participating in inference. Worth a line because the error pointed at the
+`expected` literal, several lines from the parameter that caused it.
+
+**On the general shape.** This is the third time a measurement of mine has been correct alone and
+wrong in company — V-1245's negative delta, V-1248's retry, and now the retry's own ceiling. Each
+was found by running more things together than the test was designed against. Running the thirty
+contracts as a set is cheap and is now something to repeat, not a one-off.
