@@ -49,7 +49,11 @@ import { verifyBootEncryptionKey } from '../lib/boot-key-verification.js';
 // live worker on it (the claimer crashed/deployed mid-delivery); the claim
 // reclaims it. 5 min ≫ the 10s per-attempt delivery timeout, so a slow (not
 // crashed) delivery is never reclaimed out from under an active worker.
-const RECLAIM_STALE_IN_FLIGHT_MS = 5 * 60 * 1000;
+// V-1269 — exported so the in-memory double can reclaim on the SAME window. The double had no
+// reclaim at all: it filtered `status === 'pending'`, so a delivery left `in_flight` by a crashed
+// worker was stuck forever there while production re-claims it after this window. A test could
+// assert "a stuck delivery is never retried" against the double and be wrong about production.
+export const RECLAIM_STALE_IN_FLIGHT_MS = 5 * 60 * 1000;
 const MAX_WEBHOOK_SECRET_MIGRATION_BATCH = 500;
 const WEBHOOK_SECRET_V2_STORAGE_PATTERN = `^${WEBHOOK_SECRET_V2_PREFIX}[A-Za-z0-9+/]{88}$`;
 

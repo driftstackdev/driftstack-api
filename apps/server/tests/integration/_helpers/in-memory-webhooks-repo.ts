@@ -18,6 +18,7 @@ import type {
   WebhookEventType,
   WebhooksRepo,
 } from '../../../src/services/webhooks.js';
+import { RECLAIM_STALE_IN_FLIGHT_MS } from '../../../src/db/webhooks-repo.js';
 
 /** Mirror of DrizzleWebhooksRepo.deliveryKeysetCondition (#125): keep a delivery
  *  iff it sorts strictly AFTER the composite (created_at, id) cursor in DESC
@@ -322,8 +323,18 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
   }
 
   claim(opts: { batchSize: number; now: Date }): Promise<WebhookDeliveryRow[]> {
+    // V-1269 — eligible means pending-and-due OR a STALE in_flight row, matching
+    // DrizzleWebhooksRepo. A worker that crashes mid-batch leaves rows `in_flight` with no live
+    // worker on them; production re-claims those once `updatedAt` is older than
+    // RECLAIM_STALE_IN_FLIGHT_MS, and without that here a stuck delivery is stuck forever — so
+    // any test of crash recovery against this double asserted the opposite of production.
+    const staleBefore = opts.now.getTime() - RECLAIM_STALE_IN_FLIGHT_MS;
     const eligible = Array.from(this.deliveries.values())
-      .filter((r) => r.status === 'pending' && r.nextAttemptAt.getTime() <= opts.now.getTime())
+      .filter(
+        (r) =>
+          (r.status === 'pending' && r.nextAttemptAt.getTime() <= opts.now.getTime()) ||
+          (r.status === 'in_flight' && r.updatedAt.getTime() < staleBefore),
+      )
       .sort((a, b) => a.nextAttemptAt.getTime() - b.nextAttemptAt.getTime())
       .slice(0, opts.batchSize);
     for (const r of eligible) {

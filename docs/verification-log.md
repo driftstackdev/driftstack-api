@@ -3425,3 +3425,52 @@ So they are annotated at their definitions with why they are kept, because "this
 delete it" is the obvious next move and it is wrong here. The annotation is the durable part — the
 next person to measure dead surface finds the answer at the seam rather than repeating the four
 runs above.
+
+## V-1269 — the delivery worker's crash recovery existed in production and not in the fixture
+
+Last entry measured the doubles' dead surface. The mirror question is which PRODUCTION repo methods
+have no parity assertion at all, and answering it needed the denominator fixed first: 123/330 across
+every repo is meaningless, because a repo with no double has nothing to be in parity with. Over the
+27 PAIRED repos it is 106/223, and every one of them has some coverage.
+
+That number is not a defect — each contract in this campaign took one coherent property cluster per
+pair, by design. But it locates the thin ice, and `webhooks-repo` at 2/28 was the thinnest.
+
+**The divergence, verified in source before writing anything.**
+
+```
+Drizzle  claim  selects pending-and-due  OR  in_flight whose updated_at is older than
+                RECLAIM_STALE_IN_FLIGHT_MS (5 min) — a crashed worker's rows are re-claimed
+double   claim  selects `status === 'pending'` only
+```
+
+A worker that dies mid-batch leaves rows `in_flight` forever. Production re-claims them; the double
+never did. So a crash-recovery test written against this fixture would have asserted the opposite of
+what production does — and the fixture is where such a test would naturally be written, because the
+real path needs Postgres.
+
+Fixed by giving the double the same reclaim, reading the window from the repo rather than restating
+five minutes.
+
+```
+N1  double back to pending-only            "it is stuck forever"                  1 failed | 4 passed
+N2  reclaim with NO lease window           "displaced the worker holding it"      1 failed | 4 passed
+N3  drop the export                        tsc exit 2, TS2459 in two files
+restored (both files 0 dirty, sha equal)                                          5 passed
+```
+
+N2 is the half that keeps N1 honest: reclaiming everything would satisfy "stuck deliveries get
+picked up" while stealing rows from workers that are alive and working on them.
+
+**What I did NOT change, and why.** The Drizzle claim also caps deliveries per endpoint at 5 so one
+endpoint's backlog cannot monopolise a batch. The double has no such cap — but `perEndpointCap` is
+not on the `WebhooksRepo` interface, production callers never pass it, `webhook-claim-fairness-parity`
+already guards the two PRODUCTION claim implementations, and `db-webhook-delivery-fair-claim` proves
+the property against real Postgres. A fixture omitting a parameter its interface does not declare is
+defensible; adding it would be inventing surface. Recorded rather than silently done.
+
+**And the arm is honest about what it is.** It exercises the double only. The Drizzle side of the
+same property is covered by `db-durable-webhook-claim-reclaim-drizzle` against real Postgres, so the
+two halves are asserted in different files rather than by one shared contract — building a
+both-implementations Subject here means a delivery fixture with secret decryption, signing and HTTP.
+The arm says so at its own site instead of implying a contract that does not exist.

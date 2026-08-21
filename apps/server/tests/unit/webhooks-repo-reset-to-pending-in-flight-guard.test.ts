@@ -33,6 +33,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { InMemoryWebhooksRepo } from '../integration/_helpers/in-memory-webhooks-repo.js';
+import { RECLAIM_STALE_IN_FLIGHT_MS } from '../../src/db/webhooks-repo.js';
 
 const ACCOUNT_ID = 'acc-resetdlvy';
 
@@ -62,6 +63,31 @@ async function seedClaimedDelivery(repo: InMemoryWebhooksRepo) {
 }
 
 describe('resetDeliveryToPending in_flight guard', () => {
+  it('CRITICAL a delivery left in_flight by a crashed worker is RECLAIMED once its lease goes stale. The double had no reclaim at all — it selected only `pending` rows, so a stuck delivery stayed stuck forever here while DrizzleWebhooksRepo re-claims it after RECLAIM_STALE_IN_FLIGHT_MS. A crash-recovery test written against this fixture would have asserted the opposite of what production does. The window is imported rather than written as five minutes, so moving it moves this arm. The Drizzle side of the same property is covered against real Postgres by db-durable-webhook-claim-reclaim-drizzle; this is the fixture half, and saying so is more honest than implying a shared contract that does not exist.', async () => {
+    const repo = new InMemoryWebhooksRepo();
+    const { deliveryId } = await seedClaimedDelivery(repo);
+
+    // Still inside the lease: no live worker would be displaced.
+    const fresh = await repo.claim({
+      batchSize: 10,
+      now: new Date(Date.now() + RECLAIM_STALE_IN_FLIGHT_MS - 1_000),
+    });
+    expect(
+      fresh.map((r) => r.id),
+      'a delivery still inside its lease was re-claimed from the worker holding it',
+    ).toEqual([]);
+
+    // Past the lease: the holder is presumed dead.
+    const reclaimed = await repo.claim({
+      batchSize: 10,
+      now: new Date(Date.now() + RECLAIM_STALE_IN_FLIGHT_MS + 1_000),
+    });
+    expect(
+      reclaimed.map((r) => r.id),
+      'a delivery whose lease expired was never reclaimed — it is stuck forever',
+    ).toEqual([deliveryId]);
+  });
+
   it("returns null and does NOT mutate a delivery a worker has claimed (status='in_flight')", async () => {
     const repo = new InMemoryWebhooksRepo();
     const { deliveryId } = await seedClaimedDelivery(repo);
