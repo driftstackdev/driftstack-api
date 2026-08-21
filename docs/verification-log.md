@@ -1871,3 +1871,67 @@ restored (source 0 dirty, sha equal)                                            
 Both `tsc -p apps/server/tsconfig.test.json` and `tsc -p apps/gui-client/tsconfig.json` exit 0 —
 read as exit codes, not as empty output, and not through a pipe into `tail`, where `$?` is `tail`'s
 status and always 0. No ratchet change: one `it()` added to an existing file, no new file.
+
+## V-1237 — two paging algorithms that agree until an admin changes a row
+
+Twenty-sixth of the twenty-nine. `AccountsAdminRepo.list` is the staff account browser — filter,
+page, count. The counters were fine. The paging was two different algorithms wearing one interface:
+
+```
+Drizzle  keyset.  cursor row looked up BY ID, then
+                  WHERE (created_at, id) < (cursor.created_at, cursor.id)
+                  ORDER BY created_at DESC, id DESC   LIMIT $n + 1
+double   offset.  findIndex(r => r.id === cursor) inside the ALREADY-FILTERED array,
+                  slice from that index + 1
+```
+
+They agree exactly while the cursor row still satisfies the filter, which is why nobody noticed.
+`findIndex` returns **-1** when it does not, and the double read -1 as "start from the top".
+
+The workflow that separates them is the one the browser exists for: filter by `status: 'active'`,
+read page one, **suspend** an account you just read, ask for page two. The cursor row has left the
+filtered set, so the double restarts and page two re-lists accounts already on page one — staff
+acting twice on the same account. The keyset query continues from where it left off, because it
+resolves the cursor against ALL accounts and lets the cursor row be gone from the filtered set.
+Resolving against `all` rather than against `filtered` is the load-bearing line; M1 proves it.
+
+Fixed the double to keyset. Its ordering and its cursor boundary now share one `compareKey`, so the
+boundary cannot disagree with the ordering it is a boundary in.
+
+```
+M1  double resolves the cursor in `filtered`   the suspend-mid-page arm     1 failed | 24 passed
+M2  double boundary < becomes <=               partition (cursor repeats)   1 failed | 24 passed
+M3  double drops the limit cap                 101 rows returned for 100    1 failed | 24 passed
+M4  double countCreatedSince >= becomes >      the inclusive arm            1 failed | 24 passed
+M5  double countByTier stops zero-filling      enum-key + attribution arms  2 failed | 23 passed
+M6  DRIZZLE gte(since) becomes gte(since+1ms)  the inclusive arm            1 failed | 24 passed
+M7  DRIZZLE drops the limit cap                the cap arm                  1 failed | 24 passed
+restored (both files 0 dirty, sha equal)                                    25 passed
+```
+
+**M6 first went in as `gt(...)` and that proof was worthless.** `gt` is not in this module's import
+list, so the arm reddened on a ReferenceError rather than on a moved boundary — a mutation that
+crashes proves the test file runs, not that the assertion discriminates. Redone as
+`gte(since + 1ms)`, which is the same semantics using only symbols already in scope.
+
+**Two fixture faults, both caught before they could be read as findings.** A raw
+`INSERT INTO accounts (…, tier, status, created_at, …)` through postgres-js throws
+`TypeError: The "string" argument … Received an instance of Date` — `tier` and `status` are Postgres
+ENUMS and the mixed enum/timestamp parameter list is mis-serialised. Seeding through Drizzle's own
+insert fixes it, because Drizzle knows the column types. And the cap arm's 101 sequential inserts
+timed out at 10 s, so seeding is batched into one statement.
+
+**A zsh trap worth recording.** `FILES=$(grep -rl …); npx vitest run $FILES` runs **two** files, not
+39: zsh does not word-split an unquoted expansion, so the whole list arrives as a single argument
+that matches nothing, and the run reports green. `${=FILES}` splits it. Re-run properly: 41 files,
+517 tests, all green — the keyset rewrite moves nothing under the existing consumers
+(`build-test-app.ts`, `auth-cache.test.ts`, the shape-parity guard, and 38 admin route tests).
+
+Every method here is global — `list` has no account scope and the counters take no filter — so list
+arms scope with a unique `emailContains` token and counter arms assert a DELTA across a seed. That
+is the fourth fixture arrangement in this campaign: caller-chosen time, stamp-returned,
+DB-only-arm, and now unscoped-so-measure-the-delta.
+
+Ratchets: 2989 → 2990, 3156 → 3157, conditional skips 166 → 167.
+
+**Owed remaining: 3.**
