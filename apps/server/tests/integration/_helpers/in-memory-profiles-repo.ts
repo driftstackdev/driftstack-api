@@ -131,7 +131,11 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
       deletedAt: null,
     };
     this.rows.set(row.id, row);
-    return Promise.resolve({ record: row });
+    // V-1274 — a copy, not the stored object. Every write in this double is copy-on-write, so
+    // the aliasing was not observable today; that is a weaker property than the rule, and it
+    // holds only until someone adds a write that mutates in place. The incidents double was
+    // exactly one such file.
+    return Promise.resolve({ record: { ...row } });
   }
 
   findById(args: { id: string; accountId: string }): Promise<ProfileRecord | null> {

@@ -3654,3 +3654,79 @@ difference, in a suite where many files write the same table. Each was found by 
 a nine-file run, a thirty-file contract run, a thirty-four-file consumer run, and twice by the full
 suite. The class does not have a natural boundary at which "I have found them all" can be asserted,
 which is the argument for the helper being shared rather than the fixes being local.
+
+---
+
+## V-1274 — the aliasing class had a shape the guard could not see, and it was in a repaired file
+
+The obvious next move after V-1273 was a sixth guard, for the unfiltered-counter class. It was
+prototyped and measured before being written, and it is **not buildable at acceptable precision**.
+The signature "a bare before/after delta on an unfiltered count" returns three hits and only one
+kind is a defect: `admin-accounts-list-repo-contract` takes an exact delta but dates its fixtures
+into the far future so the window excludes every other file's rows, and `db-admin-accounts-repo-
+drizzle` asserts `>=` and says why in its own title — _a delta around a seed, because the table is
+shared with every other db-_ file running concurrently\*. Three legitimate mitigations — anchor the
+window, tolerate with `>=`, detect-and-retry — and the signature cannot tell which is in force. The
+reasoning now lives at the top of `counter-delta.ts`, where the question next arises. Same verdict,
+same reason, as the repo-to-repo constant guard rejected in V-1267.
+
+So the turn went to the coverage list instead, and `profiles-repo` produced a better finding by a
+side door. Its `insertWithLimit` returns `Promise.resolve({ record: row })` — the row it has just
+stored. The V-1255 guard reads bare returns, whole collections, spreads, filter/sort chains and
+V-1272's accumulators. **A row that leaves inside an object was none of those.**
+
+Widening the detector and re-running it over all 29 doubles found four:
+
+```
+in-memory-incidents-repo.ts::createWithInitialUpdate   incident: row
+in-memory-incidents-repo.ts::resolve                   { incident, update }
+in-memory-incidents-repo.ts::reopen                    { incident, update }
+in-memory-profiles-repo.ts::insertWithLimit            { record: row }
+```
+
+**Three of them are live defects, and they are in a file that already carries the fix.**
+`in-memory-incidents-repo.ts` has had a `snapIncident` helper since V-1251 and applies it on every
+bare read — while `resolve` and `reopen` bind the stored incident, mutate it in place, and hand that
+object straight back. A caller holding the result of a create watched its status turn `resolved`
+underneath it when somebody else resolved the incident. Postgres cannot do that; `INSERT..RETURNING`
+is a point-in-time copy. This is the "FIX 3" story again exactly — the repair applied to the reads
+of a file and not to the three methods that return through a wrapper.
+
+The fourth is not currently observable. `in-memory-profiles-repo` is copy-on-write throughout: every
+write builds `{ ...r }` and stores the new object, so a held row never changes. That is a **weaker
+property than the rule**, and it holds only until someone adds a write that mutates in place — which
+is precisely what the incidents double is. Fixed alongside the other three.
+
+**The detector was wrong twice on the way, and both are the point.** Judging the line a return opens
+on rather than the whole statement reported the _repaired_ `listAll` in the status-subscribers double
+as a defect: it begins `return [...this.rows]` and maps every row through `snap` four lines later —
+the guard accusing the fix. And the first widening missed `return { incidents: this.incidents }`,
+because the name arrives after a dot; the staleness arm caught that immediately by reporting my own
+brand-new `LIVE_SEAMS` entry as an exemption nothing needed. Both halves are now asserted: a
+multi-line chain that snapshots is not flagged, and the same chain with the `.map` removed is.
+
+Mutation proofs, restored byte-identical from a scratchpad snapshot of the fixed state:
+
+```
+M1  drop snapIncident from resolve+reopen   guard  RED, names both methods and lines
+M2  same, against the behavioural arm       17 passed — PROVED NOTHING
+M3  drop snapIncident from create           in-memory RED "changed status underneath it"
+                                            drizzle GREEN
+M4  drop snapIncident from resolve          in-memory RED "the row resolve() returned changed
+                                            status underneath the caller", drizzle GREEN
+```
+
+**M2 is the one worth reading.** The first behavioural arm holds a row from
+`createWithInitialUpdate` and resolves it — so reverting `resolve` cannot reach it, and a full green
+run said the arm was fine when it simply was not looking there. Three methods carried the defect and
+one arm reaches one of them; the second arm exists because proving one leaves the other two asserted
+by nothing. That arm needed a real admin account and key on the Drizzle side — `reopen` is
+admin-only and types its poster ids non-null, where `resolve` is nullable for V-295b auto-resolve,
+and both columns carry an FK — so `Subject` grew an `admin()` seam per implementation.
+
+`tsc` caught the null ids; `vitest` had passed them happily, which is the standing lesson that a
+green suite is not a typecheck.
+
+Suites: guard 7 passed; incident contract 17 passed both halves; the eight `insertWithLimit`
+consumers 117 passed; neighbours 50 passed. No test files added, so the `EXPECTED_TEST_FILES`
+ratchets are untouched.

@@ -99,7 +99,12 @@ export class InMemoryIncidentsRepo implements IncidentsRepo {
     };
     this.incidents.push(row);
     this.updates.push(update);
-    return { outcome: 'created', incident: row, update };
+    // V-1274 — snapshot on the way out. `resolve`/`reopen` below mutate a stored incident IN
+    // PLACE, so handing back the very object just pushed means a caller holding this result
+    // watches it change status underneath them. Postgres cannot do that: INSERT..RETURNING is
+    // a point-in-time copy. The reads in this file were snapshotted long ago; these three
+    // wrapped returns were missed because the row leaves inside an object rather than alone.
+    return { outcome: 'created', incident: snapIncident(row), update: snapIncident(update) };
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await
@@ -227,7 +232,7 @@ export class InMemoryIncidentsRepo implements IncidentsRepo {
     incident.status = 'resolved';
     incident.resolvedAt = now;
     incident.updatedAt = now;
-    return { incident, update };
+    return { incident: snapIncident(incident), update: snapIncident(update) };
   }
 
   // 2026-05-22 — admin reopen. Mirrors the Drizzle repo's behavior:
@@ -252,10 +257,14 @@ export class InMemoryIncidentsRepo implements IncidentsRepo {
     incident.status = 'investigating';
     incident.resolvedAt = null;
     incident.updatedAt = now;
-    return { incident, update };
+    return { incident: snapIncident(incident), update: snapIncident(update) };
   }
 
-  /** Test-only — exposes raw rows for assertions. */
+  /**
+   * Test-only — exposes raw rows for assertions. NOT on IncidentsRepo, so it is a hatch into
+   * this fixture's own state rather than an interface read, and it stays live deliberately:
+   * fixtures arrange through it as well as assert. Registered in the guard's LIVE_SEAMS.
+   */
   getAll(): { incidents: readonly IncidentRow[]; updates: readonly IncidentUpdateRow[] } {
     return { incidents: this.incidents, updates: this.updates };
   }

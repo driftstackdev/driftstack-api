@@ -39,6 +39,10 @@ const STARTED = new Date('2026-08-20T12:00:00.000Z');
 let client: ReturnType<typeof postgres> | null = null;
 let dbReachable = false;
 const seeded: string[] = [];
+// V-1274 — `reopen` is admin-only and types its poster ids as non-null (only V-295b auto-resolve
+// is nullable), and both columns carry an FK. So the Drizzle half needs a real account and key;
+// the double needs nothing and hands back bare uuids.
+const seededAccounts: string[] = [];
 
 beforeAll(async () => {
   const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
@@ -58,6 +62,11 @@ afterAll(async () => {
       await client`DELETE FROM incident_updates WHERE incident_id = ${id}::uuid`.catch(() => {});
       await client`DELETE FROM incidents WHERE id = ${id}::uuid`.catch(() => {});
     }
+    // After the updates that reference them, or the FK refuses the delete.
+    for (const a of seededAccounts) {
+      await client`DELETE FROM api_keys WHERE account_id = ${a}::uuid`.catch(() => {});
+      await client`DELETE FROM accounts WHERE id = ${a}`.catch(() => {});
+    }
     await client.end({ timeout: 5 });
   }
 });
@@ -65,10 +74,15 @@ afterAll(async () => {
 interface Subject {
   repo: IncidentsRepo;
   track: (id: string) => void;
+  admin: () => Promise<{ id: string; keyId: string }>;
 }
 
 function inMemorySubject(): Subject {
-  return { repo: new InMemoryIncidentsRepo(), track: () => {} };
+  return {
+    repo: new InMemoryIncidentsRepo(),
+    track: () => {},
+    admin: () => Promise.resolve({ id: randomUUID(), keyId: randomUUID() }),
+  };
 }
 
 function drizzleSubject(): Subject {
@@ -78,6 +92,18 @@ function drizzleSubject(): Subject {
   return {
     repo: new DrizzleIncidentsRepo({ client: c, db, close: async () => {} }),
     track: (id) => seeded.push(id),
+    admin: async () => {
+      const id = randomUUID();
+      const keyId = randomUUID();
+      seededAccounts.push(id);
+      const tag = id.slice(0, 8);
+      await c`INSERT INTO accounts (id, email)
+              VALUES (${id}, ${`incident-${id}@test.local`})`;
+      await c`INSERT INTO api_keys (id, account_id, name, key_prefix, key_hash, scopes)
+              VALUES (${keyId}::uuid, ${id}::uuid, ${`k-${tag}`},
+                      ${`ds_in_${tag}`}, ${`hash-${tag}`}, ${['driftstack_internal_admin']})`;
+      return { id, keyId };
+    },
   };
 }
 
@@ -111,6 +137,68 @@ function incidentContract(label: string, make: () => Subject, enabled: () => boo
       expect(page.length, 'the default page size does not match the repo default').toBe(
         INCIDENT_PAGE_DEFAULT,
       );
+    });
+
+    it('CRITICAL an incident row already handed to a caller does NOT change when someone resolves it, in both. Postgres returns a point-in-time copy, so the row a caller is holding keeps saying what it said; the double bound the stored object and mutated it in place, so the same read silently became "resolved" underneath the holder. The damage is not a crash, it is that every before/after comparison written against this double compares one object with itself and passes forever whatever resolve() does.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const held = await openIncident(s, true);
+      const statusWhenCreated = held.status;
+      expect(
+        statusWhenCreated,
+        'a new incident is already resolved — the arm proves nothing',
+      ).not.toBe('resolved');
+
+      await s.repo.resolve({
+        incidentId: held.id,
+        message: 'root cause addressed',
+        postedByAdminId: null,
+        postedByAdminKeyId: null,
+      });
+
+      expect(held.status, 'the caller\u2019s incident changed status underneath it').toBe(
+        statusWhenCreated,
+      );
+      expect(
+        held.resolvedAt,
+        'the caller\u2019s incident gained a resolvedAt underneath it',
+      ).toBeNull();
+
+      // ...and the repo really did resolve it, so the arm above is about aliasing rather than
+      // about resolve() quietly doing nothing.
+      const reread = await s.repo.get(held.id);
+      expect(reread?.status, 'resolve() did not actually resolve the incident').toBe('resolved');
+    });
+
+    it('CRITICAL the row RESOLVE hands back does not change when the incident is reopened, in both. Three methods returned the live incident and the arm above only reaches the one that creates it, so proving that one leaves the other two asserted by nothing — which is how a repaired file kept the same defect in the methods nobody wrote an arm for.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const opened = await openIncident(s, true);
+
+      const { incident: resolved } = await s.repo.resolve({
+        incidentId: opened.id,
+        message: 'root cause addressed',
+        postedByAdminId: null,
+        postedByAdminKeyId: null,
+      });
+      expect(resolved.status, 'resolve() did not return a resolved incident').toBe('resolved');
+
+      const admin = await s.admin();
+      await s.repo.reopen({
+        incidentId: opened.id,
+        message: 'it came back',
+        postedByAdminId: admin.id,
+        postedByAdminKeyId: admin.keyId,
+      });
+
+      expect(
+        resolved.status,
+        'the row resolve() returned changed status underneath the caller',
+      ).toBe('resolved');
+      expect(
+        resolved.resolvedAt,
+        'the row resolve() returned lost its resolvedAt underneath the caller',
+      ).not.toBeNull();
     });
 
     it('CRITICAL an INTERNAL incident is invisible through the public path, in both. The status page is the one surface with no authentication in front of it, and an internal incident carries operator detail — which customer, which node, what is suspected — so this predicate is the entire control between that text and anyone who guesses an id.', async () => {

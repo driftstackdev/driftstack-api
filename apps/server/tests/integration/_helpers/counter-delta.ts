@@ -1,3 +1,27 @@
+// WHY THERE IS NO GUARD FORCING EVERY COUNTER DELTA THROUGH THIS HELPER.
+//
+// V-1273 closed the fifth file in this class and observed that it has no boundary at which "all
+// found" can be asserted — which is normally the argument for a guard. One was prototyped and
+// measured before being written, and it is not buildable at acceptable precision.
+//
+// The signature is "a bare before/after delta on an unfiltered count". Three hits, and only one is
+// a defect:
+//
+//   admin-accounts-list-repo-contract  EXACT delta — but safe, because V-1245 dates its fixtures
+//                                      into the far future so the window excludes every other
+//                                      file's rows. Scoped by anchor rather than by filter.
+//   db-admin-accounts-repo-drizzle     TOLERANT `>=` — safe by construction, and its own title
+//                                      says so: a delta around a seed, because the table is
+//                                      shared with every other db-* file running concurrently.
+//   (the five already converted)       genuinely racy, and now use this helper.
+//
+// So the class has THREE legitimate mitigations — anchor the window, tolerate with `>=`, or
+// detect-and-retry here — and "bare delta on a count" cannot tell which one is in force. A guard
+// on that signature would flag two pieces of correct code and push toward replacing a cheaper
+// correct mitigation with this heavier one. Same conclusion, and the same reason, as the
+// repo-to-repo constant guard rejected in V-1267: a signal that cannot tell two things apart is
+// not a weaker guard, it is a wrong one.
+
 // V-1264 — one detect-and-retry measurement for unfiltered, table-wide counters.
 //
 // Three contracts now measure a counter that takes no filter and counts the whole table:

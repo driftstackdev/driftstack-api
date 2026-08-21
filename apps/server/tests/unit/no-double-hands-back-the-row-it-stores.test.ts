@@ -52,6 +52,11 @@ const LIVE_SEAMS = new Map<string, string>([
       'in place, so a held reference cannot change underneath the caller',
   ],
   ['in-memory-admin-audit-repo.ts::getAll', 'not on AdminAuditLogRepo; assertion-only seam'],
+  [
+    'in-memory-incidents-repo.ts::getAll',
+    'not on IncidentsRepo; returns both raw collections wrapped in an object, and fixtures ' +
+      'arrange incident state through it as well as assert on it',
+  ],
 ]);
 
 interface Hit {
@@ -106,9 +111,50 @@ function aliasingReads(src: string, file: string): Hit[] {
     }
   }
 
+  // V-1274 — rows that leave INSIDE an object rather than alone:
+  //   return { outcome: 'created', incident: row, update };
+  // The incidents double did this from three methods while its reads had been snapshotted since
+  // V-1251, and it mutates stored incidents in place — so a caller holding the result of a create
+  // watched its status change when someone else resolved the incident. The row was never returned
+  // bare, so every branch above walked past it. Rows pushed or set into a collection count as live
+  // alongside rows bound off one, because `this.rows.push(row); return { row }` aliases just as
+  // hard as looking one up does.
+  const stored = new Set<string>();
+  for (const line of lines) {
+    const m = /this\.\w+\.(?:push\((\w+)\)|set\([\w.]+,\s*(\w+)\s*\))/.exec(line);
+    const name = m?.[1] ?? m?.[2];
+    if (name !== undefined) stored.add(name);
+  }
+
   const out: Hit[] = [];
   for (const [i, line] of lines.entries()) {
     const t = line.trim();
+    // A live row named as a property value or array element. The lookbehind is what keeps
+    // `{ record: { ...row } }` — the FIX — from reading as the defect: after a spread the name is
+    // preceded by a dot, and a copy is exactly what the rule asks for.
+    // The whole RETURN STATEMENT, not the line. A snapshotting read is routinely written across
+    // four lines ending `.map((r) => snap(r));`, and judging its first line alone reported the
+    // repaired `listAll` in the status-subscribers double as a defect — the guard accusing the
+    // fix. A statement that maps its rows through anything has already made copies.
+    const stmt = ((): string => {
+      const acc: string[] = [];
+      for (let j = i; j < Math.min(lines.length, i + 8); j += 1) {
+        const piece = (lines[j] ?? '').trim();
+        acc.push(piece);
+        if (piece.endsWith(';')) break;
+      }
+      return acc.join(' ');
+    })();
+    const copies = /\.map\(|\bsnap\w*\(/.test(stmt);
+    const opensWrapper = /^return\s+(?:Promise\.resolve\()?[[{]/.test(t) && !copies;
+    const wrapped =
+      opensWrapper &&
+      ([...t.matchAll(/(?<![.\w])(\w+)(?=\s*[,}\]])/g)].some(
+        (m) => m[1] !== undefined && (bound.has(m[1]) || stored.has(m[1])),
+      ) ||
+        // `return { incidents: this.incidents, updates: this.updates };` — the whole collection,
+        // wrapped. `whole` above only sees it returned alone, so this form walked past both.
+        /this\.\w+\s*[,}\]]/.test(t));
     // `return out;` AND `return Promise.resolve(out);` — the doubles that use the accumulate
     // shape all return through the Promise form, so matching only the bare return meant the
     // widened branch below never fired. Its own mutation is what said so.
@@ -122,7 +168,8 @@ function aliasingReads(src: string, file: string): Hit[] {
     if (
       (bare?.[1] !== undefined && (bound.has(bare[1]) || accumulators.has(bare[1]))) ||
       whole ||
-      chain
+      chain ||
+      wrapped
     ) {
       out.push({ file, method: enclosingMethod(lines, i), line: i + 1, text: t.slice(0, 80) });
     }
@@ -146,6 +193,54 @@ describe('no in-memory double hands back the row it stores', () => {
     const hits = aliasingReads(control, 'control.ts');
     expect(hits.length, 'the signature no longer detects an aliasing read').toBe(1);
     expect(hits[0]?.method, 'the enclosing method was not resolved').toBe('getById');
+  });
+
+  it('CRITICAL a row handed back INSIDE an object is flagged, and the same row spread into a copy is not. This is the shape that survived V-1251 in the very file that had been repaired: three methods returned a live incident as an object property while the bare reads beside them had been snapshotted for months, and the guard passed the whole time.', () => {
+    const defect = [
+      '  async create(input: Input) {',
+      '    const row = { id: input.id };',
+      '    this.incidents.push(row);',
+      "    return { outcome: 'created', incident: row };",
+      '  }',
+    ].join('\n');
+    const hits = aliasingReads(defect, 'wrapped.ts');
+    expect(hits.length, 'a stored row returned as an object property was not flagged').toBe(1);
+    expect(hits[0]?.method, 'the enclosing method was not resolved').toBe('create');
+
+    const fixed = defect.replace('incident: row', 'incident: { ...row }');
+    expect(
+      aliasingReads(fixed, 'wrapped-fixed.ts'),
+      'a row spread into a copy was flagged as an aliasing return',
+    ).toEqual([]);
+
+    // The whole collection, wrapped. `return this.rows;` was already caught; the same array
+    // leaving as an object property was not, and that is how the incidents assertion seam went
+    // unregistered for as long as it did.
+    expect(
+      aliasingReads('  getAll() {\n    return { rows: this.rows };\n  }', 'coll.ts').length,
+      'a stored collection returned as an object property was not flagged',
+    ).toBe(1);
+  });
+
+  it('CRITICAL a snapshotting chain spread across several lines is NOT flagged. The widened branch judged only the line the return opened on, so `return [...this.rows]` reported as a defect while three lines below it mapped every row through snap — the guard accusing the repair. Both halves are asserted here because a detector that cannot tell them apart is worse than the narrower one it replaced.', () => {
+    const multiline = [
+      '  async listAll(opts: { limit: number }) {',
+      '    return [...this.rows]',
+      '      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())',
+      '      .slice(0, opts.limit)',
+      '      .map((r) => snap(r));',
+      '  }',
+    ].join('\n');
+    expect(
+      aliasingReads(multiline, 'multiline.ts'),
+      'a multi-line chain that snapshots every row was flagged',
+    ).toEqual([]);
+
+    const unsnapped = multiline.replace('      .map((r) => snap(r));', '      .slice(0);');
+    expect(
+      aliasingReads(unsnapped, 'multiline-defect.ts').length,
+      'the same chain WITHOUT the snapshot was not flagged — the exclusion is too broad',
+    ).toBe(1);
   });
 
   it('CRITICAL a snapshotting read is NOT flagged, so the guard distinguishes the fix from the defect. Without this it fires on all three doubles that were already repaired and the output is noise.', () => {
