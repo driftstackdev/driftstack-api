@@ -3116,3 +3116,56 @@ narrowed it to whatever the ignore set contained, so `expected` then rejected it
 wrong in company — V-1245's negative delta, V-1248's retry, and now the retry's own ceiling. Each
 was found by running more things together than the test was designed against. Running the thirty
 contracts as a set is cheap and is now something to repeat, not a one-off.
+
+## V-1262 — the string half of the restated-constant class, and a snapshot taken at the wrong moment
+
+V-1260's guard covers restated NUMBERS and says in its own header that it walks past restated
+STRINGS, naming V-1238 as the instance it would have missed. Closing that gap by hand, since the
+reason the guard does not model strings still holds: a repo and its double share string vocabulary
+constantly and legitimately.
+
+Enumerating string literals that appear in a comparison or an array on both sides of each pair gave
+seven candidates. Five are shared VOCABULARY — incident statuses, session result kinds, webhook
+delivery states — values both implementations must name because they are enum members, not
+decisions restated. Two are the real shape:
+
+```
+usage-repo.ts            INTERNAL_RECORD_TYPES = ['agent_decomposer', 'agent_decomposer_bundled']
+                         LIFECYCLE_DERIVED_RECORD_TYPE = 'session_minute'
+in-memory-usage-repo.ts  its own copy of both
+```
+
+Both were module-private, so the double had no way to read them and carried duplicates. Adding a
+record type to the internal list would have kept it out of customer aggregates in production while
+every test on the double went on counting it. Exported; the double imports both.
+
+```
+N1  repo drops a type AND double restates the old set   3 arms   1 failed x3 | 8 passed
+N2  double restates the CURRENT set, repo unchanged     passes, and should
+restored to the FIXED state (sha equal, exports intact)          11 passed
+```
+
+N2 is the pair-of-edits rule from V-1246 again: a single edit cannot separate a fixture that reads
+the constant from one that merely agrees with it today.
+
+**I restored a mutation onto a snapshot of the PRE-FIX file and silently undid the whole batch.**
+The snapshots were taken at the top of the batch, before the export was added — so `cp snap file`
+after the first mutation reverted not just the mutation but the fix. The contract then went green,
+because it was green before the fix too, and three arms failed in between for a reason I initially
+read as the mutation working.
+
+Caught by grepping for the exported constant afterwards and finding nothing. The rule that already
+exists — restore from a scratchpad snapshot, never `git checkout` — is only half of it: the snapshot
+has to be of the state you want to return TO, which during a batch is the fixed state, not the state
+you started from. Re-applied, snapshotted after the fix, and the restore verified by checking the
+export is still present rather than by the sha alone.
+
+That is the second snapshot-shaped loss this session. The first was `git checkout` discarding
+uncommitted work (V-1245); this one used the right mechanism at the wrong moment.
+
+**Still open, and not fixed here:** `stripe-webhooks-repo.ts` writes `['active', 'trialing']` inline
+twice and its double restates it twice, while V-1238 already exported
+`ACTIVE_SUBSCRIPTION_STATUSES` from `admin-billing-repo.ts` — four copies of one policy set across
+three files. The fix needs a home decision: importing a constant from one repo module into another
+is the low-churn option and reads oddly, and the alternative is a neutral module that does not exist
+yet. Recorded rather than guessed at.

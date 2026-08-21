@@ -6,6 +6,10 @@ import type {
   UsageRepo,
   UsageTotals,
 } from '../../../src/services/usage.js';
+import {
+  INTERNAL_RECORD_TYPES as REPO_INTERNAL_RECORD_TYPES,
+  LIFECYCLE_DERIVED_RECORD_TYPE as REPO_LIFECYCLE_DERIVED_RECORD_TYPE,
+} from '../../../src/db/usage-repo.js';
 
 export interface UsageEvent {
   accountId: string;
@@ -25,8 +29,10 @@ export interface UsageEvent {
  * stored rows makes the two agree about what must NOT be counted; it does not make this double a
  * source of lifecycle minutes, and a test needing those has to use the real repo.
  */
-const LIFECYCLE_DERIVED_RECORD_TYPE = 'session_minute';
-const INTERNAL_RECORD_TYPES: readonly string[] = ['agent_decomposer', 'agent_decomposer_bundled'];
+// V-1262 — both sets are read from DrizzleUsageRepo rather than restated. They used to be
+// local copies of the same two decisions, correct only for as long as nobody moved either.
+const LIFECYCLE_DERIVED_RECORD_TYPE: string = REPO_LIFECYCLE_DERIVED_RECORD_TYPE;
+const INTERNAL_RECORD_TYPES: readonly string[] = REPO_INTERNAL_RECORD_TYPES;
 
 function isExcludedFromAggregation(recordType: string): boolean {
   return recordType === LIFECYCLE_DERIVED_RECORD_TYPE || INTERNAL_RECORD_TYPES.includes(recordType);

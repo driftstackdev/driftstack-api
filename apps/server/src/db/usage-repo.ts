@@ -19,10 +19,15 @@ import { usageRecords } from './schema.js';
 // same filter set. The bundled-LLM status endpoint (sub-slice 6.7) is
 // the customer-visible surface for these rows; the generic /v1/usage
 // summary keeps the same shape it has today.
-const INTERNAL_RECORD_TYPES = ['agent_decomposer', 'agent_decomposer_bundled'] as const;
+// V-1262 — exported so the in-memory double reads THESE sets rather than restating them.
+// Both were module-private and the double carried its own copy of each: the same two
+// decisions written twice, agreeing only until somebody edited one. Adding a record type to
+// the internal list here would have kept it out of customer aggregates in production while
+// every test on the double went on counting it, and agreeing with itself.
+export const INTERNAL_RECORD_TYPES = ['agent_decomposer', 'agent_decomposer_bundled'] as const;
 // Production never had a complete session-minute writer. Lifecycle rows are
 // the durable authority; old/manual ledger rows must not double-count them.
-const LIFECYCLE_DERIVED_RECORD_TYPE = 'session_minute' as const;
+export const LIFECYCLE_DERIVED_RECORD_TYPE = 'session_minute' as const;
 
 interface LifecycleMinutesRow {
   total_minutes: number;
