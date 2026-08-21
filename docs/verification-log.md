@@ -1153,3 +1153,51 @@ M1 and M2 are the matched pair — whichever side stops excluding trashed rows, 
 the slot was not released.
 
 **Owed remaining: 16.**
+
+---
+
+## V-1223/V-1224 — making a claim true, and the third shape of single-use
+
+**V-1223 first, because it is a correction.** V-1222's commit message said the two cap contracts
+"each name the other". They did not. V-1222 pointed at V-1219 from the start; V-1219, written three
+entries earlier, said nothing back. The claim was true in one direction and I wrote it as though it
+were true in both.
+
+That matters more than a missing comment because the whole point of the pair is that neither file
+makes the asymmetry visible alone — an errored session KEEPS its cap slot, a trashed profile FREES
+its own — and a reader arriving at the session contract had no way to learn the other rule exists.
+The back-reference is now in `session-cap-repo-contract.test.ts`, and it says when and why it was
+added rather than pretending it was always there.
+
+**V-1224 — the status-subscriber double opt-in.** Fourteenth of the twenty-nine. An address is only
+mailed after it confirms and only until it unsubscribes, and both transitions are claimed by a token
+hash under compare-and-swap.
+
+Three properties pinned, none expressed by the types:
+
+- **The confirmation link is single-use, and this is the THIRD distinct mechanism for that** in as
+  many contracts. V-1220 compared a monotonic counter, V-1221 stamped `consumed_at`, and here the
+  claim NULLS the token it matched on, so a replay finds no matching row. Same guarantee, three
+  implementations, and each needed its own arm because none of them looks like the others.
+- **Confirming RESURRECTS a previously unsubscribed address** — `unsubscribed_at` goes back to NULL.
+  That is the entire re-subscribe path and it is easy to read the SET clause as merely establishing
+  confirmation. Both sides do it; nothing asserted it. M2 proves the arm: dropping
+  `unsubscribedAt: null` from the Drizzle SET leaves the row confirmed AND unsubscribed, and the
+  address is never mailed again.
+- **`expectedUnsubscribeTokenHash: null` is the deliberate admin branch** — the operator
+  force-unsubscribe from V-1200, carrying admin authority instead of a token. Pinned beside the
+  token-checked arm, because a null arriving from a customer-facing caller is an unauthenticated
+  unsubscribe of anyone whose id is known, and it looks like a normal call while doing it.
+
+```
+M1  DRIZZLE confirm drops the token check      2 failed | 9 passed
+M2  DRIZZLE confirm stops resurrecting         1 failed | 10 passed
+M3  the DOUBLE unsubscribe ignores the token   1 failed | 10 passed
+restored (source 0 dirty)                      11 passed
+```
+
+The resurrect arm also carries its own precondition check — it asserts the unsubscribe actually took
+before re-confirming, because otherwise "the address is on the confirmed list at the end" is
+satisfied by an unsubscribe that never happened.
+
+**Owed remaining: 15.**

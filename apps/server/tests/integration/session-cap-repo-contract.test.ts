@@ -23,6 +23,14 @@
 // The arms use only interface methods — `insertSession`, `updateSessionStatus`, `countActiveSessions`,
 // `listActiveByAccount` — so neither implementation is driven through a private seam the other
 // lacks, which is the failure mode that makes a contract test quietly about one side.
+//
+// READ WITH `profile-trash-cap-repo-contract.test.ts` (V-1222), which pins the OPPOSITE rule: a
+// TRASHED profile FREES its cap slot, where an ERRORED session does not free its own. Both are
+// right — a trashed profile is inert, a session row may still have a live driver session behind it
+// — but two caps with two meanings of "still counts" are exactly the pair someone harmonises in the
+// wrong direction. Neither file makes the asymmetry visible alone, so each names the other. This
+// back-reference was added in V-1223: V-1222 pointed here from the start and this did not point
+// back, so the claim that they referenced each other was true in one direction only.
 
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
