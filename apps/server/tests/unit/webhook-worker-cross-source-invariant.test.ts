@@ -12,7 +12,7 @@
 //     3. On 2xx → recordDelivered (resets
 //        endpoint.consecutiveFailures).
 //     4. On non-2xx / network / timeout → recordRetry (if attempts
-//        < MAX) or recordDlq (if attempts == MAX). Both bump
+//        < MAX) or recordDlq (if attempts == MAX). Only recordDlq bumps
 //        endpoint.consecutiveFailures.
 //     5. If endpoint.consecutiveFailures crosses the auto-disable
 //        threshold, mark the endpoint disabled.
@@ -69,7 +69,7 @@ describe('W956 webhook-worker delivery-loop cross-source invariant', () => {
 
   // ─── 5-step loop framing ─────────────────────────────────────
 
-  it("CRITICAL 5-step loop framing — 1. Claim batch where nextAttemptAt past. 2. For each: build signed POST + fetch + observe. 3. 2xx → recordDelivered (resets consecutiveFailures). 4. Non-2xx/network/timeout → recordRetry (attempts<MAX) or recordDlq (attempts==MAX), both bump consecutiveFailures. 5. Cross auto-disable threshold → mark endpoint disabled. The 5-step delivery state machine is the worker's contract.", () => {
+  it("CRITICAL 5-step loop framing — 1. Claim batch where nextAttemptAt past. 2. For each: build signed POST + fetch + observe. 3. 2xx → recordDelivered (resets consecutiveFailures). 4. Non-2xx/network/timeout → recordRetry (attempts<MAX) or recordDlq (attempts==MAX); only recordDlq bumps consecutiveFailures. 5. Cross auto-disable threshold → mark endpoint disabled. The 5-step delivery state machine is the worker's contract.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/webhook-worker.ts'));
     expect(p).toMatch(/1\. Claim a batch of pending deliveries whose nextAttemptAt is past/);
     expect(p).toMatch(/2\. For each: build the signed POST, send via fetch, observe response/);
@@ -77,7 +77,11 @@ describe('W956 webhook-worker delivery-loop cross-source invariant', () => {
     expect(p).toMatch(
       /4\. On non-2xx \/ network \/ timeout → recordRetry \(if attempts < MAX\) or/,
     );
-    expect(p).toMatch(/recordDlq \(if attempts == MAX\)\. Both bump endpoint\.consecutiveFailures/);
+    // V-1274c — the header used to say BOTH writers bump the counter. Only recordDlq does: a
+    // retry is an attempt within one delivery, and counting it tombstoned endpoints roughly
+    // 6x early. The pin follows the corrected framing.
+    expect(p).toMatch(/recordDlq \(if attempts == MAX\)\. Only recordDlq bumps/);
+    expect(p).toMatch(/a retry is an attempt WITHIN one delivery\./);
     expect(p).toMatch(/5\. If endpoint\.consecutiveFailures crosses the auto-disable threshold,/);
     expect(p).toMatch(/mark the endpoint disabled\./);
   });

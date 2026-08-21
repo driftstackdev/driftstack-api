@@ -3828,3 +3828,59 @@ one: a non-greedy body regex stopped at the closing brace of a multi-line ARGUME
 than the method body, under-reporting write counts across the board. Extracting the body by
 "the first line that is exactly two spaces and a brace" fixed it, and the corrected sweep found
 three multi-write doubles the first run had scored as zero.
+
+---
+
+## V-1274c — the webhooks double kept a counter production deleted, and the worker's comments agreed with the double
+
+Two divergences in `in-memory-webhooks-repo`, both in the three delivery-outcome writers, and the
+second one had spread beyond the fixture.
+
+**D1 — `recordRetry` advanced `consecutiveFailures`; production stopped doing that on purpose.**
+That counter is the customer-facing signal: the docs say an endpoint "is auto-disabled after 50
+consecutive failed deliveries" and tell customers to watch it. A retry is an ATTEMPT within one
+delivery, and MAX_ATTEMPTS is 6, so counting retries billed a single failed delivery up to six
+times — an endpoint tombstoned after roughly NINE failed deliveries instead of fifty, permanently,
+about 6x sooner than the headroom the customer was promised. The Drizzle repo carries a long comment
+explaining exactly this. The double still incremented.
+
+**D2 — none of the three fenced on `in_flight`.** Production matches
+`and(eq(id), eq(status, 'in_flight'))` and no-ops on zero rows, because the worker only writes for a
+row it claimed. The double honoured any write for any row, so a >5-minute-stalled worker's late
+report — the case the production comment says the fence exists for — resurrected a delivered
+delivery into the DLQ and pushed its endpoint toward an auto-disable it never earned.
+
+**The blast radius is what makes this more than a fixture fix.** The worker's own header said
+_"recordDlq (if attempts == MAX). Both bump endpoint.consecutiveFailures"_, its retry-path comment
+justified the auto-disable check by _"recordRetry bumps endpoint.consecutiveFailures by 1"_, and
+`maybeAutoDisable`'s docblock claimed _"recordRetry/recordDlq have already committed their +1"_.
+All three describe the pre-fix model. Two content-parity tests PIN that header text, so the stale
+sentence was frozen in place by tests whose job is to keep it accurate. The repo was fixed and
+nothing else was — the double, three comments and two pins all still agreed with each other.
+
+Six arms in `webhook-worker.test.ts` seeded the counter by calling `recordRetry` in a loop on one
+delivery, which only counts on the double. **Arm #6 asserted a scenario production cannot reach** —
+"a RETRY that crosses the 50-consecutive-failure threshold auto-disables the endpoint" — and it is
+now inverted to assert the invariant instead: an endpoint at 49 survives a retry. Seeding is a real
+failed delivery per failure (enqueue → claim → DLQ), and the arms that arrange a nearly-exhausted
+delivery claim it first, because an unclaimed write is a no-op in production.
+
+The worker CODE needed no change. `maybeAutoDisable` re-reads the live counter, so it is correct
+under either model; the retry-path call is now defensive rather than load-bearing, and says so.
+
+```
+M7  restore the increment on the retry path   3 arms RED, incl. "the retry advanced the failure
+                                              counter — it counts attempts, not failed deliveries"
+M8  drop the in_flight fence                  RED "a stale write resurrected a delivered row
+                                              into the DLQ"
+```
+
+Each mutation printed a marker proving it landed before the suite ran, per V-1274b.
+
+**A gap left open, stated rather than papered over.** The fence is now asserted on BOTH sides —
+a new arm in `db-webhooks-repo-consecutive-failures-drizzle` and its mirror in `webhook-worker` —
+but they are two arms in two files, not one contract parameterised over both implementations. The
+trio still has no shared contract, which is exactly the structure that would have caught D1 the day
+the repo was fixed. `webhooks-repo` remains the widest coverage gap on the V-1269 list.
+
+Suites: 11 files, 176 passed, `tsc` clean.

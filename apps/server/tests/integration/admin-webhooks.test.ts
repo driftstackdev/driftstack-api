@@ -44,6 +44,11 @@ async function seedDelivery(
 
   // Optionally mutate status (simulating worker outcome).
   if (overrides.status && overrides.status !== 'pending') {
+    // V-1274c — CLAIM first. The outcome writers are fenced on `in_flight` in both
+    // implementations now, because the worker only ever writes for a row it claimed; a write for
+    // an unclaimed row is a no-op in production, so simulating an outcome without the claim
+    // arranged a state the real repo refuses and this helper silently produced a pending row.
+    await fixture.webhooksRepo.claim({ batchSize: 64, now: new Date() });
     if (overrides.status === 'dlq') {
       await fixture.webhooksRepo.recordDlq(row.id, {
         responseStatus: 500,
@@ -248,6 +253,7 @@ describe('GET /v1/admin/webhook-dlq', () => {
     const all = fx.webhooksRepo.getAllDeliveries();
     const a2Row = all[all.length - 1];
     if (!a2Row) throw new Error('seed a2 missing');
+    await fx.webhooksRepo.claim({ batchSize: 64, now: new Date() });
     await fx.webhooksRepo.recordDlq(a2Row.id, {
       responseStatus: 500,
       lastError: 'simulated',

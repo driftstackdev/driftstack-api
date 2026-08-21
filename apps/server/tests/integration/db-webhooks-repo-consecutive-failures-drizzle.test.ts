@@ -128,6 +128,32 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(await failuresOf(endpointId)).toBe(0);
     });
 
+    it('CRITICAL a late write from a stalled worker is a NO-OP once the row has been finalised. The record* writers fence on in_flight because the worker only writes for a row it claimed: if a >5min-stalled worker reports failure after another tick reclaimed and delivered that row, the write must not resurrect it into the DLQ or advance the endpoint toward its auto-disable. Without the fence the customer loses an endpoint to a delivery that actually succeeded.', async () => {
+      if (!dbReachable || repo === null) return;
+      const c = client!;
+      const { endpointId, deliveryId } = await seed();
+      await repo.recordDelivered(deliveryId, { responseStatus: 200, at: new Date() });
+      expect(await failuresOf(endpointId), 'the successful delivery did not zero the counter').toBe(
+        0,
+      );
+
+      // The stalled worker finally reports its failure, long after the row was finalised.
+      await repo.recordDlq(deliveryId, {
+        responseStatus: 500,
+        lastError: 'HTTP 500',
+        at: new Date(),
+      });
+
+      const [row] = await c`SELECT status FROM webhook_deliveries WHERE id = ${deliveryId}::uuid`;
+      expect(row?.status, 'a stale write resurrected a delivered row into the DLQ').toBe(
+        'delivered',
+      );
+      expect(
+        await failuresOf(endpointId),
+        'a stale write advanced the endpoint toward auto-disable',
+      ).toBe(0);
+    });
+
     it('exhausting a delivery advances it exactly once', async () => {
       if (!dbReachable || repo === null) return;
       const { endpointId, deliveryId } = await seed();

@@ -5,7 +5,9 @@
 //   2. For each: build the signed POST, send via fetch, observe response
 //   3. On 2xx → recordDelivered (resets endpoint.consecutiveFailures)
 //   4. On non-2xx / network / timeout → recordRetry (if attempts < MAX) or
-//      recordDlq (if attempts == MAX). Both bump endpoint.consecutiveFailures.
+//      recordDlq (if attempts == MAX). Only recordDlq bumps
+//      endpoint.consecutiveFailures: that counter is a per-DELIVERY signal, and
+//      a retry is an attempt WITHIN one delivery.
 //   5. If endpoint.consecutiveFailures crosses the auto-disable threshold,
 //      mark the endpoint disabled.
 //
@@ -504,12 +506,14 @@ export class WebhookDeliveryWorker {
       },
       'webhook delivery scheduled for retry',
     );
-    // Auto-disable check — ALSO run on the RETRY path (not just on DLQ). recordRetry
-    // bumps endpoint.consecutiveFailures by 1, so the post-failure count is
-    // (consecutiveFailures + 1). An endpoint that keeps failing — each delivery
-    // scheduling a retry rather than DLQ'ing — was crossing the threshold without
-    // ever being disabled, because the check only ran in the DLQ branch. Mirror
-    // the DLQ branch so a sustained-failing endpoint is disabled here too.
+    // Auto-disable check, also on the RETRY path — but defensively, not because a retry can
+    // cross the threshold. recordRetry does NOT bump consecutiveFailures (a retry is an attempt
+    // within one delivery, not a failed delivery), so the count this re-reads is whatever the DLQ
+    // path last committed. It stays because the re-read is cheap and idempotent and catches an
+    // endpoint already at the threshold that an earlier disable missed. This comment used to say
+    // recordRetry bumped the counter — true before the repo was fixed, wrong since — and the
+    // in-memory double agreed with the comment rather than with the repo, so every arm covering
+    // this path was calibrated against a counter production does not keep.
     await this.maybeAutoDisable(endpoint.id, at);
     return { kind: 'retry', delivery, nextAttemptAt };
   }
@@ -521,10 +525,11 @@ export class WebhookDeliveryWorker {
    * concurrently via Promise.all, so two+ failures for the SAME endpoint would
    * otherwise each evaluate `snapshot + 1 >= threshold` against the identical
    * pre-batch count — double-counting off a stale base and disabling at the
-   * wrong count. recordRetry/recordDlq have already committed their +1 (each
-   * in its own transaction, fenced on in_flight) before this runs, so the
-   * re-read observes every committed increment and the threshold is checked
-   * against the live counter — counting each concurrent failure once. The
+   * wrong count. recordDlq has already committed its +1 (in its own
+   * transaction, fenced on in_flight) before this runs, so the re-read observes
+   * every committed increment and the threshold is checked against the live
+   * counter — counting each concurrent failed DELIVERY once. recordRetry commits
+   * no increment, so it cannot move this count at all. The
    * disable UPDATE is idempotent + scoped to this one endpoint id, so a
    * redundant call from a sibling delivery in the same batch is harmless.
    */

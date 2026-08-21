@@ -38,6 +38,12 @@ function byCreatedThenIdDesc(a: WebhookDeliveryRow, b: WebhookDeliveryRow): numb
   return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
 }
 
+// V-1274c — the three delivery-outcome writers FENCE on `in_flight`, matching the Drizzle repo's
+// `.where(and(eq(id), eq(status, 'in_flight')))`. The worker only writes for a row it claimed, so a
+// >5min-stalled worker's late `record*` must be a no-op once another tick has reclaimed and
+// finalised that row. Without the fence a stale write resurrects a delivered row into DLQ and bumps
+// the endpoint's failure counter toward the auto-disable threshold — which is the exact scenario
+// the production comment says the fence exists to stop, and this double had no fence at all.
 export class InMemoryWebhooksRepo implements WebhooksRepo {
   private readonly endpoints = new Map<string, WebhookEndpointRow>();
   private readonly deliveries = new Map<string, WebhookDeliveryRow>();
@@ -345,7 +351,7 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
 
   recordDelivered(deliveryId: string, opts: { responseStatus: number; at: Date }): Promise<void> {
     const row = this.deliveries.get(deliveryId);
-    if (!row) return Promise.resolve();
+    if (!row || row.status !== 'in_flight') return Promise.resolve();
     this.deliveries.set(deliveryId, {
       ...row,
       status: 'delivered',
@@ -376,7 +382,7 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
     },
   ): Promise<void> {
     const row = this.deliveries.get(deliveryId);
-    if (!row) return Promise.resolve();
+    if (!row || row.status !== 'in_flight') return Promise.resolve();
     this.deliveries.set(deliveryId, {
       ...row,
       status: 'pending',
@@ -391,7 +397,14 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
     if (ep) {
       this.endpoints.set(ep.id, {
         ...ep,
-        consecutiveFailures: ep.consecutiveFailures + 1,
+        // NOT consecutiveFailures, and the reason is the whole finding. That counter is a
+        // per-DELIVERY signal the docs tell customers to watch — "auto-disabled after 50
+        // consecutive failed deliveries" — and a retry is an ATTEMPT within ONE delivery.
+        // Production stopped incrementing here because with MAX_ATTEMPTS at 6 it counted a single
+        // failed delivery up to six times, tombstoning an endpoint after roughly nine failed
+        // deliveries instead of fifty, permanently and roughly 6x sooner than the customer was
+        // told. This double kept the pre-fix behaviour, so every worker test standing on it was
+        // calibrated against a counter production does not keep. recordDlq owns the increment.
         lastFailureAt: new Date(),
         updatedAt: new Date(),
       });
@@ -404,7 +417,7 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
     opts: { responseStatus: number | null; lastError: string | null; at: Date },
   ): Promise<void> {
     const row = this.deliveries.get(deliveryId);
-    if (!row) return Promise.resolve();
+    if (!row || row.status !== 'in_flight') return Promise.resolve();
     this.deliveries.set(deliveryId, {
       ...row,
       status: 'dlq',

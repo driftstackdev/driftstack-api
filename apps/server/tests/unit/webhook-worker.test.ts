@@ -20,7 +20,63 @@ function fakeFetch(spec: { status?: number; throwError?: Error }): typeof fetch 
 const NOW = new Date('2026-05-02T12:00:00Z');
 const constNow = (): Date => NOW;
 
-async function setupRepoWithEndpoint(): Promise<{
+/**
+ * V-1274c — seed n CONSECUTIVE FAILED DELIVERIES, the way production counts them.
+ *
+ * This file used to seed the counter by calling `recordRetry` n times on one delivery, which
+ * worked only because the in-memory double incremented `consecutiveFailures` on the retry path.
+ * The Drizzle repo does not, deliberately: the counter is a per-DELIVERY signal the docs tell
+ * customers to watch, and a retry is an ATTEMPT within one delivery. So every arm below was
+ * calibrated against a counter production does not keep, and the seeding is now a real delivery
+ * per failure — enqueue, claim, DLQ — which advances it on both implementations.
+ *
+ * Must be called BEFORE the delivery under test is enqueued: the claim takes every eligible row.
+ */
+async function seedFailedDeliveries(
+  repo: InMemoryWebhooksRepo,
+  endpointId: string,
+  n: number,
+): Promise<void> {
+  for (let i = 0; i < n; i += 1) {
+    const eventId = `aaaaaaaa-bbbb-4ccc-8ddd-${String(i).padStart(12, '0')}`;
+    await repo.enqueueDelivery({
+      webhookId: endpointId,
+      eventId,
+      eventType: 'session.completed',
+      payload: { id: eventId, type: 'session.completed', data: {} },
+      nextAttemptAt: NOW,
+    });
+  }
+  const claimed = await repo.claim({ batchSize: n + 8, now: NOW });
+  if (claimed.length !== n) {
+    throw new Error(
+      `seedFailedDeliveries claimed ${String(claimed.length)}, expected ${String(n)}`,
+    );
+  }
+  for (const row of claimed) {
+    await repo.recordDlq(row.id, { responseStatus: 500, lastError: null, at: NOW });
+  }
+}
+
+/**
+ * Put a delivery one failure away from the DLQ. The claim is not optional: production's
+ * `record*` are fenced on `in_flight`, so a write for a row the caller never claimed is a no-op
+ * there — and used to be honoured here, which let arms arrange states the real repo refuses.
+ */
+async function fastForwardAllPending(repo: InMemoryWebhooksRepo): Promise<void> {
+  const claimed = await repo.claim({ batchSize: 16, now: NOW });
+  for (const row of claimed) {
+    await repo.recordRetry(row.id, {
+      responseStatus: 500,
+      responseExcerpt: null,
+      lastError: null,
+      attempts: 5,
+      nextAttemptAt: new Date(NOW.getTime() - 1000),
+    });
+  }
+}
+
+async function setupRepoWithEndpoint(opts?: { enqueue?: boolean }): Promise<{
   repo: InMemoryWebhooksRepo;
   endpoint: WebhookEndpointRow;
 }> {
@@ -33,14 +89,16 @@ async function setupRepoWithEndpoint(): Promise<{
     events: ['session.completed'],
     description: null,
   });
-  await repo.enqueueDelivery({
-    webhookId: endpoint.id,
-    eventId: '11111111-2222-3333-4444-555555555555',
-    eventType: 'session.completed',
-    payload: { id: '11111111-2222-3333-4444-555555555555', type: 'session.completed', data: {} },
-    // Set to NOW so the claim (which uses constNow) finds it eligible.
-    nextAttemptAt: NOW,
-  });
+  if (opts?.enqueue !== false) {
+    await repo.enqueueDelivery({
+      webhookId: endpoint.id,
+      eventId: '11111111-2222-3333-4444-555555555555',
+      eventType: 'session.completed',
+      payload: { id: '11111111-2222-3333-4444-555555555555', type: 'session.completed', data: {} },
+      // Set to NOW so the claim (which uses constNow) finds it eligible.
+      nextAttemptAt: NOW,
+    });
+  }
   return { repo, endpoint };
 }
 
@@ -367,16 +425,8 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
   it('after MAX attempts, transitions to DLQ', async () => {
     const { repo, endpoint } = await setupRepoWithEndpoint();
     // Fast-forward attempts to 5 (next failure → 6, which is >= MAX_ATTEMPTS = 6).
-    const dlist = repo.getAllDeliveries();
-    expect(dlist[0]).toBeDefined();
-    const id = dlist[0]?.id ?? '';
-    await repo.recordRetry(id, {
-      responseStatus: 500,
-      responseExcerpt: null,
-      lastError: null,
-      attempts: 5,
-      nextAttemptAt: new Date(NOW.getTime() - 1000), // claim-eligible
-    });
+    expect(repo.getAllDeliveries()[0], 'the fixture enqueued no delivery').toBeDefined();
+    await fastForwardAllPending(repo);
 
     const worker = new WebhookDeliveryWorker({
       repo,
@@ -391,24 +441,14 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
     expect(endpoint.disabledAt).toBeNull();
   });
 
-  it('#6: a RETRY that crosses the 50-consecutive-failure threshold auto-disables the endpoint', async () => {
-    // Regression for the auto-disable check only running on the DLQ branch: an
-    // endpoint that keeps failing — each delivery scheduling a RETRY (not DLQ) —
-    // must still be disabled once consecutiveFailures crosses 50. Seed the
-    // endpoint to 49 consecutive failures (via recordRetry on a throwaway
-    // delivery), then run ONE more failing tick on a fresh delivery: the retry
-    // bumps to 50 and the endpoint must be disabled on the retry path.
-    const { repo, endpoint } = await setupRepoWithEndpoint();
-    const seedId = repo.getAllDeliveries()[0]?.id ?? '';
-    for (let i = 0; i < 49; i += 1) {
-      await repo.recordRetry(seedId, {
-        responseStatus: 500,
-        responseExcerpt: null,
-        lastError: null,
-        attempts: 1, // stays well under MAX so it never DLQs while seeding
-        nextAttemptAt: new Date(NOW.getTime() + 60 * 60_000), // not claim-eligible
-      });
-    }
+  it('#6: a RETRY does NOT advance the customer-facing failure counter, so an endpoint one failure from the tombstone survives a retry. This arm used to assert the opposite — that a retry could cross the threshold and disable the endpoint — and it passed only because the in-memory double incremented on the retry path. The Drizzle repo stopped doing that because a retry is an ATTEMPT within one delivery and MAX_ATTEMPTS is 6, so counting it tombstoned endpoints after roughly nine failed deliveries rather than the fifty customers are told to expect.', async () => {
+    const { repo, endpoint } = await setupRepoWithEndpoint({ enqueue: false });
+    await seedFailedDeliveries(repo, endpoint.id, 49);
+    expect(
+      (await repo.findEndpointById(endpoint.id))?.consecutiveFailures,
+      'the seeding did not land on 49 failed deliveries',
+    ).toBe(49);
+
     // A FRESH delivery (attempts=0) that fails → retry (nextAttemptIndex=1 < MAX).
     await repo.enqueueDelivery({
       webhookId: endpoint.id,
@@ -417,7 +457,6 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
       payload: { id: '22222222-3333-4444-5555-666666666666', type: 'session.completed', data: {} },
       nextAttemptAt: NOW,
     });
-
     const worker = new WebhookDeliveryWorker({
       repo,
       logger: createTestLogger(),
@@ -425,12 +464,18 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
       now: constNow,
     });
     const { outcomes } = await worker.tickOnce();
-    // The fresh delivery RETRIED (it did not DLQ) …
-    expect(outcomes.some((o) => o.kind === 'retry')).toBe(true);
-    // … and the 50th consecutive failure disabled the endpoint on the retry path.
+    expect(
+      outcomes.some((o) => o.kind === 'retry'),
+      'the fresh delivery did not retry',
+    ).toBe(true);
+
     const after = await repo.findEndpointById(endpoint.id);
-    expect(after?.disabledAt).not.toBeNull();
-    expect(after?.active).toBe(false);
+    expect(
+      after?.consecutiveFailures,
+      'the retry advanced the failure counter — it counts attempts, not failed deliveries',
+    ).toBe(49);
+    expect(after?.disabledAt, 'the endpoint was tombstoned by a RETRY').toBeNull();
+    expect(after?.active, 'the endpoint was deactivated by a RETRY').toBe(true);
   });
 
   // ── the other side of the threshold, and the reset ──────────────────────────
@@ -444,23 +489,10 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
   //
   // Same four-point discipline the webhook clock-skew window needed: at the edge, one
   // below, one beyond, and the way back.
-  it('#6b: a failing tick that lands on FORTY-NINE leaves the endpoint ENABLED. One below the threshold is what makes "disables at 50" mean 50 rather than "somewhere around 50" — and an endpoint tombstoned one failure early is a customer outage nobody can undo, which is what V-714 was at 6x.', async () => {
-    const { repo, endpoint } = await setupRepoWithEndpoint();
-    const seedId = repo.getAllDeliveries()[0]?.id ?? '';
-    // Seed to 48 through the repo, then let the WORKER take it to 49. Seeding all
-    // the way to 49 with recordRetry proves nothing about the threshold: the repo
-    // bumps the counter, the worker decides to disable, so a seed-only arm never
-    // reaches maybeAutoDisable at all. The first version of this test did exactly
-    // that and both "disable early" mutations survived it.
-    for (let i = 0; i < 48; i += 1) {
-      await repo.recordRetry(seedId, {
-        responseStatus: 500,
-        responseExcerpt: null,
-        lastError: null,
-        attempts: 1,
-        nextAttemptAt: new Date(NOW.getTime() + 60 * 60_000),
-      });
-    }
+  it('#6b: a failed DELIVERY that lands on FORTY-NINE leaves the endpoint ENABLED. One below the threshold is the only place an off-by-one shows: every other arm drives the count to fifty and asserts the tombstone, so a check that fired at 49 would pass all of them. The failure is driven to the DLQ rather than a retry because only a DLQ advances the counter.', async () => {
+    const { repo, endpoint } = await setupRepoWithEndpoint({ enqueue: false });
+    await seedFailedDeliveries(repo, endpoint.id, 48);
+
     await repo.enqueueDelivery({
       webhookId: endpoint.id,
       eventId: '44444444-5555-6666-7777-888888888888',
@@ -468,16 +500,19 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
       payload: { id: '44444444-5555-6666-7777-888888888888', type: 'session.completed', data: {} },
       nextAttemptAt: NOW,
     });
+    await fastForwardAllPending(repo);
+
     const worker = new WebhookDeliveryWorker({
       repo,
       logger: createTestLogger(),
       fetch: fakeFetch({ status: 500 }),
       now: constNow,
     });
-    await worker.tickOnce();
+    const { outcomes } = await worker.tickOnce();
+    expect(outcomes[0]?.kind, 'the arranged delivery did not reach the DLQ').toBe('dlq');
 
     const at49 = await repo.findEndpointById(endpoint.id);
-    expect(at49?.consecutiveFailures, 'the failing tick did not land on 49').toBe(49);
+    expect(at49?.consecutiveFailures, 'the failing delivery did not land on 49').toBe(49);
     expect(
       at49?.disabledAt,
       'the endpoint was disabled at 49 consecutive failures — one short of the documented threshold',
@@ -486,17 +521,8 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
   });
 
   it('#6c: a SUCCESSFUL delivery resets the counter, so a long-lived endpoint cannot accumulate its way to a tombstone. The worker contract says "2xx → recordDelivered (resets consecutiveFailures)" and nothing drove it: without the reset, an endpoint that failed 49 times, then delivered cleanly for a month, is disabled by its next single failure.', async () => {
-    const { repo, endpoint } = await setupRepoWithEndpoint();
-    const seedId = repo.getAllDeliveries()[0]?.id ?? '';
-    for (let i = 0; i < 49; i += 1) {
-      await repo.recordRetry(seedId, {
-        responseStatus: 500,
-        responseExcerpt: null,
-        lastError: null,
-        attempts: 1,
-        nextAttemptAt: new Date(NOW.getTime() + 60 * 60_000),
-      });
-    }
+    const { repo, endpoint } = await setupRepoWithEndpoint({ enqueue: false });
+    await seedFailedDeliveries(repo, endpoint.id, 49);
     expect((await repo.findEndpointById(endpoint.id))?.consecutiveFailures).toBe(49);
 
     // One clean delivery through the real worker path.
@@ -537,21 +563,10 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
     // and the endpoint was NEVER disabled even though the real counter climbed
     // 48 → 49 → 50. The fix re-reads the CURRENT consecutiveFailures after each
     // record* increment commits, so the second failure observes 50 and disables.
-    const { repo, endpoint } = await setupRepoWithEndpoint();
-    // Seed the endpoint to 48 consecutive failures via a throwaway delivery
-    // that is NOT claim-eligible (nextAttemptAt in the future).
-    const seedId = repo.getAllDeliveries()[0]?.id ?? '';
-    for (let i = 0; i < 48; i += 1) {
-      await repo.recordRetry(seedId, {
-        responseStatus: 500,
-        responseExcerpt: null,
-        lastError: null,
-        attempts: 1,
-        nextAttemptAt: new Date(NOW.getTime() + 60 * 60_000),
-      });
-    }
-    // Two FRESH deliveries (attempts=0) for the SAME endpoint, both claim-
-    // eligible at NOW → claimed together + run concurrently via Promise.all.
+    // Both failures are driven to the DLQ: a retry does not advance the counter.
+    const { repo, endpoint } = await setupRepoWithEndpoint({ enqueue: false });
+    await seedFailedDeliveries(repo, endpoint.id, 48);
+
     for (const eventId of [
       '44444444-5555-6666-7777-888888888888',
       '55555555-6666-7777-8888-999999999999',
@@ -564,6 +579,8 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
         nextAttemptAt: NOW,
       });
     }
+    // Both armed in ONE claim, so both are due together and land in the same batch.
+    await fastForwardAllPending(repo);
 
     const worker = new WebhookDeliveryWorker({
       repo,
@@ -572,11 +589,12 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
       now: constNow,
     });
     const { claimed, outcomes } = await worker.tickOnce();
-    // Both fresh deliveries were claimed in one batch and retried.
-    expect(claimed).toBe(2);
-    expect(outcomes.every((o) => o.kind === 'retry')).toBe(true);
-    // The two increments pushed the live counter 48 → 49 → 50: the endpoint
-    // MUST be disabled (pre-fix it stays enabled — both checks saw 48+1=49).
+    expect(claimed, 'the two deliveries were not claimed in one batch').toBe(2);
+    expect(
+      outcomes.every((o) => o.kind === 'dlq'),
+      'a delivery retried instead of reaching the DLQ, so it never advanced the counter',
+    ).toBe(true);
+
     const after = await repo.findEndpointById(endpoint.id);
     expect(after?.consecutiveFailures).toBe(50);
     expect(after?.disabledAt).not.toBeNull();
@@ -590,6 +608,9 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
     // not promote to DLQ. This is the previously-unreachable 5th retry.
     const { repo } = await setupRepoWithEndpoint();
     const id = repo.getAllDeliveries()[0]?.id ?? '';
+    // Claim first: production fences record* on in_flight, so arranging state through a write
+    // for a row nobody claimed is a no-op there.
+    await repo.claim({ batchSize: 16, now: NOW });
     await repo.recordRetry(id, {
       responseStatus: 500,
       responseExcerpt: null,
@@ -613,6 +634,26 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
     const delayMs = (d?.nextAttemptAt.getTime() ?? 0) - NOW.getTime();
     expect(delayMs).toBeGreaterThanOrEqual(60 * 60_000);
     expect(delayMs).toBeLessThanOrEqual(60 * 60_000 * 1.15 + 1);
+  });
+
+  it('CRITICAL a late record* from a stalled worker is a NO-OP against the double too. Production fences these three writers on in_flight; this fixture honoured any write for any row, so a test could arrange — and a service could appear to survive — a stale write that resurrects a delivered delivery into the DLQ and pushes its endpoint toward the auto-disable it never earned.', async () => {
+    const { repo, endpoint } = await setupRepoWithEndpoint();
+    const id = repo.getAllDeliveries()[0]?.id ?? '';
+    await repo.claim({ batchSize: 16, now: NOW });
+    await repo.recordDelivered(id, { responseStatus: 200, at: NOW });
+    expect(repo.getAllDeliveries()[0]?.status, 'the delivery was not finalised').toBe('delivered');
+
+    // The stalled worker reports failure after the row was already finalised.
+    await repo.recordDlq(id, { responseStatus: 500, lastError: 'HTTP 500', at: NOW });
+
+    expect(
+      repo.getAllDeliveries()[0]?.status,
+      'a stale write resurrected a delivered row into the DLQ',
+    ).toBe('delivered');
+    expect(
+      (await repo.findEndpointById(endpoint.id))?.consecutiveFailures,
+      'a stale write advanced the endpoint toward auto-disable',
+    ).toBe(0);
   });
 
   it('endpoint missing/disabled → DLQ', async () => {
