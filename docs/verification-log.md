@@ -1373,3 +1373,69 @@ found something a green vitest run showed no sign of, which is worth stating pla
 files a green vitest run is not evidence the fixture is well-formed.
 
 **Owed remaining: 12.**
+
+---
+
+## V-1228 — a coin-flip assertion I nearly shipped, and a guarantee no double can hold
+
+Eighteenth of the twenty-nine. Two findings, and the first is about my own test.
+
+**I wrote an ordering arm that was FLAKY, not vacuous, and it passed twice before I caught it.**
+The arm asserted the two snapshots came back in reverse creation order. Mutating the double's sort
+left the suite green, which is what exposed it. The reason is a resolution mismatch nothing else in
+this sweep has surfaced:
+
+```
+in-memory double   createdAt = new Date()      -> MILLISECOND precision
+Postgres           created_at timestamptz      -> MICROSECOND precision
+```
+
+Two inserts back to back TIE in the double and do NOT tie in Drizzle. So the id tiebreak decides on
+one side and `createdAt` decides on the other, and an arm asserting creation order is a coin flip on
+two random uuids — passing until it does not, for a reason nobody could reproduce from the failure.
+A rewrite pinning the id tiebreak instead was ALSO flaky, for the mirror-image reason: it is only a
+tiebreak on the side that ties.
+
+Fixed by making the fixture wait 5ms between inserts so `createdAt` genuinely differs on both sides,
+then asserting newest-first. Five consecutive runs green, and mutating either implementation's sort
+now reds it.
+
+This is the fifth fixture-ordering trap this session and the first one that was not vacuous but
+UNSTABLE, which is strictly worse: a vacuous arm never fails, so it is found by mutation; a flaky
+arm fails later, in someone else's run, on a test they did not write.
+
+**The second finding is a guarantee that CANNOT be a contract arm.** Snapshots exist to outlive the
+profile they came from, and what makes that work is in the schema:
+
+```
+profile_snapshots_parent_profile_id_fkey   ON DELETE SET NULL
+profile_snapshots_account_id_fkey          ON DELETE CASCADE
+```
+
+Purging the parent NULLs `parent_profile_id` and leaves the snapshot standing — which is why
+`parentProfileId` is nullable and why restore falls back to `parentArchetype`/`parentName`. Deleting
+the account takes the snapshots with it.
+
+No in-memory double can hold that: it has no `profiles` table for a foreign key to point at, so
+there is nothing to cascade FROM. The behaviour is not unimplemented in the double, it is
+unimplementable there. Putting it in the shared block would produce an assertion that runs against
+one implementation while reading as though it ran against two — the exact failure these contracts
+exist to prevent. It sits in a labelled Drizzle-only block instead.
+
+The two FK arms prove each other rather than needing a schema mutation: if both keys cascaded, the
+survival arm fails; if both set null, the account arm fails. They can only both pass if the two
+foreign keys genuinely differ.
+
+```
+M1  DRIZZLE list drops account scoping        2 failed | 9 passed
+M2  the DOUBLE list reverses createdAt order  1 failed | 10 passed
+M3  the DOUBLE delete drops its account check 1 failed | 10 passed
+M4  DRIZZLE list orders oldest-first          3 failed | 8 passed
+restored (source 0 dirty)                     11 passed
+```
+
+M4 is reported as it behaved rather than as a clean kill: swapping `desc` for `asc` also removes an
+identifier that is not imported, so the Drizzle arms error rather than merely disagreeing. It
+demonstrates the arm depends on that clause; it does not isolate ordering from compilation.
+
+**Owed remaining: 11.**
