@@ -1612,3 +1612,73 @@ arm. Same correction as V-1228's M4, applied deliberately this time rather than 
 M2 and M3 are the pair that matter: whichever side loses the inclusive boundary, the same arm fails.
 
 **Owed remaining: 8.**
+
+---
+
+## V-1232 — a composite key that can fail in two opposite directions
+
+Twenty-second of the twenty-nine. This is the record of "have we already mailed THIS subscriber
+about THIS incident?", read before every incident notification. The whole surface is two methods and
+one composite key, and everything that can go wrong is that key being too wide or too narrow.
+
+```
+Drizzle  INSERT … ON CONFLICT (subscriber_id, incident_id) DO UPDATE
+             SET last_sent_at = excluded.last_sent_at
+         SELECT last_sent_at WHERE subscriber_id = $1 AND incident_id = $2
+
+double   Map keyed on `${subscriberId}::${incidentId}`
+```
+
+**Too wide** — keyed on the subscriber alone — and the first incident someone hears about silences
+every later one. During a real outage that is the customer told the API is degraded and never told
+it is fixed. **Too narrow** — keyed on the incident alone — and one subscriber's send suppresses
+everyone else's, so the first person on the list is the only person notified.
+
+Both failures are silent. The throttle reports "already sent" and the mail does not go; nothing
+errors, and the absence of an email is not something a test notices unless it asks. So the arms hold
+the key from BOTH sides — same subscriber different incident, different subscriber same incident —
+rather than only asserting that a repeat is suppressed, which is the arm that would have been
+written by looking at the happy path.
+
+M1 and M2 are the same mutation in opposite directions, and each reds a different arm:
+
+```
+M1  the DOUBLE keys on the SUBSCRIBER alone   "throttled a different incident"   1 failed | 10 passed
+M2  the DOUBLE keys on the INCIDENT alone     "throttled another subscriber"     1 failed | 10 passed
+M3  DRIZZLE drops the incident predicate      "throttled a different incident"   1 failed | 10 passed
+M4  the DOUBLE keeps the first timestamp      "did not advance last_sent_at"     1 failed | 10 passed
+restored (source 0 dirty)                                                        11 passed
+```
+
+M4 covers the part that is not a claim. `markSent` returns void and calling it twice is expected on
+a re-notify, so the upsert must ADVANCE `last_sent_at` rather than keep the first value — the
+throttle window is measured from it, and a stuck timestamp turns a throttle into a permanent mute for
+that pair. An implementation using insert-if-absent would satisfy every other arm here.
+
+**A correction about my own process, and it invalidates a claim I made three times.** The suite
+failed this entry on `the-server-source-type-checks`: my import took
+`IncidentUpdateNotificationsRepo` from `services/incident-notifications.js`, which does not export
+it — the interface lives in `db/incident-update-notifications-repo.ts`.
+
+I had run `tsc --noEmit -p apps/server/tsconfig.json` before the mutation work and called it clean.
+It was not clean; it was **empty**:
+
+```
+apps/server/tsconfig.json   include: ['src/**/*']   exclude: ['dist', 'node_modules', 'tests']
+```
+
+That project EXCLUDES tests, so it never checked the file I had just written — and an empty grep
+over its output reads exactly like a pass. The gate itself runs two projects, `tsconfig.json` AND
+`tsconfig.test.json`; only the second covers these contracts.
+
+So the "tsc clean first time" noted in V-1228, V-1229 and V-1231 was vacuous — those runs checked
+nothing about the new files. The type errors those entries credit the SUITE with catching were
+caught by the suite precisely because my own check could not see them. The correct command for a
+contract file is `tsc --noEmit -p apps/server/tsconfig.test.json`, and the result must be read from
+the EXIT CODE, not from whether a grep printed anything. Both are now verified for this file: exit 0,
+0 errors.
+
+This is the same shape as every vacuous-arm finding in this log, turned on my own tooling: a check
+that cannot fail reads identically to a check that passed.
+
+**Owed remaining: 7.**
