@@ -3252,3 +3252,39 @@ share the helper and pay for the extra writes. That is four local fixes to one s
 the honest reading is that the structure is the thing — a counter with no filter cannot be measured
 cleanly by concurrent tests, and every technique here is a way of tolerating that rather than
 removing it.
+
+## V-1265 — the full suite caught what my consumer sweep did not
+
+The full run after V-1263 was RED: `every-drizzle-repo-is-driven-against-a-real-postgres` failed
+with `neither a repo class nor listed as having none`. The new
+`src/db/subscription-status-sets.ts` holds a constant and no repo class, and that guard requires
+every `db/*.ts` to be one or the other.
+
+**My consumer enumeration was keyed on the wrong thing.** Before committing V-1263 I ran every test
+mentioning `stripe-webhooks`, `admin-billing`, `ACTIVE_SUBSCRIPTION_STATUSES` or the new module —
+34 files, all green. But this guard mentions none of those. It scans the DIRECTORY. Adding a FILE
+to `src/db/` has consumers that no symbol-based grep can find, because what they consume is the
+directory listing.
+
+That is a new shape of the enumeration mistake this campaign keeps making. Previous ones were about
+the pattern being wrong (V-1252), the query dialect changing under me (V-1256), or scanning the
+wrong side of the defect (V-1255). This one had a correct query aimed at the right side — it simply
+cannot see a consumer that never names what it consumes.
+
+The rule that follows: **adding or removing a file under a scanned directory is itself a change with
+consumers.** For `src/db/**` those are the guards that enumerate it, and the only reliable way to
+find them is the full suite — which is exactly what found it.
+
+Listed with the reason, and the reason is the interesting part: the module exists BECAUSE it has no
+repo. Two repos and two doubles needed one policy value, and giving it to either repo would have
+made that module its accidental owner (V-1263). A file with no persistence class is what that
+decision looks like on disk.
+
+```
+N1  remove the exemption entry   the classification arm   1 failed | 2 passed
+restored (0 dirty, sha equal)                             3 passed
+```
+
+Nothing about V-1263's substance changes — the four copies are still one, and the arm underneath is
+still there. What changed is that the tree was red between two commits, and it was red because I
+verified a change against the consumers I could name.

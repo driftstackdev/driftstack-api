@@ -86,6 +86,10 @@ const NO_PERSISTENCE_CLASS = new Set([
   'schema.ts',
   'seed-target-guard.ts',
   'seed.ts',
+  // V-1263 — holds the billed-subscription status set and nothing else. It exists precisely
+  // BECAUSE it has no repo: two repos and two doubles needed the same policy value, and giving
+  // it to either repo would have made that module its accidental owner.
+  'subscription-status-sets.ts',
 ]);
 
 describe('every Drizzle repo is driven against a real Postgres', () => {
