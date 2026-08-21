@@ -248,32 +248,53 @@ describe('W998 db/sessions-repo cross-source invariant', () => {
 
   // ─── V-1001: the pair this file names must AGREE ─────────────
 
-  it("CRITICAL the in-memory double's active-status rule matches the repo's ACTIVE_SESSION_STATUSES. This file's first arm pins the Drizzle+double PAIRING as the V-156 contract but never checked the two agree on anything. The repo names the set once and uses it twice — listActiveByAccount and listExpiredForAutoDestroy, the auto-destroy sweeper's query — while the double hard-codes the same three literals TWICE, in the methods standing in for those two. The constant is not exported, so nothing links them: adding a status makes the shipped sweeper reap it and leaves every test wired to the double modelling the old set, silently.", () => {
+  it("CRITICAL the in-memory double READS the repo's ACTIVE_SESSION_STATUSES instead of spelling it out. The repo names the set once and uses it twice — listActiveByAccount and listExpiredForAutoDestroy, the auto-destroy sweeper's query — and the double stands in for both. This arm used to compare the repo's declaration against two hard-coded chains in the double, which caught drift but left two copies agreeing by inspection; V-1279 exported the constant so there is one home, and what is checked now is that the second copy has not come back. Adding a status must move the shipped sweeper and every test wired to the double in the same edit.", () => {
     const repoSrc = read(resolve(REPO_ROOT, 'apps/server/src/db/sessions-repo.ts'));
     const doubleSrc = read(
       resolve(REPO_ROOT, 'apps/server/tests/integration/_helpers/in-memory-sessions-repo.ts'),
     );
 
-    const decl = /const ACTIVE_SESSION_STATUSES[^=]*=\s*\[([^\]]*)\]/.exec(repoSrc);
-    expect(decl, 'ACTIVE_SESSION_STATUSES no longer declared as an array literal').not.toBeNull();
-    const canonical = [...(decl?.[1] ?? '').matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
-    expect(canonical.length, 'the constant parsed as empty — the regex, not the source').toBe(3);
+    const decl = /export const ACTIVE_SESSION_STATUSES[^=]*=\s*\[([^\]]*)\]/.exec(repoSrc);
+    expect(
+      decl,
+      'ACTIVE_SESSION_STATUSES is no longer EXPORTED as an array literal — the double imports it, ' +
+        'so un-exporting it breaks the link rather than the build alone',
+    ).not.toBeNull();
+    expect(
+      [...(decl?.[1] ?? '').matchAll(/'([a-z_]+)'/g)].length,
+      'the constant parsed as empty — the regex, not the source',
+    ).toBe(3);
 
     // Every place the repo uses the set, so a third use cannot appear unnoticed.
-    const uses = [...repoSrc.matchAll(/inArray\(sessions\.status, ACTIVE_SESSION_STATUSES\)/g)];
-    expect(uses.length, 'repo queries keyed to the constant').toBe(2);
+    expect(
+      [...repoSrc.matchAll(/inArray\(sessions\.status, ACTIVE_SESSION_STATUSES\)/g)].length,
+      'repo queries keyed to the constant',
+    ).toBe(2);
 
-    // The double's copies: `s.status === 'a' || s.status === 'b' || ...` chains.
-    const chains = [
-      ...doubleSrc.matchAll(/s\.status === '[a-z_]+'(?:\s*\|\|\s*s\.status === '[a-z_]+')+/g),
-    ].map((m) => [...m[0].matchAll(/'([a-z_]+)'/g)].map((x) => x[1]));
-    expect(chains.length, 'hard-coded active-status chains in the double').toBe(2);
-    for (const chain of chains) {
-      expect(
-        [...chain].sort(),
-        'the double models a different active-status set than the repo — the shipped query and ' +
-          'the double every test wires have diverged',
-      ).toEqual([...canonical].sort());
-    }
+    // The double reads it, at both sites that stand in for those queries.
+    expect(
+      doubleSrc.includes(
+        "import { ACTIVE_SESSION_STATUSES } from '../../../src/db/sessions-repo.js'",
+      ),
+      'the double no longer imports the constant',
+    ).toBe(true);
+    expect(
+      [...doubleSrc.matchAll(/ACTIVE_SESSION_STATUSES\.includes\(/g)].length,
+      'the double stopped using the constant at both of the sites that mirror the repo queries',
+    ).toBe(2);
+
+    // …and has not grown a hand-written copy back. The detector is exercised on a control first,
+    // because an arm asserting "zero chains" passes just as happily when its regex has stopped
+    // matching anything at all.
+    const CHAIN = /s\.status === '[a-z_]+'(?:\s*\|\|\s*s\.status === '[a-z_]+')+/g;
+    expect(
+      [...`s.status === 'creating' || s.status === 'ready' || s.status === 'busy'`.matchAll(CHAIN)]
+        .length,
+      'the chain detector no longer recognises a hand-written active-status copy',
+    ).toBe(1);
+    expect(
+      [...doubleSrc.matchAll(CHAIN)].map((m) => m[0]),
+      'the double spells the active-status set out by hand again — import the constant',
+    ).toEqual([]);
   });
 });

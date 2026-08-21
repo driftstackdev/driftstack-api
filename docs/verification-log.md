@@ -4042,3 +4042,54 @@ decides whether a magic link or reset token can be replayed — matches exactly,
 only for the first consume of an unconsumed row.
 
 Suites: 10 files, 117 passed, `tsc` clean.
+
+---
+
+## V-1279 — the active-status set had two homes and a guard holding them together; now it has one
+
+Continuing down the 79 one-sided assertions from V-1278, `sessions-repo` (11) was next.
+
+**Most of it is clean, verified against source rather than assumed.** `failSessionOperation` and
+`settleSessionOperation` reproduce all five components of the Drizzle predicate — id, accountId,
+driverSessionId, `status = 'busy'`, `destroyedAt IS NULL` — and the double even serialises them
+through a mutation lock; `activateSessionReservation` matches its four. The operation lifecycle is
+the same fence-on-the-claimed-state shape that diverged in the webhooks trio (V-1274c), and here the
+double has it.
+
+`listExpiredForAutoDestroy` and `listActiveByAccount` are where the repo names its active-status set,
+and **the double spelled the three literals out again, twice**. This is the V-1238 class, and the
+V-1260 guard states in its own header that it only sees NUMBERS — a set of STRINGS walks past it.
+
+**It was already known.** `db-sessions-repo-cross-source-invariant.test.ts` carries an arm (V-1063)
+that parses the repo's declaration, parses the double's two hard-coded chains, and asserts the sets
+match — and its title says exactly why: _"The constant is not exported, so nothing links them:
+adding a status makes the shipped sweeper reap it and leaves every test wired to the double
+modelling the old set, silently."_ **That is the second time this turn I have re-derived documented
+prior art.** V-1277's lesson was to grep prior art before probing; the sharper version, which I am
+writing down because the first phrasing was not enough to change my behaviour, is to grep it when
+opening the METHOD, not after comparing the two sources and finding something.
+
+The residual improvement is real, and it is the remedy V-1260 prescribes: _name it, export it from
+the repo, import it in the double_. The guard existed BECAUSE the constant was private, holding two
+copies together by comparing their text. The constant is now exported and the double imports it at
+both sites, so there is one home and adding a status moves the shipped sweeper and every
+double-backed test in the same edit.
+
+The arm was rewritten rather than deleted, because the copy can come back. It now asserts the export
+survives, the repo still uses it exactly twice, the double imports it and calls it at both mirroring
+sites, and no hand-written chain has reappeared — with the chain detector exercised on a control
+first, since an arm asserting "zero chains" passes just as happily when its regex has stopped
+matching anything.
+
+```
+M15  a hand-written chain returns to the double   RED "the double stopped using the constant at
+                                                  both of the sites that mirror the repo queries"
+M16  the export is taken away                     RED "no longer EXPORTED as an array literal"
+```
+
+Both pin-parsers that read this declaration — the arm above and
+`every-non-terminal-session-query-agrees`, which derives the TERMINAL set as the enum minus this one
+— use unanchored regexes, so `export ` prefixing them changes nothing. Checked before editing rather
+than discovered by a red run.
+
+Suites: 138 session-touching files, 1654 passed, `tsc` clean.

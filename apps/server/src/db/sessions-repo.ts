@@ -34,7 +34,16 @@ import { parseUuidCursor } from '../lib/keyset-cursor.js';
 import { profileSessionAdvisoryLockKey } from './profile-session-lock.js';
 
 // 6.g — non-terminal statuses eligible for the duration auto-destroy sweep.
-const ACTIVE_SESSION_STATUSES: SessionRecord['status'][] = ['creating', 'ready', 'busy'];
+/**
+ * The statuses a session can hold while it is still alive. Used by `listActiveByAccount` and by
+ * `listExpiredForAutoDestroy`, the auto-destroy sweeper's query.
+ *
+ * V-1279 — EXPORTED so the in-memory double imports it instead of spelling the three literals out
+ * a second and third time. V-1063 caught the drift risk with a cross-source arm comparing the
+ * repo's declaration against the double's hard-coded chains, which works but leaves two copies
+ * agreeing by inspection. One home, and adding a status moves both sides at once.
+ */
+export const ACTIVE_SESSION_STATUSES: SessionRecord['status'][] = ['creating', 'ready', 'busy'];
 
 export class DrizzleSessionRepo implements SessionRepo {
   constructor(private readonly database: Database) {}

@@ -13,6 +13,7 @@ import type {
   SerializedSessionDestroyInput,
   SerializedSessionDestroyResult,
 } from '../../../src/services/sessions.js';
+import { ACTIVE_SESSION_STATUSES } from '../../../src/db/sessions-repo.js';
 import { keysetPage } from './keyset-page.js';
 
 interface StoredEvent extends SessionEventInput {
@@ -347,9 +348,7 @@ export class InMemorySessionsRepo implements SessionRepo {
 
   listActiveByAccount(accountId: string): Promise<SessionRecord[]> {
     const active = Array.from(this.sessions.values()).filter(
-      (s) =>
-        s.accountId === accountId &&
-        (s.status === 'creating' || s.status === 'ready' || s.status === 'busy'),
+      (s) => s.accountId === accountId && ACTIVE_SESSION_STATUSES.includes(s.status),
     );
     return Promise.resolve(active);
   }
@@ -418,7 +417,8 @@ export class InMemorySessionsRepo implements SessionRepo {
     tierCutoffs: ReadonlyArray<{ tier: AccountTier; expiredBefore: Date }>;
     limit: number;
   }): Promise<SessionRecord[]> {
-    // Mirrors the Drizzle query: active (creating/ready/busy) sessions whose
+    // Mirrors the Drizzle query: sessions in ACTIVE_SESSION_STATUSES — imported from the repo
+    // rather than restated here — whose
     // account tier matches one of the supplied cutoffs AND whose createdAt
     // is strictly before that tier's cutoff. Oldest-first, capped at limit.
     if (opts.tierCutoffs.length === 0) return Promise.resolve([]);
@@ -426,7 +426,7 @@ export class InMemorySessionsRepo implements SessionRepo {
     for (const c of opts.tierCutoffs) cutoffByTier.set(c.tier, c.expiredBefore);
 
     const matches = Array.from(this.sessions.values())
-      .filter((s) => s.status === 'creating' || s.status === 'ready' || s.status === 'busy')
+      .filter((s) => ACTIVE_SESSION_STATUSES.includes(s.status))
       .filter((s) => {
         // Unseen accounts default to 'free' — mirrors the accounts.tier
         // column default so the join semantics match the Drizzle repo.
