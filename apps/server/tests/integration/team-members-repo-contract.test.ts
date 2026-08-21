@@ -144,6 +144,28 @@ async function addInvite(s: Subject, owner: string, email: string): Promise<stri
 
 function teamMembersRepoContract(label: string, make: () => Subject, enabled: () => boolean): void {
   describe(`TeamMembersRepo contract — ${label}`, () => {
+    it('CRITICAL an invite handed to the caller is a SNAPSHOT — a later write does not reach into it, in both. Postgres cannot mutate a row the caller already holds. A fixture that can makes every before/after comparison against it read "nothing changed", because `before` and `after` are the same object, and the arm then passes forever asserting nothing.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const owner = await s.account();
+      const email = `snap-${randomUUID().slice(0, 8)}@team.test`;
+      const inviteId = await addInvite(s, owner, email);
+
+      const held = (await s.repo.listPendingInvites(owner)).find((i) => i.id === inviteId);
+      expect(held?.acceptedAt ?? null, 'precondition: the invite is still pending').toBeNull();
+
+      await s.repo.markInviteAccepted(inviteId, new Date('2026-08-21T00:00:00.000Z'));
+
+      expect(
+        held?.acceptedAt ?? null,
+        'the invite handed to the caller mutated underneath it — reads are aliasing the store',
+      ).toBeNull();
+      expect(
+        (await s.repo.listPendingInvites(owner)).some((i) => i.id === inviteId),
+        'and the accept did not land, so the arm above proves nothing',
+      ).toBe(false);
+    });
+
     it("CRITICAL listMembers is owner-scoped, and returns the asking owner's own team. ownerAccountId is the entire boundary on this read — a list that leaked across owners would expose one customer's colleagues to another.", async () => {
       if (!enabled()) return;
       const s = make();

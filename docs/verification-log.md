@@ -2715,3 +2715,37 @@ because a pattern tight enough to avoid false positives is tight enough to miss 
 pattern loose enough to catch them all invents some.
 
 Still owed: `team-members`, 11 sites.
+
+## V-1253 — the aliasing class closed
+
+Third and last of the three doubles that handed back their own stored objects. `TeamMembersRepo`'s
+double mutates rows in place across eleven sites — invite fields, membership fields, the
+`acceptedAt` stamp — and returned those objects from six interface reads. All six now return a
+shallow snapshot.
+
+```
+N1  listPendingInvites hands back stored rows   "mutated underneath it"   1 failed | 10 passed
+N2  markInviteAccepted stops writing            "proves nothing"          1 failed | 10 passed
+restored (0 dirty, sha equal)                                             11 passed
+```
+
+`getAllInvites` and `getAllMembers` are deliberately left aliasing, and now say so at the
+definition rather than only in this log. They are not on `TeamMembersRepo`, so they model nothing
+in production, and fixtures use them to ARRANGE state as well as to assert — snapshotting them is
+what turned two unrelated tombstone tests red in V-1251. The rule belongs to the interface; these
+are hatches into the fixture's own state, and the comment says why so the next person does not
+"fix" them back.
+
+Class closed:
+
+```
+status-subscribers   13 in-place sites   6 reads snapshotted   V-1251
+oauth-links           3                  4                     V-1252
+team-members         11                  6                     V-1253
+probes                0                  —                     false positive (V-1252)
+```
+
+Every one of the three carries a contract arm with the same two halves: the row a caller holds does
+not change, AND the write it was holding it across actually landed. The second half is not
+decoration — without it the first is satisfied by a repo that never changes anything, which is
+precisely the vacuity this class produces in the first place.

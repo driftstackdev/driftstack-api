@@ -9,6 +9,27 @@ import type {
   TeamRole,
 } from '../../../src/services/team-members.js';
 
+/**
+ * V-1253 — every INTERFACE read hands back a SNAPSHOT, never the stored object.
+ *
+ * This double mutates stored rows in place (eleven sites: invite fields, membership fields,
+ * `acceptedAt` stamps) and its reads used to return those very objects, so a row the caller was
+ * already holding kept changing underneath it. A SELECT is a point-in-time copy; a later UPDATE
+ * cannot reach into a result already returned.
+ *
+ * The failure is silent: a before/after comparison against this double reads "nothing changed"
+ * whatever the code under test did, because `before` and `after` are one object, and the arm then
+ * passes forever asserting nothing. Third and last of the three doubles in this class, after
+ * V-1251 (status-subscribers) and V-1252 (oauth-links).
+ *
+ * `getAllInvites` / `getAllMembers` are deliberately NOT snapshotted — see the note on them.
+ */
+function snapRow<T extends object>(row: T): T;
+function snapRow<T extends object>(row: T | undefined | null): T | null;
+function snapRow<T extends object>(row: T | undefined | null): T | null {
+  return row ? { ...row } : null;
+}
+
 export class InMemoryTeamMembersRepo implements TeamMembersRepo {
   private readonly members: TeamMemberRow[] = [];
   private readonly invites: TeamInviteRow[] = [];
@@ -40,7 +61,7 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
       existing.inviteExpiresAt = input.inviteExpiresAt;
       existing.role = input.role;
       existing.invitedByAccountId = input.invitedByAccountId;
-      return existing;
+      return snapRow(existing);
     }
     const row: TeamInviteRow = {
       id: randomUUID(),
@@ -54,15 +75,15 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
       createdAt: new Date(),
     };
     this.invites.push(row);
-    return row;
+    return snapRow(row);
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await
   async findInviteByTokenHash(hash: string): Promise<TeamInviteRow | null> {
     // SINGLE-USE — only an un-accepted invite is returned (mirrors the Drizzle
     // isNull(acceptedAt) filter); a used token can't be replayed.
-    return (
-      this.invites.find((inv) => inv.inviteTokenHash === hash && inv.acceptedAt === null) ?? null
+    return snapRow(
+      this.invites.find((inv) => inv.inviteTokenHash === hash && inv.acceptedAt === null),
     );
   }
 
@@ -95,7 +116,7 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
       existing.role = input.role;
       existing.invitedAt = input.invitedAt;
       existing.invitedByAccountId = input.invitedByAccountId;
-      return existing;
+      return snapRow(existing);
     }
     const row: TeamMemberRow = {
       id: randomUUID(),
@@ -109,7 +130,7 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
       createdAt: new Date(),
     };
     this.members.push(row);
-    return row;
+    return snapRow(row);
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await
@@ -138,7 +159,7 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
       existing.role = invite.role;
       existing.invitedAt = invite.createdAt;
       existing.invitedByAccountId = invite.invitedByAccountId;
-      return existing;
+      return snapRow(existing);
     }
     const row: TeamMemberRow = {
       id: randomUUID(),
@@ -152,7 +173,7 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
       createdAt: new Date(),
     };
     this.members.push(row);
-    return row;
+    return snapRow(row);
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await
@@ -168,7 +189,8 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
     // was asserting it upside down relative to what the customer is shown.
     return this.members
       .filter((m) => m.ownerAccountId === ownerAccountId)
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .map((m) => snapRow(m));
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await
@@ -176,7 +198,8 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
     // V-1209 — mirrors `ORDER BY created_at DESC`, same reversal as listMembers above.
     return this.invites
       .filter((inv) => inv.ownerAccountId === ownerAccountId && inv.acceptedAt === null)
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .map((inv) => snapRow(inv));
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await
@@ -264,7 +287,15 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
     }
   }
 
-  /** Test-only — exposes raw rows for assertions. */
+  /**
+   * Test-only — exposes raw rows for assertions.
+   *
+   * V-1253 — deliberately NOT snapshotted, unlike every interface read above. These are not on
+   * `TeamMembersRepo`, so they model nothing in production, and fixtures use them to ARRANGE state
+   * as well as to assert. Handing back copies would send those arrange-phase writes into throwaway
+   * objects, which is exactly how V-1251 turned two unrelated tests red. The snapshot rule belongs
+   * to the interface; this is a hatch into the fixture's own state.
+   */
   getAllInvites(): readonly TeamInviteRow[] {
     return this.invites;
   }
