@@ -3524,3 +3524,48 @@ was arranged so the mechanism had no opportunity to matter, and only the mutatio
 
 Contracts re-run as a set three times, 398 passed each — the concentrated-interference check from
 V-1261, now that this contract seeds `web_sessions` as well.
+
+## V-1271 — one arm of a two-arm guard, described as if it were the whole guard
+
+`sessions-repo` was next on the coverage list at 5/19. Two of its uncovered methods turned out
+clean on inspection, and saying so matters as much as the finding:
+
+- `claimSessionOperation` — the double sets `busy` unconditionally where the repo's UPDATE also
+  requires `status = 'ready'`. Equivalent, because the enum is
+  `creating | ready | busy | destroyed | errored` and the branches above have already returned for
+  four of the five. Checked against the enum rather than assumed.
+- `insertSessionIfUnderLimit`'s cap — both count `accountId AND destroyed_at IS NULL`. Identical.
+
+**The profile guard is not.** `DrizzleSessionsRepo` refuses a bind on EITHER a live legacy session
+holding the profile OR a live row in `agent_sessions` with that profile and status not `closed`.
+The double models the first arm only — it has no agent-session state — and its comment described
+the guard as though that were all of it.
+
+So the double UNDER-REFUSES: a bind production rejects because an agent session holds the profile
+succeeds here. And `profile-in-use-guard.test.ts` has two describes, one per side, each testing its
+OWN guard — neither crosses, so nothing made the gap visible.
+
+**Not modelled, deliberately, and the reasoning is the decision.** The two routes to modelling it
+are adding a lookup to `InMemoryAgentSessionsRepo` — which lives in PRODUCTION source, so that
+means growing production surface to feed a fixture — or throwing without the live session's id,
+which the error carries and callers assert on. Either buys the cross-arm at the price of a new
+divergence. The real arm is proven against Postgres in `db-profile-in-use-concurrency-drizzle`.
+
+**What changed instead: the gap is asserted rather than described.** A comment saying "this
+under-refuses" is read once. An arm that binds a profile held by a live agent session and asserts
+the double ALLOWS it is checked on every run — and its message says that if it ever fails, the
+double has learned to gate and the arm should be deleted.
+
+```
+N1  teach the double to gate on agent sessions   the gap arm fires: "delete this arm"  2 failed | 11 passed
+N2  remove the legacy arm entirely               the driver-side refusal arm            1 failed | 12 passed
+restored (0 dirty, sha equal)                                                           13 passed
+```
+
+N1 is an unusual negative: it proves the arm fails when the code gets BETTER. That is the point of
+a gap arm — it is a tripwire on a known limitation, not an assertion that the limitation is
+correct, and it has to be written so that closing the gap is what breaks it.
+
+Three fixture corrections were needed on the way, none of them findings: `createIfUnderActiveCap`
+takes `tokenBudgetTotal`, not the `archetype`/`cap` shape I first guessed, and copying the call from
+the arms already in the file was faster than reading the type twice.

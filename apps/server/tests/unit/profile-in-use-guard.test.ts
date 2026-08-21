@@ -125,6 +125,33 @@ describe('agent-sessions profile-in-use guard (createIfUnderActiveCap)', () => {
 });
 
 describe('driver-sessions profile-in-use guard (insertSessionIfUnderLimit, metadata.profile_id)', () => {
+  it('KNOWN GAP, asserted so it cannot be mistaken for coverage: the driver-side DOUBLE does not gate on agent sessions. DrizzleSessionsRepo refuses a bind on EITHER a live legacy session OR a live agent_sessions row holding the profile; this fixture has no agent-session state and models only the first arm, so it UNDER-REFUSES. A route test creating a driver session for a profile an agent session holds will succeed here and be refused in production. The real arm is proven against Postgres in db-profile-in-use-concurrency-drizzle; this arm exists so the omission is visible rather than silent, and it will start failing the day the double learns to consult agent sessions — which is the signal to delete it.', async () => {
+    const drivers = new InMemorySessionsRepo();
+    const agents = new InMemoryAgentSessionsRepo();
+
+    // An agent session holds prof_shared for acc_a.
+    const held = await agents.createIfUnderActiveCap(
+      { accountId: 'acc_a', tokenBudgetTotal: 1000, profileId: 'prof_shared' },
+      HIGH_CAP,
+    );
+    expect(held, 'the agent-session fixture did not bind the profile').not.toBeNull();
+    expect(
+      await agents.countActiveForProfile('prof_shared'),
+      'the profile is not actually held by a live agent session',
+    ).toBe(1);
+
+    // Production refuses this. The double does not, and that is the gap.
+    const bound = await drivers.insertSessionIfUnderLimit(
+      mkDriverInput('acc_a', 0, 'prof_shared'),
+      HIGH_CAP,
+      { profileId: 'prof_shared' },
+    );
+    expect(
+      bound,
+      'the double now gates on agent sessions — production parity improved, so delete this arm',
+    ).not.toBeNull();
+  });
+
   it('refuses a SECOND non-terminal bind on the same profile with ProfileInUseError', async () => {
     const repo = new InMemorySessionsRepo();
     const first = await repo.insertSessionIfUnderLimit(

@@ -76,6 +76,20 @@ export class InMemorySessionsRepo implements SessionRepo {
   // NON-TERMINAL (status not destroyed/errored AND destroyed_at null) session
   // whose metadata.profile_id matches for the same account, by throwing
   // ProfileInUseError(ses_<id>). No profileId → no guard (fail-safe).
+  //
+  // V-1271 — THIS MODELS ONE ARM OF A TWO-ARM GUARD, and the paragraph above used to read as
+  // though it were the whole thing. `DrizzleSessionsRepo.insertSessionIfUnderLimit` refuses on
+  // EITHER a live legacy session holding the profile (modelled here) OR a live row in
+  // `agent_sessions` with that profile and status != 'closed' (not modelled — this fixture has
+  // no agent-session state, and there is no agent-sessions test double to consult).
+  //
+  // So this double UNDER-REFUSES relative to production: a bind that production rejects because
+  // an agent session holds the profile succeeds here. Deliberately not modelled — the only ways
+  // to would be adding a lookup to `InMemoryAgentSessionsRepo` in production source purely to
+  // feed a fixture, or throwing without the live session's id, which the error carries and
+  // callers assert on. The real arm is proven against Postgres in
+  // `db-profile-in-use-concurrency-drizzle`, and the gap is asserted rather than merely
+  // described in `profile-in-use-guard.test.ts` so it cannot be mistaken for coverage.
   insertSessionIfUnderLimit(
     input: NewSessionInput,
     limit: number,
