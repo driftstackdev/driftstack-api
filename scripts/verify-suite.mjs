@@ -29,7 +29,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 
 /** Files the node project is expected to collect. Raise when adding tests. */
-export const EXPECTED_TEST_FILES = 2973;
+export const EXPECTED_TEST_FILES = 2974;
 
 /**
  * Files the ROOT config collects — both vitest projects, which is what CI's
@@ -59,7 +59,7 @@ export const EXPECTED_TEST_FILES = 2973;
  * scope; this note exists so "five jobs" is not read as "everything that can
  * fail a PR".
  */
-export const EXPECTED_TEST_FILES_ALL = 3140;
+export const EXPECTED_TEST_FILES_ALL = 3141;
 
 /**
  * The CI jobs this gate does NOT run, with how to run each locally.
@@ -98,7 +98,7 @@ export const EXPECTED_TEST_FILES_ALL = 3140;
  * nothing reports which parts of it ran.
  *
  * Locally those files skip for want of `DATABASE_URL`. They are MOST of the
- * skipped files in a local green, not all of them: 108 test files gate on
+ * skipped files in a local green, not all of them: 109 test files gate on
  * `DATABASE_URL`, 11 on `RUN_DB_TESTS` and 4 on `REDIS_URL`, with 17 more carrying
  * some other condition. V-917 enumerated the skip mechanisms and V-1034 re-audited
  * all 19 of them against where each can be true, finding zero unconditional skips

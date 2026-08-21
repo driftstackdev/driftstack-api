@@ -961,3 +961,54 @@ and "we did not look" are indistinguishable from the outside — the same reason
 empty raw-SQL gap rather than staying quiet about it.
 
 **Owed remaining: 20**, unchanged — this batch closed a class rather than a contract.
+
+---
+
+## V-1219 — "active" means two different things, and only one of them is the cap
+
+Tenth of the twenty-nine. `countActiveSessions` enforces a tier's concurrent-session limit, so its
+answer is the difference between a customer starting another session and being told they are at
+their cap.
+
+**The property is what "active" means, because it is not what it sounds like:**
+
+```
+.where(and(eq(sessions.accountId, accountId), isNull(sessions.destroyedAt)))
+```
+
+It keys on `destroyed_at IS NULL` and NOT on status. A session that has ERRORED but was never
+destroyed still holds a slot, deliberately — the driver session may still exist and this row is the
+only record that it might. An implementation that tidied this up to count only live-looking statuses
+would free slots the platform has not reclaimed and let the customer past their limit.
+
+Both sides key on the same thing today. Nothing asserted it, and the two things that would drift
+apart — "active" the status and "active" the cap — are the same word.
+
+**This is the contract V-1218 declined to write.** I checked the pair, found it faithful, and skipped
+it because the Drizzle fixture needs an account and an api key. That is deferral-on-cost, the exact
+pattern this log criticised in V-1212 and then had to correct. The fixture is eleven lines.
+
+**A fixture bug that is the same shape as the subject.** My first run passed `purpose: 'automation'`
+— the in-memory double accepted it and Postgres rejected it as an invalid `session_purpose` enum
+value. Four Drizzle arms failed and four in-memory arms passed on a value that cannot exist in
+production. That is the V-1197 shape reproduced accidentally in my own test data, and it is worth
+naming: the double does not validate enums, so a fixture is free to build a session the database
+would refuse. Not filed as a defect — `purpose` is validated by Zod at the API edge, so nothing
+reaches the repo unchecked — but it is exactly how a green unit test can describe an impossible row.
+
+```
+M1  DRIZZLE counts by status instead of destroyedAt   4 failed | 5 passed
+M2  the DOUBLE counts by status instead               1 failed | 8 passed
+M3  the DOUBLE drops account scoping                  1 failed | 8 passed
+restored (source 0 dirty)                             9 passed
+```
+
+M1 reds four arms rather than one, and that is reported as it behaved: swapping the predicate for a
+status test also makes destroyed sessions count, so the entire Drizzle half moves rather than the
+cap arm alone.
+
+The fourth arm pins that `listActiveByAccount` and `countActiveSessions` describe the SAME set.
+Different callers read them — the dashboard lists, the cap counts — and a customer shown two
+sessions while being refused a third at a limit of five is looking at two answers to one question.
+
+**Owed remaining: 19.**
