@@ -83,17 +83,47 @@ function aliasingReads(src: string, file: string): Hit[] {
     if (m?.[1] !== undefined) bound.add(m[1]);
   }
 
+  // V-1272 — locals filled from a stored collection by a loop, then returned:
+  //   const out: Row[] = [];
+  //   for (const r of this.rows.values()) { if (…) out.push(r); }
+  //   return out;
+  // The original detector saw `return row;`, `return this.rows;` and filter/sort chains, and this
+  // shape is none of them — three interface reads sat outside the rule the guard states. Nothing
+  // was broken by it: none of the three mutates its rows in place, so the aliasing was not
+  // observable. "Not currently observable" is a weaker property than the rule, which is why the
+  // detector was widened rather than the finding written off.
+  const accumulators = new Set<string>();
+  for (const [i, line] of lines.entries()) {
+    const decl = /const\s+(\w+)\s*:\s*[\w<>[\]|\s]+=\s*\[\]\s*;/.exec(line);
+    if (decl?.[1] === undefined) continue;
+    const rest = lines.slice(i, i + 30).join('\n');
+    // Pushed a BARE identifier that the loop above took straight off a stored collection.
+    if (new RegExp(`for \\(const (\\w+) of this\\.\\w+`).test(rest)) {
+      const iterated = /for \(const (\w+) of this\.\w+/.exec(rest)?.[1];
+      if (iterated !== undefined && new RegExp(`${decl[1]}\\.push\\(${iterated}\\)`).test(rest)) {
+        accumulators.add(decl[1]);
+      }
+    }
+  }
+
   const out: Hit[] = [];
   for (const [i, line] of lines.entries()) {
     const t = line.trim();
-    const bare = /^return\s+(\w+)\s*;$/.exec(t);
+    // `return out;` AND `return Promise.resolve(out);` — the doubles that use the accumulate
+    // shape all return through the Promise form, so matching only the bare return meant the
+    // widened branch below never fired. Its own mutation is what said so.
+    const bare = /^return\s+(?:Promise\.resolve\()?(\w+)\)?\s*;$/.exec(t);
     // `return this.rows;` and `return [...this.rows];` are the same defect: the second copies
     // the ARRAY and hands back the very same row objects inside it. Only the elements matter.
     const whole = /^return\s+(?:\[\.\.\.)?this\.\w+\]?\s*;$/.test(t);
     // A filtered/sorted chain is fine ONLY if it ends by mapping each row through something.
     const chain = /^return\s+this\.\w+[\s\S]*\.(?:filter|sort)\(/.test(t) && !t.includes('.map(');
 
-    if ((bare?.[1] !== undefined && bound.has(bare[1])) || whole || chain) {
+    if (
+      (bare?.[1] !== undefined && (bound.has(bare[1]) || accumulators.has(bare[1]))) ||
+      whole ||
+      chain
+    ) {
       out.push({ file, method: enclosingMethod(lines, i), line: i + 1, text: t.slice(0, 80) });
     }
   }

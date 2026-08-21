@@ -117,7 +117,8 @@ export class InMemoryMfaRepo implements MfaRepo {
   listUnusedRecoveryCodes(accountId: string): Promise<RecoveryCodeRow[]> {
     const out: RecoveryCodeRow[] = [];
     for (const row of this.recoveryCodes.values()) {
-      if (row.accountId === accountId && row.usedAt === null) out.push(row);
+      // V-1272 — a COPY, for the reason in the email-preferences double.
+      if (row.accountId === accountId && row.usedAt === null) out.push({ ...row });
     }
     out.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     return Promise.resolve(out);

@@ -3569,3 +3569,48 @@ correct, and it has to be written so that closing the gap is what breaks it.
 Three fixture corrections were needed on the way, none of them findings: `createIfUnderActiveCap`
 takes `tokenBudgetTotal`, not the `archetype`/`cap` shape I first guessed, and copying the call from
 the arms already in the file was faster than reading the type twice.
+
+## V-1272 — the aliasing guard could not see the shape three doubles actually used
+
+Working down the coverage list to `auth-repo` (3/10), `findActiveRateLimitOverrides` turned out
+clean — both sides filter `expiresAt > now` strictly, and the de-scale reads the shared constant
+since V-1266. But the double returns its rows through a shape the V-1255 aliasing guard cannot see:
+
+```
+const out: Row[] = [];
+for (const r of this.rows.values()) { if (…) out.push(r); }
+return Promise.resolve(out);
+```
+
+The detector matched `return row;`, `return this.rows;`, `return [...this.rows];` and filter/sort
+chains. None of those. Three interface reads — `email-preferences.list`,
+`mfa.listUnusedRecoveryCodes`, `auth-flows.listActiveWebSessionsForAccount` — sat outside the rule
+the guard states, and the guard reported clean the whole time.
+
+**Nothing was broken by it, and that is worth separating from the fix.** None of the three mutates
+its rows in place, so the aliasing was not observable. But "not currently observable" is a weaker
+property than "reads hand back snapshots", and the guard claims the second. All three now copy, and
+the detector was widened rather than the finding written off.
+
+**My enumeration produced five candidates; two were false.** `admin-billing.upsertSubscription`
+pushes an INPUT into the store — a write, not a read. `scheduled-jobs.claimDue` pushes into an
+internal working array and returns freshly-built projections. Reading each is what separated them;
+the regex could not.
+
+**And the widened detector did not work on its first two attempts.** The accumulate branch was
+correct and never fired, because every one of these doubles returns `Promise.resolve(out)` rather
+than `return out;` — and the bare-return regex the branch fed into only matched the second form.
+Its own mutation is what said so: reverting a snapshot went unnoticed, which is the same "green
+mutation is the finding" pattern this campaign keeps hitting, this time inside a guard I was in the
+middle of extending.
+
+```
+N1' revert one snapshot           named: email-preferences-repo.ts::list (line 29)   1 failed | 4 passed
+N2' drop the accumulate branch    the same revert goes UNNOTICED                     5 passed
+restored (both files 0 dirty, sha equal)                                             5 passed
+```
+
+N2' is the arm that makes N1' mean something: it shows the new branch is what sees the revert,
+rather than some pre-existing branch catching it incidentally.
+
+All four class guards green together: cursors, aliasing, comment strippers, restated numbers.

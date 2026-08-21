@@ -16,7 +16,11 @@ export class InMemoryEmailPreferencesRepo implements EmailPreferencesRepo {
   list(accountId: string): Promise<EmailPreferenceRecord[]> {
     const out: EmailPreferenceRecord[] = [];
     for (const r of this.rows.values()) {
-      if (r.accountId === accountId) out.push(r);
+      // V-1272 — a COPY. The V-1255 guard's rule is that no interface read hands back a stored
+      // object, and this shape (accumulate into a local, return the local) simply was not one the
+      // detector could see. Nothing mutates these rows in place today, so nothing was broken —
+      // but "not currently observable" is a weaker property than the rule the guard states.
+      if (r.accountId === accountId) out.push({ ...r });
     }
     // V-1208 — mirrors DrizzleEmailPreferencesRepo's `ORDER BY event_type`. Map iteration is
     // write order, which agreed with the real repo only until a customer opted out of two events

@@ -309,7 +309,8 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
       if (row.expiresAt.getTime() <= now.getTime()) continue;
       const account = this.accounts.get(row.accountId)?.account;
       if (!account || account.authEpoch !== row.authEpoch) continue;
-      out.push(row);
+      // V-1272 — a COPY, for the reason in the email-preferences double.
+      out.push({ ...row });
     }
     out.sort((a, b) => b.lastUsedAt.getTime() - a.lastUsedAt.getTime());
     return Promise.resolve(out);
