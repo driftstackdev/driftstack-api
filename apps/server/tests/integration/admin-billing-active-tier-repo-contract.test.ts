@@ -38,6 +38,7 @@ import {
 import { InMemoryAdminBillingRepo } from './_helpers/in-memory-admin-billing-repo.js';
 import { subscriptionStatus, subscriptions } from '../../src/db/schema.js';
 import type * as schema from '../../src/db/schema.js';
+import { cleanDelta } from './_helpers/counter-delta.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
 const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
@@ -132,13 +133,14 @@ function activeTierContract(label: string, make: () => Subject, enabled: () => b
       async (status) => {
         if (!enabled()) return;
         const s = make();
-        const before = (await s.repo.countActiveSubscriptionsByTier()).api_scale;
-        await s.seed('api_scale', status);
-
-        expect(
-          (await s.repo.countActiveSubscriptionsByTier()).api_scale - before,
-          `a subscription in the billed status "${status}" was not counted`,
-        ).toBe(1);
+        await cleanDelta(
+          () => s.repo.countActiveSubscriptionsByTier(),
+          async () => {
+            await s.seed('api_scale', status);
+          },
+          { api_scale: 1 },
+          new Set(['free']),
+        );
       },
     );
 
@@ -147,45 +149,52 @@ function activeTierContract(label: string, make: () => Subject, enabled: () => b
       async (status) => {
         if (!enabled()) return;
         const s = make();
-        const before = (await s.repo.countActiveSubscriptionsByTier()).api_scale;
-        await s.seed('api_scale', status);
-
-        expect(
-          (await s.repo.countActiveSubscriptionsByTier()).api_scale - before,
-          `a subscription in the unbilled status "${status}" was counted as paying`,
-        ).toBe(0);
+        // An unbilled subscription must move NOTHING, so the expected vector is empty and every
+        // tier but the noisy default is constrained to zero.
+        await cleanDelta(
+          () => s.repo.countActiveSubscriptionsByTier(),
+          async () => {
+            await s.seed('api_scale', status);
+          },
+          {},
+          new Set(['free']),
+        );
       },
     );
 
     it('CRITICAL a subscription is attributed to its OWN tier, in both. Without this the arms above are satisfied by an implementation that puts every subscription in one bucket, which reads as one tier carrying the whole platform.', async () => {
       if (!enabled()) return;
       const s = make();
-      const before = await s.repo.countActiveSubscriptionsByTier();
-      await s.seed('agency_manual', 'active');
-      const after = await s.repo.countActiveSubscriptionsByTier();
-
-      expect(
-        after.agency_manual - before.agency_manual,
-        'the subscription was not counted under its own tier',
-      ).toBe(1);
-      expect(
-        after.api_scale - before.api_scale,
-        'it was also counted under a tier it does not belong to',
-      ).toBe(0);
+      // V-1264 — this counter takes no filter and counts the whole `subscriptions` table, so a
+      // plain before/after delta races every other file writing it. It failed about one run in
+      // four under a 34-file run with `expected +0 to be 1`: a concurrent sweep deleted a row
+      // inside the window. `cleanDelta` discards a reading whose shape shows interference and
+      // re-runs on fresh fixtures, and asserts the WHOLE tier vector rather than two buckets.
+      await cleanDelta(
+        () => s.repo.countActiveSubscriptionsByTier(),
+        async () => {
+          await s.seed('agency_manual', 'active');
+        },
+        { agency_manual: 1 },
+        // `free` is the account default and other files land subscriptions there; every other
+        // tier stays constrained, so a count filed under the wrong bucket is still caught.
+        new Set(['free']),
+      );
     });
 
     it('CRITICAL subscriptions ACCUMULATE within a tier, in both. Otherwise every arm above is satisfied by an implementation that reports 1 for any tier it has seen and never actually counts.', async () => {
       if (!enabled()) return;
       const s = make();
-      const before = (await s.repo.countActiveSubscriptionsByTier()).api_starter;
-      await s.seed('api_starter', 'active');
-      await s.seed('api_starter', 'active');
-      await s.seed('api_starter', 'trialing');
-
-      expect(
-        (await s.repo.countActiveSubscriptionsByTier()).api_starter - before,
-        'three paying subscriptions in one tier did not add up',
-      ).toBe(3);
+      await cleanDelta(
+        () => s.repo.countActiveSubscriptionsByTier(),
+        async () => {
+          await s.seed('api_starter', 'active');
+          await s.seed('api_starter', 'active');
+          await s.seed('api_starter', 'trialing');
+        },
+        { api_starter: 3 },
+        new Set(['free']),
+      );
     });
 
     it('CRITICAL the counts are NUMBERS at runtime, in both. count(*) is a bigint and postgres-js hands bigints back as strings; the `::int` cast is what makes this a number, and without it the first arithmetic on the figure concatenates instead of adding.', async () => {

@@ -189,6 +189,12 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         // api_scale is exempt: db-billing-subscription-lookups writes it
         // concurrently, so it is the one tier whose delta is not ours to claim.
         if (tier === FOREIGN_TIER) continue;
+        // V-1264 — api_starter joins it. admin-billing-active-tier-repo-contract seeds that
+        // tier, and its measurement now RETRIES on an interfered reading, so it may seed up
+        // to five times in a run. That makes this delta noisier than it was, which is a cost
+        // of the retry worth naming rather than absorbing: the fix for one racy measurement
+        // increased the write volume every other measurement of the same table has to survive.
+        if (tier === 'api_starter') continue;
         expect(after[tier] - before[tier], `tier ${tier} unchanged`).toBe(0);
       }
     });

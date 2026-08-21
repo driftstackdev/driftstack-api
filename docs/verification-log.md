@@ -3211,3 +3211,44 @@ together, `admin-billing-active-tier-repo-contract` failed about one run in four
 before/after deltas on `countActiveSubscriptionsByTier`, which is unfiltered and table-wide — the
 same class as V-1248 and V-1261, and pre-existing since V-1238. It is the next thing to fix, not a
 consequence of this one.
+
+## V-1264 — fixing one racy measurement made its neighbours racier
+
+The flake V-1263 recorded: `admin-billing-active-tier-repo-contract` failing about one run in four
+under a 34-file run, `expected +0 to be 1`. Its arms measured `countActiveSubscriptionsByTier` — a
+counter that takes no filter and counts the whole `subscriptions` table — with a plain before/after
+delta, the same shape fixed twice already for accounts.
+
+`cleanDelta` moved out of the admin-accounts contract into `_helpers/counter-delta.ts`. A second
+contract needing it is the moment to give it one home rather than a second copy, which is the rule
+this campaign has been applying to production constants all session.
+
+**Ten arms, not two.** The two obvious deltas were the attribution and accumulation arms. The
+`it.each` billed and unbilled arms — eight more — carried the identical shape on `api_scale`, and
+converting the first two and stopping would have been the one-of-N mistake the stripper guard caught
+me on earlier. `leftover plain deltas: 0` is checked, not assumed.
+
+**And the fix made a neighbour worse.** After converting, the set still failed once in twelve —
+but in a DIFFERENT file, `db-admin-billing-repo-drizzle`, which `git status` confirms I never
+touched. That test asserts no other tier moved while it seeds, and already exempted `api_scale`
+with a comment naming the concurrent writer that forced it. Now `api_starter` moved too.
+
+The cause is my own fix. `cleanDelta` RETRIES on an interfered reading, so an arm that seeded three
+subscriptions once may now seed them up to five times. The retry that makes one measurement robust
+raises the write volume every other measurement of the same table has to survive. Extended that
+file's exemption with exactly that reason recorded at the line, rather than absorbing it silently.
+
+```
+before: ~1 failure in 4 runs (34-file set)
+after converting the ten arms: 1 in 12, in a different file
+after extending the exemption: 0 in 12
+```
+
+**What this says about the class.** Three contracts now measure unfiltered table-wide counters, and
+the interference between them is not incidental — it is the direct consequence of many tests sharing
+one database and one accounts/subscriptions table. Each fix so far has been local: anchor the
+window (V-1245), detect and retry (V-1248), stop constraining the default buckets (V-1261), and now
+share the helper and pay for the extra writes. That is four local fixes to one structural fact, and
+the honest reading is that the structure is the thing — a counter with no filter cannot be measured
+cleanly by concurrent tests, and every technique here is a way of tolerating that rather than
+removing it.
