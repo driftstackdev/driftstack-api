@@ -43,6 +43,7 @@ import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DrizzleStripeWebhooksRepo } from '../../src/db/stripe-webhooks-repo.js';
+import { InMemoryStripeWebhooksRepo } from './_helpers/in-memory-stripe-webhooks-repo.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
 const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
@@ -189,6 +190,58 @@ describe('stripe webhook attribution, against the database it actually queries',
     expect(
       await repo!.getAccountTier(randomUUID()),
       'an account that does not exist reported a tier',
+    ).toBeNull();
+  });
+});
+
+// V-1277 — the OTHER half of the disagreement this file documents.
+//
+// The header above states that the double "compares two strings and quietly returns null" where
+// Postgres raises 22P02, and the arm above pins the Postgres side. Nothing pinned the double's
+// side, so the sentence was prose: someone making the double throw — a reasonable thing to attempt
+// in the name of fidelity — would have broken the agreement this file describes without failing
+// anything, and the description would have gone quietly wrong.
+//
+// This is the shape V-1276 was written about. An invariant asserted on ONE implementation is not a
+// parity assertion, and a documented DISAGREEMENT needs both halves pinned for the same reason an
+// agreement does: the file is only trustworthy if a change to either side has to come here first.
+//
+// Ungated on purpose. Every arm above early-returns without a database, so a local run proves
+// nothing about attribution; these two need no database at all and always run.
+describe('stripe webhook attribution, the in-memory double on the same inputs', () => {
+  it('CRITICAL the double resolves a stripe customer id the same way the database does. The two halves of this file are only comparable if the double is right about the LIVE branch — a fixture that disagreed here would make the disagreement pinned below look like the only one.', async () => {
+    const repo = new InMemoryStripeWebhooksRepo();
+    const accountId = randomUUID();
+    repo.registerAccount({ accountId, stripeCustomerId: 'cus_double_live', tier: 'free' });
+
+    expect(
+      await repo.findAccountIdFromCustomerOrRef({
+        stripeCustomerId: 'cus_double_live',
+        clientReferenceId: null,
+      }),
+      'the double did not resolve a known stripe customer',
+    ).toBe(accountId);
+    expect(
+      await repo.findAccountIdFromCustomerOrRef({
+        stripeCustomerId: 'cus_nobody',
+        clientReferenceId: null,
+      }),
+      'the double resolved an unknown stripe customer to somebody',
+    ).toBeNull();
+  });
+
+  it('CRITICAL the double returns NULL for the non-uuid client_reference_id that makes Postgres raise 22P02. This is a DISAGREEMENT, pinned deliberately on both sides rather than repaired: the branch is unwired, and the honest record is that the two implementations answer differently until someone threads the field through. If validation is added so null becomes the right answer everywhere, the Drizzle arm above changes to expect null and this one stops being a divergence — a decision, made in one place, rather than a surprise found later.', async () => {
+    const repo = new InMemoryStripeWebhooksRepo();
+    repo.registerAccount({ accountId: randomUUID(), stripeCustomerId: 'cus_x', tier: 'free' });
+
+    expect(
+      await repo.findAccountIdFromCustomerOrRef({
+        stripeCustomerId: null,
+        // The same value the Drizzle arm above sends, so the two arms are about one input.
+        clientReferenceId: 'cs_test_not_a_uuid',
+      }),
+      'the double no longer returns null — if it was taught to throw, the Drizzle arm above and ' +
+        'this file\u2019s header both need rewriting in the same commit',
     ).toBeNull();
   });
 });

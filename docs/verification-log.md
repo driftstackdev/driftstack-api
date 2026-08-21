@@ -3943,3 +3943,50 @@ number into a gate whose whole job is to be exact.
 
 Full suite: 3167 files, 31279 passed | 16 skipped — the collected count matching the raised ratchet
 rather than merely exceeding it.
+
+---
+
+## V-1277 — a documented disagreement was pinned on one side only, and I re-derived the finding the long way
+
+Working down the coverage list to `stripe-webhooks-repo` (6 of 13 methods untouched by any contract),
+`findAccountIdFromCustomerOrRef` looked like a live defect: it compares Stripe's arbitrary
+`client_reference_id` against `accounts.id`, which is `uuid`. Probed against the real database, it
+raises `22P02 / string_to_uuid`, while the in-memory double compares two strings in a Map and
+returns null.
+
+**All of which is already written down**, in `db-stripe-webhook-attribution-drizzle.test.ts`, in more
+detail than I would have put it — including the arm that pins the SQLSTATE rather than the message,
+the note that all five call sites pass null so the branch is unreachable, and an instruction for
+whoever adds validation later. The correct move was to grep prior art BEFORE probing, not after. It
+cost a probe cycle and produced no new finding; recording it because the near-miss is the useful
+part. It also nearly produced a WRONG finding: the first framing in my head was "a Stripe webhook
+500s", and that is false today — every caller passes null, which is exactly the distinction that
+file spends a paragraph making.
+
+**What was genuinely missing is the shape V-1276 is about.** The file states that the double "quietly
+returns null" where Postgres throws, and pins the Postgres half. Nothing pinned the double's half.
+That sentence was prose: someone teaching the double to throw — a reasonable thing to attempt in the
+name of fidelity — would have broken the agreement the file describes without failing anything, and
+the description would have gone quietly wrong while continuing to be read as true.
+
+A documented DISAGREEMENT needs both halves pinned for the same reason an agreement does. Two arms
+added, ungated because they need no database (every existing arm early-returns without one, so a
+local run proved nothing about attribution at all):
+
+```
+M11  teach the double to throw on a non-uuid   the divergence arm RED
+M12  drop the customer-id predicate            the live-branch arm RED, "resolved an unknown
+                                               stripe customer to somebody"
+```
+
+The live-branch arm exists so the pair is comparable: a fixture that disagreed about the branch
+production actually runs would make the pinned disagreement look like the only one.
+
+**Verified clean in passing**, against source rather than assumed: `setAccountTier` matches its
+double including the missing-account case; `downgradeAccountTierToBestRemaining` mirrors the
+best-remaining-subscription ordering and the crypto-entitlement floor, and its `BILLED_STATUSES` is
+an alias for the constant exported in V-1263 rather than a fourth restatement of `['active',
+'trialing']`; `revokeCryptoEntitlementByOrderId` revokes by pulling `expiresAt` forward, so the
+`gt(expiresAt, at)` filter in the tier floor already excludes revoked rows and the boundary is
+strict on both sides; and `listExpiredUnprocessedCryptoEntitlements` agrees on filter, ordering and
+limit.
