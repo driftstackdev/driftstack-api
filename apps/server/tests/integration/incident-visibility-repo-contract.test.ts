@@ -28,7 +28,7 @@ import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 
 import type { IncidentsRepo } from '../../src/services/incidents.js';
-import { DrizzleIncidentsRepo } from '../../src/db/incidents-repo.js';
+import { DrizzleIncidentsRepo, INCIDENT_PAGE_DEFAULT } from '../../src/db/incidents-repo.js';
 import { InMemoryIncidentsRepo } from './_helpers/in-memory-incidents-repo.js';
 import type * as schema from '../../src/db/schema.js';
 
@@ -101,6 +101,18 @@ async function openIncident(s: Subject, isPublic: boolean) {
 
 function incidentContract(label: string, make: () => Subject, enabled: () => boolean): void {
   describe(`IncidentsRepo visibility contract — ${label}`, () => {
+    it('CRITICAL an omitted limit falls back to the repo INCIDENT_PAGE_DEFAULT, in both. The default decides what an unparameterised incident listing returns, and both sides used to carry their own copy of the number — so moving it in production would have served a different page while every test on the double kept asserting the old one. The arm imports the constant rather than naming 100, so it follows the default instead of becoming a third copy.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      // One past the default, so the fallback is observable rather than a no-op.
+      for (let i = 0; i < INCIDENT_PAGE_DEFAULT + 1; i += 1) await openIncident(s, true);
+
+      const page = await s.repo.list({ scope: 'all' });
+      expect(page.length, 'the default page size does not match the repo default').toBe(
+        INCIDENT_PAGE_DEFAULT,
+      );
+    });
+
     it('CRITICAL an INTERNAL incident is invisible through the public path, in both. The status page is the one surface with no authentication in front of it, and an internal incident carries operator detail — which customer, which node, what is suspected — so this predicate is the entire control between that text and anyone who guesses an id.', async () => {
       if (!enabled()) return;
       const s = make();

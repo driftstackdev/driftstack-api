@@ -14,6 +14,7 @@ import type {
   ResolveIncidentInput,
 } from '../../../src/services/incidents.js';
 import { NotFoundError } from '../../../src/lib/errors-helpers.js';
+import { INCIDENT_PAGE_DEFAULT } from '../../../src/db/incidents-repo.js';
 
 /**
  * V-1255 — every INTERFACE read hands back a SNAPSHOT, never the stored object.
@@ -132,7 +133,9 @@ export class InMemoryIncidentsRepo implements IncidentsRepo {
             row.id < opts.cursor!.id),
       );
     }
-    const limit = opts.limit ?? 100;
+    // V-1259 — read from DrizzleIncidentsRepo rather than restated. It used to be its own
+    // `opts.limit ?? 100`: the same number on both sides, agreeing until one of them moved.
+    const limit = opts.limit ?? INCIDENT_PAGE_DEFAULT;
     const hasMore = rows.length > limit;
     const pageRows = hasMore ? rows.slice(0, limit) : rows;
     const last = pageRows[pageRows.length - 1];

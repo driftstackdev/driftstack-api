@@ -2985,3 +2985,40 @@ about code would re-make that mistake on every run, so it scans with `codeOnly` 
 
 Class closed: nine private strippers, seven repointed, two exempt by language (SQL) with the reason
 recorded. Ratchets 2997 → 2998, 3164 → 3165.
+
+## V-1259 — one more restated page number, found by re-running the enumeration the guards cannot
+
+The three guards written this session all pass, so the cursor, aliasing and hand-rolled-stripper
+classes are provably swept — a guard is the only thing that can say that about a class. The
+restated-constant class has no guard, so it was re-enumerated by hand instead.
+
+Three of the four remaining numeric literals in the doubles are unit conversions already cleared
+(`24 * 60 * 60 * 1000`, seconds-to-milliseconds). The fourth was real:
+
+```
+src/db/incidents-repo.ts:79                  const limit = opts.limit ?? 100;
+_helpers/in-memory-incidents-repo.ts:122     const limit = opts.limit ?? 100;
+```
+
+Named `INCIDENT_PAGE_DEFAULT`, exported, and the double imports it. Unlike the three pairs in
+V-1244 to V-1246 this is a DEFAULT with no `Math.min` beside it: it decides what an unparameterised
+listing returns, and nothing bounds what a caller may ask for. Worth saying because "page size"
+covered two different things in this class and only one of them is a cap.
+
+No pin needed rewriting — enumerated all three ways first. The two incidents guards mention the
+default only in prose describing the method, and prose is not a frozen occurrence.
+
+```
+N1  repo default 7 AND double back to 100    "does not match the repo default"  1 failed | 12 passed
+N2  double back to 100, default UNCHANGED    passes, and should                 13 passed
+restored (both files 0 dirty, sha equal)                                        13 passed
+```
+
+N2 is recorded for the reason established in V-1246: restoring the literal on its own passes,
+because 100 is what the constant says today. A single edit cannot separate a fixture that reads the
+constant from one that merely agrees with it, so the honest negative is the pair.
+
+**What made this findable.** Re-running an enumeration after the guards were in place is cheap, and
+the guards narrow what still needs hand-checking to exactly the unguarded classes. That is the
+argument for writing them beyond preventing regressions: they turn "have I swept this?" from a
+question about my memory into a question a test answers.

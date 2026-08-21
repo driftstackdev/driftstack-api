@@ -76,7 +76,7 @@ async function readListPage(
   const totalWhere = filters.length > 0 ? and(...filters) : undefined;
   const openFilters = [ne(incidents.status, 'resolved')];
   if (opts.scope === 'public') openFilters.push(eq(incidents.public, true));
-  const limit = opts.limit ?? 100;
+  const limit = opts.limit ?? INCIDENT_PAGE_DEFAULT;
   const rows = await database
     .select()
     .from(incidents)
@@ -104,6 +104,16 @@ async function readListPage(
         : null,
   };
 }
+
+// V-1259 — the incident listing's default page size, named and exported so the in-memory
+// double reads THIS number rather than restating it. Both sides carried `opts.limit ?? 100`,
+// so a change to one would have served a different page in production while every test on
+// the double went on asserting the old one, agreeing with itself.
+//
+// A DEFAULT rather than a cap: unlike the three page-size pairs in V-1244 to V-1246 there is
+// no Math.min here, so this decides what an unparameterised call returns and nothing bounds
+// what a caller may ask for.
+export const INCIDENT_PAGE_DEFAULT = 100;
 
 export class DrizzleIncidentsRepo implements IncidentsRepo {
   constructor(private readonly database: Database) {}
