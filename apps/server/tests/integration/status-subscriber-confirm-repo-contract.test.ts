@@ -202,6 +202,31 @@ function statusSubscriberContract(
       ).toBeNull();
     });
 
+    it('CRITICAL a row handed to the caller is a SNAPSHOT — a later write does not reach into it, in both. Postgres cannot mutate a result the caller already holds, and a fixture that can is not merely inaccurate: it makes every before/after comparison against it read "nothing changed", because `before` and `after` are the same object. An arm written that way passes forever and asserts nothing.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const p = await s.pending();
+      await confirm(s, p, 'hash-snapshot');
+
+      const before = await s.repo.getById(p.id);
+      expect(before?.unsubscribedAt ?? null, 'precondition: not yet unsubscribed').toBeNull();
+
+      await s.repo.markUnsubscribed({
+        id: p.id,
+        expectedUnsubscribeTokenHash: 'hash-snapshot',
+        unsubscribedAt: new Date('2026-08-21T00:00:00.000Z'),
+      });
+
+      expect(
+        before?.unsubscribedAt ?? null,
+        'the row handed to the caller mutated underneath it — reads are aliasing the store',
+      ).toBeNull();
+      expect(
+        (await s.repo.getById(p.id))?.unsubscribedAt ?? null,
+        'and the write itself did not land, so the arm above proves nothing',
+      ).not.toBeNull();
+    });
+
     it("CRITICAL rotating the unsubscribe token replaces the stored hash, in both. The fan-out issues a fresh token per outgoing email and embeds it in that email's unsubscribe link, so a rotate that does not land leaves the recipient holding a link that will not work.", async () => {
       if (!enabled()) return;
       const s = make();

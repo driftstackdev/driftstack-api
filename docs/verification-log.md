@@ -2619,3 +2619,50 @@ have to re-derive it.
 
 Class status: five throw-sites enumerated, one divergence, one flagged design question. No ratchet
 change — arms added to an existing file.
+
+## V-1251 — a fixture that could reach into a row the caller was already holding
+
+Next enumerable parity class: doubles that hand back the OBJECT they store rather than a copy.
+Scanning for in-place property assignment on a stored row, comments stripped, gave three:
+`status-subscribers` (13 sites), `team-members` (10), `oauth-links` (1). All three also return
+those objects from their reads.
+
+**Proved before fixing.** A throwaway probe against the status-subscribers double: read a
+subscriber, unsubscribe them, then re-read the value captured BEFORE the unsubscribe. It had
+changed. Postgres cannot do that — a SELECT is a point-in-time copy and a later UPDATE does not
+reach into a result the caller already holds.
+
+**The damage is not a crash, it is a vacuous test.** Any before/after comparison against such a
+double reads "nothing changed" whatever the code under test did, because `before` and `after` are
+the same object. That arm then passes forever and asserts nothing. It is the same failure this
+campaign keeps catching by mutation, reached from the fixture side instead — and this session has
+written a number of before/after arms.
+
+Every read on the interface now returns a shallow snapshot. Shallow is the right depth and
+deliberately so: the columns are scalars and Dates, nothing mutates a Date in place, and a deep
+clone would imply a guarantee the repo does not make either.
+
+```
+N1  getById hands back the stored object again   "mutated underneath it"        1 failed | 16 passed
+N2  markUnsubscribed stops writing               "the arm above proves nothing"  3 failed | 14 passed
+restored (0 dirty, sha equal)                                                    17 passed
+```
+
+N2 exists because the snapshot arm on its own is satisfied by a write that never lands: if nothing
+ever changes, `before` is trivially unchanged. The arm carries its own second half asserting the
+write DID land, and N2 is what proves that half is load-bearing.
+
+**My first cut over-applied the rule and two tests went red for it.** I snapshotted `getAll()` as
+well. That method is not on `StatusSubscribersRepo` — it models nothing in production — and the
+tombstone tests use it to ARRANGE state (`getAll()[0]!.unsubscribedAt = …`). Copies sent those
+writes into a throwaway object, the store never changed, and `processPurge` found no candidates.
+Caught by running the 44 consumers rather than by the contract, and attributed by reverting the
+double to HEAD and watching the red disappear — it was mine, not a peer's.
+
+The rule belongs to the INTERFACE, which is what production must agree with. `getAll` is a hatch
+into the fixture's own state and is allowed to behave like one; it now says so in a comment
+explaining exactly why it is the exception, so the next person does not "fix" it back.
+
+**Still owed on this class, enumerated not forgotten:** `team-members` (10 in-place mutation sites)
+and `oauth-links` (1) alias the same way. Same fix, same shape, larger diff for team-members;
+recorded as queued rather than swept.
