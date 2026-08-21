@@ -1058,3 +1058,54 @@ customer's successful login refuse another customer's identical step, on the sam
 every authenticator in the world lands on.
 
 **Owed remaining: 18.**
+
+---
+
+## V-1221 — same destination, opposite order of operations
+
+Twelfth of the twenty-nine. `consumeAuthTokenFamily` makes a password-reset link single-use AND
+retires every other outstanding link for that account in the same act. Both halves matter: without
+the first a captured link stays live, and without the second a customer who clicked "forgot
+password" three times leaves two working links behind after using the third.
+
+The two implementations reach the same place by opposite routes:
+
+```
+Drizzle  UPDATE t SET consumed_at = $at WHERE account_id = $acct AND consumed_at IS NULL
+         RETURNING id   ->   rows.some(r => r.id === args.id)
+
+double   if (target missing || wrong account || already consumed) return false
+         …then consume every unconsumed row for that account, return true
+```
+
+The SQL **consumes first and asks afterwards** whether the target was among the rows it burned. The
+double **asks first and consumes only if the answer is yes**. On every path a caller can reach they
+agree, because all three call sites pass an `id` and `accountId` taken from a row
+`findActiveAuthToken` has just returned — unconsumed, unexpired, account-matched.
+
+**Where they diverge, and why it is recorded rather than pinned.** If the target is already consumed
+while other tokens for that account are not, Drizzle still burns the others and returns false; the
+double returns false and burns nothing. Reaching that needs a family call whose target was consumed
+by the single-token path, and nothing in the service produces it. The concurrent-double-click race
+does not either — the first call consumes the whole family, so the second finds nothing left to
+differ about.
+
+So the arms pin the reachable contract, and the divergent path is asserted only as the thing both
+agree on: a stale target reports false. Pinning either side's choice about what to burn on the way
+there would freeze an unreachable behaviour into a test and make whichever implementation changes
+first look broken. That is the opposite mistake to the one V-1201 fixed, where an unasserted
+difference was real and customer-visible; the discipline is the same either way — establish
+reachability before deciding whether a difference is a defect.
+
+```
+M1  DRIZZLE scopes the family to the token id, not the account   2 failed | 7 passed
+M2  the DOUBLE stops retiring the rest of the family             1 failed | 8 passed
+M3  the DOUBLE drops the account check on the target             1 failed | 8 passed
+restored (source 0 dirty)                                        9 passed
+```
+
+M1 and M2 are the matched pair: whichever side stops retiring the family, the same arm reports that
+an earlier reset link survived. M3 covers the `(id, accountId)` pairing, so an id harvested
+elsewhere cannot be redeemed against an account that does not own it.
+
+**Owed remaining: 17.**
