@@ -28,6 +28,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { codeOnly } from './_helpers/code-only.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const UNIT_DIR = resolve(HERE);
@@ -49,7 +50,11 @@ const REJECTED = String.raw`customerEgress|egress_config|proxyUrl|SOCKS5`;
  * The negative lookbehind keeps `https://` intact.
  */
 function code(src: string): string {
-  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(?<!:)\/\/[^\n]*/g, '');
+  // V-1256 — via the SHARED scanner. A private block-first pass cannot tell that the
+  // `/*` in a line comment such as `// … /v1/agent-sessions/* routes` is inside one, and
+  // models neither string nor regex literals. `code-only.ts` does both and keeps line
+  // numbers.
+  return codeOnly(src);
 }
 
 /** Every unit test that DEFINES an egress gate — a mention in prose is not one. */

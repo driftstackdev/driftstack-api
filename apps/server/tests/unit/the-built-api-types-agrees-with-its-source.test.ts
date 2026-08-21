@@ -37,6 +37,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import * as builtApiTypes from '@driftstack/api-types';
+import { codeOnly } from './_helpers/code-only.js';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 const SOURCE = resolve(REPO, 'packages', 'api-types', 'src', 'common.ts');
@@ -177,11 +178,11 @@ describe('the built api-types agrees with its source', () => {
 
   it('CRITICAL the nested records are emitted exactly as their source declares them', () => {
     const built = readFileSync(BUILT, 'utf-8');
-    const strip = (text: string): string =>
-      text
-        .replace(/\/\*[\s\S]*?\*\//g, '')
-        .replace(/\/\/[^\n]*/g, '')
-        .replace(/\s+/g, '');
+    // V-1256 — via the SHARED scanner. A private block-first pass cannot tell that the
+    // `/*` in a line comment such as `// … /v1/agent-sessions/* routes` is inside one, and
+    // models neither string nor regex literals. `code-only.ts` does both and keeps line
+    // numbers.
+    const strip = (text: string): string => codeOnly(text).replace(/\s+/g, '');
     const mismatches: string[] = [];
     for (const name of COMPARED_AS_TEXT) {
       const fromSource = blockFor(source, name);

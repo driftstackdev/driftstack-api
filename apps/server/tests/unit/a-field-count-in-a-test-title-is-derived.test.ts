@@ -41,6 +41,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { codeOnly } from './_helpers/code-only.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -115,7 +116,11 @@ function zodObjectBody(src: string, name: string): string | null {
 
 /** Top-level keys of a z.object body — comma-separated rather than semicolon. */
 function zodKeys(body: string): string[] {
-  const code = body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  // V-1256 — via the SHARED scanner. A private block-first pass cannot tell that the
+  // `/*` in a line comment such as `// … /v1/agent-sessions/* routes` is inside one, and
+  // models neither string nor regex literals. `code-only.ts` does both and keeps line
+  // numbers.
+  const code = codeOnly(body);
   const keys: string[] = [];
   let depth = 0;
   let cur = '';

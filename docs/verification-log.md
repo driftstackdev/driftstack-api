@@ -2894,3 +2894,50 @@ blindness itself.
 `the-built-api-types-agrees-with-its-source`, `the-egress-claim-gate-has-one-definition`,
 `a-field-count-in-a-test-title-is-derived`. Same fix. `migrations-destructive-statements-are-declared`
 strips SQL rather than TypeScript and `codeOnly` does not apply to it.
+
+## V-1257 — the last three private strippers, and one whose stripping turns out to be inert
+
+Closes the set enumerated in V-1256. `the-built-api-types-agrees-with-its-source`,
+`the-egress-claim-gate-has-one-definition` and `a-field-count-in-a-test-title-is-derived` all
+carried block-first private strippers; all three now call `codeOnly`.
+
+The egress guard is the interesting repoint. Its private version defended the `//` in `https://`
+with a negative lookbehind, `(?<!:)\/\/[^\n]*` — a workaround for not modelling string literals at
+all. `codeOnly` tracks quotes, so a URL inside a string survives because it is inside a string,
+not because of a lookbehind that happens to spare it. The workaround was correct for the case it
+was written for and silent about every other one.
+
+```
+N1  egress guard: stripping becomes a pass-through        1 failed | 3 passed
+N2  field-count guard: pass-through                       1 failed | 4 passed
+N3  built-api-types guard: pass-through                   4 PASSED
+restored (all files 0 dirty, sha equal)                   13 passed
+```
+
+**N3 passed, and it is reported rather than quietly dropped.** Removing comment stripping entirely
+from the built-api-types guard changes none of its four arms. Its stripping is inert today: it
+compares a source file against its built output, and whatever comments each carries are removed
+from BOTH sides, so taking the removal away changes both sides equally and the comparison lands in
+the same place. So this repoint is hygiene — it deletes a wrong implementation rather than fixes a
+wrong result — and saying "all three proven" would have been false.
+
+That distinction matters because it is the one this session keeps mishandling in the other
+direction. A green mutation has meant, at various points: an inert mutation (V-1237), an arm that
+could not fail (V-1249), a fully-derived expectation (V-1246), and now a call site where the
+transformation genuinely does not affect the outcome. They look identical in the log line and are
+four different facts. The only way to tell them apart is to go and read why.
+
+Private-stripper set now closed:
+
+```
+a-published-response-is-the-one-returned        repointed   V-1256   (was blanking route files)
+every-declared-admin-audit-action-is-reachable  repointed   V-1256
+bootstrap-unwired-optional-deps-are-declared    repointed   V-1256
+the-egress-claim-gate-has-one-definition        repointed   V-1257
+a-field-count-in-a-test-title-is-derived        repointed   V-1257
+the-built-api-types-agrees-with-its-source      repointed   V-1257   (stripping inert)
+no-ts-vocabulary-outgrows-its-database-enum     line-first, not exposed
+schema-enums-match-their-migration-history      line-first, not exposed
+migrations-destructive-statements-are-declared  strips SQL; codeOnly does not apply
+every-env-var-the-server-reads-is-documented    deliberately does not strip — prose match only
+```
