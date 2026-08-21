@@ -2569,3 +2569,53 @@ pattern is the same each time: the arm asserted something true, and the mutation
 that could reveal it was not asserting the thing that mattered.
 
 Cursor-anchor scoping is now consistent across every repo that pages. No ratchet change.
+
+## V-1250 — a double that was STRICTER than production, and a token that can never validate
+
+With ordering, truncation, cursors and constants all swept, the next enumerable parity class is
+what the doubles THROW. Scanning every double for `throw new` with comments stripped gave five
+sites. Three are fixture-internal invariant guards — "a profile with a wrapped DEK requires a
+preallocated id" and similar — which model nothing and are fine. One (`NotFoundError` in the
+incidents double) matches its repo. One did not:
+
+```
+Drizzle  rotateUnsubscribeTokenHash   UPDATE … WHERE id = $1     no rows matched, nothing thrown
+double   rotateUnsubscribeTokenHash   throw new Error('… not found')
+```
+
+**Stricter is still wrong.** A double that throws where production waves the caller through fails
+loudly in tests for a reason production cannot produce, and that is harder to notice than the lax
+direction: nobody investigates a test that fails "correctly". Nothing depended on the throw —
+checked both ways before changing it — so the double now no-ops silently, and two arms pin the pair:
+a rotate on a real row replaces the hash, and a rotate on an unknown id resolves quietly.
+
+```
+N1  double throws again on a missing row     "did not resolve quietly"   1 failed | 14 passed
+N2  double stops writing the hash            the replace arm             1 failed | 14 passed
+N3  DRIZZLE writes the wrong hash            the replace arm             1 failed | 14 passed
+restored (both files 0 dirty, sha equal)                                 15 passed
+```
+
+N2 and N3 are the pair that stops the no-op arm being satisfied by a rotate that never writes
+anything at all.
+
+**FLAGGED, not fixed — a product call I am not making unilaterally.** The reason the mismatch was
+worth chasing is what sits behind it. `StatusSubscribersService.rotateUnsubscribeToken` generates a
+plaintext, calls the repo, and returns the plaintext **regardless of whether any row matched**. The
+fan-out embeds that token in the unsubscribe link of one outgoing email. So if the subscriber row
+disappeared between `listConfirmed()` and the rotate, the platform emails a working-looking
+unsubscribe link whose token matches nothing in the database.
+
+Severity is genuinely low and worth stating honestly rather than inflating: the window is a race
+between two calls, and if the row is gone the bigger problem is that the fan-out is emailing a
+deleted subscriber at all. But the shape is the one this campaign keeps finding — a write that
+silently matches nothing, and a caller that cannot tell.
+
+The fix is a design choice with more than one defensible answer: have the repo report whether it
+matched and let the service skip that recipient, or accept the dead link as the cheaper failure.
+Changing it means changing what a fan-out does mid-batch, which is beyond a parity sweep and is not
+mine to decide alone. Recorded here with the mechanism spelled out so whoever picks it up does not
+have to re-derive it.
+
+Class status: five throw-sites enumerated, one divergence, one flagged design question. No ratchet
+change — arms added to an existing file.

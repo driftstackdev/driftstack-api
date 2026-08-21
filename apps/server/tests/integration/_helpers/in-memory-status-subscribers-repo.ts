@@ -84,8 +84,14 @@ export class InMemoryStatusSubscribersRepo implements StatusSubscribersRepo {
 
   // eslint-disable-next-line @typescript-eslint/require-await
   async rotateUnsubscribeTokenHash(input: { id: string; hash: string }): Promise<void> {
+    // V-1250 — a missing row is a SILENT NO-OP, mirroring DrizzleStatusSubscribersRepo,
+    // whose rotate is a plain `UPDATE … WHERE id = $1`: no rows matched, nothing thrown.
+    // This used to throw, so a caller that production lets through quietly would have
+    // failed loudly here and nowhere else — the double being stricter than the thing it
+    // models is the same parity defect as it being laxer, and harder to notice because
+    // it only shows up as a test that fails for a reason production would never produce.
     const row = this.rows.find((r) => r.id === input.id);
-    if (!row) throw new Error(`status_subscribers ${input.id} not found`);
+    if (!row) return;
     row.unsubscribeTokenHash = input.hash;
   }
 

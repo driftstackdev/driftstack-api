@@ -202,6 +202,30 @@ function statusSubscriberContract(
       ).toBeNull();
     });
 
+    it("CRITICAL rotating the unsubscribe token replaces the stored hash, in both. The fan-out issues a fresh token per outgoing email and embeds it in that email's unsubscribe link, so a rotate that does not land leaves the recipient holding a link that will not work.", async () => {
+      if (!enabled()) return;
+      const s = make();
+      const p = await s.pending();
+      await confirm(s, p, 'hash-original');
+
+      await s.repo.rotateUnsubscribeTokenHash({ id: p.id, hash: 'hash-rotated' });
+
+      expect(
+        (await s.repo.getById(p.id))?.unsubscribeTokenHash,
+        'the rotate did not replace the stored hash',
+      ).toBe('hash-rotated');
+    });
+
+    it('CRITICAL rotating a subscriber that does not exist is a SILENT NO-OP, in both. The Drizzle repo issues a plain UPDATE and matches no rows; nothing is thrown. The double used to throw instead, which is a parity defect in the stricter direction — a caller production waves through would have failed here and nowhere else, for a reason production cannot produce. See the note in the log: silently succeeding also means the caller still gets a plaintext token back, and that is a separate question from whether the two implementations agree.', async () => {
+      if (!enabled()) return;
+      const s = make();
+
+      await expect(
+        s.repo.rotateUnsubscribeTokenHash({ id: randomUUID(), hash: 'hash-orphan' }),
+        'rotating an unknown subscriber did not resolve quietly',
+      ).resolves.toBeUndefined();
+    });
+
     it('CRITICAL a NULL expected unsubscribe token is the deliberate admin branch and still works, in both. It is the operator force-unsubscribe, which carries admin authority instead of a token — pinning it beside the token-checked arm is what keeps that check honest, because a null arriving from a customer-facing caller is an unauthenticated unsubscribe that looks like a normal call.', async () => {
       if (!enabled()) return;
       const s = make();
