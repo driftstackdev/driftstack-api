@@ -27,6 +27,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { codeOnly } from './_helpers/code-only.js';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 
@@ -85,9 +86,12 @@ function replayMigrations(): Replay {
 }
 
 function schemaEnums(): Map<string, Set<string>> {
-  const source = readFileSync(resolve(REPO, 'apps/server/src/db/schema.ts'), 'utf-8')
-    .replace(/\/\/[^\n]*/g, '')
-    .replace(/\/\*[\s\S]*?\*\//g, '');
+  // V-1258 — via the SHARED scanner. This stripped LINE comments first, which happens to
+  // dodge the `/*`-inside-a-line-comment trap that V-1256 found, but it strips `//`
+  // ANYWHERE — including inside a string literal, so a URL in a scanned file would be
+  // truncated mid-token. `schema.ts` has none today; that is luck, not design, and the
+  // luck is one commit deep. `code-only.ts` tracks quotes and regex literals.
+  const source = codeOnly(readFileSync(resolve(REPO, 'apps/server/src/db/schema.ts'), 'utf-8'));
   const enums = new Map<string, Set<string>>();
   for (const m of source.matchAll(/pgEnum\('([a-z0-9_]+)',\s*/g)) {
     const from = source.indexOf('[', m.index + m[0].length - 1);

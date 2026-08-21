@@ -2934,10 +2934,54 @@ a-published-response-is-the-one-returned        repointed   V-1256   (was blanki
 every-declared-admin-audit-action-is-reachable  repointed   V-1256
 bootstrap-unwired-optional-deps-are-declared    repointed   V-1256
 the-egress-claim-gate-has-one-definition        repointed   V-1257
-a-field-count-in-a-test-title-is-derived        repointed   V-1257
+a-field-count-in-a-test-title-is-derived        repointed   V-1257   (only 1 of 3 sites — see V-1258)
 the-built-api-types-agrees-with-its-source      repointed   V-1257   (stripping inert)
 no-ts-vocabulary-outgrows-its-database-enum     line-first, not exposed
 schema-enums-match-their-migration-history      line-first, not exposed
 migrations-destructive-statements-are-declared  strips SQL; codeOnly does not apply
 every-env-var-the-server-reads-is-documented    deliberately does not strip — prose match only
 ```
+
+## V-1258 — the guard caught my own half-finished fix on its first run
+
+Two things here: the last two private strippers centralised, and the guard that stops the class
+coming back. The guard is the point, and what it found on its first run is the reason it exists.
+
+**It flagged `a-field-count-in-a-test-title-is-derived` — which V-1257 reports as repointed.** That
+file has THREE hand-rolled strip sites, not one. The V-1257 edit matched on a string that included
+the following line, which made it unique to the first site and silently left the other two. The
+occurrence assert passed, because one occurrence is exactly what it asserted; the assert was
+guarding against matching the wrong thing, not against matching too few. V-1257's table is corrected
+in place.
+
+That is the whole argument for guarding a class rather than sweeping it. My sweep was careful — it
+enumerated, it verified against source, it mutation-proved — and it still finished two-thirds of one
+file. The guard found that in its first second of running.
+
+**The staleness arm also caught an exemption I added out of caution rather than evidence.**
+`code-only.ts` was on the allow-list on the assumption that the shared scanner must itself contain
+the pattern. It does not: it is a hand-written character scanner, and the only place the regex
+appears is its own header, which the scan strips. Entry removed, and its absence is now explained at
+the list, since "why isn't the scanner exempt?" is the obvious question.
+
+**The last two strippers, repointed as hygiene rather than as a fix.**
+`no-ts-vocabulary-outgrows-its-database-enum` and `schema-enums-match-their-migration-history` strip
+LINE comments first, which dodges V-1256's trap. They have their own hole — `//` is stripped inside
+string literals too, so a URL in a scanned file would be truncated mid-token — and I checked before
+claiming: `schema.ts` contains no URL in a string, and enum counts are identical under both
+strippers. Latent, not live. Called hygiene here for the same reason V-1257 called the
+built-api-types repoint hygiene.
+
+```
+N1  reintroduce a hand-rolled stripper   named it at line 123, which is where it is
+N2  guard scans raw source               prose arm + main arm      2 failed | 2 passed
+restored (both files 0 dirty, sha equal)                            4 passed / 9 passed
+```
+
+N2 is the arm that matters most. Twice while enumerating this class by grep I matched the regex
+inside PROSE, once flagging a guard whose comment explains it deliberately does NOT strip — the
+opposite of an offender. A guard for "do not hand-roll this" that could not tell code from a comment
+about code would re-make that mistake on every run, so it scans with `codeOnly` itself.
+
+Class closed: nine private strippers, seven repointed, two exempt by language (SQL) with the reason
+recorded. Ratchets 2997 → 2998, 3164 → 3165.

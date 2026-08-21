@@ -147,7 +147,7 @@ function zodKeys(body: string): string[] {
  * a JSDoc mentioning `foo:` would otherwise read as a member.
  */
 function memberNames(body: string): string[] {
-  const code = body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const code = codeOnly(body);
   const members: string[] = [];
   let depth = 0;
   let cur = '';
@@ -175,7 +175,7 @@ function memberNames(body: string): string[] {
  * `ProfilesRepo` was documented with 8 methods and has 18.
  */
 function methodNames(body: string): string[] {
-  const code = body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const code = codeOnly(body);
   const members: string[] = [];
   let depth = 0;
   let cur = '';
