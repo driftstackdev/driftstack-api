@@ -22,17 +22,25 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { codeOnly } from './_helpers/code-only.js';
+
 const HELPERS = resolve(import.meta.dirname, '../integration/_helpers');
 
 /**
- * Comments FIRST. Every one of these doubles now carries a comment explaining the defect it used
- * to have, and those comments say `findIndex` next to the word `cursor` — so a scanner that reads
- * raw source reports the explanations as the defect. An audit that cannot tell code from prose
+ * V-1254 — comment stripping is the SHARED scanner, not a private regex.
+ *
+ * Comments FIRST: every one of these doubles now carries a comment explaining the defect it used
+ * to have, and those comments say `findIndex` next to the word `cursor`. A scanner that reads raw
+ * source reports the explanations as the defect, so an audit that cannot tell code from prose
  * measures nothing.
+ *
+ * This used to be a two-`replace` one-liner here. It was wrong twice over, and `code-only.ts`
+ * already says so in its own header: the block-comment pass runs first and has no idea a `/*`
+ * inside a LINE comment is not an opener, and it modelled neither string nor regex literals. It
+ * also DELETED block comments outright, so the line numbers this guard reports drifted by the
+ * height of the comments above each hit — the reported line for a regression planted in the
+ * snapshots double was 60 where the truth was 71.
  */
-function stripComments(src: string): string {
-  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-}
 
 interface Hit {
   file: string;
@@ -42,7 +50,7 @@ interface Hit {
 
 /** A positional cursor resolution: `findIndex`/`indexOf` with `cursor` within a few lines. */
 function positionalCursorHits(src: string, file: string): Hit[] {
-  const lines = stripComments(src).split('\n');
+  const lines = codeOnly(src).split('\n');
   const out: Hit[] = [];
   for (const [i, line] of lines.entries()) {
     if (!/\b(?:findIndex|indexOf)\s*\(/.test(line)) continue;
@@ -84,6 +92,19 @@ describe('no in-memory double resolves a pagination cursor by array position', (
       positionalCursorHits(commentary, 'commentary.ts'),
       'prose describing the defect was counted as the defect',
     ).toEqual([]);
+  });
+
+  it('CRITICAL a reported line number is the REAL line number, even when a block comment sits above the hit. Deleting comments rather than blanking them collapses the lines they spanned, so the guard names a line that does not contain the defect — and the file:line is the only part of this output anybody acts on. Every double here opens with a block comment, so the drift applied to essentially all of them.', () => {
+    const src = [
+      'const a = 1;',
+      '/* a block',
+      '   spanning',
+      '   four lines */',
+      'const idx = rows.findIndex((r) => r.id === cursor);',
+    ].join('\n');
+    const hits = positionalCursorHits(src, 'lines.ts');
+    expect(hits.length, 'the control snippet was not detected at all').toBe(1);
+    expect(hits[0]?.line, 'the reported line drifted by the height of the block comment').toBe(5);
   });
 
   it('CRITICAL no double resolves a cursor by array position. The Drizzle side pages by keyset and lets the cursor row leave the visible page; a positional resolution silently restarts at the top instead, which the caller sees as rows it has already been given rather than as an error.', () => {

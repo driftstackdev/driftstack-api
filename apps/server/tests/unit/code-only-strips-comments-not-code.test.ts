@@ -44,6 +44,21 @@ function serverSources(): string[] {
 }
 
 describe('V-1012 codeOnly strips comments and nothing else', () => {
+  it('CRITICAL the output has the SAME number of lines as the input, so a `file:line` a guard reports is the line the finding is actually on. Block comments used to be dropped newlines and all, which shifted every hit below them by the height of the comment — and in this repo nearly every source file opens with a block header, so the drift applied almost everywhere. A guard naming the wrong line sends whoever acts on it to code that looks innocent.', () => {
+    const src = [
+      'const a = 1;',
+      '/* a block',
+      '   spanning',
+      '   four lines */',
+      'const b = 2;',
+    ].join('\n');
+    const out = codeOnly(src);
+
+    expect(out.split('\n').length, 'the line count changed').toBe(src.split('\n').length);
+    expect(out.split('\n')[4], 'the code below the block comment moved').toContain('const b = 2;');
+    expect(out, 'the comment text survived after all').not.toContain('spanning');
+  });
+
   const files = serverSources();
 
   it('CRITICAL a wildcard route path in a line comment does not open a block comment. This is the regression: the `/*` in `/v1/agent-sessions/*` is inside a `//` comment, and a stripper that runs the block pass first deletes everything up to the next `*/` — in that file, the imports.', () => {

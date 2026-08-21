@@ -58,6 +58,13 @@ export function codeOnly(src: string): string {
     const next = src[i + 1];
 
     if (inBlock) {
+      // V-1254 — emit the newline. A block comment used to be dropped entirely, newlines and
+      // all, so the output had fewer lines than the input and every guard that reports a
+      // `file:line` named a line that did not contain what it had found. The drift is the
+      // height of the comments above the hit, which in this repo is large: nearly every file
+      // opens with a block header. Line comments below already emit theirs; this is the half
+      // that was missing. Nothing else changes — the characters are still gone.
+      if (ch === '\n') out += '\n';
       if (ch === '*' && next === '/') {
         inBlock = false;
         i += 1;

@@ -2749,3 +2749,48 @@ Every one of the three carries a contract arm with the same two halves: the row 
 not change, AND the write it was holding it across actually landed. The second half is not
 decoration — without it the first is satisfied by a repo that never changes anything, which is
 precisely the vacuity this class produces in the first place.
+
+## V-1254 — every guard that reports a line number was reporting the wrong one
+
+Setting out to write an aliasing guard, the detector prototype needed comment stripping, and
+checking it against the file it flagged showed the reported line did not contain the finding.
+Chasing that instead.
+
+**The shipped cursor guard was misreporting locations.** V-1243's `stripComments` deleted block
+comments outright — newlines and all — so the output had fewer lines than the input and every hit
+below a block comment was named at a line that did not contain it. Measured, not assumed: the same
+planted regression that guard reported at `in-memory-profile-snapshots-repo.ts:60` last commit is
+actually on line 71. An eleven-line drift, exactly the height of the header above it. A guard's
+`file:line` is the only part of its output anybody acts on, and it was sending them to innocent code.
+
+**The shared scanner had the same defect, and I had not looked.** `tests/unit/_helpers/code-only.ts`
+already exists for precisely this job, and its header explains at length why the obvious two-`replace`
+one-liner is wrong: the block pass runs first and cannot tell that the `/*` in `// … /v1/agent-sessions/*`
+is inside a LINE comment, and string and regex literals have to be modelled too. My guard shipped
+that exact rejected one-liner as a private copy. But `codeOnly` swallowed newlines in block comments
+as well, so pointing at it would have fixed the wrong-code problem and kept the wrong-line one.
+
+Both are fixed at the one place that matters: `codeOnly` now emits the newline when it consumes one
+inside a block comment. Nothing else about its output changes — the characters are still gone. Line
+comments already emitted theirs; this was the missing half. The cursor guard drops its private
+regex and calls the shared scanner, so it stops carrying a worse duplicate of something the
+repository had already thought carefully about.
+
+```
+N1  revert the newline emit          line-fidelity arms, BOTH files   2 failed |  8 passed
+N2  guard scans raw source           the comments-are-not-code arm    2 failed |  2 passed
+verified: planted regression now reported at 71, which is where it is
+restored (0 dirty, sha equal)                                         10 passed
+```
+
+All eight `codeOnly` consumers re-run: 134 tests, green. The change can only add newlines to a
+string these guards search with `includes` and regexes, and its own test asserts both directions
+over every server source file.
+
+**The pattern, again, one layer up.** V-1252 said a grep is a hypothesis and the count is worth what
+the reading that follows is. This is the same mistake in the tool rather than the query: I wrote a
+scanner, believed its output, and only caught it because a prototype for an unrelated guard happened
+to print a line I could check. The prototype was not even the work — it was the thing that made the
+error visible.
+
+The aliasing guard this started as is still owed.
