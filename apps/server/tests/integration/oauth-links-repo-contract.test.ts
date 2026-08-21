@@ -120,6 +120,30 @@ async function link(
 
 function oauthLinksRepoContract(label: string, make: () => Subject, enabled: () => boolean): void {
   describe(`OAuthLinksRepo contract — ${label}`, () => {
+    it('CRITICAL a link handed to the caller is a SNAPSHOT — a later write does not reach into it, in both. Postgres cannot mutate a row the caller already holds. A fixture that can makes every before/after comparison against it read "nothing changed", because `before` and `after` are the same object, and the arm then passes forever asserting nothing.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const account = await s.account();
+      const id = await link(s, account, 'google', `snap-${randomUUID().slice(0, 8)}`);
+
+      const held = (await s.repo.listForAccount(account)).find((r) => r.id === id);
+      expect(
+        held?.lastLoginAt ?? null,
+        'precondition: never logged in through this link',
+      ).toBeNull();
+
+      await s.repo.markLoginAt(id, new Date('2026-08-21T00:00:00.000Z'));
+
+      expect(
+        held?.lastLoginAt ?? null,
+        'the link handed to the caller mutated underneath it — reads are aliasing the store',
+      ).toBeNull();
+      expect(
+        (await s.repo.listForAccount(account)).find((r) => r.id === id)?.lastLoginAt ?? null,
+        'and the write itself did not land, so the arm above proves nothing',
+      ).not.toBeNull();
+    });
+
     it('CRITICAL findByProviderSub matches on BOTH provider and subject. It is the login lookup and it is account-unscoped by design, so the only thing separating one customer from another is that a subject issued by one provider cannot resolve a link created for a different one — that would be an account takeover with no credential involved.', async () => {
       if (!enabled()) return;
       const s = make();

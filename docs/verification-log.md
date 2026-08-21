@@ -2627,6 +2627,10 @@ Scanning for in-place property assignment on a stored row, comments stripped, ga
 `status-subscribers` (13 sites), `team-members` (10), `oauth-links` (1). All three also return
 those objects from their reads.
 
+> Counts corrected by V-1252: the pattern used here required the assignment to start the line, so
+> it missed `if (row) row.lastLoginAt = at;` and similar. The SET of three doubles was right; two of
+> the three tallies were low. Re-run figures are in that entry.
+
 **Proved before fixing.** A throwaway probe against the status-subscribers double: read a
 subscriber, unsubscribe them, then re-read the value captured BEFORE the unsubscribe. It had
 changed. Postgres cannot do that — a SELECT is a point-in-time copy and a later UPDATE does not
@@ -2663,6 +2667,51 @@ The rule belongs to the INTERFACE, which is what production must agree with. `ge
 into the fixture's own state and is allowed to behave like one; it now says so in a comment
 explaining exactly why it is the exception, so the next person does not "fix" it back.
 
-**Still owed on this class, enumerated not forgotten:** `team-members` (10 in-place mutation sites)
-and `oauth-links` (1) alias the same way. Same fix, same shape, larger diff for team-members;
-recorded as queued rather than swept.
+**Still owed on this class, enumerated not forgotten:** `team-members` and `oauth-links` alias the
+same way. Same fix, same shape, larger diff for team-members; recorded as queued rather than swept.
+(Site counts here were low — see the correction above and the figures in V-1252.)
+
+## V-1252 — the oauth-links half, and a count I had to correct twice
+
+Second of the three aliasing doubles. `InMemoryOAuthLinksRepo` mutates stored rows in place
+(`row.lastLoginAt`, `row.lastRevokedAt`, `row.consumedAt`) and returned those objects from four
+read paths. Every interface read now returns a shallow snapshot, same as V-1251.
+
+```
+N1  listForAccount hands back stored rows again   "mutated underneath it"       1 failed | 12 passed
+N2  markLoginAt stops writing                     "proves nothing"              1 failed | 12 passed
+restored (0 dirty, sha equal)                                                   13 passed
+```
+
+N2 again guards the half of the arm that would otherwise be satisfied by a repo that never changes
+anything: if no write ever lands, the held row is trivially unchanged and the snapshot assertion
+means nothing.
+
+**MY ENUMERATION WAS WRONG, IN BOTH DIRECTIONS, AND THAT IS THE ENTRY.** V-1251 reported the class
+as three doubles with 13, 10 and 1 in-place mutation sites. The pattern behind those numbers
+required the assignment to begin the line, so it never saw `if (row) row.lastLoginAt = at;` —
+oauth-links has three sites, not one, and team-members eleven, not ten. V-1251 has been corrected
+in place with a pointer here.
+
+Re-running with a looser pattern then produced the opposite error: it reported a FOURTH double,
+`probes`. Reading it, the two hits are `cur.lastProbeAt` and `cur.lastFailureAt` on a local
+aggregate object built inside `countByTargetSince` — not a stored row, no aliasing, a false
+positive. Had I trusted the second count the way I trusted the first, this entry would have claimed
+a defect in a double that does not have one.
+
+So the corrected set is the same three doubles, with different tallies:
+
+```
+status-subscribers   13 sites   fixed in V-1251
+oauth-links           3 sites   fixed here
+team-members         11 sites   still owed
+probes                0 sites   false positive — local aggregate, not a stored row
+```
+
+The lesson is one this campaign keeps re-learning from a new angle: a grep is a hypothesis, and the
+count it returns is worth exactly as much as the reading that follows it. V-1241 said "enumerate the
+set, never report the size". This is the sharper version — enumerate the set, then OPEN each member,
+because a pattern tight enough to avoid false positives is tight enough to miss real ones, and a
+pattern loose enough to catch them all invents some.
+
+Still owed: `team-members`, 11 sites.

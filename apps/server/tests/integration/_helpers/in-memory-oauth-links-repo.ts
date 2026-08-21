@@ -12,6 +12,24 @@ import type {
   OAuthPendingLinksRepo,
 } from '../../../src/services/oauth-client.js';
 
+/**
+ * V-1252 — every read hands back a SNAPSHOT, never the stored object.
+ *
+ * This double mutates stored rows in place (`row.lastLoginAt = at`, `row.lastRevokedAt = at`,
+ * `row.consumedAt = at`) and its reads used to return those very objects, so a row a caller was
+ * already holding kept changing underneath it. A SELECT is a point-in-time copy; a later UPDATE
+ * cannot reach into a result already returned.
+ *
+ * The failure it causes is a silent one: any before/after comparison against this double reads
+ * "nothing changed" no matter what happened, because `before` and `after` are one object. Same
+ * fix and same reasoning as V-1251 on the status-subscribers double.
+ */
+function snapLink<T extends object>(row: T): T;
+function snapLink<T extends object>(row: T | undefined | null): T | null;
+function snapLink<T extends object>(row: T | undefined | null): T | null {
+  return row ? { ...row } : null;
+}
+
 export class InMemoryOAuthLinksRepo implements OAuthLinksRepo {
   readonly rows: OAuthLinkRow[] = [];
 
@@ -20,7 +38,7 @@ export class InMemoryOAuthLinksRepo implements OAuthLinksRepo {
     providerSub: string,
   ): Promise<OAuthLinkRow | null> {
     const r = this.rows.find((x) => x.provider === provider && x.providerSub === providerSub);
-    return Promise.resolve(r ?? null);
+    return Promise.resolve(snapLink(r));
   }
 
   listForAccount(accountId: string): Promise<readonly OAuthLinkRow[]> {
@@ -31,7 +49,8 @@ export class InMemoryOAuthLinksRepo implements OAuthLinksRepo {
     return Promise.resolve(
       this.rows
         .filter((x) => x.accountId === accountId)
-        .sort((a, b) => a.linkedAt.getTime() - b.linkedAt.getTime() || a.id.localeCompare(b.id)),
+        .sort((a, b) => a.linkedAt.getTime() - b.linkedAt.getTime() || a.id.localeCompare(b.id))
+        .map((x) => snapLink(x)),
     );
   }
 
@@ -57,7 +76,7 @@ export class InMemoryOAuthLinksRepo implements OAuthLinksRepo {
       lastRevokedAt: null,
     };
     this.rows.push(row);
-    return Promise.resolve(row);
+    return Promise.resolve(snapLink(row));
   }
 
   markLoginAt(id: string, at: Date): Promise<void> {
@@ -91,7 +110,7 @@ export class InMemoryOAuthPendingLinksRepo implements OAuthPendingLinksRepo {
       createdAt: new Date(),
     };
     this.rows.push(row);
-    return Promise.resolve(row);
+    return Promise.resolve(snapLink(row));
   }
 
   findActiveByTokenHash(tokenHash: string, now: Date): Promise<OAuthPendingLinkRow | null> {
@@ -99,7 +118,7 @@ export class InMemoryOAuthPendingLinksRepo implements OAuthPendingLinksRepo {
     if (!r) return Promise.resolve(null);
     if (r.consumedAt !== null) return Promise.resolve(null);
     if (now > r.expiresAt) return Promise.resolve(null);
-    return Promise.resolve(r);
+    return Promise.resolve(snapLink(r));
   }
 
   markConsumedAt(id: string, at: Date): Promise<boolean> {
