@@ -2745,6 +2745,10 @@ team-members         11                  6                     V-1253
 probes                0                  —                     false positive (V-1252)
 ```
 
+> Premature — corrected by V-1255. The three were the ones an in-place-mutation scan surfaced, but
+> the observable defect lives on the READ side, and scanning there found a fourth double this table
+> does not list. "Closed" was a claim about my enumeration, not about the code.
+
 Every one of the three carries a contract arm with the same two halves: the row a caller holds does
 not change, AND the write it was holding it across actually landed. The second half is not
 decoration — without it the first is satisfied by a repo that never changes anything, which is
@@ -2794,3 +2798,46 @@ to print a line I could check. The prototype was not even the work — it was th
 error visible.
 
 The aliasing guard this started as is still owed.
+
+## V-1255 — the guard found a fourth double the hand sweep had missed
+
+The aliasing class was declared closed in V-1253 on three hand-fixed doubles. Writing the guard for
+it — the thing that stops a fourth being written — found a fourth that already existed.
+
+**Why the hand sweep missed it.** I enumerated by scanning for in-place mutation of a stored row,
+which is only half the defect. Aliasing is observable through the READ, so the read side is where
+the scan belongs. `InMemoryIncidentsRepo.get` returned the stored row, and resolve/reopen/update
+mutate incidents in place — the same defect, invisible to a mutation-shaped query because I had
+already stopped looking once three files matched.
+
+The guard scans reads: a bare `return row;` where `row` came off `this.<store>.find(…)`, a
+`return this.<store>;`, an array-spread `return [...this.rows];`, and filter/sort chains that do not
+end in a `.map(`. `getAll`-style methods are exempt BY NAME with the reason recorded, because they
+are absent from the production interfaces and fixtures arrange state through them — snapshotting one
+is what turned two tombstone tests red in V-1251.
+
+**The array-spread case was a detector gap I nearly recorded as a stale exemption.** The guard
+flagged my `admin-audit::getAll` seam entry as naming nothing, and the tempting read was that I had
+invented the entry. The method exists; it returns `[...this.rows]`, which copies the ARRAY and hands
+back the very same row objects — the same defect, one shape further out, and the detector did not
+model it. Extending it also surfaced `sessions::getEvents`, verified as a genuine seam: not on
+`SessionRepo`, and session events are append-only, so nothing can change underneath a caller.
+
+```
+N1  reintroduce the aliasing read in incidents   named it at line 177, which is where it is
+N2  blank the LIVE_SEAMS list                    the seam-staleness arm         1 failed | 4 passed
+restored (both files 0 dirty, sha equal)                                        5 passed
+```
+
+N1's line number is worth stating: 177, and the read is on 177. That is V-1254's fix showing up
+where it matters — a guard that names the wrong line sends whoever acts on it to innocent code.
+
+The guard carries the three arms this campaign now treats as mandatory: a positive control (the
+signature still matches a synthetic aliasing read), a negative control (a snapshotting read is NOT
+flagged, so the fix is distinguishable from the defect), and a comments-are-not-code arm that also
+asserts the reported line survives stripping.
+
+**The shape of the mistake.** V-1252 said a grep is a hypothesis. This is the next layer: the
+hypothesis can be well-formed, correctly executed, and still aimed at the wrong side of the defect.
+Three doubles matched a mutation-shaped query and I read that as the population. Ratchets 2996 →
+2997, 3163 → 3164.

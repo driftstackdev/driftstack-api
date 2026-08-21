@@ -15,6 +15,23 @@ import type {
 } from '../../../src/services/incidents.js';
 import { NotFoundError } from '../../../src/lib/errors-helpers.js';
 
+/**
+ * V-1255 — every INTERFACE read hands back a SNAPSHOT, never the stored object.
+ *
+ * This double mutates stored incidents in place (`incident.status = …`, `resolvedAt`, `updatedAt`
+ * across resolve/reopen/update) and `get` returned the stored row, so an incident a caller was
+ * already holding changed underneath it. A SELECT is a point-in-time copy.
+ *
+ * Fourth member of the class fixed in V-1251 through V-1253, and found by the guard written after
+ * those — which is the argument for the guard. Declaring the class closed on three hand-fixed
+ * doubles was premature; see the correction in the log.
+ */
+function snapIncident<T extends object>(row: T): T;
+function snapIncident<T extends object>(row: T | undefined | null): T | null;
+function snapIncident<T extends object>(row: T | undefined | null): T | null {
+  return row ? { ...row } : null;
+}
+
 export class InMemoryIncidentsRepo implements IncidentsRepo {
   private readonly incidents: IncidentRow[] = [];
   private readonly updates: IncidentUpdateRow[] = [];
@@ -157,7 +174,7 @@ export class InMemoryIncidentsRepo implements IncidentsRepo {
     const row = this.incidents.find((r) => r.id === id);
     if (!row) return null;
     if (opts?.publicOnly && !row.public) return null;
-    return row;
+    return snapIncident(row);
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await
