@@ -34,6 +34,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DrizzleWebhooksRepo } from '../../src/db/webhooks-repo.js';
 import { encryptWebhookSecret } from '../../src/lib/webhook-secret-encryption.js';
+import { cleanDelta } from './_helpers/counter-delta.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
 const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
@@ -236,15 +237,28 @@ describe('DLQ keyset pagination', () => {
 
   it('CRITICAL the DLQ count moves with the queue', async () => {
     if (!dbReachable || !repo) return;
+    // `repo` is module-scope and nullable; the guard above narrows it here but NOT inside
+    // the callbacks below, so bind the narrowed value once.
+    const active = repo;
     const endpointId = await seedEndpoint();
-    const before = await repo.countDlqDeliveries();
     const at = new Date(Date.now() - 60_000).toISOString();
-    await seedDelivery({ endpointId, status: 'dlq', createdAt: at });
-    await seedDelivery({ endpointId, status: 'delivered', createdAt: at });
-    expect(
-      await repo.countDlqDeliveries(),
-      'the DLQ depth an operator reads did not move by exactly the one dead-lettered row added',
-    ).toBe(before + 1);
+
+    // V-1273 — `countDlqDeliveries` takes no filter: it counts the whole table. A bare
+    // before/after delta therefore races every other file that dead-letters a delivery, and
+    // this arm failed a full-suite run with `expected 21 to be 20` — someone else's row landed
+    // inside the window. It passes alone and passes with its eight DLQ neighbours, so the
+    // interference comes from further out than any neighbourhood run reaches.
+    //
+    // Same counter shape, same remedy as V-1248 and V-1264: discard a reading whose delta is
+    // not the one this arm caused, and re-run on fresh fixtures.
+    await cleanDelta(
+      async () => ({ dlq: await active.countDlqDeliveries() }),
+      async () => {
+        await seedDelivery({ endpointId, status: 'dlq', createdAt: at });
+        await seedDelivery({ endpointId, status: 'delivered', createdAt: at });
+      },
+      { dlq: 1 },
+    );
   });
 
   // A cursor is customer-supplied, and `new Date(...)` accepts values Postgres

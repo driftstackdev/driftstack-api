@@ -3614,3 +3614,43 @@ N2' is the arm that makes N1' mean something: it shows the new branch is what se
 rather than some pre-existing branch catching it incidentally.
 
 All four class guards green together: cursors, aliasing, comment strippers, restated numbers.
+
+## V-1273 — the full suite went red on the counter class, in a fifth file
+
+The run after V-1272 failed: `db-webhooks-dlq-keyset-paging-drizzle`, with
+`expected 21 to be 20`. `countDlqDeliveries` takes no filter — it counts the whole table — and the
+arm measured it with a bare before/after delta, so another file dead-lettering a delivery inside the
+window moves it by two.
+
+**Attributed before investigating.** The file is committed, not dirty, and nothing this turn goes
+near webhooks; `git log` shows it from an earlier arc of this campaign. It passes alone (8/8) and
+passes three times with its eight DLQ neighbours — the interference comes from further out than any
+neighbourhood run reaches, which is why only the full suite sees it.
+
+Converted to `cleanDelta`, the shared detect-and-retry from V-1264. That is the fifth file in this
+class: admin-accounts (V-1245, V-1248), admin-billing (V-1264), the drizzle sibling it perturbed
+(V-1264), and now this.
+
+```
+N1  seed TWO dlq rows instead of one   "the counter is MISCOUNTING"   deterministic, all 5 attempts
+N2  countDlqDeliveries returns 0       "the counter is MISCOUNTING"   deterministic
+restored (both files 0 dirty, sha equal)                              8 passed
+```
+
+Both negatives report MISCOUNTING rather than interference, which is the V-1248 attribution logic
+doing its job: a wrong delta identical across all five attempts is not something a concurrent writer
+reproduces.
+
+**Two process notes.** A `python` replace aborted on its occurrence assert mid-edit, so nothing was
+written and the file stayed in its previous state — the assert did exactly what it is for, and the
+retry was done by line number against the reflowed text. And `tsc` rejected the first conversion:
+`repo` is module-scope and nullable, and the `if (!repo) return` guard narrows it in the arm body
+but NOT inside the callbacks `cleanDelta` takes. Binding the narrowed value once is the fix, and it
+is worth a line because the error pointed inside the callback while the cause was the signature of
+the thing receiving it.
+
+**The pattern is now unambiguous.** Five files, one shape: a counter with no filter, measured by
+difference, in a suite where many files write the same table. Each was found by a different route —
+a nine-file run, a thirty-file contract run, a thirty-four-file consumer run, and twice by the full
+suite. The class does not have a natural boundary at which "I have found them all" can be asserted,
+which is the argument for the helper being shared rather than the fixes being local.
