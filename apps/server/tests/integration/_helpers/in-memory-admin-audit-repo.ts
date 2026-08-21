@@ -9,6 +9,17 @@ import type {
   ListAuditPage,
   NewAdminAuditLogInput,
 } from '../../../src/services/admin-audit.js';
+import { keysetPage } from './keyset-page.js';
+
+/**
+ * Ascending `(timestamp, id)`; the sort negates it and the keyset boundary derives from
+ * the same key, so ordering and boundary cannot drift apart.
+ */
+function compareAuditKey(a: { timestamp: Date; id: string }, b: { timestamp: Date; id: string }) {
+  const t = a.timestamp.getTime() - b.timestamp.getTime();
+  if (t !== 0) return t;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
 
 export class InMemoryAdminAuditLogRepo implements AdminAuditLogRepo {
   private readonly rows: AdminAuditLogRow[] = [];
@@ -51,25 +62,26 @@ export class InMemoryAdminAuditLogRepo implements AdminAuditLogRepo {
     if (filters.targetResourceId) {
       filtered = filtered.filter((r) => r.targetResourceId === filters.targetResourceId);
     }
-    // Keyset: stable (timestamp desc, id desc) sort, then resume
-    // strictly after the cursor row's position — mirrors the Drizzle
-    // repo so same-timestamp rows aren't dropped at a page boundary.
-    filtered.sort((a, b) => {
-      const dt = b.timestamp.getTime() - a.timestamp.getTime();
-      if (dt !== 0) return dt;
-      return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+    // V-1243 — keyset via the shared helper. The comment here claimed to mirror the
+    // Drizzle repo, and the SORT did; the cursor did not. Resolving it with findIndex
+    // inside the filtered array returns -1 once the cursor row leaves that array — a
+    // narrower window on a re-read, or a retention purge — and the slice read -1 as
+    // "start from the top", handing back entries the caller had already exported.
+    filtered.sort((a, b) => -compareAuditKey(a, b));
+    const page = keysetPage({
+      // UNSCOPED, matching DrizzleAdminAuditLogRepo, whose anchor lookup is
+      // `eq(adminAuditLog.id, cursor)` with no adminAccountId term. Mirrored rather
+      // than corrected: changing it is a production decision, not a fixture one.
+      anchorSet: [...this.rows].sort((a, b) => -compareAuditKey(a, b)),
+      rows: filtered,
+      cursor: filters.cursor,
+      limit: filters.limit,
+      id: (r) => r.id,
+      at: (r) => r.timestamp,
     });
-    if (filters.cursor) {
-      const idx = filtered.findIndex((r) => r.id === filters.cursor);
-      if (idx >= 0) filtered = filtered.slice(idx + 1);
-    }
-
-    const items = filtered.slice(0, filters.limit);
-    const hasMore = filtered.length > filters.limit;
-    const last = items[items.length - 1];
     return Promise.resolve({
-      items,
-      nextCursor: hasMore && last ? last.id : null,
+      items: page.items,
+      nextCursor: page.nextCursor,
     });
   }
 

@@ -2205,3 +2205,59 @@ the fact that they now call the same proven function. Stated here rather than le
 
 Ratchets: 2994 → 2995, 3161 → 3162. The gate and conditional-skip counts do not move: `keyset-page.ts`
 is a helper rather than a test file, and the new unit test gates on nothing.
+
+## V-1243 — the last three sites, and a guard so the class stops coming back
+
+V-1242 converted three of the six positional-cursor sites. This closes the other three — both audit
+doubles and profile snapshots — and adds the guard.
+
+Each double now mirrors the anchor scope its Drizzle counterpart actually uses, which is not the
+same answer three times:
+
+```
+account-audit      and(eq(id, cursor), eq(accountId, accountId))   -> anchorSet = account-scoped
+profile-snapshots  and(eq(id, cursor), eq(accountId, accountId))   -> anchorSet = account-scoped
+admin-audit        eq(id, cursor)                                  -> anchorSet = UNSCOPED
+```
+
+**The admin-audit anchor lookup is unscoped, and I mirrored it rather than corrected it.** The
+profile-snapshots repo carries a comment explaining why IT scopes: an unscoped anchor lets a forged
+cross-account cursor resolve to another account's `(createdAt, id)`, mis-positioning the caller's
+page and answering whether a given id exists. The same argument applies to `admin_audit_log`
+between staff members, where the main query filters on `adminAccountId` but the anchor lookup does
+not. It is staff-only and the severity is low, and `unscoped-cursor-listings-stay-admin-only.test.ts`
+does not cover it because that guard is about listings whose MAIN query is unscoped — a different
+thing. A fixture is the wrong place to decide this: the double copies production, and changing
+production cursor scoping is its own change with its own pins. **Recorded here as an open item, not
+silently fixed.**
+
+The profile-snapshots sort also compared ids with `localeCompare`; it now uses plain byte order,
+which is what Postgres compares uuids by, and the keyset boundary derives from the same comparator
+so ordering and boundary cannot drift apart.
+
+**The guard looks for the defect's signature, not for use of the helper.** Three doubles page
+correctly with cursor shapes `keysetPage` does not model — a composite `{ startedAt, id }` object,
+a delivery cursor with a legacy created_at-only form, and the profiles anchor variant. Demanding the
+helper would mean churning correct code to satisfy a test.
+
+```
+G1  reintroduce a positional cursor in one double   named the exact file:line   1 failed | 2 passed
+G2  comment-stripper disabled (raw scan)            2 arms                      2 failed | 1 passed
+restored (both files 0 dirty, sha equal)                                        3 passed
+```
+
+**G2 is the arm that matters most, and it exists because of how this class was found.** Every
+converted double now carries a comment explaining the defect it used to have — prose containing
+both `findIndex` and `cursor`. A scanner reading raw source reports all six explanations as six
+defects. The guard strips comments first and has an arm proving it does, because an audit that
+cannot tell code from prose measures nothing. The first hand-grep in this campaign returned mostly
+comment lines for exactly this reason.
+
+The guard also carries a positive control: the scan must find more than twenty doubles, and the
+signature must still match a synthetic positional cursor. A guard reporting zero because it looked
+nowhere reads identically to one reporting zero because the defect is gone.
+
+Class now closed: 6 sites converted, 3 already correct, 1 guard, and the shared helper covered by
+its own arms in V-1242.
+
+Ratchets: 2995 → 2996, 3162 → 3163.

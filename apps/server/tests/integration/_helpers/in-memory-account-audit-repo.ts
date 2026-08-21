@@ -8,6 +8,17 @@ import type {
   ListAccountAuditPage,
   RecordAccountAuditInput,
 } from '../../../src/services/account-audit.js';
+import { keysetPage } from './keyset-page.js';
+
+/**
+ * Ascending `(timestamp, id)`; the sort negates it and the keyset boundary derives from
+ * the same key, so ordering and boundary cannot drift apart.
+ */
+function compareAuditKey(a: { timestamp: Date; id: string }, b: { timestamp: Date; id: string }) {
+  const t = a.timestamp.getTime() - b.timestamp.getTime();
+  if (t !== 0) return t;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
 
 export class InMemoryAccountAuditRepo implements AccountAuditRepo {
   private readonly rows: AccountAuditEntryRow[] = [];
@@ -36,34 +47,34 @@ export class InMemoryAccountAuditRepo implements AccountAuditRepo {
   }
 
   list(accountId: string, opts: ListAccountAuditOpts): Promise<ListAccountAuditPage> {
-    // Keyset cursor on (timestamp desc, id desc) — mirrors the Drizzle
-    // repo. Stable sort, then resume strictly after the cursor row's
-    // position so same-timestamp rows aren't dropped at a page boundary.
-    let ordered = this.rows
+    // V-1243 — keyset via the shared helper. The sort mirrored the Drizzle repo; the
+    // cursor did not. findIndex inside the filtered array returns -1 as soon as the
+    // cursor row stops matching — a narrowed window, a different action filter on a
+    // re-read, a retention purge — and the slice read that as "start from the top".
+    const scoped = this.rows
       .filter((r) => r.accountId === accountId)
+      .sort((a, b) => -compareAuditKey(a, b));
+    const ordered = scoped
       .filter((r) => (opts.action ? r.action === opts.action : true))
       // V-484 — date range + actor + target_resource_id filters.
       .filter((r) => (opts.from ? r.timestamp >= opts.from : true))
       .filter((r) => (opts.to ? r.timestamp <= opts.to : true))
       .filter((r) => (opts.actorType ? r.actorType === opts.actorType : true))
-      .filter((r) => (opts.targetResourceId ? r.targetResourceId === opts.targetResourceId : true))
-      .sort((a, b) => {
-        const dt = b.timestamp.getTime() - a.timestamp.getTime();
-        if (dt !== 0) return dt;
-        return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
-      });
+      .filter((r) => (opts.targetResourceId ? r.targetResourceId === opts.targetResourceId : true));
 
-    if (opts.cursor !== undefined) {
-      const idx = ordered.findIndex((r) => r.id === opts.cursor);
-      if (idx >= 0) ordered = ordered.slice(idx + 1);
-    }
-
-    const items = ordered.slice(0, opts.limit);
-    const last = items[items.length - 1];
-    const hasMore = ordered.length > opts.limit;
+    const page = keysetPage({
+      // Account-scoped and nothing more, matching the Drizzle anchor lookup's
+      // `and(eq(id, cursor), eq(accountId, accountId))` exactly.
+      anchorSet: scoped,
+      rows: ordered,
+      cursor: opts.cursor,
+      limit: opts.limit,
+      id: (r) => r.id,
+      at: (r) => r.timestamp,
+    });
     return Promise.resolve({
-      items,
-      nextCursor: hasMore && last ? last.id : null,
+      items: page.items,
+      nextCursor: page.nextCursor,
     });
   }
 

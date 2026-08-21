@@ -8,6 +8,21 @@ import type {
   ProfileSnapshotRecord,
   ProfileSnapshotsRepo,
 } from '../../../src/services/profile-snapshots.js';
+import { keysetPage } from './keyset-page.js';
+
+/**
+ * Ascending `(createdAt, id)`. The previous sort compared ids with `localeCompare`; this
+ * uses plain byte order, which is what Postgres compares uuids by, and the keyset
+ * boundary derives from the same function so the two cannot drift apart.
+ */
+function compareSnapshotKey(
+  a: { createdAt: Date; id: string },
+  b: { createdAt: Date; id: string },
+) {
+  const t = a.createdAt.getTime() - b.createdAt.getTime();
+  if (t !== 0) return t;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
 
 export class InMemoryProfileSnapshotsRepo implements ProfileSnapshotsRepo {
   private readonly rows = new Map<string, ProfileSnapshotRecord>();
@@ -32,23 +47,35 @@ export class InMemoryProfileSnapshotsRepo implements ProfileSnapshotsRepo {
 
   list(args: ListSnapshotsArgs): Promise<ListSnapshotsPage> {
     const limit = Math.min(args.limit ?? 50, 100);
-    let candidates = Array.from(this.rows.values()).filter((r) => r.accountId === args.accountId);
-    if (args.parentProfileId !== undefined) {
-      candidates = candidates.filter((r) => r.parentProfileId === args.parentProfileId);
-    }
-    candidates.sort((a, b) => {
-      const t = b.createdAt.getTime() - a.createdAt.getTime();
-      if (t !== 0) return t;
-      return b.id.localeCompare(a.id);
+    // V-1243 — keyset via the shared helper. Resolving the cursor with findIndex inside
+    // the parentProfileId-filtered array returns -1 whenever the caller pages with a
+    // different drill-down than the one that issued the cursor, and the slice read that
+    // as "start from the top".
+    const scoped = Array.from(this.rows.values())
+      .filter((r) => r.accountId === args.accountId)
+      .sort((a, b) => -compareSnapshotKey(a, b));
+    const candidates =
+      args.parentProfileId === undefined
+        ? scoped
+        : scoped.filter((r) => r.parentProfileId === args.parentProfileId);
+
+    const page = keysetPage({
+      // Account-scoped only, matching the Drizzle anchor lookup's
+      // `and(eq(id, cursor), eq(accountId, args.accountId))` — the scoping that repo
+      // added deliberately, so a forged cross-account cursor cannot mis-position the
+      // page or answer whether a snapshot id exists.
+      anchorSet: scoped,
+      rows: candidates,
+      cursor: args.cursor,
+      limit,
+      id: (r) => r.id,
+      at: (r) => r.createdAt,
     });
-    if (args.cursor !== undefined) {
-      const cIdx = candidates.findIndex((r) => r.id === args.cursor);
-      if (cIdx >= 0) candidates = candidates.slice(cIdx + 1);
-    }
-    const data = candidates.slice(0, limit);
-    const hasMore = candidates.length > limit;
-    const nextCursor = hasMore && data.length > 0 ? data[data.length - 1]!.id : null;
-    return Promise.resolve({ data, hasMore, nextCursor });
+    return Promise.resolve({
+      data: page.items,
+      hasMore: page.hasMore,
+      nextCursor: page.nextCursor,
+    });
   }
 
   findById(args: { id: string; accountId: string }): Promise<ProfileSnapshotRecord | null> {
