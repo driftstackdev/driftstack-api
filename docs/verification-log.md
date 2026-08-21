@@ -2142,3 +2142,66 @@ different reason. Second time this turn that a green-or-red vitest result said n
 Ratchets: 2993 → 2994, 3160 → 3161, DATABASE_URL gate 128 → 129, conditional skips 170 → 171.
 
 **Owed remaining: 0, and this time the set was enumerated rather than counted.**
+
+## V-1242 — the class behind V-1237 and V-1241, enumerated instead of stumbled into
+
+V-1237 found an offset-vs-keyset paging split in the admin-accounts double. V-1241 found the same
+thing in rate-limit overrides. Two instances is a class, so this time the doubles were enumerated
+rather than waited for:
+
+```
+offset by POSITION (defective)          keyset already (correct)
+  in-memory-sessions-repo.ts       x2     in-memory-incidents-repo.ts
+  in-memory-api-keys-repo.ts              in-memory-webhooks-repo.ts
+  in-memory-admin-audit-repo.ts           in-memory-profiles-repo.ts
+  in-memory-account-audit-repo.ts         in-memory-admin-accounts-repo.ts   (V-1237)
+  in-memory-profile-snapshots-repo.ts     in-memory-rate-limit-overrides-repo.ts (V-1241)
+```
+
+**Six defective sites, not two.** All five Drizzle counterparts page by keyset — verified in source,
+one repo at a time — and all five scope the cursor-anchor lookup by TENANCY only, never by the
+mutable filter. That last detail is the whole mechanism: the cursor row is deliberately allowed to
+have left the visible page.
+
+**The fix already existed in this codebase and was never swept.** `in-memory-profiles-repo.ts`
+carries it under a comment labelled "FIX 3", describing the same pagination loop in the same words —
+someone hit this, fixed the one double in front of them, and the class went unexamined. That is the
+argument for a shared `keysetPage` helper rather than a seventh correct copy.
+
+**The triggers are ordinary, and they get worse down the list.** A staff member suspending an
+account (V-1237). A customer revoking an API key. An override expiring. A session FINISHING — that
+listing filters on `status`, which a session changes by itself, so page two of a `running` listing
+restarted at the top on an ordinary clock tick with nobody touching anything. None of these is an
+error; each is a page of duplicates handed to a caller that has already acted on them.
+
+This entry converts the two sessions sites and the api-keys site. The three remaining — both audit
+doubles and profile snapshots — follow in the next commit, together with a guard so the class cannot
+return.
+
+```
+api-keys contract, revoked-between-pages arm (drives BOTH implementations)
+M1  double resolves the anchor in the filtered set   the old defect      1 failed | 10 passed
+M2  DRIZZLE anchor lookup scoped by revoked too      same, prod side     1 failed | 10 passed
+
+keysetPage's own semantics
+N1  anchor resolved in `rows` not `anchorSet`        the defining arm    1 failed |  5 passed
+N2  boundary id < becomes <=                         partition           2 failed |  4 passed
+N3  id tie-break dropped                             same-timestamp arm  1 failed |  5 passed
+N4  cursor handed out on the last page               terminating null    1 failed |  5 passed
+N5  parseUuidCursor guard removed                    malformed cursor    1 failed |  5 passed
+restored (all files 0 dirty, sha equal)                                  6 passed / 11 passed
+```
+
+**N5 passed the first time, and that was the finding.** The malformed-cursor arm asserted that a
+non-uuid cursor falls back to page one — but a lookup for a non-uuid MISSES whether or not the guard
+is there, so removing the guard changed nothing and the arm pinned nothing. Fixed by putting a row
+whose id IS the malformed cursor into the anchor set, positioned so that anchoring on it returns a
+visibly different page. Same shape as V-1237's inert de-indent and V-1240's crashing mutation: the
+mutation is what tells you whether the arm discriminates, and a green mutation run is a result, not
+a formality.
+
+Sessions has no both-implementations contract, so those two sites rest on the helper's own arms plus
+the fact that they now call the same proven function. Stated here rather than left implied.
+
+Ratchets: 2994 → 2995, 3161 → 3162. The gate and conditional-skip counts do not move: `keyset-page.ts`
+is a helper rather than a test file, and the new unit test gates on nothing.

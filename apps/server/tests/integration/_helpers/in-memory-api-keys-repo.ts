@@ -17,6 +17,17 @@ import type {
   RotateApiKeyRepoResult,
 } from '../../../src/services/api-keys.js';
 import type { InMemoryAuthRepo } from './in-memory-auth-repo.js';
+import { keysetPage } from './keyset-page.js';
+
+/**
+ * Ascending `(createdAt, id)`; the sort negates it and the keyset boundary derives from
+ * the same key, so ordering and boundary cannot drift apart.
+ */
+function compareApiKeyKey(a: { createdAt: Date; id: string }, b: { createdAt: Date; id: string }) {
+  const t = a.createdAt.getTime() - b.createdAt.getTime();
+  if (t !== 0) return t;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
 
 export class InMemoryApiKeysRepo implements ApiKeysRepo {
   private readonly byId = new Map<string, ApiKeyRow>();
@@ -187,28 +198,30 @@ export class InMemoryApiKeysRepo implements ApiKeysRepo {
   }): Promise<{ items: ApiKeyRow[]; nextCursor: string | null }> {
     // Keyset (createdAt desc, id desc) — stable sort + resume after the
     // cursor row's position; mirrors the Drizzle repo.
-    let all = Array.from(this.byId.values())
+    // V-1242 — keyset via the shared helper. This listing filters on `revoked`, and
+    // revoking a key is an ordinary customer action: resolving the cursor by its position
+    // inside the filtered array meant that revoking a key you had just been shown made
+    // page two of a `revoked: false` listing restart at the top, re-listing keys already
+    // seen. The Drizzle anchor lookup scopes by account only, never by revoked.
+    const scoped = Array.from(this.byId.values())
       .filter((r) => (opts.accountId ? r.accountId === opts.accountId : true))
-      .filter((r) => {
-        if (opts.revoked === true) return r.revokedAt !== null;
-        if (opts.revoked === false) return r.revokedAt === null;
-        return true;
-      })
-      .sort((a, b) => {
-        const dt = b.createdAt.getTime() - a.createdAt.getTime();
-        if (dt !== 0) return dt;
-        return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
-      });
-    if (opts.cursor !== undefined) {
-      const idx = all.findIndex((r) => r.id === opts.cursor);
-      if (idx >= 0) all = all.slice(idx + 1);
-    }
-    const items = all.slice(0, opts.limit);
-    const last = items[items.length - 1];
-    const hasMore = all.length > opts.limit;
+      .sort((a, b) => -compareApiKeyKey(a, b));
+    const all = scoped.filter((r) => {
+      if (opts.revoked === true) return r.revokedAt !== null;
+      if (opts.revoked === false) return r.revokedAt === null;
+      return true;
+    });
+    const page = keysetPage({
+      anchorSet: scoped,
+      rows: all,
+      cursor: opts.cursor,
+      limit: opts.limit,
+      id: (r) => r.id,
+      at: (r) => r.createdAt,
+    });
     return Promise.resolve({
-      items,
-      nextCursor: hasMore && last ? last.id : null,
+      items: page.items,
+      nextCursor: page.nextCursor,
     });
   }
 }

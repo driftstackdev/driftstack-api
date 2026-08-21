@@ -181,6 +181,46 @@ function apiKeysRepoContract(label: string, make: () => Subject, enabled: () => 
         'the key was revoked by someone else',
       ).toBeNull();
     });
+
+    it('CRITICAL a cursor survives the boundary key being REVOKED between pages, in both. The listing filters on `revoked`, and revoking a key is an ordinary customer action — so the cursor row leaves the filtered set during exactly the workflow this listing serves. Resolving the cursor by its POSITION inside the filtered array returns -1 once that happens, which reads as "start from the top": page two comes back as page one and the caller acts twice on keys it has already seen. The Drizzle anchor lookup scopes by account only, never by revoked, which is what lets the cursor row be gone from the page and still hold its place.', async () => {
+      if (!enabled()) return;
+      const { repo, account } = make();
+      const owner = await account();
+      // Four active keys. mintKey stamps createdAt from the clock, so space them out to
+      // make the DESC order deterministic rather than a same-millisecond tie.
+      const ids: string[] = [];
+      for (let i = 0; i < 4; i++) {
+        ids.push(await mintKey(repo, owner));
+        await new Promise((r) => setTimeout(r, 5));
+      }
+      const newestFirst = [...ids].reverse();
+
+      const first = await repo.listAllApiKeys({ limit: 2, accountId: owner, revoked: false });
+      expect(
+        first.items.map((k) => k.id),
+        'page one was not the two newest active keys',
+      ).toEqual(newestFirst.slice(0, 2));
+
+      // The key at the page boundary is revoked, so it leaves the `revoked: false` set.
+      const boundary = first.nextCursor;
+      expect(boundary, 'page one handed out no cursor').not.toBeNull();
+      await repo.revokeApiKeyAtomic({
+        id: boundary ?? '',
+        accountId: owner,
+        revokedAt: new Date(),
+      });
+
+      const second = await repo.listAllApiKeys({
+        limit: 2,
+        accountId: owner,
+        revoked: false,
+        cursor: boundary ?? undefined,
+      });
+      expect(
+        second.items.map((k) => k.id),
+        'page two restarted from the top after the boundary key was revoked, repeating keys from page one',
+      ).toEqual(newestFirst.slice(2, 4));
+    });
   });
 }
 

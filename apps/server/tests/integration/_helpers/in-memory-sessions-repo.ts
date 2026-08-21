@@ -13,10 +13,21 @@ import type {
   SerializedSessionDestroyInput,
   SerializedSessionDestroyResult,
 } from '../../../src/services/sessions.js';
+import { keysetPage } from './keyset-page.js';
 
 interface StoredEvent extends SessionEventInput {
   id: string;
   createdAt: Date;
+}
+
+/**
+ * Ascending `(createdAt, id)`. The sorts negate it for createdAt DESC, id DESC, and the
+ * keyset boundary is derived from the same key, so the two cannot drift apart.
+ */
+function compareSessionKey(a: { createdAt: Date; id: string }, b: { createdAt: Date; id: string }) {
+  const t = a.createdAt.getTime() - b.createdAt.getTime();
+  if (t !== 0) return t;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
 export class InMemorySessionsRepo implements SessionRepo {
@@ -333,25 +344,25 @@ export class InMemorySessionsRepo implements SessionRepo {
     accountId: string,
     opts: { limit: number; cursor?: string },
   ): Promise<SessionListPage> {
-    // Keyset (createdAt desc, id desc): stable sort then resume after
-    // the cursor row's position — mirrors the Drizzle repo.
-    let all = Array.from(this.sessions.values())
+    // V-1242 — keyset via the shared helper. The comment here used to say it mirrored
+    // the Drizzle repo, and the sort did; the cursor did not. `findIndex` inside the
+    // filtered array returns -1 once the cursor row leaves it — here, when the session
+    // is purged — and the slice read that as "start from the top".
+    const all = Array.from(this.sessions.values())
       .filter((s) => s.accountId === accountId)
-      .sort((a, b) => {
-        const dt = b.createdAt.getTime() - a.createdAt.getTime();
-        if (dt !== 0) return dt;
-        return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
-      });
-    if (opts.cursor !== undefined) {
-      const idx = all.findIndex((s) => s.id === opts.cursor);
-      if (idx >= 0) all = all.slice(idx + 1);
-    }
-    const items = all.slice(0, opts.limit);
-    const last = items[items.length - 1];
-    const hasMore = all.length > opts.limit;
+      .sort((a, b) => -compareSessionKey(a, b));
+    const page = keysetPage({
+      // Account-scoped, matching the Drizzle anchor lookup's WHERE clause exactly.
+      anchorSet: all,
+      rows: all,
+      cursor: opts.cursor,
+      limit: opts.limit,
+      id: (s) => s.id,
+      at: (s) => s.createdAt,
+    });
     return Promise.resolve({
-      items,
-      nextCursor: hasMore && last ? last.id : null,
+      items: page.items,
+      nextCursor: page.nextCursor,
     });
   }
 
@@ -361,22 +372,28 @@ export class InMemorySessionsRepo implements SessionRepo {
     status?: SessionRecord['status'];
     accountId?: string;
   }): Promise<SessionListPage> {
-    // Keyset (createdAt desc, id desc) — see listSessions.
-    let all = Array.from(this.sessions.values())
+    // V-1242 — keyset via the shared helper, and the sharpest instance of the class:
+    // this listing filters on `status`, which a session changes BY ITSELF as it finishes.
+    // Resolving the cursor by its position inside the filtered array meant page two of a
+    // `status: 'running'` listing restarted at the top the moment the boundary session
+    // stopped running, with nobody touching anything.
+    const scoped = Array.from(this.sessions.values())
       .filter((s) => (opts.accountId ? s.accountId === opts.accountId : true))
-      .filter((s) => (opts.status ? s.status === opts.status : true))
-      .sort((a, b) => {
-        const dt = b.createdAt.getTime() - a.createdAt.getTime();
-        if (dt !== 0) return dt;
-        return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
-      });
-    if (opts.cursor !== undefined) {
-      const idx = all.findIndex((s) => s.id === opts.cursor);
-      if (idx >= 0) all = all.slice(idx + 1);
-    }
-    const items = all.slice(0, opts.limit);
+      .sort((a, b) => -compareSessionKey(a, b));
+    const all = scoped.filter((s) => (opts.status ? s.status === opts.status : true));
+    const page = keysetPage({
+      // NOT status-filtered: the Drizzle anchor lookup scopes by account only, so the
+      // cursor row is allowed to have changed status since the page before.
+      anchorSet: scoped,
+      rows: all,
+      cursor: opts.cursor,
+      limit: opts.limit,
+      id: (s) => s.id,
+      at: (s) => s.createdAt,
+    });
+    const items = page.items;
+    const hasMore = page.hasMore;
     const last = items[items.length - 1];
-    const hasMore = all.length > opts.limit;
     return Promise.resolve({
       items,
       nextCursor: hasMore && last ? last.id : null,
