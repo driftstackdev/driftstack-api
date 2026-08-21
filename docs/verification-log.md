@@ -4093,3 +4093,64 @@ Both pin-parsers that read this declaration — the arm above and
 than discovered by a red run.
 
 Suites: 138 session-touching files, 1654 passed, `tsc` clean.
+
+---
+
+## V-1280 — the double accepted a key envelope, validated it, and threw it away
+
+Having re-derived documented prior art twice in one turn (V-1277, V-1279), the fix was to put the
+prior-art check INTO the instrument rather than into a resolution. The V-1278 list of one-sided
+methods was filtered against every source-reading guard in the tree — 1172 `cross-source`,
+`content-parity`, `no-*` and `every-*` files — keeping only methods **no guard so much as names**:
+
+```
+78 one-sided  →  11 watched by nothing
+profiles-repo 3   stripe-webhooks-repo 3   auth-flows-repo 2   scheduled-jobs-repo 2   api-keys-repo 1
+```
+
+That is the list worth opening, and the first three items produced one real finding and two clean
+verifications.
+
+**`getWrappedDek` in the double was a stub: `(_args) => Promise.resolve(null)`.** Production selects
+`profiles.wrapped_dek` under three predicates — the id, the owning account, and not-trashed. The
+double accepted a `wrappedDek` on insert, validated that it arrived with a preallocated id, and then
+discarded it.
+
+Two consequences, and the second is the one that matters.
+
+`ProfilesService.getProfileDek` returns null the moment this does, so **no double-backed test could
+reach `unwrapProfileDek` at all** — which is why `profiles-service.test.ts` monkey-patches
+`repo.getWrappedDek` over the fixture to test the unwrap. The workaround was load-bearing.
+
+And the stub's null is **indistinguishable from a tenancy refusal**. An arm asserting "another
+account cannot read this profile's key envelope" passes against the double whatever the predicate
+does, including nothing at all. The Drizzle-only tenant-scope test asserts it properly; every
+double-backed route or service test that thought it was covering the same ground was asserting a
+constant.
+
+The double now keeps the envelopes in a map deliberately separate from `ProfileRecord`, mirroring
+production's reason for the column being off the customer-facing row, and reads them under the same
+three predicates. The read is gated on the live ROW rather than on the envelope map, so a trashed or
+purged profile answers null without the map needing a cleanup pass.
+
+Two contract arms, paired so neither can pass by returning a constant — one demands the real value
+back, the other demands null for a profile stored without an envelope:
+
+```
+M17  restore the stub                  RED "the owner could not read the key envelope it just stored"
+M18  drop the owning-account predicate RED "another account read this profile's key envelope"
+M19  drop the not-trashed predicate    RED "a trashed profile still hands out its key envelope"
+```
+
+Each predicate proven separately, because an arm that only ever sees one of them removed cannot tell
+which one it is holding.
+
+**Verified clean on the way past:** `purgeTrashed` and `purgeTrashedBefore` match exactly, including
+the strict `<` cutoff boundary and the requirement that the row already be trashed;
+`findAccountByCanonicalEmail` matches; and in `sessions-repo`, `failSessionOperation` and
+`settleSessionOperation` reproduce all five components of their Drizzle predicate.
+
+Out of scope and named so it is not mistaken for covered: `migrateWrappedDekEnvelopes` re-wraps
+legacy envelopes and has no counterpart in the double at all.
+
+Suites: 69 profile-touching files, 938 passed, `tsc` clean.

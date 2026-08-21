@@ -18,6 +18,20 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
   // the row survives (recycle bin) for listTrashed/restore until a purge.
   private readonly rows = new Map<string, ProfileRecord>();
 
+  /**
+   * V-1280 — the profile key envelopes, kept OFF `ProfileRecord` exactly as production keeps them
+   * off the customer-facing row: `profiles.wrapped_dek` is read only by `getWrappedDek`, so the
+   * secret never rides a record that gets serialised to a customer.
+   *
+   * This double used to accept a `wrappedDek` on insert, validate that it came with a preallocated
+   * id, and then DISCARD it — `getWrappedDek` was `(_args) => null`. Two things followed. No
+   * double-backed test could exercise the unwrap path at all, because `getProfileDek` returns null
+   * the moment this does. And worse, the stub's null is indistinguishable from a tenancy refusal:
+   * an arm asserting "another account cannot read this profile's key envelope" passed against the
+   * double whatever the predicate did, including nothing.
+   */
+  private readonly wrappedDeks = new Map<string, string | null>();
+
   insert(input: NewProfileInput): Promise<ProfileRecord> {
     if (input.wrappedDek != null && input.id === undefined) {
       throw new Error('a profile with a wrapped DEK requires a preallocated id');
@@ -41,6 +55,7 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
       deletedAt: null,
     };
     this.rows.set(row.id, row);
+    this.wrappedDeks.set(row.id, input.wrappedDek ?? null);
     return Promise.resolve(row);
   }
 
@@ -148,6 +163,7 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
       deletedAt: null,
     };
     this.rows.set(row.id, row);
+    this.wrappedDeks.set(row.id, input.wrappedDek ?? null);
     // V-1274 — a copy, not the stored object. Every write in this double is copy-on-write, so
     // the aliasing was not observable today; that is a weaker property than the rule, and it
     // holds only until someone adds a write that mutates in place. The incidents double was
@@ -163,8 +179,15 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
 
   // In-memory repo doesn't track per-profile DEKs (DEK dispatch is exercised by
   // the unit test's dedicated mock); null keeps the interface satisfied.
-  getWrappedDek(_args: { id: string; accountId: string }): Promise<string | null> {
-    return Promise.resolve(null);
+  getWrappedDek(args: { id: string; accountId: string }): Promise<string | null> {
+    // The same three predicates as the Drizzle select: the id, the OWNING account, and not
+    // trashed. Gated on the live row rather than on the envelope map, so a purged or trashed
+    // profile answers null without the map needing a cleanup pass of its own.
+    const row = this.rows.get(args.id);
+    if (!row || row.accountId !== args.accountId || row.deletedAt !== null) {
+      return Promise.resolve(null);
+    }
+    return Promise.resolve(this.wrappedDeks.get(args.id) ?? null);
   }
 
   findByAccountAndName(args: { accountId: string; name: string }): Promise<ProfileRecord | null> {

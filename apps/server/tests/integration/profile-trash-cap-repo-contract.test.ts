@@ -177,6 +177,55 @@ function profileTrashCapContract(label: string, make: () => Subject, enabled: ()
       ).toContain(sourceId);
     });
 
+    it('CRITICAL a profile key envelope comes back to the OWNER and to nobody else, and disappears when the profile is trashed, in both. `wrapped_dek` is the profile\u2019s key envelope, read only through this method so the secret never rides a customer-facing record. The double used to accept one on insert, validate it, then discard it and answer null forever — which made the unwrap path unreachable in every double-backed test AND made this very assertion vacuous, because a stub returning null is indistinguishable from a tenancy refusal.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const owner = await s.account();
+      const stranger = await s.account();
+
+      // A wrapped DEK requires a preallocated id — both implementations reject it otherwise.
+      const id = randomUUID();
+      await s.repo.insert({
+        id,
+        accountId: owner,
+        name: `dek-${randomUUID().slice(0, 8)}`,
+        archetype: ARCHETYPE,
+        description: null,
+        wrappedDek: 'v2:wrapped-dek-material',
+      });
+
+      expect(
+        await s.repo.getWrappedDek({ id, accountId: owner }),
+        'the owner could not read the key envelope it just stored',
+      ).toBe('v2:wrapped-dek-material');
+      expect(
+        await s.repo.getWrappedDek({ id, accountId: stranger }),
+        'another account read this profile\u2019s key envelope',
+      ).toBeNull();
+      expect(
+        await s.repo.getWrappedDek({ id: randomUUID(), accountId: owner }),
+        'an unknown profile id produced a key envelope',
+      ).toBeNull();
+
+      expect(await s.repo.delete({ id, accountId: owner }), 'the trash call failed').toBe(true);
+      expect(
+        await s.repo.getWrappedDek({ id, accountId: owner }),
+        'a trashed profile still hands out its key envelope',
+      ).toBeNull();
+    });
+
+    it('CRITICAL a profile stored WITHOUT a key envelope reports null rather than someone else\u2019s, in both. Paired with the arm above so neither passes by returning a constant: one requires a real value back, this one requires null, and a repo that always answered either way fails one of them.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const owner = await s.account();
+      const plain = await addProfile(s, owner, `plain-${randomUUID().slice(0, 8)}`);
+
+      expect(
+        await s.repo.getWrappedDek({ id: plain, accountId: owner }),
+        'a profile with no stored key envelope produced one',
+      ).toBeNull();
+    });
+
     it('CRITICAL a trashed profile is hidden from findById and list, in both. The bin must not leak into the live grid — V-1194 found it doing exactly that.', async () => {
       if (!enabled()) return;
       const s = make();
