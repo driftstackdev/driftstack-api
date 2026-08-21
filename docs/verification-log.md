@@ -3022,3 +3022,52 @@ constant from one that merely agrees with it, so the honest negative is the pair
 the guards narrow what still needs hand-checking to exactly the unguarded classes. That is the
 argument for writing them beyond preventing regressions: they turn "have I swept this?" from a
 question about my memory into a question a test answers.
+
+## V-1260 — the last unguarded class gets its guard, and the guard's own first arm was vacuous
+
+The restated-constant class has been fixed by hand six times — V-1238, V-1240, V-1241, the three
+page-size pairs, V-1247 and V-1259 — and each time the entry ended by noting the shape would recur.
+It now has a guard, which makes every class this campaign has swept answerable by a test rather than
+by my memory of having looked.
+
+The rule is exact because the fix is exact. Centralising a value leaves the literal in the repo and
+an import in the double, so a policy number present in BOTH files is the defect and a number in one
+is the fix. Verified against the five pairs already repaired: every one of them now carries its
+number in the repo alone.
+
+```
+auth-repo             30_000   repo:1  double:0
+rate-limit-overrides     100   repo:1  double:0
+admin-accounts           100   repo:1  double:0
+incidents                100   repo:1  double:0
+scheduled-jobs        60_000   repo:1  double:0
+```
+
+**What it does not model, said in the guard itself rather than only here.** It sees NUMBERS. V-1238
+was a set of STRINGS — `['active', 'trialing']` in the repo, restated as two `===` comparisons in
+the double — and this guard walks straight past it. Strings are shared between a repo and its double
+constantly and legitimately, so a string rule would be noise. Five of six historical instances
+covered; the sixth is named at the top of the file so a green run is not read as more than it is.
+
+**Its own first arm could not fail.** The arm meant to show that a number in one file only is not
+flagged compared two `Set`s built inside the test and never called the real function. It passed, as
+it would have against any implementation whatsoever. Caught by reading it back rather than by any
+tool. The comparison is now extracted to work over source strings, and the arm drives it twice: once
+with the number in both files (must flag), once with the double importing instead (must not).
+
+```
+N1  restate a policy number in a double     "incidents-repo.ts  restates 100"   1 failed | 4 passed
+N2  guard scans raw source                  the prose arm                       1 failed | 4 passed
+N3  blank SHARED_UNITS                      the MAIN arm — see below            1 failed | 4 passed
+N4  add a bogus exemption                   the staleness arm                   1 failed | 4 passed
+restored (0 dirty, sha equal)                                                   5 passed
+```
+
+**N3 was mislabelled when I ran it.** I recorded it as proving the staleness arm; it reds the main
+arm, because an empty exemption list makes the three unit conversions look like restatements. The
+staleness arm needs the opposite mutation — an entry naming a pair that carries nothing — which is
+N4. Both arms are proven, but only after checking WHICH arm went red rather than counting that one
+did. A failure count is not an attribution.
+
+Guarded classes now: positional cursors (V-1243), aliasing reads (V-1255), hand-rolled comment
+stripping (V-1258), restated policy numbers (here). Ratchets 2998 → 2999, 3165 → 3166.
