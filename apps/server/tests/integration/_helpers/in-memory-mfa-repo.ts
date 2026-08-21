@@ -4,6 +4,7 @@
 
 import { randomUUID } from 'node:crypto';
 import type { MfaEnrollmentRow, MfaRepo, RecoveryCodeRow } from '../../../src/services/mfa.js';
+import { nextRevision } from '../../../src/db/mfa-repo.js';
 
 interface MfaSessionAuthority {
   activateMfaEnrollmentSession(args: {
@@ -32,9 +33,7 @@ export class InMemoryMfaRepo implements MfaRepo {
   }): Promise<MfaEnrollmentRow | null> {
     const existing = this.enrollments.get(args.accountId);
     if (existing?.enrolledAt != null) return Promise.resolve(null);
-    const updatedAt = existing
-      ? new Date(Math.max(args.now.getTime(), existing.updatedAt.getTime() + 1))
-      : args.now;
+    const updatedAt = existing ? nextRevision(args.now, existing.updatedAt) : args.now;
     const row: MfaEnrollmentRow = {
       accountId: args.accountId,
       totpSecretCiphertext: args.ciphertext,
@@ -71,7 +70,7 @@ export class InMemoryMfaRepo implements MfaRepo {
     this.enrollments.set(args.accountId, {
       ...row,
       enrolledAt: args.now,
-      updatedAt: new Date(Math.max(args.now.getTime(), row.updatedAt.getTime() + 1)),
+      updatedAt: nextRevision(args.now, row.updatedAt),
     });
     this.insertHashes(args);
     return Promise.resolve(true);
@@ -83,7 +82,7 @@ export class InMemoryMfaRepo implements MfaRepo {
       this.enrollments.set(accountId, {
         ...r,
         lastUsedAt: now,
-        updatedAt: new Date(Math.max(now.getTime(), r.updatedAt.getTime() + 1)),
+        updatedAt: nextRevision(now, r.updatedAt),
       });
     }
     return Promise.resolve();
@@ -102,7 +101,7 @@ export class InMemoryMfaRepo implements MfaRepo {
     this.enrollments.set(args.accountId, {
       ...r,
       lastUsedTotpCounter: args.counter,
-      updatedAt: new Date(Math.max(args.now.getTime(), r.updatedAt.getTime() + 1)),
+      updatedAt: nextRevision(args.now, r.updatedAt),
     });
     return Promise.resolve(true);
   }
@@ -151,7 +150,7 @@ export class InMemoryMfaRepo implements MfaRepo {
     }
     this.enrollments.set(args.accountId, {
       ...enrollment,
-      updatedAt: new Date(Math.max(args.now.getTime(), enrollment.updatedAt.getTime() + 1)),
+      updatedAt: nextRevision(args.now, enrollment.updatedAt),
     });
     for (const [id, row] of this.recoveryCodes.entries()) {
       if (row.accountId === args.accountId && row.usedAt === null) {

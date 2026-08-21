@@ -3474,3 +3474,53 @@ same property is covered by `db-durable-webhook-claim-reclaim-drizzle` against r
 two halves are asserted in different files rather than by one shared contract — building a
 both-implementations Subject here means a delivery fixture with secret decryption, signing and HTTP.
 The arm says so at its own site instead of implying a contract that does not exist.
+
+## V-1270 — the MFA compare-and-swap token had its rule written six times
+
+Continuing down the coverage list from V-1269, `mfa-repo` was next thinnest at 2/10. The
+security-critical methods there are the single-use and compare-and-swap paths, so those were read
+first. `markRecoveryCodeUsed` matches its Drizzle sibling exactly. `replaceRecoveryCodesIfCurrent`
+matches structurally — and restates the rule it swaps on:
+
+```
+mfa-repo.ts               function nextRevision(now, previous) = max(now, previous + 1)
+                          module-private, called in THREE places
+in-memory-mfa-repo.ts     the same expression written inline in FIVE places
+```
+
+`updated_at` is the CAS token for MFA credentials: every conditional update matches on it, so the
+rule for advancing it decides whether a stale snapshot can collide with a fresh one. Widening the
+step here — to avoid millisecond collisions, say — would have left the double minting different
+tokens while every MFA test standing on it agreed with itself. Exported; the double calls it in all
+five places.
+
+**The arm passed its own mutation twice before it discriminated.**
+
+First version: the CAS returned false on BOTH halves, which looked like a defect and was a fixture
+error — `enrolled()` only STARTS enrolment, so `enrolledAt` is null and the swap correctly refuses.
+Completing enrolment first is what puts the row in the state the CAS is written for.
+
+Second version: the Drizzle half still refused, because `completeEnrollmentIfPending` re-reads the
+account's auth epoch under lock and demands an unrevoked, unexpired web session at that epoch. The
+Subject grew a live-session seeder — a real row for the Drizzle half, an id for the double, which
+has no such check unless a session authority is wired.
+
+Third version passed, and its mutation passed too. `at` was five seconds ahead of `previous`, so
+`max(now, previous + step)` is `now` whatever the step is, and the arm could not see the rule at
+all. **Advancing when the clock has NOT is the entire property** — two writes inside one millisecond
+must still mint distinct tokens. Pinning `at` to the previous revision is what made +1 versus +1000
+visible.
+
+```
+N1  repo step +1000ms AND double restates +1   "the two sides mint different tokens"  1 failed | 12 passed
+N2  drop the export                            tsc exit 2, TS2459
+restored (both files 0 dirty, sha equal)                                              13 passed
+```
+
+That is the third arm this campaign has written which asserted something true and could not fail —
+V-1249's foreign cursor stamped last, V-1260's two locally-built Sets, and now a clock set far
+enough ahead that the rule under test never applied. The pattern is the same each time: the fixture
+was arranged so the mechanism had no opportunity to matter, and only the mutation said so.
+
+Contracts re-run as a set three times, 398 passed each — the concentrated-interference check from
+V-1261, now that this contract seeds `web_sessions` as well.

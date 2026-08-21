@@ -42,7 +42,15 @@ function toRecoveryCodeRow(r: typeof accountMfaRecoveryCodes.$inferSelect): Reco
   };
 }
 
-function nextRevision(now: Date, previous: Date): Date {
+/**
+ * V-1270 — exported. This is the CAS token for MFA credentials: every conditional update in this
+ * repo matches on `updated_at = expectedUpdatedAt`, so the rule for advancing it decides whether a
+ * stale snapshot can share a revision with a fresh one. The in-memory double restated the
+ * expression inline in FIVE places instead of reading it, so changing the rule here — widening the
+ * step past a millisecond, say — would have left the double minting different tokens while every
+ * MFA test standing on it agreed with itself.
+ */
+export function nextRevision(now: Date, previous: Date): Date {
   return new Date(Math.max(now.getTime(), previous.getTime() + 1));
 }
 
