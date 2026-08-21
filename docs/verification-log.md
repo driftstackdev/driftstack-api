@@ -1726,3 +1726,50 @@ exposes `items` rather than `data`. The old command would have reported all four
 suite would have found them twenty minutes later.
 
 **Owed remaining: 6.**
+
+---
+
+## V-1234 — a safety switch, and the write that ends the tick
+
+Twenty-fourth of the twenty-nine. These schedules drive the recurring archetype-validation runs, and
+two properties decide whether the scheduler behaves or misbehaves forever.
+
+```
+Drizzle  WHERE enabled = true AND next_run_at <= $now  ORDER BY next_run_at ASC  LIMIT $n
+         markRun: SET next_run_at = $now + cadence_seconds
+double   filter(r => r.enabled && r.nextRunAt <= now).sort(by nextRunAt).slice(0, limit)
+         markRun: nextRunAt = now + cadenceSeconds * 1000
+```
+
+**`enabled` is a safety switch, not a display filter.** An operator turning a schedule off is saying
+"stop running this", usually because it is producing bad results. A due-query that ignored the flag
+would keep executing exactly the validation someone disabled — and the row would read as correctly
+disabled the entire time, so the disabling would look like it worked.
+
+**`markRun` advancing is what ENDS the tick.** It returns void and is not a claim, so nothing about
+its signature suggests it is load-bearing. But a `markRun` that failed to move `next_run_at` forward
+leaves the schedule satisfying `next_run_at <= now` on the very next sweep and every sweep after —
+firing forever at the sweeper's interval rather than its own cadence. The arm asserts the schedule
+stops being due at the same instant, which is the observable consequence rather than the field.
+
+Worth noting the double gets right what three earlier doubles got wrong: it sorts BEFORE slicing, so
+its limit selects the oldest-due rather than an arbitrary subset. That is the V-1210/V-1213 class,
+absent here.
+
+```
+M1  DRIZZLE findDue ignores `enabled`      "a disabled schedule was selected"       1 failed | 10 passed
+M2  the DOUBLE findDue ignores `enabled`   same arm                                  1 failed | 10 passed
+M3  the DOUBLE markRun does not advance    "still due at the same instant"           1 failed | 10 passed
+M4  the DOUBLE boundary <= becomes <       "due exactly at `now` was not selected"   1 failed | 10 passed
+restored (source 0 dirty)                                                            11 passed
+```
+
+M1 and M2 are the matched pair on the safety switch. M4 covers the inclusive boundary, where `<`
+instead of `<=` defers every schedule by one sweep interval — invisible except as everything running
+slightly late, forever.
+
+`upsert` derives `next_run_at` from the cadence and RETURNS the row, so the boundary is queried at
+exactly that instant through the shared interface. Third contract running to that technique now, and
+`tsc -p tsconfig.test.json` was clean first time — this time verified by exit code.
+
+**Owed remaining: 5.**
