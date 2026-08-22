@@ -5370,3 +5370,29 @@ What this sweep establishes is that it was not hiding much: the population is mo
 injectors, and canned queues, none of which can drift, and the one place it did hide something was
 found and proved. That is a better answer than either "sweep them all" or "assume they are fine",
 and it took reading them to earn it.
+
+---
+
+## V-1310 — the collected-files pin is one behind, and it is not mine to move
+
+The full suite is green at **3168 files, 31306 passed | 16 skipped**. `EXPECTED_TEST_FILES_ALL` is
+**3167**.
+
+The extra file is `apps/gui-client/tests/unit/a-proxy-is-tested-against-the-registry-not-the-draft.test.tsx`,
+added by `88b9a976e` — _"Guard the add-time proxy probe against the row it is supposed to test"_ — a
+peer commit that did not raise the pin alongside it.
+
+**Nothing is failing, and the distinction matters.** `judge()` only reports a problem when
+`collected < expectedFiles`; a surplus passes silently. So the gate is not broken — it is WEAKENED by
+exactly one. Its purpose is that a worker dying, or a file failing to collect, shows up as a smaller
+count rather than as a green run over less code. With the pin one behind, the first file that
+silently stops collecting is absorbed and reported as healthy.
+
+**Not fixed here, deliberately.** The standing rule is to raise these pins only for files this agent
+adds, never to absorb a peer's — because a pin quietly moved by whoever noticed last stops recording
+who added what, and the bump belongs in the same commit as the file for exactly the reason the pin
+exists. Recorded instead, with the commit named, so it is visible and attributable rather than
+silently corrected.
+
+Both agents commit under `Driftstack <dev@driftstack.dev>`, so this is attributed by content and
+timing, as V-1300 established it must be.
