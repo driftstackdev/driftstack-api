@@ -5329,3 +5329,44 @@ aliasing form (V-1303). The pairs that remain genuinely unread are `PricingRepo`
 One in nine demonstrated is a real rate for this kind of work, and the honest reading of it is that
 the file-local stub population is in better shape than V-1298 implied — the blind spot is real, the
 defects behind it are mostly not.
+
+---
+
+## V-1309 — the fixture-pair enumeration finished: sixteen of sixteen
+
+The last two pairs, and the close of the sweep V-1303 started.
+
+**AccountAuditRepo — identical.** `countActionsSince` applies the same three predicates in production
+and in both fixtures, and crucially the same BOUNDARY: `gte(timestamp, since)` in the Drizzle query,
+`timestamp >= since` in each double. An inclusive-versus-exclusive window is the classic way a
+windowed count diverges, and it does not here.
+
+**PricingRepo — clean, and the reason is a design worth naming.** The "local stub" is not a fixture
+at all: it is a pair of failure injectors — `listAll: () => Promise.reject(new Error('db down'))` —
+used to drive error handling, while the happy path in the same file calls the SHARED double directly.
+A stub that only ever rejects cannot disagree with production about behaviour. This is the pattern
+the other files could have used, and where it is used the whole class of divergence does not arise.
+
+**All sixteen pairs, closed:**
+
+```
+demonstrated  1   MfaRepo — restated `nextRevision`; counterfactual proved it masked a regression
+prospective   2   page defaults across four stubs; TeamMembersRepo's member-email path
+clean         8   ApiKeys, Webhooks, Usage, StatusSubscribers, ScheduledJobs,
+                  ValidationSchedules, AccountAudit, Pricing
+unable        3   LegalRepo (nothing in common), AccountAuth (9 of 11 no-ops), no-op paths
+undercut      2   Profiles and ProfileSnapshots — read for constants in V-1305, and their
+                  behaviour is exercised through the shared double by their own suites
+```
+
+**What the sweep is worth, stated as a rate rather than a claim.** One demonstrated regression-mask
+in sixteen pairs, from roughly a turn and a half of reading. The other fifteen produced two
+prospective fixes, one new aliasing form found while reading a pair that turned out clean, and a
+triage rule that saved reading six of them at all: a stub that no-ops a method cannot disagree about
+it, and a stub that only rejects cannot disagree at all.
+
+The blind spot V-1298 measured — 37 file-local stubs outside every guard — is real and stays real.
+What this sweep establishes is that it was not hiding much: the population is mostly no-ops, failure
+injectors, and canned queues, none of which can drift, and the one place it did hide something was
+found and proved. That is a better answer than either "sweep them all" or "assume they are fine",
+and it took reading them to earn it.
