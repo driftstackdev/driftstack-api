@@ -71,7 +71,8 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
   }
 
   findAccountById(id: string): Promise<AuthFlowAccountRow | null> {
-    return Promise.resolve(this.accounts.get(id)?.account ?? null);
+    const account = this.accounts.get(id)?.account;
+    return Promise.resolve(account ? { ...account } : null);
   }
 
   createAccount(args: {

@@ -94,7 +94,8 @@ export class InMemoryApiKeysRepo implements ApiKeysRepo {
   }
 
   findApiKeyUnscoped(id: string): Promise<ApiKeyRow | null> {
-    return Promise.resolve(this.byId.get(id) ?? null);
+    const row = this.byId.get(id);
+    return Promise.resolve(row ? { ...row } : null);
   }
 
   revokeApiKeyAtomic(input: RevokeApiKeyInput): Promise<RevokeApiKeyRepoResult> {

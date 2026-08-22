@@ -54,7 +54,8 @@ export class InMemoryAuthRepo implements AccountAuthRepo {
   }
 
   findApiKeyByPrefix(prefix: string): Promise<ApiKeyRow | null> {
-    return Promise.resolve(this.keysByPrefix.get(prefix) ?? null);
+    const row = this.keysByPrefix.get(prefix);
+    return Promise.resolve(row ? { ...row } : null);
   }
 
   async getAccount(id: string): Promise<AccountRow | null> {
@@ -218,7 +219,8 @@ export class InMemoryAuthRepo implements AccountAuthRepo {
 
   getOrganization(id: string): Promise<AccountOrganization | null> {
     if (!this.accounts.has(id)) return Promise.resolve(null);
-    return Promise.resolve(this.organizations.get(id) ?? { folders: [], tags: [] });
+    const org = this.organizations.get(id);
+    return Promise.resolve(org ? { ...org } : { folders: [], tags: [] });
   }
 
   setOrganization(id: string, org: AccountOrganization): Promise<void> {

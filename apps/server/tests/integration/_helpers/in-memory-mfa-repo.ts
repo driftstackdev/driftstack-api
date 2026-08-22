@@ -21,7 +21,8 @@ export class InMemoryMfaRepo implements MfaRepo {
   constructor(private readonly sessionAuthority: MfaSessionAuthority | null = null) {}
 
   findByAccount(accountId: string): Promise<MfaEnrollmentRow | null> {
-    return Promise.resolve(this.enrollments.get(accountId) ?? null);
+    const row = this.enrollments.get(accountId);
+    return Promise.resolve(row ? { ...row } : null);
   }
 
   startEnrollmentIfNotEnrolled(args: {

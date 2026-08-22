@@ -18,7 +18,8 @@ export class InMemoryValidationSchedulesRepo implements ValidationSchedulesRepo 
   }
 
   findByArchetype(archetypeId: string): Promise<ValidationScheduleRow | null> {
-    return Promise.resolve(this.byArchetype.get(archetypeId) ?? null);
+    const row = this.byArchetype.get(archetypeId);
+    return Promise.resolve(row ? { ...row } : null);
   }
 
   upsert(input: UpsertValidationScheduleInput): Promise<ValidationScheduleRow> {

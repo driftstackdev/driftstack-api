@@ -53,6 +53,19 @@ const LIVE_SEAMS = new Map<string, string>([
   ],
   ['in-memory-admin-audit-repo.ts::getAll', 'not on AdminAuditLogRepo; assertion-only seam'],
   [
+    'in-memory-account-lifecycle-repo.ts::read',
+    'not on AccountLifecycleRepo; returns the fixture-internal InMemoryRow for assertions',
+  ],
+  [
+    'in-memory-sessions-repo.ts::getSession',
+    'not on SessionRepo — it returns `| undefined` where the interface read returns `| null`; ' +
+      'fixtures reach through it to inspect stored state',
+  ],
+  [
+    'in-memory-stripe-webhooks-repo.ts::readAccount',
+    'not on StripeWebhooksRepo; returns the fixture-internal AccountFacet',
+  ],
+  [
     'in-memory-incidents-repo.ts::getAll',
     'not on IncidentsRepo; returns both raw collections wrapped in an object, and fixtures ' +
       'arrange incident state through it as well as assert on it',
@@ -75,6 +88,23 @@ function enclosingMethod(lines: readonly string[], index: number): string {
     if (m?.[1] !== undefined && m[1] !== 'constructor') return m[1];
   }
   return '<unknown>';
+}
+
+/**
+ * Does `this.<name>` hold OBJECTS? Read from the declaration in the same file — a collection of
+ * strings, Dates or Buffers is not something a shallow copy protects, and saying so from the type
+ * beats a list of exemptions that has to be re-argued every time one is added.
+ */
+function holdsObjects(lines: readonly string[], collection: string): boolean {
+  for (const line of lines) {
+    const m = new RegExp(
+      `(?:private )?(?:readonly )?${collection}(?:\\s*:[^=]*)?\\s*=\\s*new Map<[^,]+,\\s*([^>]+)>`,
+    ).exec(line);
+    if (m?.[1] === undefined) continue;
+    const value = m[1].trim();
+    return !/^(string|number|boolean|bigint|Date|Buffer)(\s*\|\s*null)?$/.test(value);
+  }
+  return true;
 }
 
 /** Reads that hand back a stored object rather than a copy of one. */
@@ -228,6 +258,24 @@ function aliasingReads(src: string, file: string): Hit[] {
     // `return this.rows;` and `return [...this.rows];` are the same defect: the second copies
     // the ARRAY and hands back the very same row objects inside it. Only the elements matter.
     const whole = /^return\s+(?:\[\.\.\.)?this\.\w+\]?\s*;$/.test(t);
+    // V-1290 — the row handed straight out of the collection, with no local at all:
+    //   return Promise.resolve(this.endpoints.get(id) ?? null);
+    // Every branch above needs a NAME to check, so a read with nothing to bind walked past all of
+    // them. Ten interface reads were written this way. A statement that spreads, maps or snaps is
+    // not the defect, and neither is one reading a scalar out of the row (`?.tier`, `?.email`) —
+    // a string cannot change underneath its holder.
+    const inlineMatch =
+      /^return\s+(?:Promise\.resolve\()?this\.(\w+)(?:\[[^\]]*\])?\.(?:get|find)\(/.exec(t);
+    const inlineRead =
+      inlineMatch?.[1] !== undefined &&
+      !/\.\.\.|\.map\(|\bsnap\w*\(/.test(t) &&
+      // Reading a SCALAR field off the row hands back a string, not the row.
+      !/\?\.\w+\s*(?:\?\?|\))/.test(t) &&
+      // …and the collection must actually hold objects. `Map<string, string>` and
+      // `Map<string, Date>` cannot change underneath a caller in any way a copy would prevent,
+      // and the declaration says which it is — so the guard reads the type rather than keeping a
+      // hand-maintained list of "this one holds a string, trust me".
+      holdsObjects(lines, inlineMatch[1]);
     // A filtered/sorted chain is fine ONLY if it ends by mapping each row through something.
     const chain = /^return\s+this\.\w+[\s\S]*\.(?:filter|sort)\(/.test(t) && !t.includes('.map(');
 
@@ -239,7 +287,8 @@ function aliasingReads(src: string, file: string): Hit[] {
           stored.has(bare[1]))) ||
       whole ||
       chain ||
-      wrapped
+      wrapped ||
+      inlineRead
     ) {
       out.push({ file, method: enclosingMethod(lines, i), line: i + 1, text: t.slice(0, 80) });
     }
@@ -311,6 +360,36 @@ describe('no in-memory double hands back the row it stores', () => {
       aliasingReads(unsnapped, 'multiline-defect.ts').length,
       'the same chain WITHOUT the snapshot was not flagged — the exclusion is too broad',
     ).toBe(1);
+  });
+
+  it('CRITICAL a row returned STRAIGHT out of the collection is flagged, and the same read spread into a copy is not. Every other branch needs a name to check, so a read with no local at all — `return Promise.resolve(this.endpoints.get(id) ?? null)` — walked past all of them; ten interface reads were written that way. A read pulling a SCALAR out of the row is not flagged, because a string cannot change underneath the caller holding it.', () => {
+    const defect = [
+      '  findById(id: string) {',
+      '    return Promise.resolve(this.rows.get(id) ?? null);',
+      '  }',
+    ].join('\n');
+    expect(
+      aliasingReads(defect, 'inline.ts').length,
+      'a row returned straight out of the map was not flagged',
+    ).toBe(1);
+
+    const fixed = [
+      '  findById(id: string) {',
+      '    const row = this.rows.get(id);',
+      '    return Promise.resolve(row ? { ...row } : null);',
+      '  }',
+    ].join('\n');
+    expect(aliasingReads(fixed, 'inline-fixed.ts'), 'the copying form was flagged').toEqual([]);
+
+    const scalar = [
+      '  tierOf(id: string) {',
+      '    return Promise.resolve(this.rows.get(id)?.tier ?? null);',
+      '  }',
+    ].join('\n');
+    expect(
+      aliasingReads(scalar, 'scalar.ts'),
+      'reading a scalar field off the row was treated as handing back the row',
+    ).toEqual([]);
   });
 
   it('CRITICAL a row BUILT, stored, and then returned is flagged — including one stored inside an object literal. Twenty-four insert-style methods handed back the object their map holds. None was observable: the doubles that mutate rows in place do not mutate the row types these return, which is the same weaker-than-the-rule property that made the incidents double look fine until it was not. The detector keys on the DECLARATION being an object literal and the name appearing in the storing call — matching every identifier in the call arguments instead flagged seventy-two sites, among them `return Promise.resolve(true)`.', () => {

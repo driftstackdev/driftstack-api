@@ -27,7 +27,8 @@ export class InMemoryBillingRepo implements BillingRepo {
   }
 
   getAccount(accountId: string): Promise<BillingAccountSnapshot | null> {
-    return Promise.resolve(this.accounts.get(accountId) ?? null);
+    const snap = this.accounts.get(accountId);
+    return Promise.resolve(snap ? { ...snap } : null);
   }
 
   setStripeCustomerId(args: { accountId: string; customerId: string }): Promise<void> {

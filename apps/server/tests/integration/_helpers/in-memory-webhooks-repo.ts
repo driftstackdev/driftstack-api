@@ -132,7 +132,8 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
   }
 
   findEndpointById(id: string): Promise<WebhookEndpointRow | null> {
-    return Promise.resolve(this.endpoints.get(id) ?? null);
+    const row = this.endpoints.get(id);
+    return Promise.resolve(row ? { ...row } : null);
   }
 
   countActiveEndpoints(accountId: string): Promise<number> {
@@ -438,7 +439,8 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
   }
 
   findDeliveryById(deliveryId: string): Promise<WebhookDeliveryRow | null> {
-    return Promise.resolve(this.deliveries.get(deliveryId) ?? null);
+    const row = this.deliveries.get(deliveryId);
+    return Promise.resolve(row ? { ...row } : null);
   }
 
   listDlqDeliveries(opts: {

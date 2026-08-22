@@ -4549,3 +4549,54 @@ M30  rename a declared page   RED in ALL THREE arms — "a declared rate-limit d
 
 That count is the whole point of the fix: the mutation reddens three arms now and would have
 reddened one before.
+
+---
+
+## V-1290 — the read with nothing to bind, and a guard that reads types instead of keeping a list
+
+Two veins this batch, one negative and one finding.
+
+**The negative first, because it validates prior art from the side prior art could not check.**
+V-1201 reviewed every array-returning read with no `ORDER BY` and recorded, per entry, why arbitrary
+order is unobservable there — verified against CONSUMERS on 2026-08-20. What it could not check is
+the other direction: whether a TEST asserts an order on one of those reads, which would contradict
+the review and pass anyway, because a double returns insertion order for free. Cross-checking the
+twelve allowlisted reads against every test assertion produced four candidates and **all four are
+false positives**, each confirmed against source: `rate-limit-overrides::listAll` is a DIFFERENT
+`listAll` from the allowlisted `pricing-repo` one and orders by `(createdAt desc, id desc)`; the
+pair-mode test sorts BOTH sides before comparing, which is the correct order-insensitive idiom, and
+my `[1]` match was an index into the test's own fixture array; `dailyBucketsForRange` sorts in JS
+after the query; and the session-cap contract's `toEqual([kept])` is a one-element array whose comma
+my detector counted from the trailing formatting. Zero violations. The review holds.
+
+**The finding.** While confirming V-1288 I noticed `in-memory-billing::getAccount` returns
+`this.accounts.get(accountId) ?? null` — a stored row handed straight out with no local at all.
+Every branch of the aliasing guard needs a NAME to check, so a read with nothing to bind walked past
+all of them. Ten interface reads are written that way, across seven doubles. None is observable, for
+the reason that keeps recurring: the doubles that mutate rows in place do not mutate these row
+types. All ten now copy on the way out, written as ten explicit edits rather than one clever regex —
+this session has lost enough time to detectors that were too broad.
+
+**The guard reads the declaration rather than keeping a list.** Widening it flagged seven, and only
+three were defects. The other four read collections that hold `string`, `Date` or `Buffer` — a copy
+protects nothing there, and no amount of syntax tells you which is which. Rather than a hand-kept
+exemption list that has to be re-argued each time it grows, the detector now resolves
+`this.<name>` to its `new Map<K, V>` declaration in the same file and skips the read when `V` is a
+primitive. The three genuine seams — `account-lifecycle::read`, `sessions::getSession`,
+`stripe-webhooks::readAccount`, all returning fixture-internal types or `| undefined` where the
+interface returns `| null` — went to `LIVE_SEAMS` with their reasons.
+
+```
+M31  restore one inline read                    RED, naming webhooks::findEndpointById
+M32  make the value-type check always say "objects"   RED with exactly the scalar reads it exists
+                                                to suppress — getWrappedDek and findAccountEmail
+```
+
+M32 is the one worth keeping: it proves the exclusion is load-bearing rather than decorative, by
+showing precisely which false positives return when it is removed.
+
+One instrument error, found by checking rather than assuming: the declaration regex had no `\s*`
+before `=`, so it matched nothing and every scalar collection stayed flagged. The symptom looked
+like "the exclusion does not work"; the cause was that it never ran.
+
+Suites: the whole server project — 2358 files, 24159 passed | 10 skipped — `tsc` clean.

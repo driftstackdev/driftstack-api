@@ -252,7 +252,8 @@ export class InMemorySessionsRepo implements SessionRepo {
   }
 
   findSessionUnscoped(id: string): Promise<SessionRecord | null> {
-    return Promise.resolve(this.sessions.get(id) ?? null);
+    const row = this.sessions.get(id);
+    return Promise.resolve(row ? { ...row } : null);
   }
 
   async destroySessionSerialized(
