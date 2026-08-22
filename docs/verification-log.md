@@ -4852,3 +4852,38 @@ population of absence-asserting source guards is 271, they protect themselves th
 distinct idioms, and a classifier that recognises fewer than all four will keep reporting a gap that
 is not there. Verified along the way: the SDK path-escaping extractors still find 57 TypeScript, 86
 Python and 56 Go interpolation sites — exactly the counts recorded when that guard landed.
+
+---
+
+## V-1297 — the production question V-1294 left open, answered; and the plan this campaign cites is gone
+
+**The open question, closed.** V-1294 fixed a racy TEST measurement and noted, without settling it,
+that the production query behind it applies `since` to one sub-query and not the others. Sweeping
+every `src/db` method that issues two or more sub-queries through a shared page reader, looking for
+a filter passed to some and not all, returns exactly ONE method — `incidents-repo::publicFeed`, the
+same one. So the shape is unique rather than a class.
+
+And its asymmetry is deliberate on both axes. `severity` is absent from two of the three sub-queries
+because one of them IS the outage page and the others are deliberately all-severity. `since` is
+absent from the two OPEN pages because an open incident should appear regardless of age; only
+resolved history is windowed. The obvious worry — an incident opened long ago and never resolved
+pinning the banner forever — is covered for the incidents nobody is watching: `health-probe`
+auto-resolves an open auto-incident after N consecutive successes. A human-declared incident stays
+open until a human resolves it, which is the intended contract rather than a leak.
+
+No production defect. The V-1294 fix stands as a test-measurement fix, which is what it claimed.
+
+**A material correction about this campaign's framing.** Every batch is requested "working from
+`apply-plan.md` (the re-verified plan) and `sweep-report.md`". **Neither file exists.** Not in the
+session scratchpad (1221 files), not anywhere under the session directory, not in the repository, not
+in `/tmp`. They are absent, not stale — `find` returns nothing for either name.
+
+That has a concrete consequence worth stating rather than working around: the numbered action list
+those batches carry (5, 7, 8, 12, …) cannot be re-verified against its source, and neither can the
+V-1150 derivation that the list was already spent. Everything from V-1274 onward has been
+self-directed defect-hunting under the batch rules, which has been productive — a torn write, a
+key-envelope stub, a counter with no time bound, a repo pair invisible to every guard — but it is not
+the same thing as executing that plan, and a reader of this log should not infer that it was.
+
+Resuming plan-driven work needs one of: the two files restored to the scratchpad, or the remaining
+actions restated in the request itself.
