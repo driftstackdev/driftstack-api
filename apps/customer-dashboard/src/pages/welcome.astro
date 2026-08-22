@@ -37,8 +37,8 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
         <p class="mt-2 text-sm text-tk-ink-2 leading-relaxed">
           Your account is already on the free plan: 1 profile, 1 concurrent
           session of up to 20 minutes. No subscription, no expiry — the best way to
-          try Driftstack before committing. The signed Apple-silicon macOS app is
-          supplied directly by Driftstack support. Once you have it, launch the app and
+          try Driftstack before committing. The desktop app is a public download for
+          macOS, Windows and Linux. Once you have it, launch the app and
           choose browser sign-in; that provisions a restricted device credential for the
           app, not a customer API key.
         </p>
@@ -47,10 +47,12 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
             Go to your dashboard
           </a>
           <a
-            href="mailto:support@driftstack.dev?subject=Driftstack%20desktop%20app%20access"
+            href="https://github.com/driftstackdev/driftstack-api/releases/latest"
+            target="_blank"
+            rel="noopener noreferrer"
             class="btn-secondary inline-flex"
           >
-            Request desktop app access
+            Download the desktop app
           </a>
         </div>
       </li>
@@ -92,10 +94,11 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
             >2</span
           >
           <span class="leading-relaxed">
-            Request the signed Apple-silicon macOS app from Driftstack support,
-            then choose browser sign-in. Driftstack provisions a restricted device
+            Download the desktop app for macOS, Windows or Linux, then choose
+            browser sign-in. Driftstack provisions a restricted device
             credential for the app; that's where Free customers launch and drive
-            iPhone Safari sessions. There is no public installer link.
+            iPhone Safari sessions. The builds are not OS-code-signed yet, so
+            macOS Gatekeeper or Windows SmartScreen warns on first launch.
           </span>
         </li>
         <li class="flex gap-4">

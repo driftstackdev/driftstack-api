@@ -125,14 +125,13 @@ describe('W739 dashboard forgot-password + welcome page parity', () => {
     expect(w).toMatch(
       /Start free with no card — or pick a paid tier and we'll send you\s*\n\s+to Stripe to confirm payment\. Your card details stay between you\s*\n\s+and Stripe — we never see them/,
     );
-    // Step 2 — support supplies the signed app before browser sign-in
-    // provisions a restricted device credential.
+    // Step 2 — the app is a PUBLIC cross-platform download (gui-v0.1.2); browser
+    // sign-in then provisions a restricted device credential. Support no longer
+    // hands out the binary, and the builds are not OS-code-signed.
     expect(w).toMatch(
-      /Request the signed Apple-silicon macOS app from Driftstack support,\s*\n\s+then choose browser sign-in\. Driftstack provisions a restricted device\s*\n\s+credential for the app; that's where Free customers launch and drive\s*\n\s+iPhone Safari sessions\. There is no public installer link/,
+      /Download the desktop app for macOS, Windows or Linux, then choose\s*\n\s+browser sign-in\. Driftstack provisions a restricted device\s*\n\s+credential for the app; that's where Free customers launch and drive\s*\n\s+iPhone Safari sessions\. The builds are not OS-code-signed yet, so\s*\n\s+macOS Gatekeeper or Windows SmartScreen warns on first launch\./,
     );
-    expect(w).toContain(
-      'mailto:support@driftstack.dev?subject=Driftstack%20desktop%20app%20access',
-    );
+    expect(w).toContain('https://github.com/driftstackdev/driftstack-api/releases/latest');
     expect(w).toMatch(
       /On an API-enabled paid tier, create a customer API key for SDK\s*\n\s+automation\. Customer keys can be revoked or rotated any time;\s*\n\s+Free desktop sign-in does not require one/,
     );

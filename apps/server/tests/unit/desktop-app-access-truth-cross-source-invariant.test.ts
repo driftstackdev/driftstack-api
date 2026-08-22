@@ -5,7 +5,14 @@ import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const ACCESS_MAILTO = 'mailto:support@driftstack.dev?subject=Driftstack%20desktop%20app%20access';
+// Retired 2026-08-22. gui-v0.1.2 is a PUBLIC release, so routing customers to
+// support for a copy of the app was not stale wording -- it was a false claim.
+// Kept here only so the ban below can name the exact string.
+const RETIRED_ACCESS_MAILTO =
+  'mailto:support@driftstack.dev?subject=Driftstack%20desktop%20app%20access';
+// /releases/latest redirects to the newest published tag, so this link cannot
+// go stale the way a pinned gui-vX.Y.Z would on the next cut.
+const DOWNLOAD_URL = 'https://github.com/driftstackdev/driftstack-api/releases/latest';
 
 function read(path: string): string {
   return readFileSync(resolve(REPO_ROOT, path), 'utf8');
@@ -17,32 +24,52 @@ const welcome = read('apps/customer-dashboard/src/pages/welcome.astro');
 const pricing = read('apps/marketing-site/src/pages/pricing.astro');
 
 describe('desktop app access public truth', () => {
-  it('every customer-facing app-access action uses one actionable support request', () => {
+  it('every customer-facing app-access action points at the ONE public release download', () => {
     for (const [name, body] of [
       ['overview', overview],
       ['layout', layout],
       ['welcome', welcome],
       ['pricing', pricing],
     ] as const) {
-      expect(body, name).toContain(ACCESS_MAILTO);
+      expect(body, name).toContain(DOWNLOAD_URL);
+      // Ban the retired route outright. While an installer existed and these
+      // pages still said "ask support", every one of these four surfaces was
+      // telling customers something untrue.
+      expect(body, name).not.toContain(RETIRED_ACCESS_MAILTO);
     }
-    expect(overview).toContain('Request desktop app access');
-    expect(layout).toContain("label: 'Request desktop app access'");
-    expect(welcome).toContain('Request desktop app access');
-    expect(pricing).toContain('Request desktop app access');
+    expect(overview).toContain('Download the desktop app');
+    expect(layout).toContain("label: 'Download desktop app'");
+    expect(welcome).toContain('Download the desktop app');
+    expect(pricing).toContain('Download the desktop app');
   });
 
-  it('states the current signed macOS distribution truth without inventing public installers', () => {
-    expect(overview).toMatch(/Signed Apple-silicon macOS app, supplied directly by Driftstack/);
-    expect(welcome).toMatch(
-      /signed Apple-silicon macOS app is\s+supplied directly by Driftstack support/,
-    );
-    expect(welcome).toContain('There is no public installer link.');
-    expect(pricing).toMatch(
-      /signed Apple-silicon macOS app is supplied directly by\s+Driftstack support after signup/,
-    );
-    expect(pricing).toContain('there is no public installer link');
-    expect(welcome).not.toMatch(/Download the Driftstack desktop app/);
+  it('states the real distribution truth: public, cross-platform, and NOT OS-code-signed', () => {
+    // Three separate falsehoods came out of these pages together, so all three
+    // are banned together across every surface that carried any of them:
+    //   1. "there is no public installer link" -- gui-v0.1.2 is a public,
+    //      non-draft, non-prerelease GitHub release.
+    //   2. "signed" -- gui-release.yml states the pre-launch posture is
+    //      "NO OS-level binary signing"; only UPDATE bundles are key-signed.
+    //   3. "Apple-silicon" -- the macOS artefact is Driftstack_universal.dmg,
+    //      and .exe / .AppImage / .deb ship alongside it.
+    for (const [name, body] of [
+      ['overview', overview],
+      ['layout', layout],
+      ['welcome', welcome],
+      ['pricing', pricing],
+    ] as const) {
+      expect(body, name).not.toMatch(/Apple-silicon macOS app/);
+      expect(body, name).not.toMatch(/no public installer link/i);
+      expect(body, name).not.toMatch(/supplied directly by Driftstack/);
+    }
+    // Say the unsigned posture out loud rather than letting a first-launch
+    // Gatekeeper/SmartScreen block read as a broken download.
+    expect(overview).toMatch(/Not OS-code-signed yet/);
+    expect(welcome).toMatch(/not OS-code-signed yet/);
+    expect(pricing).toMatch(/not OS-code-signed yet/);
+    expect(welcome).toMatch(/macOS, Windows (and|or) Linux/);
+    expect(pricing).toMatch(/macOS, Windows and Linux/);
+    expect(overview).toMatch(/macOS, Windows and Linux/);
   });
 
   it('never treats opening an access link as proof of installation', () => {

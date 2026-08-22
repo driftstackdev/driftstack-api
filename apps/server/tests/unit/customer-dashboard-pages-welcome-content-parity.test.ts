@@ -66,14 +66,12 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
     expect(body).toMatch(
       /Your card details stay between you\s*\n?\s*and Stripe — we never see them\./,
     );
-    // Step 2 — support supplies the signed app, then browser sign-in
-    // provisions the restricted app credential.
+    // Step 2 — the app is a PUBLIC cross-platform download; browser sign-in then
+    // provisions the restricted app credential. Not OS-code-signed.
     expect(body).toMatch(
-      /Request the signed Apple-silicon macOS app from Driftstack support,\s*\n?\s*then choose browser sign-in\. Driftstack provisions a restricted device\s*\n?\s*credential for the app; that's where Free customers launch and drive\s*\n?\s*iPhone Safari sessions\. There is no public installer link\./,
+      /Download the desktop app for macOS, Windows or Linux, then choose\s*\n?\s*browser sign-in\. Driftstack provisions a restricted device\s*\n?\s*credential for the app; that's where Free customers launch and drive\s*\n?\s*iPhone Safari sessions\. The builds are not OS-code-signed yet, so\s*\n?\s*macOS Gatekeeper or Windows SmartScreen warns on first launch\./,
     );
-    expect(body).toContain(
-      'mailto:support@driftstack.dev?subject=Driftstack%20desktop%20app%20access',
-    );
+    expect(body).toContain('https://github.com/driftstackdev/driftstack-api/releases/latest');
     // Step 3 — customer keys/SDK automation require a paid API tier.
     expect(body).toMatch(
       /On an API-enabled paid tier, create a customer API key for SDK\s*\n?\s*automation\. Customer keys can be revoked or rotated any time;\s*\n?\s*Free desktop sign-in does not require one\./,
