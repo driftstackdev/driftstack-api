@@ -4763,3 +4763,49 @@ instead of running the suite — the rule from V-1274b holding on the exact fail
 for. Rewriting it through a quoted heredoc, with the marker checked before the run, applied cleanly.
 
 Suites: the whole server project — 2358 files, 24162 passed | 10 skipped — `tsc` clean.
+
+---
+
+## V-1295 — the last two class residuals, both negative, both measured rather than assumed
+
+Three of the five guard classes had been enumerated. These are the other two, and both come back
+empty — but for reasons worth writing down, because "we looked and found nothing" and "we looked at
+the wrong thing" produce identical green runs.
+
+**Restated numbers: zero below the threshold.** That guard's `POLICY_NUMBER` matches three-or-more
+digits, or digits grouped with underscores. Two-digit policy values are invisible to it — and this
+campaign centralised page sizes of exactly 50, so the gap is not hypothetical. Every double was
+compared against its repo for shared two-digit literals, excluding the time units (24, 60, 12) that
+are legitimately shared: **zero**. The threshold is not currently hiding anything, and single digits
+are genuine noise (indices, 0, 1) rather than an omission.
+
+**Hand-rolled comment strippers: fourteen, none damaging, and the reasoning is per-case.** That
+guard's signature is one specific block-comment regex, so a stripper spelled another way is outside
+it. Fourteen test files strip LINE comments with a private regex instead of the shared scanner. The
+guard's own header already calls this form "not currently damaging, which is luck rather than
+design" — this checks whether that is still true instead of inheriting it.
+
+A file-level scan says four of them read source containing `//` inside a string literal, which is
+what a naive line strip truncates. **That measurement over-reports, and the correction is the
+point:** the risk is not that the FILE contains such a string, it is that the STRIPPED REGION does.
+Three of the four strip a bounded slice — an array literal of webhook event names, a schema union of
+`z.literal` type names — whose contents cannot contain a URL. The fourth strips the whole of
+`bootstrap.ts`, which genuinely holds `'https://driftstack.dev/docs'`, and is safe for a different
+reason: the stripped text feeds a PRESENCE assertion, so a truncated line makes the arm fail loudly
+rather than pass quietly. The dangerous direction — an absence assertion over truncated text — does
+not occur in any of the fourteen.
+
+All five classes now have measured residuals rather than assumed ones:
+
+```
+aliasing reads      six forms modelled, one named and left with its population as the reason
+positional cursors  14 methods read, zero positional
+racy counters       65 candidates read, one real member found and fixed (V-1294)
+restated numbers    zero below the guard's digit threshold
+comment strippers   14 private strippers, none damaging, each checked by region and direction
+```
+
+The through-line of the last several entries is one habit: a guard's green run is evidence about its
+signature, not about its class, and the two only coincide when somebody has enumerated the
+difference. Four of these five enumerations found nothing. The fifth found a table-wide counter with
+no time bound.
