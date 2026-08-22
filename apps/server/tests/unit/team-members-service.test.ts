@@ -128,7 +128,12 @@ function makeRepo(): {
         existing.role = inv.role;
         existing.invitedAt = inv.createdAt;
         existing.invitedByAccountId = inv.invitedByAccountId;
-        return Promise.resolve(existing);
+        // V-1306 — the caller's address, and a copy. `member_email` is not a `team_members`
+        // column: production returns `attachMemberEmail(row, input.memberEmail)`, so the address
+        // on the returned membership is always the one just presented. This stub returned the
+        // row's stored address, which is the defect V-1278 fixed in the shared double — the
+        // guarded copy was repaired and this one kept it.
+        return Promise.resolve({ ...existing, memberEmail: input.memberEmail });
       }
       memberCounter += 1;
       const row: TeamMemberRow = {
