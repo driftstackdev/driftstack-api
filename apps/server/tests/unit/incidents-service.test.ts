@@ -22,6 +22,8 @@ import {
   type ResolveIncidentInput,
 } from '../../src/services/incidents.js';
 import { NotFoundError } from '../../src/lib/errors-helpers.js';
+// V-1305 — the page default has one home in the repo; this stub restated it.
+import { INCIDENT_PAGE_DEFAULT } from '../../src/db/incidents-repo.js';
 
 function makeRepo(): {
   repo: IncidentsRepo;
@@ -90,7 +92,13 @@ function makeRepo(): {
       Promise.resolve(
         scope === 'public' ? state.incidents.filter((i) => i.public) : state.incidents,
       ),
-    listPage: ({ scope, state: lifecycleState, severity, since, limit = 100 }) => {
+    listPage: ({
+      scope,
+      state: lifecycleState,
+      severity,
+      since,
+      limit = INCIDENT_PAGE_DEFAULT,
+    }) => {
       let rows = scope === 'public' ? state.incidents.filter((i) => i.public) : state.incidents;
       const openCount = rows.filter((row) => row.status !== 'resolved').length;
       if (since) rows = rows.filter((i) => i.startedAt >= since);

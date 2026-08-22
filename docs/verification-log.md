@@ -5158,3 +5158,44 @@ mid-edit across `customer-dashboard`, `marketing-site` and four server parity te
 and `rate-limit-overrides-repo-contract` — which measures a before/after delta on a shared table —
 passes in isolation, 23 of 23. Concurrent load, not this change. Only `mfa-service.test.ts` is mine
 in the working tree, and only it is committed here.
+
+---
+
+## V-1305 — the same shape in four more stubs, and a counterfactual that says it does not matter yet
+
+V-1304 found a file-local stub restating a rule production exports, and proved it was masking a
+regression. The shape generalises cheaply: for each of the sixteen fixture pairs, compare what the
+SHARED double imports from `src/` against what the local stub does. Eight pairs import a production
+constant the stub does not.
+
+Eight is not eight findings. "Does not import" is not "restates" — the stub may simply not implement
+the method. Resolving each constant to its value and looking for the literal narrows it to five, and
+reading those five in context narrows it to **four**, all page-size defaults in a paging fallback:
+
+```
+admin-accounts-service     const limit = args.limit ?? 50            ADMIN_ACCOUNTS_PAGE_DEFAULT
+incidents-service          limit = 100                               INCIDENT_PAGE_DEFAULT
+profile-snapshots-service  .slice(0, limit ?? 50)                    SNAPSHOT_PAGE_DEFAULT
+profiles-service           .slice(0, limit ?? 50)                    DEFAULT_PAGE
+```
+
+The fifth was a false positive worth naming: `sizeBytes: 100` in a storage-quota fixture is a byte
+count, not `MAX_PAGE`. A literal match is not a restatement, and this class is built entirely out of
+numbers common enough to appear for other reasons.
+
+**The counterfactual says this is not a V-1304.** Moving `DEFAULT_PAGE` from 50 to 2 in production
+leaves the profiles service suite green at 62 of 62 — BEFORE and AFTER the fix alike. No arm in that
+file exercises the paging fallback, so nothing was being masked. Stated plainly because the previous
+entry earned a strong claim by counterfactual and this one does not: the value here is prospective,
+not demonstrated. I tested the profiles pair; the other three were not individually counterfactualled.
+
+Kept anyway, and the distinction from V-1301 is deliberate. There I declined to snapshot seven stubs
+because a snapshot fix does not stop the eighth stub leaking — it decays without a guard. An import
+cannot decay for the site that holds it: the rule has one home and that line follows it. Four
+one-line imports that are self-maintaining are a different trade from seven copies that are not.
+
+**Attribution.** The server run showed three failures, none mine. A peer is mid-commit — several
+files are staged-and-modified — and both `incident-visibility-repo-contract` and
+`rate-limit-overrides-repo-contract` pass in isolation, 42 of 42, while
+`dist-reading-suites-have-fresh-artifacts` reads artifacts against Astro pages they are editing.
+Only the four stub files are mine, and only those are committed.

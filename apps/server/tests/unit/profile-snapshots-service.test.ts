@@ -20,6 +20,8 @@ import type { NewProfileInput, ProfileRecord, ProfilesRepo } from '../../src/ser
 import type { AccountAuditService } from '../../src/services/account-audit.js';
 import { ConflictError, NotFoundError, TierLimitError } from '../../src/lib/errors.js';
 import { PROFILE_DEK_V2_PREFIX, unwrapProfileDek } from '../../src/lib/profile-key-hierarchy.js';
+// V-1305 — the page default has one home in the repo; this stub restated it.
+import { SNAPSHOT_PAGE_DEFAULT } from '../../src/db/profile-snapshots-repo.js';
 
 const CRYPTO_ACCOUNT_A = '00000000-0000-4000-8000-0000000000a1';
 const CRYPTO_ACCOUNT_B = '00000000-0000-4000-8000-0000000000b2';
@@ -103,7 +105,7 @@ function makeRepos(
         data: snapshots
           .filter((s) => s.accountId === accountId)
           .filter((s) => parentProfileId === undefined || s.parentProfileId === parentProfileId)
-          .slice(0, limit ?? 50),
+          .slice(0, limit ?? SNAPSHOT_PAGE_DEFAULT),
         hasMore: false,
         nextCursor: null,
       }),

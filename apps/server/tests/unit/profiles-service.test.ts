@@ -36,6 +36,8 @@ import {
 import { TIER_STORAGE_BYTES_CAP } from '@driftstack/api-types';
 import { mintWrappedProfileDek, unwrapProfileDek } from '../../src/lib/profile-key-hierarchy.js';
 import { InMemoryProfilesRepo } from '../integration/_helpers/in-memory-profiles-repo.js';
+// V-1305 — the page default has one home in the repo; this stub restated it.
+import { DEFAULT_PAGE } from '../../src/db/profiles-repo.js';
 
 const CRYPTO_ACCOUNT_A = '11111111-1111-4111-8111-111111111111';
 const CRYPTO_ACCOUNT_B = '22222222-2222-4222-8222-222222222222';
@@ -157,7 +159,7 @@ function makeRepo(
       Promise.resolve(rows.find((r) => r.accountId === accountId && r.name === name) ?? null),
     list: ({ accountId, limit }) =>
       Promise.resolve({
-        data: rows.filter((r) => r.accountId === accountId).slice(0, limit ?? 50),
+        data: rows.filter((r) => r.accountId === accountId).slice(0, limit ?? DEFAULT_PAGE),
         hasMore: false,
         nextCursor: null,
       }),

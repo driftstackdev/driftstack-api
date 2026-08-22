@@ -20,6 +20,8 @@ import type { AuthCache } from '../../src/services/auth-cache.js';
 import { SessionsService } from '../../src/services/sessions.js';
 import { InMemorySessionsRepo } from '../integration/_helpers/in-memory-sessions-repo.js';
 import type { Driver } from '../../src/drivers/types.js';
+// V-1305 — the page default has one home in the repo; this stub restated it.
+import { ADMIN_ACCOUNTS_PAGE_DEFAULT } from '../../src/db/admin-accounts-repo.js';
 
 function ctxWith(scopes: ApiKeyScope[]): AccountContext {
   return {
@@ -62,7 +64,7 @@ function makeRepo(initial: AccountRow[] = []): {
       return Promise.resolve(row);
     },
     list: (args: ListAccountsArgs) => {
-      const limit = args.limit ?? 50;
+      const limit = args.limit ?? ADMIN_ACCOUNTS_PAGE_DEFAULT;
       let filtered = rows;
       if (args.status !== undefined) {
         filtered = filtered.filter(
