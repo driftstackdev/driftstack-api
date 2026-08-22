@@ -4513,3 +4513,39 @@ to name: my prior-art check greps the method name and the guard files, and all t
 documentation lived in the FILE HEADER of the double. Read both headers before comparing a method.
 
 Suites: the whole server project — 2358 files, 24158 passed | 10 skipped — `tsc` clean.
+
+---
+
+## V-1289 — the same shape again: a filter that shrinks a population instead of failing
+
+V-1288's cause was a guard whose population came from a filter, so a member that failed to resolve
+was dropped silently — and an absence reads exactly like a clean result. That is a SHAPE, so it was
+swept for rather than assumed unique.
+
+**Most of the sweep was a negative, and the negatives are the useful part.** Two hundred and one
+guards build a population by scanning, which is far too coarse to act on; ranking them by whether
+they assert a size floor or name a member turned out to be another weak instrument, so it was
+abandoned rather than dressed up. The `every-drizzle-repo-is-driven-against-a-real-postgres` guard
+looked like a candidate and is not: it ENUMERATES `src/db` and requires every file to either carry a
+Drizzle class or sit in an exemption list, so all 55 files are covered by construction. That is the
+distinction worth keeping: **enumerate-and-classify is sound; pair-by-name-and-filter-on-existence
+is not.**
+
+Filtering for the second shape leaves a handful, and all but one are the safe direction — "this
+cited path must exist", which FAILS when something is missing. One is not.
+
+`rate-limit-bucket-disclosure-invariant` filters its two declared disclosure pages down by
+existence. One of its three arms asserts the resolved count equals the declared count; **the other
+two do not.** A page renamed or deleted would leave those two arms checking one page instead of two,
+green, and silent about the one that vanished — in a guard whose subject is whether customers are
+told the truth about which routes consume a rate-limit bucket.
+
+The check now lives in the helper rather than in one arm, so every caller gets it by construction.
+
+```
+M30  rename a declared page   RED in ALL THREE arms — "a declared rate-limit disclosure page no
+                              longer resolves" — where previously only one would have failed
+```
+
+That count is the whole point of the fix: the mutation reddens three arms now and would have
+reddened one before.

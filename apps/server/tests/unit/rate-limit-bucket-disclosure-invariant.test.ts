@@ -119,7 +119,18 @@ function enforcedConsumers(): Map<string, string[]> {
 }
 
 function disclosurePages(): { path: string; text: string }[] {
-  return DISCLOSURE_PAGES.filter((p) => existsSync(resolve(REPO_ROOT, p))).map((p) => ({
+  const resolved = DISCLOSURE_PAGES.filter((p) => existsSync(resolve(REPO_ROOT, p)));
+  // V-1289 — the missing-page check lives HERE, not in one arm. Filtering the declared pages down
+  // by existence means a page that is renamed or deleted leaves the population smaller and every
+  // arm still green: it checks fewer pages and says nothing about the one that vanished. Three arms
+  // call this and only one asserted the full count, so two of them were reading an absence as a
+  // clean result. Asserting inside the helper gives every caller the check by construction.
+  expect(
+    resolved,
+    'a declared rate-limit disclosure page no longer resolves — restore it, or remove it from ' +
+      'DISCLOSURE_PAGES deliberately',
+  ).toEqual([...DISCLOSURE_PAGES]);
+  return resolved.map((p) => ({
     path: p,
     text: readFileSync(resolve(REPO_ROOT, p), 'utf8'),
   }));
