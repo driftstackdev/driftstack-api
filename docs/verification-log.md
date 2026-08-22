@@ -5199,3 +5199,53 @@ files are staged-and-modified — and both `incident-visibility-repo-contract` a
 `rate-limit-overrides-repo-contract` pass in isolation, 42 of 42, while
 `dist-reading-suites-have-fresh-artifacts` reads artifacts against Astro pages they are editing.
 Only the four stub files are mine, and only those are committed.
+
+---
+
+## V-1306 — the guarded copy was repaired and the unguarded one kept the defect
+
+`TeamMembersRepo` is the fourth fixture pair read. Its `acceptInviteAtomic` is the compare-and-swap
+that decides who joins an account.
+
+**The authority checks agree.** The local stub compares the presented token hash against the
+invite's, refuses an already-accepted invite, and sources role, invited-at and inviter from the
+consumed invite rather than from the caller. Nothing it admits differs from the shared double.
+
+**The returned row does not.** On the EXISTING-member path the stub returned `existing` — the stored
+row, carrying the address the membership was created with. Production has no `member_email` column:
+it returns `attachMemberEmail(row, input.memberEmail)`, so the address is always the one just
+presented. That is the defect V-1278 found and fixed in the shared double, and this copy kept it.
+**The guarded fixture was repaired; the unguarded one, implementing the same interface, was not** —
+the concrete form of the blind spot V-1298 measured.
+
+**Prospective, not demonstrated.** No arm in that file calls `acceptInviteAtomic` — the only
+occurrence is the stub's own definition. The divergence was unreachable, so nothing was masked. Same
+category as V-1305, not V-1304.
+
+**Hit rate, since it should govern how much the next pass invests.** Four pairs read:
+
+```
+ApiKeysRepo      agreed on all nine shared methods — reading it produced a seventh aliasing form
+MfaRepo          restated `nextRevision` five times; counterfactual PROVED it masked a regression
+page defaults    four stubs restated a page size; counterfactual showed nothing masked
+TeamMembersRepo  reproduced a defect already fixed in the shared double; unreachable, masking nil
+```
+
+One demonstrated finding in four pairs, the other three real but prospective. Reading a pair costs
+minutes; that ratio justifies working through the remaining ten and does not justify a sweep that
+rewrites every stub unread.
+
+### An operational incident, recorded because it cost this entry once
+
+This entry was written, formatted, and then **lost before it was ever committed**. A peer committed
+in the shared worktree while it sat unstaged; their `lint-staged` run opens with _"Backing up
+original state in git stash"_, which captures the whole working tree — including an unstaged edit to
+a file they never touched — and the restore did not bring it back. It is not in `HEAD`, not in either
+surviving stash, and not in any dangling blob or commit: `git fsck --lost-found` finds nothing
+carrying the text.
+
+Nothing was corrupted and no committed work was at risk; the cost was one re-write. The lesson is
+narrow and practical: in a worktree with a concurrent committer, an append to a shared file should be
+committed in the same breath as it is written, not left unstaged across another agent's hook. The
+same applies to the earlier habit of preparing an edit and applying it later — that window is exactly
+what closed on this file.
