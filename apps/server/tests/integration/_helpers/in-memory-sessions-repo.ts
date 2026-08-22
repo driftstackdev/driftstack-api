@@ -350,7 +350,7 @@ export class InMemorySessionsRepo implements SessionRepo {
     const active = Array.from(this.sessions.values()).filter(
       (s) => s.accountId === accountId && ACTIVE_SESSION_STATUSES.includes(s.status),
     );
-    return Promise.resolve(active);
+    return Promise.resolve(active.map((r) => ({ ...r })));
   }
 
   listSessions(

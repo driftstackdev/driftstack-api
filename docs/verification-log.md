@@ -4208,3 +4208,53 @@ reproduced; the run itself took more than 600 seconds against a normal 250, so l
 difference. No cause is claimed for them here, because none was established.
 
 Suites: the converted file 7 passed, `tsc` clean.
+
+---
+
+## V-1281 — eight aliasing reads wearing a variable name
+
+Reading the last of the eleven unwatched methods from V-1280, `listApiKeysMintedBy` turned out to
+match production exactly — and to hand back the rows it stores:
+
+```
+const rows = Array.from(this.byId.values()).filter(…).sort(…);
+return Promise.resolve(rows);
+```
+
+`Array.from` copies the ARRAY, never the row objects inside it, so every element is still the stored
+row. This is `return [...this.rows]` — which the V-1255 guard has caught since the day it was
+written — wearing a local variable. The guard models bare returns of a bound row, whole collections,
+spreads, filter/sort chains, V-1272's accumulators and V-1274's wrapped returns. **A materialised
+local was none of them.** Eight interface reads across five doubles sat outside the rule the guard
+states, invisible to every branch it had:
+
+```
+api-keys::listApiKeysMintedBy   api-keys::listApiKeys        profiles::listTrashed
+sessions::listActiveByAccount   webhooks::listEndpoints      webhooks::listEndpointsSubscribedTo
+validation-schedules::list      validation-schedules::findDue
+```
+
+**None was observable**, and the measurement says why: the same sweep checked whether each of those
+five doubles mutates a stored row in place, and none does. That is the V-1274 argument again, and it
+is worth repeating because it keeps being the thing that makes a defect look like a non-defect:
+"not currently observable" is weaker than the rule, and it holds only until someone adds a write
+that mutates in place. The incidents double was exactly such a file, and its aliasing reads had been
+sitting harmlessly until they were not.
+
+All eight now map each row through a copy on the way out. The detector gained a branch that
+recognises the shape, with the exclusion keyed on whether anything between the materialisation and
+the return maps the rows through something — so the fix is not flagged as the defect.
+
+```
+M22  drop the copy from listApiKeysMintedBy   RED, naming the file, method and line
+```
+
+Both halves asserted in the control arm, per the standing rule that a detector which cannot tell the
+fix from the defect is worse than the narrower one it replaced.
+
+**Verified clean on the way past**, completing the eleven: `pruneFinished` (OR of the two terminal
+timestamps, strict `<` on both sides), `jobTypesWithPendingWork` (DISTINCT over rows with neither
+timestamp set), `deleteStaleAuthTokens` (consumed-before OR unconsumed-and-expired, split the same
+way), and `listApiKeysMintedBy` itself, which filters on the minter rather than the owner in both.
+
+Suites: 70 files over the five doubles, 909 passed, `tsc` clean.

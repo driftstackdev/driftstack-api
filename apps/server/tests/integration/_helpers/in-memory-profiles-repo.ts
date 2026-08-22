@@ -299,7 +299,7 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
         const t = b.deletedAt!.getTime() - a.deletedAt!.getTime();
         return t !== 0 ? t : b.id.localeCompare(a.id);
       });
-    return Promise.resolve(trashed);
+    return Promise.resolve(trashed.map((r) => ({ ...r })));
   }
 
   // L4b — restore (clear deletedAt). 'not_found' if no trashed row matches;

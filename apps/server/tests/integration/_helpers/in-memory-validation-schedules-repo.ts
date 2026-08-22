@@ -14,7 +14,7 @@ export class InMemoryValidationSchedulesRepo implements ValidationSchedulesRepo 
     const sorted = Array.from(this.byArchetype.values()).sort((a, b) =>
       a.archetypeId.localeCompare(b.archetypeId),
     );
-    return Promise.resolve(sorted);
+    return Promise.resolve(sorted.map((r) => ({ ...r })));
   }
 
   findByArchetype(archetypeId: string): Promise<ValidationScheduleRow | null> {
@@ -57,7 +57,7 @@ export class InMemoryValidationSchedulesRepo implements ValidationSchedulesRepo 
       .filter((r) => r.enabled && r.nextRunAt <= now)
       .sort((a, b) => a.nextRunAt.getTime() - b.nextRunAt.getTime())
       .slice(0, limit);
-    return Promise.resolve(due);
+    return Promise.resolve(due.map((r) => ({ ...r })));
   }
 
   markRun(archetypeId: string, runId: string, now: Date): Promise<void> {

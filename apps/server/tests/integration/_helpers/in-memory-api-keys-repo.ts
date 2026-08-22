@@ -78,14 +78,14 @@ export class InMemoryApiKeysRepo implements ApiKeysRepo {
     const rows = Array.from(this.byId.values())
       .filter((r) => this.minterByKeyId.get(r.id) === minterAccountId)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-    return Promise.resolve(rows);
+    return Promise.resolve(rows.map((r) => ({ ...r })));
   }
 
   listApiKeys(accountId: string): Promise<ApiKeyRow[]> {
     const rows = Array.from(this.byId.values())
       .filter((r) => r.accountId === accountId)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-    return Promise.resolve(rows);
+    return Promise.resolve(rows.map((r) => ({ ...r })));
   }
 
   findApiKey(id: string, accountId: string): Promise<ApiKeyRow | null> {

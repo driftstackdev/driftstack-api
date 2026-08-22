@@ -108,7 +108,7 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
     const rows = Array.from(this.endpoints.values())
       .filter((r) => r.accountId === accountId)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-    return Promise.resolve(rows);
+    return Promise.resolve(rows.map((r) => ({ ...r })));
   }
 
   deliveryCountsByEndpoint(accountId: string): Promise<Map<string, EndpointDeliveryCounts>> {
@@ -325,7 +325,7 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
     const rows = Array.from(this.endpoints.values()).filter(
       (r) => r.accountId === accountId && r.active && r.events.includes(eventType),
     );
-    return Promise.resolve(rows);
+    return Promise.resolve(rows.map((r) => ({ ...r })));
   }
 
   claim(opts: { batchSize: number; now: Date }): Promise<WebhookDeliveryRow[]> {

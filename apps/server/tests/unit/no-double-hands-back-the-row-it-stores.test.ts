@@ -119,6 +119,28 @@ function aliasingReads(src: string, file: string): Hit[] {
   // bare, so every branch above walked past it. Rows pushed or set into a collection count as live
   // alongside rows bound off one, because `this.rows.push(row); return { row }` aliases just as
   // hard as looking one up does.
+  // V-1281 — a local MATERIALISED straight off a stored collection, then returned:
+  //   const rows = Array.from(this.byId.values()).filter(…).sort(…);
+  //   return Promise.resolve(rows);
+  // `Array.from` copies the ARRAY and not the row objects inside it, so every element is still
+  // the stored row — the same defect as `return [...this.rows]`, which this guard has caught
+  // since V-1255, wearing a local variable. Eight interface reads across five doubles sat
+  // outside the rule the guard states. None was observable, because none of those five mutates
+  // a stored row in place; that is a weaker property than the rule and it holds only until
+  // someone adds a write that does, which is exactly what the incidents double turned out to be.
+  const materialised = new Set<string>();
+  for (const [i, line] of lines.entries()) {
+    const m = /const\s+(\w+)\s*(?::[^=]*)?=\s*Array\.from\(this\.\w+\.values\(\)\)/.exec(line);
+    if (m?.[1] === undefined) continue;
+    // Only if nothing between here and the return maps the rows through anything.
+    const upToReturn =
+      lines
+        .slice(i, i + 12)
+        .join('\n')
+        .split('return')[0] ?? '';
+    if (!/\.map\(|\bsnap\w*\(/.test(upToReturn)) materialised.add(m[1]);
+  }
+
   const stored = new Set<string>();
   for (const line of lines) {
     const m = /this\.\w+\.(?:push\((\w+)\)|set\([\w.]+,\s*(\w+)\s*\))/.exec(line);
@@ -166,7 +188,8 @@ function aliasingReads(src: string, file: string): Hit[] {
     const chain = /^return\s+this\.\w+[\s\S]*\.(?:filter|sort)\(/.test(t) && !t.includes('.map(');
 
     if (
-      (bare?.[1] !== undefined && (bound.has(bare[1]) || accumulators.has(bare[1]))) ||
+      (bare?.[1] !== undefined &&
+        (bound.has(bare[1]) || accumulators.has(bare[1]) || materialised.has(bare[1]))) ||
       whole ||
       chain ||
       wrapped
@@ -241,6 +264,29 @@ describe('no in-memory double hands back the row it stores', () => {
       aliasingReads(unsnapped, 'multiline-defect.ts').length,
       'the same chain WITHOUT the snapshot was not flagged — the exclusion is too broad',
     ).toBe(1);
+  });
+
+  it('CRITICAL a local materialised off a stored collection and then returned IS flagged, and the same local mapped through a copy is not. Array.from copies the array, never the rows inside it, so this is `return [...this.rows]` wearing a variable name — eight interface reads across five doubles were sitting outside the rule this guard states, invisible to every branch it had.', () => {
+    const defect = [
+      '  listKeys(accountId: string) {',
+      '    const rows = Array.from(this.byId.values())',
+      '      .filter((r) => r.accountId === accountId)',
+      '      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());',
+      '    return Promise.resolve(rows);',
+      '  }',
+    ].join('\n');
+    const hits = aliasingReads(defect, 'materialised.ts');
+    expect(hits.length, 'a materialised-then-returned local was not flagged').toBe(1);
+    expect(hits[0]?.method, 'the enclosing method was not resolved').toBe('listKeys');
+
+    const fixed = defect.replace(
+      '    return Promise.resolve(rows);',
+      '    return Promise.resolve(rows.map((r) => ({ ...r })));',
+    );
+    expect(
+      aliasingReads(fixed, 'materialised-fixed.ts'),
+      'copying each row on the way out was still flagged',
+    ).toEqual([]);
   });
 
   it('CRITICAL a snapshotting read is NOT flagged, so the guard distinguishes the fix from the defect. Without this it fires on all three doubles that were already repaired and the output is noise.', () => {
