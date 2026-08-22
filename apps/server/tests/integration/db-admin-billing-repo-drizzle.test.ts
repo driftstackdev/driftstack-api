@@ -62,6 +62,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AccountTierSchema, type AccountTier } from '@driftstack/api-types';
 import { DrizzleAdminBillingRepo } from '../../src/db/admin-billing-repo.js';
 import * as schema from '../../src/db/schema.js';
+import { cleanDelta } from './_helpers/counter-delta.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
 const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
@@ -69,7 +70,16 @@ const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
 /** The one tier no other test file writes — see the isolation note above. */
 const TIER: AccountTier = 'agency_manual';
 /** The tier db-billing-subscription-lookups writes, so it may move under us. */
-const FOREIGN_TIER: AccountTier = 'api_scale';
+
+/**
+ * V-1282 — buckets other files write inside any measurement window, so they are not ours to
+ * claim. `free` is the accounts default; `api_scale` is written by
+ * db-billing-subscription-lookups; `api_starter`, `api_scale` and TIER itself are seeded by
+ * admin-billing-active-tier-repo-contract, which RETRIES on an interfered reading and so may
+ * seed up to five times in a run. Every other tier stays constrained, so a count filed under
+ * the wrong bucket is still caught.
+ */
+const NOISY_TIERS: ReadonlySet<string> = new Set(['free', 'api_scale', 'api_starter']);
 
 type SubStatus = 'active' | 'trialing' | 'canceled' | 'past_due' | 'unpaid' | 'paused';
 
@@ -153,50 +163,60 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
 
     it('CRITICAL an active subscription adds exactly one to its own tier. This is the number the cockpit reports as paying customers, so an increment landing on the wrong tier misattributes revenue between plans.', async () => {
       if (!dbReachable || !repo) return;
-      const before = await counts();
-      await seedSubscription('active');
-      const after = await counts();
-      expect(after[TIER] - before[TIER], 'exactly one more on this tier').toBe(1);
+      await cleanDelta(
+        counts,
+        async () => {
+          await seedSubscription('active');
+        },
+        { [TIER]: 1 },
+        NOISY_TIERS,
+      );
     });
 
     it('CRITICAL a trialing subscription counts as paying. Stripe reports a trial as its own status, and dropping it from the active set makes the paying count DIP exactly when signups rise — a metric that moves the wrong way under success is worse than one that is merely wrong.', async () => {
       if (!dbReachable || !repo) return;
-      const before = await counts();
-      await seedSubscription('trialing');
-      const after = await counts();
-      expect(after[TIER] - before[TIER], 'a trial is counted').toBe(1);
+      await cleanDelta(
+        counts,
+        async () => {
+          await seedSubscription('trialing');
+        },
+        { [TIER]: 1 },
+        NOISY_TIERS,
+      );
     });
 
     it('CRITICAL cancelled, past_due, unpaid and paused subscriptions are NOT counted. Stripe keeps all of them in the same mirror table, so without the status filter the cockpit counts churned customers as paying and the number only ever grows — a cancellation would never show up at all.', async () => {
       if (!dbReachable || !repo) return;
-      const before = await counts();
-      await seedSubscription('canceled');
-      await seedSubscription('past_due');
-      await seedSubscription('unpaid');
-      await seedSubscription('paused');
-      const after = await counts();
-      expect(after[TIER] - before[TIER], 'four non-paying rows added nothing').toBe(0);
+      // Four unbilled rows must move NOTHING, so the expected vector is EMPTY and every tier
+      // but the noisy ones is constrained to zero — a stronger statement than the single-bucket
+      // delta this used to make.
+      await cleanDelta(
+        counts,
+        async () => {
+          await seedSubscription('canceled');
+          await seedSubscription('past_due');
+          await seedSubscription('unpaid');
+          await seedSubscription('paused');
+        },
+        {},
+        NOISY_TIERS,
+      );
     });
 
     it('CRITICAL a subscription on one tier does not move another. The count is grouped by tier, and a grouping that collapsed would report the whole book against whichever tier sorted first.', async () => {
       if (!dbReachable || !repo) return;
-      const before = await counts();
-      await seedSubscription('active');
-      const after = await counts();
-
-      for (const tier of AccountTierSchema.options) {
-        if (tier === TIER) continue;
-        // api_scale is exempt: db-billing-subscription-lookups writes it
-        // concurrently, so it is the one tier whose delta is not ours to claim.
-        if (tier === FOREIGN_TIER) continue;
-        // V-1264 — api_starter joins it. admin-billing-active-tier-repo-contract seeds that
-        // tier, and its measurement now RETRIES on an interfered reading, so it may seed up
-        // to five times in a run. That makes this delta noisier than it was, which is a cost
-        // of the retry worth naming rather than absorbing: the fix for one racy measurement
-        // increased the write volume every other measurement of the same table has to survive.
-        if (tier === 'api_starter') continue;
-        expect(after[tier] - before[tier], `tier ${tier} unchanged`).toBe(0);
-      }
+      // The whole vector at once: TIER gains exactly one and every other constrained tier sits
+      // still. That is what the per-tier loop below was reaching for, and cleanDelta states it
+      // directly — including distinguishing a MISCOUNT from a concurrent writer, which the loop's
+      // growing list of `continue` exemptions could only ever paper over.
+      await cleanDelta(
+        counts,
+        async () => {
+          await seedSubscription('active');
+        },
+        { [TIER]: 1 },
+        NOISY_TIERS,
+      );
     });
 
     it('CRITICAL the counts are numbers rather than the text Postgres returns for count(*). The signature promises Record<AccountTier, number>; without the ::int cast the values are strings, so any arithmetic downstream concatenates instead of adding and a total renders as digits glued together.', async () => {

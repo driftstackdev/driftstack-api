@@ -4154,3 +4154,57 @@ Out of scope and named so it is not mistaken for covered: `migrateWrappedDekEnve
 legacy envelopes and has no counterpart in the double at all.
 
 Suites: 69 profile-touching files, 938 passed, `tsc` clean.
+
+---
+
+## V-1282 — RETRACTION: the unfiltered-counter class was not bounded at five, and my own fix is what made the sixth site collide
+
+A full-suite run came back with eight failures. Attribution first, per the standing rule: the tree
+held only the three foreign files that are never mine to commit, and no peer commit sat on top, so
+the red was mine or environmental. All eight pass in isolation. Four of them are neither.
+
+**The retraction.** The V-1274 entry recorded a measurement of the racy-counter class and concluded
+it had a known, closed population — five converted sites plus two that were safe by other
+mitigations. That conclusion was wrong, and the reason is the instrument, again. The detector looked
+for a delta expression naming the baseline local immediately before a comma. Every site it found
+spells that `before,`. The four it missed spell it `before[TIER],` — the same expression with an
+array subscript between the name and the comma — so the pattern could not match, and a whole file of
+exact deltas on `countActiveSubscriptionsByTier` scored as clean. Allowing a subscript finds them
+immediately. The population is seven, not five-plus-two.
+
+**And the collision is mine.** `db-admin-billing-repo-drizzle` measures its deltas on
+`agency_manual`. V-1264 added an arm to `admin-billing-active-tier-repo-contract` that seeds exactly
+that tier — and `cleanDelta` RETRIES on an interfered reading, so it may seed it up to five times in
+a run. A latent raciness that had been surviving on luck became a reliable collision the moment the
+remedy for a different site started writing the same bucket.
+
+Worse, I was standing in front of it. V-1264 edited this very file to add `continue` exemptions to
+its per-tier loop for `api_scale` and `api_starter`, with a comment explaining that the retry made
+the deltas noisier. Naming the interference and stepping around it, in the one file where the shared
+helper was the answer, is the mistake the entry should record: **an exemption list that grows once
+per neighbour is a measurement asking to be replaced, not tuned.**
+
+All four arms now use `cleanDelta`. The per-tier loop with its accumulating `continue`s is gone —
+the helper states the whole vector directly, and it distinguishes a MISCOUNT from a concurrent
+writer, which the loop could only ever paper over. The unbilled-statuses arm gained strength on the
+way: it used to assert one bucket did not move, and now asserts an EMPTY vector, so every
+constrained tier must sit still.
+
+```
+N1  seed TWO active rows where the vector expects one   "the counter is MISCOUNTING: the same wrong
+                                                        delta appeared in all 5 attempts …
+                                                        agency_manual: 2 (want 1)"
+N2  seed an ACTIVE row inside the unbilled arm          "… agency_manual: 1 (want 0)"
+```
+
+Both deterministic across all five attempts, which is the helper correctly saying "this is the
+counter, not a neighbour". Restored byte-identical from a snapshot of the FIXED state.
+
+**The other four failures are not resolved, and are recorded as such rather than absorbed.** Two are
+customer-dashboard jsdom page tests, a known order-dependent class. One is a docs parity arm. One is
+a Stripe contract arm that is account-SCOPED — it creates its own account and reads that account's
+tier, so it is immune to the counter race by construction. All four pass in isolation and none
+reproduced; the run itself took more than 600 seconds against a normal 250, so load is the visible
+difference. No cause is claimed for them here, because none was established.
+
+Suites: the converted file 7 passed, `tsc` clean.
