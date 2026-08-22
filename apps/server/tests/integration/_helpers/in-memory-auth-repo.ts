@@ -141,7 +141,7 @@ export class InMemoryAuthRepo implements AccountAuthRepo {
     if (!row) return Promise.resolve(null);
     if (row.revokedAt !== null) return Promise.resolve(null);
     if (row.expiresAt.getTime() <= args.now.getTime()) return Promise.resolve(null);
-    return Promise.resolve(row);
+    return Promise.resolve({ ...row });
   }
 
   touchWebSessionLastUsed(id: string, at: Date): Promise<void> {

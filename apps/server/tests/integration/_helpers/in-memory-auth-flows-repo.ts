@@ -154,7 +154,7 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
       if (row.tokenHash !== args.tokenHash) continue;
       if (row.consumedAt !== null) continue;
       if (row.expiresAt.getTime() <= args.now.getTime()) continue;
-      return Promise.resolve(row);
+      return Promise.resolve({ ...row });
     }
     return Promise.resolve(null);
   }
@@ -246,7 +246,7 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
       if (row.expiresAt.getTime() <= args.now.getTime()) continue;
       const account = this.accounts.get(row.accountId)?.account;
       if (!account || account.authEpoch !== row.authEpoch) continue;
-      return Promise.resolve(row);
+      return Promise.resolve({ ...row });
     }
     return Promise.resolve(null);
   }
@@ -320,7 +320,7 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
     const row = this.webSessions.get(id);
     if (!row) return Promise.resolve(null);
     if (row.accountId !== accountId) return Promise.resolve(null);
-    return Promise.resolve(row);
+    return Promise.resolve({ ...row });
   }
 
   revokeAllWebSessionsExcept(accountId: string, exceptId: string, at: Date): Promise<number> {

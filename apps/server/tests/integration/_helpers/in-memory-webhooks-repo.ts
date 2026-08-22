@@ -128,7 +128,7 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
   findEndpoint(id: string, accountId: string): Promise<WebhookEndpointRow | null> {
     const r = this.endpoints.get(id);
     if (!r || r.accountId !== accountId) return Promise.resolve(null);
-    return Promise.resolve(r);
+    return Promise.resolve({ ...r });
   }
 
   findEndpointById(id: string): Promise<WebhookEndpointRow | null> {
@@ -174,7 +174,7 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
       r.secretPrevExpiresAt.getTime() > input.now.getTime() &&
       r.forceRotatedAt === null
     ) {
-      return Promise.resolve(r);
+      return Promise.resolve({ ...r });
     }
     const updated: WebhookEndpointRow = {
       ...r,
@@ -533,6 +533,20 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
   }
 
   /** Test helper: read all delivery rows. */
+  /**
+   * Test-only — age an endpoint's secret. NOT on WebhooksRepo.
+   *
+   * V-1285 — `webhook-secret-force-rotation` used to backdate by mutating the row `findEndpoint`
+   * handed back, under a comment saying the fixture "stores rows by reference; mutate in place".
+   * That is an arrangement Postgres cannot support: a SELECT returns a copy, so the same test
+   * against the real repo would age nothing and rotate nothing. The seam does the write the
+   * fixture actually needs, and leaves the interface read free to return a snapshot.
+   */
+  backdateSecretCreatedAt(id: string, at: Date): void {
+    const row = this.endpoints.get(id);
+    if (row) this.endpoints.set(id, { ...row, secretCreatedAt: at });
+  }
+
   getAllDeliveries(): WebhookDeliveryRow[] {
     return Array.from(this.deliveries.values());
   }

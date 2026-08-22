@@ -4350,3 +4350,62 @@ with the reason that milliseconds-per-second is a unit rather than a decision.
 The remaining one-sided population is now the tail: every method in it is named by at least one
 source-reading guard, every paired method is reached by some test, and the eleven that were watched
 by nothing are done. What is left is read-by-hand work with no instrument that beats reading.
+
+---
+
+## V-1285 — the aliasing guard was looking for the one binding form nobody uses
+
+Reading `webhooks::rotateSecret` off the one-sided list — verified clean, all four of its behaviours
+mirrored, including the customer-grace guard and the force-window `secretPrev` preservation — its
+no-op path returns `Promise.resolve(r)` where `r` came from `this.endpoints.get(...)`. The V-1255
+guard should have flagged that, and it was green.
+
+**It binds on `this.x.find(` and nothing else.** Almost every double here is Map-backed, so `.get()`
+is the ordinary way a row is bound. Measured per method scope:
+
+```
+find  0 live instances   (the form the guard checks)
+get   7                  (invisible)
+for-of 3                 (invisible)
+```
+
+The guard has been passing because its signature stopped describing the code — which is exactly the
+failure its own first arm exists to catch on the other side, and the reason that arm exists at all.
+All ten are now snapshotted and the detector recognises all three forms, each asserted separately so
+losing one cannot hide behind the others.
+
+**Three instrument errors on the way, each worth its line.**
+
+_File-wide binding scope._ Widening the forms immediately produced six false positives: `createAccount`
+builds a fresh row, and it was flagged because a DIFFERENT method in the same file binds a local
+called `row` out of a map. The set is now computed per method span. The scope is part of the
+signature, and a name is not a binding.
+
+_A regex that thought `true` was a row._ An attempt to also catch rows stored inside an object
+literal matched every identifier in the storing call's arguments and flagged seventy-two sites,
+including `return Promise.resolve(true)`.
+
+_My own per-site attribution was wrong_ in the first measurement, for the same file-wide-name reason
+— it reported `findActiveAuthToken` as a `.get()` bind when it is a `for-of` one.
+
+**A class measured and deliberately NOT swept.** A principled version of the stored-inside-a-literal
+rule flags twenty more sites: every insert-style method that builds a row, stores it, and returns
+that same object. They are genuine instances of the rule as stated. They are also a distinct class
+with a much larger blast radius, and sweeping them in at the end of a long batch would be a decision
+made by momentum. Population recorded, deferred deliberately.
+
+**One test depended on the aliasing, in writing.** `webhook-secret-force-rotation` backdated a secret
+by mutating the row `findEndpoint` handed back, under the comment _"The InMemory repo stores rows by
+reference; mutate in place."_ Four arms rested on it. That arrangement cannot work against Postgres —
+a SELECT returns a copy, so the same test against the real repo would age nothing and rotate nothing.
+The double gained a fixture-only `backdateSecretCreatedAt` seam, mirroring the `backdate*` idiom the
+team-members contract already uses, and the interface read is free to return a snapshot. This is the
+V-1251 lesson exactly: the snapshot rule belongs to the INTERFACE, and an arrangement that needs a
+live row needs a seam that says so.
+
+```
+M25  drop the copy from sessions::findSession (a .get bind)         RED, names file/method/line
+M26  drop the copy from auth-flows::findActiveAuthToken (a for-of)  RED, names file/method/line
+```
+
+Suites: 521 files across auth, sessions, profiles, webhooks and mfa — 6245 passed, `tsc` clean.

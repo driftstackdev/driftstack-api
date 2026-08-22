@@ -56,11 +56,7 @@ describe('Arc 3 v2-#28 sub-slice 28.2 WebhookSecretForceRotationService', () => 
       description: null,
     });
     // Backdate the aged endpoint past 91 days.
-    const agedRow = await repo.findEndpoint(aged.id, 'acc_1');
-    if (agedRow) {
-      // The InMemory repo stores rows by reference; mutate in place.
-      (agedRow as { secretCreatedAt: Date }).secretCreatedAt = NINETY_TWO_DAYS_AGO;
-    }
+    repo.backdateSecretCreatedAt(aged.id, NINETY_TWO_DAYS_AGO);
 
     const { svc: emailSvc } = makeFakeEmail();
     const svc = new WebhookSecretForceRotationService(repo, emailSvc, makeFakeLogger(), {
@@ -94,10 +90,7 @@ describe('Arc 3 v2-#28 sub-slice 28.2 WebhookSecretForceRotationService', () => 
       events: ['session.completed'],
       description: null,
     });
-    const agedRow = await repo.findEndpoint(aged.id, 'acc_1');
-    if (agedRow) {
-      (agedRow as { secretCreatedAt: Date }).secretCreatedAt = NINETY_TWO_DAYS_AGO;
-    }
+    repo.backdateSecretCreatedAt(aged.id, NINETY_TWO_DAYS_AGO);
     const { svc: emailSvc } = makeFakeEmail();
     const svc = new WebhookSecretForceRotationService(repo, emailSvc, makeFakeLogger(), {
       dashboardUrl: 'https://app.driftstack.test',
@@ -126,8 +119,7 @@ describe('Arc 3 v2-#28 sub-slice 28.2 WebhookSecretForceRotationService', () => 
       events: ['session.completed'],
       description: null,
     });
-    const agedRow = await repo.findEndpoint(ep.id, 'acc_1');
-    if (agedRow) (agedRow as { secretCreatedAt: Date }).secretCreatedAt = NINETY_TWO_DAYS_AGO;
+    repo.backdateSecretCreatedAt(ep.id, NINETY_TWO_DAYS_AGO);
     const { svc: emailSvc } = makeFakeEmail();
     const svc = new WebhookSecretForceRotationService(repo, emailSvc, makeFakeLogger(), {
       dashboardUrl: 'https://app.driftstack.test',
@@ -175,10 +167,7 @@ describe('Arc 3 v2-#28 sub-slice 28.2 WebhookSecretForceRotationService', () => 
       events: ['session.completed'],
       description: null,
     });
-    const agedRow = await repo.findEndpoint(aged.id, 'acc_1');
-    if (agedRow) {
-      (agedRow as { secretCreatedAt: Date }).secretCreatedAt = NINETY_TWO_DAYS_AGO;
-    }
+    repo.backdateSecretCreatedAt(aged.id, NINETY_TWO_DAYS_AGO);
     const failingEmail = {
       isConfigured: true,
       sendWebhookSecretForceRotated: () => Promise.reject(new Error('postmark down')),

@@ -248,7 +248,7 @@ export class InMemorySessionsRepo implements SessionRepo {
   findSession(id: string, accountId: string): Promise<SessionRecord | null> {
     const s = this.sessions.get(id);
     if (!s || s.accountId !== accountId) return Promise.resolve(null);
-    return Promise.resolve(s);
+    return Promise.resolve({ ...s });
   }
 
   findSessionUnscoped(id: string): Promise<SessionRecord | null> {

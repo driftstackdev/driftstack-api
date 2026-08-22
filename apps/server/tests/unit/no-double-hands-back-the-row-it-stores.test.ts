@@ -82,11 +82,39 @@ function aliasingReads(src: string, file: string): Hit[] {
   const lines = codeOnly(src).split('\n');
 
   // Locals bound straight off a stored collection: `const row = this.rows.find(…)`.
-  const bound = new Set<string>();
-  for (const line of lines) {
-    const m = /const\s+(\w+)\s*=\s*this\.(\w+)\.find\(/.exec(line);
-    if (m?.[1] !== undefined) bound.add(m[1]);
+  // V-1285 — THREE binding forms, because the guard knew only one and it was the one nobody
+  // uses. Measured per method scope: `this.x.find(` had ZERO live instances, while `this.x.get(`
+  // had seven and `for (const r of this.x.values())` had three. Almost every double here is
+  // Map-backed, so `.get()` is the ordinary way a row is bound — the guard was passing because
+  // its signature no longer described the code, which is precisely the failure its own first arm
+  // exists to catch on the OTHER side.
+  // Binds are computed PER METHOD, not per file. A file-wide set taints every method that happens
+  // to name a local `row`: `createAccount` builds a fresh row and was flagged because a DIFFERENT
+  // method in the same file binds `row` out of a map. Six false positives, all from one shared
+  // name — the scope is part of the signature.
+  const spans: Array<{ start: number; end: number }> = [];
+  for (const [i, l] of lines.entries()) {
+    if (!/^ {2}(?:async )?(?:private )?[A-Za-z_]\w*\s*\(/.test(l)) continue;
+    let e = i + 1;
+    while (e < lines.length && lines[e] !== '  }') e += 1;
+    spans.push({ start: i, end: e });
   }
+  const BINDINGS = [
+    /const\s+(\w+)\s*(?::[^=]*)?=\s*this\.\w+(?:\[[^\]]*\])?\.find\(/,
+    /const\s+(\w+)\s*(?::[^=]*)?=\s*this\.\w+(?:\[[^\]]*\])?\.get\(/,
+    /for \(const (\w+) of this\.\w+/,
+  ];
+  const boundAt = (index: number): ReadonlySet<string> => {
+    const span = spans.find((sp) => index >= sp.start && index <= sp.end);
+    const out = new Set<string>();
+    for (const line of lines.slice(span?.start ?? 0, (span?.end ?? lines.length) + 1)) {
+      for (const re of BINDINGS) {
+        const m = re.exec(line);
+        if (m?.[1] !== undefined) out.add(m[1]);
+      }
+    }
+    return out;
+  };
 
   // V-1272 — locals filled from a stored collection by a loop, then returned:
   //   const out: Row[] = [];
@@ -141,11 +169,27 @@ function aliasingReads(src: string, file: string): Hit[] {
     if (!/\.map\(|\bsnap\w*\(/.test(upToReturn)) materialised.add(m[1]);
   }
 
+  // A local BUILT as an object literal and then handed to a `set`/`push` on a stored collection:
+  //   const row = { … };  this.accounts.set(row.id, { account: row, … });  return row;
+  // The caller ends up holding the object the map holds, which is the same defect as binding one
+  // out of the map. Keyed on the DECLARATION being an object literal, and on the name appearing in
+  // the storing call — a first attempt matched every identifier inside the call arguments and
+  // flagged seventy-two sites including `return Promise.resolve(true)`, because `true` is an
+  // identifier to a regex that has not been told otherwise.
+  const built = new Set<string>();
+  for (const line of lines) {
+    const m = /const\s+(\w+)\s*(?::[^=]*)?=\s*\{\s*$/.exec(line.trim());
+    if (m?.[1] !== undefined) built.add(m[1]);
+  }
   const stored = new Set<string>();
   for (const line of lines) {
-    const m = /this\.\w+\.(?:push\((\w+)\)|set\([\w.]+,\s*(\w+)\s*\))/.exec(line);
-    const name = m?.[1] ?? m?.[2];
-    if (name !== undefined) stored.add(name);
+    if (!/this\.\w+(?:\[[^\]]*\])?\.(?:set|push)\(/.test(line)) continue;
+    for (const name of built) {
+      if (new RegExp(`(?<![.\\w])${name}(?![\\w])`).test(line)) stored.add(name);
+    }
+    const direct = /this\.\w+\.(?:push\((\w+)\)|set\([\w.]+,\s*(\w+)\s*\))/.exec(line);
+    const n = direct?.[1] ?? direct?.[2];
+    if (n !== undefined) stored.add(n);
   }
 
   const out: Hit[] = [];
@@ -172,7 +216,7 @@ function aliasingReads(src: string, file: string): Hit[] {
     const wrapped =
       opensWrapper &&
       ([...t.matchAll(/(?<![.\w])(\w+)(?=\s*[,}\]])/g)].some(
-        (m) => m[1] !== undefined && (bound.has(m[1]) || stored.has(m[1])),
+        (m) => m[1] !== undefined && (boundAt(i).has(m[1]) || stored.has(m[1])),
       ) ||
         // `return { incidents: this.incidents, updates: this.updates };` — the whole collection,
         // wrapped. `whole` above only sees it returned alone, so this form walked past both.
@@ -189,7 +233,7 @@ function aliasingReads(src: string, file: string): Hit[] {
 
     if (
       (bare?.[1] !== undefined &&
-        (bound.has(bare[1]) || accumulators.has(bare[1]) || materialised.has(bare[1]))) ||
+        (boundAt(i).has(bare[1]) || accumulators.has(bare[1]) || materialised.has(bare[1]))) ||
       whole ||
       chain ||
       wrapped
@@ -263,6 +307,35 @@ describe('no in-memory double hands back the row it stores', () => {
     expect(
       aliasingReads(unsnapped, 'multiline-defect.ts').length,
       'the same chain WITHOUT the snapshot was not flagged — the exclusion is too broad',
+    ).toBe(1);
+  });
+
+  it('CRITICAL all THREE ways a row gets bound are recognised — find, get, and a for-of over the stored values. The guard shipped knowing only `find`, and a per-scope measurement found zero live instances of that form against ten of the other two: it was passing because its signature had stopped describing the code rather than because the defect was gone. Each form is asserted separately so losing one cannot hide behind the others.', () => {
+    const forms: ReadonlyArray<readonly [string, string]> = [
+      ['find', '    const row = this.rows.find((r) => r.id === id);'],
+      ['get', '    const row = this.rows.get(id);'],
+      ['for-of', '    for (const row of this.rows.values()) {'],
+    ];
+    for (const [label, binding] of forms) {
+      const src = ['  read(id: string) {', binding, '    return Promise.resolve(row);', '  }'].join(
+        '\n',
+      );
+      expect(
+        aliasingReads(src, `${label}.ts`).length,
+        `a row bound via ${label} was not recognised as an aliasing read`,
+      ).toBe(1);
+    }
+
+    // The keyed-collection form too: `this.tokensByKind[kind].get(...)`.
+    const keyed = [
+      '  read(kind: string, id: string) {',
+      '    const row = this.tokensByKind[kind].get(id);',
+      '    return Promise.resolve(row);',
+      '  }',
+    ].join('\n');
+    expect(
+      aliasingReads(keyed, 'keyed.ts').length,
+      'a row bound off a keyed collection was not recognised',
     ).toBe(1);
   });
 

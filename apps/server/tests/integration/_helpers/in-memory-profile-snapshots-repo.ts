@@ -89,7 +89,7 @@ export class InMemoryProfileSnapshotsRepo implements ProfileSnapshotsRepo {
     const r = this.rows.get(args.id);
     if (!r) return Promise.resolve(null);
     if (r.accountId !== args.accountId) return Promise.resolve(null);
-    return Promise.resolve(r);
+    return Promise.resolve({ ...r });
   }
 
   delete(args: { id: string; accountId: string }): Promise<boolean> {

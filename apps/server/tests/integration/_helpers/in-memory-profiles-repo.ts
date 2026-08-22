@@ -174,7 +174,7 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
   findById(args: { id: string; accountId: string }): Promise<ProfileRecord | null> {
     const r = this.rows.get(args.id);
     if (!r || r.accountId !== args.accountId || r.deletedAt !== null) return Promise.resolve(null);
-    return Promise.resolve(r);
+    return Promise.resolve({ ...r });
   }
 
   // In-memory repo doesn't track per-profile DEKs (DEK dispatch is exercised by
@@ -193,7 +193,7 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
   findByAccountAndName(args: { accountId: string; name: string }): Promise<ProfileRecord | null> {
     for (const r of this.rows.values()) {
       if (r.accountId === args.accountId && r.name === args.name && r.deletedAt === null)
-        return Promise.resolve(r);
+        return Promise.resolve({ ...r });
     }
     return Promise.resolve(null);
   }
