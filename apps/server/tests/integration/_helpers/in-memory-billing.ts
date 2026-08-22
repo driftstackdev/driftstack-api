@@ -7,6 +7,10 @@ import type {
   BillingRepo,
   SubscriptionMirror,
 } from '../../../src/services/billing.js';
+import {
+  ACTIVE_SUBSCRIPTION_STATUSES,
+  COLLECTING_SUBSCRIPTION_STATUSES,
+} from '../../../src/db/subscription-status-sets.js';
 
 export class InMemoryBillingRepo implements BillingRepo {
   private readonly accounts = new Map<string, BillingAccountSnapshot>();
@@ -40,7 +44,7 @@ export class InMemoryBillingRepo implements BillingRepo {
     let found: SubscriptionMirror | null = null;
     for (const s of this.subscriptions.values()) {
       if (s.accountId !== accountId) continue;
-      if (s.status !== 'active' && s.status !== 'trialing') continue;
+      if (!(ACTIVE_SUBSCRIPTION_STATUSES as readonly string[]).includes(s.status)) continue;
       if (found === null || s.createdAt.getTime() > found.createdAt.getTime()) found = s;
     }
     return Promise.resolve(found);
@@ -53,7 +57,7 @@ export class InMemoryBillingRepo implements BillingRepo {
     let found: SubscriptionMirror | null = null;
     for (const s of this.subscriptions.values()) {
       if (s.accountId !== accountId) continue;
-      if (s.status !== 'active' && s.status !== 'trialing' && s.status !== 'past_due') continue;
+      if (!(COLLECTING_SUBSCRIPTION_STATUSES as readonly string[]).includes(s.status)) continue;
       if (found === null || s.createdAt.getTime() > found.createdAt.getTime()) found = s;
     }
     return Promise.resolve(found);

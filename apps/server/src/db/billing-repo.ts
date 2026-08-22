@@ -8,6 +8,10 @@ import type {
 } from '../services/billing.js';
 import type { Database } from './client.js';
 import { accounts, subscriptions } from './schema.js';
+import {
+  ACTIVE_SUBSCRIPTION_STATUSES,
+  COLLECTING_SUBSCRIPTION_STATUSES,
+} from './subscription-status-sets.js';
 
 function toAccount(r: typeof accounts.$inferSelect): BillingAccountSnapshot {
   return {
@@ -74,7 +78,7 @@ export class DrizzleBillingRepo implements BillingRepo {
       .where(
         and(
           eq(subscriptions.accountId, accountId),
-          inArray(subscriptions.status, ['active', 'trialing']),
+          inArray(subscriptions.status, [...ACTIVE_SUBSCRIPTION_STATUSES]),
         ),
       )
       .orderBy(desc(subscriptions.createdAt))
@@ -103,7 +107,7 @@ export class DrizzleBillingRepo implements BillingRepo {
       .where(
         and(
           eq(subscriptions.accountId, accountId),
-          inArray(subscriptions.status, ['active', 'trialing', 'past_due']),
+          inArray(subscriptions.status, [...COLLECTING_SUBSCRIPTION_STATUSES]),
         ),
       )
       .orderBy(desc(subscriptions.createdAt))

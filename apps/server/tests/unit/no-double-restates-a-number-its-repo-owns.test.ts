@@ -73,15 +73,32 @@ interface Pair {
   double: string;
 }
 
-/** Doubles that have a Drizzle counterpart of the same name. */
+/**
+ * Doubles paired with the Drizzle repo they stand in for.
+ *
+ * V-1288 — the pairing used to be `in-memory-<X>.ts` against `src/db/<X>.ts` and nothing else,
+ * which silently dropped `in-memory-billing.ts`: it is named for the two classes it exports rather
+ * than for the repo, so it resolved to no counterpart and every sweep keyed on this pairing skipped
+ * the billing pair entirely. That is how `billing-repo.ts` kept `['active', 'trialing']` inline,
+ * and its double kept the same three statuses as a `!==` chain, through the very campaign that gave
+ * that set one home. A double that resolves to nothing is now a FAILURE rather than an absence —
+ * see the arm below — because "no pair" and "no drift" look identical in a green run.
+ */
+const PAIR_ALIASES: ReadonlyMap<string, string> = new Map([['billing.ts', 'billing-repo.ts']]);
+
+/** Doubles with no Drizzle counterpart at all, each with the reason. The list may only shrink. */
+const UNPAIRED: ReadonlyMap<string, string> = new Map([
+  ['in-memory-probes-repo.ts', 'ProbesRepo is a service-level interface; there is no src/db repo'],
+]);
+
 function pairs(): Pair[] {
   return readdirSync(HELPERS)
-    .filter((f) => f.startsWith('in-memory-') && f.endsWith('-repo.ts'))
-    .map((f) => ({
-      base: f.slice('in-memory-'.length),
-      double: resolve(HELPERS, f),
-      repo: resolve(REPOS, f.slice('in-memory-'.length)),
-    }))
+    .filter((f) => f.startsWith('in-memory-') && f.endsWith('.ts'))
+    .map((f) => {
+      const raw = f.slice('in-memory-'.length);
+      const base = PAIR_ALIASES.get(raw) ?? raw;
+      return { base, double: resolve(HELPERS, f), repo: resolve(REPOS, base) };
+    })
     .filter((p) => existsSync(p.repo));
 }
 
@@ -144,6 +161,21 @@ describe('no in-memory double restates a number its repo owns', () => {
       (codeOnly(prose.join('\n')).match(POLICY_NUMBER) ?? []).filter((n) => n === '30_000'),
       'a number mentioned in a comment was counted as code',
     ).toEqual([]);
+  });
+
+  it('CRITICAL every in-memory double resolves to the repo it stands in for, or is listed as having none. A double that pairs with nothing is skipped by this guard, and "no pair" reads exactly like "no drift" in a green run — which is how the billing pair sat outside the sweep that gave the billed-status set one home, while the repo kept the set inline and the double kept it as a comparison chain.', () => {
+    const all = readdirSync(HELPERS).filter((f) => f.startsWith('in-memory-') && f.endsWith('.ts'));
+    const resolved = new Set(pairs().map((p) => p.double.slice(p.double.lastIndexOf('/') + 1)));
+    const orphans = all.filter((f) => !resolved.has(f) && !UNPAIRED.has(f)).sort();
+    expect(
+      orphans,
+      'double(s) resolving to no repo — add a PAIR_ALIASES entry, or list it in UNPAIRED with ' +
+        'the reason there is no src/db counterpart',
+    ).toEqual([]);
+
+    // …and the exemption list may not outlive its reason.
+    const stale = [...UNPAIRED.keys()].filter((f) => !all.includes(f) || resolved.has(f)).sort();
+    expect(stale, 'stale UNPAIRED entry(ies) — remove them').toEqual([]);
   });
 
   it('CRITICAL no double restates a policy number its repo also carries. Name it, export it from the repo, and import it — after which the value has one home and moving it moves both sides at once.', () => {

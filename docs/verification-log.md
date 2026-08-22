@@ -4456,3 +4456,60 @@ worktree (`ProfilePhoneCard.tsx`, `ProfilesView.tsx`, `visual-harness/gallery.ts
 component's test) and running its project's vitest concurrently. Those files are untouched here and
 must not be committed by this agent; any gui-client red in a full-suite run during this window
 belongs to that work, not to this sweep.
+
+---
+
+## V-1288 — a naming convention hid an entire repo pair from every parity sweep
+
+The billed-status set was given one home in V-1263, and the entry closing that work named the next
+edit precisely: _Stripe grants `past_due` a retry window in which the subscription is still charged,
+so a third member here is a plausible edit rather than a hypothetical one._
+
+**It was not hypothetical. It already existed, in a file no sweep could see.**
+
+`billing-repo.ts` spelled `['active', 'trialing']` inline for `findActiveSubscription`, and
+`['active', 'trialing', 'past_due']` inline for `findCollectingSubscription`. Its double restated
+both as `!==` chains. Four spellings of the paying set — the canonical constant, two repos importing
+it correctly, and these two — plus a collecting set with no home at all.
+
+**Why every sweep missed it.** Each pairing guard, and every coverage measurement in this campaign,
+resolves `in-memory-<X>.ts` against `src/db/<X>.ts`. The billing double is `in-memory-billing.ts`,
+named for the TWO classes it exports rather than for a repo — deliberately, and documented as such
+in the shape-parity guard. As a side effect it resolved to no counterpart, so it was dropped from
+the pairing silently. My "194 paired methods", the one-sided list, the unwatched-by-any-guard list
+and the string-set sweep were all computed without it.
+
+That is the failure mode this campaign keeps meeting from a new angle: **an absence and a clean
+result are indistinguishable.** A guard that skips a file reports the same green as a guard that
+checks it and finds nothing.
+
+Fixed on both axes. `COLLECTING_SUBSCRIPTION_STATUSES` now lives beside the paying set and is
+DERIVED from it, so adding a billed status extends both and the relationship stays a fact rather
+than a coincidence; the repo and its double both read the two constants. And the pairing itself now
+resolves an alias, with a new arm that makes an unresolvable double a FAILURE rather than an
+absence — plus an `UNPAIRED` list for the one double that genuinely has no `src/db` counterpart,
+which may only shrink.
+
+```
+M28  remove the billing alias           RED "double(s) resolving to no repo", naming the file
+M29  restate the billed set in the double   GREEN — and correctly so
+```
+
+**M29 is the informative one.** It proves the numeric guard does not cover string sets, which is
+exactly what that guard's own header says. It also means V-1284's decision not to build a standing
+string-set guard was taken on a population measured through the broken pairing. Re-run with the
+pairing corrected, the sweep returns ONE restated set — `['busy', 'creating']` in sessions, already
+judged legitimate in V-1283 because both sides inline it identically with no constant to import. The
+decision stands; it now rests on a number that was measured correctly.
+
+**A retraction, and the process fix behind it.** Before this, `usage-repo::dailyBucketsForRange`
+looked like a divergence: production reconstructs session minutes from `sessions` and
+`agent_sessions` and merges them in as `session_minute`, and the double produces none. It is
+documented — V-1217, in the double's own file header, as a stated limitation with a stated remedy
+("a test needing those has to use the real repo"), and the admin route tests that touch it assert
+only authorization, never bucket content. So the decision holds and there is no finding. That is the
+THIRD time this campaign I have re-derived documented prior art, and the pattern is now clear enough
+to name: my prior-art check greps the method name and the guard files, and all three times the
+documentation lived in the FILE HEADER of the double. Read both headers before comparing a method.
+
+Suites: the whole server project — 2358 files, 24158 passed | 10 skipped — `tsc` clean.
