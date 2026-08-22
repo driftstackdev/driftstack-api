@@ -201,6 +201,43 @@ function incidentContract(label: string, make: () => Subject, enabled: () => boo
       ).not.toBeNull();
     });
 
+    it('CRITICAL the incident findOpenAutoIncident hands back does not change when a timeline update is posted, in both. This double writes status, resolvedAt and updatedAt STRAIGHT onto the stored incident in addUpdate, and this read was the last one still returning that row live — so a caller holding it watched the status change under them. Postgres returns a copy of the row as it was and cannot do that; the probe path that calls this decides whether to open a NEW incident from what it is holding.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const target = `probe-${randomUUID().slice(0, 8)}`;
+      const created = await s.repo.createWithInitialUpdate({
+        title: `auto-${randomUUID().slice(0, 8)}`,
+        description: 'probe failed',
+        severity: 'major',
+        affectedComponents: ['api'],
+        public: true,
+        startedAt: STARTED,
+        createdByAdminId: null,
+        createdByAdminKeyId: null,
+        autoProbeTarget: target,
+      });
+      s.track(created.incident.id);
+
+      const held = await s.repo.findOpenAutoIncident(target);
+      expect(held, 'the open auto-incident did not resolve').not.toBeNull();
+      const statusWhenRead = held?.status;
+
+      await s.repo.addUpdate({
+        incidentId: created.incident.id,
+        message: 'still failing',
+        status: 'identified',
+        postedByAdminId: null,
+        postedByAdminKeyId: null,
+      });
+
+      expect(held?.status, 'the held auto-incident changed status underneath the caller').toBe(
+        statusWhenRead,
+      );
+      // …and the write really landed, so the arm is about aliasing rather than a no-op update.
+      const reread = await s.repo.get(created.incident.id);
+      expect(reread?.status, 'addUpdate did not move the incident status').toBe('identified');
+    });
+
     it('CRITICAL an INTERNAL incident is invisible through the public path, in both. The status page is the one surface with no authentication in front of it, and an internal incident carries operator detail — which customer, which node, what is suspected — so this predicate is the entire control between that text and anyone who guesses an id.', async () => {
       if (!enabled()) return;
       const s = make();

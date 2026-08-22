@@ -107,6 +107,25 @@ function holdsObjects(lines: readonly string[], collection: string): boolean {
   return true;
 }
 
+/**
+ * Does the method enclosing `index` declare a ROW return type? A primitive return cannot leak a
+ * stored object, and the signature says which it is — the same trick as reading a collection's
+ * value type, for the same reason: better than an exemption list that has to be re-argued.
+ */
+function returnsRowType(
+  lines: readonly string[],
+  spans: ReadonlyArray<{ start: number; end: number }>,
+  index: number,
+): boolean {
+  const span = spans.find((sp) => index >= sp.start && index <= sp.end);
+  if (span === undefined) return true;
+  const sig = lines.slice(span.start, Math.min(span.start + 8, span.end + 1)).join(' ');
+  const m = /\)\s*:\s*Promise<([^>]+)>/.exec(sig);
+  const t = (m?.[1] ?? '').trim();
+  if (t === '') return true;
+  return !/^(string|number|boolean|bigint|void|Date|Buffer)(\s*\|\s*null)?$/.test(t);
+}
+
 /** Reads that hand back a stored object rather than a copy of one. */
 function aliasingReads(src: string, file: string): Hit[] {
   const lines = codeOnly(src).split('\n');
@@ -136,12 +155,23 @@ function aliasingReads(src: string, file: string): Hit[] {
   ];
   const boundAt = (index: number): ReadonlySet<string> => {
     const span = spans.find((sp) => index >= sp.start && index <= sp.end);
+    const body = lines.slice(span?.start ?? 0, (span?.end ?? lines.length) + 1);
     const out = new Set<string>();
-    for (const line of lines.slice(span?.start ?? 0, (span?.end ?? lines.length) + 1)) {
+    for (const line of body) {
       for (const re of BINDINGS) {
         const m = re.exec(line);
         if (m?.[1] !== undefined) out.add(m[1]);
       }
+    }
+    // V-1291 — bound off the END of a chain on a stored collection:
+    //   const row = this.incidents.filter(…).sort(…)[0];
+    // Matched against the joined METHOD body, because that declaration spans several lines: the
+    // first attempt put it in BINDINGS, which is applied line by line, so it matched nothing —
+    // and "no matches" reads as "no such sites" rather than "the pattern cannot span a newline".
+    for (const m of body
+      .join('\n')
+      .matchAll(/const\s+(\w+)\s*(?::[^=]*)?=\s*this\.\w+[\s\S]{0,240}?\)\s*\[\s*\d+\s*\]/g)) {
+      if (m[1] !== undefined) out.add(m[1]);
     }
     return out;
   };
@@ -254,7 +284,15 @@ function aliasingReads(src: string, file: string): Hit[] {
     // `return out;` AND `return Promise.resolve(out);` — the doubles that use the accumulate
     // shape all return through the Promise form, so matching only the bare return meant the
     // widened branch below never fired. Its own mutation is what said so.
-    const bare = /^return\s+(?:Promise\.resolve\()?(\w+)\)?\s*;$/.exec(t);
+    // `return row;`, `return Promise.resolve(row);`, `return row ?? null;` and
+    // `return Promise.resolve(slot.account);` are one defect wearing four suffixes — a coalesce
+    // and a property access do not make a live row less live.
+    const bareSelf = /^return\s+(?:Promise\.resolve\()?(\w+)\s*(?:\?\?\s*null)?\)?\s*;$/.exec(t);
+    // `return Promise.resolve(slot.account);` reaches a stored row THROUGH a bound local. Gated on
+    // the method's own return type, because `return Promise.resolve(row.id)` reaches a string —
+    // ungated, this flagged two id-returning writes as though they leaked rows.
+    const bareProp = /^return\s+(?:Promise\.resolve\()?(\w+)\.\w+\)?\s*;$/.exec(t);
+    const bare = bareSelf ?? (returnsRowType(lines, spans, i) ? bareProp : null);
     // `return this.rows;` and `return [...this.rows];` are the same defect: the second copies
     // the ARRAY and hands back the very same row objects inside it. Only the elements matter.
     const whole = /^return\s+(?:\[\.\.\.)?this\.\w+\]?\s*;$/.test(t);
@@ -360,6 +398,38 @@ describe('no in-memory double hands back the row it stores', () => {
       aliasingReads(unsnapped, 'multiline-defect.ts').length,
       'the same chain WITHOUT the snapshot was not flagged — the exclusion is too broad',
     ).toBe(1);
+  });
+
+  it('CRITICAL a row bound off the END of a chain, and one returned through a coalesce or a property access, are all flagged. `const row = this.incidents.filter(…).sort(…)[0]` binds a row as live as any `get`, and `return row ?? null` / `return slot.account` are the same defect wearing a suffix. Between them they reached the last method in the incidents double still handing back a mutable row — the one double here that writes status straight onto a stored incident.', () => {
+    const chainBound = [
+      '  findOpen(target: string) {',
+      '    const row = this.incidents',
+      '      .filter((r) => r.target === target)',
+      '      .sort((a, b) => b.at.getTime() - a.at.getTime())[0];',
+      '    return row ?? null;',
+      '  }',
+    ].join('\n');
+    expect(
+      aliasingReads(chainBound, 'chain.ts').length,
+      'a row bound off the end of a chain and coalesced was not flagged',
+    ).toBe(1);
+
+    const propOfBound = [
+      '  setPassword(id: string) {',
+      '    const slot = this.accounts.get(id);',
+      '    return Promise.resolve(slot.account);',
+      '  }',
+    ].join('\n');
+    expect(
+      aliasingReads(propOfBound, 'prop.ts').length,
+      'a stored row reached through a property of a bound local was not flagged',
+    ).toBe(1);
+
+    const fixed = chainBound.replace(
+      '    return row ?? null;',
+      '    return row ? snap(row) : null;',
+    );
+    expect(aliasingReads(fixed, 'chain-fixed.ts'), 'the snapshotting form was flagged').toEqual([]);
   });
 
   it('CRITICAL a row returned STRAIGHT out of the collection is flagged, and the same read spread into a copy is not. Every other branch needs a name to check, so a read with no local at all — `return Promise.resolve(this.endpoints.get(id) ?? null)` — walked past all of them; ten interface reads were written that way. A read pulling a SCALAR out of the row is not flagged, because a string cannot change underneath the caller holding it.', () => {

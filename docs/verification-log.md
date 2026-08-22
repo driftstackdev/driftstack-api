@@ -4600,3 +4600,54 @@ before `=`, so it matched nothing and every scalar collection stayed flagged. Th
 like "the exclusion does not work"; the cause was that it never ran.
 
 Suites: the whole server project — 2358 files, 24159 passed | 10 skipped — `tsc` clean.
+
+---
+
+## V-1291 — enumerating the residual instead of waiting for the next form to bite
+
+The aliasing guard has been widened five times, each widening finding real sites. That is a pattern
+worth interrupting: rather than guess a sixth form, the RESIDUAL was enumerated — every return in
+every double that touches stored state, classified as flagged, provably safe, or neither. Eighty-two
+returns, thirty-three safe on the line, and the rest read by hand.
+
+Most of the remainder is benign in ways a one-line classifier cannot see: locally computed counts,
+registered `getAll` seams, and delegations where the question moves to the delegate. **Two are not.**
+
+**`incidents::findOpenAutoIncident` is an observable defect**, and the most serious one this guard
+has turned up since V-1274. The row is bound off the END of a chain —
+`this.incidents.filter(…).sort(…)[0]` — and returned through a coalesce. Neither shape had a
+binding the guard could recognise, so V-1274 snapshotted every other read in that file and left this
+one live. It matters because this is the double that writes `status`, `resolvedAt` and `updatedAt`
+STRAIGHT onto a stored incident in `addUpdate`: a caller holding what this returned watched the
+status change underneath it, and the probe path that calls this decides from what it is holding
+whether to open a NEW incident. Postgres returns the row as it was and cannot do that.
+
+**`auth-flows::setPassword`** returns `slot.account` — a stored row reached through a property of a
+bound local. Not observable, because that double replaces `slot.account` rather than mutating it,
+but the same rule.
+
+Both fixed. The guard now recognises the chain-bound form and the property-of-a-bound-local form,
+and a behavioural arm on the incidents contract asserts the invariant on BOTH implementations rather
+than only the shape.
+
+```
+M33  drop the snapshot from findOpenAutoIncident   guard RED, naming file/method/line
+M34  drop the copy from setPassword                guard RED, naming file/method/line
+M35  drop the snapshot again, against the contract in-memory RED "the held auto-incident changed
+                                                   status underneath the caller", drizzle GREEN
+```
+
+M35 is the one that matters: it is the difference between "this shape is wrong" and "the caller sees
+the wrong thing".
+
+**Two instrument errors, both caught by checking rather than by a green run.** The chain-bind pattern
+was first added to the per-line `BINDINGS` list, where it could never match a declaration spanning
+four lines — it reported zero, which reads as "no such sites" rather than "this pattern cannot span
+a newline"; it now matches against the joined method body. And widening the bare-return regex to
+allow a property access immediately flagged `return Promise.resolve(row.id)` in two writes that
+return an id string. That is now gated on the enclosing method's declared return type, the same
+technique V-1290 used for collection value types, and for the same reason: the signature already
+says whether a row can escape, so the guard reads it instead of carrying a list of exceptions
+somebody has to re-argue.
+
+Suites: the whole server project — 2358 files, 24162 passed | 10 skipped — `tsc` clean.

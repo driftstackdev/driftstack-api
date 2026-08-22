@@ -112,7 +112,13 @@ export class InMemoryIncidentsRepo implements IncidentsRepo {
     const row = this.incidents
       .filter((r) => r.autoProbeTarget === target && r.status !== 'resolved')
       .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())[0];
-    return row ?? null;
+    // V-1291 — snapshot, like every other read here. This one was missed by V-1274 because the
+    // row is bound off the END of a filter/sort chain rather than out of a `find`, so the guard
+    // had no binding to recognise. It matters more than the reads that were fixed: this double
+    // mutates incident rows IN PLACE (`addUpdate` writes status/resolvedAt/updatedAt straight onto
+    // the stored row), so a caller holding what this returned watched its status change when
+    // somebody posted a timeline update. Postgres hands back a copy and cannot.
+    return row ? snapIncident(row) : null;
   }
 
   async list(opts: ListIncidentsOpts): Promise<IncidentRow[]> {

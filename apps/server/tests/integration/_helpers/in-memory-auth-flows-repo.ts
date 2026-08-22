@@ -116,7 +116,7 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
       passwordHash,
       authEpoch: slot.account.authEpoch + 1,
     };
-    return Promise.resolve(slot.account);
+    return Promise.resolve({ ...slot.account });
   }
 
   markEmailVerified(accountId: string, at: Date): Promise<boolean> {
