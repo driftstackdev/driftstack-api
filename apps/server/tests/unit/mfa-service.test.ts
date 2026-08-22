@@ -21,6 +21,9 @@ import {
 } from '../../src/services/mfa.js';
 import { computeTotpCode, TOTP_PERIOD_SECONDS } from '../../src/lib/mfa-totp.js';
 import { hashApiKey } from '../../src/lib/api-keys.js';
+// V-1304 — the revision rule has one home in mfa-repo. This stub restated it five times; the
+// shared double and the replay contract both import it, so only this file could drift.
+import { nextRevision } from '../../src/db/mfa-repo.js';
 
 const ENC_KEY = Buffer.alloc(32, 7).toString('base64');
 const CURRENT_WEB_SESSION_ID = 'ws_current';
@@ -55,9 +58,7 @@ function makeRepo(): {
     findByAccount: () => Promise.resolve(state.row),
     startEnrollmentIfNotEnrolled: ({ accountId, ciphertext, iv, tag, now }) => {
       if (state.row?.enrolledAt != null) return Promise.resolve(null);
-      const updatedAt = state.row
-        ? new Date(Math.max(now.getTime(), state.row.updatedAt.getTime() + 1))
-        : now;
+      const updatedAt = state.row ? nextRevision(now, state.row.updatedAt) : now;
       const row: MfaEnrollmentRow = {
         accountId,
         totpSecretCiphertext: ciphertext,
@@ -83,7 +84,7 @@ function makeRepo(): {
       state.row = {
         ...state.row,
         enrolledAt: now,
-        updatedAt: new Date(Math.max(now.getTime(), state.row.updatedAt.getTime() + 1)),
+        updatedAt: nextRevision(now, state.row.updatedAt),
       };
       insertHashes({ accountId, hashes, now });
       return Promise.resolve(true);
@@ -92,7 +93,7 @@ function makeRepo(): {
       state.touchedAt = now;
       if (state.row) {
         state.row.lastUsedAt = now;
-        state.row.updatedAt = new Date(Math.max(now.getTime(), state.row.updatedAt.getTime() + 1));
+        state.row.updatedAt = nextRevision(now, state.row.updatedAt);
       }
       return Promise.resolve();
     },
@@ -104,7 +105,7 @@ function makeRepo(): {
         return Promise.resolve(false);
       }
       r.lastUsedTotpCounter = counter;
-      r.updatedAt = new Date(Math.max(now.getTime(), r.updatedAt.getTime() + 1));
+      r.updatedAt = nextRevision(now, r.updatedAt);
       return Promise.resolve(true);
     },
     deleteForAccount: () => {
@@ -133,7 +134,7 @@ function makeRepo(): {
       }
       state.row = {
         ...state.row,
-        updatedAt: new Date(Math.max(now.getTime(), state.row.updatedAt.getTime() + 1)),
+        updatedAt: nextRevision(now, state.row.updatedAt),
       };
       for (const c of state.codes) if (c.usedAt === null) c.usedAt = now;
       insertHashes({ accountId, hashes, now });

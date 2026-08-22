@@ -5120,3 +5120,41 @@ row a caller holds — which is the same weaker-than-the-rule property that has 
 seven times and has twice turned out to matter later.
 
 Suites: the whole server project — 2358 files, 24163 passed | 10 skipped — `tsc` clean.
+
+---
+
+## V-1304 — a file-local stub was masking a production regression, proven by counterfactual
+
+V-1303 established the method: an interface with TWO fixtures — the shared double and a file-local
+stub — is worth reading, because if they disagree the test's choice of fixture decides the result.
+Sixteen interfaces have both. `MfaRepo` was next, being auth.
+
+**The security semantics agree.** `consumeTotpCounter` rejects a counter that is not strictly newer
+on both sides; `markRecoveryCodeUsed` does the conditional single-use flip on both, reporting whether
+THIS call consumed the code. No divergence in what either refuses.
+
+**The POLICY SOURCE does not.** `mfa-repo` exports `nextRevision(now, previous)` —
+`max(now, previous + 1ms)` — whose entire purpose is that a stale snapshot cannot share the persisted
+revision. Production uses it, the shared double imports it, the replay contract imports it. The local
+stub restated it **five times**, inline.
+
+**The counterfactual is what makes this a finding rather than tidiness.** Breaking `nextRevision` in
+production — returning `now`, dropping the strictly-newer guarantee — is now caught: the MFA suite
+fails. Against the stub as it stood, the same production break leaves it **green, 28 of 28**. The
+file that tests MFA would have gone on passing while the guarantee it depends on was gone. That is
+the first demonstrated case of the unguarded stub population hiding a real regression, and it turns
+V-1298's measured blind spot from a structural observation into a demonstrated one.
+
+All five now read the exported rule.
+
+```
+M39  nextRevision returns `now`, dropping the +1ms   fixed stub: RED
+                                                     pre-fix stub: GREEN, 28 of 28
+```
+
+**Attribution, before investigating.** The server run showed two failures, neither mine. A peer is
+mid-edit across `customer-dashboard`, `marketing-site` and four server parity tests;
+`dist-reading-suites-have-fresh-artifacts` reads built artifacts against source they are changing,
+and `rate-limit-overrides-repo-contract` — which measures a before/after delta on a shared table —
+passes in isolation, 23 of 23. Concurrent load, not this change. Only `mfa-service.test.ts` is mine
+in the working tree, and only it is committed here.
