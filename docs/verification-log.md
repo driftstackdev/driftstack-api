@@ -5011,3 +5011,44 @@ proved nothing. And the peer commits under `Driftstack <dev@driftstack.dev>` —
 this agent uses — so `git log --format='%an'` cannot separate us. Attribution here has to be by
 CONTENT and timing, not by author, which is worth knowing before the next red run gets attributed to
 the wrong side.
+
+---
+
+## V-1301 — the aliasing rule applied to the unguarded population: the shape is there, the damage is not
+
+V-1298 measured 37 file-local stubs typed as a production interface, all outside every guard's
+population. The obvious follow-up is not "sweep them" but "does the rule the guards enforce actually
+matter there" — so the aliasing detector was pointed at that population instead of `_helpers`.
+
+**Seven stubs carry the shape**: a row bound off a local collection, mutated in place, and/or handed
+back without a copy.
+
+```
+webhooks-service                10 in-place mutations,  4 bare row returns
+status-subscribers-service      10                      4
+validation-harness-service       7                      1
+admin-accounts-service           3                      2
+profiles-service                 3                      1
+profile-snapshots-service        1                      0
+legal-service                    0                      1
+```
+
+**No arm is damaged by it.** The damage model is specific — an arm holds a row, triggers a write,
+then compares, and passes forever because `before` and `after` are one object. Searching all seven
+for a local bound from an awaited call whose FIELD is later asserted returns exactly one candidate,
+and reading it settles it: `first` and `second` are two different profiles compared against each
+other, not one row held across a write.
+
+So the population has the shape and none of the defect. That is worth recording rather than fixing:
+snapshotting seven stubs that no arm depends on, in files no guard scans, buys nothing today and
+decays the moment someone writes the eighth. What protects the shared doubles is the guard, not the
+copies — and extending the guard to file-local stubs is the deliberate decision V-1298 named and
+did not take.
+
+**The instrument was wrong first, and caught before it was reported.** The first pass returned ZERO
+stubs with both shapes. Validating against a known positive — `profiles-service`'s stub does
+`src.deletedAt = new Date()` on a row bound from its array — showed the collection regex had found
+`calls`, `captured`, `deleted` and `purgedIds` but not `rows`, because `rows` is declared
+`const rows = [...initial]` and the pattern demanded `= []` or `= new Map<`. A zero from a detector
+that has not been shown to find a known positive is not a measurement. Widening the declaration
+pattern turned that zero into seven.
