@@ -5249,3 +5249,44 @@ narrow and practical: in a worktree with a concurrent committer, an append to a 
 committed in the same breath as it is written, not left unstaged across another agent's hook. The
 same applies to the earlier habit of preparing an edit and applying it later — that window is exactly
 what closed on this file.
+
+---
+
+## V-1307 — three more pairs read, all clean, and a triage that says which of the rest are worth reading
+
+Continuing the fixture-pair enumeration. Three read in full, five triaged.
+
+**WebhooksRepo — a specific hypothesis, retracted.** V-1274c found the SHARED double incrementing
+`consecutiveFailures` on the retry path, which production deliberately does not, and the obvious
+worry was that the local stub kept the pre-fix behaviour — the V-1306 shape exactly. It did not: its
+`recordDelivered`, `recordRetry` and `recordDlq` are pure no-ops, commented as satisfying the
+interface for a create/update suite that never drives them. A no-op cannot be calibrated on a wrong
+counter. Clean by absence rather than by fidelity, which is worth distinguishing.
+
+**UsageRepo — clean.** The shared double imports `INTERNAL_RECORD_TYPES` and
+`LIFECYCLE_DERIVED_RECORD_TYPE`; the local stubs do not. But they do not restate the exclusion rule
+either — `session_minute` appears in them as a fixture VALUE (totals keys, expected numbers), with
+the filtering left to the service under test. A literal in a fixture is not a policy copy.
+
+**StatusSubscribersRepo — semantics identical.** Eleven methods implemented for real on both sides.
+`markConfirmed` performs the same compare-and-swap on `(id, expectedConfirmTokenHash)` and the same
+five field writes in both. The only divergence is that the shared double returns `snap(row)` where
+the local returns the stored row — the aliasing shape V-1301 already measured across these files and
+declined to fix, with no arm depending on it.
+
+**Triage of the remaining pairs, because reading them is not uniformly worth it.** Counting methods
+implemented by BOTH fixtures, and how many local implementations are pure no-ops:
+
+```
+StatusSubscribersRepo    11 shared   0 no-ops   read — done above, clean
+ValidationSchedulesRepo   6 shared   0 no-ops   worth reading
+ScheduledJobsRepo         7 shared   2 no-ops   worth reading
+AccountAuthRepo          10 shared   9 no-ops   little to diverge
+LegalRepo                 0 shared   —          nothing in common to compare
+```
+
+A stub that no-ops a method cannot disagree with production about it, and a pair with nothing in
+common cannot disagree at all. That leaves two pairs genuinely worth reading rather than eight, which
+is the useful output of this batch.
+
+Seven pairs read now: one demonstrated regression-mask, two real-but-prospective, four clean.
