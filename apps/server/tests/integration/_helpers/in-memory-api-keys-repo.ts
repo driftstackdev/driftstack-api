@@ -90,7 +90,10 @@ export class InMemoryApiKeysRepo implements ApiKeysRepo {
 
   findApiKey(id: string, accountId: string): Promise<ApiKeyRow | null> {
     const r = this.byId.get(id);
-    return Promise.resolve(r && r.accountId === accountId ? r : null);
+    // V-1303 — a copy. The row leaves through a TERNARY, which is neither a bare return nor an
+    // inline map read, so it sat outside all six branches the guard had grown. Found by reading
+    // this method while comparing it against the file-local ApiKeysRepo stub, not by a detector.
+    return Promise.resolve(r && r.accountId === accountId ? { ...r } : null);
   }
 
   findApiKeyUnscoped(id: string): Promise<ApiKeyRow | null> {

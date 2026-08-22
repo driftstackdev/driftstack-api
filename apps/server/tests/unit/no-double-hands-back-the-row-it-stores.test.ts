@@ -304,6 +304,17 @@ function aliasingReads(src: string, file: string): Hit[] {
     // ungated, this flagged two id-returning writes as though they leaked rows.
     const bareProp = /^return\s+(?:Promise\.resolve\()?(\w+)\.\w+\)?\s*;$/.exec(t);
     const bare = bareSelf ?? (returnsRowType(lines, spans, i) ? bareProp : null);
+    // V-1303 — the row leaving through a CONDITIONAL:
+    //   return Promise.resolve(r && r.accountId === accountId ? r : null);
+    // Neither a bare return nor an inline read, so all six branches walked past it. One site, found
+    // by reading the method rather than by a signature — which is how every form after the first
+    // has been found.
+    const conditional = /\?\s*(\w+)\s*:/.exec(t);
+    const conditionalLeak =
+      /^return\b/.test(t) &&
+      !/\.\.\.|\.map\(|\bsnap\w*\(/.test(t) &&
+      conditional?.[1] !== undefined &&
+      boundAt(i).has(conditional[1]);
     // `return this.rows;` and `return [...this.rows];` are the same defect: the second copies
     // the ARRAY and hands back the very same row objects inside it. Only the elements matter.
     const whole = /^return\s+(?:\[\.\.\.)?this\.\w+\]?\s*;$/.test(t);
@@ -337,7 +348,8 @@ function aliasingReads(src: string, file: string): Hit[] {
       whole ||
       chain ||
       wrapped ||
-      inlineRead
+      inlineRead ||
+      conditionalLeak
     ) {
       out.push({ file, method: enclosingMethod(lines, i), line: i + 1, text: t.slice(0, 80) });
     }
@@ -441,6 +453,24 @@ describe('no in-memory double hands back the row it stores', () => {
       '    return row ? snap(row) : null;',
     );
     expect(aliasingReads(fixed, 'chain-fixed.ts'), 'the snapshotting form was flagged').toEqual([]);
+  });
+
+  it('CRITICAL a row handed back through a CONDITIONAL is flagged, and the same conditional yielding a copy is not. `return Promise.resolve(r && r.accountId === accountId ? r : null)` is neither a bare return nor an inline read, so all six earlier branches walked past it — and the tenancy check in front of the row makes it read like a guarded return rather than a leaked one.', () => {
+    const defect = [
+      '  findApiKey(id: string, accountId: string) {',
+      '    const r = this.byId.get(id);',
+      '    return Promise.resolve(r && r.accountId === accountId ? r : null);',
+      '  }',
+    ].join('\n');
+    expect(
+      aliasingReads(defect, 'ternary.ts').length,
+      'a row returned through a conditional was not flagged',
+    ).toBe(1);
+
+    const fixed = defect.replace('? r : null', '? { ...r } : null');
+    expect(aliasingReads(fixed, 'ternary-fixed.ts'), 'the copying conditional was flagged').toEqual(
+      [],
+    );
   });
 
   it('CRITICAL a row returned STRAIGHT out of the collection is flagged, and the same read spread into a copy is not. Every other branch needs a name to check, so a read with no local at all — `return Promise.resolve(this.endpoints.get(id) ?? null)` — walked past all of them; ten interface reads were written that way. A read pulling a SCALAR out of the row is not flagged, because a string cannot change underneath the caller holding it.', () => {

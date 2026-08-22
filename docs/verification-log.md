@@ -5079,3 +5079,44 @@ over 29 files. Measured: 32ms of test time, 175ms wall, against 8ms for the simp
 to it. Twelve arms for 24ms more than a four-arm sibling is not a CI cost worth acting on — recorded
 because "I widened a scanner six times" is exactly the kind of thing that quietly becomes one, and
 because the alternative to measuring it is assuming.
+
+---
+
+## V-1303 — a seventh aliasing form, found by comparing two fixtures for one interface
+
+V-1298 left a question rather than a sweep: several interfaces now have TWO fixtures — the shared
+double in `_helpers` and a file-local stub — and if they disagree, which one a test happens to use
+decides the result. `ApiKeysRepo` was opened first because it is the auth surface: the shared double
+carries 11 methods, the local stub 12, and NINE are implemented by both.
+
+**They agree.** `findApiKey` applies the same two predicates on each side (id, owning account), and
+`revokeApiKeyAtomic` on the local stub reproduces the not-found / already-revoked / revoked
+three-way outcome. No divergence.
+
+**But reading the shared one produced a form the guard had never modelled.**
+
+```
+const r = this.byId.get(id);
+return Promise.resolve(r && r.accountId === accountId ? r : null);
+```
+
+That is a stored row leaving through a TERNARY. Not a bare return, not an inline map read, not a
+wrapper, not a materialised local — all six branches walked past it, and the tenancy check sitting
+in front of the row makes it READ like a guarded return rather than a leaked one. One site across
+every double; the guard now models it and the fix is a spread.
+
+The form was found by reading a method while comparing two fixtures, not by a signature. That is now
+true of every form after the first: the accumulator, the wrapper, the materialised local, the
+binding-form blindness, the built-then-stored, the inline read, and this. **The detector has never
+predicted the next shape; reading has, every time.** Worth stating plainly, because the instinct
+after six widenings is to write a smarter regex, and the evidence says the return on that is zero.
+
+```
+M38  restore the ternary handing back the stored row   RED, naming file, method and line
+```
+
+Not observable today — `in-memory-api-keys-repo` is copy-on-write throughout, so nothing mutates the
+row a caller holds — which is the same weaker-than-the-rule property that has now been recorded
+seven times and has twice turned out to matter later.
+
+Suites: the whole server project — 2358 files, 24163 passed | 10 skipped — `tsc` clean.
