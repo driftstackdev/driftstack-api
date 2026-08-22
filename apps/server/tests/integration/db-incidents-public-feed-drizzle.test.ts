@@ -34,6 +34,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DrizzleIncidentsRepo } from '../../src/db/incidents-repo.js';
 import { assertIsolatedDatabase, ensureIsolatedDatabase } from './_helpers/isolated-database.js';
+import { cleanDelta } from './_helpers/counter-delta.js';
 
 const HOUR = 60 * 60 * 1000;
 
@@ -119,6 +120,24 @@ async function seedIncident(args: {
 
 const titles = (feed: { rows: { title: string }[] }): string[] => feed.rows.map((r) => r.title);
 
+/**
+ * V-1294 — `openOutageCount` is table-wide with NO time bound.
+ *
+ * `publicFeed` passes `since` to its RESOLVED page only; the open and open-outage pages carry no
+ * date filter at all. So this figure counts every public, open, outage-severity incident in the
+ * table, and a bare before/after delta on it races every other file writing incidents —
+ * `db-incidents-truth-drizzle` seeds three public open outages of its own, whose fixed
+ * 2026-07-18 `startedAt` puts them outside no window, because there is no window.
+ *
+ * Read as a one-key vector so `cleanDelta` can do what it does everywhere else: discard a reading
+ * whose shape shows interference, retry on fresh fixtures, and tell a MISCOUNT apart from a
+ * neighbour by whether the dirty delta is stable across attempts.
+ */
+const outageCount = async (): Promise<{ openOutage: number }> => {
+  const feed = await repo!.publicFeed({ since: new Date(Date.now() - 24 * HOUR), limit: 50 });
+  return { openOutage: feed.openOutageCount };
+};
+
 describe('the public incident feed', () => {
   it('CRITICAL the database was reachable, so a green here is not "no database"', () => {
     expect(
@@ -141,19 +160,19 @@ describe('the public incident feed', () => {
 
   it('CRITICAL a private OPEN OUTAGE does not raise the public outage banner', async () => {
     if (!dbReachable || !repo) return;
-    const before = await repo.publicFeed({ since: new Date(Date.now() - 24 * HOUR), limit: 50 });
-    await seedIncident({
-      marker: `priv-outage-${randomUUID()}`,
-      isPublic: false,
-      status: 'investigating',
-      severity: 'outage',
-    });
-    const after = await repo.publicFeed({ since: new Date(Date.now() - 24 * HOUR), limit: 50 });
-    expect(
-      after.openOutageCount,
-      'a private outage moved the public outage count — the banner would announce an incident the ' +
-        'page cannot show',
-    ).toBe(before.openOutageCount);
+    // A private outage must move NOTHING, so the expected vector is empty.
+    await cleanDelta(
+      outageCount,
+      async () => {
+        await seedIncident({
+          marker: `priv-outage-${randomUUID()}`,
+          isPublic: false,
+          status: 'investigating',
+          severity: 'outage',
+        });
+      },
+      {},
+    );
   });
 
   it('CRITICAL an open incident is never pushed off the feed by resolved history', async () => {
@@ -200,23 +219,29 @@ describe('the public incident feed', () => {
 
   it('CRITICAL a public open outage is counted, and only while it is open', async () => {
     if (!dbReachable || !repo) return;
-    const since = new Date(Date.now() - 24 * HOUR);
-    const before = await repo.publicFeed({ since, limit: 50 });
-    const id = await seedIncident({
-      marker: `pub-outage-${randomUUID()}`,
-      isPublic: true,
-      status: 'investigating',
-      severity: 'outage',
-    });
-    const during = await repo.publicFeed({ since, limit: 50 });
-    expect(during.openOutageCount, 'a public open outage was not counted').toBe(
-      before.openOutageCount + 1,
+    let opened = '';
+    // Opening a public outage raises the banner by exactly one…
+    await cleanDelta(
+      outageCount,
+      async () => {
+        opened = await seedIncident({
+          marker: `pub-outage-${randomUUID()}`,
+          isPublic: true,
+          status: 'investigating',
+          severity: 'outage',
+        });
+      },
+      { openOutage: 1 },
     );
-    await sql!`UPDATE incidents SET status = 'resolved', resolved_at = now() WHERE id = ${id}`;
-    const after = await repo.publicFeed({ since, limit: 50 });
-    expect(
-      after.openOutageCount,
-      'a resolved outage still counted as open — the banner would never clear',
-    ).toBe(before.openOutageCount);
+    // …and resolving that same incident lowers it by exactly one. Measured as its own delta rather
+    // than against the original baseline, so a neighbour opening an outage between the two halves
+    // is retried rather than blamed on the resolve.
+    await cleanDelta(
+      outageCount,
+      async () => {
+        await sql!`UPDATE incidents SET status = 'resolved', resolved_at = now() WHERE id = ${opened}`;
+      },
+      { openOutage: -1 },
+    );
   });
 });

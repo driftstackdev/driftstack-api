@@ -4714,3 +4714,52 @@ parser matched `if (` as a method signature — `  if (opts.cursor) {` has the s
 reported two "hand-rolled comparison" methods in the webhooks double named `if`. Harmless here
 because every entry was read, which is the point: an enumeration whose entries are all inspected
 survives a sloppy classifier, and one whose entries are merely counted does not.
+
+---
+
+## V-1294 — a table-wide counter with no time bound at all, found by enumerating the third class
+
+The residual discipline was applied to the counter class — the one that already forced a retraction
+in V-1282, when the detector missed four sites because they wrote `before[TIER],` and the pattern
+demanded `before,`. So this time the enumeration was NAMING-AGNOSTIC: every local bound from an
+awaited call, re-read from the SAME call within twenty lines, with an assertion relating the two.
+Sixty-five hits.
+
+**Sixty-four are not counters.** They are idempotency and replay arms — `createIdempotent` twice,
+`app.inject` twice, `repo.create` twice — where comparing two results is the entire point. A broad
+signature over a suite this size returns mostly the thing it is not looking for, which is why every
+hit was read rather than counted.
+
+**One is, and it is worse than the four V-1282 corrected.**
+`db-incidents-public-feed-drizzle` takes exact before/after deltas on
+`publicFeed().openOutageCount`, in two arms. Reading `publicFeed` to check the window explains why
+that is unsafe: **`since` is passed to the RESOLVED page only.** The open page and the open-outage
+page carry no date filter at all. So `openOutageCount` counts every public, open, outage-severity
+incident in the table, unbounded in time — and `db-incidents-truth-drizzle` seeds three public open
+outages of its own. Their fixed `startedAt` of 2026-07-18 puts them outside no window, because there
+is no window. I nearly dismissed this on exactly that date: the feed asks for the last 24 hours, the
+neighbour's incidents are a month old, so they cannot collide. They can, and only reading the query
+says so.
+
+Neither detector could have reached it. The read is `publicFeed()` — no `count` in the name — and
+the compared value is a FIELD of the result, so the corrected V-1282 pattern misses it too.
+
+Both arms now measure through `cleanDelta` against a one-key vector. The second arm became two
+deltas rather than one span: opening the outage raises the banner by one, resolving that same
+incident lowers it by one, each retried on its own, so a neighbour opening an outage between the
+halves is retried rather than blamed on the resolve.
+
+```
+N3  seed the "private" outage as PUBLIC   MISCOUNTING, "openOutage: 1 (want 0)"
+N4  drop the resolve UPDATE               MISCOUNTING, "openOutage: 0 (want -1)"
+```
+
+Both deterministic across all five attempts, which is the helper distinguishing a miscount from a
+neighbour rather than guessing.
+
+**Process note.** N4's first attempt never applied: the anchor contained a backtick and a `!`, and
+the shell rewrote both inside the python one-liner. The marker printed `anchor: 0` and I stopped
+instead of running the suite — the rule from V-1274b holding on the exact failure it was written
+for. Rewriting it through a quoted heredoc, with the marker checked before the run, applied cleanly.
+
+Suites: the whole server project — 2358 files, 24162 passed | 10 skipped — `tsc` clean.
