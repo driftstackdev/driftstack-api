@@ -5290,3 +5290,42 @@ common cannot disagree at all. That leaves two pairs genuinely worth reading rat
 is the useful output of this batch.
 
 Seven pairs read now: one demonstrated regression-mask, two real-but-prospective, four clean.
+
+---
+
+## V-1308 — the two pairs the triage flagged, both clean, and the enumeration's shape
+
+V-1307's triage said only two of the remaining pairs were worth reading. Both were, and both are
+clean — which is the triage working rather than a wasted pass.
+
+**ScheduledJobsRepo — clean by design.** The shared double's `claimDue` models the real query: skip
+completed and failed rows, skip a job whose lock is still fresh against `SCHEDULED_JOB_STALE_LOCK_MS`,
+sort by `runAt` BEFORE applying the batch limit (V-1213 fixed the reverse, which starved the oldest
+job under a backlog), then claim and bump attempts. The local stub is a canned queue —
+`claimDue: () => { const batch = due; due = []; return batch; }` — so the service test controls what
+arrives. It models no lock, no ordering and no filter, and therefore cannot disagree about any of
+them. The stale-lock window is not restated anywhere in it.
+
+**ValidationSchedulesRepo — semantics identical.** `findDue` applies the same predicate
+(`enabled && nextRunAt <= now`), the same sort and the same slice on both sides. `markRun` computes
+`now + cadenceSeconds * 1000` in production, in the shared double, and in the local stub alike — and
+that `* 1000` is milliseconds-per-second, already carried in the numeric guard's `SHARED_UNITS` with
+exactly that reason. A unit shared three ways is not a policy restated three ways.
+
+**Where the enumeration stands.** Nine pairs read in full, four more read for their constants during
+the V-1305 scan, and three triaged as unable to diverge:
+
+```
+demonstrated   1   MfaRepo — restated revision rule, counterfactual proved it masked a regression
+prospective    2   page defaults in four stubs; TeamMembersRepo's member-email path
+clean          6   ApiKeys, Webhooks, Usage, StatusSubscribers, ScheduledJobs, ValidationSchedules
+unable         3   LegalRepo (no methods in common), AccountAuth (9 of 11 no-ops), plus no-op paths
+```
+
+`ApiKeysRepo` is filed clean and still earned its read: comparing it is what surfaced the seventh
+aliasing form (V-1303). The pairs that remain genuinely unread are `PricingRepo` and
+`AccountAuditRepo`.
+
+One in nine demonstrated is a real rate for this kind of work, and the honest reading of it is that
+the file-local stub population is in better shape than V-1298 implied — the blind spot is real, the
+defects behind it are mostly not.
