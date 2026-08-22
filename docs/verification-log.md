@@ -4258,3 +4258,57 @@ timestamp set), `deleteStaleAuthTokens` (consumed-before OR unconsumed-and-expir
 way), and `listApiKeysMintedBy` itself, which filters on the minter rather than the owner in both.
 
 Suites: 70 files over the five doubles, 909 passed, `tsc` clean.
+
+---
+
+## V-1283 — the terminal set is the active set's complement, and only production knew it
+
+V-1279 gave the active-status set one home. Its complement still had two.
+
+The restated-STRING-set class is the gap V-1260 names in its own header: that guard sees NUMBERS
+only, and a naive string rule would be noise because doubles legitimately share literals like `'id'`
+with their repos. A narrow detector was prototyped instead — groups of two or more lowercase string
+literals appearing as a SET on both sides, either as an array literal or an `||`-chain — and across
+all paired doubles it returns exactly two, both in `sessions-repo`: `['destroyed', 'errored']` and
+`['creating', 'busy']`.
+
+**Only one is a finding, and checking that mattered.** `['creating', 'busy']` is inlined identically
+by production and the double at the same branch, with no named constant on either side to import; a
+double reproducing production's branch logic is what a double is for, and "name this" is a refactor
+rather than a divergence. `['destroyed', 'errored']` is different, because production's four inlined
+`notInArray` sites are already TIED to a derivation: `every-non-terminal-session-query-agrees`
+derives the terminal set as the enum minus `ACTIVE_SESSION_STATUSES` and requires every inlined
+predicate to equal it.
+
+**That guard scans `apps/server/src`.** The six copies in the double were outside its population and
+tied to nothing. Adding a terminal status would have moved every guarded production query and left
+the fixture that service and route tests actually run modelling the old split — the V-1279 argument
+one level down, and reachable only because V-1279 exported the active constant in the first place.
+
+The double now derives the complement the same way the guard does. Production is deliberately left
+alone: its inlined sites are pinned by `EXPECTED_SITES` counts, and introducing a constant there
+would dismantle the derive-and-pin design that already works.
+
+```
+M23  a hand-written comparison returns   RED "the double compares against a terminal status by
+                                         name", listing the literals it found
+M24  the derivation becomes a literal    RED "no longer derives its terminal set from the enum
+                                         minus the active constant"
+```
+
+The new arm exercises its literal-detector on a control before asserting zero, because an arm
+asserting an empty list passes just as happily when its pattern has stopped matching anything.
+
+**One existing arm had to change to stay honest.** The V-1279 arm counts uses of
+`ACTIVE_SESSION_STATUSES.includes(` in the double and required exactly two — the sites mirroring the
+repo's two queries. The terminal derivation reads the same constant, which would have made the total
+three and quietly turned that number into something its own message no longer described. It now
+strips the derivation before counting, so it still measures what it claims to.
+
+`tsc` caught the one behavioural trap: `status` is optional on the insert input, and the `===` chain
+being replaced simply evaluated false when it was absent, where `.includes(undefined)` does not
+typecheck. Guarded explicitly — a green vitest run would have shipped it.
+
+Suites: 138 session-touching files, 1655 passed, `tsc` clean. Full suite before this batch: 3167
+files, 31290 passed | 16 skipped, confirming the V-1282 counter conversion cleared the four
+admin-billing failures and that the other four did not recur.

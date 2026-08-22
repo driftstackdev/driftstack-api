@@ -248,6 +248,32 @@ describe('W998 db/sessions-repo cross-source invariant', () => {
 
   // ─── V-1001: the pair this file names must AGREE ─────────────
 
+  it("CRITICAL the in-memory double DERIVES the terminal statuses rather than spelling them out. `every-non-terminal-session-query-agrees` ties production's four inlined notInArray sites to the enum minus the active set — and it scans apps/server/src, so the six copies that used to live in the double were tied to nothing. Adding a terminal status would have moved every guarded production query while the fixture that service and route tests actually run kept the old split.", () => {
+    const doubleSrc = read(
+      resolve(REPO_ROOT, 'apps/server/tests/integration/_helpers/in-memory-sessions-repo.ts'),
+    );
+
+    expect(
+      /const TERMINAL_SESSION_STATUSES[^=]*=\s*\n?\s*SessionStatusSchema\.options\.filter\(/.test(
+        doubleSrc,
+      ),
+      'the double no longer derives its terminal set from the enum minus the active constant',
+    ).toBe(true);
+
+    // The detector is exercised on a control first: an arm asserting "no hand-written copies"
+    // passes just as happily when its pattern has stopped matching anything at all.
+    const TERMINAL_LITERAL = /(?:===|!==)\s*'(?:destroyed|errored)'/g;
+    expect(
+      [...`if (s.status === 'destroyed' || s.status === 'errored') {`.matchAll(TERMINAL_LITERAL)]
+        .length,
+      'the terminal-literal detector no longer recognises a hand-written copy',
+    ).toBe(2);
+    expect(
+      [...doubleSrc.matchAll(TERMINAL_LITERAL)].map((m) => m[0]),
+      'the double compares against a terminal status by name — derive it from the enum instead',
+    ).toEqual([]);
+  });
+
   it("CRITICAL the in-memory double READS the repo's ACTIVE_SESSION_STATUSES instead of spelling it out. The repo names the set once and uses it twice — listActiveByAccount and listExpiredForAutoDestroy, the auto-destroy sweeper's query — and the double stands in for both. This arm used to compare the repo's declaration against two hard-coded chains in the double, which caught drift but left two copies agreeing by inspection; V-1279 exported the constant so there is one home, and what is checked now is that the second copy has not come back. Adding a status must move the shipped sweeper and every test wired to the double in the same edit.", () => {
     const repoSrc = read(resolve(REPO_ROOT, 'apps/server/src/db/sessions-repo.ts'));
     const doubleSrc = read(
@@ -278,8 +304,12 @@ describe('W998 db/sessions-repo cross-source invariant', () => {
       ),
       'the double no longer imports the constant',
     ).toBe(true);
+    // Counted with the TERMINAL_SESSION_STATUSES derivation removed: that line reads the same
+    // constant (V-1283 derives terminal as the enum minus active), and folding it into this
+    // total would make the number stop meaning "sites that mirror the repo's two queries".
+    const queryUses = doubleSrc.replace(/const TERMINAL_SESSION_STATUSES[\s\S]*?;\n/, '');
     expect(
-      [...doubleSrc.matchAll(/ACTIVE_SESSION_STATUSES\.includes\(/g)].length,
+      [...queryUses.matchAll(/ACTIVE_SESSION_STATUSES\.includes\(/g)].length,
       'the double stopped using the constant at both of the sites that mirror the repo queries',
     ).toBe(2);
 

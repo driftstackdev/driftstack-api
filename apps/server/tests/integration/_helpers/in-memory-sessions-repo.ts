@@ -16,6 +16,19 @@ import type {
 import { ACTIVE_SESSION_STATUSES } from '../../../src/db/sessions-repo.js';
 import { keysetPage } from './keyset-page.js';
 
+/**
+ * V-1283 — DERIVED from the enum minus the active set, never restated.
+ *
+ * `every-non-terminal-session-query-agrees` ties production's four inlined
+ * `notInArray(sessions.status, ['destroyed', 'errored'])` sites to exactly this derivation, and
+ * scans `apps/server/src` — so the SIX copies that used to live in this file were tied to nothing.
+ * Adding a terminal status would have moved every guarded production query and left the double
+ * every service and route test wires modelling the old split, which is the V-1279 argument one
+ * level down: the active set now has one home, and this is its complement.
+ */
+const TERMINAL_SESSION_STATUSES: readonly SessionRecord['status'][] =
+  SessionStatusSchema.options.filter((s) => !ACTIVE_SESSION_STATUSES.includes(s));
+
 interface StoredEvent extends SessionEventInput {
   id: string;
   createdAt: Date;
@@ -101,8 +114,7 @@ export class InMemorySessionsRepo implements SessionRepo {
         if (
           s.accountId === input.accountId &&
           s.destroyedAt === null &&
-          s.status !== 'destroyed' &&
-          s.status !== 'errored' &&
+          !TERMINAL_SESSION_STATUSES.includes(s.status) &&
           typeof s.metadata?.['profile_id'] === 'string' &&
           s.metadata['profile_id'] === opts.profileId
         ) {
@@ -147,11 +159,7 @@ export class InMemorySessionsRepo implements SessionRepo {
     return this.withSessionMutationLock(id, () => {
       const current = this.sessions.get(id);
       if (!current || current.accountId !== accountId) return { kind: 'not_found' };
-      if (
-        current.status === 'destroyed' ||
-        current.status === 'errored' ||
-        current.destroyedAt !== null
-      ) {
+      if (TERMINAL_SESSION_STATUSES.includes(current.status) || current.destroyedAt !== null) {
         return { kind: 'terminal', session: { ...current } };
       }
       if (current.status === 'creating' || current.status === 'busy') {
@@ -224,8 +232,7 @@ export class InMemorySessionsRepo implements SessionRepo {
         !current ||
         current.accountId !== input.accountId ||
         current.driverSessionId !== input.driverSessionId ||
-        current.status === 'destroyed' ||
-        current.status === 'errored' ||
+        TERMINAL_SESSION_STATUSES.includes(current.status) ||
         current.destroyedAt !== null
       ) {
         return;
@@ -257,7 +264,7 @@ export class InMemorySessionsRepo implements SessionRepo {
       if (!current || (input.accountId !== null && current.accountId !== input.accountId)) {
         return { kind: 'not_found' };
       }
-      if (current.status === 'destroyed' || current.status === 'errored') {
+      if (TERMINAL_SESSION_STATUSES.includes(current.status)) {
         return { kind: 'already_terminal', session: { ...current } };
       }
       if (current.destroyedAt !== null) {
@@ -318,7 +325,7 @@ export class InMemorySessionsRepo implements SessionRepo {
     extra?: { lastStateAt?: Date; destroyedAt?: Date },
   ): Promise<void> {
     const s = this.sessions.get(id);
-    if (s && s.status !== 'busy' && s.status !== 'destroyed' && s.status !== 'errored') {
+    if (s && s.status !== 'busy' && !TERMINAL_SESSION_STATUSES.includes(s.status)) {
       const updated: SessionRecord = {
         ...s,
         status,
@@ -517,8 +524,12 @@ export class InMemorySessionsRepo implements SessionRepo {
       createdAt: input.createdAt,
       updatedAt: input.createdAt,
       lastStateAt: null,
+      // `status` is optional on this input, and the `===` chain this replaced simply evaluated
+      // false when it was absent; `.includes(undefined)` does not typecheck.
       destroyedAt:
-        input.status === 'destroyed' || input.status === 'errored' ? input.createdAt : null,
+        input.status !== undefined && TERMINAL_SESSION_STATUSES.includes(input.status)
+          ? input.createdAt
+          : null,
     };
     this.sessions.set(record.id, record);
     return record;
