@@ -5396,3 +5396,46 @@ silently corrected.
 
 Both agents commit under `Driftstack <dev@driftstack.dev>`, so this is attributed by content and
 timing, as V-1300 established it must be.
+
+---
+
+## V-1311 — a scoping correction: the parity apparatus covers 28 of 47 repos, not all of them
+
+Chasing `session_operations_one_live_per_session` — a partial unique index enforcing at most one
+LIVE operation per session — turned up something larger than the constraint. `session-operations-repo`
+has no shared double at all, so it was never in the paired population any of this campaign's
+measurements ran over.
+
+**Measured: 19 of 47 production Drizzle repos have no shared double.**
+
+```
+account-deletion-purge  account-proxies  agent-decomposer-usage-recorder  agent-sessions
+agent-turn-receipts     atlas-priority-events  audit-archive  bundled-llm  byok-anthropic
+byok-anthropic-rotation-reminder  cost-nightly-accounts-provider  crypto-orders  fleet-nodes
+health-probes  oauth-store  recipes  retention-scrub  session-operations
+webhook-rotation-reminder
+```
+
+That reframes numbers this log has been quoting. "198 paired methods", "every paired method is
+reached by a test", "zero never-tested" — all true, and all scoped to the **28 repos that have a
+double**. The parity apparatus this campaign built — the contracts, the aliasing guard, the cursor
+guard, the counter helper, the restated-set rules — applies to those 28. It says nothing about the
+other 19, and I have been reporting its results without that qualifier.
+
+**No coverage hole behind it, and an existing guard is why.** Every one of the 19 is driven against
+real Postgres by an integration test. `every-drizzle-repo-is-driven-against-a-real-postgres` already
+enforces exactly that — its first arm is _"every repo class is constructed by some integration
+test"_ — across all integration tests, and its third arm requires every `src/db/*.ts` to either
+carry a repo class or sit on a reviewed no-persistence list. The classification is complete by
+construction.
+
+**And one false negative of my own, worth recording.** My first pass reported
+`atlas-priority-events-repo` as having no Drizzle test at all. It has one —
+`atlas-priority-events-end-to-end.test.ts`, which probes `DATABASE_URL`, constructs
+`DrizzleAtlasPriorityEventsRepo`, and skips gracefully when the database is unreachable. The detector
+only scanned files named `db-*.test.ts`, and that repo's coverage is an end-to-end file. A prefix is
+not a population, which is the same mistake in a new costume: V-1288's pairing dropped a double for
+its filename, and this dropped a test for its filename.
+
+Nothing to fix. The 19 are covered where it matters and guarded for the thing that would matter if
+they were not; what changes is the scope this log claims for its own results.
