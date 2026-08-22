@@ -13,6 +13,17 @@
 // did — the fix existed in one double under a comment labelled "FIX 3" and nobody swept the rest.
 // So: a guard.
 //
+// WHAT IT DOES NOT MODEL, measured rather than guessed.
+//
+// V-1291 enumerated every return in every double that touches stored state — 82 of them — and read
+// the residual by hand rather than waiting for a seventh form to bite. Two were defects and are
+// fixed. One shape survives unmodelled: `return Array.from(this.subs.values());` returned INLINE,
+// with no local to bind. Three sites are written that way and ALL THREE are fixture seams that are
+// not on any production interface, so flagging the shape today would buy three LIVE_SEAMS entries
+// and no defect. It is named here because the population is what makes it safe to skip, and that
+// population can change: an interface read written this way would slip through, and whoever writes
+// one should find this paragraph rather than a silence.
+//
 // WHAT IS ALLOWED. `getAll`-style methods are NOT on the repo interfaces, model nothing in
 // production, and fixtures use them to ARRANGE state as well as assert — snapshotting one turned
 // two unrelated tombstone tests red in V-1251. They are hatches into the fixture's own state and

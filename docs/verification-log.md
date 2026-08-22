@@ -4651,3 +4651,33 @@ says whether a row can escape, so the guard reads it instead of carrying a list 
 somebody has to re-argue.
 
 Suites: the whole server project — 2358 files, 24162 passed | 10 skipped — `tsc` clean.
+
+---
+
+## V-1292 — finishing an enumeration I had reported as finished
+
+V-1291 said the residual had been enumerated and read. It had not: the listing was capped at thirty
+of forty-seven, and the seventeen I never saw were reported as though they had been. Correcting that
+is the entry.
+
+The tail holds nothing new, and the reasons are worth keeping because three of them look like
+findings until read:
+
+`status-subscribers::listPurgeCandidates`, `team-members::listMembers` and
+`team-members::listPendingInvites` all sit in doubles that mutate rows IN PLACE, which is exactly
+where an aliasing read is observable — and all three end in `.map((r) => snap(r))`. They surfaced in
+the residual only because the classifier reads one line and the `.map` sits three lines below the
+`return`. The remaining entries are locally computed scalars, delegations where the question moves
+to the delegate, and `getAll`-style seams already registered.
+
+**One shape survives unmodelled, and the measurement is what makes skipping it defensible.**
+`return Array.from(this.subs.values());` returned inline, with no local to bind, is invisible to
+every branch of the guard. Three sites are written that way and all three are fixture seams absent
+from any production interface — so a branch for it would buy three `LIVE_SEAMS` entries and no
+defect. That is recorded in the guard's header rather than acted on, alongside the numeric guard's
+note about string sets, because the population is the reason and populations change: an interface
+read written that way would slip through, and whoever writes one should meet the paragraph instead
+of a silence.
+
+The aliasing class now stands at: six forms modelled, one measured-and-named, 82 returns classified,
+and every double read to the end rather than to the thirtieth line of a capped listing.
