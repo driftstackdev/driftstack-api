@@ -4312,3 +4312,41 @@ typecheck. Guarded explicitly — a green vitest run would have shipped it.
 Suites: 138 session-touching files, 1655 passed, `tsc` clean. Full suite before this batch: 3167
 files, 31290 passed | 16 skipped, confirming the V-1282 counter conversion cleared the four
 admin-billing failures and that the other four did not recur.
+
+---
+
+## V-1284 — two instruments retired, and the crypto activation verified clean
+
+Three negative results, recorded because each cost a measurement and the next pass should not pay
+for them again.
+
+**No general restated-string-set guard.** The narrow detector that found V-1283 returns two sets
+across every paired double, and after that fix the population is one — `['creating', 'busy']`,
+inlined identically on both sides with no constant on either to import, which is a refactor rather
+than a divergence. A guard would be watching a set of size zero for the shape it can distinguish,
+and the one real instance now has its own tripwire in the sessions cross-source arm. The V-1260
+header's judgement stands: string sets are noise in general, and the narrow version earns its keep
+as a one-off sweep rather than a standing rule.
+
+**The predicate-gap ranking does not find divergences.** Built to prioritise the ~67 one-sided
+methods still watched only by a guard, it counts decision tokens on each side and ranks by the gap.
+Its top hits were all indirection, not disagreement: `incidents::listPage` and `publicFeed` scored
+zero on the production side because they delegate to a module function; `sessions::listSessions` and
+`listAllSessions` scored low on the double side because the keyset logic lives in the shared
+`keysetPage` helper. And `stripe-webhooks::activateCryptoEntitlement`, the largest gap where both
+sides genuinely carry logic, turned out to be clean — Drizzle spells one decision across several
+builder calls (`eq`, `and`, `gt`), so the metric counts verbosity. Following delegation would fix
+it, at a cost well above reading the methods.
+
+**`activateCryptoEntitlement` agrees on every outcome**, checked against source on both sides: a
+missing account returns the un-inserted window without touching anything; a replay returns the
+ORIGINAL grant's window and applies no tier change; a new grant stacks off the account's latest
+unexpired SAME-tier expiry (production takes it with `orderBy(desc(expiresAt)).limit(1)`, the double
+by keeping the maximum) and applies the tier only when `isCryptoTierUpgrade` says so. The
+day-length arithmetic differs in spelling — `24 * 60 * 60 * 1000` against a named `DAY_MS` — and
+that is already covered: `stripe-webhooks-repo.ts::1000` sits in the numeric guard's `SHARED_UNITS`
+with the reason that milliseconds-per-second is a unit rather than a decision.
+
+The remaining one-sided population is now the tail: every method in it is named by at least one
+source-reading guard, every paired method is reached by some test, and the eleven that were watched
+by nothing are done. What is left is read-by-hand work with no instrument that beats reading.
