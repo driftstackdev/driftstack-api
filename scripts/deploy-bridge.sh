@@ -56,8 +56,19 @@ ENV="${1:-}"
 SHA="${2:-main}"
 
 case "$ENV" in
-  prod) HOST="128.140.37.74"; PUBLIC_URL="https://api.driftstack.dev" ;;
-  staging) HOST="116.203.22.197"; PUBLIC_URL="https://staging.driftstack.dev" ;;
+  prod) HOST="128.140.37.74"; PUBLIC_URL="https://api.driftstack.dev"
+    # #21 — execution posture, asserted rather than guarded at boot. Prod runs
+    # DRIVER=mock DELIBERATELY (the browser work happens on the fleet, not
+    # in-process), so a boot guard refusing mock-in-production would brick every
+    # deploy. `agent_execution=live` means the fleet control plane is wired; if
+    # it ever reported "simulated", customers would be served the stub
+    # executor's synthetic per-intent successes with nothing else complaining.
+    EXPECT_DRIVER="mock"; EXPECT_AGENT_EXECUTION="live" ;;
+  staging) HOST="116.203.22.197"; PUBLIC_URL="https://staging.driftstack.dev"
+    # Staging is deliberately NOT fleet-wired, so it reports "simulated". That
+    # also means staging cannot exercise the live agent path -- a soak here
+    # proves boot, routes and migrations, never agent behaviour.
+    EXPECT_DRIVER="mock"; EXPECT_AGENT_EXECUTION="simulated" ;;
   *)
     echo "usage: $0 <staging|prod> [<git-sha>]" >&2
     exit 2
@@ -290,12 +301,13 @@ run_ssh "root@${HOST}" "set -euo pipefail; \
 # when AUTO_REVERT=0 is passed (e.g. revert-bridge.sh itself shouldn't
 # infinitely recurse on a bad last-good-sha).
 set +e
+POSTURE_ARGS=(--expected-driver "$EXPECT_DRIVER" --expected-agent-execution "$EXPECT_AGENT_EXECUTION")
 if [ -n "$EXPECTED_SHORT_SHA" ]; then
-  echo "[bridge] post-deploy verify against $PUBLIC_URL (--expected-sha $EXPECTED_SHORT_SHA)" >&2
-  node scripts/post-deploy-verify.mjs --base-url "$PUBLIC_URL" --expected-sha "$EXPECTED_SHORT_SHA"
+  echo "[bridge] post-deploy verify against $PUBLIC_URL (--expected-sha $EXPECTED_SHORT_SHA, driver=$EXPECT_DRIVER agent_execution=$EXPECT_AGENT_EXECUTION)" >&2
+  node scripts/post-deploy-verify.mjs --base-url "$PUBLIC_URL" --expected-sha "$EXPECTED_SHORT_SHA" "${POSTURE_ARGS[@]}"
 else
-  echo "[bridge] post-deploy verify against $PUBLIC_URL (no --expected-sha)" >&2
-  node scripts/post-deploy-verify.mjs --base-url "$PUBLIC_URL"
+  echo "[bridge] post-deploy verify against $PUBLIC_URL (no --expected-sha, driver=$EXPECT_DRIVER agent_execution=$EXPECT_AGENT_EXECUTION)" >&2
+  node scripts/post-deploy-verify.mjs --base-url "$PUBLIC_URL" "${POSTURE_ARGS[@]}"
 fi
 VERIFY_EXIT=$?
 set -e

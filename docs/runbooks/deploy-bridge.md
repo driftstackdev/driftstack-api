@@ -77,7 +77,28 @@ Exit 2 from migrate triggers the auto-revert path. This catches the
 drizzle-orm silent-skip class where `migrate()` returns success
 without actually running every pending migration.
 
-End-state guarantee: prod is always at a SHA that passed all 22
+`deploy-bridge.sh` also passes the target's expected EXECUTION POSTURE
+(`--expected-driver` / `--expected-agent-execution`), so a drift in how
+customer sessions actually run fails the verify and auto-reverts:
+
+| env     | `driver` | `agent_execution` |
+| ------- | -------- | ----------------- |
+| prod    | `mock`   | `live`            |
+| staging | `mock`   | `simulated`       |
+
+`DRIVER=mock` on production is DELIBERATE — the browser work happens on
+the fleet, not in-process — which is why this is asserted here rather
+than guarded at boot, where refusing mock would brick every prod deploy.
+`agent_execution` reports whether the fleet control plane is wired
+(`live`) or the stub executor is answering (`simulated`); a production
+that quietly reported `simulated` would serve customers the stub's
+synthetic per-intent successes while every other probe stayed green.
+Both flags are opt-in, so a bare invocation behaves exactly as before.
+
+Because staging reports `simulated`, a staging soak proves boot, routes
+and migrations — it can NOT exercise the live agent path.
+
+End-state guarantee: prod is always at a SHA that passed all 23
 post-deploy-verify invariants when it landed AND whose migrations
 matched the on-disk journal exactly.
 

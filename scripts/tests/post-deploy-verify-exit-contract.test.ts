@@ -27,6 +27,11 @@ const REPO_ROOT = resolve(HERE, '..', '..');
 const SCRIPT = resolve(REPO_ROOT, 'scripts/post-deploy-verify.mjs');
 
 const DEPLOYED_SHA = 'a1b2c3d';
+// The production posture (#21): DRIVER=mock is DELIBERATE there -- browser work
+// runs on the fleet, not in-process -- which is exactly why this is asserted
+// here instead of guarded at boot, where refusing mock would brick the deploy.
+const DEPLOYED_DRIVER = 'mock';
+const DEPLOYED_AGENT_EXECUTION = 'live';
 
 interface VerifyReport {
   ok: boolean;
@@ -57,6 +62,8 @@ beforeAll(async () => {
           version: '0.1.0',
           git_sha: DEPLOYED_SHA,
           started_at: new Date(0).toISOString(),
+          driver: DEPLOYED_DRIVER,
+          agent_execution: DEPLOYED_AGENT_EXECUTION,
         }),
       );
       return;
@@ -88,6 +95,34 @@ async function runVerifier(expectedSha: string): Promise<{ code: number; report:
 }
 
 const SHA_CHECK = '/version git_sha matches --expected-sha';
+const POSTURE_CHECK_PREFIX = '/version execution posture matches';
+
+/** Run the verifier with the #21 posture flags and return its --json report. */
+async function runVerifierWithPosture(
+  driver: string,
+  agentExecution: string,
+): Promise<{ code: number; report: VerifyReport }> {
+  const child = spawn(
+    process.execPath,
+    [
+      SCRIPT,
+      '--base-url',
+      baseUrl,
+      '--expected-driver',
+      driver,
+      '--expected-agent-execution',
+      agentExecution,
+      '--json',
+    ],
+    { cwd: REPO_ROOT, stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+  let stdout = '';
+  child.stdout.on('data', (c: Buffer) => (stdout += c.toString()));
+  child.stderr.on('data', () => undefined);
+  const code = await new Promise<number>((r) => child.on('close', (c) => r(c ?? -1)));
+  const start = stdout.indexOf('{');
+  return { code, report: JSON.parse(stdout.slice(start)) as VerifyReport };
+}
 
 describe('post-deploy-verify exit contract (the auto-revert trigger)', () => {
   it('CRITICAL the sha check PASSES when the deployed git_sha matches, so the gate is not simply always-red', async () => {
@@ -121,4 +156,31 @@ describe('post-deploy-verify exit contract (the auto-revert trigger)', () => {
     expect(mismatched.report.ok, 'a sha mismatch fails the whole verify').toBe(false);
     expect(mismatched.code, 'non-zero exit is what deploy-bridge turns into a revert').not.toBe(0);
   }, 120_000);
+
+  it('the execution-posture check PASSES on the expected posture, so it is not simply always-red', async () => {
+    const { report } = await runVerifierWithPosture(DEPLOYED_DRIVER, DEPLOYED_AGENT_EXECUTION);
+    const posture = report.checks.find((c) => c.name.startsWith(POSTURE_CHECK_PREFIX));
+    expect(posture, 'the posture check ran').toBeDefined();
+    expect(posture?.ok, 'the deployed posture must pass').toBe(true);
+  }, 60_000);
+
+  it('CRITICAL the posture check FAILS when agent_execution drifts. A prod that reported "simulated" would serve the stub executor\'s synthetic per-intent successes, and every other probe on this list would still be green.', async () => {
+    const { code, report } = await runVerifierWithPosture(DEPLOYED_DRIVER, 'simulated');
+    const posture = report.checks.find((c) => c.name.startsWith(POSTURE_CHECK_PREFIX));
+    expect(posture?.ok, 'a drifted agent_execution must fail').toBe(false);
+    // Name both sides so the operator can act without re-querying /version.
+    expect(posture?.detail ?? '', 'the detail names what was actually deployed').toContain(
+      DEPLOYED_AGENT_EXECUTION,
+    );
+    expect(posture?.detail ?? '', 'and what was expected').toContain('simulated');
+    expect(code, 'a posture drift is a non-zero exit, i.e. a revert').not.toBe(0);
+  }, 60_000);
+
+  it('the posture check is OPT-IN: absent when the flags are not passed, so every existing invocation is unchanged', async () => {
+    const { report } = await runVerifier(DEPLOYED_SHA);
+    expect(
+      report.checks.some((c) => c.name.startsWith(POSTURE_CHECK_PREFIX)),
+      'no posture flags means no posture check',
+    ).toBe(false);
+  }, 60_000);
 });

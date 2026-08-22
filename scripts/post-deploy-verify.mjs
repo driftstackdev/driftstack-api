@@ -9,6 +9,8 @@
 // Usage:
 //   node scripts/post-deploy-verify.mjs --base-url https://staging.driftstack.dev
 //   node scripts/post-deploy-verify.mjs --base-url https://api.driftstack.dev --expected-sha 5822e21
+//   node scripts/post-deploy-verify.mjs --base-url https://api.driftstack.dev \
+//     --expected-driver mock --expected-agent-execution live
 //
 // Non-zero exit on any check failure so the CI / deploy-bridge can
 // gate prod rollout on staging verification.
@@ -22,6 +24,14 @@ if (!baseUrl) {
   process.exit(2);
 }
 const expectedSha = args['expected-sha'] ?? null;
+// #21 — execution-posture pins. Production deliberately runs DRIVER=mock (the
+// real browser work happens on the fleet, not in-process), so a boot guard that
+// REFUSED mock-in-production would brick every prod deploy. The honest place to
+// state the expectation is here, per-environment, where a drift fails the deploy
+// and auto-reverts instead of silently changing how customer sessions execute.
+// Opt-in: unset means "not asserted", so every existing invocation is unchanged.
+const expectedDriver = args['expected-driver'] ?? null;
+const expectedAgentExecution = args['expected-agent-execution'] ?? null;
 const jsonOut = args.json === 'true';
 
 // Module-load-time constant. Referenced inside the activation-gate
@@ -52,6 +62,7 @@ const checks = [
   checkHealth,
   checkVersionShape,
   expectedSha ? checkVersionMatchesSha : null,
+  expectedDriver || expectedAgentExecution ? checkExecutionPosture : null,
   checkStatusEndpoint,
   checkStatusIncidentsList,
   checkStatusIncidentDetailRoute,
@@ -178,6 +189,37 @@ async function checkVersionMatchesSha() {
       return null;
     },
     '/version git_sha matches --expected-sha',
+  );
+}
+
+async function checkExecutionPosture() {
+  const wanted = [
+    expectedDriver === null ? null : `driver=${expectedDriver}`,
+    expectedAgentExecution === null ? null : `agent_execution=${expectedAgentExecution}`,
+  ]
+    .filter(Boolean)
+    .join(' ');
+  return jsonCheck(
+    '/version',
+    (body, status) => {
+      if (status !== 200) return `expected 200, got ${status}`;
+      // Both fields are reported by /version and both decide how a customer's
+      // session actually runs, so a silent flip is invisible until sessions
+      // behave differently. `driver` selects the in-process browser driver;
+      // `agent_execution` reports whether the fleet control plane is wired
+      // ("live") or the stub executor is answering ("simulated"). Prod running
+      // "simulated" would hand customers synthetic per-intent successes.
+      const driver = String(body?.driver ?? '');
+      const execution = String(body?.agent_execution ?? '');
+      if (expectedDriver !== null && driver !== expectedDriver) {
+        return `/version driver "${driver}" does not match expected "${expectedDriver}"`;
+      }
+      if (expectedAgentExecution !== null && execution !== expectedAgentExecution) {
+        return `/version agent_execution "${execution}" does not match expected "${expectedAgentExecution}"`;
+      }
+      return null;
+    },
+    `/version execution posture matches ${wanted}`,
   );
 }
 
