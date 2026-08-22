@@ -35,6 +35,7 @@ import {
 } from '../../src/lib/errors.js';
 import { TIER_STORAGE_BYTES_CAP } from '@driftstack/api-types';
 import { mintWrappedProfileDek, unwrapProfileDek } from '../../src/lib/profile-key-hierarchy.js';
+import { InMemoryProfilesRepo } from '../integration/_helpers/in-memory-profiles-repo.js';
 
 const CRYPTO_ACCOUNT_A = '11111111-1111-4111-8111-111111111111';
 const CRYPTO_ACCOUNT_B = '22222222-2222-4222-8222-222222222222';
@@ -303,6 +304,36 @@ describe('V-553.B-21 ProfilesService.create', () => {
     await expect(svc.create({ accountId: 'acc_1', tier: SOLO, name: 'taken' })).rejects.toThrow(
       ConflictError,
     );
+  });
+
+  it('CRITICAL two concurrent same-name creates: one wins, the LOSER gets a 409 from the unique-index race branch rather than an uncaught 500. Both requests pass the findByAccountAndName pre-check before either insert commits — the double-click case — so the pre-check cannot be what refuses the second. Until the fixture enforced `profiles_account_name_unique` this branch was unreachable in any double-backed test, and its only coverage was a content-parity pin asserting the source TEXT contains the catch.', async () => {
+    // The SHARED double, not this file's local stub: the stub models no unique index, so the
+    // branch under test cannot fire against it. That is the gap this arm exists to close — the
+    // guards hardened `_helpers/in-memory-*`, and a file-local stub implementing the same
+    // interface inherits none of it.
+    const repo = new InMemoryProfilesRepo();
+    const svc = new ProfilesService(repo);
+
+    const settled = await Promise.allSettled([
+      svc.create({ accountId: 'acc_1', tier: SOLO, name: 'double-click' }),
+      svc.create({ accountId: 'acc_1', tier: SOLO, name: 'double-click' }),
+    ]);
+
+    const won = settled.filter((r) => r.status === 'fulfilled');
+    const lost = settled.filter((r) => r.status === 'rejected');
+    expect(won, 'both concurrent creates were refused — nobody got the profile').toHaveLength(1);
+    expect(
+      lost,
+      'both concurrent creates succeeded — the account holds two live profiles ' +
+        'with one name, which the partial unique index forbids',
+    ).toHaveLength(1);
+
+    const reason = (lost[0] as PromiseRejectedResult).reason;
+    expect(
+      reason,
+      'the race loser saw a raw unique violation rather than the translated conflict — a 500 ' +
+        'where the customer should get a 409',
+    ).toBeInstanceOf(ConflictError);
   });
 
   it('mints + stores a wrapped DEK on create when PROFILE_MASTER_KEY is set (file 57)', async () => {

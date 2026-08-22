@@ -32,6 +32,33 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
    */
   private readonly wrappedDeks = new Map<string, string | null>();
 
+  /**
+   * V-1298 — the PARTIAL unique index `profiles_account_name_unique`, modelled.
+   *
+   * Postgres reserves a name among LIVE profiles only (`where deleted_at is null`), so trashing
+   * "shopper" frees it. Every insert path in production does a `findByAccountAndName` pre-check and
+   * then a raw insert, and the index is what catches the double-click: two same-name creates can
+   * both pass the pre-check before either commits, and the loser's INSERT raises 23505, which
+   * `ProfilesService.create` catches and turns into a 409 rather than an uncaught 500.
+   *
+   * This double enforced nothing, so that catch branch was unreachable through the fixture — its
+   * only coverage was a content-parity pin asserting the source TEXT contains
+   * `if (isProfileNameRaceViolation(err)) {`. A text pin survives the branch being reordered,
+   * or the detector being narrowed to a constraint name that no longer matches.
+   *
+   * The thrown shape is the one `isUniqueViolation` reads: SQLSTATE and constraint name at the top
+   * level, which is where postgres-js puts them.
+   */
+  private assertNameFree(accountId: string, name: string): void {
+    for (const r of this.rows.values()) {
+      if (r.accountId !== accountId || r.name !== name || r.deletedAt !== null) continue;
+      throw Object.assign(
+        new Error('duplicate key value violates unique constraint "profiles_account_name_unique"'),
+        { code: '23505', constraint_name: 'profiles_account_name_unique' },
+      );
+    }
+  }
+
   insert(input: NewProfileInput): Promise<ProfileRecord> {
     if (input.wrappedDek != null && input.id === undefined) {
       throw new Error('a profile with a wrapped DEK requires a preallocated id');
@@ -54,6 +81,7 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
       updatedAt: now,
       deletedAt: null,
     };
+    this.assertNameFree(input.accountId, input.name);
     this.rows.set(row.id, row);
     this.wrappedDeks.set(row.id, input.wrappedDek ?? null);
     return Promise.resolve({ ...row });
@@ -162,6 +190,7 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
       updatedAt: now,
       deletedAt: null,
     };
+    this.assertNameFree(input.accountId, input.name);
     this.rows.set(row.id, row);
     this.wrappedDeks.set(row.id, input.wrappedDek ?? null);
     // V-1274 — a copy, not the stored object. Every write in this double is copy-on-write, so

@@ -4887,3 +4887,56 @@ the same thing as executing that plan, and a reader of this log should not infer
 
 Resuming plan-driven work needs one of: the two files restored to the scratchpad, or the remaining
 actions restated in the request itself.
+
+---
+
+## V-1298 — the guards hardened one double per repo, and there are thirty-seven others
+
+A new class, and the first one in a while that is structural rather than a single defect: Postgres
+enforces constraints a `Map` cannot. Twenty-six unique indexes exist in the schema. The one worth
+opening first is `profiles_account_name_unique` — PARTIAL, on `(accountId, name) where deleted_at is
+null`, so trashing a profile frees its name.
+
+**Production leans on that index for a real branch.** Every insert path does a
+`findByAccountAndName` pre-check and then a raw insert, so two same-name creates — the double-click —
+can both pass the pre-check before either commits. The loser's INSERT raises 23505, and
+`ProfilesService.create` catches it and throws a `ConflictError`: a clean 409 instead of an uncaught 500. The shared double enforced nothing, so **that branch was unreachable through the fixture**, and
+its only coverage was content-parity pins asserting the source TEXT contains
+`if (isProfileNameRaceViolation(err)) {`. A text pin survives the branch being reordered, or the
+detector narrowed to a constraint name that no longer matches.
+
+The double now models the partial index and throws the shape `isUniqueViolation` reads — SQLSTATE
+and constraint name at the top level, where postgres-js puts them. All 69 profile-touching files
+still pass, so nothing was relying on creating two live profiles with one name.
+
+**Then the arm failed, and the reason is the bigger finding.** Driving two concurrent creates through
+`profiles-service.test.ts` produced two SUCCESSES. The double was enforcing correctly — a direct
+probe throws `code=23505 constraint=profiles_account_name_unique` — but that file never touches it.
+`makeRepo` there is a hand-rolled object literal typed `ProfilesRepo`, and **the guards scan
+`_helpers/in-memory-*.ts` only**. Measured across the tree: **37 file-local stubs typed as a
+production interface, over 26 distinct interfaces** — `RateLimitStore` ×4, `ApiKeysRepo` ×3,
+`ProfilesRepo` ×2, `IncidentsRepo`, `WebhooksRepo`, `UsageRepo`, `AuthCache` and twenty more.
+
+Everything this campaign hardened — the aliasing forms, the cursor keysets, the counter helper, the
+restated sets — applies to one double per repo. Those 37 inherit none of it, and every guard reports
+green over a population that excludes them. That is V-1288's lesson again at a larger scale: the
+guards are not wrong, their POPULATION is smaller than the thing they are read as covering.
+
+The arm now drives the shared double rather than the local stub, which is what makes the branch
+reachable at all.
+
+```
+M37  disable the race catch in ProfilesService.create   RED "the race loser saw a raw unique
+                                                        violation rather than the translated
+                                                        conflict — a 500 where the customer
+                                                        should get a 409"
+```
+
+That mutation is against PRODUCTION source, not a fixture: the arm guards the 409 a customer sees
+when they double-click Create.
+
+Not swept, and named with its size rather than left implied: the other 25 unique indexes, and the 37
+stubs. Extending the guards' population to file-local stubs would flag most of them and need an
+exemption each, so it is a decision to take deliberately rather than at the end of a batch.
+
+Suites: the whole server project — 2358 files, 24162 passed | 10 skipped — `tsc` clean.
