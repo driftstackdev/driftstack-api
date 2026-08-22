@@ -4940,3 +4940,50 @@ stubs. Extending the guards' population to file-local stubs would flag most of t
 exemption each, so it is a decision to take deliberately rather than at the end of a batch.
 
 Suites: the whole server project — 2358 files, 24162 passed | 10 skipped — `tsc` clean.
+
+---
+
+## V-1299 — the unique-violation class enumerated to the end: one gap, already closed
+
+V-1298 modelled one constraint because a production branch hung off it. The obvious question is how
+many others do, so the class was enumerated from production source rather than from the schema:
+every site that translates a Postgres 23505 into a domain error.
+
+```
+profiles_account_name_unique      profiles-repo + services/profiles   409 on the create race
+accounts_slug_unique              auth-repo                           SLUG_TAKEN → 409
+accounts_email_unique             services/auth-flows                 signup race
+accounts_canonical_email_unique   services/auth-flows                 alias-variant signup race
+api_keys_prefix_unique            services/api-keys ×2                retry-then-rethrow
+(unnamed)                         routes/agent-sessions               idempotency-key replay
+```
+
+**Five of the six are covered behaviourally, and finding that out took three retractions of my own
+hypotheses.**
+
+`api_keys_prefix_unique` looked like an unexercised bounded-retry loop — the mint path counts
+`attempt = 0; attempt < MAX` and the rotate path `attempt = 1; attempt <= MAX`, checking
+`attempt === MAX_KEY_MINT_ATTEMPTS`, which is the shape an off-by-one hides in. Both are correct:
+the 1-based loop pairs with the `=== MAX` check, the 0-based one rethrows after the loop. And both
+are driven — `api-keys-service.test.ts` builds a repo that throws a real 23505 for its first
+`failTimes` calls, asserts the retry re-minted (`insertCalls === 2`), and covers the bounded
+exhaustion. Prior art, found by grepping first.
+
+`accounts_slug_unique` looked uncovered: every hit for `SLUG_TAKEN` was a content-parity text pin at
+two layers, repo and route. It is covered — `account-me.test.ts` has _409 when slug is already taken
+by another account_. **My search term was the internal error name while the test asserts the
+customer-visible outcome**, which is the third time this campaign a grep has missed coverage by
+looking for the mechanism instead of the result. The double models the conflict too, rejecting with
+`Error('SLUG_TAKEN')`.
+
+The two email constraints and the agent-sessions idempotency race each have their own harness
+constructing the 23505 shape.
+
+**So V-1298 was the only gap, and that claim is now verified rather than assumed.** The 409 tests for
+duplicate profile names all drive the PRE-CHECK — two sequential requests — and the only
+`Promise.allSettled` concurrent create in the tree is the arm V-1298 added. The pre-check path was
+well covered; the branch that fires when two requests pass it and the INSERT loses was not.
+
+Left standing, with its size: 21 of the 26 unique indexes back no translation site, so nothing hangs
+off them and modelling them would be work without a branch to reach. The 37 file-local stubs from
+V-1298 remain outside every guard's population.
