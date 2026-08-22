@@ -4681,3 +4681,36 @@ of a silence.
 
 The aliasing class now stands at: six forms modelled, one measured-and-named, 82 returns classified,
 and every double read to the end rather than to the thirtieth line of a capped listing.
+
+---
+
+## V-1293 — the same discipline on the cursor guard, and it comes back empty
+
+The residual enumeration found two real defects in the aliasing class, so it was applied to the other
+guard that closed a class of shipped paging bugs: positional cursors (V-1242, V-1243).
+
+That guard has ONE signature — `findIndex`/`indexOf` near the word `cursor`. Anything resolving a
+cursor by some other spelling is outside it, and a green run says nothing about those. So every
+method in every double that mentions a cursor was enumerated and read:
+
+```
+14 cursor-using methods
+ 6 resolve through the shared keysetPage helper
+ 8 resolve by an explicit keyset comparison
+ 0 positional
+```
+
+The eight were read individually rather than pattern-matched. `admin-accounts::list`,
+`profiles::list` and `rate-limit-overrides::listAll` each compare `(createdAt, id)` against the
+cursor row and carry a comment recording the conversion from the offset form they used to have.
+`incidents::listPage` filters on the same comparison. Both webhooks listings resolve through
+`decodeDeliveryCursor` + `afterDeliveryCursor`, a shared key comparison rather than a position.
+
+The class is closed, and closed by reading rather than by the guard agreeing with itself.
+
+**One instrument note, because it produced two entries that looked like findings.** The method-span
+parser matched `if (` as a method signature — `  if (opts.cursor) {` has the same shape as
+`  listPage(opts) {` to a regex that only checks for an identifier followed by a parenthesis. It
+reported two "hand-rolled comparison" methods in the webhooks double named `if`. Harmless here
+because every entry was read, which is the point: an enumeration whose entries are all inspected
+survives a sloppy classifier, and one whose entries are merely counted does not.
