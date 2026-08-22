@@ -5476,3 +5476,40 @@ Neither needed anything. Recorded because the thread began by asking whether a c
 double behind it was being taken on trust, and the answer is that these two are the best-tested
 invariants I have read in this repository — the coverage lives in integration tests against real
 Postgres, which is exactly where a constraint's behaviour can actually be observed.
+
+---
+
+## V-1313 — every skipped test in a full run, enumerated: sixteen, all legitimate
+
+A test that does not run is a claim nobody is checking, and a full run reports sixteen skipped. The
+`no-permanently-skipped-tests` guard already proves none is UNCONDITIONAL; this asks the next
+question — whether each condition still holds — because a conditional skip whose condition went stale
+is dormant coverage that reports as green.
+
+```
+6   gui-jsdom  profiles-lifecycle-actions   Clone (2) and Import (4), flag-gated
+2   node       marketing-egress-claim-sweep
+8   node       one arm each across eight doc-parity files
+```
+
+**The six GUI skips are self-healing, and the chain was checked end to end.** They read
+`describe.skipIf(!CLONE_ENABLED)` / `(!IMPORT_EXPORT_ENABLED)`, and the flags are not restated —
+`viewFlag()` reads `const <NAME> = (true|false);` straight out of `ProfilesView.tsx` and THROWS if
+the constant has moved. So the flag lives in one place, flipping it un-skips six tests on the next
+run with nobody in the loop, and renaming it fails loudly rather than skipping silently. A separate
+guard ties each skip to its stated justification. This is the shape the restated-policy findings
+elsewhere in this log wish they had.
+
+**The doc-parity skips are inverted, and their precondition is asserted.** They read
+`it.skipIf(hasEgressImpl)('does not claim customer-controlled egress while no impl exists')` — a
+guard against a PREMATURE marketing claim, which correctly retires once the feature ships. The
+obvious worry is that retiring leaves the claim unverified. It does not: the same file carries a
+CRITICAL arm asserting the gate was computed and HAS retired — `expect(hasEgressImpl).toBe(true)` —
+so the reason for the skip is itself under test. Its header records why: an earlier version branched
+on the gate INSIDE the test body, so once egress shipped "the arm below asserted nothing while
+reporting as a pass".
+
+Nothing to fix. Recorded because "16 skipped" appears in every run summary in this log and has never
+been broken down, and because the two mechanisms found here — a flag read from its single home, and
+a skip whose precondition is asserted — are the two ways to make a conditional skip trustworthy
+rather than merely permitted.
