@@ -67,7 +67,7 @@ export class InMemoryApiKeysRepo implements ApiKeysRepo {
       this.minterByKeyId.set(row.id, input.createdByAccountId);
     }
     if (this.authRepoMirror) this.authRepoMirror.upsertApiKey(row);
-    return Promise.resolve(row);
+    return Promise.resolve({ ...row });
   }
 
   private readonly minterByKeyId = new Map<string, string>();

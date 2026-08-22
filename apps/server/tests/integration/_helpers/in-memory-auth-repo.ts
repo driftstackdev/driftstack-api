@@ -210,7 +210,7 @@ export class InMemoryAuthRepo implements AccountAuthRepo {
       updatedAt: new Date(),
     };
     this.accounts.set(id, updated);
-    return Promise.resolve(updated);
+    return Promise.resolve({ ...updated });
   }
 
   // Per-account org-sync (0079) — in-memory taxonomy store.

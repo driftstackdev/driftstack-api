@@ -77,7 +77,7 @@ export class InMemorySessionsRepo implements SessionRepo {
       destroyedAt: null,
     };
     this.sessions.set(record.id, record);
-    return Promise.resolve(record);
+    return Promise.resolve({ ...record });
   }
 
   // Synchronous twin of the Drizzle atomic insert-if-under-cap: the in-memory
@@ -152,7 +152,7 @@ export class InMemorySessionsRepo implements SessionRepo {
       updatedAt: new Date(),
     };
     this.sessions.set(input.id, updated);
-    return Promise.resolve(updated);
+    return Promise.resolve({ ...updated });
   }
 
   claimSessionOperation(id: string, accountId: string): Promise<SessionOperationClaimResult> {
@@ -474,7 +474,7 @@ export class InMemorySessionsRepo implements SessionRepo {
       updatedAt: new Date(),
     };
     this.sessions.set(args.sessionId, updated);
-    return Promise.resolve(updated);
+    return Promise.resolve({ ...updated });
   }
 
   /** Test helper: read all events ever recorded. */
@@ -532,6 +532,6 @@ export class InMemorySessionsRepo implements SessionRepo {
           : null,
     };
     this.sessions.set(record.id, record);
-    return record;
+    return { ...record };
   }
 }

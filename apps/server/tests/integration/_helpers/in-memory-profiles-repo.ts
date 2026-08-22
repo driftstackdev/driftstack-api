@@ -56,7 +56,7 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
     };
     this.rows.set(row.id, row);
     this.wrappedDeks.set(row.id, input.wrappedDek ?? null);
-    return Promise.resolve(row);
+    return Promise.resolve({ ...row });
   }
 
   countByAccount(accountId: string): Promise<number> {
@@ -257,7 +257,7 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
       updatedAt: new Date(),
     };
     this.rows.set(r.id, next);
-    return Promise.resolve(next);
+    return Promise.resolve({ ...next });
   }
 
   // L4b soft delete — set deletedAt (idempotent: re-deleting a trashed row is a

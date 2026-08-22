@@ -85,7 +85,7 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
       updatedAt: now,
     };
     this.endpoints.set(row.id, row);
-    return Promise.resolve(row);
+    return Promise.resolve({ ...row });
   }
 
   insertEndpointIfUnderLimit(
@@ -203,7 +203,7 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
       updatedAt: input.now,
     };
     this.endpoints.set(input.id, updated);
-    return Promise.resolve(updated);
+    return Promise.resolve({ ...updated });
   }
 
   findEndpointsNeedingForceRotation(args: {
@@ -250,7 +250,7 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
       updatedAt: input.now,
     };
     this.endpoints.set(input.id, updated);
-    return Promise.resolve(updated);
+    return Promise.resolve({ ...updated });
   }
 
   clearStaleSecretPrev(args: { now: Date }): Promise<{ cleared: number }> {
@@ -293,7 +293,7 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
       updatedAt: new Date(),
     };
     this.endpoints.set(input.id, updated);
-    return Promise.resolve(updated);
+    return Promise.resolve({ ...updated });
   }
 
   enqueueDelivery(input: NewWebhookDeliveryInput): Promise<string> {
@@ -493,7 +493,7 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
       updatedAt: at,
     };
     this.deliveries.set(deliveryId, updated);
-    return Promise.resolve(updated);
+    return Promise.resolve({ ...updated });
   }
 
   // 2026-05-22 — hard-delete a DLQ row. Mirrors the Drizzle repo's

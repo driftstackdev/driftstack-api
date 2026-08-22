@@ -58,7 +58,7 @@ export class InMemoryRateLimitOverridesRepo implements RateLimitOverridesRepo {
       refillPerSecond,
       expiresAt: input.expiresAt,
     });
-    return Promise.resolve(record);
+    return Promise.resolve({ ...record });
   }
 
   clear(accountId: string, bucketKey: string): Promise<boolean> {

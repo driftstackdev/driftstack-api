@@ -38,7 +38,7 @@ export class InMemoryAdminAuditLogRepo implements AdminAuditLogRepo {
       timestamp: new Date(),
     };
     this.rows.push(row);
-    return Promise.resolve(row);
+    return Promise.resolve({ ...row });
   }
 
   list(filters: ListAuditFilters): Promise<ListAuditPage> {

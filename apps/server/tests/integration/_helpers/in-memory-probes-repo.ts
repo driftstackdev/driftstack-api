@@ -25,7 +25,7 @@ export class InMemoryProbesRepo implements ProbesRepo {
       errorMessage: input.errorMessage,
     };
     this.rows.push(row);
-    return row;
+    return { ...row };
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await

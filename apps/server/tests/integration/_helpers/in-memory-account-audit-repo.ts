@@ -38,7 +38,7 @@ export class InMemoryAccountAuditRepo implements AccountAuditRepo {
       timestamp: new Date(),
     };
     this.rows.push(row);
-    return Promise.resolve(row);
+    return Promise.resolve({ ...row });
   }
 
   /** Test-only — returns every row inserted, regardless of account. */

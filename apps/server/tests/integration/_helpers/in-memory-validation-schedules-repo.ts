@@ -45,7 +45,7 @@ export class InMemoryValidationSchedulesRepo implements ValidationSchedulesRepo 
           updatedAt: now,
         };
     this.byArchetype.set(input.archetypeId, next);
-    return Promise.resolve(next);
+    return Promise.resolve({ ...next });
   }
 
   remove(archetypeId: string): Promise<boolean> {

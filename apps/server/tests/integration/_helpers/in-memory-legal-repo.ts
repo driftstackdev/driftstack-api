@@ -25,7 +25,7 @@ export class InMemoryLegalRepo implements LegalRepo {
       acceptedAt: new Date(),
     };
     this.rows.push(row);
-    return row;
+    return { ...row };
   }
 
   async latestAcceptancesForAccount(

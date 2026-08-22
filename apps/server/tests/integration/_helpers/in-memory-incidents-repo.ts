@@ -213,7 +213,7 @@ export class InMemoryIncidentsRepo implements IncidentsRepo {
     incident.status = input.status;
     incident.resolvedAt = input.status === 'resolved' ? (incident.resolvedAt ?? now) : null;
     incident.updatedAt = now;
-    return update;
+    return { ...update };
   }
 
   async resolve(

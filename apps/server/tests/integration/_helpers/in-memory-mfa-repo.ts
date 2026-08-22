@@ -46,7 +46,7 @@ export class InMemoryMfaRepo implements MfaRepo {
       updatedAt,
     };
     this.enrollments.set(args.accountId, row);
-    return Promise.resolve(row);
+    return Promise.resolve({ ...row });
   }
 
   completeEnrollmentIfPending(args: {

@@ -104,7 +104,7 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
       account: row,
       canonicalEmail: canonicalizeEmailForDedup(normalizedEmail),
     });
-    return Promise.resolve(row);
+    return Promise.resolve({ ...row });
   }
 
   setPassword(accountId: string, passwordHash: string): Promise<AuthFlowAccountRow | null> {
@@ -142,7 +142,7 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
       createdAt: new Date(),
     };
     this.tokensByKind[args.kind].set(row.id, row);
-    return Promise.resolve(row);
+    return Promise.resolve({ ...row });
   }
 
   findActiveAuthToken(args: {
@@ -236,7 +236,7 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
       createdAt: now,
     };
     this.webSessions.set(row.id, row);
-    return Promise.resolve(row);
+    return Promise.resolve({ ...row });
   }
 
   findActiveWebSession(args: { tokenHash: string; now: Date }): Promise<WebSessionRow | null> {

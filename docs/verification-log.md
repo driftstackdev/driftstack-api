@@ -4409,3 +4409,50 @@ M26  drop the copy from auth-flows::findActiveAuthToken (a for-of)  RED, names f
 ```
 
 Suites: 521 files across auth, sessions, profiles, webhooks and mfa — 6245 passed, `tsc` clean.
+
+---
+
+## V-1286 — the deferred class, decided and swept
+
+V-1285 measured a class and deliberately left it: insert-style methods that build a row, store it,
+and return that same object. Deferring was right — it was the end of a long batch — but leaving it
+deferred indefinitely would be worse, so it was decided here on evidence rather than momentum.
+
+**Two measurements made the decision cheap.** No test in the suite arranges state by mutating a row
+a repo returned — zero, after V-1285's `backdateSecretCreatedAt` seam removed the last one — so the
+sweep carries no test risk. And a per-row-type check corrected my own earlier framing: the four sites
+I had flagged as "observable" are not. `auth-flows` REPLACES `slot.account` with a fresh object
+rather than mutating the account, and `incidents` mutates incident rows in place but `addUpdate`
+returns an UPDATE row. So the population is 25 and none of it is observable today — which is
+precisely the property that has gone stale twice in this campaign, and the reason to fix it anyway.
+
+All 25 now copy on the way out, and the guard grew the branch that keeps them fixed.
+
+**The block-first strip bit me, in a script, three files after the guard that documents it.** The
+first sweep detected on a comment-stripped view and wrote back by line index into the raw file. Its
+stripper ran the block-comment pass first — so a `/*` inside a LINE comment swallowed everything to
+the next `*/`, collapsing lines, and the indices no longer matched. `auth-flows` came out with a
+`return` spliced into the middle of a `.set(` call, which `tsc` caught immediately. This is V-1256's
+finding, in my own tooling, and the fix is the same one `code-only.ts` exists to provide: detect on
+raw lines and blank anything that starts a comment, or use the shared scanner. Restored from HEAD —
+the file held only committed work plus the bad edit — after snapshotting the damage.
+
+**The guard is stricter than the script that preceded it, which is the right way round.** It found a
+twenty-fifth site the sweep missed: `validation-schedules::upsert` declares its row through a
+ternary, which the "declaration is an object literal" rule does not match, but the guard also treats
+a name passed directly to `set(key, value)` as stored. One rule catching what another misses is why
+the guard is the thing that ships, not the sweep.
+
+```
+M27  drop the copy from profiles::insert   RED, naming file, method and line
+```
+
+Suites: the entire server project — 2358 files, 24157 passed | 10 skipped — plus `tsc` clean. Full
+suite before this batch: 3167 files, 31292 passed, confirming V-1285 including the force-rotation
+seam.
+
+**Noted for attribution, not investigation:** a peer is editing `apps/gui-client/` in this shared
+worktree (`ProfilePhoneCard.tsx`, `ProfilesView.tsx`, `visual-harness/gallery.tsx` and that
+component's test) and running its project's vitest concurrently. Those files are untouched here and
+must not be committed by this agent; any gui-client red in a full-suite run during this window
+belongs to that work, not to this sweep.

@@ -233,7 +233,10 @@ function aliasingReads(src: string, file: string): Hit[] {
 
     if (
       (bare?.[1] !== undefined &&
-        (boundAt(i).has(bare[1]) || accumulators.has(bare[1]) || materialised.has(bare[1]))) ||
+        (boundAt(i).has(bare[1]) ||
+          accumulators.has(bare[1]) ||
+          materialised.has(bare[1]) ||
+          stored.has(bare[1]))) ||
       whole ||
       chain ||
       wrapped
@@ -308,6 +311,40 @@ describe('no in-memory double hands back the row it stores', () => {
       aliasingReads(unsnapped, 'multiline-defect.ts').length,
       'the same chain WITHOUT the snapshot was not flagged — the exclusion is too broad',
     ).toBe(1);
+  });
+
+  it('CRITICAL a row BUILT, stored, and then returned is flagged — including one stored inside an object literal. Twenty-four insert-style methods handed back the object their map holds. None was observable: the doubles that mutate rows in place do not mutate the row types these return, which is the same weaker-than-the-rule property that made the incidents double look fine until it was not. The detector keys on the DECLARATION being an object literal and the name appearing in the storing call — matching every identifier in the call arguments instead flagged seventy-two sites, among them `return Promise.resolve(true)`.', () => {
+    const direct = [
+      '  insert(input: Input) {',
+      '    const row = {',
+      '      id: input.id,',
+      '    };',
+      '    this.rows.set(row.id, row);',
+      '    return Promise.resolve(row);',
+      '  }',
+    ].join('\n');
+    expect(
+      aliasingReads(direct, 'built-direct.ts').length,
+      'a row stored directly and then returned was not flagged',
+    ).toBe(1);
+
+    const nested = direct.replace(
+      'this.rows.set(row.id, row);',
+      'this.rows.set(row.id, { account: row });',
+    );
+    expect(
+      aliasingReads(nested, 'built-nested.ts').length,
+      'a row stored INSIDE an object literal and then returned was not flagged',
+    ).toBe(1);
+
+    const fixed = direct.replace(
+      '    return Promise.resolve(row);',
+      '    return Promise.resolve({ ...row });',
+    );
+    expect(
+      aliasingReads(fixed, 'built-fixed.ts'),
+      'copying the row on the way out was still flagged',
+    ).toEqual([]);
   });
 
   it('CRITICAL all THREE ways a row gets bound are recognised — find, get, and a for-of over the stored values. The guard shipped knowing only `find`, and a per-scope measurement found zero live instances of that form against ten of the other two: it was passing because its signature had stopped describing the code rather than because the defect was gone. Each form is asserted separately so losing one cannot hide behind the others.', () => {

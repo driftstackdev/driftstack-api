@@ -46,7 +46,7 @@ export class InMemoryProfileSnapshotsRepo implements ProfileSnapshotsRepo {
       createdAt: now,
     };
     this.rows.set(row.id, row);
-    return Promise.resolve(row);
+    return Promise.resolve({ ...row });
   }
 
   list(args: ListSnapshotsArgs): Promise<ListSnapshotsPage> {
