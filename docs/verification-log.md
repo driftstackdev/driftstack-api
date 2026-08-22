@@ -4987,3 +4987,27 @@ well covered; the branch that fires when two requests pass it and the INSERT los
 Left standing, with its size: 21 of the 26 unique indexes back no translation site, so nothing hangs
 off them and modelling them would be work without a branch to reach. The 37 file-local stubs from
 V-1298 remain outside every guard's population.
+
+---
+
+## V-1300 — a test-count that did not move, attributed rather than assumed
+
+V-1298 added one arm. The next full run reported the same total as the run before it — 31299 passed,
+16 skipped, 3167 files. A total that does not move when an arm is added is the shape of a test lost
+somewhere else, which is the failure this campaign's rule about `it(` counts exists to catch, so it
+was chased rather than waved through.
+
+It balances exactly. A peer commit landed between V-1297 and V-1298 —
+`ee8f7db11 fix(agent): a plan one step too long discarded the whole billed turn` — and among its
+five files it removed one arm from `agent-decomposer-error-classification-cross-source.test.ts`
+(14 → 13). One removed, one added, net zero.
+
+Nothing of mine was lost: the V-1298 arm is in HEAD, the file reports 62 of 62, and the arm's own
+mutation still fails correctly.
+
+**Two things worth keeping from the chase.** I first compared against `HEAD~1` believing it was the
+pre-arm state; it is the V-1298 commit itself, so it already contained the arm and the comparison
+proved nothing. And the peer commits under `Driftstack <dev@driftstack.dev>` — the same identity
+this agent uses — so `git log --format='%an'` cannot separate us. Attribution here has to be by
+CONTENT and timing, not by author, which is worth knowing before the next red run gets attributed to
+the wrong side.
