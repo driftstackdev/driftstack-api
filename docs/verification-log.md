@@ -5052,3 +5052,30 @@ stubs with both shapes. Validating against a known positive — `profiles-servic
 `const rows = [...initial]` and the pattern demanded `= []` or `= new Map<`. A zero from a detector
 that has not been shown to find a known positive is not a measurement. Widening the declaration
 pattern turned that zero into seven.
+
+---
+
+## V-1302 — correcting how the constraint class was framed, and a runtime check
+
+**A correction to V-1299.** That entry closed the unique-violation class by saying the other 21
+indexes "back no translation site, so nothing hangs off them". That is the wrong inference from the
+right measurement. A constraint with no `isUniqueViolation` catch is not necessarily unhandled — it
+may be handled EARLIER, by the write itself.
+
+Checking the one an ordinary user reaches most often makes the point. Inviting the same person twice
+would trip `team_invites_owner_email_pending_unique`, and there is no catch for it — but
+`upsertInvite` writes through `onConflictDoUpdate`, so a repeat invite refreshes the pending row's
+token and expiry instead of erroring. Correct behaviour, no 500, and no catch needed. There are 20
+`onConflictDo{Update,Nothing}` clauses in `src`, against 5 constraints translated by a catch.
+
+So the class has at least three handling mechanisms — translate the violation, avoid it with
+ON CONFLICT, or accept a 500 for a collision that cannot realistically happen (the token-hash
+indexes). "No catch site" distinguishes none of them, and the V-1299 phrasing implied the third
+where the second was often the answer.
+
+**A runtime check, since this session widened one guard six times.**
+`no-double-hands-back-the-row-it-stores` now resolves per-method spans and runs six detector branches
+over 29 files. Measured: 32ms of test time, 175ms wall, against 8ms for the simpler cursor guard next
+to it. Twelve arms for 24ms more than a four-arm sibling is not a CI cost worth acting on — recorded
+because "I widened a scanner six times" is exactly the kind of thing that quietly becomes one, and
+because the alternative to measuring it is assuming.
