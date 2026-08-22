@@ -5439,3 +5439,40 @@ its filename, and this dropped a test for its filename.
 
 Nothing to fix. The 19 are covered where it matters and guarded for the thing that would matter if
 they were not; what changes is the scope this log claims for its own results.
+
+---
+
+## V-1312 — the two constraint-backed concurrency fences, both thoroughly covered
+
+V-1311 was a scoping correction; this is the substantive half of the same thread. Both constraints
+that prompted it are enforced by Postgres and exercised against it.
+
+**`session_operations_one_live_per_session` — covered past the point of doubt.**
+`db-session-operations-fences` drives every branch the schema declares, against a real database and
+with a reachability arm so a green cannot mean "no database":
+
+```
+FENCE 1  concurrent admissions on one session produce exactly ONE operation
+FENCE 1  the exclusion is on LIVE rows only — a session runs another once the first settles
+FENCE 2  a retry with the same Idempotency-Key returns the SAME operation, no second row
+FENCE 2  scoped per account — two customers sharing a key each get their own operation
+FENCE 2  in isolation — a retry AFTER settle still replays rather than resubmitting credentials
+FENCE 2  same key, DIFFERENT body is a conflict, never a silent replay of the wrong request
+FENCE 3  a result from a SUPERSEDED driver incarnation is discarded, not applied
+FENCE 3  terminal is terminal — one settle wins a race, losers do not overwrite
+```
+
+The partial index — unique on `session_id` WHERE status IN ('queued','running') — is what makes
+"one live operation" true under concurrency rather than by convention, and the first two arms are
+its direct test.
+
+**`crypto_orders_idempotency_key_unique` — handled by ON CONFLICT, and tested.** The repo writes
+through `onConflictDoNothing` targeted at the idempotency key, guarded `WHERE idempotency_key IS NOT
+NULL`, then re-reads by the SCOPED key. That is V-1302's second mechanism rather than a translated
+violation, and it is exercised by a dedicated per-account namespacing test plus four Drizzle
+integration files covering sweep ordering, entitlement reconcile and lock exclusivity.
+
+Neither needed anything. Recorded because the thread began by asking whether a constraint with no
+double behind it was being taken on trust, and the answer is that these two are the best-tested
+invariants I have read in this repository — the coverage lives in integration tests against real
+Postgres, which is exactly where a constraint's behaviour can actually be observed.
