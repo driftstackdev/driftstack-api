@@ -4809,3 +4809,46 @@ The through-line of the last several entries is one habit: a guard's green run i
 signature, not about its class, and the two only coincide when somebody has enumerated the
 difference. Four of these five enumerations found nothing. The fifth found a table-wide counter with
 no time bound.
+
+---
+
+## V-1296 — RETRACTION: I measured a guard-decay gap four times and it was my instrument every time
+
+The habit that closed the five classes generalises: a guard that stops matching reports the same
+green as a guard with nothing to find. So the question was asked of the whole tree — how many guards
+assert an ABSENCE over a regex-derived list with nothing to catch their own decay?
+
+**Four answers, each smaller, each produced by reading a file the previous instrument had
+misclassified.**
+
+```
+125   first pass — control detection matched lowercase variable names only
+ 39   second — after allowing UPPERCASE (an-unredactable-auth-token has `const PROBE = …`)
+ 23   third — after allowing a floor compared against a VARIABLE, not a literal
+      (every-sdk-path-id-is-url-escaped: `.toBeGreaterThanOrEqual(floor)`)
+  0   demonstrated — four of four sampled from the 23 turned out protected
+```
+
+The four sampled were each defended by a DIFFERENT idiom, which is why no single pattern found them:
+
+```
+an-unredactable-auth-token-is-never-logged     a synthetic PROBE the detector must match
+every-sdk-path-id-is-url-escaped               a per-language floor against a variable
+unscoped-lookup-containment-invariant          an exact-set pin — an emptied scan fails it
+webhook-backoff-schedule-agrees-everywhere     an exact-count pin in a SIBLING arm
+every-job-chain-rearms-on-a-throwing-tick      `toHaveLength(12)` on the population
+```
+
+**I nearly committed redundant churn.** Believing `every-sdk-path-id-is-url-escaped` had no
+protection, I added per-language floors, ran the mutation, and watched it fail correctly. That
+proves an arm works; it does not prove it was needed. The counterfactual — the SAME mutation against
+the file as it stood — is what settled it, and the pre-existing arm caught the dead pattern with a
+better message than the one I had written: _its verdict below would be a perfect score over an empty
+set_. The arm was reverted. Running the mutation against the unmodified file costs one command and
+is the only thing that distinguishes a fix from a duplicate.
+
+Recorded so the next pass does not re-run this: **no guard-decay gap was demonstrated.** The
+population of absence-asserting source guards is 271, they protect themselves through at least four
+distinct idioms, and a classifier that recognises fewer than all four will keep reporting a gap that
+is not there. Verified along the way: the SDK path-escaping extractors still find 57 TypeScript, 86
+Python and 56 Go interpolation sites — exactly the counts recorded when that guard landed.
