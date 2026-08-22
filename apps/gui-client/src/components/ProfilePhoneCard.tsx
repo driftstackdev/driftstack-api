@@ -43,6 +43,17 @@ export interface ProfilePhoneCardProps {
   onSaveNote?: (note: string) => string | null | void | Promise<string | null | void>;
   // proxy / egress
   hasProxy: boolean;
+  /**
+   * Whether this profile is bound to that proxy DELIBERATELY, or merely inherits it.
+   *
+   * With no explicit binding a profile resolves to the first saved proxy, so the
+   * moment one proxy exists every card starts showing its country and exit IP —
+   * reported as "suddenly all profiles are linked to this proxy". Nothing was
+   * written; the display simply could not tell a choice from a default. The edit
+   * modal already distinguishes them ("First available saved proxy"); this makes
+   * the card agree.
+   */
+  proxyExplicit: boolean;
   flag: string; // emoji or '🌍'
   countryCode: string | null; // exit country code (e.g. 'NL') for the badge
   exitIp: string | null; // real exit IP, or null = untested
@@ -335,6 +346,17 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                   {p.countryCode !== null && (
                     <span className="rounded bg-surface-divider/70 px-1 text-[9px] font-semibold uppercase tracking-wide text-ink-secondary">
                       {p.countryCode}
+                    </span>
+                  )}
+                  {!p.proxyExplicit && (
+                    // An inherited default, not a choice. Saying so is what stops a
+                    // second proxy silently moving every profile that never picked one.
+                    <span
+                      data-component="proxy-inherited-badge"
+                      title="No proxy chosen for this profile — it uses the first saved proxy, and will follow whichever that is."
+                      className="rounded bg-surface-divider/40 px-1 text-[9px] font-medium uppercase tracking-wide text-ink-muted"
+                    >
+                      default
                     </span>
                   )}
                   <span

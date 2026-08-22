@@ -21,6 +21,7 @@ function props(over: Partial<ProfilePhoneCardProps> = {}): ProfilePhoneCardProps
     folder: '',
     tags: [],
     hasProxy: true,
+    proxyExplicit: true,
     flag: '🇳🇱',
     countryCode: 'NL',
     exitIp: '82.14.220.9',
@@ -193,6 +194,23 @@ describe('ProfilePhoneCard', () => {
     expect((dup as HTMLButtonElement).disabled).toBe(true);
     expect(del.getAttribute('title')).toMatch(/Another profile is busy/i);
     cleanup();
+  });
+
+  it('CRITICAL a profile that INHERITS the only saved proxy is marked as such, and one bound deliberately is not. Reported: adding a single proxy made every profile look linked to it. Nothing was written — with no explicit binding a profile resolves to the first saved proxy, and the egress widget then showed its country and exit IP exactly as though it had been chosen. Without this marker, adding a SECOND proxy silently moves every unbound profile.', () => {
+    const { unmount } = render(<ProfilePhoneCard {...props({ proxyExplicit: false })} />);
+    expect(
+      screen.queryByTestId
+        ? document.querySelector('[data-component="proxy-inherited-badge"]')
+        : null,
+      'an inherited proxy is presented as a deliberate binding',
+    ).not.toBeNull();
+    unmount();
+
+    render(<ProfilePhoneCard {...props({ proxyExplicit: true })} />);
+    expect(
+      document.querySelector('[data-component="proxy-inherited-badge"]'),
+      'a deliberately bound proxy was labelled as an inherited default',
+    ).toBeNull();
   });
 
   it('never-probed → "run Test"; probed-no-IP → "no exit IP"; no proxy → "no proxy bound"', () => {

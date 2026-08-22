@@ -2284,6 +2284,26 @@ export function ProfilesView({
     // No explicit default binding → use the first saved proxy (account default).
     return proxies[0] ?? null;
   }
+  /**
+   * True when this profile is bound to a proxy DELIBERATELY rather than inheriting
+   * the first saved one.
+   *
+   * Reported: adding a single proxy made every profile look linked to it. Nothing
+   * writes a bulk binding — `profiles` has no proxy column, the server routes never
+   * touch one, and `setDefaultProxy` is only called from the two single-profile
+   * modals. It is this fallback: with one saved proxy, every profile that never
+   * picked one resolves to it, and the card's egress widget then shows its country
+   * and exit IP as though it had been chosen.
+   *
+   * The default itself is reasonable and is left alone — `pickProxy` still decides
+   * launches. Only the DISPLAY needs to tell a choice from an inheritance, so that
+   * adding a second proxy cannot silently move every unbound profile without the
+   * customer having seen that coming.
+   */
+  function proxyIsExplicit(profileId: string): boolean {
+    const binding = bindings.find((b) => b.profileId === profileId);
+    return binding?.defaultProxyId !== undefined && binding.defaultProxyId !== null;
+  }
 
   /** True when the profile has an EXPLICIT default-proxy binding that points at
    *  a proxy that no longer exists (it was deleted). Lets the launch path tell
@@ -3992,6 +4012,7 @@ export function ProfilesView({
                           note={profilesMeta[profile.id]?.note ?? ''}
                           onSaveNote={(note) => handleSaveNote(profile.id, note)}
                           hasProxy={px !== null}
+                          proxyExplicit={proxyIsExplicit(profile.id)}
                           flag={exitOk && probe?.exitCountry ? flagEmoji(probe.exitCountry) : '🌍'}
                           countryCode={exitOk ? (probe?.exitCountry ?? null) : null}
                           exitIp={exitOk ? (probe?.exitIp ?? null) : null}
