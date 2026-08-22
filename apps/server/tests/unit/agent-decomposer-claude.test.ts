@@ -448,16 +448,20 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       expect(res.intents.map((i) => i.kind)).toEqual(['navigate', 'capture']);
     });
 
-    it('rejects a plan above the eight-entry execution ceiling before any action can run', async () => {
-      const intents = Array.from({ length: __TEST_ONLY__.MAX_PLAN_INTENTS + 1 }, () => ({
+    it('truncates a plan above the eight-entry execution ceiling instead of discarding the billed turn', async () => {
+      const intents = Array.from({ length: __TEST_ONLY__.MAX_PLAN_INTENTS + 3 }, () => ({
         kind: 'capture',
         capture: 'screenshot',
       }));
       const { fetch } = sequenceFetch([jsonResponse({ kind: 'plan', intents })]);
 
-      await expect(new ClaudeAgentDecomposer({ fetch }).decompose(defaultArgs())).rejects.toThrow(
-        /intents exceeded 8 entries/i,
-      );
+      const res = await new ClaudeAgentDecomposer({ fetch }).decompose(defaultArgs());
+      if (res.kind !== 'plan') throw new Error('type narrow');
+      // The ceiling still binds EXACTLY as tightly as the old throw did: never
+      // more than MAX_PLAN_INTENTS actions reach the harness. What changed is
+      // that the customer keeps the turn they already paid Anthropic for.
+      expect(res.intents).toHaveLength(__TEST_ONLY__.MAX_PLAN_INTENTS);
+      expect(res.intents.every((i) => i.kind === 'capture')).toBe(true);
     });
 
     it('rejects every recognized over-limit executable field instead of returning a partial plan', async () => {

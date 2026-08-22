@@ -69,10 +69,15 @@ describe('services/agent-decomposer-claude content parity', () => {
     expect(body).not.toMatch(/const MODEL = /);
   });
 
-  it('runtime-enforces the documented eight-intent ceiling and safe Anthropic usage accounting', () => {
+  it('runtime-enforces the documented eight-intent ceiling BY TRUNCATION and safe Anthropic usage accounting', () => {
     expect(body).toContain('const MAX_PLAN_INTENTS = 8;');
-    expect(body).toMatch(/if \(raw\.length > MAX_PLAN_INTENTS\) \{/);
-    expect(body).toContain('Anthropic plan.intents exceeded ${MAX_PLAN_INTENTS} entries');
+    // The ceiling is enforced by stopping the mapper at the cap, NOT by
+    // throwing the turn away. Ban the old wording so the refusal cannot creep
+    // back: it discarded an already-billed Anthropic call and 500'd the
+    // customer over a plan that was one step too long.
+    expect(body).toMatch(/if \(out\.length === MAX_PLAN_INTENTS\) break;/);
+    expect(body).not.toMatch(/Anthropic plan\.intents exceeded/);
+    expect(body).not.toMatch(/if \(raw\.length > MAX_PLAN_INTENTS\)/);
     expect(body).toMatch(/Number\.isSafeInteger\(inputTokens\)/);
     expect(body).toMatch(/Number\.isSafeInteger\(outputTokens\)/);
     expect(body).toMatch(/Number\.isSafeInteger\(inputTokens \+ outputTokens\)/);

@@ -685,11 +685,23 @@ function parseIntents(raw: unknown): ReadonlyArray<AgentIntent> {
   if (!Array.isArray(raw)) {
     throw new Error('Anthropic plan.intents was not an array');
   }
-  if (raw.length > MAX_PLAN_INTENTS) {
-    throw new Error(`Anthropic plan.intents exceeded ${MAX_PLAN_INTENTS} entries`);
-  }
+  // MAX_PLAN_INTENTS bounds how many browser actions ONE turn may run. It used
+  // to be enforced by throwing, which threw away the whole turn: the Anthropic
+  // call had already succeeded and already been BILLED, and the customer got an
+  // opaque 500 for a plan that was merely one step too long. The prompt asks for
+  // "1-8 intents", but that is a soft instruction the model overshoots from time
+  // to time (prod: agt_6b1a8e1f, 2026-08-22, and once before on 2026-08-11 --
+  // the only two agent-message 5xx in the journal, both this).
+  //
+  // Truncating enforces the ceiling EXACTLY as strictly as refusing did -- at
+  // most MAX_PLAN_INTENTS actions still reach the harness -- while keeping the
+  // paid turn. The tail is not lost work: the runtime re-plans from the
+  // resulting page state on the next turn, so an over-long plan just continues
+  // where this one stopped. Same posture as the zero-intent CLARIFY above:
+  // degrade, never discard a turn the customer has already paid for.
   const out: AgentIntent[] = [];
   for (const [index, item] of raw.entries()) {
+    if (out.length === MAX_PLAN_INTENTS) break;
     if (typeof item !== 'object' || item === null) continue;
     const i = normalizeIntentShape(item as Record<string, unknown>);
     const field = (name: string) => `plan.intents[${index}].${name}`;

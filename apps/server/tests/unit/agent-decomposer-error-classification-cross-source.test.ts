@@ -152,23 +152,6 @@ describe('decomposer errors ↔ runtime classifier cross-source invariant', () =
       expect(classifyDecomposerError(err)).toBe('fatal');
     });
 
-    it('plan above the eight-entry execution ceiling', async () => {
-      const err = await thrownBy(
-        dec([
-          textResponse(
-            JSON.stringify({
-              kind: 'plan',
-              intents: Array.from({ length: 9 }, () => ({
-                kind: 'capture',
-                capture: 'screenshot',
-              })),
-            }),
-          ),
-        ]).decompose(defaultArgs()),
-      );
-      expect(classifyDecomposerError(err)).toBe('fatal');
-    });
-
     it('clarify missing clarifyingQuestion', async () => {
       const err = await thrownBy(
         dec([textResponse(JSON.stringify({ kind: 'clarify' }))]).decompose(defaultArgs()),
