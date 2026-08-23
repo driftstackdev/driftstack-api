@@ -66,8 +66,25 @@ describe('routes/account-oauth-links content parity', () => {
     expect(body).toMatch(
       /\/\/ \?active_only=true filters Verdict-2 revoked links so the\s*\n?\s*\/\/ dashboard's "Connected accounts" UI doesn't have to filter\s*\n?\s*\/\/ client-side\. Defaults to false \(show all\) so audit views see\s*\n?\s*\/\/ the full history\./,
     );
+    // V-1367 — the filter used to be read straight off request.query. A repeated query
+    // key parses to an array, which never equals 'true', so the filter silently did not
+    // apply and the revoked links came back with a 200. The read now goes through a
+    // schema, and the pin follows it; the filter expression itself is unchanged.
     expect(body).toMatch(
-      /const activeOnly = request\.query\.active_only === 'true';\s*\n?\s*const filtered = activeOnly \? rows\.filter\(\(r\) => r\.lastRevokedAt === null\) : rows;\s*\n?\s*return \{ data: filtered\.map\(publicLink\) \};/,
+      /const query = ListOAuthLinksQuerySchema\.safeParse\(request\.query\);\s*\n?\s*if \(!query\.success\) throw new ValidationError\(query\.error\.flatten\(\)\);\s*\n?\s*const activeOnly = query\.data\.active_only === 'true';\s*\n?\s*const filtered = activeOnly \? rows\.filter\(\(r\) => r\.lastRevokedAt === null\) : rows;\s*\n?\s*return \{ data: filtered\.map\(publicLink\) \};/,
+    );
+  });
+
+  // V-1367 — and the schema stays a string rather than an enum. The two admin routes with
+  // a boolean query param use z.enum(['true','false']); adopting it here would newly reject
+  // ?active_only=1 and ?active_only= on a documented customer endpoint, which is a different
+  // change from fixing the array. Executed both ways in the integration file.
+  it('CRITICAL the active_only schema narrows the TYPE, not the accepted values — an enum here would be a customer-facing rejection change rather than the array fix', () => {
+    expect(body).toMatch(
+      /const ListOAuthLinksQuerySchema = z\.object\(\{\s*\n?\s*active_only: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
+    );
+    expect(body, 'an enum would change which single values are accepted').not.toMatch(
+      /active_only: z\.enum\(/,
     );
   });
 

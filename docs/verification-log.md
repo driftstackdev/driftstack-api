@@ -7402,3 +7402,51 @@ not rewriting a money path to remove a redundancy that is currently harmless.
 Three arms added to the socket file from V-1365, with a vacuity floor (a checkout carrying no
 acting-as header is a 201 that persists exactly one order), so the two refusals cannot be satisfied
 by a route that rejects every purchase.
+
+## V-1367 — a repeated query parameter silently turned a filter off
+
+`GET /v1/account/me/oauth-links` read its filter straight off the request:
+
+```ts
+app.get<{ Querystring: { active_only?: string } }>(…)
+const activeOnly = request.query.active_only === 'true';
+```
+
+The generic is a claim, not a check. A repeated query key parses to an **array**, so the real type is
+`string | string[] | undefined` — and an array is simply not equal to `'true'`. Sending
+`?active_only=true&active_only=true` therefore returned **200 with the revoked links the caller asked
+to hide**, `last_revoked_at` and all. Not an error: a wrong answer, on the read the dashboard's
+"Connected accounts" view uses. A revoked integration renders as connected.
+
+**This is the one site of five that had no validation.** Every direct `req.query.<x>` read in
+`apps/server/src`:
+
+| site                                                 | guard                   | array behaviour              |
+| ---------------------------------------------------- | ----------------------- | ---------------------------- |
+| `auth-oauth-client.ts` ×4 (`error`, `code`, `state`) | `typeof … === 'string'` | falls back to `''` → refuses |
+| **`account-oauth-links.ts:58` (`active_only`)**      | **none**                | **silently answers false**   |
+
+And the two other boolean query params in the codebase — `revoked` in `admin-api-keys.ts`,
+`include_expired` in `admin-rate-limit-overrides.ts` — both parse through
+`z.enum(['true','false']).optional()` first, which rejects an array and 400s. The customer-facing one
+was the only one reading the parameter unvalidated.
+
+**Fixed with `z.string().optional()`, deliberately not the siblings' enum.** Measured, the difference
+is exactly the values a customer can already send:
+
+| value                 | `z.string()`                  | `z.enum(['true','false'])` |
+| --------------------- | ----------------------------- | -------------------------- |
+| `['true','true']`     | reject                        | reject                     |
+| `'1'`, `''`, `'TRUE'` | accept — "show all", as today | **reject (400)**           |
+
+Adopting the enum would newly 400 requests that work today on a documented customer endpoint. That is
+a different change from fixing the array, and it is not the one this defect calls for. The parameter's
+**type** was wrong, not its accepted values.
+
+Three arms, and the third is the one that pins the boundary: the repeat is a 400; the single-value
+filter still filters (so the refusal is not satisfied by a route that rejects every filtered read);
+and `1`, `''`, `TRUE`, `yes` are all still 200 with the full list. Mutation-proven both ways —
+reverting to the raw read reds the repeat arm, and swapping in the enum reds the lenient-values arm
+plus the pin that forbids it.
+
+The pin over the read moved with it, in the same commit.
