@@ -5513,3 +5513,49 @@ Nothing to fix. Recorded because "16 skipped" appears in every run summary in th
 been broken down, and because the two mechanisms found here — a flag read from its single home, and
 a skip whose precondition is asserted — are the two ways to make a conditional skip trustworthy
 rather than merely permitted.
+
+## V-1314 — the published-SDK suite reached five of nine resources; the envelope it guards differs on the one it skipped
+
+`sdk-typescript-against-the-real-server.test.ts` imports the SDK by package name, so it exercises
+the built `dist/` against a real server — the only place the published artifact is checked end to
+end. Its own header names the risk it exists to catch: both list responses "key their rows under
+`data`, and an SDK reading `items` would return undefined against a perfectly healthy server".
+
+That risk is per-resource, and the suite reached five call sites: `account.me`, `apiKeys.create`,
+`apiKeys.list`, `archetypes.list`, `sessions.list`. Not reached: `profiles`, `webhooks`, `usage`,
+`recipes`. Two of those matter for the stated risk:
+
+- **`profiles.list`** is the listing customers reach for first, and its envelope is built
+  independently of the sessions one (`routes/profiles.ts` versus `routes/sessions.ts`). One route
+  proving the shape does not prove the other.
+- **`usage.series` is the response where the shape genuinely differs.** It keys its rows under
+  `buckets` and carries `from_date`/`to_date` instead of a cursor. It is the single endpoint where
+  applying the pagination envelope would be wrong — so it is the one endpoint where the mistake the
+  suite guards against cannot be caught by the guard as it stood.
+
+Three arms added. `usage.current` came with them because its `totals`/`quotas` are records keyed by
+record type, and an SDK treating either as a list reads `length` off an object and reports zero
+usage against a real bill.
+
+**A weak assertion caught before it was committed.** The first draft asserted
+`typeof summary.totals === 'object'`, which an ARRAY satisfies — precisely the confusion the arm's
+own comment describes. Mutating the route to `Object.values(s.totals)` would have passed it. The
+assertion is now `Array.isArray(...) === false`, and that mutation fails it.
+
+Each arm mutation-proven against the route that builds the response, one at a time:
+
+| mutation (production route)                     | arm that failed                        |
+| ----------------------------------------------- | -------------------------------------- |
+| `buckets: series.buckets` → `data:`             | `daily rows come back under 'buckets'` |
+| `data: page.data.map(publicProfile)` → `items:` | `profile rows come back under 'data'`  |
+| `totals: s.totals` → `Object.values(s.totals)`  | `totals is a RECORD ..., not a list`   |
+
+Each mutation failed exactly its own arm and nothing else; every route file was restored
+byte-identical from a snapshot. The series arm also carries the negative — the paginated envelope is
+NOT what that endpoint returns — which held under all three.
+
+Where `/v1/usage` and `/v1/usage/series` live is worth recording: `routes/admin.ts`, despite the
+name. Grepping `routes/usage*.ts` finds nothing and the file does not exist.
+
+Still not round-tripped through the published SDK: `webhooks`, `recipes`, and the profiles/webhooks
+write paths. Named rather than left implied.

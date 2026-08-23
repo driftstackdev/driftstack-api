@@ -74,6 +74,40 @@ describe('the published SDK works against the real server', () => {
     expect(catalogue.default_archetype_id, 'a default is named').toBeTruthy();
   });
 
+  it('CRITICAL unwraps the PROFILES page — the resource customers reach for first. The envelope arm above proves the shape on one listing; this proves the SDK applies it to the listing most customers call, because `data` versus `items` is a per-resource mistake, not a global one.', async () => {
+    const page = await sdk.profiles.list();
+    expect(Array.isArray(page.data), 'profile rows come back under `data`').toBe(true);
+    expect(typeof page.has_more, 'the envelope carries has_more').toBe('boolean');
+    expect(page, 'the envelope carries a cursor field').toHaveProperty('next_cursor');
+  });
+
+  it('CRITICAL parses the usage SERIES, whose envelope is NOT the paginated one. Every other list here keys its rows under `data`; this response keys them under `buckets` and carries `from_date`/`to_date` instead of a cursor. An SDK that applied the pagination shape to it would hand the customer undefined for their billing chart from a perfectly healthy 200 — the exact failure this file exists to catch, in the one response where the shape differs.', async () => {
+    const series = await sdk.usage.series({ days: 7 });
+    expect(Array.isArray(series.buckets), 'daily rows come back under `buckets`').toBe(true);
+    expect(series, 'the window start is surfaced').toHaveProperty('from_date');
+    expect(series, 'the window end is surfaced').toHaveProperty('to_date');
+    expect(series, 'the paginated envelope is NOT what this endpoint returns').not.toHaveProperty(
+      'has_more',
+    );
+  });
+
+  it('CRITICAL parses the current-period usage summary, totals and quotas included. `totals` and `quotas` are records keyed by record type rather than arrays, so an SDK that treated either as a list would read length undefined off an object and report zero usage against a real bill.', async () => {
+    const summary = await sdk.usage.current();
+    expect(summary, 'the period start is surfaced').toHaveProperty('period_start');
+    expect(summary, 'the period end is surfaced').toHaveProperty('period_end');
+    expect(
+      Array.isArray(summary.totals),
+      'totals is a RECORD keyed by record type, not a list',
+    ).toBe(false);
+    expect(
+      Array.isArray(summary.quotas),
+      'quotas is a RECORD keyed by record type, not a list',
+    ).toBe(false);
+    expect(typeof summary.totals, 'totals is an object').toBe('object');
+    expect(typeof summary.quotas, 'quotas is an object').toBe('object');
+    expect(summary.tier, 'the summary names the tier it priced against').toBeTruthy();
+  });
+
   it('CRITICAL round-trips a WRITE through the SDK and reads it back. A create the server accepts but the SDK cannot parse looks identical to a failure from the caller.', async () => {
     const created = await sdk.apiKeys.create({ name: 'sdk-integration-probe', scopes: ['read'] });
     expect(created.id, 'the created key has an id').toBeTruthy();
