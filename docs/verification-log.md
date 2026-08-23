@@ -8340,3 +8340,51 @@ Two of the results reported above were confounded by it and are corrected here:
   delegation alone fails the pin plus the metrics arm with `expected [] to deeply equal [Array(2)]`.
 
 The two mutations are now separated, which is what they were meant to show.
+
+## V-1390 — the cached team memberships nothing had ever put a member in
+
+Two `teams.map(...)` callbacks — one in `serialize`, one in `deserialize` — were in the
+never-executed set for a single reason: **no cached context in the suite carries a team
+membership.** Every arm in the auth-cache file builds an account with `teams: []`, so the array
+round-tripped as empty and the mapping either side of Redis never ran.
+
+That array is what `resolveEffectiveAccount` consults to decide whether an `X-Driftstack-Account`
+header may act for another account, and `role` is what separates a member from an admin on the team
+surfaces. A field lost across the cache round trip is not a cache bug in isolation — it is an
+authorisation answer computed from a different context than the database returned, for the whole
+30-second TTL.
+
+Two arms:
+
+- every membership field survives `serialize → Redis → deserialize`, **`role` included**;
+- a pre-fix entry with no owner identity deserialises to its documented fallbacks — the bare
+  `acc_<uuid>` form and a null name — rather than `undefined`. Those two fields are optional in the
+  type precisely so an older cache entry still parses, and the route serializers read them directly.
+
+Mutations separate cleanly: dropping `role` from the serialized membership reds both arms; removing
+only the `ownerEmail` fallback on deserialize reds the second alone.
+
+### The mutation procedure itself
+
+Three failures last turn — two commands that never ran, and a restore that reverted my own source fix
+while the byte-identical check confirmed it against the same stale copy — all came from doing this by
+hand each time. It is now a script:
+
+- the snapshot is taken **immediately before mutating**, so a restore can never undo an edit made
+  earlier in the batch;
+- the target is a **line number plus a substring that must be on that line** — no multi-line
+  literals, no indentation guessing, no shell quoting of backticks or `${…}`;
+- every step asserts and prints, so `APPLIED` / `RESULT` / `RESTORED byte-identical: True` appear in
+  the transcript;
+- a run producing no summary line is reported as **"the run did not complete; this is not a result"**
+  rather than silence.
+
+Both mutations above went through it and landed first try.
+
+### Checked and not pursued, recorded so the next sweep does not re-open them
+
+`lib/r2.ts` has three dark functions including `listObjects`, which feeds the profile-blob orphan
+**sweeper** — a delete path, so worth looking at closely. Every failure mode is fail-safe: the
+sweeper filters candidates through `SEALED_KEY_RE` (so a missing `Prefix` would still not widen what
+it reaps), skips any object with a null `lastModified`, and requires an age past the grace window.
+Broken pagination reaps fewer orphans, never more.

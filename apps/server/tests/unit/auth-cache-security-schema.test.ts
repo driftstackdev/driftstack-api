@@ -10,6 +10,7 @@ function context(
   args: {
     provenance?: string | null;
     webSession?: AccountContext['webSession'];
+    teams?: AccountContext['teams'];
   } = {},
 ): AccountContext {
   return {
@@ -40,7 +41,7 @@ function context(
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
     },
     rateLimitOverrides: {},
-    teams: [],
+    teams: args.teams ?? [],
     webSession: args.webSession ?? null,
   };
 }
@@ -459,5 +460,69 @@ describe('RedisAuthCache security-sensitive schema compatibility', () => {
 
     await expect(cache.invalidateKey('key-security')).resolves.toBeUndefined();
     expect(warn).toHaveBeenCalled();
+  });
+});
+
+// V-1390 — the two `teams.map(...)` callbacks in `serialize` and `deserialize` were both
+// in the never-executed set, for one reason: no cached context in the suite carries a team
+// membership. Every arm above builds an account with `teams: []`, so the array round-trips
+// as empty and the mapping either side of Redis was never run.
+//
+// That array is what `resolveEffectiveAccount` reads to decide whether an
+// `X-Driftstack-Account` header may act for another account, and `role` is what separates a
+// member from an admin on the team surfaces. A field lost in the cache round-trip is not a
+// cache bug in isolation — it is an authorisation answer computed from a different context
+// than the database returned, for the whole 30-second TTL.
+describe('a cached context carries its team memberships across the round trip', () => {
+  const TEAMS: AccountContext['teams'] = [
+    {
+      membershipId: 'mem-1',
+      ownerAccountId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      ownerEmail: 'owner@example.test',
+      ownerName: 'Owner One',
+      role: 'admin',
+    },
+    {
+      membershipId: 'mem-2',
+      ownerAccountId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      ownerEmail: 'second@example.test',
+      ownerName: null,
+      role: 'member',
+    },
+  ];
+
+  it('CRITICAL every membership field survives serialize → Redis → deserialize, ROLE included. The cached array is what decides whether an X-Driftstack-Account header may act for another account; a role lost here reads as a member acting with admin rights, or the reverse, for the whole TTL.', async () => {
+    const redis = new FakeRedis();
+    const { cache } = makeCache(redis);
+    await cache.set(TOKEN_SHA, 'key-security', 'acc-security', context({ teams: TEAMS }), 30);
+
+    const hit = await cache.get(TOKEN_SHA);
+    expect(hit, 'precondition: the entry must be a hit, or nothing below is proved').not.toBeNull();
+    expect(hit?.teams).toEqual(TEAMS);
+  });
+
+  it('CRITICAL a pre-fix entry with no owner identity deserialises to the documented fallbacks rather than undefined. Those two fields are optional in the type, so a cache written before they were added still has to produce a usable membership — and the route serializers read them directly.', async () => {
+    const redis = new FakeRedis();
+    const { cache } = makeCache(redis);
+    await cache.set(TOKEN_SHA, 'key-security', 'acc-security', context({ teams: TEAMS }), 30);
+
+    // Rewrite the stored envelope as an older writer would have left it: memberships
+    // without the owner-identity fields.
+    const stored = JSON.parse(redis.values.get(entryKey()) ?? '{}') as {
+      context: { teams: Array<Record<string, unknown>> };
+    };
+    for (const t of stored.context.teams) {
+      delete t.ownerEmail;
+      delete t.ownerName;
+    }
+    redis.values.set(entryKey(), JSON.stringify(stored));
+
+    const hit = await cache.get(TOKEN_SHA);
+    expect(
+      hit?.teams?.[0]?.ownerEmail,
+      'the bare owner-id form stands in for a missing email',
+    ).toBe(`acc_${TEAMS[0]!.ownerAccountId}`);
+    expect(hit?.teams?.[0]?.ownerName, 'and a missing name is null, not undefined').toBeNull();
+    expect(hit?.teams?.[0]?.role, 'the role still survives the legacy shape').toBe('admin');
   });
 });
