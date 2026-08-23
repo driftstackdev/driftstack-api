@@ -8388,3 +8388,45 @@ Both mutations above went through it and landed first try.
 sweeper filters candidates through `SEALED_KEY_RE` (so a missing `Prefix` would still not widen what
 it reaps), skips any object with a null `lastModified`, and requires an age past the grace window.
 Broken pagination reaps fewer orphans, never more.
+
+## V-1391 — staff elevation recomputed on every cache hit, in a branch nothing had taken
+
+Switching to the finest signal in the coverage artifact: **branch arms whose sibling ran but which
+never ran themselves.** 1415 of them across `apps/server/src`, so filtered to `??`/`||`/ternary
+fallbacks in security-relevant modules — the shape that produced V-1390 — leaving 62. This is the one
+that mattered.
+
+`services/auth.ts:358`, on the **cache-hit** revalidation path for web sessions:
+
+```ts
+const scopes = staffEmails.has(liveAccount.email.toLowerCase())
+  ? [...baseScopes, 'driftstack_internal_admin']
+  : baseScopes;
+```
+
+The grant arm had never been taken — every cache hit in the suite was a non-staff one. A source-text
+pin covers the _slow path_'s copy of this line; the cached path had neither.
+
+It recomputes the scope set from the **live** staff list on every hit rather than trusting what the
+entry was written with, and that matters in both directions:
+
+- someone **added** to the list gets internal-admin on their next request, not after the TTL;
+- someone **removed** loses it on their next request — the case that counts, because an offboarded
+  staff account holding a warm cache entry would otherwise keep internal-admin authority for the
+  remainder of the TTL, from an entry written while they still had it.
+
+The cached entry's own `scopes` array is what makes this testable: the code ignores it. So the
+de-elevation arm writes an entry **carrying** `driftstack_internal_admin`, hands `authenticate` an
+empty staff set, and asserts the hit comes back with base scopes only. Replacing the live-list lookup
+with the cached array reds both arms.
+
+⚠️ **A third arm exists because the mutation refused to confirm the second property.** Dropping
+`.toLowerCase()` from the live email left all arms green: the fixture's address is already lowercase,
+so the normalisation was a no-op there and entirely unpinned. With a mixed-case live row —
+`A@Example.Test` against a lowercase staff list — it reds. Without that, elevation would depend on
+the casing the accounts row happens to hold, so the same person is staff or not according to how they
+typed their address at signup.
+
+That is the second time this session a mutation has said "your arm does not test what its title
+claims", and both times the fix was a fixture that could tell the difference rather than a reworded
+assertion.

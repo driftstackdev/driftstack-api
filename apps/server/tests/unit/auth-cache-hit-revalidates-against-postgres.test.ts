@@ -49,6 +49,11 @@ interface Overrides {
   liveSession?: unknown;
   liveAccountStatus?: 'active' | 'suspended' | 'deleted';
   liveAccountMissing?: boolean;
+  /** V-1391 — what the cache WROTE, so an arm can prove the scopes are recomputed from
+   *  the live staff list rather than served back from the entry. */
+  cachedScopes?: string[];
+  /** V-1391 — the LIVE row's email, so an arm can prove the staff match lowercases it. */
+  liveAccountEmail?: string;
 }
 
 /** A cached context for a web-session credential, valid unless overridden. */
@@ -58,7 +63,7 @@ function cachedContext(o: Overrides): unknown {
     apiKey: {
       id: `wsk_${SESSION_ID}`,
       accountId: ACCOUNT_ID,
-      scopes: [],
+      scopes: o.cachedScopes ?? [],
       revokedAt: null,
       expiresAt: o.cachedKeyExpiresAt === undefined ? FUTURE : o.cachedKeyExpiresAt,
     },
@@ -86,7 +91,7 @@ function repoWith(o: Overrides): unknown {
           ? null
           : {
               id: ACCOUNT_ID,
-              email: 'a@example.test',
+              email: o.liveAccountEmail ?? 'a@example.test',
               status: o.liveAccountStatus ?? 'active',
               tier: 'free',
             },
@@ -484,5 +489,62 @@ describe('a credential revoked DURING verification is not written to the cache',
     await expect(
       authenticate(repo as never, plaintext, cache as never, NOW),
     ).rejects.toBeInstanceOf(InvalidKeyError);
+  });
+});
+
+// V-1391 — the staff-scope recompute on the cache-hit path. Branch coverage put the GRANT
+// arm of `staffEmails.has(liveAccount.email.toLowerCase()) ? … : baseScopes` in the
+// never-taken set: its sibling ran, so every hit in the suite was a non-staff one.
+//
+// The line matters in both directions and neither was exercised. It recomputes the scope
+// set from the LIVE staff list on every hit rather than trusting what the entry was written
+// with, so:
+//
+//   • someone added to the list gets the admin scope on their next request, not after the
+//     cache TTL;
+//   • someone REMOVED from it loses it on their next request — the case that matters,
+//     because an offboarded staff account holding a warm entry would otherwise keep
+//     internal-admin authority for the rest of the TTL.
+//
+// The cached entry's own `scopes` array is what makes this testable: the code ignores it.
+describe('staff scope is recomputed from the live list on every cache hit', () => {
+  const STAFF_EMAIL = 'a@example.test';
+  const BASE = ['read', 'write', 'account_owner'];
+
+  async function authWithStaff(o: Overrides, staffEmails: Set<string>): Promise<unknown> {
+    return authenticate(
+      repoWith(o) as never,
+      TOKEN,
+      cacheReturning(cachedContext(o)) as never,
+      NOW,
+      null,
+      staffEmails,
+    );
+  }
+
+  it('CRITICAL an account on the staff list is GRANTED driftstack_internal_admin on the hit, even though the cached entry carried no scopes. The entry is written once and read for the whole TTL; if the scope set came from the entry, adding someone to the staff list would not take effect until it aged out.', async () => {
+    const ctx = (await authWithStaff({}, new Set([STAFF_EMAIL]))) as {
+      apiKey: { scopes: string[] };
+    };
+    expect(ctx.apiKey.scopes).toEqual([...BASE, 'driftstack_internal_admin']);
+  });
+
+  it('CRITICAL the match lowercases the LIVE account email before consulting the list. The staff set is configuration and the email comes from the accounts row; without the normalisation, elevation depends on the casing the row happens to be stored with — so the same person is staff or not depending on how they typed their address at signup.', async () => {
+    const ctx = (await authWithStaff(
+      { liveAccountEmail: 'A@Example.Test' },
+      new Set([STAFF_EMAIL]),
+    )) as { apiKey: { scopes: string[] } };
+    expect(ctx.apiKey.scopes, 'a differently-cased row must still resolve as staff').toContain(
+      'driftstack_internal_admin',
+    );
+  });
+
+  it('CRITICAL an account NO LONGER on the staff list LOSES driftstack_internal_admin on the very next hit, even though the cached entry still carries it. This is the offboarding case: without the recompute a removed staff account keeps internal-admin authority for the remainder of the cache TTL, from an entry written while they still had it.', async () => {
+    const ctx = (await authWithStaff(
+      { cachedScopes: [...BASE, 'driftstack_internal_admin'] },
+      new Set(),
+    )) as { apiKey: { scopes: string[] } };
+    expect(ctx.apiKey.scopes, 'the stale elevation must not survive the hit').toEqual(BASE);
+    expect(ctx.apiKey.scopes).not.toContain('driftstack_internal_admin');
   });
 });
