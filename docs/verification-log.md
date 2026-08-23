@@ -6429,3 +6429,37 @@ reasons worth writing down rather than discovering again:**
   `authRepo` at all. `buildTestApp` always wires one, so reaching it means building an app that is
   deliberately incomplete — which is a different kind of fixture from every arm above, and possibly a
   branch that only a misconfigured deployment can reach.
+
+## V-1339 — an arm that passed while measuring the wrong layer, and the branch it proved is shadowed
+
+Attempting the sixth deleted-owner copy — `routes/agent-sessions.ts:4070`, reached through
+`POST /v1/agent-sessions/:id/mode` — produced an arm that passed on the first run. It was wrong, and
+the mutation is what said so: disabling line 4070 left all eleven arms green.
+
+**What it was actually measuring.** Enumerating every producer of the message found NINE, not the
+seven the coverage sweep had listed — the two extra (`routes/profiles.ts:166`, `routes/admin.ts:95`)
+were already covered, and the ninth is **`middleware/rate-limit.ts:178`**, which lives in a
+preHandler. On the mode route the effective-owner limiter resolves the owner and refuses a deleted
+one BEFORE the handler body runs, with the identical string. Mutating that line to a different
+message failed the arm immediately. So the arm exercised the middleware, asserted on a message shared
+by both layers, and read as coverage of a branch it never reached.
+
+**The branch is shadowed, which is why coverage shows it unexecuted.** `agent-sessions.ts:4070`
+cannot fire on that route while the effective-owner limiter answers first on the same condition. The
+limiter's own comment says it "Mirrors routes/admin.ts, profiles.ts and profile-snapshots.ts, which
+already answer 403 on exactly this condition" — the duplication is deliberate and known; what was not
+recorded is that on routes carrying the effective-owner limiter, the route-level copy is unreachable.
+That is a different thing from untested, and the log said untested.
+
+The arm was removed rather than relabelled. `middleware/rate-limit.ts:178` already had coverage — it
+was never in the unreached set — so keeping it would have added a redundant assertion under a name
+claiming something else.
+
+**Why the five committed arms are unaffected:** each was proven by mutating its OWN route line, and
+each failed. Those routes do not carry the effective-owner limiter, so the route-level branch is the
+first guard on that condition. The proof method is what distinguishes them from this one, not the
+fact that they passed.
+
+Standing count: 9 producers of the refusal, 5 newly covered and proven at their own line, 2 already
+covered, 1 shadowed by the rate limiter (`agent-sessions.ts:4070`), 1 reachable only from an app
+registered without an `authRepo` (`agent-sessions.ts:4066`).
