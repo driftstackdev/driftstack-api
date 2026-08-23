@@ -46,7 +46,14 @@ const ROUTES = resolve(REPO_ROOT, 'apps/server/src/routes');
 const API_TYPES = resolve(REPO_ROOT, 'packages/api-types/src');
 
 /** Mirrors the coverage guard's exemptions. */
-const EXEMPT_PREFIXES = ['admin-', 'admin.ts'] as const;
+// V-1370 — `admin.ts` came off this list with the sibling invariant's copy of it. It
+// was never a staff surface: every route it registers is customer self-service behind
+// plain `requireAuth`, and the field it could drop was `expires_at` on key creation —
+// a mistyped one minted a credential with no expiry at all. That is precisely the
+// "customer's resource silently configured as something they did not ask for" case
+// the admin rationale says it is NOT covering. The route reports now, so the schema
+// leaves this file's droppable set as well.
+const EXEMPT_PREFIXES = ['admin-'] as const;
 const EXEMPT_FILES = [
   'status-subscribe.ts',
   'mac-nodes-register.ts',
@@ -75,7 +82,6 @@ const CAN_DROP: ReadonlySet<string> = new Set([
   'admin-owner.ts (SetSecretBodySchema)',
   'admin-validation-harness.ts (TriggerValidationScheduleBodySchema)',
   'admin-validation-harness.ts (UpsertValidationScheduleRequestSchema)',
-  'admin.ts (CreateApiKeyRequestSchema)',
   'internal-atlas-priority.ts (eventStatusBodySchema)',
   'internal-atlas-priority.ts (probeSignatureBodySchema)',
   'mac-nodes-register.ts (ControlNodeBodySchema)',

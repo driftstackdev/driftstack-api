@@ -3,6 +3,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 type AccountReq = NonNullable<FastifyRequest['account']>;
 import { CreateApiKeyRequestSchema, UsageSeriesQuerySchema } from '@driftstack/api-types';
+import { reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import type { AccountAuthRepo, ApiKeyRow } from '../services/auth.js';
 import type { ApiKeysService } from '../services/api-keys.js';
 import type { UsageService, UsageSummary } from '../services/usage.js';
@@ -85,6 +86,18 @@ export function registerAdminRoutes(app: FastifyInstance, opts: AdminRoutesOptio
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
       const body = CreateApiKeyRequestSchema.parse(request.body ?? {});
+      // V-1370 — `expires_at` is optional, so a mistyped one is stripped and the key
+      // is minted with NO expiry: a credential that outlives what its owner asked for,
+      // answered 201 with nothing said. This file was exempt from the reporting rule
+      // under the staff-surface rationale, which it does not qualify for — every route
+      // in it is customer self-service behind plain `requireAuth`.
+      reportUnknownRequestFields({
+        body: request.body,
+        knownKeys: Object.keys(CreateApiKeyRequestSchema.shape),
+        reply,
+        logger: request.log,
+        route: 'POST /v1/api-keys',
+      });
       const eff = effectiveAccountIdForKeyWrite(request, ctx);
       // Typed as the PAIR, not two optionals: the values here are always set
       // together, and declaring them independently is what let the pairing be
@@ -164,6 +177,17 @@ export function registerAdminRoutes(app: FastifyInstance, opts: AdminRoutesOptio
       if (!ctx) throw new Error('account context missing after requireAuth');
       const id = uuidFromPrefixedId(request.params.id, 'key');
       const body = request.body ?? {};
+      // V-1370 — `name` is the only field this route reads, and it is read by hand
+      // rather than through a schema. The coverage invariant derives its population
+      // from schema parse sites, so it cannot see this route at all; the reporting is
+      // wired here on the same customer-facing grounds as the create above.
+      reportUnknownRequestFields({
+        body: request.body,
+        knownKeys: ['name'],
+        reply,
+        logger: request.log,
+        route: 'POST /v1/api-keys/:id/rotate',
+      });
       const eff = effectiveAccountIdForKeyWrite(request, ctx);
       let rotateOpts: EffectiveOwner & { name?: string } = {};
       if (typeof body.name === 'string') {

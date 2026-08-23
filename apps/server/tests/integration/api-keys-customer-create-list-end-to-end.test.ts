@@ -33,6 +33,75 @@ interface ListedKey {
   created_at: string;
 }
 
+// V-1370 — the two writes in routes/admin.ts are customer self-service, not staff
+// surfaces, and neither reported the fields it ignored. `expires_at` is optional on
+// create, so a mistyped one is stripped by zod and the key is minted with NO expiry —
+// a credential that outlives what its owner asked for, answered 201 with no signal.
+describe('/v1/api-keys reports the fields it ignored', () => {
+  it('CRITICAL a mistyped expires_at is REPORTED, not silently dropped. It is optional, so zod strips it and the key is created without an expiry; the caller asked for one and gets a permanent credential back with a 201 on it.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/api-keys',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {
+        name: 'rotating-key',
+        scopes: ['read'],
+        expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(
+      res.headers['x-driftstack-unknown-fields'],
+      'the ignored field must be named back to the caller',
+    ).toBe('expiresAt');
+    expect(
+      res.json<{ expires_at: string | null }>().expires_at,
+      'and the drop is real — the key has no expiry',
+    ).toBeNull();
+  });
+
+  it('CRITICAL a well-formed create carries no such header, so the arm above cannot be satisfied by a route that reports on every request', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/api-keys',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { name: 'clean-key', scopes: ['read'] },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.headers['x-driftstack-unknown-fields']).toBeUndefined();
+  });
+
+  it('CRITICAL rotate reports too. It has no schema at all — the body is hand-validated with a typeof check — so the coverage invariant that derives its population from schema parse sites cannot see this route, and a caller rotating with a mistyped field would otherwise get no signal either.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const created = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/api-keys',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { name: 'to-rotate', scopes: ['read'] },
+    });
+    expect(created.statusCode).toBe(201);
+    const id = created.json<{ id: string }>().id;
+
+    const rotated = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/api-keys/${id}/rotate`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { nmae: 'renamed-on-rotate' },
+    });
+    expect(rotated.statusCode).toBe(201);
+    expect(
+      rotated.headers['x-driftstack-unknown-fields'],
+      'the ignored rename must be named back to the caller',
+    ).toBe('nmae');
+    expect(
+      rotated.json<{ name: string }>().name,
+      'and the drop is real — the rename did not happen',
+    ).toBe('to-rotate');
+  });
+});
+
 describe('/v1/api-keys customer create + list end-to-end', () => {
   it('POST /v1/api-keys → 201 with plaintext + key_prefix in response', async () => {
     fx = await buildTestApp({ tier: 'api_builder' });

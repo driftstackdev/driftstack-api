@@ -7546,3 +7546,49 @@ the floor, and the arm that pins the two repaired routes to the validated side; 
 `Querystring` generic reds the population floor; reshaping an excused route reds the staleness arm.
 
 `EXPECTED_TEST_FILES` 3007 → 3008, `_ALL` 3171 → 3172.
+
+## V-1370 — a customer surface inherited a staff exemption because of its filename
+
+`unknown-request-fields-coverage-invariant` requires every customer-facing write to report the
+fields it ignored, and waives three groups. The first waiver is `admin-*`, with a stated reason: a
+mistyped field on a staff surface is a mistyped admin action, "not a customer's resource silently
+configured as something they did not ask for". Alongside the prefix sat one exact filename —
+`admin.ts`.
+
+**`routes/admin.ts` registers no staff routes.** Every one of the six is customer self-service behind
+plain `requireAuth`:
+
+| route                                                                  | gate                                   |
+| ---------------------------------------------------------------------- | -------------------------------------- |
+| `POST` / `GET` / `DELETE /v1/api-keys`, `POST /v1/api-keys/:id/rotate` | `requireAuth`                          |
+| `GET /v1/usage`, `GET /v1/usage/series`                                | `requireAuth` + `requireScope('read')` |
+
+Its own comment calls the rotate route "customer self-service rotation". The exemption was granted by
+filename, not by gate — and the file's two writes reported nothing.
+
+**What that dropped.** `scopes` is required on create, so a mistyped one is a 400. `expires_at` is
+**optional**, so a mistyped one is stripped and the key is minted with **no expiry at all** — a
+credential that outlives what its owner asked for, answered **201 with nothing said**. Measured:
+`expiresAt` instead of `expires_at` returns 201, `expires_at: null`, no header. That is exactly the
+case the admin rationale says it is _not_ covering.
+
+Both writes report now, and the exemption is gone from the prefix list. Three arms: the mistyped
+create is named back in `x-driftstack-unknown-fields` **and** the response proves the drop was real
+(`expires_at` null); a clean create carries no header, so the first arm cannot be satisfied by a
+route that reports on everything; and a rotate carrying `nmae` reports it while the name stays
+unchanged.
+
+**Rule 2 earned its keep here.** The import-style grep found the coverage invariant. A second guard —
+`an-exempt-surface-that-can-drop-a-field-is-listed` — keeps its **own copy** of the exempt-prefix
+list and pins `admin.ts (CreateApiKeyRequestSchema)` in its droppable set. It passed the whole time,
+because it was reading its own stale copy. Only the quoted-basename pattern found it. Both lists and
+the pinned entry move in this commit.
+
+⚠️ **A gap I am recording rather than closing.** The coverage invariant derives its population from
+schema **parse sites** (`XSchema.parse(req.body)`, `parseOrThrow`). The rotate route validates its
+body by hand — `typeof body.name === 'string'` plus a length bound — so it has no parse site and the
+invariant cannot see it at all. Mutation shows this precisely: unwiring the **create** reporter reds
+the invariant _and_ the behavioural arm; unwiring the **rotate** reporter reds only the behavioural
+arm. It is wired here because it is a customer-facing write, not because anything structural
+demanded it. A hand-validated body is invisible to that derivation, and extending it is a change to
+569 lines of load-bearing machinery that this batch is not the right place for.

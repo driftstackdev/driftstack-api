@@ -51,7 +51,14 @@ import { transportReportBodySchema } from '../../src/routes/agent-sessions-trans
 const ROUTES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../src/routes');
 
 /** Files whose body-parsing writes deliberately do not report. */
-const EXEMPT_PREFIXES = ['admin-', 'admin.ts'] as const;
+// V-1370 — `admin.ts` was on this list under the staff-surface rationale above and does
+// not qualify for it: every route it registers is customer self-service — POST/GET/DELETE
+// /v1/api-keys, POST /v1/api-keys/:id/rotate, GET /v1/usage(/series) — behind plain
+// `requireAuth`, with no staff scope anywhere in the file. Its own comment calls the
+// rotate route "customer self-service rotation". The exemption was granted by filename,
+// not by gate. Removed; the create is wired, and the rotate — which the derivation below
+// cannot see, because it hand-validates instead of parsing a schema — is wired too.
+const EXEMPT_PREFIXES = ['admin-'] as const;
 const EXEMPT_FILES = [
   'status-subscribe.ts',
   // V-947 — staff surfaces by gate rather than by filename. Checked below.
