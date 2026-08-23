@@ -6822,3 +6822,36 @@ The reusable step is cheap: **before writing an arm for a dark guard, list its c
 caller validates first, the guard is unreachable and the arm would measure the validator. If one
 caller does not, that caller is the reason the guard exists — and the arm belongs there, driving the
 service directly rather than through the route.
+
+## V-1350 — a twice-observed flake, and a type error of mine the peer fixed first
+
+**The flake.** `db-webhooks-force-rotation-selection-drizzle` failed under a full run with
+`limit 1 returns exactly one row: expected [] to have a length of 1`, and passed alone. It did the
+same thing during the V-1328 investigation, so this is the second observation, both times under load.
+
+The cause is in the query, not the timing: `findEndpointsNeedingForceRotation` takes no account
+filter and scans the whole `webhook_endpoints` table, so every other suite writing that table shares
+this result set. The arm read it twice in a row — once unlimited to check ordering, once with
+`limit: 1` — and a concurrent cleanup between the two reads empties it. The failure message then
+reads like a leaked limit and is actually interference, which is the worst property a flake can have.
+
+Fixed by taking an uncontaminated reading rather than trusting one: retry up to five times, requiring
+both seeded endpoints to be present BEFORE and AFTER the limited read, so the comparison only happens
+against a set known to hold at least two rows — the only state in which "limit 1 returns one" means
+anything. Exhausting the retries fails with a message naming interference instead of blaming the
+limit.
+
+The retry does not weaken the assertion: mutating the repo's `.limit(args.limit)` to `.limit(500)`
+still fails the arm. Source restored byte-identical.
+
+**A defect of mine, and how it was caught.** The V-1348 arms called
+`service.navigate(ctx, id, { url })` while `NavigateRequest` also requires `wait_until`. Vitest does
+not typecheck, so 48 tests passed and I committed it; the `the-server-source-type-checks` gate caught
+it on the next full run. I had run `tsc` against the OAuth file in V-1343 and did not run it here —
+the same lesson that is already written down as "a vitest pass is not a strict tsc pass", skipped
+because the arms were an append to an existing file rather than a new one.
+
+By the time I reached it the peer had already committed the repair
+(`55af0135a "Make the scheme-refusal arms typecheck as well as pass"`), and the file now uses the
+`wait_until: 'load'` idiom the other twenty call sites in it already used — which is what reading a
+neighbouring call would have given me for free.

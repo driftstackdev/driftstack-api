@@ -192,7 +192,36 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(ordered.indexOf(older), 'the older secret comes first').toBeLessThan(
         ordered.indexOf(old),
       );
-      expect(await dueIds(1), 'limit 1 returns exactly one row').toHaveLength(1);
+
+      // V-1350 — `findEndpointsNeedingForceRotation` scans the WHOLE table: it
+      // takes no account filter, so every other suite writing webhook_endpoints
+      // shares this result set. Read twice in a row and a concurrent cleanup can
+      // empty it in between, which is how this arm failed twice under a full run
+      // while passing alone — reported as "limit 1 returns exactly one row:
+      // expected [] to have a length of 1", a message that reads like a leaked
+      // limit and is actually interference.
+      //
+      // Retry until a reading is uncontaminated, i.e. until BOTH seeds are still
+      // due. Then the limited query is compared against a set known to hold at
+      // least two rows, which is the only state in which "limit 1 returns one"
+      // means what it says.
+      let limited: string[] | null = null;
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const full = await dueIds();
+        if (!full.includes(older) || !full.includes(old)) continue;
+        const one = await dueIds(1);
+        // Re-read the full set: if the seeds survived on both sides of the
+        // limited read, nothing removed them mid-measurement.
+        const after = await dueIds();
+        if (!after.includes(older) || !after.includes(old)) continue;
+        limited = one;
+        break;
+      }
+      expect(
+        limited,
+        'five readings in a row were disturbed by a concurrent writer — the limit was never measured',
+      ).not.toBeNull();
+      expect(limited, 'limit 1 returns exactly one row').toHaveLength(1);
     });
   },
 );
