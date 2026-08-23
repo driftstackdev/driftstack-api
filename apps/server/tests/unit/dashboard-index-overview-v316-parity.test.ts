@@ -146,11 +146,17 @@ describe('W748 dashboard index/overview V-316 live-data parity', () => {
       /if \(line\) line\.textContent = tierLabel\(sub\.tier\) \+ ' · ' \+ String\(sub\.status\)/,
     );
     expect(i).toMatch(/'Period ends ' \+ fmtIsoDay\(sub\.current_period_end\) \+ '\.'/);
-    // Fleet v2 (2026-07-02): the no-subscription branch reveals the empty
-    // slot AND labels the Plan stat card 'free plan'.
-    expect(i).toMatch(
-      /\} else \{\s*\n\s+if \(empty\) empty\.classList\.remove\('hidden'\);\s*\n\s+if \(planSub\) planSub\.textContent = 'free plan';/,
-    );
+    // Fleet v2 (2026-07-02): the no-subscription branch reveals the empty slot.
+    expect(i).toMatch(/\} else \{\s*\n\s+if \(empty\) empty\.classList\.remove\('hidden'\);/);
+    // 2026-08-23 — it no longer LABELS the Plan stat card 'free plan' there.
+    // That assignment was unconditional, so this one card rendered "Enterprise"
+    // as its value and "free plan" as its sub-line simultaneously: an
+    // entitlement granted outside Stripe has no subscription row. The sub-line
+    // now reads the real tier, and says nothing at all when /me is unavailable
+    // rather than guessing.
+    expect(i).not.toMatch(/if \(planSub\) planSub\.textContent = 'free plan'/);
+    expect(i).toMatch(/accountMePromise/);
+    expect(i).toMatch(/managed by Driftstack/);
   });
 
   it('trial-pack credit display removed — the perpetual free tier carries no credit, so the dashboard overview no longer reads b.trial_pack.', () => {

@@ -283,16 +283,20 @@ const apiBaseUrl = resolveApiBaseUrl();
       // audit w2flmiw48 #4 — the account-email header used to be seeded from static
       // sample data and never overwritten by live data. Populate it from /account/me;
       // leave the neutral placeholder on failure / no token.
-      if (token) {
-        authedFetch('/v1/account/me')
-          .then((r) => (r.ok ? r.json() : null))
-          .then((me) => {
-            if (me && me.email) setText('account-email', 'Account · ' + me.email);
-          })
-          .catch(() => {
-            /* leave the placeholder */
-          });
-      }
+      // This page also needs the ACCOUNT tier, not only the Stripe subscription.
+      // An entitlement granted outside Stripe — enterprise, comped, crypto — has
+      // NO subscription row, and describing that as "no active subscription,
+      // choose a plan" tells a customer on the highest tier that they are on
+      // nothing. Hoisted into one promise so the subscription branch below reads
+      // the same result instead of racing a second, independent fetch.
+      const mePromise = token
+        ? authedFetch('/v1/account/me')
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null)
+        : Promise.resolve(null);
+      mePromise.then((me) => {
+        if (me && me.email) setText('account-email', 'Account · ' + me.email);
+      });
 
       // Wire action buttons regardless of token state — they show a
       // banner if no token rather than silently no-oping.
@@ -418,7 +422,12 @@ const apiBaseUrl = resolveApiBaseUrl();
                   return Promise.reject(err);
                 }),
         )
-        .then((body) => {
+        // Pair the billing state with the account identity so the no-subscription
+        // branch can tell "free, go pick a plan" apart from "already on a plan we
+        // bill outside Stripe". A `me` that failed to load resolves null and the
+        // branch falls back to the old free-tier copy.
+        .then((body) => Promise.all([body, mePromise]))
+        .then(([body, me]) => {
           // Subscription card.
           if (body.subscription) {
             const sub = body.subscription;
@@ -445,19 +454,46 @@ const apiBaseUrl = resolveApiBaseUrl();
             }
           } else {
             setPortalAvailability(false);
-            setText('sub-tier', 'No active subscription');
-            setText(
-              'sub-summary',
-              'Upgrade to a paid tier to unlock concurrent caps + archetype access.',
-            );
-            setStatusBadge('no subscription', 'no_subscription');
+            const accountTier = me && typeof me.tier === 'string' ? me.tier : null;
+            const planCta = root.querySelector('[data-field="plan-cta"]');
+            if (accountTier !== null && accountTier !== 'free') {
+              // A plan the customer HAS, billed outside Stripe. The old copy
+              // told an enterprise account it was on nothing and pointed it at
+              // the tier picker, where its own tier is not even purchasable.
+              setText('sub-tier', tierLabel(accountTier));
+              setText(
+                'sub-summary',
+                'Managed directly by Driftstack, not billed through Stripe. ' +
+                  'Contact support to change it.',
+              );
+              setStatusBadge('managed by Driftstack', 'no_subscription');
+              // Retarget the CTA as well as relabelling it — leaving the href on
+              // /select-tier/ under a "Contact support" label would just be a
+              // different wrong answer.
+              if (planCta) {
+                planCta.textContent = 'Contact support';
+                planCta.setAttribute(
+                  'href',
+                  'mailto:support@driftstack.dev?subject=Driftstack%20plan%20change',
+                );
+              }
+            } else {
+              setText('sub-tier', 'No active subscription');
+              setText(
+                'sub-summary',
+                'Upgrade to a paid tier to unlock concurrent caps + archetype access.',
+              );
+              setStatusBadge('no subscription', 'no_subscription');
+              if (planCta) {
+                planCta.textContent = 'Choose a plan';
+                planCta.setAttribute('href', '/select-tier/');
+              }
+            }
             // No subscription → no Stripe customer/portal and nothing to
             // cancel; hide both so they can't lead to a dead Stripe call.
-            // The plan CTA becomes "Choose a plan" (not "Change").
             if (portalBtn) portalBtn.classList.add('hidden');
             if (cancelBtn) cancelBtn.classList.add('hidden');
             if (cancelHint) cancelHint.classList.add('hidden');
-            setText('plan-cta', 'Choose a plan');
           }
         })
         .catch((err) => {

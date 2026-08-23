@@ -605,7 +605,13 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       }
 
       // ─── /v1/account/me ────────────────────────────────────────────────
-      getJson('/v1/account/me')
+      // Shared so the /v1/billing handler below can describe the plan sub-line
+      // against the REAL account tier. It used to hardcode 'free plan' whenever
+      // there was no Stripe subscription, so this one stat card rendered
+      // "Enterprise" as its value and "free plan" as its sub-line at the same
+      // time — an entitlement granted outside Stripe has no subscription row.
+      const accountMePromise = getJson('/v1/account/me');
+      accountMePromise
         .then(function (me) {
           const nameEl = root.querySelector('[data-account-name]');
           if (nameEl) nameEl.textContent = me.name || me.email || '—';
@@ -753,7 +759,22 @@ const ARCHETYPE_LABELS = Object.fromEntries(
             if (planSub) planSub.textContent = String(sub.status);
           } else {
             if (empty) empty.classList.remove('hidden');
-            if (planSub) planSub.textContent = 'free plan';
+            // No Stripe subscription does NOT mean the free tier. Describe the
+            // billing relationship against the real account tier instead of
+            // asserting one, and tolerate a /me that failed by saying nothing
+            // rather than guessing 'free plan' as this previously did.
+            if (planSub) {
+              accountMePromise
+                .then(function (me) {
+                  const t = me && typeof me.tier === 'string' ? me.tier : null;
+                  if (t === null) planSub.textContent = '';
+                  else if (t === 'free') planSub.textContent = 'free plan';
+                  else planSub.textContent = 'managed by Driftstack';
+                })
+                .catch(function () {
+                  planSub.textContent = '';
+                });
+            }
           }
         })
         .catch(function () {

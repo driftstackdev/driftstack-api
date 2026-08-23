@@ -73,11 +73,22 @@ describe('W360.B customer-dashboard /billing page content parity', () => {
     expect(body).toMatch(/Manage in Stripe portal/);
   });
 
-  it('no-subscription state hides the portal/cancel actions (no dead Stripe call for a free account) + relabels the plan CTA to "Choose a plan"', () => {
-    // A free account has no Stripe customer/portal and nothing to cancel.
+  it('no-subscription state hides the portal/cancel actions (no dead Stripe call) and splits the CTA by whether the account actually has a plan', () => {
+    // No Stripe subscription → no Stripe customer/portal and nothing to cancel,
+    // whichever branch below produced it.
     expect(body).toMatch(/if \(portalBtn\) portalBtn\.classList\.add\('hidden'\)/);
     expect(body).toMatch(/if \(cancelBtn\) cancelBtn\.classList\.add\('hidden'\)/);
-    expect(body).toMatch(/setText\('plan-cta', 'Choose a plan'\)/);
+    // 2026-08-23 — "no subscription" is no longer assumed to mean "free tier".
+    // An entitlement granted outside Stripe (enterprise / comped / crypto) has
+    // no subscription row, and the old single CTA sent that account to
+    // /select-tier/, where its own tier is not purchasable. Two branches now:
+    // the free account still gets the picker...
+    expect(body).toMatch(/planCta\.textContent = 'Choose a plan'/);
+    expect(body).toMatch(/planCta\.setAttribute\('href', '\/select-tier\/'\)/);
+    // ...and the out-of-Stripe plan gets support, with the href retargeted too
+    // rather than relabelled over a link that still went to the picker.
+    expect(body).toMatch(/planCta\.textContent = 'Contact support'/);
+    expect(body).toMatch(/mailto:support@driftstack\.dev/);
     // …and the paid branch re-shows the portal + restores "Change plan".
     expect(body).toMatch(/if \(portalBtn\) portalBtn\.classList\.remove\('hidden'\)/);
     expect(body).toMatch(/setText\('plan-cta', 'Change plan'\)/);
