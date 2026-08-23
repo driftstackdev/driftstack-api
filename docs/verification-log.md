@@ -6498,3 +6498,50 @@ deleted-owner refusal (7 copies, 5 unreached), the pagination boundary (14 sites
 now the profile cap (4 conditional branches, 2 unreached). The shape is consistent enough to be worth
 naming — a rule implemented once per call path is a rule tested once per call path, and the count of
 copies is never the count of covered copies.
+
+## V-1341 — the replicated-guard pattern, measured instead of anecdotal
+
+Three findings in a row had the same shape: a rule implemented once per call path, tested on some
+paths and not others — the deleted-owner refusal, the pagination boundary, the profile cap. Rather
+than wait for a fourth, here is the whole class, from the coverage run intersected against all 744
+throw sites and grouped by the refusal MESSAGE each site raises.
+
+**12 refusal messages appear at more than one site with at least one copy never executed.** Ranked
+by how many copies are dark:
+
+| dark / total | refusal                                                                          |
+| ------------ | -------------------------------------------------------------------------------- |
+| 6 / 9        | `Owner account no longer exists.`                                                |
+| 2 / 2        | `Another turn is already running for this agent session.`                        |
+| 2 / 2        | `Agent message admission did not resolve.`                                       |
+| 2 / 12       | `Invalid id format. Expected …`                                                  |
+| 2 / 12       | `invalid_request` (OAuth)                                                        |
+| 1 / 2        | `Proxy … not found.`, `Session … not found.`, `atlas-priority-event … not found` |
+| 1 / 3        | `Confirmation link is invalid or has been used.`, `Unsubscribe link is invalid.` |
+| 1 / 33       | `AgentSession … not found.`                                                      |
+| 1 / 2        | `Subscriber … not found.`                                                        |
+
+**The snapshot predates this session's work.** The coverage run is from before V-1335–V-1338, so the
+`Owner account no longer exists.` row still shows six dark; five have since been covered and proven,
+and one (`agent-sessions.ts:4070`) is shadowed by the rate limiter rather than untested (V-1339). The
+other rows are untouched by that work and stand as measured.
+
+**The most interesting new entry is dark on BOTH copies.** `Another turn is already running for this
+agent session.` guards the same condition on two paths — the manual-transcript admission
+(`agent-sessions.ts:4514`) and the LLM-driven one (`:4837`) — converting the runtime's
+`turn-in-progress` result into a 409. Two concurrent turns on one session is a billing and
+transcript-ordering problem, and neither copy has ever run.
+
+It is not covered here, and the reason is worth recording rather than rediscovering: the result comes
+from `activeTurnSessionIds`, an in-memory `Set` private to the `AgentRuntime` instance, and
+`buildTestApp` constructs that runtime internally with no override. Producing the state needs either
+an injectable runtime or a controllable slow point in a first turn so a second overlaps it. A test
+built on real timing would be the flaky kind this repo treats as a defect, so the seam comes first.
+
+Same reason, same shelf: `routes/account-me.ts:865` (avatar upload with R2 unconfigured — the fixture
+always wires an R2 fake) and `:901` (an R2 write failing — the fake has no failure seam and the
+fixture exposes only its store, not the client).
+
+The pattern itself is the durable part: **the count of copies is never the count of covered copies**,
+and grouping throw sites by message turns that from something noticed three times by hand into a list
+that can be worked down.
