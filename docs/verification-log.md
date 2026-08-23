@@ -8124,3 +8124,29 @@ reported 45 passed, which meant nothing. The target strings were indented 6 spac
 guessed 8. The `assert old in s` guard is what turned a fake green into an error; without it this
 entry would have claimed two proofs that never ran. Third time this session, and the fix is always
 the same: print the exact bytes with `repr()` before writing a mutation.
+
+## V-1384 — the other half of two refusals that answer the same failure differently
+
+`DurableWebhookDelivery.replay()` and `dlq.requeue()` both work by conditional update: match the row
+AND its expected status. When that misses, each re-reads the row and refuses in one of two ways —
+the id resolved but the status is wrong, or the id resolved to nothing. Coverage had the
+**wrong-status** half of both driven and the **not-found** half of neither.
+
+They are not interchangeable to whoever is holding the console. _"has status 'in_flight'"_ means the
+right row in the wrong state, so waiting for the lease to expire is the correct move. _"not found"_
+means the id itself is wrong and waiting never helps.
+
+One arm covers both methods, asking each for a well-formed uuid that was never inserted — not a
+malformed one, because the branch under test is the lookup succeeding and finding nothing. It then
+asserts the negative in both directions: neither refusal may carry the other's wording, so the two
+cannot be swapped without notice.
+
+Mutations: rewording either not-found message into the wrong-status form reds it, one method at a
+time.
+
+⚠️ **Two more mutations that silently did not apply**, on top of the three last turn. Both inline
+`python3 -c` targets guessed the indentation — 6 and 8 spaces where the file has 4 and 6 — and the
+runs after them reported 9 passed, which meant nothing. The `assert` caught both. The fix that
+actually holds: stop matching on text. Mutate **by line index**, read the line back, and assert the
+substring is present before rewriting it. That is what produced the two proofs above on the first
+attempt.

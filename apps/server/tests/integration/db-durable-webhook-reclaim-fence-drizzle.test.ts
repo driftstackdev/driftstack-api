@@ -289,6 +289,34 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(row?.status).toBe('in_flight');
     });
 
+    // V-1384 — both methods answer a failed update by re-reading the row and refusing in one
+    // of two ways: the id resolves but the status is wrong, or the id resolves to nothing.
+    // The wrong-status half is pinned by the arms above; the not-found half was in the
+    // never-executed set for both. They are not interchangeable to whoever is holding the
+    // console: "has status 'in_flight'" means the right row in the wrong state and the
+    // operator waits, while "not found" means the id itself is wrong and waiting never helps.
+    it('CRITICAL replay() and requeue() distinguish a MISSING delivery from a wrong-status one. Both re-read the row after the conditional update misses, and only the wrong-status branch was covered — so an id that resolves to nothing had never been asked for.', async () => {
+      if (!dbReachable || !client) return;
+      const { database } = await seedEndpoint();
+      const now = new Date();
+      const handles = createDurableWebhookDelivery({
+        database,
+        fetch: () => Promise.resolve(new Response('ok', { status: 200 })),
+        now: () => now.getTime(),
+      });
+
+      // A well-formed id that was never inserted. Not a malformed one — the point is that
+      // the lookup succeeds and finds nothing, which is the branch under test.
+      const absent = randomUUID();
+
+      await expect(handles.deliveries.replay(absent)).rejects.toThrow(/not found/);
+      await expect(handles.dlq.requeue({ deliveryId: absent })).rejects.toThrow(/not found/);
+
+      // …and neither says the other thing, so the two refusals cannot be swapped.
+      await expect(handles.deliveries.replay(absent)).rejects.not.toThrow(/has status/);
+      await expect(handles.dlq.requeue({ deliveryId: absent })).rejects.not.toThrow(/has status/);
+    });
+
     it("requeue() succeeds on a genuinely 'dlq' delivery (no regression)", async () => {
       if (!dbReachable || !client) return;
       const { webhookId, database } = await seedEndpoint();
