@@ -6239,3 +6239,44 @@ precondition can make an assertion pass for a reason unrelated to the property u
 `ctx.teams` here, the short final page in the pagination walks (V-1317), the `if (!app) return`
 suites (V-1328) — each proved something narrower than its title claimed, and in each case the gap was
 invisible to reading and obvious to a mutation.
+
+## V-1333 — the tenant boundary swept end to end: 127 predicates, 3 gate copies, one prior gap already closed
+
+V-1332 found a real hole on the cross-tenant boundary. This asks whether it was the only one, on the
+two layers beneath it. Neither sweep found a defect; both are recorded because an unwritten sweep is
+indistinguishable from one never run.
+
+**The repo predicate — 127 sites, 24 repos.** Every `eq(<table>.accountId, …)` in `src/db` was
+rewritten to `eq(t.accountId, t.accountId)`, always true — the technique the original ownership sweep
+used, which back then left the ENTIRE suite green across two repos and 14 predicates. Today it fails
+**242 tests across 85 files**, including all three deliberate boundary files
+(`db-repo-account-ownership-boundary`, `db-repo-account-scoped-reads-boundary`, and the
+`tenant-scope-drizzle` family). Every repo carrying a predicate is represented. The class those two
+prior passes opened is closed.
+
+**A false alarm of my own, worth recording because it is the fourth of its kind today.** Attributing
+by NAME said four repos had no failing test. Three were covered by files named for the boundary
+rather than the repo. The fourth, `stripe-webhooks-repo`, looked real — five predicates inside
+`downgradeAccountTierToBestRemaining`, `setAccountTierToBestActive` and `activateCryptoEntitlement`,
+which compute an account's TIER from its subscriptions and entitlements; unscoped, one customer's
+tier is derived from the whole platform's rows, and a free account inherits whatever the best
+subscription on the platform happens to be. It is covered: `db-account-tier-best-active-drizzle` and
+`db-crypto-entitlements-drizzle` both failed. I had grepped the failure list for the repo's name and
+those files do not carry it. **Name matching is not attribution** — the same error in four different
+shapes today.
+
+**The write-path role gate — three copies.** `effectiveAccountIdForWrite` is defined separately in
+`routes/profiles.ts`, `routes/webhooks.ts` and `routes/profile-snapshots.ts`, logically identical,
+differing only in variable name and message. Removing the `role !== 'admin'` check from all three
+failed nine files, of which three are behavioural and cover one family each: `team-rbac-auth-path`
+(profiles and webhooks, both as MEMBER role), `webhook-replay-customer`, and
+`profile-snapshots-team-write-requires-admin`. The remaining five are content-parity and
+cross-source pins, plus the source-typecheck arm reacting to the now-unused import.
+
+**The completeness question was already answered, and better than the guard I was about to write.**
+`every-team-scoped-write-is-gated` (V-1069) exists precisely for the fourth copy: it measures that 47
+live `/v1` writes resolve an effective account and all 47 carry one of five recognised gates, refuses
+the forty-eighth, holds a roster so a DELETION is visible rather than dropping the route out of the
+scan, shares its gate vocabulary with V-837 so a helper cannot be known to one and not the other, and
+carries a vacuity arm. Its header records that its first version was a false green a mutation caught.
+Nothing to add.
