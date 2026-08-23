@@ -6579,3 +6579,43 @@ because they are deliberately unreachable: both carry a comment saying purged ro
 hash, so the branch exists for type-narrowing only. The code said so before I wrote anything, which
 is the cheapest kind of verification available and the reason to read the site before building a
 fixture for it. They are not defects and need no arm.
+
+## V-1343 — an abandoned OAuth consent screen, and two guards that cannot be told apart from outside
+
+Two more worklist entries from V-1341, and they resolved in opposite directions.
+
+**`services/oauth.ts:518` is shadowed, not untested.** It refuses a PKCE `code_challenge_method`
+other than `S256` — a real security control, since `plain` sends the verifier as the challenge. But
+`service.authorize()` has exactly one caller, `routes/oauth.ts:242`, and that route's schema pins
+`code_challenge_method: z.literal('S256')` at line 55. The request is refused before the service is
+reached. `oauth-pkce-s256-only.test.ts` already proves that by SENDING a `plain` request, and its own
+header records the same lesson from the other side: relaxing the route schema reds only source-text
+guards. So the service check is defence in depth behind a validator that always answers first — the
+second shadowed branch found this way, after `agent-sessions.ts:4070` in V-1339.
+
+**`services/oauth.ts:564` is a real gap, now covered.** The consent flow has a gap between recording
+a pending authorization and a human approving it; `CODE_TTL_SECONDS` bounds it. The branch one line
+above — an `authorization_id` that resolves to nothing — is exercised; the one distinguishing "no
+such authorization" from "this one is too old" was not. New file with three arms: an approval inside
+the window still mints a code (so the refusal arms cannot be satisfied by a service that refuses
+everything), an approval past the window is refused, and the refusal carries `invalid_request`.
+Driven against the service with an injected clock, because the alternative is waiting five real
+minutes.
+
+**The mutation proof needed correcting, and the correction is the interesting part.** Disabling the
+pre-check alone left all three arms green — the tell that an arm is measuring something else. It was
+not: changing only the pre-check's MESSAGE failed the arm, which proves the arm does execute line 564. What masks the first mutation is that `consumeAuthorizationForCode` returns `'expired'` a few
+lines later and raises the **identical code and message**. The two guards are observationally
+identical from outside, so neither is provable alone; disabling BOTH fails both refusal arms while
+the inside-window arm stays green. The entry says "these arms pin the behaviour, guaranteed by two
+redundant guards" rather than claiming a specific line, because the stronger claim is not available
+through the public surface.
+
+**An imprecision in the V-1341 instrument, for the record.** That sweep grouped throw sites by their
+first quoted argument. `OAuthError`'s first argument is the error CODE, so both OAuth rows were
+grouped as `invalid_request` rather than by message — which is why two unrelated refusals appeared as
+one row. The grouping is still useful; it is looser than it reads for error classes whose first
+argument is not the message.
+
+`EXPECTED_TEST_FILES` 3003 → 3004 and `_ALL` 3168 → 3169 for the one file added. The new file is a
+pure unit test and gates on nothing, so the stated `DATABASE_URL` share is unchanged.
