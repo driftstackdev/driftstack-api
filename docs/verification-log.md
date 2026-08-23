@@ -6855,3 +6855,29 @@ By the time I reached it the peer had already committed the repair
 (`55af0135a "Make the scheme-refusal arms typecheck as well as pass"`), and the file now uses the
 `wait_until: 'load'` idiom the other twenty call sites in it already used — which is what reading a
 neighbouring call would have given me for free.
+
+## V-1351 — a guard that failed for a reason unrelated to what it guards
+
+`the-egress-claim-gate-has-one-definition` reported two failures in a full run and passed alone. The
+failing arms took **10044ms and 10102ms** — a timeout signature, not an assertion. It had shown the
+same behaviour once before, during the V-1317 sweep, where it was set aside as transient.
+
+The cause is in the file, not the machine. `gateDefiners()` reads and comment-strips EVERY `.test.ts`
+in the unit directory, and each of the four arms calls it — four full passes over a few thousand
+files for four identical answers. Alone that is merely wasteful; sharing a machine with the rest of a
+parallel run, two of the passes crossed the timeout and the file reported a failure that had nothing
+to do with egress gates.
+
+Memoised. The filesystem does not change during a run, so one pass is the same answer as four; kept
+as a lazy memo rather than a `beforeAll` so the arms stay independently runnable. Test time for the
+file is now 3.6s.
+
+**Checked that the speed-up did not buy vacuity**, which is the obvious way to make a scanning guard
+fast and useless: breaking the scan's own filter so it matches nothing still fails the arm that exists
+for exactly that — "files defining an egress gate", which requires at least five. The memo caches a
+real answer, not an empty one.
+
+Worth noting alongside V-1350: two flakes in one turn, both load-sensitive, both previously written
+off. One was a shared-table read racing a concurrent cleanup, one a scan too slow under parallelism.
+Neither was random, and neither would have been found by re-running the file alone — which is the
+first thing one does with a flake and the thing that hides both of these.

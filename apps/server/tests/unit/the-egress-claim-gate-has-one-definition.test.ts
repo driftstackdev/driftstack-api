@@ -57,12 +57,29 @@ function code(src: string): string {
   return codeOnly(src);
 }
 
+/**
+ * Memo for the scan below.
+ *
+ * V-1350 — every arm here calls `gateDefiners()`, and each call read and
+ * comment-stripped EVERY `.test.ts` in the unit directory: four full passes over
+ * a few thousand files for four identical answers. Alone that is merely wasteful;
+ * under a full parallel run two of the arms exceeded the test timeout and the
+ * file reported a failure that had nothing to do with egress gates.
+ *
+ * The filesystem does not change during a run, so one pass is the same answer as
+ * four. Kept as a lazy memo rather than a `beforeAll` so the arms stay
+ * independently runnable.
+ */
+let gateDefinersMemo: { file: string; body: string }[] | null = null;
+
 /** Every unit test that DEFINES an egress gate — a mention in prose is not one. */
 function gateDefiners(): { file: string; body: string }[] {
-  return readdirSync(UNIT_DIR)
+  if (gateDefinersMemo !== null) return gateDefinersMemo;
+  gateDefinersMemo = readdirSync(UNIT_DIR)
     .filter((f) => f.endsWith('.test.ts') && f !== SELF)
     .map((f) => ({ file: f, body: code(readFileSync(join(UNIT_DIR, f), 'utf8')) }))
     .filter((f) => /const hasEgressImpl\s*=/.test(f.body));
+  return gateDefinersMemo;
 }
 
 describe('V-917 the egress claim gate has one definition', () => {
