@@ -8556,3 +8556,38 @@ from a different line than the shape of the input suggests.
 - `fleet-upgrade-auth.ts:82/107`: both untaken arms are inside log-field expressions
   (`tokenSource`, `nodeIdSource`). Getting them wrong misleads an operator; it grants nothing. The
   security check beside them — declared node id must equal the signed `iss` — is covered.
+
+## V-1395 — a corrupt MFA challenge payload, and the removal that stops it repeating
+
+`parseMfaChallengePayload` guards the payload the challenge store holds between the password step and
+the code step. Branch coverage put **all five** of its type checks in the never-taken set, plus the
+shape check above them: nothing had handed `completeMfaChallenge` a stored payload it could not parse.
+
+The consumer's own comment states what the null return is for — corrupt state "can never become a
+valid customer retry", removed so malformed Redis data fails closed "instead of a repeatable 500 or a
+verifier call with an invalid account identity". Both halves were unexercised:
+
+- the **consume**. Without it the corrupt entry survives its whole TTL and every retry hits the same
+  failure — the repeatable case the comment names.
+- the **parse**. `payload.account_id` is what the code verifier is called with, so a payload missing
+  it would put `undefined` where an account id belongs.
+
+Eleven malformed payloads: not JSON, a JSON array, JSON `null`, a JSON string, missing and empty
+`account_id`, missing `email`, a numeric `source_ip`, a string `issued_at`, an `issued_at` of `1e999`
+(which parses as `Infinity` — `typeof` alone would accept it), and a numeric `issued_user_agent`.
+Each asserts the refusal **and** that the entry was consumed.
+
+The twelfth arm is the one that makes the other eleven mean something: a **well-formed** payload
+refused for an IP mismatch must **not** be consumed, so the legitimate customer can retry from the
+right address. Without it, every arm above is satisfied by a method that consumes on any failure —
+which would quietly destroy a live challenge on a benign refusal.
+
+The store is not reachable from the HTTP fixture, so the service is constructed directly with a
+recording challenge store, and the injected verifier **throws** if it is ever reached — a refusal that
+came from the wrong place cannot read as the guard working.
+
+Mutations: removing the consume reds eleven arms and leaves the well-formed one green; dropping the
+`account_id` guard reds exactly its two; dropping the `issued_at` finiteness guard reds exactly its
+two.
+
+`EXPECTED_TEST_FILES` and `_ALL` each +1 for the file added here.
