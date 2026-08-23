@@ -61,6 +61,10 @@ describe('desktop app access public truth', () => {
       expect(body, name).not.toMatch(/Apple-silicon macOS app/);
       expect(body, name).not.toMatch(/no public installer link/i);
       expect(body, name).not.toMatch(/supplied directly by Driftstack/);
+      // The retired CALL TO ACTION, not only the retired claims. This one
+      // outlived the first sweep because it sits in a banner STRING with no
+      // mailto beside it, so neither the link grep nor the claim grep saw it.
+      expect(body, name).not.toMatch(/Request desktop app/);
     }
     // Say the unsigned posture out loud rather than letting a first-launch
     // Gatekeeper/SmartScreen block read as a broken download.
