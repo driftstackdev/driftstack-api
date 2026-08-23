@@ -261,6 +261,52 @@ describe('X-Driftstack-Account team-RBAC header end-to-end', () => {
     ).toContain('Owner account no longer exists');
   });
 
+  // V-1338 — the fifth copy, and the most expensive fixture of the set: import
+  // parses a full export envelope BEFORE it resolves the effective account, so
+  // an invalid body answers with a 422 and never reaches the branch. The
+  // envelope below is therefore complete and valid — the request is refused for
+  // the owner being gone and nothing else.
+  it('CRITICAL importing a profile for an owner whose account has been DELETED is refused. Import mints a fresh profile on the OWNER account under the OWNER tier, so a half-resolved owner decides both where the profile lands and what it is allowed to be.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+
+    const GHOST_ID = '00000000-0000-4000-8000-00000000f041';
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: '00000000-0000-4000-8000-00000000f042',
+        ownerAccountId: GHOST_ID,
+        role: 'admin',
+      },
+    ]);
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles/import',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${GHOST_ID}`,
+      },
+      payload: {
+        envelope: {
+          version: 1,
+          exported_at: '2026-01-01T00:00:00.000Z',
+          source_profile_id: 'prof_00000000-0000-4000-8000-00000000f043',
+          source_account_id: 'acc_00000000-0000-4000-8000-00000000f044',
+          profile: {
+            name: 'imported-under-a-vanished-owner',
+            archetype: 'iphone17_ios18_7_safari26_4',
+            description: null,
+          },
+        },
+      },
+    });
+
+    expect(res.statusCode, 'importing for a deleted owner must be refused').toBe(403);
+    expect(
+      res.json<{ detail?: string }>().detail,
+      'and the refusal names the vanished owner',
+    ).toContain('Owner account no longer exists');
+  });
+
   it('X-Driftstack-Account with malformed acc_-prefixed UUID → 4xx (NOT 500)', async () => {
     fx = await buildTestApp({ tier: 'api_builder' });
     const res = await fx.app.inject({

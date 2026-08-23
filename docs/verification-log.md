@@ -6404,3 +6404,28 @@ the clone and restore arms — the same null read behind all four. Source restor
 
 Four of seven copies covered. Remaining: `routes/profiles.ts:454` (`POST /v1/profiles/import`, which
 needs a valid envelope body to reach the branch) and `routes/agent-sessions.ts:4066` / `:4070`.
+
+## V-1338 — the fifth deleted-owner copy: profile import
+
+`POST /v1/profiles/import` parses a complete export envelope BEFORE it resolves the effective
+account, so any shortcut in the fixture answers with a validation error and never reaches the branch
+— the V-1332 trap in its plainest form. The payload here is therefore a valid envelope end to end
+(version, `exported_at`, both source ids, and a profile carrying a selectable archetype), so the only
+thing wrong with the request is the owner being gone.
+
+Import mints a fresh profile on the OWNER account under the OWNER tier, so a half-resolved owner
+decides both where the profile lands and what it is permitted to be.
+
+Mutation-proven with `if (false && !owner)` on `routes/profiles.ts:454` — fails on
+`expected 500 to be 403`, the fifth arm to show that same signature. Source restored byte-identical.
+
+**Five of seven covered. The remaining two are in `routes/agent-sessions.ts` and are harder for
+reasons worth writing down rather than discovering again:**
+
+- `:4070` needs an agent-session record whose `accountId` is an account that does not exist, and the
+  caller must not be that account — so the fixture has to seed a session owned by the ghost, not just
+  a membership pointing at it.
+- `:4066` (`'Owner account tier is unavailable.'`) fires only when the route is registered with no
+  `authRepo` at all. `buildTestApp` always wires one, so reaching it means building an app that is
+  deliberately incomplete — which is a different kind of fixture from every arm above, and possibly a
+  branch that only a misconfigured deployment can reach.
