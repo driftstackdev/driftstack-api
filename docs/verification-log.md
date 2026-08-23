@@ -5905,3 +5905,42 @@ Mutation-proven, each restored byte-identical:
 | `n > 100` → `n > 250` in the customer route             | 2 fail: spec-parity AND the message arm — the condition moved away from both |
 | the message alone says 500, still refuses above 100     | 1 fails: only the message arm, isolating it                                  |
 | a fourth imperative marker added to `admin-sessions.ts` | completeness arm fails, naming the file and its count                        |
+
+## V-1324 — the guard's own reader could borrow a neighbour's number
+
+Extending the limit-bounds guard in V-1323 meant using its spec extractor on new anchors, and using
+it is what exposed two ways it can return the wrong answer. Both were latent — no entry in the table
+hit either — so both would have stayed invisible until someone added the endpoint that did.
+
+**It could read a bound belonging to a different endpoint.** An inline path block was sliced from its
+`path: '…'` to the next `registerRoute(`. Named query consts are declared BETWEEN routes, so that
+slice swallows one. `/v1/admin/usage/accounts/{id}` publishes no `limit` at all and resolved to
+**1000** — the atlas queue's bound, declared in the const sitting between it and the next route. This
+is the worse of the two failures: every arm asserts against null, so a missing bound is caught, while
+a borrowed one simply agrees with whatever it was compared to.
+
+**It could miss a bound that is published.** The anchor was resolved with `indexOf`, taking the first
+block. A path registered under two methods has two: `/v1/recipes` is both the create and the list,
+and the create carries no query. First-match therefore read "no bound" for an endpoint advertising 100.
+
+Both fixed — the slice now also terminates at the next named query const, and every block for an
+anchor is collected with the matches required to agree (differing maxima throw rather than picking
+one). The six pre-existing admin arms still read the same numbers, which is what shows the change
+tightened the reader without loosening them.
+
+Two arms added, pinned to the real spec paths that exhibit each failure, and each proven by reverting
+its own fix:
+
+| mutation                        | failing arm                                                |
+| ------------------------------- | ---------------------------------------------------------- |
+| named-const terminator removed  | a path with no limit borrowed a neighbouring bound         |
+| loop reduced to the first block | a multi-method path did not resolve to its published limit |
+
+Each failed exactly one arm with the other fifteen green.
+
+**A measurement error of mine, retracted before it became a claim.** The sweep that found this
+started with a script that sliced each spec block from one `path:` to the next, which reported
+`/v1/admin/usage/accounts/{id}` as advertising a limit of 1000 while its route file contains no
+`limit` at all — reading like a live spec/route mismatch. It was my slice over-reaching, not a
+defect. Checking the block before writing it down turned a false finding into a real one about the
+instrument: the guard's own reader had the same over-reach, which is the part that mattered.

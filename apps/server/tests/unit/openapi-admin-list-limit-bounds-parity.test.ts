@@ -67,22 +67,51 @@ function specLimitMax(anchor: string): number | null {
   const startToken = anchor.startsWith('/v1/')
     ? `path: '${anchor}'`
     : `const ${anchor} = z.object({`;
-  const start = SPEC.indexOf(startToken);
-  if (start < 0) return null;
-  const rest = SPEC.slice(start);
-  // Inline path blocks terminate at the next registerRoute(); named const
-  // blocks terminate at their first `});`.
-  const endTok = anchor.startsWith('/v1/') ? 'registerRoute(' : '});';
-  const endIdx = rest.indexOf(endTok, 1);
-  const block = endIdx > 0 ? rest.slice(0, endIdx) : rest;
-  // Tolerant of the chained multi-line form prettier produces once the
-  // declaration grows a `.describe(...)`: `/v1/billing/crypto-orders` writes
-  // `limit: z.coerce\n.number()\n…\n.max(100)`, which a single-line pattern
-  // reads as absent — and "absent" is indistinguishable from "no bound" unless
-  // the caller asserts non-null, which every arm below does.
-  const m = block.match(/limit:\s*z\.[\s\S]{0,200}?\.max\((\d+)\)/);
-  const g = m?.[1];
-  return g !== undefined ? Number(g) : null;
+
+  // V-1324 — EVERY block for this anchor, not the first.
+  //
+  // `indexOf` took the first, and a path registered under two methods has two
+  // blocks: `/v1/recipes` is both the create and the list, and the create has no
+  // query at all. Reading the first therefore read "no bound" for an endpoint
+  // that publishes one. Collecting all of them and requiring the matches to
+  // agree removes the ordering dependency entirely.
+  const limits = new Set<number>();
+  for (let at = SPEC.indexOf(startToken); at >= 0; at = SPEC.indexOf(startToken, at + 1)) {
+    const rest = SPEC.slice(at);
+    // Terminators. Inline blocks end at the next registerRoute(); named const
+    // blocks at their first `});`.
+    //
+    // V-1324 — and inline blocks ALSO end at the next named query const, which
+    // is the tighter of the two. Those consts are declared BETWEEN routes, so a
+    // slice running to the next registerRoute() swallows one and reads its
+    // bound: `/v1/admin/usage/accounts/{id}` publishes no limit at all and
+    // resolved to 1000, the atlas queue's, because that const sits between it
+    // and the next route. Borrowing a neighbour's number is worse than finding
+    // none — a null is asserted against, a wrong number quietly agrees.
+    const ends: number[] = [];
+    if (anchor.startsWith('/v1/')) {
+      ends.push(rest.indexOf('registerRoute(', 1));
+      const namedConst = /\n\s*const [A-Za-z]+ = z\.object\(\{/.exec(rest.slice(1));
+      if (namedConst) ends.push(namedConst.index + 1);
+    } else {
+      ends.push(rest.indexOf('});', 1));
+    }
+    const live = ends.filter((n) => n > 0);
+    const block = live.length > 0 ? rest.slice(0, Math.min(...live)) : rest;
+    // Tolerant of the chained multi-line form prettier produces once the
+    // declaration grows a `.describe(...)`: `/v1/billing/crypto-orders` writes
+    // `limit: z.coerce\n.number()\n…\n.max(100)`, which a single-line pattern
+    // reads as absent — and "absent" is indistinguishable from "no bound" unless
+    // the caller asserts non-null, which every arm below does.
+    const m = block.match(/limit:\s*z\.[\s\S]{0,200}?\.max\((\d+)\)/);
+    if (m?.[1] !== undefined) limits.add(Number(m[1]));
+  }
+  if (limits.size > 1) {
+    throw new Error(
+      `${anchor}: blocks advertise different limit maxima (${[...limits].sort().join(', ')})`,
+    );
+  }
+  return limits.size === 1 ? [...limits][0]! : null;
 }
 
 // endpoint → { route file, spec anchor (path for inline, const for named) }
@@ -248,6 +277,27 @@ describe('OpenAPI spec ↔ route `limit` max parity (imperatively bounded endpoi
       ).toBe(route?.enforced);
     });
   }
+
+  // V-1324 — the extractor's two failure modes, pinned with real spec paths.
+  //
+  // Both were latent: no table entry hit either, so both would have stayed
+  // invisible until someone added the endpoint that did. A guard whose reader
+  // can silently return another endpoint's number is worse than one that finds
+  // nothing, because every arm here asserts against null and none of them can
+  // tell a borrowed number from a real one.
+  it('CRITICAL a path that publishes NO limit resolves to null, not to the bound of whatever is declared after it. `/v1/admin/usage/accounts/{id}` has no limit query, and the atlas queue const sits between it and the next route — read to the next registerRoute() it came back 1000, which is the atlas bound.', () => {
+    expect(
+      specLimitMax('/v1/admin/usage/accounts/{id}'),
+      'a path with no limit borrowed a neighbouring bound',
+    ).toBeNull();
+  });
+
+  it('CRITICAL a path registered under two methods resolves to the bound it publishes, whichever block comes first. `/v1/recipes` is both the create and the list; the create carries no query, so taking the first match read "no bound" for an endpoint that advertises 100.', () => {
+    expect(
+      specLimitMax('/v1/recipes'),
+      'a multi-method path did not resolve to its published limit',
+    ).toBe(100);
+  });
 
   it('CRITICAL every imperatively bounded limit in the route layer is in the table. The pairs compared here are the pairs someone listed, so an endpoint left out is not reported as unchecked — its two numbers simply never meet. Counted from the refusal message, which is the one marker every such bound carries.', () => {
     const routesDir = resolve(REPO, 'apps/server/src/routes');
