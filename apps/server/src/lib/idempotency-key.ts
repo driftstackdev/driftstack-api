@@ -14,7 +14,8 @@
 //   - empty / whitespace-only → treat as absent
 //   - >255 ASCII chars → invalid (return 400)
 //   - contains whitespace OR non-printable-ASCII → invalid (400)
-//   - duplicate header → first value wins
+//   - header sent twice → Node joins the two values with `, `, and the
+//     joined string trips the whitespace rule above → invalid (400)
 //
 // Previously each route hand-rolled its own parser. agent-sessions
 // only checked "empty → absent" and missed the length / whitespace /
@@ -44,9 +45,15 @@ export type IdempotencyHeader =
 export function readIdempotencyKey(req: FastifyRequest): IdempotencyHeader {
   const raw = req.headers['idempotency-key'];
   if (raw === undefined) return { kind: 'absent' };
-  // Duplicate header → first wins. A Fastify request with multiple
-  // copies of the same header presents as an array; downstream
-  // tooling should not have to think about that.
+  // Fastify types every header as `string | string[]`, so narrow it. This is
+  // NOT the duplicate-header path, whatever it looks like: Node puts only
+  // `set-cookie` in an array. A repeated `Idempotency-Key` arrives already
+  // joined — `key-one, key-two` — and the whitespace rule below then refuses
+  // it, so the customer gets a 400 rather than a dedup key that is neither of
+  // the two they sent. Measured over a socket in
+  // tests/integration/a-header-sent-twice-does-not-arrive-as-an-array.test.ts,
+  // which also shows why app.inject cannot be used to check this: it joins
+  // without the space, and the result passes.
   const value = Array.isArray(raw) ? raw[0] : raw;
   if (value === undefined) return { kind: 'absent' };
   const trimmed = value.trim();

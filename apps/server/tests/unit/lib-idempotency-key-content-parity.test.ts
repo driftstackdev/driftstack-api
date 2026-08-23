@@ -43,9 +43,14 @@ describe('lib/idempotency-key content parity', () => {
     );
   });
 
-  it('4-rule validation contract framing pinned: empty/whitespace → absent + >255 ASCII → invalid (400) + whitespace or non-printable-ASCII → invalid (400) + duplicate header → first wins. + cross-ref to /docs/idempotency-keys.astro single-source-of-truth. — pinned so the 4-rule + docs-as-source-of-truth contract all stay documented', () => {
+  // V-1365 — the fourth rule used to say a repeated header resolved to its first
+  // value. It does not: Node joins the two values with a comma and a space, and the
+  // joined string then fails the whitespace rule, so the real outcome is a 400. The
+  // rule now states that, and the behaviour is executed over a socket in
+  // tests/integration/a-header-sent-twice-does-not-arrive-as-an-array.test.ts.
+  it('4-rule validation contract framing pinned: empty/whitespace → absent + >255 ASCII → invalid (400) + whitespace or non-printable-ASCII → invalid (400) + header sent twice → joined by Node and refused as whitespace (400). + cross-ref to /docs/idempotency-keys.astro single-source-of-truth. — pinned so the 4-rule + docs-as-source-of-truth contract all stay documented', () => {
     expect(body).toMatch(
-      /\/\/ All four follow the same validation contract documented at\s*\n?\s*\/\/ apps\/marketing-site\/src\/pages\/docs\/idempotency-keys\.astro:\s*\n?\s*\/\/ {3}- empty \/ whitespace-only → treat as absent\s*\n?\s*\/\/ {3}- >255 ASCII chars → invalid \(return 400\)\s*\n?\s*\/\/ {3}- contains whitespace OR non-printable-ASCII → invalid \(400\)\s*\n?\s*\/\/ {3}- duplicate header → first value wins/,
+      /\/\/ All four follow the same validation contract documented at\s*\n?\s*\/\/ apps\/marketing-site\/src\/pages\/docs\/idempotency-keys\.astro:\s*\n?\s*\/\/ {3}- empty \/ whitespace-only → treat as absent\s*\n?\s*\/\/ {3}- >255 ASCII chars → invalid \(return 400\)\s*\n?\s*\/\/ {3}- contains whitespace OR non-printable-ASCII → invalid \(400\)\s*\n?\s*\/\/ {3}- header sent twice → Node joins the two values with `, `, and the\s*\n?\s*\/\/ {5}joined string trips the whitespace rule above → invalid \(400\)/,
     );
   });
 
@@ -73,9 +78,17 @@ describe('lib/idempotency-key content parity', () => {
     );
   });
 
-  it("readIdempotencyKey 6-step implementation pinned: 1. undefined → absent 2. array → first wins (with framing 'Duplicate header → first wins. A Fastify request with multiple copies of the same header presents as an array; downstream tooling should not have to think about that.') 3. undefined first → absent 4. trim → empty? absent 5. length > 255 → invalid 6. /^[\\x21-\\x7e]+$/ char class (printable ASCII excluding space; 'Whitespace inside the key is rejected — the customer-facing docs commit to this.') Drift to using last-wins on duplicate would let attackers force a specific dedup key; drift to expanding the char class to allow whitespace would silently change the contract the docs commit to", () => {
+  // V-1365 — this pin used to freeze a claim that the array narrowing was the
+  // duplicate-header path. Only `set-cookie` reaches a handler as an array, so that
+  // branch cannot run for this header; the narrowing is there for the `string |
+  // string[]` type. What the pin protects is unchanged and now stated truthfully,
+  // including the reason the check cannot be written with app.inject.
+  it("readIdempotencyKey 6-step implementation pinned: 1. undefined → absent 2. narrow the string | string[] header type (explicitly NOT the duplicate path — Node arrays only set-cookie, and a repeated key arrives joined as `key-one, key-two`, which the whitespace rule then refuses) 3. undefined first → absent 4. trim → empty? absent 5. length > 255 → invalid 6. /^[\\x21-\\x7e]+$/ char class (printable ASCII excluding space; 'Whitespace inside the key is rejected — the customer-facing docs commit to this.') Drift to expanding the char class to allow whitespace would silently change the contract the docs commit to, AND would start accepting a joined duplicate as a dedup key that is neither value the customer sent", () => {
     expect(body).toMatch(
-      /\/\/ Duplicate header → first wins\. A Fastify request with multiple\s*\n?\s*\/\/ copies of the same header presents as an array; downstream\s*\n?\s*\/\/ tooling should not have to think about that\./,
+      /\/\/ NOT the duplicate-header path, whatever it looks like: Node puts only\s*\n?\s*\/\/ `set-cookie` in an array\. A repeated `Idempotency-Key` arrives already\s*\n?\s*\/\/ joined — `key-one, key-two` — and the whitespace rule below then refuses\s*\n?\s*\/\/ it/,
+    );
+    expect(body).toMatch(
+      /tests\/integration\/a-header-sent-twice-does-not-arrive-as-an-array\.test\.ts,\s*\n?\s*\/\/ which also shows why app\.inject cannot be used to check this: it joins\s*\n?\s*\/\/ without the space, and the result passes\./,
     );
     expect(body).toMatch(
       /export function readIdempotencyKey\(req: FastifyRequest\): IdempotencyHeader \{\s*\n?\s*const raw = req\.headers\['idempotency-key'\];\s*\n?\s*if \(raw === undefined\) return \{ kind: 'absent' \};/,

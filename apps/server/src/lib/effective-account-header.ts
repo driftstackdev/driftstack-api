@@ -41,7 +41,13 @@ export const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';
  * Returns the raw account-id string (`acc_<uuid>`) when present, or
  * `undefined` when the header is absent OR empty / whitespace-only.
  *
- * Fastify presents duplicate headers as an array — first wins.
+ * Fastify types every header as `string | string[]`, and the narrowing below is
+ * for that type rather than for a header sent twice. Node puts only `set-cookie`
+ * in an array; a repeated `X-Driftstack-Account` arrives already joined, as
+ * `acc_A, acc_B`. That still carries the `acc_` prefix, so it clears the format
+ * check in `resolveEffectiveAccount` and is refused one step later by the
+ * membership lookup — a 403, not the first value. Measured over a socket in
+ * tests/integration/a-header-sent-twice-does-not-arrive-as-an-array.test.ts.
  */
 export function readEffectiveAccountHeader(request: FastifyRequest): string | undefined {
   const raw = request.headers[EFFECTIVE_ACCOUNT_HEADER];

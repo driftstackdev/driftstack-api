@@ -67,14 +67,22 @@ describe('lib/effective-account-header content parity', () => {
     expect(body).toMatch(/export const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';/);
   });
 
-  it("readEffectiveAccountHeader 4-step implementation pinned: 1. read header by lowercase name 2. take first if Array (Fastify presents duplicate headers as array) 3. typeof !== 'string' → return undefined 4. trim + return undefined if empty, else trimmed. + 'Fastify presents duplicate headers as an array — first wins.' framing. Drift to using last-wins on the duplicate-array would let attackers force a specific account scope by appending a second header value", () => {
+  // V-1365 — the old framing here named a threat (appending a second header value to
+  // force an account scope) and pointed the defence at the array branch. That branch
+  // cannot execute: a repeated header arrives joined as `acc_A, acc_B`, which keeps the
+  // acc_ prefix and is stopped by the membership lookup instead. Same threat, correct
+  // defence, and the 403 is now executed over a socket in
+  // tests/integration/a-header-sent-twice-does-not-arrive-as-an-array.test.ts.
+  it("readEffectiveAccountHeader 4-step implementation pinned: 1. read header by lowercase name 2. narrow the string | string[] header type (NOT the duplicate path — a repeated header arrives joined) 3. typeof !== 'string' → return undefined 4. trim + return undefined if empty, else trimmed. + the framing that a header sent twice is refused by resolveEffectiveAccount's membership lookup rather than resolving to its first value. Drift to actually implementing first-wins would silently ignore an appended second header value on a team-scoped request instead of refusing it", () => {
     expect(body).toMatch(
       /\/\*\*\s*\n?\s*\*\s+Read the `X-Driftstack-Account` team-RBAC effective-account header\./,
     );
     expect(body).toMatch(
       /\*\s+Returns the raw account-id string \(`acc_<uuid>`\) when present, or\s*\n?\s*\*\s+`undefined` when the header is absent OR empty \/ whitespace-only\./,
     );
-    expect(body).toMatch(/\*\s+Fastify presents duplicate headers as an array — first wins\./);
+    expect(body).toMatch(
+      /\*\s+in an array; a repeated `X-Driftstack-Account` arrives already joined, as\s*\n?\s*\*\s+`acc_A, acc_B`\. That still carries the `acc_` prefix, so it clears the format\s*\n?\s*\*\s+check in `resolveEffectiveAccount` and is refused one step later by the\s*\n?\s*\*\s+membership lookup — a 403, not the first value\./,
+    );
     expect(body).toMatch(
       /export function readEffectiveAccountHeader\(request: FastifyRequest\): string \| undefined \{\s*\n?\s*const raw = request\.headers\[EFFECTIVE_ACCOUNT_HEADER\];\s*\n?\s*const value = Array\.isArray\(raw\) \? raw\[0\] : raw;\s*\n?\s*if \(typeof value !== 'string'\) return undefined;\s*\n?\s*const trimmed = value\.trim\(\);\s*\n?\s*return trimmed\.length === 0 \? undefined : trimmed;\s*\n?\s*\}/,
     );

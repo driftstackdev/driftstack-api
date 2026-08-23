@@ -11,7 +11,7 @@
 //
 // Test pins:
 //   - absent / empty / whitespace-only → undefined
-//   - duplicate header → first wins
+//   - header sent twice → joined by Node, NOT resolved to the first value
 //   - valid acc_<uuid> → returned trimmed
 //
 // Drift-guard: every consumer route imports from the shared lib and the
@@ -87,9 +87,9 @@ describe('readEffectiveAccountHeader — shared parser', () => {
       expect(readEffectiveAccountHeader(fakeRequest('  \t  '))).toBeUndefined();
     });
 
-    it('returns undefined for an empty duplicate-header array', () => {
-      // Defensive — Fastify rarely emits an empty array, but the
-      // shared parser must not crash on it.
+    it('returns undefined for an empty header array', () => {
+      // Defensive — the header type admits an array and the shared parser
+      // must not crash on an empty one.
       expect(readEffectiveAccountHeader(fakeRequest([]))).toBeUndefined();
     });
   });
@@ -105,10 +105,22 @@ describe('readEffectiveAccountHeader — shared parser', () => {
       expect(readEffectiveAccountHeader(fakeRequest(`  ${id}  `))).toBe(id);
     });
 
-    it('first wins on duplicate headers (Fastify presents as array)', () => {
+    it('takes the first element when the header type hands over an array', () => {
       const a = 'acc_11111111-1111-4111-8111-111111111111';
       const b = 'acc_22222222-2222-4222-8222-222222222222';
       expect(readEffectiveAccountHeader(fakeRequest([a, b]))).toBe(a);
+    });
+
+    // V-1365 — the array above is the `string | string[]` header TYPE. It is not what
+    // a header sent twice produces: Node arrays only `set-cookie`, and a repeated
+    // `X-Driftstack-Account` arrives already joined. The parser is transport-level, so
+    // it hands the joined string on unchanged and `resolveEffectiveAccount` refuses it
+    // at the membership lookup — executed end to end over a socket in
+    // tests/integration/a-header-sent-twice-does-not-arrive-as-an-array.test.ts.
+    it('CRITICAL passes a header sent twice through JOINED, rather than resolving it to the first account id. Returning the first value here would silently honour a scope the caller shares the header with, instead of refusing an ambiguous request.', () => {
+      const a = 'acc_11111111-1111-4111-8111-111111111111';
+      const b = 'acc_22222222-2222-4222-8222-222222222222';
+      expect(readEffectiveAccountHeader(fakeRequest(`${a}, ${b}`))).toBe(`${a}, ${b}`);
     });
 
     it('does NOT validate the acc_<uuid> shape — resolveEffectiveAccount owns that branch', () => {

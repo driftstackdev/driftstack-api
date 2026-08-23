@@ -7301,3 +7301,66 @@ constant. Making the cap injectable moved that default into the destructuring �
 siblings are already pinned in one and two lines above. The pin now reads
 `uploadMaxFileBytes = UPLOAD_MAX_FILE_BYTES_DEFAULT`, same property, same shape as its neighbours, and
 the mutation above proves it still fires.
+
+## V-1365 — two shared parsers documented a duplicate-header behaviour that cannot happen
+
+`lib/idempotency-key.ts` and `lib/effective-account-header.ts` both narrow the header with
+`Array.isArray(raw) ? raw[0] : raw`, and both described that line as the duplicate-header path:
+a header sent twice resolves to its first value. Both descriptions were frozen by content-parity
+pins, and the effective-account pin justified the line with a threat model — an attacker appending
+a second header value to force an account scope.
+
+The arm that read like coverage of that threat handed the parser a hand-built `[a, b]`. It proves
+the parser can handle an array. **Nothing proved an array is what arrives.**
+
+Measured on a socket. It is not:
+
+| header sent twice      | what the handler receives   | verdict                                                                    |
+| ---------------------- | --------------------------- | -------------------------------------------------------------------------- |
+| `Idempotency-Key`      | `key-one, key-two` (string) | **400** — the joined value trips the whitespace rule                       |
+| `X-Driftstack-Account` | `acc_A, acc_B` (string)     | **403** — clears the `acc_` format check, refused at the membership lookup |
+| `Authorization`        | `Bearer first`              | first really does win — Node special-cases it                              |
+
+Node puts only `set-cookie` in an array. A short list of headers discards duplicates, which is
+where "first wins" is true; everything else — including both of these — is **joined with `', '`**.
+So the array branch is unreachable for the two headers these parsers read, and the documented
+behaviour was not the behaviour.
+
+Both outcomes are fail-closed, and neither is fail-closed **by design**, which is why they are now
+executed rather than described:
+
+- The idempotency refusal rests on the **space** in the separator, not on anything noticing the
+  duplication. Disabling the whitespace rule does not merely relax validation — the duplicated
+  request **returns 201 and mints a session** under the key `key-one, key-two`, which is neither
+  value the customer sent. A retry with either real key would then miss the dedup entry it was
+  supposed to hit.
+- The account refusal happens one step **later** than the pin assumed, and in a different file:
+  the joined string keeps the `acc_` prefix, so it passes the format check and dies at the
+  membership lookup.
+
+The new arms open a socket, and they have to. `app.inject()` joins a duplicated value with a comma
+and **no space**, which the idempotency contract accepts as a well-formed key — so an inject-based
+version of this test exercises the accepting path while production takes the rejecting one. One arm
+pins that divergence so the file does not get rewritten the easy way.
+
+**Mutation-proven, five ways.** Allowing whitespace in the key → the duplicate mints a session
+(201, not 400). Implementing the documented first-wins in the account parser → the duplicated
+header resolves to self and returns **200 instead of 403**. Rejecting commas → the inject-divergence
+arm goes red, so it is load-bearing on the specific property it names. And both corrected pins fail
+when their source framing is reverted.
+
+⚠️ **One of those five nearly went down as "not load-bearing".** The account-pin mutation was first
+applied with BSD `sed` against a line containing an em dash; it silently matched nothing, the pin
+stayed green, and that reads exactly like a pin that does not fire. Re-applied in Python with an
+assertion that the target string was present first, it fails as it should. A mutation that does not
+turn something red is a claim about the guard **only after** the mutation is proven to have landed.
+
+Corrected in the same commit: two source comments, the two content-parity pins that froze them, and
+the two shared-parser unit files whose titles asserted the same thing — six files, enumerated with
+both grep patterns, no occurrence left. Each parser also gains the arm it was missing: what it does
+with the joined string a customer can actually produce.
+
+`EXPECTED_TEST_FILES` 3006 → 3007 and `EXPECTED_TEST_FILES_ALL` 3170 → 3171, for the one file added
+here. Noted rather than fixed: `_ALL` was already six behind the 3176 the root config collects at
+HEAD. `judge()` only fails on _fewer_ files than the pin, so the drift is silent and safe-direction,
+and it is not mine to absorb.
