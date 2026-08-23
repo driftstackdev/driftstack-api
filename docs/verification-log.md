@@ -6881,3 +6881,36 @@ Worth noting alongside V-1350: two flakes in one turn, both load-sensitive, both
 off. One was a shared-table read racing a concurrent cleanup, one a scan too slow under parallelism.
 Neither was random, and neither would have been found by re-running the file alone — which is the
 first thing one does with a flake and the thing that hides both of these.
+
+## V-1352 — the suite has a load-sensitive tail, measured rather than tuned
+
+Three full runs this turn produced three different red sets, and every failure resolved to one of two
+things: a test that raced a concurrent writer, or a test that ran out of time.
+
+The timing half is now precise. `vitest.node.config.ts` sets `testTimeout: 10_000`, and the arms that
+failed took **9958ms, 10005ms, 10809ms** — the ceiling, not an assertion. The same signature produced
+the egress-gate failure fixed in V-1351 (10044ms, 10102ms). Runs alone, or in a group of four, they
+pass: the four DB files that failed together pass together in 38 tests when they are not competing
+with the whole suite.
+
+The standing shape, for whoever picks this up:
+
+- No `maxConcurrency` or `poolOptions` is configured, so vitest uses its default worker pool against
+  **10 CPUs**, while Postgres allows **100 connections** and every DB-backed file opens its own.
+- 181 files touch Postgres (V-1329). Under a full run they contend for connections and for CPU, and
+  the slowest arms cross a 10-second ceiling that is generous in isolation.
+
+**Two instances were real defects and are fixed** — a shared-table read racing a cleanup (V-1350) and
+a scan repeated four times per file (V-1351). Both were in the test, not the environment, and both had
+previously been written off as transient.
+
+**The remainder is not something to fix quietly.** Raising `testTimeout`, capping worker concurrency,
+or pooling connections across files are all changes to what CI enforces and how long it takes, and
+each trades one property for another. Recorded with the numbers so the choice is made deliberately
+rather than discovered as a slow drift in flake rate.
+
+Attribution for this run, since a red set that changes every time invites guessing: four DB files —
+`db-health-probes-repo-drizzle`, `db-incidents-public-feed-drizzle`, `db-recipes-encryption-drizzle`,
+`incident-visibility-repo-contract` — timed out under contention and pass together in isolation. The
+fifth, `ConfirmProvider.test.tsx`, is the peer's, from `97451cffb feat(gui): animate shared
+confirmation dialogs`.
