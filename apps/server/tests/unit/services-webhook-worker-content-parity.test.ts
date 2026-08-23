@@ -195,12 +195,20 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
     );
   });
 
-  it('run(): while-loop on this.running; empty claim → sleep idleSleepMs; deliver batch via Promise.all', () => {
+  // V-1389 — this pinned run() repeating claim-and-deliver with `Promise.all`, which is the
+  // form V-781 replaced in tickOnce: one escaping rejection discards every other outcome in
+  // the tick and skips the metrics. run() carried the old shape and counted nothing, so the
+  // pin was freezing the drift rather than catching it. It now delegates, and what is pinned
+  // is that it delegates.
+  it('run(): while-loop on this.running; delegates the batch to tickOnce; empty claim → sleep idleSleepMs', () => {
     expect(body).toMatch(
       /async run\(\): Promise<void> \{\s*\n?\s*if \(this\.running\) return;\s*\n?\s*this\.running = true;/,
     );
     expect(body).toMatch(
-      /if \(claimed\.length === 0\) \{\s*\n?\s*await sleep\(idleSleepMs\);\s*\n?\s*continue;\s*\n?\s*\}\s*\n?\s*await Promise\.all\(claimed\.map\(\(d\) => this\.deliver\(d\)\)\);/,
+      /while \(this\.running\) \{\s*\n?\s*const \{ claimed \} = await this\.tickOnce\(\);\s*\n?\s*if \(claimed === 0\) await sleep\(idleSleepMs\);\s*\n?\s*\}/,
+    );
+    expect(body, 'run() must not grow its own delivery path again').not.toMatch(
+      /await Promise\.all\(claimed\.map\(\(d\) => this\.deliver\(d\)\)\);/,
     );
   });
 

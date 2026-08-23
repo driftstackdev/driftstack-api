@@ -8287,3 +8287,36 @@ Mutations, each by line index: dropping `.trim().toLowerCase()` reds the lookup 
 that is not a `Date`, so `?.toISOString()` on it is a TypeError rather than a comparison. The helper
 normalises to an ISO string, which keeps the arm about the column's value rather than the driver's
 type mapping.
+
+## V-1389 — a dead alternative lifecycle carrying the defect its live sibling was fixed for
+
+`WebhookDeliveryWorker.run()` and `.stop()` were both in the never-executed set, and nothing in the
+repo called them. Bootstrap drives `tickOnce()` through a bounded drain loop instead. So `run()` — the
+method whose doc comment reads _"Start the loop"_ — was the obvious entry point for whoever wires
+this next, and it had quietly gone stale:
+
+|                       | `tickOnce()` (live)        | `run()` (dead)                         |
+| --------------------- | -------------------------- | -------------------------------------- |
+| batch delivery        | `Promise.allSettled`       | `Promise.all`                          |
+| an escaping rejection | costs that one delivery    | discards **every** outcome in the tick |
+| metrics               | `countOutcome` per outcome | **none at all**                        |
+
+The `Promise.all` form is precisely what V-781 replaced, and its comment says why. `run()` kept it,
+and counted nothing — so a deployment wired to `run()` would deliver webhooks while both delivery
+counters read flat zero, which the neighbouring arm in this file already calls out as
+_"indistinguishable from 'no webhooks configured'"_.
+
+`run()` now delegates to `tickOnce()`, so the two cannot drift again, and two arms drive the loop
+itself. The mutation makes the old state concrete: restoring the previous body fails the metrics arm
+with **`expected [] to deeply equal [Array(2)]`** — both counters empty — and fails the content pin,
+which had been freezing the drift rather than catching it. Removing the re-entrancy guard fails the
+second arm with `expected 3 to be 2`: a second concurrent loop draining an extra batch, which is
+unbounded concurrency against customer endpoints and the same hazard bootstrap guards its interval
+against.
+
+⚠️ **Two mutation runs in this batch produced no output and I read them as hangs.** They were neither:
+`timeout` is not a macOS binary, so the command never ran and the shell's _command not found_ was
+swallowed by the grep. Re-run without it, both mutations red cleanly. This is the same failure family
+as the five silent no-ops earlier — an experiment that did not execute, reported as a result — and
+the lesson generalises past mutation anchors: **check the command exists before believing its
+silence.**

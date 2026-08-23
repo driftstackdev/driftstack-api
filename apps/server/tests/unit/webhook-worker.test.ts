@@ -915,3 +915,68 @@ describe('WebhookDeliveryWorker per-delivery error boundary (V-781)', () => {
     expect(deliverySamples(metrics).length).toBeGreaterThan(0);
   });
 });
+
+// V-1389 — `run()` and `stop()` were both in the never-executed set, and nothing in the
+// repo called them: bootstrap drives `tickOnce()` through a bounded drain loop instead.
+// That let `run()` keep the pre-V-781 shape — its own `Promise.all` claim-and-deliver, and
+// no outcome counting at all — while its sibling was fixed. It is the obvious entry point
+// for whoever wires this next, and it looked finished.
+//
+// It now delegates to `tickOnce`, so the two cannot drift again. These arms drive the loop
+// itself, which is what makes the delegation checkable rather than asserted.
+describe('WebhookDeliveryWorker.run', () => {
+  it('CRITICAL the loop delivers through tickOnce, so it counts the same metrics. Under the old body both counters stayed flat — a dashboard would have read zero webhooks delivered while the loop was delivering them.', async () => {
+    const { repo } = await setupRepoWithEndpoint();
+    const metrics = registryOf();
+    const worker = new WebhookDeliveryWorker({
+      repo,
+      logger: createTestLogger(),
+      fetch: fakeFetch({ status: 200 }),
+      now: constNow,
+      metrics,
+      // The idle sleep is the loop's only suspension point, so stopping from inside it
+      // ends the run after exactly one drained batch.
+      sleep: () => {
+        worker.stop();
+        return Promise.resolve();
+      },
+    });
+
+    await worker.run();
+
+    expect(deliverySamples(metrics)).toEqual([
+      'attempt{outcome="success"}=1',
+      'terminal{terminal_state="delivered"}=1',
+    ]);
+  });
+
+  it('CRITICAL stop() ends the loop, and a second run() on an already-running worker is a no-op rather than a second concurrent loop. Two loops claiming the same batch is unbounded concurrency against customer endpoints, which is the reason bootstrap guards its interval the same way.', async () => {
+    const { repo } = await setupRepoWithEndpoint();
+    let sleeps = 0;
+    const worker = new WebhookDeliveryWorker({
+      repo,
+      logger: createTestLogger(),
+      fetch: fakeFetch({ status: 200 }),
+      now: constNow,
+      sleep: () => {
+        sleeps += 1;
+        worker.stop();
+        return Promise.resolve();
+      },
+    });
+
+    await worker.run();
+    expect(sleeps, 'the loop reached its idle sleep and stopped there').toBe(1);
+
+    // Already stopped: run() returns, and the re-entrancy guard means a call while running
+    // returns immediately without starting a second loop.
+    const running = worker.run();
+    await expect(
+      worker.run(),
+      'the re-entrant call returns rather than looping',
+    ).resolves.toBeUndefined();
+    worker.stop();
+    await running;
+    expect(sleeps, 'no extra batches were drained by the re-entrant call').toBe(2);
+  });
+});
