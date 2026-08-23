@@ -22,7 +22,7 @@
 // exactly what would ship broken.
 
 import type { AddressInfo } from 'node:net';
-import { Driftstack } from '@driftstack/sdk';
+import { Driftstack, FeatureUnavailableError } from '@driftstack/sdk';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildTestApp } from './_helpers/build-test-app.js';
 
@@ -106,6 +106,19 @@ describe('the published SDK works against the real server', () => {
     expect(typeof summary.totals, 'totals is an object').toBe('object');
     expect(typeof summary.quotas, 'quotas is an object').toBe('object');
     expect(summary.tier, 'the summary names the tier it priced against').toBeTruthy();
+  });
+
+  it("CRITICAL a route the deployment has switched OFF surfaces as the SDK's typed FeatureUnavailableError, not a parse failure. This app registers the recipes disabled-stub, so the 503 and its problem type are real rather than a mocked body — and the mapping from `https://errors.driftstack.dev/feature-unavailable` to the exported class is what makes the documented recovery path reachable. A customer catching that class on a deployment without recipes is the whole point; a raw parse error would miss every one of them.", async () => {
+    await expect(sdk.recipes.list()).rejects.toBeInstanceOf(FeatureUnavailableError);
+  });
+
+  it('CRITICAL reads the webhook endpoint list, which is a BARE data list — the third envelope shape in this API. It carries no has_more and no next_cursor at all, so a customer looping until has_more goes false reads undefined on the first pass. That is correct by accident here, and would be wrong the day this route learns to paginate; pinning the shape is what makes that day visible.', async () => {
+    const list = await sdk.webhooks.list();
+    expect(Array.isArray(list.data), 'endpoints come back under `data`').toBe(true);
+    expect(list, 'this listing does NOT carry the paginated has_more').not.toHaveProperty(
+      'has_more',
+    );
+    expect(list, 'nor a cursor').not.toHaveProperty('next_cursor');
   });
 
   it('CRITICAL round-trips a WRITE through the SDK and reads it back. A create the server accepts but the SDK cannot parse looks identical to a failure from the caller.', async () => {

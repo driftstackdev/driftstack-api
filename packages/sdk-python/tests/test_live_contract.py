@@ -38,7 +38,7 @@ import os
 import pytest
 
 from driftstack import Driftstack
-from driftstack.errors import AuthError
+from driftstack.errors import AuthError, FeatureUnavailableError
 
 BASE_URL = os.environ.get("DS_LIVE_BASE_URL")
 API_KEY = os.environ.get("DS_LIVE_API_KEY")
@@ -117,6 +117,33 @@ def test_usage_series_is_the_envelope_that_differs(client) -> None:
     assert series.get("from_date"), "the window start is surfaced"
     assert series.get("to_date"), "the window end is surfaced"
     assert "has_more" not in series, "this endpoint is NOT the paginated envelope"
+
+
+def test_webhook_endpoint_list_is_the_bare_envelope(client) -> None:
+    """PARSED path, and the third envelope shape in this API.
+
+    ``GET /v1/webhooks`` returns ``data`` and nothing else — no ``has_more``,
+    no ``next_cursor``. Asserting their ABSENCE here would say nothing about the
+    server: ``page`` is a parsed model, so it carries the fields the model
+    declares whatever the body held, and the check would be true by
+    construction. What this arm proves live is that ``data`` still maps at all —
+    the model's own shape is what pins the rest.
+    """
+    page = client.webhooks.list()
+    assert isinstance(page.data, list), "endpoints arrive under `data`"
+
+
+def test_a_disabled_feature_raises_the_typed_error(client) -> None:
+    """A deployment gate must surface as the documented class.
+
+    This server registers the recipes disabled-stub, so the 503 and its problem
+    type are real rather than a body a test author wrote. The mapping from
+    ``https://errors.driftstack.dev/feature-unavailable`` onto the exported
+    class is what makes the documented recovery path reachable; a caller on a
+    deployment without recipes catches this class or catches nothing.
+    """
+    with pytest.raises(FeatureUnavailableError):
+        client.recipes.list()
 
 
 def test_a_rejected_key_raises_a_typed_auth_error(client) -> None:

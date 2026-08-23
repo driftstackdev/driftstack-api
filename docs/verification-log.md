@@ -5611,3 +5611,52 @@ per SDK, and both language-side floors were exact. No finding there.
 
 Not round-tripped through any published SDK: `webhooks`, `recipes`, and the profiles/webhooks write
 paths. Named rather than left implied.
+
+## V-1316 — the third envelope shape, and a mutation that proved nothing
+
+Closing the gap V-1314 and V-1315 both named rather than leaving it named a third time: `webhooks`
+and `recipes` were not round-tripped through any published SDK.
+
+**A third envelope shape exists.** `GET /v1/webhooks` returns `{ data }` and nothing else — no
+`has_more`, no `next_cursor` — while sessions, profiles, recipes and deliveries all carry the full
+paginated envelope and `/v1/usage/series` carries its own. So the API has three list shapes, not
+two. A caller looping until `has_more` goes false reads undefined on the first pass, which is
+correct only by accident and would be wrong the day that route learns to paginate. Now pinned in all
+three SDKs.
+
+**Recipes turned out to be unreachable, and the reachable thing was better.** The harness builds an
+app with the recipes disabled-stub registered (the gate needs both `recipesRepo` and
+`agentSessionsRepo`), so `recipes.list()` answers 503. Rather than rewire a builder shared by many
+suites, the arm became the one the stub makes available: a deployment gate must surface as the
+documented typed error — `FeatureUnavailableError` in TypeScript and Python, `ErrFeatureUnavailable`
+via `errors.Is` in Go. That maps a real 503 and a real problem type end to end, where every existing
+test of that mapping fed the parser a body a test author wrote.
+
+**A mutation that landed in the file and not in the running system.** Proving the typed-error arm
+first tried editing `packages/api-types/src/problem.ts` to corrupt the problem-type URL. The marker
+printed, the file changed — and the suite stayed green with only the unrelated webhooks arm failing.
+`api-types` resolves to `dist/index.js`, so the server never read the edit. **A marker proves the
+file changed, not that the running code did.** Re-proven by mutating the server's own stub
+(`FeatureUnavailableError` → `NotFoundError`), which vitest loads from source; the arm then failed
+in all three languages.
+
+**A weak assertion caught before commit, again.** The Python webhooks arm first asserted
+`not hasattr(page, "has_more")`. But `page` is a parsed model, so it carries the fields the model
+declares whatever the body held — the check was true by construction and could not fail from server
+drift. Dropped; what the arm proves live is that `data` still maps. The Go side needs no equivalent:
+its struct has no such field.
+
+Six arms, each mutation-proven against the route that builds the response, markers printed first:
+
+| mutation                                      | arms that failed                       |
+| --------------------------------------------- | -------------------------------------- |
+| `data:` → `endpoints:` on `GET /v1/webhooks`  | webhooks arm, all three languages      |
+| stub throws `NotFoundError`                   | typed-feature arm, all three languages |
+| `has_more: false` added to `GET /v1/webhooks` | the TypeScript bare-shape negative     |
+
+Every other arm stayed green; every route restored byte-identical from a snapshot. Both harness
+floors moved 6 → 8, since each was exact and two of eight could otherwise stop running unnoticed.
+
+Live SDK coverage now: account, api-keys, archetypes, sessions, profiles, usage (both shapes),
+webhooks, and the disabled-feature path. Still not round-tripped: the profiles and webhooks WRITE
+paths, and recipes' actual envelope, which needs a deployment with the feature on.

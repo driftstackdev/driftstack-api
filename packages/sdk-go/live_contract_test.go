@@ -136,6 +136,37 @@ func TestLiveUsageSeriesDecodes(t *testing.T) {
 	}
 }
 
+// The third envelope shape in this API: GET /v1/webhooks returns `data` and
+// nothing else — no has_more, no cursor. Decoding it into the bare struct is
+// the assertion; a nil slice means the tag stopped matching, silently.
+func TestLiveWebhookEndpointListDecodes(t *testing.T) {
+	baseURL, apiKey := liveTarget(t)
+	client := New(apiKey, WithBaseURL(baseURL))
+	defer client.Close()
+
+	list, err := client.Webhooks.List(context.Background())
+	if err != nil {
+		t.Fatalf("Webhooks.List against the real server: %v", err)
+	}
+	if list.Data == nil {
+		t.Fatal("endpoints decoded to nil — the `data` tag no longer matches the server")
+	}
+}
+
+// A deployment gate must surface as the documented sentinel. This server
+// registers the recipes disabled-stub, so the 503 and its problem type are real
+// rather than a body a test author wrote — and errors.Is against
+// ErrFeatureUnavailable is the recovery path callers are told to use.
+func TestLiveDisabledFeatureIsTheTypedSentinel(t *testing.T) {
+	baseURL, apiKey := liveTarget(t)
+	client := New(apiKey, WithBaseURL(baseURL))
+	defer client.Close()
+
+	if _, err := client.Recipes.List(context.Background(), nil); !errors.Is(err, ErrFeatureUnavailable) {
+		t.Fatalf("a disabled feature must match ErrFeatureUnavailable, got %v", err)
+	}
+}
+
 func TestLiveRejectedKeyIsATypedAuthError(t *testing.T) {
 	baseURL, _ := liveTarget(t)
 	client := New("ds_live_definitely_not_a_real_key", WithBaseURL(baseURL))
