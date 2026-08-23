@@ -8178,3 +8178,40 @@ against an implementation that throws after already firing the webhook.
 Recorded rather than pursued: the sibling invariants above. Their violations surface as an exception
 on the next line rather than as a silently dropped notification, so an arm for each would pin a
 type-narrowing convenience rather than a customer-visible property.
+
+## V-1386 — the production key-invalidation path had never run
+
+Switching instrument from never-executed _throws_ to never-executed _functions_: **211** functions in
+`apps/server/src` never ran during the suite. Most are bootstrap wiring and driver adapters. One is
+not.
+
+`RedisAuthCache.invalidateKey` — **dark**. Its neighbours are not, which is exactly why nothing
+looked thin:
+
+| function                           | status                                   |
+| ---------------------------------- | ---------------------------------------- |
+| `RedisAuthCache.invalidateAccount` | run — has its own CRITICAL arm           |
+| `InMemoryAuthCache.invalidateKey`  | run — the double every service test uses |
+| **`RedisAuthCache.invalidateKey`** | **never executed**                       |
+
+That is the path `revoke()` and `rotate()` take in production. It is what makes a revoked key stop
+authenticating **now** rather than when its cache entry expires. Every service-level test constructs
+`new ApiKeysService(repo, null, …)` — a null cache — so the call site is exercised and the
+implementation behind it never was.
+
+Three arms, and the second is the one worth having. The source names its own ordering as
+load-bearing: bump the key generation FIRST so an in-flight `set()` that captured the old value lands
+an entry the next `get()` reads as stale, and only then drop the rows. So:
+
+1. the generation moves and **both** cache rows are dropped;
+2. the generation still moves when the **reverse index has already expired** — that lookup is how the
+   entry is found, so skipping the bump on a miss would leave a live cached context authenticating a
+   revoked key until TTL, which is precisely the case entry-deletion cannot cover;
+3. a Redis outage warns and does not throw, matching the account-level sibling — revocation is
+   authoritative in the database and must not be turned into a failed request by a cache problem.
+
+The fake Redis gained `del`, which it had never needed because nothing had ever called this method.
+
+Mutations: making the generation bump conditional on the reverse-index hit reds all three (the
+outage arm included — with no `incr` there is nothing left to fail); suppressing only the entry
+deletion reds the first alone, so the two properties are pinned separately rather than as one lump.

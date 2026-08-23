@@ -51,7 +51,8 @@ class FakeRedis {
   /** Methods that should reject, standing in for a Redis that is reachable for
    *  some commands and failing for others — which is what a partial outage
    *  actually looks like. */
-  readonly fail = new Set<'get' | 'mget' | 'incr'>();
+  readonly fail = new Set<'get' | 'mget' | 'incr' | 'del'>();
+  readonly deleted: string[] = [];
 
   get(key: string): Promise<string | null> {
     if (this.fail.has('get')) return Promise.reject(new Error('redis down'));
@@ -68,6 +69,16 @@ class FakeRedis {
   set(key: string, value: string): Promise<'OK'> {
     this.values.set(key, value);
     return Promise.resolve('OK');
+  }
+
+  del(...keys: string[]): Promise<number> {
+    if (this.fail.has('del')) return Promise.reject(new Error('redis down'));
+    let removed = 0;
+    for (const key of keys) {
+      this.deleted.push(key);
+      if (this.values.delete(key)) removed += 1;
+    }
+    return Promise.resolve(removed);
   }
 
   mget(...keys: string[]): Promise<Array<string | null>> {
@@ -400,6 +411,53 @@ describe('RedisAuthCache security-sensitive schema compatibility', () => {
     redis.fail.add('incr');
 
     await expect(cache.invalidateAccount('acc-security')).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalled();
+  });
+
+  // V-1386 — `RedisAuthCache.invalidateKey` had never executed. Its account-level sibling
+  // is driven by the arm above and the in-memory double's copy is driven elsewhere, so the
+  // file reads as though invalidation were covered — but the production key path, the one
+  // revoke and rotate call, was dark.
+  //
+  // It is what makes a revoked key stop authenticating NOW instead of at TTL expiry. The
+  // source names the ordering as load-bearing: bump the key generation FIRST so any
+  // in-flight `set()` that captured the old value lands an entry the next `get()` reads as
+  // stale, and only then drop the entry.
+  it('CRITICAL invalidateKey bumps the key generation AND drops both cache rows. This is the path revoke and rotate take; without it a revoked key keeps authenticating from cache until its TTL runs out.', async () => {
+    const redis = new FakeRedis();
+    const { cache } = makeCache(redis);
+    await cache.set(TOKEN_SHA, 'key-security', 'acc-security', context(), 30);
+    expect(redis.values.get(entryKey()), 'the entry is cached before invalidation').toBeDefined();
+    expect(redis.values.get('auth:keyid:key-security')).toBe(TOKEN_SHA);
+
+    await cache.invalidateKey('key-security');
+
+    expect(redis.values.get('auth:keyid:key-security:v'), 'the key generation moved').toBe('1');
+    expect(redis.values.get(entryKey()), 'the cached context is gone').toBeUndefined();
+    expect(
+      redis.values.get('auth:keyid:key-security'),
+      'and so is the reverse index',
+    ).toBeUndefined();
+  });
+
+  it('CRITICAL the generation bump happens even when the reverse index has already expired. That lookup is how the entry is found, so skipping the bump when it misses would leave a live cached context authenticating a revoked key until TTL — the exact case the entry deletion cannot cover.', async () => {
+    const redis = new FakeRedis();
+    const { cache } = makeCache(redis);
+    // Entry present, reverse index gone — what a partially-expired cache looks like.
+    await cache.set(TOKEN_SHA, 'key-security', 'acc-security', context(), 30);
+    redis.values.delete('auth:keyid:key-security');
+
+    await cache.invalidateKey('key-security');
+
+    expect(redis.values.get('auth:keyid:key-security:v'), 'the generation still moved').toBe('1');
+  });
+
+  it('CRITICAL a failing key INVALIDATION does not throw at the caller, matching its account-level sibling. Revocation is authoritative in the database; a Redis outage must not turn a successful revoke into a failed one.', async () => {
+    const redis = new FakeRedis();
+    const { cache, warn } = makeCache(redis);
+    redis.fail.add('incr');
+
+    await expect(cache.invalidateKey('key-security')).resolves.toBeUndefined();
     expect(warn).toHaveBeenCalled();
   });
 });
