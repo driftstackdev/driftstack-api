@@ -77,6 +77,54 @@ export interface OpenSimulatorResult {
 const SIM_WIDTH = 330;
 const SIM_HEIGHT = 684 + 34;
 
+/** Gap between the main window and the simulator placed beside it. */
+const SIM_GAP = 16;
+
+/**
+ * Choose an on-screen position for the simulator window.
+ *
+ * This used to be two lines — "main.x + main.width + 16, main.y" — with no
+ * reference to the display at all. Beside the main window is the right INTENT,
+ * but on a main window that is maximised or merely near the right edge, which
+ * is the normal case on Windows, that x is past the edge of the monitor and the
+ * simulator opens mostly or entirely off-screen. It is borderless, so there is
+ * not even a title bar left on-screen to drag it back by.
+ *
+ * Preference order: right of the main window, then left of it, then clamped
+ * into the monitor. The result is always fully on-screen when the simulator
+ * fits on the monitor at all; when it genuinely cannot fit, the clamp favours
+ * the top-left corner so the window's own drag handle stays reachable.
+ *
+ * Pure and exported so the off-screen cases are testable — the real Tauri
+ * geometry calls cannot be exercised in jsdom.
+ */
+export function placeSimulatorWindow(args: {
+  main: { x: number; y: number; width: number };
+  monitor: { x: number; y: number; width: number; height: number };
+  sim: { width: number; height: number };
+  gap?: number;
+}): { x: number; y: number } {
+  const gap = args.gap ?? SIM_GAP;
+  const left = args.monitor.x;
+  const top = args.monitor.y;
+  const right = args.monitor.x + args.monitor.width;
+  const bottom = args.monitor.y + args.monitor.height;
+
+  const toRight = args.main.x + args.main.width + gap;
+  const toLeft = args.main.x - args.sim.width - gap;
+
+  let x: number;
+  if (toRight + args.sim.width <= right) x = toRight;
+  else if (toLeft >= left) x = toLeft;
+  // Neither side fits: clamp rather than overlap the edge. Math.max wins over
+  // Math.min so a simulator wider than the monitor still starts at the left
+  // edge instead of at a negative x.
+  else x = Math.max(left, Math.min(args.main.x, right - args.sim.width));
+
+  const y = Math.max(top, Math.min(args.main.y, bottom - args.sim.height));
+  return { x: Math.round(x), y: Math.round(y) };
+}
+
 /**
  * Open the simulator as an in-process Tauri window.
  *
@@ -106,18 +154,36 @@ async function openInProcessSimulatorWindow(
   }
 
   // Beside the main window, not centred over it. Best-effort: fall back to
-  // centring only when the main window's geometry is unreadable.
+  // centring only when the main window's or the monitor's geometry is
+  // unreadable.
   let position: { x: number; y: number } | null = null;
   try {
     const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+    const { currentMonitor } = await import('@tauri-apps/api/window');
     const main = getCurrentWebviewWindow();
     const pos = await main.outerPosition();
     const size = await main.outerSize();
     const factor = await main.scaleFactor();
-    position = {
-      x: Math.round(pos.x / factor + size.width / factor + 16),
-      y: Math.round(pos.y / factor),
-    };
+    const monitor = await currentMonitor();
+    // Physical → logical with the SAME factor the window geometry uses, or the
+    // comparison below is between two different coordinate spaces.
+    const bounds =
+      monitor === null
+        ? null
+        : {
+            x: monitor.position.x / factor,
+            y: monitor.position.y / factor,
+            width: monitor.size.width / factor,
+            height: monitor.size.height / factor,
+          };
+    position =
+      bounds === null
+        ? null
+        : placeSimulatorWindow({
+            main: { x: pos.x / factor, y: pos.y / factor, width: size.width / factor },
+            monitor: bounds,
+            sim: { width: SIM_WIDTH, height: SIM_HEIGHT },
+          });
   } catch {
     position = null;
   }
