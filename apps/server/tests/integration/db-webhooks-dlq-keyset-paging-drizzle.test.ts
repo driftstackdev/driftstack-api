@@ -204,6 +204,67 @@ describe('DLQ keyset pagination', () => {
     ).toEqual([oldId]);
   });
 
+  // V-1317 — both walks above end on a SHORT final page, so neither tells
+  // `rows.length > limit` apart from `>=`. The off-by-one only surfaces when the
+  // last page is exactly full, and then the repo offers a cursor onto a page
+  // that is not there. Both of this repo's paginated listings are covered here:
+  // the operator DLQ view and the customer's own delivery log.
+  it('CRITICAL both delivery listings report NO further pages when the final page is exactly full. The walks above always end short, so nothing distinguished the overfetch boundary — past it the caller follows a cursor to an empty page.', async () => {
+    if (!dbReachable || !repo || !sql) return;
+    const endpointId = await seedEndpoint();
+    const [owner] = await sql`SELECT account_id FROM webhook_endpoints WHERE id = ${endpointId}`;
+    const accountId = (owner as { account_id: string }).account_id;
+
+    // Exactly four, each on its own instant so ordering is total.
+    const base = Date.parse('2026-01-02T00:00:00.000Z');
+    for (let i = 0; i < 4; i += 1) {
+      await seedDelivery({
+        endpointId,
+        status: 'dlq',
+        createdAt: new Date(base + i * 1000).toISOString(),
+      });
+    }
+
+    // ── the operator DLQ listing ──
+    const dlqExact = await repo.listDlqDeliveries({ limit: 4, endpointId });
+    expect(dlqExact.items, 'the whole DLQ came back in one page').toHaveLength(4);
+    expect(
+      dlqExact.nextCursor,
+      'a full final DLQ page must not offer a cursor — it leads to an empty page',
+    ).toBeNull();
+
+    const dlqFirst = await repo.listDlqDeliveries({ limit: 2, endpointId });
+    expect(dlqFirst.items, 'first DLQ page is full').toHaveLength(2);
+    expect(dlqFirst.nextCursor, 'four rows at limit two: there IS a second page').not.toBeNull();
+
+    const dlqSecond = await repo.listDlqDeliveries({
+      limit: 2,
+      endpointId,
+      cursor: dlqFirst.nextCursor!,
+    });
+    expect(dlqSecond.items, 'the second DLQ page is also exactly full').toHaveLength(2);
+    expect(dlqSecond.nextCursor, 'and it is the last one').toBeNull();
+
+    // ── the customer's per-endpoint delivery log ──
+    const logExact = await repo.listDeliveriesForEndpoint(endpointId, accountId, { limit: 4 });
+    expect(logExact.items, 'the whole delivery log came back in one page').toHaveLength(4);
+    expect(
+      logExact.nextCursor,
+      'a full final delivery-log page must not offer a cursor',
+    ).toBeNull();
+
+    const logFirst = await repo.listDeliveriesForEndpoint(endpointId, accountId, { limit: 2 });
+    expect(logFirst.items, 'first delivery-log page is full').toHaveLength(2);
+    expect(logFirst.nextCursor, 'there IS a second page').not.toBeNull();
+
+    const logSecond = await repo.listDeliveriesForEndpoint(endpointId, accountId, {
+      limit: 2,
+      cursor: logFirst.nextCursor!,
+    });
+    expect(logSecond.items, 'the second delivery-log page is also exactly full').toHaveLength(2);
+    expect(logSecond.nextCursor, 'and it is the last one').toBeNull();
+  });
+
   it('CRITICAL only dead-lettered deliveries are listed', async () => {
     if (!dbReachable || !repo) return;
     const endpointId = await seedEndpoint();

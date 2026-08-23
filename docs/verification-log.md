@@ -5735,3 +5735,30 @@ agent-sessions, admin-audit).
 
 **Still text-pinned only — 9 sites:** `api-keys-repo`, `rate-limit-overrides-repo`, `sessions-repo`
 (×2), `webhooks-repo` (×2), `profile-snapshots-repo`, `recipes-repo`, `admin-accounts-repo`.
+
+## V-1319 — both webhook delivery listings, proven per-occurrence
+
+`webhooks-repo.ts` carries two of the nine boundaries left text-pinned by V-1318, and one fixture
+reaches both: the operator DLQ view (`listDlqDeliveries`) and the customer's own delivery log
+(`listDeliveriesForEndpoint`) read the same four seeded rows.
+
+One arm on the existing `db-webhooks-dlq-keyset-paging-drizzle.test.ts` harness, which already had
+`seedEndpoint`/`seedDelivery`. For each listing: a page the size of the whole population offers no
+cursor, and a walk whose second page is exactly full ends there.
+
+**Proven per occurrence rather than together.** Mutating both lines at once would have failed the arm
+without showing which half did the work. Each was flipped alone, by line number:
+
+| mutated line                                          | failing assertion                                      |
+| ----------------------------------------------------- | ------------------------------------------------------ |
+| `webhooks-repo.ts:1083` (`listDlqDeliveries`)         | a full final DLQ page must not offer a cursor          |
+| `webhooks-repo.ts:1176` (`listDeliveriesForEndpoint`) | a full final delivery-log page must not offer a cursor |
+
+Each run failed exactly one test with the message belonging to that listing; the other listing's
+assertions and all eight pre-existing arms stayed green. Source restored byte-identical from a
+snapshot after each.
+
+Behaviourally covered boundaries: 7 of 14.
+
+**Still text-pinned only — 7 sites:** `api-keys-repo`, `rate-limit-overrides-repo`, `sessions-repo`
+(×2), `profile-snapshots-repo`, `recipes-repo`, `admin-accounts-repo`.
