@@ -6131,3 +6131,41 @@ Worth stating plainly because it changes how the next sweep should start: this t
 produced a complete, exact answer, where four successive greps produced three wrong numbers and an
 upper bound. When a guard's subject can be broken cheaply — a dead port, a removed clause, a flipped
 operator — breaking it answers "would this notice?" directly. A pattern only guesses at it.
+
+## V-1330 — the scope surface is two layers, and both notice when it is removed
+
+Same instrument as V-1329, pointed at authorization. Two runs, because scope enforcement is
+implemented **twice** and one mutation reaches only half of it.
+
+**The surface is bigger than a route-layer grep shows.** `requireScope(` in `routes/` finds 176 call
+sites across 42 files. That is not the whole thing: 11 service files import the same helper under an
+alias — `import { requireScope as throwIfMissingScope }` — for another **48 call sites**, and one
+route file uses the aliased import rather than the decorator. 224 sites, two idioms, two layers. The
+route-only map also missed three scopes enforced nowhere else: `read:webhooks`, `read:audit`,
+`read:api`.
+
+**Both layers are covered behaviourally.**
+
+| neutralised                                                | tests that failed   | scopes represented in the failures                |
+| ---------------------------------------------------------- | ------------------- | ------------------------------------------------- |
+| the route decorator (`services/auth.ts::requireScope`)     | 249 across 38 files | all 11 the routes gate on, `gui_control` included |
+| the service helper (`lib/errors-helpers.ts::requireScope`) | 48 across 19 files  | 8, including the three the routes never use       |
+
+Both files restored byte-identical from snapshots; `tsc` clean under each mutation, so the failures
+are behavioural rather than compilation noise.
+
+**A claim raised and fully retracted.** The route-only map showed `read:webhooks` declared in the
+scope enum with zero enforcement sites, and every webhook route gated on `requireAuth` alone — which
+reads as a customer-selectable least-privilege scope that grants nothing, and webhook WRITES
+reachable by any authenticated key. It is enforced, in the service layer, at four sites, with
+`account_owner` required for the writes. The gate was in a different layer behind an aliased import.
+That is the third enumeration of this shape to come up short today, and the pattern is consistent:
+counting call sites of one spelling in one directory measures the spelling, not the rule.
+
+**The duplication is already guarded, and better than a hand-written check would be.** Two
+implementations exist — inlined in `services/auth.ts`, delegating to `scopesSatisfy` in
+`lib/errors-helpers.ts` — kept in step by hand and by comment. `scope-check.test.ts` compares all
+three entry points across every granted subset of size 0, 1 and 2 drawn from `ApiKeyScopeSchema.options`
+against every required scope, and states why size 2 is the floor: several rules read one scope while
+a second is present, and a singleton sweep cannot catch an implementation consulting the wrong
+element. Nothing to add.
