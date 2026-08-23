@@ -6308,3 +6308,50 @@ percentage: `lib/bootstrap.ts` (300), `routes/agent-sessions.ts` (110), `drivers
 not execute; the rest are worth a look on their own terms, and none of them is a refusal.
 
 The coverage run that produced this was itself green — 3172 files, 31328 passed, 16 skipped.
+
+## V-1335 — RETRACTION of the V-1334 count, and the seven refusals it hid
+
+**V-1334 said every refusal path in the server executes under test. That conclusion was wrong, and
+wrong twice over.** Recording the correction before the finding, because the finding only exists
+because the instrument was rebuilt.
+
+**Error one: the population came from a hand-written list.** I enumerated six error classes and
+called the result "refusal paths". `apps/server/src` throws **52 distinct error classes across 744
+sites**. `BundledLlmConsentRequiredError` and `ByokAnthropicRequiredError` refuse an agent turn and
+were never in the list — the same defect rule 2 exists to prevent, committed while quoting rule 2.
+
+**Error two: the coverage lookup masked the zeros it was looking for.** For each throw line I took
+the MAXIMUM execution count over every statement spanning that line. An enclosing block that ran
+reports a nonzero count, so an inner throw that never ran was recorded as reached. Matching the
+NARROWEST statement instead — the throw is its own statement — changes the answer from 14
+never-executed sites to **68**. The first number was produced by an instrument that could not see
+what it was measuring, and it agreed with the conclusion I had already published.
+
+The corrected sweep over all 744 sites: **68 never executed**, led by `BadRequestError` (14),
+`NotFoundError` (11), `DriverNotIntegratedError` (10), `ForbiddenError` (7), `ConflictError` (7).
+
+**Seven of them are one refusal, replicated.** Every copy guards the window between the auth cache
+loading a team membership and the handler reading the owner row — the owner account deleted in
+between:
+
+| site                                     | route                                    |
+| ---------------------------------------- | ---------------------------------------- |
+| `routes/profiles.ts:382`                 | `POST /v1/profiles/:id/clone`            |
+| `routes/profiles.ts:454`                 | `POST /v1/profiles/import`               |
+| `routes/admin.ts:182`, `:219`            | api-key rotate, `/v1/usage`              |
+| `routes/agent-sessions.ts:4066`, `:4070` | tier resolution for an owner-run session |
+| `routes/profile-snapshots.ts:235`        | snapshot writes                          |
+
+**What the branch is actually worth, measured rather than argued.** My first draft of the new arm
+said that without the guard the handler would carry on with the caller's own account and tier,
+writing to the wrong account. Disabling it and running showed otherwise: `owner.id` is read off null
+and the caller gets a **500**. So the guard converts an unexplained server fault into a 403 that
+names its cause — a smaller claim than the one I wrote first, and the true one. The description now
+says that, because a comment that misstates its own line is the defect this campaign keeps repairing
+in other files.
+
+One arm added, on the clone route, with the fixture correct in every other respect so an earlier
+guard cannot answer first: membership resolves, role is admin, body parses. Mutation-proven —
+`if (false && !owner)` fails it on `expected 500 to be 403`. Source restored byte-identical.
+
+Six copies remain uncovered and are named above rather than left implied.

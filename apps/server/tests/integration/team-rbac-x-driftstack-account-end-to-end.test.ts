@@ -117,6 +117,49 @@ describe('X-Driftstack-Account team-RBAC header end-to-end', () => {
     );
   });
 
+  // V-1335 — the owner-vanished branch, which no test had ever executed.
+  //
+  // Seven copies of this refusal exist across the route layer (profiles x2,
+  // admin x2, agent-sessions x2, profile-snapshots), each guarding the window
+  // between the auth cache loading a membership and the handler reading the
+  // owner row. Coverage says none of the seven had run. A membership is cached,
+  // the owner account is deleted, and the next call from that member arrives
+  // holding a valid membership for an account that is gone.
+  //
+  // Reaching it needs a fixture that is correct in every other respect: the
+  // membership must resolve, the role must be admin, and the body must parse —
+  // otherwise an earlier guard answers and the arm measures a different refusal.
+  it('CRITICAL a member acting for an owner whose account has been DELETED is refused, not served against a half-resolved account. The membership is still valid and still cached; only the owner row is gone. Measured, not assumed: with the guard disabled the handler reads `owner.id` off null and the caller gets a 500 — indistinguishable from a server fault — on a request whose cause is knowable and whose correct answer is a 403 naming it.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+
+    // A membership pointing at an account that was never created — the state a
+    // cached membership is in for the moment after its owner is deleted.
+    const GHOST_ID = '00000000-0000-4000-8000-00000000f001';
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: '00000000-0000-4000-8000-00000000f002',
+        ownerAccountId: GHOST_ID,
+        role: 'admin',
+      },
+    ]);
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/prof_00000000-0000-4000-8000-00000000f003/clone`,
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${GHOST_ID}`,
+      },
+      payload: {},
+    });
+
+    expect(res.statusCode, 'acting for a deleted owner must be refused').toBe(403);
+    expect(
+      res.json<{ detail?: string }>().detail,
+      'and the refusal names the vanished owner rather than a generic denial',
+    ).toContain('Owner account no longer exists');
+  });
+
   it('X-Driftstack-Account with malformed acc_-prefixed UUID → 4xx (NOT 500)', async () => {
     fx = await buildTestApp({ tier: 'api_builder' });
     const res = await fx.app.inject({
