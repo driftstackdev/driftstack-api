@@ -92,6 +92,10 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       return raw === null || raw === undefined ? null : new Date(raw as string).toISOString();
     }
 
+    it('CRITICAL the database was actually reachable. Every arm below returns early when it is not, so without this the file reports PASSED against a dead Postgres — a green that means "no database" and is indistinguishable from one that means the tracker agreed.', () => {
+      expect(dbReachable, 'DATABASE_URL is set but Postgres did not answer').toBe(true);
+    });
+
     it('CRITICAL resolves an account id by email, normalising case and surrounding whitespace. Postmark hands back the address as the remote reported it, so a lookup that matched only the exact stored bytes would fail to attribute the bounce and silently track nothing.', async () => {
       if (!dbReachable) return;
       const email = `tracker-${randomUUID()}@test.local`;
