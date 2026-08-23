@@ -2409,3 +2409,49 @@ describe('auto-destroy driver-teardown failure is audited (V-782)', () => {
     expect(webhookEvents.filter((e) => e.eventType === 'session.completed')).toEqual([]);
   });
 });
+
+// V-1348 — the scheme guard on `navigate`, which no test had ever executed.
+//
+// Its own comment states why it exists at the SERVICE layer rather than only in
+// the route schema: `services/agent-executor.ts:378` calls
+// `sessions.navigate(account, sessionId, { url: intent.url })` directly, and
+// `intent.url` is produced by the model. A page that talks the agent into
+// navigating `file:///etc/passwd` never passes through the route schema at all,
+// so this check is the only thing standing between a prompt injection and the
+// driver.
+//
+// Coverage put it in the never-executed set. The guard is the first statement in
+// `navigate`, so reaching it needs nothing wired downstream — which is why the
+// arms below reuse this file's existing service factory rather than standing up
+// a fixture that the refusal never touches.
+describe('V-1348 navigate refuses a non-http(s) scheme before touching the driver', () => {
+  const REFUSED = [
+    ['file', 'file:///etc/passwd'],
+    ['ftp', 'ftp://internal.host/secrets.txt'],
+    ['javascript', 'javascript:fetch("/v1/account/me")'],
+    ['data', 'data:text/html,<script>1</script>'],
+  ] as const;
+
+  it.each(REFUSED)(
+    'CRITICAL a %s: URL is refused. The agent executor reaches this method directly with a model-produced url, so the route schema never sees it — a prompt-injected navigate is refused here or nowhere.',
+    async (_label, url) => {
+      const { service, driver } = buildService();
+      await expect(service.navigate(buildCtx(), 'sess-uuid-test', { url })).rejects.toThrow(
+        /Only http:\/\/ and https:\/\/ URLs can be navigated/,
+      );
+      // The refusal must precede the driver: a navigate that reached the driver
+      // and failed there would already have resolved DNS for the attacker.
+      // `operationCalls` is this stub's record of non-lifecycle driver work.
+      expect(driver.operationCalls, 'the driver was reached despite the scheme refusal').toEqual(
+        [],
+      );
+    },
+  );
+
+  it('CRITICAL an https URL is NOT refused by the scheme guard, so the arms above are not satisfied by a method that rejects everything. This one is allowed past the guard and fails later, in the driver, which is what proves the guard let it through.', async () => {
+    const { service } = buildService();
+    await expect(
+      service.navigate(buildCtx(), 'sess-uuid-test', { url: 'https://example.test/page' }),
+    ).rejects.not.toThrow(/Only http:\/\/ and https:\/\/ URLs can be navigated/);
+  });
+});

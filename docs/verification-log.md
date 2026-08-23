@@ -6754,3 +6754,39 @@ deployment but a broken one — `authRepo` is what authenticates every request, 
 serves nothing at all. Reaching the branch would mean building a fixture that cannot answer a single
 authenticated call, which measures the fixture rather than the route. Recorded as deliberately not
 pursued rather than left on a list implying it is pending.
+
+## V-1348 — the prompt-injection scheme guard on navigate had never run
+
+`services/sessions.ts:722` refuses a `navigate` whose URL is not `http(s)`. Its own comment says why
+it lives at the SERVICE layer rather than only in the route schema, and the reason checks out:
+`services/agent-executor.ts:378` calls `sessions.navigate(account, sessionId, { url: intent.url })`
+directly, and `intent.url` is produced by the model. A page that talks the agent into fetching
+`file:///etc/passwd` never passes through the route schema at all — this check is the only thing
+between a prompt injection and the driver.
+
+Coverage put it in the never-executed set, so the defence existed and nothing had ever watched it
+refuse.
+
+Four refusals covered — `file:`, `ftp:`, `javascript:`, `data:` — plus two things that make them mean
+something:
+
+- **The driver must not have been reached.** A navigate that got as far as the driver and failed
+  there would already have resolved DNS for whoever wrote the injected page. Asserted on the stub's
+  own `operationCalls` recorder.
+- **An `https` URL is NOT refused by this guard**, so the four arms cannot be satisfied by a method
+  that rejects everything. It is allowed past and fails later in the driver, which is what shows the
+  guard let it through.
+
+The arms reuse the existing `buildService`/`buildCtx` factory in `sessions-failure.test.ts` rather
+than standing up a new fixture: the guard is the first statement in `navigate`, so nothing downstream
+is touched and a fresh fixture would only add surface the refusal never reaches.
+
+Mutation-proven — `if (false && !/^https?:\/\//i.test(body.url))` fails all four refusal arms while
+the https arm stays green. Source restored byte-identical.
+
+**A wrong assumption of mine, caught by the first run.** The driver assertion was written against
+`driver.calls`, which this stub does not have; four arms failed on `expected undefined to deeply equal
+[]`. The stub records non-lifecycle work in `operationCalls`. Reading the stub rather than guessing
+its shape would have been quicker, and the failure mode is worth noting: an assertion against a
+property that does not exist fails loudly here, but the same mistake inside a `.some()` or an
+optional chain would have passed silently.
