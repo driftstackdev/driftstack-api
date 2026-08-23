@@ -183,6 +183,46 @@ describe('fetchUserInfo — Google', () => {
     }
   });
 
+  // V-1392 — the identity guards. Branch coverage put every `typeof … === 'string' ? … : ''`
+  // fallback here in the never-taken set: no test had ever handed these parsers a userinfo
+  // body missing a field, so the guards that read those empty strings had never run.
+  //
+  // `providerSub` is not a display field. `account_oauth_links` carries a UNIQUE index on
+  // `(provider, provider_sub)` and sign-in resolves an account by exactly that pair, so a
+  // link stored with an empty sub is an identity any later empty-sub response matches. The
+  // guard below is the only thing between a malformed IDP response and that state — it is
+  // one `if` deep, and it had never executed.
+  it.each([
+    ['sub missing entirely', { email: 'u@e.test', email_verified: true }],
+    ['sub not a string', { sub: 12345, email: 'u@e.test', email_verified: true }],
+    ['email missing entirely', { sub: 'google-sub', email_verified: true }],
+    ['email not a string', { sub: 'google-sub', email: null, email_verified: true }],
+  ])(
+    'CRITICAL a Google userinfo body with %s is refused as an idp-error, never normalised to an empty identity. An empty providerSub would be stored against the unique (provider, provider_sub) index, and the next malformed response would resolve to that same link.',
+    async (_label, body) => {
+      const res = await fetchUserInfo({
+        provider: 'google',
+        accessToken: 'token',
+        fetch: mockFetch([{ status: 200, body }]),
+      });
+      expect(res.kind).toBe('idp-error');
+      if (res.kind === 'idp-error') expect(res.body).toBe('missing sub/email');
+    },
+  );
+
+  it('CRITICAL the refusal is the MISSING field, not the verification flag — a body with sub and email present still reaches the email_verified check. Without this the arms above would also pass against a parser that refused every Google response.', async () => {
+    const res = await fetchUserInfo({
+      provider: 'google',
+      accessToken: 'token',
+      fetch: mockFetch([
+        { status: 200, body: { sub: 'google-sub', email: 'u@e.test', email_verified: false } },
+      ]),
+    });
+    expect(res.kind, 'this body is well-formed; only its verification flag is false').toBe(
+      'unverified-email',
+    );
+  });
+
   it('email_verified=false → kind: unverified-email (Verdict 1 trust)', async () => {
     const res = await fetchUserInfo({
       provider: 'google',
@@ -232,6 +272,36 @@ describe('fetchUserInfo — GitHub', () => {
       expect(res.user.name).toBe('GitHub User');
       expect(res.user.avatarUrl).toBe('https://avatars.githubusercontent.com/u/987654');
     }
+  });
+
+  // V-1392 — the GitHub half of the same guard. Its id arrives as a NUMBER on the happy
+  // path and is stringified, so the fallback has two ways to be reached rather than one:
+  // absent, or present with a type the parser does not accept.
+  it.each([
+    ['id missing entirely', { login: 'user', email: 'u@e.test' }],
+    ['id an object', { id: { v: 7 }, login: 'user', email: 'u@e.test' }],
+    ['id null', { id: null, login: 'user', email: 'u@e.test' }],
+  ])(
+    'CRITICAL a GitHub /user body with %s is refused as an idp-error rather than linked under an empty providerSub',
+    async (_label, body) => {
+      const res = await fetchUserInfo({
+        provider: 'github',
+        accessToken: 'token',
+        fetch: mockFetch([{ status: 200, body }]),
+      });
+      expect(res.kind).toBe('idp-error');
+      if (res.kind === 'idp-error') expect(res.body).toBe('missing GitHub id');
+    },
+  );
+
+  it('CRITICAL a STRING id is accepted, not refused. GitHub documents a numeric id and the happy path stringifies it, so the string arm exists for a provider that returns one — refusing it would lock those customers out, and it is the sibling of the arms above rather than a duplicate.', async () => {
+    const res = await fetchUserInfo({
+      provider: 'github',
+      accessToken: 'token',
+      fetch: mockFetch([{ status: 200, body: { id: '7', login: 'user', email: 'u@e.test' } }]),
+    });
+    expect(res.kind).toBe('ok');
+    if (res.kind === 'ok') expect(res.user.providerSub).toBe('7');
   });
 
   it('email null (private) → kind: unverified-email (caller falls back to /user/emails)', async () => {

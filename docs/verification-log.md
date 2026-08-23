@@ -8430,3 +8430,43 @@ typed their address at signup.
 That is the second time this session a mutation has said "your arm does not test what its title
 claims", and both times the fix was a fixture that could tell the difference rather than a reworded
 assertion.
+
+## V-1392 — the identity guards on the OAuth sign-in path, one `if` from a shared account
+
+Continuing the never-taken-branch sweep. Every `typeof … === 'string' ? … : ''` fallback in
+`lib/oauth-client-exchange.ts` was in the never-taken set: no test had handed those parsers a
+userinfo body missing a field, so the guards that read the resulting empty strings had never run.
+
+That would be unremarkable if `providerSub` were a display field. It is not.
+`account_oauth_links` carries a **unique index on `(provider, provider_sub)`**, and sign-in resolves
+an account by exactly that pair (`findByProviderSub`). A link stored with an **empty** sub is an
+identity that any later empty-sub response matches — so a malformed IDP body would not merely fail,
+it would resolve to whoever got there first.
+
+Between that and a normal sign-in stands one `if`, at `oauth-client-exchange.ts:294`, which had never
+executed:
+
+```ts
+if (sub.length === 0 || email.length === 0) {
+  return { kind: 'idp-error', status: 200, body: 'missing sub/email' };
+}
+```
+
+Seven arms across both providers. Google: `sub` missing, `sub` non-string, `email` missing, `email`
+non-string. GitHub: `id` missing, `id` an object, `id` null — three ways rather than two, because its
+id arrives as a **number** on the happy path and is stringified, so the fallback is reachable both by
+absence and by an unaccepted type.
+
+Two of the seven are there to stop the others passing for the wrong reason:
+
+- a well-formed Google body with `email_verified: false` must still reach the verification check and
+  return `unverified-email` — otherwise every arm above is satisfied by a parser that refuses _every_
+  Google response;
+- a **string** GitHub id must be **accepted**, since that ternary arm exists for a provider that
+  returns one, and refusing it would lock those customers out.
+
+Mutations separate cleanly: removing the Google guard reds its four arms; removing the GitHub guard
+reds its three; collapsing the string arm of the GitHub ternary reds only the acceptance arm.
+
+Checked and not pursued: `services/oauth.ts:293`, which the same filter surfaced, is inside
+`InMemoryOAuthStore` — a test-only store with no `new` in `apps/server/src`.
