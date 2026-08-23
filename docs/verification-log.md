@@ -7130,3 +7130,28 @@ secret is in the clear".
 No arms added. The useful output is the mechanism: if someone later notices there is no direct
 ciphertext-is-not-plaintext assertion and adds one, it is redundant rather than a gap being closed —
 the AAD arms already stand in front of it, and they fail louder because they name what broke.
+
+## V-1360 — a run disturbed mid-flight, attributed rather than chased
+
+The full run after V-1359 reported **6 failed files but only 1 failed test**, with skips up from the
+usual 16 to 39. That shape is worth reading carefully: five files failed without any assertion
+failing, which means they broke at import or setup rather than in a test.
+
+Attribution, before investigating:
+
+- **Five are the peer's gui-client work in flight.** The errors are React — `useToasts requires
+<ToastProvider>` and `view exploded` — raised as unhandled errors, and `git status` shows them
+  mid-edit on `SettingsView.tsx`, `src/lib/settings.ts` and an auto-update test. Not server surface,
+  not mine.
+- **The one failing test reports a duration of 4,246,556ms** — roughly seventy minutes, for an arm
+  that is not slow. That is not a 10-second timeout being exceeded; it is a stalled or suspended
+  process being measured. Both files involved
+  (`db-durable-webhook-list-keyset-drizzle`, `db-durable-webhook-reclaim-fence-drizzle`) pass together
+  in **1.7s** immediately afterwards, and Postgres answers `select 1`.
+
+The elevated skip count fits the same story: DB-gated suites skip when the probe cannot complete, and
+a run competing with a peer's build and a `.husky/pre-commit` change is exactly when that happens.
+
+Recorded rather than chased because the alternative is to spend a batch reproducing a suspension.
+What would change the reading is the same failure with a plausible duration, or the keyset arm failing
+in isolation — neither is true here.
