@@ -7677,3 +7677,55 @@ Four mutations, each hitting a different arm:
 | drop the EXEMPT entry         | the undeclared rule, proving the header is genuinely in the population now                                     |
 | un-expose it in `app.ts`      | the checked-premise arm                                                                                        |
 | remove the docs instruction   | the checked-premise arm                                                                                        |
+
+## V-1373 — the two waiver lists that produced V-1370 were held in agreement by nothing
+
+`unknown-request-fields-coverage-invariant` waives route files from the report-unknown-fields rule.
+`an-exempt-surface-that-can-drop-a-field-is-listed` audits _which of those waived surfaces can
+actually drop a field_. The second is meaningless if its population is not the first's — and it kept
+its **own copy** of both lists, duplicated by construction and independent by code.
+
+That is exactly how V-1370 hid. `admin.ts` sat on both under a staff-surface rationale it did not
+qualify for; the sibling guard stayed green throughout because it was reading its own stale copy, and
+only the quoted-basename grep found it. Fixing one copy would have left the other silently waiving a
+customer surface.
+
+The second guard now reads the first's source and asserts the two waiver sets are identical —
+prefixes and files — with comments blanked so a commented-out entry cannot count as declared, and a
+floor so a broken extraction reds instead of agreeing with anything.
+
+Three mutations, and the first is the point:
+
+| mutation                                                                | result                                                                     |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `admin.ts` back on the **sibling's** list only — the exact V-1370 shape | caught: _"the two files disagree on which route-file PREFIXES are waived"_ |
+| a file removed from **this** guard's list only                          | caught, plus the droppable-set arm reds on the now-stale entries           |
+| extraction broken so both lists parse empty                             | caught by the floor: _"nothing parsed out of the coverage invariant"_      |
+
+⚠️ **The third mutation's first attempt did not run and printed `Tests 6 passed`.** Its target string
+had been reflowed by prettier across two lines, so the replacement matched nothing and the "proof"
+was an unmutated run reporting green — the same shape as the zsh word-splitting incident earlier this
+session, from a different cause. The `assert` on the target caught it. A mutation proof needs both:
+the target asserted present _before_ the run, and a real failure _after_ it.
+
+### Negative result, recorded so it is not re-run
+
+Before this, I generated candidates by finding refusal messages in `apps/server/src` that appear in
+no test file. It reported **114**. It is a bad detector, and both halves of that are worth writing
+down:
+
+- At the **service layer** the refined count is **0** — every refusal message there has all its
+  distinctive words present somewhere in the test tree.
+- At the **route layer** it flagged three SSRF refusals on customer proxy config
+  (`account-me.ts:460/537/556`). All three are thoroughly covered: `account-me-proxies.test.ts` drives
+  a metadata-address OpenVPN `remote`, a private-address WireGuard endpoint, and a metadata-address
+  WireGuard `dns` — each asserting `.toMatch(/metadata|private|loopback/i)` rather than the literal
+  message. The heuristic cannot see an assertion that matches on a pattern, which is how a
+  well-written arm is usually written.
+
+Two other veins checked and found sound rather than left implied: the five `expiresAt` gates in
+`services/auth.ts` are already the declared subject of `auth-slow-path-denials-actually-deny` (32
+throws enumerated across four functions) plus two named cache-revalidation files; and
+`packages/webhook-delivery`'s in-memory double warns that production must inject an SSRF-guarded
+fetch, which `durable-webhook-delivery.ts` and `webhook-worker.ts` both do by **default** rather than
+by injection — a stronger posture than the comment asks for.

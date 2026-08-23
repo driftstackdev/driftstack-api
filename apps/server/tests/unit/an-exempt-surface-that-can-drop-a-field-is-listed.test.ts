@@ -152,6 +152,42 @@ function exemptSites(): Array<{ file: string; schema: string }> {
 describe('V-961 an exempt surface that can drop a field is listed, not inherited', () => {
   const sites = exemptSites();
 
+  // V-1373 — these two lists are duplicated by construction and were held in
+  // agreement by nothing. That is not hypothetical: `admin.ts` sat on BOTH under a
+  // staff-surface rationale it did not qualify for (V-1370), and fixing one copy
+  // would have left the other quietly waiving a customer surface. This file's whole
+  // subject is "which of the coverage invariant's exempt surfaces can drop a field",
+  // so if its population stops matching that invariant's, it is auditing something
+  // else and still reporting green.
+  it("CRITICAL this file waives exactly the surfaces the coverage invariant waives. Read from that file's source, not re-declared, because a second copy of a waiver list is how a surface gets exempted in one place and audited in the other.", () => {
+    const sibling = readFileSync(
+      resolve(HERE, 'unknown-request-fields-coverage-invariant.test.ts'),
+      'utf8',
+    );
+    // Comments blanked so a commented-out entry cannot count as declared.
+    const code = sibling.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+    const listOf = (name: string): string[] => {
+      const m = new RegExp(`const ${name}\\s*=\\s*\\[([^\\]]*)\\]`).exec(code);
+      return [...(m?.[1] ?? '').matchAll(/'([^']+)'/g)].map((x) => x[1] as string).sort();
+    };
+
+    const theirPrefixes = listOf('EXEMPT_PREFIXES');
+    const theirFiles = listOf('EXEMPT_FILES');
+    expect(
+      theirPrefixes.length + theirFiles.length,
+      'nothing parsed out of the coverage invariant — the extraction broke and this arm would agree with anything',
+    ).toBeGreaterThan(2);
+
+    expect(
+      [...EXEMPT_PREFIXES].sort(),
+      'the two files disagree on which route-file PREFIXES are waived from reporting',
+    ).toEqual(theirPrefixes);
+    expect(
+      [...EXEMPT_FILES].sort(),
+      'the two files disagree on which route FILES are waived from reporting',
+    ).toEqual(theirFiles);
+  });
+
   it('CRITICAL the scan found the exempt surface and every schema on it resolves to a declaration. Both arms below compare against a list, so a scan that found nothing, or a schema whose body could not be located, would make them agree with anything.', () => {
     expect(sites.length, 'body-parsing schemas on exempt surfaces').toBeGreaterThanOrEqual(20);
     const unresolved = sites.filter((s) => schemaBody(s.schema) === null).map((s) => s.schema);
