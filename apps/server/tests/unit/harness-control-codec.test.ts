@@ -541,6 +541,15 @@ describe('serializeSessionAssign (EG-API-1.6; A3 W136 shape)', () => {
   // `sessionAssign` frame. The box side validates too, but a frame that fails there fails
   // AFTER the session has been assigned, which is a much worse place to find out.
   it('CRITICAL a VPN config that fails the wire contract is refused HERE, before it is encoded onto the frame. Its socks sibling one branch down is covered and this one was not, so the asymmetry was the gap: the happy paths prove the flat wire shape, not that a bad config is stopped.', () => {
+    // The parameter type forbids these shapes, and the runtime can still deliver them: an
+    // inline proxy config is decrypted out of the database at dispatch time, so what reaches
+    // this function is only as well-formed as the row. That is the whole reason the contract
+    // check exists, so the arm supplies what the type will not vouch for.
+    type InlineProxyArg = NonNullable<
+      Parameters<typeof serializeSessionAssign>[0]['inlineProxyConfig']
+    >;
+    const fromStorage = (value: unknown): InlineProxyArg => value as InlineProxyArg;
+
     // Valid but for one required field — `private_key` removed. Everything else is the
     // shape the passing arm above uses, so only the contract check can answer.
     const brokenWireGuard = {
@@ -550,27 +559,27 @@ describe('serializeSessionAssign (EG-API-1.6; A3 W136 shape)', () => {
       allowed_ips: '0.0.0.0/0',
       address: '10.7.0.2/32',
     };
-    expect(() => serializeSessionAssign({ ...base, inlineProxyConfig: brokenWireGuard })).toThrow(
-      HarnessWireCodecError,
-    );
-    expect(() => serializeSessionAssign({ ...base, inlineProxyConfig: brokenWireGuard })).toThrow(
-      /InlineVpnProxyWire contract before assign/,
-    );
+    expect(() =>
+      serializeSessionAssign({ ...base, inlineProxyConfig: fromStorage(brokenWireGuard) }),
+    ).toThrow(HarnessWireCodecError);
+    expect(() =>
+      serializeSessionAssign({ ...base, inlineProxyConfig: fromStorage(brokenWireGuard) }),
+    ).toThrow(/InlineVpnProxyWire contract before assign/);
 
     const brokenOpenVpn = { type: 'openvpn' as const, username: 'u' }; // no config_blob
-    expect(() => serializeSessionAssign({ ...base, inlineProxyConfig: brokenOpenVpn })).toThrow(
-      /InlineVpnProxyWire contract before assign/,
-    );
+    expect(() =>
+      serializeSessionAssign({ ...base, inlineProxyConfig: fromStorage(brokenOpenVpn) }),
+    ).toThrow(/InlineVpnProxyWire contract before assign/);
 
     // Control: the same wireguard config WITH the field serializes, so the refusal is the
     // missing key rather than anything else about the fixture.
     expect(() =>
       serializeSessionAssign({
         ...base,
-        inlineProxyConfig: {
+        inlineProxyConfig: fromStorage({
           ...brokenWireGuard,
           private_key: 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=',
-        },
+        }),
       }),
     ).not.toThrow();
   });
