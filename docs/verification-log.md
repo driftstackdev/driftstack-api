@@ -7098,3 +7098,35 @@ re-measure instead of the fix.
 Related: the same shape is already recorded for grep classifiers and for coverage intersection. This
 adds a third medium — arithmetic in a matched expression — where the pattern that looks complete stops
 one token short of the meaning.
+
+## V-1359 — would plaintext-at-rest be noticed? Measured at both ends of the class
+
+`apps/server/src` has **32 encrypt/decrypt/wrap boundaries** across eight modules. The question worth
+asking of that class is not whether a round-trip works — every one of them tests that — but whether a
+regression that stopped encrypting would be caught. A round-trip test cannot see it: if `encrypt`
+returns the plaintext and `decrypt` hands it back, the round-trip still passes.
+
+So the counterfactual is an **identity pair**, both halves mutated together, leaving the stored value
+readable and unencrypted.
+
+Probed at both ends of the coverage distribution:
+
+| module                                                         | arms across its test files | identity pair caught by |
+| -------------------------------------------------------------- | -------------------------- | ----------------------- |
+| `account-proxy-secret-encryption` (customer proxy credentials) | 76                         | **8 tests**             |
+| `platform-secret-value-encryption` (thinnest in the class)     | 25                         | **10 tests**            |
+
+Both are caught, and the mechanism is worth recording because it is not the obvious one. Nothing
+asserts "the stored value differs from the plaintext" directly. What fails are the **tamper and
+wrong-context arms** — assertions that a modified blob, a foreign account, or a mismatched AAD is
+REJECTED. Those cannot pass without real authenticated encryption, so they catch the absence of
+encryption as a side effect of testing its integrity.
+
+A first attempt mutated only `encrypt`, and 3 tests failed on decrypt-side format errors. That is
+detection by round-trip breakage, which says nothing about the property in question — the pair is
+what makes the question answerable, and it is the difference between "the format changed" and "the
+secret is in the clear".
+
+No arms added. The useful output is the mechanism: if someone later notices there is no direct
+ciphertext-is-not-plaintext assertion and adds one, it is redundant rather than a gap being closed —
+the AAD arms already stand in front of it, and they fail louder because they name what broke.
