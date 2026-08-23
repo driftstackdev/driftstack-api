@@ -8097,3 +8097,30 @@ reds them and the pre-existing non-JSON arm.
 
 Still dark in this module and left for the next batch: `:205`, the `InlineVpnProxyWire` contract
 refusal on `inlineProxyConfig`.
+
+## V-1383 — two sibling refusals, one covered and one not
+
+`serializeSessionAssign` splits `inlineProxyConfig` on `type`: `openvpn`/`wireguard` are validated
+against `InlineVpnProxyWireSchema`, everything else against `SocksProxyConfigWireSchema`. Both
+branches refuse a config that fails their contract. Coverage showed only the socks refusal executing.
+
+The happy paths were not the gap — both VPN shapes are already driven, and their arm pins the FLAT
+wire (type plus sibling fields, never nested). What nothing did was hand the serializer a **malformed**
+VPN config. That refusal is what stops a half-formed config being base64'd onto a `sessionAssign`
+frame; the box side validates too, but a frame that fails there fails _after_ the session has been
+assigned, which is a considerably worse place to find out.
+
+The arm drives both members of the union — a WireGuard config missing `private_key`, and an OpenVPN
+one missing `config_blob` — and controls on the same fixture WITH the field restored, so the refusal
+is the missing key rather than anything else about the input.
+
+Mutations: disabling the VPN contract check reds it, and routing VPN configs down the socks branch
+reds it with the _other_ contract's message (`SocksProxyConfig` instead of `InlineVpnProxyWire`),
+alongside the pre-existing flat-wire arm. The second is the one that matters — it proves the arm
+distinguishes _which_ contract answered, not merely that something refused.
+
+⚠️ **Both mutations silently failed to apply on the first attempt** and the runs that followed
+reported 45 passed, which meant nothing. The target strings were indented 6 spaces where I had
+guessed 8. The `assert old in s` guard is what turned a fake green into an error; without it this
+entry would have claimed two proofs that never ran. Third time this session, and the fix is always
+the same: print the exact bytes with `repr()` before writing a mutation.
