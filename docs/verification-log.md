@@ -6463,3 +6463,38 @@ fact that they passed.
 Standing count: 9 producers of the refusal, 5 newly covered and proven at their own line, 2 already
 covered, 1 shadowed by the rate limiter (`agent-sessions.ts:4070`), 1 reachable only from an app
 registered without an `authRepo` (`agent-sessions.ts:4066`).
+
+## V-1340 — the profile cap's race backstop was enforced on two creation paths out of four
+
+Four service methods can add a profile to an account — `create`, `clone`, `importProfile`,
+`transferProfile` — and each carries the cap TWICE: a `countByAccount` pre-check that fails fast, and
+a conditional `insertWithLimit` that re-checks under an account-row lock. The second exists because
+the first cannot settle a race: two calls both read a count under the limit, and only the conditional
+insert decides which one loses.
+
+Coverage over all 744 throw sites put two `TierLimitError` throws in the never-executed set:
+`services/profiles.ts:819` (clone) and `:967` (import) — **both of them the conditional-insert
+branch**. `create` and `transferProfile` have theirs covered; the transfer arm even spells the race
+out. So the backstop was verified on two paths of four, and the two left out are the two a customer
+reaches for when adding profiles in bulk.
+
+A cap enforced on three paths out of four is not a cap: the loser of the race is written anyway and
+the account ends up over the allowance it is billed against.
+
+Two arms, in the idiom the transfer arm already established — pre-check made to see room,
+`insertWithLimit` made to report the account at ten:
+
+| mutated branch                      | failing arm                                                      |
+| ----------------------------------- | ---------------------------------------------------------------- |
+| `services/profiles.ts:818` (clone)  | CLONE refuses when the atomic insert reports the account at cap  |
+| `services/profiles.ts:966` (import) | IMPORT refuses when the atomic insert reports the account at cap |
+
+Proven per occurrence — the two branches are textually identical lines in one file, so a single flip
+would not show which arm did the work. Each failed exactly one arm with the other 63 green, and the
+service was restored byte-identical after each.
+
+This is the third replicated-guard finding in a row where only some copies were exercised: the
+deleted-owner refusal (7 copies, 5 unreached), the pagination boundary (14 sites, 12 unverified), and
+now the profile cap (4 conditional branches, 2 unreached). The shape is consistent enough to be worth
+naming — a rule implemented once per call path is a rule tested once per call path, and the count of
+copies is never the count of covered copies.

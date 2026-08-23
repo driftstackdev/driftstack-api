@@ -887,6 +887,43 @@ describe('V-553.B-21 ProfilesService.transferProfile', () => {
     ).rejects.toThrow(TierLimitError);
   });
 
+  // V-1340 — the same race backstop on CLONE and IMPORT, which the transfer arm
+  // below covers for transfer alone. Coverage said both were never executed:
+  // four paths create a profile, each carries its own pre-check AND its own
+  // conditional-insert branch, and only two of the four conditional branches had
+  // ever run. A cap enforced on three paths out of four is not a cap.
+  it('CRITICAL CLONE refuses when the atomic insert reports the account at cap, even though the pre-check passed. Cloning is the cheapest way to add a profile — one call, no payload — so it is the likeliest path to win the race that puts an account over the allowance it is billed for.', async () => {
+    const { repo } = makeRepo([makeProfile({ id: 'p1', accountId: 'acc_1', name: 'source' })]);
+    // Pre-check sees room; the conditional insert disagrees, which is what a
+    // concurrent create looks like from inside this call.
+    repo.countByAccount = () => Promise.resolve(0);
+    repo.insertWithLimit = () => Promise.resolve({ limitExceeded: true as const, current: 10 });
+    const svc = new ProfilesService(repo);
+    await expect(svc.clone({ id: 'p1', accountId: 'acc_1', tier: SOLO })).rejects.toThrow(
+      TierLimitError,
+    );
+  });
+
+  it('CRITICAL IMPORT refuses when the atomic insert reports the account at cap, even though the pre-check passed. Import is the path a customer reaches for when moving profiles in bulk, so it is the one where several calls land close enough together for the pre-check to be stale on all of them.', async () => {
+    const { repo } = makeRepo([]);
+    repo.countByAccount = () => Promise.resolve(0);
+    repo.insertWithLimit = () => Promise.resolve({ limitExceeded: true as const, current: 10 });
+    const svc = new ProfilesService(repo);
+    await expect(
+      svc.importProfile({
+        accountId: 'acc_1',
+        tier: SOLO,
+        sourceProfileId: 'prof_00000000-0000-4000-8000-000000000001',
+        sourceAccountId: 'acc_src',
+        payload: {
+          name: 'imported-at-the-cap',
+          archetype: 'iphone17_ios18_7_safari26_4',
+          description: null,
+        },
+      }),
+    ).rejects.toThrow(TierLimitError);
+  });
+
   it('CRITICAL refuses when the ATOMIC INSERT reports the recipient at cap, even though the pre-check passed. That is the race: two transfers into the same recipient both read a count under the limit, and only the conditional insert can settle it. Without this branch the loser of that race is written anyway and the recipient ends up over the cap they are billed against — the pre-check alone cannot prevent it, which is why both exist.', async () => {
     const { repo, state } = makeRepo([
       makeProfile({ id: 'p1', accountId: 'acc_src', name: 'movable' }),
