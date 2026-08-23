@@ -866,6 +866,27 @@ export function isProxyUsable(result: ProxyTestResult): boolean {
   return result.reachable && result.auth_ok && result.can_route;
 }
 
+/**
+ * The single definition of what to CALL that verdict, for the same reason
+ * `isProxyUsable` is the single definition of the verdict itself.
+ *
+ * The label ladder had already drifted from the predicate: the profile edit
+ * modal coloured its badge with `isProxyUsable` — which includes routing — while
+ * its text only asked `reachable` then `auth_ok`. A proxy that authenticates but
+ * cannot route therefore rendered RED and read "Reachable · 12 ms", telling the
+ * customer the opposite of the colour beside it. Ordered most-fundamental first,
+ * so the reason named is the one to fix first.
+ */
+export function proxyVerdict(result: ProxyTestResult): { ok: boolean; label: string } {
+  if (!result.reachable) return { ok: false, label: 'Not reachable' };
+  if (!result.auth_ok) return { ok: false, label: 'Auth failed' };
+  // Reaches the proxy and authenticates, but CONNECT does not complete — the
+  // failure that used to pass as healthy, and the one that only shows up as a
+  // dead session at launch.
+  if (!result.can_route) return { ok: false, label: 'Cannot route' };
+  return { ok: true, label: `Reachable · ${result.latency_ms} ms` };
+}
+
 export async function testProxy(input: {
   host: string;
   port: number;

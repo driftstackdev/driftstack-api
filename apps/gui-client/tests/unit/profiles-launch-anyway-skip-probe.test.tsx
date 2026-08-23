@@ -115,6 +115,21 @@ vi.mock('../../src/lib/proxies', () => ({
   // drift this predicate was introduced to remove.
   isProxyUsable: (r: { reachable: boolean; auth_ok: boolean; can_route: boolean }): boolean =>
     r.reachable && r.auth_ok && r.can_route,
+  // Same reasoning as isProxyUsable above: the WORDS for a verdict are as
+  // drift-prone as the verdict. Kept in step with lib/proxies.proxyVerdict.
+  proxyVerdict: (r: {
+    reachable: boolean;
+    auth_ok: boolean;
+    can_route: boolean;
+    latency_ms: number;
+  }): { ok: boolean; label: string } =>
+    !r.reachable
+      ? { ok: false, label: 'Not reachable' }
+      : !r.auth_ok
+        ? { ok: false, label: 'Auth failed' }
+        : !r.can_route
+          ? { ok: false, label: 'Cannot route' }
+          : { ok: true, label: `Reachable · ${r.latency_ms} ms` },
   listProxies: () =>
     Promise.resolve([
       {

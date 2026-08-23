@@ -12,7 +12,7 @@
 import { useEffect, useRef, useState, type JSX, type ReactNode } from 'react';
 import { proxyCapabilities } from './ProxyCapabilities';
 import { RelativeTime } from './RelativeTime';
-import type { ProxyTestResult } from '../lib/proxies';
+import { proxyVerdict, type ProxyTestResult } from '../lib/proxies';
 
 export interface ProfilePhoneCardProps {
   name: string;
@@ -161,6 +161,12 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
   const webrtc = caps?.find((c) => c.key === 'webrtc')?.ok ?? false;
   const quic = caps?.find((c) => c.key === 'quic')?.ok ?? false;
   const udpOk = webrtc; // WebRTC ok === UDP relay verified
+  // The overall verdict, from the ONE shared definition rather than a local
+  // spelling of it — a card that disagreed with the proxies page about whether
+  // a proxy works is the whole failure this helper exists to prevent.
+  const verdict = p.capabilities !== null ? proxyVerdict(p.capabilities) : null;
+  const proxyOk = verdict === null || verdict.ok;
+  const proxyLabel = verdict?.label ?? '';
   const udpTitle =
     caps === null
       ? 'Run Test to check UDP (WebRTC + QUIC) support on this exit.'
@@ -404,6 +410,58 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                     UDP {caps === null ? '?' : udpOk ? '✓' : '✗'}
                   </span>
                 </div>
+                {/* A proxy that FAILED its last test says so, in place, with the
+                    reason and a one-click retest.
+                    Before this the card rendered a broken proxy almost exactly
+                    like an untested one — "no exit IP" and a blank latency —
+                    which reads as "not checked yet", not "this will not work".
+                    The only retest lived in the overflow menu, so the customer
+                    had to already suspect the proxy to find out it was dead. */}
+                {caps !== null && !proxyOk && (
+                  <div
+                    data-component="proxy-broken-banner"
+                    role="status"
+                    className="flex items-center gap-1.5 rounded-[8px] border border-status-error/40 bg-status-error/10 px-1.5 py-1"
+                  >
+                    <span
+                      className="text-[10px] font-semibold text-status-error"
+                      title={p.capabilities?.message}
+                    >
+                      {proxyLabel}
+                    </span>
+                    <button
+                      type="button"
+                      data-action="retest-proxy"
+                      disabled={p.testing || p.testDisabled}
+                      onClick={(e) => {
+                        // The card body is itself clickable (select/expand), so a
+                        // bare click here would also toggle the row.
+                        e.stopPropagation();
+                        p.onTest();
+                      }}
+                      className="ml-auto rounded bg-status-error/20 px-1.5 py-px text-[9.5px] font-semibold text-status-error hover:bg-status-error/30 disabled:opacity-50"
+                    >
+                      {p.testing ? 'Testing…' : 'Retest'}
+                    </button>
+                    {p.onEdit !== undefined && (
+                      // Straight to the edit modal, which is where the proxy is
+                      // chosen — "retest or change more conveniently" needs both
+                      // to be one click from the card that reports the problem.
+                      <button
+                        type="button"
+                        data-action="change-proxy"
+                        disabled={p.anyBusy}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          p.onEdit?.();
+                        }}
+                        className="rounded bg-surface-divider/60 px-1.5 py-px text-[9.5px] font-semibold text-ink-secondary hover:bg-surface-divider disabled:opacity-50"
+                      >
+                        Change
+                      </button>
+                    )}
+                  </div>
+                )}
                 {/* WebRTC/QUIC detail — on hover (founder: hover shows them) */}
                 {caps !== null && (
                   <div className="hidden gap-1 group-hover:flex">

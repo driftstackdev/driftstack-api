@@ -100,6 +100,7 @@ import {
 } from '../lib/profile-bindings';
 import {
   isProxyUsable,
+  proxyVerdict,
   addProxy,
   listProxies,
   setProxyServerId,
@@ -5097,13 +5098,12 @@ function CreateProfileModal({
                         }`}
                       >
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="font-medium">
-                            {testResult.reachable
-                              ? testResult.auth_ok
-                                ? `Reachable · ${testResult.latency_ms} ms`
-                                : 'Auth failed'
-                              : 'Not reachable'}
-                          </span>
+                          {/* One shared verdict for the label AND the colour.
+                              This ladder used to stop at auth_ok while the
+                              colour above already came from isProxyUsable, so a
+                              proxy that authenticates but cannot route rendered
+                              RED and read "Reachable · 12 ms". */}
+                          <span className="font-medium">{proxyVerdict(testResult).label}</span>
                           {testResult.reachable && (
                             <ProxyCapabilityChips result={testResult} size="sm" />
                           )}
