@@ -297,6 +297,45 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       );
     });
 
+    // V-1317 — the keyset walk above ends on a SHORT final page, so it cannot
+    // tell `rows.length > limit` apart from `>=`. The off-by-one only surfaces
+    // when the last page is exactly full, and then the repo reports more rows
+    // and hands back a cursor onto a page that is not there. This listing
+    // returns `hasMore` directly rather than deriving it, so both are asserted.
+    it('CRITICAL reports NO further pages when the final page is exactly full. The walk above always ends short, so nothing distinguished the overfetch boundary — past it the staff browser offers a next page that comes back empty.', async () => {
+      if (!dbReachable || !repo) return;
+      const boundaryMarker = `${MARKER}-boundary`;
+
+      // Exactly four, each on its own instant so ordering is total. Filtered by
+      // its own submarker because this table is shared with every other suite.
+      const base = Date.UTC(2026, 0, 2, 0, 0, 0);
+      for (let i = 0; i < 4; i += 1) {
+        await seedAccount({ createdAt: new Date(base + i * 1000), submarker: 'boundary' });
+      }
+
+      const exact = await repo.list({ emailContains: boundaryMarker, limit: 4 });
+      expect(exact.data, 'the full population came back in one page').toHaveLength(4);
+      expect(exact.hasMore, 'a full final page has no more rows behind it').toBe(false);
+      expect(
+        exact.nextCursor,
+        'a full final page must not offer a cursor — it leads to an empty page',
+      ).toBeNull();
+
+      const first = await repo.list({ emailContains: boundaryMarker, limit: 2 });
+      expect(first.data, 'first page is full').toHaveLength(2);
+      expect(first.hasMore, 'four rows at limit two: there IS a second page').toBe(true);
+      expect(first.nextCursor, 'and a cursor to reach it').not.toBeNull();
+
+      const second = await repo.list({
+        emailContains: boundaryMarker,
+        limit: 2,
+        cursor: first.nextCursor!,
+      });
+      expect(second.data, 'the second page is also exactly full').toHaveLength(2);
+      expect(second.hasMore, 'and it is the last one').toBe(false);
+      expect(second.nextCursor, 'so it offers no cursor').toBeNull();
+    });
+
     it('CRITICAL an unknown cursor silently restarts from page one — pinned because it is surprising. `list` looks the cursor row up and applies NO keyset filter when it is gone, so a client paging with a cursor whose account was deleted between pages restarts rather than erroring or ending. Recorded as behaviour so a change here is deliberate.', async () => {
       if (!dbReachable || !repo) return;
       const firstPage = await repo.list({ emailContains: MARKER, limit: 2 });

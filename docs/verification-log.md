@@ -5796,3 +5796,40 @@ each flip.
 Behaviourally covered boundaries: 11 of 14.
 
 **Still text-pinned only — 3 sites:** `profile-snapshots-repo`, `recipes-repo`, `admin-accounts-repo`.
+
+## V-1321 — the pagination boundary class closed: 14 of 14
+
+The last three sites from V-1320.
+
+**`admin-accounts-repo`** took an arm on its existing harness, using the `submarker` fixture already
+there to carve an exact four-row population out of a table every other suite writes to. This listing
+returns `hasMore` directly rather than deriving it from the cursor, so the arm asserts both.
+
+**`recipes-repo` and `profile-snapshots-repo` had no paging harness to extend.** Both appear in
+DB-backed tests only for encryption and tenant scoping, and a pagination arm bolted onto either
+would sit outside what those files are about. New file:
+`db-paging-boundary-recipes-and-snapshots-drizzle.test.ts`, with the reachability arm these DB files
+carry so a silent skip cannot read as a pass.
+
+Each of the three proven by flipping its own repo's `rows.length > limit` to `>=`:
+
+| mutated site                    | failing arm                                       |
+| ------------------------------- | ------------------------------------------------- |
+| `admin-accounts-repo.ts:99`     | a full final page has no rows behind it           |
+| `recipes-repo.ts:266`           | recipes: a page the size of the whole population… |
+| `profile-snapshots-repo.ts:127` | profile snapshots: the same boundary              |
+
+Each failed exactly one test and left every sibling green; each repo restored byte-identical.
+
+**All 14 boundaries are now verified behaviourally**, where the class began at 2. The other 12 reds
+the original sweep produced were source-text pins, which fire when the line changes and say nothing
+about what it computes.
+
+**The ratchets moved by one, not two.** Disk collects 3002 test files; the pin stood at 3000. Two
+files were added — mine and a peer's `abandoned-crypto-orders-are-actually-swept.test.ts`, still
+untracked in the shared worktree. `EXPECTED_TEST_FILES` goes to 3001 and `_ALL` to 3168, my share
+only. The exact-match arm in `scripts/tests/verify-suite.test.ts` therefore reads 3001 against a disk
+of 3002 and is RED until the peer commits their file with their own bump. That is the correct
+outcome rather than a problem to route around: absorbing another writer's count is how a pin stops
+meaning anything, and the arithmetic — 3002 minus the 3000 baseline, one file each — is what shows
+3001 is exactly mine.
