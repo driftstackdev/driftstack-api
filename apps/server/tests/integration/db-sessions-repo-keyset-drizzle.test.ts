@@ -185,6 +185,81 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       ).toEqual([mine.sessionId]);
     });
 
+    // V-1317 — the walks in this file end on a SHORT final page (nine rows at
+    // limit two leaves one), so none of them tells `rows.length > limit` apart
+    // from `>=`. The off-by-one only surfaces when the last page is exactly
+    // full, and then the repo offers a cursor onto a page that is not there.
+    // Both of this repo's paginated listings are covered: the customer's own
+    // session list and the staff-wide one.
+    it('CRITICAL both session listings report NO further pages when the final page is exactly full. The walks above always end short, so nothing distinguished the overfetch boundary — past it the caller follows a cursor to an empty page.', async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG keyset test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleSessionRepo({ client, db, close: async () => {} });
+
+      const accountId = randomUUID();
+      const apiKeyId = randomUUID();
+      seeded.push({ accountId, apiKeyId });
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`boundary-sess-${accountId}@test.local`})`;
+      await client`INSERT INTO api_keys (id, account_id, name, key_prefix, key_hash)
+        VALUES (${apiKeyId}, ${accountId}, 'boundary-probe', ${`dsk_${apiKeyId.slice(0, 8)}`}, ${`hash_${apiKeyId}`})`;
+
+      // Exactly four, each on its own instant so ordering is total. The staff
+      // listing is scoped by accountId below for the same reason: the table is
+      // shared with every other suite, so only a filtered population is exact.
+      const base = Date.UTC(2026, 0, 2, 0, 0, 0);
+      for (let i = 0; i < 4; i++) {
+        await client`
+          INSERT INTO sessions (account_id, api_key_id, driver_session_id, created_at)
+          VALUES (${accountId}, ${apiKeyId}, ${`drv_${randomUUID()}`}, ${new Date(base + i * 1000).toISOString()})`;
+      }
+
+      // ── the customer's own session list ──
+      const ownExact = await repo.listSessions(accountId, { limit: 4 });
+      expect(ownExact.items, 'the full population came back in one page').toHaveLength(4);
+      expect(
+        ownExact.nextCursor,
+        'a full final page must not offer a cursor — it leads to an empty page',
+      ).toBeNull();
+
+      const ownFirst = await repo.listSessions(accountId, { limit: 2 });
+      expect(ownFirst.items, 'first page is full').toHaveLength(2);
+      expect(ownFirst.nextCursor, 'four rows at limit two: there IS a second page').not.toBeNull();
+
+      const ownSecond = await repo.listSessions(accountId, {
+        limit: 2,
+        cursor: ownFirst.nextCursor!,
+      });
+      expect(ownSecond.items, 'the second page is also exactly full').toHaveLength(2);
+      expect(ownSecond.nextCursor, 'and it is the last one').toBeNull();
+
+      // ── the staff-wide listing, filtered to the same account ──
+      const allExact = await repo.listAllSessions({ limit: 4, accountId });
+      expect(allExact.items, 'the staff listing returned the same four').toHaveLength(4);
+      expect(
+        allExact.nextCursor,
+        'a full final staff page must not offer a cursor either',
+      ).toBeNull();
+
+      const allFirst = await repo.listAllSessions({ limit: 2, accountId });
+      expect(allFirst.items, 'first staff page is full').toHaveLength(2);
+      expect(allFirst.nextCursor, 'there IS a second staff page').not.toBeNull();
+
+      const allSecond = await repo.listAllSessions({
+        limit: 2,
+        accountId,
+        cursor: allFirst.nextCursor!,
+      });
+      expect(allSecond.items, 'the second staff page is also exactly full').toHaveLength(2);
+      expect(allSecond.nextCursor, 'and it is the last one').toBeNull();
+    });
+
     it('does not repeat or drop a session when sessions are created mid-walk (the documented concurrent-insert promise)', async () => {
       if (!dbReachable || !client) {
         if (process.env.CI) {

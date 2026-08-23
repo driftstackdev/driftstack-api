@@ -5762,3 +5762,37 @@ Behaviourally covered boundaries: 7 of 14.
 
 **Still text-pinned only — 7 sites:** `api-keys-repo`, `rate-limit-overrides-repo`, `sessions-repo`
 (×2), `profile-snapshots-repo`, `recipes-repo`, `admin-accounts-repo`.
+
+## V-1320 — four more boundaries, every one proven against its own line
+
+Four of the seven sites V-1319 left text-pinned, on the `db-*-keyset-drizzle` harnesses that already
+existed for each:
+
+- **`sessions-repo`, both listings.** One fixture reaches both — the customer's own session list
+  (`listSessions`) and the staff-wide one (`listAllSessions`), the latter scoped by `accountId`
+  because the `sessions` table is shared with every other suite and only a filtered population is
+  exact.
+- **`api-keys-repo`** (`listAllApiKeys`) and **`rate-limit-overrides-repo`** (`listAll`), both
+  account-scoped for the same reason.
+
+Each arm asserts the same two things: a page the size of the whole population offers no cursor, and
+a walk whose final page is exactly full ends there.
+
+**Proven per occurrence, by line number.** The two `sessions-repo` sites are textually identical
+lines in one file, so mutating both together would have failed the arm without showing which listing
+did the work:
+
+| mutated line                               | failing assertion                                      |
+| ------------------------------------------ | ------------------------------------------------------ |
+| `sessions-repo.ts:438` (`listSessions`)    | a full final page must not offer a cursor              |
+| `sessions-repo.ts:540` (`listAllSessions`) | a full final staff page must not offer a cursor either |
+| `api-keys-repo.ts:222`                     | a full final page must not offer a cursor              |
+| `rate-limit-overrides-repo.ts:130`         | a full final page must not offer a cursor              |
+
+Every run failed exactly one test, carrying the message belonging to that listing, with all
+pre-existing arms in the same file green. Each repo restored byte-identical from a snapshot after
+each flip.
+
+Behaviourally covered boundaries: 11 of 14.
+
+**Still text-pinned only — 3 sites:** `profile-snapshots-repo`, `recipes-repo`, `admin-accounts-repo`.

@@ -129,6 +129,52 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
     // The case above pages a fixed set. This one adds keys WHILE the walk is in
     // progress. See _helpers/keyset-stable-under-inserts.ts for why this
     // belongs against real Postgres rather than the in-memory twin.
+    // V-1317 — the walk above ends on a SHORT final page (nine rows at limit two
+    // leaves one), so it cannot tell `rows.length > limit` apart from `>=`. The
+    // off-by-one only surfaces when the last page is exactly full, and then the
+    // repo offers a cursor onto a page that is not there.
+    it('CRITICAL reports NO further pages when the final page is exactly full. The walk above always ends short, so nothing distinguished the overfetch boundary — past it the caller follows a cursor to an empty page.', async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG keyset test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleApiKeysRepo({ client, db, close: async () => {} });
+
+      const accountId = randomUUID();
+      seededAccountIds.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`boundary-keys-${accountId}@test.local`})`;
+
+      // Exactly four, each on its own instant so ordering is total. Scoped by
+      // accountId because the table is shared with every other suite.
+      const base = Date.UTC(2026, 0, 2, 0, 0, 0);
+      for (let i = 0; i < 4; i++) {
+        const kid = randomUUID();
+        await client`
+          INSERT INTO api_keys (account_id, name, key_prefix, key_hash, created_at)
+          VALUES (${accountId}, 'boundary', ${`dsk_${kid.slice(0, 8)}`}, ${`hash_${kid}`}, ${new Date(base + i * 1000).toISOString()})`;
+      }
+
+      const exact = await repo.listAllApiKeys({ limit: 4, accountId });
+      expect(exact.items, 'the full population came back in one page').toHaveLength(4);
+      expect(
+        exact.nextCursor,
+        'a full final page must not offer a cursor — it leads to an empty page',
+      ).toBeNull();
+
+      const first = await repo.listAllApiKeys({ limit: 2, accountId });
+      expect(first.items, 'first page is full').toHaveLength(2);
+      expect(first.nextCursor, 'four rows at limit two: there IS a second page').not.toBeNull();
+
+      const second = await repo.listAllApiKeys({ limit: 2, accountId, cursor: first.nextCursor! });
+      expect(second.items, 'the second page is also exactly full').toHaveLength(2);
+      expect(second.nextCursor, 'and it is the last one').toBeNull();
+    });
+
     it('CRITICAL a cursor from another account cannot anchor an account-filtered page', async () => {
       if (!dbReachable || !client) {
         if (process.env.CI) {

@@ -139,6 +139,56 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
     // The case above pages a fixed set. This one adds overrides WHILE the walk
     // is in progress. See _helpers/keyset-stable-under-inserts.ts for why this
     // belongs against real Postgres rather than the in-memory twin.
+    // V-1317 — the walk above ends on a SHORT final page (nine rows at limit two
+    // leaves one), so it cannot tell `rows.length > limit` apart from `>=`. The
+    // off-by-one only surfaces when the last page is exactly full, and then the
+    // repo offers a cursor onto a page that is not there.
+    it('CRITICAL reports NO further pages when the final page is exactly full. The walk above always ends short, so nothing distinguished the overfetch boundary — past it the caller follows a cursor to an empty page.', async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG keyset test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleRateLimitOverridesRepo({ client, db, close: async () => {} });
+
+      const accountId = randomUUID();
+      const apiKeyId = randomUUID();
+      seeded.push({ accountId, apiKeyId });
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`boundary-rlo-${accountId}@test.local`})`;
+      await client`INSERT INTO api_keys (id, account_id, name, key_prefix, key_hash)
+        VALUES (${apiKeyId}, ${accountId}, 'boundary-probe', ${`dsk_${apiKeyId.slice(0, 8)}`}, ${`hash_${apiKeyId}`})`;
+
+      // Exactly four unexpired overrides, each on its own instant and its own
+      // bucket key (the table is unique on (account_id, bucket_key)).
+      const future = new Date(Date.UTC(2027, 0, 1));
+      const base = Date.UTC(2026, 0, 2, 0, 0, 0);
+      for (let i = 0; i < 4; i++) {
+        await client`
+          INSERT INTO rate_limit_overrides
+            (account_id, bucket_key, capacity, refill_per_second_centi, expires_at, set_by_key_id, created_at)
+          VALUES (${accountId}, ${`boundary-bucket-${i}`}, 100, 100, ${future.toISOString()}, ${apiKeyId}, ${new Date(base + i * 1000).toISOString()})`;
+      }
+
+      const exact = await repo.listAll({ limit: 4, accountId });
+      expect(exact.items, 'the full population came back in one page').toHaveLength(4);
+      expect(
+        exact.nextCursor,
+        'a full final page must not offer a cursor — it leads to an empty page',
+      ).toBeNull();
+
+      const first = await repo.listAll({ limit: 2, accountId });
+      expect(first.items, 'first page is full').toHaveLength(2);
+      expect(first.nextCursor, 'four rows at limit two: there IS a second page').not.toBeNull();
+
+      const second = await repo.listAll({ limit: 2, accountId, cursor: first.nextCursor! });
+      expect(second.items, 'the second page is also exactly full').toHaveLength(2);
+      expect(second.nextCursor, 'and it is the last one').toBeNull();
+    });
+
     it('CRITICAL a cursor from another account cannot anchor an account-filtered page', async () => {
       if (!dbReachable || !client) {
         if (process.env.CI) {
