@@ -129,7 +129,16 @@ describe('W417.B apps/server/src/routes/account-web-sessions.ts content parity',
   });
 
   it("Bulk revoke gate: ?keep=current required (case-insensitive); missing → 400 'Bulk revoke requires `?keep=current`'; non-web-session caller → 400", () => {
-    expect(body).toMatch(/const keep = \(request\.query\?\.keep \?\? ''\)\.toLowerCase\(\);/);
+    // V-1368 — the read used to come straight off request.query. A repeated query key
+    // parses to an array, and .toLowerCase() on an array is a TypeError, so a duplicated
+    // ?keep answered 500 rather than the 400 this gate gives every other unusable value.
+    // The schema narrows the type; the case-insensitive comparison below is unchanged.
+    expect(body).toMatch(
+      /const query = BulkRevokeQuerySchema\.safeParse\(request\.query \?\? \{\}\);\s*\n?\s*if \(!query\.success\) throw new ValidationError\(query\.error\.flatten\(\)\);\s*\n?\s*const keep = \(query\.data\.keep \?\? ''\)\.toLowerCase\(\);/,
+    );
+    expect(body, 'a literal here would drop the case-insensitivity the gate commits to').toMatch(
+      /const BulkRevokeQuerySchema = z\.object\(\{\s*\n?\s*keep: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
+    );
     expect(body).toMatch(
       /if \(keep !== 'current'\) \{\s*\n?\s*throw new BadRequestError\(\s*\n?\s*'Bulk revoke requires `\?keep=current`\. Pass it explicitly to confirm intent\.',\s*\n?\s*\);/,
     );
@@ -165,7 +174,7 @@ describe('W417.B apps/server/src/routes/account-web-sessions.ts content parity',
       /import type \{ AuthFlowsService, WebSessionRow \} from '\.\.\/services\/auth-flows\.js';/,
     );
     expect(body).toMatch(
-      /import \{ BadRequestError, NotFoundError \} from '\.\.\/lib\/errors\.js';/,
+      /import \{ BadRequestError, NotFoundError, ValidationError \} from '\.\.\/lib\/errors\.js';/,
     );
   });
 

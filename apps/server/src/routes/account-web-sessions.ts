@@ -19,7 +19,23 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { AuthFlowsService, WebSessionRow } from '../services/auth-flows.js';
 import type { AccountAuditService } from '../services/account-audit.js';
-import { BadRequestError, NotFoundError } from '../lib/errors.js';
+import { z } from 'zod';
+import { BadRequestError, NotFoundError, ValidationError } from '../lib/errors.js';
+
+// V-1368 — validate the querystring rather than trusting the `Querystring` generic.
+//
+// A repeated query key parses to an ARRAY, so `request.query.keep` is really
+// `string | string[] | undefined`. The confirmation read below calls `.toLowerCase()`
+// on it, which an array does not have — so `?keep=current&keep=current` used to
+// surface as a 500 on a customer endpoint instead of the 400 this route already
+// returns for every other unusable value of `keep`.
+//
+// `z.string()` rather than `z.literal('current')`: the confirmation is deliberately
+// case-insensitive and its refusal message names the exact parameter to pass, and
+// that message is what a caller should keep getting. This narrows the TYPE only.
+const BulkRevokeQuerySchema = z.object({
+  keep: z.string().optional(),
+});
 import { readClientIp } from '../lib/client-ip.js';
 
 export interface AccountWebSessionsRoutesOptions {
@@ -182,7 +198,9 @@ export function registerAccountWebSessionsRoutes(
     async (request, reply) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
-      const keep = (request.query?.keep ?? '').toLowerCase();
+      const query = BulkRevokeQuerySchema.safeParse(request.query ?? {});
+      if (!query.success) throw new ValidationError(query.error.flatten());
+      const keep = (query.data.keep ?? '').toLowerCase();
       if (keep !== 'current') {
         throw new BadRequestError(
           'Bulk revoke requires `?keep=current`. Pass it explicitly to confirm intent.',

@@ -143,7 +143,9 @@ describe('W1038 routes/account-web-sessions V-355 cross-source invariant', () =>
 
   it("CRITICAL bulk revoke ?keep=current required + 'Bulk revoke requires `?keep=current`. Pass it explicitly to confirm intent.' + 'Bulk revoke is only callable from a dashboard web session.' on non-web-session caller.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/account-web-sessions.ts'));
-    expect(p).toMatch(/const keep = \(request\.query\?\.keep \?\? ''\)\.toLowerCase\(\);/);
+    // V-1368 — via the querystring schema now; a repeated ?keep used to reach
+    // .toLowerCase() as an array and answer 500 instead of this gate's 400.
+    expect(p).toMatch(/const keep = \(query\.data\.keep \?\? ''\)\.toLowerCase\(\);/);
     expect(p).toMatch(/if \(keep !== 'current'\) \{/);
     expect(p).toMatch(/throw new BadRequestError\(/);
     expect(p).toMatch(

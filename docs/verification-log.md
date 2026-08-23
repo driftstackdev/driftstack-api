@@ -7450,3 +7450,52 @@ reverting to the raw read reds the repeat arm, and swapping in the enum reds the
 plus the pin that forbids it.
 
 The pin over the read moved with it, in the same commit.
+
+## V-1368 — the same untyped query read, on the bulk sign-out confirmation, answering 500
+
+Sweeping the class from V-1367 rather than stopping at the one site: **16 routes declare a
+`Querystring` generic**. The generic is a claim about the shape, and a repeated query key parses to
+an array regardless of it. Classified by what actually stands between the array and the code:
+
+| how the query is read                                               | routes | array behaviour                                     |
+| ------------------------------------------------------------------- | ------ | --------------------------------------------------- |
+| `parseOrThrow(<zod>, req.query)` / `safeParse`                      | 12     | rejected — the schemas are `z.string()`-based → 400 |
+| `typeof … === 'string'` in a preHandler (`ds_token`) or at the read | 2      | falls back → 401 / dropped                          |
+| **nothing**                                                         | **2**  | `active_only` (V-1367) and `keep`, below            |
+
+⚠️ My first classifier called 12 of the 16 unvalidated. It was searching for `safeParse(req.query)`
+and this codebase mostly uses a `parseOrThrow` helper, and two more validate in a **preHandler** the
+route body never mentions. Reading each of the twelve is what produced the table above — the grep
+would have published ten false positives.
+
+**The second unvalidated site.** `DELETE /v1/account/web-sessions` requires `?keep=current` as an
+explicit confirmation before signing out every other session:
+
+```ts
+const keep = (request.query?.keep ?? '').toLowerCase();
+if (keep !== 'current') throw new BadRequestError('Bulk revoke requires `?keep=current`. …');
+```
+
+`.toLowerCase()` is not a method on an array. `?keep=current&keep=current` therefore threw a
+TypeError and answered **500 Internal Server Error** — measured, not inferred — on a customer
+endpoint whose entire job is to refuse anything that is not exactly this confirmation. Every _other_
+unusable value of `keep` already gets a 400 naming the parameter to pass.
+
+Nothing is revoked in either case: the throw happens before the revoke. So this is not a destructive
+bug — it is the route answering "we broke" where it means "you did not confirm", and the arm asserts
+both sessions are still alive afterwards so that stays true.
+
+Fixed the same way as V-1367, `z.string().optional()`, and again **not** the tighter form. A
+`z.literal('current')` would fold the confirmation into the schema and silently drop the
+case-insensitivity the gate commits to — `?keep=CURRENT` works today. The second arm pins that, and
+swapping the literal in reds it.
+
+Both mutations land: reverting to the raw read reds the repeat arm **and both source pins**; the
+literal reds the case arm and the pin that forbids it. Three pins moved with the source in one
+commit — the content-parity read, its imports line, and the V-355 cross-source invariant.
+
+⚠️ **Two mutation runs in this session reported nothing at all and I nearly read that as "the guard
+does not fire".** The file list was in a shell variable, and **zsh does not word-split unquoted
+variables** — so vitest received one argument containing spaces, matched no file, and printed no
+summary. An empty result is not a passing result. Re-run with literal paths, and check for the
+summary line before concluding anything.

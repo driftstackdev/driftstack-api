@@ -277,6 +277,68 @@ describe('DELETE /v1/account/web-sessions?keep=current (V-355)', () => {
     }
   });
 
+  // V-1368 — `keep` is read off request.query with no schema, and a repeated query key
+  // parses to an ARRAY. `.toLowerCase()` is not a method on an array, so the confirmation
+  // check throws a TypeError instead of comparing anything.
+  it('CRITICAL a REPEATED ?keep is a 400, not a 500. The repeat parses to an array and the confirmation read calls .toLowerCase() on it; that is a TypeError surfacing as an internal error on a customer endpoint, for a request the route should simply refuse. Nothing is revoked either way — this is about answering correctly, not about the sessions.', async () => {
+    fx = await buildTestApp();
+    const a = await signupVerifyAndSession(
+      fx,
+      'dupkeep@driftstack.local',
+      'correct horse battery staple',
+      'Mozilla/5.0 (Macintosh) Safari',
+    );
+    await loginAgain(
+      fx,
+      'dupkeep@driftstack.local',
+      'correct horse battery staple',
+      'Mozilla/5.0 (Windows) Chrome',
+    );
+
+    const res = await fx.app.inject({
+      method: 'DELETE',
+      url: '/v1/account/web-sessions?keep=current&keep=current',
+      headers: { authorization: `Bearer ${a.token}` },
+    });
+    expect(res.statusCode, `repeated ?keep answered ${String(res.statusCode)}: ${res.body}`).toBe(
+      400,
+    );
+
+    const list = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/web-sessions',
+      headers: { authorization: `Bearer ${a.token}` },
+    });
+    expect(
+      list.json<ListWebSessionsResponse>().data.length,
+      'a refused bulk revoke must leave both sessions alive',
+    ).toBe(2);
+  });
+
+  it('CRITICAL the confirmation stays case-insensitive on a single value, so the fix above did not tighten what one ?keep may say', async () => {
+    fx = await buildTestApp();
+    const a = await signupVerifyAndSession(
+      fx,
+      'casekeep@driftstack.local',
+      'correct horse battery staple',
+      'Mozilla/5.0 (Macintosh) Safari',
+    );
+    await loginAgain(
+      fx,
+      'casekeep@driftstack.local',
+      'correct horse battery staple',
+      'Mozilla/5.0 (Windows) Chrome',
+    );
+
+    const res = await fx.app.inject({
+      method: 'DELETE',
+      url: '/v1/account/web-sessions?keep=CURRENT',
+      headers: { authorization: `Bearer ${a.token}` },
+    });
+    expect(res.statusCode, `?keep=CURRENT should still confirm: ${res.body}`).toBe(200);
+    expect(res.json<{ revoked: number }>().revoked).toBe(1);
+  });
+
   it('400 without ?keep=current to force explicit confirmation', async () => {
     fx = await buildTestApp();
     const a = await signupVerifyAndSession(
