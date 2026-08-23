@@ -413,6 +413,22 @@ export interface TestAppOptions {
    * dependency over.
    */
   disableAccountProxies?: boolean;
+
+  /**
+   * V-1345 — the same shape one dependency over. Leaves `profilesService`
+   * unwired: the create route still accepts `profile_id` and the branch under
+   * test refuses that reference rather than launching a session bound to
+   * nothing.
+   */
+  disableProfilesService?: boolean;
+
+  /**
+   * V-1345 — leaves the driver `sessionRepo` unwired, which is what the route
+   * reads as `driverSessionsRepo`. A create naming a `driftstack_session_id`
+   * must be refused rather than persisting a pointer nothing validated; the
+   * column is a real FK, so an unvalidated write is a dangling reference.
+   */
+  disableDriverSessionsRepo?: boolean;
   /**
    * Founder directive #63 — inject a CP-side live proxy connectivity probe so the
    * pre-launch gate runs in tests. Omitted → no probe wired → the gate is a no-op
@@ -1642,7 +1658,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     mfaService,
     stripeWebhooksService,
     stripeWebhookSigningSecret,
-    profilesService,
+    ...(opts.disableProfilesService === true ? {} : { profilesService }),
     profileSnapshotsService,
     ...(opts.disableBilling === true ? {} : { billingService }),
     ...(opts.enableEgressSafeguard === true
@@ -1778,7 +1794,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
       : {}),
     costMonitoringService,
     cryptoOrdersService,
-    sessionRepo: sessionsRepo,
+    ...(opts.disableDriverSessionsRepo === true ? {} : { sessionRepo: sessionsRepo }),
     apiKeysRepo,
     profilesRepo,
     accountProxiesRepo,

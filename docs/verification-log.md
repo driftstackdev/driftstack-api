@@ -6662,3 +6662,36 @@ Six remain dark and are named above. Each needs its own seam; `profilesService` 
 `driverSessionsRepo` are the same shape as this one and would transfer directly, `pairModeLock` and
 `authRepo` need theirs, and the two `pre` branches are internal invariants rather than deployment
 states — worth classifying before assuming they are gaps at all.
+
+## V-1345 — the seam transfers: three of the seven half-wired branches now covered
+
+V-1344 added one fixture seam and predicted two others would transfer directly. They do.
+
+`disableProfilesService` and `disableDriverSessionsRepo`, both additive and defaulted like the
+`disableAgentTurnReceipts` precedent, leave one dependency out while the agent-session create route
+stays registered and keeps accepting the field that needs it.
+
+- **`profile_id` with no profiles service** — launching anyway binds the session to nothing while
+  reporting success, and the customer learns of it from automation behaving as though no profile were
+  attached.
+- **`driftstack_session_id` with no driver session repo** — that column is a real foreign key, so
+  persisting a pointer nothing validated writes a dangling reference the database would later reject.
+
+Each refused by its own branch, so covering one says nothing about the next — which is why the
+fixture gained a seam per dependency rather than one switch for "degraded mode".
+
+Mutation-proven per occurrence:
+
+| mutated branch                                  | failing arm                                                                       |
+| ----------------------------------------------- | --------------------------------------------------------------------------------- |
+| `agent-sessions.ts:2023` (`profilesService`)    | unresolvable profile reference must not launch a session — expected 500 to be 404 |
+| `agent-sessions.ts:2091` (`driverSessionsRepo`) | unresolvable session reference must not be persisted — expected 500 to be 404     |
+
+Both show the same signature as the proxy arm: without the branch the route dereferences the absent
+dependency and the caller gets an unexplained fault where a clean 404 was available. That is the
+whole value of these branches, and it is now measured on three of them.
+
+Four of the nine remain dark: `pairModeLock` (503) and `authRepo` (403) each need their own seam, and
+the two `pre` branches raise `InternalError` — an internal invariant rather than a deployment state,
+which is a different question from "is this tested" and worth classifying before treating them as
+gaps.

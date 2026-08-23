@@ -26,6 +26,49 @@ describe('AI-D /v1/agent-sessions/* (activation gate off — runtime not wired)'
     if (fx) await fx.cleanup();
   });
 
+  // V-1345 — the same shape for the other two optional references a create can
+  // carry. Each is refused by its own branch, so covering one says nothing about
+  // the next; the fixture gained a seam per dependency for that reason.
+  it('CRITICAL a create naming a profile_id is REFUSED when the profiles service is unwired. Launching anyway would bind the session to nothing while reporting success, and the customer would find out from the automation behaving as though no profile were attached.', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, disableProfilesService: true });
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: auth,
+      payload: {
+        token_budget: 50_000,
+        profile_id: 'prof_00000000-0000-4000-8000-0000000000d2',
+      },
+    });
+
+    expect(res.statusCode, 'an unresolvable profile reference must not launch a session').toBe(404);
+    expect(res.json<{ detail?: string }>().detail, 'and it names the profile').toContain(
+      'not found',
+    );
+  });
+
+  it('CRITICAL a create naming a driftstack_session_id is REFUSED when the driver session repo is unwired. That column is a real foreign key, so persisting a pointer nothing validated writes a dangling reference the database itself would later reject.', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, disableDriverSessionsRepo: true });
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: auth,
+      payload: {
+        token_budget: 50_000,
+        driftstack_session_id: '00000000-0000-4000-8000-0000000000d3',
+      },
+    });
+
+    expect(res.statusCode, 'an unresolvable session reference must not be persisted').toBe(404);
+    expect(res.json<{ detail?: string }>().detail, 'and it names the session').toContain(
+      'not found',
+    );
+  });
+
   // V-1344 — what a create carrying a `proxy_id` does on a deployment where the
   // proxy subsystem is NOT wired.
   //
