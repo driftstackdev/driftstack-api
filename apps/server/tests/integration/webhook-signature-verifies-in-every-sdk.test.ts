@@ -34,6 +34,7 @@ import { signWebhookPayload } from '../../src/lib/webhook-signing.js';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..', '..', '..', '..');
 const PYTHON = resolve(REPO, 'packages/sdk-python/.venv/bin/python');
+const GO_DIR = resolve(REPO, 'packages/sdk-go');
 
 const SECRET = 'whsec_current_secret_for_the_signature_bridge';
 const PREV = 'whsec_previous_secret_inside_the_grace_window';
@@ -104,17 +105,36 @@ describe('a server-signed webhook header verifies in every published SDK', () =>
     expect(out.tam, 'a tampered body must not verify').toBe(false);
   });
 
-  // V-1353 — GO IS NOT COVERED HERE, deliberately.
+  // V-1354 — Go, now that the arm is trustworthy.
   //
-  // A `go test` arm was written, and under the separator mutation below it PASSED while the
-  // fixture on disk provably carried a bad signature — the same command run by hand against
-  // that same file fails. Go test caching was ruled out (same path, changed content, no
-  // `-count=1`: still fails). The cause is not understood, so the arm is not here: an arm
-  // that can go green on an input it should reject is worse than an absent one, because it
-  // reads as coverage.
-  //
-  // What IS established: the Python and TypeScript verifiers both accept a server-signed
-  // dual-signature header and both reject a tampered body, executed rather than compared as
-  // text. Go remains covered only by `cross-sdk-webhook-signature-parity`, which reads
-  // source. Recorded in the log as an open item rather than left as a passing arm.
+  // A first attempt at this arm PASSED under the separator mutation while the fixture on
+  // disk provably carried a bad signature, so it was removed rather than shipped. The cause
+  // was `go test` result caching: the arm omitted `-count=1`, and an earlier attempt to rule
+  // caching out used a DIFFERENT fixture path, which is a different cache entry — so it
+  // exonerated the wrong thing. Instrumented, the spawn returns status 1 and zero
+  // `--- PASS` lines exactly as it should once `-count=1` is passed.
+  it('CRITICAL Go accepts both secrets and rejects a tampered body — run with -count=1, and asserted to have RUN rather than skipped. `go test` prints ok and exits 0 both for a cached result and for a package whose tests all skipped, so neither the exit code nor a bare PASS is evidence on its own.', () => {
+    if (!process.env.CI && !existsSync(resolve(GO_DIR, 'go.mod'))) return;
+
+    const run = spawnSync(
+      'go',
+      ['test', '-count=1', '-run', 'TestVerifyServerEmittedSignatureFixture', '-v', './...'],
+      {
+        cwd: GO_DIR,
+        encoding: 'utf8',
+        timeout: 180_000,
+        env: { ...process.env, DS_SIG_FIXTURE: FIXTURE },
+      },
+    );
+    const out = `${run.stdout ?? ''}${run.stderr ?? ''}`;
+    expect(
+      (out.match(/^\s*--- SKIP: TestVerifyServerEmittedSignatureFixture/gm) ?? []).length,
+      `the Go fixture case SKIPPED, so nothing was verified:\n${out}`,
+    ).toBe(0);
+    expect(
+      (out.match(/^\s*--- PASS: TestVerifyServerEmittedSignatureFixture/gm) ?? []).length,
+      `the Go fixture case did not pass:\n${out}`,
+    ).toBe(1);
+    expect(run.status, 'and go test exits clean').toBe(0);
+  });
 });

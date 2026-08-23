@@ -6954,3 +6954,33 @@ caveat. Go remains covered by the source comparison only. Recorded as an open it
 out, so the next attempt starts from the evidence instead of the idea.
 
 `EXPECTED_TEST_FILES` 3005 → 3006, `_ALL` 3169 → 3170, for the one file added.
+
+## V-1354 — the Go arm was mine to fix, not Go's to blame
+
+V-1353 dropped the Go half of the signature bridge because it passed under a mutation while the
+fixture provably carried a bad signature, and said the cause was not understood. It is now, and the
+earlier account was wrong in a way worth stating: the entry claimed test-result caching had been
+ruled out. It had not been. That experiment used a **different fixture path**, which is a different
+cache entry — so it exonerated something other than the thing under suspicion.
+
+The arm omitted `-count=1`. Instrumented properly — writing the captured spawn result to a file,
+since vitest swallows console output from a passing test — the same command returns status 1 with
+zero `--- PASS` lines the moment `-count=1` is present. The verifier was never at fault; the harness
+was reading a cached green.
+
+Restored, with `-count=1`, and now load-bearing on both mutations:
+
+| mutation                             | arms that fail                                                                    |
+| ------------------------------------ | --------------------------------------------------------------------------------- |
+| signed-string separator `.` → `:`    | TypeScript, Python, **Go** (the header-shape precondition correctly still passes) |
+| the `v1=<prev>` entry is not emitted | all four, precondition included                                                   |
+
+**The generalisation was checked and is narrow.** `sdk-go-against-the-real-server` counts
+`--- PASS`/`--- SKIP` the same way and could in principle have had the same hole — it already passes
+`-count=1`. The exposure was in the arm I wrote, not in the pattern the repo uses.
+
+Two things worth keeping from the detour. `go test` exits 0 and prints `PASS` for a package whose
+tests all skipped, for a cached result, and for `-run` matching nothing — so neither the exit code nor
+a bare `PASS` is evidence, which is why the arm counts `--- PASS:` lines by name and asserts the skip
+count is zero. And when a probe's own output disappears, write it to a file: the console.log that
+would have shown this immediately was swallowed because the test it lived in passed.
