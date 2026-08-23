@@ -75,9 +75,20 @@ let gateDefinersMemo: { file: string; body: string }[] | null = null;
 /** Every unit test that DEFINES an egress gate — a mention in prose is not one. */
 function gateDefiners(): { file: string; body: string }[] {
   if (gateDefinersMemo !== null) return gateDefinersMemo;
+  // V-1356 — the comment-strip is the expensive step, so do it LAST.
+  //
+  // Stripping comments from every `.test.ts` in the directory cost ~14s under a
+  // parallel run and blew the 10s ceiling. Comment-stripping can only ever REMOVE
+  // text, so a file whose stripped body contains `const hasEgressImpl =` must
+  // contain `hasEgressImpl` in its raw source — which makes a cheap substring test
+  // a sound pre-filter, and drops the strip from thousands of files to the handful
+  // that could possibly match. Same answer, and the arms below still fail if the
+  // filter stops matching.
   gateDefinersMemo = readdirSync(UNIT_DIR)
     .filter((f) => f.endsWith('.test.ts') && f !== SELF)
-    .map((f) => ({ file: f, body: code(readFileSync(join(UNIT_DIR, f), 'utf8')) }))
+    .map((f) => ({ file: f, raw: readFileSync(join(UNIT_DIR, f), 'utf8') }))
+    .filter((f) => f.raw.includes('hasEgressImpl'))
+    .map((f) => ({ file: f.file, body: code(f.raw) }))
     .filter((f) => /const hasEgressImpl\s*=/.test(f.body));
   return gateDefinersMemo;
 }

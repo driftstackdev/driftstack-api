@@ -7010,3 +7010,29 @@ payload is refused at parse with "Must be base64-encoded" — the intended outco
 above. Dead defence behind a validator, the same classification as V-1349 and V-1346, and the third
 time this session that reading one more layer reversed a conclusion. The check I nearly skipped was
 the one that mattered: what does the SCHEMA already reject.
+
+## V-1356 — my own fix made one arm worse, and the real cost was elsewhere
+
+V-1351 memoised `gateDefiners()` in the egress gate so four identical scans became one. Total work
+fell fourfold and the file's isolated time dropped to 3.6s. Under the next full run it failed again —
+**14036ms on the FIRST arm**, past the 10s ceiling.
+
+The memo did what it said and still made that arm worse. Four scans at roughly 2.5s each kept every
+individual arm under the limit; one scan of ~10s, paid entirely by whichever arm runs first, does not.
+Reducing total work is not the same as reducing the worst arm, and the ceiling applies per arm.
+
+The actual cost was never the repetition — it was comment-stripping every `.test.ts` in the directory.
+Stripping can only REMOVE text, so a file whose stripped body contains `const hasEgressImpl =` must
+contain `hasEgressImpl` in its raw source. That makes a plain substring test a sound pre-filter, and
+it moves the expensive step from thousands of files to the handful that could possibly match.
+
+File test time is now **476ms** — about seven times faster than the memoised version and roughly
+thirty times faster than the original, with the same answer.
+
+Both filters proven load-bearing, because a fast scan that matches nothing is the obvious way to make
+this useless: breaking the regex fails the vacuity arm, and breaking the new substring pre-filter
+fails it too. The pre-filter is not a no-op that happens to let everything through.
+
+The lesson is the ordering one: when a scan is slow, look at what it does per file before looking at
+how many times it runs. Four passes of an expensive strip and one pass of the same strip differ by a
+constant; skipping the strip differs by the corpus.
