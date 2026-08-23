@@ -5944,3 +5944,53 @@ started with a script that sliced each spec block from one `path:` to the next, 
 `limit` at all — reading like a live spec/route mismatch. It was my slice over-reaching, not a
 defect. Checking the block before writing it down turned a false finding into a real one about the
 instrument: the guard's own reader had the same over-reach, which is the part that mattered.
+
+## V-1325 — two classes swept, both already covered, and a filter with a 100% false-positive rate
+
+Neither sweep found a defect. Recording what was measured, because "we looked" is only worth
+anything if what was looked at is written down.
+
+**Conflict-handling clauses.** Eight `.onConflictDoNothing(...)` calls guard idempotency where a
+customer feels the failure: duplicate billing emails keyed on the Stripe event, replayed Stripe
+webhooks, double crypto entitlements, retried usage records, agent turn receipts, session operations,
+incident creation, crypto orders. Removing all eight — a paren-balanced strip, tsc clean afterwards —
+turned 19 files red, and the behavioural ones map one-to-one onto the eight sites:
+
+| site                                     | behavioural test that caught it                                                          |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `account-lifecycle-repo.ts:63`           | `db-account-lifecycle-repo-billing-claim-drizzle`, `lifecycle-email-claim-repo-contract` |
+| `session-operations-repo.ts:96`          | `db-session-operations-fences`                                                           |
+| `agent-turn-receipts-repo.ts:83`         | `db-agent-turn-receipts-drizzle`                                                         |
+| `incidents-repo.ts:143`                  | `db-incidents-truth-drizzle`                                                             |
+| `crypto-orders-repo.ts:133`              | `db-crypto-orders-sweep-ordering-drizzle`                                                |
+| `agent-decomposer-usage-recorder.ts:102` | `db-usage-record-retry-idempotency`                                                      |
+| `stripe-webhooks-repo.ts:41`             | `db-stripe-event-idempotency-drizzle`, `stripe-webhooks-repo-contract`                   |
+| `stripe-webhooks-repo.ts:408`            | `db-crypto-entitlements-drizzle`                                                         |
+
+Every site has a DB-backed test of its own. Unlike the pagination boundary, this class needed
+nothing. Source restored byte-identical.
+
+**Vacuous guards — and the instrument was the story.** A guard that derives a set and asserts it is
+empty passes whether the violation is absent or the SCAN is broken. Filtering for that shape:
+412 files assert `toEqual([])`; 108 carry no numeric floor; 24 of those build their set from a regex
+over source; 9 survive once a non-empty set-equality counts as a floor too.
+
+Four of the nine were read. **All four were protected, and none of them by the shape being filtered
+for.** The floor takes at least four forms here:
+
+- a numeric floor (`toBeGreaterThan`) — the only one the filter knew;
+- an exact-set equality, where an empty scan fails because the set is pinned —
+  `unscoped-lookup-containment-invariant` pins the two known unscoped lookups;
+- a symmetric difference against a pinned roster, where an empty scan reports the whole roster
+  missing — `admin-scope-refusal-coverage`;
+- an instrument self-test naming a specific finding the scan must produce —
+  `a-published-route-that-can-never-succeed-is-listed` asserts the segment walk reports 1 rather than
+  7, and `a-customer-doc-may-not-cite-a-file-that-does-not-exist` names a citation that must be
+  found "rather than counting how many were".
+
+So the useful output is about the filter, not the code: **a sweep for vacuity that looks only for a
+numeric floor produces false positives at a rate near 100% in this repo**, because the repo defends
+the class four different ways. The five unread candidates are named here rather than implied:
+`docs-internal-postmark-approval-request-content-parity`, `legal-refunds-doc-parity`,
+`gui-flag-gated-suites-track-their-flag`, `v2-12-error-kind-catalog-parity`,
+`pricing-comparison-doc-parity`, `webhook-backoff-schedule-agrees-everywhere`.
