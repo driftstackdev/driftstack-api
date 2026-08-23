@@ -49,13 +49,15 @@ export interface DriftstackSettings {
   /**
    * Install signed updates without asking each time.
    *
-   * Default ON: this is a desktop tool talking to a moving server API, and a
-   * customer sitting on a months-old build is how a version skew becomes a
-   * support ticket. The install is still gated on there being NO running
-   * session — an unrequested relaunch mid-session would destroy live browser
-   * state, which is worse than being a version behind. With a session running,
-   * or with this off, the non-blocking banner is shown instead and the customer
-   * chooses the moment.
+   * Default OFF, so the DEFAULT experience is being asked: the update banner
+   * names the new version and the current one and offers Install & restart or
+   * Later. Installing ends in a relaunch, and this is a browser-automation
+   * tool — deciding for the customer that now is a good moment to restart is
+   * the one thing an updater should not do on its own.
+   *
+   * Turning it ON means "stop asking", and even then the install is vetoed
+   * while a session is running, because that is the case where a relaunch
+   * destroys state the customer cannot get back.
    */
   autoUpdate: boolean;
 }
@@ -71,7 +73,7 @@ export const DEFAULT_SETTINGS: DriftstackSettings = {
   themeAccent: 'oxblood',
   telemetryOptIn: null,
   startUrl: 'https://driftstack.dev',
-  autoUpdate: true,
+  autoUpdate: false,
 };
 
 const STORE_FILE = 'settings.json';

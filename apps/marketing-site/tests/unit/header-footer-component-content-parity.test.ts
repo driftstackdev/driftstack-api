@@ -20,7 +20,7 @@
 //     2026-07-03, D8): How it works / Use cases / Pricing / Compare /
 //     FAQ / Docs(external). Self-hosted left the desktop roster —
 //     footer Product column carries it on desktop.
-//   • mobileExtraItems: Self-hosted + Glossary (S14 — mobile users
+//   • mobileExtraItems: Self-hosted + Glossary + Download (S14 — mobile users
 //     keep those paths). Never /roadmap (F-3 / Issue 5).
 //   • V-219* D-badge + lowercase font-mono "driftstack".
 //   • "Sign in" link to https://app.driftstack.dev/login.
@@ -94,9 +94,9 @@ describe('W382.C marketing-site Header.astro content parity', () => {
     expect(navBlock).not.toContain("{ href: '/self-hosted'");
   });
 
-  it('mobileExtraItems: Self-hosted + Glossary (S14 — mobile keeps the paths that left/never had a desktop slot; /roadmap stays banned per F-3 Issue 5)', () => {
+  it('mobileExtraItems: Self-hosted + Glossary + Download (S14 — mobile keeps the paths that left/never had a desktop slot; /roadmap stays banned per F-3 Issue 5)', () => {
     expect(body).toMatch(
-      /const mobileExtraItems: Array<\{ href: string; label: string \}> = \[\s*\n?\s*\{ href: '\/self-hosted', label: 'Self-hosted' \},\s*\n?\s*\{ href: '\/glossary', label: 'Glossary' \},\s*\n?\s*\];/,
+      /const mobileExtraItems: Array<\{ href: string; label: string; external\?: boolean \}> = \[[\s\S]*?\{ href: '\/self-hosted', label: 'Self-hosted' \},[\s\S]*?\{ href: '\/glossary', label: 'Glossary' \},[\s\S]*?label: 'Download',[\s\S]*?\];/,
     );
     expect(body).not.toMatch(/\{ href: '\/roadmap', label: 'Roadmap' \}/);
   });

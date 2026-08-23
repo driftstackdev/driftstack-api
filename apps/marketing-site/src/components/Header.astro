@@ -22,9 +22,16 @@ const navItems = [
 // earn a top-level desktop slot: Self-hosted (left the desktop roster
 // in the S14 rework; footer Product column carries it on desktop) and
 // the Glossary reference page.
-const mobileExtraItems: Array<{ href: string; label: string }> = [
+const mobileExtraItems: Array<{ href: string; label: string; external?: boolean }> = [
   { href: '/self-hosted', label: 'Self-hosted' },
   { href: '/glossary', label: 'Glossary' },
+  // The desktop Download sits in the CTA row, which is hidden below md — so it
+  // has to be repeated here or it is unreachable on a phone.
+  {
+    href: 'https://github.com/driftstackdev/driftstack-api/releases/latest',
+    label: 'Download',
+    external: true,
+  },
 ];
 const pathname = Astro.url.pathname;
 const normalizedPathname = pathname === '/' ? '/' : pathname.replace(/\/+$/, '');
@@ -102,6 +109,13 @@ function isActiveItem(item: { href: string; external?: boolean }): boolean {
           <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
         </svg>
       </button>
+      <a
+        href="https://github.com/driftstackdev/driftstack-api/releases/latest"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="nav-link"
+        data-download-link>Download</a
+      >
       <a href="https://app.driftstack.dev/login/" class="nav-link">Sign in</a>
       <a href="/pricing/#free" class="btn-primary">Start free</a>
     </nav>

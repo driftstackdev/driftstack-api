@@ -40,7 +40,7 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
     );
   });
 
-  it("6-item navItems array pinned (S14 nav rework 2026-07-03, D8): /how-it-works How it works + /use-cases Use cases + /pricing Pricing + /comparison Compare + /faq FAQ + https://docs.driftstack.dev Docs (external), in that order (funnel pages lead). /self-hosted left the desktop roster (footer Product column carries it; mobile keeps a slot). mobileExtraItems: /self-hosted + /glossary. F-3 (Issue 5) stays binding: no /roadmap anywhere in nav — aspirational pages don't belong in nav at launch.", () => {
+  it("6-item navItems array pinned (S14 nav rework 2026-07-03, D8): /how-it-works How it works + /use-cases Use cases + /pricing Pricing + /comparison Compare + /faq FAQ + https://docs.driftstack.dev Docs (external), in that order (funnel pages lead). /self-hosted left the desktop roster (footer Product column carries it; mobile keeps a slot). mobileExtraItems: /self-hosted + /glossary + the external Download (the desktop Download sits in the CTA row, which is hidden below md, so it must repeat here or be unreachable on a phone). F-3 (Issue 5) stays binding: no /roadmap anywhere in nav — aspirational pages don't belong in nav at launch.", () => {
     const navBlock = body.match(/const navItems = \[([\s\S]+?)\];/)?.[1] ?? '';
     const order = [
       "{ href: '/how-it-works', label: 'How it works' },",
@@ -59,7 +59,7 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
     // Self-hosted is out of the desktop roster but keeps its mobile path.
     expect(navBlock).not.toContain("{ href: '/self-hosted'");
     expect(body).toMatch(
-      /const mobileExtraItems: Array<\{ href: string; label: string \}> = \[\s*\n?\s*\{ href: '\/self-hosted', label: 'Self-hosted' \},\s*\n?\s*\{ href: '\/glossary', label: 'Glossary' \},\s*\n?\s*\];/,
+      /const mobileExtraItems: Array<\{ href: string; label: string; external\?: boolean \}> = \[[\s\S]*?\{ href: '\/self-hosted', label: 'Self-hosted' \},[\s\S]*?\{ href: '\/glossary', label: 'Glossary' \},[\s\S]*?label: 'Download',[\s\S]*?\];/,
     );
     expect(body).not.toMatch(/\{ href: '\/roadmap',/);
   });

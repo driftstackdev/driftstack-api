@@ -30,15 +30,11 @@ describe('auto-update never relaunches mid-session', () => {
     expect(shouldAutoInstall({ autoUpdate: false, sessionRunning: true })).toBe(false);
   });
 
-  it('ships ON by default, because the failure it prevents is version skew against a moving API', () => {
-    expect(DEFAULT_SETTINGS.autoUpdate).toBe(true);
-  });
-
-  it('a settings file written before this option existed keeps auto-update ON rather than reading as switched off', async () => {
-    // Absent is not the same fact as false. Coercing a missing field to false
-    // would silently opt every existing install out of the thing this change
-    // exists to deliver.
-    const { DEFAULT_SETTINGS: fresh } = await import('../../src/lib/settings');
-    expect(fresh.autoUpdate).toBe(true);
+  it('ships OFF by default, so the default experience is being ASKED before a restart', () => {
+    // Installing ends in relaunch(). Deciding on the customer's behalf that now
+    // is a good moment to restart a browser-automation tool is the one thing an
+    // updater should not do unprompted, so the banner — new version, current
+    // version, Install & restart or Later — is what happens by default.
+    expect(DEFAULT_SETTINGS.autoUpdate).toBe(false);
   });
 });

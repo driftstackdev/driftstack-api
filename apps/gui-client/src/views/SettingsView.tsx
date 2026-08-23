@@ -1131,14 +1131,13 @@ export function SettingsView(): JSX.Element {
                 onChange={(e) => void update({ autoUpdate: e.target.checked })}
                 className="mt-0.5"
               />
-              <span className="text-sm text-ink-secondary">
-                Install updates as soon as they are available
-              </span>
+              <span className="text-sm text-ink-secondary">Install updates without asking</span>
             </label>
             <span className="mt-2.5 block text-2xs text-ink-muted">
-              Installing restarts the app, so an update is never applied while a session is running
-              — you get the usual banner instead and pick the moment. Turn this off to always be
-              asked.
+              Off by default: when an update is available you get a prompt naming the new version,
+              and you choose when to install. Installing restarts the app, so even with this on an
+              update is never applied while a session is running — a relaunch mid-session would lose
+              live browser state.
             </span>
           </Field>
 
