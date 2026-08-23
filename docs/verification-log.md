@@ -6695,3 +6695,32 @@ Four of the nine remain dark: `pairModeLock` (503) and `authRepo` (403) each nee
 the two `pre` branches raise `InternalError` — an internal invariant rather than a deployment state,
 which is a different question from "is this tested" and worth classifying before treating them as
 gaps.
+
+## V-1346 — two of the four remaining dark branches are unreachable, and now say so
+
+V-1345 left four half-wired branches dark and flagged the two raising `InternalError` as needing
+classification before being treated as gaps. Classified: **they are unreachable by construction**, and
+the reasoning is short enough that it should have been written at the site rather than rediscovered.
+
+`prepareAgentMessage` is typed `Promise<AgentSessionRecord>` — it never returns undefined. So `pre` is
+unset only when the catch around it ran, and each site is preceded by a rethrow that makes that
+impossible:
+
+- **`agent-sessions.ts:5148`** is inside `if (!wantsEventStream)`, and the catch rethrows every error
+  unconditionally on that lane (`if (err instanceof RateLimitedError || !wantsEventStream) throw err`).
+  Reaching the check means the catch did not continue, so `pre` is set.
+- **`agent-sessions.ts:5216`** is preceded one line up by `if (admissionError !== undefined) throw
+admissionError`. Past it, the catch stored nothing, so `pre` is set.
+
+Both are TypeScript narrowing guards. Coverage reports them as unexecuted throws, which is accurate
+and misleading at the same time — the same shape as `services/status-subscribers.ts:133` and `:168`,
+which carry a comment saying exactly that and were therefore dismissed in V-1342 in one reading.
+These two had no such comment, and cost a classification pass twice: once landing in the V-1341
+worklist, once in the V-1344 enumeration.
+
+A four-line comment at each site now records the invariant and names the coverage artefact, so the
+next sweep dismisses them the way the status-subscriber pair already gets dismissed. Comment-only —
+no behaviour changed, `tsc` clean, and all **27** test files that read this route's source still pass,
+which is the check that matters when editing a file this heavily pinned.
+
+Two genuinely dark branches remain from the class of nine: `pairModeLock` (503) and `authRepo` (403).

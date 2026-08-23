@@ -5145,6 +5145,15 @@ export function registerAgentSessionsRoutes(
         admissionError = err;
       }
       if (!wantsEventStream) {
+        // V-1346 — narrowing only, not a reachable state. `prepareAgentMessage`
+        // returns `AgentSessionRecord` (never undefined), so `pre` is unset only
+        // when the catch above ran — and on this lane that catch rethrows every
+        // error unconditionally (`!wantsEventStream`). Coverage reports it as an
+        // unexecuted throw; it is unreachable rather than untested.
+        // V-1346 — narrowing only, same invariant as the JSON lane above: the
+        // line before this rethrows `admissionError` whenever the catch stored
+        // one, so reaching here means no admission error occurred and `pre` is
+        // set. Unreachable rather than untested.
         if (pre === undefined) {
           throw new InternalError('Agent message admission did not resolve.');
         }
