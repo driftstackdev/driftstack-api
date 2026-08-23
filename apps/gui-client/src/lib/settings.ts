@@ -46,6 +46,18 @@ export interface DriftstackSettings {
    * https://driftstack.dev.
    */
   startUrl: string;
+  /**
+   * Install signed updates without asking each time.
+   *
+   * Default ON: this is a desktop tool talking to a moving server API, and a
+   * customer sitting on a months-old build is how a version skew becomes a
+   * support ticket. The install is still gated on there being NO running
+   * session — an unrequested relaunch mid-session would destroy live browser
+   * state, which is worse than being a version behind. With a session running,
+   * or with this off, the non-blocking banner is shown instead and the customer
+   * chooses the moment.
+   */
+  autoUpdate: boolean;
 }
 
 export const DEFAULT_SETTINGS: DriftstackSettings = {
@@ -59,6 +71,7 @@ export const DEFAULT_SETTINGS: DriftstackSettings = {
   themeAccent: 'oxblood',
   telemetryOptIn: null,
   startUrl: 'https://driftstack.dev',
+  autoUpdate: true,
 };
 
 const STORE_FILE = 'settings.json';
@@ -100,6 +113,7 @@ interface PersistedSettings {
   themeAccent?: unknown;
   telemetryOptIn?: unknown;
   startUrl?: unknown;
+  autoUpdate?: unknown;
   /** Legacy plaintext map; read only for one-shot keychain migration + purge. */
   apiKeys?: unknown;
 }
@@ -253,6 +267,14 @@ export async function loadSettings(): Promise<DriftstackSettings> {
       ? persisted.startUrl
       : DEFAULT_SETTINGS.startUrl;
 
+  // Only an explicit stored boolean overrides the default, so a settings.json
+  // written before this field existed keeps auto-update ON rather than being
+  // read as "the customer switched it off".
+  const autoUpdate =
+    persisted && typeof persisted.autoUpdate === 'boolean'
+      ? persisted.autoUpdate
+      : DEFAULT_SETTINGS.autoUpdate;
+
   const scopedName = keychainNameFor(baseUrl);
   const legacyKeyMap = keyMapFrom(persisted);
   const activeHostId = hostIdFor(baseUrl);
@@ -307,7 +329,7 @@ export async function loadSettings(): Promise<DriftstackSettings> {
     await getStore().save();
   }
 
-  return { apiKey, baseUrl, themeMode, themeAccent, telemetryOptIn, startUrl };
+  return { apiKey, baseUrl, themeMode, themeAccent, telemetryOptIn, startUrl, autoUpdate };
 }
 
 // Serialize settings writes so rapid theme/accent/base updates cannot overwrite
@@ -353,6 +375,7 @@ async function saveSettingsUnlocked(
     themeAccent: s.themeAccent,
     telemetryOptIn: s.telemetryOptIn,
     startUrl: s.startUrl,
+    autoUpdate: s.autoUpdate,
   });
   await getStore().save();
 

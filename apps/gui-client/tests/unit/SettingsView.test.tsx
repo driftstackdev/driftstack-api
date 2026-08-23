@@ -524,7 +524,11 @@ describe('SettingsView (V-288 jsdom + RTL foundation)', () => {
     });
     renderWithToasts();
 
-    const consent = await screen.findByRole<HTMLInputElement>('checkbox');
+    // Named explicitly: Settings now has a second checkbox (automatic
+    // updates), so a bare role query is ambiguous.
+    const consent = await screen.findByRole<HTMLInputElement>('checkbox', {
+      name: 'Use bundled AI billing',
+    });
     const cap = screen.getByRole<HTMLInputElement>('spinbutton');
     fireEvent.click(consent);
     fireEvent.change(cap, { target: { value: '25.00' } });

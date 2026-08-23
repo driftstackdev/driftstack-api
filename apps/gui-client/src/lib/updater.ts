@@ -141,3 +141,42 @@ export async function checkForUpdate(
     },
   };
 }
+
+/**
+ * Whether a found update should install itself without asking.
+ *
+ * Auto-update defaults ON, because a desktop client sitting on a months-old
+ * build against a moving server API is how version skew turns into a support
+ * ticket. But installing ends in `relaunch()`, and relaunching mid-session
+ * destroys live browser state the customer cannot get back — worse than being
+ * one version behind. So the preference is necessary and not sufficient: a
+ * running session defers to the existing non-blocking banner, which is exactly
+ * the "customer picks the moment" path that already existed.
+ *
+ * Pure, because the interesting part is the policy, not the plumbing.
+ */
+export function shouldAutoInstall(args: { autoUpdate: boolean; sessionRunning: boolean }): boolean {
+  return args.autoUpdate && !args.sessionRunning;
+}
+
+/**
+ * Best-effort "is the customer mid-session".
+ *
+ * Simulator windows are labelled `simulator-<sessionId>` by open-simulator, so
+ * their presence is the concrete signal. Honest limitation: on macOS the
+ * simulator is a SEPARATE application, so the main app cannot see its windows
+ * and this returns false there. That errs toward auto-installing on macOS —
+ * acceptable only because the failure is bounded (a relaunch of the main
+ * window) and because the platform where auto-update matters most, and where
+ * the simulator IS in-process, is Windows. Any throw means "unknown", and
+ * unknown must not read as "safe to relaunch".
+ */
+export async function isSessionRunning(): Promise<boolean> {
+  try {
+    const { getAllWebviewWindows } = await import('@tauri-apps/api/webviewWindow');
+    const all = await getAllWebviewWindows();
+    return all.some((w) => w.label.startsWith('simulator-'));
+  } catch {
+    return true;
+  }
+}

@@ -35,6 +35,8 @@ import { useConfirm } from '../components/ConfirmProvider';
 import { maskApiKey } from '../components/ApiKeyMaskedSpan';
 import { SettingsAccountCard } from '../components/SettingsAccountCard';
 import { useToasts } from '../lib/toasts';
+import { useAppVersion } from '../lib/app-version';
+import { checkForUpdate, type AvailableUpdate } from '../lib/updater';
 
 const CLOUD_URL = 'https://api.driftstack.dev';
 const SELF_HOSTED_DEFAULT = 'http://localhost:3000';
@@ -61,6 +63,28 @@ export function SettingsView(): JSX.Element {
     isCloudBaseUrl(settings.baseUrl) ? 'cloud' : 'self-hosted',
   );
   const [draftTelemetry, setDraftTelemetry] = useState<boolean | null>(settings.telemetryOptIn);
+  // Manual update check. Separate from the silent startup check in App so a
+  // customer who wants to know NOW gets an answer either way — "you are on the
+  // latest" is a real result, and the startup path can only ever surface the
+  // other one.
+  const appVersion = useAppVersion();
+  const [updateCheck, setUpdateCheck] = useState<'idle' | 'checking' | 'none' | 'found' | 'error'>(
+    'idle',
+  );
+  const [foundUpdate, setFoundUpdate] = useState<AvailableUpdate | null>(null);
+  const runUpdateCheck = async (): Promise<void> => {
+    setUpdateCheck('checking');
+    setFoundUpdate(null);
+    try {
+      const u = await checkForUpdate();
+      setFoundUpdate(u);
+      setUpdateCheck(u === null ? 'none' : 'found');
+    } catch {
+      // checkForUpdate is documented not to throw, but a manual check must not
+      // be able to strand the button on "Checking…" if that ever changes.
+      setUpdateCheck('error');
+    }
+  };
   const [draftStartUrl, setDraftStartUrl] = useState(settings.startUrl);
   const [reveal, setReveal] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1092,6 +1116,68 @@ export function SettingsView(): JSX.Element {
 
       <Panel>
         <SectionHeader
+          icon={<IconShield />}
+          title="Updates"
+          description="Signed builds, verified against Driftstack's key before anything is installed."
+        />
+        <div className="mt-4 flex flex-col gap-4">
+          <Field label="Automatic updates">
+            <label className="flex cursor-pointer items-start gap-2">
+              <input
+                type="checkbox"
+                aria-label="Install updates automatically"
+                data-field="auto-update"
+                checked={settings.autoUpdate}
+                onChange={(e) => void update({ autoUpdate: e.target.checked })}
+                className="mt-0.5"
+              />
+              <span className="text-sm text-ink-secondary">
+                Install updates as soon as they are available
+              </span>
+            </label>
+            <span className="mt-2.5 block text-2xs text-ink-muted">
+              Installing restarts the app, so an update is never applied while a session is running
+              — you get the usual banner instead and pick the moment. Turn this off to always be
+              asked.
+            </span>
+          </Field>
+
+          <Field label="Version">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="mono text-sm text-ink-primary">{appVersion}</span>
+              <button
+                type="button"
+                data-action="check-for-updates"
+                disabled={updateCheck === 'checking'}
+                onClick={() => void runUpdateCheck()}
+                className="btn-secondary text-xs disabled:opacity-50"
+              >
+                {updateCheck === 'checking' ? 'Checking…' : 'Check for updates'}
+              </button>
+            </div>
+            {updateCheck !== 'idle' && updateCheck !== 'checking' && (
+              <span
+                role="status"
+                data-field="update-check-result"
+                className={`mt-2.5 block text-2xs ${
+                  updateCheck === 'error' ? 'text-status-error' : 'text-ink-muted'
+                }`}
+              >
+                {updateCheck === 'none' && 'You are on the latest version.'}
+                {updateCheck === 'found' &&
+                  `Version ${foundUpdate?.version ?? ''} is available — it will install shortly.`}
+                {/* Say WHY rather than "check failed": offline and a blocked
+                    endpoint are the common cases and neither is the app's fault. */}
+                {updateCheck === 'error' &&
+                  "Couldn't reach the update server. Check your connection and try again."}
+              </span>
+            )}
+          </Field>
+        </div>
+      </Panel>
+
+      <Panel>
+        <SectionHeader
           icon={<IconSparkle />}
           title="AI & billing"
           description="How the AI chat's Claude usage gets paid for."
@@ -1101,6 +1187,10 @@ export function SettingsView(): JSX.Element {
             <label className="flex items-start gap-2.5">
               <input
                 type="checkbox"
+                // Both checkboxes on this page need a name a screen reader (and
+                // a role query) can tell apart; neither had one.
+                aria-label="Use bundled AI billing"
+                data-field="bundled-llm-consent"
                 checked={bundledLlmConsentDraft}
                 disabled={bundledLlmSaving || bundledLlmLoad !== 'loaded'}
                 onChange={(e) => {

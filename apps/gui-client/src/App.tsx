@@ -35,7 +35,12 @@ import { ToastProvider, useToasts } from './lib/toasts';
 import { CommandCenterView } from './views/CommandCenterView';
 import { UpdateBanner } from './components/UpdateBanner';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { checkForUpdate, type AvailableUpdate } from './lib/updater';
+import {
+  checkForUpdate,
+  isSessionRunning,
+  shouldAutoInstall,
+  type AvailableUpdate,
+} from './lib/updater';
 import { buildClient } from './lib/client';
 import { dispatchDeepLink } from './lib/deep-link';
 import { openSessionById } from './lib/open-simulator';
@@ -531,8 +536,22 @@ function Shell(): JSX.Element {
   const [update, setUpdate] = useState<AvailableUpdate | null>(null);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   useEffect(() => {
-    void checkForUpdate().then((u) => {
+    void checkForUpdate().then(async (u) => {
       setUpdate(u);
+      // Auto-install when the customer has left it on AND nothing is running.
+      // A failure here is deliberately silent: the banner below is still
+      // rendered, so a failed auto-install degrades into the manual path
+      // rather than into a dead end.
+      if (u !== null && kbSettings.autoUpdate) {
+        if (shouldAutoInstall({ autoUpdate: true, sessionRunning: await isSessionRunning() })) {
+          try {
+            await u.install();
+            return;
+          } catch {
+            /* fall through to the banner */
+          }
+        }
+      }
       // M16 — "Later" persists per-version so the banner doesn't re-nag on EVERY launch;
       // a genuinely newer version (different string) still surfaces (audit 2026-07-08).
       if (u !== null) {
