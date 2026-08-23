@@ -6545,3 +6545,37 @@ fixture exposes only its store, not the client).
 The pattern itself is the durable part: **the count of copies is never the count of covered copies**,
 and grouping throw sites by message turns that from something noticed three times by hand into a list
 that can be worked down.
+
+## V-1342 — the id-format refusal, and the half of it a regex cannot do
+
+Two entries from the V-1341 worklist: `Invalid id format. Expected …` appears at 12 sites and two
+were dark — `routes/admin-rate-limit-overrides.ts:19` and `routes/admin-sessions.ts:19`, each a
+private copy of `uuidFromPrefixedId` in its own route file.
+
+Both parse the `account_id` query filter, and both had their happy path covered (`admin-sessions`
+even has an arm named "filters by account_id (prefixed)") while the refusal had never run.
+
+**The valuable half is the prefix check, not the regex.** `PUBLIC_ID_RE` matches ANY three-letter
+prefix, so `key_<uuid>` is a well-formed id by that pattern; only `value.startsWith(`${prefix}\_`)`
+separates an api-key id from an account id. Drop it and a caller passing one resource's id where
+another is expected has its uuid looked up against the wrong table — with no complaint, because the
+shape was valid.
+
+One arm per copy, asserting both halves: a malformed value is a 400, and a well-formed `key_<uuid>`
+is also a 400 whose detail names the shape it wanted.
+
+Mutation-proven per occurrence, removing ONLY the `startsWith` clause so the regex still passes the
+input — which is precisely the state that makes the wrong-prefix id acceptable:
+
+| mutated copy                              | failing assertion                                                  |
+| ----------------------------------------- | ------------------------------------------------------------------ |
+| `routes/admin-sessions.ts:18`             | an api-key id where an account id is expected must not be accepted |
+| `routes/admin-rate-limit-overrides.ts:18` | same                                                               |
+
+Each failed exactly one arm in its own file; both routes restored byte-identical.
+
+**Two worklist entries closed as NOT gaps.** `services/status-subscribers.ts:133` and `:168` are dark
+because they are deliberately unreachable: both carry a comment saying purged rows clear the token
+hash, so the branch exists for type-narrowing only. The code said so before I wrote anything, which
+is the cheapest kind of verification available and the reason to read the site before building a
+fixture for it. They are not defects and need no arm.
