@@ -6984,3 +6984,29 @@ tests all skipped, for a cached result, and for `-run` matching nothing — so n
 a bare `PASS` is evidence, which is why the arm counts `--- PASS:` lines by name and asserts the skip
 count is zero. And when a probe's own output disappears, write it to a file: the console.log that
 would have shown this immediately was swallowed because the test it lived in passed.
+
+## V-1355 — a list that is non-empty as a string and empty as a list
+
+`GET /v1/admin/cost/overview` takes `account_ids` as a comma-separated string and derives the list by
+splitting, trimming and dropping empties. The schema requires `min(1)` on the STRING, which `","`
+satisfies while producing no ids at all. Coverage put the refusal that catches this in the
+never-executed set: nothing had ever sent the shape that produces it.
+
+The mutation says what the check is worth, and it is more than a tidier error. With
+`if (ids.length === 0)` disabled the request returns **200**, not a crash — the empty list reaches the
+cost lookup and answers for zero accounts. To a staff caller that reads as "these accounts cost
+nothing" rather than "you asked about no accounts", which is the more expensive of the two
+misreadings. Arm added, proven on `expected 200 to be 400`, source restored byte-identical.
+
+**A defect I talked myself into and then out of, before it was written down as one.**
+`routes/account-me.ts:883` throws `data_base64 is not valid base64` from a `catch` around
+`Buffer.from(value, 'base64')`. Node does not throw there — verified directly: garbage decoded to 18
+bytes without error — so the catch is unreachable and that message can never be returned. Nothing
+downstream sniffs the image either; the bytes go straight to R2 under the caller-declared
+content-type. That reads like malformed base64 being stored as a customer's avatar.
+
+It is not. `UploadAvatarRequestSchema` constrains the field with `/^[A-Za-z0-9+/=]+$/`, so a garbage
+payload is refused at parse with "Must be base64-encoded" — the intended outcome, from the layer
+above. Dead defence behind a validator, the same classification as V-1349 and V-1346, and the third
+time this session that reading one more layer reversed a conclusion. The check I nearly skipped was
+the one that mattered: what does the SCHEMA already reject.
