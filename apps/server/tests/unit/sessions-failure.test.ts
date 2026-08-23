@@ -2436,9 +2436,9 @@ describe('V-1348 navigate refuses a non-http(s) scheme before touching the drive
     'CRITICAL a %s: URL is refused. The agent executor reaches this method directly with a model-produced url, so the route schema never sees it — a prompt-injected navigate is refused here or nowhere.',
     async (_label, url) => {
       const { service, driver } = buildService();
-      await expect(service.navigate(buildCtx(), 'sess-uuid-test', { url })).rejects.toThrow(
-        /Only http:\/\/ and https:\/\/ URLs can be navigated/,
-      );
+      await expect(
+        service.navigate(buildCtx(), 'sess-uuid-test', { url, wait_until: 'load' }),
+      ).rejects.toThrow(/Only http:\/\/ and https:\/\/ URLs can be navigated/);
       // The refusal must precede the driver: a navigate that reached the driver
       // and failed there would already have resolved DNS for the attacker.
       // `operationCalls` is this stub's record of non-lifecycle driver work.
@@ -2451,7 +2451,10 @@ describe('V-1348 navigate refuses a non-http(s) scheme before touching the drive
   it('CRITICAL an https URL is NOT refused by the scheme guard, so the arms above are not satisfied by a method that rejects everything. This one is allowed past the guard and fails later, in the driver, which is what proves the guard let it through.', async () => {
     const { service } = buildService();
     await expect(
-      service.navigate(buildCtx(), 'sess-uuid-test', { url: 'https://example.test/page' }),
+      service.navigate(buildCtx(), 'sess-uuid-test', {
+        url: 'https://example.test/page',
+        wait_until: 'load',
+      }),
     ).rejects.not.toThrow(/Only http:\/\/ and https:\/\/ URLs can be navigated/);
   });
 });
