@@ -212,3 +212,73 @@ describe('verifyStripeSignature — cross-implementation reference vectors', () 
     if (!result.ok) expect(result.reason).toBe('missing_v1');
   });
 });
+
+// V-1394 — the malformed-header guards. Branch coverage put three arms in the never-taken
+// set, all of them on input a forger controls:
+//
+//   parseHeader   `if (!Number.isFinite(n)) return null`      — a non-numeric `t=`
+//   constantTimeHexEq  `if (a.length !== b.length) return false`
+//   constantTimeHexEq  `if (!/^[0-9a-f]+$/i.test(…)) return false`
+//
+// The arms above this block are thorough about WELL-FORMED headers — altered hex, wrong
+// secret, tolerance edges, multiple v1, an empty v1 — and every one of them supplies a
+// syntactically valid signature. Nothing had ever handed the verifier a header it could not
+// parse.
+//
+// The hex guard carries its own reason in the source: `Buffer.from(hex, 'hex')` silently
+// truncates at the first invalid pair. Without it a 64-character non-hex `v1` decodes to a
+// shorter buffer and `timingSafeEqual` THROWS on the length mismatch — an unhandled throw on
+// the Stripe webhook route, which is a 500 where a refusal belongs. Fail-closed either way;
+// the difference is whether the money path answers or falls over.
+describe('a Stripe signature header that does not parse is refused, not thrown on', () => {
+  const V = VECTORS[0]!;
+  const verify = (header: string): ReturnType<typeof verifyStripeSignature> =>
+    verifyStripeSignature({
+      rawBody: V.rawBody,
+      header,
+      secret: V.secret,
+      nowSec: V.timestampSec,
+    });
+
+  it.each([
+    ['a non-numeric timestamp', `t=abc,v1=${VECTORS[0]!.expectedHex}`],
+    ['a timestamp of Infinity', `t=Infinity,v1=${VECTORS[0]!.expectedHex}`],
+  ])(
+    'CRITICAL %s is malformed_header rather than a parse that silently yields NaN. The tolerance check compares against `t`; a NaN there makes `Math.abs(now - t) > tolerance` false, so an unparseable timestamp would sail past the replay window instead of being refused by it.',
+    (_label, header) => {
+      const res = verify(header);
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.reason).toBe('malformed_header');
+    },
+  );
+
+  it.each([
+    ['the right length but not hex', 'z'.repeat(64)],
+    ['hex with one non-hex character', `${'a'.repeat(63)}z`],
+    ['shorter than the digest', 'abcdef'],
+    ['longer than the digest', 'a'.repeat(65)],
+  ])(
+    'CRITICAL a v1 that is %s is refused as invalid_signature and does not throw. Buffer.from(hex) truncates at the first bad pair, so without the shape guard timingSafeEqual sees mismatched lengths and throws — a 500 on the webhook route instead of a refusal.',
+    (_label, v1) => {
+      const header = `t=${String(V.timestampSec)},v1=${v1}`;
+      expect(
+        () => verify(header),
+        'the verifier must not throw on attacker-shaped input',
+      ).not.toThrow();
+      const res = verify(header);
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.reason).toBe('invalid_signature');
+    },
+  );
+
+  it('CRITICAL an EMPTY timestamp is still refused, by the tolerance check rather than the parse. `Number("")` is 0, not NaN, so `t=` parses as the epoch and is finite — the isFinite guard never sees it. Worth pinning separately: the refusal is real but it comes from a different line than the shape of the input suggests.', () => {
+    const res = verify(`t=,v1=${V.expectedHex}`);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.reason).toBe('timestamp_outside_tolerance');
+  });
+
+  it('CRITICAL the same payload with its real signature still verifies, so the refusals above are not satisfied by a verifier that rejects everything', () => {
+    const res = verify(`t=${String(V.timestampSec)},v1=${V.expectedHex}`);
+    expect(res.ok).toBe(true);
+  });
+});

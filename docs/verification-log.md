@@ -8513,3 +8513,46 @@ Checked and not pursued from the same sweep: `lib/oauth-pkce.ts`'s `base64UrlDec
 `pad === 0` arm, unreachable because `CHALLENGE_PATTERN` pins the challenge to exactly 43 characters
 and `43 % 4 = 3`; and `verifyPlainChallenge` is exported with no caller in `src`, guarded by the
 route layer's `z.literal('S256')` as V-1377 recorded.
+
+## V-1394 — the Stripe signature guards that only a malformed header reaches
+
+Re-filtered the never-taken branch arms on **what the line does** — a refusal keyword — rather than on
+the filename, which was my own heuristic and had been excluding files. 55 candidates outside
+`routes/` and bootstrap; `lib/stripe-signing.ts` carried three of them, all on input a forger
+controls:
+
+| line                    | guard                                                       |
+| ----------------------- | ----------------------------------------------------------- |
+| `parseHeader:98`        | `if (!Number.isFinite(n)) return null` — a non-numeric `t=` |
+| `constantTimeHexEq:109` | `if (a.length !== b.length) return false`                   |
+| `constantTimeHexEq:111` | `if (!/^[0-9a-f]+$/i.test(…)) return false`                 |
+
+The file's existing arms are thorough about **well-formed** headers — altered hex, wrong secret,
+tolerance edges, multiple `v1` during a secret roll, an empty `v1` — and every one supplies a
+syntactically valid signature. Nothing had handed the verifier a header it could not parse.
+
+The hex guard states its own reason in the source: `Buffer.from(hex, 'hex')` **silently truncates** at
+the first invalid pair. Without it a 64-character non-hex `v1` decodes short, `timingSafeEqual` throws
+on the length mismatch, and an unhandled throw on the Stripe webhook route is a **500 where a refusal
+belongs**. Fail-closed either way — the difference is whether the money path answers or falls over.
+
+Eight arms, with a control that the same payload's real signature still verifies. Mutations separate
+cleanly: dropping `isFinite` reds the two timestamp arms, dropping the hex shape guard reds the two
+non-hex arms, dropping the length guard reds the short-`v1` arm.
+
+⚠️ **One arm asserted the wrong reason and the run corrected it.** I grouped `t=` (empty) with the
+non-numeric cases, expecting `malformed_header`. `Number('')` is **0**, not `NaN` — so an empty
+timestamp parses as the epoch, is finite, never reaches the `isFinite` guard, and is refused by the
+**tolerance** check instead. It now has its own arm saying that, because the refusal is real but comes
+from a different line than the shape of the input suggests.
+
+### Checked and not pursued
+
+- `canonicalizeEmailForDedup` (`auth-flows.ts:288`): the untaken arm is a `?? ''` on
+  `split('+')[0]`, which `String.prototype.split` cannot produce. The canonicalisation itself is
+  covered by a dedicated security file, a SQL/runtime parity test, a DB dedup-enforcement test and a
+  recovery variant test — including the case that matters most, that a **non-Gmail** domain keeps its
+  dots.
+- `fleet-upgrade-auth.ts:82/107`: both untaken arms are inside log-field expressions
+  (`tokenSource`, `nodeIdSource`). Getting them wrong misleads an operator; it grants nothing. The
+  security check beside them — declared node id must equal the signed `iss` — is covered.
