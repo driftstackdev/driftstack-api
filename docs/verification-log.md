@@ -7224,3 +7224,38 @@ comparison stays one" and cannot enforce "every comparison that should be consta
 brand-new plain `===` on secret material would pass it. That is a real residual, already named at the
 site, and closing it means deciding which values are secret, which is static analysis with an unknown
 yield. Recorded rather than reopened.
+
+## V-1363 — the residual the timing guard names has no current instances
+
+`timing-safe-equal-pattern-cross-source-invariant` states its own limit: it derives its set FROM the
+files already calling `timingSafeEqual`, so it keeps existing constant-time comparisons constant-time
+and cannot see a brand-new plain `===` on secret material. V-1362 recorded that as a real residual.
+This measures it.
+
+Sweeping `apps/server/src` for `===`/`!==` where BOTH sides carry a secret-shaped identifier
+(secret/token/hash/key/password/signature/nonce/code) gives **17 sites**. Read individually, none is a
+secret comparison in the sense that matters — a timing oracle needs the attacker to control one side
+and to learn something they do not already have:
+
+- **length and shape checks** — `secretBytes.length !== SECRET_RAW_BYTES` (mfa-totp).
+- **public identifiers** — `code.clientId !== token.client_id`, `code.accountId !== …` (oauth-store,
+  services/oauth). A client id is not a secret.
+- **server-side against server-side** — `row.secret !== newSecret` during rotation (webhooks), and the
+  auth cache revalidation comparing a freshly loaded key to the cached copy (services/auth ×4).
+  Neither side is attacker-supplied.
+- **content hashes** — legal document version/contentHash comparisons, agent turn-receipt idempotency
+  hashes. Not credentials; learning one grants nothing.
+
+The one that looked serious on first pass is `routes/auth-oauth-client.ts:229`,
+`cookie.nonce !== stateNonce` — a CSRF binding check. It is not exploitable by timing, and the reason
+is upstream rather than at the line: `stateNonce` is extracted from a **signature-verified** state JWT
+and `cookie` from a **signature-verified** PKCE cookie. To reach the comparison at all an attacker
+must already hold both validly-signed artefacts, so a byte-by-byte timing leak of one reveals
+something they possess. It is a binding check between two authenticated values, which is what its own
+comment says it is.
+
+So the residual is real in principle and empty in practice. Nothing to fix, and the useful part is the
+shape of the check: a comparison needs constant time when one side is **attacker-supplied** and the
+other is a **secret the attacker is trying to learn**. Most secret-named comparisons fail one of those
+two tests, which is why a scan for "compares something called a token" would be noise rather than a
+guard — and is presumably why the existing one derives its set the way it does.
