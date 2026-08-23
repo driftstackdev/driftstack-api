@@ -7155,3 +7155,39 @@ a run competing with a peer's build and a `.husky/pre-commit` change is exactly 
 Recorded rather than chased because the alternative is to spend a batch reproducing a suspension.
 What would change the reading is the same failure with a plausible duration, or the keyset arm failing
 in isolation — neither is true here.
+
+## V-1361 — hashing, measured the same way as encryption, and the detector is again a side effect
+
+V-1359 asked whether a regression that stopped ENCRYPTING would be noticed. The same question applies
+to hashing, and a round-trip cannot answer it there either: if `hash(x)` returns `x` and the lookup
+compares hash to hash, authentication still works and every end-to-end path passes.
+
+Two boundaries, two counterfactuals.
+
+**`tokenHash` as an identity — 100 tests across 17 files.** One function on both the store and lookup
+sides, so an identity keeps every pair agreeing. The failures reach well past the lib: `auth-flows`,
+`cli-authorize`, `account-web-sessions`, the MFA suites, `full-lifecycle`. Thoroughly guarded.
+
+**`hashApiKey`/`verifyApiKey` as an identity pair — 18 tests across 9 files**, and the composition is
+narrower: only **two are behavioural** (`api-keys`, `auth-tokens`); the rest are content-parity and
+cross-source pins that fire because the source text changed. **No integration test noticed.**
+
+That looked like a gap until the realistic version was tested. A one-sided wiring bug — the route
+persisting the plaintext into `key_hash` — is not silent: `verifyApiKey` would fail on it and
+authentication would break everywhere. The silent regression is an **algorithm downgrade**: a
+consistent, weaker pair that still hashes and still round-trips.
+
+**Downgraded to unsalted sha256 on both sides — 15 tests across 8 files, behavioural detection
+included.** The arm that catches it is not one about algorithms at all: _"produces different hashes
+for the same plaintext (random salt)"_. sha256 is deterministic, so the two hashes match and the arm
+fails. Its sibling does the same for passwords.
+
+So both classes are covered, and in both the detector is a side effect rather than the obvious test:
+authenticated-encryption **tamper** arms catch the absence of encryption (V-1359), and a **salt**
+arm catches the absence of a strong hash. In neither case does a direct "the stored value differs
+from the input" assertion do the work — `api-keys.test.ts:43` has one, and it passes happily under
+the sha256 downgrade.
+
+Worth keeping for the next security-property sweep: ask what a weaker-but-consistent implementation
+would still satisfy. The identity pair finds the absent property; the downgrade finds the degraded
+one, and they are caught by different arms.
