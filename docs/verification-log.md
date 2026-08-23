@@ -5833,3 +5833,25 @@ of 3002 and is RED until the peer commits their file with their own bump. That i
 outcome rather than a problem to route around: absorbing another writer's count is how a pin stops
 meaning anything, and the arithmetic — 3002 minus the 3000 baseline, one file each — is what shows
 3001 is exactly mine.
+
+## V-1322 — a second frozen occurrence I missed: adding a DB-gated test file moves a stated share
+
+The new file in V-1321 gates on `DATABASE_URL`, and the count of files that do is written in prose
+inside `scripts/verify-suite.mjs` — "130 test files gate on `DATABASE_URL`" — which
+`a-gate-that-does-not-name-its-blind-spot-reads-as-total.test.ts` parses with a regex and holds
+against a live walk of `apps`. Adding one DB-gated file made it 131 and the gate went red.
+
+Bumped to 131 in the same breath as noticing.
+
+**The miss is the finding.** Rule 2 says enumerate every frozen occurrence with both patterns, and I
+ran that enumeration against the thing I was CHANGING — the fourteen boundary sites — rather than
+against the thing I was ADDING. A new test file has frozen occurrences of its own: the two
+`EXPECTED_TEST_FILES` ratchets (which I did move) and this stated share (which I did not). The
+question to ask when adding a file is not only "what does this file touch" but "what counts this
+file into a total".
+
+Attribution of the other two reds in the same run, checked before investigating:
+`job-chain-liveness.test.ts` expects 16 job names against 15 — the peer is mid-edit on
+`src/services/job-chain-liveness.ts` and its test, and has added
+`crypto-order-expiry-sweep-job.ts` untracked. `verify-suite.test.ts` is the count pin at 3001
+against a disk of 3002, which is their untracked test file and stays theirs to bump.
