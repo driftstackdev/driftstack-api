@@ -6619,3 +6619,46 @@ argument is not the message.
 
 `EXPECTED_TEST_FILES` 3003 → 3004 and `_ALL` 3168 → 3169 for the one file added. The new file is a
 pure unit test and gates on nothing, so the stated `DATABASE_URL` share is unchanged.
+
+## V-1344 — what a half-wired deployment does, and why nothing was checking
+
+Chasing two more V-1341 entries turned up a class rather than two sites. `routes/*.ts` contains **9
+branches of the shape "an optional dependency is absent, so refuse"** — distinct from the
+subsystem-level activation gates `every-activation-gate-has-a-refusing-disabled-variant` already
+covers, because here the route IS registered and serving; only the service behind one field is
+missing.
+
+**7 of the 9 are dark:**
+
+| branch                            | dependency              | refusal                  |
+| --------------------------------- | ----------------------- | ------------------------ |
+| `agent-sessions.ts:2023`          | `profilesService`       | 404                      |
+| `agent-sessions.ts:2040`          | `accountProxiesService` | 404                      |
+| `agent-sessions.ts:2091`          | `driverSessionsRepo`    | 404                      |
+| `agent-sessions.ts:3839`          | `pairModeLock`          | 503                      |
+| `agent-sessions.ts:4065`          | `authRepo`              | 403                      |
+| `agent-sessions.ts:5148`, `:5216` | `pre`                   | 500 (internal invariant) |
+
+They are dark for a structural reason, not neglect: `buildTestApp` wires every dependency, so no test
+can produce the state. **The two that ARE covered say how to fix that** — `agentTurnReceipts:5004` is
+reachable because the fixture already carries `disableAgentTurnReceipts`, an option whose only
+purpose is to leave one dependency out.
+
+So the seam is the deliverable, following that precedent exactly: `disableAccountProxies`, additive
+and defaulted, leaving `accountProxiesService` unwired while the agent-session create route still
+registers and still accepts `proxy_id`.
+
+The arm asserts the create is REFUSED rather than dispatched. A session that quietly ignored the
+proxy would run the customer's automation from the wrong egress — the exact failure the field exists
+to prevent — and would look like a success. The 404 rather than a 503 is deliberate and the route
+says so: confirming "the proxy subsystem is off here" for an id the caller may not own would answer a
+question about another account's resources.
+
+Mutation-proven: `if (false && accountProxiesService === undefined)` fails the arm on
+`expected 500 to be 404` — without the branch the route dereferences the absent service and the
+caller gets an unexplained fault instead of a clean refusal. Source restored byte-identical.
+
+Six remain dark and are named above. Each needs its own seam; `profilesService` and
+`driverSessionsRepo` are the same shape as this one and would transfer directly, `pairModeLock` and
+`authRepo` need theirs, and the two `pre` branches are internal invariants rather than deployment
+states — worth classifying before assuming they are gaps at all.

@@ -403,6 +403,16 @@ export interface TestAppOptions {
   agentDecomposerKind?: 'claude' | 'deterministic';
   /** Test the fail-closed deployment posture when turn-receipt storage is absent. */
   disableAgentTurnReceipts?: boolean;
+
+  /**
+   * V-1344 — leave `accountProxiesService` UNWIRED, the state a deployment is in
+   * when the proxy subsystem is not configured. The agent-session create route
+   * still registers and still accepts `proxy_id`; the branch under test is the
+   * one that refuses that reference rather than dispatching without validating
+   * it. Mirrors `disableAgentTurnReceipts`, which exists for the same reason one
+   * dependency over.
+   */
+  disableAccountProxies?: boolean;
   /**
    * Founder directive #63 — inject a CP-side live proxy connectivity probe so the
    * pre-launch gate runs in tests. Omitted → no probe wired → the gate is a no-op
@@ -1772,7 +1782,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     apiKeysRepo,
     profilesRepo,
     accountProxiesRepo,
-    accountProxiesService,
+    ...(opts.disableAccountProxies === true ? {} : { accountProxiesService }),
     // Founder directive #63 — CP-side live proxy pre-launch probe. Only wired when
     // a test injects a stub (default: unwired → gate no-op, today's behaviour).
     ...(opts.proxyConnectivityProbe !== undefined

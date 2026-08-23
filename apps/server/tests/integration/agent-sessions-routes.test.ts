@@ -26,6 +26,39 @@ describe('AI-D /v1/agent-sessions/* (activation gate off — runtime not wired)'
     if (fx) await fx.cleanup();
   });
 
+  // V-1344 — what a create carrying a `proxy_id` does on a deployment where the
+  // proxy subsystem is NOT wired.
+  //
+  // The route still registers and still accepts the field; only the service
+  // behind it is absent. The branch refuses the reference rather than
+  // dispatching a session that silently ignored it — and the refusal is a 404
+  // rather than a 503 on purpose, because confirming "the proxy subsystem is off
+  // here" for an id the caller may not own would answer a question about another
+  // account's resources.
+  //
+  // Coverage put this branch in the never-executed set along with six siblings of
+  // the same shape. It is reachable only from an app built without the
+  // dependency, which is why the fixture gained `disableAccountProxies` —
+  // mirroring `disableAgentTurnReceipts`, which exists for the identical reason
+  // one dependency over.
+  it("CRITICAL a create naming a proxy_id is REFUSED when the proxy subsystem is unwired, not dispatched without it. A session that quietly ignored the proxy would run the customer's automation from the wrong egress — the failure the field exists to prevent — and would look like a success.", async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, disableAccountProxies: true });
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: auth,
+      payload: { token_budget: 50_000, proxy_id: '00000000-0000-4000-8000-0000000000d1' },
+    });
+
+    expect(res.statusCode, 'an unresolvable proxy reference must not launch a session').toBe(404);
+    expect(
+      res.json<{ detail?: string }>().detail,
+      'and the refusal names the proxy rather than the missing subsystem',
+    ).toContain('not found');
+  });
+
   it('POST /v1/agent-sessions → 503 FeatureUnavailable', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
