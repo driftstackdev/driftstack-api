@@ -6280,3 +6280,31 @@ the forty-eighth, holds a roster so a DELETION is visible rather than dropping t
 scan, shares its gate vocabulary with V-837 so a helper cannot be known to one and not the other, and
 carries a vacuity arm. Its header records that its first version was a false green a mutation caught.
 Nothing to add.
+
+## V-1334 — every refusal path in the server now executes under test: 104 of 104
+
+`mfa-step-up-gate-actually-denies` (V-1069-era) was written after intersecting per-line coverage with
+deny-throw sites and finding **108 such sites, 31 of which no test reached** — among them both
+refusal paths of the MFA step-up gate, which was "extensively pinned and never run". That file closed
+two. This re-runs the same measurement to see what became of the rest.
+
+Instrument: a full `vitest run --coverage` with a JSON report, intersected against every
+`throw new (Forbidden|Unauthorized|MfaStepUpRequired|InvalidKey|RevokedKey|ExpiredKey)Error(` in
+`apps/server/src`. That yields **104 sites**, close enough to the 108 the earlier work counted to
+confirm the two instruments are measuring the same population.
+
+**All 104 are reached. None is unexecuted.** The campaign that file opened is finished.
+
+**The zero was controlled before it was believed**, because "0 unreached" and "the parser matched
+nothing" read identically. Across `apps/server/src` the same coverage data shows **1,434 never-executed
+statements in 164 files** — 8% of 17,402. The instrument sees zeros in quantity; refusal throws
+simply are not among them.
+
+Where the remaining dead statements are, since the next sweep should start from a set rather than a
+percentage: `lib/bootstrap.ts` (300), `routes/agent-sessions.ts` (110), `drivers/playwright.ts` (62),
+`services/durable-webhook-delivery.ts` (52), `routes/account-me.ts` (40),
+`services/proxy-connectivity-probe.ts` (33), `scripts/seed-local-fleet-node.ts` (30),
+`services/agent-runtime.ts` (26). Bootstrap and the seed script are wiring that a test process does
+not execute; the rest are worth a look on their own terms, and none of them is a refusal.
+
+The coverage run that produced this was itself green — 3172 files, 31328 passed, 16 skipped.
