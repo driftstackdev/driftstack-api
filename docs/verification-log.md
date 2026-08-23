@@ -8051,3 +8051,49 @@ a new reason.
 Mutations: removing the bound reds the arm; shrinking it to 32 bytes reds four _pre-existing_ arms in
 the same file — which is the ordinary-payload control working, since a bound that small refuses
 routine round-trips.
+
+## V-1382 — a wire codec that documented a refusal it never performed
+
+Coverage put `services/harness-control-codec.ts:95` in the never-executed set. It is the catch arm of:
+
+```ts
+try {
+  json = Buffer.from(base64, 'base64').toString('utf8');
+} catch {
+  throw new HarnessWireCodecError('inputParams/outputData is not valid base64');
+}
+```
+
+**`Buffer.from(x, 'base64')` throws for no input.** Measured across `'not-base64!!'`, `'$$$$'`,
+`'A'`, `'AAA'`, `'===='`, `'ÿþ'` and `''`: every one returns a Buffer. Node drops characters outside
+the alphabet and hands back whatever bytes remain. So that catch could never fire — and the JSDoc
+above it promised _"Throws HarnessWireCodecError on malformed base64 or invalid JSON"_, which is only
+half true.
+
+The dead branch is harmless. The doc comment is not: it reads as though the wire field were
+validated. What actually happens to `'not-base64!!'` is that it decodes to garbage bytes and is
+reported as a **JSON** failure, which misattributes the fault — and a string outside the alphabet
+that still decodes to valid JSON is simply **accepted**, so the field has more than one accepted
+spelling.
+
+⚠️ **This is the same trap in the opposite direction from earlier this session**, where I nearly
+published `account-me.ts:883` as a defect for the same dead catch — and retracted after finding that
+`UploadAvatarRequestSchema` validates the base64 with `/^[A-Za-z0-9+/=]+$/` before the route sees it.
+There the dead catch sits behind a real validator. Here nothing validates, which is the whole
+difference and the reason one is a footnote and the other is this entry.
+
+Corrected: the unreachable catch is removed and the doc says what the function does. Two arms pin the
+behaviour — malformed base64 surfaces as the JSON error and specifically **not** as a base64 refusal,
+and a respelled-but-decodable payload is accepted.
+
+**Deliberately not fixed: the permissiveness itself.** Tightening this to reject non-canonical base64
+— the way the storage envelopes in `lib/` do, with a shape check and a re-encode comparison — changes
+what the harness is allowed to put on the wire. That is a control-plane contract shared with the box
+side, not a local call. Mutation shows the arms would force that decision to be deliberate: adding a
+base64 shape check reds both of them rather than passing quietly.
+
+Mutations: reinstating a base64-specific refusal reds both new arms; making the JSON refusal silent
+reds them and the pre-existing non-JSON arm.
+
+Still dark in this module and left for the next batch: `:205`, the `InlineVpnProxyWire` contract
+refusal on `inlineProxyConfig`.

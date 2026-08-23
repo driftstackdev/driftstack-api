@@ -46,6 +46,32 @@ describe('encode/decodeWireData — base64 JSON round-trip', () => {
     const notJson = Buffer.from('not json at all', 'utf8').toString('base64');
     expect(() => decodeWireData(notJson)).toThrow(HarnessWireCodecError);
   });
+
+  // V-1382 — the arm above feeds VALID base64 whose bytes are not JSON, which is why the
+  // decoder's base64 branch showed as never executed: it could not execute. `Buffer.from(x,
+  // 'base64')` throws for no input at all, so the try/catch that used to wrap the decode was
+  // dead, and the doc comment promising a "malformed base64" refusal described something the
+  // function never did. These two pin what it does instead.
+  it('CRITICAL malformed base64 is NOT rejected as base64 — Node drops the characters outside the alphabet and the leftover bytes are what fails, so the caller is told the payload was not JSON. Pinned because the previous doc comment claimed the opposite, and a wire field that reads as validated when it is not is worse than one nobody claimed for.', () => {
+    // Node's own behaviour, asserted rather than assumed: no input makes this throw.
+    for (const garbage of ['not-base64!!', '$$$$', 'A', '====']) {
+      expect(() => Buffer.from(garbage, 'base64')).not.toThrow();
+    }
+
+    expect(() => decodeWireData('not-base64!!')).toThrow(HarnessWireCodecError);
+    expect(() => decodeWireData('not-base64!!')).toThrow(/did not contain valid JSON/);
+    expect(
+      () => decodeWireData('not-base64!!'),
+      'no base64-specific refusal exists on this path',
+    ).not.toThrow(/is not valid base64/);
+  });
+
+  it('CRITICAL a string outside the base64 alphabet that happens to decode to valid JSON is ACCEPTED. This is the cost of the permissive decode, stated rather than discovered later: `{"a":1}` survives characters Node simply drops, so the wire field has more than one accepted spelling.', () => {
+    const canonical = encodeWireData({ a: 1 });
+    const respelled = `${canonical}!!`; // `!` is outside the alphabet and is dropped
+    expect(respelled).not.toBe(canonical);
+    expect(decodeWireData(respelled), 'the dropped characters change nothing').toEqual({ a: 1 });
+  });
 });
 
 describe('serializeIntentDispatch', () => {
