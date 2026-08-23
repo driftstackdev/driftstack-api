@@ -7191,3 +7191,36 @@ the sha256 downgrade.
 Worth keeping for the next security-property sweep: ask what a weaker-but-consistent implementation
 would still satisfy. The identity pair finds the absent property; the downgrade finds the degraded
 one, and they are caught by different arms.
+
+## V-1362 — when a source-text guard is the RIGHT instrument, with the criterion
+
+Much of this session has been spent showing text pins standing in for behavioural coverage: the
+pagination boundary, the deleted-owner refusals, the SDK signature comparison. This is the other half
+of that picture, because two security properties here are **not behaviourally observable at all**, and
+for those a source scan is the only instrument that exists.
+
+**A CSPRNG downgrade.** Replacing `randomBytes` in `generateApiKey` with a `Math.random()` byte
+generator produces keys that are well-formed, distinct, round-trip, hash, and authenticate — merely
+predictable. `api-keys.test.ts` stayed **fully green**, exactly as it must: nothing about a single
+generated value distinguishes a CSPRNG from a seeded PRNG. What fired was
+`no-insecure-randomness-for-secrets`, naming the file: "Math.random() in non-allowlisted server
+file(s): apps/server/src/lib/api-keys.ts".
+
+**A constant-time comparison downgrade.** Replacing `timingSafeEqual` with `a === b` in
+`constantTimeStringEq` is functionally identical for every input; only the timing differs. Six tests
+across five files caught it and **every one is a source-text guard**, including a dedicated
+`timing-safe-equal-pattern-cross-source-invariant`. Zero behavioural arms, which is the correct
+outcome — a behavioural timing test would be the flaky kind this repo treats as a defect.
+
+**The criterion, since "is a text pin acceptable here?" keeps coming up:** ask what a behavioural test
+could observe. If a mutation changes an observable answer — a refusal that stops refusing, a page that
+gains a row, a header a verifier rejects — a behavioural arm is available and a text pin is a weaker
+substitute for it. If the mutation is observationally identical by construction, the source IS the
+only evidence, and pinning it is correct engineering rather than thin coverage.
+
+Both guards here are also honest about their reach. The timing one states in its own header that it
+derives its set FROM the files already calling `timingSafeEqual`, so it enforces "every constant-time
+comparison stays one" and cannot enforce "every comparison that should be constant-time is one" — a
+brand-new plain `===` on secret material would pass it. That is a real residual, already named at the
+site, and closing it means deciding which values are secret, which is static analysis with an unknown
+yield. Recorded rather than reopened.
