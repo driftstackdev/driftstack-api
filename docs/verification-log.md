@@ -7036,3 +7036,31 @@ fails it too. The pre-filter is not a no-op that happens to let everything throu
 The lesson is the ordering one: when a scan is slow, look at what it does per file before looking at
 how many times it runs. Four passes of an expensive strip and one pass of the same strip differ by a
 constant; skipping the strip differs by the corpus.
+
+## V-1357 — a cursor test that was really a clock test
+
+`rate-limit-overrides-repo-contract` failed a full run on "page two did not continue after the
+cursor", and passed alone. The message is about cursors and the cause was a deadline.
+
+The arm creates four overrides and gives the second one `expiresAt: now + 250ms`, then reads page one
+and page two, both of which must still contain it. That leaves a **250ms budget for several database
+round-trips**. Under a full parallel run the budget is spent before page two is read, the row has
+lapsed, and the assertion fails describing a cursor defect that is not there.
+
+Rewritten to remove the clock rather than widen it. The row is now born with the far-future expiry
+every other row uses, and is expired LATER by rewriting it with a past `expiresAt` — deterministic
+where sleeping past a deadline is not. That depends on the upsert leaving `createdAt` alone so the row
+keeps its place in the ordering, which was checked in BOTH implementations rather than assumed: the
+Drizzle `onConflictDoUpdate` set-clause does not list `createdAt`, and the double uses
+`existing?.createdAt ?? now`. A contract test that runs against two implementations has to be true of
+both seams, not just the one that happened to fail.
+
+The property is unchanged and still load-bearing. What it asserts is subtle and worth restating: the
+cursor row is resolved by a SEPARATE query that deliberately does not filter on expiry, so a cursor
+naming a row that has since lapsed still anchors the page. Neutralising that resolution — `if (c)` →
+`if (false && c)` — fails this arm and a sibling that shares the mechanism, which is what shows the
+determinism change bought speed and not silence.
+
+Third flake this session whose message pointed away from its cause: a limit that was interference, a
+gate that was a timeout, and now a cursor that was a deadline. The pattern is worth naming — under
+load, the assertion that fails is rarely the one that is wrong.

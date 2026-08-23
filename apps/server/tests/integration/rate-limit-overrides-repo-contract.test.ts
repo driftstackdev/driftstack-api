@@ -286,10 +286,17 @@ function overridesContract(label: string, make: () => Subject, enabled: () => bo
       if (!enabled()) return;
       const s = make();
       const account = await s.account();
-      // Four overrides, newest first by createdAt; the second one expires shortly.
+      // Four overrides, newest first by createdAt. `b` is expired LATER, by rewriting
+      // it, rather than by being born with a short life.
+      //
+      // V-1357 — it used to be created with `expiresAt: now + 250ms`, which gave the
+      // two page reads below a 250ms budget for several database round-trips. Under a
+      // full parallel run that budget is spent before page two is read, `b` has already
+      // lapsed, and the arm fails with "page two did not continue after the cursor" —
+      // a message about cursors, describing a clock.
       const a = await set(s, account, 'api:a');
       await new Promise((r) => setTimeout(r, 5));
-      const b = await set(s, account, 'api:b', { expiresAt: new Date(Date.now() + 250) });
+      const b = await set(s, account, 'api:b');
       await new Promise((r) => setTimeout(r, 5));
       const c = await set(s, account, 'api:c');
       await new Promise((r) => setTimeout(r, 5));
@@ -312,9 +319,13 @@ function overridesContract(label: string, make: () => Subject, enabled: () => bo
         'page two did not continue after the cursor',
       ).toEqual([b.id, a.id]);
 
-      // Now let the row the NEXT cursor names lapse, then page past it.
+      // Now expire the row the NEXT cursor names, then page past it. Rewriting it with
+      // a past expiry is deterministic where sleeping past a deadline is not, and the
+      // upsert leaves `createdAt` alone on conflict — verified in BOTH implementations,
+      // the Drizzle `onConflictDoUpdate` set-clause and the double's
+      // `existing?.createdAt ?? now` — so `b` keeps its place in the ordering.
       const cursorRow = second.items[0];
-      await new Promise((r) => setTimeout(r, 300));
+      await set(s, account, 'api:b', { expiresAt: new Date(Date.now() - 1000) });
       const third = await s.repo.listAll({
         limit: 2,
         accountId: account.accountId,
