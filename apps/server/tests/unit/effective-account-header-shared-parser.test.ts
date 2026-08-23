@@ -191,9 +191,20 @@ describe('readEffectiveAccountHeader — shared parser', () => {
     });
 
     it('CRITICAL the crypto-checkout rejection guard stays at least as strict as the parser', () => {
-      // It is an exception because it is STRICTER. If it is ever "tidied" into
-      // the shared parser, `'   '` and `['', 'acc_x']` start reading as absent
-      // and the self-workspace-only rule silently stops rejecting them.
+      // V-1366 — this used to say the route is an exception because it is STRICTER,
+      // naming `'   '` and `['', 'acc_x']` as inputs that would start reading as absent
+      // if it were "tidied" into the shared parser. Measured on a socket, neither shape
+      // can arrive. Node strips optional whitespace off a field value, so `'   '` is
+      // already `''` before any of our code runs, and only `set-cookie` reaches a handler
+      // as an array — a header sent twice arrives JOINED, as `', acc_x'`, which the
+      // shared parser would also report as present.
+      //
+      // So no reachable input distinguishes the two today. The exception is kept for what
+      // the route MEANS rather than for a behavioural gap: its rule is refuse-on-presence,
+      // not resolve, and that must not become contingent on the shared parser's trimming
+      // staying exactly as it is. Both reachable shapes are executed end to end in
+      // tests/integration/a-header-sent-twice-does-not-arrive-as-an-array.test.ts —
+      // `', acc_x'` is a 400 with no order persisted, `''` is a self-workspace 201.
       const body = codeOnly(
         readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes/billing-crypto.ts'), 'utf8'),
       );

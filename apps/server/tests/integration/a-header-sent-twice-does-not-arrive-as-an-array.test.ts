@@ -107,6 +107,8 @@ describe('a request header sent twice', () => {
       account: request.headers['x-driftstack-account'] ?? null,
       accountIsArray: Array.isArray(request.headers['x-driftstack-account']),
       authorization: request.headers.authorization ?? null,
+      blank: request.headers['x-blank'] ?? null,
+      blankThenReal: request.headers['x-blank-then-real'] ?? null,
     }));
     await probe.listen({ host: '127.0.0.1', port: 0 });
     const address = probe.server.address();
@@ -123,6 +125,9 @@ describe('a request header sent twice', () => {
           'X-Driftstack-Account: acc_22222222-2222-4222-8222-222222222222',
           'Authorization: Bearer first',
           'Authorization: Bearer second',
+          'X-Blank:    ',
+          'X-Blank-Then-Real:    ',
+          'X-Blank-Then-Real: acc_real',
         ],
         '{}',
       );
@@ -141,6 +146,13 @@ describe('a request header sent twice', () => {
       // authorization IS on Node's discard-duplicates list, so first-wins is real there.
       expect(seen.authorization, 'authorization is special-cased, so here first really wins').toBe(
         'Bearer first',
+      );
+      // V-1366 — and optional whitespace is stripped off a field value before any handler
+      // runs, so a whitespace-only header is already the empty string. Two route guards
+      // treat "whitespace-only" as a case they handle; neither can reach it.
+      expect(seen.blank, 'a whitespace-only value arrives empty, not as spaces').toBe('');
+      expect(seen.blankThenReal, 'and an empty first value leaves only the separator').toBe(
+        ', acc_real',
       );
     } finally {
       await probe.close();
@@ -199,6 +211,78 @@ describe('a request header sent twice', () => {
       `X-Driftstack-Account: ${self}`,
     ]);
     expect(once.status, `and the single-header control is allowed: ${once.body}`).toBe(200);
+  });
+
+  // V-1366 — the third narrowing of this header, on the money path.
+  //
+  // POST /v1/billing/crypto-checkout deliberately does NOT use the shared parser: crypto
+  // purchases are self-workspace only, so it refuses the header outright rather than
+  // resolving it. Its guard is written as
+  //
+  //   Array.isArray(raw) ? raw.some((v) => v.length > 0) : typeof raw === 'string' && …
+  //
+  // and the drift-guard beside it explains the array branch with a shape that cannot
+  // occur — an empty first value and a real second one. On the wire that request produces
+  // the STRING `", acc_x"`, so the string branch is what actually protects the money path,
+  // and nothing had executed it. It holds, for a reason worth pinning: the guard tests
+  // LENGTH rather than well-formedness, so a value that no resolver would accept is still
+  // enough to refuse.
+  const CHECKOUT = JSON.stringify({
+    product: 'solo_manual',
+    price_cents: 7900,
+    price_currency: 'USD',
+  });
+
+  it('CRITICAL an X-Driftstack-Account sent twice with an EMPTY first value is refused by crypto checkout, and no order is persisted. This is the case the guard beside it names, in the shape the wire can actually deliver: not [<empty>, acc_x] but the joined string that has a comma where the first value was.', async () => {
+    fx = await buildTestApp();
+    const port = await listen(fx.app);
+
+    const response = await sendRaw(
+      port,
+      'POST /v1/billing/crypto-checkout HTTP/1.1',
+      [
+        `Authorization: Bearer ${fx.plaintext}`,
+        'X-Driftstack-Account:',
+        'X-Driftstack-Account: acc_22222222-2222-4222-8222-222222222222',
+      ],
+      CHECKOUT,
+    );
+    expect(response.status, `acting-as slipped the money path: ${response.body}`).toBe(400);
+    expect(response.body, 'and refused as a workspace-scope error').toMatch(/Self workspace/i);
+    expect(await fx.cryptoOrdersRepo.listAll(), 'no order may be persisted').toEqual([]);
+  });
+
+  it('CRITICAL a whitespace-only X-Driftstack-Account is ACCEPTED here — the other shape the drift-guard names, and it cannot reach the guard either. Node strips optional whitespace off a field value before a handler sees it, so `X-Driftstack-Account:    ` arrives as the empty string and is absent by the time any of our code runs. Treating it as absent is right; the claim that this route is stricter than the shared parser about it is not.', async () => {
+    fx = await buildTestApp();
+    const port = await listen(fx.app);
+
+    const response = await sendRaw(
+      port,
+      'POST /v1/billing/crypto-checkout HTTP/1.1',
+      [`Authorization: Bearer ${fx.plaintext}`, 'X-Driftstack-Account:    '],
+      CHECKOUT,
+    );
+    expect(response.status, `whitespace-only acting-as: ${response.body}`).toBe(201);
+    expect(
+      await fx.cryptoOrdersRepo.listAll(),
+      'a self-workspace purchase, because the header carried no account',
+    ).toHaveLength(1);
+  });
+
+  it('CRITICAL the same checkout with no acting-as header at all is accepted. Without this the two refusals above are satisfied by a route that 400s every purchase.', async () => {
+    fx = await buildTestApp();
+    const port = await listen(fx.app);
+
+    const response = await sendRaw(
+      port,
+      'POST /v1/billing/crypto-checkout HTTP/1.1',
+      [`Authorization: Bearer ${fx.plaintext}`],
+      CHECKOUT,
+    );
+    expect(response.status, `a self-workspace checkout must succeed: ${response.body}`).toBe(201);
+    expect(await fx.cryptoOrdersRepo.listAll(), 'and it persists exactly one order').toHaveLength(
+      1,
+    );
   });
 
   it('CRITICAL app.inject() cannot stand in for the wire here: it joins a duplicated value with a comma and NO space, which the idempotency contract ACCEPTS. An inject-based version of this file would exercise the accepting path while production takes the rejecting one — the reason these arms open a socket.', async () => {

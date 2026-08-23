@@ -7364,3 +7364,41 @@ with the joined string a customer can actually produce.
 here. Noted rather than fixed: `_ALL` was already six behind the 3176 the root config collects at
 HEAD. `judge()` only fails on _fewer_ files than the pin, so the drift is silent and safe-direction,
 and it is not mine to absorb.
+
+## V-1366 — the third narrowing of that header guards a money path, and both shapes it names are unreachable
+
+`POST /v1/billing/crypto-checkout` deliberately does **not** use the shared parser. Crypto purchases
+are self-workspace only, so the route refuses `X-Driftstack-Account` outright instead of resolving
+it, and a drift-guard beside it explains why the exception exists: the route is **stricter**, and
+tidying it into the shared parser would make `'   '` and `['', 'acc_x']` start reading as absent, so
+the self-workspace rule would silently stop rejecting them.
+
+Measured on a socket, **neither shape can arrive**:
+
+| what a client sends                 | what the handler receives                                |
+| ----------------------------------- | -------------------------------------------------------- |
+| `X-Driftstack-Account:` + spaces    | `''` — Node strips optional whitespace off a field value |
+| the header twice, first value empty | `', acc_x'` — a joined **string**, never `['', 'acc_x']` |
+
+So the justification named two inputs that cannot reach the guard, while the input a client _can_
+send — the joined string — had never been executed against it. It holds, and for a reason worth
+pinning: the guard tests **length**, not well-formedness, so a value no resolver would accept is
+still enough to refuse. Both mutations confirm it. Disabling the refusal, and separately narrowing
+the string branch to demand an `acc_` prefix, each turn the duplicated request into a **201 with a
+persisted order** — an acting-as purchase completing on a money path.
+
+The whitespace case goes the other way, and the arm now says so: `X-Driftstack-Account:    ` arrives
+empty, is absent before any of our code runs, and the checkout correctly proceeds as a self-workspace
+purchase. Treating it as absent is right. The claim that this route is stricter _about that shape_ is
+not.
+
+**And the exception's premise does not survive the measurement.** On every reachable input, refusing
+on presence and using the shared parser now agree: `''` → absent for both, `', acc_x'` → present for
+both. The route keeps its own guard anyway, and the drift-guard now says why in terms that are true —
+its rule is _refuse on presence_, not _resolve_, and that intent should not become contingent on the
+shared parser's trimming staying exactly as it is. What changed is the rationale, not the code: I am
+not rewriting a money path to remove a redundancy that is currently harmless.
+
+Three arms added to the socket file from V-1365, with a vacuity floor (a checkout carrying no
+acting-as header is a 201 that persists exactly one order), so the two refusals cannot be satisfied
+by a route that rejects every purchase.
