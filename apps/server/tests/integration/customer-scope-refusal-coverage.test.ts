@@ -1,5 +1,18 @@
-// Every customer-facing route that enforces a scope actually refuses a key
-// lacking it — proved by CALLING each one.
+// Every customer-facing route whose scope gate is visible IN ITS ROUTE FILE
+// actually refuses a key lacking it — proved by CALLING each one.
+//
+// V-1330 — the qualifier is load-bearing and used to be absent. This roster is
+// built by reading route source for a gate in the handler's own window, so it
+// sees a scope enforced there and nothing else. Scope enforcement in this server
+// has a SECOND home: eleven service files import the same helper under an alias
+// (`requireScope as throwIfMissingScope`) and gate inside the service method, 48
+// call sites in all. Three scopes are enforced only that way and appear nowhere
+// in any route file — `read:webhooks`, `read:audit`, `read:api`.
+//
+// Those routes are not unprotected, and they are not untested: neutralising the
+// service-layer helper failed 48 tests across 19 files. They are simply outside
+// what THIS file proves, and the header used to say otherwise. The arm at the
+// bottom pins the gap with a live example so the claim cannot drift back.
 //
 // Companion to `admin-scope-refusal-coverage`, which covers the staff surface.
 // Together they close the gap that measurement exposed: of 163 scope-enforcing
@@ -271,6 +284,30 @@ afterEach(async () => {
 
 describe('customer routes refuse a key that lacks their scope', () => {
   const routes = scopedRoutes();
+
+  // V-1330 — the blind spot named in the header, pinned to a live example so it
+  // cannot quietly stop being true in either direction. `/v1/webhooks` gates on
+  // `read:webhooks` and `account_owner` INSIDE the service, so no route-file
+  // scan can see it and this roster does not carry it. If a preHandler gate is
+  // added there the first half fails and the header needs revisiting; if the
+  // service gate is removed the second half fails, which is the more serious of
+  // the two.
+  it('CRITICAL this roster does NOT reach scope gates that live in the service layer, and the example proving it is still gated there. A roster silently missing a whole enforcement form is how "every route is covered" becomes false without anything failing.', () => {
+    expect(
+      routes.filter((r) => r.path.startsWith('/v1/webhooks')).map((r) => `${r.method} ${r.path}`),
+      'a webhook route gained a route-file scope gate — the header blind spot needs revisiting',
+    ).toEqual([]);
+
+    const svc = readFileSync(resolve(HERE, '..', '..', 'src', 'services', 'webhooks.ts'), 'utf8');
+    expect(
+      /throwIfMissingScope\(ctx, 'read:webhooks'\)/.test(svc),
+      'the webhook read gate is gone from the service layer, and no route file carries one',
+    ).toBe(true);
+    expect(
+      /throwIfMissingScope\(ctx, 'account_owner'\)/.test(svc),
+      'the webhook write gate is gone from the service layer, and no route file carries one',
+    ).toBe(true);
+  });
 
   it('the scan found the customer scope surface (a broken scan would make every case below vacuous)', () => {
     expect(routes.length).toBeGreaterThan(50);

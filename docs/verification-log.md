@@ -6169,3 +6169,35 @@ three entry points across every granted subset of size 0, 1 and 2 drawn from `Ap
 against every required scope, and states why size 2 is the floor: several rules read one scope while
 a second is present, and a singleton sweep cannot catch an implementation consulting the wrong
 element. Nothing to add.
+
+## V-1331 — a coverage guard that claimed every route, and could not see half the enforcement
+
+`customer-scope-refusal-coverage` opens by stating that every customer-facing route enforcing a scope
+refuses a key lacking it, proved by calling each one. The measurement in V-1330 makes that untrue:
+the roster is built by reading each handler's own window in its route file, so a gate enforced
+anywhere else is invisible to it — and 48 of the server's 224 scope call sites live in service
+methods behind an aliased import, with `read:webhooks`, `read:audit` and `read:api` enforced ONLY
+that way.
+
+This is the same defect shape as the Python SDK header in V-1315: a file whose opening sentence
+claims more than its implementation delivers, where the claim is what a reader trusts.
+
+The routes concerned are neither unprotected nor untested — neutralising the service helper failed 48
+tests across 19 files. They are outside what THIS file proves, which is a different statement and the
+one the header now makes.
+
+**Named, then pinned, because a blind spot recorded only in prose decays.** The file already carries
+a scar of exactly this kind (V-776: the `controlKeyOrAccountAuth` wrapper form made 13 routes
+invisible to the same scan), so the correction follows that precedent and adds an arm holding the gap
+in place from both directions, using `/v1/webhooks` as the live example:
+
+| mutation                                                                 | failing assertion                                                                       |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| the `read:webhooks` gate deleted from `services/webhooks.ts`             | the webhook read gate is gone from the service layer, and no route file carries one     |
+| a `requireScope('read:webhooks')` preHandler added to `GET /v1/webhooks` | a webhook route gained a route-file scope gate — the header blind spot needs revisiting |
+
+The first is the serious direction: it fires when the only gate those routes have disappears. The
+second fires when the blind spot stops being one, so the header gets revisited rather than quietly
+becoming wrong in the other direction. Each mutation failed its own assertion and nothing else that
+matters — the second also registers a new refusal case for the route it just gated, which is the
+roster doing its job. Both source files restored byte-identical.
