@@ -25,44 +25,10 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { codeOnly } from './_helpers/code-only.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROUTES_DIR = resolve(HERE, '..', '..', 'src', 'routes');
-
-/**
- * Blank out comments and string/template bodies, preserving every newline so reported line
- * numbers still point at the source. Without this a route that merely *mentions* safeParse
- * in a comment reads as validated.
- */
-function blankCommentsAndStrings(src: string): string {
-  const out = src.split('');
-  let i = 0;
-  const n = src.length;
-  while (i < n) {
-    const c = src[i];
-    if (c === '/' && src[i + 1] === '/') {
-      while (i < n && src[i] !== '\n') out[i++] = ' ';
-    } else if (c === '/' && src[i + 1] === '*') {
-      const close = src.indexOf('*/', i + 2);
-      const end = close < 0 ? n : close + 2;
-      while (i < end) {
-        if (src[i] !== '\n') out[i] = ' ';
-        i++;
-      }
-    } else if (c === '"' || c === "'" || c === '`') {
-      const quote = c;
-      i++;
-      while (i < n && src[i] !== quote) {
-        if (src[i] === '\\') i++;
-        i++;
-      }
-      i++;
-    } else {
-      i++;
-    }
-  }
-  return out.join('');
-}
 
 /**
  * Validation rooted in the querystring itself. A bare `typeof x === 'string'` somewhere in a
@@ -107,7 +73,7 @@ function discover(): QuerystringRoute[] {
   for (const file of readdirSync(ROUTES_DIR)
     .filter((f) => f.endsWith('.ts'))
     .sort()) {
-    const code = blankCommentsAndStrings(readFileSync(join(ROUTES_DIR, file), 'utf8'));
+    const code = codeOnly(readFileSync(join(ROUTES_DIR, file), 'utf8'));
     const decl = /app\.(?:get|post|put|patch|delete)</g;
     let m: RegExpExecArray | null;
     while ((m = decl.exec(code)) !== null) {
@@ -148,6 +114,16 @@ describe('every route declaring a Querystring generic validates it', () => {
     expect(
       VALIDATES_QUERY.test("const keep = (request.query?.keep ?? '').toLowerCase();"),
       'the classifier accepts a raw query read — it would have cleared both V-1367 and V-1368',
+    ).toBe(false);
+
+    // A route that only MENTIONS the parse in prose must not read as validated. Asserted
+    // here rather than left to the discovery pass: with every route currently either
+    // validating or excepted, nothing in the population exercises the comment handling, so
+    // dropping codeOnly above would go unnoticed until the first unvalidated route landed
+    // — which is exactly when this guard is supposed to speak.
+    expect(
+      VALIDATES_QUERY.test(codeOnly('// const q = Schema.safeParse(req.query);\nconst x = 1;')),
+      'a parse mentioned in a comment reads as validation',
     ).toBe(false);
   });
 

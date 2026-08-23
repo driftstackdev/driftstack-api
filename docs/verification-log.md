@@ -7729,3 +7729,44 @@ throws enumerated across four functions) plus two named cache-revalidation files
 `packages/webhook-delivery`'s in-memory double warns that production must inject an SSRF-guarded
 fetch, which `durable-webhook-delivery.ts` and `webhook-worker.ts` both do by **default** rather than
 by injection — a stronger posture than the comment asks for.
+
+## V-1374 — two private comment-strippers, one of them mine, and a guard that could only see one spelling
+
+The full run after V-1373 went red on `no-guard-strips-comments-by-hand`: my new cross-check
+hand-rolled `.replace(/\/\*[\s\S]*?\*\//g,' ').replace(/\/\/[^\n]*/g,' ')` when the repo ships
+`tests/unit/_helpers/code-only.ts` for exactly that. Its rationale is right — a private copy models
+comments but not string or regex literals, and gets it wrong **silently**, because the guard keeps
+passing while scanning a file it has blanked.
+
+**It caught one of my two copies.** Its signature is the escaped regex-literal shape
+`/\*[\s\S]*?\*\//`, so it sees the two-`replace` idiom and nothing else. A hand-written character
+scanner is invisible to it. Measured across the test tree, three exist:
+
+| private stripper                                                                      | seen by the guard |
+| ------------------------------------------------------------------------------------- | ----------------- |
+| `an-exempt-surface-…` (V-1373, mine) — two-regex form                                 | **yes**, flagged  |
+| `every-querystring-route-…` (V-1369, mine) — character scanner                        | no                |
+| `a-published-response-…` and `bootstrap-unwired-optional-deps-…` — character scanners | no                |
+
+Both of mine now call `codeOnly`. My V-1369 copy was also **misnamed** — `blankCommentsAndStrings`
+skipped _past_ string literals rather than blanking them, which is what `codeOnly` does and why it is
+safe to swap: the string handling exists so a `//` inside a literal is not read as a comment, not to
+remove the literal. The two pre-existing scanners are recorded here, not touched: writing an honest
+`ALLOWED` reason for a guard I have not read is how a waiver becomes decoration.
+
+⚠️ **And a claim I nearly made about my own guard, which the control refuted.** I mutated an exempted
+route to carry a comment mentioning `safeParse(req.query)`, expecting the comment handling to be what
+kept it classified as unvalidated. It stayed green — but so did the **control** with comment
+stripping disabled entirely. The mutation site could never have shown anything: flipping an
+_exempted_ route to "validates" is invisible to both arms, since it is neither unaccounted-for nor a
+stale key.
+
+The real conclusion is about the guard, not the experiment: with every route currently either
+validating or excepted, **nothing in the population exercised the comment handling at all.** Dropping
+`codeOnly` would have gone unnoticed until the first unvalidated route landed — precisely the moment
+the guard exists to speak. So the classifier floor now feeds itself a parse that appears **only
+inside a comment** and asserts it does not read as validation. Removing `codeOnly` from that one
+expression reds it, which is the proof the route-level mutation could not give.
+
+V-1373's cross-check was re-proven through `codeOnly`: `admin.ts` back on the sibling's list alone
+still fails with _"the two files disagree on which route-file PREFIXES are waived"_.

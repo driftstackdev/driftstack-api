@@ -39,6 +39,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { codeOnly } from './_helpers/code-only.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -164,8 +165,11 @@ describe('V-961 an exempt surface that can drop a field is listed, not inherited
       resolve(HERE, 'unknown-request-fields-coverage-invariant.test.ts'),
       'utf8',
     );
-    // Comments blanked so a commented-out entry cannot count as declared.
-    const code = sibling.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+    // Comments removed so a commented-out entry cannot count as declared. Via the shared
+    // codeOnly, not a private copy: it models string and regex literals as well as both
+    // comment forms, and `no-guard-strips-comments-by-hand` exists because a private copy
+    // gets one of those wrong silently.
+    const code = codeOnly(sibling);
     const listOf = (name: string): string[] => {
       const m = new RegExp(`const ${name}\\s*=\\s*\\[([^\\]]*)\\]`).exec(code);
       return [...(m?.[1] ?? '').matchAll(/'([^']+)'/g)].map((x) => x[1] as string).sort();
