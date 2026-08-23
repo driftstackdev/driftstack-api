@@ -193,6 +193,74 @@ describe('X-Driftstack-Account team-RBAC header end-to-end', () => {
     ).toContain('Owner account no longer exists');
   });
 
+  // V-1337 — the deleted-owner branch on a READ, and behind a fourth gate.
+  //
+  // The two arms above go through `effectiveAccountIdForWrite`, which demands
+  // the admin role first. `/v1/usage` does not: it calls `resolveEffectiveAccount`
+  // directly, so ANY member reaches the owner lookup. That makes it a different
+  // path to the same refusal, and the reason a member role is used here rather
+  // than admin — a fixture copied from the write arms would have proved the
+  // write gate again instead of this one.
+  it('CRITICAL a MEMBER reading usage for an owner whose account has been DELETED is refused. This is the read side of the deleted-owner window: `/v1/usage` resolves the effective account with no role gate in front of it, so it reaches the owner lookup on any membership — and returning a usage summary computed from a half-resolved owner is a billing figure attributed to nobody.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+
+    const GHOST_ID = '00000000-0000-4000-8000-00000000f021';
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: '00000000-0000-4000-8000-00000000f022',
+        ownerAccountId: GHOST_ID,
+        role: 'member',
+      },
+    ]);
+
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/usage',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${GHOST_ID}`,
+      },
+    });
+
+    expect(res.statusCode, 'reading usage for a deleted owner must be refused').toBe(403);
+    expect(
+      res.json<{ detail?: string }>().detail,
+      'and the refusal names the vanished owner',
+    ).toContain('Owner account no longer exists');
+  });
+
+  // V-1337 — and behind `effectiveAccountIdForKeyWrite`, the third of the four
+  // gate variants. Same branch, third helper: covering it through one variant
+  // says nothing about the others, which is why each is reached on its own.
+  it('CRITICAL rotating an API key for an owner whose account has been DELETED is refused. The rotate path mints a replacement credential on the OWNER account, so a half-resolved owner here decides which account the new key belongs to.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+
+    const GHOST_ID = '00000000-0000-4000-8000-00000000f031';
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: '00000000-0000-4000-8000-00000000f032',
+        ownerAccountId: GHOST_ID,
+        role: 'admin',
+      },
+    ]);
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/api-keys/key_00000000-0000-4000-8000-00000000f033/rotate',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${GHOST_ID}`,
+      },
+      payload: {},
+    });
+
+    expect(res.statusCode, 'rotating for a deleted owner must be refused').toBe(403);
+    expect(
+      res.json<{ detail?: string }>().detail,
+      'and the refusal names the vanished owner',
+    ).toContain('Owner account no longer exists');
+  });
+
   it('X-Driftstack-Account with malformed acc_-prefixed UUID → 4xx (NOT 500)', async () => {
     fx = await buildTestApp({ tier: 'api_builder' });
     const res = await fx.app.inject({

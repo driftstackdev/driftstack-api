@@ -6372,3 +6372,35 @@ signature as the clone arm, confirming the same null read behind it. Source rest
 Two of seven copies now covered. Remaining, unchanged from V-1335: `routes/profiles.ts:454`
 (`POST /v1/profiles/import`), `routes/admin.ts:182` and `:219`, `routes/agent-sessions.ts:4066` and
 `:4070`.
+
+## V-1337 — the deleted-owner refusal on a READ, and behind a third gate variant
+
+Two more of the seven copies, chosen because each is reached by a path the earlier arms do not use.
+
+**`GET /v1/usage` is the read side, and it has no role gate in front of it.** The clone and restore
+arms both go through `effectiveAccountIdForWrite`, which demands admin before the owner lookup.
+`/v1/usage` calls `resolveEffectiveAccount` directly, so ANY member reaches the branch. The fixture
+therefore uses role `member` on purpose: copying the write arms' admin fixture would have re-proved
+the write gate instead of this path. What the branch prevents here is a usage summary — a billing
+figure — computed from a half-resolved owner.
+
+**`POST /v1/api-keys/:id/rotate` sits behind `effectiveAccountIdForKeyWrite`**, the third of four
+gate variants in the route layer (`effectiveAccountIdForWrite`, `effectiveAccountIdForKeyWrite`,
+`effectiveAccountIdForLiveOperation`, `callerCanAccessAgentSession`). Covering the branch through one
+variant says nothing about the others, so each is reached on its own. Rotate mints a replacement
+credential on the OWNER account, so a half-resolved owner decides which account the new key belongs
+to.
+
+Mutation-proven per occurrence rather than together, since both live in `routes/admin.ts` and a
+single flip would not show which arm did the work:
+
+| mutated line                                       | failing arm                                                                |
+| -------------------------------------------------- | -------------------------------------------------------------------------- |
+| `admin.ts:215` (`if (!owner) {` on the usage read) | reading usage for a deleted owner must be refused — expected 500 to be 403 |
+| `admin.ts:182` (rotate)                            | rotating for a deleted owner must be refused — expected 500 to be 403      |
+
+Each failed exactly one arm with the other eight green, and both produce the same `500` signature as
+the clone and restore arms — the same null read behind all four. Source restored byte-identical.
+
+Four of seven copies covered. Remaining: `routes/profiles.ts:454` (`POST /v1/profiles/import`, which
+needs a valid envelope body to reach the branch) and `routes/agent-sessions.ts:4066` / `:4070`.
