@@ -8215,3 +8215,40 @@ The fake Redis gained `del`, which it had never needed because nothing had ever 
 Mutations: making the generation bump conditional on the reverse-index hit reds all three (the
 outage arm included — with no `incr` there is nothing left to fail); suppressing only the entry
 deletion reds the first alone, so the two properties are pinned separately rather than as one lump.
+
+## V-1387 — a 40-entry redaction list pinned as text, and nothing checking it took effect
+
+`createLogger` is 155 lines and **never executed** — the suite boots through `createTestLogger`, and
+every serializer the real factory installs is tested in isolation. This file's own header says it
+"proves the exact serializer that createLogger() wires". It proves the serializer. Nothing proved the
+wiring.
+
+That gap is narrow and severe. `redact.paths` is a 40-entry list — Authorization, cookies, Stripe and
+NOWPayments signatures, the BYOK Anthropic header, the GUI control key, passwords, MFA codes,
+recovery codes, OAuth client secrets, the nested VPN credentials — and its own comment says new
+sensitive fields MUST be added to it. A cross-source guard freezes that list as **source text**.
+
+**Text is not effect.** Renaming the `redact` key so pino silently ignores the whole block:
+
+|                                                                              | under that one-word change                       |
+| ---------------------------------------------------------------------------- | ------------------------------------------------ |
+| `logger-v494-redaction-cross-source-invariant` + `lib-logger-content-parity` | **40 tests, all green**                          |
+| the new arm                                                                  | fails — `ds_live_LEAK_APIKEY` is in the log line |
+
+The arm drives the real factory in a child process and reads what it actually writes to stdout — a
+child rather than an in-process capture because pino writes through sonic-boom to fd 1, which
+`process.stdout.write` does not intercept.
+
+⚠️ **The first version proved only half the wiring, and the mutation said so.** Disabling
+`serializers` left it green, because every secret it carried was also covered by `redact.paths`. The
+one field that separates the two halves is `req.url` — not in the path list, stripped only by
+`redactReqSerializer` — so the payload now carries a `?ds_token=` URL. Each mutation fails on its own
+leak: killing `redact` surfaces the API key, killing `serializers` surfaces the ds_token.
+
+Absence alone would also be satisfied by a logger that dropped the payload entirely, so the arm pins
+that `[redacted]` appears and that an ordinary field survives.
+
+⚠️ **One run in this batch reported `Tests no tests`** — a shell loop split my mutation spec on the
+colon inside `redact: {`, wrote `{: {` into the source, and vitest reported no tests rather than a
+failure. Exactly the shape the batch rules warn about. Re-run without shell string-splitting, both
+mutations land.
