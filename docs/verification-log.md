@@ -8018,3 +8018,36 @@ The stale note is rewritten to record the measured outcome rather than the open 
 ⚠️ **The probe's own output vanished the first time.** It ran as a passing test and vitest swallows
 `console.log` from those, so the run reported `Tests 1 passed` and told me nothing. Re-run writing the
 results to a file, it produced the table above. A probe that cannot show its work has not been run.
+
+## V-1381 — the one storage bound in the family that is not subsumed
+
+Five modules carry the same shape — refuse a plaintext past a byte bound — and four of them turned
+out to be unreachable, each because the stored blob is bounded at `iv + tag + max` and AES-GCM does
+not pad, making the two checks one inequality 28 bytes apart:
+
+| module                                       | verdict                                                                                             |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `livekit-secret-encryption`                  | covered directly (V-1378)                                                                           |
+| `webhook-secret-encryption`                  | unreachable — fixed-width encoding (V-1376)                                                         |
+| `byok-anthropic-encryption`                  | encrypt + decrypt sides unreachable; the payload range live only through the legacy reader (V-1379) |
+| `account-proxy-secret-encryption`            | unreachable — the envelope gate uses the same per-slot number (V-1380)                              |
+| **`recipe-payload-encryption` encrypt side** | **reachable**                                                                                       |
+
+The decrypt side here is subsumed like the rest, by `decodeCiphertextBase64`. The **encrypt** side is
+not, and the reason is upstream rather than local: `AgentIntentSchema` types `url`, `selector` and
+`value` as bare `z.string()` with **no length cap**, so a single intent can carry an arbitrarily long
+value straight through `RecipeIntentLogSchema.parse` into `encryptJson`. This bound is the only thing
+between a customer-supplied intent and a multi-megabyte encrypted row, and it had never executed.
+
+Cheap to drive despite the size: the check reads `Buffer.byteLength` **before** any cipher touches
+the data, so nothing encrypts 64 MiB — building the payload costs ~75 ms and ~240 MB RSS, measured
+before committing to the approach.
+
+The arm asserts its own premise first, because that premise is exactly what would silently invalidate
+it: the intent schema must **not** refuse the oversized value. If a length cap is ever added upstream,
+this bound joins its four siblings as subsumed and the arm says so rather than continuing to pass for
+a new reason.
+
+Mutations: removing the bound reds the arm; shrinking it to 32 bytes reds four _pre-existing_ arms in
+the same file — which is the ordinary-payload control working, since a bound that small refuses
+routine round-trips.

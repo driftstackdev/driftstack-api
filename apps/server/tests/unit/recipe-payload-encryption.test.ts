@@ -1,5 +1,6 @@
 import { createCipheriv, randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import { AgentIntentSchema } from '@driftstack/api-types';
 import { encryptPlatformSecret } from '../../src/lib/platform-secret-encryption.js';
 import {
   convertRecipeIntentLogToV2,
@@ -301,5 +302,53 @@ describe('recipe payload encryption refuses its own preconditions', () => {
     expect(() => readRecipeTranscriptSnapshot(stored, undefined, CONTEXT_A)).toThrow(
       /encryption key is unavailable/i,
     );
+  });
+
+  // V-1381 — the last dark statement in this module's storage-bound family, and the only
+  // one of the five that is genuinely reachable.
+  //
+  // Its four siblings are all subsumed: LiveKit, BYOK and account-proxy secrets each bound
+  // the stored blob at `iv + tag + max`, which is the same inequality as the plaintext
+  // bound because AES-GCM does not pad. The DECRYPT side here is subsumed the same way, by
+  // `decodeCiphertextBase64`. The ENCRYPT side is not, and the reason is upstream:
+  // `AgentIntentSchema` types `url`, `selector` and `value` as bare `z.string()` with no
+  // length cap, so a single intent can carry an arbitrarily long value straight through
+  // `RecipeIntentLogSchema.parse` and into `encryptJson`. This bound is the only thing
+  // standing there.
+  //
+  // Cheap to drive despite the size: the check runs on `Buffer.byteLength` BEFORE any
+  // cipher touches the data, so nothing encrypts 64 MiB.
+  it('CRITICAL an intent log whose JSON exceeds the storage bound is refused BEFORE encryption. Nothing upstream caps it — the intent schema puts no length limit on `value` — so this is the only guard between a customer-supplied intent and a multi-megabyte row, and it had never executed.', () => {
+    const MAX_PLAINTEXT_BYTES = 64 * 1024 * 1024;
+    const oversized = [
+      {
+        kind: 'interact' as const,
+        action: 'type' as const,
+        value: 'a'.repeat(MAX_PLAINTEXT_BYTES),
+      },
+    ];
+
+    // The premise, asserted rather than assumed: the schema does NOT refuse this, so the
+    // byte bound is what has to. If a cap is ever added upstream this flips, and the arm
+    // below stops testing what it says it does.
+    expect(
+      () => oversized.map((intent) => AgentIntentSchema.parse(intent)),
+      'the intent schema gained a length cap — this bound is now subsumed like its siblings',
+    ).not.toThrow();
+    expect(Buffer.byteLength(JSON.stringify(oversized), 'utf8')).toBeGreaterThan(
+      MAX_PLAINTEXT_BYTES,
+    );
+
+    expect(() => encryptRecipeIntentLog(oversized, KEY, CONTEXT_A)).toThrow(
+      /plaintext exceeds the storage bound/,
+    );
+  });
+
+  it('CRITICAL and an ordinary intent log of the same shape still seals, so the bound refuses size rather than the shape it was handed', () => {
+    const ordinary = [
+      { kind: 'interact' as const, action: 'type' as const, value: 'a'.repeat(64) },
+    ];
+    const stored = encryptRecipeIntentLog(ordinary, KEY, CONTEXT_A);
+    expect(readRecipeIntentLog(stored, KEY, CONTEXT_A)).toEqual(ordinary);
   });
 });
