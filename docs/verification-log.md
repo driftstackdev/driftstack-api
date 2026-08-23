@@ -6097,3 +6097,37 @@ One arm each, in the idiom the other 170 already use: quiet locally where an abs
 legitimate, loud in CI where it is not. After: the healthy run is 17 green, and the dead-port CI run
 fails exactly the two new arms — the same 15 that used to pass in silence now report nothing new,
 which is correct, because they still cannot run.
+
+## V-1329 — the whole corpus checked by counterfactual: 176 of 181 fail when the database is gone
+
+V-1328 found two vacuous DB suites by narrowing a grep four times and reading the survivors. That
+works but it is the wrong instrument, and the entry said so. This is the right one: **break the thing
+the guards guard, and see who notices.** `DATABASE_URL` at a dead port, `CI` set, the whole node
+project.
+
+Population first, and deliberately wider than the obvious pattern: 172 files open a probe with
+`connect_timeout: 2`, and **9 more reach Postgres by another route** — the same many-idioms problem
+that made the greps in V-1328 wrong three times running. 181 files total.
+
+**176 of the 181 failed.** The five that passed do not connect at all:
+
+| file                                   | why it legitimately passes                                                               |
+| -------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `db-fleet-nodes-list-livekit-orderby`  | builds the query and asserts on `.toSQL()`; its own comment says no connection is opened |
+| `db-client-cross-source-invariant`     | reads source                                                                             |
+| `e2e-destructive-target-guard`         | reads source                                                                             |
+| `global-scope-db-tests-are-isolated`   | reads source                                                                             |
+| `no-postgres-client-leaks-raw-notices` | reads source                                                                             |
+
+So after V-1328 every file that actually talks to Postgres reports it when Postgres is not there. The
+class is closed, and closed by measurement rather than by inspection.
+
+**The instrument was controlled before the result was believed.** The two files repaired in V-1328
+appear in the failure list — they passed this same counterfactual before the fix and fail it now,
+which is the before/after that makes the fix real rather than plausible. A third file nobody touched
+fails too, confirming the run reaches ordinary DB suites and not only the repaired ones.
+
+Worth stating plainly because it changes how the next sweep should start: this took one command and
+produced a complete, exact answer, where four successive greps produced three wrong numbers and an
+upper bound. When a guard's subject can be broken cheaply — a dead port, a removed clause, a flipped
+operator — breaking it answers "would this notice?" directly. A pattern only guesses at it.
