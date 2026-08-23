@@ -5660,3 +5660,54 @@ floors moved 6 → 8, since each was exact and two of eight could otherwise stop
 Live SDK coverage now: account, api-keys, archetypes, sessions, profiles, usage (both shapes),
 webhooks, and the disabled-feature path. Still not round-tripped: the profiles and webhooks WRITE
 paths, and recipes' actual envelope, which needs a deployment with the feature on.
+
+## V-1317 — pagination's off-by-one boundary: 21 files go red, and 19 of them prove nothing
+
+Every paginated repo overfetches by one and derives `hasMore = rows.length > limit`. The classic
+defect is `>=`, which only shows when the final page is exactly FULL — when the row count is an exact
+multiple of the limit. Under it the repo hands back a cursor onto a page that does not exist, and the
+customer's own paging loop makes one more request and gets nothing.
+
+**The population is 14 sites across 12 repo files**, not the 12 first counted: `head -20` on the
+enumeration silently cut `api-keys-repo.ts` and `rate-limit-overrides-repo.ts` below the fold. The
+truncation was caught only because the mutation script reported two sites still unmutated. Rule 2
+exists for exactly this, and a pipe to `head` defeats it as thoroughly as a wrong pattern does.
+
+**Mutating all 14 to `>=` turned 21 test files red — and 19 of those reds are worthless as evidence.**
+Classified by reading each failure rather than counting them:
+
+- **2 behavioural catches.** `db-incidents-truth-drizzle` and `db-profiles-repo-keyset-drizzle` —
+  DB-backed, no `readFileSync`, failed on real paging behaviour.
+- **13 source-text pins.** Every `db-*-content-parity` and `db-*-cross-source-invariant` file that
+  went red reads the repo source with `readFileSync` and matches the literal
+  `hasMore = rows.length > opts.limit`. They fired because the TEXT changed. They would fire on a
+  correct refactor just as loudly, and if someone updated the pin to match a wrong new text, nothing
+  would notice. Freezing a line is not verifying what it does.
+- **6 unrelated**, attributed via `git status` before investigating: four are the peer's in-flight
+  gui-client and customer-dashboard work, one is the file-count pin against a transient 3001, and
+  the V-917 egress gate. All six pass at clean source; none are mine.
+
+So the honest number: **of 14 pagination boundaries, 2 are verified behaviourally and 12 are held
+only by text.**
+
+**Route-level tests cannot close this.** `buildTestApp` wires the in-memory doubles, not Drizzle — so
+`agent-sessions-routes`, `profiles`, `recipes-routes` and the rest exercise the doubles' paging and
+were structurally incapable of seeing a Drizzle mutation. Checked while there: every double derives
+its own `hasMore` with `>` too, so the doubles are correct and the route tests are not wrong, merely
+aimed elsewhere. Closing this needs DB-backed arms.
+
+**Why the existing DB-backed walks missed it.** They page until the cursor goes null and every one
+ends on a SHORT final page — nine rows at limit two leaves one. The exact-multiple case is never
+reached, so `>` and `>=` are indistinguishable to them.
+
+One arm added to `db-account-audit-repo-keyset-drizzle.test.ts`, on the harness already there: four
+rows, then a page of four (full and last) and a walk of two pages of two (the second exactly full).
+Both assert `nextCursor` is null. Mutation-proven — `>` → `>=` in `account-audit-repo.ts` fails the
+new arm on the message about a cursor onto an empty page, while both pre-existing arms in the same
+file stay green, which is the counterfactual showing they never covered it. Source restored
+byte-identical from a snapshot.
+
+**Still uncovered behaviourally, named rather than implied — 11 sites:** `admin-audit-repo`,
+`api-keys-repo`, `rate-limit-overrides-repo`, `sessions-repo` (×2), `webhooks-repo` (×2),
+`profile-snapshots-repo`, `recipes-repo`, `agent-sessions-repo`, `admin-accounts-repo`. Several have
+a `db-*-keyset-drizzle` harness already, so the arm above transfers to them nearly verbatim.

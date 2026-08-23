@@ -142,6 +142,62 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       }
     });
 
+    // V-1317 — the boundary the two walks above never reach.
+    //
+    // Both page until the cursor goes null, and both end on a SHORT final page:
+    // nine rows at limit two leaves one. So the case where the last page is
+    // exactly FULL — total rows an exact multiple of the limit — is never
+    // exercised, and that is precisely where `rows.length > limit` differs from
+    // `>=`. Under the off-by-one the repo hands back a cursor for a page that
+    // does not exist, and the customer's own paging loop makes one more request
+    // and receives nothing. Mutating `>` to `>=` across all fourteen paginated
+    // repos left this file green.
+    it('CRITICAL reports NO further pages when the final page is exactly full. The walks above always end on a short page, so nothing here distinguished `rows.length > limit` from `>=` — the classic overfetch off-by-one, which hands the customer a cursor onto an empty page.', async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG keyset test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleAccountAuditRepo({ client, db, close: async () => {} });
+
+      const accountId = randomUUID();
+      seededAccountIds.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`boundary-${accountId}@test.local`})`;
+
+      // Exactly four rows, each on its own timestamp so ordering is total.
+      const base = Date.UTC(2026, 0, 2, 0, 0, 0);
+      for (let i = 0; i < 4; i++) {
+        await client`
+          INSERT INTO account_audit_log (account_id, actor_type, action, timestamp)
+          VALUES (${accountId}, 'system', 'webhook_endpoint.created', ${new Date(base + i * 1000).toISOString()})`;
+      }
+
+      // A page whose size equals the whole population: full, and the last one.
+      const exact = await repo.list(accountId, { limit: 4 });
+      expect(exact.items, 'the full population came back in one page').toHaveLength(4);
+      expect(
+        exact.nextCursor,
+        'a full final page must not offer a cursor — that cursor leads to an empty page',
+      ).toBeNull();
+
+      // And the same boundary reached by WALKING: two pages of two, the second
+      // exactly full. This is the shape a customer's loop actually takes.
+      const second = await repo.list(accountId, { limit: 2 });
+      expect(second.items, 'first page is full').toHaveLength(2);
+      expect(second.nextCursor, 'with four rows and a limit of two there IS more').not.toBeNull();
+
+      const third = await repo.list(accountId, { limit: 2, cursor: second.nextCursor! });
+      expect(third.items, 'the second page is also exactly full').toHaveLength(2);
+      expect(
+        third.nextCursor,
+        'and it is the last — a cursor here sends the caller to an empty page',
+      ).toBeNull();
+    });
+
     // The case above seeds a fixed set and pages it. This one lets the log GROW
     // mid-walk, which is what an audit log actually does: it is append-only and
     // written on every account action, so a customer exporting theirs is paging
