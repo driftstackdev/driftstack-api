@@ -42,16 +42,48 @@ export interface AvailableUpdate {
    * UI should surface that and leave the running app untouched.
    */
   install: (onProgress?: (fraction: number) => void) => Promise<void>;
+  /**
+   * True when this app CANNOT install the update itself and the customer has to
+   * fetch it manually. macOS is the case: the updater capability is granted to
+   * Windows and Linux only, deliberately, so a minisign-only artifact cannot
+   * replace the bundle and change its code requirement.
+   *
+   * Before this existed, `check()` simply threw on macOS, was swallowed, and
+   * returned null — so a macOS customer was never told a new version existed at
+   * all. Silence is the worst of the three options: install it, tell them where
+   * to get it, or leave them on an old build unaware.
+   */
+  downloadOnly?: boolean;
+  /** Where to send a `downloadOnly` customer. */
+  downloadUrl?: string;
 }
+
+/** The release page — always the newest, so it cannot go stale at the next cut. */
+export const RELEASES_URL = 'https://github.com/driftstackdev/driftstack-api/releases/latest';
+const MANIFEST_URL = `${RELEASES_URL}/download/latest.json`;
 
 export interface UpdaterDeps {
   /** Resolves the available `Update`, or null when up-to-date. */
   check: () => Promise<Update | null>;
   /** Restart the app into the freshly-installed version. */
   relaunch: () => Promise<void>;
+  /**
+   * The running version, for the manifest-only path where the plugin is not
+   * available to report it. Null when it cannot be determined — in which case
+   * there is nothing to compare against and no update is offered.
+   */
+  currentVersion: () => Promise<string | null>;
 }
 
 const defaultDeps: UpdaterDeps = {
+  currentVersion: async () => {
+    try {
+      const { resolveAppVersion } = await import('./app-version');
+      return await resolveAppVersion();
+    } catch {
+      return null;
+    }
+  },
   // Lazy so a node unit test importing this module doesn't pull in the
   // Tauri plugin runtime (which only resolves inside the app).
   check: async () => {
@@ -102,7 +134,10 @@ export async function checkForUpdate(
   try {
     update = await deps.check();
   } catch {
-    return null;
+    // The plugin is not permitted here (macOS) or the check genuinely failed.
+    // Fall back to READING the manifest, which needs no updater capability, so
+    // the customer at least learns a new version exists.
+    return checkManifestOnly(deps);
   }
   if (!update) return null;
 
@@ -178,5 +213,56 @@ export async function isSessionRunning(): Promise<boolean> {
     return all.some((w) => w.label.startsWith('simulator-'));
   } catch {
     return true;
+  }
+}
+
+/**
+ * Version check WITHOUT the updater plugin: fetch the same `latest.json` the
+ * plugin would and compare versions ourselves.
+ *
+ * This is the macOS path. Reading a JSON file needs no updater capability, so
+ * it works where `check()` is not permitted — and it deliberately cannot
+ * install anything, which is the property that makes it safe to run there.
+ *
+ * Best-effort in every direction: offline, a malformed manifest, a missing
+ * version field and an unreadable current version all resolve to null rather
+ * than throwing into the shell. An update check must never be able to break
+ * the app it is checking.
+ */
+async function checkManifestOnly(deps: UpdaterDeps): Promise<AvailableUpdate | null> {
+  try {
+    const currentVersion = await deps.currentVersion();
+    if (currentVersion === null) return null;
+    const res = await fetch(MANIFEST_URL, { redirect: 'follow' });
+    if (!res.ok) return null;
+    const body: unknown = await res.json();
+    const version =
+      typeof body === 'object' &&
+      body !== null &&
+      typeof (body as { version?: unknown }).version === 'string'
+        ? (body as { version: string }).version
+        : null;
+    if (version === null || !isNewerVersion(version, currentVersion)) return null;
+    const notes =
+      typeof body === 'object' &&
+      body !== null &&
+      typeof (body as { notes?: unknown }).notes === 'string'
+        ? (body as { notes: string }).notes
+        : null;
+    return {
+      version,
+      currentVersion,
+      notes,
+      downloadOnly: true,
+      downloadUrl: RELEASES_URL,
+      // Never silently no-op: a caller that ignored downloadOnly and called
+      // install() must fail loudly rather than appear to have updated.
+      install: () =>
+        Promise.reject(
+          new Error('This platform installs updates manually — open the releases page.'),
+        ),
+    };
+  } catch {
+    return null;
   }
 }

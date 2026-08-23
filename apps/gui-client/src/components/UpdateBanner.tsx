@@ -60,14 +60,30 @@ export function UpdateBanner({ update, onDismiss }: UpdateBannerProps): JSX.Elem
           </span>
         ) : (
           <>
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={() => void install()}
-              data-testid="update-install"
-            >
-              {phase === 'error' ? 'Retry' : 'Install & restart'}
-            </button>
+            {update.downloadOnly === true ? (
+              // This platform cannot install for itself (macOS: the updater
+              // capability is Windows/Linux only, by design). Offering
+              // "Install & restart" here would be a button that cannot do what
+              // it says, so send them to the release instead.
+              <a
+                href={update.downloadUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-primary"
+                data-testid="update-download"
+              >
+                Download
+              </a>
+            ) : (
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => void install()}
+                data-testid="update-install"
+              >
+                {phase === 'error' ? 'Retry' : 'Install & restart'}
+              </button>
+            )}
             <button
               type="button"
               className="text-ink-muted hover:text-ink-secondary"
