@@ -7259,3 +7259,45 @@ shape of the check: a comparison needs constant time when one side is **attacker
 other is a **secret the attacker is trying to learn**. Most secret-named comparisons fail one of those
 two tests, which is why a scan for "compares something called a token" would be noise rather than a
 guard — and is presumably why the existing one derives its set the way it does.
+
+## V-1364 — the one upload cap that was not injectable was the one that was never enforced under test
+
+`lib/upload-caps.ts` names three ceilings, and its own header explains the technique its arms use:
+every behavioural arm over these caps "INJECTS a small value (that is the only way to drive a
+rejection without moving gigabytes)". Two of the three have that seam. The per-file one did not:
+
+| cap                          | injectable                           | its rejection      |
+| ---------------------------- | ------------------------------------ | ------------------ |
+| session lifetime bytes/count | `deps.sessionUploadMaxLifetimeBytes` | exercised          |
+| per-account in-flight        | operator-configurable                | exercised          |
+| **per-file decoded size**    | **no — a fixed const**               | **never executed** |
+
+Coverage had `routes/agent-sessions.ts:3206` in the never-executed set, and the reason was structural:
+`UPLOAD_MAX_FILE_BYTES` was read straight from the imported default, so crossing it needed a **64 MiB
+decoded / ~85 MiB base64** body. Nothing was going to write that test, and the Fastify body limit
+above it (96 MiB) is deliberately higher, so the handler is the authoritative enforcer with nothing
+watching it.
+
+Made injectable exactly like its siblings — `uploadMaxFileBytes?: number`, defaulted to
+`UPLOAD_MAX_FILE_BYTES_DEFAULT` in the same destructuring the other two use — and covered with an arm
+that runs at **8 bytes** instead of 85 MiB. The arm asserts both sides: a file exactly at the cap is
+accepted (so it cannot be satisfied by a route that rejects everything), and one byte over is a 400
+that never reaches the node.
+
+It also distinguishes two rejections that look alike from outside: the lifetime caps answer **200**
+with `status: 'error'` because the request was well-formed and the budget was spent, while an
+oversized file is a malformed request and answers **400** before any reservation is taken.
+
+Mutation-proven twice, and the second one is the interesting one:
+
+- `if (bytes.length > UPLOAD_MAX_FILE_BYTES)` disabled → the oversized upload returns **200 and is
+  relayed**, which is what the cap prevents.
+- the destructuring default changed to a literal → `the-documented-upload-caps-are-the-enforced-ones`
+  fails, so the new seam did not weaken the guarantee that the route applies the shared constant.
+
+**A pin I had to move, in the same commit.** That guard pins the literal text
+`UPLOAD_MAX_FILE_BYTES = UPLOAD_MAX_FILE_BYTES_DEFAULT` to prove the route defaults to the shared
+constant. Making the cap injectable moved that default into the destructuring — the exact form its two
+siblings are already pinned in one and two lines above. The pin now reads
+`uploadMaxFileBytes = UPLOAD_MAX_FILE_BYTES_DEFAULT`, same property, same shape as its neighbours, and
+the mutation above proves it still fires.

@@ -131,7 +131,10 @@ describe('the documented upload caps are the enforced ones', () => {
     for (const applied of [
       'uploadMaxAccountInFlightBytes = UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES_DEFAULT',
       'sessionUploadMaxLifetimeBytes = SESSION_UPLOAD_MAX_LIFETIME_BYTES_DEFAULT',
-      'UPLOAD_MAX_FILE_BYTES = UPLOAD_MAX_FILE_BYTES_DEFAULT',
+      // V-1364 — the per-file cap became test-injectable like its two siblings,
+      // so its default now lives in the same destructuring they use rather than
+      // in a standalone const. Same property, same form as the lines above.
+      'uploadMaxFileBytes = UPLOAD_MAX_FILE_BYTES_DEFAULT',
     ])
       expect(route, `the route no longer defaults to the shared constant: ${applied}`).toContain(
         applied,

@@ -742,6 +742,13 @@ export interface AgentSessionsRoutesDeps {
    * deps.sessionUploadMaxLifetimeCount. Default 500 when omitted.
    */
   sessionUploadMaxLifetimeCount?: number;
+  /**
+   * V-1364 — the DECODED size ceiling for a single uploaded file. Its two
+   * siblings above are test-injectable and their rejections are exercised; this
+   * one was a fixed const, so driving its 400 needed an ~85 MiB base64 body and
+   * nothing ever did. Default 64 MiB (the harness cap) when omitted.
+   */
+  uploadMaxFileBytes?: number;
 }
 
 /** Config for the session-create → harness `sessionAssign` dispatch (see
@@ -1729,6 +1736,7 @@ export function registerAgentSessionsRoutes(
     uploadMaxAccountInFlightCount = 4,
     sessionUploadMaxLifetimeBytes = SESSION_UPLOAD_MAX_LIFETIME_BYTES_DEFAULT,
     sessionUploadMaxLifetimeCount = 500,
+    uploadMaxFileBytes = UPLOAD_MAX_FILE_BYTES_DEFAULT,
   } = deps;
 
   /** LK.4 — auto-mint a LiveKit token for the just-created (or
@@ -3015,7 +3023,7 @@ export function registerAgentSessionsRoutes(
   // DISCRIMINATED 200 body in every relay case (ok / unavailable / timeout / error)
   // so the GUI renders expected-inert states without HTTP-error noise. Client-side
   // validation failures (malformed body / empty / >64 MiB) are 400s.
-  const UPLOAD_MAX_FILE_BYTES = UPLOAD_MAX_FILE_BYTES_DEFAULT; // harness cap (W2851)
+  const UPLOAD_MAX_FILE_BYTES = uploadMaxFileBytes; // harness cap (W2851), test-injectable
   // 64 MiB raw → ~85.4 MiB base64; allow that + the JSON envelope with margin.
   // Beyond this Fastify 413s before the handler; the handler is the authoritative
   // 64-MiB-decoded enforcer.

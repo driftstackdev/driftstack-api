@@ -457,6 +457,8 @@ const LIFETIME_ACC = 'acc_upload_lifetime';
 
 interface LifetimeCapDeps {
   fleetControlRegistry?: FleetControlRegistry;
+  /** V-1364 — the DECODED per-file ceiling; see the arm that drives its 400. */
+  uploadMaxFileBytes?: number;
   sessionUploadMaxLifetimeBytes?: number;
   sessionUploadMaxLifetimeCount?: number;
   uploadMaxAccountInFlightBytes?: number;
@@ -552,6 +554,61 @@ describe('POST /v1/agent-sessions/:id/files — per-SESSION LIFETIME cap (indepe
   let fx: DirectFixture;
   afterEach(async () => {
     if (fx) await fx.app.close();
+  });
+
+  // V-1364 — the PER-FILE decoded ceiling, which nothing had ever driven.
+  //
+  // Its two siblings in `lib/upload-caps.ts` are test-injectable and their
+  // rejections are exercised here. This one was read from a fixed const, so the
+  // only way to cross it was an ~85 MiB base64 body — and coverage confirmed the
+  // 400 had never executed. The cap is now injectable the same way, which is the
+  // whole reason this arm can exist at a few bytes instead of tens of megabytes.
+  //
+  // It is a DIFFERENT rejection from the lifetime caps below: those answer 200
+  // with `status: 'error'` because the request was well-formed and the budget was
+  // spent, while an oversized file is a malformed request and answers 400 before
+  // any reservation is taken.
+  it('rejects a single file larger than the PER-FILE decoded cap, as a 400 and without relaying', async () => {
+    const nodeId = 'node-per-file-cap';
+    const relayed: string[] = [];
+    const PER_FILE_CAP = 8; // bytes, decoded
+    fx = await buildDirectApp({
+      fleetControlRegistry: makeUploadRegistry(nodeId, { relayed }),
+      uploadMaxFileBytes: PER_FILE_CAP,
+      sessionUploadMaxLifetimeBytes: HUGE_CONCURRENT_CAP_BYTES,
+      uploadMaxAccountInFlightBytes: HUGE_CONCURRENT_CAP_BYTES,
+      uploadMaxAccountInFlightCount: HUGE_CONCURRENT_CAP_COUNT,
+    });
+    const rec = await fx.sessions.create({ accountId: LIFETIME_ACC, tokenBudgetTotal: 50_000 });
+    await fx.sessions.setNodeId(rec.id, nodeId);
+
+    // Exactly at the cap is allowed — without this the arm below is satisfied by
+    // a route that rejects every upload.
+    const atCap = await postDirectUpload(
+      fx,
+      rec.id,
+      'at-cap.bin',
+      Buffer.alloc(PER_FILE_CAP, 0x41).toString('base64'),
+    );
+    expect(atCap.statusCode, 'a file exactly at the cap is accepted').toBe(200);
+    expect(atCap.json<FilesBody>().status).toBe('ok');
+
+    // One byte over is a client error, not a spent budget.
+    const relayedBefore = relayed.length;
+    const overCap = await postDirectUpload(
+      fx,
+      rec.id,
+      'over-cap.bin',
+      Buffer.alloc(PER_FILE_CAP + 1, 0x41).toString('base64'),
+    );
+    expect(overCap.statusCode, 'one byte over the per-file cap is a 400').toBe(400);
+    // This harness registers the routes directly without the RFC 7807 error
+    // handler, so the refusal arrives in Fastify's default shape rather than as
+    // `detail`. Asserted on the serialised body so the arm is about the message
+    // the caller receives, not about which envelope this fixture happens to use.
+    expect(overCap.body, 'and the refusal names the ceiling it applied').toMatch(/too large/i);
+    expect(relayed.length, 'an oversized file must never reach the node').toBe(relayedBefore);
+    expect(relayed).not.toContain('over-cap.bin');
   });
 
   it('rejects an upload that would cross the LIFETIME BYTE cap even though every upload is SEQUENTIAL and never approaches the concurrent cap', async () => {
