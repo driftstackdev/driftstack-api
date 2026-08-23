@@ -906,6 +906,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       'ratelimit-remaining',
       'ratelimit-reset',
       'retry-after',
+      // V-1371 — the report-never-reject header. `unknown-request-fields.ts` sets it
+      // on customer-facing writes and apps/docs api/versioning tells integrators to
+      // log it, because "its presence means a field you sent was ignored — usually a
+      // typo". A response header absent from this list is unreadable from JS on
+      // another origin, and the dashboard IS another origin, so the whole mechanism
+      // was invisible to every browser caller. Nothing new is disclosed by exposing
+      // it: the value is the caller's own top-level keys, echoed back, bounded and
+      // sanitised at the send site, and never set for an anonymous caller.
+      'x-driftstack-unknown-fields',
     ],
     // Cache preflight responses for 10 minutes — reduces CORS preflight
     // round-trips for the SDK + dashboard without delaying policy

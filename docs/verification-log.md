@@ -7592,3 +7592,44 @@ the invariant _and_ the behavioural arm; unwiring the **rotate** reporter reds o
 arm. It is wired here because it is a customer-facing write, not because anything structural
 demanded it. A hand-validated body is invisible to that derivation, and extending it is a change to
 569 lines of load-bearing machinery that this batch is not the right place for.
+
+## V-1371 — the header the docs tell customers to read, that no browser could read
+
+`unknown-request-fields.ts` sets `x-driftstack-unknown-fields` on customer-facing writes, and
+`apps/docs/src/pages/api/versioning.md` instructs integrators plainly:
+
+> Log `x-driftstack-unknown-fields` in non-production. Its presence means a field you sent was
+> ignored — usually a typo, occasionally a field removed on our side.
+
+The page even walks through the example: `PATCH /v1/account/me` with a mistyped `timezonee` returns
+200, applies the `name` change, and names the dropped key back.
+
+**It was not on `Access-Control-Expose-Headers`.** A response header absent from that list is
+unreadable from JavaScript on a different origin — `headers.get()` returns null — and the dashboard
+at `app.driftstack.dev` is a different origin from `api.driftstack.dev`. So the entire
+report-never-reject mechanism, ~33 call sites of it, was invisible to every browser caller including
+our own dashboard. Server-side SDK callers were never subject to CORS and could always read it, which
+is why nothing looked broken.
+
+Measured, not inferred: a cross-origin `PATCH /v1/account/me` carrying `timezonee` answers 200 with
+`x-driftstack-unknown-fields: timezonee` on the wire and an expose list of
+`x-request-id, idempotent-replayed, x-ratelimit-*, retry-after` — the one header the docs point at,
+missing.
+
+One line to fix, and nothing new is disclosed by it: the value is the caller's **own** top-level keys
+echoed back, bounded and sanitised at the send site, and never set for an anonymous caller — that
+last part is why `status-subscribe` is exempt from the mechanism in the first place. Exposure changes
+who can _read_ what was already on the wire, not who receives it.
+
+**Two arms, because the obvious one is not enough.** Asserting the allowlist on `/version` passes
+while the write that produces the header answers without it, so the second arm drives the documented
+example end to end: the header is sent, carries `timezonee`, and is exposed on that same response.
+Mutation confirms the split — removing the entry reds both arms and the source pin; leaving the entry
+and deleting the `reply.header` call reds **only** the second.
+
+⚠️ **A second gap in the same header, not fixed here.** It is sent on ~33 routes and declared in
+`packages/sdk-python/openapi.json` **zero** times, which is precisely what V-944's guard exists to
+catch. That guard misses it: `sentHeaders()` matches `.header('literal')` only, and this is the one
+header in the server set via a constant — `reply.header(UNKNOWN_FIELDS_HEADER, …)`. Measured across
+`apps/server/src`: 19 header names visible to the guard, exactly 1 invisible, and it is this one.
+Next batch.

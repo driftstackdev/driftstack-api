@@ -124,7 +124,12 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
     expect(body).toMatch(/'ratelimit-limit',/);
     expect(body).toMatch(/'ratelimit-remaining',/);
     expect(body).toMatch(/'ratelimit-reset',/);
-    expect(body).toMatch(/'retry-after',\s*\n?\s*\],/);
+    expect(body).toMatch(/'retry-after',/);
+    // V-1371 — the report-never-reject header joins the exposed set, and it is the
+    // LAST entry, so this pin also holds the array's close. A header the server sends
+    // but does not expose is unreadable from JS on another origin; apps/docs tells
+    // integrators to log this one, and the dashboard is another origin.
+    expect(body).toMatch(/'x-driftstack-unknown-fields',\s*\n?\s*\],/);
     expect(body).toMatch(/maxAge: 600,/);
   });
 

@@ -96,6 +96,42 @@ describe('V-664.B CORS — actual-request response', () => {
     expect(exposed.toLowerCase()).toContain('retry-after');
   });
 
+  // V-1371 — the unknown-fields header is set on ~33 customer-facing writes and
+  // apps/docs tells integrators to "Log `x-driftstack-unknown-fields` in
+  // non-production. Its presence means a field you sent was ignored". A response
+  // header that is not on Access-Control-Expose-Headers is unreadable from JS on a
+  // different origin, and the dashboard is a different origin from the API.
+  it('CRITICAL exposedHeaders includes x-driftstack-unknown-fields. Without it the whole report-never-reject mechanism is invisible to every browser caller — including our own dashboard — while the docs instruct customers to read it.', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/version',
+      headers: { origin: 'http://localhost:5173' },
+    });
+    const exposed = (res.headers['access-control-expose-headers'] ?? '').toString().toLowerCase();
+    expect(exposed, 'the header a browser cannot read is a header we did not send').toContain(
+      'x-driftstack-unknown-fields',
+    );
+  });
+
+  it('CRITICAL the header is actually SENT on a cross-origin write, and exposed on that same response. Asserting the allowlist on /version alone would pass while the write that produces the header answered without it.', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/account/me',
+      headers: { authorization: `Bearer ${fx.plaintext}`, origin: 'http://localhost:5173' },
+      payload: { name: 'Updated', timezonee: 'Europe/Amsterdam' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['x-driftstack-unknown-fields'], 'the ignored key is named back').toBe(
+      'timezonee',
+    );
+    expect(
+      (res.headers['access-control-expose-headers'] ?? '').toString().toLowerCase(),
+      'and the browser is allowed to read it on this very response',
+    ).toContain('x-driftstack-unknown-fields');
+  });
+
   it('rejects a non-allowlisted origin in production posture (permissiveCors=false default)', async () => {
     // buildTestApp uses permissiveCors=true; for prod posture we'd need
     // to flip it. Pin the dev posture explicitly here so a future change
