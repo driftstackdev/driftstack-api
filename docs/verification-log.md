@@ -6790,3 +6790,35 @@ the https arm stays green. Source restored byte-identical.
 its shape would have been quicker, and the failure mode is worth noting: an assertion against a
 property that does not exist fails loudly here, but the same mistake inside a `.some()` or an
 optional chain would have passed silently.
+
+## V-1349 — same shape, opposite answers: when a service-layer guard is reachable and when it is not
+
+V-1348 covered a service-layer check that the route schema also enforces. This is the same shape
+three sites over, and it resolves the other way — which is the point of writing both down.
+
+`routes/account-me.ts:532`, `:551` and `:573` sit in `buildVpnSecretAndConfig` and refuse a proxy
+whose scheme and config block disagree: an `openvpn` scheme with no `openvpn` block, the same for
+`wireguard`, and a VPN block supplied alongside `socks5`/`http`. All three are dark.
+
+**They are shadowed, and by design.** The helper has exactly two callers — the proxy create
+(`:622`) and the proxy update (`:693`) — and both parse first:
+
+- `AccountProxyInputSchema` is a discriminated union whose `openvpn` variant REQUIRES the block, each
+  arm `.strict()`, so a stray block on `socks5` is a parse error.
+- `AccountProxyUpdateSchema` is the same, plus a fifth "scheme unchanged" arm whose own comment spells
+  the intent out: `scheme` must be the omitted key so that a request like `{ scheme: 'wireguard' }`
+  with no matching block "fails closed against THIS branch too, instead of silently falling through".
+
+So the schema refuses every input that could reach these three, and they are the belt behind that
+brace. No arms written; writing them would have meant asserting a 400 that a different layer produces.
+
+**Why V-1348 went the other way, stated because the two look identical from a coverage report.**
+`services/sessions.ts:722` is also a service-layer check behind a route schema — but its second
+caller is `services/agent-executor.ts:378`, which passes a model-produced `intent.url` and never
+touches the route schema at all. One extra caller is the whole difference between defence in depth
+that cannot fire and the only check standing between a prompt injection and the driver.
+
+The reusable step is cheap: **before writing an arm for a dark guard, list its callers.** If every
+caller validates first, the guard is unreachable and the arm would measure the validator. If one
+caller does not, that caller is the reason the guard exists — and the arm belongs there, driving the
+service directly rather than through the route.
