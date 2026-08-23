@@ -607,6 +607,35 @@ describe('V-553.B-20 ApiKeysService.revoke', () => {
     expect(auditCalls[0]?.targetResourceId).toBe('key_k_x');
   });
 
+  // V-1385 — a repo-contract invariant, and the only one of its kind whose violation is
+  // SILENT. `revokeApiKeyAtomic` returning a revoked outcome whose row has no `revokedAt`
+  // is impossible from the real repo, but the value it guards feeds
+  // `revoked_at: revokedAt.toISOString()` on the customer-facing `api_key.revoked`
+  // webhook — inside a `try { … } catch {}` that swallows. Without the guard a null would
+  // throw there and be eaten, so the revoke would still succeed and the customer's
+  // integration would simply never be told the key was revoked. The guard turns a
+  // security-relevant notification going missing into a loud failure.
+  it('CRITICAL a revoked row with no revokedAt is REFUSED rather than degrading into a missing webhook. The webhook emit is wrapped in a swallowing catch, so a null here does not surface as an error — it surfaces as api_key.revoked never arriving, which is the kind of failure nobody reports.', async () => {
+    const { repo } = makeRepo([makeKey({ id: 'k_x', accountId: 'acc_1' })]);
+    const lying: ApiKeysRepo = {
+      ...repo,
+      revokeApiKeyAtomic: (input) =>
+        Promise.resolve({
+          kind: 'revoked',
+          key: { ...makeKey({ id: input.id, accountId: 'acc_1' }), revokedAt: null },
+        }),
+    };
+    const { webhooks, calls: hookCalls } = makeWebhooks();
+    const { audit, calls: auditCalls } = makeAudit();
+    const svc = new ApiKeysService(lying, null, webhooks, null, audit);
+
+    await expect(svc.revoke(ctxWith(['account_owner']), 'k_x')).rejects.toThrow(
+      /revoked row without revokedAt/,
+    );
+    expect(hookCalls, 'and nothing was emitted on the way out').toHaveLength(0);
+    expect(auditCalls, 'nor written to the audit log').toHaveLength(0);
+  });
+
   it('emits cache invalidation, webhook, and audit exactly once across concurrent first revokes', async () => {
     const { repo, state } = makeRepo([makeKey({ id: 'k_x', accountId: 'acc_1' })]);
     const { webhooks, calls: hookCalls } = makeWebhooks();

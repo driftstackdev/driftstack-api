@@ -8150,3 +8150,31 @@ runs after them reported 9 passed, which meant nothing. The `assert` caught both
 actually holds: stop matching on text. Mutate **by line index**, read the line back, and assert the
 substring is present before rewriting it. That is what produced the two proofs above on the first
 attempt.
+
+## V-1385 — the repo-contract invariant whose violation is silent
+
+What remains in the never-executed set, once the `if (!ctx)` narrowing idiom and the
+behind-a-zod-schema second layers are set aside, is mostly **repo-contract invariants**: "the
+repository returned a combination it cannot return". `api-keys.ts:493`, `sessions.ts:1077/1209/1286`,
+`incidents.ts:237` and `audit-archive.ts:448` are all of that shape, and covering them means handing
+the service a lying double.
+
+Most are not worth it — the violation is a repo bug and it fails loudly either way. **This one is
+different**, and the difference is why it is the one that got an arm.
+
+`revokeApiKeyAtomic` returning a revoked outcome whose row carries no `revokedAt` is impossible from
+the real repo. The value it guards feeds
+`revoked_at: revokedAt.toISOString()` on the customer-facing `api_key.revoked` webhook — **inside a
+`try { … } catch {}` that swallows**, deliberately, so a webhook failure cannot break revoke
+correctness. Without the guard, a null would throw exactly there and be eaten. Measured by mutation:
+`svc.revoke()` then **resolves `true`**. The key is revoked, the caller is told it worked, and the
+customer's integration is never told the key was revoked at all.
+
+That is the failure nobody reports, and the guard converts it into a loud one. The arm hands the
+service a repo whose `revokeApiKeyAtomic` returns exactly that impossible row, and asserts both that
+the call rejects and that **nothing** was emitted or audited on the way out — so it cannot pass
+against an implementation that throws after already firing the webhook.
+
+Recorded rather than pursued: the sibling invariants above. Their violations surface as an exception
+on the next line rather than as a silently dropped notification, so an arm for each would pin a
+type-narrowing convenience rather than a customer-visible property.
