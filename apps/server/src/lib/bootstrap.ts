@@ -213,6 +213,10 @@ import { DrizzleProfileSnapshotsRepo } from '../db/profile-snapshots-repo.js';
 import type { AccountTier } from '@driftstack/api-types';
 import { BillingService, type BillingProvider } from '../services/billing.js';
 import { CryptoOrdersService } from '../services/crypto-orders.js';
+import {
+  registerCryptoOrderExpirySweepJob,
+  enqueueNextCryptoOrderExpirySweep,
+} from '../services/crypto-order-expiry-sweep-job.js';
 import { CryptoTierActivationService } from '../services/crypto-tier-activation.js';
 import { DrizzleCryptoOrdersRepo } from '../db/crypto-orders-repo.js';
 import {
@@ -1702,6 +1706,41 @@ export async function createProductionDeps(
     logger, // chain survival: a swallowed tick failure is logged, then re-armed
   });
   await enqueueNextCryptoEntitlementReconcile({ scheduledJobs: scheduledJobsService });
+
+  // Expire abandoned pending crypto orders. `sweepExpiredOrders` has always
+  // worked; nothing ever RAN it — its only caller was the manual admin sweep
+  // route — so an order abandoned before payment sat `pending` on the
+  // customer's billing page forever, with no payment behind it and no route to
+  // a terminal state. Production carried exactly such a row.
+  //
+  // Wired UNCONDITIONALLY, and its own service instance for the same reason the
+  // reconcile sweeper above builds its own repo: the NOWPAYMENTS block far
+  // below constructs one only when the IPN intake path is configured. An
+  // abandoned order can exist from a deploy where it WAS configured and must
+  // still expire in one where it currently is not — and a sweep behind a config
+  // gate fails silently, which is the whole shape
+  // retention-sweeps-are-unconditional-invariant exists to reject. With no
+  // orders the tick is a no-op.
+  const cryptoOrderSweepService = new CryptoOrdersService({
+    repo: new DrizzleCryptoOrdersRepo(dbHandle),
+    webhooks: {
+      enqueueEvent: (accountId, eventType, data) =>
+        webhooksService.enqueueEvent(accountId, eventType, data),
+    },
+    tierActivator: new CryptoTierActivationService(
+      stripeWebhooksRepo,
+      logger,
+      accountLifecycleService,
+      authCache,
+    ),
+    logger,
+  });
+  registerCryptoOrderExpirySweepJob({
+    scheduledJobs: scheduledJobsService,
+    service: cryptoOrderSweepService,
+    logger, // chain survival: a swallowed tick failure is logged, then re-armed
+  });
+  await enqueueNextCryptoOrderExpirySweep({ scheduledJobs: scheduledJobsService });
 
   // V-759 — privacy-policy §9 retention enforcement. ANONYMISES rather than deletes:
   // usage_records cascades from sessions and §9 requires billing data be kept 7 years, and

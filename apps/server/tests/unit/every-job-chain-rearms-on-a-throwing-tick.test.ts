@@ -91,12 +91,14 @@ describe('a recurring sweep re-arms even when its tick throws', () => {
   const helpers = registerHelpers();
 
   it('CRITICAL the scan found the helpers, so a green means checked rather than nothing found', () => {
-    // Floor below the measured 12. Without this, a rename of the `register*Job`
+    // Floor below the measured 13. Without this, a rename of the `register*Job`
     // convention empties the population and every check below passes vacuously.
+    // 12 → 13 with registerCryptoOrderExpirySweepJob (the abandoned-pending-
+    // order sweep, which had no scheduler at all until 2026-08-23).
     expect(
       helpers.map((h) => h.name).sort(),
       'the register*Job scan came back short — the checks below cover only what it found',
-    ).toHaveLength(12);
+    ).toHaveLength(13);
   });
 
   it('the detector detects — it must flag the broken shape and clear both working ones', () => {
