@@ -97,6 +97,45 @@ func TestLivePaginatedEnvelopeDecodes(t *testing.T) {
 // A rejected key must surface as the SDK's typed error. Callers are told to
 // match on it; if a 401 arrived as a generic transport failure instead, every
 // documented recovery path would miss it.
+// The listing customers reach for first. Its envelope is built in its own route
+// rather than shared with sessions, so the sessions arm proves nothing about it.
+// A renamed field decodes to the zero value in Go without an error, so the
+// emptiness check is the assertion — "err == nil" would pass on an empty body.
+func TestLiveProfilesPageDecodes(t *testing.T) {
+	baseURL, apiKey := liveTarget(t)
+	client := New(apiKey, WithBaseURL(baseURL))
+	defer client.Close()
+
+	page, err := client.Profiles.List(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Profiles.List against the real server: %v", err)
+	}
+	if page.Data == nil {
+		t.Fatal("profile rows decoded to nil — the `data` tag no longer matches the server")
+	}
+}
+
+// The one response whose envelope is NOT the paginated one: rows under
+// `buckets`, with from_date/to_date instead of a cursor. It is the single
+// endpoint where applying the pagination shape would be wrong, and Go says
+// nothing when a tag stops matching — the fields simply stay zero.
+func TestLiveUsageSeriesDecodes(t *testing.T) {
+	baseURL, apiKey := liveTarget(t)
+	client := New(apiKey, WithBaseURL(baseURL))
+	defer client.Close()
+
+	series, err := client.Usage.Series(context.Background(), 7)
+	if err != nil {
+		t.Fatalf("Usage.Series against the real server: %v", err)
+	}
+	if series.Buckets == nil {
+		t.Fatal("buckets decoded to nil — the `buckets` tag no longer matches the server")
+	}
+	if series.FromDate == "" || series.ToDate == "" {
+		t.Fatal("the series window decoded empty — from_date/to_date no longer match")
+	}
+}
+
 func TestLiveRejectedKeyIsATypedAuthError(t *testing.T) {
 	baseURL, _ := liveTarget(t)
 	client := New("ds_live_definitely_not_a_real_key", WithBaseURL(baseURL))

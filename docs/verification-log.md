@@ -5559,3 +5559,55 @@ name. Grepping `routes/usage*.ts` finds nothing and the file does not exist.
 
 Still not round-tripped through the published SDK: `webhooks`, `recipes`, and the profiles/webhooks
 write paths. Named rather than left implied.
+
+## V-1315 — the Python live-contract header overstated how much of that SDK validates: 48 of 276
+
+Extending V-1314 to the other two published SDKs surfaced a documentation defect first.
+
+`test_live_contract.py`'s header justified the file's existence on the claim that every resource
+method funnels its 2xx body through `parse_model`, so a shape mismatch is an exception in the
+customer's process rather than a silent degradation. Measured twice — once with a regex sweep, once
+with Python's `ast` module over `src/driftstack/resources`, both agreeing exactly — **48 of 276
+public resource methods parse into a model. The other 228 return the decoded JSON as an unvalidated
+`dict[str, Any]`.**
+
+The file's own first arm shows it: `test_authenticates_against_an_authed_route` calls
+`client.account.me()` and asserts `isinstance(me, dict)`, because that method does not parse. The
+arms were right; the header describing them was not.
+
+The consequence runs the opposite way from how the header read. For 82% of the surface — including
+`account.me`, `profiles.list` and `usage.series` — drift is exactly as silent in Python as in
+TypeScript: the caller gets a dict without the key it expected and finds out at their own access
+site. An engineer reading the old text would believe pydantic was standing behind calls it never
+touches. Header rewritten with the measurement, and it now says which kind each arm is: where a
+method parses, "no exception" is itself the assertion; where it does not, only an explicit field
+check notices.
+
+**Coverage, the reason for looking.** Both live contracts reached the same three resources as the
+TypeScript one did before V-1314 — `account.me`, `archetypes.list`, `sessions.list` — so neither
+reached `profiles` or the one endpoint whose envelope genuinely differs. Two arms added to each:
+
+- `profiles.list` — its own route builds its own envelope; the sessions arm proves nothing about it.
+- `usage.series` — rows under `buckets`, `from_date`/`to_date` instead of a cursor.
+
+Go needs these for a reason of its own: `encoding/json` leaves a field whose tag stopped matching at
+its zero value and returns **no error**, so `err == nil` passes on a body that filled in nothing.
+Both Go arms assert emptiness, matching the pattern the existing arms already established.
+
+All four proven by mutating the route that builds the response — `buckets:` → `data:` and
+`data:` → `items:` — with the markers printed before the run. Each failed exactly its own arm in
+both languages (`TestLiveProfilesPageDecodes`, `TestLiveUsageSeriesDecodes`,
+`test_profiles_page_envelope`, `test_usage_series_is_the_envelope_that_differs`); every other arm
+stayed green; both route files restored byte-identical from snapshots.
+
+**The harness floors were exact and were kept exact.** Each harness asserts its live suite ran
+rather than skipped, and floors the passing count — the Go one counting `--- PASS`/`--- SKIP` per
+test because `go test` prints PASS and exits 0 for a package whose tests all skipped. Both floors
+read 4 against 4 actual, so both moved to 6. A floor left at 4 would have gone on passing while two
+of the six silently stopped running.
+
+That apparatus was checked before being extended and needed no repair: three harnesses exist, one
+per SDK, and both language-side floors were exact. No finding there.
+
+Not round-tripped through any published SDK: `webhooks`, `recipes`, and the profiles/webhooks write
+paths. Named rather than left implied.

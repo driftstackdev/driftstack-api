@@ -5,13 +5,23 @@ transport. Not one has ever opened a socket to the API this client wraps, so
 every assertion here has been about what the SDK *sends* — never about whether
 the server agrees.
 
-That gap matters more for this SDK than for the TypeScript one, because this
-client PARSES. Every resource method funnels its 2xx body through
-``parse_model``, which runs pydantic validation and re-raises a mismatch as
-``TransportError``. A server that returns a field this package's models do not
-describe is therefore not a silent degradation here — it is an exception in the
-customer's process, on a call that succeeded. Mocked tests cannot reach that
-path at all: they feed the parser exactly the body the test author wrote.
+Part of this SDK PARSES, and that part fails loudly: ``parse_model`` runs
+pydantic validation and re-raises a mismatch as ``TransportError``, so a server
+sending a shape the package's models do not describe raises in the customer's
+process on a call that succeeded. Mocked tests cannot reach that path at all —
+they feed the parser exactly the body the test author wrote.
+
+But it is a minority of the surface, and this header used to claim otherwise.
+Measured with ``ast`` over ``src/driftstack/resources``: 48 of 276 public
+resource methods parse into a model. The other 228 return the decoded JSON as
+``dict[str, Any]``, unvalidated — including ``account.me``, ``profiles.list``
+and ``usage.series``, three of the endpoints exercised below. For those, drift
+is exactly as silent as it is in the TypeScript client: the caller gets a dict
+without the key it expected, and finds out at their own access site.
+
+That is an argument for MORE assertions here rather than fewer. Where a method
+parses, "no exception" is itself the assertion; where it does not, only an
+explicit check on the field notices. The arms below say which kind they are.
 
 Skipped unless ``DS_LIVE_BASE_URL`` and ``DS_LIVE_API_KEY`` are set, so
 ``pytest`` stays runnable on its own. The server-side harness in
@@ -75,6 +85,38 @@ def test_paginated_envelope_parses(client) -> None:
     assert isinstance(page.has_more, bool)
     # Declared `str | None`; a server sending anything else fails validation.
     assert page.next_cursor is None or isinstance(page.next_cursor, str)
+
+
+def test_profiles_page_envelope(client) -> None:
+    """UNVALIDATED path: ``profiles.list`` returns the raw dict.
+
+    The listing customers reach for first, and its envelope is built in its own
+    route rather than shared with sessions — so the arm above proves nothing
+    about it. No model stands behind this one, which is why every key is
+    asserted by hand: a server keying the rows under ``items`` would hand back a
+    dict this SDK reports no error about at all.
+    """
+    page = client.profiles.list()
+    assert isinstance(page, dict)
+    assert isinstance(page.get("data"), list), "profile rows arrive under `data`"
+    assert isinstance(page.get("has_more"), bool), "the envelope carries has_more"
+    assert "next_cursor" in page, "the envelope carries a cursor field"
+
+
+def test_usage_series_is_the_envelope_that_differs(client) -> None:
+    """UNVALIDATED path, and the one response whose shape is not the others'.
+
+    Every other listing here keys its rows under ``data``. This one uses
+    ``buckets`` and carries ``from_date``/``to_date`` instead of a cursor, so it
+    is the single endpoint where applying the pagination envelope would be
+    wrong — and with no model behind it, nothing but this assertion would say so.
+    """
+    series = client.usage.series(days=7)
+    assert isinstance(series, dict)
+    assert isinstance(series.get("buckets"), list), "daily rows arrive under `buckets`"
+    assert series.get("from_date"), "the window start is surfaced"
+    assert series.get("to_date"), "the window end is surfaced"
+    assert "has_more" not in series, "this endpoint is NOT the paginated envelope"
 
 
 def test_a_rejected_key_raises_a_typed_auth_error(client) -> None:
