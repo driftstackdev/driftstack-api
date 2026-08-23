@@ -165,6 +165,20 @@ const overlap = (a: string[], b: string[]): number =>
   a.filter((x) => b.includes(x)).length / new Set([...a, ...b]).size;
 
 describe('the database CHECK enumerations agree with the code', () => {
+  // V-1328 — every arm below calls `guardUnreachable()`, which warns to the
+  // console and returns. A console warning is not a test result: with Postgres
+  // unreachable this file reported all of its comparisons green having made
+  // none of them, in CI as readily as locally. Verified by pointing DATABASE_URL
+  // at a dead port with CI set — the file passed.
+  //
+  // Locally an absent database is a legitimate skip. In CI it is a broken job,
+  // and a broken job that reports success is the failure this whole series keeps
+  // re-deriving.
+  it('CRITICAL the database was reachable, so a green run here is not "no database". Every comparison below returns early when the connection failed, so without this arm an unreachable Postgres reports ten enumerations verified having read neither side.', () => {
+    if (!process.env.CI && !dbReachable) return;
+    expect(dbReachable, `could not reach ${DB_URL} — no enumeration below was compared`).toBe(true);
+  });
+
   it('CRITICAL the catalog-race retry is NARROW — it must not swallow a real failure', () => {
     // The retry above exists for one transient condition and must not become a
     // general "try again" that hides a genuine error. Asserted in both

@@ -94,6 +94,18 @@ afterAll(async () => {
 describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
   '/v1/internal/atlas-priority/* (Drizzle-backed end-to-end)',
   () => {
+    // V-1328 — every arm here opens with `if (!app) return;`, and `app` stays
+    // null whenever the probe or the table check failed. That made an
+    // unreachable database indistinguishable from a passing run, in CI too:
+    // pointed at a dead port with CI set, this file reported green.
+    it('CRITICAL the app was built against a real database, so a green run here is not "no database". Every arm below returns early when it was not.', () => {
+      if (!process.env.CI && app === null) return;
+      expect(
+        app,
+        `could not build against ${DB_URL} — no arm below exercised anything`,
+      ).not.toBeNull();
+    });
+
     it('rejects missing Authorization with 401', async () => {
       if (!app) return;
       const res = await app.inject({

@@ -6058,3 +6058,42 @@ unnoticed.
 
 All three published SDKs now round-trip a write against a real server. Still not round-tripped
 anywhere: recipes' real envelope, which needs a deployment with the feature enabled.
+
+## V-1328 — fifteen tests passing against a database that does not exist
+
+A DB-backed suite failed during a full run with "postgres reachable and the table present: expected
+false to be true", then passed alone. Contention, not an outage — but it raised the question the
+flake only hints at: **when the probe fails, do the other DB suites say so, or do they go quiet?**
+Because the same pressure that failed one file loudly would make the quiet ones pass having verified
+nothing.
+
+172 test files open a Postgres probe with `connect_timeout: 2`; the server allows 100 connections.
+
+**The classification took four attempts, and the first three were wrong.** Searching for
+`expect(dbReachable)` said 62 files were unguarded. Adding the `process.env.CI` throw idiom said 61.
+Matching on arm titles mentioning reachability said 19. Every candidate checked by hand at each stage
+turned out to be protected — by a differently-named variable, by a helper called `unusable()` that
+throws in CI, by an arm whose title says "vacuously" instead. Only a filter requiring the absence of
+BOTH idioms got to a set small enough to read, and that set was **2**.
+
+That is the fourth time today a single-pattern sweep over-reported a gap in this repo, and the
+lesson has stopped being incidental: **this codebase expresses the same protection in many idioms, so
+any grep for "files lacking X" is an upper bound, never a finding.** The finding is whatever survives
+reading them.
+
+**The two that survived were real, and proven rather than argued.** Pointing `DATABASE_URL` at a dead
+port with `CI` set, then running both files: **15 tests passed, 0 failed.** Against a database that
+does not exist, in the mode where an absent database is a broken job rather than a legitimate skip.
+
+- `database-check-enums-agree-with-the-code` routes every arm through `guardUnreachable()`, which
+  emits `console.warn` and returns. A console warning is not a test result. The file already reasons
+  about vacuity for its PARSE — one arm exists because "a parse that recovered no values would report
+  all ten enumerations verified having read none of them" — and had the identical hole one level
+  down, at the connection.
+- `atlas-priority-events-end-to-end` opens every arm with `if (!app) return;`, and `app` stays null
+  when the probe or the table check fails.
+
+One arm each, in the idiom the other 170 already use: quiet locally where an absent database is
+legitimate, loud in CI where it is not. After: the healthy run is 17 green, and the dead-port CI run
+fails exactly the two new arms — the same 15 that used to pass in silence now report nothing new,
+which is correct, because they still cannot run.
