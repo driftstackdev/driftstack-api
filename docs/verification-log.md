@@ -5994,3 +5994,34 @@ the class four different ways. The five unread candidates are named here rather 
 `docs-internal-postmark-approval-request-content-parity`, `legal-refunds-doc-parity`,
 `gui-flag-gated-suites-track-their-flag`, `v2-12-error-kind-catalog-parity`,
 `pricing-comparison-doc-parity`, `webhook-backoff-schedule-agrees-everywhere`.
+
+## V-1326 — the write paths the live SDK suite never reached, named twice and now closed
+
+V-1314 and V-1316 both ended by naming the same remaining gap: the profiles and webhooks WRITE paths
+were not round-tripped through the published SDK. Naming a gap twice and leaving it is how it becomes
+permanent.
+
+The suite had one write arm, `apiKeys.create`. Two more:
+
+- **`profiles.create`** — the resource customers create first, and its create response is assembled
+  in its own route, so the api-keys arm proves nothing about it. Creates, checks the name it sent
+  came back, then finds the row through `profiles.list`.
+- **`webhooks.create`** — this one carries the same class of field as the api-key plaintext. The
+  signing secret is returned ONCE and is not retrievable afterwards, so an SDK that dropped or
+  renamed it hands the customer an endpoint whose deliveries they can never verify, with no retry
+  that recovers it. The endpoint is created successfully either way, which is what makes the loss
+  silent: nothing else in the system reports it.
+
+Both mutation-proven against the route that builds the response, markers printed first:
+
+| mutation                                                                        | failing assertion                       |
+| ------------------------------------------------------------------------------- | --------------------------------------- |
+| `webhooks.ts:150` — the create response drops `secret: created.plaintextSecret` | the one-time signing secret is surfaced |
+| `profiles.ts:174` — the create echoes `'mutated'` instead of the name sent      | the name the caller sent came back      |
+
+Each failed exactly one arm, the other eleven green, both routes restored byte-identical.
+
+Live SDK coverage is now: account, api-keys (read + write), archetypes, sessions, profiles (read +
+write), usage (both envelope shapes), webhooks (read + write), and the disabled-feature typed error.
+Still not round-tripped: recipes' real envelope, which needs a deployment with the feature enabled —
+the harness registers the disabled stub, and that stub's 503 is itself covered.

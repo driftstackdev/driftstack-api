@@ -121,6 +121,36 @@ describe('the published SDK works against the real server', () => {
     expect(list, 'nor a cursor').not.toHaveProperty('next_cursor');
   });
 
+  it('CRITICAL round-trips a PROFILE write and reads it back through the SDK that made it. Profiles are the resource customers create first, and its create response is built by its own route — the api-keys write above proves nothing about this one.', async () => {
+    const created = await sdk.profiles.create({ name: 'sdk-write-probe' });
+    expect(created.id, 'the created profile has an id').toBeTruthy();
+    expect(created.name, 'and the name the caller sent came back').toBe('sdk-write-probe');
+
+    const page = await sdk.profiles.list();
+    expect(
+      page.data.some((p) => p.id === created.id),
+      'the profile the SDK created is visible through the SDK that listed it',
+    ).toBe(true);
+  });
+
+  it('CRITICAL a webhook create surfaces the signing secret, which is returned ONCE and never again. This is the webhook analogue of the api-key plaintext: an SDK that dropped or renamed it hands the customer an endpoint whose deliveries they can never verify, and no retry recovers it because the server does not store it back. The endpoint is created successfully either way, so nothing else in the system would report the loss.', async () => {
+    const created = await sdk.webhooks.create({
+      url: 'https://hooks.test.local/sdk-write-probe',
+      events: ['session.completed'],
+    });
+    expect(created.id, 'the created endpoint has an id').toBeTruthy();
+    expect(typeof created.secret, 'the one-time signing secret is surfaced').toBe('string');
+    expect(created.secret.length, 'and it is a real secret, not an empty string').toBeGreaterThan(
+      20,
+    );
+
+    const list = await sdk.webhooks.list();
+    expect(
+      list.data.some((w) => w.id === created.id),
+      'the endpoint the SDK created is visible through the SDK that listed it',
+    ).toBe(true);
+  });
+
   it('CRITICAL round-trips a WRITE through the SDK and reads it back. A create the server accepts but the SDK cannot parse looks identical to a failure from the caller.', async () => {
     const created = await sdk.apiKeys.create({ name: 'sdk-integration-probe', scopes: ['read'] });
     expect(created.id, 'the created key has an id').toBeTruthy();
