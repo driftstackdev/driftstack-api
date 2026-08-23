@@ -75,8 +75,10 @@ const SessionsView = lazy(async () => ({
 const SettingsView = lazy(async () => ({
   default: (await import('./views/SettingsView')).SettingsView,
 }));
-const BillingView = lazy(async () => ({
-  default: (await import('./views/BillingView')).BillingView,
+// Billing moved to the web dashboard only — the desktop hub is gone, and this
+// destination now just points at the one surface that owns billing.
+const BillingMovedView = lazy(async () => ({
+  default: (await import('./views/BillingMovedView')).BillingMovedView,
 }));
 const ConnectivityView = lazy(async () => ({
   default: (await import('./views/ConnectivityView')).ConnectivityView,
@@ -900,7 +902,7 @@ function CurrentView({
     case 'team':
       return <TeamView onGoToSettings={() => onNavigate({ kind: 'settings' })} />;
     case 'billing':
-      return <BillingView />;
+      return <BillingMovedView />;
   }
 }
 
