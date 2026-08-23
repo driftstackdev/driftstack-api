@@ -160,6 +160,39 @@ describe('X-Driftstack-Account team-RBAC header end-to-end', () => {
     ).toContain('Owner account no longer exists');
   });
 
+  // V-1335 — the second of the seven copies. Each route carries its own copy of
+  // the branch, so covering one proves nothing about the next: the fixture that
+  // reaches it differs per route (this one needs a `psnap_` id and a body with a
+  // name, where the clone route needs a `prof_` id and accepts `{}`).
+  it("CRITICAL the same deleted-owner refusal on snapshot RESTORE. Restore rebuilds a profile from a snapshot under the owner's tier, so a half-resolved owner here decides what the restored profile is allowed to be — and the branch that stops it had never run.", async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+
+    const GHOST_ID = '00000000-0000-4000-8000-00000000f011';
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: '00000000-0000-4000-8000-00000000f012',
+        ownerAccountId: GHOST_ID,
+        role: 'admin',
+      },
+    ]);
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profile-snapshots/psnap_00000000-0000-4000-8000-00000000f013/restore`,
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${GHOST_ID}`,
+      },
+      payload: { name: 'restored-from-a-vanished-owner' },
+    });
+
+    expect(res.statusCode, 'restoring for a deleted owner must be refused').toBe(403);
+    expect(
+      res.json<{ detail?: string }>().detail,
+      'and the refusal names the vanished owner',
+    ).toContain('Owner account no longer exists');
+  });
+
   it('X-Driftstack-Account with malformed acc_-prefixed UUID → 4xx (NOT 500)', async () => {
     fx = await buildTestApp({ tier: 'api_builder' });
     const res = await fx.app.inject({

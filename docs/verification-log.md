@@ -6355,3 +6355,20 @@ guard cannot answer first: membership resolves, role is admin, body parses. Muta
 `if (false && !owner)` fails it on `expected 500 to be 403`. Source restored byte-identical.
 
 Six copies remain uncovered and are named above rather than left implied.
+
+## V-1336 — the second of the seven deleted-owner copies
+
+`POST /v1/profile-snapshots/:id/restore` carries its own copy of the branch V-1335 covered on clone.
+Covering one proves nothing about the next: each route reaches the branch through a different
+fixture — clone needs a `prof_` id and accepts `{}`, restore needs a `psnap_` id and a body carrying
+a name — so a single arm cannot stand in for the family.
+
+Restore matters on its own terms: it rebuilds a profile from a snapshot under the OWNER's tier, so a
+half-resolved owner decides what the restored profile is permitted to be.
+
+Mutation-proven with `if (false && !owner)`, which fails it on `expected 500 to be 403` — the same
+signature as the clone arm, confirming the same null read behind it. Source restored byte-identical.
+
+Two of seven copies now covered. Remaining, unchanged from V-1335: `routes/profiles.ts:454`
+(`POST /v1/profiles/import`), `routes/admin.ts:182` and `:219`, `routes/agent-sessions.ts:4066` and
+`:4070`.
