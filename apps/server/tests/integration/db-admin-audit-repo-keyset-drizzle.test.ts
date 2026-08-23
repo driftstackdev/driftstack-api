@@ -144,6 +144,60 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
     // The case above pages a fixed set. This one appends WHILE the walk runs.
     // See _helpers/keyset-stable-under-inserts.ts for why this belongs against
     // real Postgres rather than the in-memory twin.
+    // V-1317 — the walks in this file all end on a SHORT final page (nine rows
+    // at limit two leaves one), so none of them tells `rows.length > limit`
+    // apart from `>=`. The off-by-one only surfaces when the last page is
+    // exactly full, and then the repo offers a cursor onto a page that is not
+    // there.
+    it('CRITICAL reports NO further pages when the final page is exactly full. The walk above always ends short, so nothing distinguished the overfetch boundary — past it a staff export follows a cursor to an empty page.', async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG keyset test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleAdminAuditLogRepo({ client, db, close: async () => {} });
+
+      const accountId = randomUUID();
+      const apiKeyId = randomUUID();
+      seeded.push({ accountId, apiKeyId });
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`boundary-admin-${accountId}@test.local`})`;
+      await client`INSERT INTO api_keys (id, account_id, name, key_prefix, key_hash)
+        VALUES (${apiKeyId}, ${accountId}, 'boundary-probe', ${`dsk_${apiKeyId.slice(0, 8)}`}, ${`hash_${apiKeyId}`})`;
+
+      // Exactly four rows, each on its own timestamp so ordering is total.
+      const base = Date.UTC(2026, 0, 2, 0, 0, 0);
+      for (let i = 0; i < 4; i++) {
+        await client`
+          INSERT INTO admin_audit_log (admin_account_id, admin_key_id, action, result, timestamp)
+          VALUES (${accountId}, ${apiKeyId}, 'webhook_delivery.replayed', 'success', ${new Date(base + i * 1000).toISOString()})`;
+      }
+
+      // A page the size of the whole population: full, and the last one.
+      const exact = await repo.list({ limit: 4, adminAccountId: accountId });
+      expect(exact.items, 'the full population came back in one page').toHaveLength(4);
+      expect(
+        exact.nextCursor,
+        'a full final page must not offer a cursor — that cursor leads to an empty page',
+      ).toBeNull();
+
+      // The same boundary reached by walking, which is what a client does.
+      const first = await repo.list({ limit: 2, adminAccountId: accountId });
+      expect(first.items, 'first page is full').toHaveLength(2);
+      expect(first.nextCursor, 'four rows at limit two: there IS a second page').not.toBeNull();
+
+      const second = await repo.list({
+        limit: 2,
+        adminAccountId: accountId,
+        cursor: first.nextCursor!,
+      });
+      expect(second.items, 'the second page is also exactly full').toHaveLength(2);
+      expect(second.nextCursor, 'and it is the last one').toBeNull();
+    });
+
     it('does not repeat or drop an entry when the admin log is appended to mid-walk (the documented concurrent-insert promise)', async () => {
       if (!dbReachable || !client) {
         if (process.env.CI) {

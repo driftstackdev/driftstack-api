@@ -132,6 +132,33 @@ describe('agent session page cursor', () => {
     );
   });
 
+  // V-1317 — every other walk in this file ends on a SHORT final page, so none
+  // of them tells `rows.length > limit` apart from `>=`. The off-by-one only
+  // surfaces when the last page is exactly full, and then the repo offers a
+  // cursor onto a page that does not exist.
+  it('CRITICAL a full final page reports NO further pages. The other arms here always end short, so none of them distinguishes the overfetch boundary — and past it the caller is handed a cursor that fetches nothing.', async () => {
+    const accountId = await seedAccount();
+    const base = Date.UTC(2026, 0, 3, 0, 0, 0);
+    for (let i = 0; i < 4; i += 1) await seedSession(accountId, new Date(base + i * 1000));
+
+    // A page the size of the whole population: full, and the last one.
+    const exact = await repo!.listPageByAccount(accountId, { limit: 4 });
+    expect(exact.items, 'the full population came back in one page').toHaveLength(4);
+    expect(exact.nextCursor, 'a full final page must not offer a cursor').toBeNull();
+
+    // The same boundary reached by walking, which is the shape a client uses.
+    const first = await repo!.listPageByAccount(accountId, { limit: 2 });
+    expect(first.items, 'first page is full').toHaveLength(2);
+    expect(first.nextCursor, 'four rows at limit two: there IS a second page').not.toBeNull();
+
+    const second = await repo!.listPageByAccount(accountId, {
+      limit: 2,
+      cursor: first.nextCursor!,
+    });
+    expect(second.items, 'the second page is also exactly full').toHaveLength(2);
+    expect(second.nextCursor, 'and it is the last one').toBeNull();
+  });
+
   it('CRITICAL paging a burst that shares one instant loses nothing', async () => {
     if (!dbReachable || !repo) return;
     const accountId = await seedAccount();

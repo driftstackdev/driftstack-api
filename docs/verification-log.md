@@ -5711,3 +5711,27 @@ byte-identical from a snapshot.
 `api-keys-repo`, `rate-limit-overrides-repo`, `sessions-repo` (×2), `webhooks-repo` (×2),
 `profile-snapshots-repo`, `recipes-repo`, `agent-sessions-repo`, `admin-accounts-repo`. Several have
 a `db-*-keyset-drizzle` harness already, so the arm above transfers to them nearly verbatim.
+
+## V-1318 — the boundary arm transfers: two more of the eleven closed
+
+V-1317 left eleven pagination boundaries verified only by source-text pins and noted that several
+already have a `db-*-drizzle` harness, so the arm should transfer nearly verbatim. It does.
+
+- **`agent-sessions-repo`** — `db-agent-sessions-page-cursor-drizzle.test.ts` already had
+  `seedAccount`/`seedSession` helpers and a `pageThrough` walker. Four sessions, then a page of four
+  and a walk of two pages of two.
+- **`admin-audit-repo`** — `db-admin-audit-repo-keyset-drizzle.test.ts`, same shape, with the
+  `accounts` + `api_keys` FK seeding that file already established.
+
+Both assert the same two things: a page equal to the whole population offers no cursor, and a walk
+whose final page is exactly full ends there. Both mutation-proven by flipping that repo's own
+`rows.length > limit` to `>=` — each time the new arm failed on the full-final-page message while
+every pre-existing arm in the same file stayed green. That counterfactual is the point: it shows the
+existing walks never reached the boundary, rather than merely that the new arm works. Both repo files
+restored byte-identical from snapshots.
+
+Behaviourally covered boundaries: 5 of 14 (incidents and profiles already, plus account-audit,
+agent-sessions, admin-audit).
+
+**Still text-pinned only — 9 sites:** `api-keys-repo`, `rate-limit-overrides-repo`, `sessions-repo`
+(×2), `webhooks-repo` (×2), `profile-snapshots-repo`, `recipes-repo`, `admin-accounts-repo`.
