@@ -242,11 +242,13 @@ describe('account proxy secret v2 encryption', () => {
 // key. A guard that silently stops refusing here does not throw anything a
 // customer sees; it stores something that cannot be read back.
 //
-// STILL UNMEASURED, deliberately left for a following pass rather than claimed:
-// the three read-path guards at :122, :130 and :153 (canonical bounded base64 and
-// the plaintext bound after decrypt). They need a forged envelope, and the
-// bounded — not fixed — base64 shape means their reachability has to be settled
-// the way the webhook module's was, empirically, before a test is written.
+// V-1380 — the read-path guards this note used to list as unmeasured have been settled.
+// The two canonical-base64 ones are driven by the three arms above (shape check before
+// decode, byte floor after decode, and the re-encode comparison). The plaintext bound
+// after decrypt is UNREACHABLE, measured rather than reasoned: forging an envelope at
+// each slot's bound + 1 and reading it back shows the envelope shape gate answering every
+// time, never the plaintext bound. The last arm in this file pins that so the dead branch
+// cannot quietly become a live untested one.
 describe('account-proxy-secret-encryption — unnoticed encrypt-path refusals', () => {
   const ctx = (slot: AccountProxySecretContext['slot']): AccountProxySecretContext => ({
     accountId: ACCOUNT_A,
@@ -346,5 +348,60 @@ describe('account-proxy-secret-encryption — bounded base64, attributed', () =>
     expect(() =>
       readAccountProxySecret(MASTER, C, `${ACCOUNT_PROXY_SECRET_V2_PREFIX}!!!!not-base64!!!!`),
     ).toThrow(/outside its canonical bounded base64 shape/);
+  });
+
+  // V-1380 — why `plaintextBytes.length > maximumPlaintextBytes(slot)` after the decrypt
+  // can never be true, pinned as behaviour rather than restated as arithmetic.
+  //
+  // `decodeCanonicalEnvelope` bounds the blob at `iv + tag + maximumPlaintextBytes(slot)`
+  // — the SAME per-slot number — and AES-GCM does not pad, so the ciphertext is exactly as
+  // long as the plaintext. `plaintext > max` and `blob > iv + tag + max` are therefore one
+  // inequality, and the envelope gate reaches it first on every path: `decryptPayload` is
+  // the only route in, and it always decodes through that gate (unlike the BYOK module,
+  // where a legacy reader skips its equivalent).
+  //
+  // Measured: a forged envelope one byte past each slot's bound is answered by the shape
+  // gate, never by the plaintext bound. If those two numbers ever diverge, the branch below
+  // becomes reachable and untested — and this arm turns red first.
+  it('CRITICAL an over-bound plaintext is refused by the ENVELOPE gate, so the plaintext bound behind it is unreachable. Which guard answers is the property: the two bounds are the same inequality 28 bytes apart, and pinning that is what keeps the dead branch dead rather than silently live.', () => {
+    const cases = [
+      { slot: 'wireguard-private-key' as const, max: 44 },
+      { slot: 'password' as const, max: 4 * 1024 },
+      { slot: 'openvpn-config' as const, max: 2 * 1024 * 1024 },
+    ];
+
+    for (const { slot, max } of cases) {
+      const context: AccountProxySecretContext = {
+        accountId: ACCOUNT_A,
+        proxyId: PROXY_A,
+        slot,
+      };
+      let message = '(no throw)';
+      try {
+        readAccountProxySecret(
+          MASTER,
+          context,
+          rawV2({ context, plaintext: Buffer.alloc(max + 1, 97) }),
+        );
+      } catch (error) {
+        message = (error as Error).message;
+      }
+      expect(message, `${slot}: one byte over the bound`).toMatch(/canonical bounded base64/i);
+      expect(
+        message,
+        `${slot}: the plaintext bound must NOT be what answers — if it is, the envelope gate stopped covering it`,
+      ).not.toMatch(/plaintext exceeds its byte bound/i);
+    }
+
+    // And exactly AT the bound the size gates are cleared, so this is a bound rather than a
+    // refusal of everything large: the WireGuard slot gets as far as its own schema.
+    const wg: AccountProxySecretContext = {
+      accountId: ACCOUNT_A,
+      proxyId: PROXY_A,
+      slot: 'wireguard-private-key',
+    };
+    expect(() =>
+      readAccountProxySecret(MASTER, wg, rawV2({ context: wg, plaintext: Buffer.alloc(44, 97) })),
+    ).toThrow(/WireGuard private key is invalid/);
   });
 });

@@ -7981,3 +7981,40 @@ Named and not pursued: `lib/account-proxy-secret-encryption.ts:150` is the same 
 bound for proxy slots (`password` 4 KiB, `openvpn-config` 2 MiB, `wireguard-private-key`), still dark
 and reachable the same way through a stored envelope. Same shape, different module — a batch of its
 own rather than a footnote to this one.
+
+## V-1380 — closing a deferral the file itself had written down
+
+`account-proxy-secret-encryption.test.ts` carried a note listing three read-path guards as
+deliberately unmeasured, and it named the method: their reachability had to be settled empirically,
+the way the webhook module's was, before writing a test. Coverage now says two of them are driven by
+arms added since, and exactly **one statement in the whole module is dark** (91/92) — the plaintext
+bound after decrypt.
+
+**Settled by measurement, not by reading the source.** Forging a genuine v2 envelope one byte past
+each slot's bound and reading it back:
+
+| forged plaintext                   | which guard answers                                                            |
+| ---------------------------------- | ------------------------------------------------------------------------------ |
+| 44 bytes (WireGuard, at the bound) | the slot schema — _"WireGuard private key is invalid"_                         |
+| 45, 46, 60, 4096 bytes             | _"outside its canonical bounded base64 shape"_ — the envelope gate, every time |
+
+So the bound is unreachable, and the reason is structural: `decodeCanonicalEnvelope` bounds the blob
+at `iv + tag + maximumPlaintextBytes(slot)` — the **same** per-slot number — and AES-GCM does not pad,
+so ciphertext length equals plaintext length. `plaintext > max` and `blob > 28 + max` are one
+inequality, and the gate reaches it first on every path: `decryptPayload` is the only route in and it
+always decodes through that gate. That is the difference from V-1379's BYOK module, where a legacy
+reader skips its equivalent and the same-shaped check _was_ live.
+
+The arm pins **which guard answers** across all three slots rather than restating the arithmetic, and
+the mutations show why that is the right property:
+
+- Widening the gate by 4096 makes the failure message change to _"plaintext exceeds its byte bound"_ —
+  the dead branch becoming live and untested, caught immediately.
+- Shrinking it by one byte reds the at-bound control, so the gate cannot start refusing legitimate
+  rows early.
+
+The stale note is rewritten to record the measured outcome rather than the open question.
+
+⚠️ **The probe's own output vanished the first time.** It ran as a passing test and vitest swallows
+`console.log` from those, so the run reported `Tests 1 passed` and told me nothing. Re-run writing the
+results to a file, it produced the table above. A probe that cannot show its work has not been run.
