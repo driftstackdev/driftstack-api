@@ -2972,6 +2972,39 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     ).toContain(id);
   });
 
+  // V-1347 — the last half-wired branch a fixture seam can reach. The arm above
+  // fires the takeover transition with the lock present; this is the same
+  // request on a deployment where the Redis lock is not configured.
+  it('CRITICAL takeover-via-input-event is REFUSED as unavailable when the pair-mode lock is unwired, rather than proceeding unserialised. The lock is what stops two clients both winning control of one session; without it the honest answer is that the feature is off here, not a takeover granted to whichever request arrived first.', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, disablePairModeLock: true });
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: auth,
+      payload: { mode: 'pair' },
+    });
+    expect(create.statusCode, 'fixture precondition: the pair-mode session was created').toBe(201);
+    const id = create.json<{ id: string }>().id;
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/input-event`,
+      headers: auth,
+      payload: {
+        event: { type: 'mouseDown', x: 100, y: 200, button: 0 },
+        client_id: 'cli_tab_a',
+      },
+    });
+
+    expect(res.statusCode, 'an unserialised takeover must not be granted').toBe(503);
+    expect(
+      res.json<{ detail?: string }>().detail,
+      'and the refusal names the missing lock rather than blaming the caller',
+    ).toContain('pair-mode lock');
+  });
+
   it('Slice 5 POST /:id/input-event on mode=pair + ai-driving WITHOUT client_id → 400 ValidationFailed (client_id required for takeover-trigger)', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const create = await fx.app.inject({

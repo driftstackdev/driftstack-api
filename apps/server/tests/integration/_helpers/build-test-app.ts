@@ -429,6 +429,14 @@ export interface TestAppOptions {
    * column is a real FK, so an unvalidated write is a dangling reference.
    */
   disableDriverSessionsRepo?: boolean;
+
+  /**
+   * V-1347 — leaves the Redis pair-mode takeover lock unwired. Pair mode still
+   * runs; only the takeover-via-input-event transition, which needs the lock to
+   * serialise two clients racing for control, is refused. The last of the
+   * half-wired branches that a fixture seam can reach.
+   */
+  disablePairModeLock?: boolean;
   /**
    * Founder directive #63 — inject a CP-side live proxy connectivity probe so the
    * pre-launch gate runs in tests. Omitted → no probe wired → the gate is a no-op
@@ -1762,9 +1770,11 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     // mint. 32 raw bytes base64-encoded. Tests assert the route works
     // round-trip; production uses the real MFA_ENCRYPTION_KEY env.
     guiControlKeyEncryptionKey: Buffer.alloc(32, 7).toString('base64'),
-    // Arc 2 sub-slice 8.8 (v2-#8) — in-memory takeover lock; always
-    // wired so the takeover/handback routes register for tests.
-    pairModeLock,
+    // Arc 2 sub-slice 8.8 (v2-#8) — in-memory takeover lock; wired by
+    // default so the takeover/handback routes register for tests.
+    // V-1347 — `disablePairModeLock` leaves it out on purpose, which is the
+    // only way to reach the route's own "lock not wired" refusal.
+    ...(opts.disablePairModeLock === true ? {} : { pairModeLock }),
     // Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — heartbeat tracker so
     // takeover/handback handlers can record activity. The sweep
     // service itself isn't wired in the test fixture (tests would

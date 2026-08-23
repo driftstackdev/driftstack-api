@@ -6724,3 +6724,33 @@ no behaviour changed, `tsc` clean, and all **27** test files that read this rout
 which is the check that matters when editing a file this heavily pinned.
 
 Two genuinely dark branches remain from the class of nine: `pairModeLock` (503) and `authRepo` (403).
+
+## V-1347 — the last seam-reachable half-wired branch, and a comment that had to change with it
+
+`pairModeLock` unwired: pair mode still runs, but the takeover-via-input-event transition — the one
+that needs the lock to serialise two clients racing for control of one session — is refused as
+unavailable rather than granted to whichever request arrived first.
+
+The setup came free. An arm two lines above already fires that exact transition with the lock
+present; this is the same request against a deployment without it, which is what the new
+`disablePairModeLock` seam produces.
+
+Mutation-proven: `if (false && pairModeLock === undefined)` fails the arm on
+`expected 500 to be 503`. Same signature as the other three — without the branch the route
+dereferences the absent dependency and the caller gets an unexplained fault instead of a refusal
+naming the cause. Source restored byte-identical.
+
+**A comment had to change with the code, which is the part worth recording.** The fixture line
+wiring this lock said it was "always wired so the takeover/handback routes register for tests." After
+the seam that is false, and a stale "always" is exactly the kind of statement this campaign keeps
+finding in other files and correcting. It now says wired by default, and names the option that leaves
+it out and why.
+
+**The class of nine, closed out:** 4 covered behaviourally by a seam per dependency (proxies,
+profiles, driver sessions, pair-mode lock), 2 already covered before this work, 2 classified as
+unreachable narrowing guards and documented at the site (V-1346), and **1 left**:
+`agent-sessions.ts:4065`, which fires when `authRepo` itself is absent. That one is not a partial
+deployment but a broken one — `authRepo` is what authenticates every request, so an app without it
+serves nothing at all. Reaching the branch would mean building a fixture that cannot answer a single
+authenticated call, which measures the fixture rather than the route. Recorded as deliberately not
+pursued rather than left on a list implying it is pending.
