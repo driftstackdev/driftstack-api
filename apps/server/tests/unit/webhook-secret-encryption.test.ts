@@ -201,4 +201,51 @@ describe('webhook-secret-encryption — non-round-trippable input secret', () =>
     expect(Buffer.from(loneSurrogate, 'utf8').toString('utf8')).not.toBe(loneSurrogate);
     expect(() => encryptWebhookSecret(loneSurrogate, KEY, CONTEXT)).toThrow(/not exact UTF-8/);
   });
+
+  // V-1376 — swept the six re-encode canonicality checks in the server by mutation. Four
+  // are load-bearing (proxy secrets, LiveKit, TOTP, profile DEKs) and one was completely
+  // dark (recipe payloads, V-1375). This one SURVIVES its mutation — replacing
+  // `blob.toString('base64') !== payload` with nothing leaves 594 webhook tests green —
+  // and that is correct rather than a gap: this envelope is fixed-length, and at this
+  // length base64 has no slack bits to respell.
+  //
+  // 12 (IV) + 16 (tag) + 38 (secret) = 66 bytes, and 66 % 3 === 0, so the encoding is
+  // exactly 88 characters with no padding. Every group of 3 bytes maps onto 4 characters
+  // with nothing left over, so the shape check one line above — 88 chars, alphabet only,
+  // no `=` — already admits only the canonical spelling.
+  //
+  // The arithmetic is what makes that true, so the arithmetic is what is pinned. Change
+  // the secret length to something where the blob is not a multiple of 3 and the tail
+  // gains slack bits, the re-encode comparison becomes reachable, and it would then need
+  // the deterministic respelling arm that recipe payloads got in V-1375.
+  it('CRITICAL the canonicality check is unreachable BY ARITHMETIC, not by omission. It survives mutation because a fixed 88-character encoding of 66 bytes has no slack bits — if that stops being true the check becomes live and untested, so the length relationship is the thing under guard.', () => {
+    const IV_BYTES = 12;
+    const TAG_BYTES = 16;
+    const SECRET_BYTES = 38;
+    const blobBytes = IV_BYTES + TAG_BYTES + SECRET_BYTES;
+
+    expect(
+      blobBytes % 3,
+      'the blob length gained slack bits — the re-encode check is now live',
+    ).toBe(0);
+    expect(
+      Buffer.alloc(blobBytes).toString('base64'),
+      'and encodes to the pinned width',
+    ).toHaveLength(88);
+    expect(
+      Buffer.alloc(blobBytes).toString('base64').includes('='),
+      'padding means slack, and slack means respellable',
+    ).toBe(false);
+
+    // The claim itself, not just its arithmetic: nothing matching the shape check can be
+    // non-canonical. A single counter-example here is the whole finding reversed.
+    const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    for (let i = 0; i < 2_000; i += 1) {
+      const candidate = Array.from(randomBytes(88), (b) => ALPHABET[b & 63]).join('');
+      expect(
+        Buffer.from(candidate, 'base64').toString('base64'),
+        'an 88-character alphabet string that re-encodes differently — the check IS reachable',
+      ).toBe(candidate);
+    }
+  });
 });

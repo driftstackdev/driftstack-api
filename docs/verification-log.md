@@ -7824,3 +7824,42 @@ agree.
 ⚠️ **Process note.** To run the control I overwrote the working test with its HEAD version and lost
 the rewrite, which had to be re-applied from scratch. A control that needs the old file should copy
 the **new** one aside first; `git show HEAD:… > file` is not a read.
+
+## V-1376 — the same canonicality check at six sites, swept by mutation: four live, one dark, one arithmetic
+
+V-1375 found the re-encode canonicality check in `recipe-payload-encryption.ts` had never executed.
+The same idiom — decode, re-encode, compare to the stored string — appears at **six** places in the
+server. Statement coverage cannot answer this one: every site writes it as
+`length-wrong || re-encode-differs`, so the throw shows as covered whenever the _length_ clause
+fires. Only mutation separates them. Each canonicality clause replaced, one at a time, against every
+test that names its module:
+
+| site                                         | verdict                        |
+| -------------------------------------------- | ------------------------------ |
+| `lib/account-proxy-secret-encryption.ts:125` | **live** — reds its own arm    |
+| `lib/livekit-secret-encryption.ts:44`        | **live**                       |
+| `lib/mfa-totp.ts:221`                        | **live**                       |
+| `lib/profile-key-hierarchy.ts:61`            | **live**                       |
+| `services/recipe-payload-encryption.ts:116`  | **was dark** — fixed in V-1375 |
+| `lib/webhook-secret-encryption.ts:73`        | **survives** — see below       |
+
+⭐ The proxy arm's own title records this exact class being found there before: _"the case the payload
+test is named for and does not contain"_. V-1375 was the same shape one module over.
+
+**The survivor is not a gap.** Removing the clause leaves **594** webhook tests green, and that is
+correct: this envelope is fixed-length, and at this length base64 has nothing to respell.
+12 (IV) + 16 (tag) + 38 (secret) = **66 bytes**, and **66 % 3 === 0**, so the encoding is exactly 88
+characters with no padding and no slack bits. The shape check one line above — 88 chars, alphabet
+only, no `=` — therefore already admits only the canonical spelling. Confirmed empirically as well as
+arithmetically: **0 of 200,000** random 88-character alphabet strings re-encode differently.
+
+So the honest fix is not to "cover" the check but to pin **why** it cannot fire, because that reason
+is a length relationship somebody could change without noticing what it was holding up. The new arm
+asserts the blob is a multiple of 3, that it encodes to the pinned 88-character width with no
+padding, and then makes the claim itself falsifiable: 2,000 generated 88-character alphabet strings,
+every one of which must re-encode identically. A single counter-example reverses the finding.
+
+Both halves mutation-proven: changing the secret length from 38 to 39 bytes reds it with _"the blob
+length gained slack bits — the re-encode check is now live"_, and letting `=` into the generated
+candidates reds the counter-example loop. If that arm ever goes red, the webhook check has become
+reachable and needs the deterministic respelling arm recipe payloads got in V-1375.
