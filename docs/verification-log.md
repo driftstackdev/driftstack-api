@@ -7633,3 +7633,47 @@ catch. That guard misses it: `sentHeaders()` matches `.header('literal')` only, 
 header in the server set via a constant — `reply.header(UNKNOWN_FIELDS_HEADER, …)`. Measured across
 `apps/server/src`: 19 header names visible to the guard, exactly 1 invisible, and it is this one.
 Next batch.
+
+## V-1372 — a guard whose population was defined by how a name is spelled
+
+V-944's rule is two-sided and good: every response header the server sends is declared in the
+published spec, or exempt with a stated reason. Its scan was
+`.matchAll(/\.header\(\s*'([A-Za-z0-9-]+)'/g)` — **quoted literals only**.
+
+Measured across `apps/server/src`: **19 header names visible to it, exactly 1 invisible.** The
+invisible one is `reply.header(UNKNOWN_FIELDS_HEADER, …)` — and it is the header
+`apps/docs/api/versioning.md` gives a worked example of and tells integrators to log.
+
+The consequence is subtler than "one header unchecked": it was outside the rule in **both**
+directions. Never reported as sent-but-undeclared, and not listable as exempt either — an exemption
+for it would have failed the staleness arm, because nothing the scan could see sent it. A guard whose
+population depends on a coding style has a blind spot shaped like that style, and the one header
+written differently was the one with a documented customer workflow.
+
+The scan now resolves `const SOME_HEADER = 'x-name'` across the source tree and follows
+`reply.header(IDENT, …)` through it. Constants are collected in a first pass, because a send can
+precede its declaration in file order and the constant is routinely exported from another module.
+
+**Then the rule had to be answered, which is the point of fixing a detector.** Declaring this header
+means editing ~40 of the **232 hand-written 2xx blocks** in `openapi.ts` — it is sent on 40
+customer-facing writes and no error path — and keeping that subset in sync by hand, with no shared
+2xx construct to hang it on. That is the same cost the X-Request-Id decision above this one already
+declined for success responses.
+
+So it is exempt, on the ground the rule actually cares about: **not invisible to customers.** The
+docs give it a section and a worked example, and V-1371 put it on `Access-Control-Expose-Headers` so
+a browser can read it at all.
+
+⭐ **And that ground is checked rather than asserted**, in the style this file already uses for its
+`.strict()` exemptions. A new arm reads the docs page and `lib/app.ts` and fails if either premise
+goes away — because an exemption whose reason has quietly stopped being true still reads as
+considered.
+
+Four mutations, each hitting a different arm:
+
+| mutation                      | what reds                                                                                                      |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| detector back to literal-only | the constant-resolution arm **and** the staleness arm — the exemption instantly names a header "nothing sends" |
+| drop the EXEMPT entry         | the undeclared rule, proving the header is genuinely in the population now                                     |
+| un-expose it in `app.ts`      | the checked-premise arm                                                                                        |
+| remove the docs instruction   | the checked-premise arm                                                                                        |
