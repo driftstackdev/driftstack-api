@@ -61,7 +61,36 @@
     ],
     "macOS": {
       "minimumSystemVersion": "12.0",
-      "entitlements": "Entitlements.plist"
+      "entitlements": "Entitlements.plist",
+      "dmg": {
+        "windowSize": {
+          "width": 660,
+          "height": 400
+        },
+        "appPosition": {
+          "x": 180,
+          "y": 170
+        },
+        "applicationFolderPosition": {
+          "x": 480,
+          "y": 170
+        }
+      }
+    },
+    "publisher": "Driftstack",
+    "homepage": "https://driftstack.dev",
+    "copyright": "© Driftstack",
+    "shortDescription": "Real iPhone Safari sessions, driven from your desktop.",
+    "longDescription": "Driftstack runs real iPhone Safari sessions on Apple hardware and streams them to your desktop. Launch a profile, drive it by hand or hand it to the agent, and every site sees a genuine iPhone.",
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "installMode": "currentUser",
+        "languages": ["English"],
+        "displayLanguageSelector": false,
+        "startMenuFolder": "Driftstack"
+      }
     }
   },
   "plugins": {
