@@ -8252,3 +8252,38 @@ that `[redacted]` appears and that an ordinary field survives.
 colon inside `redact: {`, wrote `{: {` into the source, and vitest reported no tests rather than a
 failure. Exactly the shape the batch rules warn about. Re-run without shell string-splitting, both
 mutations land.
+
+## V-1388 — the bounce tracker bootstrap wires, whose SQL had never run
+
+Continuing the never-executed-_function_ sweep. `createDrizzleAccountEmailDeliveryTracker` and all
+three of its methods were dark. `bootstrap.ts:728` passes it to `createEmailService`, so this is what
+runs in production — and its only other reference anywhere is `lib-bootstrap-content-parity`, which
+pins the wiring **line** as source text. The same shape as V-1387: the text is frozen, the effect was
+not checked.
+
+The email service's call sites (`findAccountIdByEmail`, `clearDeliveryFailed`, `markDeliveryFailed`)
+are all covered — through a **double**. The SQL that reads and writes
+`accounts.email_delivery_failed_at` had never executed.
+
+The two ways it can be wrong are not symmetric, so the arms are split accordingly:
+
+- a lost or wrong `WHERE` marks **every** account undeliverable at once, and the dashboard then tells
+  every customer their address is bouncing;
+- a write that lands nowhere means a genuinely bouncing address is never flagged, so a customer
+  locked out of password reset gets no signal at all.
+
+Three arms against real Postgres: the lookup resolves by email and normalises case and surrounding
+whitespace (Postmark reports the address as the remote gave it, so an exact-bytes match would fail to
+attribute the bounce and silently track nothing); the stamp lands with the time given and clears; and
+both writes touch exactly one row — including the mirror case, where **both** accounts are marked and
+clearing one must leave the other's bounce standing.
+
+Mutations, each by line index: dropping `.trim().toLowerCase()` reds the lookup arm; dropping the
+`WHERE` on either write reds the scoping arm.
+
+`EXPECTED_TEST_FILES` 3008 → 3009, `_ALL` 3172 → 3173.
+
+⚠️ Worth noting for the next drizzle test: `postgres`'s timestamptz comes back in a representation
+that is not a `Date`, so `?.toISOString()` on it is a TypeError rather than a comparison. The helper
+normalises to an ISO string, which keeps the arm about the column's value rather than the driver's
+type mapping.
