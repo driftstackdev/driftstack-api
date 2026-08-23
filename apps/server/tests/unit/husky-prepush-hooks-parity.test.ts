@@ -123,7 +123,22 @@ describe('W722 Husky pre-push gate + installer parity', () => {
 
   it('CRITICAL pre-commit invokes `npx lint-staged`. The lint-staged runner is what scopes lint+format to staged files (fast feedback loop); drift to `npm test` would make pre-commit slow and noisy.', () => {
     const p = read(PRE_COMMIT);
-    expect(p.trim()).toBe('npx lint-staged');
+    expect(p).toMatch(/^npx lint-staged$/m);
+    // Still NOT the whole suite — the point of this hook is a fast loop.
+    expect(p).not.toMatch(/npm (run )?test/);
+  });
+
+  it("CRITICAL pre-commit also typechecks the staged workspaces. lint-staged runs eslint + prettier, and neither typechecks; vitest does not either. So a type error committed cleanly and only failed the PRE-PUSH gate — which tests the WORKING TREE, meaning one agent's type error rejected every other agent's push until someone repaired it. Twice on 2026-08-23.", () => {
+    const p = read(PRE_COMMIT);
+    expect(p).toMatch(/tsc --noEmit -p/);
+    // Scoped to the affected workspaces, not the whole monorepo: a
+    // one-workspace commit must not pay for all of them.
+    expect(p).toMatch(/--diff-filter=ACM/);
+    expect(p).toMatch(/cut -d\/ -f1,2/);
+    // NOT sed: BSD sed has no \(a\|b\) alternation, so the obvious one-liner
+    // matched nothing and the loop ran zero times — a hook that passed by
+    // checking nothing. Caught only by deliberately committing a type error.
+    expect(p).not.toMatch(/sed -n 's#\^/);
   });
 
   // --- install-git-hooks.sh installer ------------------------------
@@ -185,8 +200,9 @@ describe('W722 Husky pre-push gate + installer parity', () => {
     const preCommit = read(PRE_COMMIT);
     const prePush = read(PRE_PUSH);
 
-    // pre-commit is a one-liner; pre-push is a multi-step bash script.
-    expect(preCommit.split('\n').length).toBeLessThanOrEqual(3);
+    // pre-commit gained a scoped typecheck (2026-08-23), so it is no longer a
+    // one-liner — but it must stay far smaller than the full pre-push gate.
+    expect(preCommit.split('\n').length).toBeLessThanOrEqual(40);
     expect(prePush.split('\n').length).toBeGreaterThanOrEqual(20);
   });
 

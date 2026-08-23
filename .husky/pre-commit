@@ -1,1 +1,29 @@
 npx lint-staged
+
+# Typecheck the workspaces whose TypeScript is actually staged.
+#
+# lint-staged above runs eslint + prettier, neither of which typechecks, and
+# vitest does not either — so a type error commits cleanly and only surfaces in
+# the PRE-PUSH gate. That gate tests the WORKING TREE rather than the ref being
+# pushed, so one agent's type error rejects every other agent's push until
+# somebody repairs it. That happened twice on 2026-08-23.
+#
+# Scoped to the affected workspaces rather than `npm run typecheck --workspaces`:
+# a one-workspace commit should not pay for the whole monorepo. No staged
+# TypeScript means no cost at all.
+staged_ts=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.tsx?$' || true)
+if [ -n "$staged_ts" ]; then
+  # cut, not sed: BSD sed (macOS) has no \(a\|b\) alternation in basic regex, so
+  # the obvious one-liner silently matched NOTHING and the loop below ran zero
+  # times — a hook that passes by checking nothing, which is worse than no hook.
+  workspaces=$(printf '%s\n' "$staged_ts" \
+    | grep -E '^(apps|packages)/' \
+    | cut -d/ -f1,2 \
+    | sort -u)
+  for ws in $workspaces; do
+    if [ -f "$ws/tsconfig.json" ]; then
+      echo "→ typecheck $ws"
+      npx tsc --noEmit -p "$ws/tsconfig.json" || exit 1
+    fi
+  done
+fi
