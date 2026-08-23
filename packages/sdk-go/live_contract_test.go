@@ -167,6 +167,44 @@ func TestLiveDisabledFeatureIsTheTypedSentinel(t *testing.T) {
 	}
 }
 
+// The only WRITE in this file; every other arm reads. Plaintext is surfaced
+// once and is not retrievable afterwards, so a tag that stopped matching leaves
+// the customer a key they cannot use — and Go reports no error for that, it
+// simply decodes the empty string.
+func TestLiveWriteRoundTripsAndSurfacesThePlaintext(t *testing.T) {
+	baseURL, apiKey := liveTarget(t)
+	client := New(apiKey, WithBaseURL(baseURL))
+	defer client.Close()
+
+	created, err := client.APIKeys.Create(context.Background(), &CreateAPIKeyRequest{
+		Name:   "go-live-write-probe",
+		Scopes: []APIKeyScope{"read"},
+	})
+	if err != nil {
+		t.Fatalf("APIKeys.Create against the real server: %v", err)
+	}
+	if created.ID == "" {
+		t.Fatal("the created key decoded no id")
+	}
+	if len(created.Plaintext) <= 20 {
+		t.Fatalf("the one-time plaintext did not survive decoding (got %q)", created.Plaintext)
+	}
+
+	list, err := client.APIKeys.List(context.Background())
+	if err != nil {
+		t.Fatalf("APIKeys.List against the real server: %v", err)
+	}
+	found := false
+	for _, k := range list.Data {
+		if k.ID == created.ID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("the key the SDK created is not visible through the SDK that listed it")
+	}
+}
+
 func TestLiveRejectedKeyIsATypedAuthError(t *testing.T) {
 	baseURL, _ := liveTarget(t)
 	client := New("ds_live_definitely_not_a_real_key", WithBaseURL(baseURL))

@@ -146,6 +146,29 @@ def test_a_disabled_feature_raises_the_typed_error(client) -> None:
         client.recipes.list()
 
 
+def test_a_write_round_trips_and_surfaces_the_one_time_plaintext(client) -> None:
+    """PARSED path, and the only WRITE this file performs.
+
+    Every other arm reads. A create the server accepts but the models cannot
+    describe raises ``TransportError`` inside the customer's process on a call
+    that succeeded — and for a create that is worse than for a read, because the
+    key EXISTS by then and the plaintext is gone with the exception.
+
+    ``plaintext`` is surfaced once and is not retrievable afterwards, so an SDK
+    that dropped or renamed it hands back a key nobody can use and no retry
+    recovers.
+    """
+    created = client.api_keys.create({"name": "py-live-write-probe", "scopes": ["read"]})
+    assert created.id, "the created key has an id"
+    assert isinstance(created.plaintext, str), "the one-time plaintext is surfaced"
+    assert len(created.plaintext) > 20, "and it is a real key, not an empty string"
+
+    listed = client.api_keys.list()
+    assert any(k.id == created.id for k in listed.data), (
+        "the key the SDK created is visible through the SDK that listed it"
+    )
+
+
 def test_a_rejected_key_raises_a_typed_auth_error(client) -> None:
     """A bad key must surface as the SDK's typed error, not a parse failure.
 

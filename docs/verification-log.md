@@ -6025,3 +6025,36 @@ Live SDK coverage is now: account, api-keys (read + write), archetypes, sessions
 write), usage (both envelope shapes), webhooks (read + write), and the disabled-feature typed error.
 Still not round-tripped: recipes' real envelope, which needs a deployment with the feature enabled —
 the harness registers the disabled stub, and that stub's 503 is itself covered.
+
+## V-1327 — the other two live contracts performed no write at all
+
+V-1326 closed the write gap in the TypeScript live suite. The Python and Go contracts had eight arms
+each and **every one of them was a read** — account, archetypes, sessions, profiles, usage, webhooks,
+the paginated envelope, the typed errors. Nothing in either file had ever sent a body to the real
+server.
+
+One write arm each, on `api_keys.create` / `APIKeys.Create`, which carries the field with the
+sharpest consequence: `plaintext` is surfaced once and is not retrievable afterwards, so an SDK that
+drops or renames it hands back a key nobody can use and no retry recovers.
+
+The two languages fail differently, which is why each needs its own arm rather than one standing for
+both:
+
+- **Python** parses the create response into a model — `api_keys.create` is one of the 48 methods
+  that do (V-1315) — so a response the models cannot describe raises inside the customer's process on
+  a call that SUCCEEDED. For a create that is worse than for a read: the key exists by then, and the
+  plaintext is gone with the exception.
+- **Go** reports no error at all for a tag that stopped matching; the field decodes to the empty
+  string. Only the length check notices, which is why the arm asserts on the value rather than on
+  `err == nil`.
+
+Proven by dropping `plaintext: created.plaintext` from the create response in `routes/admin.ts`,
+marker printed first. Both new arms failed — `TestLiveWriteRoundTripsAndSurfacesThePlaintext` and
+`test_a_write_round_trips_and_surfaces_the_one_time_plaintext` — with every read arm on both sides
+still green, and the route restored byte-identical.
+
+Both harness floors moved 8 → 9. Each was exact, so leaving them would let the new arm stop running
+unnoticed.
+
+All three published SDKs now round-trip a write against a real server. Still not round-tripped
+anywhere: recipes' real envelope, which needs a deployment with the feature enabled.

@@ -108,7 +108,7 @@ describe('the published Go SDK works against the real server', () => {
 
     expect(run.failed, `Go SDK failed against the real server:\n${run.out}`).toBe(0);
     expect(run.skipped, `the live Go tests SKIPPED, so nothing was verified:\n${run.out}`).toBe(0);
-    expect(run.passed, `expected the live Go cases to run:\n${run.out}`).toBeGreaterThanOrEqual(8);
+    expect(run.passed, `expected the live Go cases to run:\n${run.out}`).toBeGreaterThanOrEqual(9);
     expect(run.status, 'and go test exits clean').toBe(0);
   }, 180_000);
 });

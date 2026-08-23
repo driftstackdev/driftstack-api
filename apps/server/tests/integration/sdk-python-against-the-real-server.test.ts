@@ -123,7 +123,7 @@ describe('the published Python SDK works against the real server', () => {
     expect(
       run.counts['passed'] ?? 0,
       `expected the live contract cases to run:\n${run.stdout}`,
-    ).toBeGreaterThanOrEqual(8);
+    ).toBeGreaterThanOrEqual(9);
     expect(run.counts['failed'] ?? 0, `python SDK failed against the server:\n${run.stdout}`).toBe(
       0,
     );
