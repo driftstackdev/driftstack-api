@@ -253,27 +253,47 @@ describe('recipe payload encryption refuses its own preconditions', () => {
     }
   });
 
+  // V-1375 — this arm used to end in an `if/else`: when its respelling did not decode to
+  // the same bytes it fell back to asserting only that SOMETHING threw. Coverage says that
+  // is what happened on every run — the re-encode comparison it names never executed once,
+  // and the coarser shape check one layer up was answering instead. The construction below
+  // is deterministic: it flips a bit that lives in the final character's SLACK bits, which
+  // is the only way to respell base64 without changing the bytes.
   it('CRITICAL a NON-CANONICAL encoding of the same bytes is refused. This is the malleability check: base64 has spellings that decode identically, so without re-encoding and comparing, the same payload has more than one valid stored form — and anything keyed or compared on the stored string can then be bypassed by respelling it.', () => {
+    const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    // Trailing whitespace keeps the JSON valid while moving the blob length so the
+    // encoding ends in padding — no padding means no slack bits, and nothing to respell.
+    let json = JSON.stringify(intents);
+    while ((json.length + 28) % 3 === 0) json += ' ';
     const stored = encryptRecipeIntentLog(intents, KEY, CONTEXT_A);
-    // Flip the final padding character to a different one that decodes the same.
-    // `Buffer.from` accepts it; `blob.toString('base64') !== ciphertext` is the
-    // only thing that notices.
-    const canonical = stored.ciphertext;
-    const respelled = canonical.slice(0, -2) + (canonical.at(-2) === 'A' ? 'B' : 'A') + '=';
-    if (
-      respelled !== canonical &&
-      Buffer.from(respelled, 'base64').equals(Buffer.from(canonical, 'base64'))
-    ) {
-      expect(() =>
-        readRecipeIntentLog({ ...stored, ciphertext: respelled }, KEY, CONTEXT_A),
-      ).toThrow(/not canonical bounded base64/i);
-    } else {
-      // The respelling did not decode identically, so it is refused by the
-      // shape/auth path instead — still refused, which is the property.
-      expect(() =>
-        readRecipeIntentLog({ ...stored, ciphertext: respelled }, KEY, CONTEXT_A),
-      ).toThrow();
-    }
+    const canonical = encryptRaw(Buffer.from(json, 'utf8'), intentAad());
+    const pad = (/=+$/.exec(canonical) ?? [''])[0].length;
+    expect(pad, 'the fixture must end in padding or there are no slack bits to flip').toBe(1);
+
+    const at = canonical.length - pad - 1;
+    const respelled =
+      canonical.slice(0, at) +
+      B64[B64.indexOf(canonical[at] as string) ^ 1] +
+      canonical.slice(at + 1);
+
+    // Controls, so a failure below can only be the canonicality check.
+    expect(respelled, 'the respelling changed nothing').not.toBe(canonical);
+    expect(
+      Buffer.from(respelled, 'base64').equals(Buffer.from(canonical, 'base64')),
+      'the respelling must decode to the SAME bytes — otherwise this tests tampering, not malleability',
+    ).toBe(true);
+    expect(
+      /^[A-Za-z0-9+/]+={0,2}$/.test(respelled) && respelled.length % 4 === 0,
+      'the respelling must clear the shape check, or it never reaches the re-encode comparison',
+    ).toBe(true);
+    expect(
+      () => readRecipeIntentLog({ ...stored, ciphertext: canonical }, KEY, CONTEXT_A),
+      'the canonical spelling of this very payload reads fine, so the only difference is the encoding',
+    ).not.toThrow();
+
+    expect(() => readRecipeIntentLog({ ...stored, ciphertext: respelled }, KEY, CONTEXT_A)).toThrow(
+      /not canonical bounded base64/i,
+    );
   });
 
   it('CRITICAL reading a transcript snapshot with NO key configured is refused. Its intent-log sibling is covered and this one was not — the two envelopes are read by separate functions with their own copies of the check, and a deployment that lost the key must refuse rather than return an envelope it cannot open.', () => {

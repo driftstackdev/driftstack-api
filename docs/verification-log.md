@@ -7770,3 +7770,57 @@ expression reds it, which is the proof the route-level mutation could not give.
 
 V-1373's cross-check was re-proven through `codeOnly`: `admin.ts` back on the sibling's list alone
 still fails with _"the two files disagree on which route-file PREFIXES are waived"_.
+
+## V-1375 — the base64 malleability guard was never once executed, and its test always passed
+
+Fresh coverage over `apps/server/src` (v8, statements resolved to the **narrowest** covering
+statement, never the max over spanning ones) put `services/recipe-payload-encryption.ts:118` in the
+never-executed set:
+
+```ts
+if (blob.length < MIN … || blob.length > MAX || blob.toString('base64') !== ciphertext) {
+  throw new Error('Recipe payload ciphertext is not canonical bounded base64.');
+}
+```
+
+That third clause is the malleability check. Base64 has spellings that decode to identical bytes —
+the final character carries slack bits a canonical encoder always writes as zero — so without
+re-encoding and comparing, one payload has several valid stored forms, and anything keyed or compared
+on the stored string can be bypassed by respelling it.
+
+**An arm already claimed to cover it.** It ended in a fallback:
+
+> the respelling did not decode identically, so it is refused by the shape/auth path instead — still
+> refused, which is the property
+
+Coverage says that branch is what ran **every time**. Its respelling flipped the _second-to-last_
+character between `'A'` and `'B'` whichever it happened to be — which usually changes bits outside
+the slack, so the bytes differ, and the coarser shape/auth path answers one layer up. The arm passed
+on a property it never reached.
+
+**Proven with the same mutation on both versions of the test** — only the test differs, so the
+comparison is honest:
+
+| test                 | `blob.toString('base64') !== ciphertext` replaced with `false` |
+| -------------------- | -------------------------------------------------------------- |
+| the arm at HEAD      | **10 passed** — deleting the check entirely goes unnoticed     |
+| the arm as rewritten | **fails**: _expected [Function] to throw an error_             |
+
+The rewrite is deterministic instead of probabilistic. It pads the JSON with trailing whitespace
+(still valid JSON) until the blob length forces one `=`, then flips the low bit of the final data
+character — the only way to respell base64 without changing what it decodes to. Four controls stand
+in front of the assertion so a failure can only be the canonicality check: the respelling differs
+from the canonical form, decodes to the **same bytes**, clears the shape regex and the `%4` check
+(otherwise it never reaches the comparison), and the canonical spelling of that very payload **reads
+successfully**.
+
+Two other candidates from the same coverage set were checked and are **not** defects, recorded so the
+next sweep does not re-open them: `status-subscribers.ts:133` and `:168` are the purge-row guards
+whose own comments say they are unreachable and exist for type-narrowing; and the proxy SSRF refusals
+at `account-me.ts:460/537/556` — which the message-grep heuristic wrongly flagged in V-1373 — are
+absent from the never-executed set, confirming the coverage instrument and the earlier hand check
+agree.
+
+⚠️ **Process note.** To run the control I overwrote the working test with its HEAD version and lost
+the rewrite, which had to be re-applied from scratch. A control that needs the old file should copy
+the **new** one aside first; `git show HEAD:… > file` is not a read.
