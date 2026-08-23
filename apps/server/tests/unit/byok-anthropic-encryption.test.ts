@@ -179,4 +179,65 @@ describe('BYOK Anthropic encryption', () => {
     // encrypt + store it (capped only by bodyLimit otherwise).
     expect(looksLikeAnthropicKey('sk-ant-' + 'a'.repeat(513))).toBe(false);
   });
+
+  // V-1379 — three storage-bound throws in this module were in the never-executed set, and
+  // they are not the same kind of dark. The payload RANGE check had simply never run in
+  // either direction; the two "exceeds the storage bound" throws around it cannot run at
+  // all, because a check that fires first covers exactly the same ground.
+  //
+  //   plaintext ≤ 519 bytes  ⟺  blob ≤ 547 bytes      (GCM ciphertext length == plaintext
+  //   length, and blob = 12 iv + 16 tag + ciphertext), and 519 = len('sk-ant-') + 512,
+  //   which is precisely what `looksLikeAnthropicKey` already allows.
+  //
+  // So the encrypt-side bound sits behind a regex admitting the same maximum, and the
+  // decrypt-side one behind a payload range that is the same inequality plus 28. Both are
+  // defence in depth rather than gaps — but only while those numbers agree, which is what
+  // the last arm pins.
+  it('CRITICAL a stored payload SHORTER than iv+tag+1 is refused before any decrypt. Nothing had exercised this range check in either direction, and a blob that short cannot carry a tag at all — the subarray slicing below it would silently read past the end.', () => {
+    const key = makeKey();
+    // Driven through the LEGACY reader on purpose. `decryptByokAnthropicKey` gates the
+    // whole envelope on the same numbers first, so this range can only be reached by the
+    // one caller that does not: `decryptLegacyByokAnthropicKey` hands its blob straight to
+    // `decryptPayload`, which is exactly the path a pre-v2 stored row takes.
+    const tooShort = randomBytes(28); // iv + tag, zero bytes of ciphertext
+    expect(() => decryptLegacyByokAnthropicKey(tooShort, key)).toThrow(/expected 29\.\.547/);
+  });
+
+  it('CRITICAL a stored payload LONGER than the bound is refused before any decrypt, and the boundary is exact: a payload at 547 bytes gets past the size gate and fails on authentication instead. Asserting only the refusal would pass against a range that rejects legitimate rows one byte early.', () => {
+    const key = makeKey();
+    const blob = (ciphertextBytes: number): Buffer =>
+      Buffer.concat([randomBytes(12), randomBytes(16), Buffer.alloc(ciphertextBytes, 7)]);
+
+    expect(() => decryptLegacyByokAnthropicKey(blob(520), key)).toThrow(/expected 29\.\.547/);
+    expect(
+      () => decryptLegacyByokAnthropicKey(blob(519), key),
+      'exactly at the bound the size gate must let it through',
+    ).not.toThrow(/expected 29\.\.547/);
+  });
+
+  it('CRITICAL the two "exceeds the storage bound" throws are unreachable BY ARITHMETIC, not by omission — and stay that way only while these three numbers agree. The key shape admits 519 bytes, the plaintext bound is 519, and the payload bound is 519 + 28; move any one of them and a real gap opens where a dead branch used to be.', () => {
+    const PREFIX_BYTES = Buffer.byteLength('sk-ant-', 'utf8');
+    const BODY_MAX_CHARS = 512;
+    const MAX_PLAINTEXT = PREFIX_BYTES + BODY_MAX_CHARS;
+
+    // The shape check runs first on the encrypt side and admits exactly the bound.
+    const atMax = `sk-ant-${'a'.repeat(BODY_MAX_CHARS)}`;
+    expect(Buffer.byteLength(atMax, 'utf8'), 'the longest accepted key IS the bound').toBe(
+      MAX_PLAINTEXT,
+    );
+    expect(looksLikeAnthropicKey(atMax), 'the shape check accepts it').toBe(true);
+    expect(
+      looksLikeAnthropicKey(`sk-ant-${'a'.repeat(BODY_MAX_CHARS + 1)}`),
+      'and refuses one character more, so the byte bound after it can never fire',
+    ).toBe(false);
+
+    // The payload range runs first on the decrypt side and is the same inequality plus 28.
+    // GCM does not pad, so ciphertext length equals plaintext length.
+    const key = makeKey();
+    const envelope = encryptWithContextForTest(Buffer.alloc(MAX_PLAINTEXT, 97), key, ACCOUNT_A);
+    expect(
+      envelope.length - Buffer.byteLength(BYOK_ANTHROPIC_KEY_V2_PREFIX, 'utf8'),
+      'a max-length plaintext produces a blob of exactly iv + tag + 519',
+    ).toBe(12 + 16 + MAX_PLAINTEXT);
+  });
 });

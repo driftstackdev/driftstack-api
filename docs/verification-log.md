@@ -7941,3 +7941,43 @@ and the size arm asserts that a blob **exactly at** the bound clears the size ga
 authentication instead — so the check is a bound, not an off-by-one refusal of legitimate rows.
 
 Four mutations, four distinct reds, one per arm.
+
+## V-1379 — three dark storage bounds in one module, and only one of them was a gap
+
+`lib/byok-anthropic-encryption.ts` had three never-executed throws around the same property. They are
+not the same kind of dark, and the difference is the whole finding:
+
+| line                               | status                                                                                   |
+| ---------------------------------- | ---------------------------------------------------------------------------------------- |
+| `:70` encrypt-side plaintext bound | **unreachable** — `looksLikeAnthropicKey` runs first and admits exactly the same maximum |
+| `:94` decrypt-side plaintext bound | **unreachable** — the payload range above it is the same inequality plus 28              |
+| `:80` payload byte-range           | **a real gap** — never ran in either direction                                           |
+
+The arithmetic: GCM does not pad, so ciphertext length equals plaintext length and
+`blob = 12 (iv) + 16 (tag) + plaintext`. `MAX_PLAINTEXT = len('sk-ant-') + 512 = 519`, and
+`MAX_PAYLOAD = 547`. So `plaintext ≤ 519 ⟺ blob ≤ 547` exactly, and the regex
+`/^sk-ant-[A-Za-z0-9_-]{1,512}$/` accepts a 519-byte key and refuses a 520-byte one. Two of the three
+bounds are therefore defence in depth — but only while those three numbers agree.
+
+**Reaching the one that is real took a second look.** Driving it through `decryptByokAnthropicKey`
+failed with _"BYOK v2 envelope is 61 bytes; outside the bounded storage shape"_ — the v2 reader gates
+the whole envelope on the same numbers before `decryptPayload` ever sees it, so the range check is
+subsumed on that path too. It is reachable through exactly one caller:
+`decryptLegacyByokAnthropicKey` hands its blob straight to `decryptPayload` with no envelope gate,
+which is the path a pre-v2 stored row takes. Both halves are now driven there, and the upper one
+pins the boundary — a blob at **547** must clear the size gate and fail on authentication instead, so
+the range cannot start refusing legitimate rows a byte early.
+
+The third arm pins the subsumption rather than the dead branches, in the shape V-1376 used for the
+webhook canonicality check: the longest accepted key **is** the bound, one character more is refused,
+and a max-length plaintext produces a blob of exactly `iv + tag + 519`. Widening the shape regex from
+512 to 600 reds it — which is the point. Move any of those numbers and a dead branch becomes a live,
+untested one.
+
+Mutations: dropping the range's lower half reds the short arm, dropping its upper half reds the long
+arm, and widening the regex reds the arithmetic arm (alongside the module's own shape test).
+
+Named and not pursued: `lib/account-proxy-secret-encryption.ts:150` is the same read-side plaintext
+bound for proxy slots (`password` 4 KiB, `openvpn-config` 2 MiB, `wireguard-private-key`), still dark
+and reachable the same way through a stored envelope. Same shape, different module — a batch of its
+own rather than a footnote to this one.
