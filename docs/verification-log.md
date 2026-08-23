@@ -7064,3 +7064,37 @@ determinism change bought speed and not silence.
 Third flake this session whose message pointed away from its cause: a limit that was interference, a
 gate that was a timeout, and now a cursor that was a deadline. The pattern is worth naming — under
 load, the assertion that fails is rarely the one that is wrong.
+
+## V-1358 — the wall-clock-budget class is empty, and the instrument took three passes to say so
+
+V-1357 fixed a test that gave a row a 250ms life and then required two database round-trips to finish
+inside it. Three load-sensitive flakes in one session is enough to ask whether that shape is a class,
+so: every `Date.now() + <n>` in the test tree, evaluated, looking for a short deadline that has to
+survive intervening work.
+
+**The class is empty.** Apart from the one already repaired, nothing in the suite budgets real time
+against real work:
+
+- `db-webhooks-repo-consecutive-failures-drizzle` (two sites) stores `nextAttemptAt: now + 1000` and
+  then asserts on `failuresOf()`, which reads the `consecutive_failures` COLUMN. The count does not
+  consult the clock, so the deadline is stored and never raced.
+- `services-oauth-client-service` passes `now: new Date(Date.now() + 1000)` as an INJECTED clock
+  argument. That is the opposite of a wall-clock dependency — it is the fix, not the risk.
+
+**The instrument is the part worth recording, because it was wrong twice and confident each time.**
+
+| pass | reported               | why it was wrong                                                                                       |
+| ---- | ---------------------- | ------------------------------------------------------------------------------------------------------ |
+| 1    | **33** short deadlines | the regex captured the first number only, so `Date.now() + 10 * 60_000` read as 10ms                   |
+| 2    | **4**                  | arithmetic evaluated, but `Date.now() + 24 * HOUR` still read as 24ms — a NAMED factor is not a number |
+| 3    | **3**                  | matches followed by `* <identifier>` rejected                                                          |
+
+Each pass produced a clean-looking number and a list I could have acted on. The first would have sent
+me to eleven "7ms deadlines" in `team-members.test.ts` that are seven days. The tell each time was the
+same one that has worked all session: open the file and read the line, rather than trusting the
+extraction — the first two candidates I opened were both false positives, which is what prompted the
+re-measure instead of the fix.
+
+Related: the same shape is already recorded for grep classifiers and for coverage intersection. This
+adds a third medium — arithmetic in a matched expression — where the pattern that looks complete stops
+one token short of the meaning.
