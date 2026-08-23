@@ -6201,3 +6201,41 @@ second fires when the blind spot stops being one, so the header gets revisited r
 becoming wrong in the other direction. Each mutation failed its own assertion and nothing else that
 matters — the second also registers a new refusal case for the route it just gated, which is the
 roster doing its job. Both source files restored byte-identical.
+
+## V-1332 — a cross-tenant escalation that only a source-text pin would have noticed
+
+**The code is correct. Nothing behavioural was checking that it stayed correct.** That distinction is
+the whole entry: this is a coverage finding, not a live vulnerability.
+
+`resolveEffectiveAccount` is what stands behind `X-Driftstack-Account`: a team member may act as the
+owner whose team they belong to, and nobody else. The check is one line — find a membership whose
+`ownerAccountId` equals the requested account, refuse if absent.
+
+Neutralising it so that ANY membership satisfies ANY requested account — one member of one team able
+to act as any account on the platform — **failed exactly one test in the entire node project**, and
+that one is `server-resolve-effective-account-parity`, a `readFileSync` pin matching the literal
+return statement against a regex. It fired because the TEXT changed. Nothing observed the
+impersonation.
+
+**Why the existing end-to-end arm could not see it.** `team-rbac-x-driftstack-account-end-to-end`
+does carry "pointing at a non-member account → 403", and it is a good arm — its own title records
+V-1043, where it once asserted only `statusCode < 500` and would have passed a server that granted
+the impersonation. But its fixture seeds no membership at all, and says so in a comment. With
+`ctx.teams` empty, every header but the caller's own is refused by the emptiness alone. It proves a
+STRANGER is refused. It cannot prove membership is checked against the account the header names —
+and those two properties only come apart once the caller belongs to some team, which is every real
+customer who has one.
+
+The arm added seeds the caller as a genuine admin of one team, asserts acting as that owner returns
+200 (so the escalation attempt is a real request rather than a malformed one), then asserts a third
+account returns 403 with the RFC 7807 forbidden type.
+
+Proven by re-applying the same mutation: it now fails the new arm on "a team member acted as an
+account they are not a member of", where before it failed only the text pin. Source restored
+byte-identical.
+
+**The general shape, since it has now cost three findings this session.** A fixture that omits a
+precondition can make an assertion pass for a reason unrelated to the property under test. The empty
+`ctx.teams` here, the short final page in the pagination walks (V-1317), the `if (!app) return`
+suites (V-1328) — each proved something narrower than its title claimed, and in each case the gap was
+invisible to reading and obvious to a mutation.

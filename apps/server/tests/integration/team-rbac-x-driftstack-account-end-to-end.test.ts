@@ -47,6 +47,76 @@ describe('X-Driftstack-Account team-RBAC header end-to-end', () => {
     );
   });
 
+  // V-1332 — the escalation the arm above cannot see.
+  //
+  // That one seeds NO membership, and says so: with `ctx.teams` empty, every
+  // header but the caller's own is refused by the emptiness alone. So it proves
+  // a stranger is refused, not that membership is CHECKED AGAINST THE REQUESTED
+  // ACCOUNT — and those are different properties the moment the caller belongs
+  // to any team at all.
+  //
+  // Measured rather than assumed: making the resolver accept any membership for
+  // any requested account — one member of one team able to act as any account —
+  // failed exactly ONE test in the whole node project, and that one is a
+  // source-text pin matching the literal return statement. Nothing observed the
+  // impersonation. This is the arm that does.
+  it('CRITICAL a member of ONE team still cannot act as a DIFFERENT account. Membership must be checked against the account the header names, not merely be present — a caller who belongs to some team is exactly the caller for whom "has a membership" and "has THIS membership" come apart, and every real customer with a team is that caller.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+
+    const OWNER_ID = '00000000-0000-4000-8000-00000000e001';
+    const STRANGER_ID = '00000000-0000-4000-8000-00000000e002';
+
+    // The caller is a genuine admin of OWNER's team…
+    fx.authRepo.upsertAccount({
+      id: OWNER_ID,
+      email: 'team-owner@example.test',
+      name: 'Team Owner',
+      tier: 'api_builder',
+      status: 'active',
+      timezone: null,
+      avatarR2Key: null,
+      slug: null,
+      region: null,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: '00000000-0000-4000-8000-00000000e003',
+        ownerAccountId: OWNER_ID,
+        role: 'admin',
+      },
+    ]);
+
+    // …acting as OWNER is legitimate, which is what makes the next call a
+    // genuine escalation attempt rather than a malformed request.
+    const allowed = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/sessions',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${OWNER_ID}`,
+      },
+    });
+    expect(allowed.statusCode, 'fixture precondition: acting as the real owner works').toBe(200);
+
+    // …but a THIRD account they hold no membership in must still be refused.
+    const refused = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/sessions',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${STRANGER_ID}`,
+      },
+    });
+    expect(refused.statusCode, 'a team member acted as an account they are not a member of').toBe(
+      403,
+    );
+    expect(refused.json<{ type?: string }>().type, 'the RFC 7807 type for a refusal').toBe(
+      'https://errors.driftstack.dev/forbidden',
+    );
+  });
+
   it('X-Driftstack-Account with malformed acc_-prefixed UUID → 4xx (NOT 500)', async () => {
     fx = await buildTestApp({ tier: 'api_builder' });
     const res = await fx.app.inject({
