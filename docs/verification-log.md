@@ -8470,3 +8470,46 @@ reds its three; collapsing the string arm of the GitHub ternary reds only the ac
 
 Checked and not pursued: `services/oauth.ts:293`, which the same filter surfaced, is inside
 `InMemoryOAuthStore` — a test-only store with no `new` in `apps/server/src`.
+
+## V-1393 — a fleet-JWT lifetime check that cannot fire, and an arm crediting it for a refusal it never made
+
+Branch coverage put `services/fleet-node-auth.ts:165` — the **absolute-window** lifetime check — in
+the never-taken set. Measured directly: replacing `exp - now > MAX + CLOCK_SKEW` with `false` leaves
+all **22** fleet-node auth arms green.
+
+That is arithmetic, not a coverage gap. Anything reaching that line has already cleared the two
+checks above it:
+
+```
+exp - iat <= MAX          (the iat→exp cap, line 154)
+iat       <= now + SKEW   (the future-iat allowance, line 164)
+⟹ exp - now <= MAX + SKEW
+```
+
+which is exactly the threshold it tests with `>`. Its own comment argues for its existence against a
+future-dated `iat` carrying `exp = iat + 300` — the case the future-iat check now takes first.
+
+**An existing arm credited it anyway.** The one titled _"exp more than the lifetime cap from NOW, even
+with a not-future iat"_ signs `iat: NOW-100, exp: NOW+3600` — a **delta of 3700**, so the iat→exp cap
+answers and the absolute check is never consulted. Its inline comment said the absolute window
+rejected it. Corrected in place.
+
+The property worth holding is not that the check fires but that no route to it exists, so the new arm
+walks both directions out of the extremal accepted token (`iat` at the skew allowance, delta at the
+cap, `exp - now` exactly at the threshold).
+
+⚠️ **Only one of those directions is attributable, and finding that out is what fixed the arm.**
+Pushing `iat` is refused as `future_iat` — a distinct reason, and widening `CLOCK_SKEW_SECONDS` reds
+it. Pushing `exp` is refused as `too_long_lived`, which is the reason **both** lifetime checks return:
+disabling the delta cap leaves that half green, because the absolute check answers with the same
+string. My first title claimed the arm pinned _which_ check answered. It cannot, and that
+indistinguishability is precisely what subsumption looks like from outside — so the title now says
+what it shows and stops there.
+
+That is the third time this session a mutation has corrected a claim rather than confirmed one, and
+the second where the honest fix was to narrow the assertion rather than strengthen the fixture.
+
+Checked and not pursued from the same sweep: `lib/oauth-pkce.ts`'s `base64UrlDecode` has an untaken
+`pad === 0` arm, unreachable because `CHALLENGE_PATTERN` pins the challenge to exactly 43 characters
+and `43 % 4 = 3`; and `verifyPlainChallenge` is exported with no caller in `src`, guarded by the
+route layer's `z.literal('S256')` as V-1377 recorded.

@@ -164,7 +164,10 @@ describe('V-820 FleetNodeAuthImpl.verify', () => {
       iss: NODE_ID,
       sub: NODE_ID,
       iat: NOW_S - 100, // valid (past) iat
-      exp: NOW_S + 3600, // but exp is ~1h from now → absolute window check rejects
+      // V-1393 — this token's DELTA is 3700s, so the iat→exp cap answers first. The
+      // comment here used to credit the absolute-window check; measured, that check is
+      // unreachable (see the arm at the end of this block).
+      exp: NOW_S + 3600,
       nonce: 'x',
     });
     const res = await auth.verify(jwt, NOW);
@@ -248,6 +251,57 @@ describe('V-820 FleetNodeAuthImpl.verify', () => {
     });
     const res = await auth.verify(jwt, NOW);
     expect(res).toEqual({ ok: false, reason: 'future_iat' });
+  });
+
+  // V-1393 — and the absolute-window check cannot fire at all.
+  //
+  // Measured: replacing `exp - now > MAX + CLOCK_SKEW` with `false` leaves all 22 arms in
+  // this file green. That is not a coverage gap, it is arithmetic. Anything reaching that
+  // line has already cleared the two checks above it:
+  //
+  //     exp - iat <= MAX        (the delta cap)
+  //     iat       <= now + SKEW (the future-iat allowance)
+  //   ⟹ exp - now <= MAX + SKEW
+  //
+  // which is exactly the threshold it tests with `>`. The comment beside it argues for its
+  // existence against a future-dated iat — a case the future-iat check now takes first.
+  //
+  // So the property worth holding is not that it fires; it is that no route to it exists.
+  // This arm walks both directions out of the extremal accepted token.
+  //
+  // ⚠️ Only ONE of the two is attributable, and the reason is the subsumption itself.
+  // Pushing `iat` is answered by `future_iat`, a distinct reason — measured, widening
+  // CLOCK_SKEW_SECONDS reds that half. Pushing `exp` is answered by `too_long_lived`, which
+  // is the reason BOTH lifetime checks return: disabling the delta cap leaves this arm green
+  // because the absolute check then answers with the same string. That indistinguishability
+  // is what "subsumed" looks like from outside, so the arm asserts the refusal without
+  // claiming to name which line produced it.
+  it('CRITICAL from the extremal accepted token, every direction that would push exp past the absolute window is already refused. Pushing iat is refused as future_iat specifically, which pins the skew allowance; pushing exp is refused as too_long_lived, the reason BOTH lifetime checks share — so that half brackets the boundary without attributing it.', async () => {
+    // The accepted edge, as the arm above establishes: iat at the skew allowance, delta at
+    // the cap, so exp - now is exactly MAX + CLOCK_SKEW.
+    const oneSecondMoreExp = await signJwt(pair.privateKey, {
+      iss: NODE_ID,
+      sub: NODE_ID,
+      iat: NOW_S + 60,
+      exp: NOW_S + 60 + 301, // exp - now = MAX + SKEW + 1, but the DELTA is now 301
+      nonce: 'window-exp',
+    });
+    expect(
+      await auth.verify(oneSecondMoreExp, NOW),
+      'pushing exp past the window must be refused; either lifetime check answers too_long_lived',
+    ).toEqual({ ok: false, reason: 'too_long_lived' });
+
+    const oneSecondMoreIat = await signJwt(pair.privateKey, {
+      iss: NODE_ID,
+      sub: NODE_ID,
+      iat: NOW_S + 61, // one past the skew allowance
+      exp: NOW_S + 61 + 300, // delta still exactly at the cap
+      nonce: 'window-iat',
+    });
+    expect(
+      await auth.verify(oneSecondMoreIat, NOW),
+      'pushing iat is answered by the skew allowance, a reason no lifetime check returns',
+    ).toEqual({ ok: false, reason: 'future_iat' });
   });
 
   it('signature signed by a different key → ok=false reason signature_invalid', async () => {
