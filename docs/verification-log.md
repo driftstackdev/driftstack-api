@@ -8320,3 +8320,23 @@ swallowed by the grep. Re-run without it, both mutations red cleanly. This is th
 as the five silent no-ops earlier — an experiment that did not execute, reported as a result — and
 the lesson generalises past mutation anchors: **check the command exists before believing its
 silence.**
+
+### V-1389 correction — the source fix was reverted before it was committed, and my own check confirmed the wrong thing
+
+The commit above landed the updated pin and the two new arms but **not** the source change. The full
+run caught it: both new guards failed against a `run()` that still had the old body.
+
+The cause is a snapshot taken at the wrong moment. I copied `webhook-worker.ts` to the scratchpad at
+the START of the batch, edited it, then mutated and restored — and the restore put back the
+**pre-edit** file, undoing my own fix. Every `restored byte-identical: True` afterwards compared
+against that same stale snapshot and reported success, so the check could not detect the problem it
+was there to catch. Snapshot the file you intend to keep, after the edit, not before.
+
+Two of the results reported above were confounded by it and are corrected here:
+
+- the metrics arm failing during the re-entrancy mutation was the **stale body**, not the guard;
+- re-run against the correct baseline, removing the re-entrancy guard alone fails exactly one arm —
+  `expected 3 to be 2`, the extra batch a second concurrent loop drains — and reverting the
+  delegation alone fails the pin plus the metrics arm with `expected [] to deeply equal [Array(2)]`.
+
+The two mutations are now separated, which is what they were meant to show.

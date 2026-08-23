@@ -132,7 +132,18 @@ export class WebhookDeliveryWorker {
 
   constructor(private readonly config: WebhookWorkerConfig) {}
 
-  /** Start the loop. Returns when stop() is called. */
+  /**
+   * Start the loop. Returns when stop() is called.
+   *
+   * V-1389 — delegates to `tickOnce` instead of repeating claim-and-deliver. The two had
+   * drifted: this loop still used `Promise.all`, the form V-781 replaced below because one
+   * escaping rejection discards every other outcome in the tick, and it counted no metrics
+   * at all — both delivery counters would have stayed flat under it.
+   *
+   * Nothing calls `run()` today; bootstrap drives `tickOnce()` through a bounded drain. So
+   * the divergence has cost nothing yet, which is exactly why it was worth closing: this is
+   * the obvious entry point for whoever wires this next, and it looked finished.
+   */
   async run(): Promise<void> {
     if (this.running) return;
     this.running = true;
@@ -140,15 +151,8 @@ export class WebhookDeliveryWorker {
     const idleSleepMs = this.config.idleSleepMs ?? DEFAULT_IDLE_SLEEP_MS;
 
     while (this.running) {
-      const claimed = await this.config.repo.claim({
-        batchSize: this.config.batchSize ?? DEFAULT_BATCH_SIZE,
-        now: this.now(),
-      });
-      if (claimed.length === 0) {
-        await sleep(idleSleepMs);
-        continue;
-      }
-      await Promise.all(claimed.map((d) => this.deliver(d)));
+      const { claimed } = await this.tickOnce();
+      if (claimed === 0) await sleep(idleSleepMs);
     }
   }
 
