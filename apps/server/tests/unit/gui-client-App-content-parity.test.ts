@@ -161,13 +161,17 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     expect(body).toMatch(/case 'settings':/);
   });
 
-  it("Billing route wired: BillingView is lazy-loaded, the 'billing' case returns <BillingView />, and the nav-billing command-palette action exists (revenue path — the customer crypto-checkout cluster was previously built but unreachable, 2026-06-19)", () => {
+  it("Billing route points OUT to the web dashboard: BillingMovedView is lazy-loaded, the 'billing' case returns it, and the nav-billing palette action still exists (2026-08-23 — the in-app billing hub was removed; two surfaces owning billing let one account read a different answer depending on where the customer looked, and duplicated the payment path)", () => {
     expect(body).toMatch(
-      /const BillingView = lazy\(async \(\) => \(\{\s*\n?\s*default: \(await import\('\.\/views\/BillingView'\)\)\.BillingView,\s*\n?\s*\}\)\);/,
+      /const BillingMovedView = lazy\(async \(\) => \(\{\s*\n?\s*default: \(await import\('\.\/views\/BillingMovedView'\)\)\.BillingMovedView,\s*\n?\s*\}\)\);/,
     );
-    expect(body).not.toMatch(/import \{ BillingView \} from '\.\/views\/BillingView';/);
-    expect(body).toMatch(/case 'billing':\s*\n?\s*return <BillingView \/>;/);
+    expect(body).not.toMatch(/import \{ BillingMovedView \} from '\.\/views\/BillingMovedView';/);
+    expect(body).toMatch(/case 'billing':\s*\n?\s*return <BillingMovedView \/>;/);
+    // The destination stays in the palette — a customer hunting for billing
+    // that is simply absent is the other failure mode.
     expect(body).toMatch(/id: 'nav-billing'/);
+    // And the retired hub must not come back through this file.
+    expect(body).not.toMatch(/BillingView\b/);
   });
 
   it('founder tab-switch continuity: one transition-owned navigator + stable main/resettable boundary + bounded per-destination scroll; inactive views are not cached', () => {
