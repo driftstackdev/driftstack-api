@@ -167,6 +167,95 @@ describe('LiveKit API secret record-bound v2 envelope', () => {
     ).toThrow(/apiKey must encode to 1\.\.1024 bytes/);
   });
 
+  // V-1378 — four refusals on this envelope were in the never-executed set, and each is
+  // the encoding half of a compound guard whose LENGTH half is already pinned. The sibling
+  // module makes the case plainly: `webhook-secret-encryption` refuses a lone surrogate
+  // because such a value "encodes to U+FFFD replacement bytes, so the value sealed into the
+  // envelope is NOT the value the caller passed". A LiveKit API secret stored that way
+  // signs room tokens nobody can reproduce, and a node id stored that way authenticates a
+  // credential tuple that does not match the row it came from.
+  function rawV2Envelope(bytes: Buffer, keyBase64: string, context: LivekitSecretContext): string {
+    const iv = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', Buffer.from(keyBase64, 'base64'), iv);
+    cipher.setAAD(
+      Buffer.from(
+        JSON.stringify([
+          'driftstack.livekit-api-secret',
+          2,
+          context.nodeId.toLowerCase(),
+          context.apiKey,
+          context.wsUrl,
+        ]),
+        'utf8',
+      ),
+    );
+    const ciphertext = Buffer.concat([cipher.update(bytes), cipher.final()]);
+    return `${LIVEKIT_SECRET_V2_PREFIX}${Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString('base64')}`;
+  }
+
+  it('CRITICAL a context field that is not valid Unicode is refused, not silently replaced. `assertBoundedUtf8` checks encoding BEFORE length and only the length half was exercised; a lone surrogate in apiKey encodes to U+FFFD, so the AAD would bind a tuple that differs from the row the credential came from and every later decrypt under the real value would fail authentication.', () => {
+    const key = makeKey();
+    const loneSurrogate = 'lk_api_key_\uD800';
+    // The premise, asserted rather than assumed: this does not survive a UTF-8 round trip.
+    expect(Buffer.from(loneSurrogate, 'utf8').toString('utf8')).not.toBe(loneSurrogate);
+
+    expect(() =>
+      encryptLivekitSecret('secret', key, { ...CONTEXT, apiKey: loneSurrogate }),
+    ).toThrow(/apiKey is not valid Unicode text/);
+    expect(
+      () => encryptLivekitSecret('secret', key, { ...CONTEXT, apiKey: 'lk_ok' }),
+      'and a well-formed context of the same shape still encrypts',
+    ).not.toThrow();
+  });
+
+  it('CRITICAL an API secret that is not valid Unicode is refused on the way IN. Its length passes, so only the encoding check stands between a lone surrogate and an envelope sealed around a value the caller never held — one that would mint LiveKit tokens signed with a secret nobody can reproduce.', () => {
+    const key = makeKey();
+    const loneSurrogate = 'sec\uDC00ret';
+    expect(Buffer.from(loneSurrogate, 'utf8').toString('utf8')).not.toBe(loneSurrogate);
+
+    expect(() => encryptLivekitSecret(loneSurrogate, key, CONTEXT)).toThrow(
+      /API secret is not valid Unicode text/,
+    );
+  });
+
+  it('CRITICAL a stored blob that decrypts to non-UTF-8 bytes is refused on the way OUT. Authentication succeeds — the envelope is genuine — so nothing before this point objects; without it the caller receives a lossy U+FFFD rendering of the secret and signs with it.', () => {
+    const key = makeKey();
+    // 0xFF is not a valid UTF-8 lead byte. One byte, so the length bound passes and the
+    // encoding check is the only thing left.
+    const envelope = rawV2Envelope(Buffer.from([0xff]), key, CONTEXT);
+
+    expect(() => decryptLivekitSecret(envelope, key, CONTEXT)).toThrow(
+      /API secret is not valid UTF-8/,
+    );
+    expect(
+      decryptLivekitSecret(rawV2Envelope(Buffer.from('ok', 'utf8'), key, CONTEXT), key, CONTEXT),
+      'the same construction with valid bytes round-trips, so the refusal is the encoding check',
+    ).toBe('ok');
+  });
+
+  it('CRITICAL an oversized stored blob is refused BEFORE any decrypt is attempted. The bound is what stops a row of arbitrary size being handed to the cipher; the encrypt path caps the plaintext at 4096 bytes, so this shape can only arrive from storage, which is exactly the case the check exists for.', () => {
+    const key = makeKey();
+    const oversized = Buffer.concat([
+      randomBytes(12),
+      randomBytes(16),
+      Buffer.alloc(4097, 7), // one byte past MAX_API_SECRET_BYTES
+    ]).toString('base64');
+
+    expect(() =>
+      decryptLivekitSecret(`${LIVEKIT_SECRET_V2_PREFIX}${oversized}`, key, CONTEXT),
+    ).toThrow(/exceeds the API-secret storage bound/);
+
+    const atBound = Buffer.concat([
+      randomBytes(12),
+      randomBytes(16),
+      Buffer.alloc(4096, 7),
+    ]).toString('base64');
+    expect(
+      () => decryptLivekitSecret(`${LIVEKIT_SECRET_V2_PREFIX}${atBound}`, key, CONTEXT),
+      'exactly at the bound it must get past the size gate and fail on authentication instead',
+    ).toThrow(/Unsupported state or unable to authenticate data|auth/i);
+  });
+
   it('rejects noncanonical base64 and truncated payloads before decryption', () => {
     const key = makeKey();
     const envelope = encryptLivekitSecret('lk_test_xy', key, CONTEXT);

@@ -7903,3 +7903,41 @@ remain of 261).
   throws **409** for `http://` while the published spec declares only `['201','400','401','403','429']`
   on that operation — an undeclared status, but unreachable for the same reason, so it is a latent
   mismatch rather than a live one.
+
+## V-1378 — four refusals on the LiveKit secret envelope, each the encoding half of a guard whose length half was already pinned
+
+Coverage put four throws in `lib/livekit-secret-encryption.ts` in the never-executed set. Every one of
+them sits beside a check that IS exercised, which is why nothing looked thin:
+
+| dark line                                        | its exercised neighbour                             |
+| ------------------------------------------------ | --------------------------------------------------- |
+| `:53` context field is not valid Unicode         | the `1..maxBytes` length bound in the same function |
+| `:132` API secret is not valid Unicode (encrypt) | `assertSecretBytes` length bound, one line down     |
+| `:119` decrypted plaintext is not valid UTF-8    | the same length bound, on the read side             |
+| `:107` stored blob exceeds the API-secret bound  | the _minimum_ blob-length check, one line up        |
+
+`assertBoundedUtf8` is the clearest case: it checks encoding **before** length, and an arm two
+screens up already pins the length half — including a `CRITICAL bounds context fields from ABOVE`
+arm whose own header records that deleting the upper bound once left 22,425 tests green. The encoding
+half had the same status and nobody had noticed, because the compound guard reads as covered.
+
+**Why each matters, not just that it is dark.** The sibling module states the principle: a lone
+surrogate "encodes to U+FFFD replacement bytes, so the value sealed into the envelope is NOT the
+value the caller passed".
+
+- A **context field** that way makes the AAD bind a tuple that differs from the row the credential
+  came from, so every later decrypt under the real value fails authentication.
+- An **API secret** that way mints LiveKit room tokens signed with a secret nobody can reproduce.
+- On the **read** side authentication has already succeeded — the envelope is genuine — so nothing
+  before that point objects, and the caller would receive a lossy rendering of the secret and sign
+  with it.
+- The **size bound** guards a shape the encrypt path cannot produce (it caps plaintext at 4096), so
+  it can only arrive from storage, which is exactly what it is for.
+
+Each arm carries its own control so it cannot pass for the wrong reason: the Unicode arms assert the
+premise (the value does not survive a UTF-8 round trip) and that a well-formed sibling still
+encrypts; the read-side arm builds the identical raw envelope with valid bytes and round-trips it;
+and the size arm asserts that a blob **exactly at** the bound clears the size gate and fails on
+authentication instead — so the check is a bound, not an off-by-one refusal of legitimate rows.
+
+Four mutations, four distinct reds, one per arm.
