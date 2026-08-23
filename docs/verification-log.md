@@ -6914,3 +6914,43 @@ Attribution for this run, since a red set that changes every time invites guessi
 `incident-visibility-repo-contract` — timed out under contention and pass together in isolation. The
 fifth, `ConfirmProvider.test.tsx`, is the peer's, from `97451cffb feat(gui): animate shared
 confirmation dialogs`.
+
+## V-1353 — a server-signed webhook header, verified by executing the SDKs rather than reading them
+
+Two guards stand next to this property and neither covers it. `cross-sdk-webhook-signature-parity`
+compares the three SDKs by READING their source and asserting they describe the same format — its own
+header calls the property security-critical, because SDKs that disagree let customers "silently miss
+real webhooks OR accept forged ones", but a text comparison cannot see a parser that reads the format
+correctly and applies it wrongly. `durable-webhook-signature-sdk-verify` DOES feed a real emitted
+header to a verifier, and closed a genuine bug that way — the durable path once signed bare hex, which
+the SDK verifier silently rejected — but it verifies with **TypeScript only**.
+
+So Python and Go customers were covered by the text comparison alone.
+
+New file: sign with the server's own `signWebhookPayload`, then hand the result to the verifiers as a
+customer's process receives it. **The rotation case is the point.** During a secret rotation the server
+emits `t=…,v1=<curr>,v1=<prev>` — two signatures in one header — and a verifier reading only the FIRST
+`v1=` accepts the current secret while silently rejecting every delivery a customer is still verifying
+with the previous one, which is exactly the window rotation exists to make safe. A precondition arm
+asserts the header under test really does carry two signatures, so the others cannot pass on a
+single-signature header that says nothing about the grace window.
+
+Mutation-proven against the server's signer, both directions:
+
+| mutation                                    | result                                                                 |
+| ------------------------------------------- | ---------------------------------------------------------------------- |
+| the `v1=<prev>` entry is not emitted        | all 3 arms fail — precondition, TypeScript, Python                     |
+| the signed string separator `.` becomes `:` | 2 fail (both verifiers); the shape precondition correctly still passes |
+
+**Go is deliberately NOT covered here, and that is the honest part.** A `go test` arm was written and
+worked when driven by hand. Inside the vitest harness it PASSED under the separator mutation while the
+fixture on disk provably carried a colon-separated signature — the same command run by hand against
+that same file fails. Go's test-result caching was ruled out directly: same path, changed content, no
+`-count=1`, still fails. The cause is not understood.
+
+An arm that can go green on an input it should reject is worse than an absent one, because it reads as
+coverage — so it was removed along with the Go-side fixture test it drove, rather than shipped with a
+caveat. Go remains covered by the source comparison only. Recorded as an open item with what was ruled
+out, so the next attempt starts from the evidence instead of the idea.
+
+`EXPECTED_TEST_FILES` 3005 → 3006, `_ALL` 3169 → 3170, for the one file added.
