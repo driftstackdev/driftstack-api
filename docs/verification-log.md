@@ -5855,3 +5855,53 @@ Attribution of the other two reds in the same run, checked before investigating:
 `src/services/job-chain-liveness.ts` and its test, and has added
 `crypto-order-expiry-sweep-job.ts` untracked. `verify-suite.test.ts` is the count pin at 3001
 against a disk of 3002, which is their untracked test file and stays theirs to bump.
+
+## V-1323 — the imperative limit bound, measured then closed
+
+**The sweep that led here.** Five repos cap their own page size with `Math.min(limit, MAX)`.
+Neutralising all five ceilings at once — replacing each MAX with 100000, which isolates the cap from
+the default — turned 14 files red. Unlike the pagination boundary, this class is in good shape: six
+of the catches are behavioural (`admin-accounts-list-repo-contract`, `db-admin-accounts-repo-drizzle`,
+`db-profiles-repo-keyset-drizzle`, `db-recipes-encryption-drizzle`,
+`db-profile-snapshot-restore-dek-drizzle`, `profile-snapshot-parentage-repo-contract`), none of them
+reading source. Four of the five caps are covered that way. The fifth,
+`atlas-priority-events-repo`, was caught by nothing — but its route declares the same 1000 ceiling in
+Zod, so the repo cap is a second line rather than the only one. Recorded, not repaired.
+
+**A hypothesis raised and retracted.** Three route schemas declare `limit` as
+`z.string().regex(/^\d+$/)` with no numeric bound — including `/v1/billing/crypto-orders`, which is
+customer-facing. That reads like an unbounded page. It is not: all three refuse out-of-range values
+in code immediately after parsing, at 100, 200 and 1000, and each ceiling matches the message it
+returns. Verified by reading all three rather than inferring from the schema.
+
+**What was actually missing.** `openapi-admin-list-limit-bounds-parity.test.ts` compares the
+spec-advertised `limit` max against the route-enforced one — the drift that once had
+`/v1/admin/accounts` advertising 200 while the route enforced 100, so an integrator sending 150 got a 400. Its extractor reads a declared Zod `max(N)`, and its own header named the gap: an endpoint
+bounding imperatively is invisible to it, spec and route agreed by hand-check, and nothing would
+notice if they stopped. The yield was measured before the work — all three agree today — so this
+closes a gap rather than fixing a live defect.
+
+Three endpoints added, each compared two ways:
+
+- **spec ↔ enforced**, the original invariant.
+- **enforced ↔ the refusal message**, which is new. These bounds carry their ceiling twice, and a
+  route refusing above 200 while telling the caller the limit is 500 misinforms the integrator just
+  as surely as spec drift. The message is the part they actually read.
+
+One is `/v1/billing/crypto-orders`, a CUSTOMER path — outside this file's admin-scoped completeness
+arm, so it would have stayed uncovered even had the extractor learned imperative bounds.
+
+**A defect in the existing extractor, found by using it.** `specLimitMax` matched only the
+single-line Zod chain, so it returned null for `/v1/billing/crypto-orders`, whose declaration
+prettier had wrapped across six lines once it grew a `.describe(...)`. Null reads as "no bound"
+unless the caller asserts otherwise; every arm does, so this surfaced as a failure rather than a
+silent pass. The pattern is now whitespace-tolerant, and the six pre-existing admin arms still read
+the same numbers, which is what shows the change did not loosen them.
+
+Mutation-proven, each restored byte-identical:
+
+| mutation                                                | result                                                                       |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `n > 100` → `n > 250` in the customer route             | 2 fail: spec-parity AND the message arm — the condition moved away from both |
+| the message alone says 500, still refuses above 100     | 1 fails: only the message arm, isolating it                                  |
+| a fourth imperative marker added to `admin-sessions.ts` | completeness arm fails, naming the file and its count                        |

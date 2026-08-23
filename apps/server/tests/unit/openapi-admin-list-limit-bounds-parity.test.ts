@@ -10,15 +10,26 @@
 // This asserts the equality invariant directly (extracts both sides, no
 // hardcoded expected value) so any future divergence on either side fails.
 //
-// V-1110 — the blind spot, named rather than left implicit. This guard reads a
-// Zod `limit … max(N)` on both sides. An endpoint that validates its bound
-// imperatively is invisible to it: `/v1/admin/crypto-orders` parses `limit` as
-// a digit-string and refuses out-of-range values with
-// `if (!Number.isInteger(n) || n < 1 || n > 200) throw new BadRequestError(...)`.
-// Spec and route agree there today (both 200) — checked by hand while adding the
-// completeness arm below — but nothing here would notice if they stopped.
-// Extending the extractor to imperative bounds is real work with an unknown
-// yield; what is NOT acceptable is the coverage reading as total when it is not.
+// V-1323 — the imperative blind spot V-1110 named is now covered, so the note
+// describing it as out of scope no longer applies.
+//
+// The Zod extractor above reads a declared `limit … max(N)`. Three endpoints
+// declare no bound at all: they take `limit` as a digit-string and refuse
+// out-of-range values in code, which the Zod reader cannot see. The yield was
+// measured before the work was done — all three agree with the spec today — so
+// this closes a gap rather than fixing a live defect, and the second describe
+// below keeps them agreeing.
+//
+// Those three carry their ceiling TWICE: once in the comparison and once in the
+// message the caller reads back. That second copy is checked here too, because
+// a route refusing at 200 while telling the integrator the limit is 500 is the
+// same defect as the spec drifting — the caller is misinformed either way, and
+// the message is the part they actually see.
+//
+// One of the three is `/v1/billing/crypto-orders`, a CUSTOMER path. The Zod
+// half of this file is scoped to `/v1/admin` by its completeness arm, so that
+// endpoint would have stayed outside this guard even after the extractor
+// learned imperative bounds.
 //
 // The spec declares the query two ways: inline inside the registerRoute
 // block (anchor = the path string) or via a named `*QueryOpenApi` const
@@ -64,7 +75,12 @@ function specLimitMax(anchor: string): number | null {
   const endTok = anchor.startsWith('/v1/') ? 'registerRoute(' : '});';
   const endIdx = rest.indexOf(endTok, 1);
   const block = endIdx > 0 ? rest.slice(0, endIdx) : rest;
-  const m = block.match(/limit: z\.(?:coerce\.)?number\(\)\.int\(\)\.min\(1\)\.max\((\d+)\)/);
+  // Tolerant of the chained multi-line form prettier produces once the
+  // declaration grows a `.describe(...)`: `/v1/billing/crypto-orders` writes
+  // `limit: z.coerce\n.number()\n…\n.max(100)`, which a single-line pattern
+  // reads as absent — and "absent" is indistinguishable from "no bound" unless
+  // the caller asserts non-null, which every arm below does.
+  const m = block.match(/limit:\s*z\.[\s\S]{0,200}?\.max\((\d+)\)/);
   const g = m?.[1];
   return g !== undefined ? Number(g) : null;
 }
@@ -104,6 +120,56 @@ const ADMIN_LIST_ENDPOINTS: ReadonlyArray<{
     label: '/v1/admin/atlas-priority/queue',
     routeFile: 'internal-atlas-priority.ts',
     specAnchor: 'AtlasPriorityQueueQueryOpenApi',
+  },
+];
+
+/**
+ * The bound an endpoint enforces IN CODE, plus the bound its refusal message
+ * states. Sliced from the quoted route path to the next handler registration,
+ * because one file can register several bounded lists — `admin-crypto-orders.ts`
+ * carries both the 200-row list and the 1000-row CSV export, and a file-wide
+ * match would read whichever came first for both.
+ */
+function routeImperativeLimit(
+  routeFile: string,
+  pathToken: string,
+): { enforced: number; stated: number } | null {
+  const src = read(`apps/server/src/routes/${routeFile}`);
+  const i = src.indexOf(pathToken);
+  if (i < 0) return null;
+  const rest = src.slice(i + pathToken.length);
+  const ends = [rest.indexOf('app.get'), rest.indexOf('app.post')].filter((n) => n > 0);
+  const block = ends.length > 0 ? rest.slice(0, Math.min(...ends)) : rest;
+  const enforced = block.match(/n > (\d+)\)/);
+  const stated = block.match(/between 1 and (\d+)\./);
+  if (!enforced?.[1] || !stated?.[1]) return null;
+  return { enforced: Number(enforced[1]), stated: Number(stated[1]) };
+}
+
+/** Endpoints whose limit bound is enforced in code rather than declared in Zod. */
+const IMPERATIVE_LIMIT_ENDPOINTS: ReadonlyArray<{
+  label: string;
+  routeFile: string;
+  pathToken: string;
+  specAnchor: string;
+}> = [
+  {
+    label: '/v1/admin/crypto-orders',
+    routeFile: 'admin-crypto-orders.ts',
+    pathToken: "'/v1/admin/crypto-orders',",
+    specAnchor: '/v1/admin/crypto-orders',
+  },
+  {
+    label: '/v1/admin/crypto-orders.csv',
+    routeFile: 'admin-crypto-orders.ts',
+    pathToken: "'/v1/admin/crypto-orders.csv',",
+    specAnchor: '/v1/admin/crypto-orders.csv',
+  },
+  {
+    label: '/v1/billing/crypto-orders',
+    routeFile: 'billing-crypto-orders.ts',
+    pathToken: "'/v1/billing/crypto-orders',",
+    specAnchor: '/v1/billing/crypto-orders',
   },
 ];
 
@@ -156,5 +222,49 @@ describe('OpenAPI spec ↔ route `limit` max parity (admin list endpoints)', () 
       'rows for route files that no longer enforce a limit on an admin path — the row compares ' +
         'nothing while making the coverage look wider:',
     ).toEqual([]);
+  });
+});
+
+describe('OpenAPI spec ↔ route `limit` max parity (imperatively bounded endpoints)', () => {
+  for (const ep of IMPERATIVE_LIMIT_ENDPOINTS) {
+    it(`${ep.label}: spec-advertised limit max === the max the route enforces in code`, () => {
+      const route = routeImperativeLimit(ep.routeFile, ep.pathToken);
+      const specMax = specLimitMax(ep.specAnchor);
+      expect(route, `no imperative limit bound found for ${ep.label}`).not.toBeNull();
+      expect(specMax, `spec limit max not found for ${ep.specAnchor}`).not.toBeNull();
+      expect(
+        specMax,
+        `${ep.label}: spec advertises max ${specMax} but the route refuses above ${route?.enforced}`,
+      ).toBe(route?.enforced);
+    });
+
+    it(`${ep.label}: the refusal message states the bound the route actually applies`, () => {
+      const route = routeImperativeLimit(ep.routeFile, ep.pathToken);
+      expect(route, `no imperative limit bound found for ${ep.label}`).not.toBeNull();
+      expect(
+        route?.stated,
+        `${ep.label}: refuses above ${route?.enforced} but tells the caller the limit is ` +
+          `${route?.stated} — the message is the part an integrator reads`,
+      ).toBe(route?.enforced);
+    });
+  }
+
+  it('CRITICAL every imperatively bounded limit in the route layer is in the table. The pairs compared here are the pairs someone listed, so an endpoint left out is not reported as unchecked — its two numbers simply never meet. Counted from the refusal message, which is the one marker every such bound carries.', () => {
+    const routesDir = resolve(REPO, 'apps/server/src/routes');
+    const MARKER = /limit must be an integer between 1 and \d+\./g;
+    let found = 0;
+    const files: string[] = [];
+    for (const f of readdirSync(routesDir).filter((n) => n.endsWith('.ts'))) {
+      const n = (readFileSync(resolve(routesDir, f), 'utf8').match(MARKER) ?? []).length;
+      if (n > 0) {
+        found += n;
+        files.push(`${f} (${n})`);
+      }
+    }
+    expect(
+      found,
+      `imperative limit bounds in routes/: ${files.sort().join(', ')} — every one needs a row ` +
+        'in IMPERATIVE_LIMIT_ENDPOINTS, or it is enforced with nothing comparing it to the spec',
+    ).toBe(IMPERATIVE_LIMIT_ENDPOINTS.length);
   });
 });
