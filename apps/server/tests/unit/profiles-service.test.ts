@@ -266,6 +266,8 @@ function makeAudit(): {
 
 const SOLO: AccountTier = 'solo_manual';
 const TEAM: AccountTier = 'team_manual';
+/** V-1377 — 200 profiles; the copy-name bound needs 101 rows to be reachable at all. */
+const AGENCY: AccountTier = 'agency_manual';
 
 // A Postgres unique-violation (23505) on the profiles_account_name_unique
 // index — what a concurrent same-name insert raises on the race loser after
@@ -581,6 +583,45 @@ describe('V-553.B-21 ProfilesService.clone', () => {
     const row = await svc.clone({ id: 'p1', accountId: 'acc_1', tier: TEAM });
     expect(row.name).toBe('src (copy 2)');
     expect(row.archetype).toBe('mobile_ios');
+  });
+
+  // V-1377 — the copy-name search is a bounded loop, and coverage put its exhaustion
+  // refusal in the never-executed set. The arm above proves the loop ADVANCES; nothing
+  // proved where it stops. A bound nobody has crossed is a bound nobody has checked: off
+  // by one in the generous direction it hands back a name that already exists (and the
+  // insert then races the unique index), and in the strict direction it refuses a clone
+  // the customer could have had.
+  function copyNames(upTo: number): string[] {
+    return Array.from({ length: upTo }, (_, i) => (i === 0 ? 'src (copy)' : `src (copy ${i + 1})`));
+  }
+
+  it('CRITICAL with every copy name taken the clone is REFUSED rather than colliding. The loop tries 99 candidates and then stops; without the refusal the caller would either loop forever or be handed a name that is already in use.', async () => {
+    const taken = copyNames(99);
+    const { repo } = makeRepo([
+      makeProfile({ id: 'p1', accountId: 'acc_1', name: 'src' }),
+      ...taken.map((name, i) => makeProfile({ id: `pc${String(i)}`, accountId: 'acc_1', name })),
+    ]);
+    const svc = new ProfilesService(repo);
+
+    await expect(svc.clone({ id: 'p1', accountId: 'acc_1', tier: AGENCY })).rejects.toThrow(
+      /Too many copies of this profile already exist/,
+    );
+    await expect(svc.clone({ id: 'p1', accountId: 'acc_1', tier: AGENCY })).rejects.toMatchObject({
+      status: 409,
+      extensions: { resource: 'profile', field: 'name' },
+    });
+  });
+
+  it('CRITICAL and the bound is exactly 99, not 98: with the last candidate still free the clone takes it. Asserting only the refusal above would pass just as well against a loop that gave up early, which is the failure a customer actually notices.', async () => {
+    const taken = copyNames(98);
+    const { repo } = makeRepo([
+      makeProfile({ id: 'p1', accountId: 'acc_1', name: 'src' }),
+      ...taken.map((name, i) => makeProfile({ id: `pc${String(i)}`, accountId: 'acc_1', name })),
+    ]);
+    const svc = new ProfilesService(repo);
+
+    const row = await svc.clone({ id: 'p1', accountId: 'acc_1', tier: AGENCY });
+    expect(row.name, 'the last free candidate must be used, not refused').toBe('src (copy 99)');
   });
 
   it('copies the source icon + note into the clone insert (organization metadata rides along)', async () => {

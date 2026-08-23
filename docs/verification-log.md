@@ -7863,3 +7863,43 @@ Both halves mutation-proven: changing the secret length from 38 to 39 bytes reds
 length gained slack bits — the re-encode check is now live"_, and letting `=` into the generated
 candidates reds the counter-example loop. If that arm ever goes red, the webhook check has become
 reachable and needs the deterministic respelling arm recipe payloads got in V-1375.
+
+## V-1377 — a bound nobody had crossed was a bound nobody had checked
+
+Cloning a profile whose name is taken derives `"src (copy)"`, `"src (copy 2)"`, … and gives up after
+99 attempts with a 409. Coverage put that refusal in the never-executed set.
+
+An arm already proved the loop **advances** — seed `src` and `src (copy)`, get `src (copy 2)`.
+Nothing proved where it **stops**, and the two failures at that edge point in opposite directions:
+one candidate too generous hands back a name that already exists, so the insert then races the unique
+index; one too strict refuses a clone the customer could have had.
+
+Two arms, and the second is the one that makes the first mean something. With all 99 candidates taken
+the clone is refused, with `status: 409` and `extensions: { resource: 'profile', field: 'name' }`.
+With **98** taken — the last candidate still free — it must be _used_, not refused. Mutation
+separates them cleanly: deleting the refusal reds only the first, and changing the loop bound from 99
+to 98 reds only the second.
+
+⚠️ **The first draft was unreachable and said so loudly.** Seeding 100 profiles on the tier the
+neighbouring arms use tripped the tier cap first — _"Tier 'team_manual' permits at most 50"_ — so the
+copy-name loop was never entered. The refusal needs 101 rows to be reachable at all, which is why
+these two arms run on `agency_manual` (200) while their neighbours do not. A bound behind another
+bound is only testable from outside the tighter one.
+
+### Two dark lines checked and NOT defects, recorded so the next sweep does not re-open them
+
+Both are second-layer defence behind a zod schema that answers first, which is the dominant shape in
+this file's never-executed set once the `if (!ctx)` type-narrowing idiom is filtered out (142 throws
+remain of 261).
+
+- **`services/oauth.ts:518`** — `only S256 PKCE is supported`. The route schema is
+  `z.literal('S256')`, so nothing else reaches the service. The dedicated test file already documents
+  this exactly: PKCE is enforced in two places and _"relaxing EITHER one alone leaves `plain` still
+  refused, so a single-layer mutation makes this file look vacuous when it is not"_. Known, correct,
+  and better documented than most guards.
+- **`services/webhooks.ts:991`** — `Invalid URL`. Both `CreateWebhookRequestSchema` and
+  `UpdateWebhookRequestSchema` are `z.string().url().refine(startsWith('https://'))`, so a malformed
+  URL is a 400 at the route and never reaches `parseHttpsUrl`. Worth noting the sibling at `:994`
+  throws **409** for `http://` while the published spec declares only `['201','400','401','403','429']`
+  on that operation — an undeclared status, but unreachable for the same reason, so it is a latent
+  mismatch rather than a live one.
