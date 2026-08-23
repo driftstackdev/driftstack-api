@@ -7499,3 +7499,50 @@ does not fire".** The file list was in a shell variable, and **zsh does not word
 variables** — so vitest received one argument containing spaces, matched no file, and printed no
 summary. An empty result is not a passing result. Re-run with literal paths, and check for the
 summary line before concluding anything.
+
+## V-1369 — the class, guarded: a `Querystring` generic is a claim, and now something checks it
+
+V-1367 and V-1368 were the same defect twice, and they failed in opposite directions — one answered
+**200 with the wrong data**, the other answered **500** where it meant 400. Both are fixed and
+behaviourally covered. Neither fix stops the third one.
+
+So the population is now discovered from source and ruled on. Every route declaring a `Querystring`
+generic must validate the querystring **where it reads it**, or appear in an `EXCEPTIONS` map with
+the reason it does not. 16 routes, 13 validated, 3 excused:
+
+| excused route                             | what actually stands in the way                                                                                                                                    |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/v1/account/me/notifications` (SSE)      | `requireAuthEventSource` preHandler narrows `ds_token` with `typeof … === 'string'` and 401s otherwise; the handler never reads the query                          |
+| `/v1/agent-sessions/:id/transcript` (SSE) | same preHandler                                                                                                                                                    |
+| `/v1/auth/oauth/{provider}/callback`      | forwards the IDP query verbatim, appending only `typeof v === 'string'` entries, so a repeated key is dropped and the SPA exchange refuses the incomplete callback |
+
+Three properties, because a list like that rots in three different ways:
+
+- **The population is discovered, not listed.** A new route with a `Querystring` generic and no
+  schema fails here rather than waiting for someone to send the parameter twice.
+- **Exceptions are keyed by file + the declared generic**, so reshaping a route re-opens its
+  exemption instead of carrying it. Proven: adding a second field to the notifications generic makes
+  its excuse go stale and the route unaccounted-for, and both arms fire.
+- **No exception may outlive its route.** An entry matching nothing is an excuse the next route in
+  that file would inherit.
+
+**The detector is floored on both sides and tested against known inputs**, because this guard's whole
+value is its classifier. A discovery regex matching nothing satisfies the rule vacuously; one
+matching everything satisfies it just as well. So the arm asserts ≥16 discovered and ≥13 classified
+validated, and then feeds the classifier a `safeParse(req.query)` (must be true) and the exact raw
+read from V-1368 (must be false — a classifier that clears that line would have cleared both
+defects).
+
+⚠️ **The first version of this classifier was wrong in exactly the way it now tests against.** It
+accepted any `typeof x === 'string'` anywhere in the handler, which cleared two routes that validate
+somewhere else entirely, and it searched only for `safeParse` while most of this codebase uses a
+`parseOrThrow` helper — between them, ten false results. The rule is query-rooted now:
+`safeParse(req.query)`, `parseOrThrow(X, req.query)`, or `typeof req.query.<k> === 'string'`.
+Comments and string literals are blanked (newlines preserved, so reported line numbers still point at
+the source) — otherwise a route that merely _mentions_ `safeParse` in a comment reads as validated.
+
+Mutation-proven three ways, all source-side: reverting `active_only` to its raw read reds the rule,
+the floor, and the arm that pins the two repaired routes to the validated side; removing one
+`Querystring` generic reds the population floor; reshaping an excused route reds the staleness arm.
+
+`EXPECTED_TEST_FILES` 3007 → 3008, `_ALL` 3171 → 3172.
