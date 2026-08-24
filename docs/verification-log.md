@@ -15057,9 +15057,9 @@ Fourth application of the V-1527 instrument, and the strongest result: this one 
 not a narrow-but-currently-correct scan.
 
 `mfa-encryption-key-shared-cross-source-invariant` protects the property that four secret-encryption
-classes — BYOK Anthropic, gui_control_key, LiveKit, MFA TOTP — all draw AES-256-GCM key material from a
-single `MFA_ENCRYPTION_KEY`. The guarantee it exists to keep is operator-facing: _one rotation rotates all
-four ciphertexts_. Its header names the exact refactor it fears — "a refactor that introduces a separate
+classes — BYOK Anthropic, gui*control_key, LiveKit, MFA TOTP — all draw AES-256-GCM key material from a
+single `MFA_ENCRYPTION_KEY`. The guarantee it exists to keep is operator-facing: \_one rotation rotates all
+four ciphertexts*. Its header names the exact refactor it fears — "a refactor that introduces a separate
 `LIVEKIT_ENCRYPTION_KEY`" — and one of its arms states the absolute: **`config.ts` is the only place an
 `*_ENCRYPTION_KEY` env may be read at all.**
 
@@ -15106,3 +15106,44 @@ well-commented, mutation-tested, and checking a fraction of what its sentence cl
 The rule holds and is now worth stating as procedure rather than observation: **when a guard's header
 states the only way to do something, the scope of the scan must equal the scope of the sentence** — and
 the way to find out is to write the violation and watch the guard stay green.
+
+## V-1530 — the same instrument, applied to the anonymous-exemption area: no gap, proven
+
+Four consecutive batches found a guard whose scan was narrower than its sentence, so the honest next step
+was to check whether the instrument is finding real gaps or just finding whatever it is pointed at. This
+batch pointed it at the strongest remaining candidate and the answer was **no gap**.
+
+Rather than pick by hand again, the candidate set was derived: 43 guards state an absolute ("the only
+way/place/caller/path/source"), and 32 of those read a fixed file list with no tree walk. Most are false
+positives on inspection — "the only way to observe the thing that was broken" describes test technique,
+not a population. The ones making a claim about the CODEBASE are a much smaller set, and the sharpest is
+`an-anonymous-exemption-is-earned-per-route`, because a silent field drop on an unauthenticated route is
+the kind of thing that stays wrong quietly.
+
+It looks like a textbook instance. Its header commits to hand-maintained arithmetic — _"Measured across
+the fifteen … ELEVEN are importable from api-types and drop-proof … TWO more are defined inside
+`auth-oauth-client.ts` … That leaves TWO where the drop is real. 11 + 2 + 2 = 15."_ — the thirteen schemas
+arrive through a hand-written import list, and one arm openly records the list failing once already:
+_"POST /v1/oauth/revoke is the third silent-drop route, **and it was in neither list**."_ A hand-list that
+has already missed a member is exactly the shape of the last four findings.
+
+**It is backed by a derived ratchet in a sibling file, and I checked before concluding.**
+`unknown-request-fields-coverage-invariant` walks `src/routes`, extracts every parse site by regex, and
+holds unreported sites in a `KNOWN_UNREPORTED` set that is checked in BOTH directions — a new unreported
+site fails, and an entry that no longer corresponds to a live site is reported stale. Its author also
+declined to classify anonymity mechanically and said so, which is why the anonymous reasoning lives in the
+other file as prose: the two files split derivation from judgement on purpose.
+
+A clean census is not evidence, so the member was mutated rather than counted: a new route file with an
+optional field, a `safeParse(req.body)`, and no reporter call — the exact shape the hand-list would miss.
+It reds, naming `probe-anon-signup.ts:11`. The route the hand-list could not see is caught by the walk.
+
+No code change. The finding is the boundary: **a hand-list is not a defect when a derived guard covers the
+same population**, and the way to tell the two apart is to add the member and watch, not to read the list.
+
+### The instrument, scored honestly
+
+Five applications: four gaps (V-1515 header spellings, V-1527 the BYOK cache route, V-1528 three of six
+once-only secrets, V-1529 a documented bypass one directory over) and one confirmed-closed. It is worth
+keeping, and it is not a guarantee — which is the useful thing to know about it before pointing it at the
+remaining candidates.
