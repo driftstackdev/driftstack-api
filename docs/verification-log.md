@@ -13468,3 +13468,62 @@ is now recorded rather than discovered again.
 Mutation used the real historical artifact rather than a synthetic edit — the pre-regeneration
 `models.py` — and both new arms red on it, naming 44 missing enum values and the missing pattern.
 Restored byte-identical. `ruff`, `mypy` and the SDK's own 365 tests pass against the regenerated models.
+
+## V-1502 — a plaintext one-time token published as an ordinary optional field, on two of four siblings
+
+`POST /v1/auth/magic-link/request` and `POST /v1/auth/password-reset/request` published `debug_token`
+as `{ "type": "string" }` and nothing else. The two sibling endpoints in the same family —
+`/v1/auth/signup` and `/v1/auth/resend-verification` — publish the identical field carrying
+_"Stub email mode only — the plaintext verification token"_.
+
+So a customer reading the reference for **password reset** saw an unexplained optional string on the
+response, with no way to know it is a stub-mode development affordance that production never sends. The
+field holds a plaintext one-time authentication token. The correct copy already existed two declarations
+up in the same file.
+
+**The mechanism is the refine seam again, one construct over.** Both undescribed declarations carry the
+explanation in a `//` comment above them, and a zod comment does not survive into JSON Schema — the same
+reason V-1498's `.refine` never reached the document. `.describe()` is the only construct that carries
+prose across that boundary, and two of the four used a comment instead.
+
+**The exposure itself is correctly gated, which I verified before writing any of this.**
+`AUTH_EXPOSE_DEBUG_TOKEN` defaults false, and `lib/config.ts` _refuses to boot_ in production if it is
+set: _"Refusing to boot: AUTH_EXPOSE_DEBUG_TOKEN=true is development/test-only and would expose
+plaintext one-time authentication tokens in production responses."_ Fail-closed at startup. This is a
+documentation defect, not a leak, and it is worth saying plainly rather than inflating: the token never
+reaches a production response.
+
+**The repo already knew the describe mattered.** `anti-enumeration-response-cross-source-invariant`
+enumerates the three anti-enumeration schemas and pins the describe for exactly one of them, with the
+reason in its own title: _"The describe makes it clear this is test-only."_ The two it does not name are
+the two that shipped without it — a per-occurrence pin standing in for a rule, which is the shape that
+lets siblings drift apart. That arm now runs over the trio it already enumerates.
+
+**The mutation caught a fault in my own guard, which is the reason per-occurrence negatives are the
+rule.** The first version matched `${schema} = z.object({[\s\S]+?debug_token: … .describe(…)`. Reverting
+the magic-link describe left it GREEN: the lazy run crosses the declaration boundary and matched the
+_next_ sibling's describe further down the file. Only the pre-existing content-parity pin caught that
+revert — the wrong way round, since the general arm is the one meant to hold the rule. Each schema is
+now sliced at its own closing `});` before being searched, and both reverts red naming their own
+occurrence.
+
+Two pins re-quoted for the multi-line chain prettier produces, with `prettier --check` run on source and
+pins before committing.
+
+**Measured negatives from the same batch, so these surfaces are not re-swept.**
+
+- **Webhook event roster and payloads.** All 9 declared event types have a real `enqueueEvent` call site
+  — including the two thinnest, `session.challenge_detected` and `session.profile_save_failed`, whose
+  occurrences are otherwise mostly type declarations and a migration. Payload keys match the documented
+  examples in `webhooks/events.md` for every event; the docs are unusually careful here, documenting
+  that `auto_destroyed` is absent rather than false, that `session_id`/`duration_ms` are omitted when
+  unresolvable, and the closed four-class error set.
+- **Free-form webhook fields are scrubbed on both relays.** I expected an asymmetry — the
+  profile-save-failed relay pipes its `detail` through `customerSafeNodeDiagnostic` with a comment about
+  the node's real egress IP, and the challenge relay passes a harness-supplied object. It scrubs it too,
+  on `challenge.detail`, through the same helper. The hypothesis was wrong and the check was cheap.
+- **Single-key responses are safe to judge.** V-1072's `keys.size < 2` skip drops 41 routes. Judging
+  them raises the compared population from 83 to 124 and yields zero findings, and only 2 of the 41
+  carry an opaque return that could make a keyset partial — both `return await accountsAdmin.getAccount(…)`
+  _inside_ a `withAudit(async () => {…})` callback rather than the route's own answer. Recorded here as
+  a verified-safe extension rather than taken, since it changes a threshold without a defect behind it.

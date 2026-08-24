@@ -110,6 +110,30 @@ describe('W882 anti-enumeration response cross-source invariant', () => {
     );
   });
 
+  it('CRITICAL every anti-enumeration schema describes its debug_token, not just the one arm above names. The describe is the ONLY thing carrying `stub email mode only` into the published spec — a zod comment does not survive into JSON Schema, so an undescribed debug_token reaches the API reference as a bare optional string. Two of these three shipped that way: a customer reading the password-reset response saw an unexplained field holding a plaintext one-time token, while the sibling endpoint two declarations up documented the identical field correctly.', () => {
+    const p = read(resolve(REPO_ROOT, 'packages/api-types/src/auth.ts'));
+    // Each schema is sliced at its OWN closing `});` before being searched.
+    // `${schema} = z.object({[\s\S]+?debug_token…` looks equivalent and is not:
+    // the lazy run crosses the declaration boundary, so a schema that dropped its
+    // describe still matched the next sibling's. Measured — reverting the
+    // magic-link describe left this arm green while the content-parity pin caught
+    // it, which is the wrong way round for the arm that is supposed to be general.
+    const undescribed = ANTI_ENUM_RESPONSE_SCHEMAS.filter((schema) => {
+      const start = p.indexOf(`export const ${schema} = z.object({`);
+      if (start === -1) return true;
+      const end = p.indexOf('\n});', start);
+      const block = end === -1 ? p.slice(start) : p.slice(start, end);
+      return !/debug_token: z\s*\n?\s*\.string\(\)\s*\n?\s*\.optional\(\)\s*\n?\s*\.describe\('Stub email mode only — [^']+'\)/.test(
+        block,
+      );
+    });
+    expect(
+      undescribed,
+      'these schemas publish debug_token with no description, so the spec advertises a plaintext ' +
+        'one-time auth token as an ordinary optional field',
+    ).toEqual([]);
+  });
+
   // ─── 3-endpoint cardinality ──────────────────────────────────
 
   it('CRITICAL EXACTLY 3 anti-enumeration response schemas — magic-link + resend-verification + password-reset. The 3 are the email-input endpoints; drift to a 4th email-input endpoint without anti-enum response would create an enumeration vector.', () => {

@@ -163,14 +163,14 @@ describe('W435.C packages/api-types/src/auth.ts content parity', () => {
       /\/\/ Whether a magic-link email was actually sent\. Always `true` to the\s*\n?\s*\/\/ client even when the email doesn't exist, so the response shape\s*\n?\s*\/\/ doesn't leak account-existence; service layer either sends or\s*\n?\s*\/\/ silently no-ops based on the lookup\./,
     );
     expect(body).toMatch(
-      /export const MagicLinkRequestResponseSchema = z\.object\(\{[\s\S]*?sent: z\.literal\(true\),\s*\n?\s*expires_at: Iso8601Schema,\s*\n?\s*debug_token: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
+      /export const MagicLinkRequestResponseSchema = z\.object\(\{[\s\S]*?sent: z\.literal\(true\),\s*\n?\s*expires_at: Iso8601Schema,\s*\n?\s*debug_token: z\s*\n?\s*\.string\(\)\s*\n?\s*\.optional\(\)\s*\n?\s*\.describe\('Stub email mode only — the plaintext magic-link token'\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(/export const MagicLinkConsumeResponseSchema = LoginResponseUnionSchema;/);
   });
 
   it('PasswordReset: request shape-stable sent:true; confirm body token + new_password; confirm returns session-or-MFA', () => {
     expect(body).toMatch(
-      /export const PasswordResetRequestResponseSchema = z\.object\(\{\s*\n?\s*sent: z\.literal\(true\),\s*\n?\s*expires_at: Iso8601Schema,\s*\n?\s*debug_token: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
+      /export const PasswordResetRequestResponseSchema = z\.object\(\{\s*\n?\s*sent: z\.literal\(true\),\s*\n?\s*expires_at: Iso8601Schema,\s*\n?\s*debug_token: z\s*\n?\s*\.string\(\)\s*\n?\s*\.optional\(\)\s*\n?\s*\.describe\('Stub email mode only — the plaintext password-reset token'\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /export const PasswordResetConfirmRequestSchema = z\.object\(\{\s*\n?\s*token: AuthTokenSchema,\s*\n?\s*new_password: AuthPasswordSchema,\s*\n?\s*\}\);/,

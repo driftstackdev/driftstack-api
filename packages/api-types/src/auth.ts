@@ -216,7 +216,10 @@ export const MagicLinkRequestResponseSchema = z.object({
   // silently no-ops based on the lookup.
   sent: z.literal(true),
   expires_at: Iso8601Schema,
-  debug_token: z.string().optional(),
+  debug_token: z
+    .string()
+    .optional()
+    .describe('Stub email mode only — the plaintext magic-link token'),
 });
 export type MagicLinkRequestResponse = z.infer<typeof MagicLinkRequestResponseSchema>;
 
@@ -242,7 +245,10 @@ export type PasswordResetRequest = z.infer<typeof PasswordResetRequestSchema>;
 export const PasswordResetRequestResponseSchema = z.object({
   sent: z.literal(true),
   expires_at: Iso8601Schema,
-  debug_token: z.string().optional(),
+  debug_token: z
+    .string()
+    .optional()
+    .describe('Stub email mode only — the plaintext password-reset token'),
 });
 export type PasswordResetRequestResponse = z.infer<typeof PasswordResetRequestResponseSchema>;
 

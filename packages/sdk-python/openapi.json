@@ -45348,7 +45348,8 @@
                       "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
                     },
                     "debug_token": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stub email mode only — the plaintext magic-link token"
                     }
                   },
                   "required": ["sent", "expires_at"]
@@ -45750,7 +45751,8 @@
                       "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
                     },
                     "debug_token": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stub email mode only — the plaintext password-reset token"
                     }
                   },
                   "required": ["sent", "expires_at"]
