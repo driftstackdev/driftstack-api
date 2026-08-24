@@ -8739,3 +8739,50 @@ What this leaves recorded: the scanner's structural refusals are defence in dept
 a parser reading attacker-controlled bytes off an authenticated-but-compromised node, and branch
 coverage of them is reachable but not provable one guard at a time. Anyone tightening this function
 should expect coverage to say a line is dark while its behaviour is fully pinned by its neighbours.
+
+### V-1400 — the PKCE length guard is reachable because the two alphabets are not the same one
+
+`lib/oauth-pkce.ts:82` — `if (provided.length !== expected.length) return false` — was in the
+never-taken set, and it reads as unreachable: sha256 is 32 bytes, a challenge that cleared
+`CHALLENGE_PATTERN` is 43 base64url characters, and 43 characters decode to exactly 32. The only
+reference to it anywhere was `lib-oauth-pkce-content-parity`, pinning the line as source text — the
+"text pinned, effect unchecked" shape that V-1387 and V-1388 also turned on.
+
+It is reachable, because the challenge pattern is the _verifier's_ alphabet with the length narrowed:
+
+    VERIFIER_PATTERN   ^[A-Za-z0-9\-._~]{43,128}$    RFC 7636 §4.1 unreserved
+    CHALLENGE_PATTERN  ^[A-Za-z0-9\-._~]{43}$        the same set, on a base64url value
+
+`.` and `~` are unreserved URL characters and are not in the base64url alphabet. Node's base64 decoder
+skips out-of-alphabet characters rather than refusing them, so a 43-character challenge holding one
+decodes to **31** bytes (measured; three of them give 30), and `timingSafeEqual` raises
+`RangeError: Input buffers must have the same byte length` on a length mismatch.
+
+Nothing upstream narrows it. The authorize route validates the challenge as `z.string().min(43).max(128)`
+(`routes/oauth.ts:54`) with no character class, and the exchange calls the helper bare —
+`if (!verifyS256Challenge({ ... })) throw new OAuthError('invalid_grant', ...)` at `services/oauth.ts:625`,
+no try/catch. So `:82` is the whole distance between a client registering a challenge with a dot in it
+and that client's own token exchange answering with an unhandled RangeError instead of `invalid_grant`.
+The module header's promise for this function is "Returns false (not throws)"; this line is what keeps it.
+
+Twelve arms, and the mutations separate cleanly:
+
+| mutation                                       | result                                                                   |
+| ---------------------------------------------- | ------------------------------------------------------------------------ |
+| remove the S256 length guard (`:82`)           | **8 failed** — every malformed-challenge arm, the four controls green    |
+| remove the plain-method length guard (`:96`)   | **1 failed** — exactly the plain arm                                     |
+| remove the challenge shape gate (`:73`)        | 12 passed — the arms are _past_ it, which is what makes them about `:82` |
+| remove the plain-method alphabet check (`:95`) | 12 passed — subsumed                                                     |
+
+The third row is the one that makes the finding attributable rather than merely true: if these inputs
+were being refused by the shape gate, removing `:82` could not have reddened them.
+
+The fourth is recorded as a negative. `:95` cannot change an outcome: the verifier is already known to
+match `VERIFIER_PATTERN`, so a challenge that fails it either differs in length — and `:96` answers —
+or matches in length and differs in bytes, which the compare answers. Defence in depth, not a gap; no
+arm written for it.
+
+No source change. Both length guards are correct as they stand, and tightening `CHALLENGE_PATTERN` to
+the true base64url set would be a behavioural no-op that makes `:82` genuinely dead — a design call,
+not a defect fix. What was missing was the record of why the line is load-bearing, so that is what
+this adds.
