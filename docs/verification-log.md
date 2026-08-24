@@ -15449,3 +15449,57 @@ Proved still sharp by deleting that route's real 404: it reds naming the operati
 
 A magic-number window is the same fault as a hand-list — a bound chosen for the data that existed when it
 was written. This one had no reason to be 1400 and no comment saying why.
+
+## V-1536 — the same magic number again, one response away from accusing eight routes
+
+V-1535 fixed a fixed-size window in `parameterised-routes-document-404`. A magic bound chosen for the data
+that existed when it was written is a class, not an incident, so this batch swept for the class. The
+suite has ~40 bounded scans. Most are POSITIVE assertions — `toMatch(/A[\s\S]{0,300}B/)` — where
+truncation makes the test fail, which someone notices. The dangerous ones are scans that feed a
+completeness or absence answer, and the sharpest was in the same file, in the sibling helper.
+
+`spreadCodes` matched each spread constant's body with `[\s\S]{0,1200}?`. **A bounded regex does not
+truncate — it stops matching altogether.** A constant longer than the bound is not partially read; it is
+skipped in silence, its codes never enter the map, and every route spreading it is reported as missing
+them.
+
+Measured rather than reasoned about:
+
+```
+rateLimitHeaders               5267 chars   ALREADY skipped, silently
+directSessionOperationErrors    982 chars   82% of the bound — spread by EIGHT routes, carries the 404
+directSessionOperationTimeout   169 chars
+```
+
+`directSessionOperationErrors` is the one the guard's own comment singles out as carrying 404/409/410/502/503
+for the session routes. At 982 of 1200, **one more declared response would have blinded all eight at
+once** — and the failure would have arrived as eight correct routes being accused of undocumented 404s,
+which is the shape that gets a guard switched off rather than fixed. `rateLimitHeaders` had already
+crossed the line; it costs nothing today only because the 404 arm does not need the codes it carries.
+
+The body is now read by matching braces. No length participates in the answer.
+
+**Proved by A/B on identical source**, which is the only way to show a fix for a threshold: pad
+`directSessionOperationErrors` to 1628 characters, then run both guards against it. The old bounded
+version fails two arms and names `GET /v1/sessions/{id}/state`, `POST /v1/sessions/{id}/capture`,
+`/extract`, `/interact` and more as missing a 404 they document perfectly well — including its own
+"spreads are resolved" canary, the arm written to catch exactly this. The brace-matched version passes.
+
+The first attempt at that A/B was invalid and worth recording: I wrote the old guard to the repo root,
+where `resolve(HERE, '..', '..', '..', '..')` lands somewhere else entirely, so it never really ran and
+reported nothing. A control that silently does not execute reads exactly like a control that passes.
+
+### The other half of the class, measured and cleared
+
+Negative assertions with a bounded gap are the theoretically worse shape — `not.toMatch(/A[\s\S]{0,120}B/)`
+goes green if someone simply writes more words between A and B. Three exist. All three were checked
+against the file each guard actually reads:
+
+- `CryptoQuoteResponseSchema … pay_min_amount` — left anchor present, forbidden token absent.
+- `cost estimate … customer bill|invoice total` — left anchor present, forbidden token absent.
+- `30 days … purged|deleted` — both halves absent.
+
+None is a live defect: a regression guard whose forbidden phrase is absent is in its resting state, which
+is what such a guard is for. The bound still weakens each of them against a wordier reintroduction, but
+that is a latent property, not a present fault, and saying so precisely is better than filing three
+findings to make the batch look productive.

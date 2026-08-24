@@ -57,11 +57,33 @@ const NO_404_BY_DESIGN: ReadonlyMap<string, string> = new Map([
   ],
 ]);
 
-/** Status codes carried by each `...spread` constant in the spec. */
+/**
+ * Status codes carried by each `...spread` constant in the spec.
+ *
+ * V-1536 — this matched the constant's body with a bounded `[\s\S]{0,1200}?`,
+ * which does not truncate: a constant whose body exceeds the bound stops matching
+ * ALTOGETHER, so its codes vanish and every route spreading it is reported as
+ * missing them. `directSessionOperationErrors` carries the 404 that eight session
+ * routes document, and measured 982 of the 1200 — one more response and all eight
+ * would have been accused at once. `rateLimitHeaders` is 5267 and was already
+ * being skipped in silence. The body is now read by matching braces, so no length
+ * participates in the answer.
+ */
 function spreadCodes(spec: string): Map<string, Set<string>> {
   const out = new Map<string, Set<string>>();
-  for (const m of spec.matchAll(/const (\w+) = \{([\s\S]{0,1200}?)\n {2}\};/g)) {
-    const codes = new Set([...m[2]!.matchAll(/\n\s*(\d{3}):/g)].map((c) => c[1]!));
+  for (const m of spec.matchAll(/const (\w+) = \{/g)) {
+    const open = m.index + m[0].length - 1;
+    let depth = 0;
+    let i = open;
+    for (; i < spec.length; i += 1) {
+      if (spec[i] === '{') depth += 1;
+      else if (spec[i] === '}') {
+        depth -= 1;
+        if (depth === 0) break;
+      }
+    }
+    if (depth !== 0) continue;
+    const codes = new Set([...spec.slice(open, i).matchAll(/\n\s*(\d{3}):/g)].map((c) => c[1]!));
     if (codes.size > 0) out.set(m[1]!, codes);
   }
   return out;
