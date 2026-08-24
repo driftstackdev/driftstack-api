@@ -11594,3 +11594,44 @@ explicitly. Nothing to add there.
 
 Full suite green: 3067 files, 30868 tests, exit 0. No new test file; 10 `it` declarations to 11. No
 ratchet movement.
+
+## V-1468 — log redaction: a suspected bypass that measurement refuted, and the census that was wrong first
+
+Carried V-1467's instrument to the logger. `redact-url.ts` says "the logger runs `redactText` over every
+string in a serialized error", and `logger.ts` names the structural limit itself: "Pino applies
+serializers by top-level key, so the `err` serializer cannot reach `problem.detail`". Three serializers
+are registered — `req`, `err`, `problem` — so anything logged under a fourth top-level key is covered by
+neither them nor `redact.paths`, which is path-keyed (`apiKey`, `plaintext`, `secret`, `body.*`,
+`req.headers.*`) and lists neither `message` nor `stack` nor `cause`.
+
+**A census said 56 call sites passed `message`/`stack`/`cause` at top level. It was wrong.** The scan
+collected every key inside a 400-character window after `logger.x({`, so keys NESTED under `err` were
+counted as though they sat beside it. The real shape at `index.ts:92` is
+
+    logger.warn({ component: 'lifecycle', err: { name, message, stack, cause } }, '…')
+
+— under `err`, where the serializer reaches them. Re-run with brace-depth tracking: **zero**
+`message`/`stack`/`cause` keys at depth 1, out of 105 distinct depth-1 keys. Same attribution bug as
+V-1441's file-keyed consumer census, and the second time this session a census has credited a nested
+thing to its container. A windowed regex has no notion of scope; if the property is "at the top level",
+the scan has to count braces.
+
+**The corrected question, and the answer.** Of those 105 depth-1 keys, which receive an OBJECT — the
+only shape that can hide free text under a key no serializer covers? Exactly one, and it is harmless:
+
+    keying: { hasFallbackKey, hasCustomerKeyStorage }     bootstrap.ts:3326 — two booleans
+
+Everything else at depth 1 is a scalar. So the surface is clean, and the docblock's claim holds.
+
+**No guard added, and the reason is worth stating rather than leaving as silence.** The invariant worth
+holding is "a depth-1 object key is either serialized or declared harmless" — the roster idiom this repo
+uses elsewhere. It has no good home: `an-unredactable-auth-token-is-never-logged` scans only
+`auth-flows.ts`, and `every-credential-header-is-redacted-in-logs` is scoped to request headers; putting
+a repo-wide call-site census in either would break the name it is filed under. A new file is the honest
+home, and that would mean moving `EXPECTED_TEST_FILES` — which currently reads 3012 against an actual
+3067, a peer's drift I am not going to absorb or step around by adding my own +1 on top of it.
+
+Recorded here so the measurement is not repeated: the surface is clean, the method is the depth-1
+census above, and the guard is a one-arm job for whoever reconciles those ratchets.
+
+No source or test change; log entry only.
