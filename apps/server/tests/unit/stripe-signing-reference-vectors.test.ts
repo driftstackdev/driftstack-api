@@ -155,6 +155,38 @@ describe('verifyStripeSignature — cross-implementation reference vectors', () 
     expect(result.ok).toBe(true);
   });
 
+  // V-1463 — a junk part that SHADOWS a known key prefix.
+  //
+  // The arm above tolerates a well-formed unknown key (`v2=futurescheme`). This
+  // is the malformed case, and it is the only input for which `if (eq <= 0)
+  // continue;` is the deciding line: measured, replacing that condition with
+  // `false` left every other test in this file green, and only a part like `tX`
+  // changed answer.
+  //
+  // The mechanism is `part.slice(0, eq)` with `eq === -1`, which is
+  // `slice(0, -1)` — it drops the LAST character instead of returning nothing,
+  // so `tX` yields the key `t` and the value `tX`. `Number('tX')` is NaN, the
+  // finite check rejects, and the WHOLE header becomes malformed_header.
+  //
+  // So the skip is a tolerance property, not a security one — removing it makes
+  // the verifier stricter, and the cost is a legitimate Stripe delivery being
+  // refused rather than a forged one accepted. Pinned in that direction.
+  it('tolerates a malformed part whose prefix shadows a known key (t/v1) — the header still verifies', () => {
+    const v = VECTORS[0]!;
+    for (const junk of ['tX', 'v1X', 'garbage', '=xyz', '']) {
+      const header = `t=${String(v.timestampSec)},v1=${v.expectedHex},${junk}`;
+      expect(
+        verifyStripeSignature({
+          rawBody: v.rawBody,
+          header,
+          secret: v.secret,
+          nowSec: v.timestampSec,
+        }).ok,
+        `a '${junk}' part must not invalidate an otherwise good header`,
+      ).toBe(true);
+    }
+  });
+
   // ─── Secret-roll: Stripe dual-signs with old+new secret → MULTIPLE v1 ───────
   // We must accept the event if ANY v1 verifies, regardless of position, so a
   // webhook-secret rotation is zero-downtime (matches Stripe's official SDK +

@@ -11379,3 +11379,42 @@ deletion that had misled me three times.
 
 Full suite green: 3067 files, 30863 tests, exit 0. No new test file; `it` count unchanged at 17 against
 HEAD (the addition is an `it.each`). No ratchet movement.
+
+## V-1463 — the Stripe signature verifier, swept: seven of eight covered, and the survivor points the other way
+
+Carrying the operand sweep to signature verification, where a gap means accepting a FORGED webhook —
+for Stripe, an event that marks an invoice paid or moves a tier. Eight operands in
+`verifyStripeSignature` and its helpers.
+
+**Seven kill tests, several emphatically.** The signature comparison reds eleven; the hex charset guard
+(which exists because `Buffer.from(hex, 'hex')` silently truncates on bad characters) reds three; the
+non-finite timestamp check reds three; the tolerance window, malformed-header refusal, missing-`v1`
+refusal and hex length guard red two, one, one and two. `stripe-signing-reference-vectors` is a strong
+file and it shows — it already pins the subtlety that an EMPTY timestamp is refused by the tolerance
+check rather than the parse, because `Number('')` is 0 rather than NaN.
+
+**The one survivor is `if (eq <= 0) continue;` in `parseHeader`, and it is a tolerance property rather
+than a security one.** Removing it makes the verifier STRICTER, which is the safe direction, so this is
+not a forgery gap. Measured, with the guard removed:
+
+    t=…,v1=…,garbage    ok        (unchanged)
+    t=…,v1=…,=xyz       ok        (unchanged)
+    t=…,v1=…,tX         ok  ->  malformed_header
+
+The mechanism is `part.slice(0, eq)` with `eq === -1`, which is `slice(0, -1)` — it drops the last
+character rather than returning nothing, so `tX` yields the key `t` and the value `tX`, `Number('tX')`
+is NaN, and the finite check rejects the WHOLE header. Only a junk part whose prefix shadows a known
+key discriminates; `garbage` and `=xyz` are unaffected because their derived keys match neither `t` nor
+`v1`.
+
+Pinned in the tolerance direction, since that is what the guard buys: a header carrying such a part
+must still verify. The consequence of losing it is a legitimate Stripe delivery refused, not a forged
+one accepted, and the existing neighbouring arm covers only the well-formed unknown key (`v2=…`).
+
+This is the fifth validator swept in this family and the first where the survivor was not a coverage
+gap at all — the previous four each hid an operand that was never the deciding layer for any covered
+input. Worth recording as the counter-example: a surviving operand means "no test distinguishes it",
+and the next question is always which direction it fails in, not whether to write a test.
+
+Full suite green: 3067 files, 30864 tests, exit 0. No new test file; 12 `it` declarations to 13. No
+ratchet movement.
