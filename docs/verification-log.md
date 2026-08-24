@@ -14852,3 +14852,55 @@ waiting. Correctly parked, and now recorded as parked-because-unreachable rather
 No code changed this batch. What it produces is a listed action that can be closed with dates and commits
 behind it, and a second stale entry in the queue after item 15 — which matters for how much the standing
 list should be trusted, not just for this item.
+
+## V-1525 — the no-decision backlog, surveyed: mostly already done
+
+Three of the last four batches produced no code change, and the honest reason is worth stating rather
+than working around: the items still on the standing list are gated on decisions, already shipped, or
+need a migration. This batch tested that claim against the one section where auto-doable work would
+live — §4 of the queue, headed **"NO decision required now — surfaced for visibility"**, twenty items.
+
+**§4.3 — rate-limit coverage drift-guard — SHIPPED**, and the item says so in its own text:
+`route-mutation-ratelimit-coverage-invariant` statically classifies every mutating route into
+limiter / admin-scope / gated-stub / explicit-exempt.
+
+**§4.19 — the coordinated-disclosure policy's 404'ing honour-roll link — RESOLVED.** The item describes a
+researcher following a live legal policy to a dead page. `vulnerability-disclosure.md` now reads
+"Add you to a public researcher roll of honour — a page we will…" as plain prose with no markdown link,
+and two separate guards assert the link form cannot come back
+(`not.toMatch(/\]\(\/legal\/security-research-honour-roll\)/)`). The content question the item reserved
+for a human is moot: the dead link is gone, and the remaining sentence is an honest forward statement.
+
+**§4.13 — `session.failed` forwarding the raw driver `error_message` — FIXED and guarded.** This one
+mattered most: the payload goes to customer endpoints, so a verbatim driver string is an info-leak.
+`projectSessionFailedData` maps every failure onto a closed four-class set with fixed copy, and
+`session-event-metadata.test.ts` proves it — "classifies only the closed runtime classes and emits fixed
+copy", "projects arbitrary session.failed input without retaining extensions or raw copy", and, best of
+the three, "fails closed for hostile getters without retaining or rethrowing their diagnostics".
+
+**§4.7 — agent-sessions idempotency body-mismatch observability — accurately described, and not
+auto-doable.** Crypto checkout is body-hash aware and counts mismatches; the agent-session create path is
+key-only, because the schema has `idempotency_key` and no request-hash column. Closing the observability
+gap means adding that column, which is a migration.
+
+Its secondary claim was worth checking on its own: that the key-only behaviour matches the documented
+contract. It does, and the reference page is better than the item implies — it answers "what happens if I
+send the same key with a different body?" per surface: agent message turns reject with `409` and
+`idempotency_status: "mismatch"`, crypto checkout replays the original order verbatim with
+`Idempotent-Replayed: 1`, and the agent-session create path replays the existing session. Three surfaces,
+three different behaviours, all stated.
+
+### The pattern is now the finding
+
+Verified done, against a list that still asks for them: item 6 (`PERMISSIVE_CORS`), item 11 (deploy
+approval gate), item 15 (MFA regen step-up), item 19(b) (self-re-arm fan-out, fixed six weeks after it was
+written), §4.3, §4.13 and §4.19. Seven items, each checked in source with a commit, a guard, or both
+behind it.
+
+That is a large enough fraction to change how the list should be read. Two batches ago the conclusion was
+"the standing list has drifted in at least one place"; on this evidence the drift is systematic, and the
+useful next step is trimming it rather than re-deriving each item.
+
+What genuinely remains, with nothing blocking it but an answer: items 7 (agent_sessions FK behaviour), 8
+(iphone17 cutover, cross-agent), 12 (deploy gated on CI), 13 (CF-skip), §4.7 (needs a migration), plus the
+four registered decisions — D-033, D-034, D-2026-08-24-01 and D-2026-08-24-02.
