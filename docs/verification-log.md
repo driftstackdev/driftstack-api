@@ -10658,3 +10658,49 @@ survivals. A refused mutation and a surviving one look identical in every field 
 
 Four mutations, one failing arm each, every restore byte-identical. No new test files; bounded store 5
 `it` declarations to 8, `rate-limit.test.ts` 13 to 14. No ratchet movement.
+
+## V-1447 — two SSRF guards, and the doc comment describing the gap between them is half wrong
+
+`apps/server/src/lib/webhook-target-guard.ts` and `packages/webhook-delivery/src/in-memory.ts` each
+decide whether a webhook target is a private address, by different means: the server uses `node:net`
+`BlockList` subnets plus explicit numeric-encoding detection, the package hand-rolls octet comparisons
+and string prefixes. `isLiteralUnsafeWebhookHost`'s docblock states the difference — no `BlockList`,
+"no numeric/hex/octal IP-encoding detection, no IPv4-in-IPv6-embedding canonicalization" — because
+`packages/*` cannot depend on `apps/server`, and the create-time endpoint-registration validation lives
+server-side.
+
+Measured both against the same host list. **The numeric claim is wrong; the IPv6 one holds.**
+
+- `2130706433`, `0x7f000001`, `127.1`, `3232235777` are all **refused** by the package. Not because it
+  detects them: `new URL('https://2130706433/').hostname` is `127.0.0.1`, so WHATWG normalisation
+  canonicalises the encoding before `isIP` ever sees it and the ordinary octet checks do the work.
+  The protection is real and entirely incidental — it lives in the decision to take a URL rather than a
+  hostname, and nothing in the function or its tests said so.
+- `[::169.254.169.254]` — cloud metadata as IPv4-compatible IPv6 — **passes** the package guard.
+  `isIP` calls it a v6 address and it matches none of the five v6 prefixes checked. The server refuses
+  it as `private`. That asymmetry is the documented one, and it is the half that is true.
+
+**No live exposure.** `isLiteralUnsafeWebhookHost`, `InMemoryWebhookDeliveryService` and
+`createInMemoryWebhookDelivery` have zero consumers outside the package's own tests — checked with
+word-boundary greps across `apps/server/src`, the other packages, and the other apps. The divergence is
+latent, and the module header does advertise the implementation for "small self-hosted single-process
+workloads", so it is worth having written down rather than fixed silently. I did not extend the
+package's guard: its docblock states the scope boundary with a reason, and closing it unilaterally
+would overrule a documented decision on an unwired path.
+
+Two arms added. The first pins the numeric encodings and says in its name that the protection is
+incidental. Proved by replacing `new URL(url).hostname` with a plain string extraction of the host:
+the arm reds. The second pins `[::169.254.169.254]` as **false** — a gap pinned deliberately, with the
+reason in the assertion, so the boundary is visible and anyone who closes it is told the docblock needs
+updating.
+
+**A broken instrument on the way, caught by a uniform result.** The first comparison reported
+`package=false` for every host including `localhost` and `127.0.0.1`, which its own source plainly
+refuses. The function takes a **URL**, not a hostname; `new URL('localhost')` throws and the catch
+returns false. A guard that answers "safe" to everything is not a measurement, and the giveaway was
+that it disagreed with code I had just read.
+
+Related prior art: V-1410 closed the `fd00::/8` half of this same package's ULA check, where only the
+`fc` prefix had ever been exercised.
+
+No new test file; 45 `it` declarations to 47. No ratchet movement.

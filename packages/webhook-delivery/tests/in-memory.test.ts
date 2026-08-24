@@ -886,6 +886,24 @@ describe('WD-2: SSRF defense-in-depth', () => {
     expect(isLiteralUnsafeWebhookHost('https://[::]/hook')).toBe(true);
   });
 
+  // V-1447 — this function's doc comment lists what it deliberately lacks, having
+  // no `apps/server` dependency: "no numeric/hex/octal IP-encoding detection, no
+  // IPv4-in-IPv6-embedding canonicalization". Measured against apps/server's
+  // `classifyUnsafeHost` on the same hosts, one of those two is wrong.
+  it('CRITICAL numeric, hex and short-form IPv4 encodings are refused — via URL normalisation, NOT by this function. `new URL()` canonicalises `2130706433` to `127.0.0.1` before `isIP` ever sees it, so the octet checks below do the work and the doc comment understates what this guard catches. Pinned because the protection is INCIDENTAL — it lives entirely in the `new URL()` step, not in any check written here. Proved by replacing that step with a plain string extraction of the host: this arm reds while the dotted-quad literals it shares a guard with are unaffected by the numeric cases at all.', () => {
+    expect(isLiteralUnsafeWebhookHost('https://2130706433/hook'), 'decimal 127.0.0.1').toBe(true);
+    expect(isLiteralUnsafeWebhookHost('https://0x7f000001/hook'), 'hex 127.0.0.1').toBe(true);
+    expect(isLiteralUnsafeWebhookHost('https://127.1/hook'), 'inet_aton short form').toBe(true);
+    expect(isLiteralUnsafeWebhookHost('https://3232235777/hook'), 'decimal 192.168.1.1').toBe(true);
+  });
+
+  it('the IPv4-compatible IPv6 form is NOT refused, which is the one documented gap that holds. `[::169.254.169.254]` is cloud metadata written as IPv6; `isIP` calls it a v6 address and it matches none of the five v6 prefixes here, so it passes. apps/server refuses it as `private`, and that asymmetry is deliberate per this function docblock — the create-time endpoint-registration validation lives there, and this is a cheap pre-send belt-and-braces check. Pinned so the boundary is visible: if this ever starts returning true, the docblock is what needs updating.', () => {
+    expect(isLiteralUnsafeWebhookHost('https://[::169.254.169.254]/hook')).toBe(false);
+    expect(isLiteralUnsafeWebhookHost('https://[::a9fe:a9fe]/hook'), 'the same address').toBe(
+      false,
+    );
+  });
+
   it('isLiteralUnsafeWebhookHost passes public IPs + normal hostnames through', () => {
     expect(isLiteralUnsafeWebhookHost('https://8.8.8.8/hook')).toBe(false);
     expect(isLiteralUnsafeWebhookHost('https://1.2.3.4/hook')).toBe(false);
