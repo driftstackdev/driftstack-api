@@ -11635,3 +11635,48 @@ Recorded here so the measurement is not repeated: the surface is clean, the meth
 census above, and the guard is a one-arm job for whoever reconciles those ratchets.
 
 No source or test change; log entry only.
+
+## V-1469 — the authorization surface, swept three levels deep and closed at every one
+
+Took the operand instrument to the last untouched authz primitive and kept going until the surface ran
+out. Three hypotheses, three negatives, each settled by mutation rather than by reading.
+
+**1. `requireScope` is implemented TWICE — and the divergence is guarded.** `lib/errors-helpers.ts`
+(via `scopesSatisfy`) and `services/auth.ts` (inline) both encode the same four-rule hierarchy: exact
+match, the V-174 `admin`-satisfies-`account_owner` alias, `account_owner` satisfying the bare
+`read`/`write` verbs, then V-481 broad-satisfies-granular. The middleware decorator uses the
+`services/auth.ts` one; twenty-two files import the helper. Two hand-maintained copies of the core
+authorization decision is exactly the shape that bit the two SSRF guards and the two rate-limit stores.
+
+`scope-check.test.ts` already compares all three entry points across every `(granted set × required
+scope)` pair the enum permits, and says why: "the two are kept in step by hand … so a rule added to one
+and not the other cannot pass unnoticed the way the V-174 alias grant did." Load-bearing in both
+directions — dropping the `account_owner` bare-verb rule from `services/auth.ts` reds three tests, and
+dropping the V-174 alias from `errors-helpers.ts` reds three.
+
+**2. Scope enforcement has a second home, and the test that cannot see it says so.**
+`customer-scope-refusal-coverage` proves refusal by CALLING each route, and its header is unusually
+honest about scope: the roster is built from gates visible in the route file, while eleven service files
+gate inside the method via `requireScope as throwIfMissingScope` — 48 call sites, with `read:webhooks`,
+`read:audit` and `read:api` enforced ONLY that way and appearing in no route file. Those are not
+unprotected: neutralising the service-layer helper fails 48 tests across 19 files, and an arm pins the
+gap with a live example so the claim cannot drift back. Measurement behind it: of 163 scope-enforcing
+routes, 13 had no refusal assertion anywhere before that work.
+
+The insufficient key is not hard-coded per route — it is chosen by asking `scopesSatisfy`, the same
+predicate the middleware uses, and the choice is asserted before use. So a new broad verb or alias moves
+the test with it instead of leaving it quietly testing the wrong thing.
+
+**3. A route gated by NOTHING is caught too.** `every-v1-route-is-gated-or-listed-public` classifies
+every `/v1` registration against six auth mechanisms and requires anything ungated to be on a public
+list, with self-test arms asserting the recogniser accepts `requireAuth` and rejects a bare
+`rateLimit`. Stripping the whole preHandler from a real customer route
+(`profiles.ts:145`, `write:profiles`) reds it. The e2e companion boots the app and asks all 139
+reachable gated routes, and states what it cannot prove — deleting `app.requireAuth` from a route does
+not open it — established by mutation rather than assumed.
+
+Nothing to add at any of the three levels. Recorded so the surface is not re-swept: the guards exist,
+they are derived rather than rostered, and each was confirmed load-bearing here rather than taken on the
+strength of its name.
+
+No source or test change; log entry only.
