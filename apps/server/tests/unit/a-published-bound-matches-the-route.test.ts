@@ -99,6 +99,75 @@ const BOUNDS: readonly BoundCase[] = [
   },
 ];
 
+/**
+ * V-1476 — the derived half.
+ *
+ * BOUNDS above is a hand-written roster, and a roster cannot report the case
+ * nobody has noticed yet. It held four entries and the fifth — the restore rail
+ * publishing `name` as a bare string while the route enforces ProfileNameSchema
+ * — sat outside it, exactly as the clone rail had before V-1063 and the quote
+ * rail before V-1475. Three instances of one shape found one at a time is the
+ * signal that the instrument, not the roster, is what was missing.
+ *
+ * Every entry here was traced to its HANDLER, not to its zod declaration. That
+ * distinction is the finding: three of the five fields this census first
+ * surfaced looked unconstrained in zod and were bounded by hand — `rotate.name`
+ * by an explicit `body.name.length` test, and `profile_id` on two rails by
+ * `parseProfileId`, which answers 400 on anything but `prof_<uuid> | <uuid>`.
+ * Writing those off as "no schema, so no bound" would have allowlisted three
+ * live divergences as intentional, which is worse than the roster this replaces.
+ *
+ * PRIOR ART, and why this does not duplicate it.
+ * `published-request-schema-is-not-looser-than-enforced` attacks the same class
+ * by NAME-MATCHING openapi.ts declarations against route-file declarations, and
+ * it measures its own coverage honestly: of 43 published request field names,
+ * only 22 are unambiguous on both sides and actually compared. That is exactly
+ * why it sees none of the four fixed here — `name` and `profile_id` are declared
+ * many times on both sides and land in its ambiguous bucket, `rotate.name` has
+ * no route-side zod declaration to match at all, and the organization arrays are
+ * declared in api-types rather than in a route file. It compares chains where
+ * the pairing is unambiguous and asks whether the published one is LOOSER; this
+ * asks, from the document alone, whether a constraint exists AT ALL — which
+ * needs no pairing, and so has no ambiguity to decline. Neither subsumes the
+ * other, and a field can fail one while passing the other.
+ *
+ * So this half asks the question from the document's side instead: which
+ * published request-body strings carry NO constraint at all? That set is
+ * derived, so a newly added unconstrained field joins it without anyone editing
+ * this file, and the allowlist below forces a decision — bound it, or write down
+ * why it is honestly unbounded.
+ *
+ * Constraint means any of maxLength, minLength, pattern, enum, format. Checking
+ * only `maxLength` is what made the first census of this read 15 unconstrained
+ * fields when the true number is 5: `legal/accept.content_hash` publishes its
+ * 64-hex `pattern` and is faithful, and ten others were bounded in ways that
+ * filter could not see. A census that over-reports gets switched off as noise
+ * just as surely as one that under-reports gets trusted.
+ */
+const UNCONSTRAINED_BY_DESIGN: Record<string, string> = {
+  'POST /v1/agent-sessions/{id}/history .tabId':
+    'traced end to end: `z.string().optional()` in NavigateHistoryBodySchema, again in ' +
+    'NavigateHistoryRequestSchema on the wire, and read by nothing — it ships gated-inert until ' +
+    "A3's harness reads it. Honestly unconstrained on both sides.",
+};
+
+/**
+ * Divergences that are real, named, and not yet fixed. NOT exemptions.
+ *
+ * Kept separate from the map above so the guard cannot be read as saying these
+ * are fine. Emptying this map is the goal; adding to it needs the same evidence
+ * as fixing one.
+ */
+const KNOWN_DIVERGENCE_DEFERRED: Record<string, string> = {
+  'POST /v1/sessions .profile_id':
+    'parseProfileId enforces `prof_<uuid> | <uuid>` and answers 400 otherwise, so this is the same ' +
+    'defect as the agent-sessions rail fixed in V-1476. It is deferred rather than fixed because ' +
+    'this endpoint publishes CreateSessionRequestSchema DIRECTLY — the runtime schema is the ' +
+    'document — so adding the pattern changes which layer rejects a malformed id and what the ' +
+    'error body looks like. Nothing currently exercises that path (no test posts a malformed ' +
+    'profile_id anywhere), which is the first thing to fix, not the last.',
+};
+
 describe('V-927 a published bound matches the route', () => {
   it('CRITICAL every route named here still declares its bound. The published side is compared against these numbers, so if a route relaxed its cap and nothing said so, the spec arm would keep passing against a limit that no longer exists — this is the half that makes the other half mean something.', () => {
     for (const { routeFile, routePattern, field } of BOUNDS) {
@@ -119,5 +188,69 @@ describe('V-927 a published bound matches the route', () => {
       }
     }
     expect(gaps, 'the document under-specifies these bounds:').toEqual([]);
+  });
+  // V-1476 — see UNCONSTRAINED_BY_DESIGN above for why this is derived.
+  it('CRITICAL every published request-body string is either constrained or written down as deliberately unconstrained. The roster above can only re-check bounds someone already noticed; this arm is the half that can see a NEW one, which is what three separate one-at-a-time findings of this same shape (V-1063 clone, V-1475 quote, V-1476 restore) say was missing.', () => {
+    const root = JSON.parse(readFileSync(SPEC, 'utf8')) as Record<string, Record<string, unknown>>;
+    const deref = (node: unknown): Record<string, unknown> => {
+      let cur = node as Record<string, unknown>;
+      for (let hop = 0; hop < 10 && cur && typeof cur['$ref'] === 'string'; hop += 1) {
+        let target: unknown = root;
+        for (const key of cur['$ref'].replace(/^#\//, '').split('/')) {
+          target = (target as Record<string, unknown>)?.[key];
+        }
+        cur = target as Record<string, unknown>;
+      }
+      return cur ?? {};
+    };
+    const CONSTRAINTS = ['maxLength', 'minLength', 'pattern', 'enum', 'format'] as const;
+
+    let examined = 0;
+    const unconstrained: string[] = [];
+    const paths = (root['paths'] ?? {}) as Record<string, Record<string, unknown>>;
+    for (const [path, ops] of Object.entries(paths)) {
+      for (const [method, op] of Object.entries(ops)) {
+        const body = (op as Record<string, unknown>)?.['requestBody'] as
+          | Record<string, unknown>
+          | undefined;
+        if (!body) continue;
+        const byMedia = body['content'] as Record<string, Record<string, unknown>> | undefined;
+        const schema = deref(byMedia?.['application/json']?.['schema']);
+        const properties = (schema['properties'] ?? {}) as Record<string, unknown>;
+        for (const [field, raw] of Object.entries(properties)) {
+          const prop = deref(raw);
+          if (prop['type'] !== 'string') continue;
+          examined += 1;
+          if (!CONSTRAINTS.some((c) => c in prop)) {
+            unconstrained.push(`${method.toUpperCase()} ${path} .${field}`);
+          }
+        }
+      }
+    }
+
+    // The floor counts STRING PROPERTIES, which is what the assertion iterates —
+    // not paths, and not request bodies. A walk that resolved no $ref would find
+    // plenty of both and zero of these.
+    expect(
+      examined,
+      'no published request-body string properties were read — the walk stopped resolving, and this arm would pass over an empty set',
+    ).toBeGreaterThan(120);
+
+    const declared = { ...UNCONSTRAINED_BY_DESIGN, ...KNOWN_DIVERGENCE_DEFERRED };
+    const undeclared = unconstrained.filter((k) => !(k in declared)).sort();
+    expect(
+      undeclared,
+      'this field is published with no maxLength, minLength, pattern, enum or format. If the route enforces one, the document is describing as valid a request the server refuses — publish the bound. If it really is unbounded, add it to UNCONSTRAINED_BY_DESIGN with the reason',
+    ).toEqual([]);
+
+    // And the allowlist may not outlive what it exempts: a field that gains a
+    // bound must leave, or the exemption silently covers the next regression.
+    const stale = Object.keys({ ...UNCONSTRAINED_BY_DESIGN, ...KNOWN_DIVERGENCE_DEFERRED })
+      .filter((k) => !unconstrained.includes(k))
+      .sort();
+    expect(
+      stale,
+      'this exemption no longer matches an unconstrained published field — the field was bounded or removed, so drop the entry rather than leaving it to cover something else later',
+    ).toEqual([]);
   });
 });

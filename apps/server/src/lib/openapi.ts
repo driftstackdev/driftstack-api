@@ -157,6 +157,7 @@ import {
   AddSupportNoteRequestSchema,
   WireGuardProxyConfigSchema,
 } from '@driftstack/api-types';
+import { PROFILE_ID_INPUT_RE } from './profile-id.js';
 // S33 2026-07-07 (fable-truth-audit) — the cookie shape the agent-session
 // cookie read/import routes emit + validate. Imported from the harness
 // control protocol (the routes' own single source of truth) rather than
@@ -962,7 +963,17 @@ function buildRegistry(): OpenAPIRegistry {
       body: {
         content: {
           'application/json': {
-            schema: z.object({ name: z.string().optional() }).openapi('RotateApiKeyRequest'),
+            // V-1476 — was `z.string().optional()`, publishing no bound while the
+            // route rejects outside 1..120. That check is a hand-written
+            // `body.name.length` test rather than a zod schema (V-296 added it
+            // precisely because this route has no schema to carry it), so a scan
+            // that reads zod declarations sees an unconstrained field and a
+            // caller reading the document sees no limit — while `POST /v1/api-keys`
+            // publishes the same 1..120 from CreateApiKeyRequestSchema. Absence of
+            // a schema is not absence of a bound.
+            schema: z
+              .object({ name: z.string().min(1).max(120).optional() })
+              .openapi('RotateApiKeyRequest'),
           },
         },
       },
@@ -4136,7 +4147,13 @@ function buildRegistry(): OpenAPIRegistry {
               // Pass the profile id from the profiles API (prof_<uuid>); a bare
               // uuid is also accepted. Must be owned (unknown/not-owned → 404);
               // omit for a stateless session.
-              profile_id: z.string().optional(),
+              //
+              // V-1476 — those two accepted forms were stated only in this
+              // comment, which ships nowhere, while the field published as a bare
+              // string and `parseProfileId` answered 400 for anything else. The
+              // pattern is imported from the parser rather than restated, so the
+              // published contract cannot drift from the enforced one.
+              profile_id: z.string().regex(PROFILE_ID_INPUT_RE).optional(),
               // ARC A — route the session through an owned account proxy
               // (unknown/not-owned → 404); omit for the default egress.
               proxy_id: z.string().uuid().optional(),
@@ -7104,8 +7121,18 @@ function buildRegistry(): OpenAPIRegistry {
     label: z.string().min(1).max(120),
     description: z.string().max(2048).optional(),
   });
+  // V-1476 — the sibling V-1063 missed. That entry fixed exactly this defect on
+  // the CLONE rail ~1300 lines below and left the restore rail publishing
+  // `z.string()`, while the route parses with RestoreSnapshotRequestSchema,
+  // whose `name` is ProfileNameSchema: trimmed, 1..120, and a character-class
+  // regex. A caller reading the document had no way to learn any of the three
+  // except by being refused.
+  //
+  // Its own neighbour made the gap visible: CaptureSnapshotRequestOpenApi above
+  // mirrors `.min(1).max(120)` faithfully, so within one block one rail carried
+  // the bounds and the other dropped them.
   const RestoreSnapshotRequestOpenApi = z.object({
-    name: z.string(),
+    name: ProfileNameSchema,
   });
   registerRoute(r, {
     method: 'post',

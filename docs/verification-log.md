@@ -11924,3 +11924,111 @@ the new quote-rail arm (1 failed / 8 passed). Both restored byte-identical from 
 
 Full suite green: 3067 files, 30873 tests, exit 0. No new test file; `it` count unchanged at 9. No
 ratchet movement.
+
+## V-1476 — four published request fields dropped a bound the route enforces, and a four-entry roster could not have found any of them
+
+`POST /v1/profile-snapshots/{id}/restore` published `name` as a bare `z.string()` while the route parses
+with `RestoreSnapshotRequestSchema`, whose `name` is `ProfileNameSchema`: trimmed, 1..120, and a
+character-class regex. Three constraints, none discoverable except by being refused.
+
+That is the same defect V-1063 fixed on the CLONE rail, in the same file, about 1300 lines below — its
+comment states the reasoning almost word for word. The neighbour made the gap visible too:
+`CaptureSnapshotRequestOpenApi`, four lines above, mirrors `.min(1).max(120)` faithfully, so within one
+block one rail carried its bounds and the other dropped them. Fixed by importing `ProfileNameSchema`
+(already imported, for the clone rail) rather than hand-mirroring three constraints a fourth time.
+
+**The finding behind the finding.** V-1063 (clone), V-1475 (quote), V-1476 (restore) are one shape found
+three times, one at a time, each because someone happened to look.
+`a-published-bound-matches-the-route` held a hand-written roster of four cases, and a roster is
+structurally incapable of reporting the fifth. It now carries a derived half asking the question from the
+document's side: every published request-body string must carry a constraint or be written down. A newly
+unconstrained field joins that census without anyone editing the test.
+
+**Prior art, found late and worth crediting.**
+`published-request-schema-is-not-looser-than-enforced` already attacks this class, and its header records
+four earlier instances in the same direction. It works by NAME-MATCHING `lib/openapi.ts` declarations
+against route-file declarations, and it measures its own coverage honestly: of 43 published request field
+names, only 22 are unambiguous on both sides and actually compared. That is precisely why it cannot see
+any of the four here — `name` and `profile_id` are each declared many times on both sides and land in its
+ambiguous bucket, `rotate.name` has no route-side zod declaration to match at all, and the organization
+arrays are declared in `api-types` rather than in a route file. The two guards are complementary: it
+compares chains where the pairing is unambiguous, and asks whether the published one is LOOSER; the
+derived arm added here works from the document alone, asking whether a constraint exists at all, which
+needs no pairing and so has no ambiguity to decline. Neither subsumes the other. I should have found it
+before building the second — grep the prior art first.
+
+**Two instrument corrections, and they are the substance of this entry.**
+
+_First census, wrong by over-reporting._ Filtering on `maxLength` alone gave 15 unconstrained fields; the
+true number is 5. `legal/accept.content_hash` publishes its 64-hex `pattern` and is faithful; others were
+bounded by `minLength`, `enum` or `format`. A census that over-reports gets switched off as noise as
+surely as one that under-reports gets trusted. The arm now treats any of the five constraint keywords as
+a bound. Related trap: field names collide across schemas — `AcceptBodySchema` is a different local const
+in `team.ts` and in `legal.ts`, and `code`, `token`, `api_key`, `archetype_id` each match three or more
+unrelated declarations — so name-keyed grep cannot resolve this class. Each candidate needs per-endpoint
+tracing.
+
+_Second, and worse: I first wrote the allowlist from zod declarations instead of from handlers._ On that
+reading, four of the five looked honestly unconstrained and only `restore.name` was a divergence. Tracing
+each handler inverted the result — **four of the five are divergences**:
+
+- `api-keys/{id}/rotate .name` — the route rejects outside 1..120 via an explicit `body.name.length`
+  test. V-296 added that check precisely BECAUSE the route has no zod schema to carry it, and the route's
+  own V-1370 note says the field is hand-read. "No schema" reads as "no bound" and is the opposite.
+  `POST /v1/api-keys` publishes the same 1..120 from `CreateApiKeyRequestSchema`.
+- `agent-sessions .profile_id` and `sessions .profile_id` — `parseProfileId` answers 400 on anything but
+  `prof_<uuid>` or a bare `<uuid>`. On the agent-sessions rail the accepted forms were stated only in a
+  source comment, which ships to nobody.
+- `history .tabId` is the one honest exemption: `z.string().optional()` in the body schema, again in
+  `NavigateHistoryRequestSchema` on the wire, read by nothing, gated-inert.
+
+Had I not traced them, three live divergences would have been allowlisted as intentional — worse than the
+roster being replaced, because an exemption is durable. The guard's map now carries the handler evidence
+per entry, and deferred divergences sit in a separate `KNOWN_DIVERGENCE_DEFERRED` map so the file cannot
+be read as calling them fine.
+
+Fixed here: `restore.name`, `rotate.name`, and `agent-sessions.profile_id`. The published `profile_id`
+pattern is composed from the parser's own `UUID_BODY` rather than restated, so document and enforcement
+cannot drift. Written with explicit `[0-9a-fA-F]` instead of the `/i` flag — the flag has no JSON Schema
+expression, so publishing from an `/i` regex would advertise a lowercase-only contract while the server
+keeps accepting uppercase. That is over-narrowing, the worse direction of this same bug: documenting as
+invalid something the server accepts.
+
+Deferred, with reason: `sessions .profile_id`. That endpoint publishes `CreateSessionRequestSchema`
+DIRECTLY — the runtime schema _is_ the document — so adding the pattern changes which layer rejects a
+malformed id and what the error body looks like. The precise coverage position, since my first reading
+of it was too strong: `parseProfileId` itself is well covered — six arms in `profile-id.test.ts`,
+including both rejection directions and the `prof_prof_<uuid>` over-strip case. What no test does is
+send a malformed `profile_id` through `POST /v1/sessions` and pin which layer answers. That route-level
+arm is the prerequisite for moving the constraint into the schema, not the follow-up to it.
+
+**The fix tripped the counterpart guard, and that is the best thing that happened here.** Publishing the
+`profile_id` pattern turned `published-request-schema-is-not-looser-than-enforced` red on its REVERSE
+arm — "the document does not promise a validation the route skips", which carried `MEASURED at zero`. It
+was right on its own terms and wrong about the world: that arm compares route-file zod chains, and
+`profile_id` was enforced only IMPERATIVELY, by a `parseProfileId` call in the handler. So by its
+measure the document had started promising something the route did not declare.
+
+Three ways out, and only one of them is honest. Reverting the publication puts the contract back in
+prose. Exempting either guard makes the pair agree by making one of them blind. The third is to state
+the constraint where the schema can carry it — `profile_id: z.string().regex(PROFILE_ID_INPUT_RE)` in
+the route's own object, with `parseProfileId` still running downstream as the normalizer it actually is.
+Its neighbour `proxy_id` already carried `.uuid()` declaratively two lines below, which is what the field
+should have looked like all along. Both guards are green on that, and the accepted set did not move.
+
+The general form: when a fix reds a guard, the guard's model is a claim about where truth is allowed to
+live. Here it claimed "constraints live in zod chains", and the code disagreed by putting one in a
+function call. Making the code meet the claim was cheaper and better than weakening the claim. Proven
+load-bearing rather than coincidental: removing the route-side `.regex` reds that arm again, naming the
+field and both chains.
+
+Mutations, each against the artifact its sentinel actually reads: republishing `restore.name`,
+`rotate.name` or `agent-sessions.profile_id` as a bare string reds the derived arm, and the failure names
+the exact field; giving an allowlisted field a `maxLength` reds the staleness check, so an exemption
+cannot outlive what it exempts. The floor counts string PROPERTIES — the quantity the assertion iterates
+— not paths or request bodies, of which a walk resolving no `$ref` would still find plenty. Spec restored
+byte-identical from a scratchpad snapshot each time. `profile-id.ts` carries no content-parity pin
+(checked both grep forms). The equivalence evidence for splitting `UUID_RE` into `UUID_BODY` is better
+than "its tests still pass": one of those six arms asserts `parseProfileId(\`prof\_${UUID.toUpperCase()}\`)`returns the uppercase uuid, so case-insensitivity — the exact property the`/i`flag carried and the
+explicit`[0-9a-fA-F]` class replaces — is pinned directly, and it is pinned on the accepting side where
+a narrowing would show up.

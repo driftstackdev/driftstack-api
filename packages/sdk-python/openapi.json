@@ -2888,7 +2888,9 @@
         "type": "object",
         "properties": {
           "name": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
           }
         }
       },
@@ -33289,7 +33291,8 @@
                     ]
                   },
                   "profile_id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^(?:prof_)?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
                   },
                   "proxy_id": {
                     "type": "string",
@@ -54554,7 +54557,10 @@
                 "type": "object",
                 "properties": {
                   "name": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "pattern": "^[a-zA-Z0-9][a-zA-Z0-9 _.-]{0,118}[a-zA-Z0-9]$|^[a-zA-Z0-9]$"
                   }
                 },
                 "required": ["name"]

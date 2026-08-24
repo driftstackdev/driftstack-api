@@ -68,7 +68,7 @@ import { concurrentSessionLimitFor } from '../services/sessions.js';
 import type { SessionRepo } from '../services/sessions.js';
 import { buildAssignProfileBlock } from '../services/profile-store.js';
 import type { R2 } from '../lib/r2.js';
-import { parseProfileId } from '../lib/profile-id.js';
+import { PROFILE_ID_INPUT_RE, parseProfileId } from '../lib/profile-id.js';
 import { parseSessionId } from '../lib/session-id.js';
 import type { BYOKAnthropicService } from '../services/byok-anthropic.js';
 import type { InMemoryByokKeyCache } from '../services/byok-anthropic-key-cache.js';
@@ -223,7 +223,18 @@ const CreateAgentSessionRequestSchema = z.object({
   // id the API returns OR a bare uuid (parseProfileId normalizes + 400s on bad);
   // validated to be an owned profile before dispatch; its DEK rides the
   // SessionAssign.profile block.
-  profile_id: z.string().optional(),
+  //
+  // V-1476 — the shape was enforced only IMPERATIVELY, by `parseProfileId` in
+  // the handler, so the accepted set existed in prose and in a function call and
+  // nowhere a reader of this schema could see it. `proxy_id` on the next lines
+  // carries its own `.uuid()` declaratively, which is the shape this should have
+  // had. Publishing the pattern without this made
+  // `published-request-schema-is-not-looser-than-enforced` red — correctly, on
+  // its own terms: it compares route-file zod chains, and by that measure the
+  // document promised a validation the route did not declare. Stating it here
+  // makes both true, and `parseProfileId` still runs downstream as the
+  // normalizer it is.
+  profile_id: z.string().regex(PROFILE_ID_INPUT_RE).optional(),
   // ARC A — per-session customer proxy. When supplied, the dispatched session
   // browses through this account proxy instead of the operator default.
   // Validated to be an owned proxy before dispatch; a cross-account/unknown id
