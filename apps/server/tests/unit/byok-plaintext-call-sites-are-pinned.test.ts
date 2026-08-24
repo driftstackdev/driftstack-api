@@ -4,8 +4,20 @@
 // The key is a customer secret we hold. It is stored encrypted
 // (`accounts.byok_anthropic_api_key_ciphertext`, bytea — there is no plaintext
 // column), the dashboard read returns metadata only, and the audit rows carry no
-// key fingerprint by the Q2 verdict. The only way the plaintext exists in
-// process at all is `BYOKAnthropicService.getPlaintext`.
+// key fingerprint by the Q2 verdict. `BYOKAnthropicService.getPlaintext` is how
+// the plaintext ENTERS the process.
+//
+// V-1527 — it is not the only way a file can obtain it, and this header used to
+// say it was. `InMemoryByokKeyCache` retains the plaintext for the life of an
+// agent session and `get(agentSessionId)` returns it with no decrypt involved,
+// so a new file could hold the same secret while the scan — which matched the
+// decrypt spelling alone — saw nothing. Both routes are scanned now.
+//
+// Nothing new was reported by the widening, because the single cache read lives
+// in `routes/agent-sessions.ts`, which was already pinned for its decrypt. A set
+// that is correct by coincidence is the state worth fixing before the
+// coincidence ends: proved by a throwaway file that reads only the cache, which
+// the old scan passed and the new one names.
 //
 // Two call sites, both deliberate: the AgentRuntime path in
 // routes/agent-sessions.ts, and `POST /v1/account/me/byok-anthropic-key/test`,
@@ -30,6 +42,7 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = resolve(HERE, '..', '..', 'src');
 const SERVICE = 'services/byok-anthropic.ts';
+const KEY_CACHE = 'services/byok-anthropic-key-cache.ts';
 
 /** Files allowed to decrypt a customer key, and why. */
 const ALLOWED_DECRYPT_SITES = new Map<string, string>([
@@ -57,11 +70,27 @@ function codeLines(file: string): string {
     .join('\n');
 }
 
+/**
+ * V-1527 — every file that can HOLD the plaintext, by either route to it.
+ *
+ * `.getPlaintext(` is how the key enters the process. It is not the only way a
+ * file can obtain it: `InMemoryByokKeyCache` retains the plaintext for the life
+ * of an agent session, and its `get(agentSessionId)` hands it back without any
+ * decrypt. A new file reading the cache would acquire the same secret and the
+ * old scan — which matched the decrypt spelling only — would not have seen it.
+ *
+ * Today both routes land in the same file, so the allowed set is unchanged and
+ * this widening reports nothing new. That is the point at which to widen it: the
+ * coincidence is what was holding, not the scan.
+ */
 function decryptCallSites(): string[] {
   return walk(SRC)
     .map((f) => f.slice(SRC.length + 1))
-    .filter((rel) => rel !== SERVICE)
-    .filter((rel) => /\.getPlaintext\(/.test(codeLines(resolve(SRC, rel))))
+    .filter((rel) => rel !== SERVICE && rel !== KEY_CACHE)
+    .filter((rel) => {
+      const code = codeLines(resolve(SRC, rel));
+      return /\.getPlaintext\(/.test(code) || /\bbyokKeyCache\??\.get\(/.test(code);
+    })
     .sort();
 }
 

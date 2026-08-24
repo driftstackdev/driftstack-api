@@ -14954,3 +14954,47 @@ explicitly not an autopilot edit.
 The claim V-1525 made on four samples survives eleven, and the useful form of it is unchanged: the
 standing list should be trimmed against the repo before more effort goes into it, because the majority of
 what it still asks for has already landed.
+
+## V-1527 — a customer key reachable by a spelling its guard did not scan
+
+My last three batches each nearly filed a false finding by grepping for one spelling of a mechanism and
+reading its absence as the absence of the mechanism — the scope census that saw only `requireScope`, the
+header scan that saw only bracket-literals, the SSE limiter I looked for in a preHandler while it sat in
+the handler body. That is a repeatable fault, so this batch used it deliberately as an instrument: find a
+guard that scans for ONE spelling of a thing the codebase reaches by several.
+
+`byok-plaintext-call-sites-are-pinned` is the highest-stakes candidate — a customer's Anthropic key —
+and its own header states the premise the scan rests on: _"The only way the plaintext exists in process
+at all is `BYOKAnthropicService.getPlaintext`."_
+
+**That sentence is true about how the plaintext ENTERS the process and false about how a file can obtain
+it.** `InMemoryByokKeyCache` retains the plaintext for the life of an agent session, and
+`get(agentSessionId)` returns it with no decrypt involved. The scan matched `\.getPlaintext\(` only, so a
+new file reading the cache would hold the same customer secret and the guard whose stated job is "a new
+file decrypting the key fails here" would pass it.
+
+**Nothing is currently wrong, and the reason is a coincidence.** The single cache read is
+`routes/agent-sessions.ts:4616`, which was already pinned for its decrypt call, so the allowed set is
+unchanged and widening the scan reports nothing new. The neighbouring consumer is better than that:
+`routes/account-byok-anthropic.ts` takes the cache as `{ deleteByAccount(accountId: string): number }` —
+a narrowed structural type that cannot read a key at all, which is a stronger guarantee than any scan.
+
+A set that is correct by coincidence is exactly the state to fix before the coincidence ends, and the
+proof is not an argument. A throwaway file whose only content is
+`return byokKeyCache.get(id)` — no decrypt anywhere in it — **passes the old scan and is named by the
+new one**, measured both ways rather than reasoned about.
+
+The header now says which route is which: `getPlaintext` is how the key enters, the cache is how it is
+held, and both are scanned. The service file and the cache module are excluded from the population, since
+declaring the accessor is not the same as reaching for it.
+
+### Why this instrument keeps working
+
+Three near-misses and one real gap, all the same shape: a mechanism has more than one spelling, a scan
+knows one, and the gap is invisible precisely because the scan is green. V-1515 found `authorization`
+and `cookie` unseen by a redaction census. This found a customer secret reachable past a decrypt census.
+Both guards were careful, well-reasoned files whose authors wrote the limiting sentence down — which is
+what made them findable.
+
+The generalisation worth keeping: **when a guard's header states what the only way to do something is,
+that sentence is the hypothesis to test, not the reason to skip testing.**
