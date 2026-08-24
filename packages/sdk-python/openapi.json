@@ -32389,6 +32389,19 @@
             "BearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "description": "Optional client-supplied idempotency key, forwarded to Stripe. Retrying with the same key returns the original checkout session instead of opening a second one."
+            },
+            "required": false,
+            "name": "idempotency-key",
+            "in": "header"
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -33784,6 +33797,19 @@
         "security": [
           {
             "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "description": "Optional durable identity for this creation. Retrying with the same key replays the original 201 rather than minting a second agent session, so a create lost to a timeout is safe to repeat. Use a new key for an intentionally new session."
+            },
+            "required": false,
+            "name": "idempotency-key",
+            "in": "header"
           }
         ],
         "requestBody": {

@@ -4258,6 +4258,21 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['billing'],
     security: auth,
     request: {
+      // V-1507 — read by the route and forwarded to Stripe as its own
+      // idempotency key. Documented on the idempotency reference page, absent
+      // from the machine-readable contract.
+      headers: z.object({
+        'idempotency-key': z
+          .string()
+          .min(1)
+          .max(255)
+          .openapi({
+            description:
+              'Optional client-supplied idempotency key, forwarded to Stripe. Retrying with the same key returns the original checkout session instead of opening a second one.',
+          })
+          .optional(),
+      }),
+
       body: { content: { 'application/json': { schema: CreateCheckoutSessionRequestSchema } } },
     },
     responses: {
@@ -4457,6 +4472,20 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['agent-chat'],
     security: auth,
     request: {
+      // V-1507 — the route has always read this header and deduplicated on it
+      // (`readIdempotencyKey` then `findByIdempotencyKey`, replaying the prior
+      // 201). Undeclared, a generated client had no parameter to send it with.
+      headers: z.object({
+        'idempotency-key': z
+          .string()
+          .min(1)
+          .max(255)
+          .openapi({
+            description:
+              'Optional durable identity for this creation. Retrying with the same key replays the original 201 rather than minting a second agent session, so a create lost to a timeout is safe to repeat. Use a new key for an intentionally new session.',
+          })
+          .optional(),
+      }),
       body: {
         content: {
           'application/json': {

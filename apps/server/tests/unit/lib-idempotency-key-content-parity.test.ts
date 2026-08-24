@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const LIB = resolve(REPO_ROOT, 'apps/server/src/lib/idempotency-key.ts');
+const SPEC = resolve(REPO_ROOT, 'packages/sdk-python/openapi.json');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -41,6 +42,39 @@ describe('lib/idempotency-key content parity', () => {
     expect(body).toMatch(
       /\/\/ {3}- POST \/v1\/agent-sessions\/:id\/message \(durable at-most-once turn receipt\)/,
     );
+  });
+
+  it("V-1507 CRITICAL every route in that catalog DECLARES the header in the published spec. The list above is parsed out of the module's own comment rather than restated here, so the two cannot be edited apart. Two of the four honoured the header while the document never mentioned it: a generated client has no parameter to send `Idempotency-Key` with, so the safe-retry guarantee the reference page promises was unreachable from the SDKs — `POST /v1/agent-sessions` deduplicates via findByIdempotencyKey and replays its original 201, and `POST /v1/billing/checkout-session` forwards the key to Stripe.", () => {
+    const catalog = [...body.matchAll(/^\/\/ {3}- (POST) (\/v1\/[^\s(]+)/gm)].map(
+      (m) => `${m[1]} ${m[2]!.replace(/:(\w+)/g, '{$1}')}`,
+    );
+    // The assertion below reports an absence, so an empty parse would pass
+    // having compared nothing — the failure mode this repo has hit repeatedly.
+    expect(catalog.length, "consumers parsed out of the module's own comment").toBe(4);
+
+    const spec = JSON.parse(readFileSync(SPEC, 'utf8')) as {
+      paths: Record<string, Record<string, { parameters?: { name?: string; in?: string }[] }>>;
+    };
+    const declared = new Set<string>();
+    for (const [path, ops] of Object.entries(spec.paths)) {
+      for (const [method, op] of Object.entries(ops)) {
+        const has = (op.parameters ?? []).some(
+          (x) => x.in === 'header' && (x.name ?? '').toLowerCase() === 'idempotency-key',
+        );
+        if (has) declared.add(`${method.toUpperCase()} ${path}`);
+      }
+    }
+    expect(
+      catalog.filter((r) => !declared.has(r)).sort(),
+      'these routes read Idempotency-Key and the published spec does not declare it, so a ' +
+        'generated client cannot send one:',
+    ).toEqual([]);
+    // And the reverse: a declaration on a route that does not read the header
+    // promises deduplication the server will not perform.
+    expect(
+      [...declared].filter((r) => !catalog.includes(r)).sort(),
+      'the spec declares Idempotency-Key on routes the parser catalog does not list:',
+    ).toEqual([]);
   });
 
   // V-1365 — the fourth rule used to say a repeated header resolved to its first

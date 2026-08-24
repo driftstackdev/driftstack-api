@@ -13845,3 +13845,62 @@ template literal the scan reads correctly, and there is no method for any of the
 Recorded and not acted on. Which endpoints an SDK exposes is a product decision spanning three languages
 plus their docs and cross-SDK parity guards, and adding six methods to satisfy a census would be
 answering a question nobody asked with a change nobody scoped.
+
+## V-1507 — two endpoints honour Idempotency-Key and the document never said so
+
+Four routes read the customer-supplied `Idempotency-Key` header. The published spec declared it on two.
+
+```
+POST /v1/agent-sessions              reads it, dedups, replays the 201   — UNDECLARED
+POST /v1/billing/checkout-session    reads it, forwards it to Stripe     — UNDECLARED
+POST /v1/agent-sessions/{id}/message declared
+POST /v1/billing/crypto-checkout     declared
+```
+
+This is worse than an undocumented field. A header that is not a declared parameter has no slot in a
+generated client — a Python caller could not send one at all, so the safe-retry guarantee the reference
+page promises was unreachable from the SDK that is generated rather than hand-written. And the retry it
+protects is the expensive one: `POST /v1/agent-sessions` after a timeout, where the alternative to
+deduplication is a second agent session the caller never asked for.
+
+**Both human surfaces were right again, which is now the recognisable shape of this class.** The
+reference page names all four under "Which endpoints honour it" and even states the converse — _"Every
+other endpoint … ignores the header. Sending it is harmless but has no dedupe effect"_ — and
+`lib/idempotency-key.ts` opens with its own four-route catalog. V-1498, V-1502, V-1503 and V-1504 were
+each a version of this: the prose is maintained, the machine-readable contract is the surface nobody
+re-reads.
+
+Verified against source rather than taken from the docs, which is the rule this batch exists under.
+`POST /v1/agent-sessions` calls `readIdempotencyKey`, looks the key up with `findByIdempotencyKey`,
+replays the prior 201 on a hit, and handles the unique-violation race by re-reading the winner.
+`POST /v1/billing/checkout-session` parses the header, 400s an invalid one, and passes the key into
+`createCheckoutSession`, which forwards it to Stripe's own idempotency mechanism. Neither dedup is
+theoretical.
+
+### The count that was wrong, and why it mattered
+
+My first pass reported **three** reader sites and I nearly wrote the finding around that number — which
+would have made the docs look wrong about `checkout-session` rather than the spec look wrong about it.
+The three came from a `grep … | head -12`: the twelfth line landed mid-file and `billing.ts` was below
+the cut. A truncated grep reports a number that looks like a census and is a display limit.
+
+Re-enumerated without the pipe: exactly four call sites, matching the docs and the lib comment. The
+difference between "3 readers, docs overclaim" and "4 readers, spec underdeclares" is the entire
+direction of the finding, and only one of them is true.
+
+### The guard derives its list instead of restating it
+
+The new arm parses the four routes out of `lib/idempotency-key.ts`'s **own** comment — the same text the
+arm above it already pins — and requires the spec to declare the header on exactly that set. Nothing is
+hand-listed, so the catalog and the check cannot be edited apart, and a fifth consumer forces the
+declaration on the day it is added rather than whenever someone remembers.
+
+It asserts both directions. The forward one is this finding. The reverse — a declaration on a route that
+does not read the header — is the more dangerous failure: it promises deduplication the server will not
+perform, so a client retries a charge believing it is protected. Proven by declaring the header on
+`POST /v1/sessions`, which reds naming it.
+
+Three negatives, each isolating one occurrence: reverting the create declaration alone names
+`POST /v1/agent-sessions`, reverting the checkout one alone names `POST /v1/billing/checkout-session`,
+and the reverse mutation names `POST /v1/sessions`. The parse is asserted non-empty first, since an arm
+that reports an absence passes perfectly when it has parsed nothing.
