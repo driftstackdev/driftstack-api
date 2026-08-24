@@ -75,7 +75,8 @@ describe('W896 CryptoOrder admin/customer asymmetry cross-source invariant', () 
       /ListCryptoOrdersQuerySchema = z\.object\(\{[\s\S]+?limit: z\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.optional\(\)/,
     );
     expect(p).toMatch(/status: CryptoOrderStatusSchema\.optional\(\)/);
-    expect(p).toMatch(/cursor: z\.string\(\)\.min\(1\)\.optional\(\)/);
+    // V-1473 — `.max(512)` is the slice-149 cap; this schema had min but no max.
+    expect(p).toMatch(/cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\)/);
     expect(p).toMatch(/created_after: z\.string\(\)\.datetime\(\)\.optional\(\)/);
     expect(p).toMatch(/created_before: z\.string\(\)\.datetime\(\)\.optional\(\)/);
   });

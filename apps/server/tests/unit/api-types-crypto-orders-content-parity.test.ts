@@ -123,7 +123,7 @@ describe('W436.C packages/api-types/src/crypto-orders.ts content parity', () => 
       /\/\/ V-666\.BR — typed query schema for GET \/v1\/billing\/crypto-orders\.\s*\n?\s*\/\/ Customer dashboards \+ SDK consumers can reuse this instead of\s*\n?\s*\/\/ re-declaring the status union inline\./,
     );
     expect(body).toMatch(
-      /export const ListCryptoOrdersQuerySchema = z\.object\(\{\s*\n?\s*limit: z\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.optional\(\),\s*\n?\s*status: CryptoOrderStatusSchema\.optional\(\),\s*\n?\s*\/\*\* V-666\.BU — forward cursor from a prior page's next_cursor\. \*\/\s*\n?\s*cursor: z\.string\(\)\.min\(1\)\.optional\(\),\s*\n?\s*\/\*\* V-666\.BX — half-open window on created_at; ISO 8601 strings\. \*\/\s*\n?\s*created_after: z\.string\(\)\.datetime\(\)\.optional\(\),\s*\n?\s*created_before: z\.string\(\)\.datetime\(\)\.optional\(\),\s*\n?\s*\}\);/,
+      /export const ListCryptoOrdersQuerySchema = z\.object\(\{\s*\n?\s*limit: z\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.optional\(\),\s*\n?\s*status: CryptoOrderStatusSchema\.optional\(\),\s*\n?\s*[\s\S]*?cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),\s*\n?\s*\/\*\* V-666\.BX — half-open window on created_at; ISO 8601 strings\. \*\/\s*\n?\s*created_after: z\.string\(\)\.datetime\(\)\.optional\(\),\s*\n?\s*created_before: z\.string\(\)\.datetime\(\)\.optional\(\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /\*\s*V-666\.BU — forward cursor; null when there is no further page\.\s*\n?\s*\*\s*Pass back as `\?cursor=` on the next request\. Treat as opaque\./,

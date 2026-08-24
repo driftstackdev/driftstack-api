@@ -128,7 +128,12 @@ describe('W435.B packages/api-types/src/admin.ts content parity', () => {
       /\/\/ V-512 — optional drill-down by webhook-endpoint id\. Customer\s*\n?\s*\/\/ support workflow: a customer reports "my endpoint is missing\s*\n?\s*\/\/ events"; admin pulls just that endpoint's DLQ rows without\s*\n?\s*\/\/ wading through other accounts'\./,
     );
     expect(body).toMatch(
-      /export const ListDlqQuerySchema = z\.object\(\{\s*\n?\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),\s*\n?\s*cursor: z\.string\(\)\.optional\(\),/,
+      // V-1473 — this pin FROZE the defect. It quoted `cursor: z.string()
+      // .optional()`, the bare shape slice 149 exists to eliminate, so the
+      // uncapped cursor on GET /v1/admin/webhooks/dlq was not merely unguarded,
+      // it was asserted. Re-quoted against the capped source; the comment above
+      // the field records why the cap is there.
+      /export const ListDlqQuerySchema = z\.object\(\{\s*\n?\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),[\s\S]*?cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),/,
     );
     expect(body).toMatch(/endpoint_id: z\.string\(\)\.min\(1\)\.max\(200\)\.optional\(\),/);
   });

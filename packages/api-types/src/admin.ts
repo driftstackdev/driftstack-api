@@ -163,7 +163,11 @@ export type QuotaOverrideResponse = z.infer<typeof QuotaOverrideResponseSchema>;
 
 export const ListDlqQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
-  cursor: z.string().optional(),
+  // V-1473 — slice 149's cap. This schema carries its own cursor rather than
+  // extending PaginationQuerySchema, which is precisely the case slice 149 exists
+  // for, and it was missed: the guard that pins the convention rosters
+  // webhooks.ts and accounts.ts and never named this file.
+  cursor: z.string().min(1).max(512).optional(),
   // V-512 — optional drill-down by webhook-endpoint id. Customer
   // support workflow: a customer reports "my endpoint is missing
   // events"; admin pulls just that endpoint's DLQ rows without
@@ -242,7 +246,7 @@ export const ListAuditLogQuerySchema = z.object({
   // delivery) across every admin action that touched it.
   target_resource_id: z.string().min(1).max(200).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
-  cursor: z.string().optional(),
+  cursor: z.string().min(1).max(512).optional(),
 });
 export type ListAuditLogQuery = z.infer<typeof ListAuditLogQuerySchema>;
 export type ListAuditLogQueryInput = z.input<typeof ListAuditLogQuerySchema>;

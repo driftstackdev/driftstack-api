@@ -13646,7 +13646,9 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
             },
             "required": false,
             "name": "cursor",
@@ -14523,7 +14525,9 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
             },
             "required": false,
             "name": "cursor",

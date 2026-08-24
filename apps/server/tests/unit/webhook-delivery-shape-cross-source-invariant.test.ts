@@ -101,7 +101,9 @@ describe('W898 WebhookDelivery shape + V-512 DLQ cross-source invariant', () => 
   it('CRITICAL ListDlqQuery limit + cursor parity with audit-log queries — limit: 1-100 default 50, cursor optional. The shared pagination contract makes admin UI consistent.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/admin.ts'));
     expect(p).toMatch(
-      /ListDlqQuerySchema = z\.object\(\{\s*\n\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),\s*\n\s*cursor: z\.string\(\)\.optional\(\),/,
+      // V-1473 — the cursor is capped at 512 now. This pin quoted the BARE shape,
+      // which is the one slice 149 exists to remove, so it froze the defect.
+      /ListDlqQuerySchema = z\.object\(\{\s*\n\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),[\s\S]*?cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),/,
     );
   });
 

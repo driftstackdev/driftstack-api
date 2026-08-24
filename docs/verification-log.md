@@ -11797,3 +11797,55 @@ reads 3012 against an actual 3067 — a peer's drift I am not going to absorb. T
 whoever reconciles those ratchets can add one arm with the expansion already worked out.
 
 No source or test change; log entry only.
+
+## V-1473 — two live admin routes carried an unbounded cursor, and a parity pin asserted it
+
+The defects this session have been in guards' INPUTS rather than their assertions, so I censused
+roster-driven guards and sorted by what an incomplete roster costs. `admin-routes-list-query-defensive-caps`
+came top: a list route missing from it is an uncapped query param.
+
+Slice 149 states the rule — "api-types list-query schemas that don't extend `PaginationQuerySchema` but
+carry their own cursor field still need the same cap" — and rosters `webhooks.ts` and `accounts.ts`.
+`packages/api-types/src/admin.ts` is exactly that case and was never named, so:
+
+    ListDlqQuerySchema       cursor: z.string().optional()     GET /v1/admin/webhooks/dlq
+    ListAuditLogQuerySchema  cursor: z.string().optional()     GET /v1/admin/audit-log
+
+Both live, both parsed by real routes, both sitting beside a `limit` capped at 100. Admin-scoped, so the
+caller must already hold `driftstack_internal_admin` — the severity is defence-in-depth, not an open
+door, and it is recorded that way.
+
+**A content-parity test had pinned one of them in the bare shape.** `api-types-admin-content-parity`
+quoted `cursor: z.string().optional(),` inside its `ListDlqQuerySchema` regex, so the uncapped cursor
+was not merely unguarded — it was asserted. Textbook "parity pins freeze false claims", found in the
+same batch as the thing it was freezing.
+
+**The derived arm then found a third the hand pass had missed.** Rostering the file fixes the two known
+schemas; it cannot report the next one. So an arm now derives every cursor DECLARATION across
+`packages/api-types/src` and `apps/server/src` and requires the request-shaped ones to be capped —
+discriminating on shape, because a request cursor is `.optional()` while a response cursor is
+`z.string().nullable()` on a page envelope and needs no bound. It immediately failed on
+`ListCryptoOrdersQuerySchema` (`.min(1)` with no `.max`), which I had looked at by hand and set aside.
+That one has NO consumer at all — the server's crypto-order routes parse their own inline capped query —
+so nothing was unbounded in practice, but a published schema that omits the cap is how the next consumer
+inherits one. Capped, with that stated.
+
+**Rule 2 was not enough here, twice over.** My enumeration grepped the two schema names and the bare
+cursor text and found three pins. The full suite then failed **six** tests: three more pins quoting the
+same lines from other angles, plus `packages/sdk-python/openapi.json` — a GENERATED artifact that
+publishes these constraints and is committed. Regenerated with `npm run sdk:python:dump-spec`; it now
+carries 24 `"maxLength": 512` entries. A schema change in a published package ripples into generated
+snapshots, and grepping source pins alone will not find those.
+
+**And the fix does not reach the server until a build.** `@driftstack/api-types` resolves to
+`dist/index.js`, `dist` is gitignored, and it still held the bare cursor after the source edit. Rebuilt
+and verified the cap is in `dist/admin.js`. Worth stating because "fixed in src" and "fixed" are
+different claims for a package consumed via dist.
+
+Four mutations: reverting either cursor to the bare shape reds two tests each (the roster arm and the
+re-quoted pin); breaking the derived scan reds its floor. Dropping `admin.ts` back out of the roster
+stays GREEN, which is the honest result — the derived arm subsumes the roster entry, so that entry
+documents rather than protects.
+
+Full suite green: 3067 files, 30873 tests, exit 0. No new test file; the caps guard goes 1 `it`
+declaration to 2. No ratchet movement.

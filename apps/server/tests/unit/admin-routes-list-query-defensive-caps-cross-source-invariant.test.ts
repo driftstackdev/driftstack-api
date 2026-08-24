@@ -22,7 +22,7 @@
 //   - account_id: real `acc_<36-char-uuid>` is 40 chars; 100-char
 //     cap blocks abusive inputs without trimming legitimate ones.
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -60,6 +60,12 @@ const SHARED_PAGINATION_SCHEMA = 'packages/api-types/src/common.ts';
 const API_TYPES_LIST_SCHEMAS = [
   'packages/api-types/src/webhooks.ts', // ListDeliveriesQuerySchema
   'packages/api-types/src/accounts.ts', // ListAccountAuditLogQuerySchema
+  // V-1473 — ListDlqQuerySchema + ListAuditLogQuerySchema. Both carried a bare
+  // `cursor: z.string().optional()` on live admin routes
+  // (GET /v1/admin/webhooks/dlq, GET /v1/admin/audit-log) for as long as this
+  // roster omitted the file, and one of them was pinned in that shape by
+  // api-types-admin-content-parity.
+  'packages/api-types/src/admin.ts',
 ];
 
 describe('Slice 146/147/148/149 — defensive caps on list-query cursor + account_id', () => {
@@ -99,4 +105,52 @@ describe('Slice 146/147/148/149 — defensive caps on list-query cursor + accoun
       expect(body).not.toMatch(/cursor:\s*z\.string\(\)\.optional\(\)/);
     },
   );
+
+  // V-1473 — the rosters above are hand-written, and that is how two live admin
+  // routes ended up with an unbounded cursor.
+  //
+  // Slice 149 says it plainly: "api-types list-query schemas that don't extend
+  // PaginationQuerySchema but carry their own cursor field still need the same
+  // cap." `packages/api-types/src/admin.ts` is exactly that case and was never
+  // named, so `ListDlqQuerySchema` and `ListAuditLogQuerySchema` kept a bare
+  // `cursor: z.string().optional()` on GET /v1/admin/webhooks/dlq and
+  // GET /v1/admin/audit-log — and api-types-admin-content-parity PINNED one of
+  // them in that shape, so the defect was asserted rather than merely unguarded.
+  //
+  // This derives the population instead. A REQUEST cursor is the `.optional()`
+  // form; a RESPONSE cursor is `z.string().nullable()` on a page envelope and
+  // needs no bound, which is why the shape rather than the name discriminates.
+  it('CRITICAL every REQUEST cursor field in api-types and server source is capped. The rosters above cannot report a file nobody added to them, and a bare cursor is exactly what slice 146/147/148/149 spent four slices removing.', () => {
+    const roots = ['packages/api-types/src', 'apps/server/src'];
+    const declarations: { where: string; decl: string }[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(resolve(REPO_ROOT, dir), { withFileTypes: true })) {
+        const rel = `${dir}/${entry.name}`;
+        if (entry.isDirectory()) {
+          if (entry.name !== 'node_modules' && entry.name !== 'dist') walk(rel);
+          continue;
+        }
+        if (!entry.name.endsWith('.ts')) continue;
+        for (const m of read(rel).matchAll(/cursor:\s*z\.string\(\)[^,\n]*/g)) {
+          declarations.push({ where: rel, decl: m[0] });
+        }
+      }
+    };
+    for (const r of roots) walk(r);
+
+    expect(
+      declarations.length,
+      'no cursor declarations found — the scan stopped matching and this arm would pass over an empty set',
+    ).toBeGreaterThan(20);
+
+    const uncappedRequests = declarations
+      .filter((d) => d.decl.includes('.optional()') && !d.decl.includes('.nullable()'))
+      .filter((d) => !d.decl.includes('.max('))
+      .map((d) => `${d.where}: ${d.decl.trim()}`)
+      .sort();
+    expect(
+      uncappedRequests,
+      'request cursor(s) with no upper bound — the query param is unbounded on every route that parses this schema:',
+    ).toEqual([]);
+  });
 });

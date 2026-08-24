@@ -133,8 +133,15 @@ export type ListCryptoOrdersResponse = z.infer<typeof ListCryptoOrdersResponseSc
 export const ListCryptoOrdersQuerySchema = z.object({
   limit: z.number().int().min(1).max(100).optional(),
   status: CryptoOrderStatusSchema.optional(),
-  /** V-666.BU — forward cursor from a prior page's next_cursor. */
-  cursor: z.string().min(1).optional(),
+  /**
+   * V-666.BU — forward cursor from a prior page's next_cursor.
+   *
+   * V-1473 — `.max(512)` added for the slice-149 convention. This schema is
+   * offered for dashboards and SDKs to reuse and currently has no consumer at
+   * all, so nothing was unbounded in practice; a published schema that omits the
+   * cap is how the next consumer inherits one.
+   */
+  cursor: z.string().min(1).max(512).optional(),
   /** V-666.BX — half-open window on created_at; ISO 8601 strings. */
   created_after: z.string().datetime().optional(),
   created_before: z.string().datetime().optional(),
