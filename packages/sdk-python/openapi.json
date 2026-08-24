@@ -35234,6 +35234,15 @@
             "required": true,
             "name": "id",
             "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Index of the last transcript entry you received. The server replays entries after it, then continues live. A value that is not a number is treated as absent, which replays the transcript from the beginning."
+            },
+            "required": false,
+            "name": "last-event-id",
+            "in": "header"
           }
         ],
         "responses": {

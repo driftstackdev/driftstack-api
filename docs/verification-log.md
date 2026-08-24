@@ -13904,3 +13904,52 @@ Three negatives, each isolating one occurrence: reverting the create declaration
 `POST /v1/agent-sessions`, reverting the checkout one alone names `POST /v1/billing/checkout-session`,
 and the reverse mutation names `POST /v1/sessions`. The parse is asserted non-empty first, since an arm
 that reports an absence passes perfectly when it has parsed nothing.
+
+## V-1508 — the request-header surface, enumerated; one real gap, three correct silences
+
+V-1507 fixed one undeclared request header. The generalisation is cheap and worth doing once: enumerate
+every header the server reads and compare against every header the spec declares as a parameter.
+
+Read by the server: `user-agent`, `x-nowpayments-sig`, `x-byok-anthropic-api-key`, `stripe-signature`,
+`x-request-id`, `x-driftstack-gui-control-key`, `set-cookie`, `last-event-id`, `idempotency-key`, and
+four `cf-*` headers. Declared in the spec: `accept`, `idempotency-key` (four operations, after V-1507),
+`x-byok-anthropic-api-key`, `x-driftstack-mac-node-id`.
+
+**One is a real gap.** `GET /v1/agent-sessions/{id}/transcript` reads `Last-Event-ID` and resumes the SSE
+stream from that entry index. Its own 200 description says so — _"Supports Last-Event-ID resume: send the
+last entry index seen and the server replays subsequent entries"_ — and the docs page documents it twice.
+The header was not a declared parameter.
+
+A description is not a parameter. The distinction matters more here than in the field cases: a browser
+`EventSource` sends `Last-Event-ID` on reconnect without being asked, so the capability works for free in
+the surface where it is least needed. Every non-browser client has to set it deliberately, and that is
+exactly the caller who can only learn about it from the document, and whose generated client has no slot
+for a header nobody declared.
+
+Behaviour checked rather than paraphrased from the description: the route parses the header with
+`parseInt` and falls back to `-1` when the result is not finite, which replays from the beginning. The
+published description says that, rather than implying a malformed value is rejected.
+
+**Three are correct silences, and saying why is the point of enumerating.**
+
+- `x-driftstack-gui-control-key` — appears in `sentry.ts` and `logger.ts` redaction lists and a comment;
+  the route it authenticates is not published at all. That is the same deliberate decision
+  `a-route-in-neither-the-spec-nor-the-docs-is-a-decision` already classified, not an omission.
+- `stripe-signature`, `x-nowpayments-sig` — inbound from a third party to a webhook receiver. The sender
+  is Stripe and NOWPayments, not a customer; declaring them as parameters would invite someone to send
+  one.
+- `user-agent`, `set-cookie`, `cf-ipcountry` / `cf-region` / `cf-timezone` / `cf-ipcity` — infrastructure
+  and edge-injected. Nothing a caller sets to change behaviour it can rely on.
+
+**One is a judgement call recorded rather than acted on.** `x-request-id` is honoured inbound — every
+operation's `X-Request-Id` response header says so: _"echoed from the inbound `x-request-id` when
+supplied."_ So the capability is documented on roughly every operation and declared as a request
+parameter on none. Declaring it would mean adding the same parameter to ~150 operations to describe a
+global convention, which trades one kind of poor discoverability for a large amount of noise. The
+honest fix is a shared parameter component referenced where it matters, and that is a spec-wide
+convention change rather than a field edit — the same reasoning that left `.openapi({...})` metadata
+alone in V-1499.
+
+The new arm asserts the SPEC and anchors itself to the reader: it checks the declaration exists **and**
+that the route still contains `req.headers['last-event-id']`, so a declaration cannot outlive the code
+that honours it. Reverting the declaration reds it.

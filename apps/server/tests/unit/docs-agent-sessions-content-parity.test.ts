@@ -20,6 +20,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const DOCS_PAGE = resolve(REPO_ROOT, 'apps/docs/src/pages/api/agent-sessions.md');
 const ROUTE_FILE = resolve(REPO_ROOT, 'apps/server/src/routes/agent-sessions.ts');
+const SPEC = resolve(REPO_ROOT, 'packages/sdk-python/openapi.json');
 
 describe('Arc 4 Wave 2.B sub-slice 8.20.d docs/api/agent-sessions.md parity', () => {
   it('docs page file exists at the expected path', () => {
@@ -172,6 +173,24 @@ describe('Arc 4 Wave 2.B sub-slice 8.20.d docs/api/agent-sessions.md parity', ()
     expect(body).toMatch(/transcript\.entry/);
     expect(body).toMatch(/Last-Event-ID/);
     expect(body).toMatch(/replay is exclusive/);
+  });
+
+  it('V-1508 CRITICAL the resume header is DECLARED in the published spec, not only described in its prose. The 200 description has always said this stream supports Last-Event-ID resume and the route has always read the header — but a description is not a parameter, and a header with no parameter has no slot in a generated client. A browser EventSource sends it unprompted; a Python or Go caller has to set it deliberately, which is exactly the caller who can only learn it from the document.', () => {
+    const spec = JSON.parse(readFileSync(SPEC, 'utf8')) as {
+      paths: Record<
+        string,
+        Record<string, { parameters?: { name?: string; in?: string; schema?: unknown }[] }>
+      >;
+    };
+    const params = spec.paths['/v1/agent-sessions/{id}/transcript']?.['get']?.parameters ?? [];
+    const header = params.find(
+      (x) => x.in === 'header' && (x.name ?? '').toLowerCase() === 'last-event-id',
+    );
+    expect(header, 'the transcript stream declares its Last-Event-ID request header').toBeDefined();
+
+    // The route reads the header on this exact stream, so the declaration is
+    // anchored to the reader rather than to a path string that could move.
+    expect(readFileSync(ROUTE_FILE, 'utf8')).toMatch(/req\.headers\['last-event-id'\]/);
   });
 
   it('documents the transcript scope floor and sensitive-intent projection honestly', () => {

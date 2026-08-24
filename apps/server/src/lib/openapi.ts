@@ -4613,6 +4613,19 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       params: z.object({ id: z.string() }),
+      // V-1508 — the 200 description below has always said this stream supports
+      // Last-Event-ID resume, and the route has always read it. A browser
+      // EventSource sends the header on its own; every other client has to set
+      // it deliberately, and an undeclared header has no slot in a generated one.
+      headers: z.object({
+        'last-event-id': z
+          .string()
+          .openapi({
+            description:
+              'Index of the last transcript entry you received. The server replays entries after it, then continues live. A value that is not a number is treated as absent, which replays the transcript from the beginning.',
+          })
+          .optional(),
+      }),
     },
     responses: {
       200: {
