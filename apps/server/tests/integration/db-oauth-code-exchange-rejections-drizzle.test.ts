@@ -193,6 +193,33 @@ describe('consumeCodeForToken rejection reasons', () => {
     ).toBe('client_authority_changed');
   });
 
+  // V-1414 — the third cause this file's own header names for client_authority_changed
+  // ("revoked client, client RE-BOUND TO ANOTHER ACCOUNT, or a secret that no longer
+  // matches") and the only one of the three without an arm. Found from the other side:
+  // `db/oauth-store.ts` is excluded from the coverage gate, but `services/oauth.ts`
+  // carries the same predicate in the in-memory store that models this transaction, and
+  // there `client.accountId !== args.token.account_id` had never been EVALUATED — the
+  // `!== null` half short-circuited it every time, because no fixture had ever re-bound a
+  // client after issuing its code.
+  //
+  // The token deliberately keeps the ORIGINAL account, so the code-side checks all pass
+  // and the refusal can only come from the client-authority clause. Re-binding the token
+  // instead would trip `code.accountId !== token.account_id` first and answer
+  // code_unavailable, which is the neighbouring arm above and a different guard.
+  it("CRITICAL a client RE-BOUND to another account cannot redeem a code it issued earlier. A private client is authority over one account's data; moving that binding after a code is outstanding must invalidate the code, or the new owner redeems a token over the previous owner's account.", async () => {
+    if (!reachable) return;
+    const fixture = await seed();
+    const other = await seed();
+    await sql!`UPDATE oauth_clients SET account_id = ${other.accountId} WHERE client_id = ${fixture.clientId}`;
+
+    expect(
+      await exchange(fixture),
+      'a client re-bound to a different account still redeemed a code issued under its ' +
+        'previous binding — the token would carry authority over an account the client no ' +
+        'longer belongs to',
+    ).toBe('client_authority_changed');
+  });
+
   it('CRITICAL a stale client secret cannot redeem a valid code', async () => {
     if (!reachable) return;
     const fixture = await seed();

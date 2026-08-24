@@ -9320,3 +9320,42 @@ The middle case is the one worth naming: a frame that negotiates `h2-and-h3` and
 the interpose is a **silent downgrade** — the mode is agreed, the interpose is what actually carries
 the traffic, and without the warning the report says the transport is fine while the route falls back
 to `disabled`. The arm pins both halves of that: the warning fires AND `quic_route` stays `'disabled'`.
+
+### V-1414 — a guard the coverage gate cannot see, found through its own test double
+
+`db-oauth-code-exchange-rejections-drizzle` exists because coverage found both rejection paths of the
+OAuth token exchange unexercised. Its header lists three causes for `client_authority_changed`:
+"revoked client, **client re-bound to another account**, or a secret that no longer matches." Two have
+arms. The middle one did not.
+
+Finding it needed the long way round, and that is the part worth recording. `apps/server/src/db/**`
+is **excluded from the coverage gate**, so no artifact can ever report a dark branch in
+`db/oauth-store.ts`. But `services/oauth.ts` carries an in-memory store that models the same
+transaction — its own comment says so — with the predicate copied verbatim:
+
+    (client.account_id !== null && client.account_id !== args.token.account_id)
+
+and there the operand counts read `[32, 32, 31, 0, 31]`. The **fourth** operand,
+`client.account_id !== args.token.account_id`, had never been evaluated: the `!== null` half
+short-circuited it every time, because no fixture had ever re-bound a client after issuing its code.
+**A test double's coverage exposed a gap in production code the gate is blind to.**
+
+The arm keeps the token on the ORIGINAL account and re-binds the _client_. That ordering matters:
+re-binding the token instead trips `code.accountId !== token.account_id` first and answers
+`code_unavailable`, which is the neighbouring arm and a different guard entirely.
+
+Proven against the production store, not the double:
+
+| mutation to `db/oauth-store.ts`                              | result           |
+| ------------------------------------------------------------ | ---------------- |
+| drop the whole account-rebinding clause                      | the new arm reds |
+| weaken **only** `client.accountId !== args.token.account_id` | the new arm reds |
+
+The second is what makes the attribution exact — the arm depends on that operand, not merely on the
+clause existing.
+
+Recorded alongside: the same predicate appears a second time at `db/oauth-store.ts:166`, in the
+authorization-code issue path, and that copy **is** covered — by
+`db-oauth-client-account-binding-drizzle`, whose header quotes that very line. So the rule is
+implemented twice and was tested in one of its two copies, which the neighbouring file already noted
+as a recurring shape in this codebase.
