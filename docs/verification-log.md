@@ -11550,3 +11550,47 @@ where our own output is produced.
 
 Full suite green: 3067 files, 30867 tests, exit 0. No new test file; behavioural 12 `it` declarations to
 13, parity unchanged at 11. No ratchet movement.
+
+## V-1467 — the email HTML-escape chokepoint is single today, and now has to stay single
+
+New instrument, carried from V-1447: verify docblocks that CLAIM something. `services/email.ts` says
+its templates interpolate plain-text data into HTML and that "escaping at the single render chokepoint
+in `send()` neutralises HTML injection without touching any template string. Text bodies are NOT
+escaped."
+
+**Checked, and the claim holds.** Twenty `html:` template entries, and exactly one invocation:
+`tpl.html(escapeVarsForHtml(vars))` at `email.ts:897`. Text bodies going unescaped is correct — a text
+part is not an HTML context. The values reaching those templates are customer-controlled in the way
+that matters: registered webhook URLs, session error messages, ids.
+
+**The escaping is covered; the chokepoint being single is not.** `email.test.ts` has a real injection
+arm — a hostile value comes back as `&lt;img src=x onerror=&quot;…` — and removing the escape reds it,
+so that arm is load-bearing. But **no test in the repo references `escapeVarsForHtml`**. A second render
+path — a preview route, a fallback transport, a digest mailer — calling `tpl.html(vars)` directly would
+inject on that path while every existing arm stayed green, because they all exercise the one call site
+that is already correct.
+
+A derived arm now asserts every `.html(` invocation passes escaped vars. Derived rather than pinned as
+text, because the property is that no OTHER invocation appears, and a regex over a known line cannot
+say that. The `html: (v) => …` entries in the TEMPLATES table are definitions, not calls, and the
+pattern distinguishes them.
+
+Three mutations, each restored byte-identical:
+
+- dropping the escape at the chokepoint reds **two** — the behavioural arm and this one
+- adding a SECOND unescaped render path (`Preview: tpl.html(vars)`) reds **one**: this arm alone. That
+  is the gap in a sentence — the behavioural arm cannot see a path it does not call.
+- breaking the invocation regex reds the count floor, which sits on the invocations the assertion
+  iterates rather than on the template entries, per V-1454.
+
+Used the shared `codeOnly` helper rather than a private comment stripper, per V-1451.
+
+Also swept and closed as negatives this batch: the webhook signer's cross-implementation contract is
+covered better than I expected — `published-webhook-verifier-actually-verifies` runs the documented
+snippet against a server-produced header including the rotation grace window, and
+`webhook-signature-verifies-in-every-sdk` asserts the header carries TWO `v1` entries before checking
+that TypeScript, Python and Go each accept both secrets, with Go's cached-run-and-skip trap handled
+explicitly. Nothing to add there.
+
+Full suite green: 3067 files, 30868 tests, exit 0. No new test file; 10 `it` declarations to 11. No
+ratchet movement.

@@ -35,6 +35,7 @@
 //     catalog entry.
 
 import { existsSync, readFileSync } from 'node:fs';
+import { codeOnly } from './_helpers/code-only.js';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -82,6 +83,44 @@ const OPERATIONAL_TEMPLATES = [
 
 describe('W883 Email-template registry cross-source invariant', () => {
   // ─── 5 critical-path templates present ──────────────────────
+
+  // V-1467 — the HTML-escape chokepoint stays SINGLE.
+  //
+  // Every template is a bare HTML fragment interpolating plain-text data —
+  // customer-registered webhook URLs, session error messages, ids — and the
+  // module escapes at exactly one place: `tpl.html(escapeVarsForHtml(vars))` in
+  // `send()`. Its own comment calls that "the single render chokepoint", and the
+  // claim is true today: 20 template entries, one invocation.
+  //
+  // `email.test.ts` proves the escaping WORKS — a hostile value comes back as
+  // `&lt;img src=x onerror=&quot;…`, and removing the escape reds it. What no
+  // test covers is the chokepoint remaining single. A second render path (a
+  // preview route, a fallback transport, a digest mailer) calling `tpl.html(vars)`
+  // directly would inject on that path while every existing arm stays green,
+  // because they all exercise the one call site that is already correct.
+  //
+  // Derived rather than pinned as text: the point is that no OTHER invocation
+  // appears, which a regex over a known line cannot say.
+  it('CRITICAL every tpl.html() invocation passes escaped vars — the escape chokepoint is still the only render path', () => {
+    const code = codeOnly(read(resolve(REPO_ROOT, 'apps/server/src/services/email.ts')));
+
+    // `html: (v) => …` in the TEMPLATES table is a DEFINITION; only `.html(` is a
+    // call. Definitions are what produce the fragments, calls are what render them.
+    const invocations = [...code.matchAll(/\.html\(([^;]*?)\)\s*,/g)];
+    expect(
+      invocations.length,
+      'no tpl.html() invocation found — the render call was renamed and this arm would pass over an empty set',
+    ).toBeGreaterThan(0);
+
+    const unescaped = invocations
+      .map((m) => (m[1] ?? '').trim())
+      .filter((arg) => !arg.includes('escapeVarsForHtml('))
+      .sort();
+    expect(
+      unescaped,
+      'tpl.html() called with UNESCAPED vars — that render path injects customer-controlled values into an HTML email:',
+    ).toEqual([]);
+  });
 
   it('CRITICAL apps/server/src/services/email.ts TEMPLATES has all 3 critical-path templates — signup-verification + password-reset + billing-failure. These NEVER fall through opt-out gates. The 4 S44-deleted templates stay GONE.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/email.ts'));
