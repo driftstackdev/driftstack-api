@@ -14651,3 +14651,57 @@ Two of the eighteen are now registered. The rest read as prose that happens to u
 decisions awaiting an answer, on the sampling done here — `services/legal.ts`, `crypto-orders.ts` and the
 remaining guards were not individually opened, and that is stated so the next sweep knows the difference
 between checked and unexamined.
+
+## V-1521 — the numbered actions have a plausible source in the repo, and the standing list is stale against it
+
+V-1519 said the numbered actions were unrecoverable because nothing in the repo cites `apply-plan.md` or
+`sweep-report.md`. That was true and the conclusion was too strong: the FILENAMES are absent, the
+numbering is not.
+
+Following the `D-2` reference in `the-public-bucket-holds-what-config-says-it-holds` — which does not
+resolve to the register's `D-002` (workspace layout) and belongs to a separate single-digit series —
+leads to `docs/internal/2026-06-02-resilience-arc-and-founder-decision-queue.md` §2,
+**FOUNDER-DECISION QUEUE (gated — Agent-2 cannot safely self-do these)**, a numbered list of items each
+gated on a product/policy call.
+
+**The overlap with the standing task list is close enough to be worth acting on, and I am stating it as
+evidence rather than proof.** The list I am given as REMAINING is 5, 7, 8, 12, 13, 15, 16, 19, 20, 22–33,
+35–37, 38a. Against that queue:
+
+| item  | queue status                                              | in my remaining list |
+| ----- | --------------------------------------------------------- | -------------------- |
+| 5     | CORS/trustProxy — LOCKED                                  | yes                  |
+| 6     | later RESOLVED on prod, smoke-tested                      | **no**               |
+| 7     | agent_sessions strict-FK — needs the FK behaviour decided | yes                  |
+| 8     | iphone17 cutover — needs Agent-1 readiness                | yes                  |
+| 11–12 | deploy approval-gate / CI-gating — founder cadence        | 12 yes               |
+| 13    | CF-skip — founder cadence                                 | yes                  |
+| 15    | MFA recovery-code regen step-up — SHIPPED                 | yes                  |
+
+Item 6 being resolved AND absent from the remaining list is the strongest signal: that is what a list
+maintained against this queue looks like. Items 7, 8, 12 and 13 are present in both and all four are
+explicitly "genuinely need founder input / a spec (NOT auto-doable)".
+
+**Item 15 is the exception, and it is a real staleness finding.** The queue records it shipped, and it is:
+`POST /v1/account/mfa/recovery-codes/regenerate` carries `app.requireMfaFresh()` and
+`requireInteractiveWebSession` in its preHandler chain, with the source comment explaining that an
+existing recovery code satisfies step-up before regenerating — closing the
+mint-codes → satisfy-step-up → disable bypass the queue describes. Verified in the route, not taken from
+the queue's own claim.
+
+So at least one item the sweep has been asking me to work every batch is already done in the repo.
+
+### What this does and does not establish
+
+It does not give me the numbered actions. The queue's items do not run to 38, the mapping is inferred
+from six overlaps rather than read from a manifest, and acting on a guessed correspondence is how a
+census produces confident nonsense — the failure this session has recorded repeatedly. I am not treating
+"action 7" and "queue item 7" as the same thing on this evidence.
+
+What it does establish is where to look, and that the standing list has drifted from the repo in at least
+one place. Both are worth more to the next batch than another self-directed hunt.
+
+**The four gated items in both lists are, per the queue's own words, not auto-doable:** the agent_sessions
+FK needs a cascade/restrict/set-null decision plus a plan for existing orphan rows (a breaking migration),
+the iphone17 cutover needs Agent-1 to confirm canvas/atlas readiness, and 12/13 are deploy-gating and
+CF-skip on founder cadence. None is blocked on engineering effort; each is blocked on an answer.
