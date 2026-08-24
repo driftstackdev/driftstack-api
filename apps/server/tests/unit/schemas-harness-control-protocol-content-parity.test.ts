@@ -1957,6 +1957,77 @@ describe('harness-control-protocol behavioral contract', () => {
     ).toBe(false);
   });
 
+  // V-1396 — the alphabet rejection had never run. `base64DecodedByteLength` is the strict
+  // half of the harness wire: arithmetic-only, so an oversized payload is refused without
+  // allocating a decoded copy of it. Its three rejection points are NOT equally reachable,
+  // and the existing arm below reaches only the first.
+  //
+  //   length % 4      — covered: `'***'` is three characters, so it is refused here and the
+  //                     alphabet loop underneath is never entered.
+  //   alphabet loop   — NEVER RAN. Nothing had passed a length-valid string containing a
+  //                     character outside `[A-Za-z0-9+/]`.
+  //   padding loop    — UNREACHABLE. `padding` is derived from the trailing `=` test, so the
+  //                     region it scans contains only `=` by construction. Brute-forced over
+  //                     all 4096 four-character strings from an alphabet mixing letters,
+  //                     digits, `+`, `/`, `*` and `=`: the padding loop rejects nothing, ever.
+  //
+  // This matters because of what sits downstream. `decodeWireData` on the codec side is
+  // deliberately permissive — Node drops characters outside the alphabet and keeps the rest
+  // (V-1382) — so this schema is the layer that refuses a malformed payload rather than
+  // silently delivering a truncated one to the harness.
+  it('CRITICAL a length-valid string containing a non-alphabet character is refused, which is the rejection the existing three-character case never reaches. The codec below this decodes permissively, so if the schema stops refusing, a payload with stray bytes is delivered truncated rather than rejected.', () => {
+    for (const bad of ['A*AA', '$$$$', '====', 'AA=A', 'A=B=', '-_-_', 'AAA A']) {
+      expect(base64DecodedByteLength(bad), `${bad} must not decode`).toBeNull();
+    }
+    // The length check needs its own case made of LEGAL characters. `'***'` above is
+    // length-invalid AND alphabet-invalid, so the alphabet loop answers it either way —
+    // measured, removing the `% 4` guard leaves that arm green. Without the guard these
+    // return a FRACTIONAL byte count (`'AAA'` → 2.25), which is then compared against an
+    // integer byte bound.
+    for (const badLength of ['A', 'Ab', 'AAA', 'AAAAA']) {
+      expect(
+        base64DecodedByteLength(badLength),
+        `${badLength} is not a whole number of base64 quads`,
+      ).toBeNull();
+    }
+
+    // Control: the same length, entirely inside the alphabet, still decodes.
+    expect(base64DecodedByteLength('AbC9'), 'a canonical quad still decodes').toBe(3);
+    expect(
+      base64DecodedByteLength('+/+/'),
+      'the + and / members of the alphabet are accepted',
+    ).toBe(3);
+  });
+
+  it('CRITICAL the accepted set is EXACTLY canonical base64, checked against an independent oracle over every four-character string from a mixed alphabet. A hand-picked list of bad inputs cannot show that nothing else slips through; this can, and it is what pins the padding loop as redundant rather than merely untested.', () => {
+    const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    const SAMPLE = 'ABz9+/=*';
+
+    /** Canonical per RFC 4648, written from the spec rather than from the implementation. */
+    const canonical = (v: string): boolean => {
+      const trailing = /=*$/.exec(v)?.[0].length ?? 0;
+      if (trailing > 2) return false;
+      const data = v.slice(0, v.length - trailing);
+      return [...data].every((ch) => ALPHABET.includes(ch));
+    };
+
+    let checked = 0;
+    for (const a of SAMPLE)
+      for (const b of SAMPLE)
+        for (const c of SAMPLE)
+          for (const d of SAMPLE) {
+            const v = a + b + c + d;
+            checked += 1;
+            const got = base64DecodedByteLength(v);
+            if (canonical(v)) {
+              expect(got, `${v} is canonical and must decode`).not.toBeNull();
+            } else {
+              expect(got, `${v} is not canonical and must be refused`).toBeNull();
+            }
+          }
+    expect(checked, 'the sweep must actually have run').toBe(SAMPLE.length ** 4);
+  });
+
   it('correlated result frames enforce producer byte limits plus bounded ids, errors, arrays, and file metadata before settling API requests', () => {
     expect(base64DecodedByteLength('')).toBe(0);
     expect(base64DecodedByteLength('AA==')).toBe(1);

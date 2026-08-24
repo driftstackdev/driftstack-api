@@ -8591,3 +8591,50 @@ Mutations: removing the consume reds eleven arms and leaves the well-formed one 
 two.
 
 `EXPECTED_TEST_FILES` and `_ALL` each +1 for the file added here.
+
+## V-1396 — the strict base64 layer, whose three rejections are not equally reachable
+
+`base64DecodedByteLength` is the strict half of the harness wire: arithmetic-only, so an oversized
+payload is refused **without allocating a decoded copy of it**. It has three rejection points, and
+they turned out to have three different statuses.
+
+| rejection     | status                          |
+| ------------- | ------------------------------- |
+| `length % 4`  | had an arm, but see below       |
+| alphabet loop | **never ran**                   |
+| padding loop  | **unreachable by construction** |
+
+**The alphabet loop is the real gap.** The existing arm passes `'***'` — three characters, so the
+length check refuses it and the loop underneath is never entered. Nothing had ever passed a
+length-valid string containing a character outside `[A-Za-z0-9+/]`. That matters because of what sits
+downstream: `decodeWireData` on the codec side is deliberately permissive (V-1382 — Node drops
+characters outside the alphabet and keeps the rest), so **this schema is the layer that refuses a
+malformed payload rather than silently delivering a truncated one to the harness**.
+
+**The padding loop cannot reject anything.** `padding` is derived from the trailing-`=` test, so the
+region it scans contains only `=` by construction. Brute-forced over all **4096** four-character
+strings from an alphabet mixing letters, digits, `+`, `/`, `*` and `=`: zero rejections. Mutation
+agrees — deleting it changes nothing.
+
+**And the `% 4` check turned out to be unpinned too, which my own first draft missed.** Removing it
+left every arm green, including the `'***'` one: that input is _also_ alphabet-invalid, so the
+alphabet loop answers it either way. A length-invalid string built from **legal** characters is what
+separates them — and without the guard those return a **fractional** byte count (`'AAA'` → 2.25,
+`'Ab'` → 1.5) which is then compared against an integer byte bound. Four such cases now cover it, and
+the mutation reds.
+
+The second arm is an **independent oracle** rather than a hand-picked list: canonical base64 written
+from RFC 4648 rather than from the implementation, checked against every four-character string over a
+mixed alphabet. A list of bad inputs cannot show that nothing else slips through; a sweep against a
+separately-derived predicate can, and it is what turns "the padding loop is untested" into "the
+padding loop is redundant".
+
+Mutations: dropping the alphabet check reds both arms; dropping the `% 4` check reds the first;
+dropping the padding check reds nothing, as predicted before it was run.
+
+### Checked and not pursued
+
+`services/cli-authorize.ts` — its `parseStoredCode` field guards are all exercised; the untaken outer
+shape check is defence behind them, the empty-secret guard at `:523` returns the same `expired` the
+decrypt catch below it already produces, and the two expiry arms sit in the in-memory store rather
+than the Redis one.
