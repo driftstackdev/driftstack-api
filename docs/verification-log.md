@@ -12551,3 +12551,62 @@ Three mutations. Reintroducing `evt_` in the header reds the re-quoted sentinel;
 202 sample reds the newly added one; changing the SERVICE to mint `` `evt_${randomUUID()}` `` reds the
 cross-source arm, which is the proof it reads the mint site rather than restating the page. All restored
 byte-identical.
+
+## V-1486 — the same page advertised a fourth delivery header that was deleted at the durable cutover
+
+One line below the `evt_` claim fixed in V-1485, `webhooks.astro` showed `X-Driftstack-Emitted-At:
+1747051200` in the delivery sample and then spent a paragraph explaining that the header "is
+informational and must NOT be used as the signed-payload timestamp". All three delivery implementations
+— `durable-webhook-delivery.ts`, `webhook-worker.ts` and `packages/webhook-delivery/src/in-memory.ts` —
+send exactly three `x-driftstack-*` headers: Event-Id, Event-Type, Signature.
+
+**This is not drift; it is a removal that the docs never followed.** The durable path once signed bare
+hex into `x-driftstack-signature` alongside `x-driftstack-signature-prev` and `x-driftstack-emitted-at`,
+and the SDK verifier — which parses `t=…,v1=…` from the single signature header — silently rejected
+that. The cutover moved to the single header and dropped the other two, and
+`durable-webhook-signature-sdk-verify` has asserted `expect(req.headers['x-driftstack-emitted-at'])
+.toBeUndefined()` ever since. The authoritative customer docs list the three real headers and have never
+mentioned a fourth.
+
+So a customer was being given handling advice — _don't use this for the signed timestamp_ — about a
+header they will never receive. Advising on the semantics of something that does not arrive is worse
+than silence: it implies the header exists. Replaced with a statement that it is not sent, matching how
+`endpoints.md` already denies `x-driftstack-signature-prev` outright.
+
+**How it was found, and why the header census had to be checked twice.** Sweeping every
+`X-Driftstack-*` name claimed across both doc surfaces against every one referenced in source gave two
+unbacked: `-Emitted-At` and `-Signature-Prev`. The second is not a finding — it appears only inside a
+sentence denying that it exists, with a test asserting the page does not contain it. A census over
+prose finds mentions, not claims, and the difference is the whole result here: one of the two hits was
+the bug and the other was the FIX for the same bug, already applied to its sibling header.
+
+**The count in the pin's own title was the drift.** The arm read "4-delivery-header surface pinned" and
+asserted `toMatch(/X-Driftstack-Emitted-At: 1747051200/)` — a passing sentinel holding a deleted header
+in place, and a title asserting a cardinality that had been wrong since the cutover. Both are corrected:
+the sentinels now assert the page does NOT contain either dropped header, and the titles paraphrase.
+
+**The arm that would have caught it reads the code.** Text pins compare the page to itself. The new arm
+extracts the `x-driftstack-*` header set from all three delivery implementations, requires them to agree
+with each other, requires every header they send to appear on the page, and requires the delivery sample
+to advertise nothing they do not send — scoped to the sample block, since the page legitimately names
+response headers elsewhere. Removing a header in code without touching the docs now fails here rather
+than in a customer's handler.
+
+**Then V-794 caught me doing the same thing again, one level up.** My corrected arm title read
+"3-delivery-header surface pinned" and the new arm's read "Three implementations emit these" — and
+`a-parity-pin-cannot-freeze-a-claim-that-expires` flags exactly that: a pin whose title freezes a
+hand-maintained count. Its ceiling of 90 offender files went to 91 and the arm failed, with the right
+instruction attached — _derive the number instead of freezing it_.
+
+It was correct twice over. I had replaced a wrong count (four headers) with a right one (three), which
+is still a number that goes stale the moment a header is added — and the arm directly below it already
+derives that set from the delivery code, so the count in the title was not just fragile but redundant.
+Both titles now describe the property without stating a cardinality. Finding my own guard blocking my
+own commit for the precise thing it was written to prevent is the cheapest possible version of this
+lesson.
+
+Two mutations. Re-adding the `Emitted-At` line to the sample reds it with `expected
+['x-driftstack-emitted-at'] to deeply equal []`. Deleting `x-driftstack-event-type` from ONE of the
+three implementations reds the agreement check — proof the arm reads the delivery code rather than
+restating the page. Both restored byte-identical, and the marketing site was rebuilt so
+`dist-reading-suites-have-fresh-artifacts` sees an artifact newer than the source.

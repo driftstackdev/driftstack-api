@@ -95,7 +95,7 @@ describe('W515.B apps/marketing-site/src/pages/docs/webhooks.astro content parit
     );
   });
 
-  it('4-delivery-header surface pinned: X-Driftstack-Event-Id + X-Driftstack-Event-Type + X-Driftstack-Emitted-At + X-Driftstack-Signature (t=…,v1=…) + secret-rotation folds the prev HMAC into a second v1= inside the SAME single header — pinned so the 4-header standard surface + compound dual-v1= grace form survives (drift to renaming any header or claiming a separate prev header would create marketing↔delivery divergence)', () => {
+  it('Delivery-header surface pinned: Event-Id + Event-Type + Signature (t=…,v1=…), and the headers the durable path DROPPED must not reappear in the samples. Secret rotation folds the prev HMAC into a second v1= inside the SAME single header. V-1486 — this arm named a header count and pinned an Emitted-At line the delivery has not sent since the durable cutover, so the count in its own title was part of the drift. The count is gone; the arm below derives the set from the delivery code.', () => {
     // V-1485 — this pin quoted `evt_…`, which the server has never minted:
     // both webhook mint sites use a bare `randomUUID()`. The customer docs
     // site had it right all along (`webhooks/events.md` documents
@@ -103,7 +103,14 @@ describe('W515.B apps/marketing-site/src/pages/docs/webhooks.astro content parit
     // AND the other doc surface, with a passing pin holding it in place.
     expect(body).toMatch(/X-Driftstack-Event-Id: <uuid>/);
     expect(body).toMatch(/X-Driftstack-Event-Type: session\.completed/);
-    expect(body).toMatch(/X-Driftstack-Emitted-At: 1747051200/);
+    // V-1486 — was `toMatch(/X-Driftstack-Emitted-At: 1747051200/)`, pinning a
+    // header the durable dispatcher does not send. It was dropped alongside
+    // `x-driftstack-signature-prev` when that path moved to the single
+    // `t=…,v1=…` header the SDK verifier parses;
+    // `durable-webhook-signature-sdk-verify` asserts both are undefined on the
+    // emitted request. The page kept advertising one of them.
+    expect(body).not.toContain('X-Driftstack-Emitted-At:');
+    expect(body).not.toContain('X-Driftstack-Signature-Prev');
     expect(body).toMatch(/X-Driftstack-Signature: t=1747051200,v1=<hex hmac>/);
     expect(body).toMatch(
       /the single\s*\n?\s*<code>X-Driftstack-Signature<\/code> header carries both the new/,
@@ -111,11 +118,11 @@ describe('W515.B apps/marketing-site/src/pages/docs/webhooks.astro content parit
     expect(body).not.toMatch(/X-Driftstack-Signature-Prev/);
   });
 
-  it("HMAC framing pinned: 'HMAC-SHA256(secret, <unix-seconds> + \".\" + <raw request body>)' + 'The timestamp lives inside the header (the t= component), not in a separate header. The X-Driftstack-Emitted-At header is informational and must NOT be used as the signed-payload timestamp.' — pinned so the HMAC-SHA256 algorithm + ts-inside-header + Emitted-At-NOT-signed commitments survive (drift to using -Emitted-At for the signed timestamp would create marketing↔webhook-signing.ts divergence)", () => {
+  it('HMAC framing pinned: the algorithm, the timestamp living in the signature header rather than a separate one, and an explicit denial that an Emitted-At header exists. V-1486 replaced a warning not to USE that header with a statement that it is not sent — advising customers about the semantics of a header they will never receive is worse than silence.', () => {
     expect(body).toMatch(/hmac = HMAC-SHA256\(/);
     expect(body).toMatch(/<unix-seconds> \+ "\." \+ <raw request body>/);
     expect(body).toMatch(
-      /The timestamp lives inside the header \(the <code>t=<\/code>\s*\n?\s*component\), not in a separate header\. The\s*\n?\s*<code>X-Driftstack-Emitted-At<\/code> header is informational\s*\n?\s*and must NOT be used as the signed-payload timestamp\./,
+      /The timestamp lives inside the header \(the <code>t=<\/code>\s*\n?\s*component\), not in a separate header\. There is no\s*\n?\s*<code>X-Driftstack-Emitted-At<\/code> header: the delivery path\s*\n?\s*sends exactly three <code>X-Driftstack-\*<\/code> headers —\s*\n?\s*Event-Id, Event-Type and Signature\./,
     );
   });
 
@@ -244,5 +251,64 @@ describe('W515.B apps/marketing-site/src/pages/docs/webhooks.astro content parit
       /"event_id": "[a-z]+_/.test(body),
       'the 202 sample advertises a prefixed event id while the service mints a bare uuid',
     ).toBe(false);
+  });
+  // V-1486 — the documented header set, derived from the DELIVERY code.
+  //
+  // The page advertised `X-Driftstack-Emitted-At` in its sample and spent a
+  // paragraph on how not to misuse it. The durable dispatcher stopped sending it
+  // at the cutover that moved signing to the single `t=…,v1=…` header, together
+  // with `x-driftstack-signature-prev`, and
+  // `durable-webhook-signature-sdk-verify` asserts both are undefined on the
+  // emitted request. So a customer was being given handling advice for a header
+  // that has not existed on this path since.
+  //
+  // The text pins above cannot see that: they compare the page to itself. This
+  // reads the three delivery implementations and requires them to agree with
+  // each other AND with the page, so removing a header from the code without
+  // touching the docs fails here rather than in a customer's handler.
+  it('CRITICAL the headers the page advertises are the headers the delivery code sends. Every delivery implementation — durable, worker and in-memory — must agree with the others and with the samples, so a header dropped in code cannot keep being documented. The set is read from the code, never listed here.', () => {
+    const sources = [
+      'apps/server/src/services/durable-webhook-delivery.ts',
+      'apps/server/src/services/webhook-worker.ts',
+      'packages/webhook-delivery/src/in-memory.ts',
+    ].map((rel) => ({ rel, text: read(resolve(REPO_ROOT, rel)) }));
+
+    const sets = sources.map(({ rel, text }) => ({
+      rel,
+      headers: [...new Set([...text.matchAll(/'(x-driftstack-[a-z-]+)':/g)].map((m) => m[1]!))]
+        .sort()
+        .join(','),
+    }));
+    expect(
+      sets.every((x) => x.headers !== ''),
+      `a delivery implementation set no x-driftstack headers — the scan broke: ${JSON.stringify(sets)}`,
+    ).toBe(true);
+    expect(
+      [...new Set(sets.map((x) => x.headers))],
+      'the three delivery implementations no longer send the same x-driftstack header set',
+    ).toHaveLength(1);
+
+    const emitted = sets[0]!.headers.split(',');
+    expect(emitted.length, 'fewer than three delivery headers found').toBeGreaterThanOrEqual(3);
+
+    // Every header the code sends must appear on the page…
+    const notDocumented = emitted.filter((h) => !new RegExp(h.replace(/-/g, '-'), 'i').test(body));
+    expect(notDocumented, 'header(s) the delivery sends that the page never mentions').toEqual([]);
+
+    // …and the page must not advertise an x-driftstack request header the
+    // delivery does not send. Scoped to the delivery sample block, because the
+    // page legitimately names response headers elsewhere.
+    const sample = /X-Driftstack-Event-Id:[\s\S]*?v1=<hex hmac>/.exec(body)?.[0] ?? '';
+    expect(
+      sample,
+      'the delivery sample block was not found — this arm would check nothing',
+    ).not.toBe('');
+    const advertised = [...sample.matchAll(/(X-Driftstack-[A-Za-z-]+):/g)].map((m) =>
+      m[1]!.toLowerCase(),
+    );
+    expect(
+      advertised.filter((h) => !emitted.includes(h)).sort(),
+      'the delivery sample advertises a header the delivery code does not send',
+    ).toEqual([]);
   });
 });

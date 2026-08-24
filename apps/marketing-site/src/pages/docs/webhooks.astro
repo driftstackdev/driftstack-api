@@ -108,7 +108,6 @@ Content-Type: application/json
 Content-Type: application/json
 X-Driftstack-Event-Id: <uuid>
 X-Driftstack-Event-Type: session.completed
-X-Driftstack-Emitted-At: 1747051200
 X-Driftstack-Signature: t=1747051200,v1=<hex hmac>
 
 {
@@ -141,9 +140,10 @@ X-Driftstack-Signature: t=1747051200,v1=<hex hmac>
 )`}</code></pre>
     <p>
       The timestamp lives inside the header (the <code>t=</code>
-      component), not in a separate header. The
-      <code>X-Driftstack-Emitted-At</code> header is informational
-      and must NOT be used as the signed-payload timestamp.
+      component), not in a separate header. There is no
+      <code>X-Driftstack-Emitted-At</code> header: the delivery path
+      sends exactly three <code>X-Driftstack-*</code> headers —
+      Event-Id, Event-Type and Signature.
     </p>
     <p>
       Server-side verification in Node.js looks like:
