@@ -11034,3 +11034,54 @@ behavioural coverage.
 
 Full suite green: 3067 files, 30854 tests, exit 0. No new test file; 4 `it` declarations to 5. No
 ratchet movement.
+
+## V-1455 — a floor on the corpus, not on the subject, in the one guard whose file records fixing that twice
+
+V-1454's failure mode — a non-vacuity floor counting a plentiful proxy instead of the quantity the
+assertion iterates — is a property other derived guards can be tested for. I extracted the floor
+expression from every source-scanning census in `apps/server/tests/unit` and looked for that mismatch.
+
+**Four checked and honest**, recorded so they are not re-examined:
+
+- `admin-routes-authorization-invariant` — floors on `routes.length`, which is exactly what it filters,
+  parses with the TypeScript AST rather than a regex, and unit-tests its own detector against synthetic
+  sources. Removing a real `requireScope('driftstack_internal_admin')` from `admin-accounts.ts` reds it.
+- `every-webhook-event-has-somewhere-that-fires-it` — floors on `SOURCES.length > 300`, which IS a
+  proxy, but the same arm also asserts the event list is ≥ 8 and that a KNOWN event
+  (`session.completed`) resolves to a real enqueue site. That last one is the positive control the
+  whole class needs.
+- `drizzle-date-param-no-regress-structural-guard` — pairs `files.length > 300` with
+  `blocks > 200`, the raw `sql\`\`` templates it actually walks.
+- `crypto-reconciliation-docs-name-the-crypto-amount` — pairs a source-length floor with four
+  `toContain` anchors on live constants.
+
+**One real gap: `docs-internal-links-parity`.** Its floor is `files.length > 60` — pages walked. The
+arm below it iterates `HREF_RE` matches and counts nothing. Measured: changing `href=` to `hrefZZ=` in
+that regex left the file **GREEN**, with all 68 pages counted and zero links examined.
+
+The file's own comments make this sharper rather than softer. It already records this exact class being
+closed twice at the corpus level — "pointing the extension filter at a non-existent suffix left this
+file GREEN", and V-939 raising the page floor from 5 to 60 because "this scan could have lost 93% of
+its corpus and still called itself non-vacuous". The lesson was applied to the pages and never carried
+one level down to the links drawn from them.
+
+A floor on extracted hrefs now sits beside it: 232 today, floored at 200 the same way V-939 set the
+page floor. Stated honestly, it catches total or near-total extractor loss, not any partial loss — that
+limit is inherent to a floor. A related measurement while probing it: all 232 internal hrefs are
+double-quoted and none single-quoted, so narrowing `["']` to `["]` changes nothing and is
+behaviour-preserving rather than a hole the floor misses.
+
+Three mutations: breaking `HREF_RE` reds where it previously passed, and a genuinely broken link still
+reds the main assertion (control).
+
+**The full suite then failed, on a file I had not edited, and the cause was my own mutation harness.**
+`dist-reading-suites-have-fresh-artifacts` compares each app's build time against its newest source
+mtime, and reported marketing-site source newer than its dist. `git diff` showed the file byte-identical
+to HEAD: my broken-link control had mutated
+`apps/marketing-site/src/pages/docs/oauth-apps.astro`, and restoring it rewrote the file. **"Restored
+byte-identical" is a statement about CONTENT; it does not restore mtime**, and this repo has a guard
+that reads mtime. Fixed by setting the file's mtime back to its last commit time; suite green
+afterwards. Worth knowing before mutating anything under an app whose build freshness is asserted.
+
+Full suite green: 3067 files, 30854 tests, exit 0. No new test file; `it` count unchanged at 2. No
+ratchet movement.

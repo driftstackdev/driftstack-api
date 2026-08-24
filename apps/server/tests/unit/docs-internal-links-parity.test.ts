@@ -88,6 +88,23 @@ describe('W210 internal-link drift guard', () => {
     // V-939 — floor raised to just under the measured 68; it stood at 5, so this
     // scan could have lost 93% of its corpus and still called itself non-vacuous.
     expect(files.length, 'marketing-site pages walked').toBeGreaterThan(60);
+
+    // V-1455 — and the HREFS, which is what the arm below actually iterates.
+    //
+    // V-939 fixed this same vacuity one level up and it stayed open here. A page
+    // count cannot see an href extractor that has stopped matching: measured, a
+    // one-character change to HREF_RE left this file GREEN with all 68 pages
+    // still counted and zero links examined. The floor has to sit on the
+    // quantity the assertion consumes, not on the corpus it is drawn from.
+    //
+    // 232 today; floored just under, the same way V-939 set the page floor.
+    let hrefs = 0;
+    for (const file of files) {
+      const text = readFileSync(file, 'utf8');
+      HREF_RE.lastIndex = 0;
+      while (HREF_RE.exec(text) !== null) hrefs += 1;
+    }
+    expect(hrefs, 'internal hrefs extracted from those pages').toBeGreaterThan(200);
   });
 
   it('every internal /href in a marketing-site doc resolves to a real page', () => {
