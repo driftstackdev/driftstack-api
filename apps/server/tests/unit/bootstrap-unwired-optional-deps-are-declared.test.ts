@@ -503,4 +503,62 @@ describe('every optional dependency bootstrap does not pass is declared', () => 
       'bootstrap no longer passes agentSessionEventBus into AppDeps — the SSE transcript route stops registering',
     ).toBe(true);
   });
+
+  // V-1436 — the route-registration seam, derived rather than listed.
+  //
+  // V-1432..V-1435 each added one arm for one dependency, found one at a time. That
+  // is whack-a-mole, and V-1434 showed why it cannot converge: each sweep matched a
+  // syntax, and fail-open has more spellings than any one pattern holds.
+  //
+  // This is the part that CAN be derived with no hand list. `app.ts` gates route
+  // registration on a dependency being present — `if (deps.x !== undefined) {
+  // registerXRoutes(...) }` — so a dep app.ts gates on and bootstrap never assigns
+  // is a route that silently does not exist in production. Both sides come from
+  // source, so a new gated route joins the census automatically.
+  //
+  // Scope, stated rather than implied: this covers the AppDeps seam only. The
+  // service-constructor seam — the audit recorder, the live-session guard, the event
+  // bus publisher — is not derivable the same way, because "passed to a constructor"
+  // carries no marker distinguishing a security dep from a test seam. Those stay as
+  // the explicit arms above.
+  //
+  // It finds nothing today: all 35 gating deps are wired. Recorded because getting
+  // there took three corrections of my own extractor — a block-scoped search reported
+  // 14 missing, then 3, then 0, because bootstrap assembles AppDeps across several
+  // conditional blocks and the identifiers live outside the object literal.
+  function routeGatingDeps(): string[] {
+    const app = readFileSync(resolve(SRC, 'lib/app.ts'), 'utf8');
+    const found = new Set<string>();
+    for (const m of app.matchAll(/if \(([^)]{0,400}?)\)\s*\{([\s\S]{0,600}?)\}/g)) {
+      if (!/register\w*Routes?\(/.test(m[2] ?? '')) continue;
+      for (const d of (m[1] ?? '').matchAll(/deps\.([a-zA-Z]\w*)/g)) found.add(d[1] ?? '');
+    }
+    return [...found].sort();
+  }
+
+  it('CRITICAL the route-gating census found deps on both sides. An extractor that stops matching reports no unwired routes forever — the same empty-list-agrees-with-anything failure the arms above are built to avoid.', () => {
+    expect(routeGatingDeps().length, 'no route-gating deps extracted from app.ts').toBeGreaterThan(
+      25,
+    );
+    expect(bootstrapSource.length, 'bootstrap source not readable').toBeGreaterThan(10_000);
+  });
+
+  it('CRITICAL every dependency app.ts gates a route on is one bootstrap actually wires. A gated dep bootstrap never assigns is not a disabled feature — it is an endpoint that silently does not exist in production, and no route test can see it because those build their app through the test fixture rather than through bootstrap.', () => {
+    const boot = stripComments(bootstrapSource);
+    // Property position, in BOTH forms bootstrap uses — a shorthand on its own line
+    // (`recipesRepo,`) and an inline conditional spread (`? { billingService }`) —
+    // while still excluding the `const recipesRepo = new …` that CONSTRUCTS it.
+    //
+    // Both narrower drafts were wrong in opposite directions, which is why the
+    // comment is here rather than a bare regex: a whole-source word search stayed
+    // green when the AppDeps property was deleted (it found the const), and a
+    // line-start-only search flagged six deps that are wired through spreads.
+    const unwired = routeGatingDeps().filter(
+      (d) => !new RegExp(`(?:^|[{,])\\s*${d}\\s*(?=[,:}])`, 'm').test(boot),
+    );
+    expect(
+      unwired,
+      'dep(s) app.ts gates route registration on that bootstrap never wires — those routes are absent in production:',
+    ).toEqual([]);
+  });
 });

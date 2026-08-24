@@ -10217,3 +10217,39 @@ asserted now, each mutation-proven independently, and the comment says which is 
 That is the same structural reason as every finding in this V-1432..V-1435 run: the bus's tests
 exercise the bus, the route's tests exercise the route, and only bootstrap joins them. A wiring
 regression lives in the seam that neither side's tests reach.
+
+### V-1436 — deriving the part that can be derived, after five turns of whack-a-mole
+
+V-1432 through V-1435 each added one arm for one dependency, found one at a time. V-1434 showed why
+that cannot converge: every sweep matches a syntax, and fail-open has more spellings than any single
+pattern holds. So this pass asked which part of the problem is derivable with no hand list.
+
+The answer is the **route-registration seam**. `app.ts` gates registration on a dep being present —
+`if (deps.x !== undefined) { registerXRoutes(...) }` — so a dep app.ts gates on and bootstrap never
+assigns is not a disabled feature, it is an endpoint that silently does not exist in production. Both
+sides come from source, so a newly gated route joins the census automatically. 35 gating deps today,
+all wired; the guard finds nothing and exists for the next one.
+
+Scope is stated in the file rather than implied: this covers the AppDeps seam only. The
+service-constructor seam — the audit recorder, the live-session guard, the event-bus publisher — is
+not derivable the same way, because "passed to a constructor" carries no marker separating a security
+dependency from a test seam. Those stay as explicit arms.
+
+**Getting the extractor right took three corrections, in both directions, and each was caught by
+running it rather than reading it.**
+
+| draft                             | result                              | fault                                                                                                        |
+| --------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| search the AppDeps object literal | 14 "missing"                        | bootstrap assembles AppDeps across conditional blocks; the literal is not the whole assignment               |
+| search bootstrap's whole source   | 0 missing — but **M1 stayed green** | a bare word search finds `const recipesRepo = new …`, so a dep that is CONSTRUCTED and never ASSIGNED passes |
+| property position at line start   | 6 false positives                   | misses inline spreads — `...(billingService !== undefined ? { billingService } : {})`                        |
+| property position, both forms     | correct                             | matches shorthand and spread, excludes the `const`                                                           |
+
+The middle row is the one worth keeping. A false positive announces itself — the arm fails and you
+look. A **false negative is silent**: the guard passed, and only mutating the thing it claims to protect
+revealed it was watching the wrong text. That is the whole argument for mutation-proving a guard rather
+than trusting a green.
+
+Proven in three directions: deleting the shorthand property reds it, deleting the spread-conditional
+property reds it, and breaking the `app.ts` extractor reds the census self-check so it cannot pass
+vacuously.
