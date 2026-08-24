@@ -64,13 +64,36 @@ function sdkPaths(): Set<string> {
   return out;
 }
 
+/** V-1426 — the same census carried to the VERB. A path that exists under a
+ *  different method is the `?keep=current` shape: the right URL, a request the
+ *  server will not accept. `\s*` spans newlines, which matters — a single-line
+ *  `{ method, path }` object is how `/v1/archetypes` and `/v1/usage` are written,
+ *  and an adjacency-strict pattern silently drops them. */
+function sdkPairs(): Set<string> {
+  const out = new Set<string>();
+  for (const file of readdirSync(SDK_RESOURCES)) {
+    if (!file.endsWith('.ts')) continue;
+    const body = readFileSync(resolve(SDK_RESOURCES, file), 'utf8');
+    for (const m of body.matchAll(/method:\s*'(\w+)'\s*,\s*path:\s*[`']([^`']*)[`']/g)) {
+      const p = m[2] ?? '';
+      if (p.startsWith('/v1/')) out.add(`${(m[1] ?? '').toUpperCase()} ${normalise(p)}`);
+    }
+  }
+  return out;
+}
+
+const serverVerbPairs = new Set<string>();
+
 function serverPaths(): Set<string> {
   const out = new Set<string>();
+  const verbs = serverVerbPairs;
   for (const file of readdirSync(SERVER_ROUTES)) {
     if (!file.endsWith('.ts')) continue;
     const lines = readFileSync(resolve(SERVER_ROUTES, file), 'utf8').split('\n');
     lines.forEach((line, i) => {
-      if (!/app\.(get|post|put|patch|delete)\b/.test(line)) return;
+      const vm = /app\.(get|post|put|patch|delete)\b/.exec(line);
+      if (vm === null) return;
+      const verb = vm[1] ?? '';
       // The path is the first argument, but a generic type parameter can span
       // several lines before it. Scan until the literal appears or the next
       // registration begins — a fixed small window is what produced the false
@@ -80,6 +103,7 @@ function serverPaths(): Set<string> {
         const pm = /'(\/v1\/[^']*)'/.exec(lines[j] ?? '');
         if (pm?.[1] !== undefined) {
           out.add(normalise(pm[1]));
+          verbs.add(`${verb.toUpperCase()} ${normalise(pm[1])}`);
           break;
         }
       }
@@ -90,7 +114,8 @@ function serverPaths(): Set<string> {
 
 describe('an SDK path the server does not serve', () => {
   const sdk = sdkPaths();
-  const server = serverPaths();
+  const server = serverPaths(); // populates serverVerbPairs as a side effect
+  const pairs = sdkPairs();
 
   it('CRITICAL the census found paths on BOTH sides. An extractor that stops matching reports zero missing paths forever, which is the failure mode this whole file would otherwise hide — the same shape as a declaration list that agrees with anything because it is empty.', () => {
     expect(sdk.size, 'no /v1 paths extracted from the SDK resource files').toBeGreaterThan(80);
@@ -103,6 +128,22 @@ describe('an SDK path the server does not serve', () => {
       unserved,
       'SDK path(s) with no matching server route — every call through these 404s:',
     ).toEqual([]);
+  });
+
+  it('CRITICAL every (verb, path) the SDK sends is one the server registers under THAT verb. A path can exist and still refuse the request — the `?keep=current` defect was the right URL with a request the server would not accept — so matching the path alone leaves a POST to a GET-only route passing this file.', () => {
+    const unserved = [...pairs].filter((p) => !serverVerbPairs.has(p)).sort();
+    expect(
+      unserved,
+      'SDK (verb, path) pair(s) the server does not register under that method:',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL the verb census loses no path the path census found. Written because the first draft of the pair pattern required a newline between `method` and `path`, which silently dropped the two single-line request objects in the SDK — a stricter regex covering LESS while reading as an upgrade is the failure this arm exists to stop.', () => {
+    const fromPairs = new Set([...pairs].map((p) => p.slice(p.indexOf(' ') + 1)));
+    const dropped = [...sdk].filter((p) => !fromPairs.has(p)).sort();
+    expect(dropped, 'path(s) the verb extractor failed to see:').toEqual([]);
+    expect(pairs.size, 'the pair census came back empty').toBeGreaterThan(100);
+    expect(serverVerbPairs.size, 'the server verb census came back empty').toBeGreaterThan(200);
   });
 
   it('the parameterised spellings really do collapse together, so the comparison above is not passing on a normalisation that flattens everything. `/v1/profiles/:p` and `/v1/profiles` must stay distinct.', () => {

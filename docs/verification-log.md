@@ -9823,3 +9823,37 @@ leg of the BYOK key-source chain, never produced. It is reachable only when
 posture — `app.ts` calls it a "staging-only opt-in… PROD must keep this `false`", bootstrap defaults it
 to `false`, and `build-test-app` deliberately leaves it off with a comment saying so. Covering it would
 exercise a configuration production is required to disable.
+
+### V-1426 — the guard I shipped yesterday matched paths and ignored verbs
+
+V-1425 asserts every SDK path is one the server registers. Re-reading it, that is only half the
+check: a path can exist and still refuse the request. An SDK that POSTs to a GET-only route passes
+V-1425 cleanly, and that is the exact shape of the `?keep=current` defect this guard family exists for
+— the right URL with a request the server will not accept.
+
+Extended to **(verb, path)** pairs on both sides: 128 SDK pairs against 245 server pairs. **Zero
+unserved**, so again no defect — the same result the six manual batches produced, now held by a test
+that covers the axis the first version could not see.
+
+**The extension introduced a regression of its own, caught before shipping.** The first pair pattern
+required a newline between `method` and `path`:
+
+    method:\s*'(\w+)'\s*,\s*\n\s*path:
+
+Two SDK calls are written as single-line request objects — `/v1/archetypes` and `/v1/usage` — so the
+stricter pattern silently dropped them. The census would have gone from 100 paths to 98 while reading
+as an upgrade, and both dropped paths would then be unguarded in either direction. In Python and in
+JavaScript `\s*` already spans newlines; the explicit `\n` was the whole bug.
+
+So the file now carries a **coverage-loss** arm: every path the path-census finds must also appear in
+the verb-census. A stricter regex that covers less fails rather than passes.
+
+| mutation                                                 | reds                  |
+| -------------------------------------------------------- | --------------------- |
+| an SDK method flipped `GET` → `POST` on an existing path | the verb arm          |
+| the pair pattern made adjacency-strict again             | the coverage-loss arm |
+
+That second row is the point. Three self-inflicted extractor faults have now happened in this guard's
+short life — the four-line window in V-1425, and this newline — and each produced a _wrong answer that
+looked like a right one_: the first a false positive, the second a false negative. A census is only as
+good as its extractor, and the extractor needs its own tests. Both are now mutations that red.
