@@ -14006,3 +14006,61 @@ true — which is the failure V-1503 found in a guard pinning three describes th
 
 Both directions proven: restoring "endpoints only" reds the page assertion, and removing the gate from
 `listDeliveries` reds the anchor.
+
+## V-1510 — the rest of the scope table, checked row by row: one symmetry fix and eight negatives
+
+V-1509 corrected `read:webhooks`. The obvious question is whether it was the only row that understated
+its grant, and the only way to answer it is to check the others rather than assume the answer either way.
+
+**The fix.** `read:profiles` said _"Read profiles endpoints only."_ while the three snapshot READ routes
+gate on it, and the three snapshot MUTATIONS gate on `write:profiles` — whose row already carried
+`(and their snapshots)`. So the convention existed and one row was missing it.
+
+Stated at its real size rather than dressed up as another security finding: a snapshot read returns
+`label`, `parent_profile_id`, `parent_archetype`, `parent_name`, `captured_at`, `created_at`. It does not
+return the stored browser state. That is why this row gets a symmetry fix and V-1509's got a warning —
+`read:webhooks` exposed response bodies and error text from the customer's own endpoint, which is a
+different kind of data, not just more of the same kind.
+
+### Eight rows checked and correct
+
+- **`read:billing`** — the row enumerates the endpoints, which is the most falsifiable claim on the page.
+  Eight enforcement sites: `/v1/billing`, `/v1/billing/crypto-checkout/quote`, `/v1/account/cost`, and
+  the five crypto-order reads. Every one covered.
+- **`admin:billing`** — six sites including crypto checkout and order cancellation, which the row's
+  "change subscription" carries. Both route files cite this page and explain the classification in a
+  comment, so the mapping was a decision rather than an accident.
+- **`read:api-keys`**, **`read:audit`** — one service method each, `list()`, exactly as the rows say.
+- **`gui_control`** — the row names `tap_at` and `type_focused`; the schema declares those two literals
+  and no others.
+- **`write:profiles`** — its `(and their snapshots)` is accurate: create, restore and delete all gate on it.
+- **`admin`** — the row promises it satisfies `account_owner` and customer `admin:*` but _never_ the
+  staff-only `driftstack_internal_admin`. True at the predicate: that scope carries no colon, so
+  `parseGranularScope` returns null and only an exact match can grant it.
+- **broad-satisfies-granular** — `read`/`write`/`account_owner` satisfy their own verb's granular scopes
+  and granular never satisfies broad, exactly as documented.
+
+### The census that would have produced a loud wrong answer
+
+Reading enforcement from `requireScope(...)` in `routes/` reported **zero** sites for `read:audit`,
+`read:api-keys` and `read:webhooks` — which reads as "three documented scopes are enforced nowhere", a
+far more alarming finding than the true one. This codebase gates in two places, and those three are
+enforced in the SERVICE layer via `throwIfMissingScope(ctx, …)`. `dead-scopes-are-labelled` names both
+mechanisms in its header; my grep used one. Checking the second mechanism before writing anything is the
+only reason the entry above says what it says.
+
+### The equivalence check I was about to build already exists, and is better
+
+`requireScope` is implemented twice — inlined in `services/auth.ts`, and via `scopesSatisfy` in
+`lib/errors-helpers.ts` — with a comment claiming they are kept in sync by hand. That is exactly the
+shape worth a guard, so I went looking for one to write.
+
+`scope-check.test.ts` already does it, and more thoroughly than I intended: every granted set of size 0,
+1 and 2 drawn from `ApiKeyScopeSchema.options`, against every required scope, comparing all THREE entry
+points. Its own comment explains why size 2 matters — "several rules read one scope while a second is
+present, and a singleton-only sweep cannot see an implementation that consults the wrong element". The
+scope set comes from the enum rather than a local list, so a new scope extends the matrix automatically.
+
+Recorded because the useful output of a search for prior art is sometimes "it is already covered, better
+than you were going to" — and because the next person to notice two copies of an authorization predicate
+should find this note before rebuilding the same guard.

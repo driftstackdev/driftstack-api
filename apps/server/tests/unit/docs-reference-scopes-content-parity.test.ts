@@ -70,6 +70,20 @@ describe('docs reference/scopes content parity', () => {
     expect(body).not.toMatch(/Read webhook endpoints only/);
   });
 
+  it('V-1510 read:profiles names the snapshot reads it also unlocks. The three snapshot READ routes gate on this scope while the three snapshot MUTATIONS gate on write:profiles — and the write row already carried its `(and their snapshots)` annotation, so the convention existed and only the read row was missing it. Lower stakes than the webhooks row above and stated as such: a snapshot read returns label, parent profile and capture time, never the stored browser state. Derived from the route file, so the claim retires with the gating rather than outliving it.', () => {
+    const routes = readFileSync(
+      resolve(REPO_ROOT, 'apps/server/src/routes/profile-snapshots.ts'),
+      'utf8',
+    );
+    // The snapshot list/get reads are gated on read:profiles, which is what the
+    // row now claims. Asserted as a count so losing one of them is visible.
+    const reads = routes.match(/requireScope\('read:profiles'\)/g) ?? [];
+    expect(reads.length, 'snapshot read routes gated on read:profiles').toBeGreaterThanOrEqual(3);
+    expect(body).toMatch(/`read:profiles`[^|]*\|[^|]*\|[^|]*snapshots/);
+    expect(body).toMatch(/never the stored browser state/);
+    expect(body).not.toMatch(/Read profiles endpoints only/);
+  });
+
   it('broad-satisfies-granular rule pinned: a `read` key satisfies every `read:*` scope (the core scope-checking semantic; drift to making broad scopes NOT satisfy granular would break customers who hold legacy broad keys against routes that gate on granular scopes)', () => {
     expect(body).toMatch(
       /A key with a broad scope \*\*satisfies\*\* any granular scope on\s+the same verb/,
