@@ -13058,3 +13058,58 @@ likely rather than certain before; it is checked now.
 the next change touching a DB-backed surface still needs `DATABASE_URL` set, because the default gate
 will skip its tests and report green. What it does is convert "probably fine, unmeasured" into
 "measured, on this commit".
+
+## V-1495 — the destructive-target guard checked WHERE, not WHAT, and the default target was the developer's database
+
+`npm run test:e2e`, run in a clean shell on a developer machine, drops the schema of the working
+`driftstack` database and flushes the Redis holding that developer's keys. No confirmation, no
+recovery, as a side effect of running the test suite.
+
+The chain, verified end to end rather than inferred:
+
+- `playwright.config.ts` sets no `DATABASE_URL` or `REDIS_URL`.
+- `tests/e2e/helpers/server.ts` falls back to
+  `DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack'` and
+  `DEFAULT_REDIS_URL = 'redis://localhost:6379'`.
+- `startTestServer` then executes `DROP SCHEMA IF EXISTS "public" CASCADE`, and `resetState()` runs
+  `TRUNCATE … RESTART IDENTITY CASCADE` across fifteen tables followed by `redis.flushdb()`.
+- `assertLocalDestructiveTarget` permits it, because localhost is loopback.
+
+**The guard was already right about the risk and stopped one step short.** Its header describes exactly
+this catastrophe — "destroys that database completely, with no confirmation and no recovery, as a side
+effect of running the test suite" — and its refusal message already names the requirement: "Point
+DATABASE_URL and REDIS_URL at a disposable local database … such as `driftstack_e2e_local`". What it
+enforces is locality. Its threat model is a shell that exports a staging or production URL, and against
+that it works. It never asks whether the local database is the disposable one, and the default is not.
+
+This machine made the gap concrete rather than theoretical: Redis db 0 holds 3920 keys of live
+developer state, and the `driftstack` database exists alongside twenty-odd scratch ones.
+
+So the rule now enforces the advice the guard was already giving: the bare `driftstack` database and
+Redis db 0 are refused unless `CI` is set or `DRIFTSTACK_E2E_ALLOW_SHARED_DEV_RESET=1` is.
+
+**Its own variable, deliberately.** Reusing `DRIFTSTACK_E2E_ALLOW_NONLOCAL_RESET` would have been
+cheaper and wrong: that one means "this non-loopback host is fine", a different claim about a different
+risk, and someone setting it for a compose network would silently also have granted a reset of their
+working database. Two questions, two answers.
+
+**CI is exempt because the same name means different things.** The header records that CI sets exactly
+`postgres://…/driftstack` against an ephemeral service container — there `driftstack` IS the throwaway
+database. A name cannot decide this on its own, which is why the rule keys on the environment rather
+than trying to recognise a "test-looking" name. A heuristic would have to guess, and guessing
+permissively is the failure being prevented.
+
+**Ordering matters and cost me a correction.** Placed before the loopback refusal, a remote Redis URL
+carrying no index reads as db 0 and gets reported as a shared-dev problem — true, but not the point.
+Remote is the graver fact and the message an operator needs first, so the shared-dev check runs second.
+
+**The part worth recording above all: my first version was DEAD CODE and every existing test passed.**
+I inserted the check after `if (remote.length === 0) return;`, so any local target returned before
+reaching it. Nineteen arms stayed green, including a positive control I had just re-pointed. A direct
+probe — calling the function with the shared pair — printed `allowed`, which is what exposed it. Tests
+passing after a change is not evidence the change does anything; only exercising the new path is. Five
+arms now pin the rule, and the first mutation restores exactly that bug: an early `return` above the
+check reds three of them.
+
+Second mutation: disabling the Redis half alone reds the arm that asserts each target is refused
+independently, so a scratch database cannot launder a shared Redis. Both restored byte-identical.
