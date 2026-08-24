@@ -9128,3 +9128,48 @@ Two recorded as unreachable, not covered:
 
 Both are defence in depth behind a guard that already fires, in the same shape as V-1403's `:95` and
 `services/oauth.ts:741`. No arms written for either.
+
+### V-1409 — an arm titled for a path it never reached, and the path itself
+
+Mining the packages artifact further (the tree V-1407 opened) put `sdk-typescript/src/http.ts` at the
+top with the largest dark cluster. The interesting part is why it stayed dark: **there was already a
+test for it.**
+
+`http.test.ts` carried `it('non-2xx with non-Problem body throws TransportError')`. Its body is
+`<html>oops</html>`, which fails `JSON.parse` and exits at the catch **one branch earlier** with a
+different message, and its only assertion was `rejects.toBeInstanceOf(TransportError)` — which both
+paths satisfy. So the arm named the Problem-shape check, exercised the JSON-parse catch, and could not
+tell them apart. Coverage saw through it: `:147` arm 0 read 0 of 17.
+
+Retitled to the path it actually walks, and it now pins the message that distinguishes it. Changing
+that message string reds it — which it could not have done before.
+
+**The path nothing reached** is a non-2xx body that PARSES as JSON and is not RFC 7807: `{}` from
+nginx, a vendor envelope from a CDN, a bare string from an API gateway. Seven arms, and the
+consequence is in the status rather than the message. Without the shape check the body goes straight
+to `errorFromProblem`, whose first line reads `p.type`:
+
+- for `null` that raises a **TypeError** out of the customer's `catch`;
+- for an object missing the members it builds a `DriftstackError` whose type, title and status are all
+  `undefined`, and since `undefined >= 500` is false, **a gateway's 502 is reported to the customer as
+  a bad_request**.
+
+Mutations separate cleanly: removing `if (!isProblem(problem))` reds exactly the seven; letting
+`isProblem` accept `null` reds exactly the JSON-null arm, so that one genuinely exercises the
+`x === null` half of `:443`.
+
+The control earned its place immediately. I first wrote it with `PROBLEM_TYPES.NOT_FOUND`, which does
+not exist — the key is `NotFound` — so `type` serialised away and the well-formed Problem was refused
+as not-a-Problem. The arm failed on its first run and the fixture was wrong, not the client. Without a
+control asserting that a _valid_ Problem still maps to `NotFoundError`, seven green arms would have
+been consistent with a client that refuses every non-2xx body alike.
+
+Enumerated with both grep patterns, which is what surfaced the rest:
+
+- `sdk-typescript-http-content-parity` pins this exact block **as source text** — the third
+  text-pinned-effect-unchecked instance this session, after V-1400 and V-1403.
+- The Go and Python SDKs both carry the same guard, so this is a TypeScript-only coverage gap rather
+  than a missing check. Their wording differs — both say "non-problem body" where TypeScript says
+  "but body is not a Problem" — and **Go has an empty-body case TypeScript does not**. An arm now
+  records what TypeScript actually does with an empty non-2xx body (the JSON-parse catch answers it),
+  so that divergence is a measured fact in the suite rather than a reading of the source.

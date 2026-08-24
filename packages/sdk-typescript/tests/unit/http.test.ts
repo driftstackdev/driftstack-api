@@ -246,15 +246,103 @@ describe('HttpClient.request', () => {
     });
   });
 
-  it('non-2xx with non-Problem body throws TransportError', async () => {
+  // V-1409 — this arm was titled for the not-a-Problem path and exercises the
+  // not-JSON one. `<html>oops</html>` fails `JSON.parse` and exits at the catch a
+  // branch earlier, and asserting only `instanceof TransportError` cannot tell the
+  // two apart because both throw it. Retitled to what it does, and it now pins the
+  // message that distinguishes its path from the arms below.
+  it('non-2xx whose body is not JSON at all throws TransportError naming that. This is the JSON.parse catch, NOT the Problem-shape check below it — an HTML error page from a proxy is the everyday case.', async () => {
     const http = new HttpClient({
       apiKey: 'ds_live_test',
       baseUrl: 'http://api.test',
       fetch: fakeFetch({ status: 500, body: '<html>oops</html>' }),
       retry: NEVER_RETRY,
     });
+    const err = await http
+      .request<unknown>({ method: 'GET', path: '/v1/x' })
+      .catch((caught: unknown) => caught);
+    expect(err).toBeInstanceOf(TransportError);
+    expect(err).toMatchObject({
+      message: 'non-2xx response (500) with non-JSON body',
+      status: 500,
+    });
+  });
+
+  // Cross-SDK note, measured rather than assumed: the Go SDK answers an EMPTY non-2xx
+  // body with its own "with empty body" message, and Python and Go both say
+  // "non-problem body" where TypeScript says "but body is not a Problem". This arm
+  // records what TypeScript actually does with an empty body so the divergence is a
+  // fact in the suite rather than a reading of the source.
+  it('a non-2xx with a completely EMPTY body is reported by the JSON.parse catch, not by a dedicated empty-body case — an nginx 502 with no body is the everyday shape, and the Go SDK words this one differently.', async () => {
+    const http = new HttpClient({
+      apiKey: 'ds_live_test',
+      baseUrl: 'http://api.test',
+      fetch: fakeFetch({ status: 502, body: '' }),
+      retry: NEVER_RETRY,
+    });
+    const err = await http
+      .request<unknown>({ method: 'GET', path: '/v1/x' })
+      .catch((caught: unknown) => caught);
+    expect(err).toBeInstanceOf(TransportError);
+    expect(err).toMatchObject({
+      message: 'non-2xx response (502) with non-JSON body',
+      status: 502,
+    });
+  });
+
+  // The path nothing reached: a body that PARSES as JSON and is not RFC 7807. That is
+  // what a CDN, gateway or load balancer actually returns — `{}` from nginx, an
+  // envelope of its own from Cloudflare, a bare string from an API gateway. The only
+  // thing referring to this block was `sdk-typescript-http-content-parity`, which pins
+  // it as source text.
+  //
+  // Without the shape check the body goes straight to `errorFromProblem`, which reads
+  // `p.type` on its first line. For `null` that raises a TypeError out of the customer's
+  // catch; for an object missing the fields it produces a DriftstackError whose type,
+  // title and status are all `undefined` — and `undefined >= 500` is false, so a 502
+  // from a gateway is reported to the customer as a bad_request.
+  it.each([
+    ['a JSON array', '[]'],
+    ['JSON null', 'null'],
+    ['a bare JSON string', '"nope"'],
+    ['a JSON number', '42'],
+    ['an object with none of the three required members', '{"error":"nope"}'],
+    ['an object whose status is a string', '{"type":"x","title":"y","status":"502"}'],
+    ['an object missing only title', '{"type":"x","status":502}'],
+  ])(
+    'CRITICAL a non-2xx whose body is %s is refused as not-a-Problem, keeping the REAL status. The status is the half that matters: without the shape check the body reaches errorFromProblem, whose `p.status >= 500` reads undefined as false, so a gateway 502 surfaces to the customer as a bad_request.',
+    async (_label, body) => {
+      const http = new HttpClient({
+        apiKey: 'ds_live_test',
+        baseUrl: 'http://api.test',
+        fetch: fakeFetch({ status: 502, body }),
+        retry: NEVER_RETRY,
+      });
+
+      const err = await http
+        .request<unknown>({ method: 'GET', path: '/v1/x' })
+        .catch((caught: unknown) => caught);
+
+      expect(err).toBeInstanceOf(TransportError);
+      expect(err).toMatchObject({
+        message: 'non-2xx response (502) but body is not a Problem',
+        status: 502,
+      });
+    },
+  );
+
+  it('CONTROL a well-formed Problem at the same status still maps to a typed error, so the arms above are not satisfied by a client that rejects every non-2xx body the same way.', async () => {
+    const http = new HttpClient({
+      apiKey: 'ds_live_test',
+      baseUrl: 'http://api.test',
+      fetch: fakeFetch({
+        status: 404,
+        body: { type: PROBLEM_TYPES.NotFound, title: 'Not Found', status: 404 },
+      }),
+      retry: NEVER_RETRY,
+    });
     await expect(http.request<unknown>({ method: 'GET', path: '/v1/x' })).rejects.toBeInstanceOf(
-      TransportError,
+      NotFoundError,
     );
   });
 
