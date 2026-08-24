@@ -9722,3 +9722,57 @@ A shell note from the same batch: a mutation needle containing a backtick was ma
 reached `mutate.py`, which then refused on its needle assertion. Backticks in a shell argument are the
 trap already recorded for commit messages; the same applies to mutation needles. Choosing a
 backtick-free substring of the same line is enough.
+
+### V-1424 — who is driving the browser, and a ternary triaged out rather than covered
+
+`AgentSessionsResource` had four never-executed methods: `list`, `setMode`, `sendInputEvent`,
+`resume`. Paths cross-checked against the server first, as in V-1419..V-1423; all four match.
+
+This is the **third** verb-multiplexed pair the sweep has turned up, and the costliest. `get` and
+`close` both address `/v1/agent-sessions/:id`, so the call that inspects a running AI session and the
+call that ends it differ by nothing visible at the call site. Pinned as a shape, as with the BYOK
+triple (V-1421) and the sessions pair (V-1423).
+
+`setMode` is the arm that matters most. It decides whether the customer or the model is driving a live
+browser, and the mode is a bare string in the body. Mutating it to a hardcoded `'ai'` reds exactly the
+`manual` and `pair` rows and leaves the `ai` row green — the precision that makes the arm about the
+value rather than about the call happening.
+
+Alongside it, `setMode`, `takeover` and `handback` are three separate endpoints that all change who
+holds control. The arm asserts the three paths are distinct, because a collapse between them would
+answer "give control back" by setting a mode, and no response shape would show it.
+
+`sendInputEvent` carries the customer's real keystrokes and clicks into a live browser. It adds
+`client_id` only when given one, and the arm asserts the **key list**, not `toEqual` — the lesson from
+V-1423, where `toEqual` silently accepted `{ days: undefined }`. Mutating the conditional to always
+include the key reds it; with `toEqual` it would not have.
+
+**Triaged out rather than covered.** The literal-ternary sweep also flagged
+`durable-webhook-delivery.ts:868` — `nextAttemptAtMs` is `null` for a terminal delivery, and that side
+had never been produced. Traced before writing anything, and it is not worth an arm:
+
+- `nextAttemptAt` is `.notNull()` in the schema, so there is no crash to prevent.
+- The customer-facing listing does not use this projection at all. `routes/webhooks.ts:98` builds its
+  own `publicDelivery` reading `row.nextAttemptAt.toISOString()` unconditionally, and `api-types`
+  declares `next_attempt_at` as a **non-nullable** ISO string — so the public contract and the public
+  code agree, and the terminal-aware null belongs only to the internal `DeliveryRecord`.
+- The one runtime branch on the field, in the in-memory sibling's due-check, is already guarded by
+  `status === 'pending'`, which excludes every terminal record before the null test is reached.
+
+So the branch is defence in depth with no reader whose behaviour depends on it. An arm would have
+looked like coverage of a customer-visible property and been neither.
+
+**Postscript on the commit itself.** The first attempt was REJECTED by the pre-commit hook:
+`takeover(id, clientId)` takes two arguments and I passed one. Vitest transpiles without checking, so
+all 63 arms passed and all four mutations proved out against a file that does not type-check.
+
+That is the same class of error as V-1415 — and this time the hook caught it, which is the point.
+V-1419 established that the hook's coverage is per-workspace: `apps/server/tsconfig.json` excludes
+`tests`, while `packages/sdk-typescript/tsconfig.json` includes them. This commit was in the second
+workspace, so `tsc --noEmit -p packages/sdk-typescript/tsconfig.json` ran over the test file and
+refused the commit. The identical mistake in an `apps/server` test would have landed silently and
+surfaced later at full-suite time, exactly as it did in V-1415.
+
+Two measurements of the same hook, four entries apart, agreeing: the gap is real, it is specific to
+`apps/server`, and closing it is one line in `.husky/pre-commit` — prefer the workspace's own
+`typecheck` script where `package.json` defines one.

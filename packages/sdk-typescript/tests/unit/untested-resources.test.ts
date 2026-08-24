@@ -45,6 +45,7 @@ import { AccountResource } from '../../src/resources/account.js';
 import { AuthResource } from '../../src/resources/auth.js';
 import { ProfilesResource } from '../../src/resources/profiles.js';
 import { BillingResource } from '../../src/resources/billing.js';
+import { AgentSessionsResource } from '../../src/resources/agent-sessions.js';
 import { UsageResource } from '../../src/resources/usage.js';
 import { SessionsResource } from '../../src/resources/sessions.js';
 import type { HttpClient } from '../../src/http.js';
@@ -575,5 +576,88 @@ describe('UsageResource / BillingResource — three more nothing executed', () =
     await new BillingResource(http).createPortalSession();
     expect(calls[0]?.method).toBe('POST');
     expect(calls[0]?.path).toBe('/v1/billing/portal-session');
+  });
+});
+
+// V-1424 — the agent-session control surface. `list`, `setMode`, `sendInputEvent`
+// and `resume` had never executed. Paths cross-checked against the server first, as
+// in V-1419..V-1423; all four match.
+//
+// This resource carries the third verb-multiplexed pair found in this sweep, and the
+// costliest: `get` and `close` both address `/v1/agent-sessions/:id`, so the call
+// that reads a running AI session and the call that ENDS it differ by nothing a
+// reader of the call site can see.
+describe('AgentSessionsResource — the control surface nothing executed', () => {
+  const AID = 'agt_abc';
+
+  it('CRITICAL reading an agent session and CLOSING one share a path, separated only by verb. Everything the session is doing stops on the DELETE, so a verb that drifts turns an inspection into a teardown of work the customer is paying for.', async () => {
+    const r = recorder({});
+    await new AgentSessionsResource(r.http).get(AID);
+    const c = recorder(undefined);
+    await new AgentSessionsResource(c.http).close(AID);
+    expect(r.calls[0]?.path).toBe(c.calls[0]?.path);
+    expect([r.calls[0]?.method, c.calls[0]?.method]).toEqual(['GET', 'DELETE']);
+  });
+
+  it.each(['manual', 'ai', 'pair'] as const)(
+    "CRITICAL setMode('%s') wraps the mode under `mode` and forwards it verbatim. This decides who is driving a live browser — the customer or the model — so a value that is dropped, defaulted or swapped hands control to the wrong one while the request still succeeds.",
+    async (mode) => {
+      const { http, calls } = recorder({});
+      await new AgentSessionsResource(http).setMode(AID, mode);
+      expect(calls[0]?.method).toBe('POST');
+      expect(calls[0]?.path).toBe(`/v1/agent-sessions/${AID}/mode`);
+      expect(calls[0]?.body).toEqual({ mode });
+    },
+  );
+
+  it('CRITICAL setMode, takeover and handback are THREE distinct endpoints. All three change who controls the session, so a collapse between them would answer a request to hand control back by setting a mode, or the reverse — and the response shape would not reveal it.', async () => {
+    const paths: string[] = [];
+    for (const invoke of [
+      (x: AgentSessionsResource) => x.setMode(AID, 'manual'),
+      (x: AgentSessionsResource) => x.takeover(AID, 'client-1'),
+      (x: AgentSessionsResource) => x.handback(AID),
+    ]) {
+      const { http, calls } = recorder({});
+      await invoke(new AgentSessionsResource(http));
+      paths.push(calls[0]?.path ?? '');
+    }
+    expect(new Set(paths).size, 'two control-transfer calls share a path').toBe(3);
+  });
+
+  it("CRITICAL sendInputEvent forwards the raw event under `event`, and only adds client_id when one was given. These are the customer's real keystrokes and clicks being streamed into a live browser; a wrapper that reshaped them would deliver different input than the person performed.", async () => {
+    const ev = { kind: 'key', code: 'KeyA', modifiers: [] } as never;
+
+    const bare = recorder({});
+    await new AgentSessionsResource(bare.http).sendInputEvent(AID, ev);
+    expect(bare.calls[0]?.path).toBe(`/v1/agent-sessions/${AID}/input-event`);
+    expect(bare.calls[0]?.body).toEqual({ event: ev });
+    expect(
+      Object.keys(bare.calls[0]?.body as Record<string, unknown>),
+      'client_id must be absent, not present-and-undefined — the V-1423 lesson',
+    ).toEqual(['event']);
+
+    const withClient = recorder({});
+    await new AgentSessionsResource(withClient.http).sendInputEvent(AID, ev, { clientId: 'c1' });
+    expect(withClient.calls[0]?.body).toEqual({ event: ev, client_id: 'c1' });
+  });
+
+  it('list() omits pagination keys it was not given, and forwards the ones it was', async () => {
+    const bare = recorder({ data: [] });
+    await new AgentSessionsResource(bare.http).list();
+    expect(Object.keys((bare.calls[0] as { query?: Record<string, unknown> }).query ?? {})).toEqual(
+      [],
+    );
+
+    const paged = recorder({ data: [] });
+    await new AgentSessionsResource(paged.http).list({ limit: 5, cursor: 'c' });
+    expect((paged.calls[0] as { query?: unknown }).query).toEqual({ limit: 5, cursor: 'c' });
+  });
+
+  it('resume() POSTs to the resume sub-path, forwarding an empty body by default', async () => {
+    const { http, calls } = recorder({});
+    await new AgentSessionsResource(http).resume(AID);
+    expect(calls[0]?.method).toBe('POST');
+    expect(calls[0]?.path).toBe(`/v1/agent-sessions/${AID}/resume`);
+    expect(calls[0]?.body).toEqual({});
   });
 });
