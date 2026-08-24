@@ -800,19 +800,29 @@ describe('V-927 a published bound matches the route', () => {
    * document is right to be silent — each traced to its declaration rather than
    * inferred from the absence.
    */
-  const LIMIT_WITHOUT_DEFAULT: Record<string, string> = {
-    'GET /v1/admin/atlas-priority/queue':
-      'internal-atlas-priority.ts declares `limit: z.coerce.number().int().min(1).max(1000).optional()` — no default',
-    'GET /v1/admin/status-subscribers':
-      'admin-status-subscribers.ts declares `.max(200).optional()` — no default',
-    'GET /v1/admin/incidents': 'ListIncidentsQuerySchema declares no default',
-    'GET /v1/status/incidents': 'the same schema, public feed',
-    'GET /v1/admin/crypto-orders': 'crypto-orders.ts declares `.optional()` with no default',
-    'GET /v1/admin/crypto-orders.csv': 'the same schema, csv rail',
-    'GET /v1/billing/crypto-orders': 'the customer rail, `.optional()` with no default',
-  };
+  // V-1511 — this map is EMPTY, and the retraction is the point.
+  //
+  // V-1500 exempted seven endpoints on the reasoning that their route "declares
+  // `.optional()` with no default". That reading stopped at the route file. Every
+  // one of them applies a default a layer down: the crypto rails through
+  // `opts.limit ?? 50` in services/crypto-orders.ts, status-subscribers through
+  // the same idiom in its service, both incident feeds through
+  // `INCIDENT_PAGE_DEFAULT` in db/incidents-repo.ts, atlas-priority through
+  // `args.limit ?? 100` in its repo, and the csv rail through a plain
+  // `let limit = 1000` in the route body.
+  //
+  // So the exemptions described where the default was NOT rather than whether one
+  // existed, and each entry quoted a true sentence in support of a false
+  // conclusion. `GET /v1/billing/crypto-orders` even carried
+  // `.describe('Page size (1-100). Defaults to server-side 50.')` on the very
+  // declaration the exemption cited as having no default.
+  //
+  // All seven now publish it. The map stays as an empty object so the staleness
+  // arm below keeps running: an exemption that outlives its reason has to be
+  // deleted, not inherited.
+  const LIMIT_WITHOUT_DEFAULT: Record<string, string> = {};
 
-  it('CRITICAL a list endpoint that picks a page size says which one. Thirteen routes default `limit` to 50, so a caller omitting it gets fifty rows; six published the bounds and not the default, which makes an unset parameter look like "no limit" rather than a choice the server made for you.', () => {
+  it('CRITICAL a list endpoint that picks a page size says which one. Every published `limit` now carries the default its stack applies — 50, 100 or 1000 depending on the rail — so an omitted parameter reads as the server making a choice rather than as no bound at all. The exemption map above is empty on purpose: the seven entries it used to hold were each justified by a route-level declaration while the default lived in a service or repo.', () => {
     const spec = JSON.parse(readFileSync(SPEC, 'utf8')) as Record<string, never>;
     const paths = (spec as unknown as Record<string, Record<string, never>>)['paths'] ?? {};
     const silent: string[] = [];

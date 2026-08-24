@@ -14064,3 +14064,85 @@ scope set comes from the enum rather than a local list, so a new scope extends t
 Recorded because the useful output of a search for prior art is sometimes "it is already covered, better
 than you were going to" — and because the next person to notice two copies of an authorization predicate
 should find this note before rebuilding the same guard.
+
+## V-1511 — retracting V-1500's exemptions: seven "no default" endpoints all had one, a layer down
+
+`reference/pagination.md` claimed **"Default: `50` on every list endpoint"**. Twenty published `limit`
+parameters, seven of them with no `default` in the document — so either the page was wrong or the spec
+was. Checking which is the whole finding, and the answer is: the page was right about there being a
+default, wrong about the number, and the spec was silent on all seven.
+
+| endpoint                             | effective default | applied in                                     |
+| ------------------------------------ | ----------------- | ---------------------------------------------- |
+| `GET /v1/billing/crypto-orders`      | 50                | `services/crypto-orders.ts` `listAll`          |
+| `GET /v1/admin/crypto-orders`        | 50                | `listForAdminPage`                             |
+| `GET /v1/admin/status-subscribers`   | 50                | `services/status-subscribers.ts`               |
+| `GET /v1/admin/incidents`            | 100               | `db/incidents-repo.ts` `INCIDENT_PAGE_DEFAULT` |
+| `GET /v1/status/incidents`           | 100               | the same repo                                  |
+| `GET /v1/admin/atlas-priority/queue` | 100               | `atlas-priority-events-repo`                   |
+| `GET /v1/admin/crypto-orders.csv`    | 1000              | a plain `let limit = 1000` in the route        |
+
+All seven now publish it, and every one of the twenty carries a default.
+
+### This retracts my own exemption map, and the reasoning is the lesson
+
+V-1500 exempted exactly these seven, each with a note like _"declares `.optional()` with no default"_.
+Every one of those notes is **true about the file it names** and wrong about the endpoint. The route
+declares no default; the service or repo applies one. The exemptions described where the default was NOT,
+and I read that as evidence none existed.
+
+The sharpest evidence was sitting in the declaration I cited. `GET /v1/billing/crypto-orders` carries
+
+```ts
+.optional()
+.describe('Page size (1-100). Defaults to server-side 50.')
+```
+
+I quoted the `.optional()` half as proof there was no default while the next line said what the default
+is. A census that greps for a keyword finds the keyword; it does not read the sentence beside it.
+
+`LIMIT_WITHOUT_DEFAULT` is now an empty object rather than deleted, so the staleness half keeps running —
+V-1500 got that part right, and it is what failed the moment the seven were published, which is how a
+guard is supposed to react to its own author being wrong.
+
+### The page had a second wrong number
+
+_"Maximum: `100` on most endpoints; a few admin list endpoints (e.g. status subscribers) allow `200`"_ —
+the real maxima are 100, 200 **and 1000**, the last on the atlas-priority queue and the crypto-orders CSV
+export. The page named the second tier and stopped one tier short.
+
+Both bullets now match the document, and the page tells readers to take each endpoint's default from the
+spec rather than assuming one number — which is the honest instruction once there are three.
+
+### The guard derives the numbers instead of quoting them
+
+The new arm reads every published `limit` parameter, collects the distinct defaults and maxima, and
+requires each to appear on the page. No number is hardcoded in the test, so a new rail with its own page
+size fails until the section mentions it. Non-emptiness is asserted first, since an arm reporting an
+absence passes perfectly when it has parsed nothing.
+
+Two negatives: restoring the old text reds the pagination arm, and un-publishing the CSV default reds the
+V-1500 bound arm — which, with the exemption map emptied, now catches directly what it used to excuse.
+
+### Measured clean on the way, so these are not re-swept
+
+`published-rate-limit-table-matches-the-code` already derives the whole 8-tier × 4-bucket table from the
+limiter and compares capacity and refill per cell, with arms proving the page parsed and every tier and
+bucket has columns. I went to check the 64 numbers by hand and found the check already stronger than the
+one I was writing. The pagination page's endpoint list says "and others", so it makes no enumerable claim
+to falsify.
+
+### V-794 caught my new pin, which is the second time this batch a guard corrected its own author
+
+The first version of the arm above was titled _"…the defaults in use are 50, 100 and 1000, and **two
+endpoints** cap at 1000."_ `a-parity-pin-cannot-freeze-a-claim-that-expires` failed the run: 91 pin files
+freeze a hand-maintained count against a ceiling of 90, and the new offender was mine.
+
+It is right. The arm's body derives both sets from the spec precisely so that no number has to be
+restated, and I restated one anyway — in the title, where it is least visible and cements a tally that a
+third such endpoint would falsify. The clause is gone; the body is unchanged, because the body was never
+the problem.
+
+Worth recording together with the retraction above: within one batch, V-1500's staleness arm caught my
+wrong exemptions and V-794 caught my wrong title. Both guards were written earlier in this sweep to
+catch someone else.

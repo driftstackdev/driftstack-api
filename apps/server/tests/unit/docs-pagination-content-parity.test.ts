@@ -36,6 +36,41 @@ describe('Arc 6 docs.pagination — pagination reference parity', () => {
     expect(body).toMatch(/`null` when the page is the last/);
   });
 
+  it('V-1511 the limit-bounds section does not claim a single number the spec contradicts. It said `Default: 50 on every list endpoint` and named `200` as the top maximum. The document publishes several distinct defaults and a ceiling above the one the page named. Every distinct default and maximum the spec publishes must appear on the page, so a new rail with its own page size cannot leave this section quietly wrong.', () => {
+    const spec = JSON.parse(
+      readFileSync(resolve(REPO_ROOT, 'packages/sdk-python/openapi.json'), 'utf8'),
+    ) as { paths: Record<string, Record<string, { parameters?: Record<string, unknown>[] }>> };
+
+    const defaults = new Set<number>();
+    const maxima = new Set<number>();
+    for (const ops of Object.values(spec.paths)) {
+      for (const op of Object.values(ops)) {
+        for (const raw of op.parameters ?? []) {
+          if (raw['in'] !== 'query' || raw['name'] !== 'limit') continue;
+          const schema = raw['schema'] as { default?: number; maximum?: number } | undefined;
+          if (typeof schema?.default === 'number') defaults.add(schema.default);
+          if (typeof schema?.maximum === 'number') maxima.add(schema.maximum);
+        }
+      }
+    }
+    // Reports an absence, so an empty parse would pass having compared nothing.
+    expect(defaults.size, 'distinct published `limit` defaults').toBeGreaterThanOrEqual(2);
+    expect(maxima.size, 'distinct published `limit` maxima').toBeGreaterThanOrEqual(2);
+
+    const missing = [
+      ...[...defaults].map((n) => [`default ${String(n)}`, n] as const),
+      ...[...maxima].map((n) => [`maximum ${String(n)}`, n] as const),
+    ]
+      .filter(([, n]) => !new RegExp(`\`${String(n)}\``).test(body))
+      .map(([label]) => label)
+      .sort();
+    expect(
+      missing,
+      'the spec publishes these `limit` values and the page never mentions them:',
+    ).toEqual([]);
+    expect(body).not.toMatch(/Default: `50` on every list endpoint/);
+  });
+
   it('declares cursor opacity (do not parse)', () => {
     expect(body).toMatch(/do not (try to )?parse/i);
     expect(body).toMatch(/opaque/);

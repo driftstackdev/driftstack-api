@@ -23782,7 +23782,8 @@
             "schema": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 100
+              "maximum": 100,
+              "default": 100
             },
             "required": false,
             "name": "limit",
@@ -25550,7 +25551,8 @@
             "schema": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 200
+              "maximum": 200,
+              "default": 50
             },
             "required": false,
             "name": "limit",
@@ -28580,7 +28582,8 @@
             "schema": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 1000
+              "maximum": 1000,
+              "default": 100
             },
             "required": false,
             "name": "limit",
@@ -40498,6 +40501,7 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 100,
+              "default": 50,
               "description": "Page size (1-100). Defaults to server-side 50."
             },
             "required": false,
@@ -42223,7 +42227,8 @@
             "schema": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 200
+              "maximum": 200,
+              "default": 50
             },
             "required": false,
             "name": "limit",
@@ -44922,7 +44927,8 @@
             "schema": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 1000
+              "maximum": 1000,
+              "default": 1000
             },
             "required": false,
             "name": "limit",
@@ -47631,7 +47637,8 @@
             "schema": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 100
+              "maximum": 100,
+              "default": 100
             },
             "required": false,
             "name": "limit",

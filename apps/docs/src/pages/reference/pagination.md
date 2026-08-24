@@ -140,11 +140,16 @@ func ListAllAuditEntries(ctx context.Context, c *driftstack.Client) ([]driftstac
 
 Per-endpoint `limit` ranges:
 
-- Default: `50` on every list endpoint (audit log, webhooks
-  deliveries, admin accounts/sessions/api-keys).
-- Maximum: `100` on most endpoints; a few admin list endpoints
-  (e.g. status subscribers) allow `200` where ops tooling
-  reasonably batches.
+- Default: `50` on most list endpoints (audit log, webhooks
+  deliveries, admin accounts/sessions/api-keys, the crypto-order
+  reads). The incident feeds and the atlas-priority queue default to
+  `100`, and the crypto-orders CSV export to `1000`. Every endpoint
+  publishes its own default in the OpenAPI document — read it there
+  rather than assuming one number.
+- Maximum: `100` on most endpoints; a few admin list endpoints allow
+  `200` (status subscribers, admin crypto orders) and two allow
+  `1000` (the atlas-priority queue and the crypto-orders CSV export)
+  where ops tooling reasonably batches.
 - Out-of-range values surface as `400` problem+json. The problem `type`
   varies by endpoint — `.../validation-failed` where the query schema is
   parsed directly, `.../bad-request` where it is safe-parsed and re-raised

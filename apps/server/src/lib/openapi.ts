@@ -3157,11 +3157,17 @@ function buildRegistry(): OpenAPIRegistry {
   const IncidentIdParamsOpenApi = z.object({
     id: prefixedIdParam('inc', 'incident'),
   });
-  const AdminIncidentListQueryOpenApi = ListIncidentsQuerySchema.omit({ window: true });
+  // V-1511 — the repo applies INCIDENT_PAGE_DEFAULT (100) when `limit` is
+  // absent, so the document publishes that rather than implying no bound.
+  const AdminIncidentListQueryOpenApi = ListIncidentsQuerySchema.omit({ window: true }).extend({
+    limit: z.coerce.number().int().min(1).max(100).default(100),
+  });
   const PublicIncidentListQueryOpenApi = ListIncidentsQuerySchema.pick({
     since: true,
     window: true,
     limit: true,
+  }).extend({
+    limit: z.coerce.number().int().min(1).max(100).default(100),
   });
   // V-931 — `started_at` really IS required on the idempotent PUT, and this
   // document is right to say so. V-930 briefly loosened it after reading only the
@@ -3327,7 +3333,8 @@ function buildRegistry(): OpenAPIRegistry {
     // two REQUIRED envelope fields were never sent at all.
     request: {
       query: z.object({
-        limit: z.number().int().min(1).max(200).optional(),
+        // V-1511 — the service applies `opts.limit ?? 50`.
+        limit: z.number().int().min(1).max(200).default(50),
         offset: z.number().int().min(0).optional(),
       }),
     },
@@ -3718,7 +3725,8 @@ function buildRegistry(): OpenAPIRegistry {
     status: AtlasPriorityStatusOpenApi.optional(),
     customer_id: z.string().min(1).optional(),
     since: z.string().datetime().optional(),
-    limit: z.coerce.number().int().min(1).max(1000).optional(),
+    // V-1511 — atlas-priority-events-repo applies `args.limit ?? 100`.
+    limit: z.coerce.number().int().min(1).max(1000).default(100),
   });
   registerRoute(r, {
     method: 'get',
@@ -5753,7 +5761,7 @@ function buildRegistry(): OpenAPIRegistry {
           .int()
           .min(1)
           .max(100)
-          .optional()
+          .default(50)
           .describe('Page size (1-100). Defaults to server-side 50.'),
         // V-666.BR — single-value status filter; mirrors admin list.
         status: z
@@ -5960,7 +5968,8 @@ function buildRegistry(): OpenAPIRegistry {
         // endpoints in this file. The route accepts a numeric STRING off the wire and
         // enforces the range AFTER parsing, so neither bound reached the document:
         //   if (!Number.isInteger(n) || n < 1 || n > 200) throw …
-        limit: z.coerce.number().int().min(1).max(200).optional(),
+        // V-1511 — listForAdminPage applies `opts.limit ?? 50`.
+        limit: z.coerce.number().int().min(1).max(200).default(50),
         cursor: z.string().min(1).max(512).optional().describe('Opaque cursor from a prior page.'),
         created_after: z
           .string()
@@ -6275,7 +6284,8 @@ function buildRegistry(): OpenAPIRegistry {
         // endpoints in this file. The route accepts a numeric STRING off the wire and
         // enforces the range AFTER parsing, so neither bound reached the document:
         //   if (!Number.isInteger(n) || n < 1 || n > 1000) throw …
-        limit: z.coerce.number().int().min(1).max(1000).optional(),
+        // V-1511 — the route initialises `let limit = 1000`.
+        limit: z.coerce.number().int().min(1).max(1000).default(1000),
         created_after: z.string().datetime().optional(),
         created_before: z.string().datetime().optional(),
       }),
