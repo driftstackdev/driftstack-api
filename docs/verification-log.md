@@ -13349,3 +13349,60 @@ matching its hand check, and `profiles/{id}/transfer` publishes the account-id p
 Two mutations. Stripping the new default from `/v1/admin/sessions` reds the arm naming it; adding one to
 an exempt endpoint reds the staleness half, so an exemption cannot outlive the condition that earned it.
 `prettier --check` run on source and pins before committing, per V-1498.
+
+## V-1501 — the response guard was reading the minority idiom, and green on a defect of its own class
+
+`POST /v1/admin/status-subscribers/{id}/force-unsubscribe` published `{ ok: true }`, required. The
+handler has never sent it:
+
+```
+published   { ok: boolean(true) }        required: [ok]
+sends       { message: 'Subscriber force-unsubscribed.', email: string | null }
+```
+
+A caller typed from the document reads `.ok`, gets `undefined`, and cannot reach either real field —
+they are outside the generated type entirely. This is the third instance of V-1072's exact defect, and
+two guards already pin the handler's real shape, so as with the original two the server was never in
+doubt; only the published contract was.
+
+**The interesting part is why V-1072 did not catch it.** Its scan reads the handler's returned object
+literal — matching `return {`. That is the MINORITY idiom in this codebase. 145 of roughly 250
+registrations answer with `reply.send({ … })` or `reply.code(200).send({ … })`, and every one was
+dropped before any comparison.
+
+They were dropped by a `continue` that never incremented the skip counter. So the arm whose stated job
+is to keep the blind spot honest — _"the skip count is asserted rather than hidden … pretending
+otherwise is how a scan reports confidence it has not earned"_ — reported 32 skips against a real blind
+spot of 177. The instrument was truthful about the skips it knew about and silent about the larger set
+it never reached.
+
+**Measured, not argued.** Restoring the defect and running the guard exactly as HEAD has it: all four
+arms pass. The guard was green on the defect it exists to catch. With the extractor extended, the
+finding arm reds naming the route. That is the proof the extension is load-bearing, and it is the
+reason to state coverage as a judged population rather than as a passing suite.
+
+Judged population 61 → 83. Skip count 32 → 147, which is not a regression: it is the first honest
+number this guard has reported.
+
+**One route left the judged set, and that is the fix working.**
+`GET /v1/agent-sessions/{id}/downloads/content` answers with a binary `Buffer` on success and JSON only
+on its error paths, so the old scan was comparing a file download against its own error shapes. A send
+whose argument is not a literal now disqualifies the handler rather than contributing a partial keyset —
+a partial keyset does not produce silence, it produces invented findings.
+
+**Two instrument risks found by looking rather than by trusting the count.** A bare `.send(` also
+matches `socket.send(data)` in the fleet-events stream, and would match any mailer or queue client that
+borrows the verb; the extractor is anchored to a `reply` receiver, and an arm pins that
+`socket.send({ id, kind })` yields nothing. The chain form had to be handled explicitly —
+`reply.header(…).code(201).send({ … })` — since matching only `reply.send(` would have missed most of
+the population it was added for.
+
+**The consumer, checked rather than assumed.** `apps/admin-panel` calls this endpoint, so a fictional
+contract could have been a live bug. It is not: the page reads `response.ok` — the HTTP status — and its
+comment says the body is deliberately unused so a malformed body cannot make an operator repeat a
+completed force-unsubscribe. No behaviour changes here.
+
+Its test double did answer `json({ ok: true })`, though, copied from the published schema. Corrected to
+the shape the server sends. The page ignores the body either way, so this fixes nothing at runtime — but
+a double written from the document is precisely how the document's fiction survives a test suite, and
+that artifact was the last thing in the repo asserting `ok`.

@@ -39,6 +39,32 @@
 // A handler whose response is assembled by a helper or a spread cannot be judged this
 // way, and those are skipped rather than guessed at — an arm below reports how many,
 // so the skip stays visible.
+//
+// ── V-1501 — the skip that was not visible, and the route it was hiding ──
+//
+// "Reads the handler's returned literal" was doing less than it sounds. It matched
+// `return {` only, and this codebase overwhelmingly answers with `reply.send({ … })`
+// or `reply.code(200).send({ … })`: 145 of the ~250 registrations, dropped before any
+// comparison. Worse, they were dropped by a `continue` that never touched the skip
+// counter, so the arm whose job is to keep the blind spot visible reported 32 skips
+// against a blind spot of 177.
+//
+// Extending the extractor to the `reply.send` idiom took the judged population from
+// 61 to 83 and surfaced a third instance of the exact defect this file was built for:
+//
+//   POST /v1/admin/status-subscribers/:id/force-unsubscribe
+//                                          published { ok: true }
+//                                          sends     { message, email }
+//
+// Two existing guards pin the handler's real shape, so — as with the original two —
+// the server was never in doubt; only the published contract was.
+//
+// One route left the judged set, and that is the fix working rather than a loss.
+// `GET /v1/agent-sessions/:id/downloads/content` answers with a binary Buffer on
+// success and JSON only on its error paths, so the old scan was comparing a file
+// download against its own error shapes. A send whose argument is not a literal now
+// disqualifies the handler instead of contributing a partial keyset — a partial
+// keyset does not produce silence, it produces invented findings.
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -129,6 +155,50 @@ function literalKeys(raw: string): { keys: Set<string>; spread: boolean } {
   return { keys, spread };
 }
 
+/**
+ * V-1501 — every brace-matched object literal a handler answers with, by either
+ * idiom: a bare `return { … }` and `reply.send({ … })` with any chain in front
+ * of it (`reply.code(200).send({ … })`, `reply.header(…).code(201).send({ … })`).
+ *
+ * The original extractor read only the first. That is the MINORITY idiom here:
+ * 145 of the ~250 registrations answer through `reply.send` and were dropped
+ * before any comparison — and dropped by a `continue` that did not increment the
+ * skip counter, so the arm asserting "the skip stays visible" could not see them.
+ *
+ * `reply` anchors the match. A bare `.send(` also matches `socket.send(data)` in
+ * the fleet-events stream, and any future mailer or queue client that borrows the
+ * verb would be read as a response body.
+ *
+ * `nonLiteral` counts the sends whose argument is NOT an object literal — a
+ * variable, a `Buffer`, a helper call. Those make the extracted keyset partial,
+ * and a partial keyset produces invented `missing` findings rather than silence,
+ * so a handler with one is skipped outright.
+ */
+function replyBlocks(body: string): { blocks: string[]; nonLiteral: number } {
+  const blocks: string[] = [];
+  let nonLiteral = 0;
+  for (const m of body.matchAll(/\breply(?:\s*\.\w+\([^()]*\))*\s*\.send\s*\(/g)) {
+    let k = m.index + m[0].length;
+    while (k < body.length && /\s/.test(body[k] ?? '')) k += 1;
+    if (body[k] !== '{') {
+      nonLiteral += 1;
+      continue;
+    }
+    let depth = 0;
+    for (let j = k; j < body.length; j += 1) {
+      if (body[j] === '{') depth += 1;
+      else if (body[j] === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          blocks.push(body.slice(k + 1, j));
+          break;
+        }
+      }
+    }
+  }
+  return { blocks, nonLiteral };
+}
+
 /** Every brace-matched `return { … }` block inside a handler. */
 function returnBlocks(body: string): string[] {
   const out: string[] = [];
@@ -176,8 +246,15 @@ function judge(): { compared: Judged[]; skipped: number } {
       if (body === null) continue;
       const pm = /^\s*['"`](\/v1\/[^'"`]*)['"`]/.exec(body);
       if (pm === null) continue;
-      const blocks = returnBlocks(body);
-      if (blocks.length === 0) continue;
+      const sent = replyBlocks(body);
+      const blocks = [...returnBlocks(body), ...sent.blocks];
+      // V-1501 — a handler that answers in neither idiom is a skip, not a silent
+      // drop. This `continue` used to bypass the counter entirely, which is how
+      // the largest population stayed invisible to the arm that reports it.
+      if (blocks.length === 0) {
+        skipped += 1;
+        continue;
+      }
 
       const keys = new Set<string>();
       let spread = false;
@@ -186,7 +263,7 @@ function judge(): { compared: Judged[]; skipped: number } {
         for (const k of r.keys) keys.add(k);
         spread = spread || r.spread;
       }
-      if (spread || keys.size < 2) {
+      if (spread || sent.nonLiteral > 0 || keys.size < 2) {
         skipped += 1;
         continue;
       }
@@ -237,7 +314,7 @@ describe('V-1072 a published response is the one returned', () => {
   it('CRITICAL the scan compares a real population and the literal reader handles both property forms. A key extractor blind to shorthand reports every `{ country, region }` handler as broken, which is how the first version of this scan produced three findings that were all itself.', () => {
     const { compared, skipped } = judge();
     expect(compared.length, 'routes judged against a published response').toBeGreaterThanOrEqual(
-      45,
+      75,
     );
     // The skip count is asserted rather than hidden: helper- or spread-built
     // responses cannot be judged by reading a literal, and pretending otherwise
@@ -246,6 +323,15 @@ describe('V-1072 a published response is the one returned', () => {
 
     expect(literalKeys('country, region: r').keys.has('country')).toBe(true);
     expect(literalKeys('...base, id: 1').spread).toBe(true);
+
+    // V-1501 — the reply.send extractor, on the three shapes that decide it: a
+    // chained code().send() literal is read, a non-literal send is counted rather
+    // than read, and a `.send(` on any other receiver is not a response at all.
+    expect(replyBlocks("reply.code(200).send({ message: 'x', email: null });").blocks).toEqual([
+      " message: 'x', email: null ",
+    ]);
+    expect(replyBlocks('reply.send(payload);').nonLiteral).toBe(1);
+    expect(replyBlocks('socket.send({ id: 1, kind: 2 });').blocks).toEqual([]);
   });
 
   it('CRITICAL no route publishes a required success field its handler never sets. A caller typed from the document reads that field, gets undefined, and cannot reach what the server actually sent — the real fields are outside the generated type entirely. Both routes V-1072 found published `{ ok: true }` against handlers returning an id and a timestamp.', () => {

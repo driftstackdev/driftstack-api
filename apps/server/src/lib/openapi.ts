@@ -3357,7 +3357,16 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description: 'Subscriber removed. Idempotent against already-removed entries.',
-        content: { 'application/json': { schema: z.object({ ok: z.literal(true) }) } },
+        // V-1501 — the handler has never sent `ok`. It sends a message and the
+        // address it removed, and `email` is null when the row carried none.
+        content: {
+          'application/json': {
+            schema: z.object({
+              message: z.string(),
+              email: z.string().nullable(),
+            }),
+          },
+        },
       },
       ...errors4xx,
       404: { description: 'Subscriber not found.', content: problemContent },

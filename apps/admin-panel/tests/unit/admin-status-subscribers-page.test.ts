@@ -138,7 +138,11 @@ function makeRouter(subs: Sub[]): (c: MockFetchCall) => Response {
     if (fu && method === 'POST') {
       const s = subs.find((x) => x.id === fu[1]);
       if (s) s.unsubscribed_at = '2026-05-29T12:00:00.000Z';
-      return json({ ok: true });
+      // V-1501 — the shape the server actually sends. This double used to answer
+      // `{ ok: true }`, copied from a published schema no handler has ever
+      // satisfied; the page ignores the body either way, but a double written
+      // from the document is how the document's fiction stays alive.
+      return json({ message: 'Subscriber force-unsubscribed.', email: s ? s.email : null });
     }
     if (url.pathname === '/v1/admin/status-subscribers' && method === 'GET') {
       const offset = Number(url.searchParams.get('offset') || '0');

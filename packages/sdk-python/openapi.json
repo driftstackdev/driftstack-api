@@ -25735,12 +25735,14 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "ok": {
-                      "type": "boolean",
-                      "enum": [true]
+                    "message": {
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": ["string", "null"]
                     }
                   },
-                  "required": ["ok"]
+                  "required": ["message", "email"]
                 }
               }
             }
