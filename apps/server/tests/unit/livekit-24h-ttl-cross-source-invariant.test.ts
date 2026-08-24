@@ -29,6 +29,51 @@ describe('LiveKit 24h-TTL cross-source invariant', () => {
     expect(lkRouteSrc).toMatch(/export const LIVEKIT_TOKEN_TTL_SECONDS = 24 \* 60 \* 60;/);
   });
 
+  // V-1429 — a THIRD copy of the LiveKit TTL, which this file did not cover.
+  //
+  // `routes/agent-sessions.ts` mints a LiveKit token inline on the session
+  // create/get responses (`maybeMintLivekit`) and writes its own
+  // `const ttlSeconds = 24 * 60 * 60;` rather than reading the exported constant.
+  // The arms above pin the constant in the lk-token route and the gui_control_key
+  // TTL in this same file — but not this one, so the inline mint could drift to a
+  // different lifetime while every existing arm stayed green and the docs kept
+  // claiming 24 hours.
+  //
+  // Asserted as a COMPARISON between the two source expressions rather than as a
+  // second literal: two pinned literals can both be updated to agree on a new wrong
+  // value, while "these two expressions are the same text" cannot be satisfied by
+  // changing only one. The inline site is disambiguated by its `ttlSeconds` name —
+  // the other `24 * 60 * 60` in this file is `guiControlKeyTtlMs`, in milliseconds.
+  //
+  // It could instead be deduplicated in source, but not cheaply: the lk-token route
+  // already imports from `agent-sessions.ts`, so importing the constant back would
+  // be circular, and relocating it to `lib/livekit-token.ts` would break two
+  // content-parity pins that hold it in its current file with its JSDoc. Guarding
+  // the copy is the proportionate move; the dedup is recorded as an option.
+  it('CRITICAL the inline LiveKit mint in routes/agent-sessions uses the SAME TTL expression as LIVEKIT_TOKEN_TTL_SECONDS. It is a third copy of a value the docs publish as 24 hours, and nothing else in this file reaches it.', () => {
+    const exported = /export const LIVEKIT_TOKEN_TTL_SECONDS = ([^;]+);/.exec(lkRouteSrc);
+    expect(exported?.[1], 'the exported TTL expression is no longer readable').toBeDefined();
+
+    // Disambiguated by the identity the token is minted FOR. `agent-sessions.ts`
+    // mints twice: the harness/publisher token (`harness-<mac>`, canPublish:true,
+    // deliberately 6h) and the customer viewer token (`customer-<account>`,
+    // canPublish:false, 24h). A bare `const ttlSeconds` regex matches the publisher
+    // first and compares the wrong lifetime — which is exactly what the first draft
+    // of this arm did, and it is how the second mint was found at all.
+    const inline = /const ttlSeconds = ([^;]+);[\s\S]{0,400}?identity: `customer-/.exec(
+      agentRouteSrc,
+    );
+    expect(
+      inline?.[1],
+      'the customer-identity LiveKit mint no longer declares `const ttlSeconds` — if it was renamed, re-point this arm rather than deleting it',
+    ).toBeDefined();
+
+    expect(
+      inline?.[1]?.trim(),
+      'the inline mint and the exported constant have drifted apart',
+    ).toBe(exported?.[1]?.trim());
+  });
+
   it('routes/agent-sessions defaults guiControlKeyTtlMs = 24 * 60 * 60 * 1000 (Q2=C 24h verdict)', () => {
     expect(agentRouteSrc).toMatch(/guiControlKeyTtlMs = 24 \* 60 \* 60 \* 1000,/);
     expect(agentRouteSrc).toMatch(/gui_control_key\. Q2=C verdict locked 24h/);

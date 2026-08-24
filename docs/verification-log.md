@@ -9946,3 +9946,54 @@ Closing it means an opt-in fixture flag wiring a type-compatible nodes repo plus
 then an arm asserting an agent-session response carries a `livekit` block with a real token. That
 touches a shared helper used by hundreds of files and needs its own run to land safely, so it is
 written down rather than half-started at the end of a batch.
+
+### V-1429 — correcting V-1428, and the third TTL copy that correction uncovered
+
+**First, the correction.** V-1428 said the LiveKit token composition is untested and that
+`maybeMintLivekit` never proceeding past its first line leaves node resolution, secret decryption and
+minting unreachable. The first half is right; **the second overstated it.** Measured:
+`resolveSessionPublisherNode` executes **13** times and `mintLivekitToken` **61**, driven by
+`lk3-agent-sessions-livekit-token.test.ts` through the dedicated `/livekit-token` route — which covers
+the happy path, node-binding correctness against a multi-box region, the NULL-node fallback, and the
+bound-node-without-creds fallback. The machinery is well tested. What is untested is only the **inline
+convenience mint** on the session create/get responses, whose grants are byte-identical to the covered
+route's. Recorded as a residual, not a hole.
+
+**What chasing it found instead.** The inline mint writes its own `const ttlSeconds = 24 * 60 * 60;`
+rather than reading `LIVEKIT_TOKEN_TTL_SECONDS`. So the 24-hour lifetime the docs publish exists in
+three places, and `livekit-24h-ttl-cross-source-invariant` — the file whose entire purpose is keeping
+them in sync, and which already loads `agent-sessions.ts` — guarded two of them. The third could drift
+to any lifetime with every arm green and the docs still claiming 24 hours.
+
+Guarded now as a **comparison** between the two source expressions rather than a second literal: two
+pinned literals can both be updated to agree on a new wrong value; "these two expressions are the same
+text" cannot be satisfied by changing one.
+
+**The arm failed on its first run, and that failure is the better finding.** `const ttlSeconds =
+([^;]+)` matched line 1013, not 1793, and reported `6 * 60 * 60`. There are **two** inline LiveKit
+mints in this file:
+
+| line | identity             | grants              | TTL    |
+| ---- | -------------------- | ------------------- | ------ |
+| 1013 | `harness-<mac>`      | `canPublish: true`  | **6h** |
+| 1793 | `customer-<account>` | `canPublish: false` | 24h    |
+
+The 6-hour one is the harness/publisher token — a different token class for a different holder, and its
+own lifetime by design, not drift. But nothing in the enumeration I did before writing the arm found
+it: I had grepped `24 * 60 * 60` and seen two hits, and the second mint uses a different number. It
+surfaced only because the arm ran and disagreed.
+
+So the arm is disambiguated by the identity the token is minted FOR, and a control mutation proves the
+disambiguation holds:
+
+| mutation                                   | reds                                                      |
+| ------------------------------------------ | --------------------------------------------------------- |
+| the inline **customer** mint drifts to 12h | the new arm                                               |
+| the exported constant drifts to 12h        | 2 — the new arm and the pre-existing constant arm         |
+| the **publisher** 6h mint changes to 8h    | **nothing** — a legitimately separate lifetime stays free |
+
+Recorded as an option not taken: the duplication could be removed in source instead of guarded, but
+`agent-sessions-livekit-token.ts` already imports from `agent-sessions.ts`, so importing the constant
+back would be circular, and relocating it to `lib/livekit-token.ts` would break two content-parity pins
+that hold it in its current file with its JSDoc. Guarding the copy is proportionate; the dedup is a
+call for whoever owns that refactor.
