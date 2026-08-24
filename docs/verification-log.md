@@ -10739,3 +10739,42 @@ the repo that ties the stored artifact to the sentence shown to customers.
 Three mutations, one failing arm each, every restore byte-identical.
 
 No new test file; 10 `it` declarations to 11. No ratchet movement.
+
+## V-1449 — the AES consolidation stopped at the numbers, and my census of it scanned half the calls
+
+`aes-gcm-parameters-are-never-redeclared` is a good guard: ten encryption modules each used to declare
+`AES_256_KEY_BYTES`/`GCM_IV_BYTES`/`GCM_TAG_BYTES` locally with their own passing content-parity pin,
+nothing made the ten agree, and the fix was one imported home module plus a derived arm keeping the
+copies from returning. Its own argument is that these "are not tunables — they are the shape of the
+algorithm."
+
+The algorithm's **name** is the same kind of value and did not get the same treatment. `'aes-256-gcm'`
+is still a bare string literal at all 21 `createCipheriv`/`createDecipheriv` call sites across ten
+modules, with no home and nothing requiring them to agree.
+
+The parameters cannot detect the substitution that matters, because the obvious replacement has an
+identical shape: **`chacha20-poly1305` also takes a 32-byte key, a 12-byte IV and a 16-byte tag, and
+also supports `setAAD`.** A module moved to it imports all three constants correctly, satisfies every
+existing arm, round-trips its own tests perfectly, writes envelopes the other nine cannot read — and
+falsifies "AES-256-GCM", which appears eleven times across marketing-site and docs, for that one
+surface. A derived arm now asserts every constructed cipher is the literal `'aes-256-gcm'`, and treats
+a variable there as a finding too, because that moves the choice somewhere the arm cannot read it.
+
+**The arm's first draft was blind to every encrypt site, and the mutation is the only reason I know.**
+`create(?:De)?cipheriv` reads as "both spellings". It matches `createDecipheriv` and **never**
+`createCipheriv`, because that one has a capital C. So the census scanned decrypt sites only — 11 of
+21 — and swapping a cipher at an encrypt site left the arm green while it reported a clean census.
+
+Finding that took longer than it should have, and every wrong turn was an instrument fault rather than
+a code fault: a `grep -n "cipheriv"` that also missed `createCipheriv` for the same case reason and
+made the file look like it had no encrypt call at all; one mutation that silently failed to apply
+because shell quoting mangled it, checked only after the result looked wrong; and a scan I twice
+"verified" against the clean file instead of the mutated one. The rule that eventually worked was to
+instrument the arm itself, in place, with the mutation live — every proxy for that was a different
+program answering a different question. The corrected census is 21, and the earlier "11 call sites"
+reported during this batch was decipher-only.
+
+Three mutations, one failing arm each: a chacha swap at an encrypt site, the same at a decrypt site,
+and hoisting the cipher name to a variable. Census floor raised to 18.
+
+No new test file; 4 `it` declarations to 5. No ratchet movement.

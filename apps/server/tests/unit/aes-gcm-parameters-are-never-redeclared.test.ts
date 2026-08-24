@@ -97,4 +97,50 @@ describe('AES-GCM parameters are never redeclared', () => {
     expect(GCM_IV_BYTES, 'GCM is specified for a 96-bit IV').toBe(12);
     expect(GCM_TAG_BYTES, 'a full-strength GCM tag is 128 bits').toBe(16);
   });
+
+  // V-1449 — the consolidation above stopped at the numbers. By this file's own
+  // argument these values "are not tunables, they are the shape of the algorithm",
+  // and the algorithm's NAME is the same kind of value — yet it is still a bare
+  // string literal at every call site, 21 of them across ten modules, with no home
+  // and nothing requiring them to agree.
+  //
+  // The parameters alone cannot detect the substitution that matters, because the
+  // obvious replacement has the identical shape: `chacha20-poly1305` also takes a
+  // 32-byte key, a 12-byte IV and a 16-byte tag, and also supports `setAAD`. A
+  // module moved to it would import all three constants correctly, satisfy every
+  // arm above, round-trip its own tests perfectly, and write envelopes the other
+  // nine cannot read — while `AES-256-GCM`, which appears eleven times across
+  // marketing-site and docs, quietly became untrue for that one surface.
+  //
+  // Derived rather than a roster of the ten known modules, for the usual reason: a
+  // NEW encryption module is exactly the case a list cannot report.
+  it('CRITICAL every cipher constructed in this repo is aes-256-gcm. The parameter constants cannot see an algorithm swap — chacha20-poly1305 has the same key, IV and tag lengths and the same AEAD interface, so it satisfies all three and still produces envelopes no other module can decrypt.', () => {
+    const calls: Array<{ file: string; algorithm: string }> = [];
+    for (const { file, body } of SOURCES) {
+      const code = body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(?<!:)\/\/.*$/gm, '');
+      // `[Cc]` is load-bearing. `create(?:De)?cipheriv` reads as "both spellings"
+      // and matches only `createDecipheriv` — `createCipheriv` has a capital C
+      // there. The first draft of this arm therefore scanned DECRYPT sites only,
+      // 11 of the 21 calls, and swapping the cipher at an encrypt site left it
+      // green. It reported a clean census the entire time; only mutating a known
+      // call site and getting a pass exposed it.
+      for (const m of code.matchAll(/create(?:De)?[Cc]ipheriv\(\s*([^,]+),/g)) {
+        calls.push({ file, algorithm: (m[1] ?? '').trim() });
+      }
+    }
+
+    expect(
+      calls.length,
+      'no createCipheriv/createDecipheriv calls found — the scan stopped matching and this arm would pass over an empty set',
+    ).toBeGreaterThan(18);
+
+    const wrong = calls
+      .filter((c) => c.algorithm !== "'aes-256-gcm'")
+      .map((c) => `${c.file}: ${c.algorithm}`)
+      .sort();
+    expect(
+      wrong,
+      'cipher(s) constructed with something other than the literal aes-256-gcm — a variable here is as much a finding as a different algorithm, because it moves the choice somewhere this arm cannot read it:',
+    ).toEqual([]);
+  });
 });
