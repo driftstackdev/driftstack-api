@@ -64,8 +64,16 @@ function expectStrictLoginUnion(schema: JsonObject): void {
   expect(
     array(object(submitted?.properties.submitted, 'submitted=true').enum, 'submitted enum'),
   ).toEqual([true]);
+  // V-1504 — the published description is quoted, not allowed for. `logged_in`
+  // is the field most likely to be read as a guarantee: false on a SUBMITTED
+  // login is a real outcome (captcha, 2FA, login-required page), and a caller
+  // who treats it as an error retries a login that already went through. A
+  // deep-equal against `{ type: 'boolean' }` froze the state where the document
+  // said none of that.
   expect(object(submitted?.properties.logged_in, 'submitted logged_in')).toEqual({
     type: 'boolean',
+    description:
+      'Post-submit assessment, not a guarantee. False on a submitted login is a real outcome — the page may have reached a captcha, a 2FA step, or a login-required page — so handle it rather than treating it as an error.',
   });
   expect(submitted?.properties.post_login_url).toEqual({ type: 'string' });
 

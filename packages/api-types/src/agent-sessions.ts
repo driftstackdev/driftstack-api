@@ -80,12 +80,18 @@ export const AgentSessionSchema = z.object({
       detail: z
         .string()
         .max(16 * 1024)
-        .nullable(),
-      customer_actionable: z.boolean(),
-      retryable: z.boolean(),
+        .nullable()
+        .describe('Null when the server has nothing to add beyond `summary`.'),
+      customer_actionable: z
+        .boolean()
+        .describe('Whether a human can do anything about this failure.'),
+      retryable: z.boolean().describe('Whether repeating the same call is worth trying.'),
     })
     .nullable()
-    .optional(),
+    .optional()
+    .describe(
+      'The most recent harness launch or runtime failure recorded for this session. Null when the session has not reported one.',
+    ),
 });
 
 export type AgentSession = z.infer<typeof AgentSessionSchema>;

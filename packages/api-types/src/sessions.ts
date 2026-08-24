@@ -485,7 +485,9 @@ const SearchCompletedResponseSchema = z
 const SearchTruncatedResponseSchema = z
   .object({
     /** Safe refusal: an incomplete query is never submitted. */
-    submitted: z.literal(false),
+    submitted: z
+      .literal(false)
+      .describe('Always false on this branch: a truncated query is never submitted.'),
     query_truncated: z.literal(true),
     duration_ms: SearchDurationMsSchema,
   })
@@ -536,7 +538,11 @@ const SessionLoginSubmittedResponseSchema = z
     credentials_truncated: z.literal(false),
     /** Post-submit assessment. Callers must still handle a submitted login that
      *  honestly reaches a captcha, 2FA step, or login-required page. */
-    logged_in: z.boolean(),
+    logged_in: z
+      .boolean()
+      .describe(
+        'Post-submit assessment, not a guarantee. False on a submitted login is a real outcome — the page may have reached a captcha, a 2FA step, or a login-required page — so handle it rather than treating it as an error.',
+      ),
     /** The session URL after submit settled, when the browser supplied one.
      *  Not redacted or otherwise rewritten: an authorized `GET /state` already
      *  returns the same URL. Keep it out of logs like any other session URL. */
@@ -550,7 +556,11 @@ const SessionLoginSubmittedResponseSchema = z
 
 const SessionLoginTruncatedResponseSchema = z
   .object({
-    submitted: z.literal(false),
+    submitted: z
+      .literal(false)
+      .describe(
+        'Always false on this branch. Truncated credentials are refused before submission, so nothing was sent to the page.',
+      ),
     credentials_truncated: z.literal(true),
     logged_in: z.literal(false),
     /** Time spent before the safe zero-submit truncation terminal, subject to

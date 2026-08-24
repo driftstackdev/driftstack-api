@@ -18,6 +18,7 @@ import { AgentSessionSchema, AgentIntentSchema, IntentResultSchema } from '@drif
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const read = (p: string): string => readFileSync(p, 'utf8');
+const SPEC = resolve(REPO_ROOT, 'packages/sdk-python/openapi.json');
 
 describe('agent-session response schema parity', () => {
   it('AgentSessionSchema mirrors the route PublicAgentSession interface field-for-field — the response shape is shared so a field added/removed on either side breaks the build (the OpenAPI spec, SDK codegen, and the route serialization stay aligned)', () => {
@@ -101,6 +102,35 @@ describe('agent-session response schema parity', () => {
         .success,
     ).toBe(false);
     expect(AgentSessionSchema.shape.error_event.safeParse(undefined).success).toBe(true);
+  });
+
+  it('V-1504 the published error_event explains its two booleans and its nullable detail. Every field here is a failure report a customer reads to decide what to do next, and `customer_actionable` / `retryable` are unreadable as bare booleans — the Go SDK spelled both out in a doc comment while the document, the TypeScript type and the customer docs carried nothing. This asserts the SPEC rather than the source: prose that never reaches the published artifact is prose no caller sees.', () => {
+    const spec = JSON.parse(read(SPEC)) as {
+      components: {
+        schemas: Record<
+          string,
+          {
+            properties: Record<
+              string,
+              { description?: string; properties?: Record<string, { description?: string }> }
+            >;
+          }
+        >;
+      };
+    };
+    const event = spec.components.schemas.AgentSession?.properties.error_event;
+    expect(event?.description, 'error_event itself').toBe(
+      'The most recent harness launch or runtime failure recorded for this session. Null when the session has not reported one.',
+    );
+    expect(event?.properties?.detail?.description, 'detail').toBe(
+      'Null when the server has nothing to add beyond `summary`.',
+    );
+    expect(event?.properties?.customer_actionable?.description, 'customer_actionable').toBe(
+      'Whether a human can do anything about this failure.',
+    );
+    expect(event?.properties?.retryable?.description, 'retryable').toBe(
+      'Whether repeating the same call is worth trying.',
+    );
   });
 
   it('OpenAPI references AgentSessionSchema on the 3 read endpoints — bare on POST 201 + GET by-id, array-wrapped on GET list (was z.object({}))', () => {

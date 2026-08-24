@@ -553,13 +553,16 @@
               },
               "detail": {
                 "type": ["string", "null"],
-                "maxLength": 16384
+                "maxLength": 16384,
+                "description": "Null when the server has nothing to add beyond `summary`."
               },
               "customer_actionable": {
-                "type": "boolean"
+                "type": "boolean",
+                "description": "Whether a human can do anything about this failure."
               },
               "retryable": {
-                "type": "boolean"
+                "type": "boolean",
+                "description": "Whether repeating the same call is worth trying."
               }
             },
             "required": [
@@ -570,7 +573,8 @@
               "detail",
               "customer_actionable",
               "retryable"
-            ]
+            ],
+            "description": "The most recent harness launch or runtime failure recorded for this session. Null when the session has not reported one."
           }
         },
         "required": [
@@ -2025,7 +2029,8 @@
             "properties": {
               "submitted": {
                 "type": "boolean",
-                "enum": [false]
+                "enum": [false],
+                "description": "Always false on this branch: a truncated query is never submitted."
               },
               "query_truncated": {
                 "type": "boolean",
@@ -2097,7 +2102,8 @@
                 "enum": [false]
               },
               "logged_in": {
-                "type": "boolean"
+                "type": "boolean",
+                "description": "Post-submit assessment, not a guarantee. False on a submitted login is a real outcome — the page may have reached a captcha, a 2FA step, or a login-required page — so handle it rather than treating it as an error."
               },
               "post_login_url": {
                 "type": "string"
@@ -2116,7 +2122,8 @@
             "properties": {
               "submitted": {
                 "type": "boolean",
-                "enum": [false]
+                "enum": [false],
+                "description": "Always false on this branch. Truncated credentials are refused before submission, so nothing was sent to the page."
               },
               "credentials_truncated": {
                 "type": "boolean",
@@ -3792,13 +3799,16 @@
                       },
                       "detail": {
                         "type": ["string", "null"],
-                        "maxLength": 16384
+                        "maxLength": 16384,
+                        "description": "Null when the server has nothing to add beyond `summary`."
                       },
                       "customer_actionable": {
-                        "type": "boolean"
+                        "type": "boolean",
+                        "description": "Whether a human can do anything about this failure."
                       },
                       "retryable": {
-                        "type": "boolean"
+                        "type": "boolean",
+                        "description": "Whether repeating the same call is worth trying."
                       }
                     },
                     "required": [
@@ -3809,7 +3819,8 @@
                       "detail",
                       "customer_actionable",
                       "retryable"
-                    ]
+                    ],
+                    "description": "The most recent harness launch or runtime failure recorded for this session. Null when the session has not reported one."
                   }
                 },
                 "required": [
@@ -4536,13 +4547,16 @@
                       },
                       "detail": {
                         "type": ["string", "null"],
-                        "maxLength": 16384
+                        "maxLength": 16384,
+                        "description": "Null when the server has nothing to add beyond `summary`."
                       },
                       "customer_actionable": {
-                        "type": "boolean"
+                        "type": "boolean",
+                        "description": "Whether a human can do anything about this failure."
                       },
                       "retryable": {
-                        "type": "boolean"
+                        "type": "boolean",
+                        "description": "Whether repeating the same call is worth trying."
                       }
                     },
                     "required": [
@@ -4553,7 +4567,8 @@
                       "detail",
                       "customer_actionable",
                       "retryable"
-                    ]
+                    ],
+                    "description": "The most recent harness launch or runtime failure recorded for this session. Null when the session has not reported one."
                   }
                 },
                 "required": [
@@ -4756,13 +4771,16 @@
                       },
                       "detail": {
                         "type": ["string", "null"],
-                        "maxLength": 16384
+                        "maxLength": 16384,
+                        "description": "Null when the server has nothing to add beyond `summary`."
                       },
                       "customer_actionable": {
-                        "type": "boolean"
+                        "type": "boolean",
+                        "description": "Whether a human can do anything about this failure."
                       },
                       "retryable": {
-                        "type": "boolean"
+                        "type": "boolean",
+                        "description": "Whether repeating the same call is worth trying."
                       }
                     },
                     "required": [
@@ -4773,7 +4791,8 @@
                       "detail",
                       "customer_actionable",
                       "retryable"
-                    ]
+                    ],
+                    "description": "The most recent harness launch or runtime failure recorded for this session. Null when the session has not reported one."
                   }
                 },
                 "required": [
@@ -4976,13 +4995,16 @@
                       },
                       "detail": {
                         "type": ["string", "null"],
-                        "maxLength": 16384
+                        "maxLength": 16384,
+                        "description": "Null when the server has nothing to add beyond `summary`."
                       },
                       "customer_actionable": {
-                        "type": "boolean"
+                        "type": "boolean",
+                        "description": "Whether a human can do anything about this failure."
                       },
                       "retryable": {
-                        "type": "boolean"
+                        "type": "boolean",
+                        "description": "Whether repeating the same call is worth trying."
                       }
                     },
                     "required": [
@@ -4993,7 +5015,8 @@
                       "detail",
                       "customer_actionable",
                       "retryable"
-                    ]
+                    ],
+                    "description": "The most recent harness launch or runtime failure recorded for this session. Null when the session has not reported one."
                   }
                 },
                 "required": [
@@ -8641,7 +8664,8 @@
                       "properties": {
                         "submitted": {
                           "type": "boolean",
-                          "enum": [false]
+                          "enum": [false],
+                          "description": "Always false on this branch: a truncated query is never submitted."
                         },
                         "query_truncated": {
                           "type": "boolean",
@@ -8947,7 +8971,8 @@
                           "enum": [false]
                         },
                         "logged_in": {
-                          "type": "boolean"
+                          "type": "boolean",
+                          "description": "Post-submit assessment, not a guarantee. False on a submitted login is a real outcome — the page may have reached a captcha, a 2FA step, or a login-required page — so handle it rather than treating it as an error."
                         },
                         "post_login_url": {
                           "type": "string"
@@ -8971,7 +8996,8 @@
                       "properties": {
                         "submitted": {
                           "type": "boolean",
-                          "enum": [false]
+                          "enum": [false],
+                          "description": "Always false on this branch. Truncated credentials are refused before submission, so nothing was sent to the page."
                         },
                         "credentials_truncated": {
                           "type": "boolean",
@@ -34002,13 +34028,16 @@
                         },
                         "detail": {
                           "type": ["string", "null"],
-                          "maxLength": 16384
+                          "maxLength": 16384,
+                          "description": "Null when the server has nothing to add beyond `summary`."
                         },
                         "customer_actionable": {
-                          "type": "boolean"
+                          "type": "boolean",
+                          "description": "Whether a human can do anything about this failure."
                         },
                         "retryable": {
-                          "type": "boolean"
+                          "type": "boolean",
+                          "description": "Whether repeating the same call is worth trying."
                         }
                       },
                       "required": [
@@ -34019,7 +34048,8 @@
                         "detail",
                         "customer_actionable",
                         "retryable"
-                      ]
+                      ],
+                      "description": "The most recent harness launch or runtime failure recorded for this session. Null when the session has not reported one."
                     }
                   },
                   "required": [
@@ -34388,13 +34418,16 @@
                               },
                               "detail": {
                                 "type": ["string", "null"],
-                                "maxLength": 16384
+                                "maxLength": 16384,
+                                "description": "Null when the server has nothing to add beyond `summary`."
                               },
                               "customer_actionable": {
-                                "type": "boolean"
+                                "type": "boolean",
+                                "description": "Whether a human can do anything about this failure."
                               },
                               "retryable": {
-                                "type": "boolean"
+                                "type": "boolean",
+                                "description": "Whether repeating the same call is worth trying."
                               }
                             },
                             "required": [
@@ -34405,7 +34438,8 @@
                               "detail",
                               "customer_actionable",
                               "retryable"
-                            ]
+                            ],
+                            "description": "The most recent harness launch or runtime failure recorded for this session. Null when the session has not reported one."
                           }
                         },
                         "required": [
@@ -34777,13 +34811,16 @@
                         },
                         "detail": {
                           "type": ["string", "null"],
-                          "maxLength": 16384
+                          "maxLength": 16384,
+                          "description": "Null when the server has nothing to add beyond `summary`."
                         },
                         "customer_actionable": {
-                          "type": "boolean"
+                          "type": "boolean",
+                          "description": "Whether a human can do anything about this failure."
                         },
                         "retryable": {
-                          "type": "boolean"
+                          "type": "boolean",
+                          "description": "Whether repeating the same call is worth trying."
                         }
                       },
                       "required": [
@@ -34794,7 +34831,8 @@
                         "detail",
                         "customer_actionable",
                         "retryable"
-                      ]
+                      ],
+                      "description": "The most recent harness launch or runtime failure recorded for this session. Null when the session has not reported one."
                     }
                   },
                   "required": [

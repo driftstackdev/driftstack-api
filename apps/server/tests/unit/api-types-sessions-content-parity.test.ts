@@ -252,7 +252,7 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
       /const SearchCompletedResponseSchema = z[\s\S]*?submitted: z\s*\n?\s*\.boolean\(\)\s*\n?\s*\.describe\([\s\S]*?query_truncated: z\.literal\(false\),[\s\S]*?results_visible: z\s*\n?\s*\.boolean\(\)\s*\n?\s*\.optional\(\)\s*\n?\s*\.describe\([\s\S]*?duration_ms: SearchDurationMsSchema,[\s\S]*?\.strict\(\);/,
     );
     expect(body).toMatch(
-      /const SearchTruncatedResponseSchema = z[\s\S]*?submitted: z\.literal\(false\),[\s\S]*?query_truncated: z\.literal\(true\),[\s\S]*?duration_ms: SearchDurationMsSchema,[\s\S]*?\.strict\(\);/,
+      /const SearchTruncatedResponseSchema = z[\s\S]*?submitted: z\s*\n?\s*\.literal\(false\)\s*\n?\s*\.describe\([\s\S]*?query_truncated: z\.literal\(true\),[\s\S]*?duration_ms: SearchDurationMsSchema,[\s\S]*?\.strict\(\);/,
     );
     expect(body).toMatch(
       /export const SearchResponseSchema = z\.discriminatedUnion\('query_truncated', \[[\s\S]*?SearchCompletedResponseSchema,[\s\S]*?SearchTruncatedResponseSchema,[\s\S]*?\]\);/,
@@ -267,7 +267,7 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
       /const SessionLoginDurationMsSchema = z\.number\(\)\.int\(\)\.min\(0\)\.max\(600_000\);/,
     );
     expect(body).toMatch(
-      /const SessionLoginSubmittedResponseSchema = z[\s\S]*?submitted: z\.literal\(true\),[\s\S]*?credentials_truncated: z\.literal\(false\),[\s\S]*?logged_in: z\.boolean\(\),[\s\S]*?post_login_url: z\.string\(\)\.optional\(\),[\s\S]*?duration_ms: SessionLoginDurationMsSchema,[\s\S]*?\.strict\(\);/,
+      /const SessionLoginSubmittedResponseSchema = z[\s\S]*?submitted: z\.literal\(true\),[\s\S]*?credentials_truncated: z\.literal\(false\),[\s\S]*?logged_in: z\s*\n?\s*\.boolean\(\)\s*\n?\s*\.describe\([\s\S]*?post_login_url: z\.string\(\)\.optional\(\),[\s\S]*?duration_ms: SessionLoginDurationMsSchema,[\s\S]*?\.strict\(\);/,
     );
     // post_login_url is the plain session URL. This lane invents no URL
     // mutation, and an authorized `GET /state` already returns the same
@@ -278,7 +278,7 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
     );
     expect(body).not.toMatch(/redacted URL/);
     expect(body).toMatch(
-      /const SessionLoginTruncatedResponseSchema = z[\s\S]*?submitted: z\.literal\(false\),[\s\S]*?credentials_truncated: z\.literal\(true\),[\s\S]*?logged_in: z\.literal\(false\),[\s\S]*?duration_ms: SessionLoginDurationMsSchema,[\s\S]*?\.strict\(\);/,
+      /const SessionLoginTruncatedResponseSchema = z[\s\S]*?submitted: z\s*\n?\s*\.literal\(false\)\s*\n?\s*\.describe\([\s\S]*?credentials_truncated: z\.literal\(true\),[\s\S]*?logged_in: z\.literal\(false\),[\s\S]*?duration_ms: SessionLoginDurationMsSchema,[\s\S]*?\.strict\(\);/,
     );
     expect(body).toMatch(
       /export const SessionLoginResponseSchema = z\.discriminatedUnion\('credentials_truncated', \[[\s\S]*?SessionLoginSubmittedResponseSchema,[\s\S]*?SessionLoginTruncatedResponseSchema,[\s\S]*?\]\);/,

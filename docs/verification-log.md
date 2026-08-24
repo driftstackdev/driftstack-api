@@ -13609,3 +13609,69 @@ Proving it took two attempts. Reverting the source describe left the arm green, 
 nothing the guard can see, and the frozen snapshot was equally untouched. The honest negative reverts the
 source, rebuilds api-types, re-dumps the spec, and only then runs: it reds. A guard that reads a built
 artifact has to be mutated through the build, or the mutation proves the opposite of what it looks like.
+
+## V-1504 — the remainder V-1503 named, and the sentence that was hiding in the Go SDK
+
+V-1503 closed with two counts it deliberately left: `submitted` described on 2 of 8 published
+occurrences and `retryable` on 3 of 11. Both remainders are here, and tracing the second one first was
+the right order, because it was not the same defect.
+
+### `retryable` twice, meaning two different things
+
+`AgentSession.error_event.retryable` is not the field V-1503 described. `FailureDiagnosis.retryable` is
+computed by `intentResultToCustomer` and is about replaying an INTENT; `error_event.retryable` arrives
+verbatim from a harness frame through `session-error-event-relay` and is about a launch or runtime
+failure. Same word, same type, different subject — so copying V-1503's sentence across would have been
+pattern-matching a fix onto a different thing.
+
+**The real sentence was already written, in the least publishable place in the repo.** `sdk-go/agent_sessions.go`
+carries it as a doc comment: _"CustomerActionable says whether a human can do anything about it;
+Retryable says whether the same call is worth repeating. Detail is nil when the server has nothing to add
+beyond Summary."_ Precise, customer-voiced, and reachable by exactly the population that reads Go source.
+
+Everything else had nothing. The zod schema declared three bare fields, the TypeScript SDK type declared
+three bare fields, the published document declared three bare fields, and `error_event` does not appear
+anywhere under `apps/docs` — the whole failure-report group is undocumented on the customer surface. So a
+caller receiving `{ customer_actionable: false, retryable: true }` on a failed agent session had two
+booleans and no statement of which way either points.
+
+The four descriptions are lifted from the Go comment rather than invented, which matters: I did not know
+what these fields meant before reading it, and writing a plausible sentence would have published a guess.
+
+### The `submitted` remainder, and the field beside it that was worse
+
+Three declarations left: the search-truncated branch and both login branches. Describing them surfaced
+`logged_in`, which is the most misreadable field in the pair and was not on V-1503's list:
+
+> _Post-submit assessment. Callers must still handle a submitted login that honestly reaches a captcha,
+> 2FA step, or login-required page._
+
+A caller who reads `logged_in: false` after `submitted: true` as an error retries a login that already
+went through. The comment says so; the document said `{ "type": "boolean" }`.
+
+The two truncated branches now state the security-relevant half explicitly — nothing was sent to the
+page — rather than leaving `submitted: false` to be read as a failed attempt.
+
+### Two instrument faults, both mine, both from the recorded list
+
+**A no-tests run reported as a failure and I nearly read it as one.** The negative loop passed its suite
+paths through a shell variable, and zsh does not word-split, so all three paths arrived as a single
+argument, vitest matched nothing, and every run — including the baseline — exited 1. Four "successful"
+negatives in a row were an empty test selection. The tell was the baseline failing too: a mutation that
+reds and a baseline that reds are the same reading, and only the second is impossible to ignore. Paths
+are passed literally now.
+
+Before that, the same loop mis-read its own exit code: `printf ... "$?" "$(grep …)"` expands the command
+substitution during argument expansion, so `$?` was the grep's status rather than vitest's. Both faults
+produced confident output. Neither produced a correct one.
+
+Per rule, each of the seven describes was reverted alone and reds its own pin — through
+`build api-types → dump-spec → run`, since the spec-level arms read a built artifact (V-1503's lesson,
+applied rather than relearned).
+
+### One new arm, asserting the document rather than the source
+
+The four `error_event` describes had no pin at all — no test reads that api-types file's text. The new
+arm reads the SPEC and quotes all four published strings. That is deliberately stronger than a source
+pin: V-1503 found a guard freezing three describes that never reached the document because a hand mirror
+sat in between. A source pin proves prose exists; only a spec pin proves it ships.
