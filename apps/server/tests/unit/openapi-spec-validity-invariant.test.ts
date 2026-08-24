@@ -81,6 +81,44 @@ describe('OpenAPI spec validity invariant (packages/sdk-python/openapi.json)', (
     expect(spec.openapi).toMatch(/^3\.\d+\.\d+$/);
   });
 
+  it('V-1533 CRITICAL a resource group that carries any operationId carries one on ALL of its published operations. The rollout is deliberately partial - auth, billing, crypto, account and admin have none yet, and this arm excludes them by construction rather than by a list, so a group joins the check on the day it gets its first id. What it catches is the failure that actually happened: the two /v1/sessions/{id}/proxy operations sat unnamed inside a completed sessions resource for months because the reason for holding them was recorded only in a commit message, and commit messages are not re-read when the reason expires.', () => {
+    const groupOf = (path: string): string => {
+      if (path.startsWith('/v1/admin')) return 'admin';
+      const segments = path.split('/');
+      return segments.length > 2 ? (segments[2] ?? path) : path;
+    };
+
+    const named = new Map<string, number>();
+    const unnamed = new Map<string, string[]>();
+    let operations = 0;
+    for (const [path, methods] of Object.entries(spec.paths ?? {})) {
+      for (const [method, op] of Object.entries(methods)) {
+        if (!HTTP_METHODS.has(method) || typeof op !== 'object' || op === null) continue;
+        operations += 1;
+        const group = groupOf(path);
+        const opId = (op as { operationId?: unknown }).operationId;
+        if (typeof opId === 'string' && opId.length > 0) {
+          named.set(group, (named.get(group) ?? 0) + 1);
+        } else {
+          unnamed.set(group, [...(unnamed.get(group) ?? []), `${method.toUpperCase()} ${path}`]);
+        }
+      }
+    }
+
+    // Reports an absence, so a document that parsed to nothing would pass clean.
+    expect(operations, 'operations read from the published document').toBeGreaterThan(200);
+    expect(named.size, 'resource groups that have begun the operationId rollout').toBeGreaterThan(
+      4,
+    );
+
+    const holes = [...named.keys()].flatMap((group) => unnamed.get(group) ?? []).sort();
+    expect(
+      holes,
+      'these operations sit in a resource group whose siblings all carry an operationId, so a ' +
+        'generated client names them from the path while every neighbour gets a stable name',
+    ).toEqual([]);
+  });
+
   it('every operationId is globally unique (duplicates → SDK codegen method-name collisions)', () => {
     const seen = new Map<string, string[]>();
     for (const [path, methods] of Object.entries(spec.paths ?? {})) {

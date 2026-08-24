@@ -33262,6 +33262,7 @@
     },
     "/v1/sessions/{id}/proxy": {
       "post": {
+        "operationId": "attachSessionProxy",
         "summary": "Set the customer-configurable proxy for a session (requires `write:sessions`, broad `write`, or `account_owner`)",
         "tags": ["egress"],
         "security": [
@@ -33636,6 +33637,7 @@
         }
       },
       "get": {
+        "operationId": "getSessionProxy",
         "summary": "Read a session's current proxy config (type + safeguards only — no secret material) (requires `read:sessions`, broad `read`, or `account_owner`)",
         "tags": ["egress"],
         "security": [

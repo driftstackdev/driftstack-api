@@ -15247,3 +15247,67 @@ Worth recording together because the frequency is the point. Writing the fix, my
 Each was caught by a count that did not match what I expected, never by reading the code back. The
 transferable rule: **make the tool report the size of what it changed against the size of what it
 intended, and treat any gap as a bug in the tool rather than a quirk of the input.**
+
+## V-1533 — a hold whose stated reason was already false when it was written
+
+Continuing the V-1532 vein: keys that sit beside the schema and no schema-comparison sees. The census came
+back clean on four of them — all 106 path parameters correctly required, no duplicate `operationId`, every
+operation carrying a summary or description, every response described. One number stood out: 187 of 232
+operations carry no `operationId` at all.
+
+That is not a defect. `operationId` is being rolled out per resource group, and the split is almost
+perfectly clean — whole groups are named or unnamed, with **one** exception: `sessions`, 12 named and 2
+not.
+
+The two are `POST` and `GET /v1/sessions/{id}/proxy`. A sibling guard describes that route as
+"undocumented because it does not work", so the obvious reading is that the hold is deliberate. It was —
+`a7f3dfd30` (2026-05-31) says so in its own message:
+
+> Deliberately held: the two /v1/sessions/{id}/proxy egress routes (no SDK method; ...)
+
+**The reason is false, and it was false on the day it was written.** `packages/sdk-typescript` has an
+`EgressResource` with `attachToSession()` → `POST /v1/sessions/{id}/proxy` and `getSessionProxy()` →
+`GET /v1/sessions/{id}/proxy`. It landed in `041ef7a91` on **2026-05-16** — fifteen days BEFORE the commit
+that held the operations back for want of an SDK method. So the two published operations a customer's
+generated client reaches through a typed SDK method are the only two in a completed resource that a
+generator must name from the path, while all twelve neighbours get stable names.
+
+Named `attachSessionProxy` and `getSessionProxy`, following the transform every other group uses —
+`createProfile`, `listTrashedProfiles`, `getSessionState` — rather than copying the SDK method name
+verbatim, since `attachToSession` says nothing about what is attached once it is a global identifier.
+Both are unique.
+
+**The route being unfinished does not change this**, and I checked rather than assumed, because the
+standing brief names "a route 503s pre-launch" as a claim this report has got wrong before. The POST does
+throw `FeatureUnavailableError` (503) — but only after `ValidationError`/`BadRequestError`, so "every path
+through it 503s" is not exact, and the active registrar's GET answers 404, not 503. The file's own V-823
+header records all of this. Naming an operation changes no behaviour; it changes what a generated client
+calls it.
+
+**The guard is the point.** The invariant is not "name everything" — the rollout is deliberately partial,
+with auth, billing, crypto, account and admin still to come. It is: **a resource group that carries any
+operationId carries one on all of its published operations.** That excludes the unstarted groups by
+construction rather than by a list, so a group joins the check the day it gets its first id, and no
+exemption roster can go stale. Added beside the uniqueness arm that already owns this key.
+
+Proved twice, both through source and a re-dump rather than a hand-edited document: removing
+`getSessionProxy` reds naming `GET /v1/sessions/{id}/proxy` — the exact state this batch repaired — and
+removing `exportProfile` reds naming `GET /v1/profiles/{id}/export`, confirming the arm fires for any
+rolled-out group rather than only the one I was looking at. The first attempt at the second mutation
+edited too much at once and I could not tell which assertion had fired; a red whose reason is unread is
+not a proof.
+
+### The shape worth carrying forward
+
+The reason for an exception lived in a commit message. Commit messages are written once and never re-read
+when the world changes underneath them — and here the world had already changed before the message was
+written. Two of the last four findings have this shape: a deliberate, well-argued exclusion that nothing
+re-checks. **An exception needs a home that gets re-evaluated, and a test is such a home.**
+
+**Gate note.** The full run for this batch was 30929 passed / 1 failed, and the red is not this work:
+`|gui-jsdom| tests/unit/use-admin-csv-export.test.tsx > bounds a stalled export with actionable recovery`,
+which expects `kind: 'failed'` after `advanceTimersByTimeAsync(15_000)` and observed `kind: 'downloading'`.
+It passes 3/3 in isolation, `apps/gui-client` carries no uncommitted change, and nothing this batch touched
+(the spec, a server-side spec guard, this log) is reachable from a CSV-export hook. Order-dependent fake
+timers in another project's suite. Left for its owner rather than absorbed here, and recorded rather than
+rounded to green.

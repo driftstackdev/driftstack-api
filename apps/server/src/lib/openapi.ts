@@ -4510,6 +4510,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/sessions/{id}/proxy',
+    operationId: 'attachSessionProxy',
     summary:
       'Set the customer-configurable proxy for a session (requires `write:sessions`, broad `write`, or `account_owner`)',
     tags: ['egress'],
@@ -4547,6 +4548,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/sessions/{id}/proxy',
+    operationId: 'getSessionProxy',
     summary:
       "Read a session's current proxy config (type + safeguards only — no secret material) (requires `read:sessions`, broad `read`, or `account_owner`)",
     tags: ['egress'],
