@@ -308,4 +308,105 @@ describe('a gate that does not name its blind spot reads as total', () => {
       /cargo test --all-targets/,
     );
   });
+
+  // V-1407 — the same shape one level down. `vitest.config.ts` documents what it
+  // EXCLUDES from coverage, bullet by bullet with a reason each. What it does not
+  // document is what it never included: the `include` array names `apps/server/src`
+  // and `packages/sdk-typescript/src` and nothing else, so six workspace packages
+  // with their own TypeScript source and their own tests are measured by nothing.
+  // Their tests RUN — they are inside the suite's file count and they pass — but no
+  // part of them can move the 85/83/84/75 thresholds, so a regression in any of them
+  // cannot fail the gate.
+  //
+  // Measured 2026-08-23 over the whole node-project run, quoted here rather than
+  // asserted because a pinned percentage rots the moment anyone writes a test:
+  // five of the six sit at 98.25 lines / 97.14 statements / 95.97 functions / 89.51
+  // branches and would clear the existing thresholds with room to spare. `api-types`
+  // is the outlier at 25.1% statements, and it alone drags the combined figure to
+  // 83.84 lines — under the 85 the gate asks for. So closing this is two decisions,
+  // not one, and neither is a measurement's to make.
+  //
+  // The arm below is membership only. It exists so a NEW package cannot land outside
+  // the gate silently, which is the failure mode this whole file is about: not run
+  // and not measured must never look the same from a green.
+  const PACKAGES_OUTSIDE_COVERAGE: ReadonlyArray<readonly [pkg: string, note: string]> = [
+    ['api-types', '25.1% statements; the one that would fail the lines threshold if added'],
+    ['behavioural-simulation', 'measures 98.4% statements — unmeasured, not untested'],
+    ['recapture-automation', 'measures 97.7% statements — unmeasured, not untested'],
+    ['recipe-library', 'measures 99.4% statements — unmeasured, not untested'],
+    ['webhook-delivery', 'measures 96.6% statements — unmeasured, not untested'],
+    ['webrtc-streaming', 'measures 89.4% statements — unmeasured, not untested'],
+  ];
+
+  /** Packages carrying their own TypeScript source AND their own tests. */
+  function packagesWithSourceAndTests(): string[] {
+    const base = resolve(REPO_ROOT, 'packages');
+    const out: string[] = [];
+    for (const entry of readdirSync(base, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      let src = 0;
+      let tests = 0;
+      const walk = (dir: string, inTests: boolean): void => {
+        let items;
+        try {
+          items = readdirSync(dir, { withFileTypes: true });
+        } catch {
+          return;
+        }
+        for (const it of items) {
+          if (it.name === 'node_modules' || it.name === 'dist') continue;
+          const full = resolve(dir, it.name);
+          if (it.isDirectory()) {
+            walk(full, inTests || it.name === 'tests');
+            continue;
+          }
+          if (!it.name.endsWith('.ts') && !it.name.endsWith('.tsx')) continue;
+          if (inTests || it.name.includes('.test.')) tests += 1;
+          else src += 1;
+        }
+      };
+      walk(resolve(base, entry.name), false);
+      if (src > 0 && tests > 0) out.push(entry.name);
+    }
+    return out.sort();
+  }
+
+  it('CRITICAL every workspace package that has its own source and its own tests is either INSIDE the coverage include or named here as outside it. The config documents each exclusion with a reason; nothing documented what it simply never included, and a package outside the include contributes nothing to the thresholds — so it can regress to zero and the gate still reports green. A new package fails this arm rather than quietly joining the unmeasured set.', () => {
+    const config = read('vitest.config.ts');
+    const includeBlock = /include:\s*\[([^\]]*)\]/.exec(config);
+    expect(
+      includeBlock,
+      'the coverage include array is no longer readable from the config',
+    ).not.toBeNull();
+    const included = [...(includeBlock?.[1] ?? '').matchAll(/'([^']+)'/g)].map((m) => m[1] ?? '');
+    expect(included.length, 'the include array parsed as empty').toBeGreaterThan(0);
+
+    const named = new Set(PACKAGES_OUTSIDE_COVERAGE.map(([p]) => p));
+    const unaccounted = packagesWithSourceAndTests().filter(
+      (pkg) => !included.some((g) => g.startsWith(`packages/${pkg}/`)) && !named.has(pkg),
+    );
+
+    expect(
+      unaccounted,
+      'these packages have source and tests but are neither measured by the coverage gate nor listed above as outside it — add them to the include, or list them with what they measure',
+    ).toEqual([]);
+  });
+
+  it('the outside-coverage list cannot rot: every package it names still exists, still has TypeScript source, and is still absent from the include. An entry for a package that was since added to the gate overstates the blind spot, which this file already calls its own kind of wrong.', () => {
+    const config = read('vitest.config.ts');
+    const included = [
+      ...(/include:\s*\[([^\]]*)\]/.exec(config)?.[1] ?? '').matchAll(/'([^']+)'/g),
+    ].map((m) => m[1] ?? '');
+    const live = new Set(packagesWithSourceAndTests());
+
+    for (const [pkg] of PACKAGES_OUTSIDE_COVERAGE) {
+      expect(live.has(pkg), `${pkg} no longer has both source and tests — the entry is stale`).toBe(
+        true,
+      );
+      expect(
+        included.some((g) => g.startsWith(`packages/${pkg}/`)),
+        `${pkg} IS now in the coverage include — remove it from the outside-coverage list rather than describing a blind spot that closed`,
+      ).toBe(false);
+    }
+  });
 });

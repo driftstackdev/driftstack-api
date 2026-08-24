@@ -9028,3 +9028,57 @@ cursor into an empty page, and a malformed-but-returned cursor would fail the an
 produce the same empty page. What is pinned is the exported function's own contract — that a
 `CryptoOrderCursor` it returns really has a numeric `ts` and a string `id`, which is what its type
 claims and what nothing was checking.
+
+### V-1407 — the coverage gate documents what it excludes, not what it never included
+
+Two instruments were run this pass. The first produced nothing and is recorded so nobody runs it
+again; the second found a real blind spot in the coverage gate.
+
+**Closed with no findings: "exported functions no test names".** 326 exported functions across
+`lib/` and `services/`; 12 are never named anywhere under `tests/`. All 12 **execute** — between 1 and
+1,240 times each. `loopback-host.ts` is the clearest case: neither `isLoopbackHost` nor
+`hostOfConnectionString` appears in a test, and forcing `isLoopbackHost` to return `true` reds five
+arms in `seed-target-guard.test.ts`, exactly as `A2-PRODUCTION-READINESS-ASSESSMENT` already recorded.
+`parseSessionId` is covered too, refusal arm included (1 of 6 calls). **Naming is a bad proxy for
+exercise in a repo that tests through consumers**, and this instrument has a 100% false-positive rate
+here. The first version of it was worse — it reported 326 of 326 unreferenced, which is a broken
+instrument rather than a finding, and was caught only because a symbol I had written arms for an hour
+earlier appeared in the output.
+
+**The finding.** Every coverage sweep this session ran against an artifact spanning `apps/server` and
+nothing else — 283 files, no `packages/`. That is not an accident of how I invoked it.
+`vitest.config.ts` sets
+
+    include: ['apps/server/src/**/*.ts', 'packages/sdk-typescript/src/**/*.ts'],
+
+and carries a comment enumerating what it EXCLUDES, bullet by bullet with a reason each: the Drizzle
+repos, the Astro sites, the GUI client, the generated SDKs. Nothing states what it simply never
+included. **Six workspace packages have their own TypeScript source and their own tests and are
+measured by nothing** — `api-types`, `behavioural-simulation`, `recapture-automation`,
+`recipe-library`, `webhook-delivery`, `webrtc-streaming`. Their tests run and pass inside the gate's
+own file count; no part of their source can move the 85/83/84/75 thresholds, so any of them could
+regress toward zero with the gate still green.
+
+Measured rather than asserted, over the whole node-project run:
+
+|                                | lines | statements | functions | branches |
+| ------------------------------ | ----- | ---------- | --------- | -------- |
+| the five excluding `api-types` | 98.25 | 97.14      | 95.97     | 89.51    |
+| all six                        | 83.84 | 83.64      | 88.45     | 87.11    |
+| thresholds                     | 85    | 83         | 84        | 75       |
+
+So they are **unmeasured, not untested** — five of them would clear the existing bar with room, and
+`api-types` alone (25.1% statements) is what drags the combined lines figure under it. Closing this is
+two decisions, not one.
+
+The include list was NOT changed. This file's own precedent governs: "changing what CI enforces is
+still a decision somebody makes, not one a measurement makes for them." What landed instead is the
+remedy this repo already uses for exactly this shape — a derived census in
+`a-gate-that-does-not-name-its-blind-spot-reads-as-total`, asserting that every package with source
+and tests is either inside the include or named as outside it, with what it measures. Membership only;
+the percentages live in a comment because a pinned percentage rots the moment someone writes a test.
+
+Both directions are proven. Adding `packages/webhook-delivery/src/**/*.ts` to the include reds the
+anti-rot arm (the entry now overstates the blind spot); renaming an entry so a real package falls off
+the list reds both arms. A new package cannot join the unmeasured set quietly, which is the failure
+this file exists to prevent: not measured and not run must never look the same from a green.
