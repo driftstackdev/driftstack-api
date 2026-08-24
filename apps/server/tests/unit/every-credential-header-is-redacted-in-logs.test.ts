@@ -25,13 +25,29 @@
 // the one header nobody thought to name, which is exactly the failure mode. The
 // non-secret list is short and each entry is a claim someone can check:
 //
-// WHAT THIS CANNOT SEE, stated rather than left to be discovered. The scan finds
-// headers read by LITERAL name, so a header reached through a constant is
-// invisible to it — `x-driftstack-account` is read as `EFFECTIVE_ACCOUNT_HEADER`
-// and never appears here. That one has its own guard next door pinning it to a
-// single owner; a future credential header behind a constant would have neither.
-// Matching identifiers as well as literals would mean resolving them, and a
-// scan that guesses at constants is worse than one whose limit is written down.
+// WHAT THIS CANNOT SEE — V-1515 closed the gap this paragraph used to describe,
+// and found a second one it did not.
+//
+// The declared gap: headers reached through a constant were invisible, so
+// `x-driftstack-account` (read as `EFFECTIVE_ACCOUNT_HEADER`) never reached the
+// classification. The old note argued that resolving identifiers means guessing.
+// It does not have to: an identifier is followed only to a `const NAME = 'literal'`
+// in this same tree, and one that resolves to nothing is REPORTED rather than
+// assumed harmless. That is a narrower rule than the guessing it rejected.
+//
+// The undeclared one, which mattered more: the scan matched `headers['x-name']`
+// and not `headers.name`, so `authorization` and `cookie` — the two headline
+// credentials — were never discovered. Both sit in the credential set because
+// someone put them there by hand, so nothing was ever logged in the clear. But
+// the arm below claims to classify every header the server reads, and it had
+// never once seen the two most obvious ones. A hand-written list agreeing with a
+// scan that cannot reach the same headers is not corroboration.
+//
+// Now three spellings, and the floor in the first arm is the measured total, so a
+// scan that stops reading one of them fails instead of reporting a clean set.
+//
+// What remains outside: a header name built at runtime rather than declared as a
+// constant. Nothing does that today; if something starts, it is invisible again.
 //
 // This does not assert that logging happens — it asserts that IF it happens the
 // value is scrubbed, which is the only property a static check can hold.
@@ -74,10 +90,95 @@ const NON_CREDENTIAL_HEADERS = new Set([
   'last-event-id',
   'user-agent',
   'x-request-id',
+  // V-1515 — four the scan could not see until it read the dot and constant
+  // spellings. Each is a claim someone can check, on the same terms as the rest:
+  //
+  //   accept                    content negotiation; the agent-message route
+  //                             reads it to choose the SSE representation.
+  //   origin                    the browser's own origin, echoed back through
+  //                             sseCorsHeaders. Attacker-supplied, never trusted
+  //                             as authority, and secret from nobody.
+  //   x-driftstack-account      an account id (`acc_<uuid>`) naming who a staff
+  //                             caller is acting AS. It authorizes nothing on its
+  //                             own — `effective-account-header-authz-invariant`
+  //                             is the guard that the authority comes from the
+  //                             bearer token beside it.
+  //   x-driftstack-mac-node-id  a fleet node id. The node's actual credential is
+  //                             the short-lived bearer JWT that accompanies it,
+  //                             which is `authorization` and redacted.
+  'accept',
+  'origin',
+  'x-driftstack-account',
+  'x-driftstack-mac-node-id',
 ]);
 
-/** Every request header the server source reads, comments excluded. */
+/**
+ * Every request header the server source reads, comments excluded.
+ *
+ * V-1515 — three spellings, because two of them used to be invisible.
+ *
+ *   headers['x-name']   the original scan
+ *   headers.name        NEVER declared as a gap, and it hid `authorization` and
+ *                       `cookie` — the two headline credentials. Both are in the
+ *                       credential set by hand, so nothing leaked; the guard's
+ *                       claim to classify "every header the server reads" simply
+ *                       did not reach them.
+ *   headers[CONST]      the gap the header DID declare. Resolved narrowly: an
+ *                       identifier is followed only to a `const NAME = 'literal'`
+ *                       in this same source tree. That is not the guessing the
+ *                       old note rejected — an unresolvable identifier stays
+ *                       unresolved and is reported by the arm below rather than
+ *                       assumed harmless.
+ */
+function headerNameConstants(): Map<string, string> {
+  const out = new Map<string, string>();
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir)) {
+      const full = resolve(dir, entry);
+      if (statSync(full).isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!entry.endsWith('.ts')) continue;
+      for (const m of readFileSync(full, 'utf8').matchAll(
+        /^(?:export\s+)?const ([A-Z][A-Z0-9_]*)\s*=\s*'([a-z0-9-]+)'/gm,
+      )) {
+        out.set(m[1]!, m[2]!);
+      }
+    }
+  };
+  walk(SERVER_SRC);
+  return out;
+}
+
+/** Identifiers used as `headers[IDENT]` that no constant in the tree resolves. */
+function unresolvedHeaderConstants(): string[] {
+  const known = headerNameConstants();
+  const out = new Set<string>();
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir)) {
+      const full = resolve(dir, entry);
+      if (statSync(full).isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!entry.endsWith('.ts')) continue;
+      for (const line of readFileSync(full, 'utf8').split('\n')) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*'))
+          continue;
+        for (const m of trimmed.matchAll(/headers\[\s*([A-Z][A-Z0-9_]*)\s*\]/g)) {
+          if (!known.has(m[1]!)) out.add(m[1]!);
+        }
+      }
+    }
+  };
+  walk(SERVER_SRC);
+  return [...out].sort();
+}
+
 function headersRead(): Set<string> {
+  const constants = headerNameConstants();
   const out = new Set<string>();
   const walk = (dir: string): void => {
     for (const entry of readdirSync(dir)) {
@@ -94,6 +195,15 @@ function headersRead(): Set<string> {
         }
         for (const m of trimmed.matchAll(/headers\[\s*['"]([a-z0-9-]+)['"]\s*\]/g)) {
           out.add(m[1]!);
+        }
+        // Dot form. `(?!\()` keeps Headers/Map methods (`headers.get(...)`)
+        // out — a method call is not a header name.
+        for (const m of trimmed.matchAll(/\bheaders\.([a-z][a-z0-9-]*)\b(?!\s*\()/g)) {
+          out.add(m[1]!);
+        }
+        for (const m of trimmed.matchAll(/headers\[\s*([A-Z][A-Z0-9_]*)\s*\]/g)) {
+          const resolved = constants.get(m[1]!);
+          if (resolved !== undefined) out.add(resolved);
         }
       }
     }
@@ -121,15 +231,25 @@ function redactedHeaders(): Set<string> {
 
 describe('every credential-bearing header is redacted in logs', () => {
   it('CRITICAL both sides were read. Every assertion reports an absence, and an absence against an empty redaction list is every header — a reader that matched nothing would report the whole set unredacted, or with the classification absorbing it, report everything fine.', () => {
-    // MEASURED: 7 redaction paths naming headers; 13 headers read by literal.
+    // MEASURED: 7 redaction paths naming headers; 19 headers read across the
+    // three spellings (13 by literal, plus the dot and constant forms V-1515
+    // added). The floor is the measured value so a scan that silently stops
+    // reading one of the spellings fails here rather than reporting a clean set.
     expect(
       redactedHeaders().size,
       'header names parsed from the redact paths',
     ).toBeGreaterThanOrEqual(7);
     expect(
       headersRead().size,
-      'headers read by literal name in server source',
-    ).toBeGreaterThanOrEqual(13);
+      'headers read by the server source, all three spellings',
+    ).toBeGreaterThanOrEqual(19);
+
+    // V-1515 — an identifier used as `headers[IDENT]` that no constant resolves
+    // is neither classified nor visible. Reported rather than assumed harmless.
+    expect(
+      unresolvedHeaderConstants(),
+      'header constant(s) this scan could not resolve to a literal:',
+    ).toEqual([]);
 
     // On a pair whose answer is not in doubt: the two providers' webhook
     // signature headers are both scrubbed.

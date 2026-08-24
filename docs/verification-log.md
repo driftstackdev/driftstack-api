@@ -14330,3 +14330,56 @@ decoration that would be wrong on the next field added.
 Worth stating rather than quietly fixing: the guard is doing more work than I am on this particular
 habit, and the habit is specifically writing a number into prose when the code beside it already derives
 the number.
+
+## V-1515 — the redaction guard had never seen `authorization` or `cookie`
+
+This batch used the repo's own candour as the instrument. Eighty-two guards state a limitation in their
+header, and V-1501 came from exactly such a sentence. `every-credential-header-is-redacted-in-logs`
+declares one on a security surface, so it was worth testing rather than reading.
+
+Its stated gap: the scan finds headers read by LITERAL name, so a header reached through a constant is
+invisible — `x-driftstack-account`, read as `EFFECTIVE_ACCOUNT_HEADER`, was named as the known case.
+
+**Testing it turned up a second gap the header did not declare, and that one mattered more.** The scan
+matched `headers['x-name']` and not `headers.name`. Four headers are read only in the dot form, and two
+of them are `authorization` and `cookie`.
+
+So the arm asserting that _"every header the server reads is classified"_ had never once seen the two
+most obvious credentials in the system. Nothing leaked — both sit in `CREDENTIAL_HEADERS` because someone
+put them there by hand, and both are in the pino redact paths. But the guard's central claim rested on a
+hand-written list agreeing with a scan that could not reach the same headers, which is not corroboration.
+It is the shape this repo already has a name for: a clean census is not evidence.
+
+**Six headers were invisible; four had never been classified at all.**
+
+```
+authorization             dot form      already a credential, by hand
+cookie                    dot form      already a credential, by hand
+accept                    dot form      UNCLASSIFIED
+origin                    dot form      UNCLASSIFIED
+x-driftstack-account      constant      UNCLASSIFIED  (the declared gap)
+x-driftstack-mac-node-id  constant      UNCLASSIFIED
+```
+
+The four are genuinely harmless and each is now listed with a claim someone can check: `accept` is
+content negotiation on the agent-message route; `origin` is the browser's own origin echoed through
+`sseCorsHeaders`, attacker-supplied and trusted for nothing; `x-driftstack-account` is an `acc_<uuid>`
+naming who a staff caller acts AS, with a separate guard establishing that the authority comes from the
+bearer token beside it; `x-driftstack-mac-node-id` is a fleet node id whose actual credential is the
+short-lived JWT in `authorization`.
+
+**The old note's argument was right and its conclusion was avoidable.** It said matching identifiers
+would mean resolving them, and "a scan that guesses at constants is worse than one whose limit is written
+down". True of guessing — but an identifier can be followed to a `const NAME = 'literal'` in the same
+tree without guessing at all, and an identifier that resolves to nothing can be REPORTED rather than
+assumed harmless. That report is now its own assertion, so the unresolvable case fails loudly instead of
+silently rejoining the blind spot.
+
+The first arm's floor is the measured total across all three spellings, so a scan that stops reading one
+of them fails there rather than returning a clean smaller set — the failure mode that let this sit.
+
+Two mutations, one per newly-visible spelling: a credential header planted behind a constant, and one
+planted in the dot form. Each reds naming the planted header. Source restored byte-identical.
+
+**What remains outside, stated because a reach is an assumption until it is written down:** a header name
+built at runtime rather than declared as a constant. Nothing does that today.
