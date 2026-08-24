@@ -11895,3 +11895,32 @@ catches that, and it did: it failed in V-1473 for exactly that reason.
 
 Full suite green: 3067 files, 30873 tests, exit 0. No new test file; `it` count unchanged at 2. No
 ratchet movement.
+
+## V-1475 — the quote rail kept the shape V-924 removed from the other two, and a pin asserted it
+
+`POST /v1/billing/crypto-checkout/quote` published `product` as a bare `z.string()` while `QuoteSchema`
+in `routes/billing-crypto-quote.ts` enforces `z.enum(SUPPORTED_PRODUCTS)` over the six self-serve paid
+tiers. So the spec said any string quotes and the customer learned otherwise from a 400 — the exact
+failure V-924 was written to end on the two checkout rails.
+
+Found by sweeping the class V-1473 and V-1474 both belong to: a parity pin written from current source
+freezes whatever defect the source had. Eighty pins narrowed to request-shaped schemas gave two
+candidates, and this is the first. The pin at `api-types-crypto-orders-content-parity.test.ts:148`
+quoted `product: z.string(),` literally, so the dropped enum was asserted rather than merely unpublished
+— the third pin this sweep to have frozen the defect beside it.
+
+Verified before fixing rather than trusting the shape: the quote route's local `SUPPORTED_PRODUCTS` is
+element-for-element `PURCHASABLE_TIERS` (`common.ts:139`), and the route's list is already pinned
+against the price table by `billing-crypto-quote-product-list-cross-source-invariant`. So the route side
+was sound and only the published mirror was wrong — behaviour was always right, the contract was not.
+
+Why the existing guard could not see it: `the-purchasable-product-set-is-one-set` scopes itself, in its
+own arm titles, to "both checkout endpoints" and "both rails". The set was two and the quote endpoint is
+a third with the identical shape. It is covered there now, and the arm's title no longer names a count.
+
+Two mutations, each against the artifact its sentinel actually reads: reverting the source to
+`z.string()` reds the re-quoted pin (1 failed / 15 passed); appending `free` to the published enum reds
+the new quote-rail arm (1 failed / 8 passed). Both restored byte-identical from a scratchpad snapshot.
+
+Full suite green: 3067 files, 30873 tests, exit 0. No new test file; `it` count unchanged at 9. No
+ratchet movement.

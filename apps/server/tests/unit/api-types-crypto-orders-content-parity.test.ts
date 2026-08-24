@@ -145,7 +145,11 @@ describe('W436.C packages/api-types/src/crypto-orders.ts content parity', () => 
 
   it('CryptoQuoteRequest (product + optional 3-letter uppercase price_currency) + exact pricing-only response', () => {
     expect(body).toMatch(
-      /export const CryptoQuoteRequestSchema = z\.object\(\{\s*\n?\s*product: z\.string\(\),\s*\n?\s*price_currency: z\s*\n?\s*\.string\(\)\s*\n?\s*\.length\(3\)\s*\n?\s*\.regex\(\/\^\[A-Z\]\{3\}\$\/\)\s*\n?\s*\.optional\(\),\s*\n?\s*\}\);/,
+      // V-1475 — this pin quoted the bare `product: z.string()`, the shape V-924
+      // removed from both checkout rails, so the quote rail's dropped enum was
+      // asserted rather than merely unpublished. Third pin this sweep to have
+      // frozen the defect beside it.
+      /export const CryptoQuoteRequestSchema = z\.object\(\{[\s\S]*?product: z\s*\n?\s*\.enum\(PURCHASABLE_TIERS[\s\S]*?price_currency: z\s*\n?\s*\.string\(\)\s*\n?\s*\.length\(3\)\s*\n?\s*\.regex\(\/\^\[A-Z\]\{3\}\$\/\)\s*\n?\s*\.optional\(\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /export const CryptoQuoteResponseSchema = z\.object\(\{\s*\n?\s*product: z\.string\(\),\s*\n?\s*price_cents: z\.number\(\)\.int\(\)\.positive\(\),\s*\n?\s*price_currency: z\.string\(\),\s*\n?\s*\}\);/,

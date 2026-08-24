@@ -39269,7 +39269,16 @@
                 "type": "object",
                 "properties": {
                   "product": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                      "solo_manual",
+                      "team_manual",
+                      "agency_manual",
+                      "api_starter",
+                      "api_builder",
+                      "api_scale"
+                    ],
+                    "description": "SKU to quote; one of the self-serve paid tier ids."
                   },
                   "price_currency": {
                     "type": "string",

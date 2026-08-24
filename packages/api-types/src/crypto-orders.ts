@@ -169,7 +169,26 @@ export type CancelCryptoOrderResponse = z.infer<typeof CancelCryptoOrderResponse
 // ───────────────────────────────────────────────────────────────────────────
 
 export const CryptoQuoteRequestSchema = z.object({
-  product: z.string(),
+  /**
+   * V-1475 — the THIRD endpoint with the V-924 defect, and the one that fix did
+   * not reach.
+   *
+   * V-924 changed both checkout rails from an unconstrained field to
+   * `z.enum(PURCHASABLE_TIERS)` because the published document advertised values
+   * the routes refuse. `/v1/billing/crypto-checkout/quote` has the same shape —
+   * `QuoteSchema` in `routes/billing-crypto-quote.ts` enforces
+   * `z.enum(SUPPORTED_PRODUCTS)` over the same six self-serve paid tiers — and
+   * this mirror stayed a bare `z.string()`, so the spec promised that any string
+   * quotes and the customer learned otherwise from a 400.
+   *
+   * `the-purchasable-product-set-is-one-set` scopes itself to "both checkout
+   * endpoints"; the quote rail is a third and is covered there now.
+   */
+  product: z
+    .enum(PURCHASABLE_TIERS, {
+      message: 'product must be a self-serve paid tier (free and enterprise excluded)',
+    })
+    .describe('SKU to quote; one of the self-serve paid tier ids.'),
   price_currency: z
     .string()
     .length(3)

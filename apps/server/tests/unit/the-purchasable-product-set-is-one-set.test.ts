@@ -133,10 +133,19 @@ describe('V-924 the purchasable product set is one set', () => {
     }
   });
 
-  it('CRITICAL the PUBLISHED document advertises exactly the purchasable tiers, for both rails. This is the arm that would have caught the original defect: both fields were `AccountTierSchema.refine(...)`, and a refine is a runtime predicate JSON Schema cannot express — so the generated spec emitted all eight tiers and told customers `free` and `enterprise` were valid on endpoints that answer 400 for both. Behaviour was always right; the contract was not.', () => {
+  it('CRITICAL the PUBLISHED document advertises exactly the purchasable tiers, on every rail that takes a product (checkout-session, crypto-checkout, and the crypto quote). This is the arm that would have caught the original defect: both fields were `AccountTierSchema.refine(...)`, and a refine is a runtime predicate JSON Schema cannot express — so the generated spec emitted all eight tiers and told customers `free` and `enterprise` were valid on endpoints that answer 400 for both. Behaviour was always right; the contract was not.', () => {
     for (const [path, field] of [
       ['/v1/billing/checkout-session', 'tier'],
       ['/v1/billing/crypto-checkout', 'product'],
+      // V-1475 — the QUOTE rail. This arm's own title said "both rails" and the
+      // set was two, so a third endpoint with the identical shape sat outside
+      // it: `CryptoQuoteRequestSchema.product` stayed the bare `z.string()`
+      // V-924 removed from the two above, while
+      // `QuoteSchema` in routes/billing-crypto-quote.ts enforces
+      // `z.enum(SUPPORTED_PRODUCTS)` over the same six tiers. A customer reading
+      // the spec could quote any string and learn otherwise from a 400 — the
+      // exact failure V-924 was written to end.
+      ['/v1/billing/crypto-checkout/quote', 'product'],
     ] as const) {
       const advertised = publishedEnum(path, field);
       expect(advertised, `${path} must publish an enum for ${field}`).toBeDefined();
