@@ -121,6 +121,50 @@ describe('webhook-delivery composite keyset cursor (#125)', () => {
     expect(decodeDeliveryCursor(undefined)).toBeNull();
   });
 
+  // V-1397 — the sibling gap: a date JS does NOT accept, which the arm below cannot reach.
+  //
+  // That arm's four shapes are all refused one line earlier, by the shape regex and its
+  // 1970 floor: year zero fails the floor, and the extended +/-YYYYYY forms do not match a
+  // four-digit year at all. So the `Number.isNaN(createdAt.getTime())` guard beneath them
+  // had never executed.
+  //
+  // It is reachable, because the regex pins the SHAPE and not the calendar. `2026-13-01`,
+  // `2026-01-32`, `25:00` — each is `\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z` and each
+  // makes `new Date` return Invalid Date. Without the guard that Invalid Date is handed
+  // straight to the keyset comparison, which is the 500 this module exists to prevent.
+  it('CRITICAL a cursor whose components are out of CALENDAR range decodes to a first page. The shape regex accepts them — it pins the digit layout, not that the month is 1..12 — so this is the only check standing between a hand-crafted cursor and an Invalid Date reaching the query.', () => {
+    const uuid = '11111111-2222-3333-4444-555555555555';
+    const calendarInvalid = [
+      '2026-13-01T00:00:00.000Z', // month 13
+      '2026-00-10T00:00:00.000Z', // month 0
+      '2026-01-32T00:00:00.000Z', // day 32
+      '2026-01-15T25:00:00.000Z', // hour 25
+      '2026-01-15T00:61:00.000Z', // minute 61
+    ];
+    for (const iso of calendarInvalid) {
+      expect(
+        decodeDeliveryCursor(`${iso}_${uuid}`),
+        `${iso} decoded to a usable cursor; an Invalid Date in the keyset comparison fails the query`,
+      ).toBeNull();
+      // The legacy created_at-only form takes the same path.
+      expect(
+        decodeDeliveryCursor(iso),
+        `${iso} (legacy form) decoded to a usable cursor`,
+      ).toBeNull();
+    }
+
+    // Control: the same shape with in-range components still decodes, so the arm is not
+    // satisfied by a decoder that refuses everything.
+    expect(decodeDeliveryCursor(`2026-01-15T00:00:00.000Z_${uuid}`)?.id).toBe(uuid);
+  });
+
+  // V-1397 — and where the guard's boundary actually falls, which is not where it looks.
+  it('CRITICAL an impossible DAY-OF-MONTH is not refused: JS rolls 2026-02-30 forward to 2026-03-02 rather than returning Invalid Date, so it decodes. Pinned because it reads like a gap and is not one — a cursor is a position, not an identity, and paging resumes two days later at worst. Anyone tightening this should know they are changing behaviour, not fixing a bug.', () => {
+    const decoded = decodeDeliveryCursor('2026-02-30T00:00:00.000Z');
+    expect(decoded, 'JS accepts the rollover, so the NaN guard never sees it').not.toBeNull();
+    expect(decoded?.createdAt.toISOString()).toBe('2026-03-02T00:00:00.000Z');
+  });
+
   // A date JS accepts is not a date Postgres will store, and the gap was
   // reachable from the query string. `new Date(...)` was the whole check, so a
   // hand-crafted cursor decoded cleanly, reached the keyset comparison, and

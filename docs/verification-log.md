@@ -8638,3 +8638,37 @@ dropping the padding check reds nothing, as predicted before it was run.
 shape check is defence behind them, the empty-secret guard at `:523` returns the same `expired` the
 decrypt catch below it already produces, and the two expiry arms sit in the in-memory store rather
 than the Redis one.
+
+## V-1397 — the cursor guard whose sibling arm cannot reach it
+
+`decodeDeliveryCursor` turns a tampered pagination cursor into a graceful first page rather than a 500. It has two refusals a hand-crafted cursor can hit, and only one was reachable from the existing
+arms.
+
+The file already carries a careful arm titled _"a date JS accepts but Postgres cannot store"_ —
+year zero, the extended `±YYYYYY` forms, year 0001. Every one of those is refused **one line
+earlier**, by the shape regex and its 1970 floor: year zero fails the floor, and the extended forms
+do not match a four-digit year at all. So the `Number.isNaN(createdAt.getTime())` guard beneath them
+had never executed.
+
+It is reachable, because the regex pins the **shape** and not the **calendar**. Measured:
+
+| cursor                                 | matches the regex | `new Date` |
+| -------------------------------------- | ----------------- | ---------- |
+| `2026-13-01T00:00:00.000Z` (month 13)  | yes               | Invalid    |
+| `2026-00-10T00:00:00.000Z` (month 0)   | yes               | Invalid    |
+| `2026-01-32T00:00:00.000Z` (day 32)    | yes               | Invalid    |
+| `2026-01-15T25:00:00.000Z` (hour 25)   | yes               | Invalid    |
+| `2026-01-15T00:61:00.000Z` (minute 61) | yes               | Invalid    |
+
+Without the guard that Invalid Date goes straight into the keyset comparison — the 500 this module's
+header says it exists to prevent. Both cursor forms are driven, composite and legacy, with a control
+that an in-range cursor of the same shape still decodes.
+
+⭐ **A second arm pins where the boundary actually falls, because it is not where it looks.**
+`2026-02-30` is _not_ refused: JS rolls it forward to `2026-03-02` rather than returning Invalid Date,
+so it decodes and the NaN guard never sees it. That reads like a gap and is not one — a cursor is a
+position, not an identity, and paging resumes two days later at worst. It is pinned so that anyone
+tightening it knows they are changing behaviour rather than fixing a bug.
+
+Mutations separate cleanly: dropping the NaN guard reds the new arm and leaves the Postgres-range one
+green; dropping the 1970 floor does the reverse. Each guard answers for exactly one class.
