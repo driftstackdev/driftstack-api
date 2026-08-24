@@ -10506,3 +10506,49 @@ the relationship backwards. Reworded before commit; a guard that reds with an in
 whoever it stops in the wrong direction.
 
 No new test file; 13 `it` declarations to 14, 24 tests to 29. No ratchet movement.
+
+## V-1443 — a bespoke JSON scanner whose terminator set no test could see
+
+`readLargeDownloadResultHeader` exists so an ~85 MiB inbound download frame can be correlated without
+parsing the payload: a hand-written scanner walks the header, extracts `type` / `requestId` /
+`sessionId`, and skips every other member. `fleet-inbound-header-scanner-fails-closed` guards it well —
+eleven arms covering unterminated strings, control bytes, bad escapes, depth caps, mismatched brackets.
+Every one of them asserts **rejection**.
+
+The bare-value scan — the loop that skips a numeric, boolean or null member — terminates on
+`byte === 0x2c || byte === 0x7d || byte === 0x5d || isWhitespace(byte)`. **All four operands survived
+deletion with the file green.**
+
+Measured before diagnosing, because "mutation survives" has more than one cause. A probe throwing at
+the top of `jsonValueEnd` reddened 17 tests, so the function runs. A probe at the bare-value loop
+reddened exactly 1 — the empty-bare-value rejection arm. The path was reached once, by a test whose
+assertion (null) cannot distinguish which terminator ended a value.
+
+**The uncovered direction is acceptance, and that is why no rejection arm could see it.** Drop a
+terminator and the scan runs past the value; the caller then finds neither `,` nor `}` where a member
+must end and returns null. The scanner gets _stricter_. Skipping a string member is already covered —
+`VALID` carries `dataB64` — but nothing proved a header carrying one numeric member still correlates,
+and a harness that enriched the header with a `size` field would have silently stopped correlating
+customer downloads.
+
+**Two of the four arms I wrote first were decorative, and the mutation pass is the only reason I know
+it.** For whitespace and `]`, the accepting case is unfalsifiable:
+
+- `{"decoy":1 ,…}` — without the whitespace operand the scan runs from `1` through the space to the
+  comma. The caller's own `skipWhitespace(raw, valueEnd)` then lands on the same byte it would have
+  landed on anyway. Identical observable, mutation survives.
+- `]` looks genuinely unreachable on well-formed input, and that reasoning is sound as far as it goes:
+  `jsonValueEnd` is only called at a member-value position, and an array value is matched to its close
+  by the structural branch, so no valid header reaches the bare loop with `]` ahead of it. I was about
+  to record it as a defensive operand.
+
+Both are load-bearing on **malformed** input, in the fail-OPEN direction. `{"decoy":1 2,…}` and
+`{"decoy":1],…}` each scan as a single bare value ending at the comma once the operand is gone, the
+caller accepts the member, and a header `JSON.parse` would reject correlates instead. The arms now
+assert refusal, and each kills its operand.
+
+Four mutations, one failing test each, every restore byte-identical. The `]` result also corrects my
+own reading: an operand can be unreachable on the input you are picturing and still be the only thing
+refusing the input you are not.
+
+No new test file; 11 `it` declarations to 16. No ratchet movement.

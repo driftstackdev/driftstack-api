@@ -141,4 +141,73 @@ describe('fleet inbound header scanner fails closed', () => {
       scan('{"type":"downloadData","decoy":,"requestId":"rq_1","sessionId":"agt_1"}'),
     ).toBeNull();
   });
+
+  // V-1443 — every arm above this point rejects. The bare-value scan is reached by
+  // exactly one of them (the empty-value arm), and rejection cannot discriminate
+  // WHICH terminator ended a value, so all four operands of
+  //
+  //     if (byte === 0x2c || byte === 0x7d || byte === 0x5d || isWhitespace(byte)) break;
+  //
+  // survived deletion with the whole file green. Measured, not assumed: a probe
+  // throwing at the top of `jsonValueEnd` reddened 17 tests, so the function runs;
+  // a probe at the bare-value loop reddened exactly 1.
+  //
+  // The missing coverage is the ACCEPTING direction. Dropping a terminator makes the
+  // scan run past the value to the end of the buffer, and the caller then finds
+  // neither `,` nor `}` where a member must end and returns null — so the failure
+  // mode is a legitimate header being refused, not a malformed one being accepted.
+  // That is why no rejection arm can see it, and why it matters: this scanner exists
+  // so an ~85 MiB download frame can be correlated without parsing the whole payload,
+  // and a header the harness enriches with one numeric member would stop correlating.
+  //
+  // Skipping a STRING member is already covered — `VALID` carries `"dataB64"`. These
+  // arms cover the other JSON value shapes, which take the bare path.
+  it('CRITICAL a bare numeric member is SKIPPED, not refused — terminated by `}` as the last member', () => {
+    expect(
+      scan('{"type":"downloadData","requestId":"rq_1","sessionId":"agt_1","size":1234}'),
+      'a trailing numeric member must not stop the header correlating',
+    ).toEqual({ requestId: 'rq_1', sessionId: 'agt_1' });
+  });
+
+  it('CRITICAL a bare member terminated by `,` is skipped, for every non-string JSON value shape', () => {
+    for (const value of ['1234', '-12.5e3', 'true', 'false', 'null']) {
+      expect(
+        scan(`{"decoy":${value},"type":"downloadData","requestId":"rq_1","sessionId":"agt_1"}`),
+        `a leading ${value} member must not stop the header correlating`,
+      ).toEqual({ requestId: 'rq_1', sessionId: 'agt_1' });
+    }
+  });
+
+  // The whitespace and `]` operands need REJECTING inputs, and finding that out is
+  // the reason these two arms look different from the two above. Accepting arms for
+  // them are decorative: with `{"decoy":1 ,`, dropping the whitespace operand lets
+  // the scan run to the comma instead of stopping at the space, and the caller's own
+  // `skipWhitespace(raw, valueEnd)` lands on the same byte either way — identical
+  // observable, mutation survives. Both arms below were written the accepting way
+  // first and stayed green when their operand was deleted.
+  //
+  // What the operands actually buy is refusal of a bare value with something
+  // embedded in it. These fail OPEN when the operand goes: the scan swallows the
+  // intruder, the member ends at a delimiter the caller accepts, and a header that
+  // `JSON.parse` would reject correlates instead.
+  it('CRITICAL a bare value with an embedded space is refused. Without the whitespace operand the scan runs `1 2` together as one value, ends at the comma, and the header correlates — accepting a member no JSON parser would.', () => {
+    expect(
+      scan('{"decoy":1 2,"type":"downloadData","requestId":"rq_1","sessionId":"agt_1"}'),
+      'a bare value containing a space must not correlate',
+    ).toBeNull();
+  });
+
+  it('CRITICAL a bare value followed by a stray `]` is refused. `0x5d` cannot terminate a bare scan on any WELL-FORMED input — `jsonValueEnd` is only called at a member-value position and an array value is matched to its close by the structural branch — so the operand looks unreachable and its accepting arm is unfalsifiable. It earns its place on malformed input: drop it and `1]` scans as one value ending at the comma, and the header correlates.', () => {
+    expect(
+      scan('{"decoy":1],"type":"downloadData","requestId":"rq_1","sessionId":"agt_1"}'),
+      'a bare value followed by a stray close-bracket must not correlate',
+    ).toBeNull();
+  });
+
+  it('an array member is still consumed WHOLE by the structural branch, so the arm above is about malformed input only', () => {
+    expect(
+      scan('{"decoy":[1,2,[3]],"type":"downloadData","requestId":"rq_1","sessionId":"agt_1"}'),
+      'a nested array member must be skipped wholesale',
+    ).toEqual({ requestId: 'rq_1', sessionId: 'agt_1' });
+  });
 });
