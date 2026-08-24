@@ -67,9 +67,47 @@ function declaredFields(block: string): Set<string> {
   return out;
 }
 
+/**
+ * Every `enum` value and every `pattern` the component schemas declare, at any depth.
+ *
+ * A constraint is not always on a top-level property: it sits inside `items`, inside a
+ * `oneOf` branch, inside a nested object. Walking only `schema.properties[*]` reads the
+ * shallowest layer and calls it the population — the mistake that makes a census report
+ * a clean answer about a set it never enumerated. A pattern carries its property's
+ * `format` alongside it, because that is what decides whether the generator keeps it.
+ */
+function collectConstraints(root: unknown): {
+  enums: Set<string>;
+  patterns: Map<string, string | undefined>;
+} {
+  const enums = new Set<string>();
+  const patterns = new Map<string, string | undefined>();
+  const walk = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const child of node) walk(child);
+      return;
+    }
+    if (node === null || typeof node !== 'object') return;
+    const obj = node as Record<string, unknown>;
+    if (typeof obj['pattern'] === 'string') {
+      const format = obj['format'];
+      patterns.set(obj['pattern'], typeof format === 'string' ? format : undefined);
+    }
+    if (Array.isArray(obj['enum'])) {
+      for (const v of obj['enum']) if (typeof v === 'string') enums.add(v);
+    }
+    for (const v of Object.values(obj)) walk(v);
+  };
+  walk(root);
+  return { enums, patterns };
+}
+
 const spec = JSON.parse(readFileSync(SPEC, 'utf8')) as SpecShape;
 const models = readFileSync(MODELS, 'utf8');
 const blocks = classBlocks(models);
+const constraints = collectConstraints(spec.components?.schemas ?? {});
+const specEnumValues = constraints.enums;
+const specPatterns = constraints.patterns;
 const schemasWithProperties = Object.entries(spec.components?.schemas ?? {}).filter(
   ([, schema]) => Object.keys(schema.properties ?? {}).length > 0,
 );
@@ -121,5 +159,32 @@ describe('V-953 the generated Python models carry every property the spec declar
     expect(fields.has('idempotency'), 'a word from a description is NOT a field').toBe(false);
     expect(fields.has('OtherModel'), 'a type name is NOT a field').toBe(false);
     expect(fields.has('description'), 'a Field() keyword is NOT a field').toBe(false);
+  });
+
+  it(`CRITICAL every enum the spec declares reaches the generated models as a literal. The arm above compares NAMES: a property keeps its field when its allowed values change, so widening or narrowing an enum leaves every name-level check green while the typed client rejects a value the API accepts — or accepts one it refuses. Measured: the models went stale for five days across this exact class, carrying \`action: str\` against a spec declaring 24 audit actions, with three sdk-python guards green throughout. (${FIX})`, () => {
+    expect(specEnumValues.size, 'enum values declared across component schemas').toBeGreaterThan(
+      150,
+    );
+    const missing = [...specEnumValues].filter((v) => !models.includes(`"${v}"`)).sort();
+    expect(
+      missing,
+      'the spec allows these values and the generated models do not name them. A typed Python ' +
+        'caller cannot express them',
+    ).toEqual([]);
+  });
+
+  it(`CRITICAL every pattern the spec declares reaches the generated models, except where the property also declares a \`format\` — datamodel-codegen maps a formatted string onto its own type (\`format: uri\` becomes \`AnyUrl\`) and drops the pattern on the way. That exemption is DERIVED from the property rather than listed by name, so a field that loses its format stops being exempt on its own. Measured at the time of writing: 14 of 14 format-less patterns present, 2 of 2 formatted ones absent — the split is exactly the generator's behaviour and nothing else. (${FIX})`, () => {
+    const unformatted = [...specPatterns].filter(([, format]) => format === undefined);
+    expect(unformatted.length, 'format-less patterns declared in the spec').toBeGreaterThan(10);
+
+    const missing = unformatted.map(([p]) => p).filter((p) => !models.includes(p));
+    expect(
+      missing,
+      'the spec constrains these strings and the generated models accept anything. A bound ' +
+        'published without regenerating is a bound the Python SDK does not have',
+    ).toEqual([]);
+
+    // Not vacuous: the matcher is a verbatim search, so it has to be able to miss.
+    expect(models.includes('^tot_[0-9a-f]{4}$'), 'a pattern the spec never declared').toBe(false);
   });
 });

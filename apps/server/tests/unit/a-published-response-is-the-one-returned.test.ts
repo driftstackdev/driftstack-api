@@ -226,10 +226,11 @@ interface Judged {
   readonly unpublished: string[];
 }
 
-/** Routes whose returns are all plain literals, judged against the published 200/201. */
-function judge(): { compared: Judged[]; skipped: number } {
+/** Routes whose returns are all plain literals, judged against the published success. */
+function judge(): { compared: Judged[]; skipped: number; empty: string[] } {
   const doc = spec();
   const compared: Judged[] = [];
+  const empty: string[] = [];
   let skipped = 0;
   const REG = /app\.(get|post|put|patch|delete)\s*(?:<[^(]*>)?\s*\(/g;
   for (const file of readdirSync(ROUTES).filter((f) => f.endsWith('.ts'))) {
@@ -277,14 +278,29 @@ function judge(): { compared: Judged[]; skipped: number } {
             >;
           }
         | undefined;
-      const ok = op?.responses?.['200'] ?? op?.responses?.['201'];
-      const schema = deref(doc, ok?.content?.['application/json']?.schema);
+      // V-1501b — 202 counts as a success. Four routes publish their body only
+      // there (`resume`, `team/invites`, `status/subscribe`, `webhooks/{id}/test`),
+      // and reading 200/201 alone left each of them unjudged.
+      const ok = op?.responses?.['200'] ?? op?.responses?.['201'] ?? op?.responses?.['202'];
+      const declared = ok?.content?.['application/json']?.schema;
+      const schema = deref(doc, declared);
       const props = Object.keys(schema['properties'] ?? {});
       const required = new Set((schema['required'] ?? []) as string[]);
-      if (props.length === 0) continue;
+      const key = `${(m[1] ?? '').toUpperCase()} ${pm[1] ?? ''}`;
+
+      if (props.length === 0) {
+        // A schema with no properties is only a finding when the document
+        // actually declares one. Routes absent from the spec are a separate
+        // decision (`a-route-in-neither-the-spec-nor-the-docs-is-a-decision`
+        // classifies those), a 204 declares no body at all, and a union carries
+        // its shape under oneOf/anyOf/allOf where `properties` never appears.
+        const composed = ['oneOf', 'anyOf', 'allOf'].some((k) => k in schema);
+        if (declared !== undefined && !composed) empty.push(key);
+        continue;
+      }
 
       compared.push({
-        key: `${(m[1] ?? '').toUpperCase()} ${pm[1] ?? ''}`,
+        key,
         missing: props.filter((p) => required.has(p) && !keys.has(p)).sort(),
         // Only the pagination envelope is judged in this direction. A handler may
         // legitimately send more than it documents in general — an internal debug
@@ -295,7 +311,7 @@ function judge(): { compared: Judged[]; skipped: number } {
       });
     }
   }
-  return { compared, skipped };
+  return { compared, skipped, empty };
 }
 
 describe('V-1072 a published response is the one returned', () => {
@@ -343,6 +359,15 @@ describe('V-1072 a published response is the one returned', () => {
       broken,
       'these routes publish a required response field no return statement sets — correct the ' +
         'schema in lib/openapi.ts to the shape the handler sends:',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL no route publishes a success schema that declares nothing while its handler sends a keyed body. This is the emptiest form of the same defect: `{ type: object, properties: {} }` generates a client type with no members at all, so every field the server sends is unreachable — worse than naming the wrong field, because there is nothing to be wrong about. POST /v1/agent-sessions/:id/input-event described its `kind` discriminator in prose, had the real union declared in api-types since Slice 5, and carried it in both hand-written SDKs; only the generated one was reading an empty object.', () => {
+    const empty = judge().empty.sort();
+    expect(
+      empty,
+      'these routes declare a success body the document leaves shapeless — publish the schema ' +
+        'api-types already carries, or the literal the handler sends:',
     ).toEqual([]);
   });
 

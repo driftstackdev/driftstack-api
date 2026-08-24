@@ -13406,3 +13406,65 @@ Its test double did answer `json({ ok: true })`, though, copied from the publish
 the shape the server sends. The page ignores the body either way, so this fixes nothing at runtime — but
 a double written from the document is precisely how the document's fiction survives a test suite, and
 that artifact was the last thing in the repo asserting `ok`.
+
+## V-1501b — an empty published body, and the Python SDK that had none of this session's constraints
+
+Two findings, one chain: `openapi.ts` → `openapi.json` → `models.py`. The first is the last link of
+V-1501's family; the second is the link after it, which nothing was checking at value level.
+
+### The response the document declined to describe
+
+`POST /v1/agent-sessions/{id}/input-event` published `{ type: object, properties: {} }`. Not a wrong
+field — no fields. A generated client gets a type with no members, so every field the server sends is
+unreachable, which is worse than naming the wrong one because there is nothing to be wrong about.
+
+The shape was never unknown. `SendInputEventResponseSchema` has declared the real discriminated union
+in api-types since Slice 5, both hand-written SDKs carry it, cross-surface parity guards pin the Go
+struct and the TypeScript signature, and the route's own OpenAPI **description** spells it out in
+prose: _"Discriminated by 'kind'. 'pair-mode-takeover-fired' … carries pair_mode_state. 'forwarded' …
+carries duration_ms."_ Every reader was served except the machine one — the V-1498 pattern, now on the
+response side. The registration now uses the api-types schema and publishes both `oneOf` branches,
+matching the handler's two `reply.code(200).send({…})` bodies exactly.
+
+A fifth arm catches the class. Its exemptions are derived, not listed: a route absent from the spec is
+someone else's decision (`a-route-in-neither-the-spec-nor-the-docs-is-a-decision` classifies those), a
+204 declares no body, and a union carries its shape under `oneOf`/`anyOf`/`allOf` where `properties`
+never appears. `judge()` also reads 202 now — four routes publish their body only there, and reading
+200/201 alone left every one unjudged.
+
+### The link after the document
+
+Regenerating `_generated/models.py` produced **68 inserted lines**, and all of them are this session's
+work: V-1489's profile-id pattern, the name and icon bounds, tag and folder array limits, the 24-value
+audit-action enum. The committed models said `action: str`. Customers install that file.
+
+**Three guards named `sdk-python-*` were green on it — measured, not assumed.** Restoring the stale
+models and running all three: 13 of 13 arms pass. They compare schema names to class names and property
+names to field names, and a constraint is neither. Everything this session published — patterns, bounds,
+enums, defaults — changes values inside properties that already existed, so the whole session was
+invisible to the name-level chain by construction.
+
+V-953's header is worth quoting because it is the trap: it says the two guards "close the chain … at
+content level rather than at name level", and notes it verified the models were byte-identical to a
+fresh run _at the time of writing_. Both were true when written. The claim is about the property layer
+and reads as though it covers the constraint layer, and the freshness check was a one-time observation
+rather than a standing one — so nothing noticed when it stopped being true five days later.
+
+Two arms added there, at value level. Every enum value the spec declares must appear as a literal
+(247 of them, walked at any depth — `items`, `oneOf` branches and nested objects carry constraints, and
+reading only top-level properties would census a set it never enumerated). Every pattern must appear
+verbatim, **except where the property also declares a `format`**: datamodel-codegen maps a formatted
+string onto its own type, so `format: uri` becomes `AnyUrl` and the pattern is discarded. That exemption
+is derived from the property rather than listed by name, so a field that loses its format stops being
+exempt on its own. The split is exactly the generator's behaviour: 14 of 14 format-less patterns
+present, 2 of 2 formatted ones absent.
+
+The two absent ones are V-1498's and V-1499's https rules. Worth stating plainly: those constraints are
+correctly published in the spec, and a Python caller's typed model still will not enforce them, because
+the generator drops a pattern it considers superseded by a format. The document is right; the generated
+client is weaker than the document. That is a generator limitation rather than a contract defect, and it
+is now recorded rather than discovered again.
+
+Mutation used the real historical artifact rather than a synthetic edit — the pre-regeneration
+`models.py` — and both new arms red on it, naming 44 missing enum values and the missing pattern.
+Restored byte-identical. `ruff`, `mypy` and the SDK's own 365 tests pass against the regenerated models.

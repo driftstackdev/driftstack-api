@@ -36353,8 +36353,41 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {}
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["pair-mode-takeover-fired"]
+                        },
+                        "pair_mode_state": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["kind"]
+                        }
+                      },
+                      "required": ["kind", "pair_mode_state"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["forwarded"]
+                        },
+                        "duration_ms": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "required": ["kind", "duration_ms"]
+                    }
+                  ]
                 }
               }
             }

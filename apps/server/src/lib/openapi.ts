@@ -27,6 +27,7 @@ extendZodWithOpenApi(z);
 import {
   AccountRegionSchema,
   AccountSchema,
+  SendInputEventResponseSchema,
   OptOutableEmailEventSchema,
   AccountStatusSchema,
   AccountTierSchema,
@@ -4937,7 +4938,11 @@ function buildRegistry(): OpenAPIRegistry {
       200: {
         description:
           "Discriminated by 'kind'. 'pair-mode-takeover-fired' (Slice 5 — first input-event in pair-mode ai-driving fires the takeover-request transition) carries pair_mode_state. 'forwarded' (post-harness; today 503s) carries duration_ms.",
-        content: { 'application/json': { schema: z.object({}).passthrough() } },
+        // V-1501b — this said `z.object({}).passthrough()`, so the description
+        // above was the only place the union appeared. api-types has declared
+        // the real shape since Slice 5 and both hand-written SDKs carry it;
+        // only the generated one was left reading an empty object.
+        content: { 'application/json': { schema: SendInputEventResponseSchema } },
       },
       404: { description: 'Agent session not found.', content: problemContent },
       409: {
