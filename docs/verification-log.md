@@ -13157,3 +13157,47 @@ exactly the prior art a pin-grep cannot surface.
 The commit is a revert plus a documentation fix, and the verification-log keeps V-1495's entry rather
 than deleting it: the hazard analysis in it is correct and worth having, and a retraction that erases
 its own premise teaches nothing.
+
+## V-1497 — the last unrun surface, run: 222 e2e tests, through the entry point that protects itself
+
+V-1492 measured that the local gate skipped 815 tests. V-1494 ran the DB-backed integration suites — 389
+files, 3765 tests, clean. The e2e suite stayed unrun, and V-1495 was the wrong way to make it safe to
+run: I extended a shared guard, broke the compose workflow, and retracted it in V-1496.
+
+The right way was already in the repo. `npm run test:e2e:local` — `scripts/e2e-local.mjs` — exists for
+exactly this, and its header names the motivation: `test:e2e` is wired to `docker compose`, so on a
+machine without Docker "the suite gets recorded as 'unrun' and stays that way — which is how three specs
+in `rate-limit.spec.ts` were able to rot unnoticed until someone ran them."
+
+**222 tests passed in 46.4 seconds.** All three tiers of this session's work are now verified: unit and
+parity (3070 files), integration (389 files), and e2e (222 tests).
+
+**It protected itself, which is the point.** The script refuses to run unless `DATABASE_URL` names a
+database other than `driftstack` and `REDIS_URL` names an index other than 0 — the two checks I tried to
+bolt onto the shared guard. Supplying `driftstack_e2e_local` and `redis://localhost:6379/15` is not me
+being careful; it is the only input the script accepts. That is a better design than the one I proposed:
+the contract lives where the caller states their intent, so it cannot break the compose flow that uses
+the same harness with the opposite meaning.
+
+Verified after the run rather than assumed: Redis db 0 still holds its 3920 developer keys, db 15 holds
+the 5 the suite left, and the `driftstack` database is present. Index 15 was confirmed empty BEFORE the
+run, so the `flushdb()` that happens before every test destroyed nothing.
+
+`driftstack_e2e_local` is left in place. It is the name the script's own refusal message tells an
+operator to use, so it is the reusable scratch database the workflow expects rather than litter, and the
+harness drops and recreates its schema on every run.
+
+**What this turn also established, by not finding anything.** Two searches for a served-but-unpublished
+route guard: the first, on descriptive prose ("unpublished", "not in the openapi"), found nothing; the
+second, on identifier-shaped names, found
+`a-route-in-neither-the-spec-nor-the-docs-is-a-decision` — which had already classified 17 such routes,
+kept 15 as infrastructure, and fixed the two that were not. My own census of the same question returned
+15, all inside its accounted set.
+
+That is the V-1496 lesson applied and working. The failure there was searching for prior art the way you
+search for pins — by file — when the question is "has anyone been here before". Prose and identifiers are
+different vocabularies for the same idea, and a guard is named in one of them.
+
+Package coverage was measured too and points nowhere: test-to-source ratios across the nine scoped
+packages run 0.57–0.79, with `api-types` at 0.17 only because 505 external test files guard it instead.
+No thin spot to aim at.
