@@ -92,7 +92,12 @@ describe('W434.C packages/api-types/src/webhooks.ts content parity', () => {
 
   it('CreateWebhookRequest: url .refine(starts with https://) + V-356 events SubscribableWebhookEventType .min(1) .max(10) + description max 200 nullable optional; rationale pinned (test.ping not subscribable)', () => {
     expect(body).toMatch(
-      /url: z\s*\n?\s*\.string\(\)\s*\n?\s*\.url\(\)\s*\n?\s*\.refine\(\(u\) => u\.startsWith\('https:\/\/'\), \{\s*\n?\s*message: 'Webhook URL must use https:\/\/',\s*\n?\s*\}\),/,
+      // V-1498 — was a `.refine(startsWith('https://'))`. A refine is a runtime
+      // predicate JSON Schema cannot express, so the published `url` carried no
+      // https constraint at all. Same conversion V-924/V-1475 made to the tier
+      // fields, and behaviour-preserving: `.url()` still runs first and the
+      // message is unchanged.
+      /url: z\.string\(\)\.url\(\)\.regex\(\/\^https:\\\/\\\/\/, \{ message: 'Webhook URL must use https:\/\/' \}\),/,
     );
     expect(body).toMatch(
       /\/\/ V-356 — only subscribable event types accepted on create\. Customers\s*\n?\s*\/\/ can't subscribe to `test\.ping`; that event is only emitted via the\s*\n?\s*\/\/ POST \/v1\/webhooks\/:id\/test endpoint, regardless of subscription\.\s*\n?\s*events: z\.array\(SubscribableWebhookEventTypeSchema\)\.min\(1\)\.max\(10\),/,
@@ -118,7 +123,7 @@ describe('W434.C packages/api-types/src/webhooks.ts content parity', () => {
   it('V-351 UpdateWebhookRequest: all four fields optional (url with https-refine + events 1..10 + description nullable + active) + at-least-one-field .refine', () => {
     expect(body).toMatch(/\/\/ V-351 — Update/);
     expect(body).toMatch(
-      /export const UpdateWebhookRequestSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*url: z\s*\n?\s*\.string\(\)\s*\n?\s*\.url\(\)\s*\n?\s*\.refine\(\(u\) => u\.startsWith\('https:\/\/'\), \{\s*\n?\s*message: 'Webhook URL must use https:\/\/',\s*\n?\s*\}\)\s*\n?\s*\.optional\(\),\s*\n?\s*events: z\.array\(SubscribableWebhookEventTypeSchema\)\.min\(1\)\.max\(10\)\.optional\(\),\s*\n?\s*description: z\.string\(\)\.max\(200\)\.nullable\(\)\.optional\(\),\s*\n?\s*active: z\.boolean\(\)\.optional\(\),\s*\n?\s*\}\)\s*\n?\s*\.refine\(\s*\n?\s*\(v\) =>\s*\n?\s*v\.url !== undefined \|\|\s*\n?\s*v\.events !== undefined \|\|\s*\n?\s*v\.description !== undefined \|\|\s*\n?\s*v\.active !== undefined,\s*\n?\s*\{ message: 'At least one field must be provided\.' \},\s*\n?\s*\);/,
+      /export const UpdateWebhookRequestSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*url: z\s*\n?\s*\.string\(\)\s*\n?\s*\.url\(\)\s*\n?\s*\.regex\(\/\^https:\\\/\\\/\/, \{ message: 'Webhook URL must use https:\/\/' \}\)\s*\n?\s*\.optional\(\),\s*\n?\s*events: z\.array\(SubscribableWebhookEventTypeSchema\)\.min\(1\)\.max\(10\)\.optional\(\),\s*\n?\s*description: z\.string\(\)\.max\(200\)\.nullable\(\)\.optional\(\),\s*\n?\s*active: z\.boolean\(\)\.optional\(\),\s*\n?\s*\}\)\s*\n?\s*\.refine\(\s*\n?\s*\(v\) =>\s*\n?\s*v\.url !== undefined \|\|\s*\n?\s*v\.events !== undefined \|\|\s*\n?\s*v\.description !== undefined \|\|\s*\n?\s*v\.active !== undefined,\s*\n?\s*\{ message: 'At least one field must be provided\.' \},\s*\n?\s*\);/,
     );
   });
 

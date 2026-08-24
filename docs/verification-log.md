@@ -13201,3 +13201,46 @@ different vocabularies for the same idea, and a guard is named in one of them.
 Package coverage was measured too and points nowhere: test-to-source ratios across the nine scoped
 packages run 0.57–0.79, with `api-types` at 0.17 only because 505 external test files guard it instead.
 No thin spot to aim at.
+
+## V-1498 — the webhook https rule was enforced, documented in prose, and absent from the machine-readable contract
+
+`POST /v1/webhooks` and `PATCH /v1/webhooks/{id}` published `url` as `{ type: string, format: uri }`.
+The server refuses anything not starting `https://`. A client generated from that spec sends
+`http://…` and receives a 400 it had no way to anticipate.
+
+This is a blind spot every instrument in this sweep structurally misses. The rule was a
+`.refine((u) => u.startsWith('https://'))`, and a refine is a runtime predicate JSON Schema cannot
+express — so there was no published constraint to compare against the enforced one. V-1476 through
+V-1490 all work by comparing two declarations; here one side does not exist.
+
+**Both human surfaces had it right.** `apps/docs/src/pages/webhooks/endpoints.md` says "URL must use
+`https://`", and the marketing page says "Endpoint URLs MUST be HTTPS. `http://` is rejected". The only
+reader left uninformed was the machine one, which is the one the SDKs are generated from.
+
+**The conversion has direct precedent in this codebase.** V-924 and V-1475 replaced a tier `.refine`
+with `z.enum` for the stated reason that a refine does not survive into JSON Schema. The same move
+applies here because the rule is a prefix, which a `pattern` expresses exactly. Both request schemas now
+use `.regex(/^https:\/\//)` carrying the identical message.
+
+Behaviour-preserving, verified by probe rather than asserted: `http://x.com/h` is still refused with
+"Webhook URL must use https://", `https://x.com/h` still passes, and a non-URL is still caught by
+`.url()` first with "Invalid url" — the ordering is unchanged because `.url()` still runs first.
+
+**Four pins across two files, and a placement trap.** `api-types-webhooks-content-parity` quotes both
+url chains and `webhook-policy-cross-source-invariant` pins the policy in two arms, one of whose titles
+described the mechanism as a refine. All four re-quoted, titles paraphrasing, with per-occurrence
+negatives: reverting the source reds each file independently.
+
+The trap is worth recording. My first attempt put an explanatory comment between `.object({` and
+`url:`, inside the span a pin matches with `\s*\n?\s*` — which cannot cross a comment line. The pin
+failed for a reason that had nothing to do with the change it was checking. The comment moved above the
+export instead of the pin being loosened: a pin that tolerates arbitrary text between the fields it
+quotes stops pinning their adjacency.
+
+**Measured, and this is one of a class.** api-types carries 22 `.refine` calls, 10 on request-shaped
+schemas. Each is a rule the document cannot express. They are not all like this one: some are
+expressible as a constraint and simply were not (this one), while others are genuinely inexpressible —
+`MfaChallengeRequestSchema`'s "either `code` or `recovery_code`", `UpdateAccountMeRequestSchema`'s "at
+least one field", `ApiKeyScopeListRequestSchema`'s "scopes must not contain duplicates" (JSON Schema
+has `uniqueItems`, so that one is expressible too). Sorting the ten into expressible-and-missing versus
+genuinely-prose-only is the follow-up this opens; the two webhook rails are the ones fixed here.

@@ -117,12 +117,24 @@ export type WebhookEndpoint = z.infer<typeof WebhookEndpointSchema>;
 // ───────────────────────────────────────────────────────────────────────────
 
 export const CreateWebhookRequestSchema = z.object({
+  /**
+   * V-1498 — a `regex`, not a `refine`, so the published document carries it.
+   *
+   * A refine is a runtime predicate JSON Schema cannot express, so the spec
+   * described `url` as `{ type: string, format: uri }` and a generated client
+   * happily sent `http://` for a 400 it had no way to anticipate. Both customer
+   * doc surfaces state the rule in prose — `webhooks/endpoints.md` says "URL must
+   * use `https://`" and the marketing page says `http://` is rejected — so the
+   * only reader left uninformed was the machine one.
+   *
+   * Same transformation V-924 and V-1475 applied to the tier fields, for the same
+   * stated reason, and behaviour-preserving: `.url()` still runs first, the
+   * message is unchanged, and the accepted set is identical.
+   */
   url: z
     .string()
     .url()
-    .refine((u) => u.startsWith('https://'), {
-      message: 'Webhook URL must use https://',
-    }),
+    .regex(/^https:\/\//, { message: 'Webhook URL must use https://' }),
   // V-356 — only subscribable event types accepted on create. Customers
   // can't subscribe to `test.ping`; that event is only emitted via the
   // POST /v1/webhooks/:id/test endpoint, regardless of subscription.
@@ -160,14 +172,14 @@ export type RotateWebhookSecretResponse = z.infer<typeof RotateWebhookSecretResp
 // V-351 — Update
 // ───────────────────────────────────────────────────────────────────────────
 
+// V-1498 — `url` is a regex here for the same reason as on the create schema
+// above: a refine never reaches the published document.
 export const UpdateWebhookRequestSchema = z
   .object({
     url: z
       .string()
       .url()
-      .refine((u) => u.startsWith('https://'), {
-        message: 'Webhook URL must use https://',
-      })
+      .regex(/^https:\/\//, { message: 'Webhook URL must use https://' })
       .optional(),
     events: z.array(SubscribableWebhookEventTypeSchema).min(1).max(10).optional(),
     description: z.string().max(200).nullable().optional(),

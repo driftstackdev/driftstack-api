@@ -41,10 +41,10 @@ const MAX_DESCRIPTION_CHARS = 200;
 describe('W871 Webhook policy cross-source invariant', () => {
   // ─── CreateWebhookRequestSchema https refine ─────────────────
 
-  it("CRITICAL packages/api-types/src/webhooks.ts CreateWebhookRequestSchema url field has refine((u) => u.startsWith('https://')) with 'Webhook URL must use https://' message. The https-only refine is what prevents customers from pointing webhooks at http:// (leaking secrets) or non-URL strings (refusing delivery).", () => {
+  it('CRITICAL packages/api-types/src/webhooks.ts CreateWebhookRequestSchema url field enforces https:// with the same message, as a PUBLISHABLE regex rather than a refine (V-1498 — a refine never reached the OpenAPI document). The https-only rule is what prevents customers from pointing webhooks at http:// (leaking secrets) or non-URL strings (refusing delivery).', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
     expect(p).toMatch(
-      /CreateWebhookRequestSchema = z\.object\(\{[\s\S]+?url: z\s*\n?\s*\.string\(\)\s*\n\s*\.url\(\)\s*\n\s*\.refine\(\(u\) => u\.startsWith\('https:\/\/'\), \{\s*\n\s*message: 'Webhook URL must use https:\/\/',/,
+      /CreateWebhookRequestSchema = z\.object\(\{[\s\S]+?url: z\.string\(\)\.url\(\)\.regex\(\/\^https:\\\/\\\/\/, \{ message: 'Webhook URL must use https:\/\/' \}\),/,
     );
   });
 
@@ -77,10 +77,10 @@ describe('W871 Webhook policy cross-source invariant', () => {
 
   // ─── UpdateWebhookRequestSchema same constraints ─────────────
 
-  it("CRITICAL packages/api-types/src/webhooks.ts UpdateWebhookRequestSchema mirrors Create constraints — https-refine + Subscribable.min(1).max(10) + description.max(200). The dual-validation is what makes 'edit endpoint' UX behave identically to 'create endpoint'.", () => {
+  it("CRITICAL packages/api-types/src/webhooks.ts UpdateWebhookRequestSchema mirrors Create constraints — https-regex + Subscribable.min(1).max(10) + description.max(200). The dual-validation is what makes 'edit endpoint' UX behave identically to 'create endpoint'.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
     expect(p).toMatch(
-      /UpdateWebhookRequestSchema = z\s*\n?\s*\.object\(\{[\s\S]+?\.refine\(\(u\) => u\.startsWith\('https:\/\/'\)/,
+      /UpdateWebhookRequestSchema = z\s*\n?\s*\.object\(\{[\s\S]+?\.regex\(\/\^https:\\\/\\\/\/, \{ message: 'Webhook URL must use https:\/\/' \}\)/,
     );
     expect(p).toMatch(
       /UpdateWebhookRequestSchema[\s\S]+?events: z\.array\(SubscribableWebhookEventTypeSchema\)\.min\(1\)\.max\(10\)/,
