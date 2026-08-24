@@ -12106,3 +12106,46 @@ handled before a required-diff means anything, and a mirror that exists for a re
 components, 15 carry no `maxItems`. Thirteen are response collections — `data`, `teams`, `scopes`,
 `events` — where publishing an item cap would be wrong, since the length is whatever the server returns.
 Only the organization pair is request-side, and it is fixed here. No finding in the other 13.
+
+## V-1478 — the one body shape that fell between both of a route's signals
+
+`POST /v1/api-keys/{id}/rotate` accepted `{"name": 123}` with a **201**, did not rename the key, and
+said nothing about either. Verified behaviourally, not by reading: removing the fix returns
+`expected 201 to be 400` for that exact body.
+
+This route has two mechanisms for telling a caller their rotate did not do what they asked, and the
+mistyped-value case is the gap between them. `reportUnknownRequestFields` stays silent because `name` is
+a KNOWN key — it reports keys nobody recognises. The route's own `if (typeof body.name === 'string')`
+then skipped the assignment, with no `else`. So a right key with an unusable value satisfied neither
+condition: nothing reported it, nothing applied it.
+
+The intent is not inferred. The arm directly above the new one in the same file covers a MISSPELLED key
+(`nmae`) and asserts the reporter names it back, on the stated grounds that a rotate which quietly did
+not rename must never be silent. The type case is the same failure and was the one shape uncovered.
+
+**Enumerated rather than fixed where it was found.** The hand-validated write bodies are already
+catalogued by `a-hand-validated-write-body-is-listed`, five of them, so the question is whether this
+shape is one instance or a class. Traced all five: `PUT /v1/account/me/byok-anthropic-key` rejects a
+non-string outright (`typeof !== 'string' || length === 0` → 400); `POST /v1/profiles/:id/transfer`
+coerces a non-string to `''` and then rejects it with a `ValidationError` carrying the field; the two
+webhook receivers are raw-body signature verifiers with no field to mistype. One of five, not a class.
+
+**Fixed narrowly, and the wider fix declined on purpose.** Moving the route to a zod schema was the
+tempting option — it would delete a hand-validated exception, and the catalogue's own "no stale entry"
+arm would have forced the bookkeeping, so it was self-verifying. It was not taken. The bounds path below
+already behaves correctly and answers with a specific message (`Key name must be 1–120 characters.`),
+and a schema parse would change the error SHAPE for callers who are hitting a limit that works today.
+The defect is the missing type rejection; that is what changed. Also worth recording since it was
+checked: no test and no document asserts that message, so preserving it was a choice rather than a
+constraint.
+
+This is the second half of V-1476's `rotate.name`. That entry published `minLength: 1, maxLength: 120`
+for this field because the route enforces them by hand — which sharpened this gap rather than causing
+it: the document now promises a bounded string on an endpoint that was silently accepting a number. Both
+halves are needed and neither implies the other.
+
+The pin lives beside the arm that establishes the expectation, and asserts four unusable types (number,
+boolean, object, array) rather than one, since `typeof` treats the last two alike and a fix that only
+handled numbers would pass a single-case test. No new test file — the `EXPECTED_TEST_FILES` ratchet is
+stale at 3012 against an actual 3067 from a peer's drift, and rule 9 forbids absorbing it. `it` count
+10 → 11 in that file, no ratchet movement.

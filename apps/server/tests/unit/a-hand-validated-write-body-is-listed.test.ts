@@ -52,8 +52,9 @@ const SCHEMA_PARSE =
  * `PUT /v1/account/me/byok-anthropic-key` — one field, checked as a non-empty string,
  * which is exactly what the document publishes for it (`minLength: 1`, required).
  *
- * `POST /v1/api-keys/:id/rotate` — optional `name`, length-checked by hand; the route
- * says so in a comment at the check.
+ * `POST /v1/api-keys/:id/rotate` — optional `name`, type- AND length-checked by hand; the
+ * route says so in a comment at the check. The type half is V-1478: a present `name` of the
+ * wrong type used to fall through both this route's signals and return a silent 201.
  *
  * `POST /v1/profiles/:id/transfer` — one `recipient_account_id`, checked and rejected
  * with a ValidationError carrying the field.
@@ -66,7 +67,7 @@ const HAND_VALIDATED: Readonly<Record<string, string>> = {
   'POST /v1/webhooks/stripe': 'raw-body signature receiver',
   'POST /v1/webhooks/nowpayments': 'raw-body signature receiver',
   'PUT /v1/account/me/byok-anthropic-key': 'single field, matches the published minLength',
-  'POST /v1/api-keys/:id/rotate': 'optional name, hand length-checked',
+  'POST /v1/api-keys/:id/rotate': 'optional name, hand type- and length-checked',
   'POST /v1/profiles/:id/transfer': 'single recipient_account_id, ValidationError on miss',
   'POST /v1/agent-sessions/:id/message': 'reports unknown fields against RunTurnRequestSchema',
 };

@@ -190,6 +190,23 @@ export function registerAdminRoutes(app: FastifyInstance, opts: AdminRoutesOptio
       });
       const eff = effectiveAccountIdForKeyWrite(request, ctx);
       let rotateOpts: EffectiveOwner & { name?: string } = {};
+      // V-1478 — a present `name` of the wrong TYPE used to fall through both
+      // signals this route has. `reportUnknownRequestFields` above stays silent
+      // because `name` is a known key, and the typeof test below skipped the
+      // block, so `{"name": 123}` returned 201 with no rename and nothing said.
+      // The arm directly beside this route's test establishes the intent — a
+      // MISSPELLED key (`nmae`) is named back to the caller precisely so a
+      // rotate that quietly did not rename is never silent. A correctly spelled
+      // key with an unusable value is the same failure and was the one case
+      // neither mechanism covered.
+      //
+      // Rejecting rather than coercing, and left as a hand check rather than
+      // moved to a schema: the bounds path below already behaves correctly and
+      // carries a specific message, and a schema would change the error SHAPE
+      // for callers who are hitting a limit that works today.
+      if (body.name !== undefined && typeof body.name !== 'string') {
+        throw new BadRequestError('Key name must be a string.');
+      }
       if (typeof body.name === 'string') {
         // V-296 — the optional rename must honor the same bound the create
         // path enforces (CreateApiKeyRequestSchema: name min(1).max(120)).

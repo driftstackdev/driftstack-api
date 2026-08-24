@@ -100,6 +100,42 @@ describe('/v1/api-keys reports the fields it ignored', () => {
       'and the drop is real — the rename did not happen',
     ).toBe('to-rotate');
   });
+
+  // V-1478 — the case that fell between the two signals above.
+  //
+  // The arm before this one covers a MISSPELLED key: `nmae` is unknown, so the
+  // reporter names it back and the caller learns the rename did not happen. A
+  // correctly spelled `name` carrying the wrong TYPE got neither — the reporter
+  // is silent because `name` is a known key, and the route's `typeof` test
+  // skipped the assignment without complaint. 201, no rename, no signal.
+  //
+  // This asserts the rejection rather than the silence, and it is the arm that
+  // would have failed before the fix: it returned 201 with the original name.
+  it('CRITICAL a correctly-named field of the wrong type is REJECTED, not silently dropped. It is the one shape neither the unknown-field reporter nor the typeof check could see: the key is spelled right so nothing reports it, and the value is unusable so nothing applies it, leaving a 201 that did not do what was asked and said nothing about it.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const created = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/api-keys',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { name: 'typed-rotate', scopes: ['read'] },
+    });
+    expect(created.statusCode).toBe(201);
+    const id = created.json<{ id: string }>().id;
+
+    const badNames: unknown[] = [123, true, { first: 'a' }, ['a']];
+    for (const badName of badNames) {
+      const rotated = await fx.app.inject({
+        method: 'POST',
+        url: `/v1/api-keys/${id}/rotate`,
+        headers: { authorization: `Bearer ${fx.plaintext}` },
+        payload: { name: badName } as Record<string, unknown>,
+      });
+      expect(
+        rotated.statusCode,
+        `a rotate carrying name=${JSON.stringify(badName)} must be refused, not quietly ignored`,
+      ).toBe(400);
+    }
+  });
 });
 
 describe('/v1/api-keys customer create + list end-to-end', () => {
