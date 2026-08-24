@@ -12913,3 +12913,47 @@ Two mutations on the new arm. Removing the transcript stub reds it naming
 `get /v1/agent-sessions/{id}/transcript (agent-sessions.ts: registerAgentSessionsRoutes)`. Adding a live
 route with no twin reds it naming that one, which is the proof it reads both registrars rather than
 comparing a list to itself. Both restored byte-identical.
+
+## V-1492 — measuring what "full suite green" has actually meant this session
+
+Every batch this session gated on `npx vitest run` reporting green, and every one of those runs read
+`3070 passed | 115 skipped`. The skipped figure is 115 test FILES and 815 tests — not a rounding error,
+and worth knowing precisely rather than reading past.
+
+**What is skipped, and why that is correct.** 136 suites open with
+`describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)`. They are the Postgres- and
+Redis-backed repo-contract and integration suites; CI supplies the services, a local run does not, and
+`an-integration-test-cannot-pass-without-its-database` already covers the dangerous variant of this — a
+suite that RUNS with the service down and reports green because every arm returned early. Its header is
+explicit that the skip path is the correct behaviour: "the `describe.skipIf` skips the block and nothing
+claims to have tested anything." So the local gate is not broken; it is narrower than its summary line
+suggests.
+
+**Whether that narrowness touched anything I changed — measured, not assumed.** A first pass matched
+skipped filenames against the surfaces this session edited and returned 36, which looked alarming. That
+number is a keyword guess: `db-mfa-*`, `db-oauth-*` and `db-durable-webhook-*` are repo-contract tests
+about database behaviour, and this session's changes were OpenAPI declarations, guard arms, marketing
+copy, and two runtime edits.
+
+Searching those same 136 files for the symbols actually touched — `registerAgentSessionsDisabledRoutes`,
+`CreateSessionRequestSchema`, `ProfileIdInputSchema`, `parseProfileId`, `PROFILE_ID_INPUT_RE`, the
+`/v1/sessions` registration, `/transcript`, `gui-control-key` — returns **zero**. None of the skipped
+suites exercises a runtime surface changed here.
+
+The two runtime changes are covered by suites that DID run: V-1489's `profile_id` validation by
+`integration/sessions.test.ts` (which is not DB-gated, and carries the arm added for it), and V-1491's
+stub registrations by `route-auth-coverage-invariant` and the registrar-parity arm, both unit-level.
+
+**Why record a batch with no code change.** Because the alternative was to keep writing "full suite
+green" without knowing what it excluded, and a verification claim whose scope nobody has measured is
+the same shape as the defects this sweep keeps finding — a passing signal standing in for one nobody
+checked. The gap is real, it is by design, and it does not overlap this session's work. All three of
+those needed establishing rather than assuming; 36-by-keyword versus 0-by-symbol is exactly the margin
+by which an unmeasured claim would have been wrong.
+
+**What this does NOT license.** A future change landing in a DB-backed surface would pass a local gate
+that never ran its tests. Nothing here fixes that, and no guard can — the services either exist or they
+do not. The mitigation is knowing which surfaces are in that set, which is what the measurement above
+provides, and running with `DATABASE_URL` set when a change touches one. I did not run them here: the
+default target is `postgres://driftstack:driftstack@localhost:5432/driftstack`, a live local dev
+database, and writing to it is a side effect outside this task.
