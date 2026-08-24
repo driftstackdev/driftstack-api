@@ -1,8 +1,15 @@
-// Behavioural coverage for the three resources no test ever called.
+// Behavioural coverage for the resources no test ever called.
 //
 // `client.mfa`, `client.legal` and `client.emailPreferences` had zero usages in
 // any test — measured, not assumed, by scanning every `.test.ts` in the repo for
 // the symbols and for `client.<name>.`.
+//
+// V-1419 — `client.auth` joined them. Coverage over the packages tree (which the
+// gate's `include` does not reach — see V-1407) reported ten of its eleven methods
+// as never EXECUTED: everything except `login`, which `auth-login-union` drives.
+// Signup, email verification, both magic-link halves, both password-reset halves,
+// refresh, logout, and both MFA exchanges — the whole authentication surface a
+// customer's own app calls — were reached by nothing.
 //
 // They were not unguarded: content-parity pins hold each method's verb, path and
 // JSDoc, and they are strong. Three mutations confirmed it — dropping the request
@@ -35,6 +42,7 @@ import { MfaResource } from '../../src/resources/mfa.js';
 import { LegalResource } from '../../src/resources/legal.js';
 import { EmailPreferencesResource } from '../../src/resources/email-preferences.js';
 import { AccountResource } from '../../src/resources/account.js';
+import { AuthResource } from '../../src/resources/auth.js';
 import type { HttpClient } from '../../src/http.js';
 
 interface RequestOpts {
@@ -179,5 +187,106 @@ describe('EmailPreferencesResource — driven, not read', () => {
     const { http, calls } = recorder(undefined);
     await new EmailPreferencesResource(http).optOut('tier-changed');
     expect(calls[0]!.body).toEqual({ event_type: 'tier-changed', opted_in: false });
+  });
+});
+
+// V-1419 — the auth resource. Each entry was cross-checked against the SERVER's
+// routes before being pinned here, not merely copied out of the SDK: a table that
+// records whatever the client currently sends would freeze a wrong path as
+// correct, which is exactly the defect the `?keep=current` arm above found. All
+// ten paths exist on the server with the same verb, so these arms are regression
+// evidence rather than a fix — the second, independent kind this file argues for.
+describe('AuthResource — the whole surface, none of it previously executed', () => {
+  const TOKEN = 'tok_abc123';
+  const CASES: ReadonlyArray<
+    readonly [
+      name: string,
+      path: string,
+      invoke: (r: AuthResource) => Promise<unknown>,
+      body: unknown,
+    ]
+  > = [
+    [
+      'signup',
+      '/v1/auth/signup',
+      (r) => r.signup({ email: 'a@b.test', password: 'pw' }),
+      { email: 'a@b.test', password: 'pw' },
+    ],
+    [
+      'verifyEmail',
+      '/v1/auth/verify-email',
+      (r) => r.verifyEmail({ token: TOKEN }),
+      { token: TOKEN },
+    ],
+    [
+      'requestMagicLink',
+      '/v1/auth/magic-link/request',
+      (r) => r.requestMagicLink({ email: 'a@b.test' }),
+      { email: 'a@b.test' },
+    ],
+    [
+      'consumeMagicLink',
+      '/v1/auth/magic-link/consume',
+      (r) => r.consumeMagicLink({ token: TOKEN }),
+      { token: TOKEN },
+    ],
+    [
+      'requestPasswordReset',
+      '/v1/auth/password-reset/request',
+      (r) => r.requestPasswordReset({ email: 'a@b.test' }),
+      { email: 'a@b.test' },
+    ],
+    [
+      'confirmPasswordReset',
+      '/v1/auth/password-reset/confirm',
+      (r) => r.confirmPasswordReset({ token: TOKEN, password: 'pw2' } as never),
+      { token: TOKEN, password: 'pw2' },
+    ],
+    [
+      'refresh',
+      '/v1/auth/refresh',
+      (r) => r.refresh({ refresh_token: TOKEN } as never),
+      { refresh_token: TOKEN },
+    ],
+    [
+      'logout',
+      '/v1/auth/logout',
+      (r) => r.logout({ session_token: TOKEN } as never),
+      { session_token: TOKEN },
+    ],
+    [
+      'mfaChallenge',
+      '/v1/auth/mfa/challenge',
+      (r) => r.mfaChallenge({ challenge_token: TOKEN, code: '123456' }),
+      { challenge_token: TOKEN, code: '123456' },
+    ],
+    [
+      'mfaStepUp',
+      '/v1/auth/mfa/step-up',
+      (r) => r.mfaStepUp({ code: '123456' }),
+      { code: '123456' },
+    ],
+  ];
+
+  it.each(CASES)(
+    'CRITICAL %s POSTs %s and forwards its body verbatim. A wrong path or verb here fails an authentication call in every application built on this SDK, and a dropped body turns a valid credential into a rejected one that reads to the customer as their own mistake.',
+    async (_name, path, invoke, body) => {
+      const { http, calls } = recorder({});
+
+      await invoke(new AuthResource(http));
+
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.method, 'every auth write is a POST').toBe('POST');
+      expect(calls[0]?.path).toBe(path);
+      expect(
+        calls[0]?.body,
+        'the credential the caller supplied must reach the wire unchanged',
+      ).toEqual(body);
+    },
+  );
+
+  it('CRITICAL the ten paths are DISTINCT. They differ by one segment in three pairs — magic-link request/consume, password-reset request/confirm, mfa challenge/step-up — and a copy-paste between halves of a pair would send a consume to the request endpoint, which fails in a way that looks like an expired token.', () => {
+    const paths = CASES.map(([, p]) => p);
+    expect(new Set(paths).size, 'two auth methods share a path').toBe(paths.length);
   });
 });

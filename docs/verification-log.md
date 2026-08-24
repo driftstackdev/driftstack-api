@@ -9513,3 +9513,43 @@ reason is visible one line down: `avatarUrl = r2AvatarUrl ?? oauthFallback` alre
 uploaded URL. The suppression saves an IdP lookup; it does not decide the answer. The comment now says
 that, because an arm whose prose claims a mechanism it does not depend on is the same defect as a title
 naming a path it never reaches — which is what V-1409 found in the SDK.
+
+### V-1419 — the SDK's entire authentication surface had never been called
+
+A fresh instrument on the packages tree V-1407 opened: named functions with zero executions. 58 in
+`packages/`, and 45 of them are `sdk-typescript` resource methods — the calls a customer's own
+application makes. The largest coherent block is `client.auth`: **ten of its eleven methods had never
+executed.** Only `login` had, via `auth-login-union`. Signup, email verification, both magic-link
+halves, both password-reset halves, refresh, logout, and both MFA exchanges: nothing reached any of
+them.
+
+`untested-resources.test.ts` already exists for exactly this and establishes the pattern — drive the
+real resource class through a recording transport. Its header is candid that these arms do not catch
+what nothing else catches, since the content-parity pins hold each verb and path too; what they add is
+a second, independent kind of evidence that survives a refactor which forces the pins to be rewritten.
+The `?keep=current` arm in that file is the precedent that this class finds real defects: a method
+that was "a guaranteed 400 in all three SDKs" because every guard pinned the signature and none
+asserted the URL.
+
+**So the table was built against the SERVER, not copied out of the SDK.** All ten paths were checked
+for existence and verb on `apps/server/src/routes` before being pinned. A table that records whatever
+the client currently sends would freeze a wrong path as correct — the precise defect above. **All ten
+match.** So these are regression evidence, not a fix, and the log says so rather than implying a bug
+was found.
+
+Eleven arms: ten per-method, plus one asserting the paths are DISTINCT. That last one is the real
+hazard — three of the ten come in pairs separated by a single segment (magic-link
+`request`/`consume`, password-reset `request`/`confirm`, mfa `challenge`/`step-up`), and a
+copy-paste between halves sends a consume to the request endpoint, which fails in a way that reads to
+the customer as an expired token.
+
+Mutations red exactly one arm each: pointing `consumeMagicLink` at the request path, dropping the body
+from `confirmPasswordReset`, and flipping `mfaStepUp` to GET.
+
+**A correction to V-1415, measured here.** That entry said the pre-commit hook never type-checks a
+staged test file. That is true of `apps/server`, whose `tsconfig.json` is `include: ['src/**/*']` with
+`tests` excluded — but it is not true generally. `packages/sdk-typescript/tsconfig.json` includes
+`tests/**/*`, so the same hook does cover this workspace. Verified rather than assumed: injecting a
+deliberate type error into this test file made `tsc -p packages/sdk-typescript/tsconfig.json` report
+it, and the file was restored. The gap is per-workspace, and `apps/server` — the largest — is on the
+wrong side of it.
