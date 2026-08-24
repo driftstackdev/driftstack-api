@@ -13798,3 +13798,50 @@ scratchpad copy. That is the thing the batch rule forbids, and the reason is tha
 HEAD rather than to what was there. It was safe here — the file had no uncommitted changes and
 `git diff` against HEAD is empty — but "safe because I checked afterwards" is the argument the rule
 exists to make unnecessary.
+
+## V-1506b — the Go side of the same name key, closed by a rule rather than a list; and two surfaces measured clean
+
+V-1506 added five hand-listed aliases to the TypeScript side. The Go side has 31 schemas the name key
+misses, and the largest group is not renaming at all — it is a spelling convention. golint requires
+`APIKey`, not `ApiKey`, so `CreateApiKeyRequest`, `CreateApiKeyResponse`, `RotateApiKeyRequest`,
+`RotateApiKeyResponse` and `ApiKey` were each skipped over a casing difference the Go compiler enforces.
+
+Resolved with a **rule** rather than a list: `Api → API`, `Url → URL`, `Id → ID`. That is strictly better
+than what V-1506 could do for TypeScript, and the difference is worth naming — a hand entry covers the
+schemas that exist when someone remembers to add it, while a mechanical rule covers the next `…ApiKey…`
+schema the day it lands. The rule is deliberately narrow: it resolves only a name it actually transforms
+and which exists as a struct, so a schema the Go SDK genuinely does not model stays uncompared rather
+than being paired with whatever sits nearby.
+
+Five schemas move from uncompared to compared, none was missing a field, and dropping `plaintext` from
+`CreateAPIKeyResponse` reds the arm naming two of them — so the rule carries weight rather than
+decorating the file.
+
+**The near-misses were checked and are all mis-pairings, not defects.** A 70%-coverage scan flagged
+`CreateApiKeyResponse ~ APIKey` and `RotateApiKeyResponse ~ CreateAPIKeyResponse`. Both are the scan
+scoring a schema against a struct that is one embedding level below its real counterpart; the correct
+pairs cover fully. This is the reason the rule refuses to guess: the same scan that finds a real pair
+finds three plausible wrong ones.
+
+### Two surfaces measured, both clean
+
+**No list endpoint silently truncates.** V-1500 bounded `limit` on paginated routes; the adjacent
+question is the bare-`{ data }` collections that publish no cursor at all — if one capped server-side,
+rows past the cap would be unreachable and the response would not say so. Across the repos and services
+there is no hardcoded list cap: every `.limit(n)` with n > 1 is a migration batch size or the page
+maximum of an already-paginated route, and the rest are `.limit(1)` single-row lookups. Verified
+concretely on the two most likely to grow — `listEndpoints` and `listApiKeys` both select every row for
+the account with no limit clause. Unbounded rather than silently capped, and boundedness is a separate
+guard's business.
+
+**36 published customer-facing operations have no TypeScript SDK method, and that is a scope decision
+rather than a defect.** Most are obviously not SDK material: `/health`, the whole `/v1/status/*` page
+surface, `/v1/oauth/authorize` (a browser redirect), `/v1/fleet/events` (SSE), the PDF and text receipt
+routes. Six are plausible gaps a customer might expect — `agent-sessions/{id}/transcript`,
+`/page-state`, `/cookies`, `/downloads`, `/v1/account/cost`, `/v1/account/me/notifications` — and the
+absence is real, verified rather than inferred from my path regex: the resource builds every path as a
+template literal the scan reads correctly, and there is no method for any of them.
+
+Recorded and not acted on. Which endpoints an SDK exposes is a product decision spanning three languages
+plus their docs and cross-SDK parity guards, and adding six methods to satisfy a census would be
+answering a question nobody asked with a change nobody scoped.

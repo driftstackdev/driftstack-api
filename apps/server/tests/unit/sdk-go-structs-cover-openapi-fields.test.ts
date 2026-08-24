@@ -201,6 +201,27 @@ function specSchemas(): Map<string, Set<string>> {
  * confident nonsense. The arm above asserts every entry still resolves, so an
  * alias that rots stops the run instead of quietly comparing nothing.
  */
+/**
+ * V-1506b — the Go SDK's name for a schema, when it differs only by initialism.
+ *
+ * golint requires `APIKey`, not `ApiKey`, so `CreateApiKeyRequest` is
+ * `CreateAPIKeyRequest` on the Go side and the name key skipped every one of
+ * them. This is a RULE rather than a list because the difference is mechanical:
+ * a new `…ApiKey…` schema is covered the day it lands, where a hand-written
+ * entry would have to be remembered.
+ *
+ * Deliberately narrow. It only resolves a name the rule TRANSFORMS and which
+ * exists as a struct — it never guesses at a pairing, so a schema the Go SDK
+ * genuinely does not model stays uncompared rather than being matched to
+ * whatever is nearby.
+ */
+function goInitialismName(schema: string): string {
+  return schema
+    .replace(/Api/g, 'API')
+    .replace(/Url/g, 'URL')
+    .replace(/\bId\b/g, 'ID');
+}
+
 const TS_ALIASES: ReadonlyArray<readonly [schema: string, iface: string]> = [
   ['AccountMeResponse', 'AccountSelfProfile'],
   ['AccountAuditEntry', 'AuditLogEntry'],
@@ -233,14 +254,20 @@ describe('sdk-go structs cover the fields the API returns', () => {
     const structs = goStructs();
     const missing: string[] = [];
     for (const [name, props] of specSchemas()) {
-      if (!structs.has(name)) continue;
-      const have = allFields(name, structs);
+      // V-1506b — fall back to the initialism spelling before giving up.
+      const goName = structs.has(name) ? name : goInitialismName(name);
+      if (!structs.has(goName)) continue;
+      const have = allFields(goName, structs);
       // Query/request types use `url:` tags rather than `json:`; a struct with
       // no json tags at all is not a response shape and is not this guard's
       // business.
       if (have.size === 0) continue;
       const gap = [...props].filter((p) => !have.has(p));
-      if (gap.length > 0) missing.push(`${name}: ${gap.sort().join(', ')}`);
+      if (gap.length > 0) {
+        missing.push(
+          `${name}${goName === name ? '' : ` (as ${goName})`}: ${gap.sort().join(', ')}`,
+        );
+      }
     }
     expect(
       missing.sort(),
