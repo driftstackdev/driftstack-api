@@ -10704,3 +10704,38 @@ Related prior art: V-1410 closed the `fd00::/8` half of this same package's ULA 
 `fc` prefix had ever been exercised.
 
 No new test file; 45 `it` declarations to 47. No ratchet movement.
+
+## V-1448 — the scrypt work factor was pinned three times and hashed zero times
+
+Every `logN` reference in the whole suite is a source-text match. Three files —
+`api-key-generation-scrypt-cross-source-invariant`, `api-keys-lib-cross-source-invariant`, and
+`lib-api-keys-content-parity` — assert that `apps/server/src/lib/api-keys.ts` contains
+`const buf = await scryptKdf.kdf(plaintext, { logN: 15, r: 8, p: 1 });`. None of them hashes anything.
+
+The parameter is a published claim. Marketing-site `docs/security-overview.astro` tells customers their
+keys are hashed with "`scrypt` (logN=15) at mint time", and the content-parity header names that page
+as the reason the constants are pinned. So the strength of every stored API key was guaranteed by
+regex over its own source file.
+
+scrypt-kdf emits the standard format, and its header carries the parameters the hash was actually
+computed with: magic `scrypt`, a version byte, `logN` at offset 7, then `r` and `p` as big-endian
+uint32. Decoded from a real `hashApiKey` output: `scrypt`, version 0, **logN=15, r=8, p=1** — the
+published claim holds. An arm now reads those back off a hash it computed, and catches `logN 15→14`,
+`r 8→4` and `p 1→2` on its own with every text pin excluded from the run.
+
+**The reason I first gave for adding it was wrong, and the measurement is what corrected it.** The
+argument was that a pin passes on anything keeping the literal. So I wrote the weakening that exploits
+exactly that: leave the pinned `kdf(...)` line byte-identical and re-hash weakly on the `return` line
+instead. **The pin caught it** — it pins the return statement too. The pins are tighter than the
+argument for replacing them assumed, which is the same result as V-1444 and worth the same treatment:
+record it rather than quietly keep the framing.
+
+What the arm is actually worth is narrower and still real. A pin is coupled to the source SHAPE, so any
+legitimate refactor — hoisting the params to a named constant, sourcing them from config — forces the
+regex to be rewritten, and a rewritten pin re-states whatever the code now says. Nothing in that loop
+ever computes a hash. This arm means the same thing across all of it, and it is the one assertion in
+the repo that ties the stored artifact to the sentence shown to customers.
+
+Three mutations, one failing arm each, every restore byte-identical.
+
+No new test file; 10 `it` declarations to 11. No ratchet movement.

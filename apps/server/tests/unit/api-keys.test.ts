@@ -37,6 +37,42 @@ describe('keyPrefixFromPlaintext', () => {
 });
 
 describe('hashApiKey + verifyApiKey', { timeout: 15_000 }, () => {
+  // V-1448 — the scrypt work factor is the strength of every stored API key, and
+  // every `logN` reference in this suite is a SOURCE-TEXT pin. Three separate files
+  // match `const buf = await scryptKdf.kdf(plaintext, { logN: 15, r: 8, p: 1 });`
+  // against the file's own bytes. None of them hashes anything.
+  //
+  // A text pin answers "does the call site still read this way". This arm answers
+  // "is the artifact we store actually that strong" — and the parameter is a
+  // published claim: marketing-site `docs/security-overview.astro` tells customers
+  // their keys are hashed with "`scrypt` (logN=15) at mint time".
+  //
+  // The two are complementary, and NOT in the way first assumed. A weakening was
+  // written specifically to slip past the pins — leave the pinned `kdf(...)` line
+  // byte-identical and re-hash weakly on the `return` line instead — and the pins
+  // caught it, because they pin the return too. So this is not here because the
+  // pins are leaky. It is here because a pin is coupled to the source SHAPE: any
+  // legitimate refactor (params hoisted to a named constant, sourced from config)
+  // forces the regex to be rewritten, and a rewritten pin re-states whatever the
+  // code now says. This arm keeps meaning the same thing across all of that,
+  // because it reads the parameters back out of a hash it actually computed.
+  //
+  // scrypt-kdf emits the standard format, whose header carries the parameters it
+  // was run with — magic `scrypt`, a version byte, logN, then r and p as
+  // big-endian uint32.
+  it('CRITICAL a stored hash ENCODES scrypt logN=15, r=8, p=1 — read back off the artifact, not asserted about the call site. This is the customer-facing strength claim on docs/security-overview; lowering logN by one halves the work an offline cracker has to do against every stored key.', async () => {
+    const encoded = await hashApiKey(generateApiKey('live'));
+    const raw = Buffer.from(encoded, 'base64');
+
+    expect(raw.subarray(0, 6).toString('latin1'), 'not a scrypt standard-format hash').toBe(
+      'scrypt',
+    );
+    expect(raw[6], 'scrypt format version').toBe(0);
+    expect(raw[7], 'logN — N = 2^15, the published work factor').toBe(15);
+    expect(raw.readUInt32BE(8), 'r — block size').toBe(8);
+    expect(raw.readUInt32BE(12), 'p — parallelisation').toBe(1);
+  });
+
   it('hashes a key and verifies the same plaintext as valid', async () => {
     const plaintext = generateApiKey('test');
     const hash = await hashApiKey(plaintext);
