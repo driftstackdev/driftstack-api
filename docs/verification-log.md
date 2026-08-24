@@ -15147,3 +15147,55 @@ Five applications: four gaps (V-1515 header spellings, V-1527 the BYOK cache rou
 once-only secrets, V-1529 a documented bypass one directory over) and one confirmed-closed. It is worth
 keeping, and it is not a guarantee — which is the useful thing to know about it before pointing it at the
 remaining candidates.
+
+## V-1531 — a third spec axis, and my own instrument had the fault I keep finding in others'
+
+The spec is code here: `packages/sdk-python` is generated from it, so a status code the server can return
+and the document omits reaches customers as a branch their client cannot model — an untyped success for a
+2xx, a missing error class for a 4xx.
+
+Two neighbouring guards stop just short of that. `openapi-route-coverage` compares METHOD + PATH, so an
+operation can be fully covered and still declare the wrong codes. `openapi-responses-conform-to-the-spec`
+validates response BODIES against the schema, which by construction cannot see a code no arm exercises.
+Nothing checked the codes themselves.
+
+**The measurement, and how badly the first one lied.** A regex draft matching `app.<method>(` reported
+EIGHTEEN operations returning an undeclared code, including GETs apparently returning 201. Every one was
+false, for two separate reasons found by reading the source rather than the output:
+
+1. `app.post<{ Params: { id: string }; Body: { name?: string } }>(` puts a TypeScript generic between the
+   method name and the paren. The pattern required `(` immediately, so every typed registration was
+   invisible — and because block boundaries were derived from matched registrations, each invisible
+   handler's codes were attributed to whichever plain registration preceded it. 18 → 1.
+2. The survivor, `POST /v1/account/mfa/verify` "returning" 204, was a `reply.code(204)` inside
+   `disableHandler` — a `const` declared between two registrations and lexically inside neither. 1 → 0.
+
+**The true answer is zero.** 264 registrations resolve to published operations and not one returns an
+undeclared literal code.
+
+That is the finding worth recording, but it is not the useful part. **The instrument I have spent four
+batches pointing at other people's guards had exactly the fault it was built to find** — one spelling of a
+mechanism taken for the whole mechanism — and it produced eighteen confident, specific, false findings
+before the first source read. The repo already had the answer: `openapi-route-coverage` parses
+registrations with the TypeScript compiler, which is precisely why it has neither bug. Reaching for the
+canonical tool instead of a hand-rolled scan would have skipped both.
+
+**The new guard therefore reads the AST**, resolves an identifier handler to its `const` declaration in
+the same file, and — because the two bugs above were both silent under-reads — COUNTS the registrations it
+cannot resolve and asserts a ceiling on them, so the blind spot is a number rather than a silence. A
+non-vacuity arm pins >200 resolved registrations and >150 mapping to published operations, since a scan
+that resolved nothing would satisfy an emptiness assertion perfectly.
+
+Mutation-proved on all three registration forms, because two of them were the bugs:
+
+```
+plain        POST /v1/account/mfa/verify returns 410, declares 200/400/401/403/409/429
+generic      POST /v1/api-keys/{id}/rotate returns 410, declares 201/400/401/403/404/429
+const-handler DELETE /v1/account/mfa   returns 418, declares 204/400/401/403/429
+```
+
+One of those mutations was itself invalid on the first attempt — I picked 409 for a route that already
+declares 409, and the arm correctly stayed green. Worth keeping in the record: a mutation that fails to
+red is a claim about the mutation until the mutation is checked.
+
+`EXPECTED_TEST_FILES` 3014→3015 and `EXPECTED_TEST_FILES_ALL` 3176→3177, one file, mine.
