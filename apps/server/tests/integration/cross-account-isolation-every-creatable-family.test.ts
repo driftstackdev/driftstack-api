@@ -32,8 +32,65 @@
 // boundary — it exercises the request parser. That is the same trap as mutating
 // an unexecuted branch: the probe reports a refusal it never actually tested.
 
+import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildTestApp, seedAdditionalAccount } from './_helpers/build-test-app.js';
+
+/**
+ * V-1470 — the family list below is hand-maintained, and this is what keeps it
+ * honest.
+ *
+ * The describe is named "in any creatable family" and the header says the next
+ * family gets covered by construction. Both were true of the harness and neither
+ * was true of the ROSTER: seven `OWNED.push` lines and a literal `probes` array,
+ * with nothing asking whether they still span what the API lets a customer
+ * create. Measured when this landed: 7 collection-level creates in the route
+ * table, 6 customer-facing and all 6 probed.
+ *
+ * A create gated by `driftstack_internal_admin` is excluded WITH ITS REASON, not
+ * silently: staff-only fleet resources have no owning customer account, so there
+ * is no tenant boundary for one account to cross.
+ *
+ * Scope, stated because it bounds the claim: this derives COLLECTION-level
+ * creates (`POST /v1/<family>`), which are unambiguous. Nested creates like
+ * `POST /v1/profiles/{id}/snapshots` cannot be told apart from actions like
+ * `POST /v1/api-keys/{id}/rotate` by shape alone, so `snapshot` is carried in
+ * the covered list by hand and this arm does not police that half.
+ */
+const STAFF_ONLY_CREATES: Record<string, string> = {
+  '/v1/mac-nodes':
+    'fleet infrastructure, gated by driftstack_internal_admin. No customer account owns a mac node, so there is no tenant boundary to cross.',
+};
+
+/** Collection-level creates this file actually probes. `snapshot` is nested. */
+const PROBED_CREATES = [
+  '/v1/agent-sessions',
+  '/v1/api-keys',
+  '/v1/profiles',
+  '/v1/recipes',
+  '/v1/sessions',
+  '/v1/webhooks',
+];
+
+function collectionLevelCreates(): { path: string; staffOnly: boolean }[] {
+  const routesDir = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'routes');
+  const out: { path: string; staffOnly: boolean }[] = [];
+  for (const file of readdirSync(routesDir)) {
+    if (!file.endsWith('.ts')) continue;
+    const src = readFileSync(resolve(routesDir, file), 'utf8');
+    for (const m of src.matchAll(/app\.post[^(]*\(\s*\n?\s*'(\/v1\/[^']*)'/g)) {
+      const path = m[1] ?? '';
+      if (path.includes('{') || path.includes(':')) continue;
+      if (path.split('/').length !== 3) continue;
+      // The registration options follow the path; read far enough to see the gate.
+      const options = src.slice(m.index ?? 0, (m.index ?? 0) + 600);
+      out.push({ path, staffOnly: options.includes("requireScope('driftstack_internal_admin')") });
+    }
+  }
+  return out;
+}
 
 let fx: Awaited<ReturnType<typeof buildTestApp>>;
 let bToken = '';
@@ -239,6 +296,32 @@ afterAll(async () => {
 });
 
 describe('no account can reach another account resource, in any creatable family', () => {
+  it('CRITICAL every customer-creatable family is in the probe roster. The list below is written by hand, and nothing asked whether it still spans what the API lets a customer create — a new family would be absent from this sweep and from the six family-specific files, with no test saying so, on the one class of bug where a miss is another customer reading your data.', () => {
+    const creates = collectionLevelCreates();
+    expect(
+      creates.length,
+      'no collection-level POST /v1/<family> routes found — the scan stopped matching and this arm would pass over an empty set',
+    ).toBeGreaterThan(5);
+
+    const uncovered = creates
+      .filter((c) => !c.staffOnly)
+      .map((c) => c.path)
+      .filter((p) => !PROBED_CREATES.includes(p))
+      .sort();
+    expect(
+      uncovered,
+      'customer-creatable famil(ies) no cross-account probe reaches — add them to the sweep or, if staff-only, record why:',
+    ).toEqual([]);
+
+    // Both directions: an entry naming a route that no longer exists exempts
+    // nothing and reads as reviewed.
+    const known = new Set(creates.map((c) => c.path));
+    expect(
+      [...PROBED_CREATES, ...Object.keys(STAFF_ONLY_CREATES)].filter((p) => !known.has(p)).sort(),
+      'roster entr(ies) naming a create route that no longer exists:',
+    ).toEqual([]);
+  });
+
   it('CRITICAL both accounts and every resource were really created, and B holds a working credential of its own. Every assertion below reports an ABSENCE, so a sweep whose creates all failed — or whose second token was never issued — would pass having attempted nothing.', async () => {
     // EVERY family must have produced a real id. A failed create yields '' and
     // its probes are skipped, so the family silently leaves the sweep — and the

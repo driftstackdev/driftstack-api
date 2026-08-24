@@ -11680,3 +11680,44 @@ they are derived rather than rostered, and each was confirmed load-bearing here 
 strength of its name.
 
 No source or test change; log entry only.
+
+## V-1470 — "in any creatable family" was a hand-written list of families
+
+Pivoted off the security primitives, which have come back clean twice running, to the highest-severity
+class in a multi-tenant API: one account reading another's data. That surface is well covered — six
+family-specific isolation files, a 404-not-403 anti-enumeration policy, and
+`cross-account-isolation-every-creatable-family`, whose five arms are the strongest set I have read this
+session. It asserts no attempt returned 2xx, that every refusal is 404 rather than 403 (a 403 turns a
+guessed id into an existence oracle), that an idempotent delete answers a foreign id exactly as it
+answers one that never existed, and — the one most tests would omit — that A's resources are
+**byte-identical** afterwards, because a handler that mutates and only then fails to find a row would
+answer 404 having already done the damage.
+
+**What none of them asserts is that the family list is complete.** The describe is named "in any
+creatable family" and the header says the next family is covered by construction. Both are true of the
+HARNESS and neither was true of the ROSTER: seven `OWNED.push` lines and a literal `probes` array, with
+nothing asking whether they still span what the API lets a customer create.
+
+Derived the answer rather than assuming it. Seven collection-level `POST /v1/<family>` routes exist, and
+the comparison surfaced one the sweep never probes — **`/v1/mac-nodes`**. Checked before filing it:
+that route is gated by `requireScope('driftstack_internal_admin')`. It is fleet infrastructure, no
+customer account owns a mac node, and there is no tenant boundary for one account to cross. The roster
+is complete today.
+
+So the finding is the missing completeness check, not a missing family. An arm now derives the
+collection-level creates from the route table and requires each customer-facing one to be in the probe
+roster, with staff-only creates excluded BY NAME AND REASON rather than silently. It checks both
+directions, so an entry naming a route that no longer exists fails too — an exemption that exempts
+nothing reads as reviewed.
+
+Scope stated in the file because it bounds the claim: this derives collection-level creates, which are
+unambiguous. A nested create (`POST /v1/profiles/{id}/snapshots`) cannot be told apart from an action
+(`POST /v1/api-keys/{id}/rotate`) by shape alone, so `snapshot` stays in the covered list by hand and
+this arm does not police that half.
+
+Three mutations, each restored byte-identical: re-gating `/v1/mac-nodes` to a customer scope makes it a
+customer-creatable family and reds; renaming a roster entry to a route that does not exist reds the
+staleness direction; breaking the route scan reds the count floor.
+
+Full suite green: 3067 files, 30869 tests, exit 0. No new test file; 5 `it` declarations to 6. No
+ratchet movement.
