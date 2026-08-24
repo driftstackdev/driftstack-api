@@ -102,6 +102,47 @@ def write_bmp24(path, w, h, rows):
     open(path, 'wb').write(fh + hdr + body)
 
 
+def write_png24(path, w, h, rows):
+    """Minimal 8-bit RGB PNG. The DMG background is macOS-side, where PNG is the
+    expected format — the BMP writer above exists only because NSIS demands it."""
+    raw = bytearray()
+    for y in range(h):
+        raw.append(0)                       # filter type 0 (None) per scanline
+        for (r, g, b) in rows[y]:
+            raw += bytes((r, g, b))
+
+    def chunk(tag, data):
+        return (struct.pack('>I', len(data)) + tag + data
+                + struct.pack('>I', zlib.crc32(tag + data) & 0xFFFFFFFF))
+
+    png = b'\x89PNG\r\n\x1a\n'
+    png += chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0))
+    png += chunk(b'IDAT', zlib.compress(bytes(raw), 9))
+    png += chunk(b'IEND', b'')
+    open(path, 'wb').write(png)
+
+
+def compose_dmg(src, dst, tw, th, icon_y, icon_half):
+    """Brand ground for the DMG window, with the mark clear of the icon row.
+
+    Tauri places the app and the Applications folder at a fixed y; drawing the
+    logo across that band would put artwork behind the two icons the window
+    exists to present. The mark therefore sits in the space ABOVE them.
+    """
+    sw, sh, px = read_png_rgba(src)
+    canvas = [[BG for _ in range(tw)] for _ in range(th)]
+    band_top = icon_y - icon_half
+    side = min(int(th * 0.30), max(16, band_top - 24))
+    logo = flatten_and_scale(px, sw, sh, side, side)
+    ox = (tw - side) // 2
+    oy = max(12, (band_top - side) // 2)
+    for y in range(side):
+        for x in range(side):
+            canvas[oy + y][ox + x] = logo[y][x]
+    write_png24(dst, tw, th, canvas)
+    print(f'wrote {dst} ({tw}x{th}, logo {side}px above the icon row at y={icon_y})')
+
+
 def compose(src, dst, tw, th, logo_frac):
     sw, sh, px = read_png_rgba(src)
     side = int(min(tw, th) * logo_frac)
@@ -119,3 +160,7 @@ if __name__ == '__main__':
     src = sys.argv[1]
     compose(src, sys.argv[2], 164, 314, 0.62)   # sidebar: welcome/finish panel
     compose(src, sys.argv[3], 150, 57, 0.80)    # header: per-page banner strip
+    if len(sys.argv) > 4:
+        # 660x400 matches bundle.macOS.dmg.windowSize; icons sit at y=170 with
+        # a ~64px half-height, so the mark is placed clear of that band.
+        compose_dmg(src, sys.argv[4], 660, 400, 170, 64)

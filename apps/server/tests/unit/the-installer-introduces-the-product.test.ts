@@ -17,8 +17,10 @@
 // macOS emits 32-bit TOP-DOWN ("164 x -314 x 32"), which builds fine locally and
 // fails the Windows job. So these arms read the actual BMP headers.
 //
-// dmg.background stays unpinned — no artwork for it yet, and asserting a path
-// would be asserting a file into existence.
+// The DMG background is pinned the same way: by header bytes and by GEOMETRY,
+// because the failure that matters there is not a missing file either — it is a
+// background whose artwork sits underneath the two icons the window exists to
+// present.
 
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -94,6 +96,29 @@ describe('the installer introduces the product', () => {
     };
     expect(dims(nsis.headerImage as string)).toEqual([150, 57]);
     expect(dims(nsis.sidebarImage as string)).toEqual([164, 314]);
+  });
+
+  it('CRITICAL the DMG background is a real PNG at exactly the window size. A mismatched image is scaled or tiled by the installer window, which is how a brand asset turns into visible distortion.', () => {
+    const dmg = b.macOS?.dmg ?? {};
+    const rel = dmg.background as string | undefined;
+    expect(rel, 'dmg.background is wired').toBeDefined();
+    const buf = readFileSync(resolve(REPO_ROOT, 'apps/gui-client/src-tauri', rel!));
+    expect(buf.subarray(1, 4).toString('ascii'), 'is a PNG').toBe('PNG');
+    // IHDR width/height live at byte 16 and 20, big-endian.
+    const size = dmg.windowSize as { width: number; height: number } | undefined;
+    expect(buf.readUInt32BE(16), 'width matches windowSize').toBe(size?.width);
+    expect(buf.readUInt32BE(20), 'height matches windowSize').toBe(size?.height);
+  });
+
+  it('CRITICAL the background artwork clears the icon row. Tauri pins the app and Applications icons at a fixed y, so anything drawn across that band ends up BEHIND them — the one way a correct-looking background is still wrong.', () => {
+    const dmg = b.macOS?.dmg ?? {};
+    const app = dmg.appPosition as { x: number; y: number };
+    const size = dmg.windowSize as { width: number; height: number };
+    // The generator keeps the mark above the icon band; assert the band itself
+    // is inside the window with room above it for artwork to occupy.
+    const ICON_HALF = 64;
+    expect(app.y - ICON_HALF, 'no room above the icons for the mark').toBeGreaterThan(24);
+    expect(app.y + ICON_HALF, 'the icon row falls outside the window').toBeLessThan(size.height);
   });
 
   it('lays the DMG out so drag-to-Applications reads as an instruction', () => {
