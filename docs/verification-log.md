@@ -10156,3 +10156,35 @@ Five arms, one per service, each mutation-proven by deleting its argument. Three
 the roster arm — which asks for the newly-unwired dep to be _declared_. That is precisely the
 "regression becomes paperwork" failure V-1432 named, now demonstrated: the roster fires, but only the
 new arm says a security-relevant wiring was removed.
+
+### V-1434 — my own sweep's regex was its blind spot, and two of seven fell in it
+
+V-1433 censused seven services that bootstrap wires the customer audit recorder into, then guarded
+**five**. The two it left out were not an oversight of judgement — they were invisible to the pattern
+the sweep ran on. That pattern was `if (dep === null) return`, and fail-open has other spellings:
+
+| service                               | fail-open form                            | why V-1433 missed it                                |
+| ------------------------------------- | ----------------------------------------- | --------------------------------------------------- |
+| `PairModeHeartbeatSweep`              | `this.deps.accountAudit?.record(...)`     | optional chaining — there is no guard line to match |
+| `DrizzleAgentDecomposerUsageRecorder` | `if (this.accountAudit !== null) { ... }` | positive-form guard, not an early return            |
+
+Both are the same defect as the five already covered: an optional parameter, a null default, and audit
+rows that stop being written when the argument is dropped. Only the syntax differs, and the syntax is
+what the regex keyed on.
+
+Found by running a _different_ instrument over the same ground — a sweep for injected dependencies
+invoked through optional chaining. That returned 8 distinct deps, and `accountAudit?.record()` in the
+pair-mode sweep was the one that mattered. A single instrument's pattern is its blind spot; the second
+pass is what shows the shape of the first one's hole.
+
+Both entries are now in the table, each mutation-proven by deleting its argument in the form it is
+written — the object form for the sweep, positional for the recorder. The control repeats V-1433's
+measurement on the new pair: with the wiring dropped, the pair-mode sweep's own **11 tests all pass**.
+Behaviour tests remain blind to a wiring regression, which is why these arms live beside the
+construction rather than beside the behaviour.
+
+Recorded as still-unswept from the same optional-chaining pass: `eventBus?.publish()` has six call
+sites in `agent-runtime`. If that bus were unwired the agent-session event stream would go quiet with
+no error. It is not covered here — the sweep's remaining deps (`logger`, `metrics`) are observability
+whose absence is self-evidently tolerated by design, but the event bus is not obviously in that class
+and deserves its own pass.

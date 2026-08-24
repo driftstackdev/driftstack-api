@@ -433,6 +433,15 @@ describe('every optional dependency bootstrap does not pass is declared', () => 
     ['SessionsService', 'session lifecycle audit emit'],
     ['TeamMembersService', 'team membership changes'],
     ['ProfileSnapshotsService', 'snapshot create/delete (already pinned by bootstrap parity)'],
+    // V-1434 — these two were in V-1433's census and absent from its table, because
+    // that sweep matched only `if (dep === null) return`. Each fails open through a
+    // form that pattern cannot see:
+    //   PairModeHeartbeatSweep            `this.deps.accountAudit?.record(...)`
+    //   DrizzleAgentDecomposerUsageRecorder  `if (this.accountAudit !== null) { ... }`
+    // Optional chaining and a positive-form guard are the same fail-open as the early
+    // return; only the syntax differs, and the syntax is what the regex keyed on.
+    ['PairModeHeartbeatSweep', 'agent_session.pair_mode.timeout'],
+    ['DrizzleAgentDecomposerUsageRecorder', 'decomposer usage + key_source metadata'],
   ];
 
   it.each(AUDIT_WIRED)(
