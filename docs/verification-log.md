@@ -14805,3 +14805,50 @@ touches the prior-incident dedup logic, and (c) audit-archive R2 month partition
 and neither is now guarded. They are named here so the next sweep knows they were read and skipped rather
 than missed: (b) needs the dedup review the item asks for, and (c) belongs with D-033, which is one of the
 decisions already waiting.
+
+## V-1524 — item 19 closed out: one guarded, one fixed six weeks after it was written, one unreachable
+
+V-1523 guarded item 19(a) and named (b) and (c) as read-and-skipped. This batch finished them, and the
+result is that a whole listed item can be struck with evidence rather than left as an open unknown.
+
+### (b) was true when written and is not true now
+
+The item says the self-re-arming jobs "re-arm `dedup:false` inside the handler" before `markComplete`, so
+a `markComplete` throw retries a handler that has already armed a successor and the chains fan out.
+
+The mechanism is real — `handler(job)` and `markComplete` sit in one `try`, so a throw from the latter
+retries the former. The premise is not. Every one of the thirteen self-re-arming jobs passes
+`dedupOnAccountAndType: true` with `dedupAfterRunAt: currentRunAt`, and the repo's predicate dedups
+against any successor that is unfinished (`completedAt IS NULL AND failedAt IS NULL`) with a later
+`runAt`. The retry's re-arm therefore collapses into the successor the first pass created.
+
+Dated rather than asserted: the item is documented 2026-06-03, and `dedupAfterRunAt` was introduced
+2026-07-14 in `9c09b1518` — "fix(scheduler): deduplicate recurring successors". The item was correct for
+six weeks and has been wrong since.
+
+**It is also already guarded, better than I would have guarded it.**
+`recurring-scheduler-successor-dedup` asserts exactly this invariant and DISCOVERS its consumers from the
+`register*Job` export convention rather than trusting a roster — its own header records that discovery
+found three jobs the hand list had never checked. Nothing for me to add, which is the correct outcome to
+report rather than a reason to add something.
+
+### (c) is still latent and cannot fire
+
+`windowStart` is `extractTimestamp(archivable[0])` — the oldest archivable row — and the R2 object key is
+`YYYY/MM` from it, so a multi-month window does land in one mislabelled file exactly as the item says.
+
+It cannot happen today for the reason V-1518 established: nothing constructs `AuditArchiveService`. The
+defect sits behind an unscheduled service, which in turn sits behind D-033, one of the decisions already
+waiting. Correctly parked, and now recorded as parked-because-unreachable rather than merely deferred.
+
+### Item 19, complete
+
+| sub-item                             | state                                                                     |
+| ------------------------------------ | ------------------------------------------------------------------------- |
+| (a) `minCapFor` smallest-cap payload | latent; precondition now fails before a second capped tier lands (V-1523) |
+| (b) self-re-arm fan-out              | FIXED 2026-07-14, and guarded by a discovery-based invariant              |
+| (c) archive month partitioning       | latent, unreachable while the archive is unscheduled; belongs with D-033  |
+
+No code changed this batch. What it produces is a listed action that can be closed with dates and commits
+behind it, and a second stale entry in the queue after item 15 — which matters for how much the standing
+list should be trusted, not just for this item.
