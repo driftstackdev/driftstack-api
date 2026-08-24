@@ -10830,3 +10830,35 @@ cross-source invariant asserts `toBe(32)` separately, so the pair closes it comp
 the constant reds two tests. The behavioural arm's name promises more than that file alone delivers.
 
 No new test file; `it` count unchanged at 3. No ratchet movement.
+
+## V-1451 — I hand-rolled a comment stripper twice, and the repo's own guard caught it
+
+`no-guard-strips-comments-by-hand` failed on the first clean full-suite run after V-1449 and V-1450.
+Both of my new censuses stripped comments with a private
+`.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(?<!:)\/\/.*$/gm, '')` instead of calling the shared
+`codeOnly` helper — the exact thing that guard exists to prevent, for the exact reason it states: a
+private copy models line comments but not string or regex literals, so it can blank a file it is
+supposed to be scanning and the guard keeps passing while looking at nothing.
+
+That failure mode is not hypothetical here. `V-1256` recorded it: a naive block-comment pass could not
+tell that the `/*` in `// … /v1/agent-sessions/* routes` sat inside a line comment, opened a comment
+there and closed it at the next `*/` far below — all 61 imports of that file vanished, and eighteen
+files under `apps/server/src` carry that shape. My copies had precisely that bug available to them.
+
+Both now call `codeOnly`. Every behaviour re-proved afterwards: the randomness census still reds on a
+`Math.random` reference and still does NOT red on a comment naming it, and the cipher census still reds
+on an encrypt-site swap.
+
+**Two process notes, both worth more than the fix.**
+
+The suite run that would have caught this earlier was worthless because I ran it in the background and
+then mutated source files while it executed. It reported 2638 failed files out of 5655 — a file count
+impossible for this repo, which is what gave it away. A mutation harness and a full-suite run cannot
+share a working tree, and "run the suite in the background so I can keep working" is exactly how they
+end up sharing one. The clean re-run showed the real state: 3182 files, one failure, this one.
+
+The commit itself landed with the message `placeholder`, because I put a heredoc marker in the middle
+of the `git` argument list and the shell fed it to `-F -`. Amended in place — it was HEAD with no
+foreign commit on top, which is the only condition under which that is safe.
+
+No new test file; no `it` count change in either file. No ratchet movement.

@@ -30,6 +30,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { codeOnly } from './_helpers/code-only.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -60,9 +61,7 @@ const ALLOWLIST = new Set<string>([
  *  two files in packages/ say "no Math.random()" in prose to explain why they
  *  seed their own PRNG. Without this they read as offenders. */
 function code(p: string): string {
-  return read(p)
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(?<!:)\/\/.*$/gm, '');
+  return codeOnly(read(p));
 }
 
 /** Any REFERENCE to Math.random, not only a call.

@@ -22,6 +22,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { codeOnly } from './_helpers/code-only.js';
 import {
   AES_256_KEY_BYTES,
   GCM_IV_BYTES,
@@ -117,7 +118,7 @@ describe('AES-GCM parameters are never redeclared', () => {
   it('CRITICAL every cipher constructed in this repo is aes-256-gcm. The parameter constants cannot see an algorithm swap — chacha20-poly1305 has the same key, IV and tag lengths and the same AEAD interface, so it satisfies all three and still produces envelopes no other module can decrypt.', () => {
     const calls: Array<{ file: string; algorithm: string }> = [];
     for (const { file, body } of SOURCES) {
-      const code = body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(?<!:)\/\/.*$/gm, '');
+      const code = codeOnly(body);
       // `[Cc]` is load-bearing. `create(?:De)?cipheriv` reads as "both spellings"
       // and matches only `createDecipheriv` — `createCipheriv` has a capital C
       // there. The first draft of this arm therefore scanned DECRYPT sites only,
