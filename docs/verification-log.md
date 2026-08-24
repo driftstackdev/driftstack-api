@@ -13244,3 +13244,13 @@ expressible as a constraint and simply were not (this one), while others are gen
 least one field", `ApiKeyScopeListRequestSchema`'s "scopes must not contain duplicates" (JSON Schema
 has `uniqueItems`, so that one is expressible too). Sorting the ten into expressible-and-missing versus
 genuinely-prose-only is the follow-up this opens; the two webhook rails are the ones fixed here.
+
+**Follow-up, same finding.** The commit hook's prettier WRAPPED the single-line `url: z.string().url()
+.regex(...)` chain onto four lines, which broke the two Create-side pins I had just written to match it
+— the reverse of the collapse this repo has recorded before. The pins are re-quoted with `\s*\n?\s*`
+separators, the same form the Update-side pins already used, which is why those survived untouched.
+
+The rule that follows: a pin should quote the chain with whitespace-tolerant separators rather than the
+exact line breaking, because the formatter owns the line breaking and runs AFTER the author. Checking
+`prettier --check` on both the source and the pins before committing is what makes that stable, and it
+now reports them formatted.

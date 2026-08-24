@@ -97,7 +97,7 @@ describe('W434.C packages/api-types/src/webhooks.ts content parity', () => {
       // https constraint at all. Same conversion V-924/V-1475 made to the tier
       // fields, and behaviour-preserving: `.url()` still runs first and the
       // message is unchanged.
-      /url: z\.string\(\)\.url\(\)\.regex\(\/\^https:\\\/\\\/\/, \{ message: 'Webhook URL must use https:\/\/' \}\),/,
+      /url: z\s*\n?\s*\.string\(\)\s*\n?\s*\.url\(\)\s*\n?\s*\.regex\(\/\^https:\\\/\\\/\/, \{ message: 'Webhook URL must use https:\/\/' \}\),/,
     );
     expect(body).toMatch(
       /\/\/ V-356 — only subscribable event types accepted on create\. Customers\s*\n?\s*\/\/ can't subscribe to `test\.ping`; that event is only emitted via the\s*\n?\s*\/\/ POST \/v1\/webhooks\/:id\/test endpoint, regardless of subscription\.\s*\n?\s*events: z\.array\(SubscribableWebhookEventTypeSchema\)\.min\(1\)\.max\(10\),/,

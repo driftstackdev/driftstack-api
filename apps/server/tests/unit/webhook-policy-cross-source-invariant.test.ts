@@ -44,7 +44,7 @@ describe('W871 Webhook policy cross-source invariant', () => {
   it('CRITICAL packages/api-types/src/webhooks.ts CreateWebhookRequestSchema url field enforces https:// with the same message, as a PUBLISHABLE regex rather than a refine (V-1498 — a refine never reached the OpenAPI document). The https-only rule is what prevents customers from pointing webhooks at http:// (leaking secrets) or non-URL strings (refusing delivery).', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
     expect(p).toMatch(
-      /CreateWebhookRequestSchema = z\.object\(\{[\s\S]+?url: z\.string\(\)\.url\(\)\.regex\(\/\^https:\\\/\\\/\/, \{ message: 'Webhook URL must use https:\/\/' \}\),/,
+      /CreateWebhookRequestSchema = z\.object\(\{[\s\S]+?url: z\s*\n?\s*\.string\(\)\s*\n?\s*\.url\(\)\s*\n?\s*\.regex\(\/\^https:\\\/\\\/\/, \{ message: 'Webhook URL must use https:\/\/' \}\),/,
     );
   });
 
