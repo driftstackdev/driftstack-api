@@ -96,7 +96,12 @@ describe('W515.B apps/marketing-site/src/pages/docs/webhooks.astro content parit
   });
 
   it('4-delivery-header surface pinned: X-Driftstack-Event-Id + X-Driftstack-Event-Type + X-Driftstack-Emitted-At + X-Driftstack-Signature (t=…,v1=…) + secret-rotation folds the prev HMAC into a second v1= inside the SAME single header — pinned so the 4-header standard surface + compound dual-v1= grace form survives (drift to renaming any header or claiming a separate prev header would create marketing↔delivery divergence)', () => {
-    expect(body).toMatch(/X-Driftstack-Event-Id: evt_…/);
+    // V-1485 — this pin quoted `evt_…`, which the server has never minted:
+    // both webhook mint sites use a bare `randomUUID()`. The customer docs
+    // site had it right all along (`webhooks/events.md` documents
+    // `X-Driftstack-Event-Id: <uuid>`), so this page contradicted the code
+    // AND the other doc surface, with a passing pin holding it in place.
+    expect(body).toMatch(/X-Driftstack-Event-Id: <uuid>/);
     expect(body).toMatch(/X-Driftstack-Event-Type: session\.completed/);
     expect(body).toMatch(/X-Driftstack-Emitted-At: 1747051200/);
     expect(body).toMatch(/X-Driftstack-Signature: t=1747051200,v1=<hex hmac>/);
@@ -165,10 +170,16 @@ describe('W515.B apps/marketing-site/src/pages/docs/webhooks.astro content parit
     expect(body).toMatch(/<code>v1=&lt;old&gt;<\/code> — signed with the old secret\./);
   });
 
-  it("test.ping POST /v1/webhooks/<id>/test 202 framing pinned: 202 Accepted + delivery_id (wdl_…) + event_id (evt_…) + event_type 'test.ping' + 'The test event arrives at your endpoint with the same headers + signature as a real event.' — pinned so the 202 + 3-field test-response shape + same-headers+signature survives", () => {
+  it("test.ping POST /v1/webhooks/<id>/test 202 framing pinned: 202 Accepted + a prefixed delivery id + an UNPREFIXED event id + event_type 'test.ping' + 'The test event arrives at your endpoint with the same headers + signature as a real event.' — pinned so the 202 + 3-field test-response shape + same-headers+signature survives", () => {
     expect(body).toMatch(/POST \/v1\/webhooks\/<id>\/test/);
     expect(body).toMatch(/→ 202 Accepted/);
     expect(body).toMatch(/"delivery_id": "wdl_…"/);
+    // V-1485 — `event_id` was named in this arm's title and pinned by
+    // nothing, which is exactly how it kept a wrong prefix while its two
+    // neighbours were held correct. `delivery_id` really is `wdl_`-prefixed
+    // (routes/webhooks.ts builds `wdl_${result.deliveryId}`); the event id
+    // beside it is the bare column value.
+    expect(body).toMatch(/"event_id": "<uuid>"/);
     expect(body).toMatch(/"event_type": "test\.ping"/);
     expect(body).toMatch(
       /The test event arrives at your endpoint with the same headers \+\s*\n?\s*signature as a real event\./,
@@ -197,5 +208,41 @@ describe('W515.B apps/marketing-site/src/pages/docs/webhooks.astro content parit
 
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
+  });
+  // V-1485 — the doc claim tied to the MINT SITE, not just pinned as text.
+  //
+  // This page advertised `evt_…` for the webhook event id through three code
+  // samples while both mint sites in `services/webhooks.ts` call a bare
+  // `randomUUID()`, and a passing sentinel held the wrong claim in place. The
+  // customer docs site had it right the whole time (`webhooks/events.md`
+  // documents `X-Driftstack-Event-Id: <uuid>`), so the marketing page
+  // contradicted the code and the other doc surface at once.
+  //
+  // A text pin alone would not stop the obvious wrong "fix": `api-types` really
+  // does export `SessionEventIdSchema = PrefixedId('evt')`, so `evt_` looks
+  // canonical to anyone who greps for it. It is for SESSION events — a different
+  // record, minted nowhere — not for webhook deliveries. This arm reads the mint
+  // and fails if the two ever disagree again in either direction.
+  it('CRITICAL the documented webhook event id matches what the service mints. Both mint sites use a bare randomUUID(), so the page must not advertise a prefix — and if the service ever starts prefixing, this fails rather than letting the docs go stale in the other direction.', () => {
+    const service = read(resolve(REPO_ROOT, 'apps/server/src/services/webhooks.ts'));
+    const mints = [...service.matchAll(/const eventId = ([^;]+);/g)].map((m) => m[1]!.trim());
+    expect(
+      mints.length,
+      'no eventId mint found in services/webhooks.ts — the scan broke, and this arm would pass having read nothing',
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      [...new Set(mints)],
+      'the webhook event id is no longer minted as a bare randomUUID() — if it is prefixed now, the marketing samples and the customer docs both need updating',
+    ).toEqual(['randomUUID()']);
+
+    // Given an unprefixed mint, the page may not claim one.
+    expect(
+      /X-Driftstack-Event-Id: [a-z]+_/.test(body),
+      'the page advertises a prefixed event id while the service mints a bare uuid',
+    ).toBe(false);
+    expect(
+      /"event_id": "[a-z]+_/.test(body),
+      'the 202 sample advertises a prefixed event id while the service mints a bare uuid',
+    ).toBe(false);
   });
 });

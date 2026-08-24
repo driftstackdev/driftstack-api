@@ -12476,3 +12476,78 @@ copies to each other; V-1482 compares the document to the route copies; this com
 the canonical helper. The remaining uncovered edge is route copies against the canonical helper — worth
 noting rather than claiming, since `profile-snapshots.ts`'s `/i` would be its first finding and that is
 already a named exemption at the route level.
+
+## V-1485 — the marketing page advertised a webhook event-id prefix the server has never minted
+
+`apps/marketing-site/src/pages/docs/webhooks.astro` documented the webhook event id as `evt_…` in three
+code samples: the `X-Driftstack-Event-Id` delivery header, the `id` field of the delivery payload, and
+`event_id` in the `POST /v1/webhooks/{id}/test` 202 response. Both mint sites in
+`services/webhooks.ts` (lines 808 and 875) call a bare `randomUUID()`, and the route returns it
+unprefixed. A customer validating or pattern-matching the documented shape gets nothing that matches.
+
+**The customer docs site had it right the whole time.** `apps/docs/src/pages/webhooks/events.md`
+documents `X-Driftstack-Event-Id: <uuid>`, `endpoints.md` shows `"event_id": "<uuid>"`, and `replay.md`
+carries a literal bare uuid. So this was not docs-versus-code with an open question about which is
+authoritative — the marketing page contradicted the code AND the other doc surface simultaneously, and
+the fix direction was never in doubt.
+
+**The sibling field is the tell, and it is correct.** The same 202 sample shows
+`"delivery_id": "wdl_…"`, and that IS prefixed — `routes/webhooks.ts` builds `` `wdl_${result.deliveryId}` ``.
+One field in one JSON sample was right and the one beside it was wrong, which is the faithful-neighbour
+signature this sweep has hit repeatedly.
+
+**A pin held the wrong claim, and the field that drifted furthest had no pin at all.** The header
+sentinel quoted `/X-Driftstack-Event-Id: evt_…/` — a passing assertion protecting a false statement, the
+fourth time this session. Meanwhile the 202 arm pinned `delivery_id` and `event_type` and named
+`event_id` only in its title prose: the one field with no sentinel is the one that kept a wrong prefix
+while both its neighbours were held correct. That field is pinned now, and the title paraphrases while
+the sentinels quote.
+
+**Why a text pin alone would not hold.** `api-types` genuinely exports `SessionEventIdSchema =
+PrefixedId('evt')`, so `evt_` looks canonical to anyone who greps before writing. It is for SESSION
+events — a different record — and is minted nowhere: `SessionEventSchema` is referenced only by its own
+content-parity pin, and `evt_` appears in no mint site in the repo. The same is true of
+`UsageRecordIdSchema` (`use_`), which no schema references and which `UsageRecordSchema`
+(`{type, quantity, recorded_at}`) does not carry a field for. Two of the canonical roster's eight
+prefixes describe ids the product never issues, and one of them is the plausible-looking source of this
+doc error. I did not remove them — `@driftstack/api-types` is a versioned package the SDKs import — and
+W867's own V-1112 note already calls the roster's scope "a design question, not a drift", so that stays
+a decision item rather than a fix.
+
+So the third arm reads the MINT rather than the text: both `const eventId = …` sites must be
+`randomUUID()`, and given an unprefixed mint the page may not advertise a prefix. It fails in either
+direction — if the service starts prefixing, the docs go stale and this says so.
+
+**The rest of the class, swept and clean.** Every `xxx_…` / `xxx_<uuid>` id-format claim across both doc
+surfaces — 20 distinct prefixes, `apps/docs` and `apps/marketing-site` — was checked against the mint
+sites in server and api-types source. After this fix, none is unbacked.
+
+Getting that to be true took two instrument corrections, and neither was subtle. The first detector
+reported `acc`, `key`, `ses` and `prof` as "never minted", which is obviously false and is the tell for
+a broken scan rather than a finding — a shell-quoting mistake in a `git grep -oE` pattern had made every
+answer identical. The second, honest one still flagged `lacc_` in `legal.md` as unbacked; `lacc_` is
+real, minted through a THIRD idiom (`prefixId('lacc')` in `routes/legal.ts`, with its own parity test
+asserting exactly that) which the detector did not know about alongside template literals and
+`PrefixedId()`. One remaining "finding" from a census is worth checking before it is worth reporting.
+
+Noted in passing, not filed: `prefixId` is itself declared twice, in `routes/sessions.ts` and
+`routes/legal.ts` — the same local-copy shape as the twelve `uuidFromPrefixedId` declarations that
+V-1112 already calls a design question.
+
+**Editing the page made its build stale, and the right guard said so.** The full run went red on
+`dist-reading-suites-have-fresh-artifacts`: `marketing-site: built 2026-08-23T19:49:29Z but source
+changed 2026-08-24T14:06:10Z`. Its message is the useful part — _REBUILD, do not repin assertions onto
+stale markup_ — because the tempting move when a marketing parity suite disagrees with your edit is to
+adjust the assertion, which would pin the suite to the previous build and pass. `dist/` is gitignored,
+so `npm run build --workspace @driftstack/marketing-site` is a local artifact refresh with nothing to
+commit; the built page then carries `X-Driftstack-Event-Id: &lt;uuid&gt;`.
+
+Three of the four failures in that run were not mine and were attributed before being investigated: two
+`livekit-input-ack` arms in `apps/gui-client/**`, which a peer had dirty mid-edit, and a transient
+`verify-suite` shortfall from a new test file the peer added and then bumped `EXPECTED_TEST_FILES` to
+3013 for — rule 9 working from the other side.
+
+Three mutations. Reintroducing `evt_` in the header reds the re-quoted sentinel; reintroducing it in the
+202 sample reds the newly added one; changing the SERVICE to mint `` `evt_${randomUUID()}` `` reds the
+cross-source arm, which is the proof it reads the mint site rather than restating the page. All restored
+byte-identical.
