@@ -33,6 +33,7 @@ import {
 } from '@asteasolutions/zod-to-openapi';
 import { z } from 'zod';
 import * as apiTypes from '@driftstack/api-types';
+import { PrefixedId } from '@driftstack/api-types';
 
 extendZodWithOpenApi(z);
 
@@ -695,6 +696,85 @@ describe('V-927 a published bound matches the route', () => {
     expect(
       stale,
       'this exemption no longer names a registration that relies on the backstop — it was declared or removed, so drop the entry rather than leaving it to cover something else',
+    ).toEqual([]);
+  });
+  /**
+   * V-1484 — every published id pattern traces to the canonical `PrefixedId`.
+   *
+   * Three declarations of one contract exist: `PrefixedId(prefix)` in
+   * `api-types/common.ts`, the `PUBLIC_ID_RE` copies in the route files, and the
+   * published document. `twelve-copies-of-the-id-parser-must-agree` checks the
+   * route copies against each other; the arm above checks the document against
+   * the route copies. Nothing checked either against the canonical helper, which
+   * is the one the SDKs and the shared schemas are built on.
+   *
+   * That mattered immediately: V-1481 and V-1482 hand-wrote a regex that is
+   * character-for-character what `PrefixedId` already produces — the hand-copy
+   * defect V-1477 deleted two of, reintroduced two commits later. Delegating to
+   * the helper left the generated document byte-identical, which is the proof
+   * the copy was equivalent; this arm is what stops the next one drifting.
+   *
+   * One documented exception. `profile-snapshots.ts` carries `/i`, so its paths
+   * publish a case-insensitive variant the canonical helper has no form for.
+   * That divergence is already a named exemption at the route level; here it is
+   * matched explicitly rather than allowed to widen.
+   */
+  it('CRITICAL every published id pattern is the canonical PrefixedId pattern, or the one documented case-insensitive variant. api-types is the third declaration of this contract and the one the SDKs are built on — a hand-written copy in the document that happens to agree today is how the last two drifts started.', () => {
+    const spec = JSON.parse(readFileSync(SPEC, 'utf8')) as Record<string, never>;
+    const paths = (spec as unknown as Record<string, Record<string, never>>)['paths'] ?? {};
+    const anyCase = (prefix: string): string =>
+      `^${prefix}_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`;
+
+    const wrong: string[] = [];
+    let checked = 0;
+    for (const [path, ops] of Object.entries(paths)) {
+      for (const [method, op] of Object.entries(ops)) {
+        const parameters = (op as Record<string, unknown>)?.['parameters'];
+        if (!Array.isArray(parameters)) continue;
+        for (const raw of parameters as Array<Record<string, unknown>>) {
+          if (raw['in'] !== 'path') continue;
+          const pattern = (raw['schema'] as Record<string, unknown> | undefined)?.['pattern'];
+          if (typeof pattern !== 'string') continue;
+          const prefix = /^\^([a-z]+)_/.exec(pattern)?.[1];
+          if (prefix === undefined) continue; // a non-prefixed pattern (slug, uuid) — not this arm
+          checked += 1;
+          // Compared BEHAVIOURALLY rather than by reading zod's internals: the
+          // published pattern and the canonical schema must agree on accept and
+          // reject for the same probes. Reaching into `_def.checks` would pin
+          // this arm to a zod version, and it is the semantics that matter.
+          const probes = [
+            `${prefix}_11111111-2222-3333-4444-555555555555`,
+            `${prefix}_AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE`,
+            `${prefix}_not-a-uuid`,
+            `x${prefix}_11111111-2222-3333-4444-555555555555`,
+            `11111111-2222-3333-4444-555555555555`,
+            `${prefix}_11111111-2222-3333-4444-55555555555`,
+          ];
+          const published = new RegExp(pattern);
+          const isAnyCase = pattern === anyCase(prefix);
+          for (const probe of probes) {
+            const byDocument = published.test(probe);
+            const byCanonical = PrefixedId(prefix).safeParse(probe).success;
+            // The one documented divergence: the case-insensitive variant
+            // accepts uppercase hex, which the canonical helper refuses.
+            const expectedDivergence = isAnyCase && /[A-F]/.test(probe);
+            if (byDocument !== byCanonical && !expectedDivergence) {
+              wrong.push(
+                `${method.toUpperCase()} ${path}: document ${byDocument ? 'accepts' : 'rejects'} ${probe} but canonical PrefixedId('${prefix}') ${byCanonical ? 'accepts' : 'rejects'} it`,
+              );
+            }
+          }
+        }
+      }
+    }
+
+    expect(
+      checked,
+      'no prefixed id patterns were read from the document — the prefix capture stopped matching and this arm would pass over an empty set',
+    ).toBeGreaterThanOrEqual(40);
+    expect(
+      wrong.sort(),
+      'a published id pattern disagrees with the canonical PrefixedId schema on a probe value. api-types is the declaration the SDKs and shared schemas are built on',
     ).toEqual([]);
   });
 });

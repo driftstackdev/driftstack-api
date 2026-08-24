@@ -153,6 +153,7 @@ import {
   ResolveIncidentRequestSchema,
   OpenVpnProxyConfigSchema,
   RecordRefundRequestSchema,
+  PrefixedId,
   AccountIdSchema,
   AddSupportNoteRequestSchema,
   WireGuardProxyConfigSchema,
@@ -365,17 +366,32 @@ function buildRegistry(): OpenAPIRegistry {
    * two answers, one path segment apart. A per-prefix constant would publish a
    * lie on one of them whichever way it was written.
    */
+  /**
+   * V-1484 — the case-sensitive branch is `PrefixedId` itself, not a copy of it.
+   *
+   * V-1481 and V-1482 hand-wrote this regex, and it is character-for-character
+   * the one `PrefixedId(prefix)` in `api-types/common.ts` already produces —
+   * exactly the "hand copy of a schema that already exists" defect V-1477
+   * deleted two instances of, reintroduced by me two commits later while looking
+   * at the route regexes instead of asking what api-types already exported.
+   *
+   * The `anyCase` branch stays a literal because there is nothing to import: the
+   * canonical helper has no case-insensitive form, and `profile-snapshots.ts` is
+   * the single route file whose `PUBLIC_ID_RE` carries `/i`. Keeping it explicit
+   * is the point — it is a divergence from the canonical id contract, and it
+   * should read as one rather than hide inside a shared helper.
+   */
   const prefixedIdParam = (prefix: string, what: string, anyCase = false) =>
-    z
-      .string()
-      .regex(
-        new RegExp(
-          anyCase
-            ? `^${prefix}_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`
-            : `^${prefix}_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`,
-        ),
-      )
-      .describe(`Prefixed ${what} id (${prefix}_<uuid>)`);
+    (anyCase
+      ? z
+          .string()
+          .regex(
+            new RegExp(
+              `^${prefix}_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`,
+            ),
+          )
+      : PrefixedId(prefix)
+    ).describe(`Prefixed ${what} id (${prefix}_<uuid>)`);
 
   /**
    * V-1483 — path params that are NOT prefixed ids, published from their route.

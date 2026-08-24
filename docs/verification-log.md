@@ -12433,3 +12433,46 @@ registration and earlier offsets stay valid. A path is not a key; a (method, pat
 
 Two mutations. Deleting a declared `params:` reds the arm and names the registration. Adding an
 exemption for a route that does not exist reds the staleness half. Both restored byte-identical.
+
+## V-1484 — I reintroduced the defect I had just deleted twice, and the document proves it
+
+V-1481 and V-1482 published path-id patterns by hand-writing
+`^${prefix}_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$` into `openapi.ts`. That is
+character-for-character what `PrefixedId(prefix)` in `api-types/common.ts` already produces, and has
+produced since W867 — a hand copy of an exported schema, which is precisely the defect V-1477 deleted
+two instances of, six commits earlier, in the same file.
+
+Delegating the case-sensitive branch to `PrefixedId` left the generated document **byte-identical**.
+That is the proof the copy was equivalent, and it is also the reason nothing would have caught it: a
+copy that agrees on the day it is written is invisible until it stops agreeing.
+
+**How I walked into it.** I derived the expected patterns from the ROUTE files — `PUBLIC_ID_RE`,
+`PROFILE_ID_RE`, `AGENT_SESSION_ID_RE` — because the question I was answering was "what does the route
+enforce?". That was the right question for finding the drift and the wrong place to stop: the route
+regexes are themselves copies, and `api-types` is where the contract is declared. Two guards already
+covered parts of this — `twelve-copies-of-the-id-parser-must-agree` checks the route copies against each
+other, and V-1482's arm checks the document against the route copies — and between them they still left
+the canonical helper unreferenced by anything I wrote. Asking "what does this repo already export?"
+before writing a regex would have cost one grep.
+
+**The guard added is behavioural, not structural.** My first version read `PrefixedId(prefix).def.checks`
+to extract the pattern and compare strings; the installed zod exposes `_def`, and TypeScript said so.
+Rather than pin an arm to a zod internal, it now compares SEMANTICS: for six probes per prefix — a valid
+lowercase id, an uppercase-hex id, a malformed uuid, a doubled prefix, a bare uuid, a truncated uuid —
+the published pattern and `PrefixedId(prefix).safeParse` must agree on accept and reject. That survives
+a zod upgrade and tests the thing that matters.
+
+One documented divergence is matched explicitly rather than allowed to widen: `profile-snapshots.ts`
+carries `/i`, so its paths publish a case-insensitive variant the canonical helper has no form for. The
+arm expects that disagreement on uppercase probes for exactly those patterns and no others.
+
+Two mutations. Widening a non-exempt path to accept uppercase reds it — the document would accept an id
+the canonical schema refuses. Truncating a published uuid by one hex digit reds it in the other
+direction, and reds V-1482's route-derived arm too, which is correct: that pattern disagrees with both
+sources. Spec restored byte-identical.
+
+**Three declarations of one contract now have every edge checked.** `twelve-copies` compares the route
+copies to each other; V-1482 compares the document to the route copies; this compares the document to
+the canonical helper. The remaining uncovered edge is route copies against the canonical helper — worth
+noting rather than claiming, since `profile-snapshots.ts`'s `/i` would be its first finding and that is
+already a named exemption at the route level.
