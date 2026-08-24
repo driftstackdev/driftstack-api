@@ -338,6 +338,30 @@ function buildRegistry(): OpenAPIRegistry {
   //     quota resets on a billing boundary.
   //   - the policy headers are REMOVED on an effective-owner denial, on purpose:
   //     the actor's own remaining/limit must not be read as the owner's.
+  /**
+   * V-1481 — a path id whose prefix is known, as a PATTERN rather than prose.
+   *
+   * Four params already named their exact prefix in a `.describe()`, which is
+   * true and unusable: a generated client cannot validate against a sentence.
+   * Each was verified against its route's own `uuidFromPrefixedId(…, '<prefix>')`
+   * call rather than trusted from the prose.
+   *
+   * Lowercase hex, deliberately. All four routes use the
+   * `/^[a-z]{3}_([0-9a-f]{8}-…)$/` copy, which is case-SENSITIVE, so this is the
+   * exact accepted set. The `[0-9a-fA-F]` widening used in `profile-id.ts` would
+   * be wrong here — it would publish as valid an uppercase id these routes 400.
+   *
+   * The other 59 unconstrained path ids stay deferred: they resolve to five
+   * different validators (one of which, `recipes.ts`, validates nothing at all),
+   * so they need a path-to-validator map rather than a shared literal. See
+   * `a-published-bound-matches-the-route`.
+   */
+  const prefixedIdParam = (prefix: string, what: string) =>
+    z
+      .string()
+      .regex(new RegExp(`^${prefix}_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`))
+      .describe(`Prefixed ${what} id (${prefix}_<uuid>)`);
+
   const rateLimitHeaders = {
     'Retry-After': {
       description:
@@ -541,7 +565,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['sessions'],
     security: auth,
     request: {
-      params: z.object({ id: z.string().describe('Prefixed session id (ses_<uuid>)') }),
+      params: z.object({ id: prefixedIdParam('ses', 'session') }),
       body: {
         content: {
           'application/json': {
@@ -1275,7 +1299,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['admin'],
     security: auth,
     request: {
-      params: z.object({ id: z.string().describe('Prefixed account id (acc_<uuid>)') }),
+      params: z.object({ id: prefixedIdParam('acc', 'account') }),
       body: { content: { 'application/json': { schema: ChangeTierRequestSchema } } },
     },
     responses: {
@@ -1415,7 +1439,7 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Fetch one webhook delivery (admin)',
     tags: ['admin'],
     security: auth,
-    request: { params: z.object({ id: z.string().describe('Prefixed delivery id (wdl_<uuid>)') }) },
+    request: { params: z.object({ id: prefixedIdParam('wdl', 'delivery') }) },
     responses: {
       200: {
         description: 'Delivery row.',
@@ -1491,7 +1515,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['webhooks'],
     security: auth,
     request: {
-      params: z.object({ deliveryId: z.string().describe('Prefixed delivery id (wdl_<uuid>)') }),
+      params: z.object({ deliveryId: prefixedIdParam('wdl', 'delivery') }),
     },
     responses: {
       200: {

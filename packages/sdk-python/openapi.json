@@ -6267,6 +6267,7 @@
           {
             "schema": {
               "type": "string",
+              "pattern": "^ses_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
               "description": "Prefixed session id (ses_<uuid>)"
             },
             "required": true,
@@ -11561,6 +11562,7 @@
           {
             "schema": {
               "type": "string",
+              "pattern": "^acc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
               "description": "Prefixed account id (acc_<uuid>)"
             },
             "required": true,
@@ -13194,6 +13196,7 @@
           {
             "schema": {
               "type": "string",
+              "pattern": "^wdl_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
               "description": "Prefixed delivery id (wdl_<uuid>)"
             },
             "required": true,
@@ -14232,6 +14235,7 @@
           {
             "schema": {
               "type": "string",
+              "pattern": "^wdl_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
               "description": "Prefixed delivery id (wdl_<uuid>)"
             },
             "required": true,

@@ -12271,3 +12271,56 @@ Two mutations. Republishing `{tier}` as a bare string reds the census and names 
 path-family exclusion surfaces exactly 63 entries — the measured 62 `{id}` plus `{deliveryId}` — so the
 exclusion suppresses a real, counted population rather than matching nothing, which is the failure mode
 an exemption regex has and a listed key does not. Both restored byte-identical.
+
+## V-1481 — four path ids already knew their prefix and kept it in prose, and my own exemption had taken cover over them
+
+Four path parameters published a bare `z.string()` while naming their exact prefix in a `.describe()`:
+`ses_<uuid>` on the direct-session verbs, `acc_<uuid>` on the admin account actions, `wdl_<uuid>` on both
+webhook-delivery rails. True, and unusable — a generated client cannot validate against a sentence.
+
+No path-to-validator derivation was needed for these, which is what separates them from the 59 left
+deferred in V-1480: the prefix was already written down. Each was still verified against its route's own
+`uuidFromPrefixedId(…, '<prefix>')` call rather than trusted from the prose.
+
+**Lowercase hex, deliberately, and the opposite of V-1476.** All four routes use the
+`/^[a-z]{3}_([0-9a-f]{8}-…)$/` copy, which is case-SENSITIVE. So the exact accepted set is lowercase, and
+publishing `[0-9a-fA-F]` — the widening that was correct in `profile-id.ts`, whose regex carried `/i` —
+would advertise as valid an uppercase id these routes answer 400 for. Same class of error as
+over-narrowing, in the other direction: the published pattern must be the enforced set, and which
+widening is right is a property of the specific validator, not a house style.
+
+**The finding inside the fix.** These four sit inside the `{id}` family that V-1480's census defers
+wholesale. The census lists only UNCONSTRAINED parameters, so the moment one of these regressed to a
+bare string it would reappear as unconstrained, match `PATH_ID_FAMILY`, and be suppressed — by the very
+exemption that exists to document why the OTHER 59 are unpublished. An exemption written for a deferred
+population had silently extended cover to a fixed one, and it would have done so from the moment this
+commit landed.
+
+A blanket exemption does not shrink as its population is fixed. That is the general shape: an exemption
+keyed on a PATTERN covers whatever grows into the pattern later, including things that were once
+outside it. A listed key cannot do this — it goes stale and the anti-rot arm says so — which is the
+trade the pattern form makes, and the reason it needs a positive counterpart.
+
+**A measured negative that enlarges V-1480's deferral, and two retractions on the way to it.** Building
+the path-to-validator map for the remaining 59 resolved 57 of 116 registrations automatically. Chasing
+the rest turned up `AGENT_SESSION_ID_RE`, declared three times, with the `db/agent-sessions-repo.ts`
+copy carrying `/i` and both route copies not — apparently the same case split the `twelve-copies` guard
+names for `PUBLIC_ID_RE`, in a family that guard does not scan.
+
+It is not that. The repo copy's own comment says it guards a hand-crafted CURSOR, not a path id, so the
+copies are not two answers to one question. And the follow-up premise was wrong too: `sessions.get(id)`
+is a plain equality query with no regex, so most `/v1/agent-sessions/{id}/*` routes do not validate the
+id format AT ALL — a malformed id is simply a miss, answered 404. Only `livekit-token` and
+`transport-report` apply a regex and answer 400.
+
+No finding, and the negative is worth more than the finding would have been: `recipes.ts` is not the
+lone "validates nothing" exception behind V-1480's deferral. Roughly thirty agent-session registrations
+are in the same position. A blanket `^[a-z]+_<uuid>$` across the `{id}` family would have been
+over-narrow on all of them, not on one route — the deferral was more right than the evidence I had for
+it at the time.
+
+So the four are asserted positively instead: named, with their expected pattern spelled out, and no
+longer members of the deferred family. Two mutations, each against the artifact the sentinel reads.
+Reverting one to a bare string reds it with "publishes no pattern" — the exact case the census alone
+would have swallowed. Widening one to `[0-9a-fA-F]` reds it too, so the case-sensitivity decision above
+is pinned rather than merely commented. Spec restored byte-identical.

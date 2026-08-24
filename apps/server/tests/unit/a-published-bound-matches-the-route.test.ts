@@ -479,4 +479,59 @@ describe('V-927 a published bound matches the route', () => {
       'a hand-written mirror in openapi.ts disagrees with the api-types schema it copies. Delete the mirror and register the schema itself — a corrected copy is still a copy that happens to agree today',
     ).toEqual([]);
   });
+  /**
+   * V-1481 — the four path ids whose prefix was already known, asserted
+   * POSITIVELY rather than left to the census.
+   *
+   * The census lists only UNCONSTRAINED parameters, and every `{id}` it lists is
+   * suppressed by PATH_ID_FAMILY. So one of these four regressing to a bare
+   * string would reappear as unconstrained, match the family exemption, and be
+   * silently swallowed by the very entry that documents why the OTHER 59 are
+   * unpublished. An exemption written for a deferred population had quietly
+   * taken cover over a fixed one.
+   *
+   * Naming them is what closes that: these four are no longer members of the
+   * deferred family and must carry their pattern.
+   */
+  const PUBLISHED_ID_PATTERNS = [
+    ['/v1/sessions/{id}/navigate', 'post', 'id', 'ses'],
+    ['/v1/admin/accounts/{id}/tier', 'post', 'id', 'acc'],
+    ['/v1/admin/webhook-deliveries/{id}', 'get', 'id', 'wdl'],
+    ['/v1/webhook-deliveries/{deliveryId}/replay', 'post', 'deliveryId', 'wdl'],
+  ] as const;
+
+  it('CRITICAL the path ids whose prefix is known publish it as a PATTERN, not as prose. Each of these four named its exact prefix in a describe — true, and unusable by a generated client. They sit inside the {id} family that the census defers wholesale, so nothing else would notice one falling back to a bare string.', () => {
+    const spec = JSON.parse(readFileSync(SPEC, 'utf8')) as Record<string, never>;
+    const paths = (spec as unknown as Record<string, Record<string, never>>)['paths'] ?? {};
+    const wrong: string[] = [];
+
+    for (const [path, method, name, prefix] of PUBLISHED_ID_PATTERNS) {
+      const op = (paths as Record<string, Record<string, unknown>>)[path]?.[method] as
+        | Record<string, unknown>
+        | undefined;
+      const parameters = op?.['parameters'];
+      const param = Array.isArray(parameters)
+        ? (parameters as Array<Record<string, unknown>>).find((p) => p['name'] === name)
+        : undefined;
+      const pattern = (param?.['schema'] as Record<string, unknown> | undefined)?.['pattern'];
+      if (typeof pattern !== 'string') {
+        wrong.push(`${method.toUpperCase()} ${path} {${name}}: publishes no pattern`);
+        continue;
+      }
+      // Lowercase hex is deliberate: all four routes use the case-SENSITIVE
+      // `/^[a-z]{3}_([0-9a-f]…)$/` copy, so publishing [0-9a-fA-F] here would
+      // advertise as valid an uppercase id these routes answer 400 for.
+      const expected = `^${prefix}_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`;
+      if (pattern !== expected) {
+        wrong.push(
+          `${method.toUpperCase()} ${path} {${name}}: publishes ${pattern}, expected ${expected}`,
+        );
+      }
+    }
+
+    expect(
+      wrong,
+      'a path id whose prefix is known no longer publishes it — the deferred {id} family exemption would hide this, which is why it is asserted here',
+    ).toEqual([]);
+  });
 });
