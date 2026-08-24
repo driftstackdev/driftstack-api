@@ -14604,3 +14604,50 @@ it. The register restored byte-identical.
 behaviour drifts from it silently — the failure V-1517 fixed in an audit suppression and V-1518 fixed in a
 retention promise, both in the last two batches. The guard that pins the behaviour now also asserts the
 record of it, so the two move together or the run fails.
+
+## V-1520 — a second open decision outside the register, this one about money
+
+V-1519 asked whether every open decision is in the canonical register and found one that was not. Asking
+it as a sweep rather than an incident: eighteen files under `apps/server` describe something as open,
+undecided, or a product call. The highest-stakes of them is not in the register either.
+
+`an-unbounded-paid-session-is-a-visible-choice` states it plainly: _"WHAT IS ACTUALLY UNDECIDED is the
+number: how long a paid session must run before it counts as abandoned. That is a product call with real
+customer consequences … so this file does not invent one."_
+
+**Verified in source before recording it.** `MAX_SESSION_MINUTES_PER_TIER` sets `free: 20` and `null` for
+all seven paid tiers, and `durationCutoffsFor` skips a null cap outright — `continue`, with the comment
+"unlimited — never auto-destroyed". So no paid session is ever auto-destroyed on duration. Session minutes
+are a billed dimension, and `db/usage-repo.ts` records that lifecycle rows are the durable authority for
+them because "production never had a complete session-minute writer".
+
+**What I did not verify, I did not assert.** The guard's analysis of how an indefinitely-open session
+accrues is cited rather than restated: I traced the billed dimension to the lifecycle-derived
+`session_minute` ledger but did not locate the accrual expression itself, and writing a billing mechanic
+into an authority register on a partial trace is exactly the move that produced V-1511's seven wrong
+exemptions. The register entry says where the analysis lives instead.
+
+The decision is recorded as `D-2026-08-24-02`, marked OPEN, with the tier left unplaced. The engineering
+is genuinely trivial — `durationCutoffsFor` iterates the whole tier enum, so capping a paid tier is one
+value in one table — and saying so matters, because "hard to change" is the usual reason an open item
+stays open and it does not apply here. What is hard is the number.
+
+### The tie is what stops the record rotting
+
+The entry names each uncapped tier, and the guard asserts it names every tier the source shows as
+uncapped. A tier added to the enum without a cap therefore cannot join the abandoned-session exposure
+silently — it fails until the register lists it. Both negatives exercise that: dropping `enterprise` from
+the entry reds naming that tier, and deleting the entry reds.
+
+That is the third batch running where the defect was not in behaviour but in a record — an audit
+suppression whose justification was unpinned (V-1517), a retention promise whose code side was prose
+(V-1518), an open decision living in a test constant (V-1519), and now a billing posture recorded
+nowhere a reviewer would look. None of them was broken. Each was one edit away from becoming wrong with
+nothing to catch it.
+
+### Sweep status
+
+Two of the eighteen are now registered. The rest read as prose that happens to use the word rather than
+decisions awaiting an answer, on the sampling done here — `services/legal.ts`, `crypto-orders.ts` and the
+remaining guards were not individually opened, and that is stated so the next sweep knows the difference
+between checked and unexamined.

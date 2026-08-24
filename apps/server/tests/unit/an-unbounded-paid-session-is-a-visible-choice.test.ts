@@ -115,6 +115,19 @@ describe('an unbounded paid session is a visible choice', () => {
       .sort();
     expect(capped, 'tiers with a duration cap').toEqual(['free']);
     expect(caps.free, 'the free cap, in minutes').toBe(20);
+
+    // V-1520 — this posture is a product decision, and it now lives in the
+    // register that carries the others instead of only in this file's header.
+    // The entry names the uncapped tiers, so a tier added to the enum without a
+    // cap has to be added there too rather than joining the exposure silently.
+    const register = readFileSync(resolve(REPO_ROOT, 'docs/decisions.md'), 'utf8');
+    const entry = register.slice(register.indexOf('## D-2026-08-24-02'));
+    expect(entry, 'the register still carries the open duration-cap decision').toContain(
+      'MAX_SESSION_MINUTES_PER_TIER',
+    );
+    for (const tier of Object.keys(caps).filter((t) => caps[t] === null)) {
+      expect(entry, `the uncapped tier ${tier} is named in the register entry`).toContain(tier);
+    }
   });
 
   it('CRITICAL the sweeper genuinely never targets an uncapped tier. Behavioural, not textual: a null cap is skipped rather than treated as zero — the difference between "paid sessions are never auto-destroyed" and "paid sessions are destroyed immediately" is one `continue`.', () => {
