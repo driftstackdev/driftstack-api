@@ -10253,3 +10253,35 @@ than trusting a green.
 Proven in three directions: deleting the shorthand property reds it, deleting the spread-conditional
 property reds it, and breaking the `app.ts` extractor reds the census self-check so it cannot pass
 vacuously.
+
+### V-1437 — two more wiring seams swept, both already sound
+
+V-1436 derived the route-registration seam. Two neighbouring seams were swept the same way, and both
+come back clean. Recorded because each looked promising enough to spend a pass on, and the next person
+should not spend it again.
+
+**Middleware and hooks.** Only one hook installation in `app.ts` is gated on a dependency:
+`if (deps.metricsRegistry !== undefined)` around the `onResponse` HTTP request counter. Everything else
+— the error handler, the not-found handler, the decorators, the plugin registrations — installs
+unconditionally, which is the safe design and leaves nothing to guard. `metricsRegistry` also gates
+routes, so V-1436's census already holds it. No new arm.
+
+**Background jobs.** 13 job registrars are exported from `services/` — retention scrub, orphan reaping,
+trash purge, entitlement expiry, the nightly cost run. A job that silently never registers breaks a
+retention or billing promise with no error, so the seam is worth the look. **All 13 are reached.**
+
+The census reported one miss, `registerDailyMaintenanceJob`, and it was a false positive of my own
+method: I checked direct calls from bootstrap only. Bootstrap calls `wireDailyMaintenanceSweep` five
+times, and that wrapper calls the registrar on its second line. **A "never called" census must follow
+wrappers, or it reports a wrapper's callee as dead.**
+
+That is also the reason no guard was written for this seam. Reaching the truth needed one manual hop
+through an indirection, and a text-based guard that does not follow the hop would fail the moment
+someone adds another wrapper — a false red on a correctly-wired job, which is worse than no guard.
+V-1425's rule applies: an extractor whose faults produce false reds should not gate commits.
+
+Both sweeps used the same discipline that has now caught five extractor faults in this run: **treat a
+zero, or a suspiciously round hit-count, as a broken instrument until proven otherwise.** The middleware
+sweep first reported 0 gated installations (a too-strict block anchor, when the real answer is 1), and
+the job sweep first reported 0 registrars exported (a failed `grep -oE` capture, when the real answer
+is 13).
