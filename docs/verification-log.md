@@ -10357,3 +10357,51 @@ was already in the file: a `balanced()` helper that reads an argument list to it
 is the sixth extractor fault in this run, and the pattern by now is plain — a fixed window and a
 first-match index are both guesses, and the guess fails silently in the direction that reports nothing
 wrong.
+
+## V-1440 — one key, four domains, and no view of what separates them
+
+`mfa-encryption-key-shared-cross-source-invariant` establishes that four secret classes (BYOK
+Anthropic, gui_control_key, LiveKit, MFA TOTP) all draw AES-256-GCM key material from the single
+`MFA_ENCRYPTION_KEY`, that each validates it as 32 bytes, and — since a prior mutation showed the
+library-file assertions pass on prose — that bootstrap is the only wiring site. What the file did not
+assert is the property that makes sharing one key across four domains safe at all: that the four
+domains label their ciphertexts differently.
+
+Separation is two independent layers here, and saying which is which matters more than the finding.
+Each module frames its ciphertext with its own `*_V2_PREFIX`, and each decryptor rejects a foreign
+envelope on that prefix **before** the AAD is ever evaluated — verified in
+`byok-anthropic-encryption.ts:106-109` and `mfa-totp.ts:149`. Substitution through the public API is
+therefore already blocked at the format layer. The AAD purpose is the second, _cryptographic_ half:
+the one bound into GCM authentication, and the one gui-control-key-encryption's header already
+describes as binding a ciphertext to its purpose. So a collision is not a live vulnerability, and an
+earlier reading of mine that called the purpose string the only separator was too strong. What a
+collision would do is silently reduce two-layer separation to one, leaving a plaintext format check as
+the only thing between two domains that share key material.
+
+The pair that carries the most weight is BYOK and MFA. Their AAD builders are shaped identically —
+`[purpose, 2, accountId]`, at `byok-anthropic-encryption.ts:122` and `mfa-totp.ts:141` — over the same
+key, so for a single account the purpose label is the entire cryptographic distance between a stored
+Anthropic API key and that account's TOTP secret. Two near-identical builders are exactly what a
+later refactor unifies behind one helper with a default.
+
+**Scoped to collision, because change is already covered.** All twelve labels are distinct today
+(census: 12 constants, 12 values). Each of the four is guarded against being _edited_: gui-control-key
+and livekit pin theirs as source text in their content-parity files, and byok and mfa-totp rebuild the
+AAD from the literal in their behavioural tests, so an edit breaks GCM authentication and reds. The
+residual is an **addition** — a fifth consumer of the shared key reusing a label that already means
+something else. No pin can see that, because there is no pin for a file that does not exist yet. Hence
+a derived census rather than a roster, the same argument as the SDK-path and route-gating censuses.
+
+Three arms, each mutation-proven. Colliding byok's label onto mfa's reds two (the repo-wide
+distinctness arm and the key-sharing arm); emptying livekit's label reds the missing-label arm.
+The third proof is the one worth recording: breaking the extractor's own regex left the distinctness
+arm **green on an empty census** and only the self-check red. That is the vacuous pass this codebase
+keeps producing — a guard whose subject has quietly become the empty set — and it is why the census
+floor is an arm rather than a comment.
+
+**The census is keyed by `<file>:<constant>`, not by constant name.** `account-proxy` declares its
+label under the bare name `AAD_PURPOSE`; a map keyed by name alone would drop a second bare
+declaration and then pass distinctness by having lost the evidence. The keying is the assertion's
+correctness, not a detail of it.
+
+No new test file, so no ratchet movement.

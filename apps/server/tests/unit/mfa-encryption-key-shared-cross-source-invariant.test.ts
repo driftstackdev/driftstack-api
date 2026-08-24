@@ -5,7 +5,7 @@
 // LIVEKIT_ENCRYPTION_KEY) would break the "single trust boundary"
 // + "one rotation rotates all four ciphertexts" guarantee.
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -20,9 +20,33 @@ const MFA = resolve(REPO_ROOT, 'apps/server/src/lib/mfa-totp.ts');
 // happens where they are wired.
 const BOOTSTRAP = resolve(REPO_ROOT, 'apps/server/src/lib/bootstrap.ts');
 const CONFIG = resolve(REPO_ROOT, 'apps/server/src/lib/config.ts');
+const SRC_ROOT = resolve(REPO_ROOT, 'apps/server/src');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
+}
+
+/** Every `*_AAD_PURPOSE` constant declared anywhere under apps/server/src, keyed
+ *  by `<file>:<constant>`. Derived rather than listed because the drift worth
+ *  catching is an ADDITION — a new consumer of the shared key reusing a label
+ *  that already means something else. */
+function aadPurposes(): Map<string, string> {
+  const out = new Map<string, string>();
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const p = resolve(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(p);
+        continue;
+      }
+      if (!entry.name.endsWith('.ts')) continue;
+      for (const m of read(p).matchAll(/const\s+([A-Z0-9_]*AAD_PURPOSE)\s*=\s*'([^']*)'/g)) {
+        out.set(`${entry.name}:${m[1] ?? ''}`, m[2] ?? '');
+      }
+    }
+  };
+  walk(SRC_ROOT);
+  return out;
 }
 
 describe('MFA_ENCRYPTION_KEY shared 4-class cross-source invariant', () => {
@@ -90,5 +114,59 @@ describe('MFA_ENCRYPTION_KEY shared 4-class cross-source invariant', () => {
     expect(configEnvKeys.sort(), 'exactly one encryption-key env may exist').toEqual([
       'MFA_ENCRYPTION_KEY',
     ]);
+  });
+
+  // V-1440 — the arms above establish that four domains share ONE key. What
+  // makes that safe is domain separation, and this file had no view of it.
+  //
+  // Separation here is two independent layers, and the distinction matters for
+  // how loudly to state this: each module's ciphertext carries its own
+  // `*_V2_PREFIX`, and each decryptor rejects a foreign envelope on that prefix
+  // BEFORE the AAD is ever evaluated. So substitution through the public API is
+  // already blocked at the format layer. The AAD purpose is the second,
+  // *cryptographic* half — the one bound into GCM authentication, and the one
+  // gui-control-key-encryption's own header calls out as binding a ciphertext
+  // "to its purpose". A collision would not be a live vulnerability; it would
+  // silently reduce two-layer separation to one, leaving a plaintext format
+  // check as the only thing between two domains sharing key material.
+  //
+  // Each of the four labels is ALREADY guarded against being *changed*, which
+  // is why this is scoped to collision: gui-control-key and livekit pin theirs
+  // as source text in their content-parity files, and byok and mfa-totp rebuild
+  // the AAD from the literal in their behavioural tests, so an edit breaks GCM
+  // authentication and reds. What no guard could see is a FIFTH consumer of the
+  // shared key reusing an existing purpose — there is no pin for a file that
+  // does not exist yet. Hence a derived census rather than a roster.
+  const purposes = aadPurposes();
+
+  it('CRITICAL the AAD-purpose census found the domain labels. A census that silently stops matching reports "no collisions" forever — the distinctness arm below cannot fail on an empty map, so this arm is what stands between that and a vacuous pass.', () => {
+    expect(
+      purposes.size,
+      'no *_AAD_PURPOSE constants extracted from apps/server/src',
+    ).toBeGreaterThan(9);
+  });
+
+  it('CRITICAL no two AAD purpose labels in apps/server/src are equal. Keyed by file+constant, not constant name: account-proxy declares its label under the BARE name `AAD_PURPOSE`, so a census keyed by name alone would drop a second bare declaration and pass by losing the evidence. A duplicate is the one drift the per-module text pins structurally cannot see — each pin asserts its own literal in isolation and has no view of the other eleven.', () => {
+    const byValue = new Map<string, string[]>();
+    for (const [where, value] of purposes) {
+      byValue.set(value, [...(byValue.get(value) ?? []), where]);
+    }
+    const collisions = [...byValue.entries()]
+      .filter(([, sites]) => sites.length > 1)
+      .map(([value, sites]) => `${value} <- ${sites.sort().join(', ')}`)
+      .sort();
+    expect(collisions, 'AAD purpose label(s) reused across domains:').toEqual([]);
+  });
+
+  it('CRITICAL the four modules sharing MFA_ENCRYPTION_KEY carry four DIFFERENT AAD purposes. This is the pair that matters most: byok-anthropic-encryption and mfa-totp build identically shaped AAD — `[purpose, 2, accountId]` — from the same key, so for one account the purpose label is the entire cryptographic distance between a stored Anthropic API key and that account TOTP secret. A refactor unifying those two near-identical builders behind a shared default is the realistic way this breaks.', () => {
+    const labels = [byok, gck, lk, mfa].map((src) => {
+      const m = /const\s+[A-Z0-9_]*AAD_PURPOSE\s*=\s*'([^']*)'/.exec(src);
+      return m?.[1] ?? '';
+    });
+    expect(labels, 'every key-sharing module must declare an AAD purpose').not.toContain('');
+    expect(
+      new Set(labels).size,
+      `the four key-sharing modules must not share an AAD purpose: ${labels.join(', ')}`,
+    ).toBe(4);
   });
 });
