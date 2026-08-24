@@ -155,4 +155,100 @@ describe('makeSessionCapabilityReportRelay', () => {
     await vi.waitFor(() => expect(store.size).toBe(1));
     expect(ingest).not.toHaveBeenCalled();
   });
+
+  // V-1413 — the QUIC-through-proxy half of this relay had never run. Every frame in
+  // this file leaves `transportModeActive` at 'h2-only', so `h3InterposeLoaded` was
+  // never even EVALUATED (the mode comparison short-circuited it), and the derived
+  // `quic_route` was 'disabled' on all six passes — `'proxy'` had never been produced.
+  // Per planning 133 QUIC through the egress proxy is the intended live posture, so
+  // the branch that reports it working is the one nothing exercised.
+  function relayWith(
+    ingest: ReturnType<typeof vi.fn>,
+  ): ReturnType<typeof makeSessionCapabilityReportRelay> {
+    return makeSessionCapabilityReportRelay(
+      {
+        get: vi.fn(() =>
+          Promise.resolve({
+            nodeId: 'node-1',
+            driftstackSessionId: 'ses_driver_1',
+            status: 'active',
+          }),
+        ),
+      },
+      { ingestEgressCapabilityReport: ingest as unknown as (a: unknown) => Promise<unknown> },
+      new SessionCapabilityReportStore(),
+      logger(),
+    );
+  }
+
+  it("CRITICAL an active h2-and-h3 transport WITH the interpose loaded derives quic_route 'proxy'. Every frame here had left the mode at h2-only, so this value had never been produced — the success path of QUIC through the egress proxy was reported by nothing.", async () => {
+    const ingest = vi.fn((_args: unknown) => Promise.resolve());
+    relayWith(ingest)(
+      report('agt_1', {
+        transportModeActive: 'h2-and-h3',
+        h3InterposeLoaded: true,
+        safeguardChecks: [{ layer: 'dns', passed: true, detail: 'ok', timestamp: 't' }],
+        streamingState: 'live',
+        egressState: 'healthy',
+      }),
+      'node-1',
+    );
+
+    await vi.waitFor(() => expect(ingest).toHaveBeenCalledTimes(1));
+    const derived = (
+      ingest.mock.calls[0]?.[0] as { derived: { quic_route: string; warnings: string[] } }
+    ).derived;
+    expect(derived.quic_route).toBe('proxy');
+    expect(
+      derived.warnings,
+      'a working h3 interpose must not also raise the unavailable warning',
+    ).not.toContain('h3_interpose_unavailable');
+    expect(
+      derived.warnings,
+      'the requested mode was granted, so nothing is unsupported by the proxy',
+    ).not.toContain('udp_unsupported_by_proxy');
+  });
+
+  it("CRITICAL an active h2-and-h3 transport WITHOUT the interpose warns h3_interpose_unavailable and still reports quic_route 'disabled'. The mode is negotiated but the interpose is what carries the traffic, so agreeing to h3 and failing to load it is the case a customer would otherwise see as a silent downgrade.", async () => {
+    const ingest = vi.fn((_args: unknown) => Promise.resolve());
+    relayWith(ingest)(
+      report('agt_1', {
+        transportModeActive: 'h2-and-h3',
+        h3InterposeLoaded: false,
+        safeguardChecks: [{ layer: 'dns', passed: true, detail: 'ok', timestamp: 't' }],
+        streamingState: 'live',
+        egressState: 'healthy',
+      }),
+      'node-1',
+    );
+
+    await vi.waitFor(() => expect(ingest).toHaveBeenCalledTimes(1));
+    const derived = (
+      ingest.mock.calls[0]?.[0] as { derived: { quic_route: string; warnings: string[] } }
+    ).derived;
+    expect(derived.warnings).toContain('h3_interpose_unavailable');
+    expect(
+      derived.quic_route,
+      'a negotiated mode without its interpose is not a working route',
+    ).toBe('disabled');
+  });
+
+  it("CRITICAL a failed streaming state raises streaming_failed. Its sibling 'blank' was covered and this one never fired, which is the shape this sweep keeps finding — one arm of a pair exercised and the other left to a reader's assumption.", async () => {
+    const ingest = vi.fn((_args: unknown) => Promise.resolve());
+    relayWith(ingest)(
+      report('agt_1', {
+        safeguardChecks: [{ layer: 'dns', passed: true, detail: 'ok', timestamp: 't' }],
+        streamingState: 'failed',
+        egressState: 'healthy',
+      }),
+      'node-1',
+    );
+
+    await vi.waitFor(() => expect(ingest).toHaveBeenCalledTimes(1));
+    const derived = (ingest.mock.calls[0]?.[0] as { derived: { warnings: string[] } }).derived;
+    expect(derived.warnings).toContain('streaming_failed');
+    expect(derived.warnings, 'blank and failed are distinct states').not.toContain(
+      'streaming_blank',
+    );
+  });
 });

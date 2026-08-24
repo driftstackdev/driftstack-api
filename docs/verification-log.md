@@ -9288,3 +9288,35 @@ against the real driver a PDF capture is not yet implemented. That does not make
 route accepts the kind, the schema publishes it, the mock serves it, and the event mapping is what
 runs when the driver does land. It does mean the arms prove the control plane's half rather than an
 end-to-end PDF.
+
+### V-1413 — the relay had only ever reported QUIC as switched off
+
+Same sweep, next hit. `services/session-capability-report-relay.ts` derives the egress capability a
+customer's session reports, and the QUIC half of it had never run.
+
+Every frame in its test file leaves `transportModeActive` at `'h2-only'`. That single fixture choice
+hid three things at once:
+
+- `:82` — `transportModeActive === 'h2-and-h3' && frame.h3InterposeLoaded`. The right operand was
+  never **evaluated**, so `quicViaProxy` was false on all six passes.
+- `:88` — `quic_route: quicViaProxy ? 'proxy' : 'disabled'`, cond-expr counts `[0, 6]`. **The value
+  `'proxy'` had never been produced.** Per planning 133, QUIC through the egress proxy is the intended
+  live posture, so the branch that reports it _working_ was the unexercised one.
+- `:39` — the `h3_interpose_unavailable` warning, if counts `[0, 6]`. Never produced.
+
+A fourth, unrelated to the mode: `:52` `streaming_failed`, if counts `[0, 6]` — never produced, while
+its sibling `streaming_blank` at `:51` was covered twice. One arm of a pair exercised and the other
+left to assumption, which is the shape this whole sweep keeps turning up.
+
+Three arms, each mutation-proven against exactly one:
+
+| mutation                                    | reds                          |
+| ------------------------------------------- | ----------------------------- |
+| force `quicViaProxy` false                  | the `quic_route: 'proxy'` arm |
+| drop the `h3_interpose_unavailable` warning | the interpose-missing arm     |
+| drop the `streaming_failed` warning         | the streaming arm             |
+
+The middle case is the one worth naming: a frame that negotiates `h2-and-h3` and then fails to load
+the interpose is a **silent downgrade** — the mode is agreed, the interpose is what actually carries
+the traffic, and without the warning the report says the transport is fine while the route falls back
+to `disabled`. The arm pins both halves of that: the warning fires AND `quic_route` stays `'disabled'`.
