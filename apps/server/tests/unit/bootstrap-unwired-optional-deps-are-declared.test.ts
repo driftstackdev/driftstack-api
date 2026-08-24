@@ -549,6 +549,59 @@ describe('every optional dependency bootstrap does not pass is declared', () => 
     expect([...derived.keys()]).toContain('SessionsService'); // inline object type
   });
 
+  // V-1442 — the audit recorder is one instance of a wider shape, and it is not the
+  // one with the worst consequence. A census of constructor deps declared
+  // `: T | null = null` returns 45 across 20 names. Most are harmless if dropped
+  // because the default IS the production behaviour — a clock, a timeout, a base URL
+  // — which is exactly what the roster entries above say about them. The dangerous
+  // subset is the one whose default is a NO-OP at a fail-open use site, and five of
+  // those decide something a customer would notice or an auditor would ask about.
+  //
+  // Each is wired today; every one was verified by reading bootstrap's argument list,
+  // not inferred from the absence of a complaint. What none of them had is an arm
+  // that notices if the argument goes away — and it cannot come from the behaviour
+  // tests, which construct these services directly and pass their own deps.
+  //
+  // Recorded negative, so it is not re-mined: `AuthFlowsService.mfaChallenges` is the
+  // same null-defaulting shape and is NOT in this table, because it fails CLOSED —
+  // `createMfaChallenge` throws `AuthFlowError('invalid_auth_token')` when the store
+  // is null rather than skipping the challenge. Same declaration, opposite direction.
+  const FAIL_OPEN_WIRED: ReadonlyArray<readonly [service: string, arg: string, harm: string]> = [
+    [
+      'AuthFlowsService',
+      'mfaService',
+      'an MFA-enrolled account is issued a full session instead of an mfa_required challenge — `if (this.mfa)` and `this.mfa !== null && (...).enrolled` both read a missing dep as "not enrolled", on the password-login path and the email-verification path',
+    ],
+    [
+      'ApiKeysService',
+      'legalService',
+      'keys mint for an account with outstanding legal acceptances — the gate is skipped, not failed',
+    ],
+    ['ApiKeysService', 'webhooksService', 'api_key.revoked never reaches the customer endpoint'],
+    [
+      'CryptoTierActivationService',
+      'accountLifecycle',
+      'a crypto tier activation emits no lifecycle event, so no tier-changed email and no audit row',
+    ],
+    [
+      'StripeWebhooksService',
+      'accountLifecycle',
+      'a Stripe-driven tier change emits no lifecycle event',
+    ],
+  ];
+
+  it.each(FAIL_OPEN_WIRED)(
+    'CRITICAL %s still receives %s from bootstrap. Dropping it is silent: the parameter defaults to null and the use site skips rather than throws, so %s.',
+    (service, arg) => {
+      const args = constructionArgs(service);
+      expect(args, `the ${service} construction is no longer readable in bootstrap`).not.toBeNull();
+      expect(
+        new RegExp(`\\b${arg}\\w*`).test(args ?? ''),
+        `bootstrap no longer passes ${arg} to ${service} — the dependent behaviour now silently does nothing`,
+      ).toBe(true);
+    },
+  );
+
   // V-1435 — the agent-session event bus, where the two ends fail differently.
   //
   // Bootstrap wires the same bus twice, and only one end fails loudly:

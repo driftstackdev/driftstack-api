@@ -10456,3 +10456,53 @@ census regex reds the completeness arm on its own size floor rather than passing
 sits inside that arm, so an extractor that stops matching cannot report "nothing unchecked".
 
 No new test file; 11 `it` declarations to 13, 18 tests to 24. No ratchet movement.
+
+## V-1442 — the same fail-open shape, on MFA enforcement and a legal gate
+
+V-1441 guarded the audit recorder across eleven services. The recorder is one instance of a wider
+shape and not the one with the worst consequence. A census of constructor deps declared
+`: T | null = null` under `apps/server/src` returns **45 across 20 distinct names**. Most are harmless
+if dropped, because the default IS the production behaviour — a clock, a timeout, a base URL — which
+is exactly what this file's roster entries already say about them. The dangerous subset is the one
+whose default is a no-op at a fail-open use site.
+
+Five of those decide something a customer would notice or an auditor would ask about, and the first
+two are security decisions:
+
+- **`AuthFlowsService.mfa`** — `auth-flows.ts:925` guards with `if (this.mfa)` and `:843` with
+  `this.mfa !== null && (await this.mfa.getStatus(account.id)).enrolled`. Both read a **missing** dep
+  as "not enrolled", so an MFA-enrolled account would be issued a full session instead of an
+  `mfa_required` challenge — on the password-login path and the email-verification path.
+- **`ApiKeysService.legalGate`** — `api-keys.ts:318` wraps the pending-acceptance lookup in
+  `if (this.legalGate !== null)`. Absent, keys mint for an account with outstanding legal acceptances.
+  The gate is skipped, not failed.
+- **`ApiKeysService.webhooks`** — `api_key.revoked` never reaches the customer endpoint.
+- **`CryptoTierActivationService.accountLifecycle`** and **`StripeWebhooksService.accountLifecycle`** —
+  a tier change emits no lifecycle event, so no tier-changed email and no audit row.
+
+**All five are wired today.** Each was verified by reading bootstrap's argument list with balanced-paren
+extraction, not inferred from the absence of a complaint. What none had is an arm that notices the
+argument going away, and that cannot come from the behaviour tests: every test constructing these
+services builds its own deps, so a bootstrap regression is invisible to all of them.
+`lib-bootstrap-content-parity` does not pin these constructions — it has no `mfaService` reference at
+all.
+
+**A negative worth recording, because it is the same declaration pointing the other way.**
+`AuthFlowsService.mfaChallenges` is also `: T | null = null` and is deliberately NOT in the table:
+`createMfaChallenge` at `auth-flows.ts:561` **throws** `AuthFlowError('invalid_auth_token')` when the
+store is null rather than skipping the challenge. It fails closed. The declaration is identical to the
+fail-open ones; only the use site differs, which is the whole reason this class has to be read at the
+use site rather than inferred from the type.
+
+Also a clean negative: a census of optional deps whose NAME suggests a customer-visible side effect
+(notifier / emitter / publisher / mailer) returns exactly one — `CryptoOrdersService.paidEmailNotifier`
+— which this file's roster already declares as a real gap with a product decision attached.
+
+Three mutations, each restored byte-identical: dropping `mfaService`, `legalService` or
+`accountLifecycleService` from its bootstrap construction reds the named arm plus the roster arm in the
+other direction. The MFA arm was attributed by name, which also caught the arm's own message reading
+"passes AuthFlowsService into mfaService" — the `%s` substitutions followed the tuple order and stated
+the relationship backwards. Reworded before commit; a guard that reds with an inverted sentence sends
+whoever it stops in the wrong direction.
+
+No new test file; 13 `it` declarations to 14, 24 tests to 29. No ratchet movement.
