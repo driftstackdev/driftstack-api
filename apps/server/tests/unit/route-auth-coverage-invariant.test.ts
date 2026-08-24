@@ -279,6 +279,11 @@ const DISABLED_EXEMPTIONS: readonly RouteExemption[] = [
       ['post', '/v1/agent-sessions/:id/mode'],
       ['post', '/v1/agent-sessions/:id/input-event'],
       ['post', '/v1/agent-sessions/:id/resume'],
+      // V-1491 — the two routes the live registrar had without a disabled twin.
+      // Off, they were unregistered and answered a bare 404 while every sibling
+      // answered the activation 503.
+      ['get', '/v1/agent-sessions/:id/transcript'],
+      ['get', '/v1/agent-sessions/:id/gui-control-key'],
     ],
     'stub',
     'disabled',
@@ -526,10 +531,16 @@ describe('all-route caller-authority invariant', () => {
   it('discovers the complete current Fastify registration surface', () => {
     // Review tripwire, not a security assertion — the invariant below is what
     // actually enforces authority. Counts refreshed after verifying that the
-    // structurally-UNAUTHORIZED set is exactly the 71 reviewed exemptions
-    // (35 public + 1 manual-auth + 35 disabled) and that the route surface is
-    // byte-identical to `8dad6e4f6`, i.e. the drift predates this refresh.
-    expect(routes).toHaveLength(286);
+    // structurally-UNAUTHORIZED set is exactly the 73 reviewed exemptions
+    // (35 public + 1 manual-auth + 37 disabled) and that the route surface is
+    // byte-identical to `8dad6e4f6` plus the two V-1491 stubs, i.e. the rest of
+    // the drift predates this refresh.
+    //
+    // V-1491 added `transcript` and `gui-control-key` to the agent-sessions
+    // DISABLED registrar — they were the only live routes there without a twin,
+    // so with AI chat off they were unregistered rather than answering 503.
+    // Both are stubs, so both land in the disabled exemption set above.
+    expect(routes).toHaveLength(288);
     expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(215);
   });
 
@@ -544,7 +555,9 @@ describe('all-route caller-authority invariant', () => {
   it('the anonymous/manual/disabled surface is exact, unique, and non-stale', () => {
     expect(PUBLIC_EXEMPTIONS).toHaveLength(35);
     expect(MANUAL_AUTH_EXEMPTIONS).toHaveLength(1);
-    expect(DISABLED_EXEMPTIONS).toHaveLength(35);
+    // V-1491 — 35 to 37: the agent-sessions disabled registrar gained
+    // `transcript` and `gui-control-key`, the two live routes it had no twin for.
+    expect(DISABLED_EXEMPTIONS).toHaveLength(37);
     const exemptionKeys = EXEMPTIONS.map((exemption) =>
       [
         exemption.file,

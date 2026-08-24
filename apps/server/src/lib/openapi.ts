@@ -4572,6 +4572,12 @@ function buildRegistry(): OpenAPIRegistry {
       },
       404: { description: 'Agent session not found.', content: problemContent },
       ...errors4xx,
+      503: {
+        description:
+          'AI chat is not activated on this deployment. The transcript read is registered as a stub raising `FeatureUnavailableError`, carrying the activation message, so a client can tell an unactivated deployment from a missing route.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
     },
   });
 

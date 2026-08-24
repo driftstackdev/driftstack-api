@@ -35306,6 +35306,24 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "AI chat is not activated on this deployment. The transcript read is registered as a stub raising `FeatureUnavailableError`, carrying the activation message, so a client can tell an unactivated deployment from a missing route.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         }
       }

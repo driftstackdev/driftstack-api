@@ -12865,3 +12865,51 @@ it only counts files that actually contain `FeatureUnavailableError` so a helper
 Two mutations. Dropping the new 503 from `takeover` reds it naming that operation. Adding a stub
 registration for `transcript` — which declares no 503 — reds it naming that one, which is the proof the
 route side is read rather than the document restated. Both restored byte-identical.
+
+## V-1491 — a gated feature enabled two routes it did not disable, so they vanished instead of answering 503
+
+When AI chat is not activated, `registerAgentSessionsDisabledRoutes` registers seventeen stubs that raise
+`FeatureUnavailableError`. The live registrar registers nineteen. The two without a twin were
+`GET /v1/agent-sessions/{id}/transcript` and `GET /v1/agent-sessions/{id}/gui-control-key`: with the
+feature off they were not registered at all, so a caller got a bare 404 — "no such endpoint" — while
+sixteen siblings answered "not enabled on this deployment" with the activation message.
+
+`transcript` is PUBLISHED, so the document advertised an endpoint that disappears. `gui-control-key` is
+not, but the desktop client polls it, and the disabled block's own comments say repeatedly that the
+GUI panels are exactly who needs the distinction.
+
+**Two guards already cover this feature and neither could see it.**
+`activation-gate-pattern-cross-source-invariant` checks each gated feature exports both registrars,
+throws the right error, and is wired in an if/else.
+`activation-gate-disabled-stub-registrar-roster-cross-source-invariant` checks the roster of seven.
+Neither compares the two registrars' ROUTE SETS. The roster guard states the goal my arm now enforces,
+in its own words: _"an SDK client must be able to tell 'not enabled on this deployment' from 'no such
+endpoint'."_ Between the pattern being right and the roster being complete, a route can still be enabled
+and never disabled.
+
+**A file is not a scope; a function is — the third time a bound was the bug.** My first pass split each
+route file at its `…DisabledRoutes` declaration and treated everything above as the live set. That
+reported a gap on both `/v1/admin/atlas-priority/*` routes, and they are not part of the token-gated
+feature at all: they live in a SEPARATE `registerAdminAtlasPriorityRoutes`, wired under its own
+condition, with `app.ts` saying so — "independent of the internal-fleet-auth activation gate... gated
+only on the repo being available". A file holding two live registrars reads as one only if you let it.
+
+That is the same shape as V-1488b, where a gate body bounded by a character window and then by "the next
+declaration" both ran past the end of the thing being read. The arm now bounds each registrar by the
+next EXPORTED FUNCTION and pairs `registerXRoutes` with `registerXDisabledRoutes` by name, so the atlas
+false positive is gone and both real gaps remain.
+
+**The fix touched three pins, and finding them was the point of looking.** Adding two stub registrations
+moved `route-auth-coverage-invariant`, which tracks every Fastify registration and its caller authority:
+the surface count 286 → 288, the disabled-exemption count 35 → 37, and the exact per-route exemption
+list for `registerAgentSessionsDisabledRoutes`. All three are updated here with a per-occurrence
+negative — removing one stub reds the surface count immediately.
+
+Worth noting those counts are hand-maintained and V-794 permits it: that guard forbids NEW pins
+freezing a count, and these are existing ones the file is built around, each carrying the reviewed
+exemption set that makes the security assertion meaningful.
+
+Two mutations on the new arm. Removing the transcript stub reds it naming
+`get /v1/agent-sessions/{id}/transcript (agent-sessions.ts: registerAgentSessionsRoutes)`. Adding a live
+route with no twin reds it naming that one, which is the proof it reads both registrars rather than
+comparing a list to itself. Both restored byte-identical.

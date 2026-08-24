@@ -5455,6 +5455,16 @@ export function registerAgentSessionsDisabledRoutes(app: FastifyInstance): void 
   // "feature not enabled" message; the customer sees a confusing
   // "endpoint missing" error instead of the documented activation
   // state.
+  // V-1491 — the transcript READ is gated too (machine-readable 503, not a bare
+  // 404). It was the only PUBLISHED agent-session route with no disabled twin, so
+  // with AI chat off the document advertised an endpoint that answered "no such
+  // endpoint" while sixteen siblings answered "not enabled on this deployment".
+  app.get('/v1/agent-sessions/:id/transcript', stub);
+  // The GUI control-key read is gated for the same reason as the cookies and
+  // page-state reads above: the desktop client polls it, and it must be able to
+  // tell an unactivated deployment from a missing route. Not published, so this
+  // one is behaviour-only.
+  app.get('/v1/agent-sessions/:id/gui-control-key', stub);
   app.post('/v1/agent-sessions/:id/takeover', stub);
   app.post('/v1/agent-sessions/:id/handback', stub);
   // Slice 3 (Wave 29-NNN ARC 3) — POST /:id/mode also gated.

@@ -474,4 +474,71 @@ describe('path-parameterised routes document 404 or are exempt with a reason', (
       'operation(s) that become a 503-raising stub when their feature is off, without declaring 503',
     ).toEqual([]);
   });
+  /**
+   * V-1491 — a gated feature's DISABLED registrar covers the same routes its
+   * live registrar does.
+   *
+   * `activation-gate-pattern-cross-source-invariant` checks each gated feature
+   * ships both registrars, throws the right error, and is wired in an if/else.
+   * `activation-gate-disabled-stub-registrar-roster` checks the roster of seven.
+   * Neither compares the two registrars' ROUTE SETS, so a route added to the live
+   * one and not the stub is unregistered when the feature is off — a bare 404,
+   * which is precisely what the roster guard says the pattern exists to prevent:
+   * "an SDK client must be able to tell 'not enabled on this deployment' from
+   * 'no such endpoint'".
+   *
+   * `GET /v1/agent-sessions/{id}/transcript` was in that state and PUBLISHED, so
+   * the document advertised an endpoint that answered "no such endpoint" while
+   * sixteen siblings answered "not enabled". `gui-control-key` was too — not
+   * published, but polled by the desktop client for the same distinction.
+   *
+   * PER REGISTRAR, not per file, and that is the whole difficulty. A first pass
+   * split each file at its `…DisabledRoutes` declaration and treated everything
+   * above as "live", which reported a gap on both `/v1/admin/atlas-priority/*`
+   * routes. Those are not part of the token-gated feature at all: they live in a
+   * SEPARATE `registerAdminAtlasPriorityRoutes`, wired under its own condition,
+   * with a comment saying so — "independent of the internal-fleet-auth activation
+   * gate". A file is not a scope; a function is.
+   */
+  it('CRITICAL a gated feature disables the same routes it enables. A route present in the live registrar and absent from the disabled one vanishes when the feature is off, so a caller gets "no such endpoint" instead of the machine-readable 503 the pattern exists to deliver — and every sibling route answers the other way.', () => {
+    const routesDir = resolve(HERE, '..', '..', 'src', 'routes');
+    const registrations = (body: string): Set<string> =>
+      new Set(
+        [...body.matchAll(/app\.(get|post|put|patch|delete)[^(]*\(\s*\n?\s*'([^']+)'/g)].map(
+          (m) => `${(m[1] ?? '').toLowerCase()} ${(m[2] ?? '').replace(/:([a-zA-Z_]+)/g, '{$1}')}`,
+        ),
+      );
+
+    const gaps: string[] = [];
+    let pairs = 0;
+    for (const file of readdirSync(routesDir).filter((f) => f.endsWith('.ts'))) {
+      const src = readFileSync(resolve(routesDir, file), 'utf8');
+      // Every exported registrar, with its body bounded by the NEXT exported
+      // function — so a file holding two live registrars is read as two.
+      const fns = [...src.matchAll(/\nexport function (register\w+)\(/g)];
+      const bodies = new Map<string, string>();
+      for (const [i, fn] of fns.entries()) {
+        bodies.set(fn[1] ?? '', src.slice(fn.index ?? 0, fns[i + 1]?.index ?? src.length));
+      }
+      for (const [name, body] of bodies) {
+        if (!name.endsWith('DisabledRoutes')) continue;
+        const liveName = name.replace('DisabledRoutes', 'Routes');
+        const liveBody = bodies.get(liveName);
+        if (liveBody === undefined) continue; // roster guard covers a missing pair
+        pairs += 1;
+        for (const route of registrations(liveBody)) {
+          if (!registrations(body).has(route)) gaps.push(`${route} (${file}: ${liveName})`);
+        }
+      }
+    }
+
+    expect(
+      pairs,
+      'no live/disabled registrar pair was found — the export scan stopped matching, and this arm would compare nothing',
+    ).toBeGreaterThanOrEqual(5);
+    expect(
+      gaps.sort(),
+      'route(s) a gated feature enables but does not disable — off, these are unregistered and answer a bare 404 rather than the activation 503',
+    ).toEqual([]);
+  });
 });
