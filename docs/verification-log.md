@@ -14705,3 +14705,58 @@ one place. Both are worth more to the next batch than another self-directed hunt
 FK needs a cascade/restrict/set-null decision plus a plan for existing orphan rows (a breaking migration),
 the iphone17 cutover needs Agent-1 to confirm canvas/atlas readiness, and 12/13 are deploy-gating and
 CF-skip on founder cadence. None is blocked on engineering effort; each is blocked on an answer.
+
+## V-1522 — checking the gated queue against the code: one more resolved, one genuinely open, one inert divergence
+
+V-1521 found a numbered queue in `docs/internal/` whose items overlap the standing task list, and offered
+the correspondence as evidence rather than proof. This batch tested it further by checking items against
+source instead of reading their status lines.
+
+**Item 11 — production deploys have no human approval gate — is RESOLVED, and it is absent from the
+standing list.** `deploy.yml` declares `environment: name: production` on the prod job, with the comment
+that the environment is configured in repo settings to require approval before the job runs. Staging has
+its own environment and deploys unattended, which matches the header's stated two-environment flow.
+
+That is the second independently verified resolved-and-absent item, after item 6 (`PERMISSIVE_CORS`,
+smoke-tested on prod). Two resolved items missing from the list, five open items present in it, and one
+anomaly — the correspondence is now well enough evidenced to say the queue is very probably the source,
+while still not being a manifest.
+
+**Item 12 — prod deploy is not gated on CI passing — is genuinely open.** Verified rather than assumed:
+`deploy.yml` triggers on `push: [main]` plus `workflow_dispatch`, carries no `workflow_run` trigger, and
+contains no test invocation at all; `ci.yml` triggers independently on the same push. So the two run in
+parallel and tests do not gate the deploy, exactly as the item describes. It is not mine to change — the
+item says so itself, and a wrong `workflow_run` restructure can halt every deploy or create races.
+
+**Item 15's fix is not only shipped but pinned.** V-1521 verified `requireMfaFresh()` on the
+recovery-code regen route; the follow-up question is whether anything stops it being removed.
+`routes-account-mfa-content-parity` quotes the entire preHandler chain — `requireAuth`,
+`requireScope('account_owner')`, `requireInteractiveWebSession`, `requireMfaFresh()`, `rateLimit` — with
+an arm title naming the bypass it closes. A security fix that survives only until someone tidies a
+preHandler array is not really shipped; this one is guarded.
+
+### Item 9's three copies: a divergence that cannot fire
+
+The queue flags `BACKOFF_MS_BY_ATTEMPT` defined three times, marked LOW. That is the duplication class
+V-1517 found diverging in the admin audit wrappers, so it was worth checking rather than trusting the
+severity label.
+
+The tables are identical — `1: 60s, 2: 5m, 3: 15m, 4: 30m, 5: 60m` in both
+`durable-webhook-delivery.ts` and `webhook-worker.ts`. The **fallbacks differ**, and by a factor of sixty:
+the durable rail reads `?? 60 * 60_000`, the worker `?? 60_000`. On its face that is a failing endpoint
+retried every minute on one rail and every hour on the other.
+
+It cannot happen. Both lookups are dominated by a DLQ guard — `attemptNumber >= DEFAULT_MAX_ATTEMPTS` (6)
+in the durable rail, `nextAttemptIndex >= MAX_ATTEMPTS` (6) in the worker — and both tables carry keys 1
+through 5, so every reachable lookup hits. The two fallbacks are defensive defaults that no input reaches.
+
+Recorded because the divergence is real and the consequence is nil, and those are different things. The
+next person to notice two unequal fallbacks should find the reachability argument here rather than
+re-deriving it, or worse, "fixing" one to match the other and believing something changed.
+
+### Batch shape, stated plainly
+
+No code changed. Four claims were checked against source and three of them confirmed what the queue
+already said; the fourth found a divergence and proved it inert. The value is that the standing list can
+now be trimmed with evidence — items 6, 11 and 15 are done, item 12 is real and blocked on a decision
+that is not an engineering one.
