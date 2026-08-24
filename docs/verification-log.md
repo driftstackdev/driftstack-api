@@ -9251,3 +9251,40 @@ The instrument itself is the carry-forward. **A short-circuited operand is invis
 its line reads as covered** — the statement is green, the branch is green, and the right-hand half has
 never run. It is how V-1410's `fd00::/8` and this whole mechanism stayed dark, and the sweep's other 27
 hits are worth working through.
+
+### V-1412 — two of the three documented capture kinds had never been captured
+
+Working the short-circuit sweep from V-1411. At `services/sessions.ts:909` the capture handler maps
+the kind to a session event:
+
+    body.kind === 'screenshot' || body.kind === 'pdf' ? 'screenshot_captured' : 'state_captured'
+
+Both halves were dark, in the two ways that line can be dark at once. The binary-expr counts read
+`[5, 0]` — `body.kind === 'pdf'` was never **evaluated**, because the screenshot comparison
+short-circuited it every time. The cond-expr counts read `[5, 0]` too — the ternary's false branch was
+never taken, so **`'state_captured'` had never been produced by a capture at all**.
+
+`CaptureKindSchema` is `z.enum(['screenshot', 'dom_snapshot', 'pdf'])`, and the whole route had one
+arm, sending `screenshot`. So two of the three kinds the API documents had never been driven through
+`POST /v1/sessions/:id/capture`, and the mock driver implements all three.
+
+The mapping was not unguarded — `services-sessions-content-parity:431` pins it, with a regex over the
+source text that quotes the ternary verbatim. That is the fourth instance this session of a rule
+pinned as text while its effect went unexercised (after V-1400, V-1403 and V-1409). Text is not
+effect, and the effect here is which `session_event` a customer reads back from their own event
+stream.
+
+Two arms, driven end to end through the route and asserted against `fx.sessionsRepo.getEvents()`,
+which the integration fixture already exposes. They also pin the per-kind wire encoding, since only
+base64 had ever been proven and `dom_snapshot` returns utf8.
+
+| mutation                         | reds                                           |
+| -------------------------------- | ---------------------------------------------- |
+| drop `\|\| body.kind === 'pdf'`  | the pdf arm only — it records `state_captured` |
+| collapse the condition to `true` | the dom_snapshot arm only                      |
+
+Recorded alongside: `drivers/playwright.ts:203` says `'state' / 'pdf' fall through; not yet wired`, so
+against the real driver a PDF capture is not yet implemented. That does not make this dead code — the
+route accepts the kind, the schema publishes it, the mock serves it, and the event mapping is what
+runs when the driver does land. It does mean the arms prove the control plane's half rather than an
+end-to-end PDF.

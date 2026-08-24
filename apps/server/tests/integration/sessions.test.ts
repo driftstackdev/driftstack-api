@@ -714,6 +714,46 @@ describe('POST /v1/sessions/:id/capture', () => {
     expect(typeof body.data).toBe('string');
     expect(typeof body.byte_size).toBe('number');
   });
+
+  // V-1412 — `CaptureKindSchema` is `z.enum(['screenshot', 'dom_snapshot', 'pdf'])` and
+  // only the first had ever been captured. Coverage is unambiguous: at
+  // `services/sessions.ts:909` the `|| body.kind === 'pdf'` operand was never EVALUATED
+  // (the screenshot comparison short-circuited it every time) and the ternary's false
+  // branch was never taken, so `'state_captured'` had never been produced by a capture.
+  //
+  // The mapping itself is pinned by `services-sessions-content-parity` — as source text.
+  // Text is not effect, and the effect here is which session_event a customer sees in
+  // their own event stream for two of the three kinds the API documents.
+  it.each([
+    ['pdf', 'base64', 'screenshot_captured'],
+    ['dom_snapshot', 'utf8', 'state_captured'],
+  ])(
+    'CRITICAL captures kind=%s, returns it %s-encoded, and records a %s event. Two of the three documented capture kinds had never been driven through this route at all, and the event type is the half a customer reads back from their session event stream.',
+    async (kind, encoding, eventType) => {
+      fx = await buildTestApp();
+      const session = await createSession(fx);
+
+      const res = await fx.app.inject({
+        method: 'POST',
+        url: `/v1/sessions/${session.id}/capture`,
+        headers: auth(fx),
+        payload: { kind },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json<Record<string, unknown>>();
+      expect(body.kind).toBe(kind);
+      expect(body.encoding, 'the wire contract differs per kind and only base64 was proven').toBe(
+        encoding,
+      );
+      expect(typeof body.data).toBe('string');
+
+      const captured = fx.sessionsRepo
+        .getEvents()
+        .filter((e) => e.type === 'screenshot_captured' || e.type === 'state_captured');
+      expect(captured.map((e) => e.type)).toEqual([eventType]);
+    },
+  );
 });
 
 describe('DELETE /v1/sessions/:id', () => {
