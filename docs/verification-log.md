@@ -11085,3 +11085,54 @@ afterwards. Worth knowing before mutating anything under an app whose build fres
 
 Full suite green: 3067 files, 30854 tests, exit 0. No new test file; `it` count unchanged at 2. No
 ratchet movement.
+
+## V-1456 — a sweep pointed at a corpus its subject had left, checking nothing for as long as that was true
+
+Continuing the floor audit from V-1455, this time extracting EVERY floor per guard rather than the
+first. That correction matters: my first pass took the first `toBeGreaterThan` in each file and
+mis-read `every-querystring-route-validates-its-querystring` as flooring on `> 0`. Its real floors are
+at two other lines — the discovered population at ≥ 16 AND the classifier at ≥ 13 — and its comment
+reasons about both vacuity directions explicitly ("a discovery regex that silently matched nothing
+would satisfy the rule below vacuously, and one that matched everything would satisfy it just as
+well"). That guard is exemplary; my instrument was the faulty part, which is the same
+first-match-not-right-match error I have a note about.
+
+Re-derived, the signal is guards with a SINGLE floor, since one floor cannot cover both corpus and
+subject. Three `marketing-*` sweeps floor only on pages.
+
+**`marketing-prefix-id-sweep` was checking nothing at all — measured, not projected.** It walks
+marketing-site and matches `"session_id": "…"`, `"order_id": "…"`, `"webhook_id": "…"` JSON envelope
+values, asserting each carries its prefix. Across 68 pages it matched **zero** occurrences of any of
+the three. Those pages present the names as SDK code identifiers — `session_id = os.environ[...]`,
+`client.sessions.navigate(session_id, …)` — and never as a JSON envelope. The subject had moved to
+`apps/docs`, where there are **17** of them, swept by nothing.
+
+Its page floor could not see this, and its own vacuity comment states the principle it then missed by
+one level: "an absence is vacuously true over an empty scan — so a filter that stops matching would
+make this guard report clean forever while checking nothing." The filter was fine. The subject was
+gone.
+
+Fixed by sweeping both doc roots and flooring on the occurrences the arms consume (17 today, floored at
+10 so removing an example does not red the build while losing the corpus does). All 17 pass: fifteen
+carry their prefix and two are `<id>` / `<web-session-id>` placeholders, which the predicate already
+skips via its `/^[<{]/` guard.
+
+Three mutations: a RAW id planted in a real docs example now reds — coverage that did not exist before
+this commit — breaking the subject extractor reds the floor, and dropping the docs root reds because
+the corpus reverts to zero subjects.
+
+**A second instance found and not yet fixed.** `marketing-tier-caps-sweep` has the same shape and is
+also vacuous today: 61 pages, and **zero** matches for `Personal: 5`-style tier-cap assertions across
+all six display names. Whether those claims moved to another surface or simply stopped being written
+that way needs establishing before re-pointing it, so it is recorded here rather than guessed at.
+`marketing-status-event-types-sweep` is the third of the family; its absence arm has no positive
+subject to floor (the correct count of retired declarations IS zero), so it needs a positive control
+rather than a floor.
+
+Also fixed this turn, in the harness rather than the repo: `mutate.py` now captures and restores mtime
+alongside content, after V-1455's incident where a byte-identical restore still reddened
+`dist-reading-suites-have-fresh-artifacts` from a file I had not edited. Verified by mutating a
+marketing-site page and confirming the timestamp is unchanged and that guard stays green.
+
+Full suite green: 3067 files, 30854 tests, exit 0. No new test file; `it` count unchanged at 3. No
+ratchet movement.

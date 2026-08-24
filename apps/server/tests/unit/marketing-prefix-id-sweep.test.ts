@@ -13,7 +13,15 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const REPO = join(__dirname, '..', '..', '..', '..');
-const PAGES = join(REPO, 'apps', 'marketing-site', 'src', 'pages');
+// V-1456 — BOTH doc surfaces. This swept marketing-site alone and, measured
+// today, matched ZERO id occurrences there: those pages present `session_id` and
+// `order_id` as SDK code identifiers (`session_id = os.environ[...]`), never as
+// the `"session_id": "…"` JSON envelope this guard reads. The JSON response
+// examples live in apps/docs — 17 of them — and were swept by nothing.
+const PAGE_ROOTS = [
+  join(REPO, 'apps', 'marketing-site', 'src', 'pages'),
+  join(REPO, 'apps', 'docs', 'src', 'pages'),
+];
 
 function walk(dir: string): string[] {
   const out: string[] = [];
@@ -28,8 +36,8 @@ function walk(dir: string): string[] {
 // Pages we trust as the source of truth that DO use modern prefixes.
 // Any page in this sweep that uses an old (raw) id format for a
 // known resource is flagged.
-describe('W249.D marketing-site id-prefix sweep', () => {
-  const pages = walk(PAGES);
+describe('W249.D doc id-prefix sweep (marketing-site + docs)', () => {
+  const pages = PAGE_ROOTS.flatMap(walk);
   // Vacuity arm. Every assertion below reports an ABSENCE, and an absence is
   // vacuously true over an empty scan — so a filter that stops matching (a
   // rename, a new extension, a moved page root) would make this guard report
@@ -38,7 +46,32 @@ describe('W249.D marketing-site id-prefix sweep', () => {
   it('CRITICAL the scan found real pages, so a clean result means checked rather than not looked.', () => {
     // V-939 — floor raised to just under the measured 68; it stood at 5, so this
     // scan could have lost 93% of its corpus and still called itself non-vacuous.
-    expect(pages.length, 'marketing-site pages scanned').toBeGreaterThan(60);
+    expect(pages.length, 'doc pages scanned').toBeGreaterThan(60);
+
+    // V-1456 — and the ID OCCURRENCES, which is what the arms below iterate.
+    //
+    // The page floor above cannot see an extractor whose subject has moved out
+    // of the corpus, and that is exactly what had happened: 68 pages scanned,
+    // every one of them counted, and not one `"session_id": "…"` among them. The
+    // guard reported clean for as long as that was true. A floor belongs on the
+    // quantity the assertion consumes, not on the corpus it is drawn from.
+    //
+    // 17 today across both roots; floored below that so a doc removing one
+    // example does not red the build, but losing the corpus does.
+    const ID_FORMS = [
+      /"session_id"\s*:\s*"([^"]+)"/g,
+      /"order_id"\s*:\s*"([^"]+)"/g,
+      /"webhook_id"\s*:\s*"([^"]+)"/g,
+    ];
+    let occurrences = 0;
+    for (const p of pages) {
+      const body = readFileSync(p, 'utf8');
+      for (const re of ID_FORMS) {
+        re.lastIndex = 0;
+        while (re.exec(body) !== null) occurrences += 1;
+      }
+    }
+    expect(occurrences, 'prefixed-id occurrences available to check').toBeGreaterThan(10);
   });
 
   it('no doc references a raw (unprefixed) session_id placeholder', () => {
