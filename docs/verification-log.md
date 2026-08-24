@@ -11457,3 +11457,51 @@ empty body still requires the real secret to forge. Redundant layers, on the V-1
 
 Full suite green: 3067 files, 30865 tests, exit 0. No new test file; 12 `it` declarations to 13. No
 ratchet movement.
+
+## V-1465 — the same empty-key forgery on the Stripe billing path, plus the gate asymmetry that let it in
+
+V-1464 was a class, not an incident: Node's HMAC accepts an empty key and returns a valid digest, so any
+verifier whose secret can be blank is forgeable. Swept all twelve `createHmac` sites in shipped source
+and checked the verifiers.
+
+**`verifyStripeSignature` had no empty-secret guard at all.** Measured:
+
+    empty secret + HMAC-SHA256('', "<t>.<body>")  ->  { ok: true }   ACCEPTED
+    real  secret + the same forged signature      ->  invalid_signature
+
+That is a forged `invoice.paid` accepted as a genuine Stripe event. The sibling verifier in
+`nowpayments-signing.ts` has always refused an empty secret (`!opts.secret`); this one never did, and
+the two sit in the same directory doing the same job.
+
+**The asymmetry repeats one layer up, and that is where an empty string could actually arrive.** The two
+adjacent registrations in `app.ts`:
+
+    stripeWebhooksService !== undefined && stripeWebhookSigningSecret !== undefined        <- '' passes
+    nowpaymentsIpnSecret  !== undefined && nowpaymentsIpnSecret.length > 0                 <- '' blocked
+
+Both are text-pinned side by side in `lib-app-content-parity`, so the pins themselves displayed the
+difference. Today `config.stripe.webhookSecret` is only set when the env var is truthy, so `''` cannot
+reach it from the environment — the finding is latent rather than live, and it is recorded that way.
+What made it worth fixing anyway is that the defence exists two lines below for the same class of
+secret, and the weaker of the two was on the billing path.
+
+Both halves fixed and both mutation-proven: removing the primitive guard reds the new arm, and weakening
+the gate back to `!== undefined` reds the parity pin.
+
+**Deliberately NOT done: a fifth `VerifyFailureReason`.** A distinct `missing_secret` would tell an
+operator "config error" rather than "attack", which is real incident-response value. Three parity files
+pin that union as a **"4-literal"** set with the count written into their test names and header prose,
+and the SDKs turned out not to mirror it (their matches were test names containing
+`timestamp_outside_tolerance`, not the union). The guard is the security fix; re-wording three
+prose-embedded counts to relabel it is not, so it returns `invalid_signature` and the source comment
+carries the distinction.
+
+Pins updated in the same commit per the batch rule: the app gate regex rewritten for the now multi-line
+form, and that test's name changed from `stripe (service+secret)` to `stripe (service+secret>0)` — the
+name is a paraphrase, the regex is the sentinel.
+
+One slip caught immediately: the new arm used `createHmac` in a file that never imported it, which
+vitest reported as `ReferenceError` rather than as a failed assertion.
+
+Full suite green: 3067 files, 30866 tests, exit 0. No new test file; 13 `it` declarations to 14. No
+ratchet movement.

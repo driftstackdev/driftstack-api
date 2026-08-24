@@ -165,7 +165,7 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
     expect(body).toMatch(/void reply\.header\('cache-control', 'no-store, private'\);/);
   });
 
-  it('Conditional service gates pinned: incidentsService + statusSubscribersService + incidentEventBus+slaReportingService + teamMembersService + authFlowsService + cliAuthorizeService + stripe (service+secret) + NowPayments (secret>0) + cryptoOrdersService + oauthStore + costMonitoringService + profilesService (+profileSnapshotsService) + billingService + force-action triple (sessionRepo+apiKeysRepo+driver)', () => {
+  it('Conditional service gates pinned: incidentsService + statusSubscribersService + incidentEventBus+slaReportingService + teamMembersService + authFlowsService + cliAuthorizeService + stripe (service+secret>0) + NowPayments (secret>0) + cryptoOrdersService + oauthStore + costMonitoringService + profilesService (+profileSnapshotsService) + billingService + force-action triple (sessionRepo+apiKeysRepo+driver)', () => {
     expect(body).toMatch(/if \(deps\.incidentsService !== undefined\) \{/);
     expect(body).toMatch(/if \(deps\.statusSubscribersService !== undefined\) \{/);
     expect(body).toMatch(
@@ -175,8 +175,13 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
     expect(body).toMatch(/if \(deps\.authFlowsService !== undefined\) \{/);
     expect(body).toMatch(/if \(deps\.mfaService !== undefined\) \{/);
     expect(body).toMatch(/if \(deps\.cliAuthorizeService !== undefined\) \{/);
+    // V-1465 — the stripe gate now also requires a NON-EMPTY secret, matching the
+    // nowpayments line below it. The two guarded the same class of secret at
+    // different strictness and the weaker one was on the billing path: an empty
+    // string satisfies `!== undefined`, registers the route, and
+    // `verifyStripeSignature` then HMACs with an empty key, which Node accepts.
     expect(body).toMatch(
-      /if \(deps\.stripeWebhooksService !== undefined && deps\.stripeWebhookSigningSecret !== undefined\) \{/,
+      /if \(\s*\n\s+deps\.stripeWebhooksService !== undefined &&\s*\n\s+deps\.stripeWebhookSigningSecret !== undefined &&\s*\n\s+deps\.stripeWebhookSigningSecret\.length > 0\s*\n\s+\) \{/,
     );
     expect(body).toMatch(
       /if \(deps\.nowpaymentsIpnSecret !== undefined && deps\.nowpaymentsIpnSecret\.length > 0\) \{/,

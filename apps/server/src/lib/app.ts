@@ -1320,7 +1320,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       rateLimitStore: deps.rateLimitStore,
     });
   }
-  if (deps.stripeWebhooksService !== undefined && deps.stripeWebhookSigningSecret !== undefined) {
+  // V-1465 — `.length > 0`, matching the nowpayments gate directly below. These
+  // two adjacent registrations guarded the same class of secret at different
+  // strictness, and the weaker one was on the billing path.
+  if (
+    deps.stripeWebhooksService !== undefined &&
+    deps.stripeWebhookSigningSecret !== undefined &&
+    deps.stripeWebhookSigningSecret.length > 0
+  ) {
     registerStripeWebhookRoutes(app, {
       service: deps.stripeWebhooksService,
       signingSecret: deps.stripeWebhookSigningSecret,

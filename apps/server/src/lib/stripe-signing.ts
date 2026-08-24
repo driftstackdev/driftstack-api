@@ -55,6 +55,21 @@ export type VerifyFailureReason =
  * on the v1 hex digest prevents timing-leak signature recovery.
  */
 export function verifyStripeSignature(args: VerifyArgs): VerifyResult {
+  // V-1465 — refuse before hashing when the signing secret is absent.
+  //
+  // Node's HMAC accepts an EMPTY key and returns a perfectly good digest, so
+  // without this an attacker who knows the body and timestamp computes
+  // `HMAC-SHA256('', "<t>.<body>")` and it verifies. Measured: that exact input
+  // returned `{ ok: true }`. The sibling verifier in `nowpayments-signing.ts`
+  // has always had this check (`!opts.secret`); this one never did.
+  //
+  // Reuses `invalid_signature` rather than adding a fifth `VerifyFailureReason`:
+  // three parity files pin that union as a "4-literal" set with the count spelled
+  // out in their test names, and a security guard is not worth re-wording three
+  // prose-embedded counts. The route logs the reason, so the source comment is
+  // where the config-versus-attack distinction is recorded.
+  if (args.secret.length === 0) return { ok: false, reason: 'invalid_signature' };
+
   const parsed = parseHeader(args.header);
   if (parsed === null) return { ok: false, reason: 'malformed_header' };
   if (parsed.v1.length === 0) return { ok: false, reason: 'missing_v1' };

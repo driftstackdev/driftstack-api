@@ -37,6 +37,7 @@
 // one needs only the wire. The tolerance window is the only thing standing
 // against the second, so treat a change to `toleranceSec` as load-bearing.
 
+import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { verifyStripeSignature } from '../../src/lib/stripe-signing.js';
 
@@ -185,6 +186,41 @@ describe('verifyStripeSignature — cross-implementation reference vectors', () 
         `a '${junk}' part must not invalidate an otherwise good header`,
       ).toBe(true);
     }
+  });
+
+  // V-1465 — an EMPTY signing secret must refuse, including a signature forged
+  // with an empty HMAC key.
+  //
+  // Node's HMAC accepts an empty key and returns a good digest, so before this
+  // guard `HMAC-SHA256('', "<t>.<body>")` verified as a genuine Stripe event —
+  // measured, that input returned `{ ok: true }` on a body reading
+  // `{"type":"invoice.paid"}`. The sibling verifier in nowpayments-signing has
+  // always refused an empty secret; this one had no such check.
+  //
+  // The registration gate in app.ts now also requires a non-empty secret, which
+  // is where an empty string could have reached this function. Both are pinned
+  // because either alone leaves the other free to regress.
+  it('CRITICAL an empty signing secret refuses a signature forged with an empty HMAC key', () => {
+    const v = VECTORS[0]!;
+    const forged = createHmac('sha256', '')
+      .update(`${String(v.timestampSec)}.${v.rawBody}`)
+      .digest('hex');
+    const header = `t=${String(v.timestampSec)},v1=${forged}`;
+
+    expect(
+      verifyStripeSignature({ rawBody: v.rawBody, header, secret: '', nowSec: v.timestampSec }).ok,
+      'a blank webhook secret must not make every event verifiable',
+    ).toBe(false);
+    // Control: the same forged signature is refused under the real secret too,
+    // so the assertion above cannot pass merely because the digest is wrong.
+    expect(
+      verifyStripeSignature({
+        rawBody: v.rawBody,
+        header,
+        secret: v.secret,
+        nowSec: v.timestampSec,
+      }).ok,
+    ).toBe(false);
   });
 
   // ─── Secret-roll: Stripe dual-signs with old+new secret → MULTIPLE v1 ───────
