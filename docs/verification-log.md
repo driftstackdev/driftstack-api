@@ -14439,3 +14439,56 @@ Worth carrying forward: check the exemptions whose reason is a JUDGEMENT ("not a
 a customer's resource") before the ones whose reason is an OBSERVATION ("this file declares no default").
 The judgement is where a wrong conclusion can hide behind a true sentence — which is precisely how
 V-1511's seven entries survived.
+
+## V-1517 — the one admin audit wrapper that can skip a row, and the union that keeps it honest
+
+V-1516 closed by saying blind-spot sentences yield better than exemption lists, so this batch went back to
+them and picked the highest-stakes one available: `admin-audit-route-coverage-invariant`, whose header
+carries a ⚠️ paragraph stating that it _"asserts an audit CALL exists in the handler, not that it is
+correct or that it fires on every path. A handler that records the wrong action, or skips the call on an
+early return, passes here."_
+
+That is a compliance surface — the sentence a SOC2 auditor or a DPO cites — with a written admission that
+one class of failure is invisible to it. Worth testing rather than reading.
+
+**`withAudit` is defined separately in each admin route file.** Not imported from one place: a private
+copy per file, hand-maintained, with no equivalence check between them — the shape `requireScope` has and
+covers with an exhaustive matrix, and these do not.
+
+Five copies are structurally identical: `try { perform(); record success } catch { record error; throw }`.
+One is not. `admin-incidents.ts` takes an extra parameter, `shouldRecordSuccess`, that lets a caller skip
+the SUCCESS row, and exactly one call site passes it — the idempotent PUT, with
+`() => result?.outcome === 'created'`.
+
+**It is correct, and establishing that took reading the service rather than the route.**
+`createWithId` answers `'created' | 'replayed'`; a replay writes nothing, so auditing it would file a
+second `incident.created` row for one logical creation. Suppressing it is right. Failures are unaffected —
+the catch records regardless of the flag — and a `'mismatch'` throws into that catch.
+
+**What was wrong is that nothing said so, and nothing checked it.** The parameter had no comment, the
+call site had no comment, and the existing content pin froze the suppression's EXISTENCE
+(`shouldRecordSuccess: () => boolean = () => true`, `if (shouldRecordSuccess()) {`) without a word about
+why skipping an audit is safe there. A pin that freezes a suppression and not its justification is a pin
+that will preserve the suppression after the justification stops being true.
+
+The decision is now written at both places, and the arm reads the outcome union out of the service. Add a
+third outcome — one that mutates — and the same line becomes a staff mutation with no trace; the arm reds
+first, naming what to do. Proven by adding `'updated'` to the union.
+
+The second negative is the comment itself: removing the call-site reason reds the pin, so the explanation
+cannot quietly drop out and leave the bare conditional behind.
+
+### Why this was worth a batch when the answer was "correct"
+
+Nothing here was broken, and the entry says so plainly. What was there was an undocumented divergence in
+a hand-copied helper, on the one path a compliance guard states it cannot see, guarded by a pin that
+froze the mechanism and not the reason. Each of those is individually defensible and together they are
+how a correct suppression outlives its premise — which is precisely the failure V-1511 recorded when my
+own seven exemptions each cited a true sentence in support of a false conclusion.
+
+**Also measured, and clean.** Every admin route file's success and error audit branches are 1:1, so no
+handler records a success without a matching failure path. The mutations in `admin-force-actions` sit
+INSIDE their `withAudit` callback rather than before it, so the audit is structural and cannot be
+bypassed by an early return. And `admin-owner`'s hand-written audits — the secrets surface — audit before
+the response leaves on both success and failure, with the benign not-found exclusion documented against
+D-025 in the sibling handler.

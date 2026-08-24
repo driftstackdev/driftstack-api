@@ -40,6 +40,28 @@ function read(p: string): string {
 describe('W420.B apps/server/src/routes/admin-incidents.ts content parity', () => {
   const body = read(LIB);
 
+  it("V-1517 CRITICAL the audit suppression is safe only while the outcome union stays a no-op replay. This file's withAudit is the one admin copy that lets a caller skip the SUCCESS row, and the idempotent PUT uses it. That is correct today because createWithId answers `created` or `replayed` and a replay writes nothing, so auditing it would file a second incident.created for one logical creation. A third outcome that mutates would turn the same line into a staff mutation with no trace — and the coverage guard cannot catch it, because its own header says it asserts an audit CALL exists, not that it fires on every path. So the union is read from the service here rather than trusted.", () => {
+    const service = readFileSync(
+      resolve(REPO_ROOT, 'apps/server/src/services/incidents.ts'),
+      'utf8',
+    );
+    const start = service.indexOf('async createWithId(');
+    expect(start, 'createWithId is still declared in the incidents service').toBeGreaterThan(-1);
+    const signature = service.slice(start, start + 900);
+    const union = /outcome:\s*((?:'[a-z_]+'\s*\|\s*)*'[a-z_]+')/.exec(signature);
+    expect(union?.[1], 'the declared outcome union of createWithId').toBeDefined();
+    const members = (union?.[1] ?? '')
+      .split('|')
+      .map((x) => x.trim().replace(/'/g, ''))
+      .sort();
+    expect(
+      members,
+      'createWithId gained an outcome the audit suppression has never considered — the PUT skips ' +
+        'its success row on anything that is not `created`, so a new mutating outcome would go ' +
+        'unrecorded. Widen the suppression or audit the new outcome',
+    ).toEqual(['created', 'replayed']);
+  });
+
   it('V-295a framing pinned: 5 admin routes (create + list + detail + append-update + resolve) + V-281 dual-write audit pattern on every mutation', () => {
     expect(body).toMatch(/V-295a — admin-only incident management endpoints\./);
     expect(body).toMatch(/POST\s+\/v1\/admin\/incidents\s+— create new incident/);
@@ -81,6 +103,9 @@ describe('W420.B apps/server/src/routes/admin-incidents.ts content parity', () =
     expect(body).toMatch(/perform: \(\) => Promise<void>,/);
     expect(body).toContain('shouldRecordSuccess: () => boolean = () => true');
     expect(body).toContain('if (shouldRecordSuccess()) {');
+    // V-1517 — the suppression carries its reason, and the reason is checked.
+    expect(body).toContain('a replay writes');
+    expect(body).toContain('Only a real creation is audited; a replay changed nothing.');
     // The target id is resolved at record time so the create route can
     // log the real inc_<uuid> (known only after perform()).
     expect(body).toMatch(

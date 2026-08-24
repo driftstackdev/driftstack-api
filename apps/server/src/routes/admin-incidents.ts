@@ -154,6 +154,15 @@ export function registerAdminIncidentsRoutes(
     targetResourceId: string | (() => string),
     inputPayload: Record<string, unknown>,
     perform: () => Promise<void>,
+    // V-1517 — the one thing this copy does that its siblings in the other
+    // admin route files do not: let a caller suppress the SUCCESS row. It is
+    // used once, by the idempotent PUT, and it is safe only because
+    // `createWithId` answers `'created' | 'replayed'` and a replay writes
+    // nothing — recording it would file a second `incident.created` for one
+    // logical creation. A third outcome that DOES mutate would make this
+    // suppression hide a staff mutation, which is why the outcome union is
+    // asserted in `routes-admin-incidents-content-parity`. Failures are
+    // unaffected: the catch below records regardless of this flag.
     shouldRecordSuccess: () => boolean = () => true,
   ): Promise<void> {
     const ctx = request.account;
@@ -270,6 +279,8 @@ export function registerAdminIncidentsRoutes(
             createdByAdminKeyId: ctx.apiKey.id,
           });
         },
+        // Only a real creation is audited; a replay changed nothing. See the
+        // note on shouldRecordSuccess — the outcome union is what makes this safe.
         () => result?.outcome === 'created',
       );
       if (!result) throw new Error('idempotent incident creation produced no result');
