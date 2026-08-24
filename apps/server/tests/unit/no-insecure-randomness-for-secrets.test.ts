@@ -35,12 +35,44 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const SERVER_SRC = resolve(REPO_ROOT, 'apps/server/src');
 
+// V-1450 — `packages/*/src` ships to customers (the three SDKs) and was outside
+// this scan entirely. Swept by hand first: the only uses are the SDK's retry
+// jitter and two comments asserting no Math.random, so this widens the scope
+// without changing the verdict today — which is the point of adding it before
+// something security-relevant lands there.
+const PACKAGE_SRCS = (() => {
+  const root = resolve(REPO_ROOT, 'packages');
+  if (!statSync(root, { throwIfNoEntry: false })) return [];
+  return readdirSync(root)
+    .map((pkg) => resolve(root, pkg, 'src'))
+    .filter((dir) => statSync(dir, { throwIfNoEntry: false }) !== undefined);
+})();
+
 // Files where a NON-security Math.random() is vetted + intentional.
 const ALLOWLIST = new Set<string>([
   'apps/server/src/services/webhook-worker.ts', // retry backoff jitter
   'apps/server/src/lib/livekit-token.ts', // jti CSPRNG-fallback (non-secret)
   'apps/server/src/drivers/playwright.ts', // internal driver-session handle
+  'packages/sdk-typescript/src/retry.ts', // retry backoff jitter; rng is injectable for tests
 ]);
+
+/** Comments stripped — a comment that NAMES Math.random is not a use of it, and
+ *  two files in packages/ say "no Math.random()" in prose to explain why they
+ *  seed their own PRNG. Without this they read as offenders. */
+function code(p: string): string {
+  return read(p)
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(?<!:)\/\/.*$/gm, '');
+}
+
+/** Any REFERENCE to Math.random, not only a call.
+ *
+ *  The previous pattern was `\bMath\.random\(\)`, which requires the call
+ *  form. Measured: replacing a token generator's body with
+ *  `const rng = Math.random; return rng().toString(36);` produced an auth token
+ *  from a seedable PRNG and left this file GREEN — the same insecurity as the
+ *  direct call, differing only in the syntax the regex happened to key on. */
+const MATH_RANDOM = /\bMath\.random\b/;
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -67,12 +99,12 @@ function rel(p: string): string {
 }
 
 describe('security: no Math.random() for secrets/tokens/ids in server runtime', () => {
-  const files = listSourceFiles(SERVER_SRC);
+  const files = [SERVER_SRC, ...PACKAGE_SRCS].flatMap(listSourceFiles);
 
   it('CRITICAL Math.random() appears only in the vetted non-security allowlist — any other apps/server/src use must be reviewed (use a CSPRNG for tokens/ids/secrets)', () => {
     const offenders: string[] = [];
     for (const f of files) {
-      if (/\bMath\.random\(\)/.test(read(f))) {
+      if (MATH_RANDOM.test(code(f))) {
         const r = rel(f);
         if (!ALLOWLIST.has(r)) offenders.push(r);
       }
@@ -85,6 +117,10 @@ describe('security: no Math.random() for secrets/tokens/ids in server runtime', 
 
   it('non-vacuous: the scan reached server source AND the CSPRNG convention (randomBytes/randomUUID/getRandomValues) is in use', () => {
     expect(files.length).toBeGreaterThan(100);
+    expect(
+      PACKAGE_SRCS.length,
+      'no packages/*/src roots found — the widened scope silently reverted to server-only',
+    ).toBeGreaterThan(4);
     const usesCsprng = files.some((f) =>
       /\b(randomBytes|randomUUID|randomInt|getRandomValues)\b/.test(read(f)),
     );
@@ -99,8 +135,8 @@ describe('security: no Math.random() for secrets/tokens/ids in server runtime', 
         `allowlisted file missing: ${a}`,
       ).toBeTruthy();
       expect(
-        /\bMath\.random\(\)/.test(read(full)),
-        `allowlisted file no longer uses Math.random(): ${a}`,
+        MATH_RANDOM.test(code(full)),
+        `allowlisted file no longer uses Math.random: ${a}`,
       ).toBe(true);
     }
   });

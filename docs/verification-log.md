@@ -10778,3 +10778,55 @@ Three mutations, one failing arm each: a chacha swap at an encrypt site, the sam
 and hoisting the cipher name to a variable. Census floor raised to 18.
 
 No new test file; 4 `it` declarations to 5. No ratchet movement.
+
+## V-1450 — the Math.random guard keyed on the call form, so a reference slipped past it
+
+`no-insecure-randomness-for-secrets` is a well-built census: every `apps/server/src` file scanned, a
+three-entry allowlist of vetted non-security uses, a non-vacuity arm, and an arm requiring each
+allowlisted file to still contain the thing it is exempted for — so an exemption cannot go stale.
+
+Per the rule this session keeps re-learning, I proved it rather than read it: injecting
+`Math.random()` into `auth-tokens.ts`, a non-allowlisted security file, reds it. Honest guard.
+
+**Then the same injection in a different syntax, which is the finding.** The pattern was
+`\bMath\.random\(\)` — the CALL form. Replacing the auth-token generator's body with
+
+    const rng = Math.random; return rng().toString(36);
+
+produces an auth token from a seedable PRNG and leaves the file **green**. Identical insecurity,
+identical consequence, differing only in the syntax the regex happened to key on. This is the same
+shape as V-1434, where an audit-recorder sweep matched `if (dep === null) return` and missed the two
+services failing open through `?.` and a positive-form guard.
+
+The pattern is now `\bMath\.random\b`, any reference. That required stripping comments first: two
+`packages/behavioural-simulation` files say "no `Math.random()`" in prose precisely to explain why they
+seed their own PRNG, and they would otherwise read as offenders. A mutation adding such a comment to a
+clean file confirms it stays green.
+
+**Scope widened to `packages/*/src`, which was outside the scan entirely.** Those ship to customers —
+three SDKs — and a `Math.random` used for a secret there is exactly as bad as in the server. Swept by
+hand before wiring it: the only uses are the TypeScript SDK's retry jitter (`config.rng ?? Math.random`,
+injectable for tests, now allowlisted) and the two comments above. So the verdict does not change
+today, which is the argument for adding it now rather than after something security-relevant lands.
+The allowlist entry is only reachable at all under the broadened pattern — the SDK never calls
+`Math.random()` directly, which is why it was invisible to the old one.
+
+**A tree deliberately left out, with the measurement.** `apps/gui-client/src` is also unscanned and has
+six uses. All six verified benign: three are `crypto.randomUUID()` with a `Math.random` fallback for a
+local id (dead code in a Tauri webview, same shape as the vetted `livekit-token.ts` entry), one a
+`tab_` handle, one a crypto-checkout idempotency key, one a UI candidate pick. No security use. I did
+not extend the scan there because a peer has uncommitted work across `apps/gui-client/**`, and a guard
+I commit that scans a tree someone else is mid-edit on reds on their in-flight changes rather than on a
+defect. Recorded here so the omission is visible and the sweep does not have to be redone.
+
+Five mutations: direct call reds (control), reference form reds (was green before this change), a
+`Math.random` in `packages` reds (new scope), a comment naming it does NOT red (no false positive), and
+breaking the packages-root discovery reds the non-vacuity arm. Every restore byte-identical.
+
+Also measured, and a negative: `TOKEN_RANDOM_BYTES = 32` backs an explicit conditional claim — sha256
+at rest is justified _because_ the input carries 256 bits. `auth-tokens.test.ts` asserts a generated
+token decodes to `TOKEN_RANDOM_BYTES` bytes, which is self-referential and passes at 8; the
+cross-source invariant asserts `toBe(32)` separately, so the pair closes it compositionally. Lowering
+the constant reds two tests. The behavioural arm's name promises more than that file alone delivers.
+
+No new test file; `it` count unchanged at 3. No ratchet movement.
