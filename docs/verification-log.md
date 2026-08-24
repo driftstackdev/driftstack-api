@@ -9893,3 +9893,56 @@ reporting `'simulated'` forever. That case is now covered.
 Recorded alongside: this is the same shape as `an-auditing-harness-must-reproduce-the-audited-environment`.
 The gap was not in the source or in the test — it was that the harness did not reproduce the wiring, so
 the outcome had no way to occur.
+
+### V-1428 — the fixture-side dependency sweep: one real gap, and an instrument that mostly lies
+
+V-1427 found a production value that no test could reach because `build-test-app` wired only part of
+what one config flag drives. That looked like a class, so it was swept: **AppDeps keys bootstrap
+passes that the fixture never does.**
+
+**The instrument is weak, and its own numbers say so.** Three passes, each correcting the last:
+
+| pass                              | result               | why it was wrong                                                                                                                         |
+| --------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| line-anchored regex on both files | bootstrap sets **0** | wrong marker — bootstrap builds `const deps: AppDeps = {`, not an inline `buildApp({…})`                                                 |
+| corrected marker                  | **33** candidates    | missed fixture keys written inside `...(opts.x ? { … } : {})` spreads — including `agentExecutionLive`, which I had added the day before |
+| whole-file word search            | **12** candidates    | searched the dep KEY; tests name the class or module instead                                                                             |
+
+Every one of the 12 then resolved as covered elsewhere or deliberately unwired: `internalFleetAuth` has
+its own test file, `metricsRefreshGauges` is tested as `refreshGauges` through the metrics route,
+`staffEmails` is passed straight into `authenticate(...)`, and `agentDecomposerAllowFallback` is the
+staging-only flag declined in V-1425. **Zero genuine findings.** Recorded so nobody runs it again
+expecting yield — and noting the mirror direction already has a guard,
+`bootstrap-unwired-optional-deps-are-declared`, which covers optional deps _bootstrap_ never passes.
+That one is a real invariant; this direction is not, on this codebase.
+
+**The one real gap it did surface** is worth stating precisely, because it is larger than V-1427 and is
+NOT closed here.
+
+`routes/agent-sessions.ts:1774` — `maybeMintLivekit` opens with
+
+    if (fleetNodesRepo === undefined || livekitSecretEncryptionKey === undefined) return undefined;
+
+Branch data: 318 evaluations, and the **second operand never evaluated once**. So the first is always
+true and the function has never proceeded past its opening line. Everything below it — resolving the
+session's publisher node, decrypting the LiveKit secret, minting the viewer token — is unreachable
+from the suite, across all three call sites. This is the live-preview path a customer uses to watch
+their own agent session run.
+
+The parts are tested individually (`mintLivekitToken` in 3 files, `decryptLivekitSecret` in 4,
+`resolveSessionPublisherNode` in 1). The **composition** is not, and the reason is the fixture:
+
+- `build-test-app` constructs an `InMemoryFleetNodesRepo` and exposes it on the returned fixture object
+  so tests can register nodes directly — but never passes it into AppDeps, where the route reads
+  `deps.fleetNodesRepo` typed as `DrizzleFleetNodesRepo`.
+- `livekitSecretEncryptionKey` is never set by the fixture at all.
+
+Verifying that cost a correction mid-investigation: `fleetNodesRepo` appears at
+`build-test-app.ts:1896` and I first read that as the AppDeps wiring. It is the returned fixture
+object — the surrounding keys are `probesRepo`, `incidentEventBus`, `broadcastFetchCalls`. Exposed to
+tests, not passed to the app.
+
+Closing it means an opt-in fixture flag wiring a type-compatible nodes repo plus the encryption key,
+then an arm asserting an agent-session response carries a `livekit` block with a real token. That
+touches a shared helper used by hundreds of files and needs its own run to land safely, so it is
+written down rather than half-started at the end of a batch.
