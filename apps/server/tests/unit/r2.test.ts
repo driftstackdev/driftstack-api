@@ -28,6 +28,7 @@ vi.mock('@aws-sdk/s3-request-presigner', () => ({
 
 import {
   createR2Client,
+  createR2PublicClient,
   r2ReadinessCheck,
   recordingKey,
   profileSealedBlobKey,
@@ -140,6 +141,42 @@ describe('profileSealedBlobKey', () => {
   it('returns the canonical profile sealed-blob key shape (keyed by profile_id)', () => {
     expect(profileSealedBlobKey('a74c2abf-0000-4000-8000-000000000001')).toBe(
       'profiles/a74c2abf-0000-4000-8000-000000000001.sealed',
+    );
+  });
+});
+
+// V-1438 — `createR2PublicClient` had never been called. Coverage: the function
+// executed 0 times and BOTH arms of its `if (!config.bucketPublic) return null;`
+// were dark. It is not unguarded, though: `lib-r2-content-parity` pins its entire
+// body as a regex and `r2-v054-v295c2-v352b-cross-source-invariant` pins the
+// signature and the null-guard line again. Three text pins across two files, on a
+// function nothing ran.
+//
+// The property that matters is not the null return. It is WHICH BUCKET the client
+// targets. The two factories share credentials and differ only in the bucket they
+// close over, and bootstrap's own comment says why that separation exists: "The
+// recordings bucket is intentionally NOT used — recordings contain Customer Data and
+// must remain private." A copy-paste returning the recordings client would satisfy
+// "non-null", satisfy every text pin, and publish Customer Data to a bucket whose
+// whole purpose is being world-readable.
+describe('createR2PublicClient (V-295c2 dual-bucket separation)', () => {
+  it('returns null when the public bucket is unconfigured, which is how the status-snapshot writer learns the feature is off', () => {
+    expect(createR2PublicClient(config)).toBeNull();
+  });
+
+  it('CRITICAL targets the PUBLIC bucket and never the recordings one. Both factories take the same credentials and differ only in the bucket they close over, so a client built from the wrong one would write Customer Data — session recordings — into the world-readable bucket. Non-null is not the property; the bucket is.', () => {
+    const pub = createR2PublicClient({ ...config, bucketPublic: 'public-snapshots' });
+    expect(pub).not.toBeNull();
+    expect(pub?.bucket).toBe('public-snapshots');
+    expect(
+      pub?.bucket,
+      'the public client resolved to the recordings bucket — Customer Data would be written to a public bucket',
+    ).not.toBe(config.bucketRecordings);
+  });
+
+  it('CONTROL the recordings factory still targets the recordings bucket with the same config, so the arm above is a separation between two live factories rather than a claim about one', () => {
+    expect(createR2Client({ ...config, bucketPublic: 'public-snapshots' }).bucket).toBe(
+      config.bucketRecordings,
     );
   });
 });

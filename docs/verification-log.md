@@ -10285,3 +10285,43 @@ zero, or a suspiciously round hit-count, as a broken instrument until proven oth
 sweep first reported 0 gated installations (a too-strict block anchor, when the real answer is 1), and
 the job sweep first reported 0 registrars exported (a failed `grep -oE` capture, when the real answer
 is 13).
+
+### V-1438 — three text pins on a function nothing ever called, guarding a public bucket
+
+`createR2PublicClient` executed **0 times** across the suite, and both arms of its
+`if (!config.bucketPublic) return null;` were dark. It is not unpinned:
+`lib-r2-content-parity` holds its **entire body** as a regex, and
+`r2-v054-v295c2-v352b-cross-source-invariant` holds the signature and the null-guard line again.
+Three text pins across two files, on a function no test ran. The purest instance of the shape this
+session keeps turning up.
+
+**The property that matters is not the null return.** It is which bucket the client targets. Both
+factories take the same credentials and differ only in the bucket they close over, and bootstrap states
+why the separation exists:
+
+> The recordings bucket is intentionally NOT used — recordings contain Customer Data and must remain
+> private.
+
+A copy-paste returning the recordings client would be non-null, would satisfy **every one of those
+three text pins verbatim**, and would write session recordings into the bucket whose entire purpose is
+being world-readable. The text pins cannot see it because the text would not change: `createR2Client`
+and `createR2PublicClient` differ by one identifier inside a body that a regex over the _public_
+function never reads.
+
+Three arms, each mutation-proven against exactly one:
+
+| mutation                                                   | reds                      |
+| ---------------------------------------------------------- | ------------------------- |
+| the public factory returns `config.bucketRecordings`       | the bucket-separation arm |
+| the `!config.bucketPublic` null guard is dropped           | the feature-disabled arm  |
+| the **recordings** factory is pointed at the public bucket | the control arm           |
+
+The third row is why the control is there. Asserting only that the public client uses the public bucket
+leaves the other direction open; a separation between two live factories has to be checked from both
+ends, or a change that merges them passes half the pins.
+
+Recorded from the same pass: `bootstrap.ts:1021` — the warning that fires when R2 is configured and
+`R2_BUCKET_PUBLIC` is not — is still uncovered. Its second operand has never been evaluated because
+`config.r2` is null in every test. It is a log line rather than a behaviour, and reaching it needs a
+full `createProductionDeps` run against a live Postgres and Redis, so the testable core was taken
+instead: the null-return contract the warning is derived from is now exercised directly.
