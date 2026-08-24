@@ -9359,3 +9359,38 @@ authorization-code issue path, and that copy **is** covered — by
 `db-oauth-client-account-binding-drizzle`, whose header quotes that very line. So the rule is
 implemented twice and was tested in one of its two copies, which the neighbouring file already noted
 as a recurring shape in this codebase.
+
+### V-1415 — my own type error, and the hook gap it exposed
+
+The full suite went red after V-1413 on `the-server-source-type-checks` → "the TESTS type-check too".
+`git status` showed no dirty tracked files, so the red was mine, not a peer's.
+
+The fault: my three new relay arms set `egressState: 'healthy'`, and the schema is
+`z.enum(['live', 'dead_proxy'])`. Vitest transpiles without type-checking, so all three arms passed —
+and the mutation proofs passed too, because at runtime an unknown string simply fails to equal
+`'dead_proxy'` and behaves like the `'live'` I meant. Corrected to `'live'`; all three arms re-proven
+against the same three mutations afterwards, so the attribution stands.
+
+**The part worth keeping is why the pre-commit hook did not stop it.** The hook's own comment states
+its purpose — a type error that commits cleanly "only surfaces in the PRE-PUSH gate. That gate tests
+the WORKING TREE rather than the ref being pushed, so one agent's type error rejects every other
+agent's push until somebody repairs it. That happened twice on 2026-08-23." Mine is exactly that
+class, and it committed three times.
+
+It runs, per staged workspace:
+
+    npx tsc --noEmit -p "$ws/tsconfig.json"
+
+and `apps/server/tsconfig.json` is `include: ['src/**/*']`, `exclude: [..., 'tests']`. The workspace's
+own `typecheck` script is **two** invocations — `tsc --build && tsc --noEmit -p tsconfig.test.json` —
+and the hook runs only what the first one covers. So the hook type-checks `src/` and never a test file,
+while `npm run typecheck` (the CI gate) checks both. A staged test file gets eslint and prettier and no
+type-check at all.
+
+The in-suite guard caught it, which is the layer that did its job. But it catches it at full-suite
+time, after the commits have landed — later than the hook that exists to catch it first.
+
+**Not fixed here.** `.husky/**` is outside what I commit in this shared tree. The change is one line —
+have the loop prefer the workspace's `typecheck` script when `package.json` defines one, falling back
+to `tsc --noEmit -p tsconfig.json` — and it belongs to whoever owns that file. Recorded rather than
+applied.

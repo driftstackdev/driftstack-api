@@ -189,7 +189,7 @@ describe('makeSessionCapabilityReportRelay', () => {
         h3InterposeLoaded: true,
         safeguardChecks: [{ layer: 'dns', passed: true, detail: 'ok', timestamp: 't' }],
         streamingState: 'live',
-        egressState: 'healthy',
+        egressState: 'live',
       }),
       'node-1',
     );
@@ -217,7 +217,7 @@ describe('makeSessionCapabilityReportRelay', () => {
         h3InterposeLoaded: false,
         safeguardChecks: [{ layer: 'dns', passed: true, detail: 'ok', timestamp: 't' }],
         streamingState: 'live',
-        egressState: 'healthy',
+        egressState: 'live',
       }),
       'node-1',
     );
@@ -239,7 +239,7 @@ describe('makeSessionCapabilityReportRelay', () => {
       report('agt_1', {
         safeguardChecks: [{ layer: 'dns', passed: true, detail: 'ok', timestamp: 't' }],
         streamingState: 'failed',
-        egressState: 'healthy',
+        egressState: 'live',
       }),
       'node-1',
     );
