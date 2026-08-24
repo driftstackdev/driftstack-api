@@ -266,6 +266,38 @@ describe('ProxyConnectivityProbe — SOCKS5', () => {
     expect(res.reason).toBe('auth_failed');
   });
 
+  // V-1402 — the method byte is the PROXY's choice, not ours. With no credentials
+  // configured the greeting advertises NO-AUTH only, so a proxy selecting 0x02 or
+  // GSSAPI has answered with something it was never offered. Both refusals were dark.
+  it('AUTH_FAILED: a proxy selects USERNAME/PASSWORD when we advertised only NO-AUTH → refused, naming the missing configuration. The credential reads below this point are casts (`proxy.username as string`), so this guard is what makes them safe: without it an unadvertised 0x02 reaches Buffer.from(undefined) and the customer gets `egress_blocked` carrying a Node type error instead of the one reason they can act on.', async () => {
+    const { dial } = await fakeProxy((sock) => {
+      sock.on('data', () => sock.write(Buffer.from([0x05, 0x02])));
+    });
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET });
+
+    const res = await probe.probe(SOCKS5_PROXY); // deliberately no username/password
+
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('auth_failed');
+    expect(
+      res.detail,
+      'the detail must name the missing configuration; a bare auth_failed here is indistinguishable from wrong credentials, which is the opposite fix',
+    ).toMatch(/none was configured/);
+  });
+
+  it('UNREACHABLE: a proxy selects an auth method we never advertised (GSSAPI 0x01) → refused, naming the method. Falling through instead would send CONNECT to a proxy still waiting to negotiate, and the probe would report a timeout after the full budget rather than the mismatch it can already see.', async () => {
+    const { dial } = await fakeProxy((sock) => {
+      sock.on('data', () => sock.write(Buffer.from([0x05, 0x01])));
+    });
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET });
+
+    const res = await probe.probe(SOCKS5_PROXY);
+
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('unreachable');
+    expect(res.detail).toMatch(/unsupported auth method \(0x1\)/);
+  });
+
   it('EGRESS_BLOCKED: CONNECT reply REP != 0 (proxy connected but upstream failed) → { ok:false, egress_blocked }', async () => {
     const { dial } = await fakeProxy((sock) => {
       let step = 0;

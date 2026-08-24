@@ -8828,3 +8828,39 @@ Each mutation reds exactly one arm and nothing else: defeating the peer-address 
 
 The general shape is worth keeping: **a dependency injected for determinism is a dependency nothing
 tests.** The default is what production runs, and here the default carried a security guard.
+
+### V-1402 — the SOCKS5 method byte is the proxy's choice, and both refusals of it were dark
+
+Continuing in the same service as V-1401. The greeting advertises NO-AUTH alone when no credentials
+are configured (`const methods = hasAuth ? [0x00, 0x02] : [0x00]`), but what comes back is chosen by
+the far end. Two of the three answers the code handles had never been received:
+
+**A proxy selecting USERNAME/PASSWORD that was never advertised.** The guard is `if (!hasAuth)`, and
+what sits under it is the tell:
+
+    const user = Buffer.from(proxy.username as string, 'utf8');
+    const pass = Buffer.from(proxy.password as string, 'utf8');
+
+Two casts. The type system was overridden here, and this guard is the entire reason the override is
+sound. Without it `Buffer.from(undefined, 'utf8')` raises `TypeError: The first argument must be of
+type string...` (confirmed directly), which the outer catch maps to `egress_blocked` with that Node
+message as the customer-facing detail — the wrong reason, and a detail naming an internal type error
+rather than the one thing the customer can fix. The arm asserts the detail says the credentials were
+not configured, because a bare `auth_failed` is indistinguishable from _wrong_ credentials and points
+at the opposite fix.
+
+**A proxy selecting a method that is neither NO-AUTH, USER/PASS, nor 0xff** — GSSAPI (0x01) is the
+realistic one. Refused as `unreachable`, naming the method in hex. Falling through instead would send
+CONNECT to a proxy still waiting to negotiate, so the probe would spend the whole budget and report
+`timeout` — a slower and less actionable answer than the mismatch it can already see.
+
+Mutations red exactly one arm each: `if (!hasAuth)` → `if (false)`, and `} else if (chosen !== 0x00)`
+→ `} else if (false)`. 28 arms → 30, no new file.
+
+Both belong to the pattern V-1400 turned on: **a cast is a claim, and the guard above it is the proof.**
+`proxy.username as string` and `authResp[1] ?? 0xff` are the same kind of marker — somewhere a value's
+type depends on a check, and it is worth asking whether anything has ever taken that check's other arm.
+
+Recorded as a negative from the same pass: `(authResp[1] ?? 0xff)` at `:314` is unreachable, because
+`SocketReader.read(n)` loops until the buffer holds n bytes before slicing, so index 1 of a 2-byte read
+is always present. Narrowing only; no arm written.
