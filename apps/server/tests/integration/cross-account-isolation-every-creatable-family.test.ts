@@ -74,6 +74,30 @@ const PROBED_CREATES = [
   '/v1/webhooks',
 ];
 
+/**
+ * Every `(VERB, path)` this server registers under `/v1`, param names flattened.
+ *
+ * V-1471 — added because a mistyped probe is INVISIBLE here. Every arm in this
+ * file asserts a refusal, and a route that does not exist refuses too: changing a
+ * probe URL to `/v1/profiles/:id/launchZZ` left all seven green. A probe aimed at
+ * nothing proves nothing, and reads exactly like a probe aimed at something that
+ * correctly refuses.
+ */
+function registeredRoutes(): Set<string> {
+  const routesDir = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'routes');
+  const out = new Set<string>();
+  for (const file of readdirSync(routesDir)) {
+    if (!file.endsWith('.ts')) continue;
+    const src = readFileSync(resolve(routesDir, file), 'utf8');
+    for (const m of src.matchAll(
+      /app\.(get|post|put|patch|delete)[^(]*\(\s*\n?\s*'(\/v1\/[^']*)'/g,
+    )) {
+      out.add(`${(m[1] ?? '').toUpperCase()} ${(m[2] ?? '').replace(/:[A-Za-z_][\w]*/g, ':p')}`);
+    }
+  }
+  return out;
+}
+
 function collectionLevelCreates(): { path: string; staffOnly: boolean }[] {
   const routesDir = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'routes');
   const out: { path: string; staffOnly: boolean }[] = [];
@@ -246,6 +270,15 @@ beforeAll(async () => {
     { method: 'GET', url: `/v1/profiles/${profile}` },
     { method: 'PATCH', url: `/v1/profiles/${profile}`, body: { name: 'b-took-it' } },
     { method: 'DELETE', url: `/v1/profiles/${profile}` },
+    // V-1471 — the two NESTED creates hanging off another account's profile.
+    // Both were absent, and both are the severe shape this file was written for:
+    // a successful launch runs a browser session on A's profile and bills A for
+    // it, and a successful snapshot copies A's profile state into a record B can
+    // then read. Derived rather than noticed — a parameterised POST whose handler
+    // emits `reply.code(201)` is a create, and these were the only customer-facing
+    // ones the probe list did not carry.
+    { method: 'POST', url: `/v1/profiles/${profile}/launch`, body: {} },
+    { method: 'POST', url: `/v1/profiles/${profile}/snapshots`, body: { label: 'b-took-it' } },
     { method: 'GET', url: `/v1/sessions/${session}` },
     { method: 'DELETE', url: `/v1/sessions/${session}` },
     { method: 'GET', url: `/v1/profile-snapshots/${snapshot}` },
@@ -266,7 +299,13 @@ beforeAll(async () => {
       headers: bAuth,
       ...(p.body === undefined ? {} : { payload: p.body as Record<string, unknown> }),
     });
-    const op = `${p.method} ${p.url.replace(/\/[a-z]+_[0-9a-f-]+/g, '/:id')}`;
+    // V-1471 — `[0-9a-f-]+` stops at the SECOND underscore, so the in-memory
+    // fixture's ids (`agt_inmem_00000001`, `rec_inmem_<uuid>`) were never
+    // normalised: four ops carried a raw id into every failure message, and the
+    // registered-route arm below could not match them. Widened to the whole id
+    // segment. Safe because no `/v1` path segment contains an underscore —
+    // `agent-sessions`, `api-keys`, `profile-snapshots` are all hyphenated.
+    const op = `${p.method} ${p.url.replace(/\/[a-z]+_[A-Za-z0-9_-]+/g, '/:id')}`;
     attempts.push({ op, status: res.statusCode });
 
     // For an idempotent delete, ask the same question about an id that never
@@ -352,6 +391,30 @@ describe('no account can reach another account resource, in any creatable family
       headers: { authorization: `Bearer ${bToken}` },
     });
     expect(bOwn.statusCode, "B's own credential is valid and authorised").toBe(200);
+  });
+
+  it('CRITICAL every probe actually ran. A probe whose id came back empty is SKIPPED, so it leaves the sweep without failing anything — and the arms below all report absences, which an empty attempt list satisfies perfectly. Floored on the attempts recorded rather than on the probe list, because the two differ by exactly the skipping this guards against.', () => {
+    expect(
+      attempts.length,
+      'fewer cross-account attempts were recorded than the probe list defines — a create failed and its probes were skipped',
+    ).toBeGreaterThanOrEqual(21);
+  });
+
+  it('CRITICAL every probe is aimed at a route this server actually registers. A refusal arm cannot tell a correctly-refusing route from one that does not exist — both answer 404 — so a typo in a probe URL removes it from the sweep while every assertion here keeps passing. Measured: renaming a probe to `/launchZZ` left all seven arms green.', () => {
+    const registered = registeredRoutes();
+    expect(
+      registered.size,
+      'no /v1 routes parsed from the route table — this arm would pass over an empty set',
+    ).toBeGreaterThan(100);
+
+    const unknown = attempts
+      .map((a) => a.op.replace(/:[A-Za-z_][\w]*/g, ':p'))
+      .filter((op) => !registered.has(op))
+      .sort();
+    expect(
+      [...new Set(unknown)],
+      'probe(s) aimed at a route that is not registered — they answer 404 for the wrong reason and test nothing:',
+    ).toEqual([]);
   });
 
   it('CRITICAL not one cross-account attempt succeeded. A 2xx here is the resource itself crossing an account boundary — and for the two rotations it is worse than a read: a successor key or signing secret minted into the wrong hands, with the victim key invalidated.', () => {

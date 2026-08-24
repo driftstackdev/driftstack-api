@@ -11721,3 +11721,42 @@ staleness direction; breaking the route scan reds the count floor.
 
 Full suite green: 3067 files, 30869 tests, exit 0. No new test file; 5 `it` declarations to 6. No
 ratchet movement.
+
+## V-1471 — closing the half V-1470 declared out of scope, and finding the sweep could not tell a real route from a typo
+
+V-1470 bounded itself: it polices COLLECTION-level creates and leaves nested ones alone, because
+`POST /v1/profiles/{id}/snapshots` cannot be told from `POST /v1/api-keys/{id}/rotate` by path shape.
+That bound was honest but it was also a gap I had written down and left open.
+
+**A better discriminator exists.** A create emits `reply.code(201)` in its handler; an action does not.
+Reading the balanced call text of each parameterised `app.post` gives six nested creates — three
+staff-only under `/v1/admin`, and three customer-facing: `api-keys/:id/rotate` (already probed and named
+in the file's header), `profiles/:id/snapshots`, and `profiles/:id/launch`.
+
+**The last two were not probed.** Both are the severe shape this file exists for: a successful launch
+runs a browser session on another account's profile and bills them for it; a successful snapshot copies
+their profile state into a record the caller can then read. Added, and both answer 404 on current
+source — the same outcome the file's own header records for webhooks and api-keys ("Nothing had ever
+asked whether that worked. It does not.").
+
+**Then a mutation exposed something worse than a missing probe.** Renaming a probe to `/launchZZ` left
+all seven arms GREEN. Every arm in this file asserts a refusal, and a route that does not exist refuses
+too — so a typo removes a probe from the sweep while the file keeps reporting success. A probe aimed at
+nothing reads exactly like a probe aimed at something that correctly refuses.
+
+An arm now requires every attempted op to match a route the server actually registers, derived from the
+route table. Building it surfaced a second defect: **four ops were never normalised**. The file reduces
+ids with `/\/[a-z]+_[0-9a-f-]+/`, which stops at the SECOND underscore, so the in-memory fixture's ids
+(`agt_inmem_00000001`, `rec_inmem_<uuid>`) passed through raw — into every failure message, and into the
+new matcher. Widened to the whole id segment, which is safe because no `/v1` path segment contains an
+underscore (`agent-sessions`, `api-keys`, `profile-snapshots` are hyphenated).
+
+Also added a floor on attempts RECORDED rather than probes defined, because the two differ by exactly
+the skipping it guards: a create that fails yields `''` and its probes are silently dropped.
+
+Five mutations: the `/launchZZ` typo now reds; reverting the id normalisation reds; breaking the
+route-table scan reds the floor; a failed create reds both the attempts floor and the non-vacuity arm;
+removing a probe reds the count.
+
+Full suite green: 3067 files, 30871 tests, exit 0. No new test file; 6 `it` declarations to 8. No
+ratchet movement.
