@@ -9631,3 +9631,52 @@ Two of those mutations first failed `mutate.py`'s needle assertion because I rea
 the wrong lines. That is the second time in this turn, and it is now visible rather than silent only
 because V-1420's entry made me filter mutation output on `APPLIED` as well as on the result — without
 it, a refusal to mutate prints nothing and reads exactly like a mutation that changed no behaviour.
+
+### V-1422 — a correction: the api-types coverage figure in V-1407 measures the wrong thing
+
+Working the never-executed-function sweep into `packages/api-types` produced five hits —
+`tierFeatures`, `tierHasFeature`, `parseGranularScope`, `archetypeDisplayLabel`,
+`isValidIanaTimeZone`. Every one is a false positive, and finding out why invalidates a number I
+reported in V-1407.
+
+`parseGranularScope` was the tell: it is called by `lib/errors-helpers.ts:75` inside `requireScope`,
+which runs on every authenticated route. A function on that path cannot plausibly be unexecuted, so
+the instrument was wrong rather than the codebase.
+
+`packages/api-types/package.json` exports `./dist/index.js`, and nothing aliases the package to `src`
+under vitest. Consumers — the server, the other packages, and the SDK — therefore execute the **built
+output**, which `--coverage.include='packages/*/src/**/*.ts'` never instruments.
+
+Proven both directions with the same key, since a green from the wrong artifact proves nothing:
+
+| the identical break, applied to     | server scope tests         |
+| ----------------------------------- | -------------------------- |
+| `packages/api-types/src/common.ts`  | **56 passed** — unaffected |
+| `packages/api-types/dist/common.js` | **16 failed**              |
+
+The first attempt at this was a comment-only edit, which is behaviour-neutral; a green there would
+have "confirmed" the hypothesis while proving nothing. It was redone as a real behaviour break.
+
+The other four resolve the same way once that is known: `tier-features.test.ts` imports and calls
+`tierFeatures` and `tierHasFeature` directly, `isValidIanaTimeZone` is module-private and runs inside
+the timezone schema's `.refine()` on every validation, and `archetypeDisplayLabel` is used by two
+Astro pages that vitest does not run at all.
+
+**What this corrects.** V-1407 reported `api-types` at 25.1% statements and concluded that it "alone
+drags the combined lines figure to 83.84, under the 85 required," so closing that gap was "two
+decisions, not one." The 25.1% is not a coverage result — it is how much of `src` the package's own
+four test files load directly, with everything driven through `dist` invisible. The true figure is
+higher by an unknown amount, so the conclusion that adding `api-types` would fail the threshold does
+not follow.
+
+What survives unchanged: the direction of the error is known. A package consumed through `dist` is
+measured **at or below** its real coverage, never above, so V-1407's other half — that the five
+non-`api-types` packages measure 98.25 lines and would clear the bar — is a floor and still holds.
+
+The census note and the entry in `a-gate-that-does-not-name-its-blind-spot-reads-as-total` are
+rewritten to say this, including the part that matters to whoever acts on it: adding `api-types` to
+the coverage include reports the same misleading floor unless vitest is also aliased to resolve the
+package to `src`. That is a module-resolution decision, not a coverage one.
+
+Recorded as a limit on the instrument itself: **"never executed" is unreliable for any package whose
+consumers import it by package name.** Check the resolution before believing it.

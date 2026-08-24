@@ -321,16 +321,32 @@ describe('a gate that does not name its blind spot reads as total', () => {
   // Measured 2026-08-23 over the whole node-project run, quoted here rather than
   // asserted because a pinned percentage rots the moment anyone writes a test:
   // five of the six sit at 98.25 lines / 97.14 statements / 95.97 functions / 89.51
-  // branches and would clear the existing thresholds with room to spare. `api-types`
-  // is the outlier at 25.1% statements, and it alone drags the combined figure to
-  // 83.84 lines — under the 85 the gate asks for. So closing this is two decisions,
-  // not one, and neither is a measurement's to make.
+  // branches and would clear the existing thresholds with room to spare.
+  //
+  // V-1422 — the sixth needs a caveat that the first draft of this note did not
+  // have. `api-types` measured 25.1% statements, and that figure is a LOWER BOUND
+  // rather than a coverage result. Its consumers import `@driftstack/api-types`,
+  // which `package.json` resolves to `dist/index.js`, so everything the server and
+  // the other packages exercise runs the BUILT output and instruments none of
+  // `src`. Proven both ways with one key: breaking `parseGranularScope` in `src`
+  // leaves all 56 server scope tests green, and the identical break in `dist` reds
+  // 16 of them. So the number says how much of `src` the package's own four test
+  // files load directly, not how well the package is tested — every figure above is
+  // a floor for the same reason, which only matters for the one that looks low.
+  //
+  // The practical consequence for whoever closes this: adding `api-types` to the
+  // include reports that same misleading floor unless vitest is also aliased to
+  // resolve the package to `src`. That is a second decision, and it is about module
+  // resolution rather than about coverage.
   //
   // The arm below is membership only. It exists so a NEW package cannot land outside
   // the gate silently, which is the failure mode this whole file is about: not run
   // and not measured must never look the same from a green.
   const PACKAGES_OUTSIDE_COVERAGE: ReadonlyArray<readonly [pkg: string, note: string]> = [
-    ['api-types', '25.1% statements; the one that would fail the lines threshold if added'],
+    [
+      'api-types',
+      'measures 25.1% of src, but consumers load dist — a floor, not a result (V-1422)',
+    ],
     ['behavioural-simulation', 'measures 98.4% statements — unmeasured, not untested'],
     ['recapture-automation', 'measures 97.7% statements — unmeasured, not untested'],
     ['recipe-library', 'measures 99.4% statements — unmeasured, not untested'],
