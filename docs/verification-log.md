@@ -14383,3 +14383,59 @@ planted in the dot form. Each reds naming the planted header. Source restored by
 
 **What remains outside, stated because a reach is an assumption until it is written down:** a header name
 built at runtime rather than declared as a constant. Nothing does that today.
+
+## V-1516 — four security exemptions checked against source; all four hold
+
+V-1515 found a real gap by testing a guard's declared blind spot, so this batch worked the same vein
+deliberately: **hand-maintained exemption lists**, which V-1511 proved can be wrong in the worst way —
+my own seven entries there were each justified by a true sentence supporting a false conclusion.
+
+Forty-one guards carry an exemption, allowlist or skip constant. This entry records the four highest-stakes
+ones, checked against source rather than read. No defect. Recording it because the next sweep should not
+re-derive these, and because an exemption that has been verified is worth more than one that has merely
+not been questioned.
+
+**`admin-routes-authorization-invariant` — nothing to check.** `STUB_EXEMPTIONS` is an empty array, and
+the scan is a TypeScript AST walk rather than a regex. The strongest state an exemption list can be in.
+
+**`every-minted-secret-prefix-is-in-the-redactor` — three prefixes declared public, all correct.**
+`ord_` is a crypto order id that ships in receipts and customer-facing order URLs. `oac_` is an OAuth
+client*id, public by the spec, and its entry already records that it named the authorization CODE until
+V-1453 moved that to `oag*`.
+
+`oaa_` was the one worth the time, because its reason is a security judgement rather than an
+observation: _"a one-time authorization_id for the consent flow; a handle the consent UI carries, not a
+bearer credential."_ It holds, and decisively. `POST /v1/oauth/authorize/complete` requires
+`app.requireAuth`, then refuses any API key — `ctx.webSession === null` throws _"OAuth authorization
+requires an interactive dashboard session"_, with the reasoning written beside it: accepting a key there
+would let a stolen limited credential launder its authority into an OAuth token that survives key
+revocation. It gates on `apiAccess`, and binds the issued code to the AUTHENTICATED caller's account
+rather than any body-supplied `account_id`. Someone holding an `oaa_` handle scraped from a log has
+nothing: they still need an interactive dashboard session for the victim's account, which is strictly
+more than the handle would give them.
+
+**`byok-plaintext-call-sites-are-pinned` — two decrypt sites, both doing what their reason claims.**
+The AgentRuntime path sends the key to Anthropic for the turn. The test endpoint needs the real key to
+ask Anthropic whether it works. And the adjacent surface is clean in the direction that would matter
+most: `GET /v1/account/me/byok-anthropic-key` is commented _"metadata only; NEVER returns plaintext"_ and
+returns exactly `has_key`, `set_at`, `last_used_at`.
+
+**`an-exempt-surface-that-can-drop-a-field-is-listed` — already the analysis I would have run.** It
+measures which exempt schemas can drop a field at all (a schema with no optional field answers 400 on a
+mistyped key), reports the split across the body-parsing schemas on those surfaces, and says outright
+that `status-subscribe`'s exemption reaches the right conclusion from a premise V-951 had already
+measured as unsound. Nothing to add.
+
+### What this batch says about the vein
+
+V-1515 tested one declared blind spot and found a real gap on the first try. Four exemption lists later,
+the pattern is different: these are careful, and two of them anticipate exactly the failure I was hunting
+for. The vein is not exhausted — thirty-seven exemption lists remain unchecked — but the yield here is
+lower than the blind-spot sentences were, and the difference is instructive. A blind spot is what an
+author knew they had not covered; an exemption is what they decided after looking. The first is a gap by
+construction, the second only fails when the reasoning was wrong.
+
+Worth carrying forward: check the exemptions whose reason is a JUDGEMENT ("not a bearer credential", "not
+a customer's resource") before the ones whose reason is an OBSERVATION ("this file declares no default").
+The judgement is where a wrong conclusion can hide behind a true sentence — which is precisely how
+V-1511's seven entries survived.
