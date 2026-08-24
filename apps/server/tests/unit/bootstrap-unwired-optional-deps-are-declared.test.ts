@@ -458,4 +458,49 @@ describe('every optional dependency bootstrap does not pass is declared', () => 
       ).toBe(true);
     },
   );
+
+  // V-1435 — the agent-session event bus, where the two ends fail differently.
+  //
+  // Bootstrap wires the same bus twice, and only one end fails loudly:
+  //
+  //   AppDeps  (`agentSessionEventBus`)  → app.ts gates SSE route registration on it.
+  //                                        Drop it and the route is absent: a 404 the
+  //                                        first customer request surfaces.
+  //   AgentRuntime (`eventBus:`)         → every publish is `this.deps.eventBus?.publish(...)`.
+  //                                        Drop it and the route still registers, still
+  //                                        accepts the connection, and never emits.
+  //
+  // Measured, and the first framing of this needed correcting: with the PUBLISHER
+  // wiring removed, 200 tests pass across the bootstrap parity guard, the event
+  // bus's own suite, and the agent-sessions integration suite. Removing the
+  // SUBSCRIBER wiring is no better caught — the route-census suites build their own
+  // app through `buildTestApp` rather than through bootstrap, so a bootstrap change
+  // is invisible to them too.
+  //
+  // So neither end is guarded in CI; they differ only in how visible the RUNTIME
+  // failure is. A 404 on the transcript route gets reported. A stream that connects
+  // and never emits is indistinguishable from an agent that is simply thinking, for
+  // as long as the customer is willing to wait. Both ends are asserted below,
+  // because the bus's tests exercise the bus and the route's tests exercise the
+  // route — only bootstrap joins them.
+  it('CRITICAL bootstrap still passes the event bus into AgentRuntime, the PUBLISHER end. Every publish is optional-chained, so dropping it leaves the SSE transcript route registered and permanently silent rather than absent — the failure a customer cannot tell from a slow agent.', () => {
+    const call = /new AgentRuntime\(\{([\s\S]*?)\n {2}\}\)/.exec(bootstrapSource);
+    expect(
+      call?.[1],
+      'the AgentRuntime construction is no longer readable in bootstrap',
+    ).toBeDefined();
+    expect(
+      /\beventBus:\s*\w+/.test(stripComments(call?.[1] ?? '')),
+      'bootstrap no longer passes eventBus to AgentRuntime — the transcript stream would connect and never emit',
+    ).toBe(true);
+  });
+
+  it('CRITICAL bootstrap still passes the event bus into AppDeps, the SUBSCRIBER end. app.ts gates SSE route registration on it, so dropping it removes the transcript route entirely — a louder failure than the publisher end, and equally invisible here, since the route-census suites build their app through buildTestApp rather than bootstrap.', () => {
+    const deps = /const deps: AppDeps = \{([\s\S]*?)\n {2}\};/.exec(bootstrapSource);
+    expect(deps?.[1], 'the AppDeps assembly is no longer readable in bootstrap').toBeDefined();
+    expect(
+      /\bagentSessionEventBus\b/.test(stripComments(deps?.[1] ?? '')),
+      'bootstrap no longer passes agentSessionEventBus into AppDeps — the SSE transcript route stops registering',
+    ).toBe(true);
+  });
 });

@@ -10188,3 +10188,32 @@ sites in `agent-runtime`. If that bus were unwired the agent-session event strea
 no error. It is not covered here — the sweep's remaining deps (`logger`, `metrics`) are observability
 whose absence is self-evidently tolerated by design, but the event bus is not obviously in that class
 and deserves its own pass.
+
+### V-1435 — a stream that connects and never emits, and a framing I had to correct
+
+The optional-chaining sweep from V-1434 left one dep unworked: `eventBus?.publish()`, six call sites in
+`agent-runtime`. It feeds the customer-facing SSE transcript stream, so it got its own pass.
+
+Bootstrap wires the same bus **twice**, and the two ends fail differently at runtime:
+
+| end                                         | wired at            | drop it and…                                                                                           |
+| ------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------ |
+| subscriber — `AppDeps.agentSessionEventBus` | `bootstrap.ts:2792` | `app.ts` gates SSE route registration on it, so the route is **absent** — a 404                        |
+| publisher — `AgentRuntime`'s `eventBus:`    | `bootstrap.ts:1480` | every publish is optional-chained, so the route registers, accepts the connection, and **never emits** |
+
+The publisher end is the one a customer cannot diagnose: the stream connects and stays silent, which
+is indistinguishable from an agent that is simply thinking, for as long as they are willing to wait.
+
+Measured: with the publisher wiring removed, **200 tests pass** across the bootstrap parity guard, the
+event bus's own suite, and the agent-sessions integration suite.
+
+**My first framing of this was wrong and the measurement caught it.** I described the subscriber end as
+the "loud" one already covered elsewhere, and tested that claim rather than asserting it: dropping it
+leaves the route-census suites green too, because they build their app through `buildTestApp` rather
+than through bootstrap. A bootstrap change is invisible to them. So neither end was guarded in CI —
+they differ only in how visible the _runtime_ failure is, not in how well tests see it. Both are
+asserted now, each mutation-proven independently, and the comment says which is which.
+
+That is the same structural reason as every finding in this V-1432..V-1435 run: the bus's tests
+exercise the bus, the route's tests exercise the route, and only bootstrap joins them. A wiring
+regression lives in the seam that neither side's tests reach.
