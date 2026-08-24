@@ -114,8 +114,11 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     // at the binding document rather than re-enumerating categories itself.
     expect(body, 'the URL denial must not return').not.toMatch(/don't log your destination URLs/);
     expect(body, 'nor the closure claim').not.toMatch(/That's everything we touch/);
-    expect(body).toMatch(/href="\/legal\/privacy"/);
-    expect(body).toMatch(/href="\/trust"/);
+    // Trailing slashes are load-bearing, not cosmetic: without them Cloudflare
+    // Pages answers 308 and the live-quality scan flags the redirect hop. These
+    // two were the only slash-less internal links left on the site.
+    expect(body).toMatch(/href="\/legal\/privacy\/"/);
+    expect(body).toMatch(/href="\/trust\/"/);
     expect(body).toMatch(/lists every\s+category in full/);
   });
 

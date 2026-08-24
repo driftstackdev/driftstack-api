@@ -29,7 +29,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 
 /** Files the node project is expected to collect. Raise when adding tests. */
-export const EXPECTED_TEST_FILES = 3013;
+export const EXPECTED_TEST_FILES = 3014;
 
 /**
  * Files the ROOT config collects — both vitest projects, which is what CI's
