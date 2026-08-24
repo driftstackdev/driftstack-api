@@ -14904,3 +14904,53 @@ useful next step is trimming it rather than re-deriving each item.
 What genuinely remains, with nothing blocking it but an answer: items 7 (agent_sessions FK behaviour), 8
 (iphone17 cutover, cross-agent), 12 (deploy gated on CI), 13 (CF-skip), §4.7 (needs a migration), plus the
 four registered decisions — D-033, D-034, D-2026-08-24-01 and D-2026-08-24-02.
+
+## V-1526 — three more backlog items checked, all done, and one I nearly reported as broken
+
+V-1525 concluded the backlog was "mostly already done" from four samples of twenty. That was a thin basis
+for a claim about a whole section, so this batch sampled three more — chosen for being security-relevant
+rather than convenient — and the conclusion holds.
+
+**§4.8 — health-probe auto-incident info-leak — FIXED, and fixed well.** The item describes
+`evaluateThresholds` interpolating a raw probe `errorMessage` into a `public: true` incident, where a
+network failure's text (`connect ECONNREFUSED 10.x.x.x:port`) reaches the unauthenticated status page.
+The call now reads `sanitizePublicProbeError(lastErr)`, and that function is an ALLOWLIST: only
+`^HTTP \d{3}$` survives verbatim, everything else becomes "a connectivity error". Allowlist rather than a
+strip-the-bad-parts regex, which is the difference between a sanitiser that fails closed and one that
+fails on the format nobody anticipated.
+
+It is guarded on both sides: a content-parity pin quotes the whole `incidents.create` call including the
+sanitiser, and `health-probe-service.test.ts` carries a describe block named for the leak, asserting
+`connect ECONNREFUSED 10.0.0.5:8443` does not survive.
+
+**§4.12 — unauthenticated token-consume and session routes lacking an IP gate — FIXED.** `routes/auth.ts`
+declares eight named `ipRateLimit` gates, including `magicLinkConsumeGate` and
+`passwordResetConfirmGate` — the token-consume pair the item names.
+
+### §4.15 is the one worth writing down, because I nearly filed it as live
+
+The item says the public `/v1/status/stream` has "no app-level limiter at all". I grepped the route
+registration for a `preHandler` and found none, while its sibling `/v1/status/sla` on the same router
+carries `statusSlaGate`. An unauthenticated SSE stream with no limiter beside one that has a gate is a
+sharp-looking finding, and it is wrong.
+
+The cap is in the handler body, not the preHandler chain: `MAX_TOTAL_CONNECTIONS = 500`,
+`MAX_CONNECTIONS_PER_IP = 10`, checked before the hijack so a rejected connection never allocates, with
+the counters released idempotently on close and error. Its comment names the same audit the queue item
+came from. So the protection is stronger than a rate limiter — a concurrent-connection bound rather than
+an open-rate bound — and my grep missed it by looking for the shape I expected instead of the behaviour.
+
+That is the same fault as the `requireScope`-only scope census in V-1509 and the literal-only header scan
+in V-1515: searching for one spelling of a mechanism and reading its absence as the absence of the
+mechanism. It has now produced a near-miss three times, and the correction each time was to ask what the
+code DOES rather than where I assumed it would be written.
+
+### Sample and conclusion
+
+Checked across both sections now: §2 items 6, 11, 12, 15, 19; §4 items 3, 7, 8, 12, 13, 15, 19. Ten are
+done, one (§4.7) is accurately described and needs a migration, and item 12 is genuinely open and
+explicitly not an autopilot edit.
+
+The claim V-1525 made on four samples survives eleven, and the useful form of it is unchanged: the
+standing list should be trimmed against the repo before more effort goes into it, because the majority of
+what it still asks for has already landed.
