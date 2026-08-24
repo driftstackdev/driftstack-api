@@ -9210,3 +9210,44 @@ nothing needed retitling. Each mutation reds exactly one arm: dropping the `fd` 
 Worth carrying forward: **a short-circuit `||` hides its right operand from coverage entirely.** The
 line reads as covered and the second half has never run. Same instrument as the compound-condition
 note in the dark-throw triage, and it is how the more important half of this one stayed dark.
+
+### V-1411 — a short-circuit hid an entire mechanism, and the guard whose failure is inverted
+
+V-1410 turned on a `||` whose right operand had never been evaluated. That is an instrument, so it was
+run across both trees: every compound condition where the first operand is covered and a later one has
+**zero evaluations**. 29 hits. The one that mattered is in the SDK.
+
+`bodyOperationTimeoutMs` (`sdk-typescript/src/http.ts:426`) has **never once returned a value**. The
+first operand of `typeof r.timeout_ms === 'number' && …` evaluated 27 times and the two after it never,
+which happens only when the first is always false — no test in the suite had ever put a numeric
+`timeout_ms` or `timeout_seconds` in a request body. The function read as covered throughout.
+
+What that leaves unexercised is stated by `resolveTimeoutMs` in its own words: the body-derived
+deadline exists so "a 30s client default never aborts a 90s op the server would honour". If it stopped
+working, a customer running a long login or search would watch the SDK abort a request the server was
+still serving, and the suite would stay green.
+
+Nine arms. Margins are deliberately enormous rather than tight — a 60s deadline plus 15s headroom
+against a 25ms base, with the stub replying in ~120ms — so nothing here is a race.
+
+**The `isFinite` guard needed a different shape, and finding that out is the point.** Folded in with
+the other rejected values it proved nothing: removing `Number.isFinite` reddened **nothing**, because
+an infinite deadline still aborts — `setTimeout` clamps an out-of-range delay to 1ms, so the request
+failed either way and my arm could not see the difference. Its failure is _inverted_ from how it
+reads: the bug makes the request abort almost immediately rather than hang. Attribution needed a base
+timeout **longer** than the stub's reply, so the correct answer is success and the broken one is an
+abort. Restructured that way it reds exactly.
+
+| mutation                                | reds                       |
+| --------------------------------------- | -------------------------- |
+| never raise from the body (`:239`)      | the two raise arms         |
+| drop `&& r.timeout_ms > 0`              | the zero and negative arms |
+| drop `Number.isFinite(r.timeout_ms) &&` | the Infinity arm only      |
+| drop `r.timeout_seconds > 0`            | the zero-seconds arm only  |
+
+`NaN` is recorded as subsumed: `NaN > 0` is false, so it never depends on the finite check.
+
+The instrument itself is the carry-forward. **A short-circuited operand is invisible to coverage while
+its line reads as covered** — the statement is green, the branch is green, and the right-hand half has
+never run. It is how V-1410's `fd00::/8` and this whole mechanism stayed dark, and the sweep's other 27
+hits are worth working through.

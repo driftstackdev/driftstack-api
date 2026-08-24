@@ -855,3 +855,98 @@ describe('HttpClient — retry-safety gate', () => {
     expect(cf.calls()).toBe(3);
   });
 });
+
+// V-1411 — `bodyOperationTimeoutMs` has never once returned a value. Coverage shows the
+// FIRST operand of `typeof r.timeout_ms === 'number' && …` evaluated 27 times and the two
+// after it never, which happens only when the first is always false: no test in the suite
+// had ever put a numeric `timeout_ms` or `timeout_seconds` in a request body.
+//
+// What that leaves unexercised is the mechanism `resolveTimeoutMs` documents in its own
+// words — the body-derived deadline exists "so a 30s client default never aborts a 90s op
+// the server would honour". If it stopped working, a customer running a long login or
+// search would see the SDK abort a request the server was still happily serving, and the
+// whole suite would stay green.
+//
+// The margins here are deliberately enormous rather than tight: the raised deadline is
+// 60s + 15s headroom against a 25ms base, and the stub answers in ~120ms. Nothing here is
+// a race.
+describe('HttpClient body-derived operation timeout', () => {
+  const SLOW_MS = 120;
+
+  /** Answers after SLOW_MS, or surfaces the abort if the deadline fired first. */
+  function slowFetch(): typeof fetch {
+    return vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const signal = init?.signal;
+      await new Promise((resolve) => setTimeout(resolve, SLOW_MS));
+      if (signal?.aborted === true) {
+        throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+      }
+      return new Response('{"ok":true}', { status: 200 });
+    });
+  }
+
+  const client = (): HttpClient =>
+    new HttpClient({
+      apiKey: 'ds_live_test',
+      baseUrl: 'http://api.test',
+      timeoutMs: 25,
+      fetch: slowFetch(),
+      retry: NEVER_RETRY,
+    });
+
+  it('CONTROL with no deadline in the body the 25ms client timeout aborts the slow call. Without this the arms below pass on a client that never times out at all, which is the opposite of the property.', async () => {
+    await expect(
+      client().request<unknown>({ method: 'POST', path: '/v1/x', body: { url: 'https://e.test' } }),
+    ).rejects.toMatchObject({ name: 'TransportError', message: 'request timed out' });
+  });
+
+  it.each([
+    ['timeout_ms, already in milliseconds', { timeout_ms: 60_000 }],
+    ['timeout_seconds, converted from seconds', { timeout_seconds: 60 }],
+  ])(
+    'CRITICAL a body carrying %s RAISES the transport deadline above the client default, so the SDK does not abort an operation the server is still running. This is the navigate/wait/login/search contract, and nothing had ever put a numeric value in either field.',
+    async (_label, body) => {
+      await expect(
+        client().request<{ ok: boolean }>({ method: 'POST', path: '/v1/x', body }),
+      ).resolves.toEqual({ ok: true });
+    },
+  );
+
+  it.each([
+    ['zero', { timeout_ms: 0 }],
+    ['negative', { timeout_ms: -1 }],
+    ['a numeric string rather than a number', { timeout_ms: '60000' }],
+    ['zero seconds', { timeout_seconds: 0 }],
+    ['NaN seconds', { timeout_seconds: Number.NaN }],
+  ])(
+    'CRITICAL a %s deadline is IGNORED and the client default still applies. These are the guards after the typeof check — the ones the short-circuit hid — and treating a bogus value as a deadline would either abort instantly or arm a timer that never fires.',
+    async (_label, body) => {
+      await expect(
+        client().request<unknown>({ method: 'POST', path: '/v1/x', body }),
+      ).rejects.toMatchObject({ name: 'TransportError', message: 'request timed out' });
+    },
+  );
+
+  // Infinity needs its own shape, and finding that out is the reason this arm exists.
+  // Folded in with the arms above it proved nothing: an infinite deadline still aborts,
+  // because `setTimeout` clamps an out-of-range delay to 1ms — so the request failed
+  // either way and removing `Number.isFinite` reddened nothing. Attribution needs a base
+  // timeout LONGER than the stub's reply, so the correct answer is SUCCESS and the broken
+  // one is an abort at the clamped 1ms.
+  it('CRITICAL an INFINITE deadline is ignored rather than armed. Without the finite check it reaches setTimeout, which clamps an out-of-range delay to 1ms — turning a request that should have been given the full client timeout into one that aborts almost immediately. The failure is inverted from what it looks like, which is why this needs a base timeout longer than the reply.', async () => {
+    const http = new HttpClient({
+      apiKey: 'ds_live_test',
+      baseUrl: 'http://api.test',
+      timeoutMs: 400,
+      fetch: slowFetch(),
+      retry: NEVER_RETRY,
+    });
+    await expect(
+      http.request<{ ok: boolean }>({
+        method: 'POST',
+        path: '/v1/x',
+        body: { timeout_ms: Number.POSITIVE_INFINITY },
+      }),
+    ).resolves.toEqual({ ok: true });
+  });
+});
