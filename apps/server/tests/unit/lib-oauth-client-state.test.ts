@@ -96,3 +96,70 @@ describe('verifyOauthClientState', () => {
     if (res.kind === 'ok') expect(res.payload.provider).toBe('github');
   });
 });
+
+// V-1403 — a signature of the WRONG LENGTH, which is the one shape the arms above
+// never produce. "tampered payload" keeps the signature intact and "wrong secret"
+// still yields a full-width HMAC, so both reach the compare with 32 bytes on each
+// side. Branch coverage agreed: the length guard one line above that compare had
+// never been taken.
+//
+// It is not redundant. `fromBase64Url` ends in `Buffer.from(s, 'base64')`, which does
+// not reject out-of-alphabet or short input — it decodes what it can and returns a
+// shorter Buffer. So the signature part of a `state` query parameter, which is chosen
+// by whoever sends the browser to the callback, decides the length of `received`. The
+// line below it is `timingSafeEqual`, which raises `RangeError: Input buffers must
+// have the same byte length` rather than returning false.
+//
+// What the guard protects is this module's stated contract, quoted from its own doc:
+// the result is "a tagged union so the route layer can map each failure mode to a
+// distinct response (404 vs 401 vs explicit retry-prompt) without the lib leaking the
+// difference via thrown exception types". A RangeError escaping verify IS that leak,
+// and it arrives on the callback path as a 500.
+describe('verifyOauthClientState — a signature that decodes to the wrong length', () => {
+  const payloadOf = (): string => {
+    const part = signOauthClientState(BASE).split('.')[0];
+    if (part === undefined)
+      throw new Error('unreachable: signOauthClientState returned no payload');
+    return part;
+  };
+
+  it('CONTROL the genuine token still verifies, so the arms below are not satisfied by a verifier that refuses everything', () => {
+    const res = verifyOauthClientState({
+      token: signOauthClientState(BASE),
+      signingSecret: SECRET,
+      nowMs: BASE.nowMs,
+    });
+    expect(res.kind).toBe('ok');
+  });
+
+  it.each([
+    ['decodes to zero bytes', 'A'],
+    ['decodes to three bytes', 'AAAA'],
+    ['decodes to 31 — one short of the digest', 'A'.repeat(42)],
+    ['decodes to 48 — longer than the digest', 'A'.repeat(64)],
+    ['is a single padding-only character', '_'],
+  ])(
+    'CRITICAL a state token whose signature %s is refused as bad-signature by RETURNING. The signature part comes off the wire, `Buffer.from(..., base64)` shortens rather than rejects, and timingSafeEqual raises on a length mismatch — so without the length guard the callback answers a crafted state parameter with a 500 instead of the tagged union this module promises.',
+    (_label, sig) => {
+      let threw: unknown = null;
+      let kind: string | null = null;
+      try {
+        kind = verifyOauthClientState({
+          token: `${payloadOf()}.${sig}`,
+          signingSecret: SECRET,
+          nowMs: BASE.nowMs,
+        }).kind;
+      } catch (err) {
+        threw = err;
+      }
+
+      expect(
+        threw,
+        'the module doc promises the route layer sees a tagged union, never a thrown exception type; a raise here is that promise broken on attacker-chosen input',
+      ).toBeNull();
+      expect(kind, 'and a wrong-length signature is a bad signature, not a malformed token').toBe(
+        'bad-signature',
+      );
+    },
+  );
+});

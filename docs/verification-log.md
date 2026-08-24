@@ -8864,3 +8864,57 @@ type depends on a check, and it is worth asking whether anything has ever taken 
 Recorded as a negative from the same pass: `(authResp[1] ?? 0xff)` at `:314` is unreachable, because
 `SocketReader.read(n)` loops until the buffer holds n bytes before slicing, so index 1 of a 2-byte read
 is always present. Narrowing only; no arm written.
+
+### V-1403 — the same length guard, swept across every constant-time compare in the server
+
+V-1400 found a length guard before a `timingSafeEqual` that had never fired. That is a class, not a
+file, so this pass enumerated **all 15 constant-time compare sites** in `apps/server/src` and measured
+the branch coverage of each one's length check rather than picking the next plausible file.
+
+Five had never fired. Two were the `oauth-pkce` pair already closed by V-1400. The other three are all
+in the OAuth browser flow, and two of them take input chosen directly by whoever drives the browser:
+
+| site                              | operand                                 | guard arm   | now                 |
+| --------------------------------- | --------------------------------------- | ----------- | ------------------- |
+| `lib/oauth-client-state.ts:105`   | the `state` query parameter's signature | never taken | **covered**         |
+| `routes/auth-oauth-client.ts:442` | the PKCE cookie's signature             | never taken | **covered**         |
+| `services/oauth.ts:741`           | two client-secret hashes                | never taken | recorded, see below |
+
+Both covered sites fail the same way. The signature is base64url-decoded with `Buffer.from`, which
+**shortens rather than rejects** out-of-alphabet or truncated input, so the caller chooses the length
+of the decoded buffer; `timingSafeEqual` then raises `RangeError: Input buffers must have the same
+byte length` instead of returning false. The length guard is the whole distance between a crafted
+input and a raise.
+
+What each raise would break is stated by the code itself. `oauth-client-state`'s doc says the tagged
+union exists so the route "can map each failure mode to a distinct response (404 vs 401 vs explicit
+retry-prompt) **without the lib leaking the difference via thrown exception types**" — a RangeError out
+of `verify` is precisely that leak. On the cookie path every other bad-cookie shape answers 400; the
+arms pin that a wrong-length one does too, rather than becoming a 500.
+
+Why the existing arms missed it, in both files, is the same reason: they tamper _content_, not
+_length_. `tampered payload` re-signs nothing but keeps the signature, `wrong secret` still yields a
+full-width HMAC, and the cookie arm deliberately flips the FIRST signature character (with a long
+comment about why not the last). All three arrive at the compare with 32 bytes on each side.
+
+Mutations: removing `:105` reds all five state arms and none of the twelve others; removing `:442`
+reds all three cookie arms. **One arm was dropped rather than shipped** — an empty signature after the
+final dot does not reach `:442`, because `if (!verifier || !nonce || !sig) return null` at `:434`
+answers it first. It passed, and its title claimed the length guard was what refused it, which was
+false. Removing `:434` reds nothing now, confirming the subsumption.
+
+Two negatives recorded rather than covered:
+
+- **`services/oauth.ts:741`** fires only when two client-secret hashes differ in width. Both are
+  produced by `secretHasher`, which is injectable (`:466`), so within a single deployment they are
+  the same width and the guard is reachable only across a hasher change or from a row predating one.
+  Same category as V-1398's corrupt-row guard; not covered.
+- **`db/oauth-store.ts:247`** holds a third copy of the helper (`constantTimeHashEqual`) and is absent
+  from the coverage artifact — but that artifact is the **node-project** run, and this file is
+  exercised by nine Postgres-backed `db-oauth-*-drizzle` integration files that the run does not
+  include. Absence from this artifact is not evidence of absence of tests, so this copy was not
+  assessed here.
+
+Also confirmed dead, as in `oauth-pkce`: the `try/catch` around the base64url decode at `:100-104`.
+Replacing the catch body with a `throw` leaves all 17 arms green, because `Buffer.from(s, 'base64')`
+does not throw. Left in place; noted so nobody reads it as live error handling.

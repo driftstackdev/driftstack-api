@@ -402,6 +402,44 @@ describe('D2 — state↔cookie nonce binding (login-CSRF defense)', () => {
     );
   });
 
+  // V-1403 — the tamper arm above flips a character and so keeps the signature at its
+  // natural 43 chars. Nothing had ever sent a cookie whose signature decodes to a
+  // DIFFERENT NUMBER OF BYTES, and branch coverage agreed: the length guard one line
+  // above the compare in `readPkceCookie` had never been taken.
+  //
+  // A cookie is chosen entirely by whoever holds the browser. `Buffer.from(sig,
+  // 'base64url')` shortens rather than rejects, so the caller picks the length of
+  // `received`, and `timingSafeEqual` raises RangeError on a length mismatch instead of
+  // returning false. Without the guard this route answers a hand-written cookie with a
+  // 500 rather than the 400 every other bad-cookie shape here gets.
+  it.each([
+    ['is truncated to one character', (s: string) => s.slice(0, 1)],
+    ['is truncated to half its length', (s: string) => s.slice(0, 22)],
+    ['is padded out to twice the digest width', (s: string) => `${s}${s}`],
+  ])(
+    'CRITICAL a PKCE cookie whose signature %s is refused with a 400, like every other bad cookie. The value is attacker-chosen, base64url decoding shortens instead of rejecting, and the compare below raises on a length mismatch — so the length guard is what keeps a crafted cookie from becoming a 500.',
+    async (_label, mangle) => {
+      fx = await buildTestApp({ oauthClient: OAUTH });
+      const flow = await startFlow(fx);
+      const [verifier, nonce, sig] = flow.cookieValue.split('.');
+      const forged = `${verifier}.${nonce}.${mangle(sig ?? '')}`;
+
+      const res = await fx.app.inject({
+        method: 'GET',
+        url: `/v1/auth/oauth-client/callback?code=dummycode&state=${encodeURIComponent(flow.state)}`,
+        headers: { cookie: `${flow.cookieName}=${forged}` },
+      });
+
+      expect(
+        res.statusCode,
+        'a wrong-length signature must be refused, not raise out of the handler as a 500',
+      ).toBe(400);
+      expect(res.json<{ detail?: string }>().detail).toContain(
+        'PKCE verifier cookie missing or invalid',
+      );
+    },
+  );
+
   it('a state+cookie from the SAME flow passes the binding check (fails later, not on the binding)', async () => {
     fx = await buildTestApp({ oauthClient: { ...OAUTH, fetch: REJECTING_FETCH } });
     const a = await startFlow(fx);
