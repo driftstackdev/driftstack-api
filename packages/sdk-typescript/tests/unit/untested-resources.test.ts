@@ -43,6 +43,7 @@ import { LegalResource } from '../../src/resources/legal.js';
 import { EmailPreferencesResource } from '../../src/resources/email-preferences.js';
 import { AccountResource } from '../../src/resources/account.js';
 import { AuthResource } from '../../src/resources/auth.js';
+import { ProfilesResource } from '../../src/resources/profiles.js';
 import type { HttpClient } from '../../src/http.js';
 
 interface RequestOpts {
@@ -288,5 +289,82 @@ describe('AuthResource — the whole surface, none of it previously executed', (
   it('CRITICAL the ten paths are DISTINCT. They differ by one segment in three pairs — magic-link request/consume, password-reset request/confirm, mfa challenge/step-up — and a copy-paste between halves of a pair would send a consume to the request endpoint, which fails in a way that looks like an expired token.', () => {
     const paths = CASES.map(([, p]) => p);
     expect(new Set(paths).size, 'two auth methods share a path').toBe(paths.length);
+  });
+});
+
+// V-1420 — the profile lifecycle. Eight of this resource's methods had never
+// executed; `create`, `list`, `get`, `delete`, `clone` and `trim` had. Paths were
+// cross-checked against the server's `/v1/profiles` routes first, same as V-1419,
+// and all eight match.
+//
+// The pairing that matters is `delete` and `purge`. Both are DELETE and they differ
+// by one trailing segment: `/v1/profiles/:id` moves a profile to trash and
+// `/v1/profiles/:id/purge` destroys it. A client that confused them would answer a
+// customer asking to tidy up by permanently deleting the profile instead, and the
+// verb is identical so nothing about the call would look wrong.
+describe('ProfilesResource — the lifecycle half nothing executed', () => {
+  const ID = 'prof_abc';
+
+  it('CRITICAL purge targets the /purge sub-path, NOT the bare item path. Both are DELETE, so the only thing separating "move to trash" from "destroy permanently" is that segment — and the recoverable operation is the one that shares its shape with the unrecoverable one.', async () => {
+    const { http, calls } = recorder(undefined);
+    await new ProfilesResource(http).purge(ID);
+    expect(calls[0]?.method).toBe('DELETE');
+    expect(calls[0]?.path).toBe(`/v1/profiles/${ID}/purge`);
+  });
+
+  it('CRITICAL delete and purge do not share a path. Pinned as a comparison rather than two separate literals, because the failure is that one becomes the other and two independent assertions can both be updated to agree on the wrong value.', async () => {
+    const a = recorder(undefined);
+    await new ProfilesResource(a.http).delete(ID);
+    const b = recorder(undefined);
+    await new ProfilesResource(b.http).purge(ID);
+    expect(a.calls[0]?.path).not.toBe(b.calls[0]?.path);
+    expect(
+      b.calls[0]?.path.startsWith(`${a.calls[0]?.path ?? ''}/`),
+      'purge is the deeper path',
+    ).toBe(true);
+  });
+
+  it.each([
+    [
+      'update',
+      'PATCH',
+      `/v1/profiles/${ID}`,
+      (r: ProfilesResource) => r.update(ID, { label: 'L' } as never),
+    ],
+    [
+      'launch',
+      'POST',
+      `/v1/profiles/${ID}/launch`,
+      (r: ProfilesResource) => r.launch(ID, { label: 'L' }),
+    ],
+    ['restore', 'POST', `/v1/profiles/${ID}/restore`, (r: ProfilesResource) => r.restore(ID)],
+    ['export', 'GET', `/v1/profiles/${ID}/export`, (r: ProfilesResource) => r.export(ID)],
+    ['listTrash', 'GET', '/v1/profiles/trash', (r: ProfilesResource) => r.listTrash()],
+    [
+      'import',
+      'POST',
+      '/v1/profiles/import',
+      (r: ProfilesResource) => r.import({ envelope: {} } as never),
+    ],
+  ])('%s issues %s %s', async (_n, method, path, invoke) => {
+    const { http, calls } = recorder({ data: [] });
+    await invoke(new ProfilesResource(http));
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.method).toBe(method);
+    expect(calls[0]?.path).toBe(path);
+  });
+
+  it('CRITICAL transfer forwards the recipient account verbatim on the item path. This hands a profile to a different account — the one operation here that moves data ACROSS a tenant boundary — so a dropped or rewritten body would either fail or, worse, transfer to whatever the server defaulted to.', async () => {
+    const { http, calls } = recorder({});
+    await new ProfilesResource(http).transfer(ID, { recipient_account_id: 'acc_other' });
+    expect(calls[0]?.method).toBe('POST');
+    expect(calls[0]?.path).toBe(`/v1/profiles/${ID}/transfer`);
+    expect(calls[0]?.body).toEqual({ recipient_account_id: 'acc_other' });
+  });
+
+  it('CRITICAL an id is percent-encoded into its path segment. Ids reach these methods from customer code; one carrying a slash would otherwise re-point the request at a different route entirely — `purge` on `a/b` would address `/v1/profiles/a/b/purge`, which is a path nobody audited.', async () => {
+    const { http, calls } = recorder(undefined);
+    await new ProfilesResource(http).purge('a/b c');
+    expect(calls[0]?.path).toBe('/v1/profiles/a%2Fb%20c/purge');
   });
 });

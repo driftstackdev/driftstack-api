@@ -9553,3 +9553,43 @@ staged test file. That is true of `apps/server`, whose `tsconfig.json` is `inclu
 deliberate type error into this test file made `tsc -p packages/sdk-typescript/tsconfig.json` report
 it, and the file was restored. The gap is per-workspace, and `apps/server` — the largest — is on the
 wrong side of it.
+
+### V-1420 — trash and destroy differ by one segment, and neither call had been made
+
+Continuing the never-executed SDK methods from V-1419. `ProfilesResource` had eight: `update`,
+`launch`, `listTrash`, `restore`, `purge`, `export`, `import`, `transfer`. `create`, `list`, `get`,
+`delete`, `clone` and `trim` had run. Every path was cross-checked against the server's `/v1/profiles`
+routes before being pinned, as in V-1419, and all eight match.
+
+The pairing worth the arms is **`delete` and `purge`**:
+
+    DELETE /v1/profiles/:id          moves the profile to trash — recoverable
+    DELETE /v1/profiles/:id/purge    destroys it
+
+Same verb, one trailing segment apart, and the recoverable operation is the one that shares its shape
+with the unrecoverable one. A client that confused them answers a customer tidying up by permanently
+deleting their profile, and nothing about the call would look wrong from the outside.
+
+That is pinned as a **comparison** between the two calls rather than as two independent path literals.
+Two separate assertions can both be updated to agree on the same wrong value; an assertion that the
+paths differ, and that purge is the deeper of the two, cannot be satisfied by making them the same.
+
+Also pinned: `transfer` forwards `recipient_account_id` verbatim — the one operation here that moves
+data across a tenant boundary — and ids are percent-encoded into their segment. The encoding arm is
+not decorative: an id carrying a slash would otherwise re-point the request, so `purge('a/b')` would
+address `/v1/profiles/a/b/purge`, a path nobody has audited.
+
+Mutations land precisely:
+
+| mutation                             | reds                                                                    |
+| ------------------------------------ | ----------------------------------------------------------------------- |
+| `purge` loses its `/purge` segment   | 3 — the purge arm, the delete-vs-purge comparison, and the encoding arm |
+| drop `encodeURIComponent` on `purge` | the encoding arm alone                                                  |
+| `transfer` drops its body            | the transfer arm alone                                                  |
+
+A process note carried from this batch: the first mutation attempt used line numbers read off a
+`grep -n` of the wrong lines and every one failed its needle assertion. `mutate.py` refused rather
+than silently editing the wrong line — which is the behaviour it was written for after five silent
+no-ops earlier in this session — but the failure was invisible because the surrounding `grep` filtered
+its message out. Filter mutation output on `APPLIED` as well as on the result, or a refusal reads as a
+mutation that changed nothing.
