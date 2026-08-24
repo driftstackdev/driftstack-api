@@ -22,13 +22,20 @@
 // generator cannot use it. The crypto-order `Idempotent-Replayed` header had
 // exactly the same history and is fixed in the same change.
 //
-// WHAT THIS DOES NOT DO. It does not drive a genuinely truncated export —
-// that needs 10,001 audit rows, which is a fixture cost out of proportion to
-// the claim. It asserts the mechanism that carries the signal: the header is
+// WHAT THIS ASSERTS. The mechanism that carries the signal: the header is
 // declared, and it is present on a real export with the honest value `false`.
 // A header that is absent when nothing was truncated would be indistinguishable
-// from one that is absent when something was, which is the actual hazard —
-// so "always sent" is the property under test, not the true branch.
+// from one that is absent when something was, which is the actual hazard — so
+// "always sent" is a property under test in its own right.
+//
+// V-1417 — this block used to say the true branch was out of reach, on the
+// grounds that 10,001 audit rows cost more than the claim was worth. That was an
+// estimate, and measuring it disagreed: the audit repo behind `buildTestApp` is
+// in-memory, so seeding 10,001 rows AND running the fully paginated export takes
+// about a third of a second. The arm at the end of this file drives it. Coverage
+// had been unambiguous that nothing did — `truncated ? 'true' : 'false'` appears
+// twice, once per format, and both read `[0, n]`: the string `'true'` had never
+// been produced by either branch.
 
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -115,4 +122,51 @@ describe('an export declares how it signals truncation', () => {
       [],
     );
   });
+
+  // V-1417 — the true branch, which the note at the top of this file used to
+  // place out of reach. `truncated` is `all.length >= EXPORT_MAX_ROWS` with the
+  // cap at 10,000, so the signal only means anything if it flips, and neither
+  // format had ever produced it. A customer exporting a large log and receiving
+  // a silently partial one is the hazard the header exists for; until now the
+  // suite only proved the header is always PRESENT, never that it is ever TRUE.
+  it.each([
+    ['json', 'application/json'],
+    ['csv', 'text/csv'],
+  ])(
+    'CRITICAL a log past the 10,000-row cap reports truncated=true on format=%s. Seeding 10,001 rows and running the fully paginated export costs about a third of a second against the in-memory repo, which is what makes this arm affordable where the estimate said it was not.',
+    async (format, contentType) => {
+      fx = await buildTestApp();
+      for (let i = 0; i < 10_001; i++) {
+        await fx.accountAuditRepo.insert({
+          accountId: fx.accountId,
+          actorType: 'customer',
+          actorAccountId: fx.accountId,
+          actorKeyId: fx.apiKeyId,
+          action: 'api_key.minted',
+        });
+      }
+
+      const res = await fx.app.inject({
+        method: 'GET',
+        url: `/v1/account/audit-log/export?format=${format}`,
+        headers: { authorization: `Bearer ${fx.plaintext}` },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toContain(contentType);
+      expect(
+        res.headers['x-driftstack-export-truncated'],
+        'the only truncation signal a CSV client can read, and the one this file exists for',
+      ).toBe('true');
+
+      if (format === 'json') {
+        const body = res.json<{ truncated: boolean; row_count: number }>();
+        expect(body.truncated, 'the envelope field must agree with the header').toBe(true);
+        expect(body.row_count, 'the export stops AT the cap, it does not overshoot it').toBe(
+          10_000,
+        );
+      }
+    },
+    120_000,
+  );
 });

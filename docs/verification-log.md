@@ -9438,3 +9438,43 @@ customer request start returning 400. The change is small, aligns behaviour with
 documentation, and is cheapest now precisely because the path is not integrated — but it is a
 customer-facing validation change, and this repo's precedent is that those are decided by a person
 rather than by a measurement. Recorded with the arms that pin the enforced half.
+
+### V-1417 — a documented decision revisited on measurement, not on a hunch
+
+A new instrument this pass: ternaries selecting between string LITERALS where one side has never been
+taken — a **value the system can emit and never has**. It is the shape behind V-1412's
+`state_captured` and V-1413's `quic_route: 'proxy'`, so it was worth running deliberately. 33 hits
+across both trees. The one worked here is the audit-log export.
+
+`routes/account-audit.ts` emits `truncated ? 'true' : 'false'` twice — once per format — and both read
+`[0, n]`. **The string `'true'` had never been produced by either.** `truncated` is
+`all.length >= EXPORT_MAX_ROWS` with the cap at 10,000, so the signal only means anything when it
+flips, and nothing had ever flipped it.
+
+`an-export-declares-how-it-signals-truncation` is the file that owns this, and it had already thought
+about it. Its header said the true branch was out of reach because 10,001 rows was a fixture cost out
+of proportion to the claim, and asserted "always sent" instead. That is a **documented decision**, so
+overriding it needs new evidence rather than a preference.
+
+The new evidence is a measurement. The audit repo behind `buildTestApp` is in-memory, and a probe
+seeding 10,001 rows and running the fully paginated export — 50 pages of 200 — completed in **344 ms**,
+with `x-driftstack-export-truncated: true`, `truncated: true`, `row_count: 10000`. The estimate was
+about a real-database fixture; the cost on the fixture that actually runs is a third of a second. The
+note is rewritten as a paraphrase, not a quote, and now points at the arm that closes it.
+
+Two arms, one per format, and the mutations separate:
+
+| mutation                                 | reds                                                                 |
+| ---------------------------------------- | -------------------------------------------------------------------- |
+| `truncated = false`                      | both new arms                                                        |
+| `>=` → `>` at the cap                    | both new arms — the boundary, where the loop stops exactly AT 10,000 |
+| drop the header from the CSV branch only | 3 — the new CSV arm plus the two pre-existing header arms            |
+
+The second is the one worth having. The export loop runs `while (all.length < EXPORT_MAX_ROWS)`, so it
+stops at exactly 10,000 and never overshoots; a `>` comparison therefore reports a full log as
+complete forever. The JSON arm also pins `row_count === 10_000`, so a cap that drifts is caught as a
+count rather than only as a flag.
+
+What this protects is a customer holding a partial audit log that looks complete — the hazard the
+file's own header names, now tested in the direction that matters rather than only in the direction
+that was cheap.
