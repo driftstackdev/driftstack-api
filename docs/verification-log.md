@@ -10585,3 +10585,34 @@ trailing-comma `requiresMember` check, the duplicate-key check, and the empty/no
 plus `Number.isSafeInteger` in the budget admitter.
 
 No new test file; 11 `it` declarations to 17, 16 tests to 24. No ratchet movement.
+
+## V-1445 — the token bucket's consumption is proven; its refill was not
+
+A mutation sweep of `FleetInboundFrameBudget.admit` splits cleanly. Every **consumption** guard is
+killed by the existing arms: the three token checks, both decrements, the `Number.isSafeInteger`
+rejection, and the large-frame byte exemption. Every **refill** guard survived — the
+`Math.max(0, now - refilledAtMs)` clock clamp and all three `Math.min(BURST, …)` caps.
+
+The existing refill arm advances the clock by one second and asserts a refused frame is admitted
+again. That proves tokens come back. It cannot see a ceiling: a bucket that refills correctly and caps
+at nothing passes it unchanged.
+
+**The cap is the burst ceiling, and it is the whole reason a token bucket is not a rate average.**
+Replace `Math.min(BURST, …)` with the bare sum and an idle node banks tokens for as long as it stays
+quiet, then spends them in one go — an hour of silence is 115200 frames against a ceiling of 256, and
+64 MiB of byte allowance becomes 28 GiB. The third bucket is the one that bounds the O(n)
+pre-correlation lexer scan this whole file exists to make affordable; uncapped, an hour idle buys 3600
+of those scans instead of 4.
+
+**The clock clamp needs the accepting side, and that is not where the instinct points.** After
+exhausting tokens a backwards step is refused with or without the clamp — same observable, mutation
+survives. Only a node with tokens in hand can tell them apart: with 255 frames left, a ten-second
+backwards step subtracts 320 and the next frame is refused. So the arm asserts `true` on a node that
+should still be admitted, not `false` on one that should not. Same lesson as V-1443's whitespace
+operand, arrived at from the opposite direction — there the accepting case was the blind one, here it
+is the only one that sees.
+
+Four mutations, one failing test each, every restore byte-identical: dropping the clamp, and raising
+each of the three caps to `Infinity`.
+
+No new test file; 8 `it` declarations to 11. No ratchet movement.

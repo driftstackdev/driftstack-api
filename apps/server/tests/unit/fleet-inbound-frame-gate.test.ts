@@ -120,6 +120,74 @@ describe('fleet inbound frame gate', () => {
     expect(budget.admit('node-frames', 0, false)).toBe(true);
   });
 
+  // V-1445 — the refill side of the bucket. A mutation sweep of `admit` killed every
+  // consumption guard (the three token checks, both decrements, the large-frame byte
+  // exemption) and NONE of the four refill guards: the `Math.max(0, …)` clock clamp
+  // and all three `Math.min(BURST, …)` caps. The arm above advances the clock by one
+  // second, which proves tokens come back but never reaches a ceiling — a bucket that
+  // refills correctly and caps at nothing passes it.
+  //
+  // The cap is the burst ceiling, and it is the whole reason a token bucket is not
+  // just a rate average: replace `Math.min(BURST, …)` with the sum and an idle node
+  // banks tokens for as long as it stays quiet, then spends them at once. An hour
+  // idle is 115200 frames instead of 256.
+  it('CRITICAL an idle node cannot bank tokens past the burst ceiling — frames', () => {
+    let now = 1_000;
+    const budget = new FleetInboundFrameBudget(() => now);
+    for (let i = 0; i < FLEET_INBOUND_FRAME_BURST; i += 1) {
+      expect(budget.admit('node-idle-frames', 0, false)).toBe(true);
+    }
+    expect(budget.admit('node-idle-frames', 0, false)).toBe(false);
+
+    now += 3_600_000; // an hour of silence: 115200 frames' worth of refill
+    for (let i = 0; i < FLEET_INBOUND_FRAME_BURST; i += 1) {
+      expect(budget.admit('node-idle-frames', 0, false)).toBe(true);
+    }
+    expect(
+      budget.admit('node-idle-frames', 0, false),
+      'the frame bucket refilled past its burst ceiling — an idle node banked an hour of tokens',
+    ).toBe(false);
+  });
+
+  it('CRITICAL an idle node cannot bank tokens past the burst ceiling — bytes and large-frame scans', () => {
+    let now = 1_000;
+    const budget = new FleetInboundFrameBudget(() => now);
+
+    expect(budget.admit('node-idle-bytes', FLEET_INBOUND_BYTE_BURST, false)).toBe(true);
+    now += 3_600_000;
+    expect(budget.admit('node-idle-bytes', FLEET_INBOUND_BYTE_BURST, false)).toBe(true);
+    expect(
+      budget.admit('node-idle-bytes', 1, false),
+      'the byte bucket refilled past its burst ceiling',
+    ).toBe(false);
+
+    const scans = new FleetInboundFrameBudget(() => now);
+    for (let i = 0; i < FLEET_INBOUND_LARGE_FRAME_BURST; i += 1) {
+      expect(scans.admit('node-idle-scans', 96 * 1024 * 1024, true)).toBe(true);
+    }
+    now += 3_600_000; // 3600 large-frame tokens' worth, ceiling is 4
+    for (let i = 0; i < FLEET_INBOUND_LARGE_FRAME_BURST; i += 1) {
+      expect(scans.admit('node-idle-scans', 96 * 1024 * 1024, true)).toBe(true);
+    }
+    expect(
+      scans.admit('node-idle-scans', 96 * 1024 * 1024, true),
+      'the large-frame scan bucket refilled past its burst ceiling — this is the bucket that bounds ' +
+        'the O(n) pre-correlation lexer scan',
+    ).toBe(false);
+  });
+
+  it('CRITICAL a clock that steps BACKWARDS does not drain the bucket. Asserted on the accepting side deliberately: after exhausting tokens a backwards step is refused either way, so only a node with tokens left can tell the clamp from its absence — without `Math.max(0, …)` a ten-second step back subtracts 320 frames from a bucket holding 255 and the next frame is refused.', () => {
+    let now = 10_000_000;
+    const budget = new FleetInboundFrameBudget(() => now);
+    expect(budget.admit('node-clock', 0, false)).toBe(true);
+
+    now -= 10_000; // NTP correction, or a node reconnecting to a peer with a lagging clock
+    expect(
+      budget.admit('node-clock', 0, false),
+      'a backwards clock step drained the bucket and refused a node that had 255 frames in hand',
+    ).toBe(true);
+  });
+
   it('charges a correlated large download one frame but not its unavoidable body bytes', () => {
     const budget = new FleetInboundFrameBudget(() => 1_000);
     expect(budget.admit('node-large', 96 * 1024 * 1024, true)).toBe(true);
