@@ -35638,6 +35638,16 @@
               }
             }
           },
+          "402": {
+            "description": "Bundled-LLM is unavailable for billing reasons and the turn did not run. Two causes, distinguished by the problem-type URI: the monthly bundled-LLM cap has been reached (extensions carry `spent_cents` and `cap_cents`), or the account has not consented to bundled-LLM. Both are recoverable by the caller — raise the cap or grant consent via PATCH /v1/account/me/bundled-llm-settings, or supply a key via PUT /v1/account/me/byok-anthropic-key, which always takes precedence.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "403": {
             "description": "Caller not permitted.",
             "headers": {

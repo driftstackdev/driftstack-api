@@ -4926,6 +4926,18 @@ function buildRegistry(): OpenAPIRegistry {
           'application/problem+json': { schema: AgentMessageConflictProblemOpenApi },
         },
       },
+      402: {
+        // V-1534 — reachable and previously undeclared. `executeAgentMessage`
+        // throws BundledLlmBudgetExhaustedError once the account's monthly
+        // bundled-LLM spend reaches its cap, and BundledLlmConsentRequiredError
+        // when the deployment offers bundled-LLM the account has not opted into.
+        // The budget variant's own comment states the intent this omission
+        // defeated: "Status 402 Payment Required so SDK consumers can branch on
+        // the status code AND the typed problem-type URI."
+        description:
+          'Bundled-LLM is unavailable for billing reasons and the turn did not run. Two causes, distinguished by the problem-type URI: the monthly bundled-LLM cap has been reached (extensions carry `spent_cents` and `cap_cents`), or the account has not consented to bundled-LLM. Both are recoverable by the caller — raise the cap or grant consent via PATCH /v1/account/me/bundled-llm-settings, or supply a key via PUT /v1/account/me/byok-anthropic-key, which always takes precedence.',
+        content: problemContent,
+      },
       503: {
         description: 'AI chat agent not enabled on this deployment.',
         content: problemContent,

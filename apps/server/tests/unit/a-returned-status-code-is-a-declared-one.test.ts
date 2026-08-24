@@ -211,4 +211,42 @@ describe('a returned status code is a declared one', () => {
       'registrations whose handler did not resolve to a function body',
     ).toBeLessThanOrEqual(12);
   });
+
+  it("V-1534 CRITICAL POST /v1/agent-sessions/{id}/message declares 402, which it reaches by THROWING rather than by reply.code(). That is the blind spot of the arms above and it is stated here rather than left implicit: they scan literal codes inside a resolved handler, and these two throws sit two call frames below it in executeAgentMessage, so nothing above sees them. The document declared no 402 on any operation while the budget error's own comment read: Status 402 Payment Required so SDK consumers can branch on the status code AND the typed problem-type URI. A file-level version of this check was written and discarded — status-stream.ts throws 503 from an UNPUBLISHED operation and would have been judged against the declared set of a published sibling in the same file, so file granularity manufactures failures that are not real.", () => {
+    const errorsSource = readFileSync(resolve(REPO_ROOT, 'apps/server/src/lib/errors.ts'), 'utf8');
+    const statusOfClass = (name: string): string | undefined => {
+      const match = new RegExp(`export class ${name} extends ApiError \\{`).exec(errorsSource);
+      if (match === null) return undefined;
+      const start = match.index + match[0].length;
+      let depth = 1;
+      let end = start;
+      while (end < errorsSource.length && depth > 0) {
+        if (errorsSource[end] === '{') depth += 1;
+        else if (errorsSource[end] === '}') depth -= 1;
+        end += 1;
+      }
+      return /status:\s*(\d{3})/.exec(errorsSource.slice(start, end))?.[1];
+    };
+
+    // Both are 402 in errors.ts; if either is retyped, this arm must be revisited
+    // rather than silently continuing to assert a code nothing raises any more.
+    for (const name of ['BundledLlmBudgetExhaustedError', 'BundledLlmConsentRequiredError']) {
+      expect(statusOfClass(name), `${name} still carries the status this arm pins`).toBe('402');
+    }
+
+    const route = readFileSync(resolve(ROUTES_DIR, 'agent-sessions.ts'), 'utf8');
+    for (const name of ['BundledLlmBudgetExhaustedError', 'BundledLlmConsentRequiredError']) {
+      expect(route, `${name} is still thrown by the agent-sessions routes`).toContain(
+        `throw new ${name}`,
+      );
+    }
+
+    const codes = declared.get('POST /v1/agent-sessions/{id}/message');
+    expect(codes, 'the message operation is still published').not.toBeUndefined();
+    expect(
+      [...(codes ?? [])].sort(),
+      'the message turn refuses with 402 when the bundled-LLM cap is reached or consent is ' +
+        'absent, and a generated client cannot branch on a code the document omits',
+    ).toContain('402');
+  });
 });

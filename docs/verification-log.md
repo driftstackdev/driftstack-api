@@ -15311,3 +15311,59 @@ It passes 3/3 in isolation, `apps/gui-client` carries no uncommitted change, and
 (the spec, a server-side spec guard, this log) is reachable from a CSV-export hook. Order-dependent fake
 timers in another project's suite. Left for its owner rather than absorbed here, and recorded rather than
 rounded to green.
+
+## V-1534 — a 402 the customer can hit and the document never mentioned
+
+The exemption-roster instrument came back clean this batch: `UNENFORCED_BY_DESIGN` is empty (every boolean
+tier feature is enforced), the two `PUBLIC_EXEMPTIONS` I traced hold — the IDP callback really does only
+302 to `config.dashboardOrigin` with no token exchange, and `/v1/archetypes` really does filter to
+`{launch, available}` — and three of six `NO_404_BY_DESIGN` reasons check out in source, including the
+delegated one (`triggerNow` hands to a bootstrap stub that resolves without a lookup). These rosters are
+well kept.
+
+What it did surface is a blind spot in **my own guard from this session**. V-1531 scans literal
+`reply.code(n)` inside a resolved handler. Errors that are THROWN never appear that way.
+
+**`POST /v1/agent-sessions/{id}/message` can answer 402 and the document declared no 402 anywhere at
+all.** Traced through the AST rather than by proximity: the route handler calls `handleAgentMessage`
+(L5001), which calls `executeAgentMessage` (L4437), which throws `BundledLlmBudgetExhaustedError` when the
+account's monthly bundled-LLM spend reaches its cap and `BundledLlmConsentRequiredError` when the
+deployment offers bundled-LLM the account never opted into. `normaliseError` returns an `ApiError`
+unchanged and the handler emits `apiError.status`, so the 402 reaches the customer.
+
+The omission defeated a stated design intent — the budget error's own comment reads:
+
+> Status 402 Payment Required so SDK consumers can branch on the status code AND the typed problem-type URI
+
+Both causes are recoverable by the caller (raise the cap, grant consent, or supply a BYOK key, which
+always wins), and the budget variant carries `spent_cents`/`cap_cents` so a dashboard can render the exact
+numbers. All of that was unreachable from the document. Now declared, with the two causes distinguished
+by problem-type URI.
+
+### The guard I wrote, measured, and threw away
+
+The obvious generalisation is "every status an ApiError subclass throws in a route file is declared by
+some operation in that file". I wrote it. It reported six more violations. **One I checked was false, and
+its falseness condemns the whole design**: `status-stream.ts` throws 503 from `GET /v1/status/stream`,
+which is _not published at all_, and the arm judged it against the declared set of `/v1/status/sla`, a
+published sibling in the same file. File granularity manufactures failures wherever a file mixes published
+and unpublished operations, and shipping it with six exemptions would have enshrined that noise as
+signal.
+
+Attributing a throw to an operation needs a call graph — the 402 itself sits two frames below its
+handler — so the honest arm is the narrow one: pin that this operation declares 402, pin that both error
+classes still carry 402, and pin that both are still thrown. If either is retyped the arm fails rather
+than continuing to assert a code nothing raises. Proved both ways: removing the 402 from source and
+re-dumping reds, and retyping the budget error 402→409 with the spec untouched reds on a different
+assertion.
+
+**The five unverified measurements are recorded, not fixed and not exempted**: `agent-sessions.ts` throws
+422 and 502, `internal-atlas-priority.ts` and `mac-nodes-register.ts` throw 503, `mac-nodes-register.ts`
+throws 409. Each needs the same AST trace the 402 got before anyone says whether it is real — the
+status-stream case is exactly why.
+
+**Process deviation, disclosed.** For the second mutation I edited `apps/server/src/lib/errors.ts` without
+snapshotting it first and restored it through git rather than from the scratchpad. Verified clean
+afterwards — `git diff` on that file is empty and `status: 402` is intact. Separately, the snapshot I did
+take of `openapi.ts` predated the fix, so restoring it silently reverted the 402; caught by re-reading the
+regenerated document rather than by any test, and re-applied.
