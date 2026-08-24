@@ -204,7 +204,7 @@ test('OAuth happy path: persistent consent → token → real read/write API aut
   });
   expect(approve.status()).toBe(200);
   const approveBody = (await approve.json()) as { code: string; redirect_uri: string };
-  expect(approveBody.code).toMatch(/^oac_/);
+  expect(approveBody.code).toMatch(/^oag_/);
 
   // 5. Token exchange.
   const token = await request.post(`${server.baseUrl}/v1/oauth/token`, {

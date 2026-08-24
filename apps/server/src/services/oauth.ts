@@ -578,7 +578,13 @@ export class OAuthService {
         OAUTH_ALLOWED_SCOPES.has(s) &&
         (approverScopes === undefined || scopesSatisfy(approverScopes, s)),
     );
-    const code = `oac_${randomBytes(32).toString('base64url')}`;
+    // V-1453 — `oag_`, not `oac_`. The client_id above is minted with `oac_` and
+    // is PUBLIC; this is a bearer credential. Sharing one prefix meant no
+    // prefix-based log redactor could scrub the code without also scrubbing the
+    // client_id that every OAuth debugging session starts from, so the code was
+    // left readable. Safe to change: the format is documented only as `<opaque>`,
+    // nothing parses the prefix, and a code lives 5 minutes and is single-use.
+    const code = `oag_${randomBytes(32).toString('base64url')}`;
     const createdAt = this.nowFn();
     const committed = await this.store.consumeAuthorizationForCode({
       authorization_id: args.authorization_id,

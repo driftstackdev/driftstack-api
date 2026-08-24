@@ -205,7 +205,7 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
     expect(body).toMatch(
       /OAUTH_ALLOWED_SCOPES\.has\(s\) &&\s*\n?\s*\(approverScopes === undefined \|\| scopesSatisfy\(approverScopes, s\)\)/,
     );
-    expect(body).toMatch(/const code = `oac_\$\{randomBytes\(32\)\.toString\('base64url'\)\}`;/);
+    expect(body).toMatch(/const code = `oag_\$\{randomBytes\(32\)\.toString\('base64url'\)\}`;/);
     expect(body).toMatch(/this\.store\.consumeAuthorizationForCode\(\{/);
     expect(body).toMatch(/if \(committed === 'unavailable'\) \{/);
     expect(body).toMatch(/if \(committed === 'client_unavailable'\) \{/);

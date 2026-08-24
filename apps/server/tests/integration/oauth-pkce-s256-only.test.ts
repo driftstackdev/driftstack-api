@@ -428,7 +428,7 @@ describe('OAuth token exchange refuses a bad redirect_uri and a foreign code', (
 
       // And the winner's code has to be real, not a 200 with nothing behind it.
       const winner = a.statusCode === 200 ? a : b;
-      expect(winner.json<{ code: string }>().code).toMatch(/^oac_/);
+      expect(winner.json<{ code: string }>().code).toMatch(/^oag_/);
     } finally {
       await fx.cleanup();
     }

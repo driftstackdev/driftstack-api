@@ -74,6 +74,13 @@ const MINTED_SECRETS: { name: string; sample: string; minter: string }[] = [
     minter: 'services/oauth.ts registerClient + rotateClientSecret',
   },
   {
+    // V-1453 — was `oac_`, the same prefix as the public client_id, so it could
+    // not be scrubbed without scrubbing that too. Its own prefix now.
+    name: 'OAuth authorization code',
+    sample: 'oag_wR2n-Y8kT3bM_6vQ4xL7cJ1dH5fS9pZ0aN',
+    minter: 'services/oauth.ts approveAuthorization',
+  },
+  {
     name: 'OAuth access token',
     sample: 'oat_pM3k-X7bV2nQ_9wL5tR8yD1cF4hJ6sZ0aG',
     minter: 'services/oauth.ts exchangeCode (returned as access_token)',

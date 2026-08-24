@@ -340,7 +340,9 @@ describe('V-667 OAuthService — approveAuthorization + exchangeCode (full happy
       authorization_id: auth.authorization_id,
       account_id: 'acc_test_001',
     });
-    expect(approval.code).toMatch(/^oac_/);
+    // V-1453 — `oag_`, distinct from the public client_id's `oac_`, so the log
+    // redactor can scrub the code without blinding logs to the client_id.
+    expect(approval.code).toMatch(/^oag_/);
     expect(approval.state).toBe('st_test');
 
     const token = await svc.exchangeCode({
@@ -557,7 +559,7 @@ describe('V-667 OAuthService — granted scope restriction (the cross-account/es
         account_id: 'acc_owner',
         approverScopes: ['read'],
       }),
-    ).resolves.toMatchObject({ code: expect.stringMatching(/^oac_/) });
+    ).resolves.toMatchObject({ code: expect.stringMatching(/^oag_/) });
   });
 
   it('refuses a corrupted pending authorization with an unsafe redirect', async () => {

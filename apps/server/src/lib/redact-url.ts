@@ -185,14 +185,15 @@ const FREE_TEXT_ANTHROPIC_KEY_RE = /(sk-ant-)[A-Za-z0-9_-]{12,}/g;
  * of the credential in clear. Widening that class instead would let a hyphen or
  * underscore in following prose be swallowed after any other secret.
  *
- * NOT covered, and it cannot be from here: `oac_` is minted twice in
- * `services/oauth.ts` — once as the PUBLIC `client_id` and once as the SECRET
- * authorization code. One prefix, two sensitivities, so no prefix-based rule can
- * separate them, and scrubbing it would blind the logs to the client_id every
- * OAuth debugging session starts from. Fixing that means giving the code its own
- * prefix at the mint site, which changes values already issued.
+ *   oag_   authorization code (`approveAuthorization`)
+ *
+ * `oac_` is deliberately absent and stays that way: it is the PUBLIC `client_id`,
+ * the value every OAuth debugging session starts from. It once named the
+ * authorization code as well, which is why this pattern could not reach the code
+ * without also blinding the logs to the client_id — V-1453 gave the code `oag_`
+ * so the two sensitivities stopped sharing one prefix.
  */
-const FREE_TEXT_OAUTH_SECRET_RE = /(oas_|oat_)[A-Za-z0-9_-]{12,}/g;
+const FREE_TEXT_OAUTH_SECRET_RE = /(oas_|oat_|oag_)[A-Za-z0-9_-]{12,}/g;
 
 const FREE_TEXT_BEARER_RE = /(bearer\s+)[A-Za-z0-9._~+/-]+=*/gi;
 const FREE_TEXT_BASIC_RE = /(basic\s+)[A-Za-z0-9+/]{8,}={0,2}/gi;

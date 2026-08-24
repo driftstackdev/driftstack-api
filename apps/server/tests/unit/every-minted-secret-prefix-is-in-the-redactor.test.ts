@@ -18,17 +18,27 @@
 // construction, and the allowlist is read out of the regex source. Adding a
 // credential to either side is picked up without editing this file.
 //
-// SECRET BY CONSTRUCTION is the discriminator, and it is what makes this
-// checkable at all: a secret is `base32Encode(randomBytes(…))`, while a public
-// id is `randomUUID()`. Both mints are function-scoped rather than line-scoped
-// because `generateApiKey` splits the two calls across three lines —
-// `const buf = randomBytes(…)`, `const body = base32Encode(buf)`, then
-// `return \`ds_${env}_${body}\`` — so a single-line pattern sees `gck_` and
-// `whsec_` and misses `ds_`, which is the most widely distributed credential of
-// the three.
+// CSPRNG-MINTED is the discriminator, and the scan is FILE-scoped. Both of those
+// are V-1452 corrections to a narrower first version, and the narrowing was not
+// visible from its own output.
 //
-// Measured when this landed: 3 mint sites, 3 in the allowlist, 0 missing.
-// A regression guard, not a fix.
+// It read "a secret is `base32Encode(randomBytes(…))`, a public id is
+// `randomUUID()`", and scoped each mint to the enclosing `function` declaration.
+// Both were true of the three credentials it knew about and false of OAuth's,
+// which mint `randomBytes(32).toString('base64url')` inside CLASS METHODS. Either
+// narrowing alone hid all four OAuth prefixes: widening only the encoding still
+// found nothing in `services/oauth.ts`, widening only the scope still rejected
+// them on the encoding. It reported "3 mint sites, 3 in the allowlist, 0 missing"
+// the entire time, and `oas_` and `oat_` were reaching the log in clear.
+//
+// The cost of the wider scan is that `randomBytes` in a file no longer implies
+// the prefix beside it is secret — an order id and an OAuth client_id are both
+// CSPRNG-minted and both belong in a log. PUBLIC_PREFIXES carries those with a
+// reason each, so the judgement is written down rather than encoded in how narrow
+// a regex happens to be. A prefix in neither list fails.
+//
+// Measured now: 9 minted prefixes — 6 redacted (ds_, gck_, whsec_, oas_, oat_,
+// oag_), 3 declared public (ord_, oaa_, oac_).
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -99,10 +109,10 @@ const PUBLIC_PREFIXES: Record<string, string> = {
   ord_: 'crypto order id — appears in receipts and customer-facing order URLs',
   oaa_: 'one-time authorization_id for the consent flow; a handle the consent UI carries, not a bearer credential',
   oac_:
-    'BOTH the public OAuth client_id AND the secret authorization code, minted with one prefix in ' +
-    'services/oauth.ts. Listed here because no prefix rule can separate them and scrubbing it would ' +
-    'blind every OAuth debugging session to the client_id. The real fix is a distinct prefix for the ' +
-    'code at its mint site, which changes values already issued.',
+    'OAuth client_id — public by the OAuth spec and the value every debugging session starts from. ' +
+    'It also named the authorization CODE until V-1453, which is why the redactor could not scrub ' +
+    'the code without blinding logs to the client_id; the code is `oag_` now, so this prefix is ' +
+    'unambiguously public.',
 };
 
 /**
@@ -169,6 +179,38 @@ describe('every minted secret prefix is in the redactor', () => {
       minted.map((m) => m.prefix),
       'generateApiKey splits randomBytes and base32Encode across lines; a line-scoped scan misses it',
     ).toContain('ds_');
+  });
+
+  // V-1453 — the arm that keeps the collision from coming back.
+  //
+  // Neither guard above can see it. The shape test's sample is a hardcoded
+  // `oag_` literal, so it stays green whatever the mint says; and this file's own
+  // census would find `oac_`, look it up in PUBLIC_PREFIXES, and exempt it.
+  // Measured: reverting the mint to `oac_` left both passing. So the invariant
+  // has to be stated about the two mint SITES rather than about either list.
+  it('CRITICAL the OAuth authorization code and the client_id are minted with DIFFERENT prefixes, and only the code is redacted. Sharing one prefix is what made the code unscrubbable — a prefix rule cannot separate a secret from a public id wearing the same one, and the public id is the value every OAuth debugging session starts from.', () => {
+    const oauth = readFileSync(resolve(REPO, 'apps/server/src/services/oauth.ts'), 'utf-8');
+    const prefixOf = (decl: string): string =>
+      new RegExp(`const ${decl} = \`([a-z][a-z0-9]*_)\\$\\{`).exec(oauth)?.[1] ?? '';
+
+    const clientId = prefixOf('client_id');
+    const code = prefixOf('code');
+    expect(clientId, 'the client_id mint is no longer readable').not.toBe('');
+    expect(code, 'the authorization-code mint is no longer readable').not.toBe('');
+    expect(
+      code,
+      'the authorization code shares its prefix with the public client_id again',
+    ).not.toBe(clientId);
+
+    const allowlist = allowlistSource();
+    expect(
+      allowlist.includes(code),
+      `the authorization code is minted as ${code} and the redactor does not scrub it`,
+    ).toBe(true);
+    expect(
+      allowlist.includes(clientId),
+      `${clientId} is the public client_id and must stay readable in logs — redacting it blinds every OAuth debugging session`,
+    ).toBe(false);
   });
 
   it('CRITICAL a credential minted as base32Encode(randomBytes()) has a prefix the redactor scrubs', () => {

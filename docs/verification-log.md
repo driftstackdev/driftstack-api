@@ -10946,3 +10946,47 @@ the token-exchange request.
 That also narrows the `oac_` residual left open above: an authorization code reaches a log only as a
 bare literal in free text, never through its own redirect. Recording it because the difference decides
 whether the remaining prefix collision is urgent — it is not.
+
+## V-1453 — the OAuth authorization code gets its own prefix, and my reason for not doing it was wrong
+
+V-1452 left `oac_` unredacted and recorded why: `services/oauth.ts` mints it as both the PUBLIC
+`client_id` and the SECRET authorization code, so no prefix rule separates them, and I wrote that
+fixing it "changes values already issued". Every part of that deferral turned out to be wrong when
+checked:
+
+- **"values already issued"** — `CODE_TTL_SECONDS = 5 * 60`, and codes carry `consumed_at` for
+  single use. Only codes minted in the previous five minutes exist, and each will be redeemed or
+  expire. Nothing durable, unlike `client_id`.
+- **customer-facing docs** — `apps/docs/src/pages/api/oauth.md` describes the code as `<opaque>`,
+  deliberately unspecified, in every place it appears. Each documented `oac_` is a `client_id`.
+- **parsing** — nothing validates the prefix. Two mint sites in `src`, no consumer regex.
+
+So the code is `oag_` now, and the collision is gone: `oac_` is unambiguously the public client*id,
+`oag*` is a bearer credential the redactor scrubs.
+
+**The important part is what I found wrong with my own fix.** Having changed the mint and extended the
+redactor, I mutated the mint back to `oac_` to prove the regression was caught. **Both existing guards
+stayed green.** The shape test's sample is a hardcoded `oag_` literal, so it passes whatever the mint
+says; and the derived mint census finds `oac_`, looks it up in `PUBLIC_PREFIXES`, and exempts it. The
+collision could have come back silently, which is precisely the state V-1452 was fixing.
+
+The invariant had to be stated about the two mint SITES rather than about either list: the client*id
+and the authorization code are minted with DIFFERENT prefixes, the code's is in the redactor, and the
+client_id's is NOT — both directions, because over-scrubbing the client_id blinds every OAuth
+debugging session as surely as under-scrubbing the code leaks one. Mutations confirm all three: the
+collision returning reds, redacting `oac*`reds, dropping`oag\_` reds twice.
+
+**Rule 2 needed a refinement of its own.** Its two patterns are the import-style path and the quoted
+basename, and for a PREFIX the equivalent is quote-delimited: `'oac_`, `"oac_`, `` `oac_ ``. Four
+assertions were written as REGEX LITERALS — `expect(approval.code).toMatch(/^oac_/)` — and matched
+none of those. I found them from the failing full suite rather than from the enumeration, which is the
+wrong order. Five pins updated in this commit: the source-text parity pin on the mint line, two in
+`oauth.test.ts`, one integration, one e2e.
+
+Also corrected: the mint guard's file header still described the pre-V-1452 design — `base32Encode`
+discriminator, function scoping, "3 mint sites, 3 in the allowlist" — while the code below it did
+neither. Rewritten, with the count verified rather than asserted: 9 minted prefixes, 6 redacted, 3
+declared public. My first draft of that line said 8 and 5; measuring gave 9 and 6.
+
+Full suite green with the source change: 3067 files, 30853 tests, exit 0. No new test file; the mint
+guard goes 2 `it` declarations to 3. No ratchet movement.
