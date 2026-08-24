@@ -10035,3 +10035,46 @@ The second arm is the one worth explaining. The first asserts a rule whose justi
 a comment; if that comment is deleted, the arm carries on enforcing something nobody records any
 reason for, which is how a pin becomes a rubber stamp. So the rationale is anchored too, and its
 removal fails loudly rather than quietly.
+
+### V-1431 — a stale comment that nearly bought a false negative from me
+
+The incident-email template selector picks one of three: `created`, `updated`, `resolved`. Coverage
+put the **middle** branch at zero — no test had ever selected `status-incident-updated`.
+
+The interface JSDoc said the kind was shipped but not yet reachable, with callers falling back to
+`created` / `resolved`. On that reading it is a documented decision and the correct output is a
+recorded negative, exactly like the staging-only fallback flag in V-1425. **I nearly filed it that
+way.**
+
+It is not true, and the repo already knew. Tracing the caller instead of trusting the comment:
+
+- `notifyUpdated` exists (V-545.B Phase 2) and is guarded by `if (!this.throttle) return;`
+- `bootstrap.ts:913` constructs the throttle repo **unconditionally** and passes it, so that guard is
+  never taken
+- `onPublicUpdated` calls `notifyUpdated` on every operator update
+
+And `incident-email-volume-claims-match-wired-kinds` — a test that already exists — derives the same
+conclusion from the same wiring, in its own header, as the reason it was written: the subscriber-facing
+copy promised "two emails per incident maximum" while a third kind fans out.
+
+So the comment was contradicted by a test file in the same repo, and reading it alone would have
+produced a wrong "deliberately dark" verdict. Corrected as a paraphrase (verified unpinned first), and
+it now points at that guard rather than restating a claim someone must re-derive.
+
+**What the untested branch costs.** Falling through selects the RESOLVED template, so subscribers to a
+running incident are told it is over — during the incident, which is precisely when the email is the
+thing they act on. The new arm asserts the resolved and created copy are ABSENT as well as the update
+copy present, because a "contains the right words" assertion passes on a template carrying both.
+
+| mutation                                                    | result           |
+| ----------------------------------------------------------- | ---------------- |
+| the `updated` branch falls through to the resolved template | the new arm reds |
+| the `updated` branch selects the created template           | the new arm reds |
+
+Both land only because the negatives are there; the positive assertions alone survive M1.
+
+The general lesson is the one this session keeps re-learning from the other side. A comment naming a
+deferral is the same evidence class as a comment naming a decision, and V-1425 and the deferred-kind
+reading here were indistinguishable at the point of reading. The difference showed up only in the
+wiring: one is still true and one lapsed when the follow-up landed and nobody revisited the comment.
+**Trace the caller before accepting a comment that makes a branch dead.**

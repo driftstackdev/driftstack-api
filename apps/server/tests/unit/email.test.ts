@@ -429,6 +429,53 @@ describe('createEmailService — configured', () => {
     expect(c.TextBody).not.toContain('Current status:');
   });
 
+  // V-1431 — the third incident kind. `created` and `resolved` each have an arm
+  // above; `updated` had none, and coverage agreed: the middle branch of the
+  // template ternary in `services/email.ts` had never selected a template.
+  //
+  // It is not dormant. `incident-email-volume-claims-match-wired-kinds` already
+  // establishes, from the bootstrap wiring, that this kind fans out in production —
+  // the throttle repo is constructed unconditionally, so `notifyUpdated`'s
+  // `if (!this.throttle) return;` no-op is not taken, and `onPublicUpdated` sends on
+  // every operator update.
+  //
+  // What the untested branch costs is specific: falling through selects the RESOLVED
+  // template, so subscribers to a live incident would be told it is over — during
+  // the incident, which is exactly when the email is the thing they act on. The arm
+  // asserts the resolved copy is ABSENT as well as the update copy present, because
+  // "contains the right words" alone passes on a template carrying both.
+  it('status-incident-updated template (V-545.B Phase 2, kind="updated") — the live third kind', async () => {
+    const logger = makeLogger();
+    const client = makeStubClient();
+    const svc = createEmailService({ config, logger, client });
+    await svc.sendStatusIncidentNotification({
+      to: 'subscriber@example.com',
+      kind: 'updated',
+      title: 'Elevated 5xx on /v1/sessions',
+      severity: 'major',
+      status: 'identified',
+      message: 'Cause identified; mitigation rolling out.',
+      incidentTime: new Date('2026-05-11T15:45:00Z'),
+      statusPageUrl: 'https://status.driftstack.dev/',
+      unsubscribeLink: 'https://status.driftstack.dev/unsubscribe/tok_unsub',
+    });
+    const c = client.calls[0] as Record<string, string>;
+    expect(c.TextBody).toContain('Cause identified; mitigation rolling out.');
+    expect(c.TextBody).toContain('identified');
+    expect(
+      c.Subject,
+      'an update must not be announced as a new incident — subscribers already had that email',
+    ).not.toContain('Incident posted');
+    expect(
+      c.Subject,
+      'and must not be announced as resolved while the incident is still running, which is what falling through to the resolved template would do',
+    ).not.toContain('Incident resolved');
+    expect(
+      c.TextBody,
+      'the resolved template stamps a resolution time; an ongoing update must not carry one',
+    ).not.toContain('Resolved at:');
+  });
+
   it('team-invite template (V-298b) — role + accept link round-trip', async () => {
     const logger = makeLogger();
     const client = makeStubClient();

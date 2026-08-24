@@ -226,10 +226,18 @@ export interface EmailService {
     dashboardUrl: string;
   }): Promise<void>;
   /** V-295c3-followup + V-545.B — fires when a public incident is posted,
-   *  updated, or resolved. The 'updated' kind is wired-but-deferred:
-   *  the template is shipped so subscribers receive it once the V-545.B
-   *  throttling-table follow-up lands. Until then, callers default to
-   *  'created' / 'resolved'. */
+   *  updated, or resolved.
+   *
+   *  V-1431 — this comment used to describe the 'updated' kind as shipped but
+   *  not yet reachable, with callers falling back to 'created' / 'resolved'.
+   *  That stopped being true when V-545.B Phase 2 landed: bootstrap constructs
+   *  the notifications service WITH the throttle repo unconditionally, so
+   *  `notifyUpdated`'s no-op guard is not taken, and `onPublicUpdated` fans this
+   *  kind out on every operator update. All three kinds are live.
+   *
+   *  `incident-email-volume-claims-match-wired-kinds` derives that same fact from
+   *  the bootstrap wiring, so a fourth kind fails there rather than quietly
+   *  making a subscriber-facing volume claim false. */
   sendStatusIncidentNotification(args: {
     to: string;
     /** 'created' | 'updated' | 'resolved'. */
