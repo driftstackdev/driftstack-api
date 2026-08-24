@@ -79,6 +79,16 @@ describe('V-667 OAuthService — registerClient', () => {
         redirect_uris: ['http://localhost:3000/cb'],
       }),
     ).resolves.toMatchObject({ client_id: expect.stringMatching(/^oac_/) });
+    // V-1459 — and so is loopback by IP. The exemption names two hosts and only
+    // `localhost` was ever exercised, so replacing the `127.0.0.1` arm with
+    // `false` left every test passing: a developer callback on the IP form would
+    // have started being rejected with nothing to notice.
+    await expect(
+      svc.registerClient({
+        label: 'Loopback IP App',
+        redirect_uris: ['http://127.0.0.1:3000/cb'],
+      }),
+    ).resolves.toMatchObject({ client_id: expect.stringMatching(/^oac_/) });
   });
 
   it.each([
@@ -86,6 +96,22 @@ describe('V-667 OAuthService — registerClient', () => {
     'https://user:password@example.com/cb',
     'https://example.com/cb#fragment',
     `https://example.com/${'x'.repeat(2048)}`,
+    // V-1459 — each of these isolates an operand the rows above cannot reach.
+    //
+    // `user:password@` carries BOTH halves of the userinfo check, so the
+    // username test short-circuits and the password test never decides
+    // anything: deleting `u.password !== '' ||` from the guard left this whole
+    // file green. An empty username with a password is the shape that separates
+    // them, and it is a real URL — `new URL()` parses it with username '' and
+    // password 'pw'.
+    'https://:password@example.com/cb',
+    // The loopback exemption is `protocol === 'http:' AND host is loopback`.
+    // Only the protocol half is untested: `new URL('javascript://localhost/x')`
+    // parses with hostname 'localhost', so dropping `u.protocol === 'http:' &&`
+    // admits any scheme pointed at loopback — and left this file green too.
+    'javascript://localhost/evil',
+    'data://localhost/x',
+    'ftp://localhost/x',
   ])('rejects unsafe or oversized redirect URI %s', async (redirectUri) => {
     const { svc } = makeService();
     await expect(

@@ -11218,3 +11218,45 @@ which is the argument against treating "vacuous sweep" as one defect with one fi
 
 Full suite green: 3067 files, 30854 tests, exit 0. No new test file; `it` count unchanged at 3,
 verified against HEAD rather than a carried figure. No ratchet movement.
+
+## V-1459 — three unexercised operands in the OAuth redirect_uri validator
+
+`isAllowedRedirectUri` decides which callback URLs an OAuth client may register. It is the control that
+keeps an authorization code from being delivered somewhere the customer did not choose, so every
+operand in it is load-bearing. A mutation sweep of all five found **three that survived**.
+
+- **`u.password !== ''`.** The existing table already rejects `https://user:password@example.com/cb`,
+  but that row carries BOTH halves of the userinfo check: `u.username !== ''` short-circuits and the
+  password test never decides anything. Deleting it left the file green. The separating input is an
+  empty username with a password — `https://:password@example.com/cb`, which `new URL()` parses with
+  `username: ''` and `password: 'pw'`.
+- **`u.protocol === 'http:'` in the loopback exemption.** The exemption is "http AND loopback host",
+  and only the host half was exercised. Removing the protocol test admits ANY scheme pointed at
+  loopback, which is not theoretical: `new URL('javascript://localhost/evil')` parses with protocol
+  `javascript:` and hostname `localhost`, so it would have been accepted as a registered redirect_uri.
+  `data:` and `ftp:` behave the same. This is the one worth the batch.
+- **`u.hostname === '127.0.0.1'`.** The exemption names two loopback hosts and only `localhost` was
+  ever used. Replacing the IP arm with `false` passed everything — a developer callback on the IP form
+  would have started being rejected with nothing to notice. An accept-path gap rather than a security
+  one, and the reason the arm asserts acceptance.
+
+Four rows added to the existing rejection table plus one acceptance assertion, each chosen to isolate a
+single operand. Every operand now reds when broken: password 1, fragment 2, username 1, protocol gate
+3, `127.0.0.1` 1, `localhost` 1.
+
+**One mutation in the first sweep was botched and reported as "no tests".** Deleting `u.hash !== ''`
+without its `||` leaves `if (a || b || ) return false;` — a syntax error, which vitest reports as no
+tests rather than as a failure. Per the harness rule that is not a result; redone including the
+operator, the fragment check turns out to be covered twice. Worth stating because the botched form
+looked at a glance like a fourth survivor.
+
+Also completed this turn: the floor audit opened in V-1455 is finished. Eleven source-scanning censuses
+checked, seven honest — `admin-routes-authorization-invariant`, `every-webhook-event-has-somewhere-that-fires-it`,
+`drizzle-date-param-no-regress`, `crypto-reconciliation-docs`, `every-service-is-wired-or-recorded-as-dormant`,
+`an-extension-cannot-shadow-a-reserved-problem-member` and
+`activation-gate-disabled-stub-registrar-roster` all floor on the set they iterate, most with positive
+controls on known members and several guarding the matched-everything direction too. The four that
+needed work are V-1455/1456/1457/1458.
+
+Full suite green: 3067 files, 30858 tests, exit 0. No new test file; `it` count unchanged at 28 against
+HEAD (the additions are `it.each` rows). No ratchet movement.
