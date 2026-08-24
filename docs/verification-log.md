@@ -12149,3 +12149,70 @@ boolean, object, array) rather than one, since `typeof` treats the last two alik
 handled numbers would pass a single-case test. No new test file — the `EXPECTED_TEST_FILES` ratchet is
 stale at 3012 against an actual 3067 from a peer's drift, and rule 9 forbids absorbing it. `it` count
 10 → 11 in that file, no ratchet movement.
+
+## V-1479 — the query surface, where the same defect runs at a 78% rate
+
+V-1476's census walked `requestBody` and nothing else. Query parameters are the other half of the
+request surface, and they had drifted harder: **7 of 9** unconstrained published query parameters are
+divergences, against 4 of 5 for bodies.
+
+| endpoint                                         | enforced                               | published   |
+| ------------------------------------------------ | -------------------------------------- | ----------- |
+| `GET /v1/account/audit-log ?action`              | `AccountAuditActionSchema` — 46 values | bare string |
+| `GET /v1/admin/accounts ?tier`                   | `AccountTierSchema` — 8 values         | bare string |
+| `GET /v1/status/subscribe/confirm ?token`        | `.min(20)`                             | bare string |
+| `GET /v1/status/subscribe/unsubscribe ?token`    | `.min(20)`                             | bare string |
+| `GET /v1/admin/api-keys ?account_id`             | `.min(1).max(100)`                     | bare string |
+| `GET /v1/admin/rate-limit-overrides ?account_id` | `.min(1).max(100)`                     | bare string |
+| `GET /v1/admin/sessions ?account_id`             | `.min(1).max(100)`                     | bare string |
+
+The two honest ones — `?admin_id` and `?target_id` on the admin audit log — are `z.string().optional()`
+in `AdminAuditQuerySchema`, traced to the route rather than assumed from the published shape, and are
+written into the exemption map with that evidence.
+
+**Why query drifted worse than body.** A body mirror can import the schema the route parses with, and
+several do. Every query mirror in `openapi.ts` is hand-written per route, so each is an independent
+chance to omit a bound — and the omissions cluster next to fields that got it right. `?tier` sits ONE
+LINE below a `status` that publishes its enum. `?action` sits two lines below a `cursor` that imports
+`PaginationQuerySchema.shape.cursor` outright. Each of the three `?account_id` filters sits beside a
+`limit` carrying `min(1).max(100)`. The faithful neighbour is the signature of this whole class: nobody
+forgot how, they forgot once, per field.
+
+Worst of the seven is `?action`: the one filter whose legal values a caller cannot guess was the one
+field documenting none of them, while the same 46-value enum has been published on the RESPONSE since
+V-1477.
+
+**The fix reds a sibling guard, and the second one taught me more than the first.**
+`published-request-schema-is-not-looser-than-enforced` asserts a floor of 43 published request field
+names, and my change took it to 42. Twice, for two different reasons.
+
+First I reflowed the `token` chain across four lines. That guard parses declarations with a single-line
+regex and its own arm title warns that "reformatting a one-line chain silently shrinks what is checked".
+Restored to one line, which fits the print width.
+
+That was not it. Diffing the parsed name sets against HEAD showed exactly one loss — and it was `tier`,
+not `token`. Writing `tier: AccountTierSchema.optional()` is better code and is INVISIBLE to a regex
+rooted at `z.`. `action` went the same way and cost nothing, because other `action` declarations remain;
+`tier` is the only REQUEST-side `tier` in the file, so its loss showed while every response-side `tier`
+stayed visible. A one-name drop in a 43-name census is exactly the size of regression that reads as
+noise.
+
+The resolution was not to lower the floor. `z.enum(AccountTierSchema.options)` keeps the values derived
+from the single schema — it cannot drift, and it is not a copy — while staying rooted at `z.` so the
+sibling can still see it. Both guards green, no floor moved, no duplication introduced. The indirection
+is recorded at both sites, because the obvious simplification back to a bare schema reference would
+silently shrink that census again.
+
+**Also corrected here:** the V-1477 comment in `openapi.ts` describing the audit action enum as
+"52-value". It is 46. The 52 came from counting quote characters in the source block, which also counts
+quoted words inside the block's own comments; a second source-side count gave 50 for the same reason.
+The generated document settles it, since `z.enum` maps one-to-one.
+
+The census arm now walks query parameters alongside body properties, one census and one exemption map
+rather than two near-identical arms, with the floor raised from 120 to 200 to cover both. Stripping all
+seven constraints from the document reds it and names all seven.
+
+Measured negative, so the surface is not re-swept: the query params split 74 string / 23 integer. All 23
+integers carry a bound — they are `limit`-shaped fields and every one publishes its `minimum`/`maximum`
+— so the numeric side is examined and clean rather than unexamined. Of the 74 strings, two remain
+unconstrained after this and both are the traced exemptions above.

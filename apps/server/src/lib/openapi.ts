@@ -157,6 +157,7 @@ import {
   AddSupportNoteRequestSchema,
   WireGuardProxyConfigSchema,
   AccountOrganizationSchema,
+  AccountAuditActionSchema,
   AccountAuditEntrySchema,
 } from '@driftstack/api-types';
 import { PROFILE_ID_INPUT_RE } from './profile-id.js';
@@ -2401,12 +2402,26 @@ function buildRegistry(): OpenAPIRegistry {
   const ListAccountAuditQueryOpenApi = z.object({
     limit: z.number().int().min(1).max(100).optional(),
     cursor: PaginationQuerySchema.shape.cursor,
-    action: z.string().optional(),
+    // V-1479 — `ListAccountAuditLogQuerySchema.action` is
+    // `AccountAuditActionSchema`, the same 46-value enum the response publishes
+    // since V-1477. Published bare here, so the one filter whose legal values a
+    // caller cannot guess was the one field that documented none of them —
+    // while `limit` and `cursor` on the two lines above are faithful, `cursor`
+    // by importing the shared shape outright.
+    //
+    // `z.enum(X.options)` rather than plain `X.optional()`, and the indirection
+    // is load-bearing: `published-request-schema-is-not-looser-than-enforced`
+    // parses these declarations with a regex rooted at `z.`, so a bare schema
+    // reference is invisible to it. Writing it that way dropped that guard's
+    // request-field census from 43 to 42 — silently, since a smaller census
+    // still passes everything it can still see. `.options` keeps the values
+    // derived from the one schema, so this cannot drift; it is not a copy.
+    action: z.enum(AccountAuditActionSchema.options).optional(),
   });
   // V-1477 — a hand copy of AccountAuditEntrySchema, field for field, that
   // differed from it in exactly three places:
   //
-  //   action      z.string()   vs AccountAuditActionSchema — a 52-value enum
+  //   action      z.string()   vs AccountAuditActionSchema — a 46-value enum
   //   timestamp   z.string()   vs Iso8601Schema — format: date-time
   //   actor_type  the same three values, spelled again
   //
@@ -2631,7 +2646,9 @@ function buildRegistry(): OpenAPIRegistry {
   const ListAdminOverridesQueryOpenApi = z.object({
     limit: z.number().int().min(1).max(100).optional(),
     cursor: PaginationQuerySchema.shape.cursor,
-    account_id: z.string().optional(),
+    // V-1479 — the route enforces `.min(1).max(100)`; each of these three
+    // mirrors sits beside a `limit` that publishes its own bounds.
+    account_id: z.string().min(1).max(100).optional(),
     include_expired: z.enum(['true', 'false']).optional(),
   });
   const PaginatedAdminOverridesSchema = z.object({
@@ -2658,7 +2675,9 @@ function buildRegistry(): OpenAPIRegistry {
   const ListAdminApiKeysQueryOpenApi = z.object({
     limit: z.number().int().min(1).max(100).optional(),
     cursor: PaginationQuerySchema.shape.cursor,
-    account_id: z.string().optional(),
+    // V-1479 — the route enforces `.min(1).max(100)`; each of these three
+    // mirrors sits beside a `limit` that publishes its own bounds.
+    account_id: z.string().min(1).max(100).optional(),
     revoked: z.enum(['true', 'false']).optional(),
   });
   const PaginatedAdminApiKeysSchema = z.object({
@@ -2686,7 +2705,9 @@ function buildRegistry(): OpenAPIRegistry {
     limit: z.number().int().min(1).max(100).optional(),
     cursor: PaginationQuerySchema.shape.cursor,
     status: z.enum(['creating', 'ready', 'busy', 'destroyed', 'errored']).optional(),
-    account_id: z.string().optional(),
+    // V-1479 — the route enforces `.min(1).max(100)`; each of these three
+    // mirrors sits beside a `limit` that publishes its own bounds.
+    account_id: z.string().min(1).max(100).optional(),
   });
   const PaginatedAdminSessionsSchema = z.object({
     data: z.array(SessionSchema),
@@ -2785,7 +2806,18 @@ function buildRegistry(): OpenAPIRegistry {
         limit: z.number().int().min(1).max(100).optional(),
         cursor: PaginationQuerySchema.shape.cursor,
         status: z.enum(['active', 'suspended', 'deleted']).optional(),
-        tier: z.string().optional(),
+        // V-1479 — `ListAdminAccountsQuerySchema.tier` is `AccountTierSchema`.
+        // The sibling directly above publishes ITS enum, which is the whole
+        // signature of this defect class: the neighbour is faithful and one
+        // field is not, in the same object literal, one line apart.
+        //
+        // `z.enum(X.options)` for the reason spelled out at the audit-log
+        // `action` filter above: a bare `AccountTierSchema.optional()` is not
+        // rooted at `z.` and disappears from the sibling guard's census. `tier`
+        // was the field that caught this — it is the only REQUEST-side `tier`
+        // declaration, so losing it took the census from 43 to 42 while every
+        // response-side `tier` stayed visible and the drop looked like nothing.
+        tier: z.enum(AccountTierSchema.options).optional(),
         email_contains: z.string().min(1).max(254).optional(),
       }),
     },
@@ -6187,7 +6219,16 @@ function buildRegistry(): OpenAPIRegistry {
   // confirm + unsubscribe carry the opaque token as a query param on a GET
   // (the link in the email is a plain click), not a JSON request body.
   const StatusTokenQueryOpenApi = z.object({
-    token: z.string().describe('Opaque token from the confirm/unsubscribe email link.'),
+    // V-1479 — `TokenQuerySchema` enforces `.min(20)` with the message
+    // "Missing or malformed token."; the document published no length at all.
+    // One mirror, both rails: confirm and unsubscribe share it, so the omission
+    // was two published endpoints from a single line.
+    // Kept on ONE line deliberately: `published-request-schema-is-not-looser-
+    // than-enforced` parses field declarations with a single-line regex and says
+    // so — "reformatting a one-line chain silently shrinks what is checked".
+    // Splitting this chain dropped its coverage floor from 43 to 42, which is
+    // the guard catching a reformat exactly as designed.
+    token: z.string().min(20).describe('Opaque token from the confirm/unsubscribe email link.'),
   });
   // Exit-IP echo for device-side proxy probes (proxy-probe design step 1).
   // Unauthenticated by design; IP-rate-limited.

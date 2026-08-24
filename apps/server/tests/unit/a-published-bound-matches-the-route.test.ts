@@ -154,6 +154,13 @@ const BOUNDS: readonly BoundCase[] = [
  * just as surely as one that under-reports gets trusted.
  */
 const UNCONSTRAINED_BY_DESIGN: Record<string, string> = {
+  // V-1479 — the query half. Both traced to their route schema, not to the
+  // published shape: `AdminAuditQuerySchema` declares each as a bare
+  // `z.string().optional()`, so the document is faithful to what is enforced.
+  'GET /v1/admin/audit-log ?admin_id':
+    'route declares `admin_id: z.string().optional()` — no bound on either side',
+  'GET /v1/admin/audit-log ?target_id':
+    'route declares `target_id: z.string().optional()` — no bound on either side',
   'POST /v1/agent-sessions/{id}/history .tabId':
     'traced end to end: `z.string().optional()` in NavigateHistoryBodySchema, again in ' +
     'NavigateHistoryRequestSchema on the wire, and read by nothing — it ships gated-inert until ' +
@@ -199,7 +206,7 @@ describe('V-927 a published bound matches the route', () => {
     expect(gaps, 'the document under-specifies these bounds:').toEqual([]);
   });
   // V-1476 — see UNCONSTRAINED_BY_DESIGN above for why this is derived.
-  it('CRITICAL every published request-body string is either constrained or written down as deliberately unconstrained. The roster above can only re-check bounds someone already noticed; this arm is the half that can see a NEW one, which is what three separate one-at-a-time findings of this same shape (V-1063 clone, V-1475 quote, V-1476 restore) say was missing.', () => {
+  it('CRITICAL every published request string — body field or query parameter — is either constrained or written down as deliberately unconstrained. The roster above can only re-check bounds someone already noticed; this arm is the half that can see a NEW one, which is what three separate one-at-a-time findings of this same shape (V-1063 clone, V-1475 quote, V-1476 restore) say was missing.', () => {
     const root = JSON.parse(readFileSync(SPEC, 'utf8')) as Record<string, Record<string, unknown>>;
     const deref = (node: unknown): Record<string, unknown> => {
       let cur = node as Record<string, unknown>;
@@ -237,13 +244,36 @@ describe('V-927 a published bound matches the route', () => {
       }
     }
 
+    // V-1479 — query parameters are the other half of the request surface, and
+    // the half that drifted harder: 7 of 9 unconstrained query params were
+    // divergences against 4 of 5 for bodies. Every query mirror in openapi.ts is
+    // hand-written per route — there is no shared schema to import the way a
+    // body can — so each one is an independent chance to omit a bound, and
+    // several sit one line from a sibling that publishes its own.
+    for (const [path, ops] of Object.entries(paths)) {
+      for (const [method, op] of Object.entries(ops)) {
+        const parameters = (op as Record<string, unknown>)?.['parameters'];
+        if (!Array.isArray(parameters)) continue;
+        for (const rawParam of parameters) {
+          const param = deref(rawParam);
+          if (param['in'] !== 'query') continue;
+          const schema = deref(param['schema']);
+          if (schema['type'] !== 'string') continue;
+          examined += 1;
+          if (!CONSTRAINTS.some((c) => c in schema)) {
+            unconstrained.push(`${method.toUpperCase()} ${path} ?${String(param['name'])}`);
+          }
+        }
+      }
+    }
+
     // The floor counts STRING PROPERTIES, which is what the assertion iterates —
     // not paths, and not request bodies. A walk that resolved no $ref would find
     // plenty of both and zero of these.
     expect(
       examined,
-      'no published request-body string properties were read — the walk stopped resolving, and this arm would pass over an empty set',
-    ).toBeGreaterThan(120);
+      'no published request strings were read across bodies and query parameters — the walk stopped resolving, and this arm would pass over an empty set',
+    ).toBeGreaterThan(200);
 
     const declared = { ...UNCONSTRAINED_BY_DESIGN, ...KNOWN_DIVERGENCE_DEFERRED };
     const undeclared = unconstrained.filter((k) => !(k in declared)).sort();

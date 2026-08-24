@@ -19841,7 +19841,55 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "enum": [
+                "account.email_verified",
+                "account.login",
+                "account.logout",
+                "account.password_changed",
+                "account.web_session_revoked",
+                "api_key.minted",
+                "api_key.revoked",
+                "api_key.rotated",
+                "session.created",
+                "session.destroyed",
+                "profile.created",
+                "profile.deleted",
+                "profile.restored",
+                "profile.purged",
+                "profile.exported",
+                "profile.imported",
+                "subscription.tier_changed",
+                "webhook_endpoint.created",
+                "webhook_endpoint.updated",
+                "webhook_endpoint.deleted",
+                "webhook_endpoint.secret_rotated",
+                "webhook_delivery.replayed",
+                "team.member_invited",
+                "team.invite_accepted",
+                "team.member_removed",
+                "account.mfa_enrolled",
+                "account.mfa_disabled",
+                "account.recovery_code_used",
+                "admin.refund_recorded",
+                "admin.support_note",
+                "agent.decompose.claude",
+                "agent.decompose.deterministic",
+                "agent_session.pair_mode.takeover",
+                "agent_session.pair_mode.handback",
+                "agent_session.pair_mode.timeout",
+                "agent_session.mode.changed",
+                "agent_session.created",
+                "agent_session.destroyed",
+                "account.byok_anthropic_key_set",
+                "account.byok_anthropic_key_cleared",
+                "account.byok_anthropic_key_tested",
+                "proxy.created",
+                "proxy.updated",
+                "proxy.deleted",
+                "account.bundled_llm_consent_changed",
+                "account.email_preferences_changed"
+              ]
             },
             "required": false,
             "name": "action",
@@ -20891,7 +20939,9 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
             },
             "required": false,
             "name": "account_id",
@@ -21140,7 +21190,9 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
             },
             "required": false,
             "name": "account_id",
@@ -21425,7 +21477,9 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
             },
             "required": false,
             "name": "account_id",
@@ -22124,7 +22178,17 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "enum": [
+                "free",
+                "solo_manual",
+                "team_manual",
+                "agency_manual",
+                "api_starter",
+                "api_builder",
+                "api_scale",
+                "enterprise"
+              ]
             },
             "required": false,
             "name": "tier",
@@ -47309,6 +47373,7 @@
           {
             "schema": {
               "type": "string",
+              "minLength": 20,
               "description": "Opaque token from the confirm/unsubscribe email link."
             },
             "required": true,
@@ -47375,6 +47440,7 @@
           {
             "schema": {
               "type": "string",
+              "minLength": 20,
               "description": "Opaque token from the confirm/unsubscribe email link."
             },
             "required": true,
