@@ -312,4 +312,111 @@ describe('path-parameterised routes document 404 or are exempt with a reason', (
       'operation(s) whose own handler raises a status the published document does not declare',
     ).toEqual([]);
   });
+  /**
+   * V-1488b — the statuses a route's GATES raise, which belong to no handler.
+   *
+   * The arm above reads `throw` statements inside a registration block. A
+   * preHandler raises before the handler runs and its throws live in another
+   * file entirely, so nothing above can see them. `errors4xx` hides that for
+   * most routes by spreading 400/401/403/429 wholesale — which is why the gap
+   * only shows on routes that do NOT spread it.
+   *
+   * Seven did. The four OAuth provider endpoints and both oauth-client rails are
+   * gated by `ipRateLimit`, so a 429 is reachable WITHOUT authenticating at all,
+   * and none declared it. `livekit-token` declared neither the 401 its
+   * control-key gate raises nor the 429 from `app.rateLimit('global')`.
+   *
+   * Gate bodies are bounded at the next declaration, not by a fixed window. That
+   * is not a detail: the census that found these used a 2200-character window
+   * and reported a 403 on all four OAuth endpoints, because the window ran past
+   * the end of an `ipRateLimit` gate and swallowed a neighbouring `requireScope`.
+   * Those gates raise 429 and nothing else. A window is not a scope.
+   */
+  const GATE_STATUS: Record<string, string> = {
+    'app.requireAuth': '401',
+    'app.requireScope': '403',
+    'app.requireOwner': '403',
+    'app.rateLimit': '429',
+    ipRateLimit: '429',
+  };
+
+  it('CRITICAL a route declares the statuses its GATES raise, not only the ones its handler throws. A preHandler refuses before the handler runs and its throws live in another file, so the handler-scoped arm above cannot see them — and routes that do not spread errors4xx get no cover from it either. Seven operations were short a 429 reachable without authenticating.', () => {
+    const routesDir = resolve(HERE, '..', '..', 'src', 'routes');
+    const doc = JSON.parse(
+      readFileSync(
+        resolve(HERE, '..', '..', '..', '..', 'packages/sdk-python/openapi.json'),
+        'utf8',
+      ),
+    ) as { paths: Record<string, Record<string, { responses?: Record<string, unknown> }>> };
+
+    const missing: string[] = [];
+    let compared = 0;
+    for (const file of readdirSync(routesDir).filter((f) => f.endsWith('.ts'))) {
+      const src = readFileSync(resolve(routesDir, file), 'utf8');
+
+      // Local gate wrappers, bounded at the NEXT declaration rather than by a
+      // character count — see the note above on why that matters.
+      const decls = [...src.matchAll(/\n {2}(?:const|function|async function) (\w+)/g)];
+      const gates = new Map<string, Set<string>>();
+      for (const [i, d] of decls.entries()) {
+        // Bounded at the earlier of the next declaration and the first route
+        // registration. Stopping only at the next declaration is not enough:
+        // `revokeGate` is the last const before oauth.ts's admin routes, so its
+        // body ran on into a registration carrying `requireScope` and this arm
+        // reported a 403 on POST /v1/oauth/revoke — the same over-attribution,
+        // one bound later, that the note above describes.
+        const from = d.index ?? 0;
+        const nextDecl = decls[i + 1]?.index ?? src.length;
+        const nextRoute = src.slice(from).search(/app\.(?:get|post|put|patch|delete)[^(]*\(/);
+        const body = src.slice(
+          from,
+          Math.min(nextDecl, nextRoute === -1 ? src.length : from + nextRoute),
+        );
+        const raised = new Set(
+          Object.entries(GATE_STATUS)
+            .filter(([token]) => body.includes(token))
+            .map(([, status]) => status),
+        );
+        if (body.includes('validateGuiControlKey')) raised.add('401');
+        if (raised.size > 0) gates.set(d[1] ?? '', raised);
+      }
+
+      const regs = [
+        ...src.matchAll(/app\.(get|post|put|patch|delete)[^(]*\(\s*\n?\s*'([^']+)'/g),
+      ].map((m) => ({ at: m.index ?? 0, verb: (m[1] ?? '').toLowerCase(), path: m[2] ?? '' }));
+      for (const [i, reg] of regs.entries()) {
+        const block = src.slice(reg.at, regs[i + 1]?.at ?? src.length);
+        const pre = /preHandler:\s*\[([^\]]*)\]/.exec(block)?.[1];
+        if (pre === undefined) continue;
+        const need = new Set<string>();
+        for (const [token, status] of Object.entries(GATE_STATUS)) {
+          if (pre.includes(token)) need.add(status);
+        }
+        for (const [name, raised] of gates) {
+          if (new RegExp(`\\b${name}\\b`).test(pre)) for (const r of raised) need.add(r);
+        }
+        if (need.size === 0) continue;
+        const published = reg.path.replace(/:([a-zA-Z_]+)/g, '{$1}');
+        const responses = doc.paths[published]?.[reg.verb]?.responses;
+        if (responses === undefined) continue;
+        compared += 1;
+        for (const status of need) {
+          if (!(status in responses)) {
+            missing.push(
+              `${reg.verb.toUpperCase()} ${published}: gated, missing ${status} (${file})`,
+            );
+          }
+        }
+      }
+    }
+
+    expect(
+      compared,
+      'no gated operation was compared — the preHandler scan stopped matching, and this arm would pass having read nothing',
+    ).toBeGreaterThan(150);
+    expect(
+      [...new Set(missing)].sort(),
+      'operation(s) whose preHandler can refuse with a status the published document does not declare',
+    ).toEqual([]);
+  });
 });

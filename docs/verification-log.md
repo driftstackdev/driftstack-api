@@ -12705,3 +12705,52 @@ Two mutations, one per side. Dropping the new 400 from the public feed reds it w
 `GET /v1/status/incidents: throws 400 (admin-incidents.ts)`. Adding a `GoneError` to the legal-accept
 handler — 410 is declared nowhere — reds it naming that operation, which is the proof the handler side
 is read rather than restated. Both restored byte-identical.
+
+## V-1488b — the statuses a route's gates raise, and a bound that was wrong twice
+
+V-1488 read `throw` statements inside a registration block. A preHandler refuses BEFORE the handler
+runs and its throws live in another file, so nothing in that arm could see them. `errors4xx` hides the
+gap for most routes by spreading 400/401/403/429 wholesale — which is exactly why it only surfaces on
+routes that do not spread it.
+
+Seven did:
+
+| operation                                    | gate                                         | missing  |
+| -------------------------------------------- | -------------------------------------------- | -------- |
+| `GET /v1/oauth/authorize`                    | `ipRateLimit`                                | 429      |
+| `POST /v1/oauth/token`                       | `ipRateLimit`                                | 429      |
+| `POST /v1/oauth/introspect`                  | `ipRateLimit`                                | 429      |
+| `POST /v1/oauth/revoke`                      | `ipRateLimit`                                | 429      |
+| `POST /v1/auth/oauth-client/start`           | `ipRateLimit`                                | 429      |
+| `POST /v1/auth/oauth-client/confirm-merge`   | `ipRateLimit`                                | 429      |
+| `POST /v1/agent-sessions/{id}/livekit-token` | control-key gate + `app.rateLimit('global')` | 401, 429 |
+
+The OAuth ones matter most: they are IP-keyed, so the 429 is reachable **without authenticating at
+all**, on the endpoints an integrator hits first. A client generated from that document models no
+back-off path on the token endpoint.
+
+**The same mistake, at two different bounds, is the lesson.** The census that found these bounded each
+gate wrapper by a fixed 2200-character window, and reported a 403 on all four OAuth endpoints. Those
+gates are `ipRateLimit(...)` and raise 429 and nothing else; the window had simply run past the end of
+the declaration and swallowed a neighbouring `requireScope`. I narrowed to real gates and wrote the arm
+bounding each wrapper at the NEXT DECLARATION instead — and it reported a 403 on
+`POST /v1/oauth/revoke`. `revokeGate` is the last `const` in that file before the admin routes begin, so
+"next declaration" reached past several registrations and picked up
+`app.requireScope('driftstack_internal_admin')`.
+
+Two different bounds, the same false positive, the same cause: a scope guessed from proximity rather
+than from structure. The arm now bounds each gate body at the earlier of the next declaration and the
+first route registration, which is the first bound that is actually a scope. Both false 403s are gone
+and the seven real gaps remain — the test of the fix being that it removes the noise WITHOUT removing
+the findings.
+
+**Why this is a third arm rather than an extension of the second.** The handler arm reads throws the
+registration block owns. This one reads what a route's gates can raise, which is a different question
+with a different failure mode: a gate is shared, so a mistake there is wrong on every route that uses
+it, and `errors4xx` masks it everywhere except the routes that most need it — the unauthenticated ones,
+which spread the least.
+
+Two mutations. Dropping the new 429 from `POST /v1/oauth/token` reds it naming that operation. Adding
+`app.requireOwner` to the revoke registration — whose operation declares no 403 — reds it with
+`POST /v1/oauth/revoke: gated, missing 403`, which is the proof the gate side is read from the route
+file rather than restated from the document. Both restored byte-identical.

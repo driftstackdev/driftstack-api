@@ -2276,6 +2276,12 @@ function buildRegistry(): OpenAPIRegistry {
       body: { content: { 'application/json': { schema: OauthClientStartRequestOpenApi } } },
     },
     responses: {
+      429: {
+        description:
+          'Per-IP rate limit exceeded. These endpoints are gated by `ipRateLimit` rather than the account-keyed limiter, so the refusal is reachable without authenticating at all. V-1488b — the gate has always been there; the document never mentioned it.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
       200: {
         description:
           "Authorize URL — the client redirects the user's browser here to start the IDP consent flow.",
@@ -2308,6 +2314,12 @@ function buildRegistry(): OpenAPIRegistry {
       },
     },
     responses: {
+      429: {
+        description:
+          'Per-IP rate limit exceeded. These endpoints are gated by `ipRateLimit` rather than the account-keyed limiter, so the refusal is reachable without authenticating at all. V-1488b — the gate has always been there; the document never mentioned it.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
       200: {
         description: 'Merge confirmed; IDP identity now linked to the existing account.',
         content: { 'application/json': { schema: OauthClientConfirmMergeResponseOpenApi } },
@@ -2400,6 +2412,12 @@ function buildRegistry(): OpenAPIRegistry {
       query: OAuthAuthorizeQueryOpenApi,
     },
     responses: {
+      429: {
+        description:
+          'Per-IP rate limit exceeded. These endpoints are gated by `ipRateLimit` rather than the account-keyed limiter, so the refusal is reachable without authenticating at all. V-1488b — the gate has always been there; the document never mentioned it.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
       200: {
         description:
           'Authorization staged. authorization_id is consumed only by the dashboard-internal /authorize/complete endpoint, which requires an interactive web session and rejects API keys.',
@@ -2418,6 +2436,12 @@ function buildRegistry(): OpenAPIRegistry {
       body: { content: { 'application/json': { schema: OAuthTokenRequestOpenApi } } },
     },
     responses: {
+      429: {
+        description:
+          'Per-IP rate limit exceeded. These endpoints are gated by `ipRateLimit` rather than the account-keyed limiter, so the refusal is reachable without authenticating at all. V-1488b — the gate has always been there; the document never mentioned it.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
       200: {
         description: 'Access token (1-hour TTL; no refresh tokens issued).',
         content: { 'application/json': { schema: OAuthTokenResponseOpenApi } },
@@ -2438,6 +2462,12 @@ function buildRegistry(): OpenAPIRegistry {
       body: { content: { 'application/json': { schema: OAuthIntrospectRequestOpenApi } } },
     },
     responses: {
+      429: {
+        description:
+          'Per-IP rate limit exceeded. These endpoints are gated by `ipRateLimit` rather than the account-keyed limiter, so the refusal is reachable without authenticating at all. V-1488b — the gate has always been there; the document never mentioned it.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
       200: {
         description:
           'For an authenticated client: active=true with metadata for its own token, OR active=false when the token is unknown, inactive, or belongs to another client.',
@@ -2461,6 +2491,12 @@ function buildRegistry(): OpenAPIRegistry {
       body: { content: { 'application/json': { schema: OAuthRevokeRequestOpenApi } } },
     },
     responses: {
+      429: {
+        description:
+          'Per-IP rate limit exceeded. These endpoints are gated by `ipRateLimit` rather than the account-keyed limiter, so the refusal is reachable without authenticating at all. V-1488b — the gate has always been there; the document never mentioned it.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
       200: {
         description:
           'For an authenticated client, always 200 whether its token was revoked, unknown, or belongs to another client. This prevents token enumeration.',
@@ -5245,6 +5281,17 @@ function buildRegistry(): OpenAPIRegistry {
       params: z.object({ id: prefixedIdParam('agt', 'agent session') }),
     },
     responses: {
+      401: {
+        description:
+          'No usable credential: neither an account bearer nor a valid per-session GUI control key. `validateGuiControlKey` refuses with a hard 401 before the account path is tried.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
+      429: {
+        description: "Account rate limit exceeded — the route carries `app.rateLimit('global')`.",
+        content: problemContent,
+        headers: requestIdHeader,
+      },
       200: {
         description:
           'LiveKit join info: ws_url + room + token (24h TTL) + participant_identity + expires_at.',
