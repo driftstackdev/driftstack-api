@@ -119,6 +119,64 @@ describe('OpenAPI spec validity invariant (packages/sdk-python/openapi.json)', (
     ).toEqual([]);
   });
 
+  it("V-1537 CRITICAL every problem type the API can raise has its status declared SOMEWHERE in the document. This is the document-scope form of a check that per-operation needs a call graph, and it would have caught both of the last two findings on its own: 402 and 422 were absent from the whole document while three SDKs already modelled the problem types behind them, so a customer's client knew about an error the contract did not admit existed. Internal/500 is the one exception, excluded by name because no operation on this surface documents 500 and pretending otherwise would be worse than saying so.", () => {
+    const problemSource = readFileSync(
+      resolve(REPO_ROOT, 'packages/api-types/src/problem.ts'),
+      'utf8',
+    );
+    const declaredTypes = new Set(
+      [...problemSource.matchAll(/^\s+(\w+):\s*'https:\/\/errors\.driftstack\.dev\//gm)].map(
+        (m) => m[1] ?? '',
+      ),
+    );
+    expect(declaredTypes.size, 'entries in the PROBLEM_TYPES registry').toBeGreaterThan(25);
+
+    // Each registry key, paired with the status of the ApiError that raises it.
+    const errorsSource = readFileSync(resolve(REPO_ROOT, 'apps/server/src/lib/errors.ts'), 'utf8');
+    const statusForType = new Map<string, string>();
+    for (const match of errorsSource.matchAll(/export class (\w+) extends ApiError \{/g)) {
+      const start = match.index + match[0].length;
+      let depth = 1;
+      let end = start;
+      while (end < errorsSource.length && depth > 0) {
+        if (errorsSource[end] === '{') depth += 1;
+        else if (errorsSource[end] === '}') depth -= 1;
+        end += 1;
+      }
+      const body = errorsSource.slice(start, end);
+      const type = /PROBLEM_TYPES\.(\w+)/.exec(body);
+      const status = /status:\s*(\d{3})/.exec(body);
+      if (type?.[1] !== undefined && status?.[1] !== undefined) {
+        statusForType.set(type[1], status[1]);
+      }
+    }
+    expect(statusForType.size, 'problem types bound to a raising ApiError').toBeGreaterThan(25);
+
+    const declaredCodes = new Set<string>();
+    for (const methods of Object.values(spec.paths ?? {})) {
+      for (const [method, op] of Object.entries(methods)) {
+        if (!HTTP_METHODS.has(method) || typeof op !== 'object' || op === null) continue;
+        for (const code of Object.keys((op as { responses?: object }).responses ?? {})) {
+          declaredCodes.add(code);
+        }
+      }
+    }
+    expect(declaredCodes.size, 'distinct status codes in the document').toBeGreaterThan(10);
+
+    // 500 is the catch-all every route can reach and no operation documents it.
+    const UNDOCUMENTED_BY_CONVENTION = new Set(['Internal']);
+
+    const orphans = [...statusForType.entries()]
+      .filter(([type]) => !UNDOCUMENTED_BY_CONVENTION.has(type))
+      .filter(([, status]) => !declaredCodes.has(status))
+      .map(([type, status]) => `${type} raises ${status}, which no operation declares`)
+      .sort();
+    expect(
+      orphans,
+      'these problem types are reachable and their status appears nowhere in the published contract',
+    ).toEqual([]);
+  });
+
   it('every operationId is globally unique (duplicates → SDK codegen method-name collisions)', () => {
     const seen = new Map<string, string[]>();
     for (const [path, methods] of Object.entries(spec.paths ?? {})) {

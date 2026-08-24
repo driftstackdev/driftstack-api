@@ -15503,3 +15503,43 @@ None is a live defect: a regression guard whose forbidden phrase is absent is in
 is what such a guard is for. The bound still weakens each of them against a wordier reintroduction, but
 that is a latent property, not a present fault, and saying so precisely is better than filing three
 findings to make the batch look productive.
+
+## V-1537 — the guard that would have found the last two findings by itself
+
+Two sweeps and a ratchet.
+
+**Sweep one, clean: no guard passes because its target vanished.** V-1536 ended on "a control that
+silently does not execute reads exactly like a control that passes", which is a searchable class. Across
+2371 test files, 16 referenced paths do not exist on disk. Every single one is deliberate: 23 assertions
+of the form `expect(existsSync(PAGE)).toBe(false)` — redirect tombstones for deleted marketing mirrors,
+the retired dashboard mocks module, `vitest.workspace.ts` after the projects migration, and three apps
+asserted to have no `robots.txt` so only the docs site carries one. Nothing vacuous, nothing to fix.
+
+**Sweep two, also clean, and it re-frames the last two batches.** All four problem types behind the codes
+V-1534 and V-1535 declared — `BundledLlmBudgetExhausted`, `BundledLlmConsentRequired`,
+`ByokAnthropicRequired`, `ProxyValidationFailed` — are modelled in **all three SDKs**. The SDKs were ahead
+of the document the whole time. That settles what those findings were: not product gaps, but a contract
+that failed to admit errors its own clients already branch on.
+
+**The ratchet.** Attributing a thrown code to an OPERATION needs a call graph, which is why V-1534's
+general guard had to be discarded. But at DOCUMENT scope no call graph is needed, and the weaker statement
+is still strong: **every problem type reachable from an `ApiError` has its status declared somewhere in
+the published contract.**
+
+Measured across the registry: 32 problem types, all 32 bound to a raising `ApiError` with a status, and
+exactly one whose status appears nowhere — `Internal` → 500, the catch-all no operation on this surface
+documents. Excluded by name, because an exception stated is worth more than an exception that quietly
+narrows the check.
+
+It is not a guard written for a fault that already got fixed — it is a guard that reproduces both prior
+findings from scratch. Proved by rebuilding each pre-fix world from source and re-dumping:
+
+```
+402 removed from the document  ->  BundledLlmBudgetExhausted raises 402
+                                   BundledLlmConsentRequired raises 402
+422 removed from the document  ->  ProxyValidationFailed raises 422
+```
+
+Both would have failed on the day the code was written, naming the exact problem types, with no tracer and
+no call graph. Three batches of hand-tracing produced one arm that does the class automatically — which is
+the right end state for an arc like this, and the honest measure of whether the hand-tracing was worth it.
