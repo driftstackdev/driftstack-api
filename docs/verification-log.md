@@ -13254,3 +13254,54 @@ The rule that follows: a pin should quote the chain with whitespace-tolerant sep
 exact line breaking, because the formatter owns the line breaking and runs AFTER the author. Checking
 `prettier --check` on both the source and the pins before committing is what makes that stable, and it
 now reports them formatted.
+
+## V-1499 — the navigate scheme allowlist, published; and the refine population sorted honestly
+
+`POST /v1/sessions/{id}/navigate` published `url` as `{ type: string, format: uri }` while the schema
+refuses anything but `http://` and `https://`. The source comment explains why the constraint exists:
+"a browser-automation navigate has no legitimate `file://` / `ftp://` / `data:` use, in ANY egress
+architecture — rejecting other schemes at the schema also shields the AI-agent path from prompt-injected
+`file://` navigates."
+
+A security constraint whose whole purpose is refusing a class of input, and the machine-readable contract
+said any URI was fine. Converted to a regex, the same move as V-1498 and V-924 before it.
+
+**The `/i` flag decided the shape of the fix, and probing decided the `/i`.** The refine was
+`/^https?:\/\//i`, and a flag has no JSON Schema expression — `.source` drops it, so the published
+pattern would have been case-sensitive. Whether that matters depends on whether uppercase is actually
+accepted, which is a question about behaviour rather than about the regex: probed, `HTTPS://x.com` and
+`HtTp://x.com` both parse today. So a lowercase-only pattern would advertise as invalid something the
+server takes — the over-narrow direction V-1476 named as the worse one.
+
+The published pattern is therefore `^[Hh][Tt][Tt][Pp][Ss]?:\/\/`, explicit classes rather than a flag,
+which is what V-1489 settled for `PROFILE_UUID_BODY`. Behaviour verified identical across five probes
+before and after: both cases accepted, `file:///etc/passwd` and `ftp://` refused with the unchanged
+message.
+
+Two pins re-quoted with per-occurrence negatives, and `prettier --check` run on source and pins before
+committing — the V-1498 lesson, where the hook reformatted a chain after the pins were written.
+
+**The population, recounted after a false positive.** V-1498 reported 22 refines, 10 on request schemas.
+That count included matches inside COMMENTS: `billing.ts` carries V-924's note explaining why the tier
+field is an enum "not `AccountTierSchema.refine(...)`", and my scan attributed the word to the schema
+beside it. Stripping comments gives 16 real refines, 6 on request schemas. A census that reads source
+text has to strip comments first — the repo's own guards say so, and I did not.
+
+**The six that remain, sorted as this batch set out to do:**
+
+- `ApiKeyScopeListRequestSchema` — "scopes must not contain duplicates". JSON Schema expresses this as
+  `uniqueItems: true`.
+- `UpdateAccountMeRequestSchema` and `UpdateWebhookRequestSchema` — "at least one field must be
+  provided", expressible as `minProperties: 1`.
+- `MfaChallengeRequestSchema` and `MfaStepUpRequestSchema` — "either `code` or `recovery_code`",
+  expressible as `anyOf` over two `required` lists.
+- `UpdateAccountMeRequestSchema` — a valid IANA timezone name. Genuinely prose-only: it is a lookup
+  against a table, not a shape, and enumerating ~600 zone names into the document would be worse than
+  the sentence.
+
+So five of six are expressible in JSON Schema and none is reachable the way the last two fixes were: they
+are object-level or array-level assertions with no zod primitive to swap in, and `.openapi({...})`
+metadata — the escape hatch that could attach a raw keyword — is used nowhere in `api-types` today.
+Introducing it is a package-wide convention change rather than a field edit, which is a different
+decision and not one to make as a side effect of a sweep. Recorded here as the shape of the remaining
+work rather than started.

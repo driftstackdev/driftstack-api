@@ -103,11 +103,12 @@ describe('W895 Session lifecycle schemas cross-source invariant', () => {
 
   it("CRITICAL NavigateRequestSchema 3 fields — url + timeout_ms (1s-2min) + wait_until (3-value enum, default 'load'). The timeout_ms bounds prevent both too-short false-negatives + too-long DoS.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/sessions.ts'));
-    // W487 — url is http/https-only (z.string().url().refine(/^https?:/)).
+    // W487 — url is http/https-only, expressed as a publishable regex since
+    // V-1499 rather than a refine that never reached the document.
     expect(p).toMatch(
       /NavigateRequestSchema = z\.object\(\{[\s\S]*?url: z[\s\S]*?\.string\(\)[\s\S]*?\.url\(\)/,
     );
-    expect(p).toMatch(/\.refine\(\(u\) => \/\^https\?:\\\/\\\/\/i\.test\(u\)/);
+    expect(p).toMatch(/\.regex\(\/\^\[Hh\]\[Tt\]\[Tt\]\[Pp\]\[Ss\]\?:\\\/\\\/\/, \{/);
     expect(p).toMatch(
       /timeout_ms: z\.number\(\)\.int\(\)\.min\(1000\)\.max\(120_000\)\.optional\(\)/,
     );

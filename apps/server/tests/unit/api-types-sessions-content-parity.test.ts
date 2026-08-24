@@ -132,11 +132,14 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
   });
 
   it('NavigateRequest: url http/https-only (W487 .refine) + timeout_ms 1000..120000 optional + wait_until enum (load|domcontentloaded|networkidle) default load; NavigateResponse: url + status 100..599 + final_url + duration_ms', () => {
-    // W487 — url is z.string().url().refine(/^https?:/) (http/https only); the
+    // W487 — url is http/https-only. V-1499 made that a `regex` so the scheme
+    // allowlist reaches the published document; explicit character classes
+    // because the `/i` flag has no JSON Schema expression and uppercase
+    // schemes are accepted. The
     // schema spans multiple lines now, so assert the field shape + refine + the
     // timeout/wait_until fields piecewise rather than as one frozen block.
     expect(body).toMatch(
-      /export const NavigateRequestSchema = z\.object\(\{[\s\S]*?url: z[\s\S]*?\.string\(\)[\s\S]*?\.url\(\)[\s\S]*?\.refine\(\(u\) => \/\^https\?:\\\/\\\/\/i\.test\(u\)/,
+      /export const NavigateRequestSchema = z\.object\(\{[\s\S]*?url: z[\s\S]*?\.string\(\)[\s\S]*?\.url\(\)[\s\S]*?\.regex\(\/\^\[Hh\]\[Tt\]\[Tt\]\[Pp\]\[Ss\]\?:\\\/\\\/\/, \{/,
     );
     expect(body).toMatch(
       /timeout_ms: z\.number\(\)\.int\(\)\.min\(1000\)\.max\(120_000\)\.optional\(\),\s*\n?\s*\/\/ Wait policy after navigation completes\.\s*\n?\s*wait_until: z\.enum\(\['load', 'domcontentloaded', 'networkidle'\]\)\.default\('load'\),/,

@@ -191,10 +191,21 @@ export const NavigateRequestSchema = z.object({
   // file:// navigates. (Internal-IP/metadata blocklisting is deliberately NOT
   // here: under the locked customer-SOCKS5-egress design, private IPs are the
   // CUSTOMER's own network — a server-side blocklist lands at driver wiring.)
+  // V-1499 — a `regex`, not a `refine`, so the scheme allowlist reaches the
+  // published document. A refine is a runtime predicate JSON Schema cannot
+  // express, so `url` shipped as `{ type: string, format: uri }` and a generated
+  // client had no way to know `file://` is refused — on the very field the
+  // comment above calls a prompt-injection shield.
+  //
+  // Explicit character classes rather than the `/i` flag, which has no JSON
+  // Schema expression: `HTTPS://x.com` and `HtTp://x.com` are both accepted
+  // today (probed), so a lowercase-only pattern would advertise as invalid
+  // something the server takes — the over-narrow direction V-1476 established as
+  // the worse one. Same reasoning as `PROFILE_UUID_BODY` in V-1489.
   url: z
     .string()
     .url()
-    .refine((u) => /^https?:\/\//i.test(u), {
+    .regex(/^[Hh][Tt][Tt][Pp][Ss]?:\/\//, {
       message: 'Only http:// and https:// URLs can be navigated.',
     }),
   // Per-call timeout (ms); default applied server-side.

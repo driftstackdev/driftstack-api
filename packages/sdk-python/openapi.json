@@ -1629,7 +1629,8 @@
         "properties": {
           "url": {
             "type": "string",
-            "format": "uri"
+            "format": "uri",
+            "pattern": "^[Hh][Tt][Tt][Pp][Ss]?:\\/\\/"
           },
           "timeout_ms": {
             "type": "integer",
@@ -6287,7 +6288,8 @@
                 "properties": {
                   "url": {
                     "type": "string",
-                    "format": "uri"
+                    "format": "uri",
+                    "pattern": "^[Hh][Tt][Tt][Pp][Ss]?:\\/\\/"
                   },
                   "timeout_ms": {
                     "type": "integer",
