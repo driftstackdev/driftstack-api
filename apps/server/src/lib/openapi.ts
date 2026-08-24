@@ -377,6 +377,22 @@ function buildRegistry(): OpenAPIRegistry {
       )
       .describe(`Prefixed ${what} id (${prefix}_<uuid>)`);
 
+  /**
+   * V-1483 — path params that are NOT prefixed ids, published from their route.
+   *
+   * The path-validity backstop supplies `minLength: 1, maxLength: 2048` for any
+   * undeclared path parameter, so it masks every shape of contract, not just the
+   * prefixed ids V-1482 covered. These routes each enforce something specific
+   * and published that generic bound instead.
+   */
+  const ownerSecretNameParam = z
+    .string()
+    .min(1)
+    .max(64)
+    .regex(/^[a-z0-9](?:[a-z0-9_]{0,62}[a-z0-9])?$/)
+    .describe('Secret name — lowercase snake_case slug, 1..64 characters.');
+  const uuidPathParam = (what: string) => z.string().uuid().describe(`${what} id (UUID)`);
+
   const rateLimitHeaders = {
     'Retry-After': {
       description:
@@ -2114,6 +2130,9 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['account'],
     security: auth,
     request: {
+      // V-1483 — the route enforces this; the document published the
+      // path-validity backstop's generic 1..2048 bound instead.
+      params: z.object({ id: uuidPathParam('Account proxy') }),
       body: { content: { 'application/json': { schema: AccountProxyInputOpenApi } } },
     },
     responses: {
@@ -2131,6 +2150,11 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Delete a customer proxy (account_owner) (requires `account_owner`)',
     tags: ['account'],
     security: auth,
+    request: {
+      // V-1483 — the route enforces this; the document published the
+      // path-validity backstop's generic 1..2048 bound instead.
+      params: z.object({ id: uuidPathParam('Account proxy') }),
+    },
     responses: {
       404: { description: 'Not found (or owned by another account).', content: problemContent },
       204: { description: 'Deleted.' },
@@ -2149,6 +2173,11 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Test reachability of a customer proxy (account_owner) (requires `account_owner`)',
     tags: ['account'],
     security: auth,
+    request: {
+      // V-1483 — the route enforces this; the document published the
+      // path-validity backstop's generic 1..2048 bound instead.
+      params: z.object({ id: uuidPathParam('Account proxy') }),
+    },
     responses: {
       404: { description: 'Not found (or owned by another account).', content: problemContent },
       200: {
@@ -3391,6 +3420,9 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['admin', 'owner'],
     security: auth,
     request: {
+      // V-1483 — the route enforces this; the document published the
+      // path-validity backstop's generic 1..2048 bound instead.
+      params: z.object({ name: ownerSecretNameParam }),
       body: {
         required: true,
         content: {
@@ -3430,6 +3462,11 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Reveal one platform secret value (owner only; always audited)',
     tags: ['admin', 'owner'],
     security: auth,
+    request: {
+      // V-1483 — the route enforces this; the document published the
+      // path-validity backstop's generic 1..2048 bound instead.
+      params: z.object({ name: ownerSecretNameParam }),
+    },
     responses: {
       200: {
         description: 'Plaintext secret value; this is the sole decrypting API path.',
@@ -3450,6 +3487,11 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Delete an encrypted platform secret (owner only; audited)',
     tags: ['admin', 'owner'],
     security: auth,
+    request: {
+      // V-1483 — the route enforces this; the document published the
+      // path-validity backstop's generic 1..2048 bound instead.
+      params: z.object({ name: ownerSecretNameParam }),
+    },
     responses: {
       204: { description: 'Secret deleted.' },
       ...errors4xx,
@@ -3599,6 +3641,11 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Get an atlas-priority learning event and lifecycle timeline (admin)',
     tags: ['admin', 'atlas-priority'],
     security: auth,
+    request: {
+      // V-1483 — the route enforces this; the document published the
+      // path-validity backstop's generic 1..2048 bound instead.
+      params: z.object({ id: uuidPathParam('Atlas priority event') }),
+    },
     responses: {
       200: {
         description: 'Event detail and computed lifecycle timeline.',

@@ -612,4 +612,89 @@ describe('V-927 a published bound matches the route', () => {
       'a path id is published differently from what its route parses. A pattern here must be the ENFORCED set: too narrow documents a valid id as invalid, too wide promises one the route refuses',
     ).toEqual([]);
   });
+  /**
+   * V-1483 — no registration may lean on the path-validity backstop.
+   *
+   * `registerRoute` supplies `minLength: 1, maxLength: 2048` for any path
+   * parameter a registration does not declare, so that every path-template
+   * expression has the matching parameter OpenAPI 3.1 requires. That backstop
+   * is correct and should stay. What it cannot do is tell a reader whether the
+   * generic bound IS the contract or merely stands in for one.
+   *
+   * That ambiguity is what hid eight real contracts through V-1482 and five
+   * more here: a bound was present, so every census that asked "is this
+   * constrained?" said yes. The arms above catch the prefixed-id shape by
+   * comparing against the route; this one closes the rest of the surface
+   * structurally, by requiring the contract to be STATED — including shapes no
+   * derivation expresses, like the owner-secret slug and the bare-UUID proxy id.
+   *
+   * Exemptions are LISTED keys, never a pattern. V-1481 established why: a
+   * pattern-keyed exemption silently extends cover to whatever grows into it
+   * later, including entries that were once outside and have since been fixed.
+   * A listed key goes stale instead, and the arm below says so.
+   */
+  const BACKSTOP_OK: Record<string, string> = {
+    'DELETE /v1/admin/oauth/clients/{id}':
+      'req.params.id goes straight to the service; no format check',
+    'GET /v1/admin/oauth/clients/{id}': 'same — passed to getClient unvalidated',
+    'POST /v1/admin/oauth/clients/{id}/rotate-secret':
+      'same — passed to revokeClient/rotate unvalidated',
+    'DELETE /v1/admin/validation-schedules/{archetype}': 'request.params.archetype is used raw',
+    'POST /v1/admin/validation-schedules/{archetype}/trigger':
+      'request.params.archetype is used raw',
+    'GET /v1/admin/cost/accounts/{id}':
+      'bareAccountId only strips an acc_ prefix when present; it validates nothing',
+    'GET /v1/admin/usage/accounts/{id}': 'passed straight to getAccount',
+    'GET /v1/sessions/{id}/proxy': 'id is only compared against body.session_id',
+    'POST /v1/sessions/{id}/proxy': 'id is only compared against body.session_id',
+    'GET /v1/agent-sessions/{id}':
+      'sessions.get(id) is a plain equality query — a malformed id is a miss, answered 404',
+    'DELETE /v1/agent-sessions/{id}': 'sessions.get(id) — as above',
+    'POST /v1/agent-sessions/{id}/handback': 'sessions.get(id) — as above',
+    'POST /v1/agent-sessions/{id}/input-event': 'sessions.get(id) — as above',
+    'POST /v1/agent-sessions/{id}/message': 'sessions.get(id) — as above',
+    'POST /v1/agent-sessions/{id}/mode': 'sessions.get(id) — as above',
+    'POST /v1/agent-sessions/{id}/resume': 'sessions.get(id) — as above',
+    'POST /v1/agent-sessions/{id}/takeover': 'sessions.get(id) — as above',
+  };
+
+  it('CRITICAL every registration with a path template declares its parameters, or is written down as a route that validates nothing. The backstop supplies a generic 1..2048 bound for undeclared path params so the document stays valid 3.1 — which means a present bound proves nothing about the contract, and a census asking whether a constraint exists cannot tell a real one from a stand-in. Thirteen real contracts hid behind it.', () => {
+    const source = readFileSync(resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts'), 'utf8');
+    const starts = [...source.matchAll(/registerRoute\(r, \{/g)].map((m) => m.index ?? 0);
+    expect(
+      starts.length,
+      'no registerRoute calls found — the scan broke and this arm would pass over an empty set',
+    ).toBeGreaterThan(150);
+
+    const relying: string[] = [];
+    let templated = 0;
+    for (const [i, start] of starts.entries()) {
+      const block = source.slice(start, starts[i + 1] ?? source.length);
+      const path = /path: '([^']+)'/.exec(block)?.[1];
+      const method = /method: '(\w+)'/.exec(block)?.[1];
+      if (path === undefined || method === undefined || !path.includes('{')) continue;
+      templated += 1;
+      if (/params: /.test(block)) continue;
+      relying.push(`${method.toUpperCase()} ${path}`);
+    }
+
+    expect(
+      templated,
+      'no path-templated registrations found — the path or method capture stopped matching',
+    ).toBeGreaterThan(60);
+
+    const undeclared = relying.filter((k) => !(k in BACKSTOP_OK)).sort();
+    expect(
+      undeclared,
+      'this registration leaves its path parameter undeclared, so the document publishes the backstop bound rather than the contract. Declare request.params, or add it to BACKSTOP_OK with the reason its route validates nothing',
+    ).toEqual([]);
+
+    const stale = Object.keys(BACKSTOP_OK)
+      .filter((k) => !relying.includes(k))
+      .sort();
+    expect(
+      stale,
+      'this exemption no longer names a registration that relies on the backstop — it was declared or removed, so drop the entry rather than leaving it to cover something else',
+    ).toEqual([]);
+  });
 });

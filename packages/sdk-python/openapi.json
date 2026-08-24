@@ -18482,10 +18482,11 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
+              "format": "uuid",
+              "description": "Account proxy id (UUID)"
             },
             "required": true,
+            "description": "Account proxy id (UUID)",
             "name": "id",
             "in": "path"
           }
@@ -18667,10 +18668,11 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
+              "format": "uuid",
+              "description": "Account proxy id (UUID)"
             },
             "required": true,
+            "description": "Account proxy id (UUID)",
             "name": "id",
             "in": "path"
           }
@@ -18838,10 +18840,11 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
+              "format": "uuid",
+              "description": "Account proxy id (UUID)"
             },
             "required": true,
+            "description": "Account proxy id (UUID)",
             "name": "id",
             "in": "path"
           }
@@ -26835,9 +26838,12 @@
             "schema": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 2048
+              "maxLength": 64,
+              "pattern": "^[a-z0-9](?:[a-z0-9_]{0,62}[a-z0-9])?$",
+              "description": "Secret name — lowercase snake_case slug, 1..64 characters."
             },
             "required": true,
+            "description": "Secret name — lowercase snake_case slug, 1..64 characters.",
             "name": "name",
             "in": "path"
           }
@@ -27069,9 +27075,12 @@
             "schema": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 2048
+              "maxLength": 64,
+              "pattern": "^[a-z0-9](?:[a-z0-9_]{0,62}[a-z0-9])?$",
+              "description": "Secret name — lowercase snake_case slug, 1..64 characters."
             },
             "required": true,
+            "description": "Secret name — lowercase snake_case slug, 1..64 characters.",
             "name": "name",
             "in": "path"
           }
@@ -27240,9 +27249,12 @@
             "schema": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 2048
+              "maxLength": 64,
+              "pattern": "^[a-z0-9](?:[a-z0-9_]{0,62}[a-z0-9])?$",
+              "description": "Secret name — lowercase snake_case slug, 1..64 characters."
             },
             "required": true,
+            "description": "Secret name — lowercase snake_case slug, 1..64 characters.",
             "name": "name",
             "in": "path"
           }
@@ -28526,10 +28538,11 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
+              "format": "uuid",
+              "description": "Atlas priority event id (UUID)"
             },
             "required": true,
+            "description": "Atlas priority event id (UUID)",
             "name": "id",
             "in": "path"
           }

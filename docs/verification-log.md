@@ -12383,3 +12383,53 @@ passes its path segment straight to a lookup, and most `agent-sessions.ts` handl
 There is no enforced pattern to publish because there is no pattern being enforced. Publishing one would
 document as invalid an id the server accepts — the over-narrow direction, which V-1476 established as
 the worse error.
+
+## V-1483 — the rest of the backstop surface, closed structurally rather than one shape at a time
+
+V-1482 fixed eight registrations that leaned on the path-validity backstop while enforcing a prefixed
+id. The backstop does not care what shape a contract is, so the same hiding place held others:
+
+| registrations                                                           | route enforces                                                | published |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------- | --------- |
+| `PUT` / `DELETE /v1/admin/owner/secrets/{name}`, `POST …/{name}/reveal` | `min(1).max(64)` + `/^[a-z0-9](?:[a-z0-9_]{0,62}[a-z0-9])?$/` | `1..2048` |
+| `PUT` / `DELETE /v1/account/me/proxies/{id}`, `POST …/{id}/test`        | `UuidSchema` — a bare UUID, 400 otherwise                     | `1..2048` |
+| `GET /v1/admin/atlas-priority/event/{id}`                               | `z.string().uuid()`                                           | `1..2048` |
+
+None is a prefixed id, so the derived arm from V-1482 could not have expressed any of them. The
+owner-secret name is a snake_case slug; the other two are bare UUIDs, published now as `format: uuid`.
+
+**Why this one is structural.** Three surfaces of census (body, query, path) all asked the same
+question — does this parameter carry a constraint? — and the backstop answers yes for everything. So
+the instrument was blind to an entire class by construction, and each new shape would have needed its
+own derivation. The arm added here asks a different question that has no shapes in it: **does the
+registration STATE its contract?** Every path-templated registration must declare `request.params` or
+appear in `BACKSTOP_OK` with the reason its route validates nothing. That covers the slug, the UUID,
+and whatever shape comes next, without anyone extending a matcher.
+
+The backstop itself is right and stays. OpenAPI 3.1 requires every path-template expression to have a
+matching parameter, and a registration that declares none would otherwise emit an invalid operation.
+The defect was never the fallback; it was routes relying on it while enforcing something specific, and
+the fallback being indistinguishable from a decision.
+
+**Seventeen exemptions, each traced to its handler**, not to the absence of a schema — the mistake
+V-1476 recorded. `oauth/clients/{id}` passes the segment straight to the service; `validation-schedules
+/{archetype}` uses `request.params.archetype` raw; `cost/accounts/{id}` calls `bareAccountId`, which
+only strips an `acc_` prefix when present and validates nothing; `sessions/{id}/proxy` compares the id
+against `body.session_id` and nothing else; the agent-session handlers call `sessions.get(id)`, a plain
+equality query, so a malformed id is a miss answered 404 rather than a 400.
+
+Listed keys, never a pattern. V-1481 established the reason: a pattern-keyed exemption silently extends
+cover to whatever grows into it later, including entries that have since been fixed. A listed key goes
+stale, and the staleness arm says so.
+
+**A mistake worth recording, because the first attempt shipped nothing.** My first patch located each
+registration by searching for its path literal — and two methods share a path string, so
+`s.index(...)` returned the FIRST match both times and injected `params:` twice into one block.
+TypeScript caught it as TS1117 (duplicate property), and the published document showed the tell: `POST
+/v1/account/me/proxies/{id}/test` had its pattern while `DELETE /v1/account/me/proxies/{id}` still
+carried the backstop bound. Restored byte-identical from a scratchpad snapshot, regenerated the spec to
+match, and redid it by iterating registration BLOCKS bottom-up so each edit is anchored to one
+registration and earlier offsets stay valid. A path is not a key; a (method, path) pair is.
+
+Two mutations. Deleting a declared `params:` reds the arm and names the registration. Adding an
+exemption for a route that does not exist reds the staleness half. Both restored byte-identical.
