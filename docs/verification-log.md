@@ -8786,3 +8786,45 @@ No source change. Both length guards are correct as they stand, and tightening `
 the true base64url set would be a behavioural no-op that makes `:82` genuinely dead — a design call,
 not a defect fix. What was missing was the record of why the line is load-bearing, so that is what
 this adds.
+
+### V-1401 — three probe guards that were dark because every test injects a dialler
+
+`services/proxy-connectivity-probe.test.ts` is a thorough file: 25 arms across SOCKS5, HTTP
+CONNECT, and connect-level failures, standing up a real local TCP server to play the proxy. Every one
+of them passes its own `dial`. That is what makes them deterministic, and it is also what left the
+production dialler entirely unexecuted — `defaultDial`'s whole body was in the never-executed set.
+
+Its post-connect SSRF re-check is the part that matters. The comment above it says why it exists:
+
+> a customer host that is a DOMAIN resolving to an internal IP slips the literal-host guard, but the
+> connected peer address is the real resolved IP — reject it so the probe never reaches Driftstack's
+> internal network.
+
+The literal-host guard runs before DNS, so it cannot see where a name resolves; `socket.remoteAddress`
+after connect is the only place the real address is visible, and `account_proxies.host` is customer
+supplied. Nothing had ever run it. Building the probe with **no** `dial` and pointing it at the local
+fake server exercises it: the peer is 127.0.0.1, `classifyUnsafeHost` returns non-null, and the dial
+rejects with `unreachable` + "proxy host resolved to internal address". The arm asserts that detail
+rather than just the reason, because a generic dial failure also produces `unreachable` — without the
+detail the arm would pass on any connection that merely did not work.
+
+Two more were dark for the same injected-dialler reason, both on the reader:
+
+- **The 256 KiB buffer cap** (`SocketReader`, the `errored ??=` path and the `throw` at `:612`). The
+  far end chooses how much to send and whether to ever send a delimiter, so `readUntil` has no natural
+  end. A proxy that writes 300 KiB with no CRLFCRLF is cut off with `egress_blocked` + "exceeded probe
+  buffer cap". The arm asserts the detail: with the cap gone the flood is simply buffered until the
+  6 s deadline and the result is `timeout`, which is a green-looking wrong answer.
+- **The reason split at `:391`** — `status === 0 ? 'unreachable' : 'egress_blocked'`. `status` is 0
+  when no three-digit code could be parsed from the CONNECT reply, i.e. nothing on that port is
+  speaking HTTP. The existing arms cover 200, 407 and 502 and so never reach it. A reply of
+  `SSH-2.0-OpenSSH_9.6` — the host/port pointed at an SSH daemon — now pins `unreachable`. The
+  distinction is customer-facing: `a-reason-an-sdk-branches-on-must-be-documented` exists because the
+  SDKs branch on these values.
+
+Each mutation reds exactly one arm and nothing else: defeating the peer-address check (`:158` → `if
+(false)`), collapsing the reason split (`:391` → the constant), and removing the cap (`:545` → `if
+(false)`). 25 arms → 28; no new file, so no ratchet movement.
+
+The general shape is worth keeping: **a dependency injected for determinism is a dependency nothing
+tests.** The default is what production runs, and here the default carried a security guard.

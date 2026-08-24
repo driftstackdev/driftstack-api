@@ -159,6 +159,9 @@ afterEach(async () => {
  *  internet). */
 async function fakeProxy(handler: (sock: Socket) => void): Promise<{
   dial: (host: string, port: number, timeoutMs: number) => Promise<Socket>;
+  /** The listening port, for the arms that must exercise the DEFAULT dialler
+   *  rather than an injected stub (see the last describe block). */
+  port: number;
 }> {
   const server = createServer((sock) => {
     liveSockets.add(sock);
@@ -174,7 +177,7 @@ async function fakeProxy(handler: (sock: Socket) => void): Promise<{
       const s = connect({ host: '127.0.0.1', port }, () => resolve(s));
       s.on('error', reject);
     });
-  return { dial };
+  return { dial, port };
 }
 
 const EGRESS_204 = 'HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n';
@@ -540,5 +543,70 @@ describe('ProxyConnectivityProbe — connect-level failures (rejecting dial stub
     // The post-connect window is BUDGET - DIAL_DELAY (≈80ms), not a fresh BUDGET.
     // Total must be well under 2× BUDGET; generous ceiling for CI jitter.
     expect(elapsed).toBeLessThan(BUDGET + DIAL_DELAY);
+  });
+});
+
+// V-1401 — three guards on this probe that no injected dialler can reach.
+//
+// Every arm above supplies its own `dial`, which is what makes them deterministic — and
+// also means the PRODUCTION dialler has never run: coverage put the whole body of
+// `defaultDial` in the never-executed set, including its post-connect SSRF re-check. Two
+// more guards were dark for the same reason, both on the reader that consumes bytes from
+// a customer-supplied proxy: the 256 KiB buffer cap, and the reason split that decides
+// whether an unparseable CONNECT reply reads as `unreachable` or `egress_blocked`.
+//
+// The proxy host here is customer-supplied (`account_proxies.host`), so all three sit on
+// attacker-influenced input.
+describe('ProxyConnectivityProbe — guards an injected dialler cannot reach', () => {
+  const HTTP_PROXY: ProbeProxyDescriptor = { protocol: 'http', host: '127.0.0.1', port: 0 };
+
+  it('CRITICAL the DEFAULT dialler refuses a proxy whose CONNECTED PEER is an internal address. The literal-host guard runs before DNS, so a customer host that is a DOMAIN resolving inward slips it; socket.remoteAddress after connect is the real resolved IP, and this is the only place that sees it. Every other arm in this file injects a dialler and therefore skips it entirely.', async () => {
+    // No `dial` dep — this is the dialler bootstrap uses.
+    const { port } = await fakeProxy(() => {
+      /* never speaks: the refusal must happen at dial time, before any protocol byte */
+    });
+    const probe = new ProxyConnectivityProbe({ targetUrl: TARGET, timeoutMs: 2_000 });
+
+    const res = await probe.probe({ ...HTTP_PROXY, port });
+
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('unreachable');
+    expect(
+      res.detail,
+      'the refusal must be the peer-address guard and not a generic dial failure — otherwise this arm passes on any connection that simply did not work',
+    ).toMatch(/resolved to internal address/);
+  });
+
+  it('CRITICAL a proxy that answers CONNECT with a NON-HTTP head is reported `unreachable`, not `egress_blocked`. The two mean different things to the customer — nothing is speaking HTTP on that port, versus a working proxy refusing the destination — and the SDKs branch on the reason.', async () => {
+    const { dial } = await fakeProxy((sock) => {
+      // e.g. the host/port was pointed at an SSH daemon rather than a proxy.
+      sock.on('data', () => sock.write('SSH-2.0-OpenSSH_9.6\r\n\r\n'));
+    });
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET });
+
+    const res = await probe.probe(HTTP_PROXY);
+
+    expect(res.ok).toBe(false);
+    expect(
+      res.reason,
+      'no three-digit status could be parsed, so there is no evidence a proxy answered at all',
+    ).toBe('unreachable');
+  });
+
+  it('CRITICAL a proxy that floods the probe with unframed bytes is cut off at the buffer cap rather than buffered without bound. The probe dials a customer-supplied host, so the far end chooses how much to send and whether to ever send a delimiter; without the cap a single probe grows until the process does.', async () => {
+    const { dial } = await fakeProxy((sock) => {
+      // No CRLFCRLF anywhere, so `readUntil` can never complete on its own.
+      sock.on('data', () => sock.write(Buffer.alloc(300 * 1024, 0x41)));
+    });
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET });
+
+    const res = await probe.probe(HTTP_PROXY);
+
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('egress_blocked');
+    expect(
+      res.detail,
+      'the cap must be what ended it — a deadline expiry here would mean the flood was buffered for the whole budget, which is the thing the cap exists to prevent',
+    ).toMatch(/exceeded probe buffer cap/);
   });
 });
