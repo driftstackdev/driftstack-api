@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { verifyWebhookSignature } from '../../src/webhook-signature.js';
 
 const SECRET = 'whsec_test_supersecret';
@@ -281,5 +281,63 @@ describe('verifyWebhookSignature', () => {
       });
       expect(ok).toBe(true);
     });
+  });
+});
+
+// V-1408 — two paths in the SDK's verifier that nothing exercised. This is code the
+// CUSTOMER runs, in their own runtime, to decide whether a webhook is genuine, so both
+// failure directions are theirs to live with: rejecting a real delivery, or accepting a
+// forged one.
+describe('verifyWebhookSignature — the header may arrive as an array, and crypto may be absent', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('CRITICAL accepts a header delivered as a string ARRAY, which is how a duplicated `driftstack-signature` reaches a Node handler. The input type has always said `string | string[]`; nothing had ever passed the array form, and treating it as a plain string makes it fail the `typeof` check and reject a genuine delivery — a customer-visible outage with a correct signature on the wire.', async () => {
+    const now = Date.now();
+    const t = Math.floor(now / 1000);
+    const body = '{"event":"session.completed"}';
+    const header = sign(body, t);
+
+    await expect(
+      verifyWebhookSignature({ body, header: [header], secret: SECRET, nowMs: now }),
+    ).resolves.toBe(true);
+    await expect(
+      verifyWebhookSignature({ body, header: [header, header], secret: SECRET, nowMs: now }),
+    ).resolves.toBe(true);
+  });
+
+  it('CRITICAL reads the FIRST value of the array. A proxy that duplicates the header repeats the genuine one; anything appended after it is the part an attacker could influence, so first-wins is the safe reading and the one that must not drift to last-wins.', async () => {
+    const now = Date.now();
+    const t = Math.floor(now / 1000);
+    const body = '{"event":"session.completed"}';
+    const genuine = sign(body, t);
+    const forged = sign(body, t, 'whsec_attacker_secret');
+
+    await expect(
+      verifyWebhookSignature({ body, header: [genuine, forged], secret: SECRET, nowMs: now }),
+    ).resolves.toBe(true);
+    await expect(
+      verifyWebhookSignature({ body, header: [forged, genuine], secret: SECRET, nowMs: now }),
+      'a forged value first must not be rescued by a genuine one after it',
+    ).resolves.toBe(false);
+  });
+
+  it('CRITICAL fails CLOSED when the runtime has no WebCrypto. The SDK ships into browsers and older Node, and the probe for `crypto.subtle` is deliberate — but an absent primitive must mean "cannot verify, reject", never a throw the customer catches into an accept-by-default, and never a silent true.', async () => {
+    const now = Date.now();
+    const t = Math.floor(now / 1000);
+    const body = '{"event":"session.completed"}';
+    const header = sign(body, t);
+
+    vi.stubGlobal('crypto', undefined);
+    await expect(
+      verifyWebhookSignature({ body, header, secret: SECRET, nowMs: now }),
+    ).resolves.toBe(false);
+
+    vi.stubGlobal('crypto', {});
+    await expect(
+      verifyWebhookSignature({ body, header, secret: SECRET, nowMs: now }),
+      'a crypto object without subtle is the same situation and must answer the same way',
+    ).resolves.toBe(false);
   });
 });

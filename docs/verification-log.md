@@ -9082,3 +9082,49 @@ Both directions are proven. Adding `packages/webhook-delivery/src/**/*.ts` to th
 anti-rot arm (the entry now overstates the blind spot); renaming an entry so a real package falls off
 the list reds both arms. A new package cannot join the unmeasured set quietly, which is the failure
 this file exists to prevent: not measured and not run must never look the same from a green.
+
+### V-1408 — the same guard class in the SDK, found only because V-1407 opened the door
+
+V-1403 swept the constant-time-compare class across `apps/server/src` and closed it. That sweep could
+not see `packages/`, for the reason V-1407 records: the coverage artifact never spanned them. With the
+packages measured for the first time, the same instrument was re-run over them — and the SDK's own
+webhook verifier came back with five never-taken refusals. This is the "verify scope repo-wide, not
+the named file" rule paying out: a class closed in one tree was still open in another.
+
+`packages/sdk-typescript/src/webhook-signature.ts` is code the **customer** runs, in their runtime, to
+decide whether a webhook is genuine. Both failure directions are theirs: rejecting a real delivery, or
+accepting a forged one. Three arms added.
+
+**The header may arrive as an array.** `verifySingleHeader` takes `string | string[]` and reads
+`rawHeader[0]`; the array branch had never been taken, though a duplicated `driftstack-signature` is
+exactly how one reaches a Node handler. Without that branch the value fails the `typeof` check and a
+genuine delivery is rejected — an outage with a correct signature on the wire. The second arm pins
+that the **first** element wins, because a proxy that duplicates a header repeats the genuine one and
+anything appended after it is the part an attacker could influence.
+
+The two mutations separate exactly, which is the point of writing them as two arms:
+
+| mutation                                                | result                                 |
+| ------------------------------------------------------- | -------------------------------------- |
+| treat `rawHeader` as a plain string                     | **2 failed** — both array arms         |
+| read `rawHeader[rawHeader.length - 1]` instead of `[0]` | **1 failed** — only the first-wins arm |
+
+So the second arm pins the security-relevant half rather than merely "arrays are handled".
+
+**A runtime without WebCrypto must fail closed.** `getSubtleCrypto` probes `globalThis.crypto` and
+`verifySingleHeader` returns false when it is absent — the SDK ships into browsers and older Node, so
+the probe is deliberate. Nothing exercised it. Flipping that `return false` to `return true` reds the
+new arm; both the missing-`crypto` and the `crypto`-without-`subtle` shapes are covered, since they
+are the same situation and must answer the same way.
+
+Two recorded as unreachable, not covered:
+
+- **`:193`** — `if (ab.length !== bb.length) return false` inside `constantTimeHexEq`. Line 189 already
+  refused unequal _string_ lengths, and `hexToBytes` returns exactly half its input, so the two byte
+  arrays cannot differ in length by the time control reaches 193.
+- **`:170`** — the odd-length-hex refusal in `hexToBytes`. Its only two callers are lines 190 and 191,
+  both after 189, and the left operand is always the 64-character `expectedHex`, so an odd length
+  cannot arrive.
+
+Both are defence in depth behind a guard that already fires, in the same shape as V-1403's `:95` and
+`services/oauth.ts:741`. No arms written for either.
