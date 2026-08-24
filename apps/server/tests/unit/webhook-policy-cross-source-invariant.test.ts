@@ -114,7 +114,7 @@ describe('W871 Webhook policy cross-source invariant', () => {
 
   it("CRITICAL WebhookEndpointSchema has prev_secret_prefix + rotation_grace_expires_at fields, both nullable. The 'null when no rotation in flight' framing matches the V-359 24h dual-signing model — when grace expires, prev_secret_prefix should be cleared.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
-    expect(p).toMatch(/prev_secret_prefix: z\.string\(\)\.nullable\(\)/);
+    expect(p).toMatch(/prev_secret_prefix: z\s*\n?\s*\.string\(\)\s*\n?\s*\.nullable\(\)/);
     expect(p).toMatch(/rotation_grace_expires_at: Iso8601Schema\.nullable\(\)/);
     expect(p).toMatch(/V-359 — populated only during the 24h rotation grace period/);
   });

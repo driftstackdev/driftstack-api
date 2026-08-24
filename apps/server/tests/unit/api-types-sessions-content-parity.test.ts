@@ -249,7 +249,7 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
       /const SearchDurationMsSchema = z\.number\(\)\.int\(\)\.min\(0\)\.max\(600_000\);/,
     );
     expect(body).toMatch(
-      /const SearchCompletedResponseSchema = z[\s\S]*?submitted: z\.boolean\(\),[\s\S]*?query_truncated: z\.literal\(false\),[\s\S]*?results_visible: z\.boolean\(\)\.optional\(\),[\s\S]*?duration_ms: SearchDurationMsSchema,[\s\S]*?\.strict\(\);/,
+      /const SearchCompletedResponseSchema = z[\s\S]*?submitted: z\s*\n?\s*\.boolean\(\)\s*\n?\s*\.describe\([\s\S]*?query_truncated: z\.literal\(false\),[\s\S]*?results_visible: z\s*\n?\s*\.boolean\(\)\s*\n?\s*\.optional\(\)\s*\n?\s*\.describe\([\s\S]*?duration_ms: SearchDurationMsSchema,[\s\S]*?\.strict\(\);/,
     );
     expect(body).toMatch(
       /const SearchTruncatedResponseSchema = z[\s\S]*?submitted: z\.literal\(false\),[\s\S]*?query_truncated: z\.literal\(true\),[\s\S]*?duration_ms: SearchDurationMsSchema,[\s\S]*?\.strict\(\);/,

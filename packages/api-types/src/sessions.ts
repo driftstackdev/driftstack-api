@@ -462,12 +462,21 @@ const SearchCompletedResponseSchema = z
   .object({
     /** Whether the caller-requested submission occurred. A complete search
      *  may intentionally leave this false when `submit:false` was requested. */
-    submitted: z.boolean(),
+    submitted: z
+      .boolean()
+      .describe(
+        'Whether the search was submitted. False is not a failure here — it is what you get when the request asked for `submit: false`.',
+      ),
     query_truncated: z.literal(false),
     /** Present only when `wait_for_results_selector` was given: whether that
      *  selector became visible before the wait timed out (timeout → false, not
      *  an error). */
-    results_visible: z.boolean().optional(),
+    results_visible: z
+      .boolean()
+      .optional()
+      .describe(
+        'Present only when the request supplied `wait_for_results_selector`. False means the selector did not appear before the wait timed out, which is a result rather than an error.',
+      ),
     /** Producer-observed duration under the activation-held 600-second fence. */
     duration_ms: SearchDurationMsSchema,
   })

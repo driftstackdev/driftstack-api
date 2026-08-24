@@ -970,7 +970,8 @@
                     ]
                   },
                   "retryable": {
-                    "type": "boolean"
+                    "type": "boolean",
+                    "description": "True only when replaying the same step automatically is safe. False means do not auto-replay: the request may need correcting, or the prior action may have succeeded without reporting it."
                   }
                 },
                 "required": ["category", "retryable"]
@@ -1999,14 +2000,16 @@
             "type": "object",
             "properties": {
               "submitted": {
-                "type": "boolean"
+                "type": "boolean",
+                "description": "Whether the search was submitted. False is not a failure here — it is what you get when the request asked for `submit: false`."
               },
               "query_truncated": {
                 "type": "boolean",
                 "enum": [false]
               },
               "results_visible": {
-                "type": "boolean"
+                "type": "boolean",
+                "description": "Present only when the request supplied `wait_for_results_selector`. False means the selector did not appear before the wait timed out, which is a result rather than an error."
               },
               "duration_ms": {
                 "type": "integer",
@@ -2271,12 +2274,13 @@
             "type": "string"
           },
           "prev_secret_prefix": {
-            "type": ["string", "null"]
+            "type": ["string", "null"],
+            "description": "First chars of the prior signing secret, present only while a rotation is in its grace period. Null means no rotation is in flight, not that no prior secret ever existed."
           },
           "rotation_grace_expires_at": {
             "type": ["string", "null"],
             "format": "date-time",
-            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+            "description": "When dual-signing stops. Until this timestamp every delivery is signed with both secrets. Null when no rotation is in flight."
           },
           "events": {
             "type": "array",
@@ -2408,12 +2412,13 @@
             "type": "string"
           },
           "prev_secret_prefix": {
-            "type": ["string", "null"]
+            "type": ["string", "null"],
+            "description": "First chars of the prior signing secret, present only while a rotation is in its grace period. Null means no rotation is in flight, not that no prior secret ever existed."
           },
           "rotation_grace_expires_at": {
             "type": ["string", "null"],
             "format": "date-time",
-            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+            "description": "When dual-signing stops. Until this timestamp every delivery is signed with both secrets. Null when no rotation is in flight."
           },
           "events": {
             "type": "array",
@@ -4209,7 +4214,8 @@
                               ]
                             },
                             "retryable": {
-                              "type": "boolean"
+                              "type": "boolean",
+                              "description": "True only when replaying the same step automatically is safe. False means do not auto-replay: the request may need correcting, or the prior action may have succeeded without reporting it."
                             }
                           },
                           "required": ["category", "retryable"]
@@ -5337,7 +5343,8 @@
                           ]
                         },
                         "retryable": {
-                          "type": "boolean"
+                          "type": "boolean",
+                          "description": "True only when replaying the same step automatically is safe. False means do not auto-replay: the request may need correcting, or the prior action may have succeeded without reporting it."
                         }
                       },
                       "required": ["category", "retryable"]
@@ -8609,14 +8616,16 @@
                       "type": "object",
                       "properties": {
                         "submitted": {
-                          "type": "boolean"
+                          "type": "boolean",
+                          "description": "Whether the search was submitted. False is not a failure here — it is what you get when the request asked for `submit: false`."
                         },
                         "query_truncated": {
                           "type": "boolean",
                           "enum": [false]
                         },
                         "results_visible": {
-                          "type": "boolean"
+                          "type": "boolean",
+                          "description": "Present only when the request supplied `wait_for_results_selector`. False means the selector did not appear before the wait timed out, which is a result rather than an error."
                         },
                         "duration_ms": {
                           "type": "integer",
@@ -48791,12 +48800,13 @@
                       "type": "string"
                     },
                     "prev_secret_prefix": {
-                      "type": ["string", "null"]
+                      "type": ["string", "null"],
+                      "description": "First chars of the prior signing secret, present only while a rotation is in its grace period. Null means no rotation is in flight, not that no prior secret ever existed."
                     },
                     "rotation_grace_expires_at": {
                       "type": ["string", "null"],
                       "format": "date-time",
-                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                      "description": "When dual-signing stops. Until this timestamp every delivery is signed with both secrets. Null when no rotation is in flight."
                     },
                     "events": {
                       "type": "array",
@@ -49078,12 +49088,13 @@
                             "type": "string"
                           },
                           "prev_secret_prefix": {
-                            "type": ["string", "null"]
+                            "type": ["string", "null"],
+                            "description": "First chars of the prior signing secret, present only while a rotation is in its grace period. Null means no rotation is in flight, not that no prior secret ever existed."
                           },
                           "rotation_grace_expires_at": {
                             "type": ["string", "null"],
                             "format": "date-time",
-                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                            "description": "When dual-signing stops. Until this timestamp every delivery is signed with both secrets. Null when no rotation is in flight."
                           },
                           "events": {
                             "type": "array",
@@ -49353,12 +49364,13 @@
                       "type": "string"
                     },
                     "prev_secret_prefix": {
-                      "type": ["string", "null"]
+                      "type": ["string", "null"],
+                      "description": "First chars of the prior signing secret, present only while a rotation is in its grace period. Null means no rotation is in flight, not that no prior secret ever existed."
                     },
                     "rotation_grace_expires_at": {
                       "type": ["string", "null"],
                       "format": "date-time",
-                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                      "description": "When dual-signing stops. Until this timestamp every delivery is signed with both secrets. Null when no rotation is in flight."
                     },
                     "events": {
                       "type": "array",
@@ -49696,12 +49708,13 @@
                       "type": "string"
                     },
                     "prev_secret_prefix": {
-                      "type": ["string", "null"]
+                      "type": ["string", "null"],
+                      "description": "First chars of the prior signing secret, present only while a rotation is in its grace period. Null means no rotation is in flight, not that no prior secret ever existed."
                     },
                     "rotation_grace_expires_at": {
                       "type": ["string", "null"],
                       "format": "date-time",
-                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                      "description": "When dual-signing stops. Until this timestamp every delivery is signed with both secrets. Null when no rotation is in flight."
                     },
                     "events": {
                       "type": "array",
@@ -50629,19 +50642,24 @@
                   "type": "object",
                   "properties": {
                     "id": {
-                      "type": "string"
+                      "type": "string",
+                      "pattern": "^whk_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
                     },
                     "secret": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Fresh plaintext signing secret. Returned ONCE."
                     },
                     "secret_prefix": {
                       "type": "string"
                     },
                     "prev_secret_prefix": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "First chars of the prior secret, kept active during grace."
                     },
                     "grace_expires_at": {
-                      "type": "string"
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "Until this timestamp, every outbound delivery is signed with both the new + old secret so the customer can roll their verifier across infra without dropped deliveries."
                     }
                   },
                   "required": [

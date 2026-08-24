@@ -98,6 +98,12 @@ describe('agent failure diagnosis cross-source invariant', () => {
     );
   });
 
+  it('V-1503 retryable carries its meaning in a .describe(), not only in a comment. The arm above accepts the prose anywhere in the file, so a jsdoc block satisfies it — and a jsdoc block does not survive into JSON Schema. Every customer reading the published AgentSession error_event was seeing a bare boolean named `retryable` and guessing which way it pointed, while the sentence explaining it sat two lines above in source.', () => {
+    expect(API_TYPES).toMatch(
+      /retryable: z\s*\n?\s*\.boolean\(\)\s*\n?\s*\.describe\(\s*\n?\s*'True only when replaying the same step automatically is safe\. False means do not auto-replay: the request may need correcting, or the prior action may have succeeded without reporting it\.',\s*\n?\s*\),/,
+    );
+  });
+
   it('forbids the retired element-not-found retry example for ambiguous interact failures', () => {
     expect(DOCS).not.toContain('try a broader selector or wait for it to appear');
     expect(DOCS).not.toContain(

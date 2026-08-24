@@ -108,7 +108,11 @@ export const FailureDiagnosisSchema = z.object({
   /** True only when automatically replaying the same step is considered safe.
    *  False means never auto-replay: the request may need correction, or the
    *  prior action's outcome may be unknown and require state inspection. */
-  retryable: z.boolean(),
+  retryable: z
+    .boolean()
+    .describe(
+      'True only when replaying the same step automatically is safe. False means do not auto-replay: the request may need correcting, or the prior action may have succeeded without reporting it.',
+    ),
 });
 export type FailureDiagnosis = z.infer<typeof FailureDiagnosisSchema>;
 

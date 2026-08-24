@@ -91,10 +91,17 @@ export const WebhookEndpointSchema = z.object({
   secret_prefix: z.string(),
   /** V-359 — populated only during the 24h rotation grace period.
    *  Null when no rotation in flight. */
-  prev_secret_prefix: z.string().nullable(),
+  prev_secret_prefix: z
+    .string()
+    .nullable()
+    .describe(
+      'First chars of the prior signing secret, present only while a rotation is in its grace period. Null means no rotation is in flight, not that no prior secret ever existed.',
+    ),
   /** V-359 — when prev_secret is active, this is the timestamp at
    *  which dual-signing stops. Null when no rotation in flight. */
-  rotation_grace_expires_at: Iso8601Schema.nullable(),
+  rotation_grace_expires_at: Iso8601Schema.nullable().describe(
+    'When dual-signing stops. Until this timestamp every delivery is signed with both secrets. Null when no rotation is in flight.',
+  ),
   events: z.array(SubscribableWebhookEventTypeSchema),
   description: z.string().nullable(),
   active: z.boolean(),

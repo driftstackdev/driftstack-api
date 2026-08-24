@@ -78,10 +78,10 @@ describe('W434.C packages/api-types/src/webhooks.ts content parity', () => {
     expect(body).toMatch(/url: z\.string\(\)\.url\(\),/);
     expect(body).toMatch(/secret_prefix: z\.string\(\),/);
     expect(body).toMatch(
-      /\/\*\* V-359 — populated only during the 24h rotation grace period\.\s*\n?\s*\*\s*Null when no rotation in flight\. \*\/\s*\n?\s*prev_secret_prefix: z\.string\(\)\.nullable\(\),/,
+      /\/\*\* V-359 — populated only during the 24h rotation grace period\.\s*\n?\s*\*\s*Null when no rotation in flight\. \*\/\s*\n?\s*prev_secret_prefix: z\s*\n?\s*\.string\(\)\s*\n?\s*\.nullable\(\)\s*\n?\s*\.describe\(\s*\n?\s*'First chars of the prior signing secret, present only while a rotation is in its grace period\. Null means no rotation is in flight, not that no prior secret ever existed\.',\s*\n?\s*\),/,
     );
     expect(body).toMatch(
-      /\/\*\* V-359 — when prev_secret is active, this is the timestamp at\s*\n?\s*\*\s*which dual-signing stops\. Null when no rotation in flight\. \*\/\s*\n?\s*rotation_grace_expires_at: Iso8601Schema\.nullable\(\),/,
+      /\/\*\* V-359 — when prev_secret is active, this is the timestamp at\s*\n?\s*\*\s*which dual-signing stops\. Null when no rotation in flight\. \*\/\s*\n?\s*rotation_grace_expires_at: Iso8601Schema\.nullable\(\)\.describe\(\s*\n?\s*'When dual-signing stops\. Until this timestamp every delivery is signed with both secrets\. Null when no rotation is in flight\.',\s*\n?\s*\),/,
     );
     expect(body).toMatch(/events: z\.array\(SubscribableWebhookEventTypeSchema\),/);
     expect(body).toMatch(/consecutive_failures: z\.number\(\)\.int\(\)\.nonnegative\(\),/);

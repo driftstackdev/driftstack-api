@@ -58,11 +58,21 @@ function expectStrictSearchUnion(value: JsonObject): void {
 
   const completed = byTruncated.get(false);
   expect(completed).toBeDefined();
+  // V-1503 — the published description is quoted rather than allowed for. Both
+  // fields read backwards to a caller who only has the type: `submitted: false`
+  // looks like a failure when it is the documented answer to `submit: false`, and
+  // `results_visible: false` looks like an error when it means the selector never
+  // appeared. A deep-equal against `{ type: 'boolean' }` froze exactly the state
+  // where that sentence was missing, so the shape it asserts includes it now.
   expect(object(completed?.properties.submitted, 'completed submitted')).toEqual({
     type: 'boolean',
+    description:
+      'Whether the search was submitted. False is not a failure here — it is what you get when the request asked for `submit: false`.',
   });
   expect(object(completed?.properties.results_visible, 'results_visible')).toEqual({
     type: 'boolean',
+    description:
+      'Present only when the request supplied `wait_for_results_selector`. False means the selector did not appear before the wait timed out, which is a result rather than an error.',
   });
 
   const truncated = byTruncated.get(true);

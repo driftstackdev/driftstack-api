@@ -129,6 +129,7 @@ import {
   WaitRequestSchema,
   WaitResponseSchema,
   WebhookDeliverySchema,
+  RotateWebhookSecretResponseSchema,
   WebhookEndpointSchema,
   UpdateWebhookRequestSchema,
   SessionStateSchema,
@@ -7088,13 +7089,6 @@ function buildRegistry(): OpenAPIRegistry {
       ...errors4xx,
     },
   });
-  const RotateSecretResponseOpenApi = z.object({
-    id: z.string(),
-    secret: z.string(),
-    secret_prefix: z.string(),
-    prev_secret_prefix: z.string(),
-    grace_expires_at: z.string(),
-  });
   registerRoute(r, {
     method: 'post',
     path: '/v1/webhooks/{id}/rotate-secret',
@@ -7108,7 +7102,7 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'Fresh plaintext shown ONCE; prev secret stays valid for 24h.',
         content: {
           'application/json': {
-            schema: RotateSecretResponseOpenApi,
+            schema: RotateWebhookSecretResponseSchema,
             example: {
               id: 'whk_2b1c3d4e-5f60-7a8b-9c0d-1e2f3a4b5c6d',
               secret: 'whsec_v1_exampleexampleexampleexamplerotate',

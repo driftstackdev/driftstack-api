@@ -13527,3 +13527,85 @@ pins before committing.
   carry an opaque return that could make a keyset partial — both `return await accountsAdmin.getAccount(…)`
   _inside_ a `withAudit(async () => {…})` callback rather than the route's own answer. Recorded here as
   a verified-safe extension rather than taken, since it changes a threshold without a defect behind it.
+
+## V-1503 — the sentence that explains the field, and the hand-copy that dropped four of them
+
+V-1502 found a field whose caveat lived in a `//` comment instead of a `.describe()`, so it never reached
+the document. That is a class, not an incident. Censusing api-types for properties whose preceding
+comment carries an availability or behaviour caveat — _only_, _never_, _absent_, _omitted_, _deprecated_ —
+and which declare no `.describe()`, returns 27 candidates.
+
+Most are self-explanatory or admin-internal and describing them would be noise. The ones that matter share
+a quality worth naming: **a customer will actively misread the value without the sentence.** Five qualify,
+and each already had the sentence written, in the construct that does not publish:
+
+- `submitted` — false is not a failure; it is what you get when the request said `submit: false`.
+- `results_visible` — present only when `wait_for_results_selector` was supplied, and false means the
+  selector never appeared, which is a result rather than an error.
+- `prev_secret_prefix` — null means no rotation is in flight, **not** that no prior secret ever existed.
+- `rotation_grace_expires_at` — when dual-signing stops.
+- `retryable` — false means do not auto-replay, because the prior action may have succeeded without
+  saying so.
+
+A customer integrating webhook rotation or a retry loop reads a bare nullable string and a bare boolean
+and guesses. Three of the five point the opposite way to the natural guess.
+
+### The hand-copy, which is the more serious half
+
+Checking coverage after the fix showed `prev_secret_prefix` described on 6 of 7 published occurrences.
+The holdout is `POST /v1/webhooks/{id}/rotate-secret` — and that one had **never** needed this fix,
+because `RotateWebhookSecretResponseSchema` in api-types has carried three `.describe()` calls all along,
+including the full dual-signing explanation.
+
+The document was not reading that schema. `openapi.ts` declared a hand-written
+`RotateSecretResponseOpenApi` beside it, and the copy lost four things at once:
+
+```
+id                 WebhookEndpointIdSchema  →  z.string()   — dropped the ^whk_<uuid>$ pattern
+grace_expires_at   Iso8601Schema            →  z.string()   — dropped format: date-time
+secret             .describe(…)             →  z.string()   — dropped the "returned ONCE" warning
+prev_secret_prefix .describe(…)             →  z.string()   — dropped the grace-window explanation
+```
+
+This is V-1479 and V-1500's finding a third time — a mirror silently dropping what the schema carries —
+and the worst instance of it, because the rotate-secret response is the single place a customer learns
+how the 24-hour grace window works. The registration now uses the api-types schema directly and the
+document publishes all four.
+
+**A guard was freezing prose that never shipped.** `api-types-webhooks-content-parity` pins those three
+describes, quoting the dual-signing sentence in full. It passed every run. It was pinning the source
+declaration while the document served a hand copy with none of it — a pin proves text exists, never that
+it reaches an artifact anyone reads.
+
+### The mutation caught my own pin going slack, again
+
+Reverting `results_visible` left the re-quoted content-parity pin GREEN. The separators I used —
+`z\s*\n?\s*\.boolean\(\)\s*\n?\s*\.optional\(\)` — match the single-line form too, since `\s*` matches
+nothing. So the pin was re-quoted into something that no longer distinguished the change it exists to
+freeze. Same shape as V-1502's lazy-match fault one batch earlier: **a pin edited to accommodate a change
+tends to accommodate its absence too.** Both separators now require the `.describe(` that follows, and
+both reverts red.
+
+`retryable` had no contiguous pin at all — the existing arm matches its prose anywhere in the file, so a
+jsdoc block satisfies it, which is precisely how the field kept its explanation out of the document while
+looking guarded. It has one now, in the file that already governs its semantics.
+
+All five occurrences reverted individually; each reds its own pin. Sources restored byte-identical from
+scratchpad snapshots.
+
+**Left deliberately, and measured rather than assumed.** `submitted` publishes on 8 operations and is
+described on 2: the login union's two variants and the search-truncated variant declare it as
+`z.literal(true)` / `z.literal(false)`, which are separate declarations from the one fixed here. Same for
+`retryable` at 3 of 11 — the remainder come from `AgentSession.error_event`, another declaration. Those
+are the same class and a larger edit; recorded as the shape of the remaining work rather than half-done.
+
+**One pin needed updating rather than re-quoting, and its first negative was a false green.**
+`openapi-session-search-response-truth` deep-equals the published `submitted` and `results_visible`
+against `{ type: 'boolean' }`, so it froze exactly the state where the sentence was missing. It now
+quotes both published descriptions.
+
+Proving it took two attempts. Reverting the source describe left the arm green, because
+`generateOpenApiSpec()` imports `@driftstack/api-types` from **dist** — editing `src` alone changes
+nothing the guard can see, and the frozen snapshot was equally untouched. The honest negative reverts the
+source, rebuilds api-types, re-dumps the spec, and only then runs: it reds. A guard that reads a built
+artifact has to be mutated through the build, or the mutation proves the opposite of what it looks like.
