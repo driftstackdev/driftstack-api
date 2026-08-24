@@ -10990,3 +10990,47 @@ declared public. My first draft of that line said 8 and 5; measuring gave 9 and 
 
 Full suite green with the source change: 3067 files, 30853 tests, exit 0. No new test file; the mint
 guard goes 2 `it` declarations to 3. No ratchet movement.
+
+## V-1454 — the owner tier is a declared blind spot, and it is larger than the note says
+
+`no-response-leaks-a-credential` sweeps 2xx bodies across two auth fixtures for credential-shaped leaf
+keys, with a non-vacuity arm, an allowlist-staleness arm, and an assertion that the one-time secrets do
+not come back from a read. It is a good guard, and it names its own boundary: `/v1/admin/owner/*` sits
+behind `requireOwner`, which admits one account by email and fails closed, so those routes answer 403
+to both fixtures and contribute nothing to the scan.
+
+The boundary is real. The count in the note is not: it says "those three endpoints", and there are
+**seven** — four on `secrets` (GET list, PUT, POST reveal, DELETE) plus `platform-status` and two on
+pricing. Six paths in the served spec, since PUT and DELETE share one.
+
+**Nothing was leaking.** Verified by reading the handlers: `platform-status` returns
+`{ features: … }` where every member is a `deps.x !== undefined` activation boolean — six of them, no
+values — and `pricing` returns `tier` plus `monthly_cents`. The secrets routes are the sensitive ones
+and `admin-owner-secrets` covers them behaviourally, including the taint rule that a value never
+appears in a list response or an audit payload. So this is a guard extension, not a fix.
+
+**What was uncovered is the next owner endpoint.** A new route on the one tier whose purpose is
+handling platform secrets would be scanned by nothing. The added arm reads the served OpenAPI document
+rather than a response, so it needs no owner identity: every property a `/v1/admin/owner/*` operation
+DECLARES is checked against the same `CREDENTIAL_LEAF` pattern the runtime sweep uses.
+
+**Its first draft was vacuous, and the census floor did not catch that.** The floor counted PATHS —
+six, comfortably over its threshold — while the walk read **zero properties** out of them. Renaming the
+owner pricing response's `monthly_cents` to `client_secret` left the arm green. The cause: schemas
+registered with `.openapi('Name')` are emitted as a component and referenced by `$ref`, so walking the
+response subtree reaches a reference and stops. The unnamed secrets schemas are inlined, which is why
+the spec dump looked fine and hid the problem.
+
+Fixed by resolving `$ref` into `components.schemas` with a visited set, and by moving the floor onto
+the extracted KEYS rather than the paths — the quantity the arm actually depends on. Both spec shapes
+are now proven separately: a `$ref`'d field (pricing) and an inline one (platform-status) each red when
+renamed to a credential shape, and breaking `$ref` resolution reds the key floor.
+
+Stated in the file rather than left implicit: a spec arm sees DECLARATIONS, so a handler returning an
+undeclared field is invisible to it. It supplements the runtime sweep rather than replacing it.
+Extending `buildTestApp` with an owner identity remains the stronger fix and was not done here, because
+that helper is shared by hundreds of tests and the tier's one sensitive resource already has
+behavioural coverage.
+
+Full suite green: 3067 files, 30854 tests, exit 0. No new test file; 4 `it` declarations to 5. No
+ratchet movement.

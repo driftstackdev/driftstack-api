@@ -44,6 +44,10 @@ let ids: Record<string, string> = {};
 
 interface SpecDocument {
   paths?: Record<string, Record<string, Operation>>;
+  // V-1454 — schemas registered with `.openapi('Name')` are emitted as a
+  // component and referenced by `$ref`, so a walk of the response subtree alone
+  // sees no properties for them. Needed to resolve those.
+  components?: { schemas?: Record<string, unknown> };
 }
 interface Operation {
   responses?: Record<string, { content?: Record<string, unknown> }>;
@@ -69,6 +73,13 @@ interface Created {
  */
 const CREDENTIAL_LEAF =
   /^(.*_)?(secret|password|passwd|private_key|privatekey|key_hash|hashed|hash|encrypted|ciphertext|dek|salt|nonce|totp|mfa_secret|client_secret|refresh_token|access_token|token|jwt|credential|credentials|signature|pem|seed|otp|signing_key|plaintext)$/i;
+
+/**
+ * Owner-tier leaves that are the POINT of their operation, one per operation.
+ * Kept separate from the runtime allowlist below because these are checked
+ * against the spec, not against a body that was actually returned.
+ */
+const ALLOWED_OWNER_LEAVES: Record<string, string> = {};
 
 /**
  * Fields that legitimately appear, keyed by `METHOD /path` then leaf name.
@@ -451,6 +462,97 @@ describe('no successful response leaks a credential', () => {
         `${url} must not return a credential on a read`,
       ).toEqual([]);
     }
+  });
+
+  // V-1454 — the owner tier, which the runtime sweep above cannot reach.
+  //
+  // `requireOwner` admits one account by email and fails closed, so every
+  // `/v1/admin/owner/*` route answers 403 to both fixtures and contributes
+  // nothing to the scan. The header calls that a real boundary, and it is — but
+  // it is a boundary around SEVEN operations, not the three it says: four on
+  // `secrets` plus platform-status and two on pricing.
+  //
+  // Verified by hand at the time of writing, and all three non-secrets responses
+  // are credential-free by TYPE: platform-status returns six booleans, each a
+  // `deps.x !== undefined` activation flag, and pricing returns tier plus
+  // monthly_cents. The secrets routes are covered behaviourally by
+  // `admin-owner-secrets`, including the taint rule that a value never appears in
+  // a list response or an audit payload.
+  //
+  // What nothing covered is the NEXT owner endpoint. This arm reads the served
+  // OpenAPI document rather than a response, so it needs no owner identity: every
+  // property a `/v1/admin/owner/*` operation DECLARES is checked against the same
+  // leaf pattern the runtime sweep uses.
+  //
+  // Its limit, stated because it is easy to over-read: the spec is a declaration,
+  // so a handler returning an UNDECLARED field is invisible here. That is why this
+  // supplements the runtime sweep rather than replacing it, and why extending
+  // buildTestApp with an owner identity is still the stronger fix — it was not
+  // done here because that helper is shared by hundreds of tests.
+  it('CRITICAL no /v1/admin/owner/* operation declares a credential-shaped response field. The owner tier answers 403 to every fixture, so nothing else in this file scans it, and it is the one tier whose whole purpose is handling platform secrets.', () => {
+    const ownerPaths = Object.keys(spec.paths ?? {}).filter((p) =>
+      p.startsWith('/v1/admin/owner/'),
+    );
+    expect(
+      ownerPaths.length,
+      'no /v1/admin/owner/* paths found in the served spec — this arm would pass over an empty set',
+    ).toBeGreaterThanOrEqual(4);
+
+    // Follows `$ref` into components. Without that this walk reads zero
+    // properties for any schema registered with `.openapi('Name')` — measured:
+    // renaming the owner pricing response's `monthly_cents` to `client_secret`
+    // left the first draft of this arm GREEN, because that schema is a named
+    // component and the response carries only a reference to it.
+    const seenRefs = new Set<string>();
+    const declaredKeys = (node: unknown, out: Set<string>): void => {
+      if (node === null || typeof node !== 'object') return;
+      const rec = node as Record<string, unknown>;
+
+      const ref = rec['$ref'];
+      if (typeof ref === 'string' && ref.startsWith('#/components/schemas/')) {
+        const name = ref.slice('#/components/schemas/'.length);
+        if (!seenRefs.has(name)) {
+          seenRefs.add(name);
+          declaredKeys(spec.components?.schemas?.[name], out);
+        }
+        return;
+      }
+
+      const props = rec['properties'];
+      if (props !== null && typeof props === 'object') {
+        for (const k of Object.keys(props)) out.add(k);
+      }
+      for (const v of Object.values(rec)) declaredKeys(v, out);
+    };
+
+    const offenders: string[] = [];
+    const everyKey = new Set<string>();
+    for (const path of ownerPaths) {
+      for (const [method, op] of Object.entries(spec.paths?.[path] ?? {})) {
+        const keys = new Set<string>();
+        declaredKeys(op.responses, keys);
+        for (const k of keys) everyKey.add(k);
+        for (const k of keys) {
+          if (
+            CREDENTIAL_LEAF.test(k) &&
+            ALLOWED_OWNER_LEAVES[`${method.toUpperCase()} ${path}`] !== k
+          ) {
+            offenders.push(`${method.toUpperCase()} ${path}: ${k}`);
+          }
+        }
+      }
+    }
+    // Counting PATHS is not enough: the first draft found all six and read zero
+    // properties out of them, so it reported a clean tier while seeing nothing.
+    expect(
+      everyKey.size,
+      'no response properties extracted from any owner operation — the walk stopped resolving and this arm would pass over an empty set',
+    ).toBeGreaterThan(10);
+
+    expect(
+      offenders.sort(),
+      'owner-tier operation(s) declaring a credential-shaped field, on the one tier no runtime fixture reaches:',
+    ).toEqual([]);
   });
 
   it('CRITICAL every allowlist entry still describes a field that really appears. An entry whose field is gone exempts nothing and reads as reviewed.', () => {
