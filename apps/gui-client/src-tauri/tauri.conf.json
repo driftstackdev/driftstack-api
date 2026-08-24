@@ -86,6 +86,9 @@
       "nsis": {
         "installerIcon": "icons/icon.ico",
         "uninstallerIcon": "icons/icon.ico",
+        "headerImage": "installer/nsis-header.bmp",
+        "sidebarImage": "installer/nsis-sidebar.bmp",
+        "uninstallerHeaderImage": "installer/nsis-header.bmp",
         "installMode": "currentUser",
         "languages": ["English"],
         "displayLanguageSelector": false,

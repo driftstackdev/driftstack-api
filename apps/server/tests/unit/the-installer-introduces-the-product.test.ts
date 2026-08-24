@@ -11,9 +11,14 @@
 // blank state is the easy state to fall back into, and nothing else in the
 // suite reads this file's bundle block.
 //
-// NOT pinned, deliberately: nsis.headerImage / nsis.sidebarImage / dmg.background
-// are real BMP and PNG artwork that does not exist yet. Asserting them now would
-// be asserting a file into existence.
+// The NSIS artwork IS now pinned, and pinned by SHAPE rather than by path,
+// because the failure that matters is not a missing file — it is a present file
+// in the wrong format. NSIS accepts only 24-bit BOTTOM-UP BMP, and `sips` on
+// macOS emits 32-bit TOP-DOWN ("164 x -314 x 32"), which builds fine locally and
+// fails the Windows job. So these arms read the actual BMP headers.
+//
+// dmg.background stays unpinned — no artwork for it yet, and asserting a path
+// would be asserting a file into existence.
 
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -65,6 +70,30 @@ describe('the installer introduces the product', () => {
   it('carries its own icon through the installer and uninstaller', () => {
     expect(b.windows?.nsis?.installerIcon).toBe('icons/icon.ico');
     expect(b.windows?.nsis?.uninstallerIcon).toBe('icons/icon.ico');
+  });
+
+  it('CRITICAL the NSIS artwork is 24-bit BOTTOM-UP BMP. A 32-bit or top-down file is what every macOS converter produces by default, passes every check that only asks whether the file exists, and fails the Windows build.', () => {
+    const nsis = b.windows?.nsis ?? {};
+    for (const key of ['headerImage', 'sidebarImage', 'uninstallerHeaderImage'] as const) {
+      const rel = nsis[key] as string | undefined;
+      expect(rel, `${key} is wired`).toBeDefined();
+      const buf = readFileSync(resolve(REPO_ROOT, 'apps/gui-client/src-tauri', rel!));
+      expect(buf.subarray(0, 2).toString('ascii'), `${key} is a BMP`).toBe('BM');
+      // BITMAPINFOHEADER: height at 22 (signed — NEGATIVE means top-down, which
+      // NSIS rejects), bit depth at 28.
+      expect(buf.readInt32LE(22), `${key} height is positive (bottom-up)`).toBeGreaterThan(0);
+      expect(buf.readUInt16LE(28), `${key} is 24-bit`).toBe(24);
+    }
+  });
+
+  it('the artwork is the sizes NSIS actually draws — 150x57 header, 164x314 sidebar', () => {
+    const nsis = b.windows?.nsis ?? {};
+    const dims = (rel: string): [number, number] => {
+      const buf = readFileSync(resolve(REPO_ROOT, 'apps/gui-client/src-tauri', rel));
+      return [buf.readInt32LE(18), buf.readInt32LE(22)];
+    };
+    expect(dims(nsis.headerImage as string)).toEqual([150, 57]);
+    expect(dims(nsis.sidebarImage as string)).toEqual([164, 314]);
   });
 
   it('lays the DMG out so drag-to-Applications reads as an instruction', () => {
