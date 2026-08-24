@@ -13305,3 +13305,47 @@ metadata — the escape hatch that could attach a raw keyword — is used nowher
 Introducing it is a package-wide convention change rather than a field edit, which is a different
 decision and not one to make as a side effect of a sweep. Recorded here as the shape of the remaining
 work rather than started.
+
+## V-1500 — six list endpoints picked a page size and did not publish it
+
+Thirteen list routes apply `.default(50)` to `limit`, so omitting the parameter returns fifty rows. Six
+published `{ type: integer, minimum: 1, maximum: 100 }` and nothing else. A caller reading that cannot
+tell what they get, and a generated client leaving the parameter unset is choosing 50 rather than
+"everything" — which is the reading the published schema invites.
+
+**The split was mechanical, not arbitrary.** Every endpoint that publishes its default reaches the
+document through the api-types schema itself — `/v1/profiles` uses `PaginationQuerySchema` directly, and
+the default comes with it. Every endpoint that lost it goes through a hand-written mirror in
+`openapi.ts`. That is V-1479's finding one keyword over: the mirrors drop what the schema carries, and
+they drop it silently because there is nothing on the other side to compare against.
+
+Fixed: `/v1/account/audit-log`, `/v1/admin/accounts`, `/v1/admin/api-keys`,
+`/v1/admin/rate-limit-overrides`, `/v1/admin/sessions`, `/v1/recipes`.
+
+**Three censuses, and only the third was worth acting on.** The first keyed zod defaults by FIELD NAME
+across the whole tree and reported 22 — the collision trap this session has hit repeatedly, since one
+schema declaring `limit: ….default(50)` makes every `limit` anywhere look defaulted. Scoping to each
+route's own file gave 4. Extending to schemas declared in `api-types` rather than in the route file — the
+under-report the second scan introduced — gave 6, which per-route verification confirmed one at a time.
+
+22 → 4 → 6 is the useful shape: the first number was wrong by over-matching, the second by
+under-matching, and neither error announced itself. Only enumerating the twenty published `limit`
+parameters and tracing each to its declaration settled it.
+
+**Seven endpoints correctly publish no default**, and each is exempted with the declaration that shows
+it: `atlas-priority/queue` and `admin/status-subscribers` declare `.optional()` with no default in their
+route files, `ListIncidentsQuerySchema` has none (covering both the admin and public incident feeds),
+and the three crypto rails declare `.optional()` alone. Traced rather than inferred from absence — the
+mistake V-1476 recorded, where "no zod default visible" was read as "no default applied".
+
+**Two negatives measured on the way, so the family is not re-swept.** Extending V-1498's insight to the
+other zod constructs that fail to reach JSON Schema found nothing: no `superRefine`, no `preprocess`,
+one `transform` on an internal route, and all three `.catch()` hits were Promise catches rather than
+zod's — a fire-and-forget touch and an SSE cleanup. All sixteen `z.coerce` sites are query parameters,
+where coercion is correct because query values arrive as strings. Separately, the five hand-validated
+request bodies from V-1478 all publish their constraints correctly: `byok` publishes `minLength: 1`
+matching its hand check, and `profiles/{id}/transfer` publishes the account-id pattern.
+
+Two mutations. Stripping the new default from `/v1/admin/sessions` reds the arm naming it; adding one to
+an exempt endpoint reds the staleness half, so an exemption cannot outlive the condition that earned it.
+`prettier --check` run on source and pins before committing, per V-1498.

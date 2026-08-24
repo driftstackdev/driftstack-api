@@ -2549,7 +2549,11 @@ function buildRegistry(): OpenAPIRegistry {
 
   // V-216 — customer-facing audit log.
   const ListAccountAuditQueryOpenApi = z.object({
-    limit: z.number().int().min(1).max(100).optional(),
+    // V-1500 — `.default(50)` because the ROUTE applies one and the document
+    // did not say so. Seven sibling list endpoints already publish it, all of
+    // them by using the api-types schema directly; the hand-written mirrors are
+    // the ones that lost it.
+    limit: z.number().int().min(1).max(100).default(50),
     cursor: PaginationQuerySchema.shape.cursor,
     // V-1479 — `ListAccountAuditLogQuerySchema.action` is
     // `AccountAuditActionSchema`, the same 46-value enum the response publishes
@@ -2793,7 +2797,11 @@ function buildRegistry(): OpenAPIRegistry {
 
   // Cross-account rate-limit overrides list (admin)
   const ListAdminOverridesQueryOpenApi = z.object({
-    limit: z.number().int().min(1).max(100).optional(),
+    // V-1500 — `.default(50)` because the ROUTE applies one and the document
+    // did not say so. Seven sibling list endpoints already publish it, all of
+    // them by using the api-types schema directly; the hand-written mirrors are
+    // the ones that lost it.
+    limit: z.number().int().min(1).max(100).default(50),
     cursor: PaginationQuerySchema.shape.cursor,
     // V-1479 — the route enforces `.min(1).max(100)`; each of these three
     // mirrors sits beside a `limit` that publishes its own bounds.
@@ -2822,7 +2830,11 @@ function buildRegistry(): OpenAPIRegistry {
 
   // Cross-account API keys list (admin)
   const ListAdminApiKeysQueryOpenApi = z.object({
-    limit: z.number().int().min(1).max(100).optional(),
+    // V-1500 — `.default(50)` because the ROUTE applies one and the document
+    // did not say so. Seven sibling list endpoints already publish it, all of
+    // them by using the api-types schema directly; the hand-written mirrors are
+    // the ones that lost it.
+    limit: z.number().int().min(1).max(100).default(50),
     cursor: PaginationQuerySchema.shape.cursor,
     // V-1479 — the route enforces `.min(1).max(100)`; each of these three
     // mirrors sits beside a `limit` that publishes its own bounds.
@@ -2851,7 +2863,11 @@ function buildRegistry(): OpenAPIRegistry {
 
   // Cross-account sessions list (admin)
   const ListAdminSessionsQueryOpenApi = z.object({
-    limit: z.number().int().min(1).max(100).optional(),
+    // V-1500 — `.default(50)` because the ROUTE applies one and the document
+    // did not say so. Seven sibling list endpoints already publish it, all of
+    // them by using the api-types schema directly; the hand-written mirrors are
+    // the ones that lost it.
+    limit: z.number().int().min(1).max(100).default(50),
     cursor: PaginationQuerySchema.shape.cursor,
     status: z.enum(['creating', 'ready', 'busy', 'destroyed', 'errored']).optional(),
     // V-1479 — the route enforces `.min(1).max(100)`; each of these three
@@ -2952,7 +2968,8 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       query: z.object({
-        limit: z.number().int().min(1).max(100).optional(),
+        // V-1500 — the route applies .default(50); this mirror dropped it.
+        limit: z.number().int().min(1).max(100).default(50),
         cursor: PaginationQuerySchema.shape.cursor,
         status: z.enum(['active', 'suspended', 'deleted']).optional(),
         // V-1479 — `ListAdminAccountsQuerySchema.tier` is `AccountTierSchema`.
@@ -5472,7 +5489,8 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       query: z.object({
-        limit: z.coerce.number().int().min(1).max(100).optional(),
+        // V-1500 — the route applies .default(50); this mirror dropped it.
+        limit: z.coerce.number().int().min(1).max(100).default(50),
         cursor: PaginationQuerySchema.shape.cursor,
       }),
     },

@@ -781,4 +781,73 @@ describe('V-927 a published bound matches the route', () => {
       'a published id pattern disagrees with the canonical PrefixedId schema on a probe value. api-types is the declaration the SDKs and shared schemas are built on',
     ).toEqual([]);
   });
+  /**
+   * V-1500 — a page size the server picks and the document does not mention.
+   *
+   * Thirteen list endpoints apply `.default(50)` to `limit`, so omitting the
+   * parameter returns fifty rows. Six of them published `{ type: integer,
+   * minimum: 1, maximum: 100 }` and nothing else, and a caller reading that has
+   * no way to know what they get — nor that a generated client leaving the
+   * parameter unset is choosing 50 rather than "all".
+   *
+   * The split was not random. Every endpoint that publishes its default reaches
+   * the document through the api-types schema itself (`/v1/profiles` uses
+   * `PaginationQuerySchema` directly); every endpoint that lost it goes through a
+   * hand-written mirror in `openapi.ts`. Same mechanism as V-1479's dropped query
+   * constraints, one keyword over.
+   *
+   * The exemptions are the endpoints whose ROUTE applies no default, so the
+   * document is right to be silent — each traced to its declaration rather than
+   * inferred from the absence.
+   */
+  const LIMIT_WITHOUT_DEFAULT: Record<string, string> = {
+    'GET /v1/admin/atlas-priority/queue':
+      'internal-atlas-priority.ts declares `limit: z.coerce.number().int().min(1).max(1000).optional()` — no default',
+    'GET /v1/admin/status-subscribers':
+      'admin-status-subscribers.ts declares `.max(200).optional()` — no default',
+    'GET /v1/admin/incidents': 'ListIncidentsQuerySchema declares no default',
+    'GET /v1/status/incidents': 'the same schema, public feed',
+    'GET /v1/admin/crypto-orders': 'crypto-orders.ts declares `.optional()` with no default',
+    'GET /v1/admin/crypto-orders.csv': 'the same schema, csv rail',
+    'GET /v1/billing/crypto-orders': 'the customer rail, `.optional()` with no default',
+  };
+
+  it('CRITICAL a list endpoint that picks a page size says which one. Thirteen routes default `limit` to 50, so a caller omitting it gets fifty rows; six published the bounds and not the default, which makes an unset parameter look like "no limit" rather than a choice the server made for you.', () => {
+    const spec = JSON.parse(readFileSync(SPEC, 'utf8')) as Record<string, never>;
+    const paths = (spec as unknown as Record<string, Record<string, never>>)['paths'] ?? {};
+    const silent: string[] = [];
+    let seen = 0;
+
+    for (const [path, ops] of Object.entries(paths)) {
+      for (const [method, op] of Object.entries(ops)) {
+        const parameters = (op as Record<string, unknown>)?.['parameters'];
+        if (!Array.isArray(parameters)) continue;
+        for (const raw of parameters as Array<Record<string, unknown>>) {
+          if (raw['in'] !== 'query' || raw['name'] !== 'limit') continue;
+          seen += 1;
+          const schema = (raw['schema'] ?? {}) as Record<string, unknown>;
+          if (!('default' in schema)) silent.push(`${method.toUpperCase()} ${path}`);
+        }
+      }
+    }
+
+    expect(
+      seen,
+      'no published `limit` query parameter was read — the parameter walk stopped matching and this arm would pass having seen nothing',
+    ).toBeGreaterThanOrEqual(18);
+
+    const undeclared = silent.filter((k) => !(k in LIMIT_WITHOUT_DEFAULT)).sort();
+    expect(
+      undeclared,
+      'this endpoint publishes `limit` bounds without the default its route applies, so an omitted parameter reads as unlimited. Publish the default, or add it here with the declaration that shows the route has none',
+    ).toEqual([]);
+
+    const stale = Object.keys(LIMIT_WITHOUT_DEFAULT)
+      .filter((k) => !silent.includes(k))
+      .sort();
+    expect(
+      stale,
+      'this exemption names an endpoint that now publishes a default — drop the entry rather than leaving it to cover the next one',
+    ).toEqual([]);
+  });
 });
