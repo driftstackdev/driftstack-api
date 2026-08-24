@@ -117,6 +117,33 @@ describe('V-487 — verifyNowpaymentsSignature', () => {
     expect(verifyNowpaymentsSignature({ body: raw, secret: SECRET, signature: sig })).toBe(true);
   });
 
+  // V-1404 — two canonicalisation arms that had never run. Both expected signatures
+  // below are written out BY HAND rather than built with this file's local `sortKeys`
+  // mirror: that helper is a faithful copy of the source's, so signing through it would
+  // make the arm agree with the implementation even if the implementation were wrong.
+  it('CRITICAL sorts the keys of an object nested inside an ARRAY. The recursion into array elements is a separate branch from the object one already covered here, and NowPayments signs the fully-sorted form — so if array elements were left alone, a genuine IPN carrying a list would fail verification and a real payment notification would be dropped as forged.', () => {
+    const payload = { items: [{ z: 1, a: 2 }], marker: 'x' };
+    const canonical = '{"items":[{"a":2,"z":1}],"marker":"x"}';
+    const signature = createHmac('sha512', SECRET).update(canonical).digest('hex');
+
+    expect(
+      verifyNowpaymentsSignature({
+        body: JSON.stringify(payload),
+        secret: SECRET,
+        signature,
+      }),
+    ).toBe(true);
+  });
+
+  it('CRITICAL a body that parses as JSON but is NOT an object falls back to the RAW body, not a re-serialised one. The existing fallback arm sends something that does not parse at all, so it never reaches this decision — and re-serialising here would change the bytes (whitespace, and the ordering of keys inside array elements) and reject a correctly-signed notification.', () => {
+    // Top-level array carrying an object with unsorted keys, plus whitespace: both
+    // survive only if the verifier signs exactly what arrived.
+    const raw = '[{"z":1,"a":2}, 7]';
+    const signature = createHmac('sha512', SECRET).update(raw).digest('hex');
+
+    expect(verifyNowpaymentsSignature({ body: raw, secret: SECRET, signature })).toBe(true);
+  });
+
   it('accepts a Buffer body', () => {
     const payload = { payment_id: 'p_1' };
     const { signature } = sign(payload);

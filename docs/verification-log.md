@@ -8918,3 +8918,38 @@ Two negatives recorded rather than covered:
 Also confirmed dead, as in `oauth-pkce`: the `try/catch` around the base64url decode at `:100-104`.
 Replacing the catch body with a `throw` leaves all 17 arms green, because `Buffer.from(s, 'base64')`
 does not throw. Left in place; noted so nobody reads it as live error handling.
+
+### V-1404 — the IPN canonicaliser's array branch, and what "falls back to raw" actually means
+
+`lib/nowpayments-signing.ts` canonicalises an IPN body by sorting keys at every level before the
+HMAC, because NowPayments signs the sorted form. Two branches of that had never been taken, and the
+existing arms explain why each was missed:
+
+- **`sortKeys` recursing into an array (`:95`).** The file already has `canonicalises nested object
+keys` — but its fixture nests an object inside an _object_. Nothing had ever put one inside an
+  **array**, which is a different branch. If array elements were passed through unsorted, a genuine
+  IPN carrying a list would canonicalise differently from what NowPayments signed and be rejected as
+  forged — a real payment notification dropped, which fails in the expensive direction.
+- **A body that parses as JSON but is not an object (`:87`).** The existing `falls back to raw-body
+HMAC when body is non-JSON` arm sends `a=1&b=2&c=3`, which does not parse at all, so it exits at the
+  `JSON.parse` catch one branch earlier and never reaches this decision. The fixture here is a
+  top-level array — `[{"z":1,"a":2}, 7]` — carrying both unsorted keys and whitespace, so it passes
+  only if the verifier signs exactly the bytes that arrived.
+
+Both expected signatures are written out **by hand** rather than produced through this file's local
+`sortKeys` mirror. That mirror is a faithful copy of the source's, so signing through it would make
+the arm agree with the implementation even where the implementation is wrong — the trap recorded in
+`a-faithful-test-double-hides-the-real-artifact`. Hand-writing the canonical string is what makes the
+mutations below meaningful.
+
+Each mutation reds exactly one arm: `:95` → `return value` (stop recursing) reds the array arm;
+`:87` → `if (false)` reds the fallback arm. 10 arms → 12, no new file.
+
+Recorded as a negative from the same pass: **only the array shape distinguishes `:87`.** A JSON
+scalar, string, or `null` body re-serialises to the identical bytes (`42` → `42`, `"hello"` →
+`"hello"`, `null` → `null`), so removing the guard changes nothing for them and an arm built on one
+would pass either way. They are inside the guard's condition but not observable through it, and no
+arm was written for them.
+
+Note the length guard at `:68` in this same file was already exercised (its refusal arm fires), which
+is why it did not appear in V-1403's list of never-fired length guards.
