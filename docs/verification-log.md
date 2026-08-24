@@ -8700,3 +8700,42 @@ What is true and worth writing down: a corrupt stored OpenVPN secret resolves to
 launch, and that outcome is enforced redundantly — at write time, at decrypt time (twice), and by the
 wire schema before the config leaves the server. `:183` is the fourth of those, and unreachable while
 the others stand.
+
+### V-1399 — the frame gate's structural refusals are redundant; the control run proves the file is not
+
+`services/fleet-inbound-frame-gate.ts` carried the largest untaken-refusal cluster left in the branch
+artifact: seven `return null` arms in `readLargeDownloadResultHeader`, the scanner whose whole reason
+for existing is to reject an ~85 MiB frame _without_ the Buffer→string→JSON.parse→Zod allocation an
+unsolicited frame would otherwise force. Its existing arms cover only string-level damage — an
+unterminated string, a raw control byte, a bad escape, nesting past the depth cap — and every one of
+them still supplies a well-formed JSON object with quoted keys and a colon. Nothing had ever handed
+the scanner a frame that was structurally wrong.
+
+Nine such frames were written: not an object, an array, a bare word, empty, a key with no colon, a
+comma where the colon belongs, and a correlation key given a number, an object, and a bare null. All
+nine are refused. **None of them is attributable.** Five mutations, each removing one guard on its
+own, left all twenty tests green:
+
+| removed                                                                          | line |
+| -------------------------------------------------------------------------------- | ---- |
+| `if (raw[cursor] !== 0x7b) return null` — must start with `{`                    | 153  |
+| `if (raw[cursor] !== 0x3a) return null` — colon after the key                    | 175  |
+| `if (raw[valueStart] !== 0x22) return null` — correlation value must be a string | 185  |
+| `type !== 'downloadData'` in the final acceptance gate                           | 208  |
+| `cursor !== raw.length` — no trailing bytes                                      | 207  |
+
+The function is a recogniser that returns a value on exactly one shape, so every malformed frame
+reaches `null` down several paths at once and removing any single one changes no observable output.
+
+The difference from V-1398 is the control, and it is worth stating because it is what stops this from
+being a claim about the file's quality: the arms already in the file **are** load-bearing. Removing
+the control-byte check reds `a raw control byte inside a SKIPPED string is rejected`; removing the
+depth cap reds `nesting past the depth cap is rejected` — one failure each, precisely targeted. The
+existing arms name guards that are the sole refuser for their input; the nine I wrote name guards that
+are not. So the file is not outcome-pinned by design, and the right conclusion is about my additions
+rather than about it. Reverted under rule 6.
+
+What this leaves recorded: the scanner's structural refusals are defence in depth, deliberately so for
+a parser reading attacker-controlled bytes off an authenticated-but-compromised node, and branch
+coverage of them is reachable but not provable one guard at a time. Anyone tightening this function
+should expect coverage to say a line is dark while its behaviour is fully pinned by its neighbours.
