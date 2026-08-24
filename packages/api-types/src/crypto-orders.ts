@@ -290,9 +290,19 @@ export const AdminCryptoPendingAgeResponseSchema = z.object({
 });
 export type AdminCryptoPendingAgeResponse = z.infer<typeof AdminCryptoPendingAgeResponseSchema>;
 
+/**
+ * V-1474 — bounds matched to `ApplyIpnBody` in
+ * `apps/server/src/routes/admin-crypto-orders.ts`, which enforces
+ * `min(1).max(64)` and `min(1).max(128)` on these two fields.
+ *
+ * This mirror published both as unbounded strings, so the document described a
+ * 200-character `provider_status` as valid on a request the server answers with
+ * a 400 — the V-927 class, where a hand-written mirror agrees on names and
+ * required-ness while dropping the bound beside them.
+ */
 export const AdminApplyIpnRequestSchema = z.object({
-  provider_status: z.string(),
-  payment_id: z.string(),
+  provider_status: z.string().min(1).max(64),
+  payment_id: z.string().min(1).max(128),
 });
 export type AdminApplyIpnRequest = z.infer<typeof AdminApplyIpnRequestSchema>;
 

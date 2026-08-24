@@ -11849,3 +11849,49 @@ documents rather than protects.
 
 Full suite green: 3067 files, 30873 tests, exit 0. No new test file; the caps guard goes 1 `it`
 declaration to 2. No ratchet movement.
+
+## V-1474 — the published contract dropped two more bounds the route enforces
+
+Same instrument as V-1473, next roster down. `a-published-bound-matches-the-route` pins that the
+document publishes the limits the routes enforce, and its own header measures the surface: "33 of 71
+published request schemas are mirrors, 21 of them named by no test at all". Its roster holds **two**
+entries — the two found dropped when it was written. No completeness check.
+
+Derived the population: published request-body string properties with no `maxLength`, cross-referenced
+against a route that enforces one. **Fifty** published unbounded string properties, seven with a
+matching `.max()` somewhere in server source, and one credible pair — matched in the same file that
+serves the route:
+
+    AdminApplyIpnRequestSchema   provider_status: z.string()          payment_id: z.string()
+    route ApplyIpnBody           provider_status: …min(1).max(64)     payment_id: …min(1).max(128)
+
+`POST /v1/admin/crypto-orders/{order_id}/apply-ipn`. The document described a 200-character
+`provider_status` as valid on a request the server answers with 400 — the V-927 class exactly, and the
+same shape as V-1473 one layer up: **`api-types-crypto-orders-content-parity` quoted the unbounded
+mirror**, so the dropped bounds were asserted rather than merely unpublished. That is twice in two
+batches that a parity pin has frozen the defect beside it.
+
+Mirror tightened to the route's own limits, pin re-quoted, both fields added to the roster, and the
+committed OpenAPI snapshot regenerated — it now publishes `minLength: 1` with `maxLength: 64` and `128`.
+
+**The dist trap caught me again, one batch after recording it.** I regenerated the spec straight after
+editing `packages/api-types/src`, and the guard still failed: the generator loads api-types from `dist`,
+so the spec was rebuilt from the stale build. Rebuilt the package, regenerated, verified the bounds in
+`dist/crypto-orders.js` and in the snapshot. The ordering is build → dump → prettier, and skipping the
+first step produces a regenerated artifact that looks current and is not.
+
+**No derived arm added, and the reason is the measurement.** The derivation that found this produces
+seven candidates for one real pair — matching a published field name to the route schema that enforces
+it is cross-file and name-based, so `status` in a harness protocol schema matches `status` on an
+incidents route. A gate at that noise level needs an exemption roster larger than the thing it guards,
+which is how a guard gets switched off. The method and its hit rate are recorded here so it can be run
+as a periodic sweep instead.
+
+Two mutations: dropping the published bound reds the re-quoted parity pin; relaxing the ROUTE bound reds
+the roster half that exists to stop the document being validated against a limit no longer enforced.
+Worth noting what neither catches — a src edit without regeneration leaves this guard green, because it
+compares the roster against the COMMITTED snapshot. `sdk-python-openapi-snapshot-sync` is the arm that
+catches that, and it did: it failed in V-1473 for exactly that reason.
+
+Full suite green: 3067 files, 30873 tests, exit 0. No new test file; `it` count unchanged at 2. No
+ratchet movement.

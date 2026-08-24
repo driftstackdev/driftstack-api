@@ -78,6 +78,25 @@ const BOUNDS: readonly BoundCase[] = [
     routeFile: 'apps/server/src/routes/status-subscribe.ts',
     routePattern: /email: z\.string\(\)\.trim\(\)\.email\([^)]*\)\.max\(254\)/,
   },
+  // V-1474 — a third and fourth, found by deriving the surface instead of
+  // waiting for someone to notice. `AdminApplyIpnRequestSchema` published both
+  // fields as unbounded strings while `ApplyIpnBody` in the route enforces
+  // min(1).max(64) and min(1).max(128), and the api-types content-parity pin
+  // quoted the unbounded shape — so the dropped bounds were asserted.
+  {
+    path: '/v1/admin/crypto-orders/{order_id}/apply-ipn',
+    field: 'provider_status',
+    max: 64,
+    routeFile: 'apps/server/src/routes/admin-crypto-orders.ts',
+    routePattern: /provider_status: z\.string\(\)\.min\(1\)\.max\(64\)/,
+  },
+  {
+    path: '/v1/admin/crypto-orders/{order_id}/apply-ipn',
+    field: 'payment_id',
+    max: 128,
+    routeFile: 'apps/server/src/routes/admin-crypto-orders.ts',
+    routePattern: /payment_id: z\.string\(\)\.min\(1\)\.max\(128\)/,
+  },
 ];
 
 describe('V-927 a published bound matches the route', () => {

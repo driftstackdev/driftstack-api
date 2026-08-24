@@ -201,7 +201,10 @@ describe('W436.C packages/api-types/src/crypto-orders.ts content parity', () => 
       /export const AdminCryptoPendingAgeResponseSchema = z\.object\(\{\s*\n?\s*buckets: z\.record\(z\.string\(\), z\.number\(\)\.int\(\)\.nonnegative\(\)\),[\s\S]*?pending_value_cents: z\.record\([\s\S]*?total: z\.number\(\)\.int\(\)\.nonnegative\(\),[\s\S]*?truncated: z\.boolean\(\),[\s\S]*?scanned: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
-      /export const AdminApplyIpnRequestSchema = z\.object\(\{\s*\n?\s*provider_status: z\.string\(\),\s*\n?\s*payment_id: z\.string\(\),\s*\n?\s*\}\);/,
+      // V-1474 — this pin quoted the UNBOUNDED mirror, so the dropped bounds
+      // were asserted rather than merely unpublished. Re-quoted against the
+      // route's own limits.
+      /export const AdminApplyIpnRequestSchema = z\.object\(\{\s*\n?\s*provider_status: z\.string\(\)\.min\(1\)\.max\(64\),\s*\n?\s*payment_id: z\.string\(\)\.min\(1\)\.max\(128\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /export const AdminIdempotencyMetricsResponseSchema = z\.object\(\{\s*\n?\s*replays: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*first_writes: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*body_mismatches: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*\}\);/,
