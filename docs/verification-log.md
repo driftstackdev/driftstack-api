@@ -13008,3 +13008,53 @@ so. Worth recording that a stated blind spot is not automatically a finding.
 of negatives. The surfaces reachable without a database are guarded densely enough that the marginal
 sweep now mostly rediscovers existing coverage — which is itself the useful signal, provided the
 negatives are measured and written down rather than felt.
+
+## V-1494 — the blind spot V-1492 measured, run and clean: 389 files, 3765 tests
+
+V-1492 established that every "full suite green" this session excluded 115 test files and 815 tests —
+the Postgres-backed suites, skipped locally because they gate on `!CI && !DATABASE_URL`. It also
+established, by symbol search rather than filename guess, that none of them exercised a runtime surface
+this session changed. What it could not establish is whether they PASS, and an unrun suite is not a
+green one.
+
+They pass. Against a freshly created and migrated database: **389 test files, 3765 tests, zero
+failures**, with 4 files skipped — exactly the four gated on `REDIS_URL` rather than `DATABASE_URL`.
+
+**The safety work is most of this entry, because pointing a destructive harness at the wrong target is
+the failure mode here.**
+
+The e2e suites were never run. Their helpers are destructive by design — `DROP SCHEMA … CASCADE` twice
+at startup, `TRUNCATE … RESTART IDENTITY CASCADE`, and `redis.flushdb()` — and the repo ships
+`destructive-target-guard.ts` precisely to stop them reaching a real target. That guard's own message
+says to point `DATABASE_URL` and `REDIS_URL` at a disposable local database. Running only
+`tests/integration` avoids them entirely.
+
+`REDIS_URL` was deliberately left unset. The four Redis suites gate on it, so leaving it unset keeps
+them skipped and means nothing in this run wrote a key to the developer's Redis at `localhost:6379`.
+The alternative — pointing them at a spare Redis database index — would have run four more files at
+the cost of touching a live service, which is not a trade worth making unasked.
+
+`DATABASE_URL` pointed at `driftstack_sweep`, created for this run and dropped after it. The dev
+database `driftstack` was never in the connection string. That matters more than it sounds: the
+integration suites' default is `postgres://driftstack:driftstack@localhost:5432/driftstack`, so running
+them with no environment set at all — the obvious thing to do — writes into the developer's working
+database.
+
+**What the run created and why it was left alone.** `_helpers/isolated-database.ts` gives each
+whole-table-sweeping test file its own database, derived from the base URL, created if absent and
+migrated idempotently. Twenty-three `driftstack_iso_*` databases now exist that did not before. They
+are infrastructure artifacts, not litter: the helper is built to reuse them, a warm run pays only a
+`pg_database` lookup, and dropping them would slow the next run while risking a peer's in-flight suite —
+the machine already carried `_a2` and `_a3` databases belonging to other agents. Only `driftstack_sweep`,
+which this run created and nothing else uses, was dropped.
+
+**What this changes about the session's claims.** Every batch from V-1475 onward gated on a local run
+that silently omitted these 389 files. The omission was measured in V-1492 and is now closed: the two
+runtime changes this session made — `ProfileIdInputSchema` on session create (V-1489) and the two
+disabled-route stubs (V-1491) — hold under the DB-backed suites as well as the unit ones. That was
+likely rather than certain before; it is checked now.
+
+**And the honest limit.** This is one run on one machine. It does not make the local gate complete —
+the next change touching a DB-backed surface still needs `DATABASE_URL` set, because the default gate
+will skip its tests and report green. What it does is convert "probably fine, unmeasured" into
+"measured, on this commit".
