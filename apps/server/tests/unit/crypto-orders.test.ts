@@ -32,6 +32,7 @@ import {
   type CryptoOrdersRepo,
   InMemoryCryptoOrdersRepo,
   encodeCursor,
+  decodeCursor,
   mapNowpaymentsStatus,
 } from '../../src/services/crypto-orders.js';
 
@@ -3010,5 +3011,59 @@ describe('V-725 createIdempotent body fingerprint across a restart (repo-served 
     expect(r.replayed).toBe(true);
     expect(r.bodyFingerprintMismatch).toBe(false);
     expect(svc.getIdempotencyMetrics().bodyMismatches).toBe(0);
+  });
+});
+
+// V-1406 — `decodeCursor` had no behavioural test at all. It is exported, its doc says
+// production treats cursors as opaque strings, and `services-crypto-orders-content-parity`
+// pins the phrase "decodeCursor null on malformed" as SOURCE TEXT — but nothing ever called
+// it with anything malformed. Coverage agreed: BOTH of its refusal arms, the shape check and
+// the field-type check, had never been taken, and the file imported `encodeCursor` only.
+//
+// The cursor arrives as an admin `?cursor=` parameter, so its bytes are chosen by the caller.
+// `Buffer.from(token, 'base64url')` does not reject bad input, so `JSON.parse` sees whatever
+// decodes, and the field-type check is what stands between that and a returned object whose
+// `ts` is a string or `undefined`.
+//
+// Scope, stated honestly: at the SERVICE level this is not a customer-visible bug today.
+// `listForAdminPage` turns a null cursor into an empty page, and a malformed-but-returned
+// cursor would fail the anchor lookup and produce the same empty page. What is pinned here is
+// the exported function's own contract, which until now existed only as a regex over its source.
+describe('V-666.AM decodeCursor — the malformed inputs its contract names', () => {
+  it('CONTROL a cursor produced by encodeCursor round-trips, so the arms below are not satisfied by a decoder that returns null for everything', () => {
+    const decoded = decodeCursor(encodeCursor({ ts: 1_715_000_000_000, id: 'ord_abc123' }));
+    expect(decoded).toEqual({ ts: 1_715_000_000_000, id: 'ord_abc123' });
+  });
+
+  const decode = (json: string): unknown =>
+    decodeCursor(Buffer.from(json, 'utf8').toString('base64url'));
+
+  it.each([
+    ['an array carrying the right values positionally', '[1715000000000,"ord_abc123"]'],
+    ['ts as a string', '{"ts":"1715000000000","id":"ord_abc123"}'],
+    ['ts as null', '{"ts":null,"id":"ord_abc123"}'],
+    ['no id at all', '{"ts":1715000000000}'],
+    ['id as a number', '{"ts":1715000000000,"id":42}'],
+  ])(
+    'CRITICAL a cursor object with %s decodes to null. This is the FIELD-TYPE check specifically: the payload is an object, so it clears the shape check above and nothing else refuses it — without this line the decoder hands back a value typed CryptoOrderCursor whose ts or id is undefined or the wrong type, which is exactly what that type says cannot happen.',
+    (_label, json) => {
+      expect(decode(json)).toBeNull();
+    },
+  );
+
+  it.each([
+    ['a JSON number', '4242'],
+    ['a JSON string', '"ord_abc123"'],
+    ['a JSON boolean', 'true'],
+  ])(
+    'CRITICAL a cursor whose payload is %s decodes to null. Attribution here is to the PAIR, not one line: the shape check answers it first, and with that line gone the field-type check answers instead — both must be absent for a primitive to escape. The arm asserts the outcome the contract names rather than crediting either check.',
+    (_label, json) => {
+      expect(decode(json)).toBeNull();
+    },
+  );
+
+  it('CRITICAL a token that is not base64url-decodable JSON also yields null rather than throwing, since the value comes straight off the query string', () => {
+    expect(decodeCursor('not-a-cursor')).toBeNull();
+    expect(decodeCursor('')).toBeNull();
   });
 });

@@ -8987,3 +8987,44 @@ Not root-caused. What matters for anyone else sweeping here:
   actually ratchets on, so the gate itself is not affected by this.
 - To attribute a count delta to your own work, revert your paths and re-run, or parse the arms
   statically. Both are exact; comparing against a remembered total is not.
+
+### V-1406 — an exported decoder whose contract was pinned only as source text
+
+Sweeping the class this time: every `JSON.parse` in `apps/server/src` whose following shape guard has
+a never-taken refusal arm. Only two survived, and they split cleanly.
+
+**`services/proxy-connectivity-probe.ts:99` — closed, no arm written.** Its shape guard is dark, but
+the `typeof o.ip !== 'string'` check below it already fires (branch counts 3/6), and every input the
+shape guard would refuse reaches the same `undefined` through that check or the enclosing catch.
+Subsumed; recorded, not covered.
+
+**`services/crypto-orders.ts` — `decodeCursor` had no behavioural test at all.** `encodeCursor` was
+imported by the unit file; `decodeCursor` was not, and nothing had ever called it. Both of its refusal
+arms were dark. Meanwhile `services-crypto-orders-content-parity` pins the phrase "decodeCursor null
+on malformed" as a regex over the source — the same "text pinned, effect unchecked" shape as V-1400
+and V-1403.
+
+The token is an admin `?cursor=` parameter, so its bytes are the caller's. `Buffer.from(token,
+'base64url')` does not reject bad input, so `JSON.parse` sees whatever decodes.
+
+The two guards divide the input space, which the arms now reflect after a first draft got it wrong:
+
+| removed                       | result                                                       |
+| ----------------------------- | ------------------------------------------------------------ |
+| the field-type check (`:261`) | **5 failed** — exactly the object/array arms                 |
+| the shape check (`:259`)      | 155 passed — **subsumed**, primitives fall through to `:261` |
+| **both**                      | **8 failed** — the primitive arms too                        |
+
+My first draft put all seven malformed payloads in one `it.each` titled "without the field-type check
+the decoder hands back an object…". Removing that check reddened only five of them: a JSON number or
+string exits at the _shape_ check instead. The claim was false for those two, so the block was split —
+five arms that name the field-type check and genuinely depend on it, and three that state the outcome
+and say plainly that attribution is to the **pair**, since either check alone still answers a
+primitive. The third mutation above is what establishes that, and it is the reason the split is not
+just cosmetic.
+
+Scope stated honestly: this is **not** a customer-visible bug today. `listForAdminPage` turns a null
+cursor into an empty page, and a malformed-but-returned cursor would fail the anchor lookup and
+produce the same empty page. What is pinned is the exported function's own contract — that a
+`CryptoOrderCursor` it returns really has a numeric `ts` and a string `id`, which is what its type
+claims and what nothing was checking.
