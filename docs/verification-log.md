@@ -10078,3 +10078,42 @@ deferral is the same evidence class as a comment naming a decision, and V-1425 a
 reading here were indistinguishable at the point of reading. The difference showed up only in the
 wiring: one is still true and one lapsed when the follow-up landed and nobody revisited the comment.
 **Trace the caller before accepting a comment that makes a branch dead.**
+
+### V-1432 — a second stale "no caller", on a fail-open security guard
+
+V-1431's lesson generalised into a sweep: comments in `apps/server/src` asserting something is
+unwired, deferred, or uncalled. **38 of them**, and two are already-repaired instances of exactly this
+staleness — `webhook-rotation-reminder.ts` and `byok-anthropic-rotation-reminder.ts` both record that a
+previous header called the wiring deferred and was wrong. So this has bitten the repo before.
+
+Verifying the "no caller" claims found one more, and it is the consequential kind.
+`services/profiles.ts` documented its 6th constructor parameter — the agent-sessions lookup behind the
+"is this profile bound to a live session?" guard — as having no caller, so the guard was skipped in
+practice. Bootstrap passes it, and has since the 2026-06-30 audit; its call site spells out the cost:
+a profile hard-deleted, or its identity transferred away, while an agent session still holds it bound,
+"resurrecting the permanently deleted R2 blob via the session's independently-minted, long-TTL
+save-back PUT URL."
+
+The guard is live and exercised — `assertNoActiveSession` runs 23 times and its `ConflictError` fires
+twice. So the code was right and only the comment was wrong. That still matters: a reader told a
+security guard is inert is a reader who might delete it, re-opening what the audit closed.
+
+**The larger gap is that the wiring itself had no guard.** This parameter defaults to null and fails
+**open**. Drop the argument in bootstrap and `assertNoActiveSession` returns immediately, in
+production, silently. Measured rather than argued:
+
+| mutation: remove `agentSessionsRepo` from the bootstrap call       | result                      |
+| ------------------------------------------------------------------ | --------------------------- |
+| the guard's own tests (`profile-in-use-guard`, `profiles-service`) | **79 passed** — blind to it |
+| this file, with the new arm                                        | **2 failed**                |
+
+79 dedicated tests cannot see the regression, because every one constructs `ProfilesService` directly
+with a repo. That is the whole argument for the arm.
+
+It is also the inverse of what this file previously did. The roster names optional deps bootstrap does
+**not** pass; nothing asserted that a security-critical dep it **does** pass stays passed. Worse, the
+roster alone would have read a dropped argument as a newly-unwired dep and asked someone to _declare_
+it — turning a regression into paperwork. Both directions are now covered.
+
+The comment is corrected as a paraphrase in the same commit, and says plainly that the null default is
+the fail-open contract for a deployment omitting the repo, not a description of production.

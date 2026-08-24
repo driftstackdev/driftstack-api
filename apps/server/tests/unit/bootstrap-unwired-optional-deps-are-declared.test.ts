@@ -375,4 +375,35 @@ describe('every optional dependency bootstrap does not pass is declared', () => 
       'declaration(s) that no longer describe an unwired dep:',
     ).toEqual([]);
   });
+
+  // V-1432 — the inverse of everything above: a dep that MUST stay wired.
+  //
+  // This file rosters optional deps bootstrap does not pass. The mirror risk has no
+  // guard: a security-critical dep bootstrap DOES pass being quietly dropped. The
+  // roster cannot see that — removing an argument makes the dep unwired, which this
+  // file would then ask someone to *declare* rather than treat as a regression.
+  //
+  // `ProfilesService`'s live-session guard is the case. Its 6th constructor
+  // parameter defaults to null and fails OPEN, so dropping the argument in bootstrap
+  // silently disables `assertNoActiveSession` — and every test of that guard builds
+  // the service directly with a repo, so all of them stay green. The bootstrap call
+  // site records what that costs: a profile hard-deleted, or its identity
+  // transferred away, while an agent session still holds it bound.
+  //
+  // The comment on the parameter itself claimed no caller wired it, which was true
+  // once and lapsed when the 2026-06-30 audit fix landed. Corrected in the same
+  // change — but a comment is not a guard, which is why this arm exists.
+  it('CRITICAL bootstrap still passes the agent-sessions repo into ProfilesService. The parameter fails OPEN when omitted, so dropping it disables the live-session guard on purge and transfer while every direct-construction test of that guard stays green.', () => {
+    const call = /new ProfilesService\(([\s\S]*?)\n {2}\);/.exec(bootstrapSource);
+    expect(
+      call?.[1],
+      'the ProfilesService construction is no longer readable in bootstrap',
+    ).toBeDefined();
+
+    const args = stripComments(call?.[1] ?? '');
+    expect(
+      /\bagentSessionsRepo\b/.test(args),
+      'bootstrap no longer passes agentSessionsRepo to ProfilesService — the live-session guard on purge/transfer is fail-open and is now inert in production',
+    ).toBe(true);
+  });
 });

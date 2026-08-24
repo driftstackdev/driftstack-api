@@ -340,10 +340,16 @@ export class ProfilesService {
      * #1/#3 (2026-06-30) — agent-sessions lookup backing the "is this
      * profile bound to a live session?" guard purge() and transferProfile()
      * run before a hard-delete-adjacent mutation (see assertNoActiveSession).
-     * Null (the default — no caller currently wires this) → the guard is
-     * skipped, exactly the same fail-open contract every other optional
-     * dependency above uses; no behavior change until a real
-     * AgentSessionsRepo is passed in at construction.
+     * Null → the guard is skipped, the same fail-open contract every other
+     * optional dependency above uses.
+     *
+     * V-1432 — this used to add that no caller wired it, so the guard was inert
+     * in practice. That lapsed: `bootstrap.ts` passes `agentSessionsRepo` here,
+     * and its call site says why — without it a profile could be hard-deleted, or
+     * its identity transferred away, while an agent session still held it bound.
+     * The guard is LIVE in production and exercised by tests (the ConflictError
+     * below fires). Read the null default as the fail-open contract for a
+     * deployment that omits the repo, not as a description of production.
      */
     private readonly agentSessions: ProfileSessionGuard | null = null,
   ) {}
