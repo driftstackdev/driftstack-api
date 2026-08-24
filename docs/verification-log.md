@@ -8672,3 +8672,31 @@ tightening it knows they are changing behaviour rather than fixing a bug.
 
 Mutations separate cleanly: dropping the NaN guard reds the new arm and leaves the Postgres-range one
 green; dropping the 1970 floor does the reverse. Each guard answers for exactly one class.
+
+### V-1398 — a dispatch-time shape guard I could not prove, recorded rather than shipped
+
+`account-proxies.ts:183` — `if (typeof parsed.config_blob !== 'string') return null` — sits in
+`resolveForDispatch`, and a null there is genuinely load-bearing: both call sites treat it as
+**refuse to launch**, the route's own comment calling the alternative an egress-identity leak, and the
+pre-launch gate turning it into a 422. The branch had never been taken, so it looked worth covering.
+
+Writing the arms found the reason, in stages, and none of it was what I expected:
+
+1. A malformed OpenVPN secret **cannot be written through the system**: `encryptAccountProxySecret`
+   runs `validatePlaintext`, which refuses every shape I tried. So the guard defends a row corrupted
+   outside the write path — the same justification this file's header already gives for its SSRF
+   arms.
+2. Forging the envelope with a raw cipher under the correct AAD gets past that, and the arms passed.
+3. **But nothing I removed made them fail.** Deleting the shape guard, the `JSON.parse` catch, the
+   wire-schema parse at the end of the function, and the decrypt-side shape throw — four mutations,
+   all green.
+
+The input is refused by several independent layers, so an arm asserting the outcome cannot attribute
+it to any of them, and this one could not be shown to depend on any single guard at all. Under rule 6
+that is not a test to ship: it would read as coverage of `:183` while proving nothing about it.
+Reverted.
+
+What is true and worth writing down: a corrupt stored OpenVPN secret resolves to null and refuses the
+launch, and that outcome is enforced redundantly — at write time, at decrypt time (twice), and by the
+wire schema before the config leaves the server. `:183` is the fourth of those, and unreachable while
+the others stand.
