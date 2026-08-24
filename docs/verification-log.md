@@ -9776,3 +9776,50 @@ surfaced later at full-suite time, exactly as it did in V-1415.
 Two measurements of the same hook, four entries apart, agreeing: the gap is real, it is specific to
 `apps/server`, and closing it is one line in `.husky/pre-commit` — prefer the workspace's own
 `typecheck` script where `package.json` defines one.
+
+### V-1425 — automating six batches of hand-checking, and the false positive it started with
+
+V-1419 through V-1424 each verified, by hand, that the SDK paths I was about to pin exist on the
+server with the same verb. All six matched. That is the argument for automating the check rather than
+against it: the manual pass is the thing a person stops doing, and the class it protects against is
+real — the `?keep=current` defect recorded in `untested-resources` was one method sending a URL the
+server refused, unnoticed because every guard pinned the method SIGNATURE and none compared the
+request to a route.
+
+Nothing in the repo compares the two directions. `openapi-route-coverage-invariant` walks
+server → spec and states its hazard as "an endpoint the API serves and no SDK can call."
+`cross-sdk-verb-parity` compares the three SDKs to **each other** — derived rather than hand-listed,
+and a real invariant, but three SDKs agreeing on a wrong path satisfies it perfectly. Neither looks at
+whether an SDK path is served.
+
+The new guard is a derived census on both sides: 100 SDK paths, 208 server routes, parameter spellings
+normalised so `${encodeURIComponent(id)}` and `:order_id` compare. Scope is stated in the file rather
+than implied: it asserts **sdk-typescript ⊆ server**, and `cross-sdk-verb-parity` asserts the three SDK
+path sets are equal, so together they place Python and Go inside the route table too — through that
+file, not directly.
+
+**It began with a false positive, and that shaped the design.** The first extractor scanned four lines
+after each `app.<verb>(` for the path literal and reported `/v1/billing/crypto-orders` as unserved. It
+is served — `billing-crypto-orders.ts:108` registers it under a multi-line generic that pushes the
+literal past a four-line window. A guard that reports a legitimate route as missing is worse than no
+guard: it fails commits for a defect that is not there. So the window scans to the next registration,
+and the reasoning is recorded in the file.
+
+Three arms, each mutation-proven:
+
+| mutation                                             | reds                                                       |
+| ---------------------------------------------------- | ---------------------------------------------------------- |
+| an SDK path renamed to one the server does not serve | the coverage arm                                           |
+| the SDK extractor's `/v1/` filter stops matching     | the **census self-check**                                  |
+| the server window shrunk back to `i + 4`             | the coverage arm — the original false positive, reproduced |
+
+The middle one is the arm that keeps the other honest. An extractor that silently stops matching
+reports "no missing paths" forever, which is the empty-declaration-agrees-with-anything shape the
+blind-spot guard already names. The last one means the specific mistake I made is now a test.
+
+Recorded as examined-and-declined in the same pass: `routes/agent-sessions.ts:4790`, the `'fallback'`
+leg of the BYOK key-source chain, never produced. It is reachable only when
+`allowFallbackForUnconfiguredCustomers` is true, and three places agree that is not a production
+posture — `app.ts` calls it a "staging-only opt-in… PROD must keep this `false`", bootstrap defaults it
+to `false`, and `build-test-app` deliberately leaves it off with a comment saying so. Covering it would
+exercise a configuration production is required to disable.
