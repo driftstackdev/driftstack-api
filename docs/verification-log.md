@@ -15050,3 +15050,59 @@ purpose".
 
 That distinction is worth keeping separate from a defect count: none of the three was a bug. All three
 were checks that would not have caught the bug they exist for.
+
+## V-1529 — a guard that already documents its own bypass, and still had it
+
+Fourth application of the V-1527 instrument, and the strongest result: this one is a live reach-around,
+not a narrow-but-currently-correct scan.
+
+`mfa-encryption-key-shared-cross-source-invariant` protects the property that four secret-encryption
+classes — BYOK Anthropic, gui_control_key, LiveKit, MFA TOTP — all draw AES-256-GCM key material from a
+single `MFA_ENCRYPTION_KEY`. The guarantee it exists to keep is operator-facing: _one rotation rotates all
+four ciphertexts_. Its header names the exact refactor it fears — "a refactor that introduces a separate
+`LIVEKIT_ENCRYPTION_KEY`" — and one of its arms states the absolute: **`config.ts` is the only place an
+`*_ENCRYPTION_KEY` env may be read at all.**
+
+**That is a claim about the whole tree, and it was checked against one file.** The scan ran
+`process.env.([A-Z_]*ENCRYPTION_KEY)` over `bootstrap.ts` only.
+
+The arm's own title is what makes this sharp. It records a previous mutation — giving LiveKit
+`process.env.LIVEKIT_ENCRYPTION_KEY ?? config.mfaEncryptionKey` **in bootstrap** — and says catching it is
+why the arm exists. The identical refactor written in a service file is invisible. Measured, not argued: a
+throwaway `services/rogue-encryption-probe.ts` whose body is
+`Buffer.from(process.env.LIVEKIT_ENCRYPTION_KEY ?? '', 'base64')` feeding `createDecipheriv` left the file
+**9/9 GREEN**. A second key source, a class that no longer rotates with the others, and the invariant that
+exists for precisely that says nothing.
+
+Nothing is currently wrong: the tree has exactly one `*_ENCRYPTION_KEY` env read, `config.ts:842`, and
+zero `process.env` reads anywhere under `apps/server/src`. The property holds; the check for it did not.
+
+**The scan now walks `apps/server/src`**, reusing the walker idiom the file already had for
+`aadPurposes()`, excluding `config.ts` as the sanctioned reader — whose one-key-exactly assertion is
+unchanged. Both spellings are matched, `process.env.X` and `process.env['X']`, since the second was
+equally unreachable by the old regex. Proven both ways; each reds naming file and variable:
+
+```
+rogue-encryption-probe.ts:LIVEKIT_ENCRYPTION_KEY
+```
+
+Arm count unchanged at 9 — this widens an existing assertion rather than adding one, because the
+assertion was already the right assertion.
+
+### What the instrument has now found, four for four
+
+|        | guard                       | stated absolute                                | what it could not see                 |
+| ------ | --------------------------- | ---------------------------------------------- | ------------------------------------- |
+| V-1515 | credential-header redaction | every credential header                        | `authorization`, `cookie` in dot form |
+| V-1527 | BYOK plaintext call sites   | "the only way the plaintext exists in process" | the session key cache                 |
+| V-1528 | plaintext-once secrets      | "leaking plaintext on read endpoints"          | three of six once-only secrets        |
+| V-1529 | shared encryption key       | "the only place an env may be read"            | every file except bootstrap.ts        |
+
+The first three were narrow scans over correct code. This one had a documented bypass — the arm describes
+the mutation it catches, and the same mutation one directory over walks past it. That is worth separating
+from the others when judging how much the green matters: a guard can be simultaneously well-reasoned,
+well-commented, mutation-tested, and checking a fraction of what its sentence claims.
+
+The rule holds and is now worth stating as procedure rather than observation: **when a guard's header
+states the only way to do something, the scope of the scan must equal the scope of the sentence** — and
+the way to find out is to write the violation and watch the guard stay green.

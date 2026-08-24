@@ -49,6 +49,36 @@ function aadPurposes(): Map<string, string> {
   return out;
 }
 
+/** Every source file under apps/server/src that reads an `*_ENCRYPTION_KEY`
+ *  straight from the environment, keyed by `<rel path>:<env var>`. `config.ts`
+ *  is excluded: it is the sanctioned reader, and the arm below pins that it
+ *  reads exactly one. Walked rather than read from a two-file list, because a
+ *  refactor that gives one class its own key does not have to touch either
+ *  bootstrap.ts or config.ts to do it. */
+function rogueKeyEnvReads(): string[] {
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const p = resolve(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(p);
+        continue;
+      }
+      if (!entry.name.endsWith('.ts')) continue;
+      if (p === CONFIG) continue;
+      const rel = p.slice(SRC_ROOT.length + 1);
+      // Both spellings: `process.env.X_ENCRYPTION_KEY` and `process.env['X_ENCRYPTION_KEY']`.
+      for (const m of read(p).matchAll(
+        /process\.env(?:\.([A-Z0-9_]*ENCRYPTION_KEY)\b|\[\s*['"`]([A-Z0-9_]*ENCRYPTION_KEY)['"`]\s*\])/g,
+      )) {
+        out.push(`${rel}:${m[1] ?? m[2] ?? ''}`);
+      }
+    }
+  };
+  walk(SRC_ROOT);
+  return [...new Set(out)].sort();
+}
+
 describe('MFA_ENCRYPTION_KEY shared 4-class cross-source invariant', () => {
   const byok = read(BYOK);
   const gck = read(GCK);
@@ -98,13 +128,14 @@ describe('MFA_ENCRYPTION_KEY shared 4-class cross-source invariant', () => {
     );
 
     // And no consumer may reach around it to a second env var. `config.ts` is
-    // the only place an *_ENCRYPTION_KEY env may be read at all.
-    const rogueEnvReads = [...bootstrap.matchAll(/process\.env\.([A-Z_]*ENCRYPTION_KEY)/g)].map(
-      (m) => m[1]!,
-    );
+    // the only place an *_ENCRYPTION_KEY env may be read at all — a claim about
+    // the whole tree, so it is checked against the whole tree. V-1529: this
+    // scan read only bootstrap.ts, and a service file declaring
+    // `process.env.LIVEKIT_ENCRYPTION_KEY` left this file 9/9 GREEN, which is
+    // the same refactor the arm title says it caught in bootstrap.
     expect(
-      [...new Set(rogueEnvReads)].sort(),
-      'bootstrap must not read an encryption key directly from the environment:',
+      rogueKeyEnvReads(),
+      'only config.ts may read an encryption key from the environment; these reach around it:',
     ).toEqual([]);
 
     // config.ts itself must expose exactly one encryption-key env.
