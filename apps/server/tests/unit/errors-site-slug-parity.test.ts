@@ -71,7 +71,12 @@ describe('W483 errors-site ↔ PROBLEM_TYPES slug parity', () => {
   });
 
   it('errors-site generator writes one catch-all six-header security baseline', () => {
-    const block = siteSrc.match(/const SECURITY_HEADERS = `([\s\S]+?)`;/)?.[1] ?? '';
+    // The baseline moved to apps/errors-site/public/_headers so the CSP guard can
+    // audit it from source like every other Pages app. What is checked here is
+    // unchanged: ONE catch-all rule carrying all six headers exactly once —
+    // Cloudflare Pages MERGES matching _headers rules, so a second occurrence
+    // ships duplicates.
+    const block = readFileSync(resolve(REPO_ROOT, 'apps/errors-site/public/_headers'), 'utf8');
     expect(block).toMatch(/^\/\*$/m);
     for (const header of [
       'Strict-Transport-Security:',
@@ -83,6 +88,9 @@ describe('W483 errors-site ↔ PROBLEM_TYPES slug parity', () => {
     ]) {
       expect(block.match(new RegExp(header, 'g')), header).toHaveLength(1);
     }
+    // ...and the generator still actually emits it. A source file nothing copies
+    // into dist would be audited here and absent in production.
+    expect(siteSrc).toMatch(/readFileSync\(join\(HERE, 'public', '_headers'\), 'utf8'\)/);
     expect(siteSrc).toMatch(/writeFileSync\(join\(DIST, '_headers'\), SECURITY_HEADERS\);/);
   });
 

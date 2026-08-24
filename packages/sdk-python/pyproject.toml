@@ -38,7 +38,13 @@ dev = [
   "pytest>=8.0",
   "pytest-asyncio>=0.23",
   "respx>=0.21",
-  "ruff>=0.5",
+  # PINNED, not a floor. ruff is a FORMATTER as well as a linter, and
+  # `ruff format --check` is a CI gate — so an unpinned range means a ruff
+  # release can reformat files and turn CI red with no commit having touched
+  # any Python. That is exactly what happened on 2026-08-23: CI reported "1 file
+  # would be reformatted" while the pinned-here version reports all 73 clean.
+  # Bump this deliberately, running `ruff format` in the same commit.
+  "ruff==0.15.13",
   "mypy>=1.10",
   "datamodel-code-generator[http]>=0.25",
 ]

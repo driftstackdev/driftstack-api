@@ -1,0 +1,102 @@
+# Errors site — deploy pipeline.
+#
+# errors.driftstack.dev is the destination of EVERY error link the API hands a
+# developer: each RFC-9457 problem carries
+# `type: https://errors.driftstack.dev/<slug>`. Until this workflow existed the
+# site had no deploy path at all — it was built by hand and uploaded by hand,
+# which is why it also had no package.json and was skipped by `build:apps`
+# (fixed alongside this). A surface nothing deploys is a surface that drifts
+# from the code silently, and the first symptom would be a 404 on a link inside
+# a customer's error response.
+#
+# Path filter is `apps/errors-site/**` and that IS sufficient, deliberately: the
+# page content lives in an inline ERROR_PAGES map in build.mjs, and
+# apps/server/tests/unit/errors-site-slug-parity.test.ts pins that slug set to
+# api-types PROBLEM_TYPES exactly. Adding a problem type therefore cannot pass
+# CI without editing build.mjs, which is inside the filter. The guard is what
+# makes the narrow filter safe.
+#
+# Mirrors deploy-status-site.yml. Skipped (build-only, exit 0) if
+# CLOUDFLARE_API_TOKEN is unset.
+#
+# Required GitHub secrets (repository-wide; shared with the other site deploys):
+#   - CLOUDFLARE_API_TOKEN   — token with `Cloudflare Pages — Edit`.
+#   - CLOUDFLARE_ACCOUNT_ID  — Cloudflare account ID.
+#
+# Required repository variable:
+#   - CLOUDFLARE_ERRORS_SITE_PROJECT_NAME — Pages project slug
+#                                           (`driftstack-errors`).
+
+name: Deploy errors site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/errors-site/**'
+      - '.github/workflows/deploy-errors-site.yml'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-errors-site-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build + deploy to Cloudflare Pages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    environment:
+      name: errors-site-production
+      url: https://errors.driftstack.dev
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (workspace-aware)
+        run: npm ci --no-audit
+
+      - name: Build errors site
+        run: npm run build --workspace apps/errors-site
+
+      - name: Verify the build produced pages
+        # The generator is dependency-free and writes with fs directly, so a
+        # silent no-op would deploy an empty directory over a working site.
+        run: |
+          count=$(find apps/errors-site/dist -name 'index.html' | wc -l | tr -d ' ')
+          echo "built ${count} page(s)"
+          if [ "${count}" -lt 5 ]; then
+            echo "::error::errors-site produced ${count} pages — refusing to deploy over the live site."
+            exit 1
+          fi
+
+      - name: Deploy to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PROJECT_NAME: ${{ vars.CLOUDFLARE_ERRORS_SITE_PROJECT_NAME }}
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ]; then
+            echo "CLOUDFLARE_API_TOKEN unset — skipping Cloudflare Pages upload."
+            echo "Build artifact is at apps/errors-site/dist/ and verified above."
+            exit 0
+          fi
+          if [ -z "${PROJECT_NAME}" ]; then
+            echo "CLOUDFLARE_ERRORS_SITE_PROJECT_NAME variable unset — set as a repo variable in Settings → Variables."
+            exit 1
+          fi
+          npx --no-install wrangler pages deploy apps/errors-site/dist \
+            --project-name="${PROJECT_NAME}" \
+            --branch="${GITHUB_REF_NAME}" \
+            --commit-hash="${GITHUB_SHA}" \
+            --commit-message="${GITHUB_SHA::8} — $(git log -1 --pretty=%s)"

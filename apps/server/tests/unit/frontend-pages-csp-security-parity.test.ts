@@ -53,6 +53,22 @@ const SURFACES = [
     connect: ["'self'", 'https://api.driftstack.dev', 'https://r2-public.driftstack.dev'],
   },
   {
+    // The strictest surface we ship, and deliberately so: static explainer pages
+    // with no scripts, no fetches and no embedded media. `script-src 'none'` and
+    // `connect-src 'none'` are the real policy, not placeholders — anything
+    // looser here would be unjustified.
+    //
+    // It reached production unaudited: the policy lived as a string literal
+    // inside build.mjs and the app had no deploy workflow, so it was uploaded by
+    // hand and never appeared in this table. Now it is a source file like every
+    // sibling, which is what let it be reviewed at all.
+    name: 'errors-site',
+    path: 'apps/errors-site/public/_headers',
+    script: ["'none'"],
+    image: ["'self'", 'data:'],
+    connect: ["'none'"],
+  },
+  {
     name: 'docs',
     path: 'apps/docs/public/_headers',
     // Pagefind compiles its same-origin WASM search index on first use.
@@ -113,17 +129,13 @@ describe('Cloudflare Pages CSP security parity', () => {
     });
   }
 
-  it('errors-site generator forbids all script and network execution', () => {
-    const source = readFileSync(resolve(REPO_ROOT, 'apps/errors-site/build.mjs'), 'utf8');
-    const block = source.match(/const SECURITY_HEADERS = `([\s\S]+?)`;/)?.[1] ?? '';
-    const policy = parsePolicy(policyFromHeaders(block));
-
-    assertLockedBaseline(policy);
-    expect(policy.get('script-src')).toEqual(["'none'"]);
-    expect(policy.get('style-src')).toEqual(COMMON_STYLE);
-    expect(policy.get('img-src')).toEqual(["'self'", 'data:']);
-    expect(policy.get('connect-src')).toEqual(["'none'"]);
-  });
+  // The standalone errors-site arm that used to live here read the policy out of
+  // a `const SECURITY_HEADERS` literal inside build.mjs, because that is where it
+  // lived. It now lives in apps/errors-site/public/_headers like every sibling,
+  // so errors-site is an ordinary SURFACES row and the loop above makes the exact
+  // same assertions — baseline, script-src 'none', img-src, connect-src 'none' —
+  // against the file that actually ships. Two copies of one contract, one of them
+  // reading a source shape that no longer exists, is strictly worse than one.
   it('CRITICAL V-1107 every frontend the pipeline deploys has a CSP file and a row in SURFACES. The table is hand-written and is also the population every arm above iterates, so a deployed app missing from it is not reported — it is never looked at. Both halves of that matter: an app with a `_headers` file and no row ships an unaudited policy, and an app with no `_headers` file at all ships no policy while looking exactly like an app this guard has approved.', () => {
     const wf = resolve(REPO_ROOT, '.github/workflows');
     const deployed = new Set<string>();

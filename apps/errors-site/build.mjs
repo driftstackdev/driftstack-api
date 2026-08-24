@@ -11,24 +11,19 @@
 // Cloudflare Pages project `driftstack-errors` (custom domain
 // errors.driftstack.dev) via wrangler, same as the other Pages sites.
 
-import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST = join(HERE, 'dist');
 
-// One catch-all security baseline for every generated error explainer.
-// Keep security headers in this single rule: Cloudflare Pages merges all
-// matching _headers rules, so repeating them under `/` would emit duplicates.
-const SECURITY_HEADERS = `/*
-  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; frame-src 'none'; form-action 'self'; script-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; manifest-src 'self'; upgrade-insecure-requests
-  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
-  X-Frame-Options: DENY
-  X-Content-Type-Options: nosniff
-  Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()
-`;
+// One catch-all security baseline for every generated error explainer, kept in
+// public/_headers like every other Pages app rather than inline here. The CSP
+// security-parity guard audits each surface from its SOURCE file; a policy that
+// existed only as a string literal in a generator was deployed but never
+// reviewed, which is how this one shipped unaudited.
+const SECURITY_HEADERS = readFileSync(join(HERE, 'public', '_headers'), 'utf8');
 
 /**
  * slug → { status, title, meaning, fix }. Titles + statuses mirror

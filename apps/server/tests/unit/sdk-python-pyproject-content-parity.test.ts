@@ -61,13 +61,13 @@ describe('W532.C packages/sdk-python/pyproject.toml content parity', () => {
     expect(body).toMatch(/"Typing :: Typed",/);
   });
 
-  it('Runtime + dev deps framing pinned: \'dependencies = ["httpx>=0.27,<1.0", "pydantic[email]>=2.5,<3.0"]\' + dev deps pytest>=8.0 + pytest-asyncio>=0.23 + respx>=0.21 + ruff>=0.5 + mypy>=1.10 + datamodel-code-generator[http]>=0.25 — pinned so the 2-runtime-dep (httpx HTTP client + pydantic[email] validation with email-extra for EmailStr) + 6-dev-dep commitment survives (drift to dropping httpx <1.0 upper bound would silently break on httpx 1.0 release; drift to dropping pydantic[email] extra would break EmailStr fields in models)', () => {
+  it('Runtime + dev deps framing pinned: \'dependencies = ["httpx>=0.27,<1.0", "pydantic[email]>=2.5,<3.0"]\' + dev deps pytest>=8.0 + pytest-asyncio>=0.23 + respx>=0.21 + ruff PINNED at ==0.15.13 (a formatter behind a --check gate cannot float: an unpinned range let a ruff release reformat files and redden CI with no Python having changed, 2026-08-23) + mypy>=1.10 + datamodel-code-generator[http]>=0.25 — pinned so the 2-runtime-dep (httpx HTTP client + pydantic[email] validation with email-extra for EmailStr) + 6-dev-dep commitment survives (drift to dropping httpx <1.0 upper bound would silently break on httpx 1.0 release; drift to dropping pydantic[email] extra would break EmailStr fields in models)', () => {
     expect(body).toMatch(/"httpx>=0\.27,<1\.0",/);
     expect(body).toMatch(/"pydantic\[email\]>=2\.5,<3\.0",/);
     expect(body).toMatch(/"pytest>=8\.0",/);
     expect(body).toMatch(/"pytest-asyncio>=0\.23",/);
     expect(body).toMatch(/"respx>=0\.21",/);
-    expect(body).toMatch(/"ruff>=0\.5",/);
+    expect(body).toMatch(/"ruff==0\.15\.13",/);
     expect(body).toMatch(/"mypy>=1\.10",/);
     expect(body).toMatch(/"datamodel-code-generator\[http\]>=0\.25",/);
   });

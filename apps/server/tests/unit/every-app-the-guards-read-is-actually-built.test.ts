@@ -58,6 +58,22 @@ describe('every app the guards read is actually built', () => {
     ).toEqual([]);
   });
 
+  it('CRITICAL each of those apps also has a DEPLOY workflow path-filtered on it. Building an app nothing ships is the same defect one step later — errors-site was live only because somebody had uploaded it by hand, so it could drift from the code indefinitely with no signal.', () => {
+    const apps = appsTheGuardReads();
+    const wfDir = resolve(REPO_ROOT, '.github/workflows');
+    // Matched by PATH FILTER, not by filename: marketing-site deploys from
+    // deploy-marketing.yml, so a name-based lookup would be wrong for the one
+    // case most likely to be wrong.
+    const workflows = readdirSync(wfDir)
+      .filter((f) => f.endsWith('.yml'))
+      .map((f) => readFileSync(resolve(wfDir, f), 'utf8'));
+    const undeployed = apps.filter((app) => !workflows.some((w) => w.includes(`'apps/${app}/**'`)));
+    expect(
+      undeployed,
+      'these apps are built and guarded but no workflow is path-filtered to deploy them',
+    ).toEqual([]);
+  });
+
   it('every app directory carrying a build entrypoint is reachable from the workspace build', () => {
     // The inverse of the arm above: an app can also acquire a build.mjs without
     // ever being wired in. Anything with a build entrypoint must be a workspace.

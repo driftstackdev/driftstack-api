@@ -99,9 +99,15 @@ describe('privacy-policy storage claims hold in the code they describe', () => {
   });
 
   it('CRITICAL the errors-site CSP still forbids scripts and outbound connections. errors-site carries no policy section of its own, so its no-tracking property rests entirely on script-src none plus connect-src none; losing either would make it the one public surface with neither a disclosure nor a structural guarantee.', () => {
-    const build = readFileSync(resolve(REPO_ROOT, 'apps', 'errors-site', 'build.mjs'), 'utf8');
-    expect(build, "script-src 'none' in the emitted CSP").toContain("script-src 'none'");
-    expect(build, "connect-src 'none' in the emitted CSP").toContain("connect-src 'none'");
+    // Reads the SHIPPED policy file rather than the generator that copies it.
+    // Asserting against build.mjs only ever proved the string existed somewhere
+    // in a script; this proves it is in the artifact Cloudflare serves.
+    const headers = readFileSync(
+      resolve(REPO_ROOT, 'apps', 'errors-site', 'public', '_headers'),
+      'utf8',
+    );
+    expect(headers, "script-src 'none' in the shipped CSP").toContain("script-src 'none'");
+    expect(headers, "connect-src 'none' in the shipped CSP").toContain("connect-src 'none'");
   });
 
   it('CRITICAL the policy still makes the claims this file verifies. Checking only the code would keep passing if the document were rewritten to promise more than the code delivers, and the document is the side a regulator reads.', () => {
