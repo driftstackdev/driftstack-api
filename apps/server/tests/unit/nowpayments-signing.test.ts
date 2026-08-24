@@ -96,6 +96,40 @@ describe('V-487 — verifyNowpaymentsSignature', () => {
     expect(verifyNowpaymentsSignature({ body: '{}', secret: SECRET, signature: '' })).toBe(false);
   });
 
+  // V-1464 — the empty-SECRET case, with a signature that would actually match.
+  //
+  // The arm above pairs an empty secret with the signature `'x'`, which fails on
+  // length whatever the guard does, so `!opts.secret` never decides anything:
+  // measured, replacing the whole `if (!opts.body || !opts.secret ||
+  // !opts.signature)` with `false` left all 12 tests green.
+  //
+  // What it protects against is a blank or unset IPN secret, which is an ordinary
+  // env misconfiguration. Node's HMAC accepts an empty key and returns a perfectly
+  // good digest, so an attacker who knows the notification body can compute
+  // `HMAC-SHA512('', canonicalBody)` and have it verify. Measured with the guard
+  // removed: this exact input returns TRUE. That is a forged payment confirmation
+  // on the path that activates a paid tier.
+  //
+  // The signature must be computed over the CANONICAL (key-sorted) form, because
+  // that is what the verifier HMACs — a first attempt signed the raw body and was
+  // refused by the canonicalisation rather than by the guard, which would have
+  // "proved" the wrong thing.
+  it('CRITICAL an empty secret refuses a signature forged with an empty HMAC key — the fail-closed that a blank IPN secret depends on', () => {
+    const body = '{"payment_status":"finished","order_id":"ord_x"}';
+    const canonical = JSON.stringify({ order_id: 'ord_x', payment_status: 'finished' });
+    const forgedWithEmptyKey = createHmac('sha512', '').update(canonical).digest('hex');
+
+    expect(
+      verifyNowpaymentsSignature({ body, secret: '', signature: forgedWithEmptyKey }),
+      'a blank IPN secret must not make every notification verifiable',
+    ).toBe(false);
+    // Control: the same forged signature is refused under a real secret too, so
+    // the assertion above is not passing merely because the digest is wrong.
+    expect(
+      verifyNowpaymentsSignature({ body, secret: SECRET, signature: forgedWithEmptyKey }),
+    ).toBe(false);
+  });
+
   it('returns false on non-hex signature without throwing', () => {
     expect(() =>
       verifyNowpaymentsSignature({ body: '{}', secret: SECRET, signature: 'zzz-not-hex' }),

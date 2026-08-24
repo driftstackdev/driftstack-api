@@ -11418,3 +11418,42 @@ and the next question is always which direction it fails in, not whether to writ
 
 Full suite green: 3067 files, 30864 tests, exit 0. No new test file; 12 `it` declarations to 13. No
 ratchet movement.
+
+## V-1464 — a blank IPN secret would have verified every notification, and nothing tested the guard that stops it
+
+`verifyNowpaymentsSignature` authenticates NowPayments IPN callbacks — the path that confirms a crypto
+payment and activates a paid tier. Six operands swept; three survived, all three inside
+`if (!opts.body || !opts.secret || !opts.signature) return false;`.
+
+**The `!opts.secret` half is the security-relevant one, and it is load-bearing.** Node's HMAC accepts an
+empty key and returns a perfectly good digest, so if the configured IPN secret is blank — an ordinary
+env misconfiguration — an attacker who knows the notification body can compute
+`HMAC-SHA512('', canonicalBody)` and present it. Measured with the guard removed:
+
+    empty secret + signature forged with an empty key   ->  TRUE     (accepted)
+    real  secret + the same forged signature            ->  false
+
+With the guard: false. So the fail-closed behaviour on a blank secret rests entirely on that operand,
+and every one of the twelve tests passed without it.
+
+**Why the existing arm did not catch it.** `returns false on empty body / secret / signature` pairs the
+empty secret with the signature `'x'`, which fails the length check whatever the guard does — the same
+shape as V-1462's PKCE arms and V-1461's owner gate. The arm asserts the right outcome and cannot say
+which line produced it.
+
+**A wrong first experiment, worth recording.** My initial forgery signed the RAW body and was refused
+with the guard removed, which would have "proved" the guard unnecessary. The verifier HMACs the
+CANONICAL key-sorted form, so the refusal came from the canonicalisation, not from the guard. Signing
+the canonical form is what produced the TRUE above — an exculpating experiment has to use the same
+input the code does.
+
+The new arm asserts the canonically-forged signature is refused under a blank secret, with a control
+that the same signature is also refused under the real secret so it cannot pass merely because the
+digest is wrong. The `!opts.secret` operand and the whole guard now both red.
+
+The other two survivors stay untested deliberately: an empty signature is caught by
+`received.length !== expected.length` after `Buffer.from('', 'hex')` yields an empty buffer, and an
+empty body still requires the real secret to forge. Redundant layers, on the V-1444 principle.
+
+Full suite green: 3067 files, 30865 tests, exit 0. No new test file; 12 `it` declarations to 13. No
+ratchet movement.
