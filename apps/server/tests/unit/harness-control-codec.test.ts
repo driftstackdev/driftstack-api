@@ -111,6 +111,51 @@ describe('serializeIntentDispatch', () => {
     ).toThrow(HarnessWireCodecError);
   });
 
+  // V-1416 — the attribute-extraction contract. `ExtractionParamsSchema.superRefine`
+  // requires `attribute` when `type` is `'attribute'`, and the operand
+  // `value.attribute === undefined` had never been EVALUATED: no test anywhere in the
+  // repo submits `type: 'attribute'`, so the comparison before it short-circuited every
+  // time. Neither the refusal nor the valid shape had been exercised.
+  it('CRITICAL an attribute extraction WITHOUT `attribute` is refused before dispatch. The harness is told which attribute to read; omitting it leaves the field the extraction is named for undefined, so the contract requires it and this is the only layer on the agent path that checks.', () => {
+    expect(() =>
+      serializeIntentDispatch({
+        sessionId: 'ses_x',
+        intentId: 'int_attr_missing',
+        intentName: 'extract',
+        params: {
+          extractions: [{ name: 'href', selector: 'a.cta', type: 'attribute' }],
+        },
+      }),
+    ).toThrow(HarnessWireCodecError);
+  });
+
+  it('CONTROL the same extraction WITH `attribute` serializes. Without this the arm above passes on a schema that rejects every attribute extraction, which would be a different bug wearing the same green.', () => {
+    const d = serializeIntentDispatch({
+      sessionId: 'ses_x',
+      intentId: 'int_attr_ok',
+      intentName: 'extract',
+      params: {
+        extractions: [{ name: 'href', selector: 'a.cta', type: 'attribute', attribute: 'href' }],
+      },
+    });
+    expect(d.intentName).toBe('extract');
+  });
+
+  it('CRITICAL a non-list extraction carrying `extract` is refused — the sibling refine. `extract` describes per-element sub-fields and means nothing without a list to run against, so accepting it would silently drop what the caller asked for.', () => {
+    expect(() =>
+      serializeIntentDispatch({
+        sessionId: 'ses_x',
+        intentId: 'int_extract_on_text',
+        intentName: 'extract',
+        params: {
+          extractions: [
+            { name: 'x', selector: 'p', type: 'text', extract: { f: { type: 'text' } } },
+          ],
+        },
+      }),
+    ).toThrow(HarnessWireCodecError);
+  });
+
   it('composes with the (b) mapper: AgentIntent → dispatch → wire envelope', () => {
     const mapped = agentIntentToDispatch({
       kind: 'interact',

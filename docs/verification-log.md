@@ -9394,3 +9394,47 @@ time, after the commits have landed — later than the hook that exists to catch
 have the loop prefer the workspace's `typecheck` script when `package.json` defines one, falling back
 to `tsc --noEmit -p tsconfig.json` — and it belongs to whoever owns that file. Recorded rather than
 applied.
+
+### V-1416 — the attribute-extraction contract, and a documented rule the customer path does not enforce
+
+Next hit from the short-circuit sweep. `ExtractionParamsSchema.superRefine` requires `attribute` when
+`type` is `'attribute'`, and the operand `value.attribute === undefined` had never been **evaluated**:
+`git grep "type: 'attribute'"` across every test directory returns nothing, so the comparison before it
+short-circuited on every pass. Neither the refusal nor the valid shape had been exercised, and the
+sibling refine (`extract` is valid only on a list) was in the same state.
+
+Three arms through `serializeIntentDispatch`, which is where the schema is actually applied — it
+`safeParse`s the params and throws `HarnessWireCodecError` before anything reaches the wire. Mutations:
+dropping the refine reds the refusal arm; weakening **only** `value.attribute === undefined` reds it
+too, which is what makes the attribution land on the operand rather than the refine's existence;
+dropping the sibling refine reds the third arm.
+
+**The finding underneath is a rule enforced on one path and documented on the other.** The same
+requirement exists twice:
+
+- `schemas/harness-control-protocol.ts` — `superRefine`, enforced, on the agent path via
+  `serializeIntentDispatch`.
+- `packages/api-types/src/sessions.ts` — `ExtractionSpecSchema`, which the **customer's**
+  `POST /v1/sessions/:id/extract` validates against. Its field reads:
+
+      /** Required when `type: 'attribute'` — which attribute to read. */
+      attribute: z.string().optional(),
+
+  A doc comment stating a requirement, and `.optional()` with no refine. `ListFieldExtractionSchema`
+  carries the identical comment and the identical gap.
+
+So a customer request omitting `attribute` clears validation, and nothing downstream on that path
+re-checks: `routes/sessions.ts:699` parses with the api-types schema, `service.extract` hands the body
+straight to `driver.extract`, and no driver routes through `serializeIntentDispatch` — that call sits
+in `agent-executor-control-plane`, on the agent path only.
+
+**Latent, not live, and the distinction is load-bearing.** `drivers/webkit.ts:65` — `extract` throws
+`DriverNotIntegratedError`, so no real customer can reach the case today. Only the mock implements it,
+and it substitutes `e.attribute ?? 'attr'`, silently reading an attribute nobody asked for. The gap
+becomes reachable the moment extract is integrated.
+
+**Not changed here.** Adding the refine to `ExtractionSpecSchema` would make a currently-accepted
+customer request start returning 400. The change is small, aligns behaviour with the schema's own
+documentation, and is cheapest now precisely because the path is not integrated — but it is a
+customer-facing validation change, and this repo's precedent is that those are decided by a person
+rather than by a measurement. Recorded with the arms that pin the enforced half.
