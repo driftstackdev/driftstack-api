@@ -59,9 +59,28 @@ Three operational modes:
     "token": "<HS256 JWT>",
     "participant_identity": "customer-<account-uuid>",
     "expires_at": "<ISO-8601>"
+  },
+  "error_event": {
+    "timestamp": "<ISO-8601>",
+    "code": "launch_timeout",
+    "severity": "info | warn | error | fatal",
+    "summary": "The browser did not become ready in time.",
+    "detail": "<string> | null",
+    "customer_actionable": false,
+    "retryable": true
   }
 }
 ```
+
+The `error_event` field is **optional and nullable** — it carries the most
+recent harness launch or runtime failure recorded for the session, and is
+absent or `null` when none has been reported. Branch on its two booleans
+rather than on the prose: `customer_actionable` says whether a human can do
+anything about the failure, and `retryable` says whether repeating the same
+call is worth trying. `detail` is `null` when the server has nothing to add
+beyond `summary`, and `severity` is one of `info`, `warn`, `error`, `fatal`.
+An `error_event` does not by itself close the session — read `status` for
+that.
 
 The `livekit` field is **optional** — auto-populated on the
 session-create response when the deployment has at least
@@ -258,7 +277,24 @@ Response (200) is a discriminated union by `kind`:
 }
 ```
 
-AI responses can include `usage`. On the bundled-LLM rail,
+AI responses can include `usage`:
+
+```json
+{
+  "decomposer_kind": "claude | deterministic",
+  "model": "<string>",
+  "anthropic_input_tokens": 1200,
+  "anthropic_output_tokens": 340,
+  "cost_usd_cents": 10
+}
+```
+
+Only `decomposer_kind` is always present. The token counts and `model`
+appear when the selected decomposer and provider report them, so a
+`deterministic` turn carries neither. Read them as evidence for the turn you
+made, not as an account total.
+
+On the bundled-LLM rail,
 `usage.cost_usd_cents` is the posted 10-cent included-service accounting value,
 not the upstream model's measured cost. The block describes the represented
 provider call; an optional read-back model call is recorded separately and is

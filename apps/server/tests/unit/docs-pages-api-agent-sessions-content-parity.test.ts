@@ -26,6 +26,24 @@ describe('docs/pages/api/agent-sessions content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
+  it('V-1505 the failure report and the usage block are documented, not just published. `error_event` was in the spec and both SDKs and appeared NOWHERE under apps/docs — measured against every component schema, it and the AgentMessageUsage token fields were the only customer-facing properties the docs never named. A customer receiving `{ customer_actionable: false, retryable: true }` on a failed session had two booleans and no statement of which way either points.', () => {
+    // Resource shape carries the field, with the branching keys a caller acts on.
+    expect(body).toMatch(
+      /"error_event": \{[\s\S]*?"customer_actionable": false,[\s\S]*?"retryable": true/,
+    );
+    expect(body).toContain(
+      '`customer_actionable` says whether a human can do\nanything about the failure, and `retryable` says whether repeating the same\ncall is worth trying.',
+    );
+    // Verified against both recordErrorEvent implementations: each writes
+    // lastErrorEvent + updatedAt and never touches status.
+    expect(body).toContain('An `error_event` does not by itself close the session');
+
+    // Usage: decomposer_kind is the schema's only required property, and the
+    // deterministic decomposer reports DETERMINISTIC_USAGE — the kind alone.
+    expect(body).toContain('Only `decomposer_kind` is always present.');
+    expect(body).toMatch(/"anthropic_input_tokens": 1200,\s*\n\s*"anthropic_output_tokens": 340,/);
+  });
+
   it('Agent sessions overview framing pinned (W554: intent list completed to all 6 kinds — navigate/interact/wait/capture + behavioural scroll/behavioral_pause): chat-style decompose→execute loop + NL messages + streaming-results contract stay documented', () => {
     expect(body).toMatch(
       /An \*\*agent session\*\* layers a chat-style decompose→execute loop on\s*\n?\s*top of a regular driver-backed browser session\./,

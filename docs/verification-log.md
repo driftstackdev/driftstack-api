@@ -13675,3 +13675,59 @@ The four `error_event` describes had no pin at all — no test reads that api-ty
 arm reads the SPEC and quotes all four published strings. That is deliberately stronger than a source
 pin: V-1503 found a guard freezing three describes that never reached the document because a hand mirror
 sat in between. A source pin proves prose exists; only a spec pin proves it ships.
+
+## V-1505 — the two customer-facing properties the docs never named, found by enumerating all 81 schemas
+
+V-1504 fixed the spec's silence about `error_event` and noted in passing that the field appears nowhere
+under `apps/docs`. That is an assertion about one field, and the useful version is the census: for every
+component schema in the published spec, which properties are never named anywhere in the docs tree?
+
+**Seven schemas of 81 have any undocumented property, and four are not customer surfaces** —
+`AdminAuditLogEntry`, `AdminSubscriptionStatsResponse`, `OwnerPricingEdit{Request,Response}` and
+`RegisterMacNodeResponse` are admin, owner and fleet-internal. The docs are in better shape than the
+previous two batches would suggest, and saying so is part of the finding.
+
+The remaining two are customer-facing and both live on the agent-sessions page:
+
+- **`AgentSession.error_event`** — the whole failure-report group: `code`, `severity`, `summary`,
+  `detail`, `customer_actionable`, `retryable`. In the spec, in both SDKs, absent from the docs.
+- **`AgentMessageUsage`** — `decomposer_kind`, `anthropic_input_tokens`, `anthropic_output_tokens`. The
+  page discusses `usage.cost_usd_cents` in careful detail across a full paragraph and never states the
+  object's shape, so the two token counts a customer would reconcile against their own accounting are
+  undocumented while the cost field beside them is over-documented.
+
+Both are now on the page: `error_event` in the resource shape with the branching keys spelled out, and a
+`usage` block above the existing cost paragraph.
+
+**Three claims in that copy are behavioural, so each was checked rather than inferred.**
+
+1. _"An `error_event` does not by itself close the session."_ Both `recordErrorEvent` implementations —
+   the in-memory store and `agent-sessions-repo` — write `lastErrorEvent` and `updatedAt` and touch
+   nothing else. The interface comment adds a detail I would not have guessed: closed sessions accept an
+   error event, because "errorEvent follows terminal sessionStatus on the producer."
+2. _"Only `decomposer_kind` is always present."_ The published schema's `required` list is exactly
+   `['decomposer_kind']`.
+3. _"A `deterministic` turn carries neither [token counts nor model]."_ Optionality alone does not
+   establish this — a field can be optional in the schema and always sent in practice. The deterministic
+   decomposer exports `DETERMINISTIC_USAGE = { decomposerKind: 'deterministic' as const }`, so the claim
+   holds at the source rather than by inference from the schema.
+
+That third check is the one worth keeping: two of these sentences could have been written from the
+schema alone and would have been right by luck. The third could not.
+
+One arm added to the page's drift guard, pinning both additions and the verified status sentence.
+Removing either addition individually reds it; the docs file restored byte-identical from a scratchpad
+snapshot.
+
+**I got the rebuild question wrong, and the gate caught it.** I asked whether any suite reads
+`apps/docs/dist` at runtime, found none — the three files naming that path pin a deploy workflow, a
+prettierignore inventory, and the freshness guard's own fixture string — and concluded no rebuild was
+needed. `dist-reading-suites-have-fresh-artifacts` failed the full run:
+_"docs: built 14:54:31 but source changed 18:56:37 — REBUILD, do not repin assertions onto stale
+markup."_
+
+The guard does not ask what I asked. It registers `docs` as an app and compares built-artifact mtime
+against source mtime, so a source edit makes it stale whether or not anything currently reads the
+output. Answering an adjacent question and treating the answer as dispositive is the same error as
+acquitting a category on a keyword match. `npm run build --workspace @driftstack/docs` and the guard is
+green; `apps/docs/dist` is gitignored, so nothing enters the commit.
