@@ -875,6 +875,15 @@ describe('WD-2: SSRF defense-in-depth', () => {
     expect(isLiteralUnsafeWebhookHost('https://[fe80::1]/hook')).toBe(true);
     expect(isLiteralUnsafeWebhookHost('https://[fc00::1]/hook')).toBe(true);
     expect(isLiteralUnsafeWebhookHost('https://[::ffff:10.0.0.5]/hook')).toBe(true);
+    // V-1410 — fc00::/7 is written as two halves and only the fc one was exercised.
+    // fc00::/8 is reserved and effectively unused; fd00::/8 is the half that carries
+    // every locally-assigned ULA, so the prefix a real private network actually uses
+    // was the one no arm reached. Coverage agreed: `startsWith('fd')` was never even
+    // EVALUATED, because `startsWith('fc')` short-circuited on the only case present.
+    expect(isLiteralUnsafeWebhookHost('https://[fd00::1]/hook')).toBe(true);
+    expect(isLiteralUnsafeWebhookHost('https://[fdab:cdef::9]/hook')).toBe(true);
+    // The unspecified address. `host === '::'` was evaluated but never once matched.
+    expect(isLiteralUnsafeWebhookHost('https://[::]/hook')).toBe(true);
   });
 
   it('isLiteralUnsafeWebhookHost passes public IPs + normal hostnames through', () => {
@@ -882,6 +891,12 @@ describe('WD-2: SSRF defense-in-depth', () => {
     expect(isLiteralUnsafeWebhookHost('https://1.2.3.4/hook')).toBe(false);
     expect(isLiteralUnsafeWebhookHost('https://customer.example/webhook')).toBe(false);
     expect(isLiteralUnsafeWebhookHost('not a url at all')).toBe(false);
+    // V-1410 — the ALLOW side of the IPv6 branch had never executed. Every IPv6 case
+    // in this file is one the guard rejects, so nothing showed it lets a legitimate
+    // v6 endpoint through: an over-broad v6 rule would refuse every delivery to a
+    // customer on IPv6 and no arm here would have noticed.
+    expect(isLiteralUnsafeWebhookHost('https://[2001:db8::1]/hook')).toBe(false);
+    expect(isLiteralUnsafeWebhookHost('https://[2606:4700:4700::1111]/hook')).toBe(false);
   });
 
   it('processTick refuses to deliver to a literal internal IP WITHOUT ever calling fetchFn', async () => {

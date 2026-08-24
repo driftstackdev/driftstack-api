@@ -9173,3 +9173,40 @@ Enumerated with both grep patterns, which is what surfaced the rest:
   "but body is not a Problem" — and **Go has an empty-body case TypeScript does not**. An arm now
   records what TypeScript actually does with an empty non-2xx body (the JSON-parse catch answers it),
   so that divergence is a measured fact in the suite rather than a reading of the source.
+
+### V-1410 — the half of fc00::/7 that networks actually use, and the allow side of the v6 branch
+
+`packages/webhook-delivery/src/in-memory.ts` is a real implementation, not a double — its own header
+says it backs unit tests, GUI-client integration tests, and small self-hosted single-process
+workloads. It carries `isLiteralUnsafeWebhookHost`, a belt-and-braces SSRF check run immediately
+before every send.
+
+My first reading of it was wrong and the comment corrected me, which is worth recording because it is
+the third time this session. The predicate is visibly weaker than `apps/server/src/lib/
+webhook-target-guard.ts` — no `BlockList`, no numeric/hex/octal IP encodings, no IPv4-in-IPv6
+canonicalisation — and "two copies of a safety predicate that disagree" is exactly the failure
+`loopback-host.ts` exists to prevent. But the divergence is **documented and deliberate**: `packages/*`
+has no dependency on `apps/server`, this package has no endpoint-registration surface of its own, and
+the doc says so in the sentence above the function. Not a defect. No change made.
+
+The real gap is coverage, and it is on the two halves nobody would guess:
+
+- **`fd00::/8`.** The check is written `host.startsWith('fc') || host.startsWith('fd')`, and only the
+  `fc` half was exercised. Coverage shows `startsWith('fd')` was never even **evaluated**, because
+  `fc00::1` short-circuited the only case present. That is backwards from how the block is used:
+  fc00::/8 is reserved and effectively unassigned, while **fd00::/8 carries every locally-assigned
+  ULA** — the half a real private network actually uses was the untested one.
+- **The unspecified address.** `host === '::'` was evaluated but never once matched.
+- **The ALLOW side of the whole IPv6 branch.** Every v6 case in the file is one the guard rejects, so
+  `return false` at the end of the v6 arm had never executed. Nothing showed the predicate lets a
+  legitimate IPv6 endpoint through — an over-broad v6 rule would refuse every delivery to a customer
+  on IPv6, and the existing "passes public IPs through" arm would not have noticed, because its four
+  cases are two IPv4 literals, a DNS name, and an unparseable string.
+
+Added to the two existing arms rather than new ones — their titles already cover these shapes, so
+nothing needed retitling. Each mutation reds exactly one arm: dropping the `fd` operand, dropping the
+`=== '::'` operand, and flipping the v6 fall-through to `return true` (the over-block direction).
+
+Worth carrying forward: **a short-circuit `||` hides its right operand from coverage entirely.** The
+line reads as covered and the second half has never run. Same instrument as the compound-condition
+note in the dark-throw triage, and it is how the more important half of this one stayed dark.
