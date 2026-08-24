@@ -11183,3 +11183,38 @@ about whether the edit could have removed anything.
 
 Full suite green: 3067 files, 30854 tests, exit 0. Comment-only change; no `it` count change, no
 ratchet movement.
+
+## V-1458 — the third sweep needed a positive control, not a floor, and now has one
+
+Closing the item V-1457 left open. `marketing-status-event-types-sweep` scans marketing pages for the
+two RETIRED webhook declarations (`quota.warning_80pct`, `quota.exceeded`) and asserts they do not
+appear. That is an absence whose correct count is zero, so there is no subject to floor — the technique
+that fixed V-1456 does not apply here.
+
+What it needed instead is a control that the corpus is still a place where the drift could show up.
+Measured: the 61 pages carry **46 mentions across all 8** subscribable event types, and zero retired
+ones. So the absence is a checked absence today — and nothing asserted that.
+
+The failure it now blocks is not hypothetical, because a sibling has already had it. When the per-tier
+concurrency numbers moved out of markup into `src/data/pricing.ts`, `marketing-tier-caps-sweep` went
+silently vacuous while every page it walks stayed present and counted (V-1457). If the event names took
+that same route into a data module, this file would keep reporting a clean absence over pages that no
+longer discuss events at all.
+
+The control counts mentions against the LIVE enum — `SubscribableWebhookEventTypeSchema`, which the
+file already imports — rather than a written list, so retiring an event moves the number without
+anyone editing the arm. Floored at 15 against 46 measured, low enough that ordinary copy edits do not
+red the build and high enough that losing the subject does.
+
+Two mutations, each restored byte-identical: making the mention test stop matching (events vanish from
+the corpus while the pages remain) reds the new control, and planting `quota.exceeded` in a real page
+reds the absence check, which confirms the original arm still does its job.
+
+That completes the family this audit opened. `marketing-prefix-id-sweep` was re-pointed at the corpus
+its subject had moved to and floored on it (V-1456); `marketing-tier-caps-sweep` was annotated as
+vacuous-but-redundant after verifying the coverage lives in two other guards (V-1457); this one gets
+the control its absence-shaped assertion actually needs. The three needed three different remedies,
+which is the argument against treating "vacuous sweep" as one defect with one fix.
+
+Full suite green: 3067 files, 30854 tests, exit 0. No new test file; `it` count unchanged at 3,
+verified against HEAD rather than a carried figure. No ratchet movement.

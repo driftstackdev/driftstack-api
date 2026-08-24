@@ -38,6 +38,30 @@ describe('W249.B marketing-site subscribable-event-name sweep', () => {
     // V-939 — floor raised to just under the measured 61; it stood at 5, so this
     // scan could have lost 92% of its corpus and still called itself non-vacuous.
     expect(pages.length, 'marketing-site .astro pages scanned').toBeGreaterThan(55);
+
+    // V-1458 — and that the pages still NAME webhook events, which is what makes
+    // the absence below a checked absence.
+    //
+    // A page floor cannot carry this arm on its own. The retired-name check is
+    // satisfied by a corpus that never mentions events at all, and that is not a
+    // hypothetical shape here: `marketing-tier-caps-sweep` went silently vacuous
+    // in exactly that way when its per-tier numbers moved out of markup into
+    // `src/data/pricing.ts` while every page it walks stayed present and counted.
+    // If the event names took the same route into a data module, this file would
+    // keep reporting a clean absence over pages that no longer discuss events.
+    //
+    // Counted against the LIVE enum rather than a written list, so retiring an
+    // event moves this number without anyone editing this arm. 46 mentions across
+    // all 8 subscribable types today; floored well under so ordinary copy edits
+    // do not red the build, while the corpus losing the subject does.
+    const mentions = pages.reduce((total, p) => {
+      const body = readFileSync(p, 'utf8');
+      return total + [...live].filter((evt) => body.includes(evt)).length;
+    }, 0);
+    expect(
+      mentions,
+      'no marketing page names any live webhook event — the retired-name check below has nothing to look at',
+    ).toBeGreaterThan(15);
   });
 
   it('pages do not publish the retired quota webhook declarations', () => {
