@@ -11298,3 +11298,40 @@ mutation is only safe when the operand has an adjacent `||`/`&&` to remove with 
 
 Full suite green: 3067 files, 30858 tests, exit 0. No new test file; `it` count unchanged at 33 against
 HEAD (two assertions added to an existing arm). No ratchet movement.
+
+## V-1461 — the authorization middleware's gates, swept: covered, and one redundant layer
+
+Same instrument, applied to `middleware/auth.ts`, which decides access on every request. Recorded as a
+negative so the surface is not re-mined.
+
+**MFA step-up freshness gate — five of five operands kill a test.** Every bypass and every throw is the
+deciding layer for some input: the web-session bypass, the no-`MfaService`-wired bypass, the
+not-enrolled bypass, the `sat === null` never-satisfied throw, and `ageSec > window`, the expiry
+comparison that is the whole point of the gate. `mfa-step-up-gate-actually-denies` earns its name.
+
+**Owner gate — one of two operands survives, and it is redundancy rather than a hole.** Replacing
+`ownerEmail === null || ownerEmail.length === 0` with `false` leaves all seven tests green, including
+the one named "fails CLOSED — 403 even for the owner token when no ownerEmail is configured". That test
+asserts the right OUTCOME and cannot say which guard produced it: with `ownerEmail` null, the
+comparison one line below (`ctx.account.email.toLowerCase() !== ownerEmail`) is true for any string and
+throws anyway.
+
+Worked out what the operand uniquely blocks, rather than assuming it blocks nothing: the only input
+where removing it changes the answer is an EMPTY configured owner email together with an account whose
+email is also empty — `'' !== ''` being false is the single path that would otherwise admit. The first
+half is a plausible ops error (`OWNER_EMAIL=""` set but blank). The second is not reachable through the
+application: `accounts.email` is `text().notNull()`, which permits `''` at the DB level, but every
+signup path validates the format, so an empty account email would have to be written directly to the
+database.
+
+So no test is added. Constructing that account would fabricate an input shape the system cannot
+produce, which tests the guard against an imaginary caller rather than a real one — the same reason
+V-1444 kept eleven surviving guards in the fleet lexer and recorded them as layers instead of filing
+them as findings. The operand stays as fail-closed defence in depth, now with its scope written down.
+
+Two mutation batches in this sweep reported "no tests" and were discarded rather than read: a shell
+helper whose argument order put the replacement in the label slot and the label in the replacement slot,
+so every mutation substituted prose into a condition. Third time this session the `NO SUMMARY LINE`
+guard has caught a broken harness invocation that would otherwise have read as a clean survival.
+
+No source or test change; log entry only.
