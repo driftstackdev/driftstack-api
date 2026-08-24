@@ -466,6 +466,58 @@ describe('POST /v1/account/me/avatar (V-352b)', () => {
     expect(meBody.avatar_source).toBe('user');
   });
 
+  // V-1418 — `avatar_source` is derived TWICE in this route: once in GET /me and
+  // once in PATCH /me, from the same three-way rule. The GET copy's `'user'` value
+  // is asserted a few lines above; the PATCH copy's had never been produced —
+  // coverage read `[0, 17]` on it. Every PATCH arm in this file runs against an
+  // account with no uploaded avatar, so the response has only ever reported
+  // `'none'` or `'idp'`.
+  //
+  // The two must agree. A customer who uploads an avatar and then edits their
+  // name gets the profile back from PATCH, and if that copy resolved differently
+  // they would see their picture change in the response to an unrelated edit.
+  // The final assertion compares the two responses, so it fails whichever copy
+  // drifts — breaking either derivation reds this arm.
+  //
+  // Measured, so the claim stays inside what was shown: the `avatarR2Key ? null :
+  // fallback` line above the derivation is NOT what carries this. Removing it reds
+  // nothing here, because `r2AvatarUrl ?? oauthFallback` still prefers the uploaded
+  // URL — it saves the IdP lookup rather than deciding the answer.
+  it("CRITICAL PATCH /me reports avatar_source 'user' and the R2 URL once an avatar is uploaded, agreeing with GET. This derivation is a second copy of the rule and had never produced 'user' — a customer editing their name would otherwise see the response claim a different avatar than the one they uploaded.", async () => {
+    fx = await buildTestApp();
+    const upload = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/avatar',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { content_type: 'image/png', data_base64: ONE_BY_ONE_PNG_BASE64 },
+    });
+    expect(upload.statusCode).toBe(200);
+
+    const patched = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/account/me',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { name: 'Renamed After Upload' },
+    });
+
+    expect(patched.statusCode).toBe(200);
+    const body = patched.json<AccountMeResponse & { avatar_url: string | null }>();
+    expect(body.name).toBe('Renamed After Upload');
+    expect(body.avatar_source, 'the PATCH copy of the rule must resolve as the GET copy does').toBe(
+      'user',
+    );
+    expect(body.avatar_url, 'and carry the uploaded avatar, not an IdP fallback').toMatch(
+      /^https:\/\/r2-fake\.test\//,
+    );
+
+    const me = await fx.app.inject({ method: 'GET', url: '/v1/account/me', headers: auth(fx) });
+    const meBody = me.json<AccountMeResponse & { avatar_url: string | null }>();
+    expect(
+      { source: body.avatar_source, url: body.avatar_url },
+      'the two responses describe one account and must not disagree about its avatar',
+    ).toEqual({ source: meBody.avatar_source, url: meBody.avatar_url });
+  });
+
   it('400 when content_type is not in the allow-list', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({

@@ -9478,3 +9478,38 @@ count rather than only as a flag.
 What this protects is a customer holding a partial audit log that looks complete — the hazard the
 file's own header names, now tested in the direction that matters rather than only in the direction
 that was cheap.
+
+### V-1418 — the same three-way rule twice in one file, tested in one copy
+
+Third hit from the literal-ternary sweep, and it started as a contradiction worth chasing rather than
+dismissing. Coverage said `routes/account-me.ts:352` — `avatarR2Key ? 'user' : oauthFallback ? 'idp' :
+'none'` — had never produced `'user'`. But `account-me.test.ts` asserts `avatar_source` is `'user'`
+twice. Both statements were true: **the rule is written twice in the same file.**
+
+- `:244`, inside `GET /v1/account/me`, reading `ctx.account.avatarR2Key` — covered.
+- `:352`, inside `PATCH /v1/account/me`, reading `updated.avatarR2Key` — the `'user'` branch never
+  taken, because every PATCH arm in the file runs against an account with no uploaded avatar.
+
+So a customer who uploads an avatar and then edits their name gets the profile back from PATCH, and
+that response's avatar fields came from a copy of the rule nothing exercised.
+
+One arm: upload, then PATCH, then assert the PATCH response reports `'user'` with the R2 URL — and
+finally that the PATCH and GET responses **agree**, since they describe one account. The mutations
+place it exactly:
+
+| mutation                                              | reds                                       |
+| ----------------------------------------------------- | ------------------------------------------ |
+| drop the `'user'` half of the **PATCH** copy (`:352`) | this arm alone                             |
+| drop the `'user'` half of the **GET** copy (`:244`)   | this arm **and** the two existing GET arms |
+| remove the IdP-fallback suppression (`:349`)          | **nothing**                                |
+
+The second row is the point of the agreement assertion: it fails whichever copy drifts, which is what
+a duplicated rule needs.
+
+The third row is a correction to my own first draft. I had written that the suppression above the
+derivation — `updated.avatarR2Key ? Promise.resolve(null) : oauthAvatarFallback(...)` — was "the
+mechanism" that keeps an uploaded avatar from being overridden. Removing it reds nothing, and the
+reason is visible one line down: `avatarUrl = r2AvatarUrl ?? oauthFallback` already prefers the
+uploaded URL. The suppression saves an IdP lookup; it does not decide the answer. The comment now says
+that, because an arm whose prose claims a mechanism it does not depend on is the same defect as a title
+naming a path it never reaches — which is what V-1409 found in the SDK.
