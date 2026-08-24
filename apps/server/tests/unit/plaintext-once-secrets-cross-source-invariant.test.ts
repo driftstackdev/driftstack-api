@@ -37,6 +37,57 @@ function read(p: string): string {
 describe('W891 plaintext-once secrets cross-source invariant', () => {
   // ─── ApiKeySchema NEVER includes plaintext ───────────────────
 
+  it("V-1528 CRITICAL no READ endpoint publishes a once-only secret, derived from the document rather than from the three schemas named above. This file's stated fear is a server leaking plaintext on a read endpoint, and its arms pin the three api-types schemas it knows about — which is not the population. The published surface returns a once-only secret from six places: the API-key mint, the two webhook secret responses, the CLI-authorize exchange (spelled `api_key`, and pinned by its own parity file, which asserts the bind response NEVER carries it), and the two admin OAuth client responses. All six are POSTs. This arm asserts the property the header actually cares about across ALL of them, so a future read endpoint that returns one fails here even if its schema was never added to the list.", () => {
+    const spec = JSON.parse(
+      readFileSync(resolve(REPO_ROOT, 'packages/sdk-python/openapi.json'), 'utf8'),
+    ) as { paths: Record<string, Record<string, unknown>> };
+
+    // The field names a once-only secret is published under. `token` and `value`
+    // are deliberately NOT here: both are overloaded on this surface (a LiveKit
+    // token, a cookie value, an extracted page value), so including them would
+    // make this arm noisy rather than strict.
+    const ONCE_ONLY = new Set(['plaintext', 'secret', 'client_secret', 'api_key']);
+    const found = (node: unknown, acc: string[]): void => {
+      if (Array.isArray(node)) {
+        for (const v of node) found(v, acc);
+        return;
+      }
+      if (node === null || typeof node !== 'object') return;
+      const obj = node as Record<string, unknown>;
+      const props = obj['properties'];
+      if (props !== null && typeof props === 'object') {
+        for (const k of Object.keys(props)) {
+          if (ONCE_ONLY.has(k)) acc.push(k);
+        }
+      }
+      for (const v of Object.values(obj)) found(v, acc);
+    };
+
+    let readResponses = 0;
+    const leaking: string[] = [];
+    for (const [path, ops] of Object.entries(spec.paths)) {
+      const get = ops['get'];
+      if (get === undefined) continue;
+      const responses = (get as { responses?: Record<string, unknown> }).responses ?? {};
+      for (const [code, body] of Object.entries(responses)) {
+        if (!code.startsWith('2')) continue;
+        readResponses += 1;
+        const acc: string[] = [];
+        found(body, acc);
+        if (acc.length > 0)
+          leaking.push(`GET ${path} ${code} -> ${[...new Set(acc)].sort().join(', ')}`);
+      }
+    }
+
+    // Reports an absence, so a spec that parsed to nothing would pass clean.
+    expect(readResponses, 'successful GET responses read from the document').toBeGreaterThan(40);
+    expect(
+      leaking.sort(),
+      'this READ endpoint publishes a secret that is contracted to be returned once at mint. A ' +
+        'caller could fetch it again, and the audit trail that assumes one disclosure is wrong',
+    ).toEqual([]);
+  });
+
   it("CRITICAL packages/api-types/src/api-keys.ts ApiKeySchema (list/get response) has key_prefix display hint but NEVER plaintext. The '// API key as returned in list / get responses (NEVER includes plaintext)' comment is the security contract.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/api-keys.ts'));
     expect(p).toMatch(

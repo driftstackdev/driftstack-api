@@ -14998,3 +14998,55 @@ what made them findable.
 
 The generalisation worth keeping: **when a guard's header states what the only way to do something is,
 that sentence is the hypothesis to test, not the reason to skip testing.**
+
+## V-1528 — the plaintext-once invariant knew three secrets; the surface publishes six
+
+V-1527's instrument, applied again: a guard whose scope is a hand-named list is a hypothesis about the
+population, and the population is checkable.
+
+`plaintext-once-secrets-cross-source-invariant` pins three api-types schemas — the API-key mint response,
+the web-session token, and the two webhook secret responses — and states its fear plainly: a _"server
+leaking plaintext on read endpoints"_.
+
+**The published surface returns a once-only secret from six places, not three.** Derived from the
+document rather than from the file's list:
+
+```
+POST /v1/api-keys                                 plaintext      pinned here
+POST /v1/webhooks                                 secret         pinned here
+POST /v1/webhooks/{id}/rotate-secret              secret         pinned here
+POST /v1/auth/cli-authorize/exchange              api_key        pinned elsewhere
+POST /v1/admin/oauth/clients                      client_secret  pinned elsewhere
+POST /v1/admin/oauth/clients/{id}/rotate-secret   client_secret  pinned elsewhere
+```
+
+**Nothing is leaking, and I checked before saying so.** No GET response on the surface carries any of
+these fields. The CLI-authorize plaintext is covered by its own parity file, which pins the complementary
+claim — the bind response _"NEVER"_ carries the key, only `/exchange` does — and the OAuth pair is pinned
+in the docs parity file. So all six contracts hold and all six are guarded; what was incomplete is the
+invariant that exists for the class.
+
+**The fix asserts the property the header cares about instead of extending the list.** Adding three more
+schema pins would duplicate work already done elsewhere and would still be a list. The new arm reads every
+successful GET response in the document and requires that none publishes a once-only secret field — so a
+future read endpoint that returns one fails here even if its schema was never named. Proven by adding
+`secret` to the `GET /v1/webhooks` row schema: it reds with `GET /v1/webhooks 200 -> secret`.
+
+`token` and `value` are deliberately excluded from the field set, and the arm says why: both are
+overloaded on this surface — a LiveKit token, a cookie value, an extracted page value — so including them
+would make the arm noisy rather than strict. A guard that cries wolf gets switched off, which is this
+repo's own recorded reasoning.
+
+The parse is asserted non-empty first, since an arm reporting an absence passes perfectly against a spec
+it failed to read.
+
+### The instrument, three for three
+
+V-1515 found `authorization` and `cookie` unseen by a redaction census. V-1527 found a customer key
+reachable past a decrypt census. This found a secret class whose invariant covered half of it. Each time
+the guard was careful, the author wrote the limiting sentence down, and the sentence was the thing to
+test — and each time the answer was "nothing is broken, and the check was narrower than its own stated
+purpose".
+
+That distinction is worth keeping separate from a defect count: none of the three was a bug. All three
+were checks that would not have caught the bug they exist for.
