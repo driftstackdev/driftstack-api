@@ -14557,3 +14557,50 @@ is concrete: D-033 means wiring `AuditArchiveService` into the recurring-job reg
 configuration and a staging rehearsal, and it should be re-checked against the customer retention promise
 at that point — not because it conflicts today, but because the promise and the archive live in different
 files with nothing comparing them.
+
+## V-1519 — an open product decision that lived only in a test constant
+
+V-1518 recovered `docs/decisions.md` as the canonical register and established that it carries OPEN items,
+not just settled ones — D-033 and D-034 both sit there marked pending review. That makes a checkable
+question available: **is every open decision in the register?**
+
+`an-anonymous-exemption-is-earned-per-route` records one that is not. Its `DROPS_SILENTLY` constant is
+introduced as _"the two anonymous routes where the drop is REAL, recorded as an open decision"_, with the
+reasoning that wiring the reporter _"changes what an unauthenticated caller sees, which is a product
+decision rather than a defect fix"_. The register has no entry for it, and no `D-*` covers the
+unknown-field mechanism at all.
+
+So the decision was real, deliberate, well-reasoned — and discoverable only by reading a test file's
+constant. Someone reading the register to learn what is undecided would not find it.
+
+**The behaviour, verified rather than taken from the guard.** A mistyped optional field is dropped by
+zod's strip, so `POST /v1/auth/signup` with `nam` instead of `name` answers 201 with the account created
+unnamed. Wiring `reportUnknownRequestFields` is additive by construction: `lib/unknown-request-fields.ts`
+sets the `x-driftstack-unknown-fields` response header and logs, and its own header states the response
+body is unchanged, so no existing integration can break on it. That is what makes this a decision about
+what an unauthenticated caller is told rather than a defect to fix quietly.
+
+It is recorded as `D-2026-08-24-01`, in the register's current dated ID style, marked OPEN and explicitly
+not decided. The tier is left unplaced with the reasons for both readings written down — additive header
+argues Tier 2, any change to an unauthenticated surface argues Tier 3 — because guessing a tier in an
+authority register is worse than admitting the question.
+
+### I nearly recorded the wrong set, and the guard's own arm caught it
+
+The entry was written naming TWO routes, which is what `DROPS_SILENTLY` holds. The arm directly below it
+says they are two of THREE: `POST /v1/oauth/revoke` is the third, invisible to the schema-driven arms
+because its body is declared in the route file rather than api-types, with `token_type_hint` optional per
+RFC 7009 and no reporter call. A caller who misspells it is answered 200 with the hint discarded.
+
+Recording two of three in a canonical register would have been worse than recording nothing: an
+authoritative-looking entry that undercounts, which the next reader has no reason to re-derive. The set is
+enumerated in the entry now, and the arm asserts the register names every route it knows about — including
+the route-local one, by name, since that is precisely the member a schema-driven list cannot supply.
+
+Both negatives exercise that: dropping the third route from the entry reds it, and deleting the entry reds
+it. The register restored byte-identical.
+
+**Why the tie matters more than the entry.** A register entry is prose, and prose about a checked
+behaviour drifts from it silently — the failure V-1517 fixed in an audit suppression and V-1518 fixed in a
+retention promise, both in the last two batches. The guard that pins the behaviour now also asserts the
+record of it, so the two move together or the run fails.

@@ -252,6 +252,21 @@ describe('V-960 the anonymous unknown-field exemption is earned per route', () =
 
   it('CRITICAL the two api-types-schema routes that really do drop a field in silence, pinned by count. V-1031: these are two of THREE — POST /v1/oauth/revoke is the third, and it is pinned by the arm below rather than here because its body is declared in the route file instead of api-types. The count here is the size of this list, so it can only ever describe what somebody already put in it', () => {
     expect(DROPS_SILENTLY.length, 'anonymous routes that silently drop a mistyped field').toBe(2);
+
+    // V-1519 — the open decision this list describes is now recorded in the
+    // canonical register instead of living only here. The register entry must
+    // name every route in the set: it was written naming two, and the arm below
+    // is why that was wrong — /v1/oauth/revoke is route-local and invisible to
+    // the schema-driven arms, so a reader of either list alone undercounts.
+    const register = readFileSync(resolve(REPO_ROOT, 'docs/decisions.md'), 'utf8');
+    const entry = register.slice(register.indexOf('## D-2026-08-24-01'));
+    expect(entry, 'the register still carries the open unknown-field decision').toContain(
+      'reportUnknownRequestFields',
+    );
+    for (const c of DROPS_SILENTLY) {
+      expect(entry, `${c.route} is named in the register entry`).toContain(c.route);
+    }
+    expect(entry, 'the route-local third dropper is named too').toContain('POST /v1/oauth/revoke');
     for (const c of DROPS_SILENTLY) {
       const parsed = c.schema.safeParse(c.typo);
       expect(parsed.success, `${c.route}: the mistyped body is still accepted`).toBe(true);
