@@ -58,6 +58,36 @@ describe('V-488 — verifyS256Challenge', () => {
     expect(verifyS256Challenge({ verifier: SAMPLE_VERIFIER, challenge: 'abc' })).toBe(false);
   });
 
+  // V-1462 — the RFC 7636 length floor, on the VERIFY path.
+  //
+  // Every rejection arm above pairs a bad verifier with a challenge computed
+  // from the GOOD one, so the digest never matches and the shape check is never
+  // what decides. Measured: replacing `!VERIFIER_PATTERN.test(opts.verifier)`
+  // with `false` left all 29 tests green while a ONE-CHARACTER verifier started
+  // verifying true.
+  //
+  // The challenge here is computed from the short verifier itself, which is what
+  // a real client does — the server never calls `computeS256Challenge` on a
+  // client's behalf, it receives a challenge the client derived. So the digest
+  // matches and the 43..128 floor is the only thing left to refuse it. Without
+  // it, a stolen authorization code is redeemable by guessing a single
+  // character, which is the exact property PKCE exists to provide.
+  //
+  // `computeS256Challenge` cannot build these inputs — it throws on a short
+  // verifier, which is the mint-side half of the same rule and already covered.
+  it.each(['a', 'abc', 'x'.repeat(10), 'x'.repeat(42), 'x'.repeat(129)])(
+    'CRITICAL refuses a verifier of illegal length (%s chars) even though its challenge MATCHES',
+    (verifier) => {
+      const challenge = createHash('sha256')
+        .update(verifier)
+        .digest('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+      expect(verifyS256Challenge({ verifier, challenge })).toBe(false);
+    },
+  );
+
   it('rejects a verifier with disallowed characters', () => {
     const challenge = computeS256Challenge(SAMPLE_VERIFIER);
     expect(verifyS256Challenge({ verifier: '+'.repeat(43), challenge })).toBe(false);

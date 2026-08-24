@@ -11335,3 +11335,47 @@ so every mutation substituted prose into a condition. Third time this session th
 guard has caught a broken harness invocation that would otherwise have read as a clean survival.
 
 No source or test change; log entry only.
+
+## V-1462 — PKCE's entropy floor was never the deciding layer in any test
+
+Completing the validator family. `oauth-pkce.ts` is the last of the four; eight operands swept across
+`verifyS256Challenge` and `verifyPlainChallenge`, six survived, and one of the six is a real gap.
+
+**`!VERIFIER_PATTERN.test(opts.verifier)` in `verifyS256Challenge`.** Replacing it with `false` left all
+29 tests green while a ONE-CHARACTER verifier began verifying `true`. Measured across lengths:
+
+    verifier 'a'        false -> TRUE
+    verifier 'abc'      false -> TRUE
+    verifier 10 chars   false -> TRUE
+    verifier 43 chars    true ->  true   (unchanged)
+
+Every existing rejection arm pairs a bad verifier with a challenge computed from the GOOD one, so the
+digest never matches and the shape check never decides anything. The discriminating input is a short
+verifier whose challenge is derived from ITSELF — which is what a real client sends, since the server
+never calls `computeS256Challenge` on a client's behalf. Then the digest matches and RFC 7636's
+43..128 floor is all that refuses it. Without it a stolen authorization code is redeemable by guessing
+a single character, which is the exact property PKCE exists to provide. The mint-side half of the same
+rule was already covered — `computeS256Challenge` throws on a short verifier — and that is why it could
+not be used to build these inputs.
+
+Five rows added (`a`, `abc`, 10, 42 and 129 characters); the operand now reds.
+
+**The other five survivors are redundant layers, established by construction rather than assumed.** The
+empty-input guards are backstopped by the patterns (`''` fails a 43..128 test). The challenge-shape
+check is backstopped by the length guard: a wrong-length challenge decodes to the wrong number of bytes,
+and a 43-character challenge containing `.` or `~` decodes short because `Buffer.from(…, 'base64')`
+skips invalid characters — either way `provided.length !== expected.length` catches it. And in
+`verifyPlainChallenge` the verifier and challenge shape checks are redundant with EACH OTHER, because
+plain mode requires the two to be equal: removing the verifier check alone still refused a
+one-character input, since the challenge check saw the same string. No tests added for those, on the
+V-1444 principle.
+
+**Harness hardened first, because this trap had cost three batches.** `Tests  no tests` IS a summary
+line, so the existing NO-SUMMARY guard never fired on a mutant that failed to parse, and the run read
+like a clean survival. `mutate.py` now syntax-checks the mutant with esbuild (~0.2s) before spending a
+suite run on it, restoring content and mtime and printing `INVALID  the mutant does not parse — this is
+not a result, not a survival`; and an explicit no-tests check backs it up. Verified against the exact
+deletion that had misled me three times.
+
+Full suite green: 3067 files, 30863 tests, exit 0. No new test file; `it` count unchanged at 17 against
+HEAD (the addition is an `it.each`). No ratchet movement.
