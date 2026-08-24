@@ -97,4 +97,45 @@ describe('LiveKit 24h-TTL cross-source invariant', () => {
       /Token TTL — 24h matches gui_control_key \+ the agent-session\s*\n?\s*\*\s+lifecycle\. LiveKit's max is 6h, but the SFU re-checks at\s*\n?\s*\*\s+handshake only/,
     );
   });
+
+  // V-1430 — the OTHER inline mint, and why the two must not be unified.
+  //
+  // `agent-sessions.ts` mints a second LiveKit token for the harness/publisher
+  // (`identity: harness-<mac>`, `canPublish: true`) at 6h, against the customer
+  // viewer's 24h. That looks like drift and is not. The exported constant's own
+  // JSDoc states the rule: "LiveKit's max is 6h, but the SFU re-checks at handshake
+  // only, so post-handshake long-lived connections survive the token expiry."
+  //
+  // So the customer token KNOWINGLY exceeds LiveKit's cap — a reconnect re-mints —
+  // while the publisher, the Mac that establishes and holds the room, stays inside
+  // it. Unifying them would push the publisher past the documented maximum.
+  //
+  // This arm exists because that unification is the obvious-looking cleanup. While
+  // writing V-1429 I considered exactly it, before finding the second mint at all;
+  // the value differs from the one I had grepped for, so an enumeration of
+  // `24 * 60 * 60` could not see it. A guard that only pins the customer TTL would
+  // have let the "tidy up the duplicate" change through.
+  it("CRITICAL the harness/publisher token stays at 6h — LiveKit's documented maximum — and is NOT unified with the 24h customer TTL. The customer token deliberately exceeds the cap because the SFU re-checks at handshake only; the publisher holds the room and must not.", () => {
+    const publisher = /const ttlSeconds = ([^;]+);[\s\S]{0,400}?identity: `harness-/.exec(
+      agentRouteSrc,
+    );
+    expect(
+      publisher?.[1],
+      'the harness LiveKit mint no longer declares `const ttlSeconds` before a harness- identity',
+    ).toBeDefined();
+    expect(publisher?.[1]?.trim(), "the publisher token left LiveKit's 6h cap").toBe('6 * 60 * 60');
+
+    const customer = /const ttlSeconds = ([^;]+);[\s\S]{0,400}?identity: `customer-/.exec(
+      agentRouteSrc,
+    );
+    expect(
+      publisher?.[1]?.trim(),
+      'the two mints were unified — the publisher must stay within the 6h cap the constant JSDoc names, and the customer token is the one allowed to exceed it',
+    ).not.toBe(customer?.[1]?.trim());
+  });
+
+  it("the rationale this file leans on is still written where it claims: the exported constant's JSDoc names LiveKit's 6h maximum and the handshake-only re-check. If that comment goes, the arm above is asserting a rule nobody records.", () => {
+    expect(lkRouteSrc).toMatch(/LiveKit's max is 6h/);
+    expect(lkRouteSrc).toMatch(/re-checks at\s*\n?\s*\*\s*handshake only/);
+  });
 });

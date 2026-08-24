@@ -9997,3 +9997,41 @@ Recorded as an option not taken: the duplication could be removed in source inst
 back would be circular, and relocating it to `lib/livekit-token.ts` would break two content-parity pins
 that hold it in its current file with its JSDoc. Guarding the copy is proportionate; the dedup is a
 call for whoever owns that refactor.
+
+### V-1430 — the second mint stays at LiveKit's cap, and the cleanup that would break it
+
+V-1429 found a second inline LiveKit mint in `agent-sessions.ts` at 6h against the customer token's
+24h, and set it aside as "a different token class, by design". That was right, and it left the more
+useful half unwritten: **why** the difference exists, and what happens if someone removes it.
+
+The exported constant's own JSDoc states the rule — "LiveKit's max is 6h, but the SFU re-checks at
+handshake only, so post-handshake long-lived connections survive the token expiry." So the two mints
+sit on opposite sides of a documented cap on purpose:
+
+| mint                     | identity             | grants              | TTL | relation to the cap                        |
+| ------------------------ | -------------------- | ------------------- | --- | ------------------------------------------ |
+| `agent-sessions.ts:1013` | `harness-<mac>`      | `canPublish: true`  | 6h  | **at** LiveKit's maximum                   |
+| `agent-sessions.ts:1793` | `customer-<account>` | `canPublish: false` | 24h | knowingly **over** it — reconnects re-mint |
+
+The customer viewer may exceed the cap because a reconnect re-mints; the publisher is the Mac that
+establishes and holds the room, and does not.
+
+**The reason this needed a guard is that I nearly broke it myself.** While writing V-1429 I considered
+deduplicating the inline TTL onto the exported constant — the obvious-looking cleanup — and only
+discovered the second mint because an arm failed and reported a value I had not grepped for. An
+enumeration of `24 * 60 * 60` cannot find a site that says `6 * 60 * 60`. A guard holding only the
+customer TTL would have waved that change through, and the publisher would have gone out at four times
+LiveKit's documented maximum.
+
+Two arms, three mutations:
+
+| mutation                                               | reds                                                    |
+| ------------------------------------------------------ | ------------------------------------------------------- |
+| unify the publisher onto 24h — the cleanup             | the publisher-cap arm                                   |
+| the publisher drifts to 2h                             | the publisher-cap arm                                   |
+| delete "LiveKit's max is 6h" from the constant's JSDoc | **2** — the rationale anchor and the existing JSDoc pin |
+
+The second arm is the one worth explaining. The first asserts a rule whose justification lives only in
+a comment; if that comment is deleted, the arm carries on enforcing something nobody records any
+reason for, which is how a pin becomes a rubber stamp. So the rationale is anchored too, and its
+removal fails loudly rather than quietly.
