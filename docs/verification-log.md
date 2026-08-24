@@ -11505,3 +11505,48 @@ vitest reported as `ReferenceError` rather than as a failed assertion.
 
 Full suite green: 3067 files, 30866 tests, exit 0. No new test file; 13 `it` declarations to 14. No
 ratchet movement.
+
+## V-1466 — the third empty-key verifier, and this one signs and verifies in the same file
+
+Finishing the `createHmac` sweep. `oauth-client-state.ts` protects the OAuth client callback: the state
+token carries `provider`, `redirectTo` and `nonce`, and verifying it is what stops a forged callback.
+
+**The signing half has always guarded the secret; the verifying half never did.**
+`signOauthClientState` opens with `if (!opts.signingSecret || opts.signingSecret.length < 32) throw`.
+`verifyOauthClientState`, sixty lines below in the same file, went straight to `createHmac`. Measured:
+
+    empty secret + state forged as HMAC-SHA256('', payload)  ->  { kind: 'ok', payload }
+    real  secret + the same forged state                     ->  { kind: 'bad-signature' }
+
+`kind: 'ok'` with an attacker-chosen `redirectTo` is the OAuth CSRF token accepting a value the
+attacker wrote.
+
+**Reachability, checked rather than assumed — and it is better here than on the Stripe path.**
+`config.oauthClient.signingSecret` is `z.string().min(32).optional()`, so a blank or short value is
+rejected by the schema and cannot arrive from the environment. This is defence in depth. It is still
+worth closing because the function is exported, any caller not routed through that schema gets no
+protection, and the rule was already written down twice — once in the signing half, once in the config
+schema — while the one place that reads an attacker-supplied token had it in neither.
+
+**One home for the length.** Adding the check would have put a second bare `32` in the file, which is
+the drift this repo consolidates elsewhere (V-1449's AES parameters). Both halves now read
+`MIN_SIGNING_SECRET_LENGTH`, pinned with its value, and the sign-side parity regex was rewritten in the
+same commit — the pin is the sentinel, its test name stays a paraphrase.
+
+Returns `bad-signature` rather than a new union member. The route maps each `kind` to a distinct
+customer-visible response, so widening the union to describe a server misconfiguration would change what
+a customer sees for a case that should never reach one. Same reasoning as V-1465's decision not to add a
+fifth Stripe reason, and for a stronger cause here.
+
+Three mutations, each restored byte-identical: removing the guard, weakening it to empty-only (dropping
+the length half), and drifting the constant from 32 to 8 all red two tests.
+
+**The class, closed.** Twelve `createHmac` sites; three verifiers accepted a forgery signed with an
+empty key — NowPayments (V-1464, live-reachable), Stripe (V-1465, latent behind truthiness) and this
+one (latent behind a Zod minimum). The remaining nine either only sign, or derive their key from
+decrypted material rather than config. The through-line is that Node's HMAC treats an empty key as a
+valid key, so "the secret is configured" has to be checked where the attacker's input is read, not only
+where our own output is produced.
+
+Full suite green: 3067 files, 30867 tests, exit 0. No new test file; behavioural 12 `it` declarations to
+13, parity unchanged at 11. No ratchet movement.

@@ -52,8 +52,18 @@ export interface SignStateOpts {
  * Mint a signed state token. The returned string goes directly into
  * the authorize-URL's `state` param.
  */
+/**
+ * Minimum signing-secret length, shared by the signing and verifying halves.
+ *
+ * V-1466 — it was a bare `32` in the signing guard and the verifying half had no
+ * guard at all. Now that both enforce it, one home rather than two literals: the
+ * value is fixed by `config.oauthClient.signingSecret`'s `z.string().min(32)`,
+ * and a copy that drifts from that schema is a bug in the copy.
+ */
+const MIN_SIGNING_SECRET_LENGTH = 32;
+
 export function signOauthClientState(opts: SignStateOpts): string {
-  if (!opts.signingSecret || opts.signingSecret.length < 32) {
+  if (!opts.signingSecret || opts.signingSecret.length < MIN_SIGNING_SECRET_LENGTH) {
     throw new TypeError('signingSecret must be ≥32 chars');
   }
   const payload: OAuthClientStatePayload = {
@@ -93,6 +103,28 @@ export function verifyOauthClientState(opts: VerifyStateOpts): VerifyStateResult
   if (parts.length !== 2) return { kind: 'malformed' };
   const [encodedPayload, signaturePart] = parts;
   if (!encodedPayload || !signaturePart) return { kind: 'malformed' };
+
+  // V-1466 — refuse before hashing when the signing secret is absent or too
+  // short, matching `signOauthClientState` above.
+  //
+  // Node's HMAC accepts an EMPTY key and returns a good digest, so without this
+  // a state forged as `HMAC-SHA256('', payload)` verified as genuine — measured,
+  // it returned `{ kind: 'ok' }` with attacker-chosen `provider`, `redirectTo`
+  // and `nonce`, which is the CSRF token for the OAuth callback.
+  //
+  // The signing half of this module has always enforced the same rule; only the
+  // verifying half was missing it. `config.oauthClient.signingSecret` is
+  // `z.string().min(32)`, so an empty value cannot arrive from the environment
+  // today and this is defence in depth — but the function is exported and any
+  // caller that does not route through that schema gets the guard now.
+  //
+  // Returns `bad-signature` rather than a new union member: the tagged union is
+  // pinned across several files and the route maps each kind to a distinct
+  // response, so widening it to describe a server misconfiguration would change
+  // customer-visible behaviour for a case that should never reach a customer.
+  if (!opts.signingSecret || opts.signingSecret.length < MIN_SIGNING_SECRET_LENGTH) {
+    return { kind: 'bad-signature' };
+  }
 
   // Recompute the HMAC and compare in constant time.
   const expected = createHmac('sha256', opts.signingSecret).update(encodedPayload).digest();

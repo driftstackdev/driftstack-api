@@ -1,5 +1,6 @@
 // V-667.C — unit tests for OAuth-client state-token sign/verify.
 
+import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { signOauthClientState, verifyOauthClientState } from '../../src/lib/oauth-client-state.js';
 
@@ -62,6 +63,32 @@ describe('verifyOauthClientState', () => {
     const tampered = 'eyJtYWxpY2lvdXMiOnRydWV9' + '.' + sig; // valid base64url but different payload
     const res = verifyOauthClientState({ token: tampered, signingSecret: SECRET });
     expect(res.kind).toBe('bad-signature');
+  });
+
+  // V-1466 — the VERIFYING half now enforces the same secret rule the signing
+  // half always has. Node's HMAC accepts an empty key and returns a good digest,
+  // so a state forged as `HMAC-SHA256('', payload)` used to return
+  // `{ kind: 'ok' }` with attacker-chosen provider, redirectTo and nonce — the
+  // CSRF token for the OAuth callback. The arm named "rejects short signing
+  // secret" covers only the SIGNING side, which throws.
+  it('CRITICAL an absent or short signing secret refuses a state forged with that same key', () => {
+    const payload = {
+      provider: 'google',
+      redirectTo: '/dashboard',
+      nonce: 'abcdef0123456789',
+      iat: Math.floor(Date.now() / 1000),
+    };
+    const b64u = (b: Buffer): string =>
+      b.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const encoded = b64u(Buffer.from(JSON.stringify(payload), 'utf8'));
+
+    for (const weak of ['', 'x'.repeat(31)]) {
+      const forged = `${encoded}.${b64u(createHmac('sha256', weak).update(encoded).digest())}`;
+      expect(
+        verifyOauthClientState({ token: forged, signingSecret: weak }).kind,
+        `a ${weak.length}-char signing secret must not validate a state signed with it`,
+      ).toBe('bad-signature');
+    }
   });
 
   it('signed with wrong secret → kind: bad-signature', () => {

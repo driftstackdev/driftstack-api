@@ -63,10 +63,25 @@ describe('lib/oauth-client-state content parity', () => {
 
   it('signOauthClientState ≥32-char signing-secret check pinned + HMAC-SHA256 + `<encodedPayload>.<base64url(signature)>` triplet emit. Drift to allowing short secrets would let attackers brute-force the HMAC key', () => {
     expect(body).toMatch(
-      /if \(!opts\.signingSecret \|\| opts\.signingSecret\.length < 32\) \{\s*\n?\s*throw new TypeError\('signingSecret must be ≥32 chars'\);\s*\n?\s*\}/,
+      // V-1466 — the bare 32 became MIN_SIGNING_SECRET_LENGTH when the VERIFYING
+      // half gained the same check. Two literals in one file is the drift this
+      // repo consolidates elsewhere, so the length has one home; the constant's
+      // value is pinned separately below.
+      /if \(!opts\.signingSecret \|\| opts\.signingSecret\.length < MIN_SIGNING_SECRET_LENGTH\) \{\s*\n?\s*throw new TypeError\('signingSecret must be ≥32 chars'\);\s*\n?\s*\}/,
     );
     expect(body).toMatch(
       /const signature = createHmac\('sha256', opts\.signingSecret\)\.update\(encodedPayload\)\.digest\(\);\s*\n?\s*return `\$\{encodedPayload\}\.\$\{toBase64Url\(signature\)\}`;/,
+    );
+
+    // V-1466 — the length now has one home, and the VERIFYING half enforces it
+    // too. Node's HMAC accepts an empty key and returns a good digest, so before
+    // this a state forged with `HMAC-SHA256('', payload)` verified as genuine.
+    expect(body).toMatch(/const MIN_SIGNING_SECRET_LENGTH = 32;/);
+    expect(
+      body,
+      'verifyOauthClientState must refuse an absent or short secret before hashing',
+    ).toMatch(
+      /if \(!opts\.signingSecret \|\| opts\.signingSecret\.length < MIN_SIGNING_SECRET_LENGTH\) \{\s*\n?\s*return \{ kind: 'bad-signature' \};\s*\n?\s*\}/,
     );
   });
 
