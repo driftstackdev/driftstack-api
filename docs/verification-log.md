@@ -9680,3 +9680,45 @@ package to `src`. That is a module-resolution decision, not a coverage one.
 
 Recorded as a limit on the instrument itself: **"never executed" is unreliable for any package whose
 consumers import it by package name.** Check the resolution before believing it.
+
+### V-1423 — read and destroy share a path again, and an assertion that could not fail
+
+The remaining SDK methods: `sessions.interact/wait/get/extract`, `usage.series`, `usage.currentPeriod`,
+`billing.createPortalSession`. Paths cross-checked against the server first, as in V-1419..V-1421; all
+match.
+
+The structural hazard is V-1421's, on a costlier resource. `get` and `destroy` address the **same**
+`/v1/sessions/:id` and differ only by verb — here the destructive side ends a live browser session the
+customer is paying for, and from the call site a read that became a delete looks exactly like a read.
+Pinned as a shape: the two calls share one path, and their methods are `GET` and `DELETE`.
+
+Alongside it, `navigate`, `interact`, `wait` and `extract` are four sibling sub-paths one segment
+apart. The arm asserts the **set is distinct** rather than four literals, because two collapsing onto
+one can otherwise be "fixed" by updating both.
+
+**An arm that could not have failed, caught by mutation.** The `usage.series` arm asserted that no
+window means no query key:
+
+    expect(query).toEqual({})
+
+`toEqual` **ignores undefined members**, so `{ days: undefined }` satisfies it. Removing the
+conditional that omits the key left the whole file green — the assertion was decorative. It now
+asserts `Object.keys(query)` is empty, and the same mutation reds it.
+
+That is worth carrying: the shape being tested here is _"the key is absent, not present-and-undefined"_,
+and `toEqual` cannot express it. A serialised `undefined` becomes the literal string in most query
+builders, so the server would read a malformed window rather than applying its default — precisely the
+case the conditional exists for, and precisely the one the first draft could not see.
+
+Mutations, after the fix:
+
+| mutation                                  | reds                                                        |
+| ----------------------------------------- | ----------------------------------------------------------- |
+| `wait` collapses onto the `interact` path | 2 — the wait row and the distinct-set arm                   |
+| `destroy`'s verb becomes `GET`            | the shared-path/verb arm                                    |
+| `series` always sends the `days` key      | the usage arm — green before the assertion was strengthened |
+
+A shell note from the same batch: a mutation needle containing a backtick was mangled before it
+reached `mutate.py`, which then refused on its needle assertion. Backticks in a shell argument are the
+trap already recorded for commit messages; the same applies to mutation needles. Choosing a
+backtick-free substring of the same line is enough.

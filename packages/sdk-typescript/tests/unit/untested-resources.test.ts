@@ -44,6 +44,9 @@ import { EmailPreferencesResource } from '../../src/resources/email-preferences.
 import { AccountResource } from '../../src/resources/account.js';
 import { AuthResource } from '../../src/resources/auth.js';
 import { ProfilesResource } from '../../src/resources/profiles.js';
+import { BillingResource } from '../../src/resources/billing.js';
+import { UsageResource } from '../../src/resources/usage.js';
+import { SessionsResource } from '../../src/resources/sessions.js';
 import type { HttpClient } from '../../src/http.js';
 
 interface RequestOpts {
@@ -466,5 +469,111 @@ describe('AccountResource — the thirteen methods nothing executed', () => {
     const b = recorder({});
     await new AccountResource(b.http).getBundledLlmStatus();
     expect(a.calls[0]?.path).not.toBe(b.calls[0]?.path);
+  });
+});
+
+// V-1423 — the session operations nothing had called: interact, wait, get, extract,
+// plus usage.series and billing.createPortalSession. Paths cross-checked against the
+// server first, as in V-1419..V-1421; all match.
+//
+// The structural hazard repeats the BYOK one from V-1421, on a costlier resource:
+// `get` and `destroy` address the SAME path and differ only by verb. Here the
+// destructive side ends a live browser session the customer is paying for, and a
+// read that became a delete would look, from the call site, exactly like a read.
+describe('SessionsResource — the operations nothing executed', () => {
+  const SID = 'ses_abc';
+
+  it('CRITICAL reading a session and destroying one share a path and differ only by verb. GET and DELETE against `/v1/sessions/:id` are an inspection and the end of a running browser session; there is no segment to tell them apart, so the pair is pinned as a shape rather than as two literals.', async () => {
+    const r = recorder({});
+    await new SessionsResource(r.http).get(SID);
+    const d = recorder(undefined);
+    await new SessionsResource(d.http).destroy(SID);
+
+    expect(r.calls[0]?.path, 'the two address one URL by design').toBe(d.calls[0]?.path);
+    expect([r.calls[0]?.method, d.calls[0]?.method], 'and are separated by verb alone').toEqual([
+      'GET',
+      'DELETE',
+    ]);
+  });
+
+  it.each([
+    [
+      'interact',
+      `/v1/sessions/${SID}/interact`,
+      (x: SessionsResource) => x.interact(SID, { action: 'tap', selector: '#a' } as never),
+      { action: 'tap', selector: '#a' },
+    ],
+    [
+      'wait',
+      `/v1/sessions/${SID}/wait`,
+      (x: SessionsResource) => x.wait(SID, { until: 'load' } as never),
+      { until: 'load' },
+    ],
+    [
+      'extract',
+      `/v1/sessions/${SID}/extract`,
+      (x: SessionsResource) =>
+        x.extract(SID, { extractions: [{ name: 'n', selector: 's', type: 'text' }] } as never),
+      { extractions: [{ name: 'n', selector: 's', type: 'text' }] },
+    ],
+  ])(
+    'CRITICAL %s POSTs to %s and forwards its body verbatim. The three are sibling sub-paths of one session, so a copy-paste between them sends a wait to the interact endpoint — which fails as a schema error and reads to the customer as a malformed request of their own making.',
+    async (_n, path, invoke, body) => {
+      const { http, calls } = recorder({});
+      await invoke(new SessionsResource(http));
+      expect(calls[0]?.method).toBe('POST');
+      expect(calls[0]?.path).toBe(path);
+      expect(calls[0]?.body).toEqual(body);
+    },
+  );
+
+  it('CRITICAL the four session sub-paths are distinct. navigate, interact, wait and extract differ by one segment each, and this asserts the SET rather than four literals so that two collapsing onto one cannot be satisfied by updating both.', async () => {
+    const paths: string[] = [];
+    for (const invoke of [
+      (x: SessionsResource) => x.navigate(SID, { url: 'https://e.test' }),
+      (x: SessionsResource) => x.interact(SID, { action: 'tap', selector: '#a' } as never),
+      (x: SessionsResource) => x.wait(SID, { until: 'load' } as never),
+      (x: SessionsResource) =>
+        x.extract(SID, { extractions: [{ name: 'n', selector: 's', type: 'text' }] } as never),
+    ]) {
+      const { http, calls } = recorder({});
+      await invoke(new SessionsResource(http));
+      paths.push(calls[0]?.path ?? '');
+    }
+    expect(new Set(paths).size, 'two session operations share a path').toBe(paths.length);
+  });
+});
+
+describe('UsageResource / BillingResource — three more nothing executed', () => {
+  it('CRITICAL series() OMITS the query key entirely when no window is given, rather than sending days=undefined. A serialised undefined becomes the literal string in most clients, and the server would read it as a malformed window instead of the default.', async () => {
+    const bare = recorder({});
+    await new UsageResource(bare.http).series();
+    const bareQuery = (bare.calls[0] as { query?: Record<string, unknown> }).query ?? {};
+    // `toEqual({})` would PASS against `{ days: undefined }` — it ignores undefined
+    // members — so the key's absence is asserted directly. Mutation caught this: the
+    // first draft of this arm stayed green with the conditional removed.
+    expect(
+      Object.keys(bareQuery),
+      'no window means the key is absent, not present-and-undefined',
+    ).toEqual([]);
+
+    const windowed = recorder({});
+    await new UsageResource(windowed.http).series({ days: 30 });
+    expect((windowed.calls[0] as { query?: unknown }).query).toEqual({ days: 30 });
+  });
+
+  it('currentPeriod() and series() are distinct reads on the usage resource', async () => {
+    const a = recorder({});
+    await new UsageResource(a.http).currentPeriod();
+    const b = recorder({});
+    await new UsageResource(b.http).series();
+    expect(a.calls[0]?.path).not.toBe(b.calls[0]?.path);
+  });
+
+  it('createPortalSession() POSTs to the billing portal path with no body, since the account is identified by the key', async () => {
+    const { http, calls } = recorder({});
+    await new BillingResource(http).createPortalSession();
+    expect(calls[0]?.method).toBe('POST');
+    expect(calls[0]?.path).toBe('/v1/billing/portal-session');
   });
 });
