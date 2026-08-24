@@ -406,4 +406,47 @@ describe('every optional dependency bootstrap does not pass is declared', () => 
       'bootstrap no longer passes agentSessionsRepo to ProfilesService — the live-session guard on purge/transfer is fail-open and is now inert in production',
     ).toBe(true);
   });
+
+  // V-1433 — the same must-stay-wired shape, on the customer audit log.
+  //
+  // Five services take the audit recorder as an OPTIONAL parameter defaulting to
+  // null, and every emit site opens with a fail-open skip (`if (this.accountAudit
+  // === null) return;`). Drop the argument in bootstrap and the rows simply stop
+  // being written — no error, no degraded mode, nothing to notice.
+  //
+  // Measured on `WebhooksService`: with the argument removed, `tsc` exits 0 (the
+  // parameter is optional) and 123 tests across the bootstrap parity guard, the
+  // audit-action invariant, and the webhooks + account-audit integration suites all
+  // pass. Neither the type system nor the behaviour tests can see it.
+  //
+  // `ProfileSnapshotsService` is already safe, and shows why this arm is shaped the
+  // way it is: `lib-bootstrap-content-parity` pins its construction with the full
+  // argument list, audit recorder included. The other four are pinned only by
+  // COMMENTS describing the wiring — text that survives the argument being deleted.
+  //
+  // The surface matters: `account-audit-action-cross-source-invariant` calls the
+  // customer audit log a GDPR Article 20 portability surface. Rows that were never
+  // written cannot be exported.
+  const AUDIT_WIRED: ReadonlyArray<readonly [service: string, why: string]> = [
+    ['WebhooksService', 'webhook_endpoint.{created,deleted}'],
+    ['ApiKeysService', 'customer-facing api-key audit emit (V-216)'],
+    ['SessionsService', 'session lifecycle audit emit'],
+    ['TeamMembersService', 'team membership changes'],
+    ['ProfileSnapshotsService', 'snapshot create/delete (already pinned by bootstrap parity)'],
+  ];
+
+  it.each(AUDIT_WIRED)(
+    'CRITICAL bootstrap still passes the audit recorder into %s (%s). The parameter is optional and every emit fails OPEN, so a dropped argument silently stops writing customer audit rows — tsc accepts it and the behaviour tests cannot see it.',
+    (service) => {
+      const call = new RegExp(
+        `new ${service}\\(([\\s\\S]*?)\\n {2}\\)|new ${service}\\(([^;]*?)\\);`,
+      ).exec(bootstrapSource);
+      expect(call, `the ${service} construction is no longer readable in bootstrap`).not.toBeNull();
+      const args = stripComments(`${call?.[1] ?? ''}${call?.[2] ?? ''}`);
+      expect(
+        /\baccountAudit(?:Service)?\b/.test(args),
+        `bootstrap no longer passes the audit recorder to ${service} — its audit emits are fail-open and now write nothing`,
+      ).toBe(true);
+    },
+  );
 });

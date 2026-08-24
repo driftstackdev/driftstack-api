@@ -10117,3 +10117,42 @@ it — turning a regression into paperwork. Both directions are now covered.
 
 The comment is corrected as a paraphrase in the same commit, and says plainly that the null default is
 the fail-open contract for a deployment omitting the repo, not a description of production.
+
+### V-1433 — the fail-open sweep: four unguarded audit wirings, and nine that are fine
+
+V-1432 was one instance, so it was swept: injected dependencies whose null check causes an **early
+return** — fail-open by construction. 14 sites. Most are safe, and saying why matters as much as the
+findings.
+
+**Ruled out, with the reason each time.** The four `authCache` sites (team-members, admin-accounts,
+stripe-webhooks, rate-limit-overrides) are cache _invalidation_, and both call sites I read document the
+bound: "the next auth-path read will TTL out the stale entry within 30s in the worst case", and
+team-members adds that stale teams degrade to "no team grants (safe default)". Invalidation is an
+optimisation over expiry there, so an unwired invalidator is bounded by the TTL rather than open-ended.
+That is the distinction from V-1432, whose fail-open had no bound and lost data irreversibly.
+`profileMasterKey`, `r2`, `masterKey` and `mfaChallenges` return null — feature-unavailable, not
+silently-skipped. `throttle` no-ops the update email, which is the safe direction for volume.
+
+**The finding is the audit recorder.** Five services take `AccountAuditService | null = null` and every
+emit opens with `if (this.accountAudit === null) return;`. Drop the argument in bootstrap and customer
+audit rows stop being written — no error, no degraded mode.
+
+Measured on `WebhooksService` rather than argued:
+
+| with `accountAuditService` removed from the construction                                  | result                                 |
+| ----------------------------------------------------------------------------------------- | -------------------------------------- |
+| `tsc --noEmit`                                                                            | **exit 0** — the parameter is optional |
+| bootstrap parity + audit-action invariant + webhooks and account-audit integration suites | **123 passed**                         |
+
+Neither the type system nor the behaviour tests can see it. `account-audit-action-cross-source-invariant`
+calls this log a GDPR Article 20 portability surface; rows never written cannot be exported.
+
+`ProfileSnapshotsService` was already safe, and shows the shape: `lib-bootstrap-content-parity` pins its
+construction with the **full argument list**, recorder included. The other four are pinned only by
+comments _describing_ the wiring — text that survives the argument being deleted. That is the same
+comment-versus-effect split this session keeps finding, here on the wiring rather than on behaviour.
+
+Five arms, one per service, each mutation-proven by deleting its argument. Three of the four also red
+the roster arm — which asks for the newly-unwired dep to be _declared_. That is precisely the
+"regression becomes paperwork" failure V-1432 named, now demonstrated: the roster fires, but only the
+new arm says a security-relevant wiring was removed.
