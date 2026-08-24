@@ -3112,23 +3112,31 @@
               "type": "object",
               "properties": {
                 "name": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 32
                 },
                 "icon": {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 16
                 }
               },
               "required": ["name"]
-            }
+            },
+            "maxItems": 200,
+            "default": []
           },
           "tags": {
             "type": "array",
             "items": {
-              "type": "string"
-            }
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 24
+            },
+            "maxItems": 200,
+            "default": []
           }
-        },
-        "required": ["folders", "tags"]
+        }
       },
       "AccountProxyMetadata": {
         "type": "object",
@@ -3365,7 +3373,55 @@
             "type": ["string", "null"]
           },
           "action": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "account.email_verified",
+              "account.login",
+              "account.logout",
+              "account.password_changed",
+              "account.web_session_revoked",
+              "api_key.minted",
+              "api_key.revoked",
+              "api_key.rotated",
+              "session.created",
+              "session.destroyed",
+              "profile.created",
+              "profile.deleted",
+              "profile.restored",
+              "profile.purged",
+              "profile.exported",
+              "profile.imported",
+              "subscription.tier_changed",
+              "webhook_endpoint.created",
+              "webhook_endpoint.updated",
+              "webhook_endpoint.deleted",
+              "webhook_endpoint.secret_rotated",
+              "webhook_delivery.replayed",
+              "team.member_invited",
+              "team.invite_accepted",
+              "team.member_removed",
+              "account.mfa_enrolled",
+              "account.mfa_disabled",
+              "account.recovery_code_used",
+              "admin.refund_recorded",
+              "admin.support_note",
+              "agent.decompose.claude",
+              "agent.decompose.deterministic",
+              "agent_session.pair_mode.takeover",
+              "agent_session.pair_mode.handback",
+              "agent_session.pair_mode.timeout",
+              "agent_session.mode.changed",
+              "agent_session.created",
+              "agent_session.destroyed",
+              "account.byok_anthropic_key_set",
+              "account.byok_anthropic_key_cleared",
+              "account.byok_anthropic_key_tested",
+              "proxy.created",
+              "proxy.updated",
+              "proxy.deleted",
+              "account.bundled_llm_consent_changed",
+              "account.email_preferences_changed"
+            ]
           },
           "target_resource_id": {
             "type": ["string", "null"]
@@ -3381,7 +3437,9 @@
             "type": ["string", "null"]
           },
           "timestamp": {
-            "type": "string"
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
           }
         },
         "required": [

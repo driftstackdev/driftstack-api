@@ -156,6 +156,8 @@ import {
   AccountIdSchema,
   AddSupportNoteRequestSchema,
   WireGuardProxyConfigSchema,
+  AccountOrganizationSchema,
+  AccountAuditEntrySchema,
 } from '@driftstack/api-types';
 import { PROFILE_ID_INPUT_RE } from './profile-id.js';
 // S33 2026-07-07 (fable-truth-audit) — the cookie shape the agent-session
@@ -1927,12 +1929,22 @@ function buildRegistry(): OpenAPIRegistry {
   });
   // Per-account organization taxonomy (2026-06-16) — empty folders (+icons) +
   // tags defined in the GUI rail, synced per-account.
-  const AccountOrganizationOpenApi = z
-    .object({
-      folders: z.array(z.object({ name: z.string(), icon: z.string().optional() })),
-      tags: z.array(z.string()),
-    })
-    .openapi('AccountOrganization');
+  // V-1477 — was a hand copy that dropped every constraint its namesake
+  // enforces, in both directions at once:
+  //
+  //   folders        .max(200) gone            tags        .max(200) gone
+  //   folders[].name min(1).max(32) gone       tags[]      min(1).max(24) gone
+  //   folders[].icon .max(16) gone
+  //
+  // and it published `folders` + `tags` as REQUIRED while the schema gives both
+  // `.default([])`, so the document also declared mandatory what the server
+  // accepts omitted — the over-narrow direction of the same bug.
+  //
+  // Deleted rather than corrected. The schema is already exported and already
+  // what the route parses with, so a corrected copy would just be a copy that
+  // happens to agree today. The uniqueness `.refine()` does not survive into
+  // JSON Schema either way — that is a property of refines, not of this fix.
+  const AccountOrganizationOpenApi = AccountOrganizationSchema.openapi('AccountOrganization');
   registerRoute(r, {
     method: 'get',
     path: '/v1/account/me/organization',
@@ -2391,21 +2403,20 @@ function buildRegistry(): OpenAPIRegistry {
     cursor: PaginationQuerySchema.shape.cursor,
     action: z.string().optional(),
   });
-  const AccountAuditEntryOpenApi = z
-    .object({
-      id: z.string().uuid(),
-      account_id: z.string(),
-      actor_type: z.enum(['customer', 'system', 'staff']),
-      actor_account_id: z.string().nullable(),
-      actor_key_id: z.string().nullable(),
-      action: z.string(),
-      target_resource_id: z.string().nullable(),
-      payload: z.record(z.unknown()).nullable(),
-      ip_address: z.string().nullable(),
-      user_agent: z.string().nullable(),
-      timestamp: z.string(),
-    })
-    .openapi('AccountAuditEntry');
+  // V-1477 — a hand copy of AccountAuditEntrySchema, field for field, that
+  // differed from it in exactly three places:
+  //
+  //   action      z.string()   vs AccountAuditActionSchema — a 52-value enum
+  //   timestamp   z.string()   vs Iso8601Schema — format: date-time
+  //   actor_type  the same three values, spelled again
+  //
+  // A response rather than a request, so this is not the "server refuses what
+  // the document permits" failure — it is the consumer-side one. A generated
+  // SDK typed `action: str` cannot switch exhaustively over 52 documented
+  // actions, and the audit feed is precisely the surface people write switches
+  // against. Replaced with the schema itself; the third line shows why a copy
+  // is worth deleting even where it currently agrees.
+  const AccountAuditEntryOpenApi = AccountAuditEntrySchema.openapi('AccountAuditEntry');
   const ListAccountAuditResponseOpenApi = z
     .object({
       data: z.array(AccountAuditEntryOpenApi),

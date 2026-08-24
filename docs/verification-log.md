@@ -12032,3 +12032,77 @@ byte-identical from a scratchpad snapshot each time. `profile-id.ts` carries no 
 than "its tests still pass": one of those six arms asserts `parseProfileId(\`prof\_${UUID.toUpperCase()}\`)`returns the uppercase uuid, so case-insensitivity — the exact property the`/i`flag carried and the
 explicit`[0-9a-fA-F]` class replaces — is pinned directly, and it is pinned on the accepting side where
 a narrowing would show up.
+
+## V-1477 — two hand-mirrors deleted, and the instrument that found them without name-matching
+
+`lib/openapi.ts` hand-writes 99 `*OpenApi` schemas. 21 of them have a same-named exported schema in
+`api-types` — a hand copy of something that already exists, kept in sync by nothing. Two were drifting.
+
+**`AccountOrganization`** dropped every constraint its namesake enforces, in both directions at once:
+`.max(200)` on `folders` and on `tags`; `min(1).max(32)` on a folder name; `.max(16)` on a folder icon;
+`min(1).max(24)` on a tag. It also published `folders` and `tags` as REQUIRED while the schema gives
+both `.default([])` — declaring mandatory what the server accepts omitted, the over-narrow direction of
+the same bug.
+
+**`AccountAuditEntry`** is a field-for-field copy that differs in exactly three places: `action` is
+`z.string()` against a 46-value `AccountAuditActionSchema`, `timestamp` is `z.string()` against
+`Iso8601Schema` (`format: date-time`), and `actor_type` re-spells the same three values. A response, not
+a request, so this is not "the server refuses what the document permits" — it is the consumer-side
+failure: a generated SDK typed `action: str` cannot switch exhaustively over 46 documented actions, and
+an audit feed is exactly what people write switches against.
+
+Both replaced with the schema itself rather than a corrected copy. A corrected copy is still a copy that
+merely happens to agree today, which is how all of these started. The uniqueness `.refine()` on the
+organization arrays does not survive into JSON Schema either way — a property of refines, and the same
+fact V-924 turned on.
+
+**The instrument, and it ships with the fix rather than after it.** Reverting either mirror reinstates
+the exact defect — the required list returns and the item bounds vanish — and until this arm existed
+nothing would have said so. It is a fourth `it` in `a-published-bound-matches-the-route`, not a new file:
+the `EXPECTED_TEST_FILES` ratchet is stale at 3012 against an actual 3067 from a peer's drift, and rule 9
+forbids absorbing that.
+
+Pairing by NAME is what `published-request-schema-is-not-looser-than-enforced`
+declines to guess at, and rightly — field names collide. But `*OpenApi` ↔ `*Schema` is a pairing at the
+SCHEMA level, where the name is unique on both sides, so the ambiguity that blocks field-level matching
+does not arise. Each api-types schema is run through the same `zod-to-openapi` generator that produces
+the document, and the two JSON Schemas are diffed for constraint keywords. That is a comparison of
+generated artifacts, not of source text, so it sees element-level and nested constraints — which is how
+`tags[]` and `folders[].icon` surfaced at all.
+
+**The pair set is derived, never listed.** A hardcoded roster would stop covering a mirror registered
+later — the exact failure the other half of this file exists to correct. The arm parses `const X_OpenApi`
+out of openapi.ts, keeps those whose `XSchema` is exported, and intersects with the registered
+components. Floors are asserted on both counts so a broken extractor fails loudly instead of reporting
+nothing unchecked.
+
+**Its coverage is 6 of the 21, and the limit is worth stating.** Only schemas REGISTERED as components
+(`.openapi('Name')`) can be looked up by name in the document; the other 15 are inlined at their use
+site, where the name is gone by the time the document exists. So this instrument sees a third of the
+pairs it names. Fixing that means locating an inlined schema by walking paths, at which point the
+pairing to a name has to be re-established some other way — the honest description is "a third,
+measured", not "the mirrors are checked".
+
+**The three clean pairs, proven rather than reported clean.** `AccountProxyList`, `AccountProxyMetadata`
+and `AccountProxyTestResult` came back with no drift, which is worth nothing until a known member is
+broken. Stripping every constraint keyword from a published copy and re-diffing reddened
+`AccountProxyMetadata` immediately — and left `AccountProxyList` green, which looked like a blind spot
+and was a mutation that failed to APPLY: its only constraint is `data[].scheme`, an enum reached through
+a `$ref`, and stripping the local copy never touched the referenced component. Against a clone of the
+WHOLE document it reds correctly. The two look identical from the outside, which is the entire hazard.
+
+`AccountProxyTestResult` is a third case and neither: its schema carries no constraint keywords at all,
+so the comparison is vacuous for it by construction and can never fail. Six registered pairs, but five
+that can actually say something.
+
+**A false positive it produced, and why it was one.** The first run also reported `AccountProxyInput` as
+a required-list divergence: enforced `[]`, published `[host, label, port]`. It is not a divergence.
+`AccountProxyInputSchema` is a `discriminatedUnion`, which generates `anyOf` with no top-level
+`required` at all, so the comparison was between a union and an object. That mirror is deliberate — it
+flattens four variants into one documented object and carries every bound faithfully. Unions must be
+handled before a required-diff means anything, and a mirror that exists for a reason is not drift.
+
+**Negative, measured, so the surface is not re-swept.** Of 18 array properties across the 81 published
+components, 15 carry no `maxItems`. Thirteen are response collections — `data`, `teams`, `scopes`,
+`events` — where publishing an item cap would be wrong, since the length is whatever the server returns.
+Only the organization pair is request-side, and it is fixed here. No finding in the other 13.

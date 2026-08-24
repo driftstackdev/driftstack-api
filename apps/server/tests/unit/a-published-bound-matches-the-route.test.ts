@@ -26,6 +26,15 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import {
+  OpenAPIRegistry,
+  OpenApiGeneratorV31,
+  extendZodWithOpenApi,
+} from '@asteasolutions/zod-to-openapi';
+import { z } from 'zod';
+import * as apiTypes from '@driftstack/api-types';
+
+extendZodWithOpenApi(z);
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -251,6 +260,155 @@ describe('V-927 a published bound matches the route', () => {
     expect(
       stale,
       'this exemption no longer matches an unconstrained published field — the field was bounded or removed, so drop the entry rather than leaving it to cover something else later',
+    ).toEqual([]);
+  });
+  /**
+   * V-1477 — the SCHEMA-level comparator.
+   *
+   * `lib/openapi.ts` hand-writes 99 `*OpenApi` schemas, and 21 of them have a
+   * same-named exported schema in api-types: a hand copy of something that
+   * already exists, kept in sync by nothing at all. Two were drifting when this
+   * was written. `AccountOrganization` had lost `.max(200)` on both arrays,
+   * `min(1).max(32)` on a folder name, `.max(16)` on an icon and
+   * `min(1).max(24)` on a tag, and published two `.default([])` fields as
+   * REQUIRED; `AccountAuditEntry` published `action` as a bare string against a
+   * 46-value enum and `timestamp` without its `date-time` format.
+   *
+   * Pairing by FIELD name is what the sibling guard declines to guess at, and
+   * rightly — `name`, `code` and `status` mean different things per endpoint.
+   * `X` ↔ `XSchema` is a pairing at the SCHEMA level, where the name is unique
+   * on both sides, so that ambiguity does not arise. The api-types schema is run
+   * through the same generator that produces the document and the two JSON
+   * Schemas are diffed: a comparison of generated artifacts rather than source
+   * text, which is why nested and element-level constraints (`tags[]`,
+   * `folders[].icon`) are visible to it at all.
+   */
+  const CONSTRAINT_KEYWORDS = [
+    'maxLength',
+    'minLength',
+    'pattern',
+    'enum',
+    'format',
+    'maximum',
+    'minimum',
+    'maxItems',
+    'minItems',
+  ] as const;
+
+  /** Mirrors that intentionally differ from their namesake, with the reason. */
+  const INTENTIONAL_MIRRORS: Record<string, string> = {
+    AccountProxyInput:
+      'a discriminatedUnion flattened into one documented object on purpose. Four scheme variants ' +
+      'read badly as anyOf, and the flattened mirror carries every bound faithfully. Comparing an ' +
+      'object against a union reports its entire required list as drift — an artifact of the two ' +
+      "shapes, not a finding. This was the comparator's first false positive.",
+  };
+
+  type Constraints = Record<string, string>;
+
+  const deref = (node: unknown, root: unknown): Record<string, unknown> => {
+    let cur = node as Record<string, unknown>;
+    for (let hop = 0; hop < 10 && cur && typeof cur['$ref'] === 'string'; hop += 1) {
+      let target: unknown = root;
+      for (const key of cur['$ref'].replace(/^#\//, '').split('/')) {
+        target = (target as Record<string, unknown>)?.[key];
+      }
+      cur = target as Record<string, unknown>;
+    }
+    return cur ?? {};
+  };
+
+  const constraintsOf = (
+    node: unknown,
+    root: unknown,
+    prefix = '',
+    out: Constraints = {},
+    depth = 0,
+  ): Constraints => {
+    if (depth > 6) return out;
+    const schema = deref(node, root);
+    const properties = (schema['properties'] ?? {}) as Record<string, unknown>;
+    for (const [field, raw] of Object.entries(properties)) {
+      const prop = deref(raw, root);
+      const found = CONSTRAINT_KEYWORDS.filter((k) => k in prop);
+      if (found.length) out[prefix + field] = [...found].sort().join(',');
+      if (prop['type'] === 'array' && prop['items']) {
+        const items = deref(prop['items'], root);
+        const itemFound = CONSTRAINT_KEYWORDS.filter((k) => k in items);
+        if (itemFound.length) out[`${prefix}${field}[]`] = [...itemFound].sort().join(',');
+        constraintsOf(items, root, `${prefix}${field}[].`, out, depth + 1);
+      }
+      if (prop['type'] === 'object')
+        constraintsOf(prop, root, `${prefix}${field}.`, out, depth + 1);
+    }
+    return out;
+  };
+
+  it('CRITICAL a hand-written openapi.ts mirror carries every constraint the api-types schema of the same name enforces. 21 mirrors duplicate a schema that already exists and nothing keeps them in step; two had silently dropped bounds, an enum and a date-time format by the time anyone looked. Pairing is by SCHEMA name, which is unique on both sides, so this has none of the field-name ambiguity that limits the sibling guard.', () => {
+    const openapiSource = readFileSync(
+      resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts'),
+      'utf8',
+    );
+    const spec = JSON.parse(readFileSync(SPEC, 'utf8')) as Record<string, Record<string, unknown>>;
+    const components = (spec['components']?.['schemas'] ?? {}) as Record<string, unknown>;
+    const exported = apiTypes as unknown as Record<string, unknown>;
+
+    // DERIVED, never a roster: a hardcoded pair list would stop covering a
+    // mirror registered later, which is the exact failure the other half of
+    // this file exists to correct.
+    const names = [...openapiSource.matchAll(/const (\w+)OpenApi\s*=/g)].map((m) => m[1]!);
+    const paired = [...new Set(names)].filter((n) => `${n}Schema` in exported);
+    const registered = paired.filter((n) => n in components);
+
+    expect(
+      paired.length,
+      'no mirror paired with an api-types schema — the naming convention changed and this arm would pass over an empty set',
+    ).toBeGreaterThanOrEqual(20);
+    expect(
+      registered.length,
+      'no paired mirror is a registered component — the by-name lookup broke',
+    ).toBeGreaterThanOrEqual(5);
+
+    const drift: string[] = [];
+    for (const name of registered) {
+      if (name in INTENTIONAL_MIRRORS) continue;
+      const schema = exported[`${name}Schema`];
+      const registry = new OpenAPIRegistry();
+      registry.register(name, schema as never);
+      const truth = new OpenApiGeneratorV31(registry.definitions).generateComponents().components
+        ?.schemas?.[name] as Record<string, unknown> | undefined;
+      if (!truth) continue;
+
+      const enforced = constraintsOf(truth, { components: { schemas: { [name]: truth } } });
+      const published = constraintsOf(components[name], spec);
+      for (const [field, want] of Object.entries(enforced)) {
+        if (published[field] !== want) {
+          drift.push(
+            `${name}.${field}: enforces [${want}], publishes [${published[field] ?? 'none'}]`,
+          );
+        }
+      }
+
+      // Required-ness drifts in the over-narrow direction: the document calling
+      // a `.default([])` field mandatory tells callers to send what the server
+      // is happy to omit. Unions are skipped above — anyOf has no top-level
+      // required and the diff would be an artifact of the shape.
+      const enforcedRequired = ((truth['required'] as string[]) ?? []).slice().sort();
+      const publishedRequired = (
+        ((components[name] as Record<string, unknown>)['required'] as string[]) ?? []
+      )
+        .slice()
+        .sort();
+      if (enforcedRequired.join(',') !== publishedRequired.join(',')) {
+        drift.push(
+          `${name}.required: enforces [${enforcedRequired.join(',') || '-'}], publishes [${publishedRequired.join(',') || '-'}]`,
+        );
+      }
+    }
+
+    expect(
+      drift.sort(),
+      'a hand-written mirror in openapi.ts disagrees with the api-types schema it copies. Delete the mirror and register the schema itself — a corrected copy is still a copy that happens to agree today',
     ).toEqual([]);
   });
 });
