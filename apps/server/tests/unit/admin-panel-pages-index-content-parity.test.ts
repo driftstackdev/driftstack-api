@@ -147,7 +147,7 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
     expect(body).toMatch(/data-field="total-accounts-annotation"/);
   });
 
-  it("Audit-log render: per-entry timestamp via fmtIso → 'YYYY-MM-DD HH:MM:SS UTC' (slice(0, 19) — not 16 like the leads page, because audit-log needs second-level precision) + admin identity (email primary, admin_account_id UUID fallback) mono + → arrow + entry.action code + entry.result success/error badge — pinned so the admin-action row template renders the structured action vocabulary consistently. The actor renders email-primary with the UUID secondary when the server enriches the entry, matching the Accounts list, so operators read 'who → action' without UUID-chasing (drift back to UUID-only would re-introduce the UUID-chasing the email-primary change removed)", () => {
+  it("Audit-log render: per-entry timestamp via fmtIso to 'YYYY-MM-DD HH:MM:SS UTC' (slice(0, 19) — not 16 like the leads page, because audit-log needs second-level precision) + admin identity + arrow + entry.action code + entry.result success/error badge. V-1514 — the email-primary half is a PLACEHOLDER and this title used to describe it as a rendering. `publicEntry` in routes/admin-audit-log.ts projects no email of any kind, so `entry.admin_email` is undefined on every entry the route has ever sent and the `||` always falls through to the id. The pattern is real on the Accounts list, whose AdminAccount payload does carry `email` — it was copied to a surface whose endpoint does not enrich. The operand stays, deliberately, and the assertion below anchors WHY it is inert so the day the route starts enriching, this arm has to be revisited rather than quietly becoming true.", () => {
     expect(body).toMatch(/\.slice\(0, 19\) \+ ' UTC';/);
     expect(body).toMatch(
       /entry\.result === 'success'\s*\n?\s*\? 'bg-emerald-50 text-emerald-700'\s*\n?\s*: 'bg-red-50 text-red-700';/,
@@ -156,6 +156,24 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
     expect(body).toMatch(/escapeHtml\(entry\.admin_email \|\| entry\.admin_account_id\)/);
     // The target row likewise prefers the email with the account-id UUID as fallback.
     expect(body).toMatch(/escapeHtml\(entry\.target_email \|\| entry\.target_account_id\)/);
+    // V-1514 — the anchor. The admin audit projection carries no email of any
+    // kind, which is what makes both operands above permanently short-circuited.
+    const projection = readFileSync(
+      resolve(REPO_ROOT, 'apps/server/src/routes/admin-audit-log.ts'),
+      'utf8',
+    );
+    const publicEntry = projection.slice(
+      projection.indexOf('function publicEntry('),
+      projection.indexOf('\n}', projection.indexOf('function publicEntry(')),
+    );
+    expect(publicEntry, 'publicEntry is still the admin audit projection').toContain(
+      'admin_account_id:',
+    );
+    expect(
+      /(?:admin|target)_email\s*:/.test(publicEntry),
+      'the route now enriches audit entries with an email — the placeholder above is live, so ' +
+        'update this arm to describe a rendering rather than a fallback',
+    ).toBe(false);
     expect(body).toMatch(/escapeHtml\(entry\.action\)/);
   });
 

@@ -14263,3 +14263,70 @@ admin panel, all matching a registered `(method, path)` once the extractor was c
 it is now measured, and clean.
 
 **Consumer query parameters are declared**, apart from the `ds_token` pair fixed here.
+
+## V-1514 — a pin describing a rendering that has never rendered
+
+Continuing the consumer-side comparison V-1513 opened: what the admin pages READ, against what their
+endpoints send. Six candidate field reads across three pages; four dissolved on inspection
+(`r.n`/`r.label` are locally-built chart rows, `body.reason` is a request being constructed, and one path
+did not exist). Two survived, and they are the same field on two lines:
+
+```js
+escapeHtml(entry.admin_email || entry.admin_account_id);
+escapeHtml(entry.target_email || entry.target_account_id);
+```
+
+`publicEntry` in `routes/admin-audit-log.ts` projects a fixed set of fields and none is an email. Nothing
+under `apps/server/src` produces `admin_email` or `target_email` at all. So both first operands have been
+`undefined` on every entry the route has ever sent, and the `||` has always fallen through to the id.
+
+**This is not accidental dead code, and finding that out changed the fix.** The guard pinning these lines
+titles them _"admin identity (email primary, admin_account_id UUID fallback) … when the server enriches
+the entry"_. The author knew the enrichment did not exist and wrote the fallback for it deliberately.
+Deleting the operand would be pattern-matching a fix onto a documented decision.
+
+The pattern is also real one page over: `AdminAccount` carries `email` and `accounts.astro` renders it
+name-or-email. It was copied to a surface whose endpoint does not enrich.
+
+**So the code stays and the description changes.** The title asserted a rendering — "renders email-primary
+with the UUID secondary" — for a branch that cannot execute. It now says the email half is a placeholder,
+names `publicEntry` as the reason, and keeps the operand explicitly rather than by omission.
+
+The arm gained the anchor that makes the claim checkable: it reads `publicEntry` and asserts the
+projection carries no email of any kind. That inverts the failure direction usefully — the day the route
+starts enriching, the arm fails and demands the description become a rendering again, instead of the
+placeholder quietly turning true and the title being right by accident. Proven by adding `admin_email` to
+the projection: it reds with the message telling the next reader what to do.
+
+**Size, stated plainly.** Zero customer impact: this is the internal admin panel, the fallback renders
+the account id correctly, and nothing is broken for anyone. What was wrong was a test title describing
+behaviour that does not happen — the same species as V-1486's arm titles freezing hand-maintained counts,
+and the reason `a-parity-pin-cannot-freeze-a-claim-that-expires` exists at all. A pin that describes an
+aspiration as a fact is a pin that will confirm the aspiration to whoever reads it next.
+
+### Measured clean
+
+**Every mock fixture in the dashboard and admin-panel page tests uses field names the API publishes.** A
+fixture is that page's belief about the wire shape — V-1501 found one asserting `{ ok: true }` against a
+handler sending `{ message, email }` — so the census was worth running: 515 distinct published property
+names, and no fixture key outside them.
+
+**Field-name drift on the other admin pages.** `admin-panel-pages-cost-field-name-parity` exists because
+slices 79, 80 and 81 each fixed a real instance of a page reading a field the API nests differently, and
+it guards one page. Extending the same comparison to every admin page found the two lines above and
+nothing else.
+
+### V-794 caught the same mistake I made last batch
+
+The first version of the corrected title said `publicEntry` _"projects **ten fields** and none is an
+email"_. `a-parity-pin-cannot-freeze-a-claim-that-expires` failed the run, exactly as it did in V-1511
+when a title of mine said "two endpoints".
+
+Twice now, in consecutive batches, while writing an entry about a pin describing something inaccurately,
+I froze a count in the pin describing it. The count was incidental both times — the assertion below it
+reads the projection and asks whether an email field is present, which is the whole claim. "Ten" was
+decoration that would be wrong on the next field added.
+
+Worth stating rather than quietly fixing: the guard is doing more work than I am on this particular
+habit, and the habit is specifically writing a number into prose when the code beside it already derives
+the number.
