@@ -185,6 +185,30 @@ function specSchemas(): Map<string, Set<string>> {
   return out;
 }
 
+/**
+ * V-1506 — spec schemas the TypeScript SDK models under a different NAME.
+ *
+ * These are NOT the imported-from-api-types shapes the docstring above rightly
+ * excludes — every interface below is declared in the SDK itself, so it is the
+ * hand-written remainder that can drift. It escaped comparison only because the
+ * SDK names types for the people calling it rather than after the wire schema:
+ * `AccountMeResponse` is `AccountSelfProfile`, `AgentMessageUsage` is `AgentUsage`.
+ * Each pair was checked field-by-field before being listed and none was missing
+ * anything — coverage the guard did not have, not a repair of something broken.
+ *
+ * Listed by hand because a heuristic pairing is worse than none: matching on field
+ * overlap pairs any two shapes that happen to agree, and a wrong pair reports
+ * confident nonsense. The arm above asserts every entry still resolves, so an
+ * alias that rots stops the run instead of quietly comparing nothing.
+ */
+const TS_ALIASES: ReadonlyArray<readonly [schema: string, iface: string]> = [
+  ['AccountMeResponse', 'AccountSelfProfile'],
+  ['AccountAuditEntry', 'AuditLogEntry'],
+  ['ExportAccountAuditResponse', 'AuditLogExportResponse'],
+  ['AgentMessageUsage', 'AgentUsage'],
+  ['ByokAnthropicMetadata', 'ByokAnthropicKeyMetadata'],
+];
+
 describe('sdk-go structs cover the fields the API returns', () => {
   it('CRITICAL both sides parsed. The check below reports an absence, so an empty parse on either side would report perfect coverage — the exact failure this guard exists to catch, wearing the guard as a disguise.', () => {
     const structs = goStructs();
@@ -249,10 +273,43 @@ describe('sdk-go structs cover the fields the API returns', () => {
     }
   });
 
+  it('V-1506 CRITICAL the reach is a measured number, and the five hand-written shapes the name key missed are compared. The low TypeScript count is already EXPLAINED by this file — most SDK shapes are imported from api-types, which is what the document is generated from, so they cannot drift. What the file never states is the number: 11 of 70 on the TypeScript side, 39 on the Go side, 30 compared by neither. The gap this closes is narrower and real — types the SDK declares ITSELF, which the docstring calls the hand-written remainder that CAN drift, and which escaped comparison only because the SDK names them for its callers rather than after the wire schema: AccountMeResponse is AccountSelfProfile, AgentMessageUsage is AgentUsage. Each was verified field-by-field and none was missing anything, so this is reach rather than repair.', () => {
+    const ifaces = tsInterfaces();
+    const structs = goStructs();
+    const schemas = specSchemas();
+    const tsMatched = [...schemas.keys()].filter((n) => ifaces.has(n));
+    const goMatched = [...schemas.keys()].filter((n) => structs.has(n));
+    const aliased = TS_ALIASES.filter(
+      ([schema, iface]) => schemas.has(schema) && ifaces.has(iface),
+    );
+
+    expect(schemas.size, 'spec schemas carrying properties').toBeGreaterThanOrEqual(70);
+    expect(tsMatched.length, 'spec schemas a TypeScript interface shares a name with').toBe(11);
+    expect(goMatched.length, 'spec schemas a Go struct shares a name with').toBeGreaterThanOrEqual(
+      39,
+    );
+    // Every alias must still resolve on BOTH sides. An alias whose interface was
+    // renamed again silently stops comparing anything, which is the failure this
+    // whole arm exists to make loud.
+    expect(aliased.length, 'declared aliases that still resolve to a real pair').toBe(
+      TS_ALIASES.length,
+    );
+  });
+
   it('CRITICAL no TypeScript interface drops a field its matching OpenAPI schema declares. The Go side of this guard exists because AgentSession dropped error_event; the TypeScript types are hand-written too and can drift the same way.', () => {
     const ifaces = tsInterfaces();
     const missing: string[] = [];
     const unresolvable: string[] = [];
+    // V-1506 — the aliased pairs are judged by exactly the same rule as the
+    // name-matched ones. Each was verified field-by-field before being listed;
+    // none was missing anything, so this is reach rather than a repair.
+    for (const [schema, iface] of TS_ALIASES) {
+      const props = specSchemas().get(schema);
+      if (props === undefined || !ifaces.has(iface)) continue;
+      const have = allTsFields(iface, ifaces);
+      const gap = [...props].filter((p) => !have.has(p));
+      if (gap.length > 0) missing.push(`${schema} (as ${iface}): ${gap.sort().join(', ')}`);
+    }
     for (const [name, props] of specSchemas()) {
       if (!ifaces.has(name)) continue;
       // A parent living in api-types cannot be reconstructed here; counted
