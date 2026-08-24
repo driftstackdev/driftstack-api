@@ -10862,3 +10862,87 @@ of the `git` argument list and the shell fed it to `-F -`. Amended in place — 
 foreign commit on top, which is the only condition under which that is safe.
 
 No new test file; no `it` count change in either file. No ratchet movement.
+
+## V-1452 — OAuth client secrets and access tokens were logged in clear
+
+`redactText` scrubs prefixed secrets from free text using an allowlist, because key-based redaction
+cannot reach a credential embedded in a message — `Invalid API key: ds_live_…` from an upstream, or a
+request body echoed into an error. Measured against every credential this system mints:
+
+    oas_  OAuth client secret     NOT redacted   -> reached the log in full
+    oat_  OAuth access token      NOT redacted   -> reached the log in full
+    oac_  OAuth authorization code NOT redacted
+    ds_live_ / gck_ / whsec_      redacted       (controls)
+
+`oat_` is the value returned to the customer as `access_token` — a bearer credential. `oas_` is minted
+at client registration and again on every rotation.
+
+**A derived guard exists for exactly this and it missed them, for two independent reasons.**
+`every-minted-secret-prefix-is-in-the-redactor` compares mint sites against the allowlist and states
+its discriminator: "a secret is `base32Encode(randomBytes(…))`, while a public id is `randomUUID()`".
+Its own note records the result — "3 mint sites, 3 in the allowlist, 0 missing".
+
+- **Encoding.** OAuth mints `randomBytes(32).toString('base64url')`. Same secrecy, different encoding,
+  invisible to a `base32Encode(` test.
+- **Scope.** The scan split each file on `function` declarations, and `services/oauth.ts` mints inside
+  CLASS METHODS, so those bodies were in no chunk at all.
+
+Each hid all four prefixes on its own: widening only the encoding still found nothing in `oauth.ts`
+(3 → adds `ord_` only); widening only the scope still rejected them on the encoding. Both together
+surface `oas_`, `oat_`, `oac_`, `oaa_`. That is the same shape as V-1450 (`Math.random()` vs a
+reference) and V-1449 (`[Cc]`): a detector keyed on one spelling of the thing it is looking for.
+
+**The fix, in three parts.**
+
+`FREE_TEXT_OAUTH_SECRET_RE` covers `oas_` and `oat_`, as its own pattern for the same reason `sk-ant-`
+has one: base64url bodies carry `-` and `_`, and the general pattern's `[A-Za-z0-9]` class stops at the
+first of either — redacting a prefix and leaving the rest of the credential readable. A mutation
+narrowing the body class back reds.
+
+The guard now scans file-scoped and treats base64url and hex as secret encodings. That deliberately
+makes `randomBytes` stop implying secrecy, which it never did: an order id and an OAuth `client_id`
+are both CSPRNG-minted and both belong in a log. So a `PUBLIC_PREFIXES` roster records `ord_`, `oaa_`
+and `oac_` with reasons, and a minted prefix in neither list fails. The narrow predicate avoided false
+positives by accident, at the cost of missing two real credentials; this makes it a written decision.
+
+`oac_` is left unredacted, and that is the honest part. `services/oauth.ts` mints it twice — once as
+the PUBLIC `client_id`, once as the SECRET authorization code. One prefix, two sensitivities, so no
+prefix rule can separate them, and scrubbing it would blind every OAuth debugging session to the
+client_id. The real fix is a distinct prefix for the code at its mint site, which changes values
+already issued — recorded rather than done quietly.
+
+Five mutations, every restore byte-identical: dropping `oat_` from the pattern reds; narrowing the body
+class reds; minting a NEW secret prefix inside a class method reds the guard (the location it could not
+previously see); removing the OAuth pattern reds the guard. Reverting the guard's widening alone stays
+green, which is worth stating — a census cannot detect its own narrowing, which is why the proof has to
+be a mutation at a real mint site.
+
+Rule 2 earned its place: the import-path grep did not find
+`every-minted-secret-prefix-is-in-the-redactor` at all. The quoted-basename grep did, and that file was
+the whole reason this became a two-sided fix instead of one more prefix appended to a list.
+
+Full suite green with the source change: 3067 files, 30852 tests, exit 0. No new test file; `it` counts
+unchanged in both. No ratchet movement.
+
+### V-1452 addendum — scoping the leak precisely
+
+The table above measures BARE LITERALS in free text, and read alone it overstates the exposure. Their
+normal transports were already covered, by a different surface: `SENSITIVE_QUERY_KEYS` carries
+`client_secret`, `access_token`, `code`, `state` and `code_verifier`, and
+`query-credential-redaction-completeness-invariant` derives that set from the real query surface rather
+than listing it. Verified:
+
+    ?code=oac_…            -> code=[redacted]
+    ?client_secret=oas_…   -> client_secret=[redacted]
+    ?access_token=oat_…    -> access_token=[redacted]
+    bare `oac_…` literal   -> survives (the collision described above)
+    bare `oac_shortid` client_id -> survives (correct; a public id must)
+
+So what leaked was `oas_`/`oat_` appearing as a bare literal — which is precisely the shape
+`redactText` exists for and the one its own header names: an upstream `Invalid API key: …`, or a
+request body echoed into an error message. Real, and worth fixing, but it was never the redirect URL or
+the token-exchange request.
+
+That also narrows the `oac_` residual left open above: an authorization code reaches a log only as a
+bare literal in free text, never through its own redirect. Recording it because the difference decides
+whether the remaining prefix collision is urgent — it is not.

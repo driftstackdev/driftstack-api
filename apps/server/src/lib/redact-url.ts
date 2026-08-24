@@ -172,6 +172,28 @@ const FREE_TEXT_PREFIXED_SECRET_RE =
  */
 const FREE_TEXT_ANTHROPIC_KEY_RE = /(sk-ant-)[A-Za-z0-9_-]{12,}/g;
 
+/**
+ * OAuth client secrets and access tokens, which this system mints and the
+ * prefix pattern above could not reach.
+ *
+ *   oas_   client secret   (`registerClient`, and again on `rotateClientSecret`)
+ *   oat_   access token    (returned to the customer as `access_token`)
+ *
+ * Their own pattern for the same reason `sk-ant-` has one: the body is
+ * `randomBytes(32).toString('base64url')`, so it contains `-` and `_`, and the
+ * `[A-Za-z0-9]` class above would stop at the first of either and leave the rest
+ * of the credential in clear. Widening that class instead would let a hyphen or
+ * underscore in following prose be swallowed after any other secret.
+ *
+ * NOT covered, and it cannot be from here: `oac_` is minted twice in
+ * `services/oauth.ts` — once as the PUBLIC `client_id` and once as the SECRET
+ * authorization code. One prefix, two sensitivities, so no prefix-based rule can
+ * separate them, and scrubbing it would blind the logs to the client_id every
+ * OAuth debugging session starts from. Fixing that means giving the code its own
+ * prefix at the mint site, which changes values already issued.
+ */
+const FREE_TEXT_OAUTH_SECRET_RE = /(oas_|oat_)[A-Za-z0-9_-]{12,}/g;
+
 const FREE_TEXT_BEARER_RE = /(bearer\s+)[A-Za-z0-9._~+/-]+=*/gi;
 const FREE_TEXT_BASIC_RE = /(basic\s+)[A-Za-z0-9+/]{8,}={0,2}/gi;
 
@@ -189,6 +211,7 @@ export function redactText(s: string): string {
       .replace(FREE_TEXT_BASIC_RE, '$1[redacted]')
       .replace(FREE_TEXT_PREFIXED_SECRET_RE, '$1[redacted]')
       .replace(FREE_TEXT_ANTHROPIC_KEY_RE, '$1[redacted]')
+      .replace(FREE_TEXT_OAUTH_SECRET_RE, '$1[redacted]')
       .replace(URL_USERINFO_RE, '$1[redacted]@')
   );
 }

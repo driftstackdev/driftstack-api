@@ -65,15 +65,45 @@ function walk(dir: string, out: string[]): void {
   }
 }
 
-/** Function bodies, split on their declarations. Cheap, and enough to scope a mint. */
-function functionsIn(source: string): string[] {
-  const marks = [...source.matchAll(/(?:export\s+)?(?:async\s+)?function\s+\w+/g)].map(
-    (m) => m.index,
-  );
-  return marks.map((start, i) =>
-    source.slice(start, i + 1 < marks.length ? marks[i + 1] : source.length),
-  );
-}
+// The function-body splitter that used to scope each mint is gone with V-1452.
+// It read as a cheap way to keep a prefix and its CSPRNG call in the same scope,
+// and it was — but it split on `function` declarations only, so a mint inside a
+// class method sat in no chunk at all and could not be seen. File scope is
+// coarser and cannot be blind in that direction; the cost is that `randomBytes`
+// in a file no longer implies the prefix beside it is secret, which is what
+// PUBLIC_PREFIXES above now settles explicitly instead of by accident.
+
+/**
+ * A file that mints something from a CSPRNG, in any of the encodings this repo
+ * uses. `randomUUID()` is deliberately absent: it is the public-id idiom.
+ */
+const MINTS_A_SECRET = (src: string): boolean =>
+  src.includes('randomBytes(') &&
+  (src.includes('base32Encode(') ||
+    src.includes(".toString('base64url')") ||
+    src.includes(".toString('hex')"));
+
+/**
+ * Minted prefixes that are PUBLIC, with the reason each is not a secret.
+ *
+ * Widening the scan the way V-1452 does means `randomBytes` alone no longer
+ * implies secrecy, and it does not: an order id and an OAuth client_id are both
+ * minted from a CSPRNG and both belong in a log. The original narrow predicate
+ * avoided this by accident, at the cost of missing two real credentials.
+ *
+ * So the guard demands a decision rather than a judgement call: every minted
+ * prefix is either in the redactor or written down here with why. A new one is
+ * in neither, and fails.
+ */
+const PUBLIC_PREFIXES: Record<string, string> = {
+  ord_: 'crypto order id — appears in receipts and customer-facing order URLs',
+  oaa_: 'one-time authorization_id for the consent flow; a handle the consent UI carries, not a bearer credential',
+  oac_:
+    'BOTH the public OAuth client_id AND the secret authorization code, minted with one prefix in ' +
+    'services/oauth.ts. Listed here because no prefix rule can separate them and scrubbing it would ' +
+    'blind every OAuth debugging session to the client_id. The real fix is a distinct prefix for the ' +
+    'code at its mint site, which changes values already issued.',
+};
 
 /**
  * Prefixes of credentials that are secret BY CONSTRUCTION.
@@ -87,11 +117,23 @@ function mintedSecretPrefixes(): Array<{ prefix: string; where: string }> {
   const found = new Map<string, string>();
   for (const file of files) {
     const source = readFileSync(file, 'utf-8');
-    for (const fn of functionsIn(source)) {
-      if (!fn.includes('randomBytes(') || !fn.includes('base32Encode(')) continue;
-      for (const m of fn.matchAll(/`([a-z][a-z0-9]*_)(?:[a-z0-9]+_)?\$\{/g)) {
-        found.set(m[1] ?? '', file.slice(file.lastIndexOf('/') + 1));
-      }
+    // V-1452 — scoped to the FILE, and the encoding test widened.
+    //
+    // Both of the previous narrowings were silent, and each hid the same four
+    // credentials on its own:
+    //
+    //   `base32Encode(` required   — OAuth mints `randomBytes(32).toString('base64url')`.
+    //                                Same secrecy, different encoding.
+    //   function-scoped            — `functionsIn` splits on `function` declarations
+    //                                and `services/oauth.ts` mints inside CLASS METHODS,
+    //                                so those bodies were never in any chunk.
+    //
+    // Widening only the first still found nothing in oauth.ts; widening only the
+    // second still rejected it on the encoding. Together they surface `oas_`,
+    // `oat_`, `oac_` and `oaa_`, of which two were reaching the log in clear.
+    if (!MINTS_A_SECRET(source)) continue;
+    for (const m of source.matchAll(/`([a-z][a-z0-9]*_)(?:[a-z0-9]+_)?\$\{/g)) {
+      found.set(m[1] ?? '', file.slice(file.lastIndexOf('/') + 1));
     }
   }
   return [...found]
@@ -102,9 +144,16 @@ function mintedSecretPrefixes(): Array<{ prefix: string; where: string }> {
 /** The redactor's prefixed-secret pattern, as source text. */
 function allowlistSource(): string {
   const source = readFileSync(REDACTOR, 'utf-8');
-  const decl = source.indexOf('const FREE_TEXT_PREFIXED_SECRET_RE');
-  const end = source.indexOf(';', decl);
-  return decl === -1 ? '' : source.slice(decl, end);
+  // Spans BOTH prefixed-secret patterns: the OAuth secrets need their own
+  // because their base64url bodies carry `-` and `_`, and reading only the first
+  // declaration would report oas_/oat_ as missing while they are redacted.
+  const parts = ['const FREE_TEXT_PREFIXED_SECRET_RE', 'const FREE_TEXT_OAUTH_SECRET_RE'].map(
+    (name) => {
+      const decl = source.indexOf(name);
+      return decl === -1 ? '' : source.slice(decl, source.indexOf(';', decl));
+    },
+  );
+  return parts.join('\n');
 }
 
 describe('every minted secret prefix is in the redactor', () => {
@@ -125,7 +174,7 @@ describe('every minted secret prefix is in the redactor', () => {
   it('CRITICAL a credential minted as base32Encode(randomBytes()) has a prefix the redactor scrubs', () => {
     const allowlist = allowlistSource();
     const missing = mintedSecretPrefixes()
-      .filter((m) => !allowlist.includes(m.prefix))
+      .filter((m) => !allowlist.includes(m.prefix) && !(m.prefix in PUBLIC_PREFIXES))
       .map((m) => `${m.prefix} (minted in ${m.where})`)
       .sort();
 

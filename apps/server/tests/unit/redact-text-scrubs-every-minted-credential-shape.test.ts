@@ -57,6 +57,27 @@ const MINTED_SECRETS: { name: string; sample: string; minter: string }[] = [
     sample: `whsec_${BODY}`,
     minter: 'lib/webhook-signing.ts generateWebhookSecret',
   },
+  // V-1452 — both reached the log in CLEAR until this commit. The prefix
+  // allowlist was hand-written and these were never added; the derived guard
+  // that exists to catch exactly that missed them too, because it recognised a
+  // secret only as `base32Encode(randomBytes(...))` and only inside a `function`
+  // declaration, while OAuth mints `randomBytes(32).toString('base64url')`
+  // inside class methods.
+  //
+  // Their bodies are base64url, so the sample carries `-` and `_` deliberately:
+  // the general prefix pattern's `[A-Za-z0-9]` body class stops at the first of
+  // either, which would redact a prefix and leave the rest of the credential
+  // readable. That is why these have their own pattern.
+  {
+    name: 'OAuth client secret',
+    sample: 'oas_kQ7v-N2xR8mB_4tL9wZ1cY6dF3hJ5nP0sA',
+    minter: 'services/oauth.ts registerClient + rotateClientSecret',
+  },
+  {
+    name: 'OAuth access token',
+    sample: 'oat_pM3k-X7bV2nQ_9wL5tR8yD1cF4hJ6sZ0aG',
+    minter: 'services/oauth.ts exchangeCode (returned as access_token)',
+  },
 ];
 
 /** Third-party secrets that arrive in upstream error text rather than minted. */
