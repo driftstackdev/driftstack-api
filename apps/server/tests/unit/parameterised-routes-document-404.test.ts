@@ -16,7 +16,7 @@
 // that cannot be justified that way does not belong here — an allowlist whose
 // entries nobody re-checked is how a guard turns into decoration.
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -231,6 +231,85 @@ describe('path-parameterised routes document 404 or are exempt with a reason', (
     expect(
       missing.sort(),
       'operation(s) whose service throws an error the published spec does not declare',
+    ).toEqual([]);
+  });
+  /**
+   * V-1488 — the general form: a handler's OWN throws, for every route.
+   *
+   * V-1487 compared thrown errors to declared statuses through a listed
+   * route→service-method roster, because a handler that delegates cannot be read
+   * without knowing what it delegates to. Errors thrown IN the handler need no
+   * such pairing — the registration block owns them — so this covers the whole
+   * route surface rather than three named methods, and found eight operations
+   * short a status their own handler raises.
+   *
+   * The worst was `GET /v1/status/incidents`, which declared `200` and nothing
+   * else while refusing `?state=` and `?cursor=` outright: a public feed
+   * documented as unable to fail. The rest split between routinely reachable
+   * (an unknown `profile_id` on agent-session create, an unknown `document_key`
+   * on legal accept, a concurrent proxy update) and race-reachable (an account
+   * row deleted between `requireAuth` and the write). Both kinds are returnable,
+   * so both are declared, with the reachability written into each description
+   * rather than left for a reader to guess.
+   *
+   * Blocks are bounded by the NEXT registration, so a helper defined between two
+   * routes would be attributed to the earlier one. Every one of the eight was
+   * read at its throw site before being declared — the census names candidates,
+   * it does not confirm them.
+   */
+  const HANDLER_ERROR_STATUS: Record<string, string> = {
+    NotFoundError: '404',
+    ConflictError: '409',
+    ForbiddenError: '403',
+    BadRequestError: '400',
+    ValidationError: '400',
+    GoneError: '410',
+    PayloadTooLargeError: '413',
+  };
+
+  it('CRITICAL no operation omits a status its own handler throws. Errors raised inside a registration block belong to that route with no roster to keep in step, so this covers every route rather than a named few — eight operations were short a status they raise, including a public feed that declared 200 alone while refusing two query parameters.', () => {
+    const routesDir = resolve(HERE, '..', '..', 'src', 'routes');
+    const doc = JSON.parse(
+      readFileSync(
+        resolve(HERE, '..', '..', '..', '..', 'packages/sdk-python/openapi.json'),
+        'utf8',
+      ),
+    ) as { paths: Record<string, Record<string, { responses?: Record<string, unknown> }>> };
+
+    const missing: string[] = [];
+    let compared = 0;
+    for (const file of readdirSync(routesDir).filter((f) => f.endsWith('.ts'))) {
+      const src = readFileSync(resolve(routesDir, file), 'utf8');
+      const regs = [
+        ...src.matchAll(/app\.(get|post|put|patch|delete)[^(]*\(\s*\n?\s*'([^']+)'/g),
+      ].map((m) => ({ at: m.index ?? 0, verb: (m[1] ?? '').toLowerCase(), path: m[2] ?? '' }));
+      for (const [i, reg] of regs.entries()) {
+        const block = src.slice(reg.at, regs[i + 1]?.at ?? src.length);
+        const statuses = new Set(
+          [...block.matchAll(/throw new (\w+Error)/g)]
+            .map((m) => HANDLER_ERROR_STATUS[m[1] ?? ''])
+            .filter((x): x is string => x !== undefined),
+        );
+        if (statuses.size === 0) continue;
+        const published = reg.path.replace(/:([a-zA-Z_]+)/g, '{$1}');
+        const responses = doc.paths[published]?.[reg.verb]?.responses;
+        if (responses === undefined) continue; // not a published operation
+        compared += 1;
+        for (const status of statuses) {
+          if (!(status in responses)) {
+            missing.push(`${reg.verb.toUpperCase()} ${published}: throws ${status} (${file})`);
+          }
+        }
+      }
+    }
+
+    expect(
+      compared,
+      'no published operation was compared — the registration or throw scan stopped matching, and this arm would pass having read nothing',
+    ).toBeGreaterThan(80);
+    expect(
+      [...new Set(missing)].sort(),
+      'operation(s) whose own handler raises a status the published document does not declare',
     ).toEqual([]);
   });
 });

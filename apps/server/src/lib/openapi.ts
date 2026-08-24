@@ -1741,6 +1741,13 @@ function buildRegistry(): OpenAPIRegistry {
         content: { 'application/json': { schema: AccountMeResponseSchema } },
       },
       ...errors4xx,
+      404: {
+        // V-1488 — returnable by this handler and previously undeclared.
+        description:
+          'The account row was gone by the time the update ran — reachable only as a race against deletion, but returnable.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
       409: {
         description: 'Slug already in use by another account.',
         content: problemContent,
@@ -1771,6 +1778,13 @@ function buildRegistry(): OpenAPIRegistry {
         content: { 'application/json': { schema: UploadAvatarResponseOpenApi } },
       },
       ...errors4xx,
+      404: {
+        // V-1488 — returnable by this handler and previously undeclared.
+        description:
+          'The account row was gone by the time the avatar key was written — race against deletion.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
       413: {
         description: 'Avatar payload exceeds the per-route body limit.',
         content: problemContent,
@@ -1790,6 +1804,13 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       204: { description: 'Avatar cleared.' },
       ...errors4xx,
+      404: {
+        // V-1488 — returnable by this handler and previously undeclared.
+        description:
+          'The account row was gone by the time the avatar was cleared — race against deletion.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
     },
   });
 
@@ -2158,6 +2179,13 @@ function buildRegistry(): OpenAPIRegistry {
         content: { 'application/json': { schema: AccountProxyMetadataOpenApi } },
       },
       ...errors4xx,
+      409: {
+        // V-1488 — returnable by this handler and previously undeclared.
+        description:
+          'The proxy changed concurrently; the optimistic-concurrency update matched no row. Retry after re-reading.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
     },
   });
   registerRoute(r, {
@@ -4417,6 +4445,13 @@ function buildRegistry(): OpenAPIRegistry {
         content: { 'application/json': { schema: AgentSessionSchema } },
       },
       ...errors4xx,
+      404: {
+        // V-1488 — returnable by this handler and previously undeclared.
+        description:
+          'The requested `profile_id` or `proxy_id` is unknown or not owned by the caller. Answered 404 rather than 403 so a caller cannot enumerate another account resources.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
       // S42 2026-07-07 (founder-approved) — V-485 aiAgent tier gate: mode
       // ai (the default) / pair requires the AI-agent feature on the owner
       // tier; mode manual is available on every tier.
@@ -5244,6 +5279,12 @@ function buildRegistry(): OpenAPIRegistry {
         content: { 'application/json': { schema: RegisterMacNodeResponseOpenApi } },
       },
       ...errors4xx,
+      404: {
+        // V-1488 — returnable by this handler and previously undeclared.
+        description: 'No mac node matches the supplied id, so registration updated no row.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
     },
   });
 
@@ -6500,6 +6541,13 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['status'],
     request: { query: PublicIncidentListQueryOpenApi },
     responses: {
+      400: {
+        // V-1488 — returnable by this handler and previously undeclared.
+        description:
+          '`state` and `cursor` are not supported by the public status feed, and a malformed query fails validation. V-1488 — this operation declared 200 alone, so the document said it could not fail.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
       200: {
         description:
           'Prioritized public feed with exact open/outage totals and explicit truncation.',
@@ -6695,6 +6743,12 @@ function buildRegistry(): OpenAPIRegistry {
         content: problemContent,
       },
       ...errors4xx,
+      404: {
+        // V-1488 — returnable by this handler and previously undeclared.
+        description: 'No legal document matches the supplied `document_key`.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
     },
   });
 

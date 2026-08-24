@@ -12661,3 +12661,47 @@ service side is read rather than restated. An earlier attempt at that second mut
 `BadRequestError` instead and stayed green: 400 is already declared there, so the mutation could not
 matter. A mutation that cannot change the answer is not evidence, and it looks exactly like one that
 survived.
+
+## V-1488 — eight operations omit a status their own handler raises, and one public feed claimed it could not fail
+
+V-1487 compared thrown errors to declared statuses through a listed route→service-method roster,
+because a handler that delegates cannot be read without knowing what it delegates to. Errors thrown IN
+the handler need no such pairing: the registration block owns them. Generalising to that covers the
+whole route surface instead of three named methods, and it found eight.
+
+| operation                         | raises  | reachability                                                                       |
+| --------------------------------- | ------- | ---------------------------------------------------------------------------------- |
+| `GET /v1/status/incidents`        | **400** | any caller passing `?state=` or `?cursor=`, which the public feed refuses outright |
+| `POST /v1/agent-sessions`         | 404     | an unknown or unowned `profile_id` / `proxy_id`                                    |
+| `POST /v1/legal/accept`           | 404     | an unknown `document_key`                                                          |
+| `PUT /v1/account/me/proxies/{id}` | 409     | a concurrent update losing the optimistic-concurrency match                        |
+| `POST /v1/mac-nodes/register`     | 404     | an id matching no node, so the registration updates no row                         |
+| `PATCH /v1/account/me`            | 404     | account row deleted between `requireAuth` and the write                            |
+| `POST /v1/account/me/avatar`      | 404     | same race                                                                          |
+| `DELETE /v1/account/me/avatar`    | 404     | same race                                                                          |
+
+**The public status feed is the one that matters most.** It declared `200` and nothing else while its
+handler answers 400 for two named query parameters and for any malformed query. A generated client
+built from that document models no failure branch at all on an endpoint anyone can call unauthenticated.
+The other seven split between routinely reachable and race-reachable; both kinds are returnable, so both
+are declared, with the reachability written into each description rather than left for a reader to infer
+from a status number.
+
+**The census names candidates; it does not confirm them.** Registration blocks are bounded by the NEXT
+registration, so a helper defined between two routes is attributed to the earlier one. Every one of the
+eight was read at its throw site before being declared — which is also how I satisfied myself that the
+`mac-nodes/register` 404 was a real not-found on the update and not the encryption-failure `catch`
+sitting a few lines above it in the same block.
+
+**Why this arm can be derived where V-1487's could not.** The distinction is worth stating because it
+decides how far each instrument reaches. A route delegating to `service.regenerateRecoveryCodes()` gives
+the reader a method name and nothing else; resolving it needs a pairing that has to be listed, and a
+list rots. A route that writes `throw new NotFoundError(...)` inside its own block gives the reader
+everything. So the two arms are complementary rather than redundant: the roster reaches through
+delegation for a few high-value paths, and this reaches every handler that raises for itself. Between
+them, 128 published operations are now compared.
+
+Two mutations, one per side. Dropping the new 400 from the public feed reds it with
+`GET /v1/status/incidents: throws 400 (admin-incidents.ts)`. Adding a `GoneError` to the legal-accept
+handler — 410 is declared nowhere — reds it naming that operation, which is the proof the handler side
+is read rather than restated. Both restored byte-identical.
