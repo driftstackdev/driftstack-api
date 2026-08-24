@@ -138,4 +138,99 @@ describe('path-parameterised routes document 404 or are exempt with a reason', (
     }
     expect(stale.sort(), 'exemption(s) that no longer describe reality:').toEqual([]);
   });
+  /**
+   * V-1487 — a route can 404 without having a path parameter.
+   *
+   * Everything above keys on `/{id}`, because the motivating failure was a
+   * lookup missing. That scope is why four MFA operations escaped it: they take
+   * no path parameter and 404 on a STATE — "MFA is not enrolled for this
+   * account" — thrown from the service, not from an id that resolved to
+   * nothing. `docs/api/mfa` had documented that 404 all along; the spec had
+   * never declared it.
+   *
+   * So this arm works from the SERVICE outwards instead of from the path
+   * inwards: for each route whose handler delegates to a named service method,
+   * read the errors that method throws and require the published operation to
+   * declare the status each maps to. Derived on the error side, so a new
+   * `throw new ConflictError` in a covered method fails here rather than
+   * reaching a customer as an undeclared 409.
+   *
+   * The route→method pairing is listed because it cannot be derived reliably —
+   * handlers call services through several shapes. The staleness arm below
+   * keeps that list honest: every method named must still exist and still
+   * throw.
+   */
+  const ERROR_STATUS: Record<string, string> = {
+    NotFoundError: '404',
+    ConflictError: '409',
+    BadRequestError: '400',
+  };
+
+  const SERVICE_BACKED: ReadonlyArray<readonly [string, string, string]> = [
+    // [published operation, service file, method]
+    ['post /v1/account/mfa/verify', 'apps/server/src/services/mfa.ts', 'completeEnrollment'],
+    ['post /v1/account/mfa/enroll', 'apps/server/src/services/mfa.ts', 'startEnrollment'],
+    [
+      'post /v1/account/mfa/recovery-codes/regenerate',
+      'apps/server/src/services/mfa.ts',
+      'regenerateRecoveryCodes',
+    ],
+  ];
+
+  function methodThrows(file: string, method: string): string[] {
+    const src = readFileSync(resolve(HERE, '..', '..', '..', '..', file), 'utf8');
+    const starts = [...src.matchAll(/\n {2}async (\w+)\(/g)];
+    const at = starts.findIndex((m) => m[1] === method);
+    if (at === -1) return [];
+    const from = starts[at]!.index ?? 0;
+    const to = starts[at + 1]?.index ?? src.length;
+    return [
+      ...new Set([...src.slice(from, to).matchAll(/throw new (\w+Error)/g)].map((m) => m[1]!)),
+    ];
+  }
+
+  it('CRITICAL a route that 404s on STATE rather than on a missing id still declares it. The arms above key on /{id}, which is why four MFA operations sat undeclared: they take no path parameter and refuse with "MFA is not enrolled". This reads the service method each one delegates to and requires every error it throws to have a declared status.', () => {
+    // The GENERATED document, not the builder source: this is the artifact
+    // customers generate clients from, and reading it makes this a comparison
+    // between two independent things rather than a re-read of one.
+    const doc = JSON.parse(
+      readFileSync(
+        resolve(HERE, '..', '..', '..', '..', 'packages/sdk-python/openapi.json'),
+        'utf8',
+      ),
+    ) as { paths: Record<string, Record<string, { responses?: Record<string, unknown> }>> };
+    const missing: string[] = [];
+    let pairs = 0;
+
+    for (const [operation, file, method] of SERVICE_BACKED) {
+      const thrown = methodThrows(file, method);
+      expect(
+        thrown.length,
+        `${file}::${method} throws nothing — the scan or the roster is stale`,
+      ).toBeGreaterThan(0);
+      const [verb, path] = operation.split(' ') as [string, string];
+      const responses = doc.paths[path]?.[verb]?.responses;
+      expect(
+        responses,
+        `${operation} is not a published operation — the roster is stale`,
+      ).toBeDefined();
+      const codes = new Set(Object.keys(responses ?? {}));
+      for (const err of thrown) {
+        const status = ERROR_STATUS[err];
+        if (status === undefined) continue; // an error class with no fixed status
+        pairs += 1;
+        if (!codes.has(status))
+          missing.push(`${operation}: throws ${err} but does not declare ${status}`);
+      }
+    }
+
+    expect(
+      pairs,
+      'no (error, status) pairs compared — the throw scan stopped matching and this arm would pass having read nothing',
+    ).toBeGreaterThanOrEqual(4);
+    expect(
+      missing.sort(),
+      'operation(s) whose service throws an error the published spec does not declare',
+    ).toEqual([]);
+  });
 });

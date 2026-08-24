@@ -12610,3 +12610,54 @@ Two mutations. Re-adding the `Emitted-At` line to the sample reds it with `expec
 three implementations reds the agreement check — proof the arm reads the delivery code rather than
 restating the page. Both restored byte-identical, and the marketing site was rebuilt so
 `dist-reading-suites-have-fresh-artifacts` sees an artifact newer than the source.
+
+## V-1487 — four MFA operations return statuses the published spec never declared, and this time the docs were right
+
+`POST /v1/account/mfa/recovery-codes/regenerate` answers **404** when the account is not enrolled and
+**409** when recovery codes change mid-regeneration (optimistic-concurrency loss). It declared neither.
+`POST /v1/account/mfa/verify` answers **409** for both of `completeEnrollment`'s conflicts — no pending
+enrollment, or already enrolled — and declared none. `POST /v1/auth/mfa/challenge` and
+`POST /v1/auth/mfa/step-up` both answer **404** when enrollment is removed between a challenge being
+issued and used: `verifyCode` throws `NotFoundError`, the challenge rail does not catch it, and the
+step-up rail's `mapAuthFlowError` re-throws anything that is not an `AuthFlowError` unchanged.
+
+**The direction is the opposite of the last two entries.** V-1485 and V-1486 found the marketing page
+claiming things the server does not do. Here `docs/api/mfa` states plainly _"Returns `404 Not Found`
+when the calling account isn't enrolled"_ — correct, and true since the endpoint shipped. The published
+document is the surface that was wrong, which matters more than it sounds: the spec is what generated
+clients are built from, so a status the server returns and the spec omits is a branch no generated
+client models.
+
+**Why the existing guard could not see it.** `parameterised-routes-document-404` exists for exactly this
+class and is careful about it — it refuses a blanket rule, lists five routes that legitimately never
+404, and requires each exemption to name the source behaviour. It keys on `/{id}`. Every one of these
+four operations takes no path parameter and refuses on STATE rather than on a lookup that found
+nothing: "MFA is not enrolled for this account" is not a missing id. A guard scoped to the shape of the
+path cannot reach a status that has nothing to do with the path.
+
+So the new arm works from the SERVICE outwards: for each route that delegates to a named service
+method, read the errors that method throws, map them to statuses, and require the published operation
+to declare each. It reads the GENERATED document rather than the builder source, so it compares two
+independent artifacts. A new `throw new ConflictError` in a covered method now fails here instead of
+reaching a customer as an undeclared 409.
+
+**The finding came out of a false positive, and both halves are worth recording.** A census of
+documented `VERB /v1/... → NNN` claims against the spec first reported 19 mismatches, most of them
+nonsense: `256` and `240` are a byte count and a rate-limit capacity that happened to sit inside the
+220-character window. Narrowing to real status codes carrying a contextual marker cut it to three, and
+two of those three were still windowing artifacts — `POST /v1/recipes` documents `201 Created`
+correctly, and the `404` near `POST /v1/auth/mfa/step-up` belonged to the recovery-codes section, which
+merely mentions the step-up path in passing.
+
+Chasing that second artifact is what found the real defect. The sentence was attached to the wrong
+endpoint by my scan, but it was a true statement about a DIFFERENT endpoint whose spec did not declare
+the code either. A windowing artifact pointed at a real gap one heading away, which is an argument for
+tracing a false positive to its source rather than deleting it from the results.
+
+Two mutations, one per side. Dropping the new 409 from the regenerate operation reds the arm. Adding a
+`NotFoundError` throw to `startEnrollment` — whose operation declares no 404 — reds it naming
+`post /v1/account/mfa/enroll: throws NotFoundError but does not declare 404`, which is the proof the
+service side is read rather than restated. An earlier attempt at that second mutation added a
+`BadRequestError` instead and stayed green: 400 is already declared there, so the mutation could not
+matter. A mutation that cannot change the answer is not evidence, and it looks exactly like one that
+survived.

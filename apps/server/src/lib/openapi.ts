@@ -3880,6 +3880,13 @@ function buildRegistry(): OpenAPIRegistry {
         content: { 'application/json': { schema: MfaVerifyResponseOpenApi } },
       },
       ...errors4xx,
+      409: {
+        // V-1487 — returnable and previously undeclared.
+        description:
+          'No pending enrollment, or MFA is already enrolled. `completeEnrollment` throws ConflictError for both.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
     },
   });
   registerRoute(r, {
@@ -3918,6 +3925,20 @@ function buildRegistry(): OpenAPIRegistry {
         content: { 'application/json': { schema: MfaVerifyResponseOpenApi } },
       },
       ...errors4xx,
+      404: {
+        // V-1487 — returnable and previously undeclared.
+        description:
+          'MFA is not enrolled for this account. Documented in docs/api/mfa and thrown by regenerateRecoveryCodes; V-1487 — the spec had never declared it.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
+      409: {
+        // V-1487 — returnable and previously undeclared.
+        description:
+          'Recovery codes changed during regeneration (optimistic-concurrency loss). Retry after refreshing.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
     },
   });
   registerRoute(r, {
@@ -3934,6 +3955,13 @@ function buildRegistry(): OpenAPIRegistry {
         content: { 'application/json': { schema: MfaChallengeResponseOpenApi } },
       },
       ...errors4xx,
+      404: {
+        // V-1487 — returnable and previously undeclared.
+        description:
+          'MFA is not enrolled for this account. Reachable when enrollment is removed between the challenge being issued and completed; verifyCode throws NotFoundError and nothing catches it.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
     },
   });
   registerRoute(r, {
@@ -3951,6 +3979,13 @@ function buildRegistry(): OpenAPIRegistry {
         content: { 'application/json': { schema: MfaStepUpResponseOpenApi } },
       },
       ...errors4xx,
+      404: {
+        // V-1487 — returnable and previously undeclared.
+        description:
+          'MFA is not enrolled for this account. Same race as the challenge rail — mapAuthFlowError re-throws a non-AuthFlowError unchanged, so the NotFoundError reaches the caller.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
     },
   });
 
