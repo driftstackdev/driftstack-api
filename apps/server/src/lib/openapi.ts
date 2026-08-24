@@ -4785,6 +4785,12 @@ function buildRegistry(): OpenAPIRegistry {
         content: problemContent,
       },
       ...errors4xx,
+      503: {
+        description:
+          'AI chat is not activated on this deployment. When `agentSessionsRepo` is absent the route is registered as a stub that raises `FeatureUnavailableError`, carrying the activation message (BYOK or the bundled-LLM budget). V-1490 — 26 sibling stubs declared this and these four did not.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
     },
   });
   // W474 — POST /:id/resume. Resume a session the harness auto-paused on a
@@ -4817,6 +4823,12 @@ function buildRegistry(): OpenAPIRegistry {
         content: problemContent,
       },
       ...errors4xx,
+      503: {
+        description:
+          'AI chat is not activated on this deployment. When `agentSessionsRepo` is absent the route is registered as a stub that raises `FeatureUnavailableError`, carrying the activation message (BYOK or the bundled-LLM budget). V-1490 — 26 sibling stubs declared this and these four did not.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
     },
   });
   // Wave 29-NNN ARC 3 Slice 3 (2026-05-19) — top-level mode setter.
@@ -4848,6 +4860,12 @@ function buildRegistry(): OpenAPIRegistry {
         content: problemContent,
       },
       ...errors4xx,
+      503: {
+        description:
+          'AI chat is not activated on this deployment. When `agentSessionsRepo` is absent the route is registered as a stub that raises `FeatureUnavailableError`, carrying the activation message (BYOK or the bundled-LLM budget). V-1490 — 26 sibling stubs declared this and these four did not.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
       // S42 follow-up 2026-07-07 — the /mode flip carries the same aiAgent
       // tier gate as create (a manual session must not become LLM-driven
       // on a tier without the feature).
@@ -4928,6 +4946,12 @@ function buildRegistry(): OpenAPIRegistry {
         content: problemContent,
       },
       ...errors4xx,
+      503: {
+        description:
+          'AI chat is not activated on this deployment. When `agentSessionsRepo` is absent the route is registered as a stub that raises `FeatureUnavailableError`, carrying the activation message (BYOK or the bundled-LLM budget). V-1490 — 26 sibling stubs declared this and these four did not.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
     },
   });
 

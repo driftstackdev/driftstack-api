@@ -419,4 +419,59 @@ describe('path-parameterised routes document 404 or are exempt with a reason', (
       'operation(s) whose preHandler can refuse with a status the published document does not declare',
     ).toEqual([]);
   });
+  /**
+   * V-1490 — a route that can be registered as a DISABLED stub declares the 503
+   * that stub raises.
+   *
+   * Several features are activation-gated: when `agentSessionsRepo` (or the
+   * BYOK/recipes equivalent) is absent, `app.ts` registers a disabled variant
+   * whose handler is `stub`, raising `FeatureUnavailableError` — a 503 carrying
+   * the activation message. The disabled block says why, repeatedly: a
+   * "machine-readable 503, not a bare 404", so a dashboard or GUI panel can
+   * surface the documented activation state instead of guessing from a 404.
+   *
+   * That makes the 503 part of the published contract on every gated route, and
+   * 26 of the 30 already declared it. Four did not — `takeover`, `handback`,
+   * `mode` and `resume` — even though the block's own comment cites "the
+   * takeover/handback/mode stubs below" as sharing the rationale.
+   *
+   * Derived, not listed: a stub registration is `app.<verb>('<path>', stub)`
+   * with no options object, which is machine-detectable, so a feature gated
+   * later is covered without editing this file.
+   */
+  it('CRITICAL every route that can be registered as a disabled stub declares the 503 that stub raises. Activation gating swaps the live handler for one that raises FeatureUnavailableError, and the disabled block exists precisely so callers get a machine-readable 503 rather than a bare 404 — which only works if the document says the status is possible.', () => {
+    const routesDir = resolve(HERE, '..', '..', 'src', 'routes');
+    const doc = JSON.parse(
+      readFileSync(
+        resolve(HERE, '..', '..', '..', '..', 'packages/sdk-python/openapi.json'),
+        'utf8',
+      ),
+    ) as { paths: Record<string, Record<string, { responses?: Record<string, unknown> }>> };
+
+    const missing: string[] = [];
+    let stubs = 0;
+    for (const file of readdirSync(routesDir).filter((f) => f.endsWith('.ts'))) {
+      const src = readFileSync(resolve(routesDir, file), 'utf8');
+      // Only count a stub block that actually raises the unavailable error, so a
+      // helper coincidentally named `stub` cannot inflate this.
+      if (!src.includes('FeatureUnavailableError')) continue;
+      for (const m of src.matchAll(/app\.(get|post|put|patch|delete)\('([^']+)',\s*stub\)/g)) {
+        const verb = (m[1] ?? '').toLowerCase();
+        const path = (m[2] ?? '').replace(/:([a-zA-Z_]+)/g, '{$1}');
+        const responses = doc.paths[path]?.[verb]?.responses;
+        if (responses === undefined) continue;
+        stubs += 1;
+        if (!('503' in responses)) missing.push(`${verb.toUpperCase()} ${path} (${file})`);
+      }
+    }
+
+    expect(
+      stubs,
+      'no stub-registered published operation was found — the disabled-block scan stopped matching, and this arm would pass having read nothing',
+    ).toBeGreaterThanOrEqual(25);
+    expect(
+      missing.sort(),
+      'operation(s) that become a 503-raising stub when their feature is off, without declaring 503',
+    ).toEqual([]);
+  });
 });

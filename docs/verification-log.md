@@ -12819,3 +12819,49 @@ were different files here, and the plan drifted between them when the pattern mo
 One mutation on the fix itself: reverting `profile_id` to `z.string().optional()` reds the derived census naming
 `POST /v1/sessions .profile_id` — which also confirms the emptied deferral is no longer covering it.
 Restored byte-identical.
+
+## V-1490 — four activation-gated routes never declared the 503 their stub raises, found by debugging a broken census
+
+When a feature is not activated, `app.ts` registers a DISABLED variant of its routes whose handler is
+`stub`, raising `FeatureUnavailableError` — a 503 carrying the activation message (bring your own
+Anthropic key, or opt into the bundled-LLM budget). The disabled block states the intent repeatedly: a
+"machine-readable 503, not a bare 404", so a dashboard or GUI panel surfaces the documented activation
+state instead of inferring it from a 404.
+
+That makes the 503 part of the published contract on every gated route. Twenty-six of the thirty
+declared it. Four did not: `takeover`, `handback`, `mode` and `resume` — while the block's own comment
+cites "the takeover/handback/mode stubs below" as sharing the rationale. The convention was settled and
+the document had simply not followed it on four.
+
+**The route to it was a census that failed twice, and the second failure was the finding.**
+
+I tried the one slice of "declares a status it cannot produce" that looked sound: a route with no auth
+gate cannot 401, because 401 comes from authentication. The first run reported 49 of 60 ungated
+operations declaring 401/403 — including `/v1/agent-sessions`, `/v1/billing` and `/v1/recipes`, which
+are plainly authenticated. An implausible ratio is an instrument fault, and this one had a specific
+cause: **every gated route is registered TWICE** — once live with its preHandler, once as a disabled
+stub with none — and my scan let the ungated stub represent the pair.
+
+I had already documented that duplication in V-1480, while building the path-to-validator map, and did
+not carry it forward into a new census three batches later. Writing a trap down is not the same as
+remembering it; the check that would have caught it is the one I now apply by habit — does this
+population look like the thing I think I am counting?
+
+Deduping (OR the gated flag across all registrations of a path) cut it to 16, and then the premise
+itself failed: those sixteen are the AUTH endpoints, which issue 401 from the handler as their normal
+failure — invalid credentials, invalid client secret. Separating the genuinely credential-less ones
+(`password-reset/request`, `resend-verification`) from the rest needs the same whole-program
+reachability V-1489 already ruled out, so the direction is abandoned rather than half-reported. That is
+the third census this session discarded, and discarding is the correct outcome each time.
+
+But the bug that broke it pointed straight at the stubs, and the stubs were a real, soundly-checkable
+contract: a stub registration is `app.<verb>('<path>', stub)` with no options object, which is machine
+detectable, and `FeatureUnavailableError` is unambiguously 503. No reachability analysis needed.
+
+The new arm is derived rather than listed, so a feature gated later is covered without editing it, and
+it only counts files that actually contain `FeatureUnavailableError` so a helper coincidentally named
+`stub` cannot inflate the population. Floor at 25 stubs.
+
+Two mutations. Dropping the new 503 from `takeover` reds it naming that operation. Adding a stub
+registration for `transcript` — which declares no 503 — reds it naming that one, which is the proof the
+route side is read rather than the document restated. Both restored byte-identical.

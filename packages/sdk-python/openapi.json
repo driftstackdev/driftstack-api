@@ -35803,6 +35803,24 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "AI chat is not activated on this deployment. When `agentSessionsRepo` is absent the route is registered as a stub that raises `FeatureUnavailableError`, carrying the activation message (BYOK or the bundled-LLM budget). V-1490 — 26 sibling stubs declared this and these four did not.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         }
       }
@@ -36019,6 +36037,24 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "AI chat is not activated on this deployment. When `agentSessionsRepo` is absent the route is registered as a stub that raises `FeatureUnavailableError`, carrying the activation message (BYOK or the bundled-LLM budget). V-1490 — 26 sibling stubs declared this and these four did not.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         }
       }
@@ -36203,6 +36239,24 @@
                   "minimum": 0
                 }
               },
+              "X-Request-Id": {
+                "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "AI chat is not activated on this deployment. When `agentSessionsRepo` is absent the route is registered as a stub that raises `FeatureUnavailableError`, carrying the activation message (BYOK or the bundled-LLM budget). V-1490 — 26 sibling stubs declared this and these four did not.",
+            "headers": {
               "X-Request-Id": {
                 "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
                 "schema": {
@@ -36644,6 +36698,24 @@
                   "minimum": 0
                 }
               },
+              "X-Request-Id": {
+                "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "AI chat is not activated on this deployment. When `agentSessionsRepo` is absent the route is registered as a stub that raises `FeatureUnavailableError`, carrying the activation message (BYOK or the bundled-LLM budget). V-1490 — 26 sibling stubs declared this and these four did not.",
+            "headers": {
               "X-Request-Id": {
                 "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
                 "schema": {
