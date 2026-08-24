@@ -2780,6 +2780,22 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Subscribe to the calling account notification event stream (SSE)',
     tags: ['account'],
     security: auth,
+    // V-1513 — `requireAuthEventSource` accepts the bearer token here as a
+    // query parameter, and the docs page shows it in a code sample. Undeclared,
+    // a generated client had no parameter for the only credential an
+    // EventSource can carry.
+    request: {
+      query: z.object({
+        ds_token: z
+          .string()
+          .min(1)
+          .openapi({
+            description:
+              'Bearer token supplied as a query parameter. The browser `EventSource` API cannot set an `Authorization` header, so this is the only way to authenticate this stream from one; prefer the header wherever the client allows it. The server redacts this value from its logs, its Sentry events and its 404 bodies, but a URL-borne credential is still a URL-borne credential.',
+          })
+          .optional(),
+      }),
+    },
     responses: {
       200: {
         description:
@@ -4623,6 +4639,18 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       params: z.object({ id: z.string() }),
+      // V-1513 — the same EventSource query-token auth as the notifications
+      // stream; both routes use `requireAuthEventSource`.
+      query: z.object({
+        ds_token: z
+          .string()
+          .min(1)
+          .openapi({
+            description:
+              'Bearer token supplied as a query parameter. The browser `EventSource` API cannot set an `Authorization` header, so this is the only way to authenticate this stream from one; prefer the header wherever the client allows it. The server redacts this value from its logs, its Sentry events and its 404 bodies, but a URL-borne credential is still a URL-borne credential.',
+          })
+          .optional(),
+      }),
       // V-1508 — the 200 description below has always said this stream supports
       // Last-Event-ID resume, and the route has always read it. A browser
       // EventSource sends the header on its own; every other client has to set

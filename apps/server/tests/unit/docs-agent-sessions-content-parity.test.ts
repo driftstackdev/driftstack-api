@@ -9,7 +9,7 @@
 //   - Every documented endpoint must correspond to a real route file
 //     in apps/server/src/routes/agent-sessions.ts.
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -191,6 +191,37 @@ describe('Arc 4 Wave 2.B sub-slice 8.20.d docs/api/agent-sessions.md parity', ()
     // The route reads the header on this exact stream, so the declaration is
     // anchored to the reader rather than to a path string that could move.
     expect(readFileSync(ROUTE_FILE, 'utf8')).toMatch(/req\.headers\['last-event-id'\]/);
+  });
+
+  it('V-1513 CRITICAL every stream that accepts the EventSource query token declares it. `requireAuthEventSource` takes the bearer from `?ds_token=` because the browser EventSource API cannot set an Authorization header — so on the surface where SSE is actually consumed, that parameter is the ONLY way to authenticate, and it was declared on neither stream. Both docs pages show it in a code sample. The route set is derived from the preHandler rather than listed here, so a third stream adopting this auth is judged the day it lands.', () => {
+    const ROUTES = resolve(REPO_ROOT, 'apps/server/src/routes');
+    const accepting = new Set<string>();
+    for (const file of readdirSync(ROUTES).filter((f) => f.endsWith('.ts'))) {
+      const src = readFileSync(resolve(ROUTES, file), 'utf8');
+      for (const m of src.matchAll(
+        /app\.get(?:<[^(]*>)?\(\s*\n?\s*'(\/v1\/[^']+)'[\s\S]{0,400}?app\.requireAuthEventSource/g,
+      )) {
+        accepting.add(`GET ${(m[1] ?? '').replace(/:(\w+)/g, '{$1}')}`);
+      }
+    }
+    // Reports an absence, so an empty derivation would pass having compared nothing.
+    expect(accepting.size, 'routes gated by requireAuthEventSource').toBeGreaterThanOrEqual(2);
+
+    const spec = JSON.parse(readFileSync(SPEC, 'utf8')) as {
+      paths: Record<string, Record<string, { parameters?: { name?: string; in?: string }[] }>>;
+    };
+    const missing = [...accepting]
+      .filter((key) => {
+        const [, path] = key.split(' ');
+        const params = spec.paths[path ?? '']?.['get']?.parameters ?? [];
+        return !params.some((x) => x.in === 'query' && x.name === 'ds_token');
+      })
+      .sort();
+    expect(
+      missing,
+      'these streams accept `?ds_token=` and the document does not declare it, so a generated ' +
+        'client cannot authenticate an EventSource against them:',
+    ).toEqual([]);
   });
 
   it('documents the transcript scope floor and sensitive-intent projection honestly', () => {

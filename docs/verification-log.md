@@ -14201,3 +14201,65 @@ worth comparing are largely exhausted.
 Recorded so the next sweep starts from here rather than re-deriving the same negatives: published bound
 vs clamp, response-header placement, the tier table, the email catalogue, and cursor bounds are all
 verified as of this entry.
+
+## V-1513 — the only credential an EventSource can carry, declared nowhere
+
+V-1512 closed by saying the pairs worth comparing were largely exhausted. The pairs I had been comparing
+were: this batch used a new one — **consumer code against the contract**. The customer dashboard and the
+admin panel call the API directly, and what they send is a derivation of the real contract that nothing
+had compared against the published one.
+
+**The finding.** `GET /v1/account/me/notifications` and `GET /v1/agent-sessions/{id}/transcript` both
+authenticate through `requireAuthEventSource`, which takes the bearer token from `?ds_token=` because the
+browser `EventSource` API cannot set an `Authorization` header. Neither declared the parameter.
+
+That is worse than the usual undeclared-parameter case. For SSE consumed in a browser — the surface these
+streams exist for — `?ds_token=` is not a convenience, it is the ONLY way to authenticate. A generated
+client had no parameter for it, so the spec described two streams that could not be opened from the
+place they are meant to be opened.
+
+Both docs pages carry it, with a code sample:
+`https://api.driftstack.dev/v1/account/me/notifications?ds_token=${KEY}`. The human surfaces were right
+again; this is the fifth time this session that the machine-readable contract was the one out of step.
+
+The published description says what the parameter is, steers to the header where a client can set one,
+and states the redaction posture — verified rather than assumed: the token is stripped from logs
+(`lib/logger.ts`), from Sentry events, and from the URL echoed in a 404 body
+(`middleware/error-handler.ts`). It also says plainly that a URL-borne credential is still a URL-borne
+credential, because that is true and a reader deciding between the two paths should have it.
+
+The new arm derives the route set from the `requireAuthEventSource` preHandler rather than naming the two
+streams, so a third adopting this auth is judged the day it lands, and asserts the derivation is
+non-empty first.
+
+### Three instrument faults in one batch, each caught before it became a finding
+
+The probe compared consumer `(METHOD, path)` pairs against registered routes and reported 8 mismatches.
+All 8 were mine:
+
+1. **Query strings left on the path.** `/v1/account/audit-log?limit=20` matched no route because I never
+   split on `?`. Seven of the eight.
+2. **A query string read as a path segment.** `'/v1/auth/oauth-client/callback' + qs` became
+   `/v1/auth/oauth-client/callback/{}` because my heuristic treated any `+ expr` as another segment. The
+   route is registered; the eighth mismatch was the extractor.
+3. **The wrong method looked up.** With paths fixed, the probe then reported `keep` undeclared on
+   `/v1/account/web-sessions`. It is declared — `query: z.object({ keep: z.literal('current') })` — and
+   my lookup had hardcoded `GET` while the call is a `DELETE`. That one nearly became the headline,
+   because the repo's own guard header references a historical "`?keep=current` bug" and I was primed to
+   believe it had come back.
+
+Three wrong answers, three different causes, one surviving finding. The rule that saved it each time is
+the same one that has held all session: the census generates candidates, and source decides.
+
+A fourth, smaller: the arm's import edit was a silent no-op — the file imports
+`{ readFileSync, existsSync }` and I replaced `{ readFileSync }`, which matched nothing. `.replace()`
+returning the string unchanged is indistinguishable from success, and only the run caught it.
+
+### Measured clean
+
+**Every consumer call site's method and path is served.** Seventy fetch sites across the dashboard and
+admin panel, all matching a registered `(method, path)` once the extractor was correct. The existing
+`dashboard-fetch-paths-have-routes` checks paths only, so the method dimension was genuinely unverified —
+it is now measured, and clean.
+
+**Consumer query parameters are declared**, apart from the `ds_token` pair fixed here.

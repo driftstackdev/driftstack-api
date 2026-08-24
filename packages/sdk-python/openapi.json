@@ -21045,6 +21045,18 @@
             "BearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Bearer token supplied as a query parameter. The browser `EventSource` API cannot set an `Authorization` header, so this is the only way to authenticate this stream from one; prefer the header wherever the client allows it. The server redacts this value from its logs, its Sentry events and its 404 bodies, but a URL-borne credential is still a URL-borne credential."
+            },
+            "required": false,
+            "name": "ds_token",
+            "in": "query"
+          }
+        ],
         "responses": {
           "200": {
             "description": "SSE stream of mixed cost telemetry, audit, incident, and session events for the calling account (text/event-stream). Requires broad `read` or `account_owner`; resource-granular read scopes do not authorize this cross-resource stream. Each frame carries an `event:` discriminator (e.g. cost.threshold_alert) and a JSON `data:` payload; heartbeat comments keep the connection alive.",
@@ -35238,6 +35250,16 @@
             "required": true,
             "name": "id",
             "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Bearer token supplied as a query parameter. The browser `EventSource` API cannot set an `Authorization` header, so this is the only way to authenticate this stream from one; prefer the header wherever the client allows it. The server redacts this value from its logs, its Sentry events and its 404 bodies, but a URL-borne credential is still a URL-borne credential."
+            },
+            "required": false,
+            "name": "ds_token",
+            "in": "query"
           },
           {
             "schema": {
