@@ -561,4 +561,48 @@ describe('every optional dependency bootstrap does not pass is declared', () => 
       'dep(s) app.ts gates route registration on that bootstrap never wires — those routes are absent in production:',
     ).toEqual([]);
   });
+
+  // V-1439 — which R2 bucket Customer Data is routed to.
+  //
+  // V-1438 proved the two factories target different buckets. This is the other
+  // half: that bootstrap hands the PRIVATE client to the consumers that touch
+  // Customer Data. The two clients are interchangeable at every call site — same
+  // interface, same credentials, one identifier apart — so `r2` → `r2Public` is a
+  // one-token edit that compiles, passes every behaviour test (both are an `R2`),
+  // and writes sealed profile blobs into the world-readable bucket.
+  //
+  // Both consumers key on `profileSealedBlobKey`: the profile-save persister writes
+  // the blob, and the account-deletion purge sweeper deletes it under the
+  // privacy-policy §9 thirty-day erasure commitment. A purge pointed at the wrong
+  // bucket would also leave the real blob in place while reporting success.
+  //
+  // Checked as "private present AND public absent" rather than just the former,
+  // because a site holding both would satisfy a presence-only assertion.
+  const PRIVATE_R2_CONSUMERS: ReadonlyArray<readonly [site: string, why: string]> = [
+    ['makeProfileSavedPersister', 'writes profileSealedBlobKey — sealed Customer Data'],
+    ['new AccountDeletionPurgeSweeperService', 'deletes it under the §9 erasure commitment'],
+  ];
+
+  it.each(PRIVATE_R2_CONSUMERS)(
+    'CRITICAL bootstrap gives %s the PRIVATE R2 client (%s). The two clients share an interface and differ by one identifier, so r2 → r2Public compiles, passes every behaviour test, and routes sealed Customer Data to the world-readable bucket.',
+    (site) => {
+      // Match the CALL, not the import, and read to the BALANCED close rather than a
+      // fixed window. Both drafts of this were wrong: `indexOf(site)` found the
+      // import line for one consumer, and a 2200-char window fell short of the
+      // other, whose argument list carries a long comment block. The file already
+      // had `balanced()` for exactly this.
+      const call = new RegExp(`${site.replace(/[.*+?^$}{()|[\]\\]/g, '\\$&')}\\s*\\(`).exec(
+        bootstrapSource,
+      );
+      expect(call, `the ${site} call is no longer present in bootstrap`).not.toBeNull();
+      const open = bootstrapSource.indexOf('(', (call?.index ?? 0) + site.length - 1);
+      const args = stripComments(balanced(bootstrapSource, open));
+      expect(args.length, `the ${site} argument list read as empty`).toBeGreaterThan(0);
+      expect(/\br2\b/.test(args), `${site} no longer receives the private r2 client`).toBe(true);
+      expect(
+        /\br2Public\b/.test(args),
+        `${site} now receives r2Public — sealed Customer Data would be written to the public bucket`,
+      ).toBe(false);
+    },
+  );
 });

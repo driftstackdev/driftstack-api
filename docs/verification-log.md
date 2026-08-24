@@ -10325,3 +10325,35 @@ Recorded from the same pass: `bootstrap.ts:1021` — the warning that fires when
 `config.r2` is null in every test. It is a log line rather than a behaviour, and reaching it needs a
 full `createProductionDeps` run against a live Postgres and Redis, so the testable core was taken
 instead: the null-return contract the warning is derived from is now exercised directly.
+
+### V-1439 — which bucket Customer Data is routed to, asserted at the wiring
+
+V-1438 proved the two R2 factories target different buckets. This is the other half: that bootstrap
+hands the **private** client to the consumers that touch Customer Data. The clients are
+interchangeable at every call site — same interface, same credentials, one identifier apart — so
+`r2` → `r2Public` is a one-token edit that compiles, passes every behaviour test (both are an `R2`),
+and writes sealed profile blobs into the world-readable bucket.
+
+The mapping was verified before being pinned, and it is correct today:
+
+| consumer                             | client         | why                                                                  |
+| ------------------------------------ | -------------- | -------------------------------------------------------------------- |
+| `makeProfileSavedPersister`          | `r2` (private) | writes `profileSealedBlobKey` — sealed Customer Data                 |
+| `AccountDeletionPurgeSweeperService` | `r2` (private) | deletes it under the privacy-policy §9 thirty-day erasure commitment |
+| avatar upload / presign              | `r2Public`     | intended — avatars are served publicly                               |
+| status-snapshot writer               | `r2Public`     | intended — the status page reads it when the API is unreachable      |
+
+Nothing asserted any of it. A purge pointed at the wrong bucket is the worse half of the pair: it would
+report success while leaving the real blob in place, so an erasure commitment would be quietly unmet.
+
+Asserted as "private present AND public absent", because a site holding both would satisfy a
+presence-only check. Mutations confirm both halves carry weight: handing either consumer `r2Public`
+reds it, and so does dropping the private client from the persister altogether.
+
+**Two extractor faults on the way, both mine, both caught by running it.** `indexOf(site)` found the
+_import_ line rather than the call for one consumer, and a fixed 2200-character window fell short of
+the other, whose argument list carries a long comment block — `r2,` sits ~2700 characters in. The fix
+was already in the file: a `balanced()` helper that reads an argument list to its matching close. That
+is the sixth extractor fault in this run, and the pattern by now is plain — a fixed window and a
+first-match index are both guesses, and the guess fails silently in the direction that reports nothing
+wrong.
