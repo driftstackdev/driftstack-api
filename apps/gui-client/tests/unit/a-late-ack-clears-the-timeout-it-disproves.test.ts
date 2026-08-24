@@ -54,6 +54,21 @@ import {
 const room = (): Room => ({}) as Room;
 
 /** The observed badge state, in order, for one Room. */
+/**
+ * Burn ONE unanswered receipt.
+ *
+ * A single missing ack no longer raises the badge — an ack can be lost in
+ * transit without the input having failed (the harness injects before it acks,
+ * and `publishInputAck` drops publish errors with `try?`), so one miss is weak
+ * evidence. These arms are about what happens ONCE the badge is up, so they
+ * prime the run first and the receipt under test is the miss that trips it.
+ * Publishes nothing itself, so `watch` stays clean.
+ */
+function primeMiss(r: Room): void {
+  registerInputReceipt(r, 'prime_miss', 5_000);
+  vi.advanceTimersByTime(6_000);
+}
+
 function watch(r: Room): Array<string | null> {
   const seen: Array<string | null> = [];
   subscribeInputReceiptIssues(r, (issue) => seen.push(issue));
@@ -91,6 +106,7 @@ describe('a late ack clears the timeout it disproves', () => {
     try {
       const r = room();
       const seen = watch(r);
+      primeMiss(r);
       registerInputReceipt(r, 'tap_slow', 5_000);
       vi.advanceTimersByTime(6_000);
       expect(seen.at(-1), 'the deadline did not raise the badge — the arm proves nothing').toBe(
@@ -138,6 +154,7 @@ describe('a late ack clears the timeout it disproves', () => {
       for (const status of ['dropped', 'failed'] as const) {
         const r = room();
         const seen = watch(r);
+        primeMiss(r);
         registerInputReceipt(r, `tap_${status}`, 5_000);
         vi.advanceTimersByTime(6_000);
         expect(seen.at(-1)).toBe('timeout');
@@ -155,6 +172,7 @@ describe('a late ack clears the timeout it disproves', () => {
     try {
       const r = room();
       const seen = watch(r);
+      primeMiss(r);
       registerInputReceipt(r, 'tap_old', 5_000);
       vi.advanceTimersByTime(6_000);
       expect(seen.at(-1)).toBe('timeout');
@@ -180,6 +198,7 @@ describe('a late ack clears the timeout it disproves', () => {
     try {
       const r = room();
       const seen = watch(r);
+      primeMiss(r);
       registerInputReceipt(r, 'tap_real', 5_000);
       vi.advanceTimersByTime(6_000);
       expect(seen.at(-1)).toBe('timeout');

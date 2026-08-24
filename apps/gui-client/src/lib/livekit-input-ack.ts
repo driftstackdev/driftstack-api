@@ -20,9 +20,30 @@ interface ReceiptState {
   issue: InputReceiptIssue;
   nextSequence: number;
   settledSequence: number;
+  /** Consecutive unanswered receipts; reset by any ack that arrives. */
+  missedAcks: number;
 }
 
 export const INPUT_RECEIPT_DEADLINE_MS = 5_000;
+
+/**
+ * How many receipts in a row must go unanswered before we accuse the device.
+ *
+ * A missing ack is NOT a failed input: the harness injects first and acks
+ * after, so by the time we could time out the tap has already been applied.
+ * And the ack itself can be lost in transit without anyone noticing —
+ * `publishInputAck` sends via `try? await publishData(...)`, which silently
+ * discards both a not-connected error and a bounded-publish timeout (the
+ * LiveKit SDK's publish can hang; that hang is converted to a throw and then
+ * dropped on the floor).
+ *
+ * So ONE unanswered receipt is weak evidence of anything, and raising a badge
+ * on it means telling the customer their device is broken every time a single
+ * ack goes missing. Two in a row is a pattern worth surfacing. This calibrates
+ * the alarm to the evidence; it does not hide a real outage, which produces an
+ * unbroken run of misses and still trips on the second one.
+ */
+export const MISSED_ACKS_BEFORE_ALARM = 2;
 export const MAX_PENDING_INPUT_RECEIPTS = 128;
 
 const states = new WeakMap<Room, ReceiptState>();
@@ -38,10 +59,21 @@ function stateFor(room: Room): ReceiptState {
       issue: null,
       nextSequence: 0,
       settledSequence: 0,
+      missedAcks: 0,
     };
     states.set(room, state);
   }
   return state;
+}
+
+/**
+ * Record one unanswered receipt, and raise the alarm only once enough of them
+ * have stacked up without an ack in between.
+ */
+function noteMissedAck(state: ReceiptState, sequence: number): void {
+  state.missedAcks += 1;
+  if (state.missedAcks < MISSED_ACKS_BEFORE_ALARM) return;
+  publish(state, 'timeout', sequence);
 }
 
 function publish(state: ReceiptState, issue: InputReceiptIssue, sequence: number): void {
@@ -69,7 +101,7 @@ function expireOldest(state: ReceiptState): void {
   clearTimeout(oldest[1].timer);
   state.pending.delete(oldest[0]);
   rememberTimeout(state, oldest[0], oldest[1].sequence);
-  publish(state, 'timeout', oldest[1].sequence);
+  noteMissedAck(state, oldest[1].sequence);
 }
 
 export function registerInputReceipt(
@@ -92,7 +124,7 @@ export function registerInputReceipt(
     if (state.pending.get(id)?.timer !== timer) return;
     state.pending.delete(id);
     rememberTimeout(state, id, sequence);
-    publish(state, 'timeout', sequence);
+    noteMissedAck(state, sequence);
   }, deadlineMs);
   state.pending.set(id, { sequence, timer });
 }
@@ -129,11 +161,16 @@ export function handleInputAck(room: Room, value: unknown): boolean {
     const timedOutSequence = state.timedOut.get(record.id);
     if (timedOutSequence === undefined) return true;
     state.timedOut.delete(record.id);
+    state.missedAcks = 0;
     publish(state, record.status === 'applied' ? null : record.status, timedOutSequence);
     return true;
   }
   clearTimeout(pending.timer);
   state.pending.delete(record.id);
+  // Any answer at all -- applied, dropped or failed -- proves the ack path is
+  // alive, so the consecutive-miss run restarts. `dropped`/`failed` still
+  // publish their own issue below; they are a device verdict, not silence.
+  state.missedAcks = 0;
   publish(state, record.status === 'applied' ? null : record.status, pending.sequence);
   return true;
 }
@@ -146,6 +183,7 @@ export function resetInputReceipts(room: Room): void {
   state.nextSequence = 0;
   state.settledSequence = 0;
   state.issue = null;
+  state.missedAcks = 0;
   for (const listener of state.listeners) listener(null);
 }
 

@@ -72,9 +72,17 @@ describe('per-Room committed input receipts', () => {
     const r = room();
     const issues: Array<string | null> = [];
     subscribeInputReceiptIssues(r, (issue) => issues.push(issue));
+    // One lost ack is no longer reported — it is weak evidence, because the
+    // input is injected BEFORE the ack is attempted and the ack can be dropped
+    // in transit unlogged. The badge is calibrated to consecutive misses, so
+    // this arm burns one first and then measures the deadline on the second.
+    registerInputReceipt(r, 'key_0', 5_000);
+    vi.advanceTimersByTime(6_000);
+    expect(issues, 'a single miss raised the badge').toEqual([null]);
+
     registerInputReceipt(r, 'key_1', 5_000);
     vi.advanceTimersByTime(4_999);
-    expect(issues).toEqual([null]);
+    expect(issues, 'the badge rose BEFORE the deadline').toEqual([null]);
     vi.advanceTimersByTime(1);
     expect(issues).toEqual([null, 'timeout']);
     expect(pendingInputReceiptCount(r)).toBe(0);
@@ -103,11 +111,17 @@ describe('per-Room committed input receipts', () => {
     const r = room();
     const issues: Array<string | null> = [];
     subscribeInputReceiptIssues(r, (issue) => issues.push(issue));
-    for (let i = 0; i <= MAX_PENDING_INPUT_RECEIPTS; i += 1) {
+    // Overflow by TWO. Each eviction is one unanswered receipt, and the badge is
+    // calibrated to consecutive misses — so overflowing by one proves the bound
+    // holds but no longer proves it is reported, which is the other half of what
+    // this arm is named for.
+    for (let i = 0; i <= MAX_PENDING_INPUT_RECEIPTS + 1; i += 1) {
       registerInputReceipt(r, `id_${i}`, 60_000);
     }
     expect(pendingInputReceiptCount(r)).toBe(MAX_PENDING_INPUT_RECEIPTS);
-    expect(issues.at(-1)).toBe('timeout');
+    expect(issues.at(-1), 'evictions were silent — the bound held but said nothing').toBe(
+      'timeout',
+    );
     resetInputReceipts(r);
     expect(pendingInputReceiptCount(r)).toBe(0);
     expect(issues.at(-1)).toBe(null);
