@@ -12957,3 +12957,54 @@ do not. The mitigation is knowing which surfaces are in that set, which is what 
 provides, and running with `DATABASE_URL` set when a change touches one. I did not run them here: the
 default target is `postgres://driftstack:driftstack@localhost:5432/driftstack`, a live local dev
 database, and writing to it is a side effect outside this task.
+
+## V-1493 — four surfaces swept clean, with the instruments proven rather than trusted
+
+No defect this batch. Recorded because the alternative is that the next sweep spends a turn rediscovering
+that these are clean, and because two of the four needed an instrument correction before the negative
+was worth anything.
+
+**Spec examples validate against their own schemas — 38 of 38.** An example that fails the schema beside
+it is the first thing a customer copies. The first run reported five failures, all of the form "example
+is a string but the schema type is `['string','null']`" — which is valid nullable typing in OpenAPI 3.1,
+and a string satisfies it. My checker treated `type` as a scalar. Corrected, the count is zero: required
+fields present, enum members legal, patterns matched, types compatible. `docs-response-examples-match-
+the-spec` covers docs examples against the spec; this is the spec's internal self-consistency, which
+nothing else asks.
+
+**Every column the Drizzle schema declares is created by some migration — 539 of 539, across 52 tables.**
+The direction matters: a column in `schema.ts` that no migration creates means production lacks it and
+the app fails at runtime, and unlike the reverse it is not confounded by drops or renames (a column the
+schema has must have been created by something). `migration-journal-vs-sql-files-invariant` guards the
+journal against the SQL files; nothing compared either against the schema.
+
+That zero is only worth reading because the instrument was broken on purpose first: injecting
+`column_that_no_migration_creates` into the parsed set surfaces it as
+`account_audit_log.column_that_no_migration_creates`, and a real column (`account_audit_log.account_id`)
+resolves against the migrations. A clean census that has never been made to fail is indistinguishable
+from one that reads nothing.
+
+**Two seams confirmed saturated, by reading prior art rather than by measuring.**
+
+Problem types have nine guards covering both directions across docs and all three SDKs —
+`a-documented-problem-type-is-one-the-server-can-send` runs docs→server, and
+`cross-sdk-problem-type-coverage-parity` runs server→SDK, its first line being "every problem type the
+server can emit is mapped by every SDK".
+
+Audit-action reachability is covered on both sides: `every-declared-admin-audit-action-is-reachable`
+and `every-declared-account-audit-action-is-reachable` both exist. I went looking for the second
+because V-1479 published the 46-value account action enum as a `?action` filter, which makes a
+never-emitted value an advertised filter returning an empty page forever — the exact failure the admin
+guard's header describes. It was already guarded.
+
+**And one gap that reads as open and is not.** `every-rate-limit-bucket-key-exists` states that only
+LITERAL bucket keys are checked. The single non-literal call is a pass-through in
+`middleware/rate-limit.ts` forwarding a value that originated at a literal call site the guard does
+check, and the `bucketConfigFor` fallback is deliberate — reachable from an account override where
+falling back to `global` is correct. The gap is closed by argument, not left open, and the header says
+so. Worth recording that a stated blind spot is not automatically a finding.
+
+**On the shape of this batch.** Eight attempts across two turns produced one defect (V-1491) and a run
+of negatives. The surfaces reachable without a database are guarded densely enough that the marginal
+sweep now mostly rediscovers existing coverage — which is itself the useful signal, provided the
+negatives are measured and written down rather than felt.
