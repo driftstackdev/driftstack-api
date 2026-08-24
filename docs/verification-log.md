@@ -14146,3 +14146,58 @@ the problem.
 Worth recording together with the retraction above: within one batch, V-1500's staleness arm caught my
 wrong exemptions and V-794 caught my wrong title. Both guards were written earlier in this sweep to
 catch someone else.
+
+## V-1512 — one parameter finished, and five surfaces that turned out to be already guarded
+
+V-1511's lesson was that a census stopping at the route layer misses what a service applies. Two things
+follow from that: finish the parameter it did not cover, and check whether the same reasoning error is
+hiding elsewhere. The first took one line; the second took most of the batch and found nothing, which is
+the more useful half to write down.
+
+**The fix.** `GET /v1/admin/status-subscribers` is the only offset-paged endpoint in the API — every
+other list rail is cursor-based — and its service applies `opts.offset ?? 0` while the document published
+`{ minimum: 0 }` and no default. Exactly V-1511's shape, one parameter over. It publishes `default: 0`
+now, and the new arm derives the population from the spec rather than naming the endpoint, so a second
+offset-paged rail is judged the day it lands.
+
+Small, and worth saying so plainly: an omitted `offset` defaulting to zero is what any caller would
+assume. This closes the parameter rather than repairing a misunderstanding.
+
+### Five surfaces measured clean
+
+**No published maximum exceeds its effective clamp.** The mirror of V-1511 — a customer asking for 100
+and silently getting 50 — does not occur. Two services clamp at 200 (`durable-webhook-delivery` for
+deliveries and the DLQ) above a published maximum of 100, but `ListDeliveriesQuerySchema` caps at 100
+with `.parse()` at the route, so the headroom is unreachable rather than contradictory. Every other clamp
+reads the same constant the route publishes.
+
+**Rate-limit response headers follow the repo's own placement convention.** Seven are emitted on every
+consume — the four `x-ratelimit-*` plus three un-prefixed IETF-draft names — and all seven are declared
+on 429 across 213 operations and on no 2xx. That looked like a gap until I checked the comparable case:
+`X-Request-Id` is sent on every response and is declared on 400/401/403/404/409/429/503 and never on a
+success. So cross-cutting headers are attached where the shared error blocks are, uniformly. Declaring
+them on success responses is a spec-wide convention change, not a correction — the same call V-1508 made
+about `x-request-id` as a request parameter.
+
+**The per-tier rate-limit table is derived, not pinned.** `published-rate-limit-table-matches-the-code`
+parses the page's columns from its header row, walks every published row, and compares capacity and
+refill per cell against the limiter, with separate arms proving the parse found real rows and that every
+tier and bucket has columns. I went to check 64 numbers by hand and found a stronger check already there.
+
+**The email catalogue is closed the same way.**
+`every-email-a-customer-can-receive-is-in-the-catalogue` exists, which is the emails-page analogue of the
+webhook-event catalogue guard.
+
+**Cursor parameters are uniform.** All sixteen publish `minLength: 1, maxLength: 512`; two carry an extra
+description. Nothing to reconcile.
+
+### What five negatives in a row means
+
+This surface has been swept hard across V-1475–V-1511 and the guards that came out of it now cover the
+obvious shapes. The remaining defects in this area are unlikely to be found by another parity census —
+the ones that landed this session came from comparing two independently derived artifacts, and the pairs
+worth comparing are largely exhausted.
+
+Recorded so the next sweep starts from here rather than re-deriving the same negatives: published bound
+vs clamp, response-header placement, the tier table, the email catalogue, and cursor bounds are all
+verified as of this entry.

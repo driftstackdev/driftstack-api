@@ -3335,7 +3335,9 @@ function buildRegistry(): OpenAPIRegistry {
       query: z.object({
         // V-1511 — the service applies `opts.limit ?? 50`.
         limit: z.number().int().min(1).max(200).default(50),
-        offset: z.number().int().min(0).optional(),
+        // V-1512 — the service applies `opts.offset ?? 0`, the same shape
+        // V-1511 corrected for `limit` one parameter over.
+        offset: z.number().int().min(0).default(0),
       }),
     },
     responses: {

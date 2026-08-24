@@ -822,6 +822,30 @@ describe('V-927 a published bound matches the route', () => {
   // deleted, not inherited.
   const LIMIT_WITHOUT_DEFAULT: Record<string, string> = {};
 
+  it('V-1512 an offset-paged endpoint publishes its starting point too. Only one endpoint pages by offset rather than cursor, and its service applies `opts.offset ?? 0` while the document published bounds alone — the same shape V-1511 corrected for `limit`, one parameter over and one endpoint wide. Derived from the spec rather than named here, so a second offset-paged rail is judged on the day it lands.', () => {
+    const spec = JSON.parse(readFileSync(SPEC, 'utf8')) as {
+      paths: Record<string, Record<string, { parameters?: Record<string, unknown>[] }>>;
+    };
+    const silent: string[] = [];
+    let seen = 0;
+    for (const [path, ops] of Object.entries(spec.paths)) {
+      for (const [method, op] of Object.entries(ops)) {
+        for (const raw of op.parameters ?? []) {
+          if (raw['in'] !== 'query' || raw['name'] !== 'offset') continue;
+          seen += 1;
+          const schema = raw['schema'] as { default?: unknown } | undefined;
+          if (schema?.default === undefined) silent.push(`${method.toUpperCase()} ${path}`);
+        }
+      }
+    }
+    expect(seen, 'published `offset` query parameters').toBeGreaterThan(0);
+    expect(
+      silent.sort(),
+      'this endpoint pages by offset and publishes no starting point, so an omitted parameter ' +
+        'reads as undefined rather than the zero the service applies',
+    ).toEqual([]);
+  });
+
   it('CRITICAL a list endpoint that picks a page size says which one. Every published `limit` now carries the default its stack applies — 50, 100 or 1000 depending on the rail — so an omitted parameter reads as the server making a choice rather than as no bound at all. The exemption map above is empty on purpose: the seven entries it used to hold were each justified by a route-level declaration while the default lived in a service or repo.', () => {
     const spec = JSON.parse(readFileSync(SPEC, 'utf8')) as Record<string, never>;
     const paths = (spec as unknown as Record<string, Record<string, never>>)['paths'] ?? {};
