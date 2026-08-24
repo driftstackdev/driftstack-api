@@ -10616,3 +10616,45 @@ Four mutations, one failing test each, every restore byte-identical: dropping th
 each of the three caps to `Infinity`.
 
 No new test file; 8 `it` declarations to 11. No ratchet movement.
+
+## V-1446 — the same refill blind spot on the store that carries limiting during a Redis outage
+
+V-1445 found a token bucket whose consumption was proven and whose refill was not. That shape is not
+unique to the fleet gate. `BoundedMemoryRateLimitStore` is what both rate-limit middlewares degrade to
+when Redis throws — so it carries limiting during exactly the outage where limiting is the only thing
+left — and a mutation sweep of it killed the eviction branch and the `maxBuckets >= 1` guard while
+leaving three things standing:
+
+- **the `Math.min(capacity, …)` burst cap.** Its refill arm advances one second and proves a token
+  comes back; a store that refills correctly and caps at nothing passes it. Uncapped, 1000 seconds of
+  silence is 1000 tokens against a capacity of 2.
+- **the `Math.max(0, …)` clock clamp.** Same asymmetry as V-1445: once a bucket is empty a backwards
+  step is denied either way, so only a key with tokens in hand can tell the clamp from its absence.
+- **the delete-then-set that makes eviction least-recently-TOUCHED.** This is the one worth the batch.
+  Without it a key under sustained load keeps its original insertion slot and is evicted first while
+  idle keys survive — and the module's own header states that an evicted bucket starts full again. So
+  the heaviest talker is the one whose limit resets, under precisely the unbounded-distinct-keys
+  traffic this store was written to bound.
+
+**Why the gap was invisible: the formula is pinned as source text.**
+`lib-rate-limit-stores-content-parity` pins `elapsedSec=max(0,(now-last)/1000) * refillPerSecond, then
+min(capacity, tokens+refill)`. That pin reds on any edit to the line and says nothing about whether the
+behaviour is exercised — the "text pinned, effect unchecked" shape again. The sweep had to exclude the
+parity file to measure anything at all, and the same measurement on `MemoryRateLimitStore` showed its
+cap covered and its clamp not.
+
+**Two negatives recorded.** `MemoryRateLimitStore` is documented "do NOT use in production" and the
+cross-source invariant pins it as the tests-only implementation; a census appeared to contradict that
+by finding it in `services/rate-limit.ts`, but with comments stripped there are **zero** code
+references — the only mention is the header line naming the two-implementation pattern. And eviction
+resetting a bucket to full is deliberate, stated in the module header as coarser than Redis but far
+better than the prior unconditional fail-open.
+
+**A tooling note that nearly cost the batch.** The first sweep reported all four mutations surviving.
+They had not run: the test paths were passed through an unquoted zsh variable, zsh does not word-split,
+and vitest received one bogus path. The harness prints `NO SUMMARY LINE — the run did not complete;
+this is not a result` for exactly this, which is the only reason it was not read as four clean
+survivals. A refused mutation and a surviving one look identical in every field except that line.
+
+Four mutations, one failing arm each, every restore byte-identical. No new test files; bounded store 5
+`it` declarations to 8, `rate-limit.test.ts` 13 to 14. No ratchet movement.

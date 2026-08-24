@@ -21,6 +21,21 @@ describe('MemoryRateLimitStore.consume', () => {
     expect(r.retryAfterMs).toBe(0);
   });
 
+  // V-1446 — the `Math.max(0, …)` clamp on elapsed time survived deletion here while
+  // the `Math.min(capacity, …)` cap did not. Both stores carry the identical formula
+  // and `lib-rate-limit-stores-content-parity` pins it as SOURCE TEXT, which is why
+  // the gap was invisible: the pin reds on any edit to the line and says nothing
+  // about whether the behaviour is exercised. Measured by mutating with the parity
+  // file excluded from the run.
+  it('CRITICAL a clock that steps BACKWARDS does not drain the bucket. The admitting side is the only one that can tell: an exhausted bucket is denied either way.', async () => {
+    const store = new MemoryRateLimitStore();
+    const base = { key: 'backwards', capacity: 5, refillPerSecond: 1, cost: 1 };
+    expect((await store.consume({ ...base, now: 10_000_000 })).allowed).toBe(true);
+    const back = await store.consume({ ...base, now: 9_990_000 });
+    expect(back.allowed, 'a backwards clock step drained a bucket holding four tokens').toBe(true);
+    expect(back.remaining).toBe(3);
+  });
+
   it('exhausting the bucket returns allowed=false with retry-after', async () => {
     const store = new MemoryRateLimitStore();
     for (let i = 0; i < 5; i++) {
