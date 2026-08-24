@@ -93,9 +93,18 @@ npm run typecheck    # strict TS across all workspaces
 npm run lint         # eslint with type-aware rules
 npm run format:check # prettier (use `npm run format` to fix)
 npm test             # vitest unit + integration
-npm run test:e2e     # playwright (requires running server)
+npm run test:e2e:setup # docker compose up -d --wait (the stack test:e2e expects)
+npm run test:e2e     # playwright against that stack — DROPs its schema and flushes its Redis
+npm run test:e2e:local # no-Docker path; refuses to reset a shared database
 npm run build        # tsc --build all workspaces
 ```
+
+`test:e2e` resets the database and Redis it is pointed at, before every test.
+That is correct against the compose stack, where both are disposable containers,
+and it is what `test:e2e` assumes. On a machine running Postgres natively the
+same defaults name your working `driftstack` database and Redis db 0, so use
+`test:e2e:local`, which refuses a shared target, or point `DATABASE_URL` at a
+scratch database yourself.
 
 ### Database
 

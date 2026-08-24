@@ -13113,3 +13113,47 @@ check reds three of them.
 
 Second mutation: disabling the Redis half alone reds the arm that asserts each target is refused
 independently, so a scratch database cannot launder a shared Redis. Both restored byte-identical.
+
+## V-1496 — retracting V-1495's fix: the rule already existed, on a separate entry point, deliberately
+
+V-1495 added a shared-development-target refusal to `assertLocalDestructiveTarget`. The hazard it
+described is real and the analysis holds — on this machine Postgres is native Homebrew
+`postgresql@16`, Docker is not running, `driftstack` is the developer's working database and Redis db 0
+holds 3920 of their keys, so `npm run test:e2e` in a clean shell would destroy both. What was wrong is
+the fix, and it was wrong for a reason I could have found before writing it.
+
+**The rule already exists.** `scripts/e2e-local.mjs` refuses an unset `DATABASE_URL`, refuses a target
+named `driftstack`, and refuses a non-loopback host — the same three checks, with the same reasoning.
+Its guard's header states the design decision outright: those checks "only become meaningful once 'not
+compose' is the stated contract, which is why they live on a separate entry point rather than being
+bolted onto `test:e2e`."
+
+Bolting them onto `test:e2e` is exactly what I did.
+
+**And it breaks the documented workflow.** `docs/architecture/phase-8-e2e-design.md` says local dev runs
+the suite via `npm run test:e2e`, expecting `docker compose up -d` already running; compose publishes
+`POSTGRES_DB: driftstack` on loopback and sets no `CI`. Under V-1495 that configuration is refused. The
+compose container IS disposable — the name means something different there — and no inspection of a URL
+can tell the two apart, which is precisely why the author used an entry point to state the contract
+rather than a predicate to guess it.
+
+So the guard is reverted to its prior state, byte-for-byte, and its nineteen original arms pass.
+
+**What remains, and the proportionate fix.** The residual gap is not in the guard, it is in the README,
+which listed `npm run test:e2e # playwright (requires running server)` and mentioned neither compose nor
+the no-Docker path. A developer running Postgres natively follows that line and loses their database —
+which is how I got here. The README now says `test:e2e` resets what it points at, names
+`test:e2e:setup` as the stack it expects, and points a native-Postgres reader at `test:e2e:local`,
+which already refuses a shared target.
+
+**The process failure, stated plainly.** Rule 1 of this sweep is to verify the claim against source
+first, and I did — the hazard is real. What I skipped was checking whether the repo had already solved
+it, which is the habit that has redirected seven other batches this session and is why those cost
+minutes instead of a commit. I grepped for pins on the file I was editing, not for prior art on the
+PROBLEM. Those are different searches: one asks who depends on this text, the other asks whether
+someone has been here before. A guard whose header explains why it is NOT in the obvious place is
+exactly the prior art a pin-grep cannot surface.
+
+The commit is a revert plus a documentation fix, and the verification-log keeps V-1495's entry rather
+than deleting it: the hazard analysis in it is correct and worth having, and a retraction that erases
+its own premise teaches nothing.
