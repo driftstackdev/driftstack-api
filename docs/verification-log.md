@@ -10405,3 +10405,54 @@ declaration and then pass distinctness by having lost the evidence. The keying i
 correctness, not a detail of it.
 
 No new test file, so no ratchet movement.
+
+## V-1441 — the audit-wiring table covered seven of eleven, and had no way to know
+
+`AUDIT_WIRED` asserts bootstrap still passes the customer audit recorder into each service that
+accepts one. The recorder is optional and every emit is fail-open, so a dropped argument writes no
+customer audit rows while tsc accepts it and the behaviour tests — which construct services directly —
+stay green. The table names seven services. Deriving the set instead returns **eleven**.
+
+The four nobody was asking about: `ProfilesService` (profile create/delete/export/import/purge/
+restore), `AuthFlowsService` (account login/logout/email_verified/password_changed),
+`AccountLifecycleService` (subscription.tier_changed, billing.payment_succeeded/failed) and
+`MfaService` (mfa_enrolled/mfa_disabled/recovery_code_used). **All four are wired today** — verified by
+reading each construction in bootstrap with balanced-paren extraction, not by trusting the table's
+silence. So this is an unguarded invariant, not a live defect. The surface it protects is the one
+`account-audit-action-cross-source-invariant` calls a GDPR Article 20 portability export: rows never
+written cannot be exported, and login/logout and MFA-enrolment are exactly the security events a
+customer would look for.
+
+**The table's own history is the argument for deriving it.** Its V-1434 note records that the previous
+census missed two entries because the detector matched only `if (dep === null) return`, while
+`PairModeHeartbeatSweep` fails open through `?.` and the decomposer recorder through a positive-form
+guard. That is the second time this list was extended by hand after a sweep under-reported. A roster is
+a statement about the moment it was written; a new service accepting a recorder is not reported by it,
+it is simply never asked about. So the table is now checked for completeness against a derived census —
+the same upgrade, for the same reason, as the SDK-path census and V-1440's AAD purposes.
+
+**Three spellings, and a detector that knows one finds seven.** `accountAudit` is optional as a
+constructor parameter (`: AccountAuditService | null = null`), as a deps-bag field
+(`readonly accountAudit?:`, PairModeHeartbeatSweep) and as an inline object type (`accountAudit?: {`,
+SessionsService). The census resolves the bag forms by finding the class whose constructor takes that
+interface.
+
+**Attribution is to the owning declaration, not the file, and that mattered.** A first draft keyed by
+file returned thirteen: `AuthFlowError` and `WebhooksAdminService` merely share a file with a real
+consumer. Over-reporting is not the safe direction here — it would demand table entries for classes
+that take no recorder at all, and the natural way to make that arm green again is to add them, which
+converts a census into paperwork. An arm now pins both exclusions and both bag-form resolutions.
+
+**Extraction moved from regex to the file's `balanced()` helper.** The old pattern terminated on
+`\n {2}\)`, which cannot see a construction that does not close at two-space indent — and `MfaService`
+is built inside a ternary. A pattern that silently stops matching would have read as "no audit
+argument": a false RED, which is the loud direction, but still the extractor deciding the result.
+
+Four mutations, each restored byte-identical. Dropping the audit argument from `MfaService` reds its
+named arm (proving the balanced extraction reaches the ternary the old regex could not) and the
+unwired-deps roster arm in the other direction. Dropping it from `ProfilesService` reds two likewise.
+Renaming a table entry so a real consumer goes unnamed reds the completeness arm by name. Breaking the
+census regex reds the completeness arm on its own size floor rather than passing vacuously — the floor
+sits inside that arm, so an extractor that stops matching cannot report "nothing unchecked".
+
+No new test file; 11 `it` declarations to 13, 18 tests to 24. No ratchet movement.

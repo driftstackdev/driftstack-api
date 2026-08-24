@@ -442,22 +442,112 @@ describe('every optional dependency bootstrap does not pass is declared', () => 
     // return; only the syntax differs, and the syntax is what the regex keyed on.
     ['PairModeHeartbeatSweep', 'agent_session.pair_mode.timeout'],
     ['DrizzleAgentDecomposerUsageRecorder', 'decomposer usage + key_source metadata'],
+    // V-1441 — the four the hand-written table never had. Found by deriving the set
+    // rather than extending the list a third time: the completeness arm below now
+    // computes who accepts a fail-open recorder, and these are what it returned that
+    // this table did not already name. All four ARE wired today; none was checked.
+    ['ProfilesService', 'profile.{created,deleted,exported,imported,purged,restored}'],
+    ['AuthFlowsService', 'account.{login,logout,email_verified,password_changed}'],
+    ['AccountLifecycleService', 'subscription.tier_changed + billing.payment_{succeeded,failed}'],
+    ['MfaService', 'account.{mfa_enrolled,mfa_disabled,recovery_code_used}'],
   ];
+
+  /** Bootstrap's argument list for `new <Service>(`, comments stripped.
+   *  Balanced-paren rather than a regex: V-1441 added MfaService, which bootstrap
+   *  builds inside a ternary (`? new MfaService(`) at a deeper indent, and the
+   *  previous `\n {2}\)` terminator could not see a construction that does not
+   *  close at two-space indentation. A pattern that silently fails to match reads
+   *  here as "no audit argument", which is a false RED — the loud direction, but
+   *  still the extractor deciding the result. */
+  function constructionArgs(service: string): string | null {
+    const at = bootstrapSource.indexOf(`new ${service}(`);
+    if (at === -1) return null;
+    return stripComments(balanced(bootstrapSource, bootstrapSource.indexOf('(', at)));
+  }
 
   it.each(AUDIT_WIRED)(
     'CRITICAL bootstrap still passes the audit recorder into %s (%s). The parameter is optional and every emit fails OPEN, so a dropped argument silently stops writing customer audit rows — tsc accepts it and the behaviour tests cannot see it.',
     (service) => {
-      const call = new RegExp(
-        `new ${service}\\(([\\s\\S]*?)\\n {2}\\)|new ${service}\\(([^;]*?)\\);`,
-      ).exec(bootstrapSource);
-      expect(call, `the ${service} construction is no longer readable in bootstrap`).not.toBeNull();
-      const args = stripComments(`${call?.[1] ?? ''}${call?.[2] ?? ''}`);
+      const args = constructionArgs(service);
+      expect(args, `the ${service} construction is no longer readable in bootstrap`).not.toBeNull();
       expect(
-        /\baccountAudit(?:Service)?\b/.test(args),
+        /\baccountAudit(?:Service)?\b/.test(args ?? ''),
         `bootstrap no longer passes the audit recorder to ${service} — its audit emits are fail-open and now write nothing`,
       ).toBe(true);
     },
   );
+
+  // V-1441 — the table above is hand-written, and its own V-1434 note records that
+  // the previous census missed two entries because the detector keyed on syntax.
+  // That is the failure mode of every roster: it is a statement about the moment it
+  // was written, and a NEW service accepting a fail-open recorder is simply absent
+  // from it — not reported, just never asked about. So derive the set and require
+  // the table to cover it. This is the same upgrade the SDK-path and AAD-purpose
+  // censuses got, for the same reason.
+  //
+  // The recorder is optional in three distinct spellings, and a detector that knows
+  // only the first finds seven of eleven:
+  //   constructor param   `private readonly accountAudit: AccountAuditService | null = null`
+  //   deps-bag field      `readonly accountAudit?: AccountAuditService`   (PairModeHeartbeatSweep)
+  //   inline object type  `accountAudit?: { ... }`                        (SessionsService)
+  // Attribution is to the OWNING declaration, not the file: a first draft keyed by
+  // file reported 13, because `AuthFlowError` and `WebhooksAdminService` merely share
+  // a file with a real consumer. An over-reporting census is not a safe default here
+  // — it would demand table entries for classes that take no recorder at all.
+  function auditFailOpenConsumers(): Map<string, string> {
+    const optional = /\baccountAudit\w*\s*(?:\?\s*:|:[^;,)\n]*\|\s*null)/g;
+    const decl = /(?:^|\n)export (class|interface|type) ([A-Za-z_$][\w$]*)/g;
+    const out = new Map<string, string>();
+    for (const file of sourceFiles) {
+      const src = stripComments(readFileSync(file, 'utf8'));
+      if (!new RegExp(optional.source).test(src)) continue;
+      const decls = [...src.matchAll(decl)].map((m) => {
+        const start = m.index ?? 0;
+        const open = src.indexOf('{', start);
+        return {
+          kind: m[1] ?? '',
+          name: m[2] ?? '',
+          start,
+          end: open === -1 ? start : open + balanced(src, open).length + 1,
+        };
+      });
+      for (const hit of src.matchAll(new RegExp(optional.source, 'g'))) {
+        const owner = decls.find((d) => d.start <= (hit.index ?? 0) && (hit.index ?? 0) <= d.end);
+        if (owner === undefined) continue;
+        if (owner.kind === 'class') {
+          out.set(owner.name, file);
+          continue;
+        }
+        // A deps bag: the consumer is the class whose constructor takes that type.
+        for (const d of decls) {
+          if (d.kind !== 'class') continue;
+          if (new RegExp(`\\b${owner.name}\\b`).test(src.slice(d.start, d.end)))
+            out.set(d.name, file);
+        }
+      }
+    }
+    return out;
+  }
+
+  it('CRITICAL every service that accepts a fail-open audit recorder is named in AUDIT_WIRED. Without this the table is a list somebody remembered to extend — a new service whose audit emits silently no-op when bootstrap forgets the argument would never be asked about, which is exactly how the four added in V-1441 went unchecked while wired.', () => {
+    const derived = auditFailOpenConsumers();
+    expect(derived.size, 'the fail-open audit consumer census came back empty').toBeGreaterThan(8);
+    const named = new Set(AUDIT_WIRED.map(([service]) => service));
+    const unchecked = [...derived.keys()].filter((c) => !named.has(c)).sort();
+    expect(
+      unchecked,
+      'service(s) accepting an optional audit recorder that no arm checks bootstrap wires:',
+    ).toEqual([]);
+  });
+
+  it('the consumer census attributes to the owning declaration, so the arm above cannot be satisfied by over-reporting. AuthFlowError and WebhooksAdminService each share a file with a real consumer and take no recorder; a file-keyed census names them and would then demand table entries for classes that emit no audit rows at all.', () => {
+    const derived = auditFailOpenConsumers();
+    expect([...derived.keys()].sort()).not.toContain('AuthFlowError');
+    expect([...derived.keys()].sort()).not.toContain('WebhooksAdminService');
+    // and it still resolves both non-constructor spellings
+    expect([...derived.keys()]).toContain('PairModeHeartbeatSweep'); // deps-bag field
+    expect([...derived.keys()]).toContain('SessionsService'); // inline object type
+  });
 
   // V-1435 — the agent-session event bus, where the two ends fail differently.
   //
