@@ -210,4 +210,42 @@ describe('fleet inbound header scanner fails closed', () => {
       'a nested array member must be skipped wholesale',
     ).toEqual({ requestId: 'rq_1', sessionId: 'agt_1' });
   });
+  // V-1444 — a mutation sweep of every single-line guard in this lexer: each
+  // `if (...) return null;` deleted in turn, the whole file re-run. Five of sixteen
+  // are killed by the arms above. **The other eleven are redundant, not uncovered**,
+  // and that is the finding — the arms below were written to isolate them and could
+  // not, which is the evidence.
+  //
+  // Every input here is refused by more than one layer, so deleting any single guard
+  // still leaves it refused. Traced for the clearest case: with the colon check gone
+  // (`if (raw[cursor] !== 0x3a)`), `{"type" "downloadData"…}` is caught one line
+  // later because the value no longer starts with `0x22`; delete that too and the
+  // decode returns null and the empty/non-string id check refuses it. Three layers
+  // deep for one malformed member.
+  //
+  // So these do NOT close a mutation gap and must not be read as doing so. What they
+  // are worth: the scanner walks bytes a compromised node chooses, none of these
+  // input shapes was asserted anywhere before, and a refactor that collapsed the
+  // layers would take all of them out at once — which is precisely the change no
+  // single-guard mutation can model.
+  const MALFORMED: ReadonlyArray<readonly [label: string, raw: string]> = [
+    ['an unquoted key', '{type:"downloadData","requestId":"rq_1","sessionId":"agt_1"}'],
+    ['a member value that runs off the end of the buffer', '{"type":"downloadData","decoy":'],
+    [
+      'an unterminated string nested inside a skipped container',
+      '{"decoy":{"a":"oops},"type":"downloadData","requestId":"rq_1","sessionId":"agt_1"}',
+    ],
+    ['a frame whose header is not a JSON object at all', '["downloadData"]'],
+    ['a non-string key', '{123:"x","type":"downloadData","requestId":"rq_1","sessionId":"agt_1"}'],
+    [
+      'a key and value with no colon between them',
+      '{"type" "downloadData","requestId":"rq_1","sessionId":"agt_1"}',
+    ],
+    ['a correlated id that is not a string', '{"type":123,"requestId":"rq_1","sessionId":"agt_1"}'],
+    ['an empty correlated id', '{"type":"downloadData","requestId":"","sessionId":"agt_1"}'],
+  ];
+
+  it.each(MALFORMED)('CRITICAL the scanner refuses %s', (_label, raw) => {
+    expect(scan(raw)).toBeNull();
+  });
 });

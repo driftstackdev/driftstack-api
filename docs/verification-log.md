@@ -10552,3 +10552,36 @@ own reading: an operand can be unreachable on the input you are picturing and st
 refusing the input you are not.
 
 No new test file; 11 `it` declarations to 16. No ratchet movement.
+
+## V-1444 — sixteen guards, eleven survivors, and the survivors are the answer
+
+Having found one real gap in this lexer (V-1443), I swept the rest: every single-line
+`if (...) return null;` in `fleet-inbound-frame-gate.ts` deleted in turn, the whole file re-run.
+**Eleven of sixteen survived.** That reads like a large coverage hole in a scanner walking bytes a
+compromised node chooses, and the first instinct — file eleven findings — would have been wrong.
+
+A surviving mutation has more than one cause, and here the cause is redundancy. I wrote eight targeted
+malformed headers, one per surviving guard, each intended to be the input that only that guard refuses:
+an unquoted key, a value running off the end of the buffer, an unterminated string nested inside a
+skipped container, a header that is not an object, a non-string key, a missing colon, a non-string
+correlation id, an empty one. All eight are refused today. **None of them killed a single additional
+guard.**
+
+That is the finding, and it is worth more than eleven speculative ones. Traced for the clearest case:
+delete the colon check `if (raw[cursor] !== 0x3a)` and `{"type" "downloadData",…}` is caught one line
+later, because the value no longer begins with `0x22`; delete that check too and `decodeBoundedJsonString`
+returns null, and the empty/non-string id check refuses it. Three layers deep for one malformed member.
+The eleven survivors are defence in depth doing its job, not gaps — and knowing that is what stops the
+next person from "fixing" them.
+
+**The arms are kept, with their limitation stated in the file.** They do not close a mutation gap and
+the comment says so. What they are worth is separate: none of these input shapes was asserted anywhere
+before, and a refactor that collapsed the layers would remove all of them at once — which is exactly
+the change no single-guard mutation can model, since that technique deletes one guard while the others
+stand.
+
+Five guards are killed by the arms in this file: the control-byte check, the depth cap, the
+trailing-comma `requiresMember` check, the duplicate-key check, and the empty/non-string id check —
+plus `Number.isSafeInteger` in the budget admitter.
+
+No new test file; 11 `it` declarations to 17, 16 tests to 24. No ratchet movement.
