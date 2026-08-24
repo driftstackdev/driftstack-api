@@ -616,6 +616,7 @@ function buildRegistry(): OpenAPIRegistry {
     request: {
       params: z.object({ id: prefixedIdParam('ses', 'session') }),
       body: {
+        required: true,
         content: {
           'application/json': {
             schema: NavigateRequestSchema,
@@ -646,6 +647,7 @@ function buildRegistry(): OpenAPIRegistry {
     request: {
       params: z.object({ id: prefixedIdParam('ses', 'session') }),
       body: {
+        required: true,
         content: {
           'application/json': {
             schema: InteractRequestSchema,
@@ -676,6 +678,7 @@ function buildRegistry(): OpenAPIRegistry {
     request: {
       params: z.object({ id: prefixedIdParam('ses', 'session') }),
       body: {
+        required: true,
         content: {
           'application/json': {
             schema: WaitRequestSchema,
@@ -762,6 +765,7 @@ function buildRegistry(): OpenAPIRegistry {
     request: {
       params: z.object({ id: prefixedIdParam('ses', 'session') }),
       body: {
+        required: true,
         content: {
           'application/json': {
             schema: CaptureRequestSchema,
@@ -802,6 +806,7 @@ function buildRegistry(): OpenAPIRegistry {
     request: {
       params: z.object({ id: prefixedIdParam('ses', 'session') }),
       body: {
+        required: true,
         content: {
           'application/json': {
             schema: ExtractRequestSchema,
@@ -842,6 +847,7 @@ function buildRegistry(): OpenAPIRegistry {
     request: {
       params: z.object({ id: prefixedIdParam('ses', 'session') }),
       body: {
+        required: true,
         content: {
           'application/json': {
             schema: SearchRequestSchema,
@@ -882,6 +888,7 @@ function buildRegistry(): OpenAPIRegistry {
     request: {
       params: z.object({ id: prefixedIdParam('ses', 'session') }),
       body: {
+        required: true,
         content: {
           'application/json': {
             schema: SessionLoginRequestSchema,
@@ -944,6 +951,7 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       body: {
+        required: true,
         content: {
           'application/json': {
             schema: CreateApiKeyRequestSchema,
@@ -1187,6 +1195,7 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       body: {
+        required: true,
         content: {
           'application/json': {
             schema: z
@@ -1232,6 +1241,7 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       body: {
+        required: true,
         content: {
           'application/json': {
             schema: z.object({ token: z.string().min(20) }).openapi('TeamAcceptRequest'),
@@ -1349,7 +1359,10 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       params: z.object({ id: prefixedIdParam('acc', 'account') }),
-      body: { content: { 'application/json': { schema: ChangeTierRequestSchema } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: ChangeTierRequestSchema } },
+      },
     },
     responses: {
       200: {
@@ -1447,7 +1460,10 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       params: z.object({ id: prefixedIdParam('acc', 'account') }),
-      body: { content: { 'application/json': { schema: SetQuotaOverrideRequestSchema } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: SetQuotaOverrideRequestSchema } },
+      },
     },
     responses: {
       200: {
@@ -1663,6 +1679,7 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       body: {
+        required: true,
         content: {
           'application/json': { schema: UpsertValidationScheduleRequestOpenApi },
         },
@@ -1772,7 +1789,10 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['account'],
     security: auth,
     request: {
-      body: { content: { 'application/json': { schema: UploadAvatarRequestSchema } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: UploadAvatarRequestSchema } },
+      },
     },
     responses: {
       200: {
@@ -1906,7 +1926,10 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['account'],
     security: auth,
     request: {
-      body: { content: { 'application/json': { schema: PutByokAnthropicRequestOpenApi } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: PutByokAnthropicRequestOpenApi } },
+      },
     },
     responses: {
       200: {
@@ -2151,7 +2174,10 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['account'],
     security: auth,
     request: {
-      body: { content: { 'application/json': { schema: AccountProxyInputOpenApi } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: AccountProxyInputOpenApi } },
+      },
     },
     responses: {
       201: {
@@ -2172,7 +2198,10 @@ function buildRegistry(): OpenAPIRegistry {
       // V-1483 — the route enforces this; the document published the
       // path-validity backstop's generic 1..2048 bound instead.
       params: z.object({ id: uuidPathParam('Account proxy') }),
-      body: { content: { 'application/json': { schema: AccountProxyInputOpenApi } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: AccountProxyInputOpenApi } },
+      },
     },
     responses: {
       404: { description: 'Not found (or owned by another account).', content: problemContent },
@@ -2275,7 +2304,10 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Stage an IDP signin flow — returns the authorize URL for Google or GitHub',
     tags: ['auth'],
     request: {
-      body: { content: { 'application/json': { schema: OauthClientStartRequestOpenApi } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: OauthClientStartRequestOpenApi } },
+      },
     },
     responses: {
       429: {
@@ -2312,6 +2344,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['auth'],
     request: {
       body: {
+        required: true,
         content: { 'application/json': { schema: OauthClientConfirmMergeRequestOpenApi } },
       },
     },
@@ -2435,7 +2468,10 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'OAuth 2.0 token — exchange authorization code for an access token',
     tags: ['oauth'],
     request: {
-      body: { content: { 'application/json': { schema: OAuthTokenRequestOpenApi } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: OAuthTokenRequestOpenApi } },
+      },
     },
     responses: {
       429: {
@@ -2461,7 +2497,10 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'OAuth 2.0 introspect — RFC 7662 token introspection',
     tags: ['oauth'],
     request: {
-      body: { content: { 'application/json': { schema: OAuthIntrospectRequestOpenApi } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: OAuthIntrospectRequestOpenApi } },
+      },
     },
     responses: {
       429: {
@@ -2490,7 +2529,10 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'OAuth 2.0 revoke — RFC 7009 token revocation',
     tags: ['oauth'],
     request: {
-      body: { content: { 'application/json': { schema: OAuthRevokeRequestOpenApi } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: OAuthRevokeRequestOpenApi } },
+      },
     },
     responses: {
       429: {
@@ -2705,6 +2747,7 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       body: {
+        required: true,
         content: { 'application/json': { schema: SetEmailPrefRequestOpenApi } },
       },
     },
@@ -3053,7 +3096,10 @@ function buildRegistry(): OpenAPIRegistry {
       // whether a constraint exists. The route enforces a prefixed uuid; the
       // default masked that, and only comparing against the route found it.
       params: z.object({ id: prefixedIdParam('acc', 'account') }),
-      body: { content: { 'application/json': { schema: AdminAuditNoteRequestOpenApi } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: AdminAuditNoteRequestOpenApi } },
+      },
     },
     responses: {
       201: {
@@ -3087,7 +3133,10 @@ function buildRegistry(): OpenAPIRegistry {
       // whether a constraint exists. The route enforces a prefixed uuid; the
       // default masked that, and only comparing against the route found it.
       params: z.object({ id: prefixedIdParam('acc', 'account') }),
-      body: { content: { 'application/json': { schema: AdminRefundRecordRequestOpenApi } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: AdminRefundRecordRequestOpenApi } },
+      },
     },
     responses: {
       201: {
@@ -3233,7 +3282,10 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['admin'],
     security: auth,
     request: {
-      body: { content: { 'application/json': { schema: CreateIncidentRequestSchema } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: CreateIncidentRequestSchema } },
+      },
     },
     responses: {
       201: {
@@ -3252,6 +3304,7 @@ function buildRegistry(): OpenAPIRegistry {
     request: {
       params: IncidentIdParamsOpenApi,
       body: {
+        required: true,
         content: { 'application/json': { schema: IdempotentCreateIncidentRequestOpenApi } },
       },
     },
@@ -3296,7 +3349,10 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       params: IncidentIdParamsOpenApi,
-      body: { content: { 'application/json': { schema: AddIncidentUpdateRequestSchema } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: AddIncidentUpdateRequestSchema } },
+      },
     },
     responses: {
       201: {
@@ -3315,7 +3371,10 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       params: IncidentIdParamsOpenApi,
-      body: { content: { 'application/json': { schema: ResolveIncidentRequestSchema } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: ResolveIncidentRequestSchema } },
+      },
     },
     responses: {
       200: {
@@ -3991,7 +4050,12 @@ function buildRegistry(): OpenAPIRegistry {
       'Confirm enrollment with first 6-digit code; returns 10 single-use recovery codes (requires `account_owner`)',
     tags: ['account', 'mfa'],
     security: auth,
-    request: { body: { content: { 'application/json': { schema: MfaVerifyRequestOpenApi } } } },
+    request: {
+      body: {
+        required: true,
+        content: { 'application/json': { schema: MfaVerifyRequestOpenApi } },
+      },
+    },
     responses: {
       200: {
         description: 'Enrollment activated; recovery codes shown ONCE.',
@@ -4013,7 +4077,12 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Disable MFA. Step-up gated (requires fresh MFA proof). (requires `account_owner`)',
     tags: ['account', 'mfa'],
     security: auth,
-    request: { body: { content: { 'application/json': { schema: MfaDisableRequestOpenApi } } } },
+    request: {
+      body: {
+        required: true,
+        content: { 'application/json': { schema: MfaDisableRequestOpenApi } },
+      },
+    },
     responses: {
       204: { description: 'MFA disabled; recovery codes invalidated.' },
       ...errors4xx,
@@ -4025,7 +4094,12 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'POST alias for DELETE /v1/account/mfa. Same step-up gate. (requires `account_owner`)',
     tags: ['account', 'mfa'],
     security: auth,
-    request: { body: { content: { 'application/json': { schema: MfaDisableRequestOpenApi } } } },
+    request: {
+      body: {
+        required: true,
+        content: { 'application/json': { schema: MfaDisableRequestOpenApi } },
+      },
+    },
     responses: {
       204: { description: 'MFA disabled.' },
       ...errors4xx,
@@ -4065,7 +4139,10 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Exchange a login challenge_token for a real session via TOTP / recovery code',
     tags: ['auth', 'mfa'],
     request: {
-      body: { content: { 'application/json': { schema: MfaChallengeRequestOpenApi } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: MfaChallengeRequestOpenApi } },
+      },
     },
     responses: {
       200: {
@@ -4089,7 +4166,10 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['auth', 'mfa'],
     security: auth,
     request: {
-      body: { content: { 'application/json': { schema: MfaStepUpRequestOpenApi } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: MfaStepUpRequestOpenApi } },
+      },
     },
     responses: {
       200: {
@@ -4115,6 +4195,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['auth'],
     request: {
       body: {
+        required: true,
         content: {
           'application/json': {
             schema: SignupRequestSchema,
@@ -4159,6 +4240,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['auth'],
     request: {
       body: {
+        required: true,
         content: {
           'application/json': {
             schema: VerifyEmailRequestSchema,
@@ -4195,6 +4277,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['auth'],
     request: {
       body: {
+        required: true,
         content: {
           'application/json': {
             schema: ResendVerificationRequestSchema,
@@ -4225,6 +4308,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['auth'],
     request: {
       body: {
+        required: true,
         content: {
           'application/json': {
             schema: LoginRequestSchema,
@@ -4248,7 +4332,10 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Exchange a refresh token for a fresh web-session token',
     tags: ['auth'],
     request: {
-      body: { content: { 'application/json': { schema: RefreshSessionRequestSchema } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: RefreshSessionRequestSchema } },
+      },
     },
     responses: {
       200: {
@@ -4264,7 +4351,10 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Revoke a web-session token',
     tags: ['auth'],
     request: {
-      body: { content: { 'application/json': { schema: LogoutRequestSchema } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: LogoutRequestSchema } },
+      },
     },
     responses: {
       200: {
@@ -4299,7 +4389,10 @@ function buildRegistry(): OpenAPIRegistry {
           .optional(),
       }),
 
-      body: { content: { 'application/json': { schema: CreateCheckoutSessionRequestSchema } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: CreateCheckoutSessionRequestSchema } },
+      },
     },
     responses: {
       200: {
@@ -4422,7 +4515,10 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['egress'],
     security: auth,
     request: {
-      body: { content: { 'application/json': { schema: SessionEgressConfigSchema } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: SessionEgressConfigSchema } },
+      },
     },
     responses: {
       404: { description: 'No proxy config for this session.', content: problemContent },
@@ -4779,6 +4875,7 @@ function buildRegistry(): OpenAPIRegistry {
         'x-byok-anthropic-api-key': z.string().min(1).optional(),
       }),
       body: {
+        required: true,
         content: {
           'application/json': {
             schema: z.object({
@@ -5459,7 +5556,10 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['admin'],
     security: auth,
     request: {
-      body: { content: { 'application/json': { schema: RegisterMacNodeBodyOpenApi } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: RegisterMacNodeBodyOpenApi } },
+      },
     },
     responses: {
       200: {
@@ -5537,6 +5637,7 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       body: {
+        required: true,
         content: {
           'application/json': {
             schema: z.object({
@@ -5712,7 +5813,10 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['billing', 'crypto'],
     security: auth,
     request: {
-      body: { content: { 'application/json': { schema: CryptoQuoteRequestSchema } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: CryptoQuoteRequestSchema } },
+      },
     },
     responses: {
       200: {
@@ -5740,7 +5844,10 @@ function buildRegistry(): OpenAPIRegistry {
             'Optional client-supplied idempotency key. Duplicate POSTs with the same key within 24h replay the original order. See /docs/idempotency-keys.',
           ),
       }),
-      body: { content: { 'application/json': { schema: CreateCryptoCheckoutRequestSchema } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: CreateCryptoCheckoutRequestSchema } },
+      },
     },
     responses: {
       201: {
@@ -5856,7 +5963,10 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       params: z.object({ order_id: BillingCryptoOrderIdOpenApi }),
-      body: { content: { 'application/json': { schema: UpdateCryptoOrderNoteRequestSchema } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: UpdateCryptoOrderNoteRequestSchema } },
+      },
     },
     responses: {
       200: {
@@ -6066,6 +6176,7 @@ function buildRegistry(): OpenAPIRegistry {
     request: {
       params: z.object({ order_id: AdminCryptoOrderIdOpenApi }),
       body: {
+        required: true,
         content: { 'application/json': { schema: AdminUpdateInternalNoteRequestSchema } },
       },
     },
@@ -6216,6 +6327,7 @@ function buildRegistry(): OpenAPIRegistry {
           .describe('Paid tier slug (e.g. api_scale). Free/unpriced tiers are rejected.'),
       }),
       body: {
+        required: true,
         content: {
           'application/json': {
             schema: z
@@ -6349,7 +6461,10 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       params: z.object({ order_id: AdminCryptoOrderIdOpenApi }),
-      body: { content: { 'application/json': { schema: AdminApplyIpnRequestSchema } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: AdminApplyIpnRequestSchema } },
+      },
     },
     responses: {
       200: {
@@ -6369,6 +6484,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['auth'],
     request: {
       body: {
+        required: true,
         content: {
           'application/json': {
             schema: MagicLinkRequestSchema,
@@ -6393,6 +6509,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['auth'],
     request: {
       body: {
+        required: true,
         content: {
           'application/json': {
             schema: MagicLinkConsumeRequestSchema,
@@ -6416,6 +6533,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['auth'],
     request: {
       body: {
+        required: true,
         content: {
           'application/json': {
             schema: PasswordResetRequestSchema,
@@ -6440,6 +6558,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['auth'],
     request: {
       body: {
+        required: true,
         content: {
           'application/json': {
             schema: PasswordResetConfirmRequestSchema,
@@ -6472,7 +6591,10 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Start CLI/GUI activation; returns a device user code + browser URL',
     tags: ['auth'],
     request: {
-      body: { content: { 'application/json': { schema: CliAuthorizeInitiateRequestSchema } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: CliAuthorizeInitiateRequestSchema } },
+      },
     },
     responses: {
       200: {
@@ -6490,7 +6612,10 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['auth'],
     security: auth,
     request: {
-      body: { content: { 'application/json': { schema: CliAuthorizeBindRequestSchema } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: CliAuthorizeBindRequestSchema } },
+      },
     },
     responses: {
       200: {
@@ -6510,7 +6635,10 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Poll for the bound API key plaintext (one-shot delivery)',
     tags: ['auth'],
     request: {
-      body: { content: { 'application/json': { schema: CliAuthorizeExchangeRequestSchema } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: CliAuthorizeExchangeRequestSchema } },
+      },
     },
     responses: {
       200: {
@@ -6786,7 +6914,10 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Subscribe an email to status notifications (double-opt-in)',
     tags: ['status'],
     request: {
-      body: { content: { 'application/json': { schema: StatusSubscribeRequestOpenApi } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: StatusSubscribeRequestOpenApi } },
+      },
     },
     responses: {
       202: {
@@ -6923,7 +7054,10 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['legal'],
     security: auth,
     request: {
-      body: { content: { 'application/json': { schema: AcceptLegalDocumentRequestOpenApi } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: AcceptLegalDocumentRequestOpenApi } },
+      },
     },
     responses: {
       201: {
@@ -6970,6 +7104,7 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       body: {
+        required: true,
         content: {
           'application/json': {
             schema: CreateWebhookRequestSchema,
@@ -7219,7 +7354,10 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['profiles'],
     security: auth,
     request: {
-      body: { content: { 'application/json': { schema: CreateProfileRequestSchema } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: CreateProfileRequestSchema } },
+      },
     },
     responses: {
       200: {
@@ -7493,7 +7631,10 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['profiles'],
     security: auth,
     request: {
-      body: { content: { 'application/json': { schema: ProfileImportRequestSchema } } },
+      body: {
+        required: true,
+        content: { 'application/json': { schema: ProfileImportRequestSchema } },
+      },
     },
     responses: {
       200: {
@@ -7533,6 +7674,7 @@ function buildRegistry(): OpenAPIRegistry {
     request: {
       params: z.object({ id: prefixedIdParam('prof', 'profile') }),
       body: {
+        required: true,
         content: {
           'application/json': {
             schema: TransferProfileRequestOpenApi,
@@ -7639,6 +7781,7 @@ function buildRegistry(): OpenAPIRegistry {
     request: {
       params: z.object({ id: prefixedIdParam('prof', 'profile', true) }),
       body: {
+        required: true,
         content: {
           'application/json': {
             schema: CaptureSnapshotRequestOpenApi,
@@ -7734,6 +7877,7 @@ function buildRegistry(): OpenAPIRegistry {
     request: {
       params: z.object({ id: prefixedIdParam('psnap', 'snapshot', true) }),
       body: {
+        required: true,
         content: {
           'application/json': {
             schema: RestoreSnapshotRequestOpenApi,

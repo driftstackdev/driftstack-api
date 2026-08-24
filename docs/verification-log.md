@@ -15199,3 +15199,51 @@ declares 409, and the arm correctly stayed green. Worth keeping in the record: a
 red is a claim about the mutation until the mutation is checked.
 
 `EXPECTED_TEST_FILES` 3014→3015 and `EXPECTED_TEST_FILES_ALL` 3176→3177, one file, mine.
+
+## V-1532 — sixty-six request bodies the document said were optional
+
+A different key from the one this file already guards. Its existing arms compare a FIELD's shape between
+schema and document; `requestBody.required` sits beside `content`, not inside the schema, so an operation
+whose schema lists ten required properties can still publish the body itself as omissible. Nothing
+compared that key.
+
+**It was wrong on 66 of the 92 operations that take a JSON body**, including
+`POST /v1/auth/login`. The handler is `LoginRequestSchema.safeParse(req.body)` — an absent body is not an
+object, so the parse fails and the server answers 400. The document said the body could be left out.
+Others in the set: `POST /v1/api-keys` (needs `name`, `scopes`), `POST /v1/auth/password-reset/confirm`
+(`token`, `new_password`), `POST /v1/admin/incidents` (`title`, `description`, `severity`).
+
+**The impact is narrower than it first looks, and the check matters more than the framing.** I started to
+write that this ships a broken SDK, then read the generator: `packages/sdk-python/scripts/generate.sh`
+runs `datamodel-codegen`, which emits Pydantic MODELS only. The method signatures in
+`src/driftstack/resources/*.py` are hand-written, and `auth.py` already takes `body` as a required
+positional. So our own SDK is unaffected; what consumes this key is third-party client generation and
+spec tooling, where an optional body on a 400-ing endpoint is a documented lie. Real, and not the
+catastrophe the first draft of this paragraph claimed.
+
+The criterion is the schema's own `required` array, which holds regardless of whether a handler writes
+`request.body ?? {}` — 42 sites do, and `{}` still fails a schema with required fields. After the fix, 76
+operations are marked required, 0 are understated, and 0 are marked required whose schema requires
+nothing.
+
+**Nothing in 3186 test files noticed 66 operations changing.** That is the more useful half of the
+finding, so the invariant is now pinned here rather than left to the next person to rediscover: derived
+from the document, not listed, with a non-vacuity floor of >80 bodies because an emptiness assertion is
+satisfied perfectly by a document that parsed to nothing. Mutation ran through SOURCE and regeneration —
+drop the flag in `openapi.ts`, re-dump, and the arm reds naming `POST /v1/auth/login` — rather than
+hand-editing the JSON, which would have proved only that the arm can read a file I just edited.
+
+### Three tool bugs in one batch, all mine, all the same shape
+
+Worth recording together because the frequency is the point. Writing the fix, my own editing script:
+
+1. iterated matches from the ORIGINAL string while mutating that string, so every insertion shifted the
+   offsets after it — 22 of 66 applied, silently. Fixed by applying in reverse.
+2. required a newline before `body:`, so three MFA descriptors written inline as
+   `request: { body: { content: ... } }` were skipped — and the count said 63 of 66, which is the only
+   reason I looked.
+3. (V-1531, same session) matched `app.<method>(` and missed every generic-parameterized registration.
+
+Each was caught by a count that did not match what I expected, never by reading the code back. The
+transferable rule: **make the tool report the size of what it changed against the size of what it
+intended, and treat any gap as a bug in the tool rather than a quirk of the input.**

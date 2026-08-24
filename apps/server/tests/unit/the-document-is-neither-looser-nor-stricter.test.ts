@@ -42,7 +42,15 @@ interface Schemaish {
 interface SpecShape {
   paths: Record<
     string,
-    Record<string, { requestBody?: { content: { 'application/json': { schema: Schemaish } } } }>
+    Record<
+      string,
+      {
+        requestBody?: {
+          required?: boolean;
+          content: { 'application/json': { schema: Schemaish } };
+        };
+      }
+    >
   >;
   components: { schemas: Record<string, Schemaish> };
 }
@@ -112,5 +120,43 @@ describe('V-930 the document is neither looser nor stricter than the route', () 
       readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes/admin-incidents.ts'), 'utf8'),
       'the PUT handler still refuses a missing started_at',
     ).toMatch(/started_at is required for idempotent incident creation/);
+  });
+
+  it("V-1532 CRITICAL a request body whose schema has a required field is itself marked required. The two arms above compare a single field's shape; this compares whether the BODY must be sent at all, which is a different key — `requestBody.required` sits beside `content`, not inside the schema, so a schema listing ten required properties still reads as an optional body to anything generating a client from this document. It was false on SIXTY-SIX operations including POST /v1/auth/login, whose handler does `LoginRequestSchema.safeParse(req.body)` and answers 400 when the body is absent. Derived from the document rather than listed, so a new operation cannot arrive unmarked.", () => {
+    const s = spec();
+    const resolveSchema = (raw: Schemaish | undefined): Schemaish => {
+      let node = raw ?? {};
+      const seen = new Set<string>();
+      while (node.$ref !== undefined) {
+        const name = node.$ref.split('/').pop() ?? '';
+        if (seen.has(name)) return {};
+        seen.add(name);
+        node = s.components.schemas[name] ?? {};
+      }
+      return node;
+    };
+
+    let bodies = 0;
+    const understated: string[] = [];
+    for (const [path, operations] of Object.entries(s.paths)) {
+      for (const [method, operation] of Object.entries(operations)) {
+        const requestBody = operation.requestBody;
+        if (requestBody === undefined) continue;
+        bodies += 1;
+        const schema = resolveSchema(requestBody.content['application/json']?.schema);
+        const requires = (schema.required ?? []).length > 0;
+        if (requires && requestBody.required !== true) {
+          understated.push(`${method.toUpperCase()} ${path}`);
+        }
+      }
+    }
+
+    // An emptiness assertion is satisfied by a document that parsed to nothing.
+    expect(bodies, 'operations declaring a JSON request body').toBeGreaterThan(80);
+    expect(
+      understated.sort(),
+      'these operations require fields in the body but do not require the body, so a generated ' +
+        'client treats it as omissible on an endpoint that answers 400 without it',
+    ).toEqual([]);
   });
 });

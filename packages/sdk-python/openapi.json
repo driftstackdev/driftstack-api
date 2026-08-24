@@ -6311,6 +6311,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -6591,6 +6592,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -6936,6 +6938,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -8001,6 +8004,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -8274,6 +8278,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -8589,6 +8594,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -8901,6 +8907,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -9230,6 +9237,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -10584,6 +10592,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -10918,6 +10927,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -11645,6 +11655,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -12862,6 +12873,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -15189,6 +15201,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -16362,6 +16375,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -17100,6 +17114,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -18408,6 +18423,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -18586,6 +18602,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -19279,6 +19296,7 @@
         "summary": "Stage an IDP signin flow — returns the authorize URL for Google or GitHub",
         "tags": ["auth"],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -19360,6 +19378,7 @@
         "summary": "Confirm a same-email-collision merge — links a new IDP identity to an existing account",
         "tags": ["auth"],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -19565,6 +19584,7 @@
         "summary": "OAuth 2.0 token — exchange authorization code for an access token",
         "tags": ["oauth"],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -19689,6 +19709,7 @@
         "summary": "OAuth 2.0 introspect — RFC 7662 token introspection",
         "tags": ["oauth"],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -19809,6 +19830,7 @@
         "summary": "OAuth 2.0 revoke — RFC 7009 token revocation",
         "tags": ["oauth"],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -20705,6 +20727,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -22960,6 +22983,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -23163,6 +23187,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -24041,6 +24066,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -24351,6 +24377,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -25064,6 +25091,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -25285,6 +25313,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -29822,6 +29851,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -30180,6 +30210,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -30379,6 +30410,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -30740,6 +30772,7 @@
         "summary": "Exchange a login challenge_token for a real session via TOTP / recovery code",
         "tags": ["auth", "mfa"],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -30982,6 +31015,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -31199,6 +31233,7 @@
         "summary": "Sign up a new account; emits a verification email",
         "tags": ["auth"],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -31425,6 +31460,7 @@
         "summary": "Consume the email-verification token; issues a web session",
         "tags": ["auth"],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -31625,6 +31661,7 @@
         "summary": "Re-send the signup verification email; response never confirms account existence",
         "tags": ["auth"],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -31817,6 +31854,7 @@
         "summary": "Authenticate with email + password; issues a session OR returns an MFA challenge token",
         "tags": ["auth"],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -32038,6 +32076,7 @@
         "summary": "Exchange a refresh token for a fresh web-session token",
         "tags": ["auth"],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -32226,6 +32265,7 @@
         "summary": "Revoke a web-session token",
         "tags": ["auth"],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -32419,6 +32459,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -33241,6 +33282,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -35497,6 +35539,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -38620,6 +38663,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -39002,6 +39046,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -40061,6 +40106,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -40273,6 +40319,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -41094,6 +41141,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -43036,6 +43084,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -44193,6 +44242,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -45156,6 +45206,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -45421,6 +45472,7 @@
         "summary": "Request a magic-link email; always 200 to avoid account enumeration",
         "tags": ["auth"],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -45609,6 +45661,7 @@
         "summary": "Exchange a magic-link token for a session or MFA challenge",
         "tags": ["auth"],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -45824,6 +45877,7 @@
         "summary": "Request a password-reset email; always 200 to avoid account enumeration",
         "tags": ["auth"],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -46012,6 +46066,7 @@
         "summary": "Consume a password-reset token and set a new password",
         "tags": ["auth"],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -46234,6 +46289,7 @@
         "summary": "Start CLI/GUI activation; returns a device user code + browser URL",
         "tags": ["auth"],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -46431,6 +46487,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -46662,6 +46719,7 @@
         "summary": "Poll for the bound API key plaintext (one-shot delivery)",
         "tags": ["auth"],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -48015,6 +48073,7 @@
         "summary": "Subscribe an email to status notifications (double-opt-in)",
         "tags": ["status"],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -48602,6 +48661,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -48841,6 +48901,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -50950,6 +51011,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -53610,6 +53672,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -53899,6 +53962,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -54361,6 +54425,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -55470,6 +55535,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
