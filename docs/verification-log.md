@@ -9593,3 +9593,41 @@ than silently editing the wrong line — which is the behaviour it was written f
 no-ops earlier in this session — but the failure was invisible because the surrounding `grep` filtered
 its message out. Filter mutation output on `APPLIED` as well as on the result, or a refusal reads as a
 mutation that changed nothing.
+
+### V-1421 — a verb-multiplexed credential endpoint, and where the plaintext key travels
+
+The last block from the never-executed SDK sweep: thirteen `AccountResource` methods. Paths
+cross-checked against the server's `/v1/account` routes first, as in V-1419 and V-1420; all thirteen
+match, so again this is regression evidence rather than a fix.
+
+The structure that earned the arms is different from V-1420's. There the hazard was two paths one
+segment apart; here it is **one path serving three operations that differ only by verb**:
+
+    GET    /v1/account/me/byok-anthropic-key    read the metadata
+    PUT    /v1/account/me/byok-anthropic-key    set or rotate the key
+    DELETE /v1/account/me/byok-anthropic-key    clear it
+
+A verb that drifts turns an inspection into the destruction of the customer's own Anthropic
+credential, and there is no path segment for the difference to show up in. So the arm asserts the
+shape rather than three literals: the three calls share exactly one path, and their methods are
+`GET`, `PUT`, `DELETE` in that order. A verb swap cannot satisfy that, and neither can a path drift.
+
+The second arm is the one I would keep if I could keep only one. `setByokAnthropicKey` takes the
+plaintext key and it must travel in the **body**: a credential moved into the URL is written to every
+access log, proxy log and browser history on the way, a leak no response shape would reveal. The arm
+asserts both that the body carries it and that the path does **not** contain it, so moving it into the
+URL fails even if the request still succeeds.
+
+Mutations:
+
+| mutation                                            | reds                                           |
+| --------------------------------------------------- | ---------------------------------------------- |
+| the read's verb becomes `DELETE`                    | the verb-distinctness arm                      |
+| the plaintext key is interpolated into the path     | 2 — the credential arm and the shared-path arm |
+| the connection test collapses onto the shared path  | the test-endpoint arm                          |
+| `bundled-llm-status` becomes `bundled-llm-settings` | 2 — the table row and the distinctness arm     |
+
+Two of those mutations first failed `mutate.py`'s needle assertion because I read the line numbers off
+the wrong lines. That is the second time in this turn, and it is now visible rather than silent only
+because V-1420's entry made me filter mutation output on `APPLIED` as well as on the result — without
+it, a refusal to mutate prints nothing and reads exactly like a mutation that changed no behaviour.

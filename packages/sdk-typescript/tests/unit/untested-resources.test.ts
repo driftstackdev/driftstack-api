@@ -368,3 +368,103 @@ describe('ProfilesResource — the lifecycle half nothing executed', () => {
     expect(calls[0]?.path).toBe('/v1/profiles/a%2Fb%20c/purge');
   });
 });
+
+// V-1421 — the account resource's remaining thirteen. Paths cross-checked against
+// the server's `/v1/account` routes first; all thirteen match.
+//
+// The shape here is a VERB-multiplexed endpoint. `/v1/account/me/byok-anthropic-key`
+// serves three different operations that differ only by method — read, set, clear —
+// on the customer's own Anthropic credential. A GET that became a DELETE reads as a
+// harmless inspection and destroys the stored key; there is no path segment to make
+// the difference visible, which is what makes this worth a comparison rather than
+// three isolated literals.
+describe('AccountResource — the thirteen methods nothing executed', () => {
+  it("CRITICAL the three BYOK operations on the shared path are distinguished ONLY by verb, and all three differ. Read, set and clear address the same URL, so a verb that drifts turns an inspection into a deletion of the customer's own API credential with nothing in the request to show it.", async () => {
+    const seen: Array<{ method: string; path: string }> = [];
+    for (const invoke of [
+      (r: AccountResource) => r.getByokAnthropicKey(),
+      (r: AccountResource) => r.setByokAnthropicKey('sk-ant-x'),
+      (r: AccountResource) => r.clearByokAnthropicKey(),
+    ]) {
+      const { http, calls } = recorder({});
+      await invoke(new AccountResource(http));
+      seen.push({ method: calls[0]?.method ?? '', path: calls[0]?.path ?? '' });
+    }
+
+    expect(new Set(seen.map((c) => c.path)).size, 'the three share one path by design').toBe(1);
+    expect(
+      seen.map((c) => c.method),
+      'and are separated by verb alone',
+    ).toEqual(['GET', 'PUT', 'DELETE']);
+  });
+
+  it('CRITICAL the plaintext key travels in the BODY and appears nowhere in the path. A credential moved into the URL is written to every access log, proxy log and browser history along the way — a leak that no response shape would reveal and that this is the only layer able to prevent.', async () => {
+    const { http, calls } = recorder({});
+    const KEY = 'sk-ant-super-secret-value';
+
+    await new AccountResource(http).setByokAnthropicKey(KEY);
+
+    expect(calls[0]?.body).toEqual({ api_key: KEY });
+    expect(calls[0]?.path, 'the key must not be interpolated into the URL').not.toContain(KEY);
+    expect(calls[0]?.path).toBe('/v1/account/me/byok-anthropic-key');
+  });
+
+  it('CRITICAL the connection test is its own sub-path, not another verb on the shared one. It is the one BYOK call that reaches out to Anthropic, so collapsing it onto the shared path would make a test-connection indistinguishable from a read or a clear.', async () => {
+    const { http, calls } = recorder({});
+    await new AccountResource(http).testByokAnthropicKey();
+    expect(calls[0]?.method).toBe('POST');
+    expect(calls[0]?.path).toBe('/v1/account/me/byok-anthropic-key/test');
+  });
+
+  it.each([
+    ['me', 'GET', '/v1/account/me', (r: AccountResource) => r.me()],
+    ['updateMe', 'PATCH', '/v1/account/me', (r: AccountResource) => r.updateMe({ name: 'N' })],
+    [
+      'uploadAvatar',
+      'POST',
+      '/v1/account/me/avatar',
+      (r: AccountResource) =>
+        r.uploadAvatar({ content_type: 'image/png', data_base64: 'AA==' } as never),
+    ],
+    ['clearAvatar', 'DELETE', '/v1/account/me/avatar', (r: AccountResource) => r.clearAvatar()],
+    [
+      'listWebSessions',
+      'GET',
+      '/v1/account/web-sessions',
+      (r: AccountResource) => r.listWebSessions(),
+    ],
+    ['rateLimits', 'GET', '/v1/account/rate-limits', (r: AccountResource) => r.rateLimits()],
+    [
+      'getBundledLlmSettings',
+      'GET',
+      '/v1/account/me/bundled-llm-settings',
+      (r: AccountResource) => r.getBundledLlmSettings(),
+    ],
+    [
+      'updateBundledLlmSettings',
+      'PATCH',
+      '/v1/account/me/bundled-llm-settings',
+      (r: AccountResource) => r.updateBundledLlmSettings({ enabled: true } as never),
+    ],
+    [
+      'getBundledLlmStatus',
+      'GET',
+      '/v1/account/me/bundled-llm-status',
+      (r: AccountResource) => r.getBundledLlmStatus(),
+    ],
+  ])('%s issues %s %s', async (_n, method, path, invoke) => {
+    const { http, calls } = recorder({});
+    await invoke(new AccountResource(http));
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.method).toBe(method);
+    expect(calls[0]?.path).toBe(path);
+  });
+
+  it('CRITICAL the bundled-LLM settings read and its STATUS are different endpoints. They differ by one word in the last segment and return different things — what the customer configured versus what the platform currently reports — so a copy-paste between them would show a customer their own settings as though they were live status.', async () => {
+    const a = recorder({});
+    await new AccountResource(a.http).getBundledLlmSettings();
+    const b = recorder({});
+    await new AccountResource(b.http).getBundledLlmStatus();
+    expect(a.calls[0]?.path).not.toBe(b.calls[0]?.path);
+  });
+});
