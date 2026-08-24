@@ -43501,6 +43501,14 @@
           {
             "schema": {
               "type": "string",
+              "enum": [
+                "solo_manual",
+                "team_manual",
+                "agency_manual",
+                "api_starter",
+                "api_builder",
+                "api_scale"
+              ],
               "description": "Paid tier slug (e.g. api_scale). Free/unpriced tiers are rejected."
             },
             "required": true,

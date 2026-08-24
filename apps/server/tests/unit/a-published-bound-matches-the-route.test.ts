@@ -174,6 +174,34 @@ const UNCONSTRAINED_BY_DESIGN: Record<string, string> = {
  * are fine. Emptying this map is the goal; adding to it needs the same evidence
  * as fixing one.
  */
+/**
+ * V-1480 — the path-id family, deferred as ONE decision rather than 60 entries.
+ *
+ * 62 of the 64 unconstrained path parameters are `{id}`, and every one is
+ * validated — but by five different validators, which is why a single published
+ * pattern cannot be written and why this is a decision rather than an omission:
+ *
+ *   x11  `/^[a-z]{3}_(uuid)$/` + `value.startsWith(prefix_)`  (case-sensitive)
+ *   x1   profile-snapshots.ts — `/^[a-z]+_(uuid)$/i`, needs `[a-z]+` for `psnap`
+ *   x1   admin-status-subscribers.ts — `/^sub_(uuid)$/`, prefix in the regex
+ *   x1   profiles.ts — `uuidFromProfileId`, `/^prof_(uuid)$/`, REQUIRES the prefix
+ *        (note the body field `profile_id` uses `parseProfileId`, which also
+ *        accepts a BARE uuid — the same entity, two contracts by position)
+ *   x1   recipes.ts — NO validation at all; `req.params.id` goes straight to the
+ *        lookup, so it really is unconstrained and any pattern would be false
+ *
+ * A uniform `^[a-z]+_<uuid>$` is the union and is TRUE for every one of them
+ * except recipes, where it would be over-narrow — documenting as invalid
+ * something the server accepts, which V-1476 established as the worse
+ * direction. Publishing per-route needs a path-to-validator map; that is the
+ * work, and it is named rather than done here.
+ *
+ * `twelve-copies-of-the-id-parser-must-agree` already guards the ROUTE side of
+ * this — that every file's regex matches every prefix it asks for and mints. It
+ * says nothing about the published document, which is this gap.
+ */
+const PATH_ID_FAMILY = /^[A-Z]+ \S+ \{(id|deliveryId)\}$/;
+
 const KNOWN_DIVERGENCE_DEFERRED: Record<string, string> = {
   'POST /v1/sessions .profile_id':
     'parseProfileId enforces `prof_<uuid> | <uuid>` and answers 400 otherwise, so this is the same ' +
@@ -256,12 +284,18 @@ describe('V-927 a published bound matches the route', () => {
         if (!Array.isArray(parameters)) continue;
         for (const rawParam of parameters) {
           const param = deref(rawParam);
-          if (param['in'] !== 'query') continue;
+          // V-1480 — path parameters join query here. The three request
+          // surfaces are body, query and path; the first two are covered above
+          // and this is the third.
+          if (param['in'] !== 'query' && param['in'] !== 'path') continue;
           const schema = deref(param['schema']);
           if (schema['type'] !== 'string') continue;
           examined += 1;
           if (!CONSTRAINTS.some((c) => c in schema)) {
-            unconstrained.push(`${method.toUpperCase()} ${path} ?${String(param['name'])}`);
+            const sigil = param['in'] === 'path' ? '{}' : '?';
+            unconstrained.push(
+              `${method.toUpperCase()} ${path} ${sigil === '{}' ? `{${String(param['name'])}}` : `?${String(param['name'])}`}`,
+            );
           }
         }
       }
@@ -276,7 +310,9 @@ describe('V-927 a published bound matches the route', () => {
     ).toBeGreaterThan(200);
 
     const declared = { ...UNCONSTRAINED_BY_DESIGN, ...KNOWN_DIVERGENCE_DEFERRED };
-    const undeclared = unconstrained.filter((k) => !(k in declared)).sort();
+    const undeclared = unconstrained
+      .filter((k) => !(k in declared) && !PATH_ID_FAMILY.test(k))
+      .sort();
     expect(
       undeclared,
       'this field is published with no maxLength, minLength, pattern, enum or format. If the route enforces one, the document is describing as valid a request the server refuses — publish the bound. If it really is unbounded, add it to UNCONSTRAINED_BY_DESIGN with the reason',
@@ -284,6 +320,8 @@ describe('V-927 a published bound matches the route', () => {
 
     // And the allowlist may not outlive what it exempts: a field that gains a
     // bound must leave, or the exemption silently covers the next regression.
+    // The path-id family is matched by pattern, so it is excluded from the
+    // staleness check by construction — its members come and go with routes.
     const stale = Object.keys({ ...UNCONSTRAINED_BY_DESIGN, ...KNOWN_DIVERGENCE_DEFERRED })
       .filter((k) => !unconstrained.includes(k))
       .sort();

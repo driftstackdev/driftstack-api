@@ -161,6 +161,7 @@ import {
   AccountAuditEntrySchema,
 } from '@driftstack/api-types';
 import { PROFILE_ID_INPUT_RE } from './profile-id.js';
+import { TIER_MONTHLY_PRICE_CENTS } from './cost-defaults.js';
 // S33 2026-07-07 (fable-truth-audit) — the cookie shape the agent-session
 // cookie read/import routes emit + validate. Imported from the harness
 // control protocol (the routes' own single source of truth) rather than
@@ -5776,8 +5777,19 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       params: z.object({
+        // V-1480 — the route parses this with
+        // `z.enum(Object.keys(TIER_MONTHLY_PRICE_CENTS))`, so the legal set is
+        // the priced tiers and nothing else. Published as a bare string, the
+        // describe carried "Free/unpriced tiers are rejected" as PROSE — true,
+        // and unusable by a generated client, which is the same shape as the
+        // audit-log `?action` filter in V-1479.
+        //
+        // Derived from the same table the route derives from rather than
+        // listed, so adding a priced tier cannot leave the document behind.
+        // Kept rooted at `z.` for the reason recorded at that `?action` fix: a
+        // bare schema reference disappears from the sibling guard's census.
         tier: z
-          .string()
+          .enum(Object.keys(TIER_MONTHLY_PRICE_CENTS) as [string, ...string[]])
           .describe('Paid tier slug (e.g. api_scale). Free/unpriced tiers are rejected.'),
       }),
       body: {

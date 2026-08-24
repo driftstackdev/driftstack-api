@@ -12216,3 +12216,58 @@ Measured negative, so the surface is not re-swept: the query params split 74 str
 integers carry a bound — they are `limit`-shaped fields and every one publishes its `minimum`/`maximum`
 — so the numeric side is examined and clean rather than unexamined. Of the 74 strings, two remain
 unconstrained after this and both are the traced exemptions above.
+
+## V-1480 — the third request surface, and a duplication finding I withdrew after reading the prior art
+
+`PATCH /v1/admin/owner/pricing/{tier}` published `tier` as a bare string while the route parses it with
+`z.enum(Object.keys(TIER_MONTHLY_PRICE_CENTS))`. The describe carried "Free/unpriced tiers are rejected"
+as PROSE — true, and unusable by a generated client. Same shape as the `?action` filter in V-1479, one
+surface over. Published now as an enum derived from the same table the route derives from, so a new
+priced tier cannot leave the document behind, and kept rooted at `z.` for the reason recorded there.
+
+**The finding I did not file.** The route-side lead looked strong: `uuidFromPrefixedId` is declared 12
+times across route files, `PUBLIC_ID_RE` 13 times, and the copies resolve to three different acceptance
+sets. That is the AES-GCM-parameters shape exactly, and I had a consolidation planned.
+
+`twelve-copies-of-the-id-parser-must-agree` already guards it. Reading it first — which is the rule I
+followed late in V-1476 and early here — showed the work is done and better than my plan: it guards the
+property that actually breaks a route (a file's regex must match every prefix that file asks for AND
+mints), it caught a real latent instance I had not seen (`admin-incidents` minting `incu_` under an
+exactly-three-letter regex), and it holds the `/i` divergence as a named exemption with an anti-rot arm.
+
+It also contains, verbatim, the correction to a false claim I re-derived from scratch today:
+`admin-status-subscribers`'s one-argument helper does NOT skip the prefix check — its own regex pins
+`^sub_`, making it the strictest copy rather than the laxest. I reached the same wrong conclusion by the
+same route (reading the function body without the regex beside it), and the guard's own header records
+that the earlier version of it had encoded that wrong conclusion as an exemption. Two independent
+arrivals at one error is a fact about the shape of the code, not about the day: a two-part check whose
+halves live in different declarations reads as a one-part check.
+
+So: no consolidation, no re-litigation of a documented decision. What that guard does not touch is the
+PUBLISHED side, which is this entry.
+
+**The path surface, measured.** 106 path parameters, 64 unconstrained: 62 `{id}`, 1 `{deliveryId}`,
+1 `{tier}`. Only the last is fixed here, and the rest are deferred as ONE decision with the evidence
+written into the guard, because they are validated by five different validators:
+
+- x11 `/^[a-z]{3}_(uuid)$/` plus `value.startsWith(prefix_)`, case-sensitive
+- x1 `profile-snapshots.ts` — `/^[a-z]+_(uuid)$/i`, needing `[a-z]+` for `psnap`
+- x1 `admin-status-subscribers.ts` — `/^sub_(uuid)$/`, prefix in the regex
+- x1 `profiles.ts` — `uuidFromProfileId`, `/^prof_(uuid)$/`, which REQUIRES the prefix. Worth noting
+  against V-1476: the body field `profile_id` uses `parseProfileId`, which also accepts a BARE uuid. The
+  same entity has two contracts depending on whether it arrives in the path or the body.
+- x1 `recipes.ts` — no validation at all. `req.params.id` goes straight to the lookup.
+
+The union `^[a-z]+_<uuid>$` is true for all of them except recipes, where it would be over-narrow —
+documenting as invalid something the server accepts, which V-1476 fixed in the other direction and is
+the worse error. That single exception is why a blanket pattern is wrong and a path-to-validator map is
+the actual work. Naming it beats shipping a pattern that lies about one route.
+
+**Also worth recording:** `openapi.ts` already sets a convention for this and does not follow it. The
+`order_id` params use a named schema carrying `min(1).max(100)` and a describe; the 53 `{id}` params are
+a bare `z.string()` with nothing, and five more carry the prefix in prose only.
+
+Two mutations. Republishing `{tier}` as a bare string reds the census and names it. Dropping the
+path-family exclusion surfaces exactly 63 entries — the measured 62 `{id}` plus `{deliveryId}` — so the
+exclusion suppresses a real, counted population rather than matching nothing, which is the failure mode
+an exemption regex has and a listed key does not. Both restored byte-identical.
