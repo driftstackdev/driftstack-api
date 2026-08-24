@@ -35,6 +35,34 @@ const DISPLAY_NAME_TO_CAP: Record<string, number> = {
   'API Scale': TIER_CONCURRENT_SESSION_LIMITS.api_scale,
 };
 
+// V-1456 — MEASURED VACUOUS, and left in place deliberately. Read this before
+// trusting a green run here.
+//
+// The arms below scan page markup for `Personal: 5`-style claims. Across the 61
+// `.astro` pages walked today they match ZERO occurrences, for all six display
+// names. The caps stopped being written into markup: they live in
+// `apps/marketing-site/src/data/pricing.ts` and the pages render from it, which
+// is a better arrangement and is exactly why this sweep now checks nothing.
+//
+// The page floor cannot see that — it counts the corpus, and the corpus is
+// healthy; the subject left it. Same shape as `marketing-prefix-id-sweep`, whose
+// subject had moved to apps/docs and which was re-pointed there.
+//
+// This one was NOT re-pointed, because the risk is already covered twice, both
+// verified rather than assumed:
+//
+//   tier-limits-server-side-parity   reads api-types/common.ts AND
+//                                    marketing-site/src/data/pricing.ts and
+//                                    asserts each tier's number in BOTH, so the
+//                                    two files cannot drift apart.
+//   published-tier-caps-match-the-code  compares six apps/docs surfaces against
+//                                    the imported TIER_CONCURRENT_SESSION_LIMITS
+//                                    numerically, with completeness checks.
+//
+// So adding a subject floor here would red the build over an absence that is
+// correct. Retiring the file or re-pointing it at the data module is a decision
+// worth making deliberately; what is recorded here is the measurement, so the
+// next reader does not re-derive it.
 describe('W248.D marketing-site tier-cap drift sweep', () => {
   const pages = walk(PAGES);
   // Vacuity arm. Every assertion below reports an ABSENCE, and an absence is

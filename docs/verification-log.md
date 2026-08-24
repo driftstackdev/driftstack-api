@@ -11136,3 +11136,50 @@ marketing-site page and confirming the timestamp is unchanged and that guard sta
 
 Full suite green: 3067 files, 30854 tests, exit 0. No new test file; `it` count unchanged at 3. No
 ratchet movement.
+
+## V-1457 — the second vacuous sweep is redundant, not a gap, and the chain that proves it is worth writing down
+
+`marketing-tier-caps-sweep` has the same shape as V-1456's finding and is also vacuous: across the 61
+`.astro` pages it walks, its `Personal: 5`-style pattern matches **zero** occurrences for all six
+display names. The caps stopped being written into markup — they live in
+`apps/marketing-site/src/data/pricing.ts` and the pages render from it, which is a better arrangement
+and exactly why the sweep now checks nothing. The page floor cannot see it: the corpus is healthy, the
+subject left.
+
+**Unlike V-1456 the subject did not become unguarded, and establishing that took four steps, three of
+which changed my conclusion.**
+
+1. `marketing-pricing-adr-004-parity` pins the marketing values as literal source text
+   (`concurrent: 8,` for agency). On its own that is a one-sided pin, so I expected drift.
+2. `published-tier-caps-match-the-code` compares six `apps/docs` surfaces against the imported
+   `TIER_CONCURRENT_SESSION_LIMITS` numerically — but its header says it deliberately does NOT cover
+   marketing, because another test does.
+3. That other test, `tier-limits-server-side-parity`, opens with text pins on `common.ts`, and I read
+   its first arms and concluded the header's claim was false — that both sides were independently
+   pinned literals which could drift apart.
+4. **That was wrong.** Its arms at 143 and 171 read `common.ts` AND
+   `marketing-site/src/data/pricing.ts` and assert, per tier, that both contain the same number from
+   one shared table. Changing a cap in `common.ts` reds the server side; updating the table then reds
+   the marketing side until that file agrees. The two cannot drift apart.
+
+So the risk is covered twice — numerically for the docs surfaces, and by a shared-anchor comparison for
+the marketing data — and adding a subject floor to the sweep would red the build over an absence that
+is correct.
+
+The file is annotated rather than changed: what it measures today (zero), why (the caps moved into a
+data module), where the coverage actually lives, and that retiring it or re-pointing it at the data
+module is a deliberate decision rather than a cleanup. Recorded so the next reader does not repeat the
+four-step chain above.
+
+`marketing-status-event-types-sweep` is the third of the family and is a different case again: its arm
+asserts an ABSENCE whose correct count is zero, so there is no subject to floor — it needs a positive
+control that the pages still contain live event names. Left for a batch that can measure that properly.
+
+**A rule-5 scare that resolved to my own bookkeeping.** After annotating, the `it(` count read 3 → 2.
+The "3" was a stale baseline I had carried from the previous file; `git show HEAD` confirms this file
+has always had 2, with identical names and a diff of +28 insertions and no deletions. The check earned
+its place anyway — the correct response to a count change is to compare against HEAD, not to reason
+about whether the edit could have removed anything.
+
+Full suite green: 3067 files, 30854 tests, exit 0. Comment-only change; no `it` count change, no
+ratchet movement.
