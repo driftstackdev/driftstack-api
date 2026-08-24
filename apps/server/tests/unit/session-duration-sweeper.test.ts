@@ -14,7 +14,11 @@
 // Time is driven by an injectable `nowFn` clock passed to tickOnce so no
 // real waits are needed.
 
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
+import { MAX_SESSION_MINUTES_PER_TIER } from '@driftstack/api-types';
 import {
   SESSION_DURATION_SWEEP_INTERVAL_MS,
   SESSION_DURATION_SWEEP_JOB_TYPE,
@@ -34,6 +38,7 @@ import type {
   ScheduledJobsService,
 } from '../../src/services/scheduled-jobs.js';
 
+const HERE = dirname(fileURLToPath(import.meta.url));
 const NOW = new Date('2026-05-27T12:00:00.000Z');
 const MIN = 60 * 1000;
 
@@ -65,6 +70,30 @@ function build() {
 }
 
 describe('SessionDurationSweeperService — free-tier auto-destroy safety', () => {
+  it("V-1523 CRITICAL the destroy-event cap is only correct while ONE tier is capped, and this is the precondition rather than a demonstration. `minCapFor` resolves the `max_session_minutes` recorded on a destroy event by taking the SMALLEST cap across the matched cutoff tiers, because the candidate rows come back without their tier. With `free` the only capped tier that is always right. Cap a second tier and every candidate is told the lower number — a paid session destroyed at its own longer cap would report the free one. The fix is to carry the candidate's tier on the row rather than to adjust this arm, and the moment it becomes necessary is the moment the registered open decision on paid-session caps is approved.", () => {
+    const capped = Object.entries(MAX_SESSION_MINUTES_PER_TIER)
+      .filter(([, v]) => v !== null)
+      .map(([t]) => t)
+      .sort();
+    expect(
+      capped,
+      'a second tier now has a duration cap, so minCapFor reports the smaller one for EVERY ' +
+        'candidate — carry the tier on the row returned by listExpiredForAutoDestroy and resolve ' +
+        'the cap per session before capping another tier',
+    ).toEqual(['free']);
+
+    // The precondition is only load-bearing while the min-across-the-set strategy
+    // is still what runs. If this call disappears, the arm above is guarding a
+    // rule nothing applies any more.
+    const src = readFileSync(
+      resolve(HERE, '..', '..', 'src', 'services', 'session-duration-sweeper.ts'),
+      'utf8',
+    );
+    expect(src, 'the sweeper still resolves the payload cap from the matched-tier set').toContain(
+      'minCapFor(cutoffTiers)',
+    );
+  });
+
   it('1. destroys a FREE session created >20 min ago (active)', async () => {
     const { repo, sweeper, destroyed } = build();
     repo.setAccountTier('acc-free', 'free');

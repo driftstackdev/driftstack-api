@@ -14760,3 +14760,48 @@ No code changed. Four claims were checked against source and three of them confi
 already said; the fourth found a divergence and proved it inert. The value is that the standing list can
 now be trimmed with evidence — items 6, 11 and 15 are done, item 12 is real and blocked on a decision
 that is not an engineering one.
+
+## V-1523 — a latent bug that my own registration would activate
+
+The gated queue's item 19(a) records a latent finding: the duration sweeper's `minCapFor` resolves the
+`max_session_minutes` recorded on a destroy event by taking the SMALLEST cap across the matched cutoff
+tiers, which is _"correct today (only `free` is capped → always 20), wrong once a 2nd tier gains a cap"_.
+
+That is not idle. V-1520 registered `D-2026-08-24-02` — whether the seven paid tiers should have a
+duration cap — as an open decision. **Approving it is what turns this latent finding into a live defect**,
+and nothing connected the two.
+
+**Verified against source rather than taken from the queue.** `tickOnce` builds `cutoffTiers` as a Set
+from `durationCutoffsFor`, and the per-candidate line reads `minCapFor(cutoffTiers)` under a comment
+saying the tier is not carried on the `SessionRecord` so the minimum applicable cap is used. The helper's
+own docstring says it is "kept general so a future second capped tier degrades safely" — degrades, not
+stays correct. With two capped tiers, a paid session destroyed at its own longer cap reports the free
+tier's twenty minutes in its destroy event.
+
+**Fix versus guard, and why this is a guard.** The correct repair is to carry the candidate's tier on the
+row `listExpiredForAutoDestroy` returns, which changes a repo interface, its in-memory double, and their
+pins — larger than a latent, explicitly-deferred item warrants, and not something to land on the way past.
+What is cheap and right is to make the precondition fail the moment it stops holding, so the repair
+happens when it is actually needed and by someone who has decided to cap a tier.
+
+The arm is titled as a precondition rather than a demonstration, deliberately. Demonstrating the wrong
+value needs two capped tiers, and the cap table is a `const` — so an arm claiming to show the bug would be
+claiming more than it does. It asserts exactly one tier is capped, and fails with the repair spelled out:
+carry the tier on the row before capping another tier.
+
+**The second assertion is what keeps the first honest.** A precondition guard is worthless if the strategy
+it protects quietly disappears — the arm would go on passing while guarding a rule nothing applies. So it
+also asserts the sweeper still calls `minCapFor(cutoffTiers)`. Replacing that call with a literal reds it,
+which is the same failure V-1517 and V-1518 fixed elsewhere: a check that outlives the thing it checks.
+
+Both negatives exercised through the real build: capping `solo_manual` at 600 and rebuilding api-types
+reds the precondition arm naming the repair (and one other arm, correctly — a second capped tier changes
+sweep behaviour), and replacing the `minCapFor` call reds the anchor. Sources restored byte-identical.
+
+### What this batch did not do
+
+Item 19 carries two more latent findings — (b) self-re-arm fan-out under poller retry, whose robust fix
+touches the prior-incident dedup logic, and (c) audit-archive R2 month partitioning. Both are left alone
+and neither is now guarded. They are named here so the next sweep knows they were read and skipped rather
+than missed: (b) needs the dedup review the item asks for, and (c) belongs with D-033, which is one of the
+decisions already waiting.
