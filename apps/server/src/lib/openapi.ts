@@ -356,10 +356,25 @@ function buildRegistry(): OpenAPIRegistry {
    * so they need a path-to-validator map rather than a shared literal. See
    * `a-published-bound-matches-the-route`.
    */
-  const prefixedIdParam = (prefix: string, what: string) =>
+  /**
+   * V-1482 — `anyCase` is per-PATH, not per-prefix, and that is not a detail.
+   *
+   * `/v1/profiles/{id}` is served by `profiles.ts`, whose `PROFILE_ID_RE` is
+   * case-SENSITIVE. Its sibling `/v1/profiles/{id}/snapshots` is served by
+   * `profile-snapshots.ts`, whose `PUBLIC_ID_RE` carries `/i`. Same `prof_` id,
+   * two answers, one path segment apart. A per-prefix constant would publish a
+   * lie on one of them whichever way it was written.
+   */
+  const prefixedIdParam = (prefix: string, what: string, anyCase = false) =>
     z
       .string()
-      .regex(new RegExp(`^${prefix}_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`))
+      .regex(
+        new RegExp(
+          anyCase
+            ? `^${prefix}_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`
+            : `^${prefix}_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`,
+        ),
+      )
       .describe(`Prefixed ${what} id (${prefix}_<uuid>)`);
 
   const rateLimitHeaders = {
@@ -595,7 +610,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['sessions'],
     security: auth,
     request: {
-      params: z.object({ id: z.string() }),
+      params: z.object({ id: prefixedIdParam('ses', 'session') }),
       body: {
         content: {
           'application/json': {
@@ -625,7 +640,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['sessions'],
     security: auth,
     request: {
-      params: z.object({ id: z.string() }),
+      params: z.object({ id: prefixedIdParam('ses', 'session') }),
       body: {
         content: {
           'application/json': {
@@ -658,7 +673,7 @@ function buildRegistry(): OpenAPIRegistry {
       'Get a session by id (includes harness-reported egress_capabilities) (requires `read:sessions`, broad `read`, or `account_owner`)',
     tags: ['sessions'],
     security: auth,
-    request: { params: z.object({ id: z.string() }) },
+    request: { params: z.object({ id: prefixedIdParam('ses', 'session') }) },
     responses: {
       200: {
         description: 'Session record.',
@@ -680,7 +695,7 @@ function buildRegistry(): OpenAPIRegistry {
       'Snapshot current session state (URL, title, cookies, localStorage) (requires `read:sessions`, broad `read`, or `account_owner`)',
     tags: ['sessions'],
     security: auth,
-    request: { params: z.object({ id: z.string() }) },
+    request: { params: z.object({ id: prefixedIdParam('ses', 'session') }) },
     responses: {
       200: {
         description: 'Session state.',
@@ -711,7 +726,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['sessions'],
     security: auth,
     request: {
-      params: z.object({ id: z.string() }),
+      params: z.object({ id: prefixedIdParam('ses', 'session') }),
       body: {
         content: {
           'application/json': {
@@ -751,7 +766,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['sessions'],
     security: auth,
     request: {
-      params: z.object({ id: z.string() }),
+      params: z.object({ id: prefixedIdParam('ses', 'session') }),
       body: {
         content: {
           'application/json': {
@@ -791,7 +806,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['sessions'],
     security: auth,
     request: {
-      params: z.object({ id: z.string() }),
+      params: z.object({ id: prefixedIdParam('ses', 'session') }),
       body: {
         content: {
           'application/json': {
@@ -831,7 +846,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['sessions'],
     security: auth,
     request: {
-      params: z.object({ id: z.string() }),
+      params: z.object({ id: prefixedIdParam('ses', 'session') }),
       body: {
         content: {
           'application/json': {
@@ -874,7 +889,7 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Destroy a session (requires `write:sessions`, broad `write`, or `account_owner`)',
     tags: ['sessions'],
     security: auth,
-    request: { params: z.object({ id: z.string() }) },
+    request: { params: z.object({ id: prefixedIdParam('ses', 'session') }) },
     responses: {
       204: { description: 'Session destroyed.' },
       404: {
@@ -968,7 +983,7 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Revoke an API key',
     tags: ['api-keys'],
     security: auth,
-    request: { params: z.object({ id: z.string() }) },
+    request: { params: z.object({ id: prefixedIdParam('key', 'API key') }) },
     responses: {
       204: { description: 'Key revoked.' },
       404: { description: 'Key not found.', content: problemContent },
@@ -987,7 +1002,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['api-keys'],
     security: auth,
     request: {
-      params: z.object({ id: z.string() }),
+      params: z.object({ id: prefixedIdParam('key', 'API key') }),
       body: {
         content: {
           'application/json': {
@@ -1319,7 +1334,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['admin'],
     security: auth,
     request: {
-      params: z.object({ id: z.string() }),
+      params: z.object({ id: prefixedIdParam('acc', 'account') }),
       body: { content: { 'application/json': { schema: SuspendAccountRequestSchema } } },
     },
     responses: {
@@ -1339,7 +1354,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['admin'],
     security: auth,
     request: {
-      params: z.object({ id: z.string() }),
+      params: z.object({ id: prefixedIdParam('acc', 'account') }),
       body: { content: { 'application/json': { schema: UnsuspendAccountRequestSchema } } },
     },
     responses: {
@@ -1359,7 +1374,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['admin'],
     security: auth,
     request: {
-      params: z.object({ id: z.string() }),
+      params: z.object({ id: prefixedIdParam('acc', 'account') }),
       body: { content: { 'application/json': { schema: DeleteAccountRequestSchema } } },
     },
     responses: {
@@ -1378,7 +1393,7 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Usage period summary for any account (admin)',
     tags: ['admin'],
     security: auth,
-    request: { params: z.object({ id: z.string() }) },
+    request: { params: z.object({ id: prefixedIdParam('acc', 'account') }) },
     responses: {
       200: {
         description: 'Period summary for the target account.',
@@ -1397,7 +1412,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['admin'],
     security: auth,
     request: {
-      params: z.object({ id: z.string() }),
+      params: z.object({ id: prefixedIdParam('acc', 'account') }),
       body: { content: { 'application/json': { schema: SetQuotaOverrideRequestSchema } } },
     },
     responses: {
@@ -1417,7 +1432,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['admin'],
     security: auth,
     request: {
-      params: z.object({ id: z.string() }),
+      params: z.object({ id: prefixedIdParam('acc', 'account') }),
       query: z.object({
         bucket_key: z.enum(['global', 'sessions:create', 'agent_sessions:message']),
       }),
@@ -1456,7 +1471,7 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Replay a webhook delivery (admin)',
     tags: ['admin'],
     security: auth,
-    request: { params: z.object({ id: z.string() }) },
+    request: { params: z.object({ id: prefixedIdParam('wdl', 'delivery') }) },
     responses: {
       200: {
         description: 'Delivery reset to pending; worker will retry.',
@@ -1489,7 +1504,7 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Requeue a DLQ webhook delivery (admin)',
     tags: ['admin'],
     security: auth,
-    request: { params: z.object({ id: z.string() }) },
+    request: { params: z.object({ id: prefixedIdParam('wdl', 'delivery') }) },
     responses: {
       200: {
         description: 'DLQ entry reset to pending.',
@@ -2860,6 +2875,14 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Get a single account (admin)',
     tags: ['admin'],
     security: auth,
+    request: {
+      // V-1482 — an UNDECLARED path param is not an unconstrained one: the
+      // generator injects `minLength: 1, maxLength: 2048`, which carries a
+      // bound and therefore reads as constrained to any census that asks
+      // whether a constraint exists. The route enforces a prefixed uuid; the
+      // default masked that, and only comparing against the route found it.
+      params: z.object({ id: prefixedIdParam('acc', 'account') }),
+    },
     responses: {
       200: {
         description: 'Account row.',
@@ -2880,6 +2903,12 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['admin'],
     security: auth,
     request: {
+      // V-1482 — an UNDECLARED path param is not an unconstrained one: the
+      // generator injects `minLength: 1, maxLength: 2048`, which carries a
+      // bound and therefore reads as constrained to any census that asks
+      // whether a constraint exists. The route enforces a prefixed uuid; the
+      // default masked that, and only comparing against the route found it.
+      params: z.object({ id: prefixedIdParam('acc', 'account') }),
       body: { content: { 'application/json': { schema: AdminAuditNoteRequestOpenApi } } },
     },
     responses: {
@@ -2908,6 +2937,12 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['admin'],
     security: auth,
     request: {
+      // V-1482 — an UNDECLARED path param is not an unconstrained one: the
+      // generator injects `minLength: 1, maxLength: 2048`, which carries a
+      // bound and therefore reads as constrained to any census that asks
+      // whether a constraint exists. The route enforces a prefixed uuid; the
+      // default masked that, and only comparing against the route found it.
+      params: z.object({ id: prefixedIdParam('acc', 'account') }),
       body: { content: { 'application/json': { schema: AdminRefundRecordRequestOpenApi } } },
     },
     responses: {
@@ -2929,6 +2964,14 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Force-revoke an API key (admin)',
     tags: ['admin'],
     security: auth,
+    request: {
+      // V-1482 — an UNDECLARED path param is not an unconstrained one: the
+      // generator injects `minLength: 1, maxLength: 2048`, which carries a
+      // bound and therefore reads as constrained to any census that asks
+      // whether a constraint exists. The route enforces a prefixed uuid; the
+      // default masked that, and only comparing against the route found it.
+      params: z.object({ id: prefixedIdParam('key', 'API key') }),
+    },
     responses: {
       200: {
         // V-1072 — was `z.object({ ok: z.literal(true) })`, a shape the handler has
@@ -2954,6 +2997,14 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Force-destroy an in-flight session (admin)',
     tags: ['admin'],
     security: auth,
+    request: {
+      // V-1482 — an UNDECLARED path param is not an unconstrained one: the
+      // generator injects `minLength: 1, maxLength: 2048`, which carries a
+      // bound and therefore reads as constrained to any census that asks
+      // whether a constraint exists. The route enforces a prefixed uuid; the
+      // default masked that, and only comparing against the route found it.
+      params: z.object({ id: prefixedIdParam('ses', 'session') }),
+    },
     responses: {
       200: {
         // V-1072 — same placeholder as the revoke route above, and equally never
@@ -2976,7 +3027,7 @@ function buildRegistry(): OpenAPIRegistry {
   });
   // ── Incidents (V-295) ───────────────────────────────────────────────────
   const IncidentIdParamsOpenApi = z.object({
-    id: z.string().describe('Prefixed incident id: inc_<uuid>.'),
+    id: prefixedIdParam('inc', 'incident'),
   });
   const AdminIncidentListQueryOpenApi = ListIncidentsQuerySchema.omit({ window: true });
   const PublicIncidentListQueryOpenApi = ListIncidentsQuerySchema.pick({
@@ -3172,6 +3223,11 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Force-unsubscribe a status subscriber (admin; abuse / GDPR)',
     tags: ['admin'],
     security: auth,
+    request: {
+      // V-1482 — same class as the six above: this route relied on the
+      // path-validity backstop while enforcing a specific id.
+      params: z.object({ id: prefixedIdParam('sub', 'subscriber') }),
+    },
     responses: {
       200: {
         description: 'Subscriber removed. Idempotent against already-removed entries.',
@@ -3629,6 +3685,14 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Permanently discard a dead-letter webhook delivery (admin; audited)',
     tags: ['admin', 'webhooks'],
     security: auth,
+    request: {
+      // V-1482 — an UNDECLARED path param is not an unconstrained one: the
+      // generator injects `minLength: 1, maxLength: 2048`, which carries a
+      // bound and therefore reads as constrained to any census that asks
+      // whether a constraint exists. The route enforces a prefixed uuid; the
+      // default masked that, and only comparing against the route found it.
+      params: z.object({ id: prefixedIdParam('wdl', 'delivery') }),
+    },
     responses: {
       200: {
         description: 'Dead-letter delivery permanently deleted.',
@@ -5042,6 +5106,11 @@ function buildRegistry(): OpenAPIRegistry {
       'Mint a per-Mac LiveKit JWT for the agent session room (LK.3) (requires `write` or `account_owner`)',
     tags: ['agent-chat'],
     security: auth,
+    request: {
+      // V-1482 — same class as the six above: this route relied on the
+      // path-validity backstop while enforcing a specific id.
+      params: z.object({ id: prefixedIdParam('agt', 'agent session') }),
+    },
     responses: {
       200: {
         description:
@@ -6346,7 +6415,7 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Public incident detail with update timeline (V-545.A)',
     tags: ['status'],
     request: {
-      params: z.object({ id: z.string().describe('Prefixed id: inc_<uuid>.') }),
+      params: z.object({ id: prefixedIdParam('inc', 'incident') }),
     },
     responses: {
       200: {
@@ -6625,7 +6694,7 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Get a single webhook endpoint',
     tags: ['webhooks'],
     security: auth,
-    request: { params: z.object({ id: z.string() }) },
+    request: { params: z.object({ id: prefixedIdParam('whk', 'webhook') }) },
     responses: {
       200: {
         description: 'Endpoint.',
@@ -6666,7 +6735,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['webhooks'],
     security: auth,
     request: {
-      params: z.object({ id: z.string() }),
+      params: z.object({ id: prefixedIdParam('whk', 'webhook') }),
       body: {
         content: {
           'application/json': {
@@ -6695,7 +6764,7 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Disable (soft-delete) a webhook endpoint. Idempotent.',
     tags: ['webhooks'],
     security: auth,
-    request: { params: z.object({ id: z.string() }) },
+    request: { params: z.object({ id: prefixedIdParam('whk', 'webhook') }) },
     responses: {
       204: { description: 'Endpoint disabled.' },
       404: {
@@ -6713,7 +6782,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['webhooks'],
     security: auth,
     request: {
-      params: z.object({ id: z.string() }),
+      params: z.object({ id: prefixedIdParam('whk', 'webhook') }),
       query: ListDeliveriesQueryOpenApi,
     },
     responses: {
@@ -6737,7 +6806,7 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Enqueue a synthetic test.ping delivery (bypass subscription)',
     tags: ['webhooks'],
     security: auth,
-    request: { params: z.object({ id: z.string() }) },
+    request: { params: z.object({ id: prefixedIdParam('whk', 'webhook') }) },
     responses: {
       202: {
         description: 'Test delivery enqueued.',
@@ -6772,7 +6841,7 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Rotate the signing secret with a 24h grace (worker dual-signs during grace)',
     tags: ['webhooks'],
     security: auth,
-    request: { params: z.object({ id: z.string() }) },
+    request: { params: z.object({ id: prefixedIdParam('whk', 'webhook') }) },
     responses: {
       200: {
         description: 'Fresh plaintext shown ONCE; prev secret stays valid for 24h.',
@@ -6851,7 +6920,7 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Get a single profile (requires `read:profiles`, broad `read`, or `account_owner`)',
     tags: ['profiles'],
     security: auth,
-    request: { params: z.object({ id: z.string() }) },
+    request: { params: z.object({ id: prefixedIdParam('prof', 'profile') }) },
     responses: {
       200: {
         description: 'Profile.',
@@ -6905,7 +6974,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['profiles'],
     security: auth,
     request: {
-      params: z.object({ id: z.string() }),
+      params: z.object({ id: prefixedIdParam('prof', 'profile') }),
       body: { content: { 'application/json': { schema: UpdateProfileRequestSchema } } },
     },
     responses: {
@@ -6932,7 +7001,7 @@ function buildRegistry(): OpenAPIRegistry {
       'Delete a profile (storage state wiped; idempotent) (requires `write:profiles`, broad `write`, or `account_owner`)',
     tags: ['profiles'],
     security: auth,
-    request: { params: z.object({ id: z.string() }) },
+    request: { params: z.object({ id: prefixedIdParam('prof', 'profile') }) },
     responses: {
       204: { description: 'Profile deleted.' },
       ...errors4xx,
@@ -6968,7 +7037,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['profiles'],
     security: auth,
     request: {
-      params: z.object({ id: z.string() }),
+      params: z.object({ id: prefixedIdParam('prof', 'profile') }),
       body: { content: { 'application/json': { schema: CloneProfileRequestOpenApi } } },
     },
     responses: {
@@ -7020,7 +7089,7 @@ function buildRegistry(): OpenAPIRegistry {
       'Restore a trashed profile (clears deleted_at; returns it to the live list) (requires `write:profiles`, broad `write`, or `account_owner`)',
     tags: ['profiles'],
     security: auth,
-    request: { params: z.object({ id: z.string() }) },
+    request: { params: z.object({ id: prefixedIdParam('prof', 'profile') }) },
     responses: {
       200: {
         description: 'The restored profile.',
@@ -7045,7 +7114,7 @@ function buildRegistry(): OpenAPIRegistry {
       'Permanently delete a trashed profile, freeing its tier-cap slot (irreversible) (requires `write:profiles`, broad `write`, or `account_owner`)',
     tags: ['profiles'],
     security: auth,
-    request: { params: z.object({ id: z.string() }) },
+    request: { params: z.object({ id: prefixedIdParam('prof', 'profile') }) },
     responses: {
       204: { description: 'Trashed profile permanently deleted.' },
       404: {
@@ -7065,7 +7134,7 @@ function buildRegistry(): OpenAPIRegistry {
       'Export a profile as a versioned JSON envelope (metadata-only) (requires `read:profiles`, broad `read`, or `account_owner`)',
     tags: ['profiles'],
     security: auth,
-    request: { params: z.object({ id: z.string() }) },
+    request: { params: z.object({ id: prefixedIdParam('prof', 'profile') }) },
     responses: {
       200: {
         description: 'Versioned export envelope (re-import via POST /v1/profiles/import).',
@@ -7125,7 +7194,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['profiles'],
     security: auth,
     request: {
-      params: z.object({ id: z.string() }),
+      params: z.object({ id: prefixedIdParam('prof', 'profile') }),
       body: {
         content: {
           'application/json': {
@@ -7160,7 +7229,7 @@ function buildRegistry(): OpenAPIRegistry {
       "Trim a profile's re-fetchable caches to reclaim storage (cookies / localStorage / IndexedDB / tabs are kept) (requires `write:profiles`, broad `write`, or `account_owner`)",
     tags: ['profiles'],
     security: auth,
-    request: { params: z.object({ id: z.string() }) },
+    request: { params: z.object({ id: prefixedIdParam('prof', 'profile') }) },
     responses: {
       200: {
         description:
@@ -7231,7 +7300,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['profiles', 'snapshots'],
     security: auth,
     request: {
-      params: z.object({ id: z.string() }),
+      params: z.object({ id: prefixedIdParam('prof', 'profile', true) }),
       body: {
         content: {
           'application/json': {
@@ -7268,7 +7337,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['profiles', 'snapshots'],
     security: auth,
     request: {
-      params: z.object({ id: z.string() }),
+      params: z.object({ id: prefixedIdParam('prof', 'profile', true) }),
       query: PaginationQuerySchema,
     },
     responses: {
@@ -7304,7 +7373,7 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Single snapshot by id (requires `read:profiles`, broad `read`, or `account_owner`)',
     tags: ['snapshots'],
     security: auth,
-    request: { params: z.object({ id: z.string() }) },
+    request: { params: z.object({ id: prefixedIdParam('psnap', 'snapshot', true) }) },
     responses: {
       200: {
         description: 'Snapshot.',
@@ -7326,7 +7395,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['snapshots', 'profiles'],
     security: auth,
     request: {
-      params: z.object({ id: z.string() }),
+      params: z.object({ id: prefixedIdParam('psnap', 'snapshot', true) }),
       body: {
         content: {
           'application/json': {
@@ -7360,7 +7429,7 @@ function buildRegistry(): OpenAPIRegistry {
       'Hard-delete a snapshot (requires `write:profiles`, broad `write`, or `account_owner`)',
     tags: ['snapshots'],
     security: auth,
-    request: { params: z.object({ id: z.string() }) },
+    request: { params: z.object({ id: prefixedIdParam('psnap', 'snapshot', true) }) },
     responses: {
       204: { description: 'Snapshot deleted.' },
       404: {

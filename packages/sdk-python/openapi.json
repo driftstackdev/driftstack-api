@@ -6545,9 +6545,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed session id (ses_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed session id (ses_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -6887,9 +6890,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed session id (ses_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed session id (ses_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -7202,9 +7208,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed session id (ses_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed session id (ses_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -7479,9 +7488,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed session id (ses_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed session id (ses_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -7649,9 +7661,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed session id (ses_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed session id (ses_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -7940,9 +7955,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed session id (ses_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed session id (ses_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -8210,9 +8228,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed session id (ses_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed session id (ses_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -8522,9 +8543,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed session id (ses_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed session id (ses_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -8828,9 +8852,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed session id (ses_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed session id (ses_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -9709,9 +9736,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^key_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed API key id (key_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed API key id (key_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -9879,9 +9909,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^key_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed API key id (key_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed API key id (key_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -11810,9 +11843,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^acc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed account id (acc_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed account id (acc_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -12042,9 +12078,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^acc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed account id (acc_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed account id (acc_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -12274,9 +12313,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^acc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed account id (acc_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed account id (acc_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -12506,9 +12548,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^acc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed account id (acc_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed account id (acc_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -12766,9 +12811,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^acc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed account id (acc_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed account id (acc_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -13017,9 +13065,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^acc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed account id (acc_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed account id (acc_<uuid>)",
             "name": "id",
             "in": "path"
           },
@@ -13448,9 +13499,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^wdl_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed delivery id (wdl_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed delivery id (wdl_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -13973,9 +14027,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^wdl_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed delivery id (wdl_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed delivery id (wdl_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -22433,10 +22490,11 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
+              "pattern": "^acc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed account id (acc_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed account id (acc_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -22652,10 +22710,11 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
+              "pattern": "^acc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed account id (acc_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed account id (acc_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -22854,10 +22913,11 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
+              "pattern": "^acc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed account id (acc_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed account id (acc_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -23070,10 +23130,11 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
+              "pattern": "^key_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed API key id (key_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed API key id (key_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -23259,10 +23320,11 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
+              "pattern": "^ses_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed session id (ses_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed session id (ses_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -24038,10 +24100,11 @@
           {
             "schema": {
               "type": "string",
-              "description": "Prefixed incident id: inc_<uuid>."
+              "pattern": "^inc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed incident id (inc_<uuid>)"
             },
             "required": true,
-            "description": "Prefixed incident id: inc_<uuid>.",
+            "description": "Prefixed incident id (inc_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -24477,10 +24540,11 @@
           {
             "schema": {
               "type": "string",
-              "description": "Prefixed incident id: inc_<uuid>."
+              "pattern": "^inc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed incident id (inc_<uuid>)"
             },
             "required": true,
-            "description": "Prefixed incident id: inc_<uuid>.",
+            "description": "Prefixed incident id (inc_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -24749,10 +24813,11 @@
           {
             "schema": {
               "type": "string",
-              "description": "Prefixed incident id: inc_<uuid>."
+              "pattern": "^inc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed incident id (inc_<uuid>)"
             },
             "required": true,
-            "description": "Prefixed incident id: inc_<uuid>.",
+            "description": "Prefixed incident id (inc_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -24969,10 +25034,11 @@
           {
             "schema": {
               "type": "string",
-              "description": "Prefixed incident id: inc_<uuid>."
+              "pattern": "^inc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed incident id (inc_<uuid>)"
             },
             "required": true,
-            "description": "Prefixed incident id: inc_<uuid>.",
+            "description": "Prefixed incident id (inc_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -25459,10 +25525,11 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
+              "pattern": "^sub_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed subscriber id (sub_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed subscriber id (sub_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -28659,10 +28726,11 @@
           {
             "schema": {
               "type": "string",
-              "description": "Prefixed incident id: inc_<uuid>."
+              "pattern": "^inc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed incident id (inc_<uuid>)"
             },
             "required": true,
-            "description": "Prefixed incident id: inc_<uuid>.",
+            "description": "Prefixed incident id (inc_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -29136,10 +29204,11 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
+              "pattern": "^wdl_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed delivery id (wdl_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed delivery id (wdl_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -37908,10 +37977,11 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
+              "pattern": "^agt_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed agent session id (agt_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed agent session id (agt_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -47100,10 +47170,11 @@
           {
             "schema": {
               "type": "string",
-              "description": "Prefixed id: inc_<uuid>."
+              "pattern": "^inc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed incident id (inc_<uuid>)"
             },
             "required": true,
-            "description": "Prefixed id: inc_<uuid>.",
+            "description": "Prefixed incident id (inc_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -48722,9 +48793,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^whk_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed webhook id (whk_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed webhook id (whk_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -49018,9 +49092,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^whk_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed webhook id (whk_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed webhook id (whk_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -49337,9 +49414,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^whk_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed webhook id (whk_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed webhook id (whk_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -49507,9 +49587,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^whk_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed webhook id (whk_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed webhook id (whk_<uuid>)",
             "name": "id",
             "in": "path"
           },
@@ -49803,9 +49886,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^whk_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed webhook id (whk_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed webhook id (whk_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -49993,9 +50079,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^whk_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed webhook id (whk_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed webhook id (whk_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -50771,9 +50860,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^prof_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed profile id (prof_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed profile id (prof_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -51021,9 +51113,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^prof_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed profile id (prof_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed profile id (prof_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -51324,9 +51419,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^prof_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed profile id (prof_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed profile id (prof_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -51772,9 +51870,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^prof_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed profile id (prof_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed profile id (prof_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -52228,9 +52329,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^prof_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed profile id (prof_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed profile id (prof_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -52456,9 +52560,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^prof_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed profile id (prof_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed profile id (prof_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -52626,9 +52733,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^prof_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed profile id (prof_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed profile id (prof_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -53126,9 +53236,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^prof_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed profile id (prof_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed profile id (prof_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -53373,9 +53486,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^prof_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed profile id (prof_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed profile id (prof_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -53582,9 +53698,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^prof_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "description": "Prefixed profile id (prof_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed profile id (prof_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -53818,9 +53937,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^prof_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "description": "Prefixed profile id (prof_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed profile id (prof_<uuid>)",
             "name": "id",
             "in": "path"
           },
@@ -54298,9 +54420,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^psnap_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "description": "Prefixed snapshot id (psnap_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed snapshot id (psnap_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -54509,9 +54634,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^psnap_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "description": "Prefixed snapshot id (psnap_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed snapshot id (psnap_<uuid>)",
             "name": "id",
             "in": "path"
           }
@@ -54679,9 +54807,12 @@
         "parameters": [
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^psnap_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "description": "Prefixed snapshot id (psnap_<uuid>)"
             },
             "required": true,
+            "description": "Prefixed snapshot id (psnap_<uuid>)",
             "name": "id",
             "in": "path"
           }

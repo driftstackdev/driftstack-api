@@ -22,7 +22,7 @@
 // someone relaxed the route; asserting only the route would pass if the mirror
 // drifted again. The pair is the invariant.
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -176,6 +176,15 @@ const UNCONSTRAINED_BY_DESIGN: Record<string, string> = {
  */
 /**
  * V-1480 — the path-id family, deferred as ONE decision rather than 60 entries.
+ *
+ * V-1482 UPDATE — this population is now 14, not 63. Every path id whose route
+ * parses a prefix is published and cross-checked by the derived arm below; what
+ * remains here is the routes that do not validate their id AT ALL, where there
+ * is no enforced pattern to publish. `recipes.ts` passes the segment straight to
+ * a lookup; most `agent-sessions.ts` handlers call `sessions.get(id)`, a plain
+ * equality query, so a malformed id is a miss answered 404 rather than a 400.
+ *
+ * The original reasoning, kept because it is what sized the work:
  *
  * 62 of the 64 unconstrained path parameters are `{id}`, and every one is
  * validated — but by five different validators, which is why a single published
@@ -480,58 +489,127 @@ describe('V-927 a published bound matches the route', () => {
     ).toEqual([]);
   });
   /**
-   * V-1481 — the four path ids whose prefix was already known, asserted
-   * POSITIVELY rather than left to the census.
+   * V-1482 — every published path id, DERIVED from the route that parses it.
    *
-   * The census lists only UNCONSTRAINED parameters, and every `{id}` it lists is
-   * suppressed by PATH_ID_FAMILY. So one of these four regressing to a bare
-   * string would reappear as unconstrained, match the family exemption, and be
-   * silently swallowed by the very entry that documents why the OTHER 59 are
-   * unpublished. An exemption written for a deferred population had quietly
-   * taken cover over a fixed one.
+   * V-1481 asserted four of these from a hardcoded list. That was the right
+   * shape and the wrong scale: 45 more became publishable once the
+   * path-to-validator map existed, and a hardcoded list of 49 would rot on the
+   * first route added. So both sides are derived and they are derived from
+   * DIFFERENT artifacts — expectations from `routes/*.ts`, reality from the
+   * generated document — which is what makes this a cross-check rather than a
+   * restatement of one file.
    *
-   * Naming them is what closes that: these four are no longer members of the
-   * deferred family and must carry their pattern.
+   * Per-PATH case sensitivity is the reason this cannot be a per-prefix table.
+   * `/v1/profiles/{id}` is served by `profiles.ts`, whose `PROFILE_ID_RE` is
+   * case-sensitive; `/v1/profiles/{id}/snapshots` is served by
+   * `profile-snapshots.ts`, whose `PUBLIC_ID_RE` carries `/i`. The same `prof_`
+   * id, two answers, one path segment apart. Publishing one pattern for the
+   * prefix would be false on whichever sibling it did not match.
+   *
+   * Still unpublished, and now 14 rather than 63: the routes that do not
+   * validate their id at all. `recipes.ts` passes the segment straight to a
+   * lookup, and most `agent-sessions.ts` handlers call `sessions.get(id)`,
+   * which is a plain equality query — a malformed id is a miss, answered 404,
+   * not a 400. There is no pattern to publish for those because there is no
+   * pattern being enforced. PATH_ID_FAMILY still covers them.
    */
-  const PUBLISHED_ID_PATTERNS = [
-    ['/v1/sessions/{id}/navigate', 'post', 'id', 'ses'],
-    ['/v1/admin/accounts/{id}/tier', 'post', 'id', 'acc'],
-    ['/v1/admin/webhook-deliveries/{id}', 'get', 'id', 'wdl'],
-    ['/v1/webhook-deliveries/{deliveryId}/replay', 'post', 'deliveryId', 'wdl'],
-  ] as const;
+  const ID_PREFIX_CALL = /uuidFromPrefixedId\(\s*re(?:q|quest)\.params\.\w+\s*,\s*'([a-z]+)'/;
+  const PROFILE_ID_CALL = /uuidFromProfileId\(\s*re(?:q|quest)\.params\.\w+/;
+  const REGISTRATION = /app\.(get|post|put|patch|delete)[^(]*\(\s*\n?\s*'([^']+)'/g;
+  const ID_REGEX_DECL =
+    /const (?:PUBLIC_ID_RE|PROFILE_ID_RE|AGENT_SESSION_ID_RE) = (\/\^[^\n;]+\/i?);/;
+  // A file whose regex pins a LITERAL prefix (`/^sub_(…)/`, `/^agt_(…)/`) needs no
+  // prefix argument at the call site, so the two-argument scan below cannot see
+  // it. V-1482 found two such routes still publishing the validity backstop's
+  // generic bound: admin-status-subscribers and agent-sessions-livekit-token.
+  const LITERAL_PREFIX = /^\/\^([a-z]+)_\(/;
+  const ONE_ARG_CALL = /uuidFromPrefixedId\(\s*re(?:q|quest)\.params\.\w+\s*\)/;
+  const AGENT_ID_TEST = /AGENT_SESSION_ID_RE\.test\(/;
 
-  it('CRITICAL the path ids whose prefix is known publish it as a PATTERN, not as prose. Each of these four named its exact prefix in a describe — true, and unusable by a generated client. They sit inside the {id} family that the census defers wholesale, so nothing else would notice one falling back to a bare string.', () => {
+  interface ExpectedId {
+    readonly key: string;
+    readonly pattern: string;
+  }
+
+  function expectedIdPatterns(): ExpectedId[] {
+    const routesDir = resolve(REPO_ROOT, 'apps/server/src/routes');
+    const out = new Map<string, string>();
+    for (const file of readdirSync(routesDir).filter((f) => f.endsWith('.ts'))) {
+      const src = readFileSync(resolve(routesDir, file), 'utf8');
+      const decl = ID_REGEX_DECL.exec(src);
+      // No id regex in the file means no id contract to publish from it.
+      if (decl === null) continue;
+      const anyCase = decl[1]!.endsWith('/i');
+      const hex = anyCase ? '[0-9a-fA-F]' : '[0-9a-f]';
+
+      const regs = [...src.matchAll(REGISTRATION)].map((m) => ({
+        at: m.index ?? 0,
+        verb: (m[1] ?? '').toUpperCase(),
+        path: m[2] ?? '',
+      }));
+      for (const [i, reg] of regs.entries()) {
+        if (!reg.path.includes(':id') && !reg.path.includes(':deliveryId')) continue;
+        const body = src.slice(reg.at, regs[i + 1]?.at ?? src.length);
+        const pinned = LITERAL_PREFIX.exec(decl[1]!)?.[1] ?? null;
+        const asked =
+          ID_PREFIX_CALL.exec(body)?.[1] ??
+          (PROFILE_ID_CALL.test(body) ? 'prof' : null) ??
+          (pinned !== null && (ONE_ARG_CALL.test(body) || AGENT_ID_TEST.test(body))
+            ? pinned
+            : null);
+        if (asked === null) continue;
+        const key = `${reg.verb} ${reg.path.replace(':id', '{id}').replace(':deliveryId', '{deliveryId}')}`;
+        out.set(key, `^${asked}_${hex}{8}-${hex}{4}-${hex}{4}-${hex}{4}-${hex}{12}$`);
+      }
+    }
+    return [...out].map(([key, pattern]) => ({ key, pattern }));
+  }
+
+  it('CRITICAL every path id whose route parses a prefix publishes exactly that prefix, with exactly that case sensitivity. Expectations come from the route files and reality from the generated document, so this compares two artifacts rather than restating one. Case is per-PATH: /v1/profiles/{id} is case-sensitive and /v1/profiles/{id}/snapshots is not, so a per-prefix pattern would be false on one of them.', () => {
+    const expected = expectedIdPatterns();
+    expect(
+      expected.length,
+      'no id contracts derived from the route files — the registration or call scan stopped matching, and this arm would compare an empty set',
+    ).toBeGreaterThanOrEqual(40);
+    expect(
+      new Set(expected.map((e) => e.pattern.slice(1, e.pattern.indexOf('_')))).size,
+      'all derived ids share one prefix — the prefix capture collapsed',
+    ).toBeGreaterThanOrEqual(6);
+
     const spec = JSON.parse(readFileSync(SPEC, 'utf8')) as Record<string, never>;
     const paths = (spec as unknown as Record<string, Record<string, never>>)['paths'] ?? {};
     const wrong: string[] = [];
+    let compared = 0;
 
-    for (const [path, method, name, prefix] of PUBLISHED_ID_PATTERNS) {
-      const op = (paths as Record<string, Record<string, unknown>>)[path]?.[method] as
+    for (const { key, pattern } of expected) {
+      const [verb, path] = key.split(' ') as [string, string];
+      const op = (paths as Record<string, Record<string, unknown>>)[path]?.[verb.toLowerCase()] as
         | Record<string, unknown>
         | undefined;
-      const parameters = op?.['parameters'];
+      if (op === undefined) continue; // registered route the document does not publish
+      const parameters = op['parameters'];
       const param = Array.isArray(parameters)
-        ? (parameters as Array<Record<string, unknown>>).find((p) => p['name'] === name)
+        ? (parameters as Array<Record<string, unknown>>).find((x) => x['in'] === 'path')
         : undefined;
-      const pattern = (param?.['schema'] as Record<string, unknown> | undefined)?.['pattern'];
-      if (typeof pattern !== 'string') {
-        wrong.push(`${method.toUpperCase()} ${path} {${name}}: publishes no pattern`);
-        continue;
-      }
-      // Lowercase hex is deliberate: all four routes use the case-SENSITIVE
-      // `/^[a-z]{3}_([0-9a-f]…)$/` copy, so publishing [0-9a-fA-F] here would
-      // advertise as valid an uppercase id these routes answer 400 for.
-      const expected = `^${prefix}_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`;
-      if (pattern !== expected) {
-        wrong.push(
-          `${method.toUpperCase()} ${path} {${name}}: publishes ${pattern}, expected ${expected}`,
-        );
+      if (param === undefined) continue;
+      compared += 1;
+      const published = (param['schema'] as Record<string, unknown> | undefined)?.['pattern'];
+      if (published !== pattern) {
+        // `published` is unknown, and a non-string here is itself the finding —
+        // reporting it as `[object Object]` would hide what was actually there.
+        const shown =
+          typeof published === 'string' ? published : `no pattern (${typeof published})`;
+        wrong.push(`${key}: publishes ${shown}, route enforces ${pattern}`);
       }
     }
 
     expect(
-      wrong,
-      'a path id whose prefix is known no longer publishes it — the deferred {id} family exemption would hide this, which is why it is asserted here',
+      compared,
+      'no derived id contract matched a published operation — the path or verb keys stopped lining up',
+    ).toBeGreaterThanOrEqual(40);
+    expect(
+      wrong.sort(),
+      'a path id is published differently from what its route parses. A pattern here must be the ENFORCED set: too narrow documents a valid id as invalid, too wide promises one the route refuses',
     ).toEqual([]);
   });
 });

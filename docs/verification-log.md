@@ -12324,3 +12324,62 @@ longer members of the deferred family. Two mutations, each against the artifact 
 Reverting one to a bare string reds it with "publishes no pattern" — the exact case the census alone
 would have swallowed. Widening one to `[0-9a-fA-F]` reds it too, so the case-sensitivity decision above
 is pinned rather than merely commented. Spec restored byte-identical.
+
+## V-1482 — 53 path ids published from their own route, and a validity backstop that had been hiding eight of them
+
+The `{id}` family V-1480 deferred is down from 63 to 14. Every path id whose route parses a prefix now
+publishes exactly that prefix with exactly that case sensitivity, derived rather than listed.
+
+**Per-PATH case, not per-prefix, and this is the load-bearing detail.** `/v1/profiles/{id}` is served by
+`profiles.ts`, whose `PROFILE_ID_RE` is case-sensitive. Its sibling `/v1/profiles/{id}/snapshots` is
+served by `profile-snapshots.ts`, whose `PUBLIC_ID_RE` carries `/i`. The same `prof_` id, two answers,
+one path segment apart. A per-prefix table — the obvious way to write this — would have published a
+falsehood on whichever sibling it did not match, and there would have been nothing to notice it. That
+divergence is a real API inconsistency, already named as a deliberate exemption by
+`twelve-copies-of-the-id-parser-must-agree`; what is new is that the document now reflects it instead of
+being silent about both sides.
+
+**The eight the census could never have found.** The derived arm went red on first run against
+registrations I had not touched: `GET /v1/admin/accounts/{id}`, its `audit-note` and `refund-record`
+siblings, `admin/api-keys/{id}/revoke`, `admin/sessions/{id}/destroy`, `admin/webhook-dlq/{id}/discard`.
+None declared `request.params` at all, so they fell to `registerRoute`'s backstop — a deliberate,
+documented one: OpenAPI 3.1 requires every path-template expression to have a matching parameter, and
+the wrapper supplies `{ minLength: 1, maxLength: 2048 }` as "a conservative non-empty URL-component
+boundary" for registrations that declare none. The backstop is right. Relying on it while enforcing
+`^acc_<uuid>$` is not.
+
+Two more of the same shape came out of measuring how many registrations still lean on it — 26 do, and
+of those, `admin/status-subscribers/{id}/force-unsubscribe` enforces `^sub_<uuid>$` and
+`agent-sessions/{id}/livekit-token` enforces `^agt_<uuid>$`. Both needed the derivation widened: their
+files pin the prefix in the REGEX (`/^sub_(…)/`, `/^agt_(…)/`) rather than passing it at the call site,
+so the two-argument scan could not see them — the same shape of blind spot that made
+`admin-status-subscribers` look like it skipped its prefix check twice before. The other 24 either
+validate nothing (`oauth/clients/{id}` passes the segment straight to the service) or are not published.
+
+That backstop carries a bound. So a census asking "does this parameter have any constraint?" — which is
+what V-1476 through V-1481 asked, three surfaces deep — scores it CONSTRAINED and moves on. Eight routes
+enforcing `^acc_<uuid>$`, `^key_<uuid>$`, `^ses_<uuid>$`, `^wdl_<uuid>$`, `^sub_<uuid>$` and
+`^agt_<uuid>$` were publishing "any string up to 2048 characters", and the presence-check instrument was
+structurally incapable of seeing it. **An
+injected default is indistinguishable from a deliberate one to any check that asks whether a value
+exists rather than what it should be.** The only thing that found them was comparing against the route.
+
+**Both sides derived, from different artifacts.** V-1481 asserted four of these from a hardcoded list —
+right shape, wrong scale, and a hardcoded list this size would rot on the first route added. Expectations now come
+from `routes/*.ts` (registration paths, the prefix each handler asks `uuidFromPrefixedId` for, and the
+case flag on that file's id regex); reality comes from the generated document. Neither side can be
+edited into agreement with the other, which is what makes it a cross-check rather than a restatement.
+Floors on both the derived count (≥40) and the compared count (≥40), plus a distinct-prefix floor, so a
+collapsed capture fails loudly instead of comparing an empty set.
+
+Two mutations, one per side. Flipping a published pattern to the wrong case reds it and names the
+mismatch. Dropping `/i` from `profile-snapshots.ts` — the ROUTE, not the document — moves the
+expectation and reds two registrations, which is the proof that the expectation side is read from source
+rather than from the artifact it is checking. Both restored byte-identical.
+
+**What is left, and why it is not an omission.** 14 registrations remain unpublished: `recipes.ts`
+passes its path segment straight to a lookup, and most `agent-sessions.ts` handlers call
+`sessions.get(id)`, a plain equality query, so a malformed id is a miss answered 404 rather than a 400.
+There is no enforced pattern to publish because there is no pattern being enforced. Publishing one would
+document as invalid an id the server accepts — the over-narrow direction, which V-1476 established as
+the worse error.
