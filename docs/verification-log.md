@@ -14492,3 +14492,68 @@ INSIDE their `withAudit` callback rather than before it, so the audit is structu
 bypassed by an early return. And `admin-owner`'s hand-written audits — the secrets surface — audit before
 the response leaves on both success and failure, with the benign not-found exclusion documented against
 D-025 in the sibling handler.
+
+## V-1518 — the D-\* decision items, recovered from the repo and checked
+
+The sweep instructions have asked for "the D-\* decision items" every batch, and the plan file naming them
+has not existed on disk for this entire session. V-1517 turned up `D-025` cited in a route comment, which
+made the obvious question askable: is the decision register in the repo?
+
+It is. `docs/decisions.md` holds **D-001 through D-036**, each with a Decision, Reasoning, an
+authority Tier, and a V-log reference. So the D-\* items are recoverable without the missing plan.
+
+**Thirty-four are settled and landed. Exactly two are open, and neither is mine to close:**
+
+- **D-033 — audit-log retention (90d hot Postgres / R2 archive / 7y total).** Marked
+  _"PROPOSED — pending founder review"_, Tier 2 architectural, ADR-006.
+- **D-034 — Sentry-first observability destination.** Same status, Tier 2, ADR-005.
+
+Both are vendor/retention-SLA decisions whose own text says they need human review, and the repo's
+authority levels put Tier 2 above what an agent settles on its own. Recording them as open is the correct
+outcome, not a deferral.
+
+### What could be checked was checked
+
+**D-033's unimplemented state is honestly recorded, and I confirmed the record rather than trusting it.**
+`AuditArchiveService` is built and tested and nothing constructs it; the guard
+`audit-archive-is-not-scheduled-and-that-is-recorded` says so in its first line and explains why leaving
+it unscheduled is deliberate — `archiveTable` DELETES production rows after an R2 upload, so arming it
+needs R2 configuration and a staged rollout.
+
+**The conflict that looks obvious is not there, and finding that out required reading which TABLE.** The
+marketing audit-log page promises entries are _"retained indefinitely, on every tier — there is no
+tier-based retention window"_. An archive service that deletes after 90 days sounds like it contradicts
+that outright. It does not: the five tables it bounds are `admin_audit_log`, `processed_stripe_events`,
+`legal_acceptances`, `webhook_deliveries` and `session_events`. **`account_audit_log` — the customer-facing
+one the page is about — is not among them**, and nothing else purges it. The one comment that mentions
+purging beside it concerns the 90-day status-subscriber email purge and notes that the customer table
+needs an `accountId` it cannot supply.
+
+So scheduling D-033 as proposed would not falsify the customer promise. That is worth writing down
+precisely because the surface reading says it would, and the distinction is a table name.
+
+**D-034 matches what is implemented.** Sentry is initialised in bootstrap, and no second observability
+vendor is integrated. The only competing name in the source is a comment in `lib/otel.ts` listing
+possible OTLP upstreams — env-configured, not a vendor, and so not the DPA-amendment cost the decision is
+reasoning about.
+
+### The half of the claim that was prose
+
+The marketing page's guard already names the reason its promise is true — its arm title says the only
+audit-shaped sweep "explicitly excludes this table — see apps/server/src/services/audit-archive.ts
+AUDIT_TABLES". Only the PAGE was asserted. The code side sat in the title, which is the shape V-1517
+committed a fix for one batch earlier: a pin that freezes a claim and not the fact that makes it true.
+
+The arm now reads the roster and holds it to that claim. Adding `account_audit_log` to `AUDIT_TABLES`
+reds it with the sentence a future reader needs — correct the promise or exclude the table. So if D-033
+is approved, the customer promise is checked at the moment the archive grows rather than whenever someone
+next reads two files together.
+
+### For the human, not the agent
+
+D-033 and D-034 are the two items the sweep has been asking about that only a person can close. Both have
+an ADR and a V-log entry; neither is blocked on engineering. If either is approved, the work that follows
+is concrete: D-033 means wiring `AuditArchiveService` into the recurring-job registry behind R2
+configuration and a staging rehearsal, and it should be re-checked against the customer retention promise
+at that point — not because it conflicts today, but because the promise and the archive live in different
+files with nothing comparing them.

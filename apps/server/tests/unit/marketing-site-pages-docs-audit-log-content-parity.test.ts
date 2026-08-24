@@ -149,6 +149,29 @@ describe('W518.B apps/marketing-site/src/pages/docs/audit-log.astro content pari
     );
     // The fabricated tier-retention table must not reappear.
     expect(body).not.toMatch(/pruned by a nightly\s*\n?\s*sweep/);
+
+    // V-1518 — the half of this arm's title that was never checked. It names
+    // AUDIT_TABLES as the reason the promise above is true, and until now only
+    // the PAGE was asserted: the code side was prose. Read the roster and hold
+    // it to that claim, so approving D-033 (the proposed 90d/R2 retention, still
+    // pending review) cannot quietly add the customer table and falsify a live
+    // customer promise in a different file.
+    const archive = readFileSync(
+      resolve(REPO_ROOT, 'apps/server/src/services/audit-archive.ts'),
+      'utf8',
+    );
+    const roster = archive.slice(
+      archive.indexOf('export const AUDIT_TABLES = ['),
+      archive.indexOf('];', archive.indexOf('export const AUDIT_TABLES = [')),
+    );
+    expect(roster, 'AUDIT_TABLES is still the archive roster').toContain(
+      "tableName: 'admin_audit_log'",
+    );
+    expect(
+      roster.includes("tableName: 'account_audit_log'"),
+      'the archive now sweeps account_audit_log, and this page promises those entries are retained ' +
+        'indefinitely with no scheduled prune job — correct the promise or exclude the table',
+    ).toBe(false);
   });
 
   it("Immutability + admin.support_note-pointer correction framing pinned: 'Audit entries are append-only. There's no delete or update endpoint; even staff cannot mutate existing entries. If a correction is needed (e.g. a misattributed action), staff append an admin.support_note pointing at the original entry rather than editing it.' — pinned so the append-only + no-delete-or-update + even-staff-cannot-mutate + admin.support_note-pointer-correction commitment survives (drift to allowing staff edit would break the immutable audit-trail commitment)", () => {
