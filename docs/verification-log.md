@@ -8953,3 +8953,37 @@ arm was written for them.
 
 Note the length guard at `:68` in this same file was already exercised (its refusal arm fires), which
 is why it did not appear in V-1403's list of never-fired length guards.
+
+### V-1405 — the suite's test COUNT is not a reliable fingerprint; its FILE count is
+
+Chasing what looked like a discrepancy turned into a measurement worth keeping. After V-1403 and
+V-1404 the node-project suite reported 29895 tests against a previous 29882 — a delta of 13, while
+the three files I touched account for 11.
+
+Attributed rather than assumed, in this order:
+
+1. **Not a peer.** `git log 3f0160369..HEAD` shows only my two commits, and `git diff --stat` over
+   that range shows exactly four paths changed — the three test files and the log.
+2. **My contribution is exactly +11**, established two independent ways: parsing `it(` declarations
+   plus `it.each` rows in both versions (6 + 3 + 2), and reverting all four paths and re-running the
+   full suite, which gave **29884** — 29895 − 11.
+3. **So the baseline moved.** The same content that measured 29882 measured 29884 on re-run.
+4. **Not a runner difference.** The first figure came from `scripts/verify-suite.mjs` and the second
+   from a direct `vitest run --project node`, so that was the obvious suspect — but running
+   `verify-suite.mjs` again on the reverted tree also gave **29884**. Same runner, same content, two
+   different totals.
+5. **HEAD is stable across three runs** (29895 twice via `--project node`, once via `verify-suite`),
+   so the variance is intermittent rather than a fixed offset.
+
+Ruled out as the source: the 27 test files that build arms by scanning a directory (265 arms, byte
+identical with and without my changes), the verification-log guard, and
+`dist-reading-suites-have-fresh-artifacts` (a fixed 4 arms, not one per artifact). The `10 skipped`
+figure was identical in every run, so this is **arms not materialising**, not arms being skipped.
+
+Not root-caused. What matters for anyone else sweeping here:
+
+- ⛔ **Do not use the test count as a tree fingerprint.** Two runs of identical content can differ by 2. I briefly suspected a peer commit and then a discovery-based guard on the strength of it.
+- ✅ **The file count is stable** — 3011 in all five runs — which is the quantity `EXPECTED_TEST_FILES`
+  actually ratchets on, so the gate itself is not affected by this.
+- To attribute a count delta to your own work, revert your paths and re-run, or parse the arms
+  statically. Both are exact; comparing against a remembered total is not.
