@@ -11260,3 +11260,41 @@ needed work are V-1455/1456/1457/1458.
 
 Full suite green: 3067 files, 30858 tests, exit 0. No new test file; `it` count unchanged at 28 against
 HEAD (the additions are `it.each` rows). No ratchet movement.
+
+## V-1460 — the SSRF guard's IPv4-mapped trap was covered only where another layer already caught it
+
+Carrying V-1459's instrument to the other validator that reads attacker-controlled input.
+`classifyUnsafeHost` is the SSRF guard for webhook targets and for the raw-host callers (SOCKS5 egress
+proxy host, account proxies). V-1447 verified its BEHAVIOUR against a host list and found it strong;
+what it never did was mutate its operands. Eight of them, swept: seven kill tests, one survived.
+
+**`host.startsWith('::ffff:')` — the IPv4-mapped trap.** Replacing it with `false` left all 44 tests
+green. The existing arm is named "rejects IPv4-mapped IPv6 (private-IPv4 smuggling)" and uses
+`::ffff:10.0.0.5` and `::ffff:192.168.0.1` — both of which embed a PRIVATE address, and the BlockList
+catches those on its own once the IPv6 literal is canonicalised. The prefix test was never the deciding
+layer for any covered input.
+
+Measured what it uniquely contributes, by classifying with the operand removed:
+
+    ::ffff:10.0.0.5         private -> private     (BlockList, unchanged)
+    ::ffff:169.254.169.254  private -> private     (BlockList, unchanged)
+    ::ffff:8.8.8.8          private -> null        ALLOWED
+    ::ffff:1.1.1.1          private -> null        ALLOWED
+
+So the operand is a blanket ban on the mapped FORM, and only the mapped-public case depends on it. The
+file's own header already states the intent — a "`::ffff:/96` trap that blocks all IPv4" — and the
+module explains why: no legitimate webhook or proxy target is written in mapped form, so permitting it
+hands an attacker an alternate encoding of any host, including one that a downstream parser may resolve
+differently from this one. Two mapped-public rows added to the existing arm; the operand now reds.
+
+The other seven are genuinely covered, and two of them strongly: removing the numeric/hex/octal
+encoding gate reds twelve tests, and the bracket-strip and exact-`localhost` operands three each.
+
+**Four mutations in the first pass reported "no tests" and were not results.** Deleting a whole `if`
+condition leaves `if () …`, a syntax error, which vitest reports as no tests rather than as a failure —
+the same shape as V-1459's botched fragment mutation. Redone by substituting `false` for the condition
+rather than deleting it, which keeps the file parseable and isolates the operand. A condition-deleting
+mutation is only safe when the operand has an adjacent `||`/`&&` to remove with it.
+
+Full suite green: 3067 files, 30858 tests, exit 0. No new test file; `it` count unchanged at 33 against
+HEAD (two assertions added to an existing arm). No ratchet movement.

@@ -87,6 +87,16 @@ describe('unsafeWebhookTargetReason — rejects internal/reserved targets', () =
   it('rejects IPv4-mapped IPv6 (private-IPv4 smuggling)', () => {
     expect(reason('https://[::ffff:10.0.0.5]/h')).toBeTruthy();
     expect(reason('https://[::ffff:192.168.0.1]/h')).toBeTruthy();
+    // V-1460 — a mapped PUBLIC address, which is what the `::ffff:` prefix test
+    // uniquely contributes. Both rows above embed a private IPv4, and the
+    // BlockList catches those on its own after canonicalisation: replacing
+    // `host.startsWith('::ffff:')` with `false` left this entire file green while
+    // `::ffff:8.8.8.8` and `::ffff:1.1.1.1` started classifying as null — allowed.
+    // The header calls this a trap that blocks ALL IPv4 for the reason the module
+    // gives, that no legitimate webhook or proxy target is written in the mapped
+    // form, so permitting it hands an attacker an alternate encoding of any host.
+    expect(reason('https://[::ffff:8.8.8.8]/h'), 'mapped PUBLIC IPv4').toBeTruthy();
+    expect(reason('https://[::ffff:1.1.1.1]/h'), 'mapped PUBLIC IPv4').toBeTruthy();
   });
 
   it('rejects numeric / hex / octal IP encodings that bypass isIP (SSRF-smuggling for 127.0.0.1)', () => {
