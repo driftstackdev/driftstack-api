@@ -15367,3 +15367,85 @@ snapshotting it first and restored it through git rather than from the scratchpa
 afterwards — `git diff` on that file is empty and `status: 402` is intact. Separately, the snapshot I did
 take of `openapi.ts` predated the fix, so restoring it silently reverted the 402; caught by re-reading the
 regenerated document rather than by any test, and re-applied.
+
+## V-1535 — the five recorded measurements, traced: three real, twelve not
+
+V-1534 left five measurements explicitly unverified rather than fixing or exempting them. Leaving them
+would have been the exact failure this arc keeps finding in other people's work — a recorded exception
+nobody re-reads — so this batch built the tool that was missing and finished them.
+
+**The tool.** A call-graph tracer over the route AST: resolve every `ApiError` subclass to its status, find
+each `throw` and attribute it to the innermost NAMED enclosing function, record which named functions call
+which, then propagate to a fixpoint and read off the codes reachable from each route registration. Its own
+correctness was checked first against a known answer — it reproduces both 402s V-1534 traced by hand,
+which sit two frames below their handler. A tracer that missed those would have been worthless and would
+have looked clean.
+
+It reported 15 operations throwing an undeclared code. **Three are real. Twelve are not, and the reasons
+are worth more than the fixes.**
+
+**Seven false — a shared error mapper.** `auth.ts` routes catch service failures and call
+`mapAuthFlowError`, which switches an `AuthFlowError` code onto one of five typed errors, one of them
+`EmailAlreadyRegisteredError` (409). Propagation therefore hands all five codes to all seven callers, and
+accuses `POST /v1/auth/login` of a 409. Every `email_already_registered` in the service is raised inside
+`async signup()` — and signup already declares 409. Proximity and propagation are both wrong here; only
+reading where the code originates settles it.
+
+**Five unreachable — a dep that is always wired.** The five proxy routes each throw
+`FeatureUnavailableError` inline under `if (!accountProxiesRepo)`. `bootstrap.ts` constructs
+`new DrizzleAccountProxiesRepo(dbHandle)` unconditionally, so in a real deployment that branch cannot
+fire. Declaring 503 there would document a response no customer can receive — the same defect as omitting
+one, pointing the other way. Same shape as the V-823 `SocksProxyBackend` note, found independently.
+
+**Three real, now declared:**
+
+```
+POST /v1/sessions                      404  unknown or cross-account profile_id
+POST /v1/agent-sessions                422  egress proxy undecryptable or failed its pre-launch probe
+POST /v1/agent-sessions/{id}/message   502  no usable Anthropic credential for the turn
+```
+
+The 404 carries its own corroboration: `POST /v1/profiles/{id}/launch` reaches the same profile resolver
+and **already declared 404**, so two published shapes disagreed about one code path. All three are
+caller-actionable, which is what makes the omission cost something.
+
+Pinned three ways each — the class still carries the status, the route file still throws it, the operation
+still declares it — so retyping the error and deleting the declaration both fail. Proved in all four
+directions: removing each of 404/422/502 from source and re-dumping reds naming that operation, and
+retyping `ByokAnthropicRequiredError` 502→409 reds on a different assertion.
+
+### A tool bug, caught by its own output
+
+The first insertion pass anchored on `"      429: {"` inside each operation. Two of the three targets
+declare their 4xx through an `...errors4xx` spread and have no literal `429:` block, so `index()` ran on
+and inserted into whichever LATER operation did. The 404 landed on `POST /v1/auth/oauth-client/start` and
+the 422 on `POST /v1/agent-sessions/{id}/livekit-token`.
+
+Caught immediately because the re-measurement said 14 remaining instead of 12 — the fix count did not
+match the fix intent. Restored byte-identical, redone by locating each `registerRoute` block by its own
+`method`/`path` and inserting after that block's `responses: {`, with the diff then asserted to be exactly
+three operations changed and none losing a code.
+
+That is the fourth tooling bug in three batches (V-1531 generics, V-1532 shifting offsets and inline
+descriptors, and this), and all four were caught the same way: **a count that did not match the intent.**
+Not one was caught by reading the code back. The practice is now explicit — after any bulk edit, diff the
+set of things actually changed against the set intended, and treat a mismatch as a bug in the tool.
+
+**Two pins moved, and both were worth the trip.**
+
+`sdk-python-generated-openapi-content-parity` asserts the published document contains no "pre-launch" or
+"subject to change" language, and it caught MY copy: the 422 description said the proxy "failed the
+pre-launch probe". Reworded to "the reachability probe run before dispatch". A customer-facing copy rule
+enforced against the person adding customer-facing copy, which is the only time such a rule is worth
+anything.
+
+`parameterised-routes-document-404` failed on `POST /v1/agent-sessions/{id}/message` — a route whose 404
+is plainly in the document. The cause was in the guard: it read a fixed **1400-character window** after
+`responses:`, and declaring one more response pushed the 404 past the cut. Every code beyond that offset
+was invisible, so the guard would report a false missing-404 on any operation whose responses block grew
+large enough — silently, and in the direction of accusing correct code. The block is already delimited by
+the split on `registerRoute(r, {`, so it now reads to the block's end and no magic length is involved.
+Proved still sharp by deleting that route's real 404: it reds naming the operation.
+
+A magic-number window is the same fault as a hand-list — a bound chosen for the data that existed when it
+was written. This one had no reason to be 1400 and no comment saying why.

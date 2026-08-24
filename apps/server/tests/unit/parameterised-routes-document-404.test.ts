@@ -88,7 +88,14 @@ function routes(): Route[] {
     const method = /method: '(\w+)'/.exec(block);
     if (path === null || method === null) continue;
     const start = block.indexOf('responses:');
-    const body = start >= 0 ? block.slice(start, start + 1400) : '';
+    // V-1535 — this read a fixed 1400-character window, which silently truncated
+    // any responses block longer than that and reported the codes past the cut as
+    // undocumented. Declaring one more response on
+    // POST /v1/agent-sessions/{id}/message pushed its 404 over the edge and the
+    // arm below failed on a route whose 404 is right there in the document. The
+    // block is already delimited by the split on `registerRoute(r, {`, so it can
+    // be read to its end and no magic length is needed.
+    const body = start >= 0 ? block.slice(start) : '';
     const codes = new Set([...body.matchAll(/\n\s*(\d{3}):/g)].map((c) => c[1]!));
     for (const s of body.matchAll(/\.\.\.(\w+)/g)) {
       for (const c of spreads.get(s[1]!) ?? []) codes.add(c);

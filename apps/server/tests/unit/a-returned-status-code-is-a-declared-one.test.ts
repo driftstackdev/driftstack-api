@@ -249,4 +249,70 @@ describe('a returned status code is a declared one', () => {
         'absent, and a generated client cannot branch on a code the document omits',
     ).toContain('402');
   });
+
+  it("V-1535 CRITICAL three more THROWN codes are declared, each traced to its operation through the call graph rather than by proximity. A shared error mapper makes proximity useless here: propagating every code in auth.ts's mapAuthFlowError to each of its callers accuses seven auth routes of a 409 only signup can raise, and signup already declares it. Each entry below was traced, then checked in source, and is pinned three ways - the class still carries the status, the route file still throws it, and the operation still declares it - so retyping the error or removing the declaration both fail here.", () => {
+    const errorsSource = readFileSync(resolve(REPO_ROOT, 'apps/server/src/lib/errors.ts'), 'utf8');
+    const statusOfClass = (name: string): string | undefined => {
+      const match = new RegExp(`export class ${name} extends ApiError \\{`).exec(errorsSource);
+      if (match === null) return undefined;
+      const start = match.index + match[0].length;
+      let depth = 1;
+      let end = start;
+      while (end < errorsSource.length && depth > 0) {
+        if (errorsSource[end] === '{') depth += 1;
+        else if (errorsSource[end] === '}') depth -= 1;
+        end += 1;
+      }
+      return /status:\s*(\d{3})/.exec(errorsSource.slice(start, end))?.[1];
+    };
+
+    const TRACED: ReadonlyArray<{
+      operation: string;
+      code: string;
+      errorClass: string;
+      routeFile: string;
+    }> = [
+      // Unknown or cross-account profile_id. POST /v1/profiles/{id}/launch reaches
+      // the same resolver and already declared 404 — the two shapes disagreed.
+      {
+        operation: 'POST /v1/sessions',
+        code: '404',
+        errorClass: 'NotFoundError',
+        routeFile: 'sessions.ts',
+      },
+      // Pre-launch egress proxy probe: undecryptable config or a failed probe,
+      // blocking the launch before any dispatch.
+      {
+        operation: 'POST /v1/agent-sessions',
+        code: '422',
+        errorClass: 'ProxyValidationFailedError',
+        routeFile: 'agent-sessions.ts',
+      },
+      // No usable Anthropic credential, thrown beside the 402 V-1534 declared.
+      {
+        operation: 'POST /v1/agent-sessions/{id}/message',
+        code: '502',
+        errorClass: 'ByokAnthropicRequiredError',
+        routeFile: 'agent-sessions.ts',
+      },
+    ];
+
+    const missing: string[] = [];
+    for (const entry of TRACED) {
+      expect(
+        statusOfClass(entry.errorClass),
+        `${entry.errorClass} still carries the status this arm pins`,
+      ).toBe(entry.code);
+      expect(
+        readFileSync(resolve(ROUTES_DIR, entry.routeFile), 'utf8'),
+        `${entry.errorClass} is still thrown in ${entry.routeFile}`,
+      ).toContain(`throw new ${entry.errorClass}`);
+      const codes = declared.get(entry.operation);
+      expect(codes, `${entry.operation} is still published`).not.toBeUndefined();
+      if (codes !== undefined && !codes.has(entry.code)) {
+        missing.push(`${entry.operation} can answer ${entry.code} and does not declare it`);
+      }
+    }
+    expect(missing.sort(), 'traced throws whose operation stopped declaring them').toEqual([]);
+  });
 });

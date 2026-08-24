@@ -579,6 +579,16 @@ function buildRegistry(): OpenAPIRegistry {
       },
     },
     responses: {
+      404: {
+        // V-1535 — reachable and previously undeclared. The profile resolver
+        // answers NotFoundError for a `profile_id` that does not exist or belongs
+        // to another account. POST /v1/profiles/{id}/launch reaches the same
+        // resolver and already declared it, so two published shapes disagreed
+        // about one code path.
+        description:
+          'The requested `profile_id` does not exist, or belongs to another account. The response does not distinguish the two.',
+        content: problemContent,
+      },
       201: {
         description: 'Session created.',
         content: { 'application/json': { schema: CreateSessionResponseSchema } },
@@ -4657,6 +4667,15 @@ function buildRegistry(): OpenAPIRegistry {
       },
     },
     responses: {
+      422: {
+        // V-1535 — reachable and previously undeclared. The pre-launch proxy
+        // probe throws ProxyValidationFailedError when a stored egress proxy
+        // cannot be decrypted or fails its probe, blocking the launch before any
+        // dispatch.
+        description:
+          'The egress proxy attached to this request could not be used: its stored configuration failed to decrypt, or it failed the reachability probe run before dispatch. No agent session was created and nothing was dispatched. Re-add the proxy and retry.',
+        content: problemContent,
+      },
       201: {
         description: 'Agent session created; transcript empty + full budget remaining.',
         content: { 'application/json': { schema: AgentSessionSchema } },
@@ -4899,6 +4918,14 @@ function buildRegistry(): OpenAPIRegistry {
       },
     },
     responses: {
+      502: {
+        // V-1535 — reachable and previously undeclared, and thrown beside the 402
+        // V-1534 declared: the account has no usable Anthropic credential and
+        // bundled-LLM cannot cover the turn.
+        description:
+          'No Anthropic credential is available for this turn. Set a stored key with PUT /v1/account/me/byok-anthropic-key, or supply `x-byok-anthropic-api-key` on the request.',
+        content: problemContent,
+      },
       200: {
         description:
           'Turn result — discriminated by `kind`: plan-executed (intents + results + ok) / clarify (clarifying_question) / refuse (refuse_reason) / logged-manual (transcript-only operator entry). The `session` envelope is always present and carries the updated transcript_length + token_budget_remaining counters. Model-backed variants include `usage` when provider evidence is available.',
