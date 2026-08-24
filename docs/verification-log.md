@@ -11760,3 +11760,40 @@ removing a probe reds the count.
 
 Full suite green: 3067 files, 30871 tests, exit 0. No new test file; 6 `it` declarations to 8. No
 ratchet movement.
+
+## V-1472 — the "probe aimed at nothing" class, swept across the sibling isolation files
+
+V-1471 found that a refusal assertion is satisfied by a route that does not exist: renaming a probe to
+`/launchZZ` left every arm green, because a missing route 404s exactly like a present one that correctly
+refuses. That is a property of every refusal-based suite, not of one file, so the six family-specific
+isolation files were checked for it.
+
+They compose their probes as `` `/v1/<family>/${id}${route.suffix}` `` against a literal suffix table,
+so the URLs can be expanded statically. Expanded and matched against the 245 registered `/v1` routes:
+
+    cross-account-agent-session-isolation     18 probes
+    cross-account-session-isolation           13
+    cross-account-profile-isolation           10
+    cross-account-crypto-order-isolation       6
+    cross-account-proxy-isolation              3
+    cross-account-snapshot-isolation           3
+                                              --
+                                              53 composed probes, 0 unregistered
+
+**One flagged and it was my matcher, not the test.**
+`GET /v1/agent-sessions/:id/downloads/content?name=secret.pdf` carries a query string while routes
+register the path alone; the route is real, at `agent-sessions.ts:3384`. Re-run with the query stripped,
+all 53 resolve. Worth recording because the first pass would have been filed as a finding — the same
+shape as V-1470's `/v1/mac-nodes`, where the flagged item dissolved on inspection.
+
+So the class is bounded to the file where it was found. The derived refusal suites —
+`customer-scope-refusal-coverage` and `admin-scope-refusal-coverage` — cannot have it at all, because
+they build their route lists from route source rather than writing URLs by hand.
+
+**No shared guard added, and the reason is the same as V-1468's.** The invariant is worth holding for
+all six, but it has no home: widening the V-1471 file to police its siblings would break the name it is
+filed under ("every creatable family"), and a new file means moving `EXPECTED_TEST_FILES`, which still
+reads 3012 against an actual 3067 — a peer's drift I am not going to absorb. The measurement is here so
+whoever reconciles those ratchets can add one arm with the expansion already worked out.
+
+No source or test change; log entry only.
