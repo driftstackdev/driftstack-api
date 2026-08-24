@@ -13953,3 +13953,56 @@ alone in V-1499.
 The new arm asserts the SPEC and anchors itself to the reader: it checks the declaration exists **and**
 that the route still contains `req.headers['last-event-id']`, so a declaration cannot outlive the code
 that honours it. Reverting the declaration reds it.
+
+## V-1509 — a scope that reads more than the reference page says it reads
+
+`read:webhooks` gates four methods in `services/webhooks.ts`: `list`, `listWithCounts`, `get` — and
+`listDeliveries`. The canonical reference page described it as **"Read webhook endpoints only."**
+
+Deliveries are a different resource from endpoints, and the rows are not thin:
+`last_response_status`, `last_response_excerpt`, `last_error` — the status codes, body excerpts and
+error text the customer's OWN endpoint returned, plus event types and attempt history. A customer minting
+a least-privilege key so a script can list their webhook endpoints was also handing that key their
+delivery log.
+
+**This fails in the opposite direction to the defect the sibling guard was built for.**
+`dead-scopes-are-labelled-on-customer-surfaces` exists because scopes described as capabilities were
+enforced nowhere — the key granted LESS than advertised, which fails closed and merely wastes the
+customer's afternoon. This one grants MORE than advertised, to someone whose entire reason for reading
+that table is to decide how much access to hand out.
+
+**Two other customer surfaces have been right the whole time.** `marketing-site/docs/api-keys.astro` and
+`docs/oauth-apps.astro` both say _"List webhook endpoints + delivery history."_ The page that was wrong
+is the one its own "Source of truth" section points at. That is V-1502's shape again — siblings drifting
+apart with the correct wording sitting one file away — except here the odd one out is the canonical
+surface rather than a peripheral one, which is why the census that finds it has to compare against code
+rather than against the other pages.
+
+The word doing the damage is `only`. Without it the row would be incomplete; with it, it is a statement
+that the scope stops where it does not.
+
+### The census that found it, and the one that nearly hid it
+
+Reading enforcement out of `requireScope(...)` call sites in `routes/` reported **zero** sites for
+`read:audit`, `read:api-keys` and `read:webhooks`, which would have made all three look dead. They are
+not: this codebase gates in two places, and those three are enforced in the SERVICE layer through
+`throwIfMissingScope(ctx, …)`. The dead-scopes guard's header names both mechanisms; my grep used one.
+Had I stopped there the finding would have been "three documented scopes are enforced nowhere" — loud,
+alarming and wrong in the direction that wastes everyone's time.
+
+`read:billing` was checked the same way and is accurate: eight enforcement sites — `/v1/billing`,
+`/v1/billing/crypto-checkout/quote`, `/v1/account/cost`, and the five crypto-order reads — every one
+covered by the page's enumeration. `admin:billing` covers crypto checkout and order cancellation, which
+the row's "change subscription" phrasing carries and whose route comments cite this same page for the
+reasoning. Neither is a finding, and both were checked before this one was written up.
+
+### The guard derives the claim from the gate
+
+The new arm does not pin the sentence. It locates `async listDeliveries(` in the service, asserts the
+`read:webhooks` gate lives INSIDE that method rather than merely somewhere in the file, and only then
+requires the page to mention delivery history and `last_response_excerpt`. So if delivery listing is ever
+moved off this scope, the arm retires the claim instead of freezing a description that has stopped being
+true — which is the failure V-1503 found in a guard pinning three describes that never shipped.
+
+Both directions proven: restoring "endpoints only" reds the page assertion, and removing the gate from
+`listDeliveries` reds the anchor.

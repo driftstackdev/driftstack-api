@@ -50,6 +50,26 @@ describe('docs reference/scopes content parity', () => {
     expect(body).toMatch(/`read:billing`/);
   });
 
+  it("V-1509 CRITICAL read:webhooks is described as everything it actually unlocks. The service gates FOUR methods on it — list, listWithCounts, get and listDeliveries — so the scope also reads delivery history, whose rows carry last_response_status, last_response_excerpt and last_error from the customer's own endpoint. This page said `Read webhook endpoints only.`, which understates the grant: someone minting a least-privilege key to let something list their endpoints was also handing it their delivery log. The marketing api-keys and oauth-apps pages have said `List webhook endpoints + delivery history.` all along, so the canonical reference was the one surface out of step. Derived from the service rather than restated: the gate on listDeliveries is read here, so removing it retires the claim instead of stranding it.", () => {
+    const service = readFileSync(
+      resolve(REPO_ROOT, 'apps/server/src/services/webhooks.ts'),
+      'utf8',
+    );
+    // The claim rests on listDeliveries being gated by this scope. Assert the
+    // gate exists inside that method, not merely somewhere in the file.
+    const start = service.indexOf('async listDeliveries(');
+    expect(start, 'listDeliveries is still declared in the webhooks service').toBeGreaterThan(-1);
+    const body_ = service.slice(start, start + 2000);
+    expect(body_, 'listDeliveries is gated on read:webhooks').toMatch(
+      /throwIfMissingScope\(ctx, 'read:webhooks'\)/,
+    );
+
+    expect(body).toMatch(/`read:webhooks`[^|]*\|[^|]*\|[^|]*delivery history/);
+    expect(body).toMatch(/last_response_excerpt/);
+    // The understatement must not come back.
+    expect(body).not.toMatch(/Read webhook endpoints only/);
+  });
+
   it('broad-satisfies-granular rule pinned: a `read` key satisfies every `read:*` scope (the core scope-checking semantic; drift to making broad scopes NOT satisfy granular would break customers who hold legacy broad keys against routes that gate on granular scopes)', () => {
     expect(body).toMatch(
       /A key with a broad scope \*\*satisfies\*\* any granular scope on\s+the same verb/,
