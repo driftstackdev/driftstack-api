@@ -9857,3 +9857,39 @@ That second row is the point. Three self-inflicted extractor faults have now hap
 short life — the four-line window in V-1425, and this newline — and each produced a _wrong answer that
 looked like a right one_: the first a false positive, the second a false negative. A census is only as
 good as its extractor, and the extractor needs its own tests. Both are now mutations that red.
+
+### V-1427 — a fixture that did not reproduce the wiring, so the value production serves was untestable
+
+`/version` reports `agent_execution: deps.agentExecutionLive ? 'live' : 'simulated'`, and coverage put
+the `'live'` side at zero. The existing arm covers `'simulated'` and asserts the other value in a
+**comment**: "Prod (FLEET_CONTROL_PLANE_ENABLED=true) → 'live'".
+
+Who reads the field is what makes it matter. The GUI keys its "actions are simulated" banner on this
+and nothing else — `AgentChatView` records that keying on `driver` instead "wrongly showed preview
+mode", because `driver` is `'mock'` in production even when automation is live through the fleet path.
+A flag stuck at `'simulated'` tells customers their real browser actions are fake; stuck at `'live'` it
+tells a dev deployment the stubbed ones are real.
+
+**The reason it was untestable is the finding.** Bootstrap drives both from one config flag —
+`agentExecutionLive: config.fleetControlPlaneEnabled` — while `build-test-app` wired the fleet
+control-plane deps under `enableFleetControlPlane` and left `agentExecutionLive` unset. So the fixture
+reported `'simulated'` under a configuration production reports as `'live'`, and no test could reach
+the value the GUI actually keys on. The fixture now mirrors bootstrap, which is the change that makes
+the arm possible.
+
+The mutations separate the two arms cleanly, and the separation is the point:
+
+| mutation                                   | reds                 |
+| ------------------------------------------ | -------------------- |
+| the flag is ignored — always `'simulated'` | **the new arm only** |
+| the flag is inverted                       | both arms            |
+| the fixture wiring removed again           | the new arm only     |
+
+The pre-existing arm already caught an inversion, because with no fleet an inverted flag reports
+`'live'`. What it could not catch is a flag that is simply not read — the more likely failure, since
+that is what a dropped dependency or a renamed option produces, and it leaves every deployment
+reporting `'simulated'` forever. That case is now covered.
+
+Recorded alongside: this is the same shape as `an-auditing-harness-must-reproduce-the-audited-environment`.
+The gap was not in the source or in the test — it was that the harness did not reproduce the wiring, so
+the outcome had no way to occur.

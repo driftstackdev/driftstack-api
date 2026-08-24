@@ -1763,8 +1763,15 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     ...(byokAnthropicService !== undefined ? { byokKeyCache: testByokKeyCache } : {}),
     // V-820 — wire the fleet control-plane deps so the live WS handler
     // registers. All three are required by the app.ts activation gate.
+    //
+    // V-1427 — `agentExecutionLive` joins them because bootstrap drives BOTH from
+    // one config flag (`agentExecutionLive: config.fleetControlPlaneEnabled`). The
+    // fixture wired the WS deps and left the flag unset, so `/version` reported
+    // `agent_execution: 'simulated'` under a configuration production reports as
+    // 'live' — and the value the GUI actually keys on could not be reached from any
+    // test. A fixture that does not reproduce the wiring cannot test the outcome.
     ...(opts.enableFleetControlPlane === true
-      ? { fleetNodeAuth, fleetNonceCache, fleetControlRegistry }
+      ? { fleetNodeAuth, fleetNonceCache, fleetControlRegistry, agentExecutionLive: true }
       : {}),
     // Arc 2 sub-slice 8.4 (v2-#8) — stub MFA-key for the gui_control_key
     // mint. 32 raw bytes base64-encoded. Tests assert the route works

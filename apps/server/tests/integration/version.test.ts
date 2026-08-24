@@ -104,6 +104,28 @@ describe('GET /version', () => {
     expect(body.playwright_browser).toBeUndefined();
   });
 
+  // V-1427 — the arm below covers 'simulated' and asserted the other value in a
+  // COMMENT: "Prod (FLEET_CONTROL_PLANE_ENABLED=true) → 'live'". Coverage agreed the
+  // string 'live' had never been produced by this expression.
+  //
+  // It matters because of who reads it. The GUI keys its "actions are simulated"
+  // banner on this field and nothing else — `AgentChatView` records that keying on
+  // `driver` instead "wrongly showed preview mode", because `driver` is 'mock' in
+  // production even when automation is live through the fleet path. So a flag stuck
+  // at 'simulated' tells customers their real browser actions are fake, and one stuck
+  // at 'live' tells a dev deployment the stubbed ones are real.
+  it("#139 CRITICAL agent_execution is 'live' when the fleet control plane IS enabled — the value the GUI uses to drop the simulated-actions banner, and the one production actually serves.", async () => {
+    fx = await buildTestApp({ enableFleetControlPlane: true });
+    const res = await fx.app.inject({ method: 'GET', url: '/version' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<VersionResponse>();
+    expect(body.agent_execution).toBe('live');
+    expect(
+      body.driver,
+      'and `driver` stays mock in the same breath — the reason this field exists rather than reusing it',
+    ).toBe('mock');
+  });
+
   it("#139 — surfaces agent_execution; 'simulated' when the fleet control plane is off (test default)", async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({ method: 'GET', url: '/version' });
