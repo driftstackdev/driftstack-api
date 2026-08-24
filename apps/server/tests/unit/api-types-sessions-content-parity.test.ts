@@ -105,7 +105,7 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
   it('CreateSessionRequest: selectable archetype optional + canonical bounded label + metadata/profile/persona fields', () => {
     expect(body).toMatch(/export const SessionLabelSchema = z\.string\(\)\.max\(120\);/);
     expect(body).toMatch(
-      /export const CreateSessionRequestSchema = z\.object\(\{\s*\n?\s*archetype: SelectableArchetypeIdSchema\.optional\(\),\s*\n?\s*\/\*\* V-169 — harness purpose; defaults to `production_customer`\. \*\/\s*\n?\s*purpose: SessionPurposeSchema\.optional\(\),\s*\n?\s*label: SessionLabelSchema\.optional\(\),\s*\n?\s*metadata: SessionMetadataSchema\.optional\(\),\s*\n?\s*[\s\S]*?profile_id: z\.string\(\)\.optional\(\),\s*\n?\s*[\s\S]*?behavioral_profile: BehavioralProfileSchema\.optional\(\),\s*\n?\s*\}\);/,
+      /export const CreateSessionRequestSchema = z\.object\(\{\s*\n?\s*archetype: SelectableArchetypeIdSchema\.optional\(\),\s*\n?\s*\/\*\* V-169 — harness purpose; defaults to `production_customer`\. \*\/\s*\n?\s*purpose: SessionPurposeSchema\.optional\(\),\s*\n?\s*label: SessionLabelSchema\.optional\(\),\s*\n?\s*metadata: SessionMetadataSchema\.optional\(\),\s*\n?\s*[\s\S]*?profile_id: ProfileIdInputSchema\.optional\(\),\s*\n?\s*[\s\S]*?behavioral_profile: BehavioralProfileSchema\.optional\(\),\s*\n?\s*\}\);/,
     );
     // 2026-05-20 anti-enumeration framing pinned
     expect(body).toMatch(/a profile_id outside it returns/);

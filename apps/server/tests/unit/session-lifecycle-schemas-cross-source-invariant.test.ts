@@ -84,7 +84,11 @@ describe('W895 Session lifecycle schemas cross-source invariant', () => {
     expect(p).toMatch(/label: SessionLabelSchema\.optional\(\)/);
     // Bounded-blob fix — metadata is the size-capped SessionMetadataSchema.
     expect(p).toMatch(/metadata: SessionMetadataSchema\.optional\(\)/);
-    expect(p).toMatch(/profile_id: z\.string\(\)\.optional\(\)/);
+    // V-1489 — was `profile_id: z\\.string\\(\\)\\.optional\\(\\)`. The accepted-input
+    // contract (`prof_<uuid>` or a bare uuid) lived only in the server's
+    // parseProfileId, so this schema could not express it and the document
+    // published the field unconstrained. It is `ProfileIdInputSchema` now.
+    expect(p).toMatch(/profile_id: ProfileIdInputSchema\.optional\(\)/);
     expect(p).toMatch(/behavioral_profile: BehavioralProfileSchema\.optional\(\)/);
   });
 

@@ -8,6 +8,7 @@ import {
   SessionIdSchema,
 } from './common.js';
 import { EgressCapabilitiesSchema } from './egress.js';
+import { ProfileIdInputSchema } from './profiles.js';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Session resource
@@ -155,7 +156,7 @@ export const CreateSessionRequestSchema = z.object({
    * `prof_<uuid>` id the profiles API returns OR a bare uuid (the server
    * normalizes); kept loose here so the prefixed form validates client-side too.
    */
-  profile_id: z.string().optional(),
+  profile_id: ProfileIdInputSchema.optional(),
   /**
    * 2026-06-05 — behavioural persona for this session. When supplied, the
    * harness drives touch/scroll/typing with the selected persona's profile;

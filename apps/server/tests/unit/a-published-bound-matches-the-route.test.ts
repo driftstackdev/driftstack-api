@@ -213,13 +213,17 @@ const UNCONSTRAINED_BY_DESIGN: Record<string, string> = {
 const PATH_ID_FAMILY = /^[A-Z]+ \S+ \{(id|deliveryId)\}$/;
 
 const KNOWN_DIVERGENCE_DEFERRED: Record<string, string> = {
-  'POST /v1/sessions .profile_id':
-    'parseProfileId enforces `prof_<uuid> | <uuid>` and answers 400 otherwise, so this is the same ' +
-    'defect as the agent-sessions rail fixed in V-1476. It is deferred rather than fixed because ' +
-    'this endpoint publishes CreateSessionRequestSchema DIRECTLY — the runtime schema is the ' +
-    'document — so adding the pattern changes which layer rejects a malformed id and what the ' +
-    'error body looks like. Nothing currently exercises that path (no test posts a malformed ' +
-    'profile_id anywhere), which is the first thing to fix, not the last.',
+  // V-1489 — emptied. `POST /v1/sessions .profile_id` was the only entry: the
+  // endpoint publishes CreateSessionRequestSchema directly, so the runtime
+  // schema IS the document and the pattern could not be added without moving
+  // the accepted-input contract into api-types, where a shared package can
+  // express it. That is done, and the field publishes
+  // `^(?:prof_)?<uuid>$` now.
+  //
+  // Kept as an empty map rather than deleted: the staleness arm above treats
+  // every key here as something that must still be unconstrained, so a future
+  // deferral gets the same anti-rot treatment without anyone rebuilding the
+  // mechanism.
 };
 
 describe('V-927 a published bound matches the route', () => {

@@ -1514,7 +1514,8 @@
             "additionalProperties": {}
           },
           "profile_id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^(?:prof_)?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
           },
           "behavioral_profile": {
             "type": "string",
@@ -5698,7 +5699,8 @@
                     "additionalProperties": {}
                   },
                   "profile_id": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^(?:prof_)?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
                   },
                   "behavioral_profile": {
                     "type": "string",

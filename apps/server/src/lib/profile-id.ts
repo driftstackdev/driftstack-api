@@ -5,6 +5,10 @@
 // with the historical bare-uuid `profile_id` input contract) and returns the bare
 // uuid, throwing a 400 on anything else.
 
+import {
+  PROFILE_ID_INPUT_RE as CANONICAL_PROFILE_ID_INPUT_RE,
+  PROFILE_UUID_BODY,
+} from '@driftstack/api-types';
 import { BadRequestError } from './errors.js';
 
 // Explicit `[0-9a-fA-F]` rather than the `/i` flag, and one shared body. The
@@ -13,24 +17,16 @@ import { BadRequestError } from './errors.js';
 // accepting uppercase — over-narrowing the document, which is the worse
 // direction of the same bug this is here to fix. Semantically identical: `i`
 // affects only the hex letters, and `-` has no case.
-const UUID_BODY = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
-const UUID_RE = new RegExp(`^${UUID_BODY}$`);
+// V-1489 — the accepted-input pattern now lives in `@driftstack/api-types`
+// beside `ProfileIdSchema`, because `CreateSessionRequestSchema` needs it to
+// publish `profile_id` and a shared package cannot import from the server. This
+// module keeps its own name for it so call sites and `openapi.ts` are unchanged,
+// but the pattern itself is imported rather than composed a second time — the
+// V-1484 lesson, applied before the copy existed rather than after.
+const UUID_RE = new RegExp(`^${PROFILE_UUID_BODY}$`);
 const PROFILE_ID_PREFIX = 'prof_';
 
-/**
- * The full set of inputs `parseProfileId` accepts, as a single pattern, for
- * PUBLICATION.
- *
- * V-1476 — the accepted contract used to exist only as prose: a comment on the
- * agent-sessions request mirror reading "prof_<uuid>; a bare uuid is also
- * accepted", which ships to no one. The document published a bare `string`, so
- * the 400 was the only way to discover the format.
- *
- * Composed from `UUID_BODY` rather than written out again, so the pattern the
- * document advertises and the pattern the parser enforces cannot drift — the
- * whole failure class this was found in.
- */
-export const PROFILE_ID_INPUT_RE = new RegExp(`^(?:${PROFILE_ID_PREFIX})?${UUID_BODY}$`);
+export const PROFILE_ID_INPUT_RE = CANONICAL_PROFILE_ID_INPUT_RE;
 
 /** prof_<uuid> | <uuid> → <uuid>. Throws BadRequestError (400) otherwise. */
 export function parseProfileId(input: string): string {

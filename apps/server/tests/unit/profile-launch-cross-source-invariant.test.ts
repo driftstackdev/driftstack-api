@@ -26,7 +26,11 @@ describe('Slice 1-2 — profile_id + POST /v1/profiles/:id/launch cross-source i
     const lib = resolve(REPO_ROOT, 'packages/api-types/src/sessions.ts');
     expect(existsSync(lib)).toBe(true);
     const body = read(lib);
-    expect(body).toMatch(/profile_id: z\.string\(\)\.optional\(\),/);
+    // V-1489 — was `profile_id: z\\.string\\(\\)\\.optional\\(\\)`. The accepted-input
+    // contract (`prof_<uuid>` or a bare uuid) lived only in the server's
+    // parseProfileId, so this schema could not express it and the document
+    // published the field unconstrained. It is `ProfileIdInputSchema` now.
+    expect(body).toMatch(/profile_id: ProfileIdInputSchema\.optional\(\),/);
     expect(body).toMatch(/2026-05-20 — profile binding\. When supplied/);
     expect(body).toMatch(/a profile_id outside it returns/);
 

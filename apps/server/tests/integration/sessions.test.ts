@@ -83,6 +83,42 @@ describe('POST /v1/sessions reports fields it ignored', () => {
     ).toBe('archetypeee');
   });
 
+  // V-1489 — the coverage V-1476 named as the prerequisite for publishing this
+  // field's pattern.
+  //
+  // `parseProfileId` accepts `prof_<uuid>` or a bare uuid and answers 400 on
+  // anything else, but nothing anywhere posted a malformed `profile_id`, so the
+  // refusal was unpinned. That mattered because the fix — moving the shape into
+  // `CreateSessionRequestSchema` so the published document carries it — changes
+  // WHICH layer refuses. Without this arm the change would be invisible either
+  // way: silent success and correct refusal look identical when nothing asks.
+  //
+  // Pinned on the CONTRACT rather than the mechanism: a 400 that names the
+  // field. Asserting the message text would pin the layer instead and break on
+  // the very change it exists to protect.
+  it('CRITICAL a malformed profile_id is refused with a 400 that names the field. Accepted forms are prof_<uuid> and a bare uuid; anything else must not reach session creation.', async () => {
+    fx = await buildTestApp();
+    for (const bad of [
+      'not-a-uuid',
+      'prof_not-a-uuid',
+      'prof_',
+      '',
+      'prof_prof_00000000-0000-4000-8000-000000000000',
+    ]) {
+      const res = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/sessions',
+        headers: auth(fx),
+        payload: { profile_id: bad },
+      });
+      expect(res.statusCode, `profile_id=${JSON.stringify(bad)} must be refused`).toBe(400);
+      expect(
+        res.body.toLowerCase(),
+        `the refusal for ${JSON.stringify(bad)} must name the field the caller got wrong`,
+      ).toContain('profile_id');
+    }
+  });
+
   it('CRITICAL a well-formed create is not tagged', async () => {
     // Without this, tagging every request would satisfy the arm above while
     // making the header meaningless.

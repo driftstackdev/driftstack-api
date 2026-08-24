@@ -10,6 +10,31 @@ import { Iso8601Schema, PrefixedId, SelectableArchetypeIdSchema } from './common
 import { OpenVpnProxyConfigSchema, WireGuardProxyConfigSchema } from './egress.js';
 
 export const ProfileIdSchema = PrefixedId('prof');
+
+/**
+ * V-1489 — what a caller may SEND for a profile id, which is broader than what
+ * the API returns.
+ *
+ * `ProfileIdSchema` above is the canonical emitted form: `prof_<uuid>`,
+ * lowercase. The accepted INPUT set has always been wider — `parseProfileId` in
+ * the server strips an optional `prof_` and accepts a bare uuid, case-insensitively
+ * on the hex, for backward compatibility with the historical bare-uuid contract.
+ *
+ * That contract lived only in server code, so `CreateSessionRequestSchema` below
+ * could not express it and published `profile_id` as an unconstrained string.
+ * Declaring it here rather than in the server is what lets the schema — and
+ * therefore the document — carry it, without a second copy of the regex.
+ *
+ * Explicit `[0-9a-fA-F]` rather than an `/i` flag: the flag has no JSON Schema
+ * expression, so a pattern published from it would advertise a lowercase-only
+ * contract the server does not enforce.
+ */
+export const PROFILE_UUID_BODY =
+  '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
+export const PROFILE_ID_INPUT_RE = new RegExp(`^(?:prof_)?${PROFILE_UUID_BODY}$`);
+export const ProfileIdInputSchema = z
+  .string()
+  .regex(PROFILE_ID_INPUT_RE, { message: 'must be "prof_<uuid>" or a bare uuid' });
 export type ProfileId = z.infer<typeof ProfileIdSchema>;
 
 export const ProfileNameSchema = z

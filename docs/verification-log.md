@@ -12754,3 +12754,68 @@ Two mutations. Dropping the new 429 from `POST /v1/oauth/token` reds it naming t
 `app.requireOwner` to the revoke registration — whose operation declares no 403 — reds it with
 `POST /v1/oauth/revoke: gated, missing 403`, which is the proof the gate side is read from the route
 file rather than restated from the document. Both restored byte-identical.
+
+## V-1489 — closing the one deferral V-1476 left, and the coverage it said had to come first
+
+`POST /v1/sessions` published `profile_id` as an unconstrained string while `parseProfileId` accepted
+`prof_<uuid>` or a bare uuid and answered 400 on anything else. V-1476 fixed the identical defect on the
+agent-sessions rail and deferred this one, for a reason it stated: the endpoint publishes
+`CreateSessionRequestSchema` DIRECTLY, so the runtime schema IS the document, and adding the pattern
+changes which layer refuses. It also named the prerequisite — _nothing currently exercises that path_.
+
+**The prerequisite first, and it is not ceremony.** Nothing anywhere posted a malformed `profile_id`, so
+the refusal was unpinned; a change that moved it, weakened it, or removed it would have looked identical
+from the outside. The arm added here posts five malformed forms — `not-a-uuid`, `prof_not-a-uuid`,
+`prof_`, empty, and a doubled prefix — and requires a 400 that NAMES the field.
+
+Pinned on the contract rather than the mechanism, deliberately. Asserting the message text would have
+pinned the layer, and broken on exactly the change it exists to protect. What a caller is owed is a 400
+identifying the field they got wrong; which of two layers produces it is an implementation detail, and
+a test that cannot tell them apart is the right test here.
+
+**Where the pattern had to live.** A shared package cannot import from the server, so
+`CreateSessionRequestSchema` could not reach `PROFILE_ID_INPUT_RE` in `apps/server/src/lib/profile-id.ts`
+— which is why the contract had stayed server-side and unpublished in the first place. Adding a second
+copy in api-types would have been the V-1484 defect committed knowingly, so the canonical pattern moved
+INTO api-types beside `ProfileIdSchema`, and `lib/profile-id.ts` now imports it under its existing name.
+Call sites and `openapi.ts` are untouched; there is one regex.
+
+Worth separating the two schemas, since the names invite confusion. `ProfileIdSchema` is the canonical
+EMITTED form — `prof_<uuid>`, lowercase, what the API returns. `ProfileIdInputSchema` is the wider
+ACCEPTED set — optional prefix, case-insensitive hex — kept for the historical bare-uuid contract. They
+are different contracts in different directions and now both exist as such rather than one being implied
+by server code.
+
+Explicit `[0-9a-fA-F]` rather than an `/i` flag, for the reason V-1481 established: the flag has no JSON
+Schema expression, so publishing from it would advertise a lowercase-only contract the server does not
+enforce.
+
+`KNOWN_DIVERGENCE_DEFERRED` is now empty. Kept as an empty map rather than deleted — the staleness arm
+treats every key in it as something that must still be unconstrained, so the next deferral inherits the
+anti-rot behaviour instead of someone rebuilding it.
+
+**A census I ran and did not report.** Before this I tried the opposite direction of the response-code
+family: operations DECLARING a status nothing can produce, which the 404 guard itself calls a real
+defect. It returned 110 candidates out of 232 registrations, and the first was
+`recovery-codes/regenerate` declaring 404 — which V-1487 established last batch is genuinely reachable,
+through a SERVICE throw. That is the flaw: my producible-set counted handler-local throws only, and most
+404s come from services. A ratio that large is an instrument fault, not a finding. Doing it properly
+needs whole-program reachability, which V-1487 already showed does not generalise past a listed roster,
+so the direction is recorded as not tractable with this machinery rather than half-reported.
+
+**Three pins froze the old line, and I found them the wrong way round.** Rule 2 says enumerate every
+frozen occurrence before editing. I did that for `lib/profile-id.ts` — the file I expected to touch —
+and not for `api-types/src/sessions.ts`, which is the file this change actually lands in. The full suite
+found them instead: `api-types-sessions-content-parity` quotes the whole
+`CreateSessionRequestSchema` body, `profile-launch-cross-source-invariant` and
+`session-lifecycle-schemas-cross-source-invariant` each quote the single line. All three are re-quoted in
+this commit, titles paraphrasing and sentinels quoting, with a per-occurrence negative: reverting the
+schema reds each of the three independently.
+
+Worth naming the mistake precisely, because "enumerate the pins" is easy to perform on the wrong file.
+The rule is not "grep the file you looked at first" — it is "grep the file whose TEXT changes". Those
+were different files here, and the plan drifted between them when the pattern moved into api-types.
+
+One mutation on the fix itself: reverting `profile_id` to `z.string().optional()` reds the derived census naming
+`POST /v1/sessions .profile_id` — which also confirms the emptied deferral is no longer covering it.
+Restored byte-identical.
