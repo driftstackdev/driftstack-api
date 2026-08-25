@@ -17,9 +17,10 @@
 // worker. Pure-cron-style scheduling (not exact-timing); slop of
 // up to one tick interval is acceptable.
 
+import { ARCHETYPE_REGISTRY } from '@driftstack/api-types';
 import type { AccountContext } from './auth.js';
 import { requireScope as throwIfMissingScope } from '../lib/errors-helpers.js';
-import { ConflictError, NotFoundError } from '../lib/errors.js';
+import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js';
 
 export interface ValidationScheduleRow {
   id: string;
@@ -79,6 +80,37 @@ export interface ProcessTickResult {
   skipped?: boolean;
 }
 
+/**
+ * Every archetype the platform knows about, at any readiness status.
+ *
+ * V-1582 — deliberately the WHOLE registry rather than `SELECTABLE_ARCHETYPE_IDS`.
+ * That narrower set is the customer-facing one (`launch` + `available`), and a
+ * validation harness exists precisely to exercise an archetype BEFORE it becomes
+ * selectable — gating on the customer set would refuse the one job this service
+ * has. `reference` entries are in scope for the same reason.
+ */
+const KNOWN_ARCHETYPE_IDS: ReadonlySet<string> = new Set(ARCHETYPE_REGISTRY.map((a) => a.id));
+
+/**
+ * V-1582 — refuse an archetype the registry does not contain.
+ *
+ * `PUT /v1/admin/validation-schedules` took `archetype_id: z.string().min(1)` and
+ * persisted whatever it was given, with `enabled` defaulting to true and
+ * `next_run_at` one cadence out. `findDue` selects exactly `enabled = true AND
+ * next_run_at <= now`, so a typo did not fail — it became a row the tick loop
+ * re-dispatched every cadence, for an archetype that does not exist, with the
+ * ledger recording each fire as a real validation run.
+ *
+ * NOT applied to `remove`. A schedule written before this guard, or one whose
+ * archetype is later retired from the registry, must stay deletable; validating
+ * the way out as well as the way in is how a bad row becomes permanent.
+ */
+function assertKnownArchetype(archetypeId: string): void {
+  if (!KNOWN_ARCHETYPE_IDS.has(archetypeId)) {
+    throw new BadRequestError(`Unknown archetype "${archetypeId}".`);
+  }
+}
+
 export class ValidationHarnessService {
   constructor(
     private readonly repo: ValidationSchedulesRepo,
@@ -99,6 +131,7 @@ export class ValidationHarnessService {
     input: UpsertValidationScheduleInput,
   ): Promise<ValidationScheduleRow> {
     throwIfMissingScope(ctx, 'driftstack_internal_admin');
+    assertKnownArchetype(input.archetypeId);
     if (input.cadenceSeconds < 60) {
       throw new ConflictError('cadence_seconds must be ≥ 60.');
     }
@@ -125,6 +158,7 @@ export class ValidationHarnessService {
     reason?: string,
   ): Promise<{ runId: string }> {
     throwIfMissingScope(ctx, 'driftstack_internal_admin');
+    assertKnownArchetype(archetypeId);
     const run = await this.recapture.triggerRecapture({
       trigger: 'manual_request',
       archetypeId,

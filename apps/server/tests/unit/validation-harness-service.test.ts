@@ -11,6 +11,13 @@
 //     records per-archetype errors without aborting the batch
 
 import { describe, expect, it } from 'vitest';
+import { ARCHETYPE_REGISTRY } from '@driftstack/api-types';
+
+// V-1582 — the service refuses an archetype the registry does not contain, so
+// ARCH no longer stands for one. Taken from the registry rather than written
+// out, so retiring a slug cannot rot this fixture.
+const ARCH = ARCHETYPE_REGISTRY[0]?.id ?? '';
+const UNKNOWN_ARCH = 'totally-not-an-archetype';
 import type { ApiKeyScope } from '@driftstack/api-types';
 import type { AccountContext } from '../../src/services/auth.js';
 import {
@@ -140,7 +147,7 @@ describe('V-553.B-28 ValidationHarnessService.upsert', () => {
     const svc = new ValidationHarnessService(repo, bridge, LOCKED);
     await expect(
       svc.upsert(ctxWith(['driftstack_internal_admin']), {
-        archetypeId: 'arc',
+        archetypeId: ARCH,
         cadenceSeconds: 30,
         enabled: true,
       }),
@@ -152,12 +159,12 @@ describe('V-553.B-28 ValidationHarnessService.upsert', () => {
     const { bridge } = makeBridge();
     const svc = new ValidationHarnessService(repo, bridge, LOCKED);
     const out = await svc.upsert(ctxWith(['driftstack_internal_admin']), {
-      archetypeId: 'arc',
+      archetypeId: ARCH,
       cadenceSeconds: 600,
       enabled: true,
       reason: 'V-203 weekly drift',
     });
-    expect(out.archetypeId).toBe('arc');
+    expect(out.archetypeId).toBe(ARCH);
     expect(state.rows).toHaveLength(1);
   });
 });
@@ -177,7 +184,7 @@ describe('V-553.B-28 ValidationHarnessService.remove', () => {
     const { repo, state } = makeRepo([
       {
         id: 'sched_1',
-        archetypeId: 'arc',
+        archetypeId: ARCH,
         cadenceSeconds: 600,
         enabled: true,
         lastRunAt: null,
@@ -190,7 +197,7 @@ describe('V-553.B-28 ValidationHarnessService.remove', () => {
     ]);
     const { bridge } = makeBridge();
     const svc = new ValidationHarnessService(repo, bridge, LOCKED);
-    await svc.remove(ctxWith(['driftstack_internal_admin']), 'arc');
+    await svc.remove(ctxWith(['driftstack_internal_admin']), ARCH);
     expect(state.rows).toHaveLength(0);
   });
 });
@@ -200,7 +207,7 @@ describe('V-553.B-28 ValidationHarnessService.triggerNow', () => {
     const { repo } = makeRepo();
     const { bridge } = makeBridge();
     const svc = new ValidationHarnessService(repo, bridge, LOCKED);
-    await expect(svc.triggerNow(ctxWith(['read']), 'arc')).rejects.toThrow(
+    await expect(svc.triggerNow(ctxWith(['read']), ARCH)).rejects.toThrow(
       /driftstack_internal_admin/,
     );
   });
@@ -209,11 +216,57 @@ describe('V-553.B-28 ValidationHarnessService.triggerNow', () => {
     const { repo } = makeRepo();
     const { bridge, calls } = makeBridge();
     const svc = new ValidationHarnessService(repo, bridge, LOCKED);
-    const out = await svc.triggerNow(ctxWith(['driftstack_internal_admin']), 'arc', 'config tweak');
+    const out = await svc.triggerNow(ctxWith(['driftstack_internal_admin']), ARCH, 'config tweak');
     expect(out.runId).toMatch(/^run_/);
     expect(calls[0]?.trigger).toBe('manual_request');
-    expect(calls[0]?.archetypeId).toBe('arc');
+    expect(calls[0]?.archetypeId).toBe(ARCH);
     expect(calls[0]?.reason).toBe('config tweak');
+  });
+});
+
+describe('V-1582 an archetype outside the registry', () => {
+  it('upsert refuses it, so no enabled row exists for the tick loop to find', async () => {
+    const { repo, state } = makeRepo();
+    const { bridge } = makeBridge();
+    const svc = new ValidationHarnessService(repo, bridge, LOCKED);
+    await expect(
+      svc.upsert(ctxWith(['driftstack_internal_admin']), {
+        archetypeId: UNKNOWN_ARCH,
+        cadenceSeconds: 3600,
+        enabled: true,
+      }),
+    ).rejects.toThrow(/Unknown archetype/);
+    expect(state.rows, 'and nothing was persisted').toHaveLength(0);
+  });
+
+  it('triggerNow refuses it, so no run is dispatched for something that does not exist', async () => {
+    const { repo } = makeRepo();
+    const { bridge, calls } = makeBridge();
+    const svc = new ValidationHarnessService(repo, bridge, LOCKED);
+    await expect(
+      svc.triggerNow(ctxWith(['driftstack_internal_admin']), UNKNOWN_ARCH),
+    ).rejects.toThrow(/Unknown archetype/);
+    expect(calls, 'and the recapture bridge was never reached').toHaveLength(0);
+  });
+
+  it('remove still accepts it, so a schedule written before the guard stays deletable', async () => {
+    // The asymmetry is deliberate: validating the way out as well as the way in
+    // would make a pre-existing bad row permanent. NotFound is the honest answer.
+    const { repo } = makeRepo();
+    const { bridge } = makeBridge();
+    const svc = new ValidationHarnessService(repo, bridge, LOCKED);
+    await expect(svc.remove(ctxWith(['driftstack_internal_admin']), UNKNOWN_ARCH)).rejects.toThrow(
+      /No validation schedule/,
+    );
+  });
+
+  it('the scope check runs first, so a non-admin is refused before the archetype is judged', async () => {
+    const { repo } = makeRepo();
+    const { bridge } = makeBridge();
+    const svc = new ValidationHarnessService(repo, bridge, LOCKED);
+    await expect(svc.triggerNow(ctxWith(['read']), UNKNOWN_ARCH)).rejects.toThrow(
+      /driftstack_internal_admin/,
+    );
   });
 });
 

@@ -162,9 +162,14 @@ describe('W957 V-218 + V-179 validation-harness cross-source invariant', () => {
 
   // ─── 2-error class import ────────────────────────────────────
 
-  it('CRITICAL imports 2 error classes — ConflictError + NotFoundError. The 2-error palette covers state-conflict + row-missing states.', () => {
+  it('CRITICAL imports 3 error classes — BadRequestError + ConflictError + NotFoundError. The palette covers malformed-reference + state-conflict + row-missing states.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/validation-harness.ts'));
-    expect(p).toMatch(/import \{ ConflictError, NotFoundError \} from '\.\.\/lib\/errors\.js';/);
+    // V-1582 — a third class joined the palette when the service began refusing an
+    // archetype the registry does not contain. That is neither a state conflict nor
+    // a missing row: it is a malformed reference, so it is a bad request.
+    expect(p).toMatch(
+      /import \{ BadRequestError, ConflictError, NotFoundError \} from '\.\.\/lib\/errors\.js';/,
+    );
   });
 
   it('CRITICAL imports requireScope as throwIfMissingScope from lib/errors-helpers — scope-gate primitive (matches the convention across services).', () => {

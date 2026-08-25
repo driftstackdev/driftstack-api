@@ -1,7 +1,45 @@
 // V-218 — integration tests for /v1/admin/validation-schedules.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ARCHETYPE_REGISTRY } from '@driftstack/api-types';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+
+// V-1582 — these fixtures used invented ids (A_UPSERT, A_AUDIT_OK, …). The
+// service now refuses an archetype the registry does not contain, because an
+// unknown one persisted an enabled schedule that the tick loop re-dispatched
+// every cadence forever. Real ids are therefore required.
+//
+// They are DERIVED rather than written out. Naming eight specific slugs would
+// pin this file to today's catalogue and break it the day one is retired, which
+// is a fixture rotting against live data rather than testing anything. Taking
+// them positionally keeps the only requirement "the registry has at least eight
+// entries", asserted here so a shrunken registry fails loudly instead of
+// silently reusing one id across tests that need distinct schedules.
+const [
+  A_UPSERT,
+  A_AUDIT_OK,
+  A_AUDIT_FAIL,
+  A_NO_SCOPE,
+  A_DEL_OK,
+  A_DEL_MISSING,
+  A_TRIG_OK,
+  A_TRIG_FAIL,
+] = ARCHETYPE_REGISTRY.map((a) => a.id);
+
+if (
+  [
+    A_UPSERT,
+    A_AUDIT_OK,
+    A_AUDIT_FAIL,
+    A_NO_SCOPE,
+    A_DEL_OK,
+    A_DEL_MISSING,
+    A_TRIG_OK,
+    A_TRIG_FAIL,
+  ].some((id) => id === undefined)
+) {
+  throw new Error('ARCHETYPE_REGISTRY has fewer than 8 entries; these fixtures need distinct ids.');
+}
 
 let fx: TestAppFixture;
 
@@ -78,7 +116,7 @@ describe('PUT /v1/admin/validation-schedules', () => {
       url: '/v1/admin/validation-schedules',
       headers: auth(fx),
       payload: {
-        archetype_id: 'arch1',
+        archetype_id: A_UPSERT,
         cadence_seconds: 30,
       },
     });
@@ -91,14 +129,14 @@ describe('PUT /v1/admin/validation-schedules', () => {
       method: 'PUT',
       url: '/v1/admin/validation-schedules',
       headers: auth(fx),
-      payload: { archetype_id: 'arch1', cadence_seconds: 3600 },
+      payload: { archetype_id: A_UPSERT, cadence_seconds: 3600 },
     });
     const second = await fx.app.inject({
       method: 'PUT',
       url: '/v1/admin/validation-schedules',
       headers: auth(fx),
       payload: {
-        archetype_id: 'arch1',
+        archetype_id: A_UPSERT,
         cadence_seconds: 7200,
         enabled: false,
       },
@@ -119,7 +157,7 @@ describe('PUT /v1/admin/validation-schedules', () => {
       url: '/v1/admin/validation-schedules',
       headers: auth(fx),
       payload: {
-        archetype_id: 'arch_audit_ok',
+        archetype_id: A_AUDIT_OK,
         cadence_seconds: 3600,
         reason: 'hourly drift check',
       },
@@ -130,7 +168,7 @@ describe('PUT /v1/admin/validation-schedules', () => {
     expect(all[0]?.action).toBe('validation_schedule.upserted');
     expect(all[0]?.adminAccountId).toBe(fx.accountId);
     expect(all[0]?.adminKeyId).toBe(fx.apiKeyId);
-    expect(all[0]?.targetResourceId).toBe('arch_audit_ok');
+    expect(all[0]?.targetResourceId).toBe(A_AUDIT_OK);
     expect(all[0]?.result).toBe('success');
     expect(all[0]?.inputPayload).toEqual({
       cadence_seconds: 3600,
@@ -146,13 +184,13 @@ describe('PUT /v1/admin/validation-schedules', () => {
       method: 'PUT',
       url: '/v1/admin/validation-schedules',
       headers: auth(fx),
-      payload: { archetype_id: 'arch_audit_fail', cadence_seconds: 3600 },
+      payload: { archetype_id: A_AUDIT_FAIL, cadence_seconds: 3600 },
     });
     expect(res.statusCode).toBe(500);
     const all = fx.adminAuditRepo.getAll();
     expect(all).toHaveLength(1);
     expect(all[0]?.action).toBe('validation_schedule.upserted');
-    expect(all[0]?.targetResourceId).toBe('arch_audit_fail');
+    expect(all[0]?.targetResourceId).toBe(A_AUDIT_FAIL);
     expect(all[0]?.result).toMatch(/^error:/);
   });
 
@@ -162,7 +200,7 @@ describe('PUT /v1/admin/validation-schedules', () => {
       method: 'PUT',
       url: '/v1/admin/validation-schedules',
       headers: auth(fx),
-      payload: { archetype_id: 'arch_no_scope', cadence_seconds: 3600 },
+      payload: { archetype_id: A_NO_SCOPE, cadence_seconds: 3600 },
     });
     expect(res.statusCode).toBe(403);
     expect(fx.adminAuditRepo.getAll()).toHaveLength(0);
@@ -176,11 +214,11 @@ describe('DELETE /v1/admin/validation-schedules/:archetype', () => {
       method: 'PUT',
       url: '/v1/admin/validation-schedules',
       headers: auth(fx),
-      payload: { archetype_id: 'arch1', cadence_seconds: 3600 },
+      payload: { archetype_id: A_UPSERT, cadence_seconds: 3600 },
     });
     const del = await fx.app.inject({
       method: 'DELETE',
-      url: '/v1/admin/validation-schedules/arch1',
+      url: `/v1/admin/validation-schedules/${A_UPSERT}`,
       headers: auth(fx),
     });
     expect(del.statusCode).toBe(204);
@@ -212,11 +250,11 @@ describe('DELETE /v1/admin/validation-schedules/:archetype', () => {
       method: 'PUT',
       url: '/v1/admin/validation-schedules',
       headers: auth(fx),
-      payload: { archetype_id: 'arch_del_ok', cadence_seconds: 3600 },
+      payload: { archetype_id: A_DEL_OK, cadence_seconds: 3600 },
     });
     const del = await fx.app.inject({
       method: 'DELETE',
-      url: '/v1/admin/validation-schedules/arch_del_ok',
+      url: `/v1/admin/validation-schedules/${A_DEL_OK}`,
       headers: auth(fx),
     });
     expect(del.statusCode).toBe(204);
@@ -226,7 +264,7 @@ describe('DELETE /v1/admin/validation-schedules/:archetype', () => {
     const removeRow = all.find((r) => r.action === 'validation_schedule.removed');
     expect(removeRow?.adminAccountId).toBe(fx.accountId);
     expect(removeRow?.adminKeyId).toBe(fx.apiKeyId);
-    expect(removeRow?.targetResourceId).toBe('arch_del_ok');
+    expect(removeRow?.targetResourceId).toBe(A_DEL_OK);
     expect(removeRow?.result).toBe('success');
     expect(removeRow?.inputPayload).toEqual({});
   });
@@ -235,14 +273,14 @@ describe('DELETE /v1/admin/validation-schedules/:archetype', () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
       method: 'DELETE',
-      url: '/v1/admin/validation-schedules/arch_del_missing',
+      url: `/v1/admin/validation-schedules/${A_DEL_MISSING}`,
       headers: auth(fx),
     });
     expect(res.statusCode).toBe(404);
     const all = fx.adminAuditRepo.getAll();
     expect(all).toHaveLength(1);
     expect(all[0]?.action).toBe('validation_schedule.removed');
-    expect(all[0]?.targetResourceId).toBe('arch_del_missing');
+    expect(all[0]?.targetResourceId).toBe(A_DEL_MISSING);
     expect(all[0]?.result).toMatch(/^error: notfound/);
   });
 
@@ -255,6 +293,60 @@ describe('DELETE /v1/admin/validation-schedules/:archetype', () => {
     });
     expect(res.statusCode).toBe(403);
     expect(fx.adminAuditRepo.getAll()).toHaveLength(0);
+  });
+});
+
+describe('V-1582 an archetype the registry does not contain', () => {
+  const UNKNOWN = 'totally-not-an-archetype';
+
+  it('PUT refuses it rather than persisting an enabled schedule the tick loop would re-fire', async () => {
+    fx = await buildTestApp({ scopes: ['driftstack_internal_admin'] });
+    const res = await fx.app.inject({
+      method: 'PUT',
+      url: '/v1/admin/validation-schedules',
+      headers: auth(fx),
+      payload: { archetype_id: UNKNOWN, cadence_seconds: 3600 },
+    });
+    expect(res.statusCode, 'an unknown archetype is a bad request').toBe(400);
+
+    // The point of the guard is the ROW, not the status: an accepted upsert
+    // defaults enabled to true and sets next_run_at one cadence out, and findDue
+    // selects exactly that, so the schedule would dispatch forever.
+    const list = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/validation-schedules',
+      headers: auth(fx),
+    });
+    const rows = (JSON.parse(list.body) as ListResponse).data;
+    expect(
+      rows.map((r) => r.archetype_id),
+      'and nothing was written',
+    ).not.toContain(UNKNOWN);
+  });
+
+  it('POST trigger refuses it rather than dispatching a run for something that does not exist', async () => {
+    fx = await buildTestApp({ scopes: ['driftstack_internal_admin'] });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/admin/validation-schedules/${UNKNOWN}/trigger`,
+      headers: auth(fx),
+      payload: {},
+    });
+    expect(res.statusCode, 'an unknown archetype is a bad request').toBe(400);
+  });
+
+  it('DELETE still accepts it, so a row written before the guard stays removable', async () => {
+    // Deliberate asymmetry. Validating the way OUT as well as the way in is how a
+    // bad schedule — one written before this guard, or whose archetype was later
+    // retired from the registry — becomes permanently undeletable. 404 here is
+    // "no such schedule", which is the honest answer.
+    fx = await buildTestApp({ scopes: ['driftstack_internal_admin'] });
+    const res = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/admin/validation-schedules/${UNKNOWN}`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, 'refused as missing, not as malformed').toBe(404);
   });
 });
 
@@ -301,7 +393,7 @@ describe('POST /v1/admin/validation-schedules/:archetype/trigger', () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
       method: 'POST',
-      url: '/v1/admin/validation-schedules/arch_trigger_ok/trigger',
+      url: `/v1/admin/validation-schedules/${A_TRIG_OK}/trigger`,
       headers: auth(fx),
       payload: { reason: 'manual sanity check' },
     });
@@ -311,7 +403,7 @@ describe('POST /v1/admin/validation-schedules/:archetype/trigger', () => {
     expect(all[0]?.action).toBe('validation_schedule.triggered');
     expect(all[0]?.adminAccountId).toBe(fx.accountId);
     expect(all[0]?.adminKeyId).toBe(fx.apiKeyId);
-    expect(all[0]?.targetResourceId).toBe('arch_trigger_ok');
+    expect(all[0]?.targetResourceId).toBe(A_TRIG_OK);
     expect(all[0]?.result).toBe('success');
     expect(all[0]?.inputPayload).toEqual({ reason: 'manual sanity check' });
   });
@@ -321,7 +413,7 @@ describe('POST /v1/admin/validation-schedules/:archetype/trigger', () => {
     vi.spyOn(fx.recaptureBridge, 'triggerRecapture').mockRejectedValueOnce(new Error('boom'));
     const res = await fx.app.inject({
       method: 'POST',
-      url: '/v1/admin/validation-schedules/arch_trigger_fail/trigger',
+      url: `/v1/admin/validation-schedules/${A_TRIG_FAIL}/trigger`,
       headers: auth(fx),
       payload: {},
     });
@@ -329,7 +421,7 @@ describe('POST /v1/admin/validation-schedules/:archetype/trigger', () => {
     const all = fx.adminAuditRepo.getAll();
     expect(all).toHaveLength(1);
     expect(all[0]?.action).toBe('validation_schedule.triggered');
-    expect(all[0]?.targetResourceId).toBe('arch_trigger_fail');
+    expect(all[0]?.targetResourceId).toBe(A_TRIG_FAIL);
     expect(all[0]?.result).toMatch(/^error:/);
   });
 

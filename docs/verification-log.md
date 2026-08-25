@@ -17356,3 +17356,65 @@ the current one with the history kept underneath rather than the reverse.
 
 Full suite 3073 files / 30953 tests; e2e 223 passed against a disposable migrated Postgres, dropped
 afterwards; `verify-suite` OK.
+
+## V-1582 — an admin endpoint that persisted a self-repeating schedule for an archetype that does not exist
+
+Found by extending V-1581's sweep to the methods it deliberately left out. The GET surface is 32 of 106
+id-taking operations; the other 74 are POST, PUT, PATCH and DELETE. None of them returned a genuine 5xx —
+the fifteen 5xx responses were all the same typed `feature-unavailable` gate — but two operations answered
+**success** for an id that cannot exist, and one of those is a real defect.
+
+**`POST /v1/admin/validation-schedules/not-a-uuid/trigger` returned 200 with a run_id.** Following it into
+`ValidationHarnessService.triggerNow` shows no existence check at all, while `remove()` immediately above
+it looks the archetype up and throws `NotFoundError` when it is absent. Two operations on the same
+resource in the same class, one validating and one not, is an oversight rather than a decision.
+
+**The worse half is the write path, and it is proven, not argued.** `PUT /v1/admin/validation-schedules`
+takes `archetype_id: z.string().min(1)` and persists whatever it receives. Against a real database:
+
+```
+PUT  {archetype_id: 'totally-not-an-archetype', cadence_seconds: 60}   -> 200
+DB   [{archetype_id: 'totally-not-an-archetype', enabled: true, next_run_at: +60s}]
+AUDIT[{action: 'validation_schedule.upserted', target_resource_id: 'totally-not-an-archetype'}]
+```
+
+`findDue` selects exactly `enabled = true AND next_run_at <= now`. So a typo was not a failed request —
+it became a row the tick loop re-dispatched every cadence, forever, for something that does not exist,
+with the ledger recording each fire as a validation run.
+
+**What limits the severity today, stated because it would be easy to overstate.** The dispatch target is
+currently a stub: `bootstrap.ts` wires `triggerRecapture: () => Promise.resolve({ id: run_<uuid> })`, and
+the service header says the real RecaptureService lands "behind the same triggerRecapture interface" when
+Agent 1's vendor probes do. So no expensive work runs right now. The persisted row, the endless
+re-dispatch and the audit entries are real today; the cost becomes real the day the interface is
+implemented, which is precisely when nobody will be looking at this code.
+
+**The fix validates against the whole registry, and that choice matters.** `ARCHETYPE_REGISTRY` is the
+single source the GUI catalogue and `GET /v1/archetypes` already derive from, and the server imports it
+already. The narrower `SELECTABLE_ARCHETYPE_IDS` — `launch` + `available` — is the CUSTOMER-facing set;
+gating on it would refuse `reference` archetypes, which is the exact thing a validation harness exists to
+exercise before they become selectable. So the guard asks only whether the platform has heard of the
+archetype.
+
+**`remove` is deliberately left unguarded**, and there is an arm pinning that. Validating the way out as
+well as the way in is how a row written before this guard — or one whose archetype is later retired —
+becomes permanently undeletable. 404 "no such schedule" is the honest answer there.
+
+**The fixtures were the other half of the work.** Eight invented ids (`arch1`, `arch_audit_ok`, …) stopped
+being acceptable once the archetype must be real. They are derived positionally from the registry rather
+than written out, because naming eight live slugs would pin the file to today's catalogue and break it
+the day one is retired — a fixture rotting against live data instead of testing anything. The only
+requirement left is "the registry holds at least eight entries", asserted so a shrunken registry fails
+loudly rather than silently reusing one id across tests needing distinct schedules. The URL-embedded ids
+were missed by the first pass: grepping for the quoted literal does not find `/validation-schedules/arch1`,
+which is the same enumeration fault this log keeps recording.
+
+Both guard call sites were removed independently; each reds its own two arms (service and route), and the
+`it(` counts moved by exactly the four and three added. The tests-typecheck guard caught a widened
+`string[]` that vitest had transpiled happily — the fault it was written for.
+
+Full suite 3073 files / 30960 tests; integration 393 files / 3801 tests against a disposable migrated
+Postgres; `verify-suite` OK. One integration failure appeared on a single run whose Redis index carried
+residual state from this batch's own probe runs; it did not reproduce across three subsequent runs
+including one on a pristine database and a clean index, and the failing test's identity was not captured,
+so it is recorded here as unexplained rather than as resolved.

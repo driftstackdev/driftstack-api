@@ -177,12 +177,16 @@ describe('W409.C apps/server/src/services/validation-harness.ts content parity',
     expect(body).toMatch(/errors: \{ archetypeId: string; message: string \}\[\];/);
   });
 
-  it('imports: AccountContext + requireScope (aliased) + ConflictError/NotFoundError', () => {
+  it('imports: AccountContext + requireScope (aliased) + BadRequestError/ConflictError/NotFoundError + ARCHETYPE_REGISTRY', () => {
     expect(body).toMatch(/import type \{ AccountContext \} from '\.\/auth\.js';/);
     expect(body).toMatch(
       /import \{ requireScope as throwIfMissingScope \} from '\.\.\/lib\/errors-helpers\.js';/,
     );
-    expect(body).toMatch(/import \{ ConflictError, NotFoundError \} from '\.\.\/lib\/errors\.js';/);
+    // V-1582 — BadRequestError joined these when the service started rejecting an
+    // archetype absent from the registry.
+    expect(body).toMatch(
+      /import \{ BadRequestError, ConflictError, NotFoundError \} from '\.\.\/lib\/errors\.js';/,
+    );
   });
 
   it('file exists at canonical path', () => {
