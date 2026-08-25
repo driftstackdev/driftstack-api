@@ -19059,3 +19059,45 @@ matters because it proves the SDK reader is live rather than the map agreeing wi
 from an earlier measurement that matched paths as substrings anywhere in each SDK — counting paths that
 appear only in comments and docstrings. Literal extraction gives 54 and 55. The conclusion did not change;
 the figures in a guard someone will trust did.
+
+## V-1623 — hunting vacuous guards, and finding that this repo does not have them
+
+`the-document-is-neither-looser-nor-stricter` says it out loud: "an emptiness assertion is satisfied by a
+document that parsed to nothing". Nearly every guard here ends in `expect(offenders).toEqual([])`, and each
+one is only worth its assertion if something proved the population was read. So: which files assert
+emptiness, read from disk, and never establish that they found anything?
+
+**None. Eight candidates survived to be read, and all eight floor their populations.** The sweep is worth
+recording only because the answer is a real property of the codebase rather than a null result: the
+"a clean census is not evidence" doctrine is applied here, not merely written down, and twice with the
+incident that taught it attached —
+
+- `boolean-env-flags-share-one-truthiness-rule` counts files inside its own walk and refuses a low count,
+  because "retargeting the walk at `src/db/migrations` (real directory, no `.ts`) left all four arms GREEN
+  while nothing was read. Measured at 340 files."
+- `every-sdk-path-id-is-url-escaped` floors each language separately, because its Go extractor matched
+  `fmt.Sprintf` while Go concatenates, "found ZERO sites… a perfect score from a scanner that had looked at
+  nothing".
+- `a-status-that-can-carry-retry-after-declares-it` opens with an arm whose title is the reason: an empty
+  left-hand side makes the subset assertion below trivially true.
+
+**The instrument failed five times, each time by being narrower than its own question, and the last one is
+the joke that writes itself.** The question was "does this file assert its population is non-empty" and I
+kept answering it with one spelling at a time:
+
+    37 candidates  — floor recognised only as `.toBeGreaterThan(`
+    10 candidates  — after also counting `.toBe(n)`, `.toHaveLength(n)`, `.toContain(`
+     8 candidates  — after allowing `.toBeGreaterThanOrEqual(floor)` with a VARIABLE argument
+     0 defects     — after reading all eight: `.not.toEqual([])`, a floor asserted inside the helper
+                     rather than in an `it()`, a hardcoded population that would throw if absent, and
+                     `toMatch(...)` on the read body, which cannot pass against an empty string
+
+The fifth spelling is the one worth keeping. `every-sdk-path-id-is-url-escaped` was flagged by a detector
+looking for guards that fail to floor their populations — and it is the single best example in the
+repository of a guard that floors its populations, with the incident narrated in its header. **I hunted
+incomplete instruments with an incomplete instrument, and the file my instrument accused was the one that
+had already learned the lesson.**
+
+Recorded so the sweep is not re-run: the class is closed, and the shape of the answer is that a floor here
+is written in whatever form the file needed — inside a helper, as a `toMatch`, as a `.not.toEqual([])` —
+which is precisely why a regex asking one way about it will keep being wrong.
