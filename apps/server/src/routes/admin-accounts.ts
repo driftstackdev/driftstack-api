@@ -403,6 +403,24 @@ export function registerAdminAccountsRoutes(
       const accountId = uuidFromPrefixedId(request.params.id, 'acc');
       const query = ClearQuotaOverrideQuerySchema.parse(request.query ?? {});
 
+      // V-1586 — confirm the target exists before recording, the same way the
+      // POST above does. Without it the audit write is attempted for an account
+      // that is not there, the foreign key on target_account_id rejects it, and
+      // the constraint error replaces the 404 with a 500. It also gives the
+      // accurate refusal: "no such account" rather than "no active override",
+      // which is what clear() would have said about an account that never existed.
+      // V-1586 — confirm the target exists before recording, the same way the
+      // POST above does. The helper guard below already keeps a missing account
+      // from turning the 404 into a constraint error; this is what makes the
+      // refusal say "no such account" rather than "no active override", which is
+      // a different and misleading claim about an account that never existed.
+      // V-1586 — confirm the target exists before recording, the same way the
+      // POST above does. The helper guard below already keeps a missing account
+      // from turning the 404 into a constraint error; this is what makes the
+      // refusal say "no such account" rather than "no active override", which is
+      // a different and misleading claim about an account that never existed.
+      await accountsAdmin.getAccount(ctx, accountId);
+
       await withAuditOverrideClear(request, accountId, query.bucket_key, () =>
         rateLimitOverrides.clear(ctx, accountId, query.bucket_key),
       );
@@ -525,7 +543,13 @@ export function registerAdminAccountsRoutes(
         adminAccountId: ctx.account.id,
         adminKeyId: ctx.apiKey.id,
         action,
-        targetAccountId,
+        // V-1586 — target_account_id is a foreign key to accounts. On a
+        // not-found the account may be exactly what is missing, and writing it
+        // here trades the 404 for a constraint error. target_resource_id is
+        // already carrying the bucket key, so the id is dropped rather than
+        // moved: a row about an account that does not exist has no account to
+        // attribute to, and the admin who acted is still recorded above.
+        ...(err instanceof NotFoundError ? { targetAccountId: null } : { targetAccountId }),
         targetResourceId: bucketKey,
         inputPayload,
         result: `error: ${code}`,
@@ -562,7 +586,13 @@ export function registerAdminAccountsRoutes(
         adminAccountId: ctx.account.id,
         adminKeyId: ctx.apiKey.id,
         action: 'rate_limit_override.cleared',
-        targetAccountId,
+        // V-1586 — target_account_id is a foreign key to accounts. On a
+        // not-found the account may be exactly what is missing, and writing it
+        // here trades the 404 for a constraint error. target_resource_id is
+        // already carrying the bucket key, so the id is dropped rather than
+        // moved: a row about an account that does not exist has no account to
+        // attribute to, and the admin who acted is still recorded above.
+        ...(err instanceof NotFoundError ? { targetAccountId: null } : { targetAccountId }),
         targetResourceId: bucketKey,
         inputPayload: { bucket_key: bucketKey },
         result: `error: ${code}`,

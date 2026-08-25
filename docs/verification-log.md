@@ -17581,3 +17581,41 @@ inherit the exemption.
 Reverting the fix reds the sweep on all four routes; restored, both passes are green. Full suite 3073
 files / 30962 tests; e2e 224 passed against a disposable migrated Postgres, dropped afterwards;
 `verify-suite` OK. The Playwright figure moves 223 -> 224 in all four places the blind-spot suite pins it.
+
+## V-1586 — a fifth 500 of the same family, hidden behind a required query parameter
+
+V-1585 fixed one of three audit helpers in `admin-accounts.ts`. Enumerating the rest of the class rather
+than stopping at the instance found two more error paths writing the account foreign key —
+`withAuditOverride` and `withAuditOverrideClear` — and one live route reaching them.
+
+**`DELETE /v1/admin/accounts/{id}/quota-override` answered 500 for an account that does not exist.** Same
+mechanism as V-1585: `clear()` throws a not-found when nothing was removed, the catch records
+`error: notfound` carrying `target_account_id`, and the foreign key rejects it. Zero audit rows landed
+during the probe, which is the confirmation that the insert itself was what failed.
+
+**The sweep could not see it, for a third reason.** V-1584 was shadowed by bodies the handlers reject and
+V-1585 by id shapes refused before the lookup; this one is shadowed by a required QUERY parameter. Without
+`bucket_key` the route answers 400 on the query schema before it looks at the account at all. Required
+query parameters are now filled from their own schemas, exactly as bodies are. Optional ones are
+deliberately left off — supplying them would change the question from "is the id judged" to "does some
+filter combination work".
+
+**The asymmetry was in the file already.** `POST .../quota-override` carries an explicit
+`// Confirm target exists before recording.` and its sibling DELETE did not, which is precisely the
+difference between 404 and 500. That is the second time in two batches that the correct handling of a
+route sat ten lines above the broken one.
+
+**Two changes, and the mutation results separate them in a way worth recording.** Removing the pre-check
+alone leaves the sweep GREEN: the helper guard fixes the status by itself. Only removing both reproduces
+the 500. So the pre-check is not load-bearing for the status code, and committing it on the strength of
+"the sweep passes" would have been a fix with no test behind it. What it does change is the message —
+without it the refusal comes from `clear()` and reads "no active override for account X", which quietly
+asserts that the account exists. That claim now has its own arm, and removing the pre-check reds it.
+
+The two helpers null the key rather than moving it, because `target_resource_id` is already carrying the
+bucket key here. That is a real difference from V-1585 and the comment says so: a row about an account
+that does not exist has no account to attribute to, and the admin who acted is still recorded.
+
+Full suite 3073 files / 30962 tests; e2e 225 passed against a disposable migrated Postgres, dropped
+afterwards; `verify-suite` OK. The Playwright figure moves 224 -> 225 in all four pinned places; the
+spec-file count is unchanged at 37 because the new arm joined an existing file.

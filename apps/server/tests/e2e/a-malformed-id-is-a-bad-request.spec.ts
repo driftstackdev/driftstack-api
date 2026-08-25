@@ -130,7 +130,7 @@ type JsonNode = Record<string, unknown>;
 function minimalBody(
   doc: JsonNode,
   op: unknown,
-): { data: Record<string, unknown>; complete: boolean } {
+): { data: Record<string, unknown>; complete: boolean; query: string } {
   const deref = (node: unknown): JsonNode | undefined => {
     let cur = typeof node === 'object' && node !== null ? (node as JsonNode) : undefined;
     for (let guard = 0; guard < 10; guard += 1) {
@@ -169,7 +169,7 @@ function minimalBody(
   const schema = deref(
     typeof json === 'object' && json !== null ? (json as JsonNode)['schema'] : undefined,
   );
-  if (!schema) return { data: {}, complete: true };
+  if (!schema) return { data: {}, complete: true, query: requiredQuery(opNode, scalar) };
   const required = Array.isArray(schema['required']) ? (schema['required'] as string[]) : [];
   const props =
     typeof schema['properties'] === 'object' && schema['properties'] !== null
@@ -182,7 +182,37 @@ function minimalBody(
     if (value === undefined) complete = false;
     else data[key] = value;
   }
-  return { data, complete };
+  return { data, complete, query: requiredQuery(opNode, scalar) };
+}
+
+/**
+ * The operation's REQUIRED query parameters, filled from their own schemas.
+ *
+ * V-1586 — the third way this sweep was shadowed. A body the handler rejects was
+ * one, an id shape the route refuses early was another, and a required query
+ * parameter is the third: `DELETE /v1/admin/accounts/{id}/quota-override`
+ * answers 400 for a missing `bucket_key` before it looks at the account at all,
+ * and behind that 400 it was answering 500 for an account that does not exist.
+ *
+ * Optional parameters are deliberately left off. Supplying them would change the
+ * question from "is the id judged" to "does some filter combination work".
+ */
+function requiredQuery(op: JsonNode | undefined, scalar: (node: unknown) => unknown): string {
+  const params = op?.['parameters'];
+  if (!Array.isArray(params)) return '';
+  const pairs: string[] = [];
+  for (const raw of params) {
+    const pm = typeof raw === 'object' && raw !== null ? (raw as JsonNode) : undefined;
+    if (pm?.['in'] !== 'query' || pm['required'] !== true) continue;
+    const name = pm['name'];
+    if (typeof name !== 'string') continue;
+    const value = scalar(pm['schema']);
+    if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') {
+      continue;
+    }
+    pairs.push(`${encodeURIComponent(name)}=${encodeURIComponent(String(value))}`);
+  }
+  return pairs.length > 0 ? `?${pairs.join('&')}` : '';
 }
 
 interface Operation {
@@ -191,6 +221,7 @@ interface Operation {
   key: string;
   body: Record<string, unknown>;
   bodyComplete: boolean;
+  query: string;
 }
 
 function idTakingOperations(): Operation[] {
@@ -207,13 +238,14 @@ function idTakingOperations(): Operation[] {
     if (NOT_AN_ID.has(path)) continue;
     for (const method of METHODS) {
       if (doc.paths[path]?.[method] === undefined) continue;
-      const { data, complete } = minimalBody(doc, doc.paths[path]?.[method]);
+      const { data, complete, query } = minimalBody(doc, doc.paths[path]?.[method]);
       out.push({
         method,
         path,
         key: `${method.toUpperCase()} ${path}`,
         body: data,
         bodyComplete: complete,
+        query,
       });
     }
   }
@@ -254,7 +286,7 @@ test('no id-taking route answers 5xx or 2xx for a malformed id', async ({ reques
   const exercised: string[] = [];
 
   for (const op of targets) {
-    const url = server.baseUrl + op.path.replace(/\{[^}]+\}/, MALFORMED);
+    const url = server.baseUrl + op.path.replace(/\{[^}]+\}/, MALFORMED) + op.query;
     // An empty object rather than no body at all: several handlers parse the
     // body before the id, and omitting it entirely changes which error comes
     // back without changing what is being tested.
@@ -350,7 +382,7 @@ test('no id-taking route answers 5xx for an id that is well-formed and absent', 
 
   for (const op of targets) {
     const call = async (idValue: string) => {
-      const url = server.baseUrl + op.path.replace(/\{[^}]+\}/, idValue);
+      const url = server.baseUrl + op.path.replace(/\{[^}]+\}/, idValue) + op.query;
       const opts = {
         headers,
         ...(op.method === 'get' || op.method === 'delete' ? {} : { data: op.body }),
@@ -418,4 +450,31 @@ test('no id-taking route answers 5xx for an id that is well-formed and absent', 
   const shadowed = targets.filter((o) => !o.bodyComplete).map((o) => o.key);
   console.log(`[V-1585] still body-shadowed (${shadowed.length}):\n${shadowed.join('\n')}`);
   expect(shadowed.length, 'the un-buildable-body set stays small').toBeLessThan(10);
+});
+
+test('a refusal names what is actually missing', async ({ request }) => {
+  await server.resetState();
+
+  const admin = await seedAccount(server.client, {
+    scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
+  });
+  const headers = authHeader(admin.plaintext);
+
+  // V-1586 — clearing a quota override on an account that does not exist used to
+  // answer 500, because the failure-path audit write carries a foreign key to
+  // accounts. Nulling that key on a not-found makes the status right on its own,
+  // and the sweep proves that much. It does NOT prove the message: without the
+  // existence check the refusal comes from `clear()` and reads "no active
+  // override for account X", which quietly asserts the account exists. This arm
+  // is the reason the check is there, so removing it fails something.
+  const res = await request.delete(
+    `${server.baseUrl}/v1/admin/accounts/acc_${ABSENT_UUID}/quota-override?bucket_key=global`,
+    { headers },
+  );
+
+  expect(res.status(), 'an absent account is a miss, not a server failure').toBe(404);
+  const parsed = JSON.parse(await res.text()) as { detail?: unknown };
+  const detail = typeof parsed.detail === 'string' ? parsed.detail : '';
+  expect(detail, 'and the refusal is about the account').toMatch(/account/i);
+  expect(detail, 'not about an override that was never the missing thing').not.toMatch(/override/i);
 });
