@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { AgentSessionSchema, AgentIntentSchema, IntentResultSchema } from '@driftstack/api-types';
+import { AgentSessionErrorEventSchema } from '../../src/services/agent-sessions.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -213,5 +214,61 @@ describe('agent-session response schema parity', () => {
         summary: 'ok',
       }).success,
     ).toBe(true);
+  });
+
+  it('V-1616 CRITICAL every declaration of that severity vocabulary agrees. The arm above closes it in ONE place — api-types — while the same four values are written out separately in the harness wire frame, the service schema, the route interface and the hand-written SDK type. The field travels harness -> wire schema -> service -> response, so a fifth value added at the front and not the back is accepted off the wire, stored, and then refused by the schema that serialises it to the customer.', () => {
+    /** Peel `.optional()` / `.nullable()` / `.describe()` until the object appears. */
+    const shapeOf = (schema: unknown): Record<string, unknown> => {
+      let cur = schema as { shape?: Record<string, unknown>; unwrap?: () => unknown };
+      for (let guard = 0; guard < 6 && cur?.shape === undefined; guard += 1) {
+        if (typeof cur?.unwrap !== 'function') break;
+        cur = cur.unwrap() as typeof cur;
+      }
+      return cur?.shape ?? {};
+    };
+    const optionsOf = (schema: unknown): string[] =>
+      ((schema as { options?: string[] } | undefined)?.options ?? []).slice();
+
+    // The customer contract is the reference: it is the one already pinned, and
+    // the end of the chain, so it is what the other four have to match.
+    const canonical = optionsOf(shapeOf(AgentSessionSchema.shape.error_event)['severity']);
+    expect(canonical, 'the reference vocabulary was read off api-types').toEqual([
+      'info',
+      'warn',
+      'error',
+      'fatal',
+    ]);
+
+    // The service schema is importable, so it is compared as VALUES — the
+    // strongest form available, and immune to how the file happens to be written.
+    expect(
+      optionsOf(AgentSessionErrorEventSchema.shape.severity),
+      'services/agent-sessions.ts AgentSessionErrorEventSchema',
+    ).toEqual(canonical);
+
+    // The other three are TypeScript types or a non-exported schema, so they are
+    // read as text. EVERY declaration is checked, not the first one found: a file
+    // growing a second severity field must not be able to hide behind the first.
+    // Assignments (`severity: rec.lastErrorEvent.severity`) are not declarations
+    // and are excluded by requiring a literal right-hand side.
+    const zodDecl = `z.enum([${canonical.map((v) => `'${v}'`).join(', ')}])`;
+    const unionDecl = canonical.map((v) => `'${v}'`).join(' | ');
+    const textSites: { file: string; expected: string }[] = [
+      { file: 'apps/server/src/schemas/harness-control-protocol.ts', expected: zodDecl },
+      { file: 'apps/server/src/routes/agent-sessions.ts', expected: unionDecl },
+      { file: 'packages/sdk-typescript/src/resources/agent-sessions.ts', expected: unionDecl },
+    ];
+    for (const { file, expected } of textSites) {
+      const src = read(resolve(REPO_ROOT, file));
+      const declared = [
+        ...src.matchAll(/^[ \t]*severity\??:[ \t]*(z\.enum\(\[[^\]]*\]\)|'[^;,]*')[,;]/gm),
+      ].map((m) => m[1]!.trim());
+      expect(declared.length, `${file} declares the severity field`).toBeGreaterThan(0);
+      for (const d of declared) {
+        expect(d, `${file} states a severity vocabulary the response cannot serialise`).toBe(
+          expected,
+        );
+      }
+    }
   });
 });

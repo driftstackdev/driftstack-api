@@ -18700,3 +18700,56 @@ not the file you started from; `git diff --quiet` on the mutated path afterwards
 This is the third instrument fault today, after the null mutation and the tier-row parser.
 
 No pin bumped: one arm added to an existing file.
+
+## V-1616 — a sweep with a low yield, and the measurement that made the yield trustworthy
+
+V-1615 was found by sweeping for one shape. Broadening it: every `z.enum([...])` literal and every
+inline TypeScript string-literal union across `apps/server/src`, `packages/api-types/src` and
+`packages/sdk-typescript/src`, grouped by value set. **Thirty-four value sets are written out in three or
+more places, several spanning three packages** — `['manual','ai','pair']` twelve times,
+`['active','suspended','deleted']` ten, `['member','admin']` nine.
+
+That number invites a conclusion it does not support, so it was measured rather than acted on: for each
+set, is there any test file naming every one of its values? **Thirty-three of thirty-four.** The
+duplication is broad and the coverage is real, which is the opposite of what the raw count suggests, and
+worth writing down so the next reader does not open thirty-four investigations. The single uncovered set,
+`['json','binary']`, is the download `format` parameter, published `optional` and defaulted `'json'` at
+the route with the behaviour stated in the operation's own summary. No defect.
+
+**Then the same question asked of the guards, because naming the values is not reading the sites.** V-1615
+was a guard that named all three content types and never opened the third file carrying them. Re-run
+asking whether each covering guard mentions every file the set appears in: thirty-eight sets have at least
+one carrier no covering guard names.
+
+**That list is candidates, not findings, and the first one checked proved it.** A guard can cover a file
+by importing its schema and comparing values — no path string anywhere — which is what my own V-1614 arm
+does. `['info','warn','error','fatal']` looked worst: five carriers, one covering guard, every carrier
+unnamed. The guard turned out to be `config-lib-cross-source-invariant`, about config log levels, matching
+on four values it shares by coincidence. But `agent-session-response-schema-parity` DOES pin the
+vocabulary — by importing `AgentSessionSchema` and rejecting `severity: 'critical'`. Both of my heuristics
+were wrong about this set in opposite directions.
+
+**What survives verification is narrower and real.** `error_event.severity` is closed in exactly one
+place, api-types, and written out separately in four more: the harness wire frame
+(`harness-control-protocol.ts:1180`), the service schema (`services/agent-sessions.ts:36`), the route's
+`PublicAgentSession` interface (`routes/agent-sessions.ts:387`) and the hand-written SDK type
+(`sdk-typescript/.../agent-sessions.ts:163`). Nothing compares them. The field travels harness → wire
+schema → service → response, so a fifth value added at the front and not the back is accepted off the
+wire, stored, and then refused by the schema that serialises it to the customer. The field-for-field arm
+beside it compares TOP-LEVEL names only, so it cannot see inside `error_event`.
+
+One arm now compares all five, deriving the reference from api-types rather than restating it: values for
+the importable schema, text for the two type declarations and the non-exported wire schema, every
+declaration checked rather than the first found, and assignments excluded by requiring a literal
+right-hand side. Mutation-proved three ways — a fifth value on the wire, a shortened SDK union, a
+reordered service enum.
+
+**Three instrument faults in one batch, all the same family as this morning's.** The first draft of the
+arm read `.unwrap()` once on a schema wrapped in `.nullable().optional()`; it now peels until the shape
+appears. The second draft was spliced in by cutting between two computed offsets, which **deleted four
+existing arms** — caught only because the `it(` count is compared against HEAD after every edit, and a
+file with four fewer tests still reports green. And the mutation snapshots were keyed by BASENAME, so
+`services/agent-sessions.ts` and `sdk-typescript/.../agent-sessions.ts` shared one file: the restore wrote
+the server's schema into the SDK. Snapshot by path, splice by anchor, and count the tests.
+
+No pin bumped: one arm added to an existing file.
