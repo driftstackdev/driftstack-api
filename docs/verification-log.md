@@ -19285,3 +19285,34 @@ are not in the skipped count, which most likely means those files also contain u
 but the reporter names neither the skipped nor the passing files, so that is a hypothesis rather than a
 measurement. What is measured: 115 files skipped, 135 files carrying a DB or Redis gate, all of the latter
 under `tests/integration`.
+
+## V-1628 — the integration surface does run, in CI, and the team-RBAC path is sound
+
+**Completing V-1627's boundary before it is misread.** That entry recorded that my local green skipped 115
+files because `skipIf(!process.env.CI && !process.env.DATABASE_URL)` gates 135 integration suites and
+neither variable is set in this shell. Read alone, that invites the conclusion those suites never run.
+**They do.** `.github/workflows/ci.yml` `build-test` sets both `DATABASE_URL` and `REDIS_URL` (lines 47-48)
+against real Postgres and Redis services, runs `npm run db:migrate -w apps/server` first, and then executes
+`node scripts/verify-suite.mjs --all`. The gate skips only when NEITHER variable is present, so in CI they
+execute rather than skip. The local hole is a local hole.
+
+**And the two populations are documented, including what neither covers.** `EXPECTED_TEST_FILES` (3027) is
+the node project alone; `EXPECTED_TEST_FILES_ALL` is the root config across both vitest projects, which is
+what a bare `npx vitest run` collects and what my green measured. `verify-suite.mjs` also names what it
+does NOT run — "`--all` is ONE CI JOB, not CI" — including 32 Rust tests under
+`apps/gui-client/src-tauri` that no vitest project collects, with the local command to run them. That is
+the same class as V-1627's boundary, already written down by someone else, and worth not re-deriving.
+
+**A route audited end to end rather than swept, and it holds.** Team RBAC: writes gate on
+`account_owner` and reads on `read`; `DELETE /v1/team/members/:id` passes `ownerAccountId` from the
+authenticated context; the repo's predicate is
+`and(eq(teamMembers.id, membershipId), eq(teamMembers.ownerAccountId, ownerAccountId))`, so a team owner
+cannot reach another team's membership by id. The interface also carries an atomic
+`removeMemberWithInvites`, added as a TOCTOU fix so an accept-in-flight cannot slip between the membership
+delete and the invite delete — **and the service's `removeMember` calls that variant**, so the fix is on
+the path the route takes rather than beside it. The shape worth checking was "the fix exists but the route
+bypasses it"; it does not.
+
+**Boundary.** This is the removal path only — gate, ownership predicate, and which repo method the service
+selects. It is not an audit of invite acceptance, role changes, or the auth-cache invalidation that follows
+a removal.
