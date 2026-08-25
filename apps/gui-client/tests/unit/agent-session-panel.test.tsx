@@ -13,6 +13,7 @@ import {
   PUBLISHER_LOST_GRACE_MS,
   AUTO_RECONNECT_BACKOFF_MS,
 } from '../../src/components/AgentSessionPanel';
+import type { LiveKitInfo } from '@driftstack/sdk';
 
 const connectMock = vi.fn();
 const sendInputEventMock = vi.fn(() => Promise.resolve());
@@ -35,7 +36,27 @@ vi.mock('../../src/lib/livekit', () => ({
   },
 }));
 
-const INFO = { ws_url: 'wss://lk', token: 'tok' } as never;
+/**
+ * ⛔ A COMPLETE LiveKitInfo, not `{ws_url, token}`.
+ *
+ * These fixtures used to carry two fields and an `as never`, encoding the exact
+ * belief V-1611 disproved in `SimulatorWindow`: that "the panel reads
+ * ws_url/token only". It does not — `AgentSessionPanel` reads `info.room` as
+ * the identity key for its session-timing reset, so a two-field fixture is a
+ * fixture for a shape that never reaches this component.
+ */
+function liveKitInfo(over: Partial<LiveKitInfo> = {}): LiveKitInfo {
+  return {
+    ws_url: 'wss://lk',
+    room: 'room-a',
+    token: 'tok',
+    participant_identity: 'participant-a',
+    expires_at: '2026-08-25T13:00:00.000Z',
+    ...over,
+  };
+}
+
+const INFO = liveKitInfo();
 const INPUT_AUTHORITY_EPOCH = 29;
 
 describe('friendlyConnectError — raw LiveKit errors → customer copy', () => {
@@ -108,7 +129,7 @@ describe('AgentSessionPanel overlay UX', () => {
 
     rerender(
       <AgentSessionPanel
-        info={{ ws_url: 'wss://lk-b', token: 'tok-b' }}
+        info={liveKitInfo({ ws_url: 'wss://lk-b', room: 'room-b', token: 'tok-b' })}
         onRoom={onRoom}
         onStateChange={onStateChange}
         onPublisher={onPublisher}
@@ -171,7 +192,7 @@ describe('AgentSessionPanel overlay UX', () => {
       await act(async () => {
         rerender(
           <AgentSessionPanel
-            info={{ ws_url: 'wss://lk-b', token: 'tok-b' }}
+            info={liveKitInfo({ ws_url: 'wss://lk-b', room: 'room-b', token: 'tok-b' })}
             onPublisher={onPublisher}
           />,
         );
@@ -193,7 +214,7 @@ describe('AgentSessionPanel overlay UX', () => {
         handlersA.trackUnsubscribed?.({ kind: 'video' });
         rerender(
           <AgentSessionPanel
-            info={{ ws_url: 'wss://lk-b', token: 'tok-b' }}
+            info={liveKitInfo({ ws_url: 'wss://lk-b', room: 'room-b', token: 'tok-b' })}
             onPublisher={onPublisher}
             recoverAction={{ nonce: 1, mode: 'resubscribe' }}
           />,
@@ -254,7 +275,7 @@ describe('AgentSessionPanel overlay UX', () => {
       await act(async () => {
         rerender(
           <AgentSessionPanel
-            info={{ ws_url: 'wss://lk-b', token: 'tok-b' }}
+            info={liveKitInfo({ ws_url: 'wss://lk-b', room: 'room-b', token: 'tok-b' })}
             recoverAction={{ nonce: 1, mode: 'resubscribe' }}
           />,
         );
@@ -315,7 +336,7 @@ describe('AgentSessionPanel overlay UX', () => {
       currentRoom = roomB;
       rerender(
         <AgentSessionPanel
-          info={{ ws_url: 'wss://lk-b', token: 'tok-b' }}
+          info={liveKitInfo({ ws_url: 'wss://lk-b', room: 'room-b', token: 'tok-b' })}
           interactive
           inputAuthorityEpoch={INPUT_AUTHORITY_EPOCH}
           canSendInput={canSendInput}
@@ -1108,7 +1129,7 @@ describe('AgentSessionPanel optimistic tap ripple (#124 perceived-latency)', () 
 
     const denied = render(
       <AgentSessionPanel
-        info={{ ws_url: 'wss://lk-denied', token: 'tok-denied' }}
+        info={liveKitInfo({ ws_url: 'wss://lk-denied', room: 'room-denied', token: 'tok-denied' })}
         interactive
         inputAuthorityEpoch={INPUT_AUTHORITY_EPOCH}
         canSendInput={() => false}
