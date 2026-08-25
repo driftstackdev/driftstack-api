@@ -279,8 +279,12 @@ export async function openSimulatorWindow({
     window: 'simulator',
     ws: info.ws_url,
     token: info.token,
-    // room_name is informational; include when present for the title/debug.
-    room: (info as unknown as { room_name?: string }).room_name ?? '',
+    // ⛔ V-1611 — was `(info as unknown as { room_name?: string }).room_name`.
+    // `LiveKitInfo` has no `room_name`; the field is `room`. So this read was
+    // ALWAYS undefined and the handoff always carried an empty room, on every
+    // launch, silently — a cast asserting a field that does not exist cannot
+    // fail, it can only return nothing.
+    room: info.room,
     // Device label for the toolbar (e.g. "iPhone 17").
     name: deviceName ?? 'iPhone',
     // Profile identity for the toolbar branding (empty → device-only).

@@ -637,10 +637,25 @@ export function infoFromQuery(search: string = window.location.search): SessionQ
       baseUrl,
     };
   }
-  // LiveKitInfo carries ws_url + token (the only fields the panel/connect read);
-  // room_name is informational. Cast is safe — the panel reads ws_url/token only.
+  // ⛔ V-1611 — this said `room_name` and claimed "the panel reads ws_url/token
+  // only". Both halves were false. `LiveKitInfo` has no `room_name` (the field
+  // is `room`), and `AgentSessionPanel` reads `info.room` as the identity key
+  // for its session-timing reset:
+  //
+  //     if (sessionTimingRef.current.identity !== info.room)
+  //
+  // With `room` absent that compares `undefined !== undefined` — false forever,
+  // so the reset branch was DEAD on this path. Latent rather than customer-
+  // visible (this `info` is parsed from the URL once per window and never
+  // changes, so the reset would not have fired anyway), but the comment was
+  // load-bearing in the wrong direction: it told the next reader the cast had
+  // been checked.
+  //
+  // The cast remains because `participant_identity` and `expires_at` genuinely
+  // are not in the handoff URL. It is now a partial of the RIGHT shape rather
+  // than an assertion about a field that does not exist.
   return {
-    info: { ws_url, token, room_name: q.get('room') ?? '' } as unknown as LiveKitInfo,
+    info: { ws_url, token, room: q.get('room') ?? '' } as unknown as LiveKitInfo,
     deviceName,
     profileName,
     proxyLabel,
