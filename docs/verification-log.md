@@ -20654,3 +20654,36 @@ stronger than pinning two statements' order.
 ⚠️ Boundary: the three negatives and the positive were established by READING the four files. A mutation
 probe moving `recordEvent` above `dispatch` is queued to confirm the integration arm actually fires;
 this entry records what reading established, not what the probe returned.
+
+## V-1662 — the probe V-1661 queued, and the first attempt that could not have answered
+
+V-1661 recorded, from reading, that the `dispatch()`-before-`recordEvent()` ordering is guarded by
+`integration/stripe-webhooks-mutations.test.ts` — _"a transient error during handling → 500 + NO ledger row,
+and a Stripe re-delivery then heals"_ — a guard written in terms of the OUTCOME, which is why a search
+shaped like the implementation missed it. This is the confirmation, and the first attempt at it is worth
+recording too.
+
+⛔ **Attempt one was CONFOUNDED and I nearly read it as a pass.** Moving `dispatch()` below `recordEvent()`
+left `recordEvent({ …, result: outcome })` referencing `outcome` before its declaration. **The mutated
+source did not compile** — 8 files and 60 tests failed, including `the-server-source-type-checks`. Four of
+them were the files I expected, so the shape of the result looked like confirmation. **It was not: a
+temporal-dead-zone crash fails those tests for a reason that has nothing to do with the ordering
+property.** A mutation that breaks compilation tests the harness, not the hypothesis.
+
+**Attempt two is the refactor a person would actually write** — claim the ledger row first with a
+placeholder result, dispatch after — and it compiles cleanly:
+
+    Test Files  1 failed | 3210 passed (3211)
+    FAIL  |node| apps/server/tests/integration/stripe-webhooks-mutations.test.ts
+
+⭐ **Exactly one file, and exactly the predicted one.** The peer's three in-flight gui failures had cleared
+between the two runs, so the baseline was clean and the attribution is unambiguous. Source restored
+byte-identical.
+
+**So the ordering is guarded, by the outcome rather than the mechanism, and the guard fires.** V-1661's
+reading stands.
+
+⭐ **Two method notes, both earned here.** A mutation must be checked for compilation before its result is
+read — otherwise "many things failed" reads as confirmation when it is noise. And **a prediction naming the
+specific file is what made the second run interpretable**: "one failure, in `stripe-webhooks-mutations`" is
+a claim that could have been wrong, where "several things failed" could not.
