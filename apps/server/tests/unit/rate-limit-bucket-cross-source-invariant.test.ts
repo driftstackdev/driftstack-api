@@ -1,11 +1,24 @@
-// W869 — RateLimitBucket 2-key cross-source invariant. One-
+// W869 — RateLimitBucket 4-key cross-source invariant. One-
 // hundred-ninety-fifth in the drift-guard series. Pins the V-219
-// token-bucket key 2-roster:
+// token-bucket key roster:
 //
-//   1. global           — every authenticated /v1/* call consumes
-//                         this bucket (anti-DDoS / runaway scripts).
-//   2. sessions:create  — POST /v1/sessions only (lower cap because
-//                         session-create is the most expensive op).
+//   1. global                     — every authenticated /v1/* call without a
+//                                   dedicated bucket (anti-DDoS / runaway scripts).
+//   2. sessions:create            — POST /v1/sessions and
+//                                   POST /v1/profiles/:id/launch (lower cap because
+//                                   session-create is the most expensive op).
+//   3. agent_sessions:message     — POST /v1/agent-sessions/:id/message; a turn
+//                                   costs model tokens (v2-#13).
+//   4. agent_sessions:input_event — the manual-control screen-coordinate stream
+//                                   (Slice 4 / LK.6); largest capacities of the four.
+//
+// ⚠️ V-1624 — this header said `2-key` and listed two, for the whole life of the
+// two agent buckets, while BUCKET_KEYS below and the arms already pinned four.
+// That is the SAME staleness the subject file records as a past incident:
+// api-types/common.ts says the count `was stale at two for the whole life of the
+// two agent buckets, and the per-tier table in the customer docs was missing
+// agent_sessions:input_event for the same span (V-1091)`. It went stale a third
+// time, here, in the guard that exists to stop it.
 //
 // stays in lockstep across:
 //   - packages/api-types/src/common.ts TIER_RATE_LIMIT_DEFAULTS
@@ -74,14 +87,14 @@ describe('W869 RateLimitBucket cross-source invariant', () => {
 
   // ─── api-types admin.ts SetQuotaOverrideRequest enum field ───
 
-  it("CRITICAL packages/api-types/src/admin.ts SetQuotaOverrideRequestSchema declares bucket_key: z.enum(['global', 'sessions:create', 'agent_sessions:message']). The admin-write surface (POST /v1/admin/accounts/:id/rate-limit-overrides) accepts the 3 customer-visible keys; agent_sessions:input_event stays internal-only.", () => {
+  it("CRITICAL packages/api-types/src/admin.ts SetQuotaOverrideRequestSchema declares bucket_key: z.enum(['global', 'sessions:create', 'agent_sessions:message']). The admin-write surface (POST /v1/admin/accounts/:id/rate-limit-overrides) accepts the 3 OVERRIDE-ABLE keys: agent_sessions:input_event has no admin-override path. V-1624 — this arm previously called those the 3 'customer-visible' keys and said input_event stays 'internal-only'. Both are false, and the file it pins says so: accounts.ts RateLimitBucketSchema publishes ALL FOUR on GET /v1/account/rate-limits so the customer view never hides a limit that is actually applied, and the generated spec carries all four. A reader trusting the old wording would have deleted input_event from the CUSTOMER surface to restore a consistency that never existed.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/admin.ts'));
     expect(p).toMatch(
       /SetQuotaOverrideRequestSchema = z\.object\(\{[\s\S]+?bucket_key: z\.enum\(\['global', 'sessions:create', 'agent_sessions:message'\]\)/,
     );
   });
 
-  it("CRITICAL packages/api-types/src/admin.ts ClearQuotaOverrideQuerySchema declares bucket_key: z.enum(['global', 'sessions:create', 'agent_sessions:message']). The admin-clear surface (DELETE /v1/admin/.../rate-limit-overrides?bucket_key=...) accepts the 3 customer-visible keys.", () => {
+  it("CRITICAL packages/api-types/src/admin.ts ClearQuotaOverrideQuerySchema declares bucket_key: z.enum(['global', 'sessions:create', 'agent_sessions:message']). The admin-clear surface (DELETE /v1/admin/.../rate-limit-overrides?bucket_key=...) mirrors the write surface: the 3 OVERRIDE-ABLE keys, not 'customer-visible' ones — the customer read surface has four (V-1624).", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/admin.ts'));
     expect(p).toMatch(
       /ClearQuotaOverrideQuerySchema = z\.object\(\{[\s\S]+?bucket_key: z\.enum\(\['global', 'sessions:create', 'agent_sessions:message'\]\)/,
@@ -163,5 +176,32 @@ describe('W869 RateLimitBucket cross-source invariant', () => {
         ),
       ),
     ).toBe(true);
+  });
+
+  it("V-1624 CRITICAL this file's own header names every bucket it pins, and says how many. The roster went stale at two here while BUCKET_KEYS and every arm below already had four — the third instance of exactly this drift, after the count in api-types/common.ts and the per-tier table in the customer docs (V-1091). A guard whose header describes a smaller roster than it enforces teaches the next reader the wrong closed set, and this one is the closed set.", () => {
+    const self = read(resolve(HERE, 'rate-limit-bucket-cross-source-invariant.test.ts'));
+    const header = self.slice(0, self.indexOf('import {'));
+    expect(header.length, 'the header was read').toBeGreaterThan(400);
+
+    // Only the NUMBERED roster lines count. Scoped deliberately: the prose below
+    // them names `agent_sessions:input_event` while describing the V-1091
+    // incident, so a whole-header `toContain` passes even when the roster itself
+    // has dropped the bucket — proven by mutation, which is how this scope was
+    // found rather than reasoned.
+    const rosterLines = header
+      .split('\n')
+      .filter((l) => /^\/\/\s+\d+\.\s/.test(l))
+      .join('\n');
+    expect(rosterLines.split('\n').length, 'the numbered roster block was found').toBe(
+      BUCKET_KEYS.length,
+    );
+
+    for (const key of BUCKET_KEYS) {
+      expect(rosterLines, `the numbered roster names ${key}`).toContain(key);
+    }
+    expect(
+      header,
+      `the header states the roster size, and it is ${String(BUCKET_KEYS.length)}`,
+    ).toContain(`${String(BUCKET_KEYS.length)}-key`);
   });
 });

@@ -19101,3 +19101,49 @@ had already learned the lesson.**
 Recorded so the sweep is not re-run: the class is closed, and the shape of the answer is that a floor here
 is written in whatever form the file needed — inside a helper, as a `toMatch`, as a `.not.toEqual([])` —
 which is precisely why a regex asking one way about it will keep being wrong.
+
+## V-1624 — a guard that stated a false reason for a correct decision, and a roster stale at two
+
+Four rate-limit buckets are enforced; routes name `global` (198 sites), `sessions:create` (2),
+`agent_sessions:message` (1) and `agent_sessions:input_event` (1). The admin override schemas accept only
+three. That looked like a defect — the override service takes `bucketKey: string` unconstrained and
+enforcement reads `Record<string, RateLimitOverride>`, so **only the request schema blocks it** — until the
+guard that pins the three-value roster turned out to say why.
+
+**It is a recorded decision and I did not touch it.** `rate-limit-bucket-cross-source-invariant` pins the
+three-key admin roster deliberately: `agent_sessions:input_event` has no admin-override path.
+
+**But the reason it gave was false, in both clauses.** The arm said the admin surface accepts "the 3
+customer-visible keys" and that `input_event` "stays internal-only". The file it pins says the opposite in
+its own comment — `RateLimitBucketSchema` publishes ALL FOUR on `GET /v1/account/rate-limits` "so the
+customer view never hides a limit that's actually applied" — and the generated spec carries all four to
+customers. The decision is right; the justification describes a system that does not exist. **A reader
+trusting it would delete `input_event` from the CUSTOMER surface to restore a consistency that never
+existed**, hiding an enforced limit from the people it is enforced against. The correct sentence is the one
+the subject file already uses: three OVERRIDE-ABLE keys.
+
+The false wording has propagated once already — `docs/internal/2026-05-31-autopilot-run-handoff.md:663`
+repeats "correctly EXCLUDES the internal-only `agent_sessions:input_event` (W869)". That file is a dated
+handoff and is left as the historical record it is.
+
+**And the header was stale at two.** It opened "RateLimitBucket 2-key cross-source invariant… pins the
+V-219 token-bucket key 2-roster" and listed two, while `BUCKET_KEYS` below it and every arm already pinned
+four. That is the third instance of this exact drift: `api-types/common.ts` records that the count "was
+stale at two for the whole life of the two agent buckets, and the per-tier table in the customer docs was
+missing `agent_sessions:input_event` for the same span (V-1091)". It went stale a third time in the guard
+written to stop it.
+
+So the header now names all four, and **an arm pins it against the roster** — the header must name every
+member of `BUCKET_KEYS` and state the size. Adding a fifth bucket fails it; claiming the wrong size fails
+it.
+
+**Two of my own faults, both caught by running rather than by reading.** The first correction embedded
+double quotes inside a double-quoted `it(` title and the file stopped parsing — and the `it(` count was 13
+before and after, so **the count check passed on a file that would not load**. That check is necessary and
+not sufficient; only running it caught this.
+
+The second is better. The new arm's per-bucket check scanned the whole header, and the header's own V-1624
+note mentions `agent_sessions:input_event` while describing the V-1091 incident — so dropping the bucket
+from the numbered roster still passed. **The mutation found it; reasoning had not.** It is scoped to the
+numbered roster lines now, and the third mutation — growing `BUCKET_KEYS` to five — proves the arm tracks
+the roster rather than a literal.
