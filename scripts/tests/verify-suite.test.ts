@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
-import { EXPECTED_TEST_FILES, judge } from '../verify-suite.mjs';
+import { EXPECTED_TEST_FILES, EXPECTED_TEST_FILES_ALL, judge } from '../verify-suite.mjs';
 
 /** The real false-green: 2561 of 2633 collected, 9 workers never started. */
 const FALSE_GREEN = `
@@ -66,6 +66,38 @@ function countTestFiles(): number {
         if (entry === 'node_modules' || entry === 'dist' || entry === 'e2e') continue;
         walk(full);
       } else if (full.endsWith('.test.ts') && full.includes(`${sep}tests${sep}`)) {
+        n += 1;
+      }
+    }
+  };
+  for (const r of roots) walk(resolve(REPO_ROOT, r));
+  return n;
+}
+
+/**
+ * The `--all` population: every `.test.ts` above PLUS the gui-jsdom project's
+ * `.test.tsx` files, which the root config registers as a second project.
+ *
+ * V-1593 — this census did not exist, and EXPECTED_TEST_FILES_ALL had drifted 12
+ * files behind disk as a result. Its sibling pin has been checked against disk
+ * all along; this one was a hand-maintained number, so an `--all` run that
+ * silently skipped a dozen files would have been judged green — the precise
+ * false-green this file was written to refuse.
+ */
+function countAllTestFiles(): number {
+  const roots = ['apps', 'packages', 'scripts'];
+  let n = 0;
+  const walk = (dir: string): void => {
+    if (!existsSync(dir)) return;
+    for (const entry of readdirSync(dir)) {
+      const full = join(dir, entry);
+      if (statSync(full).isDirectory()) {
+        if (entry === 'node_modules' || entry === 'dist' || entry === 'e2e') continue;
+        walk(full);
+      } else if (
+        (full.endsWith('.test.ts') || full.endsWith('.test.tsx')) &&
+        full.includes(`${sep}tests${sep}`)
+      ) {
         n += 1;
       }
     }
@@ -134,6 +166,19 @@ describe('the suite verifier refuses to call an under-run green', () => {
     const complete = judge({ output: withPostgres, exitCode: 0, expectedFiles: 2645 });
     expect(complete.ok).toBe(true);
     expect(complete.skippedFiles, 'a complete run reports none').toBe(0);
+  });
+
+  it('CRITICAL EXPECTED_TEST_FILES_ALL matches disk too. It is the pin that judges the --all run, it was maintained by hand, and it had drifted 12 files behind — so a --all run missing a dozen files would have been called green.', () => {
+    const count = countAllTestFiles();
+    expect(count, 'the globs found a real population').toBeGreaterThan(2000);
+    expect(
+      count,
+      'the --all population must exceed the .test.ts-only one, or this census is not counting the gui-jsdom project',
+    ).toBeGreaterThan(countTestFiles());
+    expect(
+      EXPECTED_TEST_FILES_ALL,
+      'raise EXPECTED_TEST_FILES_ALL in the same commit that adds or removes a test file',
+    ).toBe(count);
   });
 
   it('CRITICAL the pin matches the test files that exist ON DISK right now. Counted from the project s own include globs rather than compared to a frozen fixture: a pin checked against captured output only stays correct until the next test file is added, and a pin left behind the real number silently stops detecting shortfalls — the exact failure this file guards against. Adding a test fails here until the pin is raised, which is the point.', () => {

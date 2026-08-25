@@ -17832,3 +17832,36 @@ project now collects 3018. That commit added two test files and deleted one, a n
 pin is theirs to raise; absorbing it here would hide which change moved the number.
 
 Playwright moves 226 → 227 over 39 spec files, in all four pinned places.
+
+## V-1593 — the pin that judged the `--all` run was maintained by hand, and had drifted
+
+`EXPECTED_TEST_FILES` has been checked against disk all along: a census in
+`scripts/tests/verify-suite.test.ts` walks the include globs and fails until the pin matches. Its
+sibling `EXPECTED_TEST_FILES_ALL` had no such census. It was a hand-maintained number, and it had
+drifted **12 files below reality** — 3179 against 3191 collected.
+
+The gate compares `collected < expectedFiles`, so the pin is a floor. A floor twelve low means
+twelve files could stop being collected and the run would still report "full file count".
+
+**I absorbed the gap, which departs from the standing rule** recorded two entries above — that a pin
+is raised only for the files its author added, because quietly closing someone else's gap hides
+whatever caused it. Stating the departure rather than making it silently:
+
+- The cause is identified and now removed. The gap did not come from a change nobody understood; it
+  came from the pin having no census while its sibling had one, so it fell behind every time anyone
+  added a file without remembering this second number. `countAllTestFiles()` closes that.
+- Nothing is being hidden, because nothing is missing. All 3191 files are collected and running —
+  independently counted (`.test.ts` 3018 + `.test.tsx` 173) and matching what `npx vitest run`
+  reports. This was a lagging counter, not absent coverage.
+- With the census in place a future gap cannot form silently, so there is no cause left for absorbing
+  this one to conceal.
+
+Mutation-proved: restoring 3179 turns the new arm red.
+
+⚠️ **A second finding, about how this suite has been run.** `npx vitest run --root apps/gui-client`
+reports a confident green over 173 files — and `apps/gui-client/tests/unit` holds 247. The missing 74
+are not excluded; they are `.test.ts`, and the root config registers TWO projects: `gui-jsdom`
+(`include: ['tests/**/*.test.tsx']`, jsdom) and the node project
+(`include: ['apps/**/tests/**/*.test.ts', …]`). The `.tsx` extension is the discriminator. A partial
+run is indistinguishable from a complete one — same format, no warning. The whole GUI surface needs a
+path, not `--root`: `npx vitest run apps/gui-client/tests` → 247 files / 2,304 tests.
