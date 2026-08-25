@@ -16816,3 +16816,42 @@ Two things worth keeping from that. The `it(` count is necessary and not suffici
 a file that lost an arm from a file that lost the ability to be read. And an earlier attempt in the same
 batch asserted against text prettier had reformatted, failed its own assertion, and wrote nothing — which
 is the safe way to fail, and the reason there was no half-edited file to untangle.
+
+## V-1569 — what actually catches a test file that stops parsing, and what only the `it(` count catches
+
+V-1568 ended on a worry worth resolving rather than leaving: my edit broke a test file, vitest said
+**"Tests no tests"** instead of failing, and the `it(` count still matched HEAD. If that is how a silent
+parse failure presents, a guard could vanish from the suite while the run stayed green.
+
+**It cannot.** Measured by breaking a file for real — an unterminated string in
+`a-shared-ajv-enforces-the-formats-it-documents` — and running the whole suite:
+
+```
+vitest exit=1
+Test Files  2 failed | 3071 passed | 115 skipped (3188)
+```
+
+**Two independent defences fire.** Vitest reports the transform failure as a failed FILE rather than
+skipping it, so the run exits non-zero on its own. And `the-server-source-type-checks` fails separately,
+by design — its arm says vitest "transpiles them without checking, so a test file can reference a renamed
+export ... and stay green while `npm run typecheck` — a CI gate — fails", recording that this had main red
+for four days.
+
+The "Tests no tests" reading came from running that ONE file in isolation. In isolation vitest has nothing
+to compare against; in the suite it has 3188 files and a type-checker.
+
+### What each check is actually for
+
+Worth separating, because they are not redundant:
+
+- **A file that stops parsing** — caught twice, loudly, without the `it(` count.
+- **A file that parses but LOSES AN ARM** — a stray `);` closing the describe early, an arm commented out —
+  caught by NOTHING above. The file still transforms, still type-checks, and the suite still passes with
+  fewer assertions. Only comparing `it(` against HEAD sees it, which is why the standing rule exists and
+  why V-1568's count check was right to run even though it did not catch that batch's fault.
+
+So the count is not a weaker version of the other two; it covers the case they cannot see. V-1568 said it
+is "necessary and not sufficient" — the accurate statement is that the three cover different failures, and
+the count is the only one that covers silent arm loss.
+
+**No code changed.** The file was restored byte-identical and the suite verified green afterwards.
