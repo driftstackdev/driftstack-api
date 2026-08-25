@@ -15543,3 +15543,41 @@ findings from scratch. Proved by rebuilding each pre-fix world from source and r
 Both would have failed on the day the code was written, naming the exact problem types, with no tracer and
 no call graph. Three batches of hand-tracing produced one arm that does the class automatically — which is
 the right end state for an arc like this, and the honest measure of whether the hand-tracing was worth it.
+
+## V-1538 — a customer-visible split whose only home was a bus message
+
+Two sweeps closed clean before the finding, and both are worth one line each rather than a batch.
+
+**Per-SDK problem-type coverage: complete, and already guarded better than I would have.** All 32 registry
+types are modelled in TypeScript, Python and Go. `cross-sdk-problem-type-coverage-parity` already asserts
+it, reads the roster from `PROBLEM_TYPES` rather than restating it — so a new type is covered the moment
+it is added, which is the only timing that helps — and proves it through a 34-case matrix across all three
+mappers. My measurement reproduced its result and added nothing.
+
+**But its header records a live split, and the split has no durable home.** From that file:
+
+> UNKNOWN type, 500 TS retries it; Python and Go do not
+
+and, a few lines later, that closing it is "raised on the bus rather than taken here". V-1533 found an
+exception whose reason lived only in a commit message and was false the day it was written. A bus message
+is the same class of home: written once, never re-read.
+
+**Re-verified in each SDK's source rather than taken from the guard.** TypeScript falls through to
+`new DriftstackError(toOpts(p.status >= 500 ? 'internal' : 'bad_request', p))` and kind `internal` is
+retryable — its own comment calls this "intentionally unchanged". Python resolves
+`PROBLEM_TYPE_TO_ERROR.get(problem_type, DriftstackError)`, and `is_retryable` is
+`isinstance(err, (TransportError, InternalError, RateLimitError))`, which the base class is not. The same
+5xx is transient to one customer and fatal to another, decided by their language.
+
+**The trigger is not hypothetical and it is one I keep pulling.** The gap opens exactly when the server
+grows a problem type an installed SDK predates. `PROBLEM_TYPES` holds 32 and has grown four times in
+recent work — the two bundled-LLM types and the BYOK one are in the set whose codes V-1534 and V-1535
+declared. A customer on an older Python or Go SDK silently stops retrying transient server errors.
+
+Registered as **D-2026-08-24-03**, unplaced by tier rather than guessed, because both resolutions change
+published retry behaviour and `sdk-versioning.md` treats that as compatibility-relevant. The entry
+deliberately does NOT pin the split: a pin would freeze the disagreement the entry asks a reviewer to
+settle. The coverage half stays pinned by the existing guard, so the way in cannot reopen.
+
+No code changed. What changed is that a customer-visible cross-language difference now sits in the
+register with the other open decisions instead of in a comment inside a test file.
