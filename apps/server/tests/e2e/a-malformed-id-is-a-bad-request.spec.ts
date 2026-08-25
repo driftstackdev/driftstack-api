@@ -112,7 +112,7 @@ const isDeploymentGate = (status: number, text: string): boolean =>
  * Fastify's own "there is no such route" answer.
  *
  * V-1587 — this sweep counted a 404 as a healthy refusal, and an operation whose
- * module was never registered answers 404 too. Twelve of the 106 declared
+ * module was never registered answers 404 too. Two of the 106 declared
  * operations are still in that state under the e2e harness: `buildApp` registers
  * several route modules only when an optional dependency is supplied
  * (`if (deps.incidentsService !== undefined)` and its siblings), and the harness
@@ -445,7 +445,7 @@ test('no id-taking route answers 5xx or 2xx for a malformed id', async ({ reques
   expect(
     unrouted.length,
     'operations the harness does not route are not covered by this sweep',
-  ).toBeLessThanOrEqual(12);
+  ).toBeLessThanOrEqual(2);
 });
 
 test('no id-taking route answers 5xx for an id that is well-formed and absent', async ({
@@ -551,7 +551,7 @@ test('no id-taking route answers 5xx for an id that is well-formed and absent', 
   expect(
     unrouted.length,
     'operations the harness does not route are not covered by this sweep',
-  ).toBeLessThanOrEqual(12);
+  ).toBeLessThanOrEqual(2);
 });
 
 test('a refusal names what is actually missing', async ({ request }) => {

@@ -41,6 +41,28 @@ export interface RegisterAdminCryptoOrdersRoutesDeps {
   audit: AdminAuditService;
 }
 
+/**
+ * V-1592 — the published filter form is `acc_<uuid>`, as the header of this file
+ * says, and it was handed to a repo that filters `crypto_orders.account_id` — a
+ * `uuid` column. So the documented usage was a cast error, not a filter: against
+ * a real database `?account_id=acc_<uuid>` answered 500, and only the
+ * undocumented bare-uuid form worked. Every test missed it because the in-memory
+ * repo stores the id as a plain string, where `acc_1` is a perfectly good key.
+ *
+ * Both forms are accepted and the uuid is what reaches the repo; anything else
+ * is refused as a bad request rather than becoming a server error.
+ */
+const ACCOUNT_FILTER_RE =
+  /^(?:acc_)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+
+function accountUuidFromFilter(value: string): string {
+  const match = ACCOUNT_FILTER_RE.exec(value);
+  if (!match?.[1]) {
+    throw new BadRequestError('Invalid account_id. Expected "acc_<uuid>" or a bare UUID.');
+  }
+  return match[1];
+}
+
 const ListQuery = z.object({
   // account_id is `acc_<36-char-uuid>` (40 chars). 100 cap (slice 116
   // pattern) blocks multi-KB strings that would bloat the 400/404
@@ -240,7 +262,9 @@ export function registerAdminCryptoOrdersRoutes(
         throw new BadRequestError('created_before must be strictly greater than created_after.');
       }
       const page = await deps.service.listForAdminPage({
-        ...(query.account_id !== undefined ? { accountId: query.account_id } : {}),
+        ...(query.account_id !== undefined
+          ? { accountId: accountUuidFromFilter(query.account_id) }
+          : {}),
         ...(limit !== undefined ? { limit } : {}),
         ...(query.status !== undefined ? { status: query.status } : {}),
         ...(query.search !== undefined ? { search: query.search } : {}),
@@ -307,7 +331,9 @@ export function registerAdminCryptoOrdersRoutes(
         throw new BadRequestError('created_before must be strictly greater than created_after.');
       }
       const orders = await deps.service.listForAdmin({
-        ...(query.account_id !== undefined ? { accountId: query.account_id } : {}),
+        ...(query.account_id !== undefined
+          ? { accountId: accountUuidFromFilter(query.account_id) }
+          : {}),
         limit,
         ...(query.status !== undefined ? { status: query.status } : {}),
         ...(query.search !== undefined ? { search: query.search } : {}),

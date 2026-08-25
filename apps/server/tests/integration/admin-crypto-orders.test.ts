@@ -144,22 +144,60 @@ describe('V-666.D GET /v1/admin/crypto-orders — auth + list', () => {
     expect(body.orders.map((o) => o.order_id)).toEqual(['ord_new', 'ord_mid', 'ord_old']);
   });
 
-  it('filters by account_id when supplied', async () => {
+  // V-1592 — this seeded `acc_other` and filtered by it. The in-memory repo keys
+  // orders by a plain string, so any invented id worked; the real column is a
+  // `uuid`, where `acc_other` is a cast error. The route now accepts the published
+  // `acc_<uuid>` form and the bare one, so the fixture uses ids that exist in both
+  // worlds and both shapes are exercised.
+  const OTHER_ACCOUNT = '22222222-3333-4444-5555-666666666666';
+
+  it.each([
+    ['the published prefixed form', `acc_${OTHER_ACCOUNT}`],
+    ['a bare uuid', OTHER_ACCOUNT],
+  ])('filters by account_id when supplied — %s', async (_label, filter) => {
     fx = await buildTestApp({
       scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
     });
     await seedOrders(fx, [
       { order_id: 'ord_a1', account_id: fx.accountId, product: 'trial_pack' },
-      { order_id: 'ord_b1', account_id: 'acc_other', product: 'trial_pack' },
+      { order_id: 'ord_b1', account_id: OTHER_ACCOUNT, product: 'trial_pack' },
     ]);
     const res = await fx.app.inject({
       method: 'GET',
-      url: '/v1/admin/crypto-orders?account_id=acc_other',
+      url: `/v1/admin/crypto-orders?account_id=${filter}`,
       headers: { authorization: `Bearer ${fx.plaintext}` },
     });
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode, 'both published shapes are accepted').toBe(200);
     const body = res.json<AdminOrdersListResponse>();
     expect(body.orders.map((o) => o.order_id)).toEqual(['ord_b1']);
+  });
+
+  it.each([
+    ['a bare word', 'acc_other'],
+    ['a prefix with a broken uuid', 'acc_not-a-uuid'],
+    ['an almost-uuid', '2222222-3333-4444-5555-666666666666'],
+  ])('refuses a malformed account_id filter — %s', async (_label, filter) => {
+    fx = await buildTestApp({
+      scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/admin/crypto-orders?account_id=${filter}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode, 'a malformed filter is refused, not cast').toBe(400);
+  });
+
+  it('the csv export refuses a malformed account_id the same way', async () => {
+    fx = await buildTestApp({
+      scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/crypto-orders.csv?account_id=acc_other',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode, 'the second call site is guarded too').toBe(400);
   });
 
   it('400 on out-of-range limit', async () => {

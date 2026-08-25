@@ -17865,3 +17865,52 @@ are not excluded; they are `.test.ts`, and the root config registers TWO project
 (`include: ['apps/**/tests/**/*.test.ts', …]`). The `.tsx` extension is the discriminator. A partial
 run is indistinguishable from a complete one — same format, no warning. The whole GUI surface needs a
 path, not `--root`: `npx vitest run apps/gui-client/tests` → 247 files / 2,304 tests.
+
+## V-1592 — an admin filter that was broken for the form its own header documents
+
+The twelve unrouted operations V-1588 left behind were declined on the grounds that reaching them meant
+inventing doubles. That reasoning was wrong for nine of them, and checking it produced the sharpest finding
+of the session.
+
+**The parts were all real and already present.** `buildApp` registers the crypto-order operations only when
+`cryptoOrdersService` is supplied. Building it needs `DrizzleCryptoOrdersRepo`, `CryptoTierActivationService`
+over `DrizzleStripeWebhooksRepo`, and the lifecycle service and auth cache the e2e harness already
+constructs — every one the production class against the real database, which is the condition under which
+widening coverage is worth doing. Unrouted fell 12 → 2 for the id sweep and 28 → 9 for the bearer sweep,
+and the query sweep went red immediately.
+
+**`GET /v1/admin/crypto-orders?account_id=` answered 500, and not only for hostile input.** The route
+passes the filter to a repo querying `crypto_orders.account_id`, a `uuid` column. The header of that same
+file documents the parameter as `acc_X`, and:
+
+```
+SELECT 1 FROM crypto_orders WHERE account_id = 'acc_11111111-2222-3333-4444-555555555555';
+ERROR:  invalid input syntax for type uuid
+```
+
+So the drill-down was broken for the shape the route publishes. Only the undocumented bare-uuid form
+worked. Both call sites — the JSON list and the `.csv` export — had it.
+
+**Why every test agreed it was fine.** The integration test named `filters by account_id when supplied`
+seeded `account_id: 'acc_other'` and filtered by it, passing green. In-memory repos key orders by a plain
+string, where any invented id is a perfectly good key; the real column is a uuid, where the same value is
+a cast error. That is the route/database seam V-1581 described, and this is the clearest instance of it
+yet: not a test that missed a case, but a test whose fixture could only exist in the fake world.
+
+The fixture now uses ids valid in both worlds and asserts BOTH published shapes work, which is what the
+old test was silently failing to establish.
+
+**A run-configuration fault of my own, worth recording.** Invoking `npx playwright test <spec> <spec>` from
+the repository root picks up no config: the real one lives at `apps/server/playwright.config.ts` and sets
+`workers: 1, fullyParallel: false` precisely because `startTestServer` drops and recreates the schema.
+Two workers therefore destroyed each other's database, which surfaced as
+`duplicate key value violates unique constraint "pg_namespace_nspname_index"` and looked briefly like a
+product defect. Single-spec runs and `scripts/e2e-local.mjs` were always correct, so no earlier conclusion
+rests on it — but multi-spec runs go through the runner from here.
+
+**Bounds tightened to what was measured**, since a bound with slack absorbs the thing it reports: the id
+sweep's unrouted bound moves 12 → 2 and the bearer sweep's 28 → 9. Reverting the fix reds five arms across
+both call sites.
+
+Full suite 3076 files / 30996 tests, green; e2e 227 passed against a disposable migrated Postgres,
+dropped afterwards.

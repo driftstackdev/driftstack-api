@@ -156,6 +156,6 @@ test('an operation that declares a bearer token refuses a caller without one', a
   // number here would have been a figure copied rather than measured, and it
   // failed on the first run for exactly that reason.
   expect(unrouted.length, 'unrouted operations are not covered by this spec').toBeLessThanOrEqual(
-    28,
+    9,
   );
 });

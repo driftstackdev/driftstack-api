@@ -22,6 +22,10 @@ import { dirname, resolve } from 'node:path';
 import { buildApp } from '../../../src/lib/app.js';
 import { DrizzleIncidentsRepo } from '../../../src/db/incidents-repo.js';
 import { IncidentsService } from '../../../src/services/incidents.js';
+import { DrizzleCryptoOrdersRepo } from '../../../src/db/crypto-orders-repo.js';
+import { DrizzleStripeWebhooksRepo } from '../../../src/db/stripe-webhooks-repo.js';
+import { CryptoOrdersService } from '../../../src/services/crypto-orders.js';
+import { CryptoTierActivationService } from '../../../src/services/crypto-tier-activation.js';
 import { createTestLogger } from '../../../src/lib/logger.js';
 import { MockDriver } from '../../../src/drivers/mock.js';
 import { SessionsService } from '../../../src/services/sessions.js';
@@ -134,6 +138,8 @@ const TRUNCATE_SQL = `
     "rate_limit_overrides",
     "webhook_deliveries",
     "webhook_endpoints",
+    "crypto_entitlements",
+    "crypto_orders",
     "incident_updates",
     "incidents",
     "admin_audit_log",
@@ -215,6 +221,7 @@ export async function startTestServer(): Promise<TestServer> {
   // fire on successful creates, not on the not-found paths under test, and a
   // hand-written no-op here would be a double nobody asked for.
   const incidentsService = new IncidentsService(new DrizzleIncidentsRepo(database));
+
   const rateLimitStore = new RedisRateLimitStore(redis);
   const authCache = new RedisAuthCache(redis, logger);
 
@@ -270,6 +277,24 @@ export async function startTestServer(): Promise<TestServer> {
     },
     accountAuditService, // V-202b — tier_changed audit emit
   );
+
+  // V-1592 — `buildApp` registers nine crypto-order operations only when this is
+  // supplied, and without it they answered "No route for" and were excluded from
+  // both malformed-id sweeps. Every part below is the production class against
+  // the real database: the drizzle repos bootstrap uses, and the same tier
+  // activator, wired to the lifecycle service and auth cache this harness already
+  // builds. Nothing here is a stand-in, which is the condition under which
+  // widening coverage is worth doing at all.
+  const cryptoOrdersService = new CryptoOrdersService({
+    repo: new DrizzleCryptoOrdersRepo(database),
+    tierActivator: new CryptoTierActivationService(
+      new DrizzleStripeWebhooksRepo(database),
+      logger,
+      accountLifecycleService,
+      authCache,
+    ),
+    logger,
+  });
 
   const scheduledJobsRepo = new DrizzleScheduledJobsRepo(database);
   const scheduledJobsService = new ScheduledJobsService(scheduledJobsRepo, logger, {
@@ -465,6 +490,7 @@ export async function startTestServer(): Promise<TestServer> {
     adminAuditService,
     accountsAdminService,
     incidentsService,
+    cryptoOrdersService,
     adminBillingService,
     pricingService,
     platformSecretsService,
