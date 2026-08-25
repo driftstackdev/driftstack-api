@@ -18134,3 +18134,54 @@ Both pins raised by one for the file this batch adds, and only for that file. Fu
 `/v1/status/stream` has zero mentions in `openapi.ts` and is absent from the published document, while its
 connection-cap gate sets `retry-after: 30` on refusal. An undocumented public SSE endpoint is a separate
 question from this one and is left recorded rather than folded in.
+
+## V-1599 — the gate that makes a scope-skipping credential safe, now checked
+
+Two open items from the previous batch were closed by reading rather than editing, and the reading led
+somewhere better than either.
+
+**`/v1/status/stream` is not undocumented.** It is absent from `openapi.json`, which is what I measured,
+but `a-route-in-neither-the-spec-nor-the-docs-is-a-decision` deliberately accepts spec OR docs, and the
+endpoint is written up in `apps/docs/src/pages/api/status.md`. Prose-only is a defensible convention for
+SSE, which OpenAPI describes poorly. Not a finding.
+
+**The two routes that guard DOES flag are not mine to fix.** `POST /v1/sessions/{id}/gui-input` and
+`GET /v1/agent-sessions/{id}/gui-control-key` appear in neither the spec nor the docs while being
+reachable with an ordinary customer key. The guard says why it stops short, and it is right: "Publishing
+an endpoint is a product commitment — it is what the SDKs generate against and what the deprecation policy
+then covers... Deciding whether that is a public API is not a drift guard's call. Recording that the
+decision has not been made is."
+
+**What that header led to is worth the detour.** It describes `gui-control-key` as minting a credential
+that reaches five other routes "with no scope check of its own (audit wxzlp9yiz, a P1 auth bypass)". Read
+in isolation that sounds live. It is not: the mint now demands `write` AND `read:sessions`, and the source
+comment explains why both — with only `write`, a bare-write key could mint its way into the live cookie
+jar, page state and downloaded bytes; with only `read`, a read-only key could escalate to
+mode/input/takeover/handback and DELETE. The original rationale reasoned about read→write and missed
+write→read.
+
+**But the mechanism the P1 exploited is still the design.** Every `controlKeyOrAccountAuth` route returns
+on a valid control key BEFORE `requireScope` runs, so the key reaches those routes having proven nothing
+there. The mint is the only gate. That makes one thing a standing invariant rather than a one-time fix:
+the set of scopes a control key can REACH must stay inside the set the mint already REQUIRED.
+
+Measured: reached `{read:sessions, write}` across fourteen registrations — five reads (GET /:id,
+page-state, cookies, downloads, downloads/content) and nine writes — against a mint requiring
+`{read:sessions, write}`. Equal today. Both sides derived from source; the assertion is subset, because
+demanding more at the mint than the key can reach is a tightening rather than a hole.
+
+Proven in both directions. Pointing one registration at `admin:profiles` flags it as reachable by a key
+that never proved it. Dropping `read:sessions` from the mint — literally the pre-audit state wxzlp9yiz
+found — flags `read:sessions`, which is the P1 reproduced and caught. Restores byte-identical.
+
+### Concurrency
+
+Six failures appeared mid-batch and none were this work: five are a peer's in-flight proxies-grid suite
+(`ProxiesView.tsx` dirty, plus a new gui-client spec), and the sixth reports `github-slugger in apps/docs`
+— an install-hoisting condition in a workspace this batch does not touch. Attributed via `git status`
+before investigating.
+
+The `_ALL` pin briefly read one behind disk because that peer added a spec file while this one did. I
+raised it by one, for one file, and left theirs alone; their commit `161cd3011` then raised it again for
+their own and swept my node-project bump along with it. Both pins are now correct for both files, which is
+the right outcome reached by each side counting only what it added.
