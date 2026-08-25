@@ -19872,3 +19872,52 @@ reporting its own boundary honestly, read as terrain.
 
 **The rule, stated so it survives the person who learned it: before trusting a zero, make the instrument
 produce a one.**
+
+## V-1643 — seven arms that could not fail, and the chain that was actually holding
+
+⭐ **The same `[\s\S]+?` shape as this morning's suite-killer, minus the backtracking.** Where that one was
+a lazy scan that could not finish, this is a lazy scan that finishes in the wrong place.
+
+`v485-tier-features-parity` asserted fourteen per-tier values against the TEXT of
+`packages/api-types/src/common.ts`, each of the form:
+
+    new RegExp(`${tier}: \{[\s\S]+?apiKeyEnvironment: 'live',`)
+
+⛔ **Every one of the eight tier names occurs TWICE in that file** — once in the per-tier rate-limit table
+(~330-382) and once in `TIER_FEATURES` (~444-507) — and the rate-limit occurrence always comes FIRST. So an
+unanchored lazy scan could **begin in the rate-limit table and terminate at a different tier's field**, a
+hundred lines away. Each arm degraded from _"THIS tier has this value"_ to _"SOME tier has this value"_.
+
+**Mutation-proved before the repair**, restoring byte-identical from a path-keyed snapshot each time:
+
+    free.concurrentSessions        1 -> 99     16 passed   (silent)
+    solo_manual.concurrentSessions 1 -> 77     16 passed   (silent)
+    solo_manual.profiles          10 -> 88      1 failed   (caught — by luck)
+
+The `profiles` mutation was caught only because no other tier's `profiles` is `10`. `free` and
+`solo_manual` both have `concurrentSessions: 1`, and that is what makes the ambiguity exploitable. **A
+guard whose pass depends on the values not colliding is not a guard.**
+
+⚠️ **The property was never unguarded, and finding that out took a third probe rather than an assumption.**
+Two other guards hold it, as a CHAIN rather than as two independent checks:
+
+- `tier-features` imports the records and compares them properly — but it imports `@driftstack/api-types`,
+  which resolves to `dist/index.js`. **It is blind to a source edit until a rebuild**, which is why it also
+  stayed green under the mutations above.
+- `the-built-api-types-agrees-with-its-source` closes exactly that gap. Mutation-proved: an unrebuilt
+  source edit fails it, 1 of 4.
+
+So edit source alone → the built-vs-source guard fires. Edit source and rebuild → `tier-features` fires.
+Either way it is caught. ⭐ **But three layers that read as independent were a chain plus a no-op**, and the
+danger of the no-op is precisely that: someone trimming the other two would find this one green.
+
+**Repaired** with a `tierRow()` reader that slices to `TIER_FEATURES` before matching and anchors per row
+(`\n  ${tier}: \{([^}]*)\}` — three independent reasons it cannot wander), plus a POSITIVE CONTROL arm
+that asserts each row carries its own values, cannot reach a neighbour's, never lands in the rate-limit
+table, and throws on an unknown tier. After: the same mutations fail it 2, 1 and 1 respectively, and a
+third (`api_scale.apiKeyEnvironment 'live' -> 'test'`) also fails.
+
+⚠️ **Boundary, stated because it bounds the claim:** eight other guards build an interpolated `RegExp`
+containing a lazy any-char run. Their prefixes are DECLARATIONS (`${name} = z.object({`, `${group}=(`),
+which are structurally unique in a file, where v485's prefix was a repeated KEY. **I have not
+mutation-proved those eight**, and the distinction is a reading, not a measurement.

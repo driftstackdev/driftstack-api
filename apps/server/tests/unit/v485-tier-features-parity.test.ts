@@ -20,9 +20,57 @@ function read(p: string): string {
 
 const COMMON = resolve(REPO_ROOT, 'packages/api-types/src/common.ts');
 
+/**
+ * One tier's row from `TIER_FEATURES`, and ONLY that row.
+ *
+ * ⛔ Every value assertion below used to search the WHOLE FILE with
+ * `${tier}: \{[\s\S]+?field: value,`. Each tier name appears TWICE in
+ * common.ts — once in the per-tier rate-limit table and once in
+ * TIER_FEATURES, about a hundred lines apart — so the lazy unanchored scan
+ * could BEGIN in the rate-limit table and TERMINATE at a DIFFERENT tier's
+ * field. Every arm degraded from "THIS tier has this value" to "SOME tier
+ * has this value".
+ *
+ * Mutation-proved both ways (V-1643): setting `free.concurrentSessions` to 99
+ * left this file entirely green; read through `tierRow` the same mutation
+ * fails it. ⚠️ The property was never unguarded —
+ * `the-built-api-types-agrees-with-its-source` catches an unrebuilt source
+ * edit and `tier-features` compares the built records — but a layer that
+ * CANNOT fail is worse than no layer, because it reads as coverage.
+ */
+function tierRow(tier: string): string {
+  const c = read(COMMON);
+  const start = c.indexOf('export const TIER_FEATURES');
+  if (start < 0) throw new Error('TIER_FEATURES not found in common.ts');
+  const m = new RegExp(`\\n  ${tier}: \\{([^}]*)\\}`).exec(c.slice(start));
+  if (m === null) throw new Error(`no TIER_FEATURES row for tier "${tier}"`);
+  return m[1]!;
+}
+
 describe('W732 V-485 TIER_FEATURES per-tier feature registry parity', () => {
   it('common.ts file exists', () => {
     expect(existsSync(COMMON)).toBe(true);
+  });
+
+  it('CRITICAL POSITIVE CONTROL the row reader isolates ONE tier, so every value assertion below means what it says. Without this the arms read as coverage while matching a neighbour a hundred lines away.', () => {
+    const free = tierRow('free');
+    const scale = tierRow('api_scale');
+
+    // Each row carries its own values...
+    expect(free).toMatch(/concurrentSessions: 1,/);
+    expect(scale).toMatch(/concurrentSessions: 24,/);
+
+    // ...and CANNOT reach a neighbour's. This is the arm that fails if the
+    // reader ever goes back to scanning the whole file.
+    expect(free).not.toMatch(/concurrentSessions: 24,/);
+    expect(scale).not.toMatch(/concurrentSessions: 1,/);
+
+    // The per-tier RATE-LIMIT table also has a `free: {` row. The reader must
+    // never land in it — that ambiguity is what made these arms vacuous.
+    expect(free).not.toMatch(/refill_per_second/);
+
+    // A tier that does not exist must throw rather than silently return ''.
+    expect(() => tierRow('no_such_tier')).toThrow(/no TIER_FEATURES row/);
   });
 
   it('CRITICAL V-485 anchor + single-source-of-truth framing pinned. The registry consolidates scattered call-site checks (tier===trial_pack, PROFILES_PER_TIER, TIER_CONCURRENT_SESSION_LIMITS) into one place.', () => {
@@ -76,8 +124,7 @@ describe('W732 V-485 TIER_FEATURES per-tier feature registry parity', () => {
   });
 
   it('CRITICAL apiKeyEnvironment is "test" on free + "live" elsewhere. The test/live split is what determines whether the minted Stripe key is sandboxed or real. Drift to "live" on free would let free keys charge real money.', () => {
-    const c = read(COMMON);
-    expect(c).toMatch(/free: \{[\s\S]+?apiKeyEnvironment: 'test',/);
+    expect(tierRow('free')).toMatch(/apiKeyEnvironment: 'test',/);
 
     // Every non-free tier uses 'live'.
     for (const tier of [
@@ -89,15 +136,14 @@ describe('W732 V-485 TIER_FEATURES per-tier feature registry parity', () => {
       'api_scale',
       'enterprise',
     ]) {
-      expect(c, `${tier} apiKeyEnvironment: live`).toMatch(
-        new RegExp(`${tier}: \\{[\\s\\S]+?apiKeyEnvironment: 'live',`),
+      expect(tierRow(tier), `${tier} apiKeyEnvironment: live`).toMatch(
+        new RegExp(`apiKeyEnvironment: 'live',`),
       );
     }
   });
 
   it('CRITICAL apiAccess: false ONLY on free; true everywhere else. The boolean discriminator gates manual-only (no API) vs API-capable tiers.', () => {
-    const c = read(COMMON);
-    expect(c).toMatch(/free: \{[\s\S]+?apiAccess: false,/);
+    expect(tierRow('free')).toMatch(/apiAccess: false,/);
 
     for (const tier of [
       'solo_manual',
@@ -108,16 +154,13 @@ describe('W732 V-485 TIER_FEATURES per-tier feature registry parity', () => {
       'api_scale',
       'enterprise',
     ]) {
-      expect(c, `${tier} apiAccess: true`).toMatch(
-        new RegExp(`${tier}: \\{[\\s\\S]+?apiAccess: true,`),
-      );
+      expect(tierRow(tier), `${tier} apiAccess: true`).toMatch(new RegExp(`apiAccess: true,`));
     }
   });
 
   it('CRITICAL aiAgent gate matrix pinned — false on free + solo_manual; true on every other paid tier. Matches W729 marketing.aiAgent (founder Tier 3 spec post-V-072).', () => {
-    const c = read(COMMON);
-    expect(c).toMatch(/free: \{[\s\S]+?aiAgent: false,/);
-    expect(c).toMatch(/solo_manual: \{[\s\S]+?aiAgent: false,/);
+    expect(tierRow('free')).toMatch(/aiAgent: false,/);
+    expect(tierRow('solo_manual')).toMatch(/aiAgent: false,/);
 
     for (const tier of [
       'team_manual',
@@ -127,28 +170,25 @@ describe('W732 V-485 TIER_FEATURES per-tier feature registry parity', () => {
       'api_scale',
       'enterprise',
     ]) {
-      expect(c, `${tier} aiAgent: true`).toMatch(
-        new RegExp(`${tier}: \\{[\\s\\S]+?aiAgent: true,`),
-      );
+      expect(tierRow(tier), `${tier} aiAgent: true`).toMatch(new RegExp(`aiAgent: true,`));
     }
   });
 
   it('CRITICAL llmBilling gate matrix pinned — null on free+solo; byok_only on team/agency/starter; byok_or_bundled on builder/scale; byok_or_bundled_custom on enterprise. Matches W729 marketing.llmBilling.', () => {
-    const c = read(COMMON);
-    expect(c).toMatch(/free: \{[\s\S]+?llmBilling: null,/);
-    expect(c).toMatch(/solo_manual: \{[\s\S]+?llmBilling: null,/);
+    expect(tierRow('free')).toMatch(/llmBilling: null,/);
+    expect(tierRow('solo_manual')).toMatch(/llmBilling: null,/);
 
     for (const tier of ['team_manual', 'agency_manual', 'api_starter']) {
-      expect(c, `${tier} llmBilling: byok_only`).toMatch(
-        new RegExp(`${tier}: \\{[\\s\\S]+?llmBilling: 'byok_only',`),
+      expect(tierRow(tier), `${tier} llmBilling: byok_only`).toMatch(
+        new RegExp(`llmBilling: 'byok_only',`),
       );
     }
     for (const tier of ['api_builder', 'api_scale']) {
-      expect(c, `${tier} llmBilling: byok_or_bundled`).toMatch(
-        new RegExp(`${tier}: \\{[\\s\\S]+?llmBilling: 'byok_or_bundled',`),
+      expect(tierRow(tier), `${tier} llmBilling: byok_or_bundled`).toMatch(
+        new RegExp(`llmBilling: 'byok_or_bundled',`),
       );
     }
-    expect(c).toMatch(/enterprise: \{[\s\S]+?llmBilling: 'byok_or_bundled_custom',/);
+    expect(tierRow('enterprise')).toMatch(/llmBilling: 'byok_or_bundled_custom',/);
   });
 
   it('CRITICAL TIER_FEATURES Record type — Record<AccountTier, TierFeatures>. Drift to a different key type would let an unknown tier slip past the gate.', () => {
@@ -170,15 +210,13 @@ describe('W732 V-485 TIER_FEATURES per-tier feature registry parity', () => {
       ['api_scale', 24],
     ];
     for (const [tier, val] of expected) {
-      expect(c, `${tier} concurrentSessions: ${val}`).toMatch(
-        new RegExp(`${tier}: \\{[\\s\\S]+?concurrentSessions: ${val},`),
+      expect(tierRow(tier), `${tier} concurrentSessions: ${val}`).toMatch(
+        new RegExp(`concurrentSessions: ${val},`),
       );
     }
   });
 
   it('CRITICAL cross-record consistency — TIER_FEATURES.profiles[tier] === PROFILES_PER_TIER[tier]. The values mirror across both records.', () => {
-    const c = read(COMMON);
-
     const expected: Array<[string, string]> = [
       ['free', '1'],
       ['solo_manual', '10'],
@@ -190,8 +228,8 @@ describe('W732 V-485 TIER_FEATURES per-tier feature registry parity', () => {
       ['enterprise', "'custom'"],
     ];
     for (const [tier, val] of expected) {
-      const re = new RegExp(`${tier}: \\{[\\s\\S]+?profiles: ${val.replace(/'/g, "'")},`);
-      expect(c, `${tier} profiles: ${val}`).toMatch(re);
+      const re = new RegExp(`profiles: ${val.replace(/'/g, "'")},`);
+      expect(tierRow(tier), `${tier} profiles: ${val}`).toMatch(re);
     }
   });
 
