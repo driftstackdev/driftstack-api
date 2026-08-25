@@ -16636,3 +16636,35 @@ the same fault as a scan that knows one spelling of a mechanism, arriving in the
 
 Corrected mid-batch, which took 6 candidates to 4, and the remaining four then fell to reading. **No code
 changed and no finding filed**, because four verified-safe files are not a finding.
+
+## V-1564 — the one declared branch with no behavioural test, and the ordering that decides which fix a customer is told to make
+
+Thirteen status codes were declared across this arc. Checking which are actually exercised turned up one
+that is not.
+
+**`POST /v1/agent-sessions/{id}/message` → 502 has no behavioural test.** `ByokAnthropicRequiredError`
+appears in four unit files and every one is a catalogue: the SDK export list, the RFC 7807 shape pin, the
+Python `__all__` parity, and the arm V-1534 added. No test drives the route and observes the status. The
+502s that DO exist in the integration suite are `/v1/sessions` driver errors — a different class, which is
+why a keyword count said "covered" and reading said otherwise.
+
+**I did not write that test, and the reason is the session's own lesson.** Reaching the branch needs
+`resolvedByokKey === undefined && agentDecomposerKind === 'claude'`, a tier that IS eligible and consent
+that is NOT missing — a fixture whose decomposer configuration I cannot verify from the outside. A test
+that passes because it was refused three lines earlier looks identical to one that reached the branch, and
+this arc has now produced eight instruments that failed exactly that way. The precise conditions are
+recorded here so it can be written correctly rather than plausibly.
+
+**What is pinned instead is the part a fixture would not have protected anyway: the ORDER.** Three
+refusals sit in one branch and each names a different fix — 403 upgrade your plan, 402 flip the consent
+toggle, 502 supply a key. The source says the ordering is deliberate twice over: the tier branch is
+commented "Deliberately NOT the consent error: consent is on", and the consent branch exists because the
+generic 502 "doesn't hint at the simpler dashboard fix".
+
+Reordering them compiles, leaves every status declared, and keeps every existing guard green — while
+telling a paying customer to buy an upgrade they already have, or to go and find an API key when a toggle
+would do. Proved by swapping the consent and credential branches: it reds with "the keyless-turn refusals
+are out of order".
+
+That is the shape worth noticing. A status-code guard checks WHICH codes exist; this checks which one a
+customer gets, and those are different properties of the same three lines.

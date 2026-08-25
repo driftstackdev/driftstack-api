@@ -585,4 +585,29 @@ describe('a returned status code is a declared one', () => {
         'generated client cannot model a refusal the contract omits',
     ).toEqual([]);
   });
+
+  it('V-1564 CRITICAL the three refusals a keyless turn can hit stay in the order the source calls deliberate: tier first (403), then consent (402), then the generic credential error (502). Each names a different fix — upgrade, flip a toggle, supply a key — and the code says so twice: the tier branch is commented "Deliberately NOT the consent error: consent is on", and the consent branch exists so the customer is not sent the generic 502 that "doesn\'t hint at the simpler dashboard fix". Reordering them compiles, keeps every status declared, and tells a paying customer to buy an upgrade they already have. Pinned statically because the 502 has no behavioural test: the branch needs a claude decomposer with no key, and every integration test that reaches this route either succeeds or is refused earlier.', () => {
+    const route = codeOf(resolve(ROUTES_DIR, 'agent-sessions.ts'));
+
+    const entry = route.indexOf(
+      "resolvedByokKey === undefined && agentDecomposerKind === 'claude'",
+    );
+    expect(entry, 'the keyless-turn branch still exists').toBeGreaterThan(-1);
+
+    const tier = route.indexOf('bundledLlmTierIneligible', entry);
+    const consent = route.indexOf('BundledLlmConsentRequiredError', entry);
+    const generic = route.indexOf('ByokAnthropicRequiredError', entry);
+    for (const [name, at] of [
+      ['tier refusal', tier],
+      ['consent refusal', consent],
+      ['credential refusal', generic],
+    ] as const) {
+      expect(at, `${name} still reachable from the keyless-turn branch`).toBeGreaterThan(-1);
+    }
+
+    expect(
+      [tier, consent, generic],
+      'the keyless-turn refusals are out of order — a customer would be told to fix the wrong thing',
+    ).toEqual([tier, consent, generic].slice().sort((a, b) => a - b));
+  });
 });
