@@ -18435,49 +18435,6 @@ arm still passed.
 
 Both pins raised by one, for the one file this batch adds.
 
-## V-1610 — the document says 201 operations need a token; this asks whether they do
-
-`openapi.json` is generated from the route definitions, which makes it a good second artefact for most
-questions and a useless one for this one. The security block is generated from what a route DECLARES, not
-from what it enforces: a handler whose auth `preHandler` went missing publishes the same
-`security: [{ BearerAuth: [] }]` it always did, and every static check in this repo would keep agreeing
-with it. The only artefact that can disagree is the running server, asked without a token.
-
-**Nothing was wrong, and the measurement is the result.** Of 201 bearer-declared operations, 146 refuse an
-anonymous caller outright and 27 answer a typed deployment gate before authentication is reached. Not one
-served data. The remaining 28 are unrouted under this harness for the reasons V-1587 established.
-
-**The gate-before-auth ordering is recorded rather than filed.** Those 27 answer 503 `feature-unavailable`
-to a request carrying no credentials, so an anonymous caller can learn which optional features a
-deployment has switched on. That is information the public status page carries anyway and the bodies are
-product copy, not secrets — but a later reader finding 27 unauthenticated 503s should not have to
-rediscover why, so the spec says it out loud.
-
-**A bound copied instead of measured, and it failed immediately.** The first version bounded the unrouted
-set at twelve, taken from the sibling id-sweep. That sweep walks the 106 single-parameter operations; this
-one walks all 201 that declare a bearer requirement, so more dependency-gated modules fall inside it. The
-real figure is 28. A number restated from a neighbouring file rather than measured for the population at
-hand is the exact fault this log keeps recording, and it is a small mercy that it failed on the first run
-rather than passing with slack.
-
-**The mutation proof, stated for what it actually shows.** Removing the `requireScope` preHandler from
-`admin-usage` reds the guard — but the route then answers 500 rather than serving data, because the
-handler reaches for an account context that is no longer there. So this proves the guard notices when a
-bearer-declared operation stops refusing anonymous; it does not prove it catches a route that would
-happily serve. That is a weaker claim than "catches an auth bypass" and is the one worth writing down.
-
-**Two working-tree facts, both about concurrency rather than code.** The restore step after that mutation
-silently did nothing: `$S` was set in an earlier shell and each command runs in a fresh one, so `cp`
-received an empty path and the route stayed unauthenticated until the next check caught it. Restores use
-absolute paths from here. Separately, a peer's retention commit swept up this batch's spec and figure
-edits into `de8155994` via a broad add — correctly, as it happens, but not by this session.
-
-**One red is outstanding and it is not this work.** `EXPECTED_TEST_FILES` reads 3017 where the node
-project now collects 3018. That commit added two test files and deleted one, a net of exactly one, so the
-pin is theirs to raise; absorbing it here would hide which change moved the number.
-
-Playwright moves 226 → 227 over 39 spec files, in all four pinned places.
-
 ## V-1608 — the guard counted twelve tiers on an eight-tier page, and would have counted anything
 
 `published-tier-caps-match-the-code` reads six docs pages and compares every published cap against
@@ -18544,3 +18501,79 @@ cache was the only thing a trim cleared, and quietly misleading once it was not.
 the scopes in a table with an example body, and quotes the reason the route actually emits.
 
 Adding that table is what tripped V-1608.
+
+## V-1610 — the document says 201 operations need a token; this asks whether they do
+
+`openapi.json` is generated from the route definitions, which makes it a good second artefact for most
+questions and a useless one for this one. The security block is generated from what a route DECLARES, not
+from what it enforces: a handler whose auth `preHandler` went missing publishes the same
+`security: [{ BearerAuth: [] }]` it always did, and every static check in this repo would keep agreeing
+with it. The only artefact that can disagree is the running server, asked without a token.
+
+**Nothing was wrong, and the measurement is the result.** Of 201 bearer-declared operations, 146 refuse an
+anonymous caller outright and 27 answer a typed deployment gate before authentication is reached. Not one
+served data. The remaining 28 are unrouted under this harness for the reasons V-1587 established.
+
+**The gate-before-auth ordering is recorded rather than filed.** Those 27 answer 503 `feature-unavailable`
+to a request carrying no credentials, so an anonymous caller can learn which optional features a
+deployment has switched on. That is information the public status page carries anyway and the bodies are
+product copy, not secrets — but a later reader finding 27 unauthenticated 503s should not have to
+rediscover why, so the spec says it out loud.
+
+**A bound copied instead of measured, and it failed immediately.** The first version bounded the unrouted
+set at twelve, taken from the sibling id-sweep. That sweep walks the 106 single-parameter operations; this
+one walks all 201 that declare a bearer requirement, so more dependency-gated modules fall inside it. The
+real figure is 28. A number restated from a neighbouring file rather than measured for the population at
+hand is the exact fault this log keeps recording, and it is a small mercy that it failed on the first run
+rather than passing with slack.
+
+**The mutation proof, stated for what it actually shows.** Removing the `requireScope` preHandler from
+`admin-usage` reds the guard — but the route then answers 500 rather than serving data, because the
+handler reaches for an account context that is no longer there. So this proves the guard notices when a
+bearer-declared operation stops refusing anonymous; it does not prove it catches a route that would
+happily serve. That is a weaker claim than "catches an auth bypass" and is the one worth writing down.
+
+**Two working-tree facts, both about concurrency rather than code.** The restore step after that mutation
+silently did nothing: `$S` was set in an earlier shell and each command runs in a fresh one, so `cp`
+received an empty path and the route stayed unauthenticated until the next check caught it. Restores use
+absolute paths from here. Separately, a peer's retention commit swept up this batch's spec and figure
+edits into `de8155994` via a broad add — correctly, as it happens, but not by this session.
+
+**One red is outstanding and it is not this work.** `EXPECTED_TEST_FILES` reads 3017 where the node
+project now collects 3018. That commit added two test files and deleted one, a net of exactly one, so the
+pin is theirs to raise; absorbing it here would hide which change moved the number.
+
+Playwright moves 226 → 227 over 39 spec files, in all four pinned places.
+
+## V-1612 — the four trim scopes were written twice, and the published contract read the copy
+
+`TRIM_PROFILE_SCOPES` sat below `TrimProfileRequestSchema` carrying the docstring "the scopes
+{@link TrimProfileRequestSchema} accepts", four lines under a `scope: z.enum(['cache', 'cookies',
+'history', 'all'])` that was a separate literal. The docstring asserted an equality; nothing enforced it.
+`grep -rn TRIM_PROFILE_SCOPES` over the tests returns nothing, and the content-parity guard pinned each
+list on its own — which freezes a drift rather than preventing one.
+
+Three things read that constant, and V-1609 made the third of them customer-facing: the route's
+`TrimScopeBodySchema` validates the caller's body against it, `lib/openapi.ts` now builds the published
+request body from it, and the frame schema used the other list. **So the drift was not symmetric, and
+neither direction is a test failure.** A fifth value added to the enum alone is accepted on the wire and
+refused at the route as a 400 the document calls valid. Added to the constant alone, it is accepted by the
+route, published to the Python and Go SDKs as a supported scope, and then refused by the frame schema on
+the way to the node — an error surfacing one layer below the one that promised it.
+
+The enum derives now. `TRIM_PROFILE_SCOPES` moves above the frame, `scope: z.enum(TRIM_PROFILE_SCOPES)`,
+and the second list is gone; TypeScript enforces the ordering, so there is no rule to remember. Deriving
+removes the question rather than pinning an answer to it, which is the difference between this and what
+the parity guard was doing.
+
+**The guard was pinning the copy, and would have passed the regression.** Its regex named the four values
+inline, so re-inlining them in the schema — the exact revert this change guards against — still matched.
+It pins `z.enum(TRIM_PROFILE_SCOPES)` now, plus the single declaration. Both mutation-proved: re-inlining
+the literal fails the first, changing `all` to `everything` fails the second, and the file restores
+byte-identical from a snapshot.
+
+Contract-neutral, and checked rather than reasoned: api-types rebuilt, spec re-dumped, prettier run, and
+`packages/sdk-python/openapi.json` compares byte-identical to what V-1609 published — `required: false`,
+`enum ['cache','cookies','history','all']`, `additionalProperties: false`.
+
+No pin bumped: this adds no test file.

@@ -1646,6 +1646,22 @@ export const DownloadDataResultSchema = z.object({
 export type DownloadDataResult = z.infer<typeof DownloadDataResultSchema>;
 
 // ── Profile TRIM / eviction (doc-150 §8.3 — storage cleanup) ──────────
+//
+// The scopes a trim may name. Declared HERE, above the frame, because three
+// things derive from it and they must not be three lists: this schema's `scope`
+// enum, the route's customer-facing body schema (routes/profiles.ts —
+// `TrimScopeBodySchema`), and the published contract (lib/openapi.ts registers
+// the request body from it, so these values ARE the customer's documented set).
+//
+// V-1612 — it used to sit below the schema as a second hand-kept literal, with a
+// docstring calling it "the scopes TrimProfileRequestSchema accepts" and nothing
+// enforcing that. The two could drift, and the drift was not symmetric: a value
+// added to the enum alone is rejected at the route as a 400 the document says is
+// valid, while a value added here alone is accepted by the route, published to
+// the SDKs, and then refused by the frame schema on the way to the node. Making
+// the enum derive removes the question rather than pinning an answer to it.
+export const TRIM_PROFILE_SCOPES = ['cache', 'cookies', 'history', 'all'] as const;
+export type TrimProfileScope = (typeof TRIM_PROFILE_SCOPES)[number];
 // CP→node REQUEST (`serializeTrimProfile`): POST /v1/profiles/:id/trim issues this
 // over ANY healthy node's LIVE control WSS, keyed by `requestId`; A3's harness opens
 // the sealed blob with `dek`, drops the re-fetchable cache subtrees (NetworkCache /
@@ -1683,13 +1699,10 @@ export const TrimProfileRequestSchema = z
     // old node (which ignores it) and an old CP (which omits it) both correct.
     // The node ALSO narrows an unrecognised value to 'cache', so the enum here is
     // a validation nicety rather than the safety property.
-    scope: z.enum(['cache', 'cookies', 'history', 'all']).optional(),
+    scope: z.enum(TRIM_PROFILE_SCOPES).optional(),
   })
   .strict();
 export type TrimProfileRequest = z.infer<typeof TrimProfileRequestSchema>;
-/** The scopes {@link TrimProfileRequestSchema} accepts, for route + GUI reuse. */
-export const TRIM_PROFILE_SCOPES = ['cache', 'cookies', 'history', 'all'] as const;
-export type TrimProfileScope = (typeof TRIM_PROFILE_SCOPES)[number];
 
 // node→CP RESULT: echoes `requestId` + `profileId`. SUCCESS → `ok:true` +
 // `newSizeBytes` (the re-sealed trimmed byte count, which A2 persists as the new

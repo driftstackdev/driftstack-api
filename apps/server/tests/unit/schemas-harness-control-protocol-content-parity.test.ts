@@ -338,8 +338,17 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     // block above so its optionality is visible as its own assertion: absent
     // means 'cache', which is what the op did before the field existed, and
     // that is the property an older node depends on.
+    //
+    // V-1612 — pinned as DERIVED rather than as a literal. The four values are
+    // declared once, above the frame, and the route's body schema and the
+    // published request body build from that same constant. A regex naming the
+    // list here would have frozen a COPY: re-inlining the four values would
+    // still have matched, which is the state this replaced.
     expect(body).toMatch(
-      /scope: z\.enum\(\['cache', 'cookies', 'history', 'all'\]\)\.optional\(\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\);/,
+      /scope: z\.enum\(TRIM_PROFILE_SCOPES\)\.optional\(\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\);/,
+    );
+    expect(body).toMatch(
+      /export const TRIM_PROFILE_SCOPES = \['cache', 'cookies', 'history', 'all'\] as const;/,
     );
     // node→CP RESULT — ok?/newSizeBytes?/bytesReclaimed?/error?, lenient like cookiesResult.
     expect(body).toContain('export const TrimProfileResultSchema = z.object({');
