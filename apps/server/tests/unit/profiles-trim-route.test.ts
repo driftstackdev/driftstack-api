@@ -209,6 +209,12 @@ describe('POST /v1/profiles/:id/trim', () => {
     const res = await trim(app, PROFILE_ID, { scope: 'everything' });
     expect(res.statusCode).toBe(400);
     expect(h.sentTrim.length, 'a rejected scope still reached the node').toBe(0);
+    // V-1613 — the status alone was all this arm read, which is how the message
+    // below stayed wrong for the sibling case. A bad VALUE is the case where
+    // listing the accepted values is the useful answer.
+    expect(res.json<{ detail?: string }>().detail).toBe(
+      'Invalid scope. Expected one of: cache, cookies, history, all.',
+    );
   });
 
   it('an unknown body key is refused rather than silently ignored, so a typo cannot clear the wrong thing', async () => {
@@ -217,6 +223,15 @@ describe('POST /v1/profiles/:id/trim', () => {
     const res = await trim(app, PROFILE_ID, { scopes: 'cookies' });
     expect(res.statusCode).toBe(400);
     expect(h.sentTrim.length).toBe(0);
+    // V-1613 — a wrong KEY is not a wrong value, and this case used to be
+    // answered with the value list: a caller who sent `{"scopes":"cookies"}` was
+    // told `cookies` was one of the values they could have used, while their
+    // request was refused and the key that was actually wrong went unnamed.
+    const detail = res.json<{ detail?: string }>().detail ?? '';
+    expect(detail).toContain('scopes');
+    expect(detail, "the caller's own value handed back to them as a valid one").not.toContain(
+      'Expected one of',
+    );
   });
 
   it('every scope the wire schema accepts is reachable through the route', async () => {
@@ -413,7 +428,7 @@ describe('POST /v1/profiles/:id/trim', () => {
     expect(second.statusCode).toBe(200);
     expect(second.json<TrimBody>()).toMatchObject({
       status: 'unavailable',
-      reason: expect.stringMatching(/another profile cache trim is already in progress/i),
+      reason: expect.stringMatching(/another profile trim is already in progress/i),
     });
     expect(sentTrim).toHaveLength(1); // the second request never reached the worker
 

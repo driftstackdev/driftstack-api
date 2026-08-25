@@ -18577,3 +18577,37 @@ Contract-neutral, and checked rather than reasoned: api-types rebuilt, spec re-d
 `enum ['cache','cookies','history','all']`, `additionalProperties: false`.
 
 No pin bumped: this adds no test file.
+
+## V-1613 — three strings on the trim route still described the endpoint it used to be
+
+All three are prose the compiler cannot check, all three shipped with the `scope` field, and each one is
+wrong in a way a customer or a maintainer reads directly.
+
+**A caller's own value handed back to them as a valid one.** `TrimScopeBodySchema` is `.strict()`, so it
+refuses an unknown KEY as well as a bad value — and both failures threw the same sentence, `Invalid scope.
+Expected one of: cache, cookies, history, all.` Send `{"scopes":"cookies"}` and the answer named `cookies`
+among the values you could have used, while refusing the request and never mentioning the key that was
+actually wrong. The two failures now get different sentences: an unrecognised key is answered by naming
+the key, a bad value by listing the values. That is the only case where the list is the useful answer.
+
+**A cookie wipe reported as a cache trim.** The per-account single-flight refusal read "another profile
+**cache** trim is already in progress" on every scope, so a customer clearing cookies — or clearing
+everything — was told a cache trim was underway. Accurate when cache was the only thing a trim did, and
+the same class of rot as the refusal reason V-1609 corrected on the docs page two commits earlier. One
+word out.
+
+**Two comments claiming a status the code does not return.** `routes/profiles.ts:33` and `:573` both said
+a malformed body is "a 422". `BadRequestError` sets `status: 400` (`lib/errors.ts:76`), the route's own
+tests assert 400, and the published spec declares `400` and no `422` — so the comments were the only thing
+in the repo saying otherwise, and a maintainer reading the schema's docstring would have written the wrong
+client.
+
+**The arms that covered this read the status and stopped.** Both malformed-body arms asserted `400` and
+`sentTrim.length === 0` and never looked at the message, which is exactly how a sentence describing the
+wrong failure survives in a covered branch: the line executes, the assertion passes, and nothing reads
+what it said. Both now assert the message, and the mutation restoring the old unconditional string fails
+the unknown-key arm with the defect printed verbatim — `expected 'Invalid scope. Expected one of: cache…'
+to contain 'scopes'`. The concurrency and bad-value mutations fail their own arms. File restored
+byte-identical from a snapshot.
+
+No pin bumped: three arms extended, none added.

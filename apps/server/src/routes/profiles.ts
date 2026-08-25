@@ -30,7 +30,7 @@ import { TRIM_PROFILE_SCOPES } from '../schemas/harness-control-protocol.js';
 /**
  * The optional body of POST /v1/profiles/:id/trim.
  *
- * `.strict()` so a typo'd key is a 422 rather than silently clearing the default
+ * `.strict()` so a typo'd key is a 400 rather than silently clearing the default
  * scope — on an op that DELETES a customer's cookies, "I sent scopes and it
  * cleared the cache instead" must not be a quiet outcome.
  */
@@ -570,12 +570,23 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
       const id = uuidFromProfileId(req.params.id);
       // W3120 (doc-150 §8.4) — WHAT to clear. Absent = 'cache', the behaviour this
       // route had before the field existed, so every existing caller is unchanged.
-      // A malformed body is a 422 rather than a silent fallback: guessing on a
+      // A malformed body is a 400 rather than a silent fallback: guessing on a
       // DESTRUCTIVE op is how a customer asking for one thing gets another.
       const scopeParsed = TrimScopeBodySchema.safeParse(req.body ?? {});
       if (!scopeParsed.success) {
+        // V-1613 — the two ways this fails need different sentences. `.strict()`
+        // rejects an unknown KEY, and answering that with "Invalid scope.
+        // Expected one of: cache, cookies, history, all" told a caller who sent
+        // `{"scopes":"cookies"}` that `cookies` was among the values they could
+        // have used — naming their value back to them as valid while refusing
+        // the request, and never mentioning the key that was actually wrong.
+        const unknownKeys = scopeParsed.error.issues.find(
+          (issue) => issue.code === 'unrecognized_keys',
+        );
         throw new BadRequestError(
-          `Invalid scope. Expected one of: ${TRIM_PROFILE_SCOPES.join(', ')}.`,
+          unknownKeys !== undefined
+            ? `Unexpected field(s): ${unknownKeys.keys.join(', ')}. This endpoint takes only \`scope\`.`
+            : `Invalid scope. Expected one of: ${TRIM_PROFILE_SCOPES.join(', ')}.`,
         );
       }
       // Left UNDEFINED when absent rather than defaulted to 'cache', so an
@@ -678,7 +689,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
       if (releaseProfileTrim === null) {
         return {
           status: 'unavailable' as const,
-          reason: 'another profile cache trim is already in progress — retry when it finishes',
+          reason: 'another profile trim is already in progress — retry when it finishes',
         };
       }
       try {
