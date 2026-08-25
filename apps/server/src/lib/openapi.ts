@@ -7168,6 +7168,11 @@ function buildRegistry(): OpenAPIRegistry {
       },
     },
     responses: {
+      409: {
+        description:
+          'The endpoint was not created. Either the account already holds the maximum number of active webhook endpoints, or `events` was supplied empty. Delete or disable an endpoint, or supply at least one event type, and retry.',
+        content: problemContent,
+      },
       // The route replies `reply.code(201)`. This said 200, which it has never
       // returned, so a client branching on 200 treated a successful creation as
       // unexpected. 200 is REMOVED rather than kept alongside 201: documenting
@@ -7276,6 +7281,11 @@ function buildRegistry(): OpenAPIRegistry {
       },
     },
     responses: {
+      409: {
+        description:
+          'The endpoint was not updated. Either it is disabled — a disabled endpoint cannot be re-enabled by update and a fresh one must be minted — or `events` was supplied empty.',
+        content: problemContent,
+      },
       200: {
         description: 'Updated endpoint.',
         content: { 'application/json': { schema: WebhookEndpointSchema } },

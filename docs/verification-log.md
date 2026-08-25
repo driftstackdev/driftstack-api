@@ -15664,3 +15664,52 @@ away cannot leave two pins quietly asserting a code nothing raises.
 
 The general form — service-layer throws attributed to operations — needs a cross-file call graph and is
 not attempted here. What is recorded is that the blind spot exists, has a name, and cost two operations.
+
+## V-1541 — the general form, built: 24 candidates, two fixed, twelve already disproved
+
+V-1540 named the blind spot and said the general form "needs a cross-file call graph and is not attempted
+here". Leaving that is the failure this arc keeps finding in other people's work, so this batch built it.
+
+**The tool.** A TypeScript `Program` over `apps/server/src` with the real type checker: every call site
+resolved through `checker.getResolvedSignature()` to its actual declaration, so `service.create(...)`
+lands on the one method it really calls rather than on every class that happens to declare `create`. Throws
+attributed to the innermost enclosing function, propagated to a fixpoint, then read off each route
+registration. 251 registrations resolved; 24 operations reach a status the document does not declare.
+
+**Twelve were already disproved in V-1535 and the tool reproduces them, which is the point.** Seven auth
+routes reach 409 through `mapAuthFlowError` — the call graph is right and the reachability is wrong, since
+only `signup()` can raise `email_already_registered` and signup declares it. Five proxy routes reach 503
+under `if (!accountProxiesRepo)`, a dep bootstrap always wires. A type-directed call graph does not make a
+path-sensitivity problem go away, and a tool that had quietly stopped reporting them would have been the
+more worrying result.
+
+**Two verified and fixed, both customer-facing writes:**
+
+```
+POST  /v1/webhooks        409  at MAX_ENDPOINTS_PER_ACCOUNT active endpoints, or `events` supplied empty
+PATCH /v1/webhooks/{id}   409  endpoint is disabled (mint a fresh one), or `events` supplied empty
+```
+
+Traced to `WebhooksService.create` (lines 400, 421) and `update` (513, 516), reached from
+`routes/webhooks.ts:139` and `:241`. No route file contains either throw, so every route-scoped scan this
+session reported both operations clean. A customer at the endpoint cap, or patching a disabled endpoint,
+gets a refusal their generated client has no model for.
+
+Pinned as a chain rather than a conclusion — the service must still refuse, and the operations must still
+declare — proved three ways: removing either declaration reds naming that operation, and downgrading the
+disabled-endpoint refusal to a different class reds on a different assertion.
+
+**The remaining ten are recorded, not fixed and not exempted**: `DELETE /v1/profiles/{id}/purge` 409;
+`POST /v1/profiles/{id}/launch` and `POST /v1/sessions` 409 and 410; `POST /v1/profiles/{id}/transfer` 409;
+`POST /v1/agent-sessions` 409; `GET /v1/profile-snapshots` 404; `GET /v1/billing`,
+`GET /v1/account/me/billing-portal`, `POST /v1/billing/checkout-session`,
+`POST /v1/billing/portal-session` 404. Each needs its own reachability check — the twelve above are why
+that sentence is not a formality.
+
+### A fifth tool bug, same shape, caught the same way
+
+The new arm's helper took the first `{` after `async create(` as the method body. That is the parameter
+type object, so the assertion ran against a destructured signature and failed on a method nobody had
+touched. Fixed by matching the parameter list's parentheses first. Caught because a fresh assertion failed
+against known-good source — which is the cheap version of the count-versus-intent check the last four bugs
+needed.

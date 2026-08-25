@@ -360,4 +360,59 @@ describe('a returned status code is a declared one', () => {
         'legal acceptance, and a generated client cannot model a refusal the contract omits',
     ).toEqual([]);
   });
+
+  it('V-1541 CRITICAL the two webhook write routes declare the 409 WebhooksService raises. Found by resolving call targets through the TypeScript checker rather than by name, which is the general form V-1540 named and did not attempt: create refuses when the account is at MAX_ENDPOINTS_PER_ACCOUNT active endpoints or `events` arrives empty, update refuses a disabled endpoint or an empty `events`. Both live in services and no route file contains either throw. Pins the chain, not the conclusion — if the service stops refusing, this fails rather than continuing to assert a code nothing raises.', () => {
+    const service = readFileSync(
+      resolve(REPO_ROOT, 'apps/server/src/services/webhooks.ts'),
+      'utf8',
+    );
+    const method = (name: string): string => {
+      const at = service.indexOf(`async ${name}(`);
+      expect(at, `WebhooksService.${name} still exists`).toBeGreaterThan(-1);
+      // Skip the PARAMETER list before looking for the body. An earlier draft took
+      // the first `{` after the name and captured the destructured argument's type
+      // object instead, so the assertions below ran against a parameter signature
+      // and failed on a method that had not changed.
+      let paren = service.indexOf('(', at);
+      let pdepth = 0;
+      for (; paren < service.length; paren += 1) {
+        if (service[paren] === '(') pdepth += 1;
+        else if (service[paren] === ')') {
+          pdepth -= 1;
+          if (pdepth === 0) break;
+        }
+      }
+      const open = service.indexOf('{', paren);
+      let depth = 0;
+      let i = open;
+      for (; i < service.length; i += 1) {
+        if (service[i] === '{') depth += 1;
+        else if (service[i] === '}') {
+          depth -= 1;
+          if (depth === 0) break;
+        }
+      }
+      return service.slice(open, i);
+    };
+
+    expect(method('create'), 'create still refuses at the endpoint cap').toMatch(
+      /throw new ConflictError\(\s*\n?\s*`Account already has/,
+    );
+    expect(method('update'), 'update still refuses a disabled endpoint').toContain(
+      "throw new ConflictError('Cannot update a disabled endpoint.",
+    );
+
+    const missing = ['POST /v1/webhooks', 'PATCH /v1/webhooks/{id}']
+      .filter((operation) => {
+        const codes = declared.get(operation);
+        expect(codes, `${operation} is still published`).not.toBeUndefined();
+        return codes !== undefined && !codes.has('409');
+      })
+      .sort();
+    expect(
+      missing,
+      'these webhook writes refuse with 409 from the service layer, and a generated client cannot ' +
+        'model a refusal the contract omits',
+    ).toEqual([]);
+  });
 });

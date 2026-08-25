@@ -49205,6 +49205,16 @@
               }
             }
           },
+          "409": {
+            "description": "The endpoint was not created. Either the account already holds the maximum number of active webhook endpoints, or `events` was supplied empty. Delete or disable an endpoint, or supply at least one event type, and retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "headers": {
@@ -50089,6 +50099,16 @@
           },
           "404": {
             "description": "Webhook endpoint not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The endpoint was not updated. Either it is disabled — a disabled endpoint cannot be re-enabled by update and a fresh one must be minted — or `events` was supplied empty.",
             "content": {
               "application/problem+json": {
                 "schema": {
