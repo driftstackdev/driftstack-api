@@ -18820,3 +18820,54 @@ decision**, and that is not a guard's job to do by accident.
 
 `openapi.json` byte-identical, verified by regenerating and diffing: a comment correction must not move
 the artefact.
+
+## V-1618 — the documented API and the flagship SDK disagree about 28 endpoints, and nothing measures it
+
+Three SDKs ship. Python and Go are generated from `openapi.json`, so their coverage follows the document by
+construction. **TypeScript is hand-written**, which means its coverage is whatever someone remembered to
+add, and the log shows exactly that history — "Live SDK coverage now: account, api-keys, archetypes,
+sessions, profiles, usage" is an incremental build-out, not an invariant.
+
+Measured against the published document: 196 paths, 132 customer-facing once staff (`/v1/admin/*`),
+internal (`/v1/internal/*`, `/v1/mac-nodes*`), inbound provider webhooks and ops endpoints are excluded.
+**Thirty-two of those 132 are never built by the TypeScript SDK, and twenty-eight of the thirty-two are
+documented on the customer docs site.** The set, enumerated rather than counted, because a count is what
+V-1617 just had to retract:
+
+    /v1/account/cost                          /v1/agent-sessions/{id}/history
+    /v1/account/me/billing-portal             /v1/agent-sessions/{id}/page-state
+    /v1/account/me/notifications              /v1/agent-sessions/{id}/transcript
+    /v1/account/me/oauth-links                /v1/auth/resend-verification
+    /v1/account/me/organization               /v1/billing/crypto-orders/{id}/receipt.pdf
+    /v1/account/mfa/disable                   /v1/billing/crypto-orders/{id}/receipt.txt
+    /v1/agent-sessions/{id}/cookies           /v1/oauth/authorize · introspect · revoke · token
+    /v1/agent-sessions/{id}/cookies/set       /v1/status · /incidents · /incidents/{id} · /sla
+    /v1/agent-sessions/{id}/downloads         /v1/status/subscribe · /confirm · /unsubscribe
+    /v1/agent-sessions/{id}/downloads/content
+    /v1/agent-sessions/{id}/files
+
+**They are not one kind of thing, and calling all 28 a defect would be the same overreach as calling 34
+duplicated value sets a catastrophe (D-4).** Three tiers:
+
+- **Probably not SDK surface at all.** `/v1/status/*` is the public unauthenticated status page, and
+  `/v1/oauth/{authorize,token,revoke,introspect}` are OAuth 2 protocol endpoints a third-party app drives
+  by redirect, not methods an account-holder's client calls. Absent by nature rather than by omission.
+- **Plausibly deliberate.** The two receipt endpoints return binary/plain-text bodies rather than JSON,
+  which the SDK's typed-response shape does not model.
+- **Looks like a real gap.** The agent-session feature endpoints — `transcript`, `page-state`, `history`,
+  `files`, `downloads`, `cookies` — and the account-management set. `api/agent-sessions.md:453` documents
+  `GET /v1/agent-sessions/{id}/transcript`; the TypeScript SDK mentions "transcript" only in prose and as
+  a `transcript_length` field on a response. `api/account-notifications.md` is an entire documentation
+  page for an endpoint no SDK method reaches.
+
+**Nothing measures any of this.** `sdk-ts-readme-method-coverage` runs README → SDK, catching a documented
+method that no longer exists; the reverse — a published customer operation with no method — has no guard
+in either direction. So the divergence has grown silently and would continue to.
+
+**Not fixed here, and deliberately.** Writing twenty-eight SDK methods is product work, and the three
+tiers need an owner's intent rather than my guess: the right artefact is the shape of
+`a-route-in-neither-the-spec-nor-the-docs-is-a-decision` — every absence carrying its reason, so the
+twenty-ninth fails instead of joining a silent pile — and that file's own header says why a list of names
+without justification is how a real gap hides among deliberate ones. I cannot supply twenty-eight
+justifications I do not have. Recorded in `docs/internal/OPEN-ITEMS.md` as owed, with the enumerated set,
+for the agent that owns the SDKs.
