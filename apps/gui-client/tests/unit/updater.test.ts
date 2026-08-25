@@ -25,24 +25,67 @@ function fakeUpdate(over: Partial<Record<string, unknown>> = {}): Update {
 }
 
 const noopRelaunch = (): Promise<void> => Promise.resolve();
+/**
+ * The installed version these fixtures report.
+ *
+ * ⛔ Added because every `UpdaterDeps` here omitted `currentVersion`, and one
+ * test was passing for the wrong reason because of it. `checkForUpdate` reaches
+ * `checkManifestOnly` ONLY when `deps.check()` throws, and that function opens
+ * with `await deps.currentVersion()` inside a `try` whose `catch` returns null.
+ * So in the "NEVER throws — a check failure resolves to null" case, the absent
+ * field threw a TypeError, the catch swallowed it, and the assertion passed —
+ * ⛔ proving the FIXTURE was malformed rather than that a check failure resolves
+ * to null. The test's stated subject went unverified.
+ *
+ * The other seven omissions are type-only: their `check` resolves, so that path
+ * is never taken.
+ */
+const currentVersion = (): Promise<string> => Promise.resolve('0.0.1');
 
 describe('V-243 checkForUpdate', () => {
   it('returns null when up-to-date (check resolves null)', async () => {
-    const deps: UpdaterDeps = { check: () => Promise.resolve(null), relaunch: vi.fn(noopRelaunch) };
+    const deps: UpdaterDeps = {
+      check: () => Promise.resolve(null),
+      currentVersion,
+      relaunch: vi.fn(noopRelaunch),
+    };
     expect(await checkForUpdate(deps)).toBeNull();
   });
 
-  it('NEVER throws — a check failure (offline / no endpoint / not a Tauri context) resolves to null', async () => {
+  it('NEVER throws — a check failure falls back to the manifest, and resolves to null only when THAT is unreachable too', async () => {
     const deps: UpdaterDeps = {
       check: () => Promise.reject(new Error('not allowed on the configured platform / offline')),
+      currentVersion,
       relaunch: vi.fn(noopRelaunch),
     };
-    await expect(checkForUpdate(deps)).resolves.toBeNull();
+    // ⛔ STUBBED, and the reason is the finding. A rejected `check()` falls
+    // through to `checkManifestOnly`, which does a REAL
+    // `fetch(https://github.com/.../latest.json)`. With the fixture missing
+    // `currentVersion` that fetch was never reached — the absent field threw
+    // first and the catch swallowed it — so this file has been a unit test with
+    // a live network dependency, hidden behind a type error. Supplying the
+    // field made it reach GitHub and return the actual published 0.1.3.
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
+      Promise.resolve(new Response('not found', { status: 404 })),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      // ⚠️ The old title claimed a check failure "resolves to null". It does not
+      // in general: the fallback exists so "the customer at least learns a new
+      // version exists". What the function actually guarantees is that it NEVER
+      // THROWS — null here is the manifest being unreachable too, which is the
+      // case this arm now genuinely covers.
+      await expect(checkForUpdate(deps)).resolves.toBeNull();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('returns null when the manifest lists the SAME version as installed (botched/rolled-back release)', async () => {
     const deps: UpdaterDeps = {
       check: () => Promise.resolve(fakeUpdate({ version: '0.1.0', currentVersion: '0.1.0' })),
+      currentVersion,
       relaunch: vi.fn(noopRelaunch),
     };
     expect(await checkForUpdate(deps)).toBeNull();
@@ -51,6 +94,7 @@ describe('V-243 checkForUpdate', () => {
   it('returns null when the manifest lists an OLDER version than installed', async () => {
     const deps: UpdaterDeps = {
       check: () => Promise.resolve(fakeUpdate({ version: '0.0.9', currentVersion: '0.1.0' })),
+      currentVersion,
       relaunch: vi.fn(noopRelaunch),
     };
     expect(await checkForUpdate(deps)).toBeNull();
@@ -59,6 +103,7 @@ describe('V-243 checkForUpdate', () => {
   it('surfaces the offered version + current version + notes when an update is available', async () => {
     const deps: UpdaterDeps = {
       check: () => Promise.resolve(fakeUpdate()),
+      currentVersion,
       relaunch: vi.fn(noopRelaunch),
     };
     const upd = await checkForUpdate(deps);
@@ -71,6 +116,7 @@ describe('V-243 checkForUpdate', () => {
   it('notes is null when the manifest omits a body', async () => {
     const deps: UpdaterDeps = {
       check: () => Promise.resolve(fakeUpdate({ body: undefined })),
+      currentVersion,
       relaunch: vi.fn(noopRelaunch),
     };
     const upd = await checkForUpdate(deps);
@@ -79,7 +125,11 @@ describe('V-243 checkForUpdate', () => {
 
   it('install() reports byte progress (ending at 1) then relaunches into the new version', async () => {
     const relaunch = vi.fn(noopRelaunch);
-    const deps: UpdaterDeps = { check: () => Promise.resolve(fakeUpdate()), relaunch };
+    const deps: UpdaterDeps = {
+      check: () => Promise.resolve(fakeUpdate()),
+      currentVersion,
+      relaunch,
+    };
     const upd = await checkForUpdate(deps);
     const fractions: number[] = [];
     await upd!.install((f) => fractions.push(f));
@@ -99,6 +149,7 @@ describe('V-243 checkForUpdate', () => {
               Promise.reject(new Error('signature verification failed')),
           }),
         ),
+      currentVersion,
       relaunch,
     };
     const upd = await checkForUpdate(deps);

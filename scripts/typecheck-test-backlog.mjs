@@ -39,7 +39,7 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
  *         cannot be judged from the error code — each needs its call site read.
  *    ~89  argument/assignment mismatches.
  */
-const BACKLOG = [{ project: 'apps/gui-client/tsconfig.test.json', pinned: 104 }];
+const BACKLOG = [{ project: 'apps/gui-client/tsconfig.test.json', pinned: 96 }];
 
 const TSC = resolve(REPO_ROOT, 'node_modules/.bin/tsc');
 let failed = false;
