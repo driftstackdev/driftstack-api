@@ -17663,3 +17663,45 @@ application.
 Full suite and gates green. The file and test totals moved by one file and four tests during this batch;
 `git status` attributes both to a peer's in-flight gui-client work, so the ratchets are theirs to move and
 were left alone.
+
+## V-1588 — reaching eight of the twenty operations the sweep could not see
+
+V-1587 established that twenty declared operations answered "No route for" under the e2e harness and were
+being scored as refusals. Bounding that was the honest minimum; reaching them is the actual fix, and eight
+of the twenty needed nothing that did not already exist in the harness.
+
+**Five came from the incidents service.** `buildApp` registers the admin-incidents routes only when
+`incidentsService` is supplied. Constructing it costs one line — `new IncidentsService(new
+DrizzleIncidentsRepo(database))` — because the lifecycle hooks are declared `= {}` by the service itself.
+That matters: no no-op double was written here. Hand-stubbing those callbacks would have produced exactly
+the kind of faithful-looking test double this log keeps warning about, and the service's own default is
+neither faithful nor a lie — it is the documented behaviour when no notifier is wired. `incidents` and
+`incident_updates` joined the harness TRUNCATE so the new writes cannot leak between specs.
+
+**Three came from a dependency triple that was two-thirds satisfied.** The admin force-action routes
+register only when `sessionRepo`, `apiKeysRepo` and `driver` are all present. The harness passed the
+first and already had the other two — the same `MockDriver` and repo the rest of the file uses — so the
+fix is two lines and invents nothing.
+
+**That recovers the evidence V-1587 had to withdraw.** The claim that `admin-force-actions.ts` handles a
+missing target correctly rested on a probe showing 404s that turned out to be unrouted 404s. Both routes
+now genuinely answer: 400 for a malformed id, 404 for one that is well-formed and absent. The source
+reading was right — the deferred account id is null until the session is found — and it now has an
+experiment behind it that could have contradicted it.
+
+**Twelve remain, and they stop here deliberately.** Nine are crypto-orders, whose service needs a tier
+activator; the rest need a LiveKit config and an atlas-priority wiring. Supplying those means constructing
+billing and streaming behaviour that does not otherwise exist in this harness, which is the point at which
+widening coverage starts manufacturing the doubles that make coverage meaningless. The bound moves 20 → 12
+so it tracks reality rather than leaving eight recovered operations of slack; tightening it to 11 reds
+both passes, so it is load-bearing.
+
+**One phantom, caught by verifying instead of reporting.** `grep "ForceActions" app.ts` found nothing and
+for a moment looked like two admin endpoints declared in the spec and never registered. The symbol is
+`registerAdminForceActionRoutes` — singular — and the call sits at `app.ts:1747`. That is the same
+one-spelling fault this session keeps recording, and the only reason it did not become a filed finding is
+that the claim was checked before it was written down.
+
+Coverage moves from 62 refused / 60 answered to **70 refused / 68 answered**, with 24 and 26 respectively
+behind deployment flags. Full e2e 225 passed against a disposable migrated Postgres — unchanged, because
+this batch adds coverage rather than tests. Full suite and `verify-suite` green.

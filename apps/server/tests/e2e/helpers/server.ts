@@ -20,6 +20,8 @@ import postgres from 'postgres';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { buildApp } from '../../../src/lib/app.js';
+import { DrizzleIncidentsRepo } from '../../../src/db/incidents-repo.js';
+import { IncidentsService } from '../../../src/services/incidents.js';
 import { createTestLogger } from '../../../src/lib/logger.js';
 import { MockDriver } from '../../../src/drivers/mock.js';
 import { SessionsService } from '../../../src/services/sessions.js';
@@ -132,6 +134,8 @@ const TRUNCATE_SQL = `
     "rate_limit_overrides",
     "webhook_deliveries",
     "webhook_endpoints",
+    "incident_updates",
+    "incidents",
     "admin_audit_log",
     "email_verify_tokens",
     "magic_link_tokens",
@@ -204,6 +208,13 @@ export async function startTestServer(): Promise<TestServer> {
   const profilesRepo = new DrizzleProfilesRepo(database);
   const apiKeysRepo = new DrizzleApiKeysRepo(database);
   const usageRepo = new DrizzleUsageRepo(database);
+  // V-1588 — `buildApp` registers the admin-incidents routes only when this is
+  // supplied, so without it five declared operations answer "No route for" and
+  // the malformed-id sweep scored them as refusals. The lifecycle hooks are left
+  // at the service's own documented default of `{}` rather than stubbed: they
+  // fire on successful creates, not on the not-found paths under test, and a
+  // hand-written no-op here would be a double nobody asked for.
+  const incidentsService = new IncidentsService(new DrizzleIncidentsRepo(database));
   const rateLimitStore = new RedisRateLimitStore(redis);
   const authCache = new RedisAuthCache(redis, logger);
 
@@ -453,6 +464,7 @@ export async function startTestServer(): Promise<TestServer> {
     webhooksAdminService,
     adminAuditService,
     accountsAdminService,
+    incidentsService,
     adminBillingService,
     pricingService,
     platformSecretsService,
@@ -472,6 +484,14 @@ export async function startTestServer(): Promise<TestServer> {
     // GET /v1/account/me + sibling routes to 404). Surfaced after the
     // catastrophic-backtracking regex fix unblocked CI completion.
     sessionRepo: sessionsRepo,
+    // V-1588 — the admin force-action routes need all three of sessionRepo,
+    // apiKeysRepo and driver before they register. Only the first was passed, so
+    // POST /v1/admin/sessions/:id/destroy and POST /v1/admin/api-keys/:id/revoke
+    // answered "No route for" and the malformed-id sweep read that as a refusal.
+    // Both objects already exist here and are the same ones the rest of this
+    // harness uses; nothing new is stubbed.
+    apiKeysRepo,
+    driver,
     profilesRepo,
     // 2026-05-20 — mfaService unlocks /v1/account/mfa/*; authFlowsService
     // unlocks /v1/auth/* + /v1/account/web-sessions. Both gated on

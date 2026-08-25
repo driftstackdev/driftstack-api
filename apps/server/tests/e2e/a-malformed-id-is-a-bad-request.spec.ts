@@ -112,11 +112,14 @@ const isDeploymentGate = (status: number, text: string): boolean =>
  * Fastify's own "there is no such route" answer.
  *
  * V-1587 — this sweep counted a 404 as a healthy refusal, and an operation whose
- * module was never registered answers 404 too. Twenty of the 106 declared
- * operations are in that state under the e2e harness: `buildApp` registers
+ * module was never registered answers 404 too. Twelve of the 106 declared
+ * operations are still in that state under the e2e harness: `buildApp` registers
  * several route modules only when an optional dependency is supplied
  * (`if (deps.incidentsService !== undefined)` and its siblings), and the harness
- * supplies a subset. So a fifth of the roster was being scored as covered while
+ * supplies a subset. It was twenty when this was written — V-1588 wired the
+ * incidents service and the force-action repos, which the harness already had —
+ * and the rest need dependencies that would have to be invented. So a fifth of
+ * the roster was being scored as covered while
  * nothing behind those paths was ever reached — the same silently-inert shape
  * this suite keeps finding, this time in the guard rather than in the code.
  *
@@ -395,7 +398,7 @@ test('no id-taking route answers 5xx or 2xx for a malformed id', async ({ reques
   expect(
     unrouted.length,
     'operations the harness does not route are not covered by this sweep',
-  ).toBeLessThanOrEqual(20);
+  ).toBeLessThanOrEqual(12);
 });
 
 test('no id-taking route answers 5xx for an id that is well-formed and absent', async ({
@@ -495,7 +498,7 @@ test('no id-taking route answers 5xx for an id that is well-formed and absent', 
   expect(
     unrouted.length,
     'operations the harness does not route are not covered by this sweep',
-  ).toBeLessThanOrEqual(20);
+  ).toBeLessThanOrEqual(12);
 });
 
 test('a refusal names what is actually missing', async ({ request }) => {
