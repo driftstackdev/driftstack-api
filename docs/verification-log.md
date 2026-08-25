@@ -18185,3 +18185,46 @@ The `_ALL` pin briefly read one behind disk because that peer added a spec file 
 raised it by one, for one file, and left theirs alone; their commit `161cd3011` then raised it again for
 their own and swept my node-project bump along with it. Both pins are now correct for both files, which is
 the right outcome reached by each side counting only what it added.
+
+## V-1600 — the other half of "that session only"
+
+V-1599 pinned which SCOPES a control key can reach. This pins which SESSION, because the two failures are
+independent and the scope guard cannot see the second one.
+
+**The binding itself is sound and that was verified first.** `validateGuiControlKey` fetches the session
+named in the PATH, decrypts that session's `guiControlKeyCiphertext`, and `timingSafeEqual`s the presented
+header against it behind a length pre-check. A key minted for session A cannot validate against session B.
+
+**The step after is what had nothing enforcing it.** When the key validates, the request is marked
+`guiControlKeyAuthorized` and fourteen handlers then skip the account-ownership check — the factory's own
+comment says "for THAT session only". Nothing checked the "that session" half. A handler that skipped
+ownership and then looked a session up by an id from a body field, header or query would be acting on a
+session the caller proved nothing about, at the same scope, which is precisely the blind spot of the guard
+written one batch earlier.
+
+Traced by hand: all 21 `sessions.get` calls resolve to `req.params.id`. Seventeen say so literally. Three
+go through helpers — `commitPairModeTransition`, `resolveAgentMessageAdmission` and the control-key
+validator — and every call site of each passes `req.params.id`. The twenty-first is `created.id` on
+`POST /v1/agent-sessions`, which takes `requireAuth` + `requireScope('write')` and is not control-key
+reachable at all. There IS a body-supplied `driftstack_session_id` on that create route, and it is on the
+one route the key cannot reach — which is the sort of coincidence worth pinning before it stops being one.
+
+The roster carries those four indirect arguments WITH the reason each resolves to the path session, rather
+than loosening the pattern to `\w+` — which would accept a body-derived local and leave the file asserting
+nothing about the property it is named for.
+
+Proven in both directions: repointing one lookup at `parsed.data.driftstack_session_id` flags it as
+unrostered, and rewriting a rostered helper's lookup so its entry goes unused reds the stale-roster arm.
+Restores byte-identical.
+
+Nothing changed in the source. What changed is that the tracing above no longer has to be redone to know
+it still holds.
+
+### Concurrency
+
+Two failures are outstanding and neither is this work: `gui-client-views-ProxiesView-content-parity` and
+`the-gui-does-not-blame-a-shipped-server-for-a-failed-probe` both freeze `ProxiesView.tsx` source, which
+commit `4056443ab` rewrote as a sortable grid without moving the pins. Attributed via `git status` — this
+batch's only files are a new server unit test and the two pins it required — and left alone, because
+updating a content-parity pin for a rewrite I did not make is exactly the absorption rule 9 exists to
+prevent. `verify-suite` will report failure until that is resolved, for that reason and not this one.
