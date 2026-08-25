@@ -82,7 +82,13 @@ export function notificationTitle(e: NotificationEvent): string {
  * show zero, and `>=` would make the most recent event permanently unread.
  */
 export function unreadCount(
-  events: ReadonlyArray<NotificationEvent>,
+  // ⭐ Takes anything CARRYING a timestamp, not `NotificationEvent`. The
+  // function reads exactly one field, and narrowing the parameter to the full
+  // event forced callers with a merged list to write
+  // `as unknown as NotificationEvent` over an object that is not one — the
+  // same "cast asserting a shape it does not have" this codebase fixed in
+  // SimulatorWindow today. A parameter should ask for what it reads.
+  events: ReadonlyArray<{ at: string }>,
   lastSeenAt: string | null,
 ): number {
   if (lastSeenAt === null) return events.length;
@@ -109,4 +115,67 @@ export function highestLevel(events: ReadonlyArray<NotificationEvent>): Notifica
     else if (best === null) best = 'info';
   }
   return best;
+}
+
+/**
+ * A notice that did NOT come from the server stream.
+ *
+ * ⛔ WHY THIS EXISTS RATHER THAN A NEW `NotificationEvent` KIND. The plan said
+ * to "route update events through NotificationEvent". That is structurally
+ * wrong: `NotificationEvent` is the wire shape of
+ * `GET /v1/account/me/notifications`, and
+ * `notification-bus-cross-source-invariant` pins it across THREE surfaces —
+ * the server union, the SSE route, and the GUI union — asserting all three
+ * agree. An app update is a CLIENT event from the Tauri updater; the server
+ * neither knows nor publishes it. Adding a kind for it would either break that
+ * invariant or force a lie into the server union.
+ *
+ * So the two sources stay separate at the wire and merge only for DISPLAY,
+ * which is where the customer actually wants them together.
+ */
+export interface LocalNotice {
+  /** Stable within a session; used as the React key. */
+  id: string;
+  level: NotificationLevel;
+  title: string;
+  at: string;
+}
+
+/** One row of the panel, whatever it came from. */
+export interface DigestItem {
+  key: string;
+  level: NotificationLevel;
+  title: string;
+  at: string;
+}
+
+/**
+ * Merge the server feed and any local notices into one list, newest first.
+ *
+ * ⚠️ Sorted by parsed DATE, not by string — the events carry server timestamps
+ * and the notices carry client ones, so the two can differ in offset even when
+ * both are valid ISO-8601. An unparseable timestamp sorts last rather than
+ * throwing: a row we cannot place is still a row worth showing.
+ */
+export function digestNotifications(
+  events: ReadonlyArray<NotificationEvent>,
+  notices: ReadonlyArray<LocalNotice> = [],
+): DigestItem[] {
+  const fromStream: DigestItem[] = events.map((e, i) => ({
+    key: `${e.kind}-${e.at}-${String(i)}`,
+    level: notificationLevel(e),
+    title: notificationTitle(e),
+    at: e.at,
+  }));
+  const fromLocal: DigestItem[] = notices.map((n) => ({
+    key: `local-${n.id}`,
+    level: n.level,
+    title: n.title,
+    at: n.at,
+  }));
+  const rank = (at: string): number => {
+    const t = Date.parse(at);
+    return Number.isNaN(t) ? Number.NEGATIVE_INFINITY : t;
+  };
+  return [...fromStream, ...fromLocal].sort((a, b) => rank(b.at) - rank(a.at));
 }

@@ -93,3 +93,38 @@ describe('NotificationBell', () => {
     expect(screen.getByTestId('notification-panel').textContent).toMatch(/nothing yet/i);
   });
 });
+
+describe('NotificationBell — local notices', () => {
+  it('⛔ shows a pending update in the bell even with an EMPTY server feed', () => {
+    // Dismissing the update BANNER means "stop interrupting me", not "forget
+    // this happened". Losing it from history is the complaint #18 exists for.
+    render(
+      <NotificationBell
+        events={[]}
+        notices={[
+          {
+            id: 'update-1.2.3',
+            level: 'info',
+            title: 'Update 1.2.3 is ready to install',
+            at: '2026-08-25T12:00:00.000Z',
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByTestId('notification-bell-badge').textContent).toBe('1');
+    fireEvent.click(screen.getByTestId('notification-bell'));
+    expect(screen.getByTestId('notification-panel').textContent).toContain('Update 1.2.3');
+  });
+
+  it('counts local notices and stream events together', () => {
+    render(
+      <NotificationBell
+        events={[outage]}
+        notices={[
+          { id: 'u', level: 'info', title: 'Update ready', at: '2026-08-25T12:00:00.000Z' },
+        ]}
+      />,
+    );
+    expect(screen.getByTestId('notification-bell-badge').textContent).toBe('2');
+  });
+});

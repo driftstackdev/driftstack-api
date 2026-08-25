@@ -749,7 +749,26 @@ function Shell(): JSX.Element {
           subtitle={mode}
           right={
             <>
-              <NotificationBell events={notificationFeed.events} />
+              <NotificationBell
+                events={notificationFeed.events}
+                notices={
+                  update
+                    ? [
+                        {
+                          id: `update-${update.version}`,
+                          level: 'info' as const,
+                          // ⛔ Stays in the bell even after the BANNER is
+                          // dismissed. Dismissing a banner means "stop
+                          // interrupting me", not "forget this happened" —
+                          // losing it from history is the complaint #18 exists
+                          // to fix.
+                          title: `Update ${update.version} is ready to install`,
+                          at: new Date().toISOString(),
+                        },
+                      ]
+                    : []
+                }
+              />
               <ThemeSwitcher />
               <span className="text-surface-divider">|</span>
               <LiveConnectionPill

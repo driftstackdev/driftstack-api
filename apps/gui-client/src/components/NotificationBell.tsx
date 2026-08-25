@@ -1,10 +1,10 @@
 import { useCallback, useState } from 'react';
 import type { NotificationEvent } from '../lib/notifications';
 import {
+  digestNotifications,
   highestLevel,
-  notificationLevel,
-  notificationTitle,
   unreadCount,
+  type LocalNotice,
   type NotificationLevel,
 } from '../lib/notification-digest';
 
@@ -37,16 +37,24 @@ const BADGE: Record<NotificationLevel, string> = {
 
 export function NotificationBell({
   events,
+  notices = [],
 }: {
   events: ReadonlyArray<NotificationEvent>;
+  /** Client-originated rows — app updates today. Deliberately NOT folded into
+   *  `NotificationEvent`: that union is pinned across three surfaces against
+   *  the server, which never publishes them. They merge for display only. */
+  notices?: ReadonlyArray<LocalNotice>;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   // The marker the unread count is measured against. Null until the panel has
   // been opened once, which is why a fresh launch shows everything as unread.
   const [lastSeenAt, setLastSeenAt] = useState<string | null>(null);
 
-  const unread = unreadCount(events, lastSeenAt);
-  const level = highestLevel(events);
+  const items = digestNotifications(events, notices);
+  // Unread counts BOTH sources: a shipped update the customer has not looked at
+  // is exactly the thing the bell exists to surface.
+  const unread = unreadCount(items, lastSeenAt);
+  const level = highestLevel(events) ?? (items.length > 0 ? 'info' : null);
 
   const toggle = useCallback(() => {
     setOpen((wasOpen) => {
@@ -83,32 +91,27 @@ export function NotificationBell({
           data-testid="notification-panel"
           className="absolute right-0 top-8 z-50 w-80 rounded-lg border border-surface-divider bg-surface-elevated p-2 shadow-lg"
         >
-          {events.length === 0 ? (
+          {items.length === 0 ? (
             <p className="px-2 py-3 text-2xs text-ink-muted">
               Nothing yet. Cost alerts, incidents and session failures show up here.
             </p>
           ) : (
             <ol className="flex max-h-80 flex-col gap-1 overflow-y-auto">
-              {events.map((e, i) => {
-                const lvl = notificationLevel(e);
-                return (
-                  <li
-                    key={`${e.kind}-${e.at}-${String(i)}`}
-                    className="flex gap-2 rounded px-2 py-1.5 hover:bg-surface-inset"
-                  >
-                    <span
-                      aria-hidden="true"
-                      className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${DOT[lvl]}`}
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block break-words text-xs text-ink-primary">
-                        {notificationTitle(e)}
-                      </span>
-                      <span className="block text-2xs text-ink-muted">{e.at}</span>
-                    </span>
-                  </li>
-                );
-              })}
+              {items.map((item) => (
+                <li
+                  key={item.key}
+                  className="flex gap-2 rounded px-2 py-1.5 hover:bg-surface-inset"
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${DOT[item.level]}`}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block break-words text-xs text-ink-primary">{item.title}</span>
+                    <span className="block text-2xs text-ink-muted">{item.at}</span>
+                  </span>
+                </li>
+              ))}
             </ol>
           )}
         </div>

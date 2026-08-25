@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { NotificationEvent } from '../../src/lib/notifications';
 import {
+  digestNotifications,
   highestLevel,
   notificationLevel,
   notificationTitle,
   unreadCount,
+  type LocalNotice,
 } from '../../src/lib/notification-digest';
 
 /**
@@ -138,5 +140,48 @@ describe('highestLevel', () => {
     expect(highestLevel([incident('outage'), cost('resolved')])).toBe('critical');
     expect(highestLevel([cost('resolved'), errored])).toBe('warn');
     expect(highestLevel([cost('resolved')])).toBe('info');
+  });
+});
+
+describe('digestNotifications', () => {
+  const older: NotificationEvent = { ...errored, at: '2026-08-25T11:00:00.000Z' };
+  const newer: NotificationEvent = { ...errored, at: '2026-08-25T13:00:00.000Z' };
+  const update: LocalNotice = {
+    id: 'update-1.2.3',
+    level: 'info',
+    title: 'Update 1.2.3 is ready to install',
+    at: '2026-08-25T12:00:00.000Z',
+  };
+
+  it('⛔ merges a CLIENT notice into the server feed without it being a NotificationEvent', () => {
+    // The plan asked for update events to be "routed through NotificationEvent".
+    // That union is pinned across three surfaces against the server by
+    // notification-bus-cross-source-invariant, and the server never publishes
+    // an app update — so the two sources merge for DISPLAY only.
+    const items = digestNotifications([older, newer], [update]);
+    expect(items).toHaveLength(3);
+    expect(items.map((i) => i.title)).toContain('Update 1.2.3 is ready to install');
+  });
+
+  it('orders newest first ACROSS both sources', () => {
+    const items = digestNotifications([older, newer], [update]);
+    expect(items.map((i) => i.at)).toEqual([newer.at, update.at, older.at]);
+  });
+
+  it('gives every row a distinct key so React can tell two identical events apart', () => {
+    const twin: NotificationEvent = { ...errored };
+    const items = digestNotifications([twin, twin], [update]);
+    expect(new Set(items.map((i) => i.key)).size).toBe(3);
+  });
+
+  it('sorts an unparseable timestamp LAST rather than throwing', () => {
+    // A row we cannot place is still a row worth showing.
+    const bad: NotificationEvent = { ...errored, at: 'garbage' };
+    const items = digestNotifications([bad, newer], []);
+    expect(items[items.length - 1]?.at).toBe('garbage');
+  });
+
+  it('is just the stream when there are no local notices', () => {
+    expect(digestNotifications([newer]).map((i) => i.at)).toEqual([newer.at]);
   });
 });
