@@ -20814,3 +20814,35 @@ the directions rather than the tables.
 **Thirteen audits, one defect.** The rule from V-1664 picked the target this time, and it picked a good one:
 searching for the _appearance_ of a failure led to a class with real history, where searching for a
 mechanism would have led to whichever method name I happened to guess.
+
+## V-1666 — "tree unchanged" is not "run uncontended", and a 173ms test timed out at 10s
+
+A full gate came back **1 failed | 3211 passed**, with my hardened runner reporting _"tree unchanged across
+the run — result is trustworthy"_. The dirty tree held only `CLAUDE.md` and `OPEN-ITEMS.md`, so there was no
+peer work in flight to attribute it to. **By every check I had, this was a real red in committed code.**
+
+**It was not a defect, and the failure text says so if you read past the test name.**
+
+    FAIL  db-recipes-encryption-drizzle.test.ts > CRITICAL list clamps an oversized limit…
+    Error: Test timed out in 10000ms.
+
+⭐ **A TIMEOUT, not an assertion.** Run standalone: **5 tests, 173ms of test time, 590ms wall.** A test that
+finishes in 173ms was starved past ten seconds. And the gate's own duration told the same story —
+**409s against a ~250s baseline, 64% slower** — which I had not looked at because the tree-fingerprint had
+already said "trustworthy".
+
+⛔ **So my harness verified the wrong invariant.** V-1666's predecessor made the gate refuse a
+non-quiescent tree and fingerprint files before and after, which closed "a peer WROTE during my run". It
+does not close **"a peer RAN during my run"** — and CPU starvation does not change a single byte on disk.
+**Two different ways a concurrent peer invalidates a result, and I had built for one and declared victory.**
+
+**Fixed by measuring the thing that actually moves under contention:** the runner now reads the suite
+duration out of the log and, past a 350s threshold against the ~250s baseline, prints that the run was
+contended and that any timeout in it must be re-run standalone before being believed. ⭐ **Duration is the
+right signal because it is affected by exactly what the fingerprint cannot see.**
+
+⚠️ And the peer's rule was the one that resolved it: _when a `db-_` integration file fails in a full gate,
+run it standalone before believing it.\* I had recorded that rule and still spent the first minute treating a
+trustworthy-labelled red as real — **because my own harness had put the word "trustworthy" on it.** A
+verdict from an instrument is worth exactly the invariants that instrument checks, and mine was checking
+one of two.
