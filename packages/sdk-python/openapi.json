@@ -9458,6 +9458,16 @@
               }
             }
           },
+          "409": {
+            "description": "The account owes acceptance on one or more legal documents, so no key was minted. The problem body carries `pending_acceptances`, each entry naming a `document_key` and its `current_version`; accept them and retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "headers": {
@@ -46672,6 +46682,16 @@
           },
           "404": {
             "description": "Code not found or expired.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The account owes acceptance on one or more legal documents, so no key was minted. The problem body carries `pending_acceptances`, each entry naming a `document_key` and its `current_version`; accept them and retry.",
             "content": {
               "application/problem+json": {
                 "schema": {

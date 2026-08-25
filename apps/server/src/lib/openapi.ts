@@ -971,6 +971,11 @@ function buildRegistry(): OpenAPIRegistry {
       },
     },
     responses: {
+      409: {
+        description:
+          'The account owes acceptance on one or more legal documents, so no key was minted. The problem body carries `pending_acceptances`, each entry naming a `document_key` and its `current_version`; accept them and retry.',
+        content: problemContent,
+      },
       201: {
         description: 'Key created. The plaintext is in the response — store it now.',
         content: {
@@ -6659,6 +6664,11 @@ function buildRegistry(): OpenAPIRegistry {
       },
     },
     responses: {
+      409: {
+        description:
+          'The account owes acceptance on one or more legal documents, so no key was minted. The problem body carries `pending_acceptances`, each entry naming a `document_key` and its `current_version`; accept them and retry.',
+        content: problemContent,
+      },
       200: {
         description: 'Code bound; CLI/GUI can now poll exchange for the plaintext key.',
         content: { 'application/json': { schema: CliAuthorizeBindResponseSchema } },

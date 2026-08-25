@@ -315,4 +315,49 @@ describe('a returned status code is a declared one', () => {
     }
     expect(missing.sort(), 'traced throws whose operation stopped declaring them').toEqual([]);
   });
+
+  it('V-1540 CRITICAL the two routes that MINT an api key declare the 409 their SERVICE raises. Every arm above reads apps/server/src/routes, which is a blind spot with a name: ApiKeysService.create gates on legalGate.required and throws LegalAcceptanceRequiredError, and no route file contains that throw, so the route-scoped tracer that found the last three codes could not see this one. Both minting paths reach that one service method — POST /v1/api-keys and POST /v1/auth/cli-authorize/bind-device-code — and neither declared 409. Rotation does NOT gate, so it is deliberately absent from this list.', () => {
+    const service = readFileSync(
+      resolve(REPO_ROOT, 'apps/server/src/services/api-keys.ts'),
+      'utf8',
+    );
+    // The gate and the throw both still live in create(), and the throw is still
+    // the only one of its kind in the tree — if either moves, the pins below are
+    // asserting a code nothing raises.
+    expect(service, 'create() still consults the legal gate').toMatch(/legalGate\.required\(/);
+    expect(service, 'create() still refuses with LegalAcceptanceRequiredError').toContain(
+      'throw new LegalAcceptanceRequiredError',
+    );
+
+    const errorsSource = readFileSync(resolve(REPO_ROOT, 'apps/server/src/lib/errors.ts'), 'utf8');
+    const match = /export class LegalAcceptanceRequiredError extends ApiError \{/.exec(
+      errorsSource,
+    );
+    expect(match, 'the error class still exists').not.toBeNull();
+    const start = (match?.index ?? 0) + (match?.[0].length ?? 0);
+    let depth = 1;
+    let end = start;
+    while (end < errorsSource.length && depth > 0) {
+      if (errorsSource[end] === '{') depth += 1;
+      else if (errorsSource[end] === '}') depth -= 1;
+      end += 1;
+    }
+    expect(
+      /status:\s*(\d{3})/.exec(errorsSource.slice(start, end))?.[1],
+      'LegalAcceptanceRequiredError still carries the status this arm pins',
+    ).toBe('409');
+
+    const missing = ['POST /v1/api-keys', 'POST /v1/auth/cli-authorize/bind-device-code']
+      .filter((operation) => {
+        const codes = declared.get(operation);
+        expect(codes, `${operation} is still published`).not.toBeUndefined();
+        return codes !== undefined && !codes.has('409');
+      })
+      .sort();
+    expect(
+      missing,
+      'these routes mint a key through a service that refuses with 409 when the account owes a ' +
+        'legal acceptance, and a generated client cannot model a refusal the contract omits',
+    ).toEqual([]);
+  });
 });

@@ -15621,3 +15621,46 @@ which cap it applies to, is not a product call.
 No code changed. Nine deferrals remain without a home; this was the one with a commercial consequence
 rather than a documentation one, and the sweep that found them is now written down so the rest can be
 worked through rather than rediscovered.
+
+## V-1540 — the tracer's own blind spot, named and paid for
+
+V-1539 left nine deferrals without a durable home. Working the highest-impact one produced something
+better than another register entry: a live undeclared status code, found because the guard's header sent
+me to read code the last three batches never scanned.
+
+`a-new-legal-reason-silently-blocks-key-minting` defers a genuine product call — whether a byte-only edit
+to a legal document (`content_hash_changed`, a typo fix with no version bump) should block API-key
+minting for every account. That is a legal-posture question and stays open. But reading the mechanism it
+describes turned up a separable, non-optional fact.
+
+**`POST /v1/api-keys` can answer 409 and did not declare it.** `ApiKeysService.create` calls
+`legalGate.required(accountId)` and throws `LegalAcceptanceRequiredError` when anything is pending. That
+gate is live rather than a dormant dep: the constructor slot defaults to `null`, and I checked before
+believing it — `bootstrap.ts:1054` passes `legalService` into that fourth positional argument, so every
+deployment has it.
+
+**And the second path had it too.** The throw has exactly one site, but two routes reach it:
+`routes/admin.ts:111` (POST /v1/api-keys) and `routes/auth-cli.ts:102`, which sits inside the registration
+for **POST /v1/auth/cli-authorize/bind-device-code**. Neither declared 409. `rotate()` does not consult
+the gate, so it is correctly untouched — checked rather than assumed, since rotation also mints a key.
+
+Both now declare it, with a description that carries the recovery: the problem body's
+`pending_acceptances` extension names each `document_key` and its `current_version`, which is what makes
+the refusal actionable rather than a wall.
+
+### Why the last three batches missed it
+
+Every arm in `a-returned-status-code-is-a-declared-one`, and the call-graph tracer built in V-1535, reads
+`apps/server/src/routes`. This throw lives in `apps/server/src/services`. **A route-scoped tracer cannot
+see a service-layer refusal**, and it reported clean on both these operations while both were wrong.
+
+That is the same fault this arc has found in five other people's guards and four times in my own tooling —
+a scan narrower than the claim it is used to support — so the new arm names its own boundary in its title
+rather than leaving the next reader to infer it. The arm pins the chain rather than the conclusion: the
+gate is still consulted, the refusal is still raised, the class still carries 409, and both operations
+still declare it. Proved in three directions — removing the declaration from each operation reds naming
+that operation, and replacing the service's throw reds on a different assertion, so a refusal that moves
+away cannot leave two pins quietly asserting a code nothing raises.
+
+The general form — service-layer throws attributed to operations — needs a cross-file call graph and is
+not attempted here. What is recorded is that the blind spot exists, has a name, and cost two operations.
