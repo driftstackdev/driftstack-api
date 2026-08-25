@@ -348,6 +348,20 @@ const PAGE_STATE_GRACE_MS = 2500;
 // This is deliberately far beyond the old 6s cutoff, which made the bar announce
 // completion while the page was still loading.
 const PAGE_LOAD_FALLBACK_MS = 45_000;
+// Reported: on a slow proxy the page "just stops loading and stays on the old
+// page", which is confusing. The 45s deadline above is right for GIVING UP —
+// a genuinely slow exit can legitimately need that long, and cutting it short
+// would abandon loads that were about to succeed. What was missing is anything
+// in between: forty-five seconds of an unchanged page with no word is
+// indistinguishable from a hung app.
+//
+// A3's box emits its own timeout-tagged 'stalled' frame, but that arrives ONLY
+// over the data channel — the same channel whose sends can be dropped silently
+// (harness publishInputAck / publishData). So this advisory is raised LOCALLY
+// on a timer and needs the device to say nothing at all. Same target-owned,
+// non-sliding cycle as the deadline: repeated `loading` frames must not keep
+// pushing it back.
+const PAGE_LOAD_SLOW_HINT_MS = 9_000;
 // flip true when A3's navigateHistory handler deploys — bus W2870
 const BACK_FORWARD_ENABLED = true; // A3 navigateHistory handler deployed (bus W2872; A3 01a5d48f1)
 // Finding #6 — throttle for the unrecognized-data-frame breadcrumb (below). One warn at
@@ -4282,6 +4296,8 @@ export function SimulatorWindow(): JSX.Element {
     target: string;
     expired: boolean;
   }>({ timer: null, target: '', expired: false });
+  /** Timer for the local slow-load hint; cleared on the same paths as the deadline. */
+  const slowHintRef = useRef<number | null>(null);
   // Timestamp of the last operator navigate. The ~2s page-state poll can fire before
   // the box has seen a just-submitted navigate and would read the PREVIOUS page as
   // 'loaded' → kill the optimistic spinner instantly (audit wqhvarsb9). For a short
@@ -4554,11 +4570,19 @@ export function SimulatorWindow(): JSX.Element {
     if (loadWatchdogRef.current.timer !== null) {
       window.clearTimeout(loadWatchdogRef.current.timer);
     }
+    if (slowHintRef.current !== null) {
+      window.clearTimeout(slowHintRef.current);
+      slowHintRef.current = null;
+    }
     loadWatchdogRef.current = { timer: null, target: '', expired: false };
   };
   const clearLoadWatchdog = (): void => {
     cancelLoadWatchdog();
     setPageLoadTimeout(null);
+    // A page that arrived retires the slow hint with it. Leaving it up over a
+    // loaded page is the same latched-advisory bug the poll branch guards
+    // against, just raised from our side instead of the box's.
+    setPageLoadStalled(null);
   };
   // One non-sliding deadline per top-level target. Repeated `loading` frames from
   // the data channel / 2s poll must NOT restart the clock forever. At expiry the
@@ -4576,6 +4600,21 @@ export function SimulatorWindow(): JSX.Element {
     const cycle = loadWatchdogRef.current;
     if (cycle.expired) return false;
     if (cycle.timer !== null) return true;
+
+    // Local slow-load hint, well before the give-up deadline. Cleared by the
+    // same cancelLoadWatchdog path, so a page that arrives never shows it.
+    const hint = window.setTimeout(() => {
+      if (loadWatchdogRef.current.target !== target) return;
+      setPageLoadStalled((prev) =>
+        prev !== null
+          ? prev
+          : {
+              url: '',
+              message: 'Still loading — this proxy is slow. The page is on its way.',
+            },
+      );
+    }, PAGE_LOAD_SLOW_HINT_MS);
+    slowHintRef.current = hint;
 
     let timer = 0;
     timer = window.setTimeout(() => {
