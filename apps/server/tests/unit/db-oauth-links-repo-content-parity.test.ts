@@ -36,7 +36,7 @@ describe('V-667.C db/oauth-links-repo content parity', () => {
 
   it('findByProviderSub composite where on (provider, providerSub) in that order', () => {
     expect(body).toMatch(
-      /\.where\(\s*\n?\s*and\(\s*\n?\s*eq\(accountOauthLinks\.provider, provider\),\s*\n?\s*eq\(accountOauthLinks\.providerSub, providerSub\),\s*\n?\s*\),\s*\n?\s*\)\s*\n?\s*\.limit\(1\)/,
+      /\.where\(\s*and\(\s*eq\(accountOauthLinks\.provider, provider\),\s*eq\(accountOauthLinks\.providerSub, providerSub\),\s*\),\s*\)\s*\.limit\(1\)/,
     );
   });
 
@@ -52,7 +52,7 @@ describe('V-667.C db/oauth-links-repo content parity', () => {
 
   it('findActiveByTokenHash composite where filters consumed + expired SERVER-SIDE (not service layer)', () => {
     expect(body).toMatch(
-      /and\(\s*\n?\s*eq\(oauthPendingLinks\.tokenHash, tokenHash\),\s*\n?\s*isNull\(oauthPendingLinks\.consumedAt\),\s*\n?\s*gt\(oauthPendingLinks\.expiresAt, now\),\s*\n?\s*\)/,
+      /and\(\s*eq\(oauthPendingLinks\.tokenHash, tokenHash\),\s*isNull\(oauthPendingLinks\.consumedAt\),\s*gt\(oauthPendingLinks\.expiresAt, now\),\s*\)/,
     );
   });
 

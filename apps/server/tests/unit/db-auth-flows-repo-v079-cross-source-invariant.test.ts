@@ -116,7 +116,7 @@ describe('W1004 db/auth-flows-repo V-079 cross-source invariant', () => {
     // C9 — the guarded UPDATE now chains .returning({ id }) and returns the
     // first-transition boolean (rows.length > 0), like consumeAuthToken.
     expect(p).toMatch(
-      /\.where\(and\(eq\(accounts\.id, accountId\), isNull\(accounts\.emailVerifiedAt\)\)\)\s*\n?\s*\.returning\(\{ id: accounts\.id \}\);\s*\n?\s*return rows\.length > 0;/,
+      /\.where\(and\(eq\(accounts\.id, accountId\), isNull\(accounts\.emailVerifiedAt\)\)\)\s*\.returning\(\{ id: accounts\.id \}\);\s*return rows\.length > 0;/,
     );
   });
 
@@ -137,7 +137,7 @@ describe('W1004 db/auth-flows-repo V-079 cross-source invariant', () => {
     // .where(...) now chains to .returning({ id }) (no trailing ;) so the call
     // reports whether it claimed the row — single-use under concurrency.
     expect(p).toMatch(
-      /\.where\(and\(eq\(t\.id, args\.id\), isNull\(t\.consumedAt\)\)\)\s*\n?\s*\.returning\(\{ id: t\.id \}\);[\s\S]*?return rows\.length > 0;/,
+      /\.where\(and\(eq\(t\.id, args\.id\), isNull\(t\.consumedAt\)\)\)\s*\.returning\(\{ id: t\.id \}\);[\s\S]*?return rows\.length > 0;/,
     );
   });
 

@@ -37,31 +37,31 @@ describe('W470.A apps/gui-client/src/lib/use-admin-idempotency-metrics.ts conten
   it("V-534.BA framing pinned: 'V-534.BA — useAdminIdempotencyMetrics hook.' + 'Wraps GET /v1/admin/crypto-orders/idempotency-metrics (V-666.AP). Admin-only — requires the `driftstack_internal_admin` scope. Cheap to scrape (no full-table walk), so the dashboard polls it alongside the stats card on every refresh.'", () => {
     expect(body).toMatch(/\/\/ V-534\.BA — useAdminIdempotencyMetrics hook\./);
     expect(body).toMatch(
-      /\/\/ Wraps GET \/v1\/admin\/crypto-orders\/idempotency-metrics \(V-666\.AP\)\.\s*\n?\s*\/\/ Admin-only — requires the `driftstack_internal_admin` scope\. Cheap\s*\n?\s*\/\/ to scrape \(no full-table walk\), so the dashboard polls it alongside\s*\n?\s*\/\/ the stats card on every refresh\./,
+      /\/\/ Wraps GET \/v1\/admin\/crypto-orders\/idempotency-metrics \(V-666\.AP\)\.\s*\/\/ Admin-only — requires the `driftstack_internal_admin` scope\. Cheap\s*\/\/ to scrape \(no full-table walk\), so the dashboard polls it alongside\s*\/\/ the stats card on every refresh\./,
     );
   });
 
   it("AdminIdempotencyMetricsData 3-field: replays + first_writes + body_mismatches optional with 'V-666.AR — count of replays where the request body differed from the stored one.' framing", () => {
     expect(body).toMatch(
-      /export interface AdminIdempotencyMetricsData \{\s*\n?\s*replays: number;\s*\n?\s*first_writes: number;\s*\n?\s*\/\*\* V-666\.AR — count of replays where the request body differed from the stored one\. \*\/\s*\n?\s*body_mismatches\?: number;\s*\n?\s*\}/,
+      /export interface AdminIdempotencyMetricsData \{\s*replays: number;\s*first_writes: number;\s*\/\*\* V-666\.AR — count of replays where the request body differed from the stored one\. \*\/\s*body_mismatches\?: number;\s*\}/,
     );
   });
 
   it('AdminIdempotencyMetricsState 4-variant union (idle | loading | ready{data} | error{message}); UseAdminIdempotencyMetricsOpts bare manual? (no JSDoc); UseAdminIdempotencyMetricsResult { state + refetch }', () => {
     expect(body).toMatch(
-      /export type AdminIdempotencyMetricsState =\s*\n?\s*\| \{ kind: 'idle' \}\s*\n?\s*\| \{ kind: 'loading' \}\s*\n?\s*\| \{ kind: 'ready'; data: AdminIdempotencyMetricsData \}\s*\n?\s*\| \{ kind: 'error'; message: string \};/,
+      /export type AdminIdempotencyMetricsState =\s*\| \{ kind: 'idle' \}\s*\| \{ kind: 'loading' \}\s*\| \{ kind: 'ready'; data: AdminIdempotencyMetricsData \}\s*\| \{ kind: 'error'; message: string \};/,
     );
     expect(body).toMatch(
-      /export interface UseAdminIdempotencyMetricsOpts \{\s*\n?\s*manual\?: boolean;\s*\n?\s*\}/,
+      /export interface UseAdminIdempotencyMetricsOpts \{\s*manual\?: boolean;\s*\}/,
     );
   });
 
   it("Same V-534 state-machine pattern: manual?-aware initial state + no-apiKey 'No API key configured.' + trailing-slash strip + URL `/v1/admin/crypto-orders/idempotency-metrics` exact + Bearer + accept JSON + !res.ok readApiErrorMessage + instance-of-Error catch", () => {
     expect(body).toMatch(
-      /const \[state, setState\] = useState<AdminIdempotencyMetricsState>\(\s*\n?\s*opts\.manual === true \? \{ kind: 'idle' \} : \{ kind: 'loading' \},\s*\n?\s*\);/,
+      /const \[state, setState\] = useState<AdminIdempotencyMetricsState>\(\s*opts\.manual === true \? \{ kind: 'idle' \} : \{ kind: 'loading' \},\s*\);/,
     );
     expect(body).toMatch(
-      /const res = await fetchWithDeadline\(\s*\n?\s*`\$\{baseUrl\}\/v1\/admin\/crypto-orders\/idempotency-metrics`,\s*\n?\s*\{\s*\n?\s*method: 'GET',\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',/,
+      /const res = await fetchWithDeadline\(\s*`\$\{baseUrl\}\/v1\/admin\/crypto-orders\/idempotency-metrics`,\s*\{\s*method: 'GET',\s*signal: controller\.signal,\s*headers: \{\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*accept: 'application\/json',/,
     );
     expect(body).toMatch(
       /if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'ready', data: body \}\);/,
@@ -72,10 +72,10 @@ describe('W470.A apps/gui-client/src/lib/use-admin-idempotency-metrics.ts conten
     expect(body).toMatch(/if \(inFlightRef\.current\) return;/);
     expect(body).toMatch(/\}, \[settings\.apiKey, settings\.baseUrl\]\);/);
     expect(body).toMatch(
-      /useEffect\(\s*\n?\s*\(\) => \(\) => \{\s*\n?\s*sequenceRef\.current \+= 1;\s*\n?\s*requestRef\.current\?\.abort\(\);\s*\n?\s*requestRef\.current = null;\s*\n?\s*inFlightRef\.current = false;\s*\n?\s*\},\s*\n?\s*\[settings\.apiKey, settings\.baseUrl\],/,
+      /useEffect\(\s*\(\) => \(\) => \{\s*sequenceRef\.current \+= 1;\s*requestRef\.current\?\.abort\(\);\s*requestRef\.current = null;\s*inFlightRef\.current = false;\s*\},\s*\[settings\.apiKey, settings\.baseUrl\],/,
     );
     expect(body).toMatch(
-      /useEffect\(\(\) => \{\s*\n?\s*if \(opts\.manual === true\) return;\s*\n?\s*void fetcher\(\);\s*\n?\s*\}, \[fetcher, opts\.manual\]\);/,
+      /useEffect\(\(\) => \{\s*if \(opts\.manual === true\) return;\s*void fetcher\(\);\s*\}, \[fetcher, opts\.manual\]\);/,
     );
   });
 

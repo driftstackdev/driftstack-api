@@ -51,9 +51,7 @@ describe('admin-panel layouts/AdminLayout content parity', () => {
   });
 
   it('Props contract pinned: title (required) + description (optional, defaults to staff-only-tagline). Drift to a different shape would break every admin page', () => {
-    expect(body).toMatch(
-      /interface Props \{\s*\n?\s*title: string;\s*\n?\s*description\?: string;\s*\n?\s*\}/,
-    );
+    expect(body).toMatch(/interface Props \{\s*title: string;\s*description\?: string;\s*\}/);
     expect(body).toMatch(/description = 'Driftstack admin panel — Driftstack staff only\.'/);
   });
 

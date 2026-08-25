@@ -44,47 +44,47 @@ describe('W473.A apps/gui-client/src/lib/use-crypto-quote.ts content parity', ()
   it("V-534.V framing pinned: 'V-534.V — useCryptoQuote hook.' + 'Wraps POST /v1/billing/crypto-checkout/quote (V-666.H) for the GUI checkout flow. Given a tier product + optional fiat currency, returns the price preview without minting an order. Re-fetches automatically when product or currency changes; supports manual mode for views that want to gate the request behind a button.'", () => {
     expect(body).toMatch(/\/\/ V-534\.V — useCryptoQuote hook\./);
     expect(body).toMatch(
-      /\/\/ Wraps POST \/v1\/billing\/crypto-checkout\/quote \(V-666\.H\) for the GUI\s*\n?\s*\/\/ checkout flow\. Given a tier product \+ optional fiat currency, returns\s*\n?\s*\/\/ the price preview without minting an order\. Re-fetches automatically\s*\n?\s*\/\/ when product or currency changes; supports manual mode for views that\s*\n?\s*\/\/ want to gate the request behind a button\./,
+      /\/\/ Wraps POST \/v1\/billing\/crypto-checkout\/quote \(V-666\.H\) for the GUI\s*\/\/ checkout flow\. Given a tier product \+ optional fiat currency, returns\s*\/\/ the price preview without minting an order\. Re-fetches automatically\s*\/\/ when product or currency changes; supports manual mode for views that\s*\/\/ want to gate the request behind a button\./,
     );
   });
 
   it('CryptoQuoteData exact pricing-only shape (product + price_cents + price_currency)', () => {
     expect(body).toMatch(
-      /export interface CryptoQuoteData \{\s*\n?\s*product: string;\s*\n?\s*price_cents: number;\s*\n?\s*price_currency: string;\s*\n?\s*\}/,
+      /export interface CryptoQuoteData \{\s*product: string;\s*price_cents: number;\s*price_currency: string;\s*\}/,
     );
     expect(body).not.toMatch(/pay_min_amount|pay_max_amount|provider: string/);
   });
 
   it("CryptoQuoteState 4-variant union + UseCryptoQuoteOpts: product 'Tier product to quote. null = no fetch; result stays idle.' + priceCurrency? 'Defaults to the server's EUR.' + manual? 'Disable auto-fetch on mount + on dependency change. Default false.'", () => {
     expect(body).toMatch(
-      /export type CryptoQuoteState =\s*\n?\s*\| \{ kind: 'idle' \}\s*\n?\s*\| \{ kind: 'loading' \}\s*\n?\s*\| \{ kind: 'ready'; data: CryptoQuoteData \}\s*\n?\s*\| \{ kind: 'error'; message: string \};/,
+      /export type CryptoQuoteState =\s*\| \{ kind: 'idle' \}\s*\| \{ kind: 'loading' \}\s*\| \{ kind: 'ready'; data: CryptoQuoteData \}\s*\| \{ kind: 'error'; message: string \};/,
     );
     expect(body).toMatch(
-      /export interface UseCryptoQuoteOpts \{\s*\n?\s*\/\*\* Tier product to quote\. null = no fetch; result stays idle\. \*\/\s*\n?\s*product: string \| null;\s*\n?\s*\/\*\* Optional fiat currency override\. Defaults to the server's EUR\. \*\/\s*\n?\s*priceCurrency\?: string;\s*\n?\s*\/\*\* Disable auto-fetch on mount \+ on dependency change\. Default false\. \*\/\s*\n?\s*manual\?: boolean;\s*\n?\s*\}/,
+      /export interface UseCryptoQuoteOpts \{\s*\/\*\* Tier product to quote\. null = no fetch; result stays idle\. \*\/\s*product: string \| null;\s*\/\*\* Optional fiat currency override\. Defaults to the server's EUR\. \*\/\s*priceCurrency\?: string;\s*\/\*\* Disable auto-fetch on mount \+ on dependency change\. Default false\. \*\/\s*manual\?: boolean;\s*\}/,
     );
   });
 
   it('product===null short-circuit: initial state guards on manual||product===null + fetcher early-return setState idle + useEffect skips both manual and null product', () => {
     expect(body).toMatch(
-      /const \[state, setState\] = useState<CryptoQuoteState>\(\s*\n?\s*opts\.manual === true \|\| opts\.product === null \? \{ kind: 'idle' \} : \{ kind: 'loading' \},\s*\n?\s*\);/,
+      /const \[state, setState\] = useState<CryptoQuoteState>\(\s*opts\.manual === true \|\| opts\.product === null \? \{ kind: 'idle' \} : \{ kind: 'loading' \},\s*\);/,
     );
     expect(body).toMatch(
-      /if \(opts\.product === null\) \{\s*\n?\s*setState\(\{ kind: 'idle' \}\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /if \(opts\.product === null\) \{\s*setState\(\{ kind: 'idle' \}\);\s*return;\s*\}/,
     );
     expect(body).toMatch(
-      /useEffect\(\(\) => \{\s*\n?\s*if \(opts\.manual === true\) return;\s*\n?\s*if \(opts\.product === null\) return;\s*\n?\s*void fetcher\(\);\s*\n?\s*\}, \[fetcher, opts\.manual, opts\.product\]\);/,
+      /useEffect\(\(\) => \{\s*if \(opts\.manual === true\) return;\s*if \(opts\.product === null\) return;\s*void fetcher\(\);\s*\}, \[fetcher, opts\.manual, opts\.product\]\);/,
     );
   });
 
   it('POST body conditional price_currency: body Record<string,string> seeded with product + only sets body.price_currency when priceCurrency !== undefined (so undefined override never sends an empty currency field that would trip the V-666.H validator)', () => {
     expect(body).toMatch(
-      /const body: Record<string, string> = \{ product: opts\.product \};\s*\n?\s*if \(opts\.priceCurrency !== undefined\) \{\s*\n?\s*body\.price_currency = opts\.priceCurrency;\s*\n?\s*\}/,
+      /const body: Record<string, string> = \{ product: opts\.product \};\s*if \(opts\.priceCurrency !== undefined\) \{\s*body\.price_currency = opts\.priceCurrency;\s*\}/,
     );
   });
 
   it('Fetch shape: POST `${baseUrl}/v1/billing/crypto-checkout/quote` exact + 3-header (authorization Bearer + accept application/json + content-type application/json) + body JSON.stringify(body); useCallback deps [opts.product, opts.priceCurrency, settings.apiKey, settings.baseUrl]', () => {
     expect(body).toMatch(
-      /const res = await fetchWithDeadline\(`\$\{baseUrl\}\/v1\/billing\/crypto-checkout\/quote`, \{\s*\n?\s*method: 'POST',\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\},\s*\n?\s*body: JSON\.stringify\(body\),\s*\n?\s*\}\);/,
+      /const res = await fetchWithDeadline\(`\$\{baseUrl\}\/v1\/billing\/crypto-checkout\/quote`, \{\s*method: 'POST',\s*signal: controller\.signal,\s*headers: \{\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*accept: 'application\/json',\s*'content-type': 'application\/json',\s*\},\s*body: JSON\.stringify\(body\),\s*\}\);/,
     );
     expect(body).toMatch(/requestRef\.current\?\.abort\(\);/);
     expect(body).toMatch(

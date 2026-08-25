@@ -92,7 +92,7 @@ describe('W692 cross-SDK V-049/V-458 legal-acceptance parity', () => {
 
     // sdk-go: similar — may span lines.
     expect(go).toMatch(
-      /document, version,\s*\n?\s*\/\/\s*content_hash\) tuple|\(document, version, content_hash\) tuple/,
+      /document, version,\s*\/\/\s*content_hash\) tuple|\(document, version, content_hash\) tuple/,
     );
   });
 

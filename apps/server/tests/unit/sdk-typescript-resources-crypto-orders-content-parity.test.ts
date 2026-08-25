@@ -54,26 +54,26 @@ describe('W426.A packages/sdk-typescript/src/resources/crypto-orders.ts content 
 
   it('CRITICAL Customer-facing-only invariant + non-refundable disclosure pinned per-line. The customer-facing-only framing prevents admin verbs from leaking into the public SDK; the non-refundable disclosure justifies the V-666.J self-service cancel as the ONLY out for pending orders.', () => {
     expect(body).toMatch(
-      /\/\/ Customer-facing only; admin endpoints are not exposed in the public\s*\n?\s*\/\/ SDK \(use the OpenAPI spec at \/openapi\.json directly\)\. Crypto\s*\n?\s*\/\/ payments are non-refundable\./,
+      /\/\/ Customer-facing only; admin endpoints are not exposed in the public\s*\/\/ SDK \(use the OpenAPI spec at \/openapi\.json directly\)\. Crypto\s*\/\/ payments are non-refundable\./,
     );
   });
 
   it("Imports — 10 api-types shapes (sorted alphabetical block) covering every verb's wire shape + HttpClient. CRITICAL: 10-shape import surface — drift to hand-rolling any of these types would diverge from @driftstack/api-types Zod single-source-of-truth.", () => {
     expect(body).toMatch(
-      /import type \{\s*\n?\s*CancelCryptoOrderResponse,\s*\n?\s*CreateCryptoCheckoutRequest,\s*\n?\s*CreateCryptoCheckoutResponse,\s*\n?\s*CryptoOrderEnvelope,\s*\n?\s*CryptoOrderReceipt,\s*\n?\s*CryptoQuoteRequest,\s*\n?\s*CryptoQuoteResponse,\s*\n?\s*ListCryptoOrdersQuery,\s*\n?\s*ListCryptoOrdersResponse,\s*\n?\s*UpdateCryptoOrderNoteRequest,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import type \{\s*CancelCryptoOrderResponse,\s*CreateCryptoCheckoutRequest,\s*CreateCryptoCheckoutResponse,\s*CryptoOrderEnvelope,\s*CryptoOrderReceipt,\s*CryptoQuoteRequest,\s*CryptoQuoteResponse,\s*ListCryptoOrdersQuery,\s*ListCryptoOrdersResponse,\s*UpdateCryptoOrderNoteRequest,\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(/import type \{ HttpClient \} from '\.\.\/http\.js';/);
   });
 
   it('CreateCryptoCheckoutOptions interface — V-666.AO idempotencyKey field pinned with "passes it as the Idempotency-Key header" framing. Drift to passing as a query param OR body field would not match HTTP spec convention.', () => {
     expect(body).toMatch(
-      /export interface CreateCryptoCheckoutOptions \{\s*\n?\s*\/\*\* V-666\.AO — idempotency key\. The SDK passes it as the Idempotency-Key header\. \*\/\s*\n?\s*idempotencyKey\?: string;\s*\n?\s*\}/,
+      /export interface CreateCryptoCheckoutOptions \{\s*\/\*\* V-666\.AO — idempotency key\. The SDK passes it as the Idempotency-Key header\. \*\/\s*idempotencyKey\?: string;\s*\}/,
     );
   });
 
   it('ListCryptoOrdersOptions type-alias — V-666.BR `export type ListCryptoOrdersOptions = ListCryptoOrdersQuery` (re-export from api-types). CRITICAL rationale: "status union stays in lockstep with the server-side enum." Drift to a local hand-rolled type would silently let the SDK accept status values the server-side enum rejects.', () => {
     expect(body).toMatch(
-      /\*\s*V-666\.BR — list options\. Sourced from @driftstack\/api-types so the\s*\n?\s*\*\s*status union stays in lockstep with the server-side enum\./,
+      /\*\s*V-666\.BR — list options\. Sourced from @driftstack\/api-types so the\s*\*\s*status union stays in lockstep with the server-side enum\./,
     );
     expect(body).toMatch(/export type ListCryptoOrdersOptions = ListCryptoOrdersQuery;/);
   });
@@ -88,7 +88,7 @@ describe('W426.A packages/sdk-typescript/src/resources/crypto-orders.ts content 
       /\/\*\* V-666\.H — preview the authoritative fiat price without minting an order\. \*\//,
     );
     expect(body).toMatch(
-      /quote\(body: CryptoQuoteRequest\): Promise<CryptoQuoteResponse> \{\s*\n?\s*return this\.http\.request<CryptoQuoteResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/billing\/crypto-checkout\/quote',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /quote\(body: CryptoQuoteRequest\): Promise<CryptoQuoteResponse> \{\s*return this\.http\.request<CryptoQuoteResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/billing\/crypto-checkout\/quote',\s*body,\s*\}\);\s*\}/,
     );
   });
 
@@ -97,34 +97,34 @@ describe('W426.A packages/sdk-typescript/src/resources/crypto-orders.ts content 
       /\/\*\* V-666\.C — mint a new crypto order\. Send an `idempotencyKey` to dedupe retries\. \*\//,
     );
     expect(body).toMatch(
-      /createCheckout\(\s*\n?\s*body: CreateCryptoCheckoutRequest,\s*\n?\s*opts: CreateCryptoCheckoutOptions = \{\},\s*\n?\s*\): Promise<CreateCryptoCheckoutResponse> \{\s*\n?\s*return this\.http\.request<CreateCryptoCheckoutResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/billing\/crypto-checkout',\s*\n?\s*body,\s*\n?\s*\.\.\.\(opts\.idempotencyKey !== undefined\s*\n?\s*\? \{ headers: \{ 'idempotency-key': opts\.idempotencyKey \} \}\s*\n?\s*: \{\}\),\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /createCheckout\(\s*body: CreateCryptoCheckoutRequest,\s*opts: CreateCryptoCheckoutOptions = \{\},\s*\): Promise<CreateCryptoCheckoutResponse> \{\s*return this\.http\.request<CreateCryptoCheckoutResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/billing\/crypto-checkout',\s*body,\s*\.\.\.\(opts\.idempotencyKey !== undefined\s*\? \{ headers: \{ 'idempotency-key': opts\.idempotencyKey \} \}\s*: \{\}\),\s*\}\);\s*\}/,
     );
   });
 
   it('V-666.G/BR/BU list verb — GET /v1/billing/crypto-orders with 5-param query. JSDoc pinned per-anchor: V-666.G (caller account, newest first), V-666.BR (status filter), V-666.BU (cursor pagination, loop until next_cursor null). Each anchor MUST stay attached because the list verb spans 3 user-facing features (read-only listing + status-filter + cursor-pagination).', () => {
     expect(body).toMatch(
-      /\*\s*V-666\.G — list the caller account's crypto orders \(newest first\)\.\s*\n?\s*\*\s*V-666\.BR — pass `status` to narrow the list to a single status\.\s*\n?\s*\*\s*V-666\.BU — pass `cursor` from a prior page's `next_cursor` to\s*\n?\s*\*\s*iterate\. Loop until the response's `next_cursor` is null\./,
+      /\*\s*V-666\.G — list the caller account's crypto orders \(newest first\)\.\s*\*\s*V-666\.BR — pass `status` to narrow the list to a single status\.\s*\*\s*V-666\.BU — pass `cursor` from a prior page's `next_cursor` to\s*\*\s*iterate\. Loop until the response's `next_cursor` is null\./,
     );
   });
 
   it('list verb implementation — 5-field query builder (status + limit + cursor + created_after + created_before) with `if (...) query.field = ...` pattern + EMPTY-query branch via `Object.keys(query).length > 0 ? { query } : {}`. CRITICAL: empty-query branch is what lets the verb emit a CLEAN `/v1/billing/crypto-orders` (no `?` suffix) when no filters are set — drift to always sending `query: {}` would append `?` to the URL even for the all-orders default case.', () => {
     expect(body).toMatch(
-      /list\(opts: ListCryptoOrdersOptions = \{\}\): Promise<ListCryptoOrdersResponse> \{\s*\n?\s*const query: Record<string, string \| number \| undefined> = \{\};\s*\n?\s*if \(opts\.status !== undefined\) query\.status = opts\.status;\s*\n?\s*if \(opts\.limit !== undefined\) query\.limit = opts\.limit;\s*\n?\s*if \(opts\.cursor !== undefined\) query\.cursor = opts\.cursor;\s*\n?\s*if \(opts\.created_after !== undefined\) query\.created_after = opts\.created_after;\s*\n?\s*if \(opts\.created_before !== undefined\) query\.created_before = opts\.created_before;/,
+      /list\(opts: ListCryptoOrdersOptions = \{\}\): Promise<ListCryptoOrdersResponse> \{\s*const query: Record<string, string \| number \| undefined> = \{\};\s*if \(opts\.status !== undefined\) query\.status = opts\.status;\s*if \(opts\.limit !== undefined\) query\.limit = opts\.limit;\s*if \(opts\.cursor !== undefined\) query\.cursor = opts\.cursor;\s*if \(opts\.created_after !== undefined\) query\.created_after = opts\.created_after;\s*if \(opts\.created_before !== undefined\) query\.created_before = opts\.created_before;/,
     );
     expect(body).toMatch(
-      /return this\.http\.request<ListCryptoOrdersResponse>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/billing\/crypto-orders',\s*\n?\s*\.\.\.\(Object\.keys\(query\)\.length > 0 \? \{ query \} : \{\}\),\s*\n?\s*\}\);/,
+      /return this\.http\.request<ListCryptoOrdersResponse>\(\{\s*method: 'GET',\s*path: '\/v1\/billing\/crypto-orders',\s*\.\.\.\(Object\.keys\(query\)\.length > 0 \? \{ query \} : \{\}\),\s*\}\);/,
     );
   });
 
   it('CRITICAL V-666.BU listAll verb — a method returning AsyncGenerator<CryptoOrderEnvelope, void, void> that DELEGATES to the shared iteratePaginated helper (audit 2026-06-23 — was an inline async* while-loop), so it inherits the non-advancing-cursor guard every other list has. Internal cursor management via `Omit<ListCryptoOrdersOptions, "cursor">` — callers MUST NOT pass cursor (the type system rejects it at compile time). The crypto envelope keys rows off `orders`, so the fetch closure adapts orders→data + `next_cursor ?? null`. Drift to dropping the adapter or the shared helper would re-introduce the unguarded loop / iterate an empty list.', () => {
     expect(body).toMatch(
-      /\*\s*V-666\.BU — async generator that walks every page until the\s*\n?\s*\*\s*server stops emitting a next_cursor\. Yields the envelope of\s*\n?\s*\*\s*each order one at a time so consumers can break early\./,
+      /\*\s*V-666\.BU — async generator that walks every page until the\s*\*\s*server stops emitting a next_cursor\. Yields the envelope of\s*\*\s*each order one at a time so consumers can break early\./,
     );
     expect(body).toMatch(
-      /\*\s*Accepts the same options as `list\(\)` minus `cursor` \(the\s*\n?\s*\*\s*iterator manages cursors internally\)\./,
+      /\*\s*Accepts the same options as `list\(\)` minus `cursor` \(the\s*\*\s*iterator manages cursors internally\)\./,
     );
     expect(body).toMatch(
-      /listAll\(\s*\n?\s*opts: Omit<ListCryptoOrdersOptions, 'cursor'> = \{\},\s*\n?\s*\): AsyncGenerator<CryptoOrderEnvelope, void, void> \{[\s\S]*?return iteratePaginated<CryptoOrderEnvelope>\(\(cursor\) =>\s*\n?\s*this\.list\(\{\s*\n?\s*\.\.\.opts,\s*\n?\s*\.\.\.\(cursor !== null \? \{ cursor \} : \{\}\),\s*\n?\s*\}\)\.then\(\(page\) => \(\{\s*\n?\s*data: page\.orders,\s*\n?\s*next_cursor: page\.next_cursor \?\? null,\s*\n?\s*\}\)\),\s*\n?\s*\);/,
+      /listAll\(\s*opts: Omit<ListCryptoOrdersOptions, 'cursor'> = \{\},\s*\): AsyncGenerator<CryptoOrderEnvelope, void, void> \{[\s\S]*?return iteratePaginated<CryptoOrderEnvelope>\(\(cursor\) =>\s*this\.list\(\{\s*\.\.\.opts,\s*\.\.\.\(cursor !== null \? \{ cursor \} : \{\}\),\s*\}\)\.then\(\(page\) => \(\{\s*data: page\.orders,\s*next_cursor: page\.next_cursor \?\? null,\s*\}\)\),\s*\);/,
     );
     // The shared paginator must actually be imported (the delegation target).
     expect(body).toMatch(/import \{ iteratePaginated \} from '\.\.\/pagination\.js';/);
@@ -133,28 +133,28 @@ describe('W426.A packages/sdk-typescript/src/resources/crypto-orders.ts content 
   it('V-666.G get verb — GET /v1/billing/crypto-orders/${encodeURIComponent(orderId)} → Promise<CryptoOrderEnvelope>. Single-line minimalist implementation; encodeURIComponent wrapping prevents path traversal via maliciously-crafted orderIds.', () => {
     expect(body).toMatch(/\/\*\* V-666\.G — read a single order envelope\. \*\//);
     expect(body).toMatch(
-      /get\(orderId: string\): Promise<CryptoOrderEnvelope> \{\s*\n?\s*return this\.http\.request<CryptoOrderEnvelope>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: `\/v1\/billing\/crypto-orders\/\$\{encodeURIComponent\(orderId\)\}`,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /get\(orderId: string\): Promise<CryptoOrderEnvelope> \{\s*return this\.http\.request<CryptoOrderEnvelope>\(\{\s*method: 'GET',\s*path: `\/v1\/billing\/crypto-orders\/\$\{encodeURIComponent\(orderId\)\}`,\s*\}\);\s*\}/,
     );
   });
 
   it('V-666.Q updateNote verb — PATCH /v1/billing/crypto-orders/${encodeURIComponent(orderId)} with UpdateCryptoOrderNoteRequest body → Promise<CryptoOrderEnvelope>. Customer-facing free-text note; PATCH (not PUT) because the note is just one field on the broader order envelope.', () => {
     expect(body).toMatch(/\/\*\* V-666\.Q — update the customer-facing free-text note\. \*\//);
     expect(body).toMatch(
-      /updateNote\(orderId: string, body: UpdateCryptoOrderNoteRequest\): Promise<CryptoOrderEnvelope> \{\s*\n?\s*return this\.http\.request<CryptoOrderEnvelope>\(\{\s*\n?\s*method: 'PATCH',\s*\n?\s*path: `\/v1\/billing\/crypto-orders\/\$\{encodeURIComponent\(orderId\)\}`,\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /updateNote\(orderId: string, body: UpdateCryptoOrderNoteRequest\): Promise<CryptoOrderEnvelope> \{\s*return this\.http\.request<CryptoOrderEnvelope>\(\{\s*method: 'PATCH',\s*path: `\/v1\/billing\/crypto-orders\/\$\{encodeURIComponent\(orderId\)\}`,\s*body,\s*\}\);\s*\}/,
     );
   });
 
   it('CRITICAL V-666.J cancel verb — POST (NOT DELETE) /v1/billing/crypto-orders/${encodeURIComponent(orderId)}/cancel → Promise<CancelCryptoOrderResponse>. POST (state transition, not row deletion) + audit-log preservation. Drift to DELETE would lose the audit-log row that captures the cancellation event. "abandon a pending order (self-service)" — the ONLY out for non-refundable crypto payments.', () => {
     expect(body).toMatch(/\/\*\* V-666\.J — abandon a pending order \(self-service\)\. \*\//);
     expect(body).toMatch(
-      /cancel\(orderId: string\): Promise<CancelCryptoOrderResponse> \{\s*\n?\s*return this\.http\.request<CancelCryptoOrderResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: `\/v1\/billing\/crypto-orders\/\$\{encodeURIComponent\(orderId\)\}\/cancel`,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /cancel\(orderId: string\): Promise<CancelCryptoOrderResponse> \{\s*return this\.http\.request<CancelCryptoOrderResponse>\(\{\s*method: 'POST',\s*path: `\/v1\/billing\/crypto-orders\/\$\{encodeURIComponent\(orderId\)\}\/cancel`,\s*\}\);\s*\}/,
     );
   });
 
   it('V-666.M receipt verb — GET /v1/billing/crypto-orders/${encodeURIComponent(orderId)}/receipt → Promise<CryptoOrderReceipt>. Returns JSON (NOT PDF — PDF download lives elsewhere). Drift to a binary blob response type would break content-negotiation typing across the SDK.', () => {
     expect(body).toMatch(/\/\*\* V-666\.M — fetch the JSON receipt\. \*\//);
     expect(body).toMatch(
-      /receipt\(orderId: string\): Promise<CryptoOrderReceipt> \{\s*\n?\s*return this\.http\.request<CryptoOrderReceipt>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: `\/v1\/billing\/crypto-orders\/\$\{encodeURIComponent\(orderId\)\}\/receipt`,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /receipt\(orderId: string\): Promise<CryptoOrderReceipt> \{\s*return this\.http\.request<CryptoOrderReceipt>\(\{\s*method: 'GET',\s*path: `\/v1\/billing\/crypto-orders\/\$\{encodeURIComponent\(orderId\)\}\/receipt`,\s*\}\);\s*\}/,
     );
   });
 
@@ -168,7 +168,7 @@ describe('W426.A packages/sdk-typescript/src/resources/crypto-orders.ts content 
     expect(methods.length, 'expected 9 verb declarations').toBe(9);
     // `iterate` is the cross-SDK naming alias delegating to `listAll`.
     expect(body).toMatch(
-      /iterate\(\s*\n?\s*opts: Omit<ListCryptoOrdersOptions, 'cursor'> = \{\},\s*\n?\s*\): AsyncGenerator<CryptoOrderEnvelope, void, void> \{\s*\n?\s*return this\.listAll\(opts\);\s*\n?\s*\}/,
+      /iterate\(\s*opts: Omit<ListCryptoOrdersOptions, 'cursor'> = \{\},\s*\): AsyncGenerator<CryptoOrderEnvelope, void, void> \{\s*return this\.listAll\(opts\);\s*\}/,
     );
     const posts = (body.match(/method: 'POST'/g) ?? []).length;
     expect(posts, 'expected 3 POSTs (quote + createCheckout + cancel)').toBe(3);

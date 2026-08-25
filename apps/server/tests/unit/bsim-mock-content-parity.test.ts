@@ -52,16 +52,16 @@ describe('W451.C packages/behavioural-simulation/src/mock.ts content parity', ()
 
   it('V-127 framing pinned: \'V-127 mock implementation. Deterministic outputs so tests can assert exact shape without RNG flakiness; same inputs ALWAYS produce the same outputs (matches the mock-driver discipline used elsewhere in the repo: "deterministic; same inputs → same outputs").\'', () => {
     expect(body).toMatch(
-      /\/\/ V-127 mock implementation\. Deterministic outputs so tests can\s*\n?\s*\/\/ assert exact shape without RNG flakiness; same inputs ALWAYS\s*\n?\s*\/\/ produce the same outputs \(matches the mock-driver discipline used\s*\n?\s*\/\/ elsewhere in the repo: "deterministic; same inputs → same outputs"\)\./,
+      /\/\/ V-127 mock implementation\. Deterministic outputs so tests can\s*\/\/ assert exact shape without RNG flakiness; same inputs ALWAYS\s*\/\/ produce the same outputs \(matches the mock-driver discipline used\s*\/\/ elsewhere in the repo: "deterministic; same inputs → same outputs"\)\./,
     );
     expect(body).toMatch(
-      /\/\/ Pure deterministic mouse, touch and scroll-velocity generators already\s*\n?\s*\/\/ exist, so this reference simulator delegates to them for mock\/real parity\./,
+      /\/\/ Pure deterministic mouse, touch and scroll-velocity generators already\s*\/\/ exist, so this reference simulator delegates to them for mock\/real parity\./,
     );
   });
 
   it('imports: interface/types, real touch/scroll delegates, and the shared grapheme splitter', () => {
     expect(body).toMatch(
-      /import type \{\s*\n?\s*BehaviouralSimulator,\s*\n?\s*GenerateKeyboardCadenceOpts,\s*\n?\s*GenerateMouseTrajectoryOpts,\s*\n?\s*GenerateScrollPatternOpts,\s*\n?\s*GenerateScrollVelocityProfileOpts,\s*\n?\s*GenerateTouchEventOpts,\s*\n?\s*\} from '\.\/interfaces\.js';/,
+      /import type \{\s*BehaviouralSimulator,\s*GenerateKeyboardCadenceOpts,\s*GenerateMouseTrajectoryOpts,\s*GenerateScrollPatternOpts,\s*GenerateScrollVelocityProfileOpts,\s*GenerateTouchEventOpts,\s*\} from '\.\/interfaces\.js';/,
     );
     expect(body).toMatch(
       /import \{ generateScrollVelocityProfile, type ScrollVelocityProfile \} from '\.\/scroll\.js';/,
@@ -73,19 +73,19 @@ describe('W451.C packages/behavioural-simulation/src/mock.ts content parity', ()
       /import \{ requireFinite, requirePositiveFinite \} from '\.\/validation\.js';/,
     );
     expect(body).toMatch(
-      /import type \{\s*\n?\s*BehaviouralProfile,\s*\n?\s*KeyboardCadence,\s*\n?\s*MouseTrajectory,\s*\n?\s*ScrollPattern,\s*\n?\s*TouchEvent,\s*\n?\s*\} from '\.\/types\.js';/,
+      /import type \{\s*BehaviouralProfile,\s*KeyboardCadence,\s*MouseTrajectory,\s*ScrollPattern,\s*TouchEvent,\s*\} from '\.\/types\.js';/,
     );
   });
 
   it('DEFAULT_PROFILES: 2-entry catalogue (casual_browser_us with meanKeyDelayMs:120 + fast_typer_dev with meanKeyDelayMs:60); each has 5 numeric fields (meanKeyDelayMs + meanMouseSpeedPxPerMs + meanScrollPxPerTick + pauseProbability + meanPauseMs)', () => {
     expect(body).toMatch(
-      /const DEFAULT_PROFILES: readonly BehaviouralProfile\[\] = immutableProfileSnapshot\(\[\s*\n?\s*\{\s*\n?\s*id: 'casual_browser_us',\s*\n?\s*meanKeyDelayMs: 120,\s*\n?\s*meanMouseSpeedPxPerMs: 0\.4,\s*\n?\s*meanScrollPxPerTick: 80,\s*\n?\s*pauseProbability: 0\.25,\s*\n?\s*meanPauseMs: 800,\s*\n?\s*\},\s*\n?\s*\{\s*\n?\s*id: 'fast_typer_dev',\s*\n?\s*meanKeyDelayMs: 60,\s*\n?\s*meanMouseSpeedPxPerMs: 0\.6,\s*\n?\s*meanScrollPxPerTick: 120,\s*\n?\s*pauseProbability: 0\.1,\s*\n?\s*meanPauseMs: 300,\s*\n?\s*\},\s*\n?\s*\]\);/,
+      /const DEFAULT_PROFILES: readonly BehaviouralProfile\[\] = immutableProfileSnapshot\(\[\s*\{\s*id: 'casual_browser_us',\s*meanKeyDelayMs: 120,\s*meanMouseSpeedPxPerMs: 0\.4,\s*meanScrollPxPerTick: 80,\s*pauseProbability: 0\.25,\s*meanPauseMs: 800,\s*\},\s*\{\s*id: 'fast_typer_dev',\s*meanKeyDelayMs: 60,\s*meanMouseSpeedPxPerMs: 0\.6,\s*meanScrollPxPerTick: 120,\s*pauseProbability: 0\.1,\s*meanPauseMs: 300,\s*\},\s*\]\);/,
     );
   });
 
   it("defaultSeed framing pinned: 'Deterministic seed = label + JSON-stringified opts. Stable across calls with identical args; differs when args differ.' + return `${label}:${JSON.stringify(opts)}`", () => {
     expect(body).toMatch(
-      /function defaultSeed\(label: string, opts: unknown\): string \{\s*\n?\s*\/\/ Deterministic seed = label \+ JSON-stringified opts\. Stable across\s*\n?\s*\/\/ calls with identical args; differs when args differ\.\s*\n?\s*return `\$\{label\}:\$\{JSON\.stringify\(opts\)\}`;\s*\n?\s*\}/,
+      /function defaultSeed\(label: string, opts: unknown\): string \{\s*\/\/ Deterministic seed = label \+ JSON-stringified opts\. Stable across\s*\/\/ calls with identical args; differs when args differ\.\s*return `\$\{label\}:\$\{JSON\.stringify\(opts\)\}`;\s*\}/,
     );
   });
 
@@ -94,13 +94,13 @@ describe('W451.C packages/behavioural-simulation/src/mock.ts content parity', ()
       /function immutableProfileSnapshot\([\s\S]*?return Object\.freeze\(profiles\.map\(\(profile\) => Object\.freeze\(\{ \.\.\.profile \}\)\)\);/,
     );
     expect(body).toMatch(
-      /export class MockBehaviouralSimulator implements BehaviouralSimulator \{\s*\n?\s*private readonly profiles: readonly BehaviouralProfile\[\];\s*\n?\s*constructor\(profiles: readonly BehaviouralProfile\[\] = DEFAULT_PROFILES\) \{\s*\n?\s*this\.profiles = immutableProfileSnapshot\(profiles\);\s*\n?\s*\}/,
+      /export class MockBehaviouralSimulator implements BehaviouralSimulator \{\s*private readonly profiles: readonly BehaviouralProfile\[\];\s*constructor\(profiles: readonly BehaviouralProfile\[\] = DEFAULT_PROFILES\) \{\s*this\.profiles = immutableProfileSnapshot\(profiles\);\s*\}/,
     );
   });
 
   it('generateMouseTrajectory delegates to the deterministic pure generator', () => {
     expect(body).toMatch(
-      /generateMouseTrajectory\(opts: GenerateMouseTrajectoryOpts\): MouseTrajectory \{[\s\S]*?\/\/ The real mouse generator is deterministic \+ pure, so delegating keeps[\s\S]*?return generateMouseTrajectory\(opts\);\s*\n?\s*\}/,
+      /generateMouseTrajectory\(opts: GenerateMouseTrajectoryOpts\): MouseTrajectory \{[\s\S]*?\/\/ The real mouse generator is deterministic \+ pure, so delegating keeps[\s\S]*?return generateMouseTrajectory\(opts\);\s*\}/,
     );
   });
 
@@ -109,7 +109,7 @@ describe('W451.C packages/behavioural-simulation/src/mock.ts content parity', ()
       /const seed = opts\.seed \?\? defaultSeed\('kb', \{ text: opts\.text, profileId: opts\.profile\.id \}\);/,
     );
     expect(body).toMatch(
-      /\/\/ Deterministic constant delay — real path samples around mean\s*\n?\s*\/\/ with profile-tuned jitter\. Keep one delay per Unicode grapheme so the\s*\n?\s*\/\/ mock cannot hide lone-surrogate events that the real path rejects\./,
+      /\/\/ Deterministic constant delay — real path samples around mean\s*\/\/ with profile-tuned jitter\. Keep one delay per Unicode grapheme so the\s*\/\/ mock cannot hide lone-surrogate events that the real path rejects\./,
     );
     expect(body).toMatch(
       /const delaysMs = splitGraphemes\(opts\.text\)\.map\(\(\) => opts\.profile\.meanKeyDelayMs\);/,
@@ -118,10 +118,10 @@ describe('W451.C packages/behavioural-simulation/src/mock.ts content parity', ()
 
   it('generateScrollPattern framing pinned: constant ticks + exact final remainder + bounded count + physical sign + 16ms cadence', () => {
     expect(body).toMatch(
-      /\/\/ Constant per-tick delta \(no decay\) except for the exact final remainder —\s*\n?\s*\/\/ real path applies velocity decay \+ occasional reversal jitter\./,
+      /\/\/ Constant per-tick delta \(no decay\) except for the exact final remainder —\s*\/\/ real path applies velocity decay \+ occasional reversal jitter\./,
     );
     expect(body).toMatch(
-      /const tickPx = opts\.profile\.meanScrollPxPerTick;\s*\n?\s*const tickCount = Math\.max\(1, Math\.ceil\(opts\.totalDistancePx \/ tickPx\)\);/,
+      /const tickPx = opts\.profile\.meanScrollPxPerTick;\s*const tickCount = Math\.max\(1, Math\.ceil\(opts\.totalDistancePx \/ tickPx\)\);/,
     );
     expect(body).toMatch(/export const MAX_SCROLL_PATTERN_TICKS = 10_000;/);
     expect(body).toMatch(/if \(tickCount > MAX_SCROLL_PATTERN_TICKS\) \{/);
@@ -129,29 +129,29 @@ describe('W451.C packages/behavioural-simulation/src/mock.ts content parity', ()
       /const sign = opts\.direction === 'up' \|\| opts\.direction === 'left' \? -1 : 1;/,
     );
     expect(body).toMatch(
-      /let emittedDistancePx = 0;[\s\S]*?const magnitudePx =\s*\n?\s*i === tickCount - 1 \? opts\.totalDistancePx - emittedDistancePx : tickPx;\s*\n?\s*ticks\.push\(\{ deltaPx: sign \* magnitudePx, tMs: i \* 16 \}\);\s*\n?\s*emittedDistancePx \+= magnitudePx;/,
+      /let emittedDistancePx = 0;[\s\S]*?const magnitudePx =\s*i === tickCount - 1 \? opts\.totalDistancePx - emittedDistancePx : tickPx;\s*ticks\.push\(\{ deltaPx: sign \* magnitudePx, tMs: i \* 16 \}\);\s*emittedDistancePx \+= magnitudePx;/,
     );
     expect(body).toMatch(/totalDistancePx: opts\.totalDistancePx,/);
   });
 
   it("generateTouchEvent + generateScrollVelocityProfile: parity-by-reuse framing pinned 'mock surface re-uses it directly rather than shipping a separate constant-output stub. Mock/real parity here means callers don't see a behavioural shift when the real Phase 3 simulator ships behind the same interface.' + 'Same parity pattern as generateTouchEvent — the real generator is already deterministic + pure.'", () => {
     expect(body).toMatch(
-      /\/\/ The real touch generator is already deterministic \+ pure \(see\s*\n?\s*\/\/ `touch\.ts`\), so the mock surface re-uses it directly rather than\s*\n?\s*\/\/ shipping a separate constant-output stub\. Mock\/real parity here means\s*\n?\s*\/\/ callers don't see a behavioural shift when the real Phase 3 simulator\s*\n?\s*\/\/ ships behind the same interface\./,
+      /\/\/ The real touch generator is already deterministic \+ pure \(see\s*\/\/ `touch\.ts`\), so the mock surface re-uses it directly rather than\s*\/\/ shipping a separate constant-output stub\. Mock\/real parity here means\s*\/\/ callers don't see a behavioural shift when the real Phase 3 simulator\s*\/\/ ships behind the same interface\./,
     );
     expect(body).toMatch(
-      /generateTouchEvent\(opts: GenerateTouchEventOpts\): TouchEvent \{[\s\S]*?return generateTouchEvent\(opts\);\s*\n?\s*\}/,
+      /generateTouchEvent\(opts: GenerateTouchEventOpts\): TouchEvent \{[\s\S]*?return generateTouchEvent\(opts\);\s*\}/,
     );
     expect(body).toMatch(
-      /\/\/ Same parity pattern as generateTouchEvent — the real generator is\s*\n?\s*\/\/ already deterministic \+ pure\./,
+      /\/\/ Same parity pattern as generateTouchEvent — the real generator is\s*\/\/ already deterministic \+ pure\./,
     );
     expect(body).toMatch(
-      /generateScrollVelocityProfile\(opts: GenerateScrollVelocityProfileOpts\): ScrollVelocityProfile \{[\s\S]*?return generateScrollVelocityProfile\(opts\);\s*\n?\s*\}/,
+      /generateScrollVelocityProfile\(opts: GenerateScrollVelocityProfileOpts\): ScrollVelocityProfile \{[\s\S]*?return generateScrollVelocityProfile\(opts\);\s*\}/,
     );
   });
 
   it('listProfiles: returns this.profiles unchanged', () => {
     expect(body).toMatch(
-      /listProfiles\(\): readonly BehaviouralProfile\[\] \{\s*\n?\s*return this\.profiles;\s*\n?\s*\}/,
+      /listProfiles\(\): readonly BehaviouralProfile\[\] \{\s*return this\.profiles;\s*\}/,
     );
   });
 

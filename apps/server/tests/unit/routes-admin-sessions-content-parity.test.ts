@@ -38,7 +38,7 @@ describe('W415.A apps/server/src/routes/admin-sessions.ts content parity', () =>
 
   it('Framing pinned: GET /v1/admin/sessions read-only no-audit + destroy at POST /v1/admin/sessions/:id/destroy in admin-force-actions', () => {
     expect(body).toMatch(
-      /Admin-only cross-account session list — GET \/v1\/admin\/sessions\.\s*\n?\s*\/\/\s*Read-only; no audit row written for the read itself\. Mutating\s*\n?\s*\/\/\s*admin actions on sessions live in admin-force-actions\.ts\s*\n?\s*\/\/\s*\(POST \/v1\/admin\/sessions\/:id\/destroy\)\./,
+      /Admin-only cross-account session list — GET \/v1\/admin\/sessions\.\s*\/\/\s*Read-only; no audit row written for the read itself\. Mutating\s*\/\/\s*admin actions on sessions live in admin-force-actions\.ts\s*\/\/\s*\(POST \/v1\/admin\/sessions\/:id\/destroy\)\./,
     );
   });
 
@@ -47,16 +47,16 @@ describe('W415.A apps/server/src/routes/admin-sessions.ts content parity', () =>
       /const PUBLIC_ID_RE = \/\^\[a-z\]\{3\}_\(\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{12\}\)\$\/;/,
     );
     expect(body).toMatch(
-      /function uuidFromPrefixedId\(value: string, expectedPrefix: string\): string \{\s*\n?\s*const match = PUBLIC_ID_RE\.exec\(value\);\s*\n?\s*if \(!match \|\| !match\[1\] \|\| !value\.startsWith\(`\$\{expectedPrefix\}_`\)\) \{\s*\n?\s*throw new BadRequestError\(`Invalid id format\. Expected "\$\{expectedPrefix\}_<uuid>"\.`\);/,
+      /function uuidFromPrefixedId\(value: string, expectedPrefix: string\): string \{\s*const match = PUBLIC_ID_RE\.exec\(value\);\s*if \(!match \|\| !match\[1\] \|\| !value\.startsWith\(`\$\{expectedPrefix\}_`\)\) \{\s*throw new BadRequestError\(`Invalid id format\. Expected "\$\{expectedPrefix\}_<uuid>"\.`\);/,
     );
   });
 
   it('ListAdminSessionsQuerySchema: limit coerce 1..100 default 50 + cursor (string 1-512) + status enum (creating|ready|busy|destroyed|errored) + account_id (string 1-100) (Slice 146 defensive caps).', () => {
     expect(body).toMatch(
-      /const ListAdminSessionsQuerySchema = z\.object\(\{\s*\n?\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),[\s\S]*?cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),\s*\n?\s*status: z\.enum\(\['creating', 'ready', 'busy', 'destroyed', 'errored'\]\)\.optional\(\),/,
+      /const ListAdminSessionsQuerySchema = z\.object\(\{\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),[\s\S]*?cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),\s*status: z\.enum\(\['creating', 'ready', 'busy', 'destroyed', 'errored'\]\)\.optional\(\),/,
     );
     expect(body).toMatch(
-      /\/\*\* Optional account scoping \(`acc_<uuid>` or raw uuid\)\. \*\/\s*\n?\s*account_id: z\.string\(\)\.min\(1\)\.max\(100\)\.optional\(\),/,
+      /\/\*\* Optional account scoping \(`acc_<uuid>` or raw uuid\)\. \*\/\s*account_id: z\.string\(\)\.min\(1\)\.max\(100\)\.optional\(\),/,
     );
   });
 
@@ -86,19 +86,19 @@ describe('W415.A apps/server/src/routes/admin-sessions.ts content parity', () =>
 
   it('account_id resolution: 36-char raw uuid pass-through OR uuidFromPrefixedId(value, "acc")', () => {
     expect(body).toMatch(
-      /const accountUuid =\s*\n?\s*parsed\.data\.account_id !== undefined\s*\n?\s*\? parsed\.data\.account_id\.length === 36\s*\n?\s*\? parsed\.data\.account_id\s*\n?\s*: uuidFromPrefixedId\(parsed\.data\.account_id, 'acc'\)\s*\n?\s*: undefined;/,
+      /const accountUuid =\s*parsed\.data\.account_id !== undefined\s*\? parsed\.data\.account_id\.length === 36\s*\? parsed\.data\.account_id\s*: uuidFromPrefixedId\(parsed\.data\.account_id, 'acc'\)\s*: undefined;/,
     );
   });
 
   it('Service dispatch: sessionsService.listAll with spread-conditional cursor + status + accountId args', () => {
     expect(body).toMatch(
-      /const page = await sessionsService\.listAll\(ctx, \{\s*\n?\s*limit: parsed\.data\.limit,\s*\n?\s*\.\.\.\(parsed\.data\.cursor !== undefined \? \{ cursor: parsed\.data\.cursor \} : \{\}\),\s*\n?\s*\.\.\.\(parsed\.data\.status !== undefined \? \{ status: parsed\.data\.status \} : \{\}\),\s*\n?\s*\.\.\.\(accountUuid !== undefined \? \{ accountId: accountUuid \} : \{\}\),\s*\n?\s*\}\);/,
+      /const page = await sessionsService\.listAll\(ctx, \{\s*limit: parsed\.data\.limit,\s*\.\.\.\(parsed\.data\.cursor !== undefined \? \{ cursor: parsed\.data\.cursor \} : \{\}\),\s*\.\.\.\(parsed\.data\.status !== undefined \? \{ status: parsed\.data\.status \} : \{\}\),\s*\.\.\.\(accountUuid !== undefined \? \{ accountId: accountUuid \} : \{\}\),\s*\}\);/,
     );
   });
 
   it('Reply shape: { data: page.items.map(publicSession), next_cursor: page.nextCursor }', () => {
     expect(body).toMatch(
-      /return \{\s*\n?\s*data: page\.items\.map\(publicSession\),\s*\n?\s*next_cursor: page\.nextCursor,\s*\n?\s*\};/,
+      /return \{\s*data: page\.items\.map\(publicSession\),\s*next_cursor: page\.nextCursor,\s*\};/,
     );
   });
 
@@ -106,7 +106,7 @@ describe('W415.A apps/server/src/routes/admin-sessions.ts content parity', () =>
     expect(body).toMatch(/'\/v1\/admin\/sessions\/stats',/);
     expect(body).toMatch(/const stats = await sessionsService\.statsForAdmin\(ctx\);/);
     expect(body).toMatch(
-      /return \{\s*\n?\s*by_status: stats\.by_status,\s*\n?\s*active: stats\.active,\s*\n?\s*total: stats\.total,\s*\n?\s*\};/,
+      /return \{\s*by_status: stats\.by_status,\s*active: stats\.active,\s*total: stats\.total,\s*\};/,
     );
   });
 

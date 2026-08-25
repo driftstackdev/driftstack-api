@@ -44,33 +44,31 @@ describe('W490.B apps/admin-panel/src/pages/incidents/index.astro content parity
 
   it("Page-purpose framing pinned: 'Manually post and update status-page incidents. Public entries surface on status.driftstack.dev within ~60 seconds. Every action audit-logged.' — pinned so the ~60s SLA-adjacent propagation framing survives + the audit-log invariant stays explicit", () => {
     expect(body).toMatch(
-      /Manually post and update status-page incidents\. Public entries surface on\s*\n?\s*status\.driftstack\.dev within ~60 seconds\. Every action audit-logged\./,
+      /Manually post and update status-page incidents\. Public entries surface on\s*status\.driftstack\.dev within ~60 seconds\. Every action audit-logged\./,
     );
   });
 
   it('CF Pages mirror cadence, Hetzner poller, R2, and audit behavior stay documented without an internal label', () => {
     expect(body).toMatch(
-      /Posting an incident writes <code>incident\.created<\/code> to the admin audit log\.\s*\n?\s*Public incidents propagate to status\.driftstack\.dev through the Cloudflare Pages mirror\s*\n?\s*within about 60 seconds via the Hetzner poller and R2\./,
+      /Posting an incident writes <code>incident\.created<\/code> to the admin audit log\.\s*Public incidents propagate to status\.driftstack\.dev through the Cloudflare Pages mirror\s*within about 60 seconds via the Hetzner poller and R2\./,
     );
   });
 
   it("New-incident form fields: title (required, 'API server elevated 5xx — eu-west-1' placeholder) + description (required textarea, 'Investigating elevated error rate on /v1/sessions/create after 14:02 UTC deploy.' placeholder) + severity 3-option select (Minor/Major default selected/Outage) + affected (text 'api, sessions' placeholder) + public (checkbox default checked) — pinned so the placeholder examples + default severity (major, not minor) + public default (checked, not unchecked) stay consistent", () => {
     expect(body).toMatch(
-      /<input\s*\n?\s*id="title"\s*\n?\s*name="title"\s*\n?\s*type="text"\s*\n?\s*required\s*\n?\s*placeholder="API server elevated 5xx — eu-west-1"/,
+      /<input\s*id="title"\s*name="title"\s*type="text"\s*required\s*placeholder="API server elevated 5xx — eu-west-1"/,
     );
     expect(body).toMatch(
-      /<textarea\s*\n?\s*id="description"\s*\n?\s*name="description"\s*\n?\s*rows="3"\s*\n?\s*required\s*\n?\s*placeholder="Investigating elevated error rate on \/v1\/sessions\/create after 14:02 UTC deploy\."/,
+      /<textarea\s*id="description"\s*name="description"\s*rows="3"\s*required\s*placeholder="Investigating elevated error rate on \/v1\/sessions\/create after 14:02 UTC deploy\."/,
     );
     expect(body).toMatch(/<option value="major" selected>Major<\/option>/);
     expect(body).toMatch(/placeholder="api, sessions"/);
-    expect(body).toMatch(
-      /<input\s*\n?\s*id="public"\s*\n?\s*name="public"\s*\n?\s*type="checkbox"\s*\n?\s*checked/,
-    );
+    expect(body).toMatch(/<input\s*id="public"\s*name="public"\s*type="checkbox"\s*checked/);
   });
 
   it("Affected-components parsing: comma-split + .map(trim) + .filter(length > 0) — pinned so 'api, sessions, ' (trailing space + comma) doesn't produce empty entries in the affected_components array + leading/trailing whitespace gets stripped (drift to bare split(',') would create [' sessions', ''] which the API would reject)", () => {
     expect(body).toMatch(
-      /const affected_components = affectedRaw\s*\n?\s*\? affectedRaw\s*\n?\s*\.split\(','\)\s*\n?\s*\.map\(function \(s\) \{\s*\n?\s*return s\.trim\(\);\s*\n?\s*\}\)\s*\n?\s*\.filter\(function \(s\) \{\s*\n?\s*return s\.length > 0;\s*\n?\s*\}\)\s*\n?\s*: \[\];/,
+      /const affected_components = affectedRaw\s*\? affectedRaw\s*\.split\(','\)\s*\.map\(function \(s\) \{\s*return s\.trim\(\);\s*\}\)\s*\.filter\(function \(s\) \{\s*return s\.length > 0;\s*\}\)\s*: \[\];/,
     );
   });
 
@@ -120,7 +118,7 @@ describe('W490.B apps/admin-panel/src/pages/incidents/index.astro content parity
 
   it("Form validation: !title || !description → 'Title + initial update are required.' error banner via showErr + bail — pinned so empty submissions show inline error (drift to letting the request fly with empty body would 422 from the server + operators get a confusing 'invalid request body' instead of a friendly 'title required' message)", () => {
     expect(body).toMatch(
-      /if \(!title \|\| !description\) \{\s*\n?\s*showErr\('Title \+ initial update are required\.'\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /if \(!title \|\| !description\) \{\s*showErr\('Title \+ initial update are required\.'\);\s*return;\s*\}/,
     );
   });
 

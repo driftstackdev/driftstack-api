@@ -48,7 +48,7 @@ describe('W372.C customer-dashboard /cli/authorize page content parity', () => {
     // "Per V-266: this page is the ONLY surface where a customer's web"
     // is all on one line; the continuation wraps to the next // line.
     expect(body).toMatch(
-      /Per V-266: this page is the ONLY surface where a customer's web\s*\n?\s*\/\/\s*session converts a CLI authorization code into a GUI-paired API key\./,
+      /Per V-266: this page is the ONLY surface where a customer's web\s*\/\/\s*session converts a CLI authorization code into a GUI-paired API key\./,
     );
     expect(body).toMatch(/The plaintext key never traverses this page\./);
   });
@@ -61,9 +61,9 @@ describe('W372.C customer-dashboard /cli/authorize page content parity', () => {
 
   it('?code= + ?state= URL-param parsing + missing-state branch (both required)', () => {
     expect(body).toMatch(
-      /const code = params\.get\('code'\);\s*\n?\s*const state = params\.get\('state'\);/,
+      /const code = params\.get\('code'\);\s*const state = params\.get\('state'\);/,
     );
-    expect(body).toMatch(/if \(!code \|\| !state\) \{\s*\n?\s*show\('missing'\);/);
+    expect(body).toMatch(/if \(!code \|\| !state\) \{\s*show\('missing'\);/);
   });
 
   it('sign-in gate redirect: canonical /login/?next= + /signup/?next= encode current URL', () => {
@@ -135,7 +135,7 @@ describe('W372.C customer-dashboard /cli/authorize page content parity', () => {
     expect(body).toMatch(/V-328e/);
     expect(body).toMatch(/function returnToDesktop\(delayMs\)/);
     expect(body).toMatch(
-      /'driftstack:\/\/auth\/callback\?code=' \+\s*\n?\s*encodeURIComponent\(code\) \+\s*\n?\s*'&state=' \+\s*\n?\s*encodeURIComponent\(state\)/,
+      /'driftstack:\/\/auth\/callback\?code=' \+\s*encodeURIComponent\(code\) \+\s*'&state=' \+\s*encodeURIComponent\(state\)/,
     );
     expect(body).toMatch(/window\.setTimeout\(\(\) => \{[\s\S]*?\}, delayMs\);/);
     expect(body).toMatch(/returnToDesktop\(600\);/);
@@ -162,7 +162,7 @@ describe('W372.C customer-dashboard /cli/authorize page content parity', () => {
     );
     expect(body).toMatch(/<a href="\/api-keys\/"[\s\S]*?>\s*View your API keys\s*<\/a>/);
     expect(body).toMatch(
-      /cancelBtn\.addEventListener\('click', \(\) => \{\s*\n?\s*window\.location\.href = '\/';/,
+      /cancelBtn\.addEventListener\('click', \(\) => \{\s*window\.location\.href = '\/';/,
     );
     expect(existsSync(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/api-keys.astro'))).toBe(
       true,

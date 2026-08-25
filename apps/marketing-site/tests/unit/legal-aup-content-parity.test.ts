@@ -158,7 +158,7 @@ describe('W377.C marketing-site /legal/aup.md content parity', () => {
     expect(body).not.toMatch(/`reason` extension\s+identifying the AUP clause/);
     expect(body).toMatch(/there is no `reason` extension naming an AUP/);
     expect(body).toMatch(/reason_code: "account_suspended"/);
-    expect(body).toMatch(/typically lasts up\s*\n?\s*to 30 days/);
+    expect(body).toMatch(/typically lasts up\s*to 30 days/);
     // V-758 — the billing-pauses promise is implemented now (pause_collection with
     // Stripe's `void` behaviour, set on suspend and cleared on unsuspend), so the copy
     // names the mechanism and this pin requires it.

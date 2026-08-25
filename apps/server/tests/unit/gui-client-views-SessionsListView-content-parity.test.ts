@@ -41,13 +41,13 @@ describe('W478.B apps/gui-client/src/views/SessionsListView.tsx content parity',
   it("V-534.P framing pinned: 'V-534.P — sessions list view.' + 'Wires the V-534.O useSessionsList hook to the V-534.N SessionStatusBadge primitive. Renders the loading/error/ready states + a refresh button. Caller passes through to FleetView / SessionsHistoryView at the parent level; this component just surfaces the data.'", () => {
     expect(body).toMatch(/\/\/ V-534\.P — sessions list view\./);
     expect(body).toMatch(
-      /\/\/ Wires the V-534\.O useSessionsList hook to the V-534\.N\s*\n?\s*\/\/ SessionStatusBadge primitive\. Renders the loading\/error\/ready\s*\n?\s*\/\/ states \+ a refresh button\. Caller passes through to FleetView \/\s*\n?\s*\/\/ SessionsHistoryView at the parent level; this component just\s*\n?\s*\/\/ surfaces the data\./,
+      /\/\/ Wires the V-534\.O useSessionsList hook to the V-534\.N\s*\/\/ SessionStatusBadge primitive\. Renders the loading\/error\/ready\s*\/\/ states \+ a refresh button\. Caller passes through to FleetView \/\s*\/\/ SessionsHistoryView at the parent level; this component just\s*\/\/ surfaces the data\./,
     );
   });
 
   it("fmtTime ISO fallback: new Date(iso).getTime() Number.isNaN guard returns raw iso on parse failure + d.toLocaleString() on success — pinned so a malformed createdAt server response renders the raw string rather than 'Invalid Date' in every Created column", () => {
     expect(body).toMatch(
-      /function fmtTime\(iso: string\): string \{\s*\n?\s*const d = new Date\(iso\);\s*\n?\s*if \(Number\.isNaN\(d\.getTime\(\)\)\) return iso;\s*\n?\s*return d\.toLocaleString\(\);\s*\n?\s*\}/,
+      /function fmtTime\(iso: string\): string \{\s*const d = new Date\(iso\);\s*if \(Number\.isNaN\(d\.getTime\(\)\)\) return iso;\s*return d\.toLocaleString\(\);\s*\}/,
     );
   });
 
@@ -69,15 +69,15 @@ describe('W478.B apps/gui-client/src/views/SessionsListView.tsx content parity',
     expect(body).toMatch(/import \{ SkeletonRows \} from '\.\.\/components\/Skeleton';/);
     expect(body).toMatch(/\{loading && <SkeletonRows rows=\{5\} label="Loading sessions" \/>\}/);
     expect(body).not.toMatch(
-      /<p className="text-sm text-ink-secondary" role="status">\s*\n?\s*Loading sessions…/,
+      /<p className="text-sm text-ink-secondary" role="status">\s*Loading sessions…/,
     );
     expect(body).toMatch(
-      /\{state\.kind === 'error' && \(\s*\n?\s*<div\s*\n?\s*role="alert"\s*\n?\s*className="rounded border border-status-error\/60 bg-status-error\/10 p-3 text-sm text-status-error"\s*\n?\s*>\s*\n?\s*Could not load sessions: \{state\.message\}\s*\n?\s*<\/div>\s*\n?\s*\)\}/,
+      /\{state\.kind === 'error' && \(\s*<div\s*role="alert"\s*className="rounded border border-status-error\/60 bg-status-error\/10 p-3 text-sm text-status-error"\s*>\s*Could not load sessions: \{state\.message\}\s*<\/div>\s*\)\}/,
     );
     // W462 — empty state now uses the shared <EmptyState> primitive (icon +
     // heading + description) instead of a bare <p>.
     expect(body).toMatch(/import \{ EmptyState \} from '\.\.\/components\/EmptyState';/);
-    expect(body).toMatch(/state\.data\.sessions\.length === 0 && \(\s*\n?\s*<EmptyState/);
+    expect(body).toMatch(/state\.data\.sessions\.length === 0 && \(\s*<EmptyState/);
     expect(body).toMatch(/title="No sessions yet"/);
     expect(body).toMatch(/description="Sessions you start will appear here/);
     expect(body).not.toMatch(/<p className="text-sm text-ink-secondary">No sessions yet\.<\/p>/);

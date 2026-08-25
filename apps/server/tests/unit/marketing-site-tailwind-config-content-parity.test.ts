@@ -66,7 +66,7 @@ describe('W525.B apps/marketing-site/tailwind.config.mjs content parity', () => 
     expect(body).toMatch(
       /mono: \['Berkeley Mono', 'JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'\],/,
     );
-    expect(body).toMatch(/maxWidth: \{\s*\n?\s*prose: '65ch',\s*\n?\s*\},/);
+    expect(body).toMatch(/maxWidth: \{\s*prose: '65ch',\s*\},/);
   });
 
   it("Fleet tk token namespace + shadows pinned (v2 2026-07-03): tk.* resolves to the two-axis CSS custom properties (styles/base.css) so tk-* classes flip with <html data-mode>/<html data-accent>; tk-accent-text = the AA-safe accent TEXT tone; 'glow-accent' shadow survives for hot elements while ambient/ambient-lg are the v2 kit's calm card shadows; borderRadius.card = 14px (spec §3)", () => {

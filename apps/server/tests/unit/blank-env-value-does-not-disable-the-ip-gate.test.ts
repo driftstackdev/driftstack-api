@@ -71,7 +71,7 @@ describe('a blank env value does not disable the global IP gate', () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const boot = readFileSync(resolve(here, '..', '..', 'src', 'lib', 'bootstrap.ts'), 'utf8');
     expect(boot, 'bootstrap still maps a non-positive value to null').toMatch(
-      /config\.globalIpRateLimitPerMin <= 0\s*\n?\s*\?\s*null/,
+      /config\.globalIpRateLimitPerMin <= 0\s*\?\s*null/,
     );
     const app = readFileSync(resolve(here, '..', '..', 'src', 'lib', 'app.ts'), 'utf8');
     expect(app, 'and app.ts still skips the hook when it is null').toMatch(

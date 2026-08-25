@@ -45,16 +45,16 @@ describe('W390.B apps/server/src/lib/cost-estimator.ts content parity', () => {
 
   it('zero-DB-dependencies framing pinned (so the estimator can be tested/tuned independently)', () => {
     expect(body).toMatch(
-      /this module\s*\n?\s*\/\/\s*has zero DB dependencies so it can be tested \+ tuned independently/,
+      /this module\s*\/\/\s*has zero DB dependencies so it can be tested \+ tuned independently/,
     );
   });
 
   it('cents-integer-math framing: "Everything in cents (integer math)"', () => {
     expect(body).toMatch(
-      /Everything in cents \(integer math\)\. Rates are passed in by the\s*\n?\s*\/\/\s*caller — the admin UI is the source of truth for re-tunable rates/,
+      /Everything in cents \(integer math\)\. Rates are passed in by the\s*\/\/\s*caller — the admin UI is the source of truth for re-tunable rates/,
     );
     expect(body).toMatch(
-      /Hard-coding rates here would mean shipping a deploy on\s*\n?\s*\/\/\s*every Hetzner \/ R2 \/ Postmark price change/,
+      /Hard-coding rates here would mean shipping a deploy on\s*\/\/\s*every Hetzner \/ R2 \/ Postmark price change/,
     );
   });
 
@@ -119,7 +119,7 @@ describe('W390.B apps/server/src/lib/cost-estimator.ts content parity', () => {
 
   it('estimateCost signature: (usage, rates, thresholds) → CostBreakdown', () => {
     expect(body).toMatch(
-      /export function estimateCost\(\s*\n?\s*usage: UsageInputs,\s*\n?\s*rates: CostRates,\s*\n?\s*thresholds: AlertThresholds,\s*\n?\s*\): CostBreakdown/,
+      /export function estimateCost\(\s*usage: UsageInputs,\s*rates: CostRates,\s*thresholds: AlertThresholds,\s*\): CostBreakdown/,
     );
   });
 
@@ -141,7 +141,7 @@ describe('W390.B apps/server/src/lib/cost-estimator.ts content parity', () => {
       /const emailCents = Math\.round\(emailSends \* rates\.emailCentsPerSend\);/,
     );
     expect(body).toMatch(
-      /const llmCents = Math\.round\(\s*\n?\s*\(llmInputTokens \/ 1000\) \* rates\.llmCentsPer1kInputTokens \+\s*\n?\s*\(llmOutputTokens \/ 1000\) \* rates\.llmCentsPer1kOutputTokens,\s*\n?\s*\);/,
+      /const llmCents = Math\.round\(\s*\(llmInputTokens \/ 1000\) \* rates\.llmCentsPer1kInputTokens \+\s*\(llmOutputTokens \/ 1000\) \* rates\.llmCentsPer1kOutputTokens,\s*\);/,
     );
     expect(body).toMatch(
       /const totalCents = computeCents \+ storageCents \+ egressCents \+ emailCents \+ llmCents;/,
@@ -150,22 +150,22 @@ describe('W390.B apps/server/src/lib/cost-estimator.ts content parity', () => {
 
   it('classifyThreshold: >=hard → over-hard, >=soft → between, else under-soft', () => {
     expect(body).toMatch(
-      /export function classifyThreshold\(totalCents: number, thresholds: AlertThresholds\): ThresholdState \{\s*\n?\s*if \(totalCents >= thresholds\.hardCents\) return 'over-hard';\s*\n?\s*if \(totalCents >= thresholds\.softCents\) return 'between-soft-and-hard';\s*\n?\s*return 'under-soft';\s*\n?\s*\}/,
+      /export function classifyThreshold\(totalCents: number, thresholds: AlertThresholds\): ThresholdState \{\s*if \(totalCents >= thresholds\.hardCents\) return 'over-hard';\s*if \(totalCents >= thresholds\.softCents\) return 'between-soft-and-hard';\s*return 'under-soft';\s*\}/,
     );
   });
 
   it('clampNonNegative: Number.isFinite + > 0 guard (NaN and negative both → 0)', () => {
     expect(body).toMatch(
-      /function clampNonNegative\(x: number\): number \{\s*\n?\s*return Number\.isFinite\(x\) && x > 0 \? x : 0;\s*\n?\s*\}/,
+      /function clampNonNegative\(x: number\): number \{\s*return Number\.isFinite\(x\) && x > 0 \? x : 0;\s*\}/,
     );
   });
 
   it('DEFAULT_TIER_THRESHOLDS: 6 self-serve tiers with hand-tuned cents', () => {
     expect(body).toMatch(
-      /Default per-tier alert thresholds in cents\. V-541 design called for\s*\n?\s*\*\s*"per-tier alert thresholds hard-coded" in v1 with admin-override\s*\n?\s*\*\s*landing in V-541\.C/,
+      /Default per-tier alert thresholds in cents\. V-541 design called for\s*\*\s*"per-tier alert thresholds hard-coded" in v1 with admin-override\s*\*\s*landing in V-541\.C/,
     );
     expect(body).toMatch(
-      /Currency:\s*\n?\s*\*\s*EUR \(V-541 open-question recommendation accepted in W44\)/,
+      /Currency:\s*\*\s*EUR \(V-541 open-question recommendation accepted in W44\)/,
     );
     expect(body).toMatch(/solo_manual: \{ softCents: 1500, hardCents: 3000 \},/);
     expect(body).toMatch(/team_manual: \{ softCents: 5000, hardCents: 10000 \},/);

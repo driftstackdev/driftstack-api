@@ -82,7 +82,7 @@ describe('W748 dashboard index/overview V-316 live-data parity', () => {
     const i = read(INDEX);
 
     expect(i).toMatch(
-      /if \(!token\) \{[\s\S]*?const next = encodeURIComponent\(window\.location\.pathname \+ window\.location\.search\);\s*\n?\s*window\.location\.replace\('\/login\/\?next=' \+ next\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /if \(!token\) \{[\s\S]*?const next = encodeURIComponent\(window\.location\.pathname \+ window\.location\.search\);\s*window\.location\.replace\('\/login\/\?next=' \+ next\);\s*return;\s*\}/,
     );
     expect(i).not.toContain('/login?return_to=');
   });

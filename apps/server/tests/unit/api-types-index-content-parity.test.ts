@@ -32,13 +32,13 @@ describe('W432.A packages/api-types/src/index.ts content parity', () => {
 
   it('Framing pinned: Public API contracts for Driftstack; Zod single source of truth; inferred TS types re-exported for SDK consumers', () => {
     expect(body).toMatch(
-      /\/\/ Public API contracts for Driftstack\. Zod is the single source of truth;\s*\n?\s*\/\/ inferred TypeScript types are re-exported for SDK consumers\./,
+      /\/\/ Public API contracts for Driftstack\. Zod is the single source of truth;\s*\/\/ inferred TypeScript types are re-exported for SDK consumers\./,
     );
   });
 
   it('Versioning rationale pinned: breaking schema change == breaking public API; server-internal shapes live in apps/server/src/schemas/ instead (L-001 boundary)', () => {
     expect(body).toMatch(
-      /\/\/ Versioning: any breaking change to a schema in this package is a breaking\s*\n?\s*\/\/ change to the public API\. Server-internal shapes that aren't part of the\s*\n?\s*\/\/ public contract live in `apps\/server\/src\/schemas\/` instead\./,
+      /\/\/ Versioning: any breaking change to a schema in this package is a breaking\s*\/\/ change to the public API\. Server-internal shapes that aren't part of the\s*\/\/ public contract live in `apps\/server\/src\/schemas\/` instead\./,
     );
   });
 

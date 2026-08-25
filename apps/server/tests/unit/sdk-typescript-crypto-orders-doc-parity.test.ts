@@ -49,7 +49,7 @@ describe('W718 sdk-typescript-crypto-orders marketing-doc parity', () => {
 
     expect(doc).toMatch(/Crypto payments are non-refundable/);
     expect(src).toMatch(
-      /Crypto payments are non-refundable|Crypto\s*\n?\s*\/\/ payments are non-refundable/,
+      /Crypto payments are non-refundable|Crypto\s*\/\/ payments are non-refundable/,
     );
   });
 
@@ -115,12 +115,12 @@ describe('W718 sdk-typescript-crypto-orders marketing-doc parity', () => {
     expect(doc).toMatch(/<code>cancelled<\/code>/);
 
     // Closed-set framing — "Unknown values return a 400 from the server."
-    expect(doc).toMatch(/Unknown values\s*\n?\s*return a 400 from the server/);
+    expect(doc).toMatch(/Unknown values\s*return a 400 from the server/);
   });
 
   it('CRITICAL doc limit-clamp claim matches server-side — `limit` is clamped to `1..=100`; default 50. Drift to a different bound would silently mismatch what the server enforces.', () => {
     const doc = read(DOC);
-    expect(doc).toMatch(/<code>limit<\/code> is clamped to\s*\n?\s*<code>1\.\.=100<\/code>/);
+    expect(doc).toMatch(/<code>limit<\/code> is clamped to\s*<code>1\.\.=100<\/code>/);
     expect(doc).toMatch(/the default is 50/);
   });
 
@@ -128,7 +128,7 @@ describe('W718 sdk-typescript-crypto-orders marketing-doc parity', () => {
     const doc = read(DOC);
     expect(doc).toMatch(/On a duplicate key within the 24h window/);
     expect(doc).toMatch(/same <code>order_id<\/code>/);
-    expect(doc).toMatch(/same\s*\n?\s*<code>created_at<\/code>/);
+    expect(doc).toMatch(/same\s*<code>created_at<\/code>/);
   });
 
   it('CRITICAL doc cancel-409 + cancel-404 error-code claims match SDK error roster. 409 = past-pending (not self-service); 404 = not-found-or-cross-account. Drift would mislead customers about catch-block branches.', () => {
@@ -186,9 +186,7 @@ describe('W718 sdk-typescript-crypto-orders marketing-doc parity', () => {
   it('CRITICAL receipt() JSON-canonical framing pinned. Drift to documenting receipt() as returning binary/PDF would mis-thread the 3-format split (JSON canonical via SDK, PDF/text via REST direct).', () => {
     const doc = read(DOC);
     expect(doc).toMatch(/The JSON receipt is the canonical machine-readable artefact/);
-    expect(doc).toMatch(
-      /For PDF \/ text variants, hit the corresponding REST endpoint\s*\n?\s*directly/,
-    );
+    expect(doc).toMatch(/For PDF \/ text variants, hit the corresponding REST endpoint\s*directly/);
   });
 
   it('Doc-parity cluster — internal V-722 provenance stays in non-rendered frontmatter, the verb roster and the three capability claims survive in rendered copy, and no internal rollout marker leaks into what the customer reads.', () => {

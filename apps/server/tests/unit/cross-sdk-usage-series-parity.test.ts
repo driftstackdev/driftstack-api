@@ -103,7 +103,7 @@ describe('W696 cross-SDK V-452 usage time-series parity', () => {
 
     // sdk-typescript: "`days` is 1-90; default 30."
     expect(ts).toMatch(/`days` is 1-90/);
-    expect(ts).toMatch(/default\s*\n?\s*\*?\s*30/);
+    expect(ts).toMatch(/default\s*\*?\s*30/);
 
     // sdk-go: "`days` is 1-90; default 30 server-side when 0 / negative."
     expect(go).toMatch(/`days` is 1-90/);

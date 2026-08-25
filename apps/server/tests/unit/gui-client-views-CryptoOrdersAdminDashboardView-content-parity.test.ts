@@ -47,35 +47,35 @@ describe('W480.B apps/gui-client/src/views/CryptoOrdersAdminDashboardView.tsx co
   it("V-534.AJ framing pinned: 'V-534.AJ — combined admin dashboard view.' + 'Stitches together the V-534.AI stats card + V-534.AG admin orders list + V-534.AH daily-breakdown table into one page. Pure layout composition; each child view handles its own fetch lifecycle.'", () => {
     expect(body).toMatch(/\/\/ V-534\.AJ — combined admin dashboard view\./);
     expect(body).toMatch(
-      /\/\/ Stitches together the V-534\.AI stats card \+ V-534\.AG admin orders\s*\n?\s*\/\/ list \+ V-534\.AH daily-breakdown table into one page\. Pure layout\s*\n?\s*\/\/ composition; each child view handles its own fetch lifecycle\./,
+      /\/\/ Stitches together the V-534\.AI stats card \+ V-534\.AG admin orders\s*\/\/ list \+ V-534\.AH daily-breakdown table into one page\. Pure layout\s*\/\/ composition; each child view handles its own fetch lifecycle\./,
     );
   });
 
   it("V-534.BA + V-534.BB + V-534.BH framing pinned: BA 'adds a small idempotency-metrics strip alongside the stats card. The numbers come from the V-666.AP route and answer \"how often is the checkout button being double-clicked / retried\" without forcing the admin to grep logs.' + BB 'colour-codes the replay-share + surfaces the V-666.AR body-mismatch count when non-zero. Replay share thresholds: <5%→neutral, 5-20%→warning, >20%→alert.' + BH 'small footer link to the live API spec (V-666.AY / V-666.AZ). Convenience for ops integrators reading codegen.'", () => {
     expect(body).toMatch(
-      /\/\/ V-534\.BA — adds a small idempotency-metrics strip alongside the\s*\n?\s*\/\/ stats card\. The numbers come from the V-666\.AP route and answer\s*\n?\s*\/\/ "how often is the checkout button being double-clicked \/ retried"\s*\n?\s*\/\/ without forcing the admin to grep logs\./,
+      /\/\/ V-534\.BA — adds a small idempotency-metrics strip alongside the\s*\/\/ stats card\. The numbers come from the V-666\.AP route and answer\s*\/\/ "how often is the checkout button being double-clicked \/ retried"\s*\/\/ without forcing the admin to grep logs\./,
     );
     expect(body).toMatch(
-      /\/\/ V-534\.BB — colour-codes the replay-share \+ surfaces the V-666\.AR\s*\n?\s*\/\/ body-mismatch count when non-zero\. Replay share thresholds:\s*\n?\s*\/\/\s+<5%\s+neutral\s+\("normal background retry rate"\)\s*\n?\s*\/\/\s+5-20% warning\s+\("worth a look"\)\s*\n?\s*\/\/\s+>20%\s+alert\s+\("something is wrong"\)/,
+      /\/\/ V-534\.BB — colour-codes the replay-share \+ surfaces the V-666\.AR\s*\/\/ body-mismatch count when non-zero\. Replay share thresholds:\s*\/\/\s+<5%\s+neutral\s+\("normal background retry rate"\)\s*\/\/\s+5-20% warning\s+\("worth a look"\)\s*\/\/\s+>20%\s+alert\s+\("something is wrong"\)/,
     );
     expect(body).toMatch(
-      /\/\/ V-534\.BH — small footer link to the live API spec \(V-666\.AY \/\s*\n?\s*\/\/ V-666\.AZ\)\. Convenience for ops integrators reading codegen\./,
+      /\/\/ V-534\.BH — small footer link to the live API spec \(V-666\.AY \/\s*\/\/ V-666\.AZ\)\. Convenience for ops integrators reading codegen\./,
     );
   });
 
   it('IdempotencyMetricsStrip subcomponent: total = first_writes + replays + replayShare = total===0 ? 0 : Math.round((replays/total)*100); 3-tone ternary (>20→alert, >=5→warning, else neutral) pinned for the V-666.AR admin signal', () => {
     expect(body).toMatch(
-      /const total = state\.data\.first_writes \+ state\.data\.replays;\s*\n?\s*const replayShare = total === 0 \? 0 : Math\.round\(\(state\.data\.replays \/ total\) \* 100\);\s*\n?\s*const shareTone: 'neutral' \| 'warning' \| 'alert' =\s*\n?\s*replayShare > 20 \? 'alert' : replayShare >= 5 \? 'warning' : 'neutral';/,
+      /const total = state\.data\.first_writes \+ state\.data\.replays;\s*const replayShare = total === 0 \? 0 : Math\.round\(\(state\.data\.replays \/ total\) \* 100\);\s*const shareTone: 'neutral' \| 'warning' \| 'alert' =\s*replayShare > 20 \? 'alert' : replayShare >= 5 \? 'warning' : 'neutral';/,
     );
   });
 
   it("Per-tone shareClass + body_mismatches ?? 0 fallback + body_mismatches > 0 → text-status-warning tint; 4-col grid with role='status' + aria-label='Idempotency metrics' + data-replay-tone={shareTone} attribute for test introspection", () => {
     expect(body).toMatch(
-      /const shareClass =\s*\n?\s*shareTone === 'alert'\s*\n?\s*\? 'text-status-error'\s*\n?\s*: shareTone === 'warning'\s*\n?\s*\? 'text-status-warning'\s*\n?\s*: 'text-ink-primary';/,
+      /const shareClass =\s*shareTone === 'alert'\s*\? 'text-status-error'\s*: shareTone === 'warning'\s*\? 'text-status-warning'\s*: 'text-ink-primary';/,
     );
     expect(body).toMatch(/const bodyMismatches = state\.data\.body_mismatches \?\? 0;/);
     expect(body).toMatch(
-      /role="status"\s*\n?\s*aria-label="Idempotency metrics"\s*\n?\s*data-replay-tone=\{shareTone\}/,
+      /role="status"\s*aria-label="Idempotency metrics"\s*data-replay-tone=\{shareTone\}/,
     );
     expect(body).toMatch(
       /className=\{`font-mono \$\{bodyMismatches > 0 \? 'text-status-warning' : 'text-ink-primary'\}`\}/,
@@ -84,22 +84,22 @@ describe('W480.B apps/gui-client/src/views/CryptoOrdersAdminDashboardView.tsx co
 
   it("W212 docs URL fix framing pinned: 'the API spec lives on the configured API host (Scalar UI at `${baseUrl}/docs/`), NOT on the Tauri app's own origin. `href=\"/docs\"` from a Tauri WebView resolves to tauri://localhost/docs (404). Pull baseUrl from SettingsContext when available; fall back to the DEFAULT_SETTINGS baseUrl when the context is unmounted (tests render this component in isolation without <SettingsProvider>).'", () => {
     expect(body).toMatch(
-      /\/\/ W212 — the API spec lives on the configured API host \(Scalar UI\s*\n?\s*\/\/ at `\$\{baseUrl\}\/docs\/`\), NOT on the Tauri app's own origin\.\s*\n?\s*\/\/ `href="\/docs"` from a Tauri WebView resolves to tauri:\/\/localhost\/docs\s*\n?\s*\/\/ \(404\)\. Pull baseUrl from SettingsContext when available; fall\s*\n?\s*\/\/ back to the DEFAULT_SETTINGS baseUrl when the context is\s*\n?\s*\/\/ unmounted \(tests render this component in isolation without\s*\n?\s*\/\/ <SettingsProvider>\)\./,
+      /\/\/ W212 — the API spec lives on the configured API host \(Scalar UI\s*\/\/ at `\$\{baseUrl\}\/docs\/`\), NOT on the Tauri app's own origin\.\s*\/\/ `href="\/docs"` from a Tauri WebView resolves to tauri:\/\/localhost\/docs\s*\/\/ \(404\)\. Pull baseUrl from SettingsContext when available; fall\s*\/\/ back to the DEFAULT_SETTINGS baseUrl when the context is\s*\/\/ unmounted \(tests render this component in isolation without\s*\/\/ <SettingsProvider>\)\./,
     );
     expect(body).toMatch(
-      /const ctx = useContext\(SettingsContext\);\s*\n?\s*const baseUrl = ctx\?\.settings\.baseUrl \?\? DEFAULT_SETTINGS\.baseUrl;\s*\n?\s*const docsUrl = `\$\{baseUrl\.replace\(\/\\\/\+\$\/, ''\)\}\/docs\/`;/,
+      /const ctx = useContext\(SettingsContext\);\s*const baseUrl = ctx\?\.settings\.baseUrl \?\? DEFAULT_SETTINGS\.baseUrl;\s*const docsUrl = `\$\{baseUrl\.replace\(\/\\\/\+\$\/, ''\)\}\/docs\/`;/,
     );
   });
 
   it("Dashboard composition: 'Crypto orders — admin dashboard' h1 + subline + <CryptoOrdersStatsCard /> + <IdempotencyMetricsStrip /> + 2-column xl:grid with section aria-label='Orders list' wrapping <CryptoOrdersAdminView /> + section aria-label='Daily breakdown' wrapping <CryptoOrdersDailyBreakdownView />; footer 'View API spec' link with target='_blank' rel='noreferrer' + 'admin + customer crypto endpoints documented at /openapi.json' note", () => {
     expect(body).toMatch(
-      /<h1 className="text-xl font-semibold">Crypto orders — admin dashboard<\/h1>\s*\n?\s*<p className="text-sm text-ink-secondary">\s*\n?\s*At-a-glance summary, full order list with filters, and a daily breakdown\.\s*\n?\s*<\/p>/,
+      /<h1 className="text-xl font-semibold">Crypto orders — admin dashboard<\/h1>\s*<p className="text-sm text-ink-secondary">\s*At-a-glance summary, full order list with filters, and a daily breakdown\.\s*<\/p>/,
     );
     expect(body).toMatch(
-      /<CryptoOrdersStatsCard \/>\s*\n?\s*<IdempotencyMetricsStrip \/>\s*\n?\s*<div className="grid grid-cols-1 gap-6 xl:grid-cols-2">\s*\n?\s*<section aria-label="Orders list" className="min-w-0">\s*\n?\s*<CryptoOrdersAdminView \/>\s*\n?\s*<\/section>\s*\n?\s*<section aria-label="Daily breakdown" className="min-w-0">\s*\n?\s*<CryptoOrdersDailyBreakdownView \/>\s*\n?\s*<\/section>\s*\n?\s*<\/div>/,
+      /<CryptoOrdersStatsCard \/>\s*<IdempotencyMetricsStrip \/>\s*<div className="grid grid-cols-1 gap-6 xl:grid-cols-2">\s*<section aria-label="Orders list" className="min-w-0">\s*<CryptoOrdersAdminView \/>\s*<\/section>\s*<section aria-label="Daily breakdown" className="min-w-0">\s*<CryptoOrdersDailyBreakdownView \/>\s*<\/section>\s*<\/div>/,
     );
     expect(body).toMatch(
-      /<a\s*\n?\s*href=\{docsUrl\}\s*\n?\s*target="_blank"\s*\n?\s*rel="noreferrer"\s*\n?\s*className="underline hover:text-ink-primary"\s*\n?\s*>\s*\n?\s*View API spec\s*\n?\s*<\/a>\{' '\}\s*\n?\s*&middot; admin \+ customer crypto endpoints documented at <code>\/openapi\.json<\/code>\./,
+      /<a\s*href=\{docsUrl\}\s*target="_blank"\s*rel="noreferrer"\s*className="underline hover:text-ink-primary"\s*>\s*View API spec\s*<\/a>\{' '\}\s*&middot; admin \+ customer crypto endpoints documented at <code>\/openapi\.json<\/code>\./,
     );
   });
 

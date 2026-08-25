@@ -35,7 +35,7 @@ describe('W536.C apps/docs/astro.config.mjs content parity', () => {
   it("V-250 + marketing-site-pattern-mirror framing pinned: 'V-250 — Driftstack docs site (docs.driftstack.dev). Static Astro build deployed to Cloudflare Pages, mirroring apps/marketing-site pattern. No SSR; pages are pre-rendered at build time.' + 'site: https://docs.driftstack.dev' + 'output: static' — pinned so the V-250 anchor + docs.driftstack.dev-canonical-site + Cloudflare-Pages-static + marketing-site-pattern-mirror + no-SSR-pre-rendered commitment survives", () => {
     expect(body).toMatch(/\/\/ @ts-check/);
     expect(body).toMatch(
-      /\/\/ V-250 — Driftstack docs site \(docs\.driftstack\.dev\)\. Static Astro\s*\n?\s*\/\/ build deployed to Cloudflare Pages, mirroring apps\/marketing-site\s*\n?\s*\/\/ pattern\. No SSR; pages are pre-rendered at build time\./,
+      /\/\/ V-250 — Driftstack docs site \(docs\.driftstack\.dev\)\. Static Astro\s*\/\/ build deployed to Cloudflare Pages, mirroring apps\/marketing-site\s*\/\/ pattern\. No SSR; pages are pre-rendered at build time\./,
     );
     expect(body).toMatch(/site: 'https:\/\/docs\.driftstack\.dev',/);
     expect(body).toMatch(/output: 'static',/);

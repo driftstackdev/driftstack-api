@@ -49,8 +49,8 @@ describe('marketing-site data/pricing content parity', () => {
   });
 
   it('Manual-ladder 3-tier price points pinned: $79 / $249 / $699 (Solo / Team / Agency). Drift would break ALL three pricing-page rows AND the changelog 2026-05-03 two-ladder-pricing entry', () => {
-    expect(body).toMatch(/name: 'Personal',\s*\n?\s*monthlyUsd: 79,/);
-    expect(body).toMatch(/name: 'Team',\s*\n?\s*monthlyUsd: 249,/);
+    expect(body).toMatch(/name: 'Personal',\s*monthlyUsd: 79,/);
+    expect(body).toMatch(/name: 'Team',\s*monthlyUsd: 249,/);
     expect(body).toMatch(/monthlyUsd: 699,/);
   });
 

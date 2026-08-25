@@ -96,7 +96,7 @@ describe('W695 cross-SDK V-082 billing Stripe-redirect parity', () => {
     const ts = read(TS_BILLING);
     const go = read(GO_BILLING);
 
-    expect(ts).toMatch(/Stripe\s*\n?\s*\/\/\s*Checkout|Stripe Checkout/);
+    expect(ts).toMatch(/Stripe\s*\/\/\s*Checkout|Stripe Checkout/);
     expect(go).toMatch(/Stripe Checkout/);
   });
 
@@ -105,7 +105,7 @@ describe('W695 cross-SDK V-082 billing Stripe-redirect parity', () => {
     const go = read(GO_BILLING);
     const py = read(PY_BILLING);
 
-    expect(ts).toMatch(/Stripe Customer\s*\n?\s*\/\/\s*Portal|Stripe Customer Portal/);
+    expect(ts).toMatch(/Stripe Customer\s*\/\/\s*Portal|Stripe Customer Portal/);
     expect(go).toMatch(/Stripe Customer Portal/);
     expect(py).toMatch(/Stripe Customer Portal/);
   });

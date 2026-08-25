@@ -223,7 +223,7 @@ describe('W707 cross-SDK public-exports surface parity', () => {
   it("CRITICAL TS index re-exports api-types schemas — drift to dropping would force SDK consumers to add a second `@driftstack/api-types` dependency. The current 'no second dependency' framing is what keeps the customer-facing install lean.", () => {
     const ts = read(TS_INDEX);
     expect(ts).toMatch(
-      /Re-export the public Zod schemas \+ types so SDK consumers don't need a\s*\n?\s*\/\/\s*second @driftstack\/api-types dependency/,
+      /Re-export the public Zod schemas \+ types so SDK consumers don't need a\s*\/\/\s*second @driftstack\/api-types dependency/,
     );
     // 10+ api-types re-exports.
     for (const name of [

@@ -66,7 +66,7 @@ describe('W428.B packages/sdk-typescript/src/resources/legal.ts content parity',
 
   it('CRITICAL architectural separation pinned per-line: "Document content is served separately on the marketing site; this resource handles the catalog + acceptance machinery." Drift to surfacing document TEXT through the API would put binary legal content on the JSON surface — breaks the load-bearing separation that keeps legal-doc text/PDFs on Cloudflare Pages and the JSON surface lean.', () => {
     expect(body).toMatch(
-      /\/\/ Document content is served separately on the marketing site; this\s*\n?\s*\/\/ resource handles the catalog \+ acceptance machinery\./,
+      /\/\/ Document content is served separately on the marketing site; this\s*\/\/ resource handles the catalog \+ acceptance machinery\./,
     );
   });
 
@@ -77,25 +77,25 @@ describe('W428.B packages/sdk-typescript/src/resources/legal.ts content parity',
 
   it('LegalDocumentEntry — 7-field shape (document_key + title + version + effective_date + content_hash + source_path + byte_size). source_path lets the marketing site cross-reference the served-content URL with the catalog entry; byte_size lets the dashboard pre-warn customers about long ToS reads. Drift to dropping these would lose the marketing-site cross-reference.', () => {
     expect(body).toMatch(
-      /export interface LegalDocumentEntry \{\s*\n?\s*document_key: string;\s*\n?\s*title: string;\s*\n?\s*version: string;\s*\n?\s*effective_date: string;\s*\n?\s*content_hash: string;\s*\n?\s*source_path: string;\s*\n?\s*byte_size: number;\s*\n?\s*\}/,
+      /export interface LegalDocumentEntry \{\s*document_key: string;\s*title: string;\s*version: string;\s*effective_date: string;\s*content_hash: string;\s*source_path: string;\s*byte_size: number;\s*\}/,
     );
   });
 
   it('LegalRequiredEntry — 5-field shape with last_accepted_version: string | NULL. CRITICAL: nullable when account NEVER accepted that doc (vs a string for stale prior version). Drift to making non-nullable would force a sentinel value ("none" / "") and lose the never-accepted-yet distinction the dashboard uses to render "First time? Read this." vs "Re-accept the updated terms".', () => {
     expect(body).toMatch(
-      /export interface LegalRequiredEntry \{\s*\n?\s*document_key: string;\s*\n?\s*current_version: string;\s*\n?\s*content_hash: string;\s*\n?\s*reason: string;\s*\n?\s*last_accepted_version: string \| null;\s*\n?\s*\}/,
+      /export interface LegalRequiredEntry \{\s*document_key: string;\s*current_version: string;\s*content_hash: string;\s*reason: string;\s*last_accepted_version: string \| null;\s*\}/,
     );
   });
 
   it('AcceptLegalDocumentRequest — 3-field shape (document_key + version + content_hash). CRITICAL inline doc-comment on content_hash: "64-character lowercase hex SHA-256 of the document content." 64-char (not 32-byte raw) + lowercase (not uppercase) + SHA-256 (not SHA-512) — all 3 invariants pinned. Drift to uppercase hex would silently fail hash-comparison; drift to SHA-512 would break every historical acceptance row.', () => {
     expect(body).toMatch(
-      /export interface AcceptLegalDocumentRequest \{\s*\n?\s*document_key: string;\s*\n?\s*version: string;\s*\n?\s*\/\*\* 64-character lowercase hex SHA-256 of the document content\. \*\/\s*\n?\s*content_hash: string;\s*\n?\s*\}/,
+      /export interface AcceptLegalDocumentRequest \{\s*document_key: string;\s*version: string;\s*\/\*\* 64-character lowercase hex SHA-256 of the document content\. \*\/\s*content_hash: string;\s*\}/,
     );
   });
 
   it('AcceptLegalDocumentResponse — 6-field shape (id + account_id + document_key + version + content_hash + accepted_at). Includes the SAME 3 tuple fields the request carried + 3 server-stamped fields (id + account_id + accepted_at). Drift to dropping content_hash from the response would make it impossible for callers to confirm WHAT they actually accepted (server could replay with a different hash).', () => {
     expect(body).toMatch(
-      /export interface AcceptLegalDocumentResponse \{\s*\n?\s*id: string;\s*\n?\s*account_id: string;\s*\n?\s*document_key: string;\s*\n?\s*version: string;\s*\n?\s*content_hash: string;\s*\n?\s*accepted_at: string;\s*\n?\s*\}/,
+      /export interface AcceptLegalDocumentResponse \{\s*id: string;\s*account_id: string;\s*document_key: string;\s*version: string;\s*content_hash: string;\s*accepted_at: string;\s*\}/,
     );
   });
 
@@ -107,7 +107,7 @@ describe('W428.B packages/sdk-typescript/src/resources/legal.ts content parity',
   it('documents verb — GET /v1/legal/documents → Promise<{ data: LegalDocumentEntry[] }>. CRITICAL: same catalog returned for every account (public catalog) — drift to filtering by account would break the "this is the canonical legal-doc list" invariant that the marketing site renders for unauthenticated visitors AND the dashboard renders for authenticated customers.', () => {
     expect(body).toMatch(/\/\*\* List the legal-document catalog\. \*\//);
     expect(body).toMatch(
-      /documents\(\): Promise<\{ data: LegalDocumentEntry\[\] \}> \{\s*\n?\s*return this\.http\.request<\{ data: LegalDocumentEntry\[\] \}>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/legal\/documents',\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /documents\(\): Promise<\{ data: LegalDocumentEntry\[\] \}> \{\s*return this\.http\.request<\{ data: LegalDocumentEntry\[\] \}>\(\{\s*method: 'GET',\s*path: '\/v1\/legal\/documents',\s*\}\);\s*\}/,
     );
   });
 
@@ -116,7 +116,7 @@ describe('W428.B packages/sdk-typescript/src/resources/legal.ts content parity',
       /\/\*\* List documents the calling account must accept \(or re-accept\)\. \*\//,
     );
     expect(body).toMatch(
-      /required\(\): Promise<\{ data: LegalRequiredEntry\[\] \}> \{\s*\n?\s*return this\.http\.request<\{ data: LegalRequiredEntry\[\] \}>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/legal\/required',\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /required\(\): Promise<\{ data: LegalRequiredEntry\[\] \}> \{\s*return this\.http\.request<\{ data: LegalRequiredEntry\[\] \}>\(\{\s*method: 'GET',\s*path: '\/v1\/legal\/required',\s*\}\);\s*\}/,
     );
   });
 
@@ -125,7 +125,7 @@ describe('W428.B packages/sdk-typescript/src/resources/legal.ts content parity',
       /\/\*\* Record acceptance of a \(document, version, content_hash\) tuple\. \*\//,
     );
     expect(body).toMatch(
-      /accept\(body: AcceptLegalDocumentRequest\): Promise<AcceptLegalDocumentResponse> \{\s*\n?\s*return this\.http\.request<AcceptLegalDocumentResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/legal\/accept',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /accept\(body: AcceptLegalDocumentRequest\): Promise<AcceptLegalDocumentResponse> \{\s*return this\.http\.request<AcceptLegalDocumentResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/legal\/accept',\s*body,\s*\}\);\s*\}/,
     );
   });
 

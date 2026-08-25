@@ -36,14 +36,14 @@ describe('services/notification-event-bus.ts content parity', () => {
   it('header framing pinned: in-process pub/sub mirroring AgentSessionEventBus + per-accountId scoping + design-doc cross-ref', () => {
     expect(body).toMatch(/\/\/ 2026-05-20 — GUI panel notification stream\./);
     expect(body).toMatch(
-      /\/\/ In-process pub\/sub for per-account notifications surfaced in the\s*\n?\s*\/\/ desktop GUI's panel-level view/,
+      /\/\/ In-process pub\/sub for per-account notifications surfaced in the\s*\/\/ desktop GUI's panel-level view/,
     );
     expect(body).toMatch(/Mirrors the shape of `AgentSessionEventBus`/);
     expect(body).toMatch(
-      /\/\/ Subscriber keying: per-`accountId`\. Cross-account leakage is\s*\n?\s*\/\/ impossible by construction/,
+      /\/\/ Subscriber keying: per-`accountId`\. Cross-account leakage is\s*\/\/ impossible by construction/,
     );
     expect(body).toMatch(
-      /\/\/ Full design at `docs\/internal\/driftstack-telemetry-event-schema-\s*\n?\s*\/\/ for-gui-panel\.md`\./,
+      /\/\/ Full design at `docs\/internal\/driftstack-telemetry-event-schema-\s*\/\/ for-gui-panel\.md`\./,
     );
   });
 
@@ -72,9 +72,7 @@ describe('services/notification-event-bus.ts content parity', () => {
     expect(body).toMatch(/publish\(event: NotificationEvent\): void/);
     expect(body).toMatch(/subscriberCount\(accountId: string\): number/);
     // The handler-throw isolation contract — pin the try/catch block.
-    expect(body).toMatch(
-      /try \{\s*\n?\s*handler\(event\);\s*\n?\s*\} catch \{\s*\n?\s*\/\* swallow \*\/\s*\n?\s*\}/,
-    );
+    expect(body).toMatch(/try \{\s*handler\(event\);\s*\} catch \{\s*\/\* swallow \*\/\s*\}/);
   });
 
   it('S45 publishBroadcast pinned: distributive-omit param type, per-subscriber accountId stamping via the existing publish path, and key-set snapshot before iteration (handlers may unsubscribe mid-fan-out)', () => {
@@ -82,7 +80,7 @@ describe('services/notification-event-bus.ts content parity', () => {
     expect(body).toMatch(
       // (the spread already narrows to NotificationEvent — no assertion;
       // lint's no-unnecessary-type-assertion strips one if added back)
-      /for \(const accountId of Array\.from\(this\.subscribers\.keys\(\)\)\) \{\s*\n?\s*this\.publish\(\{ \.\.\.event, accountId \}\);/,
+      /for \(const accountId of Array\.from\(this\.subscribers\.keys\(\)\)\) \{\s*this\.publish\(\{ \.\.\.event, accountId \}\);/,
     );
     expect(body).toMatch(
       /export type BroadcastNotificationEvent = DistributiveOmit<NotificationEvent, 'accountId'>;/,
@@ -91,7 +89,7 @@ describe('services/notification-event-bus.ts content parity', () => {
 
   it('drop-on-no-subscribers semantics pinned: publish to an accountId with no subscribers returns without throwing', () => {
     expect(body).toMatch(
-      /publish\(event: NotificationEvent\): void \{\s*\n?\s*const set = this\.subscribers\.get\(event\.accountId\);\s*\n?\s*if \(!set\) return;/,
+      /publish\(event: NotificationEvent\): void \{\s*const set = this\.subscribers\.get\(event\.accountId\);\s*if \(!set\) return;/,
     );
   });
 

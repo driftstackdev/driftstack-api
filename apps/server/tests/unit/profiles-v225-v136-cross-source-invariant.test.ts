@@ -252,7 +252,7 @@ describe('W948 V-225 + V-136 profiles cross-source invariant', () => {
   it('CRITICAL imports 5 error classes — BadRequestError + ConflictError + NotFoundError + StorageQuotaExceededError + TierLimitError. Covers retired-archetype, name-collision, row-missing, storage-quota and tier-cap states.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/profiles.ts'));
     expect(p).toMatch(
-      /import \{\s*\n?\s*BadRequestError,\s*\n?\s*ConflictError,\s*\n?\s*NotFoundError,\s*\n?\s*StorageQuotaExceededError,\s*\n?\s*TierLimitError,\s*\n?\s*\} from '\.\.\/lib\/errors\.js';/,
+      /import \{\s*BadRequestError,\s*ConflictError,\s*NotFoundError,\s*StorageQuotaExceededError,\s*TierLimitError,\s*\} from '\.\.\/lib\/errors\.js';/,
     );
   });
 

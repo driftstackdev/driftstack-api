@@ -40,7 +40,7 @@ describe('W514.C apps/marketing-site/src/pages/docs/incident-policy.astro conten
   it('V-701 framing + fix-log pinned. Re-enabled by slice 246 after verifying both the V-701 anchor at incident-policy.astro:4 + the 4-fix-log Major-fixes-vs-prior-revision framing at incident-policy.astro:6-11 exist verbatim', () => {
     expect(body).toMatch(/\/\/ V-701 — incident response \+ customer-facing policy docs\./);
     expect(body).toMatch(
-      /\/\/ Pinned by tests\/unit\/incident-policy-doc-parity\.test\.ts\. Major fixes\s*\n?\s*\/\/ vs\. prior revision: removed fictional `incident_subscriptions` account\s*\n?\s*\/\/ field, removed claim that `incident\.\*` are subscribable webhook\s*\n?\s*\/\/ events \(they aren't — they're admin-audit \/ SSE-broadcast events\),\s*\n?\s*\/\/ fixed \/v1\/status\/sla response shape \(camelCase, `data:` envelope\),\s*\n?\s*\/\/ removed fictional `\?window_days` query param\./,
+      /\/\/ Pinned by tests\/unit\/incident-policy-doc-parity\.test\.ts\. Major fixes\s*\/\/ vs\. prior revision: removed fictional `incident_subscriptions` account\s*\/\/ field, removed claim that `incident\.\*` are subscribable webhook\s*\/\/ events \(they aren't — they're admin-audit \/ SSE-broadcast events\),\s*\/\/ fixed \/v1\/status\/sla response shape \(camelCase, `data:` envelope\),\s*\/\/ removed fictional `\?window_days` query param\./,
     );
   });
 
@@ -49,7 +49,7 @@ describe('W514.C apps/marketing-site/src/pages/docs/incident-policy.astro conten
       /<a href="https:\/\/status\.driftstack\.dev">status\.driftstack\.dev<\/a>/,
     );
     expect(body).toMatch(
-      /<code>GET \/v1\/status<\/code> \(overall \+ per-component status\)\s*\n?\s*and <code>GET \/v1\/status\/incidents<\/code> \(recent \/ live\s*\n?\s*incidents\)/,
+      /<code>GET \/v1\/status<\/code> \(overall \+ per-component status\)\s*and <code>GET \/v1\/status\/incidents<\/code> \(recent \/ live\s*incidents\)/,
     );
     expect(body).toMatch(/<code>POST \/v1\/status\/subscribe<\/code>/);
     expect(body).toMatch(
@@ -59,56 +59,54 @@ describe('W514.C apps/marketing-site/src/pages/docs/incident-policy.astro conten
 
   it('severity ladder pinned: Outage (≤15min, every 30min) + Major (5%+ error rate / sub-customer auth-sessions outage, ≤30min, every 60min) + Minor (single non-critical surface, ≤60min, at resolution), plus Maintenance labelled NOT an incident severity (≥48h notice) — V-772 renamed the top row from Critical, which was not a value of the incident_severity enum (minor|major|outage), so a customer matching the badge on the status page to this table landed on the wrong row. Cadences are unchanged: the commitment is identical, only the label now matches what is actually filed.', () => {
     expect(body).toMatch(
-      /<td><strong>Outage<\/strong><\/td>\s*\n?\s*<td>Core API down across all customers, or data-loss risk\.<\/td>\s*\n?\s*<td>≤ 15 min<\/td>\s*\n?\s*<td>Every 30 min until resolved\.<\/td>/,
+      /<td><strong>Outage<\/strong><\/td>\s*<td>Core API down across all customers, or data-loss risk\.<\/td>\s*<td>≤ 15 min<\/td>\s*<td>Every 30 min until resolved\.<\/td>/,
     );
     expect(body).toMatch(
-      /<td><strong>Major<\/strong><\/td>\s*\n?\s*<td>API degraded \(\{'>'\}5% error rate\) OR a critical surface\s*\n?\s*\(auth, sessions\) unavailable for a subset of customers\.<\/td>\s*\n?\s*<td>≤ 30 min<\/td>\s*\n?\s*<td>Every 60 min\.<\/td>/,
+      /<td><strong>Major<\/strong><\/td>\s*<td>API degraded \(\{'>'\}5% error rate\) OR a critical surface\s*\(auth, sessions\) unavailable for a subset of customers\.<\/td>\s*<td>≤ 30 min<\/td>\s*<td>Every 60 min\.<\/td>/,
     );
     expect(body).toMatch(
-      /<td><strong>Minor<\/strong><\/td>\s*\n?\s*<td>Single non-critical surface \(dashboard, an SDK build pipeline\) degraded\.<\/td>\s*\n?\s*<td>≤ 60 min<\/td>\s*\n?\s*<td>At resolution\.<\/td>/,
+      /<td><strong>Minor<\/strong><\/td>\s*<td>Single non-critical surface \(dashboard, an SDK build pipeline\) degraded\.<\/td>\s*<td>≤ 60 min<\/td>\s*<td>At resolution\.<\/td>/,
     );
     expect(body).toMatch(
-      /<td><strong>Maintenance<\/strong> \(not an incident severity\)<\/td>\s*\n?\s*<td>Planned change with potential impact\. Always announced\s*\n?\s*≥48h in advance\./,
+      /<td><strong>Maintenance<\/strong> \(not an incident severity\)<\/td>\s*<td>Planned change with potential impact\. Always announced\s*≥48h in advance\./,
     );
   });
 
   it('Detection 3-signal behavior pinned without internal work-item labels', () => {
     expect(body).toMatch(
-      /<strong>Automated health probes:<\/strong> 60-second poller\s*\n?\s*against <code>\/health<\/code> \+ per-region API endpoints\.\s*\n?\s*Three consecutive failures auto-create a <strong>Major<\/strong>/,
+      /<strong>Automated health probes:<\/strong> 60-second poller\s*against <code>\/health<\/code> \+ per-region API endpoints\.\s*Three consecutive failures auto-create a <strong>Major<\/strong>/,
     );
     expect(body).toMatch(
-      /<a href="mailto:support@driftstack\.dev">support@driftstack\.dev<\/a>\s*\n?\s*and Slack channel monitoring\. We acknowledge within 30 min\s*\n?\s*during EU business hours\./,
+      /<a href="mailto:support@driftstack\.dev">support@driftstack\.dev<\/a>\s*and Slack channel monitoring\. We acknowledge within 30 min\s*during EU business hours\./,
     );
     expect(body).toMatch(
-      /<strong>Internal alerting:<\/strong> Sentry \+ cost-monitoring\s*\n?\s*thresholds page on-call\./,
+      /<strong>Internal alerting:<\/strong> Sentry \+ cost-monitoring\s*thresholds page on-call\./,
     );
   });
 
   it('5-step customer comms pinned: 1) status-page entry filed + 2) email fan-out to /v1/status/subscribe subscribers + 3) progress updates per cadence + 4) resolution + final email with root-cause + 5) postmortem within 7 business days for Outage/Major — pinned so the 5-step comms cascade + 7-business-day postmortem SLA + inline-summary-for-Minor framing survives (drift to a longer postmortem SLA would create marketing↔ops divergence)', () => {
     expect(body).toMatch(
-      /<strong>Status page entry filed<\/strong> with severity \+\s*\n?\s*title \+ affected components\./,
+      /<strong>Status page entry filed<\/strong> with severity \+\s*title \+ affected components\./,
     );
     expect(body).toMatch(
-      /<strong>Email fan-out<\/strong> to confirmed\s*\n?\s*<code>\/v1\/status\/subscribe<\/code> subscribers\./,
+      /<strong>Email fan-out<\/strong> to confirmed\s*<code>\/v1\/status\/subscribe<\/code> subscribers\./,
     );
     expect(body).toMatch(
-      /<strong>Postmortem<\/strong> for Outage \/ Major incidents\s*\n?\s*published within 7 business days/,
+      /<strong>Postmortem<\/strong> for Outage \/ Major incidents\s*published within 7 business days/,
     );
-    expect(body).toMatch(
-      /Minor\s*\n?\s*incidents get an inline summary on the resolved status entry\./,
-    );
+    expect(body).toMatch(/Minor\s*incidents get an inline summary on the resolved status entry\./);
   });
 
   it('incident events are explicitly internal rather than advertised as deferred subscriptions', () => {
     expect(body).toMatch(
-      /<code>incident\.created<\/code> \/\s*\n?\s*<code>incident\.updated<\/code> \/ <code>incident\.resolved<\/code>\s*\n?\s*are admin-audit \/ internal SSE event types, not customer webhook\s*\n?\s*subscription values\. Email subscription is the customer-facing\s*\n?\s*notification path\./,
+      /<code>incident\.created<\/code> \/\s*<code>incident\.updated<\/code> \/ <code>incident\.resolved<\/code>\s*are admin-audit \/ internal SSE event types, not customer webhook\s*subscription values\. Email subscription is the customer-facing\s*notification path\./,
     );
     expect(body).not.toMatch(/not yet\s+in <code>SubscribableWebhookEventTypeSchema/);
   });
 
   it("/docs/sla-policy authoritative-reference framing pinned: 'Tier-by-tier SLA targets, the windowing methodology, the credit bands, and the dispute process all live in /docs/sla-policy — that is the authoritative reference. Tier identifiers used there match the AccountTier enum exactly.' — pinned so the /docs/sla-policy authoritative cross-ref + AccountTier-enum-match commitment survives (drift to dropping the AccountTier-enum-match anchor would re-create tier-name-divergence risk)", () => {
     expect(body).toMatch(
-      /Tier-by-tier SLA targets, the windowing methodology, the\s*\n?\s*credit bands, and the dispute process all live in\s*\n?\s*<a href="\/docs\/sla-policy\/">\/docs\/sla-policy<\/a> — that is the\s*\n?\s*authoritative reference\. Tier identifiers used there match\s*\n?\s*the <code>AccountTier<\/code> enum exactly\./,
+      /Tier-by-tier SLA targets, the windowing methodology, the\s*credit bands, and the dispute process all live in\s*<a href="\/docs\/sla-policy\/">\/docs\/sla-policy<\/a> — that is the\s*authoritative reference\. Tier identifiers used there match\s*the <code>AccountTier<\/code> enum exactly\./,
     );
   });
 
@@ -125,13 +123,13 @@ describe('W514.C apps/marketing-site/src/pages/docs/incident-policy.astro conten
     expect(body).toMatch(/"windowStart":/);
     expect(body).toMatch(/"windowEnd":/);
     expect(body).toMatch(
-      /No auth — status surface is public\. Window is a fixed rolling\s*\n?\s*30 days\. Field names are camelCase \(the SLA report serialises\s*\n?\s*its internal model directly\)\./,
+      /No auth — status surface is public\. Window is a fixed rolling\s*30 days\. Field names are camelCase \(the SLA report serialises\s*its internal model directly\)\./,
     );
   });
 
   it("Postmortems blameless framing pinned: 'Public postmortems for Outage + Major incidents live on the public status page, attached to the resolved incident entry. Each follows the same template: timeline, root cause, what we changed to prevent recurrence. Postmortems are blameless and detailed enough to be useful — we'd rather over-share than under-share.' — pinned so the 3-template-field (timeline/root-cause/prevention) + blameless + over-share commitment survives", () => {
     expect(body).toMatch(
-      /Each follows the same\s*\n?\s*template: timeline, root cause, what we changed to prevent\s*\n?\s*recurrence\. Postmortems are blameless and detailed enough to be\s*\n?\s*useful — we'd rather over-share than under-share\./,
+      /Each follows the same\s*template: timeline, root cause, what we changed to prevent\s*recurrence\. Postmortems are blameless and detailed enough to be\s*useful — we'd rather over-share than under-share\./,
     );
   });
 
@@ -139,10 +137,10 @@ describe('W514.C apps/marketing-site/src/pages/docs/incident-policy.astro conten
     expect(body).toMatch(/<a href="mailto:urgent@driftstack\.dev">urgent@driftstack\.dev<\/a>\./);
     expect(body).toMatch(/That goes straight to on-call\./);
     expect(body).toMatch(
-      /<a href="mailto:support@driftstack\.dev">support@driftstack\.dev<\/a>\s*\n?\s*with a session id \+ timestamp\./,
+      /<a href="mailto:support@driftstack\.dev">support@driftstack\.dev<\/a>\s*with a session id \+ timestamp\./,
     );
     expect(body).toMatch(
-      /<a href="mailto:security@driftstack\.dev">security@driftstack\.dev<\/a>\s*\n?\s*— PGP available on the page\./,
+      /<a href="mailto:security@driftstack\.dev">security@driftstack\.dev<\/a>\s*— PGP available on the page\./,
     );
     expect(body).toMatch(
       /<a href="\/docs\/api-security-headers\/">\/docs\/api-security-headers<\/a>/,

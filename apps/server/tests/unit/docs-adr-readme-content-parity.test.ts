@@ -57,9 +57,9 @@ describe('W551.C /docs/adr/README.md content parity', () => {
     expect(body).toMatch(/- The decision has \*\*explicit revisit triggers\*\* \(capacity, cost,/);
     expect(body).toMatch(/compliance, vendor change\)/);
     expect(body).toMatch(
-      /For routine decisions inside the locked stack, the one-paragraph\s*\n?\s*`D-NNN` entry in `decisions\.md` is enough\./,
+      /For routine decisions inside the locked stack, the one-paragraph\s*`D-NNN` entry in `decisions\.md` is enough\./,
     );
-    expect(body).toMatch(/ADRs are reserved for the\s*\n?\s*load-bearing contextual decisions\./);
+    expect(body).toMatch(/ADRs are reserved for the\s*load-bearing contextual decisions\./);
   });
 
   it("Format spec — 6-section ADR shape pinned: 'ADR-NNN — Short title' + '**Status:** Accepted | Superseded by ADR-MMM | Deprecated' + '**Tier:** 1 | 2 | 3 (per AGENTS.md autonomy tiers)' + '**Related D-entry:** D-NNN (if applicable)' + '**Related V-entry:** V-NNN (if applicable)' + '## Context' + '## Decision' + '## Consequences' + '## Alternatives considered' + '## Revisit triggers' — pinned so the ADR-format-frontmatter + 5-section-body-Context+Decision+Consequences+Alternatives+Revisit-triggers commitment survives", () => {
@@ -113,11 +113,11 @@ describe('W551.C /docs/adr/README.md content parity', () => {
       /file 127 §6\)\.\s*\n\s*\*\*Reversed by the shipped system/,
     );
     expect(body).toMatch(
-      /paid trial pack replaces the free tier \(explicit deviation from\s*\n?\s*parent driftstack repo file 127 §6\)\./,
+      /paid trial pack replaces the free tier \(explicit deviation from\s*parent driftstack repo file 127 §6\)\./,
     );
     expect(body).toMatch(/- \[ADR-004\]\(ADR-004-pricing-restructure-two-ladder\.md\) — Pricing/);
     expect(body).toMatch(
-      /restructure to two-ladder concurrent-only \(explicit deviation from\s*\n?\s*parent driftstack repo file 127 single-ladder hours-with-overage/,
+      /restructure to two-ladder concurrent-only \(explicit deviation from\s*parent driftstack repo file 127 single-ladder hours-with-overage/,
     );
   });
 

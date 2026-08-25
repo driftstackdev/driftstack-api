@@ -50,13 +50,13 @@ describe('W715 server-side config DASHBOARD_ORIGIN parity', () => {
 
     // Schema definition with .url() + .default() + .transform() chain.
     expect(src).toMatch(
-      /dashboardOrigin: z\s*\n?\s*\.string\(\)\s*\n?\s*\.url\(\)\s*\n?\s*\.default\('http:\/\/localhost:5173'\)\s*\n?\s*\.transform\(\(s\) => s\.replace\(\/\\\/\+\$\/, ''\)\)/,
+      /dashboardOrigin: z\s*\.string\(\)\s*\.url\(\)\s*\.default\('http:\/\/localhost:5173'\)\s*\.transform\(\(s\) => s\.replace\(\/\\\/\+\$\/, ''\)\)/,
     );
 
     // W190 anchor.
     expect(src).toMatch(/W190 — strip any trailing slash/);
     expect(src).toMatch(
-      /so consumers can safely do\s*\n?\s*\/\/\s*`\$\{dashboardOrigin\}\/billing` etc\. without producing `https:\/\/…\/\/billing`/,
+      /so consumers can safely do\s*\/\/\s*`\$\{dashboardOrigin\}\/billing` etc\. without producing `https:\/\/…\/\/billing`/,
     );
   });
 
@@ -64,7 +64,7 @@ describe('W715 server-side config DASHBOARD_ORIGIN parity', () => {
     const src = read(SERVER_CONFIG);
 
     expect(src).toMatch(
-      /V-079\.B — derive the three auth-flow URLs from a single\s*\n?\s*\*\s*`DASHBOARD_ORIGIN` env var/,
+      /V-079\.B — derive the three auth-flow URLs from a single\s*\*\s*`DASHBOARD_ORIGIN` env var/,
     );
     expect(src).toMatch(/Real customers received emails with broken links/);
   });
@@ -73,7 +73,7 @@ describe('W715 server-side config DASHBOARD_ORIGIN parity', () => {
     const src = read(SERVER_CONFIG);
 
     expect(src).toMatch(
-      /Resolution order for each URL:\s*\n?\s*\*\s*1\. explicit per-URL env var \(AUTH_VERIFY_EMAIL_URL etc\.\)/,
+      /Resolution order for each URL:\s*\*\s*1\. explicit per-URL env var \(AUTH_VERIFY_EMAIL_URL etc\.\)/,
     );
     expect(src).toMatch(/2\. DASHBOARD_ORIGIN \+ the conventional path/);
     expect(src).toMatch(/3\. dev-friendly localhost default \(final fallback, dev-only\)/);
@@ -101,7 +101,7 @@ describe('W715 server-side config DASHBOARD_ORIGIN parity', () => {
     expect(src).toMatch(/if \(env\.NODE_ENV === 'production'\)/);
     expect(src).toMatch(/\/\\blocalhost\\b\/\.test\(value\)/);
     expect(src).toMatch(
-      /throw new Error\(\s*\n?\s*`Refusing to boot: \$\{name\} resolves to a localhost URL/,
+      /throw new Error\(\s*`Refusing to boot: \$\{name\} resolves to a localhost URL/,
     );
     expect(src).toMatch(
       /Set DASHBOARD_ORIGIN \(or the per-URL env var\) to the customer-facing dashboard origin/,
@@ -112,7 +112,7 @@ describe('W715 server-side config DASHBOARD_ORIGIN parity', () => {
     const src = read(SERVER_CONFIG);
 
     expect(src).toMatch(
-      /if \(env\.DASHBOARD_ORIGIN === undefined \|\| env\.DASHBOARD_ORIGIN\.length === 0\) \{\s*\n?\s*throw new Error\(\s*\n?\s*'Refusing to boot: DASHBOARD_ORIGIN must be set in production/,
+      /if \(env\.DASHBOARD_ORIGIN === undefined \|\| env\.DASHBOARD_ORIGIN\.length === 0\) \{\s*throw new Error\(\s*'Refusing to boot: DASHBOARD_ORIGIN must be set in production/,
     );
     expect(src).toMatch(/drives auth-flow URLs \+ CLI-authorize browser URL/);
   });
@@ -131,7 +131,7 @@ describe('W715 server-side config DASHBOARD_ORIGIN parity', () => {
 
     expect(src).toMatch(/const origin = env\.DASHBOARD_ORIGIN\?\.replace\(\/\\\/\+\$\/, ''\);/);
     expect(src).toMatch(
-      /const fromOrigin = \(path: string\): string \| undefined =>\s*\n?\s*origin !== undefined && origin\.length > 0 \? `\$\{origin\}\$\{path\}` : undefined;/,
+      /const fromOrigin = \(path: string\): string \| undefined =>\s*origin !== undefined && origin\.length > 0 \? `\$\{origin\}\$\{path\}` : undefined;/,
     );
   });
 
@@ -145,7 +145,7 @@ describe('W715 server-side config DASHBOARD_ORIGIN parity', () => {
 
     expect(src).toMatch(/V-266 — origin of the customer dashboard/);
     expect(src).toMatch(
-      /Used to build the\s*\n?\s*\*\s*browser_url returned by \/v1\/auth\/cli-authorize\/initiate/,
+      /Used to build the\s*\*\s*browser_url returned by \/v1\/auth\/cli-authorize\/initiate/,
     );
     expect(src).toMatch(/dev \/ staging \/ prod/);
   });

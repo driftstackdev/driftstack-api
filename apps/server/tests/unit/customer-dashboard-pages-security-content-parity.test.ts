@@ -37,7 +37,7 @@ describe('W497.C-security apps/customer-dashboard/src/pages/security.astro conte
   it('V-353h MFA enroll + verify + recovery contract: POST /v1/account/mfa/enroll → { otpauth_uri, secret_base32 } + POST /v1/account/mfa/verify { code } → { recovery_codes } — pinned so the 2-step enroll-then-verify flow + the recovery_codes response field stay correct (drift to a single-step enroll would skip the QR-scan verification; drift to dropping recovery_codes would orphan customers from the shown-ONCE backup-codes flow)', () => {
     expect(body).toMatch(/authedFetch\('\/v1\/account\/mfa\/enroll', \{ method: 'POST' \}\)/);
     expect(body).toMatch(
-      /authedFetch\('\/v1\/account\/mfa\/verify', \{\s*\n?\s*method: 'POST',\s*\n?\s*body: JSON\.stringify\(\{ code \}\),\s*\n?\s*\}\)/,
+      /authedFetch\('\/v1\/account\/mfa\/verify', \{\s*method: 'POST',\s*body: JSON\.stringify\(\{ code \}\),\s*\}\)/,
     );
     expect(body).toMatch(/body\.recovery_codes \|\| \[\]/);
   });
@@ -45,12 +45,12 @@ describe('W497.C-security apps/customer-dashboard/src/pages/security.astro conte
   it("MFA recovery codes shown-ONCE framing pinned: 'Save your recovery codes — these are shown ONCE' + 'Each code works once. Store them somewhere safe (password manager, printed copy, secure note). Without your authenticator AND these codes, account access requires support intervention.' — pinned so the shown-ONCE contract + support-intervention escape-hatch both survive (drift to dropping support-intervention would let lockout victims think there's no recovery path)", () => {
     expect(body).toMatch(/Save your recovery codes — these are shown ONCE/);
     expect(body).toMatch(
-      /Each code works once\. Store them somewhere safe \(password manager,\s*\n?\s*printed copy, secure note\)\. Without your authenticator AND these\s*\n?\s*codes, account access requires support intervention\./,
+      /Each code works once\. Store them somewhere safe \(password manager,\s*printed copy, secure note\)\. Without your authenticator AND these\s*codes, account access requires support intervention\./,
     );
   });
 
   it("MFA step-up reauth framing: 'requires_mfa_step_up' response flag → openStepUp('disable') + POST /v1/auth/mfa/step-up { code | recovery_code } — pinned so the disable-needs-fresh-code security gate survives (drift to dropping step-up would let an attacker with a stolen session disable MFA without proving fresh possession of the authenticator)", () => {
-    expect(body).toMatch(/if \(b && b\.requires_mfa_step_up\) \{\s*\n?\s*openStepUp\('disable'\);/);
+    expect(body).toMatch(/if \(b && b\.requires_mfa_step_up\) \{\s*openStepUp\('disable'\);/);
     expect(body).toMatch(/const body = isCode \? \{ code: raw \} : \{ recovery_code: raw \};/);
     expect(body).toMatch(/authedFetch\('\/v1\/auth\/mfa\/step-up', \{/);
   });
@@ -58,7 +58,7 @@ describe('W497.C-security apps/customer-dashboard/src/pages/security.astro conte
   it("V-355 active sign-ins contract: GET /v1/account/web-sessions + DELETE /v1/account/web-sessions/:id + DELETE /v1/account/web-sessions?keep=current bulk-revoke — pinned so the 3-endpoint web-sessions contract stays correct (drift to dropping ?keep=current would let bulk-revoke kill the current session, signing the customer out of the page they're using)", () => {
     expect(body).toMatch(/authedFetch\('\/v1\/account\/web-sessions', \{ method: 'GET' \}\)/);
     expect(body).toMatch(
-      /authedFetch\('\/v1\/account\/web-sessions\/' \+ encodeURIComponent\(id\), \{\s*\n?\s*method: 'DELETE',\s*\n?\s*\}\)/,
+      /authedFetch\('\/v1\/account\/web-sessions\/' \+ encodeURIComponent\(id\), \{\s*method: 'DELETE',\s*\}\)/,
     );
     expect(body).toMatch(
       /authedFetch\('\/v1\/account\/web-sessions\?keep=current', \{ method: 'DELETE' \}\)/,
@@ -67,7 +67,7 @@ describe('W497.C-security apps/customer-dashboard/src/pages/security.astro conte
 
   it("V-355 IP-omitted-for-privacy framing pinned: 'IP omitted for privacy. The \"current\" session is the one you're using right now and can't be revoked from this list — sign out from the menu instead.' — pinned so the privacy-by-default + don't-revoke-self framing stays explicit (drift to surfacing IP would change the privacy posture; drift to dropping the can't-revoke-self framing would confuse customers who try to revoke their current session)", () => {
     expect(body).toMatch(
-      /IP omitted for privacy\. The "current" session is the one you're using\s*\n?\s*right now and can't be revoked from this list — sign out from the menu\s*\n?\s*instead\./,
+      /IP omitted for privacy\. The "current" session is the one you're using\s*right now and can't be revoked from this list — sign out from the menu\s*instead\./,
     );
   });
 
@@ -90,7 +90,7 @@ describe('W497.C-security apps/customer-dashboard/src/pages/security.astro conte
       ),
     );
     expect(body).toMatch(
-      /boundedFetch\(apiBaseUrl \+ '\/v1\/auth\/password-reset\/request', \{\s*\n?\s*method: 'POST',/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/auth\/password-reset\/request', \{\s*method: 'POST',/,
     );
   });
 
@@ -114,7 +114,7 @@ describe('W497.C-security apps/customer-dashboard/src/pages/security.astro conte
   // danger zone now points at the privacy-policy purge schedule.
   it('Danger-zone framing pinned: irreversible deletion + privacy-policy purge schedule + 7y Dutch-tax invoice retention + support@ mailto + #danger-zone anchor (S38: recordings/configurable-retention fictions retired)', () => {
     expect(body).toMatch(
-      /All sessions, profiles, API keys,\s*\n?\s*and webhook endpoints are immediately revoked, and stored account\s*\n?\s*data is purged on the schedule in the privacy policy\. Invoice\s*\n?\s*history retained per Dutch tax law \(7 years\) — not\s*\n?\s*deletable on\s*\n?\s*request\./,
+      /All sessions, profiles, API keys,\s*and webhook endpoints are immediately revoked, and stored account\s*data is purged on the schedule in the privacy policy\. Invoice\s*history retained per Dutch tax law \(7 years\) — not\s*deletable on\s*request\./,
     );
     expect(body).toMatch(
       /href="mailto:support@driftstack\.dev\?subject=Account%20deletion%20request"/,
@@ -143,14 +143,14 @@ describe('W497.C-security apps/customer-dashboard/src/pages/security.astro conte
     expect(body).not.toMatch(/Account \+ record bound/);
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /export and deletion are request-based today; start in\s*\n?\s*<a href="#danger-zone" class="text-tk-accent-text underline">the danger zone<\/a>\./,
+      /export and deletion are request-based today; start in\s*<a href="#danger-zone" class="text-tk-accent-text underline">the danger zone<\/a>\./,
     );
     expect(body).not.toMatch(/export or delete anytime/);
   });
 
   it("V-331b act-as header in authedFetch — pinned so the team-scoped flow propagates to security reads/writes (drift would let team managers accidentally modify their OWN MFA / sign-ins when trying to manage a team-mate's account)", () => {
     expect(body).toMatch(
-      /\/\/ V-331b — act-as header for team-scoped requests\.\s*\n?\s*\.\.\.\(typeof window\.driftstackActAsHeaders === 'function'\s*\n?\s*\? window\.driftstackActAsHeaders\(\)\s*\n?\s*: \{\}\),/,
+      /\/\/ V-331b — act-as header for team-scoped requests\.\s*\.\.\.\(typeof window\.driftstackActAsHeaders === 'function'\s*\? window\.driftstackActAsHeaders\(\)\s*: \{\}\),/,
     );
   });
 

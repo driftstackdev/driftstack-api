@@ -38,53 +38,53 @@ describe('W411.C apps/server/src/routes/billing-crypto-quote.ts content parity',
   it('V-666.H framing pinned: POST /v1/billing/crypto-checkout/quote + price preview + quote-vs-order distinction', () => {
     expect(body).toMatch(/V-666\.H — POST \/v1\/billing\/crypto-checkout\/quote\./);
     expect(body).toMatch(
-      /Price preview for the crypto-checkout page\. Customers hit this\s*\n?\s*\/\/\s*before committing to actually opening an order \(which would mint\s*\n?\s*\/\/\s*an order_id \+ reserve a payment address\)\./,
+      /Price preview for the crypto-checkout page\. Customers hit this\s*\/\/\s*before committing to actually opening an order \(which would mint\s*\/\/\s*an order_id \+ reserve a payment address\)\./,
     );
   });
 
   it('Pricing-only boundary pinned: payment-specific values are returned only by checkout creation', () => {
     expect(body).toMatch(
-      /The response carries\s*\n?\s*\/\/ only the authoritative tier price in fiat cents\. The exact crypto\s*\n?\s*\/\/ currency, amount and deposit address are payment-specific values\s*\n?\s*\/\/ returned by checkout creation, never invented by this stateless preview\./,
+      /The response carries\s*\/\/ only the authoritative tier price in fiat cents\. The exact crypto\s*\/\/ currency, amount and deposit address are payment-specific values\s*\/\/ returned by checkout creation, never invented by this stateless preview\./,
     );
     expect(body).not.toMatch(/provider: 'stub'|pay_currency: null|pay_min_amount|pay_max_amount/);
   });
 
   it('Stateless framing pinned: no DB write; re-fetching cheap; not rate-limited beyond global bucket', () => {
     expect(body).toMatch(
-      /Quote responses are stateless — no DB write — so re-fetching is\s*\n?\s*\/\/\s*cheap and the route is not rate-limited beyond the global bucket\./,
+      /Quote responses are stateless — no DB write — so re-fetching is\s*\/\/\s*cheap and the route is not rate-limited beyond the global bucket\./,
     );
   });
 
   it('SUPPORTED_PRODUCTS: 6-tier allowlist (solo_manual + team_manual + agency_manual + api_starter + api_builder + api_scale)', () => {
     expect(body).toMatch(
-      /const SUPPORTED_PRODUCTS: AccountTier\[\] = \[\s*\n?\s*'solo_manual',\s*\n?\s*'team_manual',\s*\n?\s*'agency_manual',\s*\n?\s*'api_starter',\s*\n?\s*'api_builder',\s*\n?\s*'api_scale',\s*\n?\s*\];/,
+      /const SUPPORTED_PRODUCTS: AccountTier\[\] = \[\s*'solo_manual',\s*'team_manual',\s*'agency_manual',\s*'api_starter',\s*'api_builder',\s*'api_scale',\s*\];/,
     );
   });
 
   it('QuoteSchema: product enum cast as [AccountTier, ...AccountTier[]] + optional price_currency 3-letter uppercase ISO', () => {
     expect(body).toMatch(
-      /const QuoteSchema = z\.object\(\{\s*\n?\s*product: z\.enum\(SUPPORTED_PRODUCTS as \[AccountTier, \.\.\.AccountTier\[\]\]\),\s*\n?\s*price_currency: z\s*\n?\s*\.string\(\)\s*\n?\s*\.length\(3\)\s*\n?\s*\.regex\(\/\^\[A-Z\]\{3\}\$\/, 'price_currency must be a 3-letter uppercase ISO code'\)\s*\n?\s*\.optional\(\),\s*\n?\s*\}\);/,
+      /const QuoteSchema = z\.object\(\{\s*product: z\.enum\(SUPPORTED_PRODUCTS as \[AccountTier, \.\.\.AccountTier\[\]\]\),\s*price_currency: z\s*\.string\(\)\s*\.length\(3\)\s*\.regex\(\/\^\[A-Z\]\{3\}\$\/, 'price_currency must be a 3-letter uppercase ISO code'\)\s*\.optional\(\),\s*\}\);/,
     );
   });
 
   it('Route registration: POST + read:billing scope before the global rate limit', () => {
     expect(body).toMatch(
-      /app\.post\(\s*\n?\s*'\/v1\/billing\/crypto-checkout\/quote',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('read:billing'\), app\.rateLimit\('global'\)\] \},/,
+      /app\.post\(\s*'\/v1\/billing\/crypto-checkout\/quote',\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('read:billing'\), app\.rateLimit\('global'\)\] \},/,
     );
   });
 
   it('Defensive desync guard: priceCents undefined → 400 ValidationError (not 500) with "No quote available for tier" + schema-vs-table rationale', () => {
     expect(body).toMatch(
-      /if \(priceCents === undefined\) \{\s*\n?\s*\/\/ Defensive: schema gated on a fixed list that lines up with\s*\n?\s*\/\/ the price table\. A new tier added to one but not the other\s*\n?\s*\/\/ is a 400 here rather than a 500\./,
+      /if \(priceCents === undefined\) \{\s*\/\/ Defensive: schema gated on a fixed list that lines up with\s*\/\/ the price table\. A new tier added to one but not the other\s*\/\/ is a 400 here rather than a 500\./,
     );
     expect(body).toMatch(
-      /throw new ValidationError\(\{\s*\n?\s*fieldErrors: \{ product: \[`No quote available for tier "\$\{product\}"\.`\] \},\s*\n?\s*formErrors: \[\],\s*\n?\s*\}\);/,
+      /throw new ValidationError\(\{\s*fieldErrors: \{ product: \[`No quote available for tier "\$\{product\}"\.`\] \},\s*formErrors: \[\],\s*\}\);/,
     );
   });
 
   it('Reply shape is exactly product + price_cents + price_currency = the USD settlement currency', () => {
     expect(body).toMatch(
-      /return reply\.send\(\{\s*\n?\s*product,\s*\n?\s*price_cents: priceCents,\s*\n?\s*price_currency: CRYPTO_SETTLEMENT_CURRENCY,\s*\n?\s*\}\);/,
+      /return reply\.send\(\{\s*product,\s*price_cents: priceCents,\s*price_currency: CRYPTO_SETTLEMENT_CURRENCY,\s*\}\);/,
     );
   });
 

@@ -46,34 +46,34 @@ describe('W473.C apps/gui-client/src/lib/use-crypto-order.ts content parity', ()
   it("V-534.T framing pinned: 'V-534.T — useCryptoOrder polling hook.' + 'Polls GET /v1/billing/crypto-orders/:id for the given order id and transitions the state machine each tick. Polling stops automatically once the order reaches a terminal status (paid / failed / cancelled). Callers can pass `pollIntervalMs` to override the default cadence.'", () => {
     expect(body).toMatch(/\/\/ V-534\.T — useCryptoOrder polling hook\./);
     expect(body).toMatch(
-      /\/\/ Polls GET \/v1\/billing\/crypto-orders\/:id for the given order id and\s*\n?\s*\/\/ transitions the state machine each tick\. Polling stops automatically\s*\n?\s*\/\/ once the order reaches a terminal status \(paid \/ failed \/ cancelled\)\.\s*\n?\s*\/\/ Callers can pass `pollIntervalMs` to override the default cadence\./,
+      /\/\/ Polls GET \/v1\/billing\/crypto-orders\/:id for the given order id and\s*\/\/ transitions the state machine each tick\. Polling stops automatically\s*\/\/ once the order reaches a terminal status \(paid \/ failed \/ cancelled\)\.\s*\/\/ Callers can pass `pollIntervalMs` to override the default cadence\./,
     );
   });
 
   it("CryptoOrderEvent 3-field (status 6-value union + at ISO + source 4-value union) with V-666.AU framing 'customer-facing source tag. \\'swept\\' is mapped to \\'expired\\' server-side.' — pinned so the swept-vs-expired customer-facing label decision isn't reverted in the wire contract", () => {
     expect(body).toMatch(
-      /export interface CryptoOrderEvent \{\s*\n?\s*status: 'pending' \| 'confirming' \| 'paid' \| 'failed' \| 'partial' \| 'cancelled';\s*\n?\s*at: string;\s*\n?\s*\/\*\* V-666\.AU — customer-facing source tag\. 'swept' is mapped to 'expired' server-side\. \*\/\s*\n?\s*source: 'create' \| 'ipn' \| 'cancel' \| 'expired';\s*\n?\s*\}/,
+      /export interface CryptoOrderEvent \{\s*status: 'pending' \| 'confirming' \| 'paid' \| 'failed' \| 'partial' \| 'cancelled';\s*at: string;\s*\/\*\* V-666\.AU — customer-facing source tag\. 'swept' is mapped to 'expired' server-side\. \*\/\s*source: 'create' \| 'ipn' \| 'cancel' \| 'expired';\s*\}/,
     );
   });
 
   it("CryptoOrderData 9-field: status 6-value union + events optional CryptoOrderEvent[] V-666.AU 'append-only state-transition timeline. Optional on the wire so older server builds still parse.' + expires_at? V-666.AV 'informational pay-window deadline (ISO 8601). Set for pending orders; null otherwise.'", () => {
     expect(body).toMatch(
-      /export interface CryptoOrderData \{\s*\n?\s*order_id: string;\s*\n?\s*product: string;\s*\n?\s*price_cents: number;\s*\n?\s*price_currency: string;\s*\n?\s*payment_id: string \| null;\s*\n?\s*status: 'pending' \| 'confirming' \| 'paid' \| 'failed' \| 'partial' \| 'cancelled';/,
+      /export interface CryptoOrderData \{\s*order_id: string;\s*product: string;\s*price_cents: number;\s*price_currency: string;\s*payment_id: string \| null;\s*status: 'pending' \| 'confirming' \| 'paid' \| 'failed' \| 'partial' \| 'cancelled';/,
     );
     expect(body).toMatch(
-      /\/\*\* V-666\.AU — append-only state-transition timeline\. Optional on\s*\n?\s*\*\s+the wire so older server builds still parse\. \*\/\s*\n?\s*events\?: CryptoOrderEvent\[\];/,
+      /\/\*\* V-666\.AU — append-only state-transition timeline\. Optional on\s*\*\s+the wire so older server builds still parse\. \*\/\s*events\?: CryptoOrderEvent\[\];/,
     );
     expect(body).toMatch(
-      /\/\*\* V-666\.AV — informational pay-window deadline \(ISO 8601\)\. Set\s*\n?\s*\*\s+for pending orders; null otherwise\. \*\/\s*\n?\s*expires_at\?: string \| null;\s*\n?\s*created_at: string;\s*\n?\s*updated_at: string;\s*\n?\s*\}/,
+      /\/\*\* V-666\.AV — informational pay-window deadline \(ISO 8601\)\. Set\s*\*\s+for pending orders; null otherwise\. \*\/\s*expires_at\?: string \| null;\s*created_at: string;\s*updated_at: string;\s*\}/,
     );
   });
 
   it("UseCryptoOrderOpts: manual? 'Disable auto-fetch on mount. Default false.' + pollIntervalMs? 'Polling cadence in ms. Default 5_000. Set 0 to disable polling.'; useCryptoOrder(orderId: string | null, opts = {})", () => {
     expect(body).toMatch(
-      /export interface UseCryptoOrderOpts \{\s*\n?\s*\/\*\* Disable auto-fetch on mount\. Default false\. \*\/\s*\n?\s*manual\?: boolean;\s*\n?\s*\/\*\* Polling cadence in ms\. Default 5_000\. Set 0 to disable polling\. \*\/\s*\n?\s*pollIntervalMs\?: number;\s*\n?\s*\}/,
+      /export interface UseCryptoOrderOpts \{\s*\/\*\* Disable auto-fetch on mount\. Default false\. \*\/\s*manual\?: boolean;\s*\/\*\* Polling cadence in ms\. Default 5_000\. Set 0 to disable polling\. \*\/\s*pollIntervalMs\?: number;\s*\}/,
     );
     expect(body).toMatch(
-      /export function useCryptoOrder\(\s*\n?\s*orderId: string \| null,\s*\n?\s*opts: UseCryptoOrderOpts = \{\},\s*\n?\s*\): UseCryptoOrderResult \{/,
+      /export function useCryptoOrder\(\s*orderId: string \| null,\s*opts: UseCryptoOrderOpts = \{\},\s*\): UseCryptoOrderResult \{/,
     );
   });
 
@@ -85,7 +85,7 @@ describe('W473.C apps/gui-client/src/lib/use-crypto-order.ts content parity', ()
   it('lastStatusRef + setInterval polling loop: lastStatusRef = useRef<string|null>(null) + body.status assigned on each successful tick + setInterval tick checks lastStatusRef.current !== null && TERMINAL_STATUSES.has(lastStatusRef.current) → clearInterval + return (auto-stop on terminal) + interval <= 0 disables polling + cleanup returns clearInterval', () => {
     expect(body).toMatch(/const lastStatusRef = useRef<string \| null>\(null\);/);
     expect(body).toMatch(
-      /lastStatusRef\.current = body\.status;\s*\n?\s*setState\(\{ kind: 'ready', data: body \}\);/,
+      /lastStatusRef\.current = body\.status;\s*setState\(\{ kind: 'ready', data: body \}\);/,
     );
     expect(body).toContain('const interval = opts.pollIntervalMs ?? DEFAULT_POLL_MS;');
     expect(body).toContain('if (interval <= 0) return;');
@@ -103,10 +103,10 @@ describe('W473.C apps/gui-client/src/lib/use-crypto-order.ts content parity', ()
 
   it('orderId===null short-circuit on initial state + fetcher early-return + useEffect skip; URL `/v1/billing/crypto-orders/${orderId}` exact (no /receipt suffix — separate hook); useCallback deps [orderId, settings.apiKey, settings.baseUrl]', () => {
     expect(body).toMatch(
-      /const \[state, setState\] = useState<CryptoOrderState>\(\s*\n?\s*opts\.manual === true \|\| orderId === null \? \{ kind: 'idle' \} : \{ kind: 'loading' \},\s*\n?\s*\);/,
+      /const \[state, setState\] = useState<CryptoOrderState>\(\s*opts\.manual === true \|\| orderId === null \? \{ kind: 'idle' \} : \{ kind: 'loading' \},\s*\);/,
     );
     expect(body).toMatch(
-      /const res = await fetchWithDeadline\(`\$\{baseUrl\}\/v1\/billing\/crypto-orders\/\$\{orderId\}`, \{\s*\n?\s*method: 'GET',\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',\s*\n?\s*\},\s*\n?\s*\}\);/,
+      /const res = await fetchWithDeadline\(`\$\{baseUrl\}\/v1\/billing\/crypto-orders\/\$\{orderId\}`, \{\s*method: 'GET',\s*signal: controller\.signal,\s*headers: \{\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*accept: 'application\/json',\s*\},\s*\}\);/,
     );
     expect(body).toMatch(/if \(inFlightRef\.current\) return;/);
     expect(body).toMatch(

@@ -40,67 +40,67 @@ describe('W439.C apps/server/src/lib/openapi.ts content parity', () => {
   it('Header framing pinned: OpenAPI 3.1 spec generator; @asteasolutions/zod-to-openapi registry pairs Zod schemas with route metadata (path, method, auth, rate-limit bucket, status codes); static JSON at /openapi.json + Scalar UI at /docs', () => {
     expect(body).toMatch(/\/\/ OpenAPI 3\.1 spec generator\./);
     expect(body).toMatch(
-      /\/\/ Builds the API document by registering Zod schemas with @asteasolutions\/\s*\n?\s*\/\/ zod-to-openapi and pairing them with route metadata \(path, method, auth,\s*\n?\s*\/\/ rate-limit bucket, status codes\)\. The output is a static JSON document\s*\n?\s*\/\/ served at \/openapi\.json and rendered by Scalar UI at \/docs\./,
+      /\/\/ Builds the API document by registering Zod schemas with @asteasolutions\/\s*\/\/ zod-to-openapi and pairing them with route metadata \(path, method, auth,\s*\/\/ rate-limit bucket, status codes\)\. The output is a static JSON document\s*\/\/ served at \/openapi\.json and rendered by Scalar UI at \/docs\./,
     );
   });
 
   it('Adding-new-endpoint 3-step recipe framing pinned: (1) define request+response schemas in @driftstack/api-types (2) registerRoute(...) call here (3) route handler in apps/server/src/routes/; route handler still does own Zod parse — generator only publishes contract', () => {
     expect(body).toMatch(
-      /\/\/ Adding a new endpoint requires:\s*\n?\s*\/\/\s*1\. Define request \+ response schemas in @driftstack\/api-types\s*\n?\s*\/\/\s*2\. Add a `registerRoute\(\.\.\.\)` call in this file\s*\n?\s*\/\/\s*3\. Add the route handler in apps\/server\/src\/routes\//,
+      /\/\/ Adding a new endpoint requires:\s*\/\/\s*1\. Define request \+ response schemas in @driftstack\/api-types\s*\/\/\s*2\. Add a `registerRoute\(\.\.\.\)` call in this file\s*\/\/\s*3\. Add the route handler in apps\/server\/src\/routes\//,
     );
     expect(body).toMatch(
-      /\/\/ The route handler still does its own Zod parse — this generator only\s*\n?\s*\/\/ publishes the contract\./,
+      /\/\/ The route handler still does its own Zod parse — this generator only\s*\/\/ publishes the contract\./,
     );
   });
 
   it('imports: extendZodWithOpenApi + OpenApiGeneratorV31 + OpenAPIRegistry from @asteasolutions; OpenAPIObject from openapi3-ts/oas31; z from zod; extendZodWithOpenApi(z) BEFORE any registry.register', () => {
     expect(body).toMatch(
-      /import \{\s*\n?\s*extendZodWithOpenApi,\s*\n?\s*OpenApiGeneratorV31,\s*\n?\s*OpenAPIRegistry,\s*\n?\s*\} from '@asteasolutions\/zod-to-openapi';/,
+      /import \{\s*extendZodWithOpenApi,\s*OpenApiGeneratorV31,\s*OpenAPIRegistry,\s*\} from '@asteasolutions\/zod-to-openapi';/,
     );
     expect(body).toMatch(/import type \{ RouteConfig \} from '@asteasolutions\/zod-to-openapi';/);
     expect(body).toMatch(/import type \{ OpenAPIObject \} from 'openapi3-ts\/oas31';/);
     expect(body).toMatch(/import \{ z \} from 'zod';/);
     expect(body).toMatch(
-      /\/\/ Augment z with \.openapi\(\) — must run before any registry\.register call\.\s*\n?\s*extendZodWithOpenApi\(z\);/,
+      /\/\/ Augment z with \.openapi\(\) — must run before any registry\.register call\.\s*extendZodWithOpenApi\(z\);/,
     );
   });
 
   it('V-386 AccountMeResponse inline rationale frames the rich OpenAPI component and SDK/dashboard consumers', () => {
     expect(body).toMatch(
-      /\/\/ V-386 — full \/v1\/account\/me response shape\. Defined here rather than\s*\n?\s*\/\/ in api-types because it is richer than the lean shared AccountSchema\.\s*\n?\s*\/\/ This named OpenAPI component is also mirrored by the public SDK\s*\n?\s*\/\/ AccountSelfProfile models and consumed directly by the dashboard\./,
+      /\/\/ V-386 — full \/v1\/account\/me response shape\. Defined here rather than\s*\/\/ in api-types because it is richer than the lean shared AccountSchema\.\s*\/\/ This named OpenAPI component is also mirrored by the public SDK\s*\/\/ AccountSelfProfile models and consumed directly by the dashboard\./,
     );
   });
 
   it('AccountMeResponseSchema shape includes avatar_url plus avatar_source user/idp/none', () => {
     expect(body).toMatch(
-      /const AccountMeResponseSchema = z\.object\(\{\s*\n?\s*id: z\.string\(\),\s*\n?\s*email: z\.string\(\)\.email\(\),\s*\n?\s*name: z\.string\(\)\.nullable\(\),\s*\n?\s*tier: AccountTierSchema,\s*\n?\s*status: AccountStatusSchema,\s*\n?\s*timezone: z\.string\(\)\.nullable\(\),\s*\n?\s*slug: z\.string\(\)\.nullable\(\),\s*\n?\s*region: AccountRegionSchema\.nullable\(\),\s*\n?\s*avatar_url: z\.string\(\)\.nullable\(\),\s*\n?\s*avatar_source: z\.enum\(\['user', 'idp', 'none'\]\),\s*\n?\s*mfa_enrolled: z\.boolean\(\),\s*\n?\s*concurrent_session_cap: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*concurrent_session_active: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*profile_cap: z\.number\(\)\.int\(\)\.nonnegative\(\)\.nullable\(\),\s*\n?\s*profile_count: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*teams: z\.array\(/,
+      /const AccountMeResponseSchema = z\.object\(\{\s*id: z\.string\(\),\s*email: z\.string\(\)\.email\(\),\s*name: z\.string\(\)\.nullable\(\),\s*tier: AccountTierSchema,\s*status: AccountStatusSchema,\s*timezone: z\.string\(\)\.nullable\(\),\s*slug: z\.string\(\)\.nullable\(\),\s*region: AccountRegionSchema\.nullable\(\),\s*avatar_url: z\.string\(\)\.nullable\(\),\s*avatar_source: z\.enum\(\['user', 'idp', 'none'\]\),\s*mfa_enrolled: z\.boolean\(\),\s*concurrent_session_cap: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*concurrent_session_active: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*profile_cap: z\.number\(\)\.int\(\)\.nonnegative\(\)\.nullable\(\),\s*profile_count: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*teams: z\.array\(/,
     );
   });
 
   it('AccountMeResponseSchema teams entries carry owner_account_id + owner_email + owner_name nullable + role + membership_id (owner identity for the dashboard team label)', () => {
     expect(body).toMatch(
-      /teams: z\.array\(\s*\n?\s*z\.object\(\{\s*\n?\s*owner_account_id: z\.string\(\),(?:\s*\n?\s*\/\/[^\n]*)*\s*\n?\s*owner_email: z\.string\(\),\s*\n?\s*owner_name: z\.string\(\)\.nullable\(\),\s*\n?\s*role: z\.enum\(\['admin', 'member'\]\),\s*\n?\s*membership_id: z\.string\(\),\s*\n?\s*\}\),\s*\n?\s*\),/,
+      /teams: z\.array\(\s*z\.object\(\{\s*owner_account_id: z\.string\(\),(?:\s*\/\/[^\n]*)*\s*owner_email: z\.string\(\),\s*owner_name: z\.string\(\)\.nullable\(\),\s*role: z\.enum\(\['admin', 'member'\]\),\s*membership_id: z\.string\(\),\s*\}\),\s*\),/,
     );
   });
 
   it('PaginatedSessions + PaginatedApiKeys inline schemas (data array + has_more + next_cursor on sessions; data array only on api-keys)', () => {
     expect(body).toMatch(
-      /const PaginatedSessionsSchema = z\.object\(\{\s*\n?\s*data: z\.array\(SessionSchema\),\s*\n?\s*has_more: z\.boolean\(\),\s*\n?\s*next_cursor: z\.string\(\)\.nullable\(\),\s*\n?\s*\}\);/,
+      /const PaginatedSessionsSchema = z\.object\(\{\s*data: z\.array\(SessionSchema\),\s*has_more: z\.boolean\(\),\s*next_cursor: z\.string\(\)\.nullable\(\),\s*\}\);/,
     );
     expect(body).toMatch(
-      /const PaginatedApiKeysSchema = z\.object\(\{\s*\n?\s*data: z\.array\(ApiKeySchema\),\s*\n?\s*\}\);/,
+      /const PaginatedApiKeysSchema = z\.object\(\{\s*data: z\.array\(ApiKeySchema\),\s*\}\);/,
     );
   });
 
   it("Bearer auth scheme component (http bearer + bearerFormat 'API key')", () => {
     expect(body).toMatch(
-      /r\.registerComponent\('securitySchemes', 'BearerAuth', \{\s*\n?\s*type: 'http',\s*\n?\s*scheme: 'bearer',\s*\n?\s*bearerFormat: 'API key',\s*\n?\s*\}\);/,
+      /r\.registerComponent\('securitySchemes', 'BearerAuth', \{\s*type: 'http',\s*scheme: 'bearer',\s*bearerFormat: 'API key',\s*\}\);/,
     );
   });
 
   it("Component-promotion rationale framing pinned: reusable schemas promoted to components.schemas so codegen produces named types (Pydantic, Go structs, etc.) instead of inline anonymous shapes; anything referenced from a route's request/response is registered here", () => {
     expect(body).toMatch(
-      /\/\/ Reusable schemas — promote to components\.schemas so codegen\s*\n?\s*\/\/ produces named types \(Pydantic, Go structs, etc\.\) instead of\s*\n?\s*\/\/ inline anonymous shapes\. Anything referenced from a route's\s*\n?\s*\/\/ request\/response is registered here\./,
+      /\/\/ Reusable schemas — promote to components\.schemas so codegen\s*\/\/ produces named types \(Pydantic, Go structs, etc\.\) instead of\s*\/\/ inline anonymous shapes\. Anything referenced from a route's\s*\/\/ request\/response is registered here\./,
     );
   });
 
@@ -113,22 +113,22 @@ describe('W439.C apps/server/src/lib/openapi.ts content parity', () => {
     expect(body).toMatch(/r\.register\('UsagePeriodSummary', UsagePeriodSummarySchema\);/);
     expect(body).toMatch(/r\.register\('PaginationQuery', PaginationQuerySchema\);/);
     expect(body).toMatch(
-      /\/\/ Sessions resource\s*\n?\s*r\.register\('CreateSessionRequest', CreateSessionRequestSchema\);/,
+      /\/\/ Sessions resource\s*r\.register\('CreateSessionRequest', CreateSessionRequestSchema\);/,
     );
     expect(body).toMatch(
-      /\/\/ API keys resource\s*\n?\s*r\.register\('CreateApiKeyRequest', CreateApiKeyRequestSchema\);/,
+      /\/\/ API keys resource\s*r\.register\('CreateApiKeyRequest', CreateApiKeyRequestSchema\);/,
     );
     expect(body).toMatch(
-      /\/\/ Webhooks resource\s*\n?\s*r\.register\('WebhookEndpoint', WebhookEndpointSchema\);/,
+      /\/\/ Webhooks resource\s*r\.register\('WebhookEndpoint', WebhookEndpointSchema\);/,
     );
     expect(body).toMatch(
-      /\/\/ Admin \(already registered below for the admin section, but having\s*\n?\s*\/\/ them once at the top keeps the codegen output deterministic\)\.\s*\n?\s*r\.register\('AdminAccount', AdminAccountResponseSchema\);\s*\n?\s*r\.register\('AdminAuditLogEntry', AdminAuditLogEntrySchema\);/,
+      /\/\/ Admin \(already registered below for the admin section, but having\s*\/\/ them once at the top keeps the codegen output deterministic\)\.\s*r\.register\('AdminAccount', AdminAccountResponseSchema\);\s*r\.register\('AdminAuditLogEntry', AdminAuditLogEntrySchema\);/,
     );
   });
 
   it('problemContent application/problem+json shape + errors4xx 400/401 entries with Problem $ref', () => {
     expect(body).toMatch(
-      /const problemContent = \{\s*\n?\s*'application\/problem\+json': \{ schema: \{ \$ref: '#\/components\/schemas\/Problem' \} \},\s*\n?\s*\};/,
+      /const problemContent = \{\s*'application\/problem\+json': \{ schema: \{ \$ref: '#\/components\/schemas\/Problem' \} \},\s*\};/,
     );
     // SPLIT. The chain ran 400 and 401 as consecutive one-line entries, so
     // declaring the RFC 7235 challenge on the 401 — which makes that entry
@@ -143,13 +143,13 @@ describe('W439.C apps/server/src/lib/openapi.ts content parity', () => {
     // rather than being load-bearing for a claim about the Problem $ref.
     expect(body).toMatch(/const errors4xx = \{/);
     expect(body).toMatch(
-      /400: \{\s*\n?\s*description: 'Validation failed\.',\s*\n?\s*content: problemContent,\s*\n?\s*headers: requestIdHeader,\s*\n?\s*\},/,
+      /400: \{\s*description: 'Validation failed\.',\s*content: problemContent,\s*headers: requestIdHeader,\s*\},/,
     );
     expect(body).toMatch(
-      /403: \{\s*\n?\s*description: 'Caller not permitted\.',\s*\n?\s*content: problemContent,\s*\n?\s*headers: requestIdHeader,\s*\n?\s*\},/,
+      /403: \{\s*description: 'Caller not permitted\.',\s*content: problemContent,\s*headers: requestIdHeader,\s*\},/,
     );
     expect(body).toMatch(
-      /401: \{\s*\n?\s*description: 'Authentication failed\.',\s*\n?\s*content: problemContent,\s*\n?\s*headers: \{ \.\.\.unauthorizedHeaders, \.\.\.requestIdHeader \},\s*\n?\s*\},/,
+      /401: \{\s*description: 'Authentication failed\.',\s*content: problemContent,\s*headers: \{ \.\.\.unauthorizedHeaders, \.\.\.requestIdHeader \},\s*\},/,
     );
     // Per-occurrence negative: a status entry that carries no headers at all is
     // the state this replaced, and it would mean the correlation id support asks
@@ -166,7 +166,7 @@ describe('W439.C apps/server/src/lib/openapi.ts content parity', () => {
     expect(body).toMatch(/'WWW-Authenticate': \{/);
     // V-942 — the 429 now merges the shared request-id header with its own set.
     expect(body).toMatch(
-      /429: \{\s*\n?\s*description: 'Rate limit or concurrency limit hit\.',\s*\n?\s*content: problemContent,\s*\n?\s*headers: \{ \.\.\.rateLimitHeaders, \.\.\.requestIdHeader \},\s*\n?\s*\},/,
+      /429: \{\s*description: 'Rate limit or concurrency limit hit\.',\s*content: problemContent,\s*headers: \{ \.\.\.rateLimitHeaders, \.\.\.requestIdHeader \},\s*\},/,
     );
     // V-942 — the legacy X-RateLimit-* aliases are declared, not just described
     // inside the Bucket header's prose.

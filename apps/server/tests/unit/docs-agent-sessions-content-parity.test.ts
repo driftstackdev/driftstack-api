@@ -199,7 +199,7 @@ describe('Arc 4 Wave 2.B sub-slice 8.20.d docs/api/agent-sessions.md parity', ()
     for (const file of readdirSync(ROUTES).filter((f) => f.endsWith('.ts'))) {
       const src = readFileSync(resolve(ROUTES, file), 'utf8');
       for (const m of src.matchAll(
-        /app\.get(?:<[^(]*>)?\(\s*\n?\s*'(\/v1\/[^']+)'[\s\S]{0,400}?app\.requireAuthEventSource/g,
+        /app\.get(?:<[^(]*>)?\(\s*'(\/v1\/[^']+)'[\s\S]{0,400}?app\.requireAuthEventSource/g,
       )) {
         accepting.add(`GET ${(m[1] ?? '').replace(/:(\w+)/g, '{$1}')}`);
       }
@@ -226,8 +226,8 @@ describe('Arc 4 Wave 2.B sub-slice 8.20.d docs/api/agent-sessions.md parity', ()
 
   it('documents the transcript scope floor and sensitive-intent projection honestly', () => {
     expect(body).toMatch(/`read:sessions` scope/);
-    expect(body).toMatch(/Free-text user and\s*\n?\s*operator `body` fields are returned verbatim/);
-    expect(body).toMatch(/sensitive selector\)\s*\n?\s*are omitted from SSE/);
+    expect(body).toMatch(/Free-text user and\s*operator `body` fields are returned verbatim/);
+    expect(body).toMatch(/sensitive selector\)\s*are omitted from SSE/);
     expect(body).toMatch(/Sensitive type intents retain their selector,[\s\S]*omit `value`/);
   });
 

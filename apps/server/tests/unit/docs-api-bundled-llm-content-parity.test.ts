@@ -26,13 +26,13 @@ describe('docs/api/bundled-llm content parity', () => {
 
   it('documents the bundled model-access rail as an included-service budget with BYOK precedence', () => {
     expect(body).toMatch(
-      /without supplying their own\s*\n?\s*Anthropic API key\. Driftstack hosts the decomposer and posts an\s*\n?\s*included-service accounting value against a customer-controlled\s*\n?\s*monthly soft cap \(default \$20\)\./,
+      /without supplying their own\s*Anthropic API key\. Driftstack hosts the decomposer and posts an\s*included-service accounting value against a customer-controlled\s*monthly soft cap \(default \$20\)\./,
     );
     expect(body).toMatch(
-      /Opt-in is explicit \(`consent: true`\) and revocable; the soft cap is\s*\n?\s*customer-configurable up to a \$10,000\/month ceiling\./,
+      /Opt-in is explicit \(`consent: true`\) and revocable; the soft cap is\s*customer-configurable up to a \$10,000\/month ceiling\./,
     );
     expect(body).toMatch(
-      /The agent\s*\n?\s*session route's resolution chain prefers \[BYOK\]\(\/api\/byok-anthropic\/\)\s*\n?\s*\(per-request header or stored\) over bundled-LLM — bundled-LLM is\s*\n?\s*the no-BYOK fallback\./,
+      /The agent\s*session route's resolution chain prefers \[BYOK\]\(\/api\/byok-anthropic\/\)\s*\(per-request header or stored\) over bundled-LLM — bundled-LLM is\s*the no-BYOK fallback\./,
     );
   });
 
@@ -43,68 +43,66 @@ describe('docs/api/bundled-llm content parity', () => {
   });
 
   it('pins the desktop settings path and flat included-service turn value without inventing a Stripe item', () => {
-    expect(body).toMatch(/desktop app under \*\*Settings → AI\s*\n?\s*& billing\*\*/);
-    expect(body).toMatch(
-      /flat \*\*\$0\.10\s*\n?\s*included-service accounting value per agent turn\*\*/,
-    );
-    expect(body).toMatch(/independent of model choice\s*\n?\s*and token count/);
-    expect(body).toMatch(/Enterprise can\s*\n?\s*use a contracted custom budget/);
-    expect(body).toMatch(/not a\s*\n?\s*separately itemized Stripe invoice charge today/);
+    expect(body).toMatch(/desktop app under \*\*Settings → AI\s*& billing\*\*/);
+    expect(body).toMatch(/flat \*\*\$0\.10\s*included-service accounting value per agent turn\*\*/);
+    expect(body).toMatch(/independent of model choice\s*and token count/);
+    expect(body).toMatch(/Enterprise can\s*use a contracted custom budget/);
+    expect(body).toMatch(/not a\s*separately itemized Stripe invoice charge today/);
     expect(body).toMatch(/`cost_basis = 'bundled_flat_per_turn'`/);
-    expect(body).toMatch(/does\s*\n?\s*not expose Driftstack's upstream provider cost/);
+    expect(body).toMatch(/does\s*not expose Driftstack's upstream provider cost/);
     expect(body).not.toMatch(/Cost-per-turn varies with the underlying model/);
     expect(body).not.toMatch(/costs are billed alongside the customer's tier/i);
   });
 
   it('status-panel prose keeps consent, cap, used spend, and remaining budget in one coherent sentence', () => {
     expect(body).toMatch(
-      /`BundledLlmStatusPanel` reads this on page-load to render consent,\s*\n?\s*cap, used spend, and remaining budget\./,
+      /`BundledLlmStatusPanel` reads this on page-load to render consent,\s*cap, used spend, and remaining budget\./,
     );
     expect(body).not.toMatch(/render consent\s*\n\s*\n- cap \+ used/);
   });
 
   it("Status record shape pinned to the SHIPPED route fields: consent + cap_cents + used_this_month_cents + remaining_cents + refused_count_this_month + month_started_at. + 'used_this_month_cents sums usage_records.cost_usd_cents over the rows where record_type = \"agent_decomposer_bundled\" and recorded_at >= start_of_calendar_month (UTC)' — pinned so the status field names match account-bundled-llm.ts (the status route returns cap_cents/remaining_cents/month_started_at, NOT the settings record's monthly_cap_usd_cents) + record_type filter + UTC-calendar-month aggregation contract all stay documented (drift on aggregation would mis-bill across month boundaries)", () => {
     expect(body).toMatch(
-      /"consent": true,\s*\n?\s*"cap_cents": 2000,\s*\n?\s*"used_this_month_cents": 450,\s*\n?\s*"remaining_cents": 1550,\s*\n?\s*"refused_count_this_month": 0,\s*\n?\s*"month_started_at":/,
+      /"consent": true,\s*"cap_cents": 2000,\s*"used_this_month_cents": 450,\s*"remaining_cents": 1550,\s*"refused_count_this_month": 0,\s*"month_started_at":/,
     );
     expect(body).toMatch(
-      /`used_this_month_cents` sums `usage_records\.cost_usd_cents` over\s*\n?\s*the rows where `record_type = 'agent_decomposer_bundled'` and\s*\n?\s*`recorded_at >= start_of_calendar_month` \(UTC\)\./,
+      /`used_this_month_cents` sums `usage_records\.cost_usd_cents` over\s*the rows where `record_type = 'agent_decomposer_bundled'` and\s*`recorded_at >= start_of_calendar_month` \(UTC\)\./,
     );
   });
 
   it("PATCH validation framing pinned: 'consent — boolean.' + 'monthly_cap_usd_cents — integer; 0 to 1,000,000 ($10,000 ceiling). Negative values rejected with 400.' + 'Partial update — either field may be omitted, but at least one must be present; an empty body is rejected with 400.' — pinned so the integer/0-to-1M range + $10k ceiling + empty-body-400 contract (PatchBodySchema.refine) all stay documented", () => {
     expect(body).toMatch(/- `consent` — boolean\./);
     expect(body).toMatch(
-      /- `monthly_cap_usd_cents` — integer; 0 to 1,000,000 \(\$10,000 ceiling\)\.\s*\n?\s*Negative values rejected with `400`\./,
+      /- `monthly_cap_usd_cents` — integer; 0 to 1,000,000 \(\$10,000 ceiling\)\.\s*Negative values rejected with `400`\./,
     );
     expect(body).toMatch(
-      /Partial update — either field may be omitted, but at least one of\s*\n?\s*`consent` \/ `monthly_cap_usd_cents` must be present\. An empty body\s*\n?\s*is rejected with `400`/,
+      /Partial update — either field may be omitted, but at least one of\s*`consent` \/ `monthly_cap_usd_cents` must be present\. An empty body\s*is rejected with `400`/,
     );
   });
 
   it("BundledLlmBudgetExhausted 402 problem+json shape pinned: type 'https://errors.driftstack.dev/bundled-llm-budget-exhausted' + title 'Bundled-LLM monthly cap reached' + spent_cents + cap_cents extension fields. + 3-recovery-path list: raise cap / supply BYOK / wait for next month — pinned so the 402 problem-type + extension-fields + 3-recovery-path roster contract all stay documented", () => {
     expect(body).toMatch(
-      /"type": "https:\/\/errors\.driftstack\.dev\/bundled-llm-budget-exhausted",\s*\n?\s*"title": "Bundled-LLM monthly cap reached",\s*\n?\s*"status": 402,\s*\n?\s*"detail": "Spend this month has reached the configured cap\.",\s*\n?\s*"spent_cents": 2000,\s*\n?\s*"cap_cents": 2000/,
+      /"type": "https:\/\/errors\.driftstack\.dev\/bundled-llm-budget-exhausted",\s*"title": "Bundled-LLM monthly cap reached",\s*"status": 402,\s*"detail": "Spend this month has reached the configured cap\.",\s*"spent_cents": 2000,\s*"cap_cents": 2000/,
     );
     expect(body).toMatch(/1\. Raise the cap via `PATCH \/v1\/account\/me\/bundled-llm-settings`/);
     expect(body).toMatch(
-      /2\. Supply a BYOK key via the `x-byok-anthropic-api-key` header or\s*\n?\s*`PUT \/v1\/account\/me\/byok-anthropic-key`/,
+      /2\. Supply a BYOK key via the `x-byok-anthropic-api-key` header or\s*`PUT \/v1\/account\/me\/byok-anthropic-key`/,
     );
     expect(body).toMatch(/3\. Wait for the next calendar month/);
   });
 
   it("BundledLlmConsentRequired 402 problem+json shape pinned: type 'https://errors.driftstack.dev/bundled-llm-consent-required' + title 'Bundled-LLM consent required' + detail 'Opt in via PATCH /v1/account/me/bundled-llm-settings.' + no extension fields — pinned so the consent-gate 402 + opt-in-via-PATCH guidance + 'no extension fields' SDK contract all stay documented", () => {
     expect(body).toMatch(
-      /"type": "https:\/\/errors\.driftstack\.dev\/bundled-llm-consent-required",\s*\n?\s*"title": "Bundled-LLM consent required",\s*\n?\s*"status": 402,\s*\n?\s*"detail": "Opt in via PATCH \/v1\/account\/me\/bundled-llm-settings\."/,
+      /"type": "https:\/\/errors\.driftstack\.dev\/bundled-llm-consent-required",\s*"title": "Bundled-LLM consent required",\s*"status": 402,\s*"detail": "Opt in via PATCH \/v1\/account\/me\/bundled-llm-settings\."/,
     );
     expect(body).toMatch(
-      /The SDK exposes the typed `BundledLlmConsentRequiredError` \(no\s*\n?\s*extension fields\)\./,
+      /The SDK exposes the typed `BundledLlmConsentRequiredError` \(no\s*extension fields\)\./,
     );
   });
 
   it("Cross-language SDK extension-fields naming pinned: Python spent_cents/cap_cents + TS spentCents/capCents + Go SpentCents/CapCents. Drift on snake_case-vs-camelCase-vs-PascalCase would mismatch the SDK's native idiom in each language", () => {
     expect(body).toMatch(
-      /Python:\s*\n?\s*`spent_cents` \/ `cap_cents`; TS: `spentCents` \/ `capCents`; Go:\s*\n?\s*`SpentCents` \/ `CapCents`/,
+      /Python:\s*`spent_cents` \/ `cap_cents`; TS: `spentCents` \/ `capCents`; Go:\s*`SpentCents` \/ `CapCents`/,
     );
   });
 
@@ -122,16 +120,16 @@ describe('docs/api/bundled-llm content parity', () => {
     // 503 belongs to the agent-session turn route, not these reads.
     expect(body).not.toMatch(/\|\s*503 \| /);
     expect(body).toMatch(
-      /The settings \+ status routes above do not return a `503`\. A `503`\s*\n?\s*for an unwired bundled-LLM service is returned on the \*\*agent-session\s*\n?\s*turn\*\* route, not on these reads\./,
+      /The settings \+ status routes above do not return a `503`\. A `503`\s*for an unwired bundled-LLM service is returned on the \*\*agent-session\s*turn\*\* route, not on these reads\./,
     );
   });
 
   it("Anthropic-no-training privacy commitment framing pinned: 'Bundled-LLM consent does NOT grant Driftstack any rights to train models on customer prompts. The current bundled-LLM provider is Anthropic Claude; per their API terms, customer data is not used for training.' + 'No prompt content is logged on Driftstack's side beyond what customers can read in their own session transcripts.' — pinned so the no-training-rights + Anthropic-API-terms + transcript-only-logging privacy contract all stay documented", () => {
     expect(body).toMatch(
-      /- Bundled-LLM consent does NOT grant Driftstack any rights to\s*\n?\s*train models on customer prompts\. The current bundled-LLM\s*\n?\s*provider is Anthropic Claude; per their API terms, customer\s*\n?\s*data is not used for training\./,
+      /- Bundled-LLM consent does NOT grant Driftstack any rights to\s*train models on customer prompts\. The current bundled-LLM\s*provider is Anthropic Claude; per their API terms, customer\s*data is not used for training\./,
     );
     expect(body).toMatch(
-      /- No prompt content is logged on Driftstack's side beyond what\s*\n?\s*customers can read in their own session transcripts\./,
+      /- No prompt content is logged on Driftstack's side beyond what\s*customers can read in their own session transcripts\./,
     );
   });
 });

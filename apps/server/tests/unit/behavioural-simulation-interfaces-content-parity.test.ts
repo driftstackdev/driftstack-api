@@ -23,18 +23,18 @@ describe('W595.B packages/behavioural-simulation/src/interfaces.ts content parit
     expect(body).toMatch(/\/\/ this seam while callers keep one coherent contract\./);
     expect(body).toMatch(/^import type \{ ScrollVelocityProfile \} from '\.\/scroll\.js';/m);
     expect(body).toMatch(
-      /export interface GenerateMouseTrajectoryOpts \{\s*\n?\s*\/\*\* Finite CSS-pixel start coordinate\. \*\/\s*\n?\s*from: \{ x: number; y: number \};\s*\n?\s*\/\*\* Finite CSS-pixel end coordinate\. \*\/\s*\n?\s*to: \{ x: number; y: number \};\s*\n?\s*\/\*\* Profile whose mean mouse speed determines trajectory duration\. \*\/\s*\n?\s*profile: BehaviouralProfile;/,
+      /export interface GenerateMouseTrajectoryOpts \{\s*\/\*\* Finite CSS-pixel start coordinate\. \*\/\s*from: \{ x: number; y: number \};\s*\/\*\* Finite CSS-pixel end coordinate\. \*\/\s*to: \{ x: number; y: number \};\s*\/\*\* Profile whose mean mouse speed determines trajectory duration\. \*\/\s*profile: BehaviouralProfile;/,
     );
     expect(body).toMatch(
-      /\/\*\* Optional seed override \(defaults to deterministic per-call seed\)\. \*\/\s*\n?\s*seed\?: string;/,
+      /\/\*\* Optional seed override \(defaults to deterministic per-call seed\)\. \*\/\s*seed\?: string;/,
     );
     expect(body).toMatch(
-      /\/\*\* Integer sample count in the implementation's bounded range \(default 32\)\. \*\/\s*\n?\s*samples\?: number;/,
+      /\/\*\* Integer sample count in the implementation's bounded range \(default 32\)\. \*\/\s*samples\?: number;/,
     );
     expect(body).toMatch(/^export interface GenerateKeyboardCadenceOpts \{$/m);
     expect(body).toMatch(/\/\*\* Profile whose meanKeyDelayMs \+ jitter shapes the cadence\. \*\//);
     expect(body).toMatch(
-      /export interface GenerateScrollPatternOpts \{\s*\n?\s*direction: 'up' \| 'down' \| 'left' \| 'right';\s*\n?\s*\/\*\* Positive finite absolute distance\. \*\/\s*\n?\s*totalDistancePx: number;/,
+      /export interface GenerateScrollPatternOpts \{\s*direction: 'up' \| 'down' \| 'left' \| 'right';\s*\/\*\* Positive finite absolute distance\. \*\/\s*totalDistancePx: number;/,
     );
     expect(body).toMatch(/^export interface GenerateTouchEventOpts \{$/m);
     expect(body).toMatch(/\/\*\* DOM element class the touch targets\. \*\//);

@@ -61,7 +61,7 @@ describe('W549.C /docs/adr/ADR-001-control-plane-hosting-hetzner.md content pari
   it("Constraints — 4-constraint framing pinned: '**GDPR posture.**' + 'Hetzner is a German company; Falkenstein and Nürnberg datacenters are EU jurisdiction.' + '**VM-level control for future build infrastructure.**' + '**Cost predictability at low scale.**' + '**Datastore decoupling.** Postgres → Neon (managed, EU Frankfurt). Redis → Upstash (managed, EU Frankfurt). Object storage → Cloudflare R2 (EU jurisdiction).' — pinned so the GDPR-EU-jurisdiction + Falkenstein/Nürnberg-EU + VM-level-control + flat-cost-predictability + Neon+Upstash+R2-EU-decoupling commitment survives", () => {
     expect(body).toMatch(/- \*\*GDPR posture\.\*\*/);
     expect(body).toMatch(
-      /Hetzner is a German company; Falkenstein and Nürnberg datacenters\s*\n?\s*are EU jurisdiction\./,
+      /Hetzner is a German company; Falkenstein and Nürnberg datacenters\s*are EU jurisdiction\./,
     );
     expect(body).toMatch(/- \*\*VM-level control for future build infrastructure\.\*\*/);
     expect(body).toMatch(/- \*\*Cost predictability at low scale\.\*\*/);
@@ -81,16 +81,12 @@ describe('W549.C /docs/adr/ADR-001-control-plane-hosting-hetzner.md content pari
     // record a record overtaken by the system.
     expect(body).toMatch(/Cloudflare Tunnel fronts/);
     expect(body, 'the not-as-shipped annotation is gone').toMatch(
-      /\*\*NOT AS\s*\n?\s*SHIPPED \(V-1088\): no `cloudflared` runs in `infra\/`/,
+      /\*\*NOT AS\s*SHIPPED \(V-1088\): no `cloudflared` runs in `infra\/`/,
     );
     expect(body).toMatch(/the VMs for edge HTTPS termination and DDoS protection —/);
-    expect(body).toMatch(
-      /the VMs run\s*\n?\s*the control plane container behind loopback-only HTTP;/,
-    );
-    expect(body).toMatch(
-      /mTLS for the\s*\n?\s*fleet endpoint terminates directly on the Hetzner VM/,
-    );
-    expect(body).toMatch(/\(per V-054\s*\n?\s*decision 1A — skip Cloudflare API Shield\)\./);
+    expect(body).toMatch(/the VMs run\s*the control plane container behind loopback-only HTTP;/);
+    expect(body).toMatch(/mTLS for the\s*fleet endpoint terminates directly on the Hetzner VM/);
+    expect(body).toMatch(/\(per V-054\s*decision 1A — skip Cloudflare API Shield\)\./);
     expect(body).toMatch(
       /Deploy pipeline \(`\.github\/workflows\/deploy\.yml`, V-051\) builds the/,
     );

@@ -63,13 +63,13 @@ describe('W555.A /docs/runbooks/cost-monitoring.md content parity', () => {
     expect(body).toMatch(/Scheduled-job ledger\s+\|\s+`scheduled_jobs` table \(V-202d\)/);
     expect(body).toMatch(/> \*\*Important — dispatcher state is in-memory\.\*\*/);
     expect(body).toMatch(
-      /The first nightly tick\s*\n?\s*> after a deploy will re-alert every account currently above/,
+      /The first nightly tick\s*> after a deploy will re-alert every account currently above/,
     );
     expect(body).toMatch(/> `over-soft`/);
   });
 
   it("4-threshold-state vocabulary + soft/hard rule-of-thumb framing pinned: '`under-soft → approaching → over-soft → over-hard`' + '`softCents` — first alert; \"approaching the limit\" — friendly notice' + '`hardCents` — second alert; \"over the limit\" — operator action' + '`softCents = round(P * 0.6)`' + '`hardCents = round(P * 0.9)`' + 'The customer-facing route (`GET /v1/account/cost`) intentionally **redacts** the numeric thresholds from the response' + 'the customer sees a categorical `thresholdState` (`under-soft` / `approaching` / `over-soft` / `over-hard`)' + 'This prevents customers from optimising right up to the hard line.' — pinned so the 4-threshold-state-arrow + softCents-0.6P + hardCents-0.9P + customer-route-redacts-numeric + categorical-thresholdState + no-optimize-to-hard-line commitment survives", () => {
-    expect(body).toMatch(/`under-soft → approaching → over-soft →\s*\n?\s*over-hard`/);
+    expect(body).toMatch(/`under-soft → approaching → over-soft →\s*over-hard`/);
     expect(body).toMatch(/- `softCents` — first alert; "approaching the limit" — friendly notice/);
     expect(body).toMatch(/- `hardCents` — second alert; "over the limit" — operator action/);
     expect(body).toMatch(/2\. `softCents = round\(P \* 0\.6\)` — gives the customer headroom to/);

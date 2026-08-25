@@ -55,37 +55,37 @@ describe('W464.C apps/gui-client/src/lib/gui-input.ts content parity', () => {
       /\/\/ GUI control plane — thin client for `\/v1\/sessions\/:id\/gui-input`\./,
     );
     expect(body).toMatch(
-      /\/\/ Per L-001 \(docs\/locked-decisions\.md\), coordinate-level primitives\s*\n?\s*\/\/ don't appear on the customer SDK surface\. The self-hosted GUI talks\s*\n?\s*\/\/ to a separate, scope-gated endpoint via this helper\. The wire shape\s*\n?\s*\/\/ matches the server's `GUIInputActionSchema` exactly; we don't share\s*\n?\s*\/\/ types because the server schema is internal-only\./,
+      /\/\/ Per L-001 \(docs\/locked-decisions\.md\), coordinate-level primitives\s*\/\/ don't appear on the customer SDK surface\. The self-hosted GUI talks\s*\/\/ to a separate, scope-gated endpoint via this helper\. The wire shape\s*\/\/ matches the server's `GUIInputActionSchema` exactly; we don't share\s*\/\/ types because the server schema is internal-only\./,
     );
   });
 
   it("Auth framing pinned: 'Auth: requires the API key to carry the gui_control scope. Mutates the session via the same WebKit driver as /interact does, just on the gui-control branch.'", () => {
     expect(body).toMatch(
-      /\/\/ Auth: requires the API key to carry the `gui_control` scope\.\s*\n?\s*\/\/ Mutates the session via the same WebKit driver as `\/interact` does,\s*\n?\s*\/\/ just on the gui-control branch\./,
+      /\/\/ Auth: requires the API key to carry the `gui_control` scope\.\s*\/\/ Mutates the session via the same WebKit driver as `\/interact` does,\s*\/\/ just on the gui-control branch\./,
     );
   });
 
   it("GUIInputAction 2-variant tagged union: { kind:'tap_at'; x: number; y: number } + { kind:'type_focused'; text: string; delay_ms?: number }", () => {
     expect(body).toMatch(
-      /export type GUIInputAction =\s*\n?\s*\| \{ kind: 'tap_at'; x: number; y: number \}\s*\n?\s*\| \{ kind: 'type_focused'; text: string; delay_ms\?: number \};/,
+      /export type GUIInputAction =\s*\| \{ kind: 'tap_at'; x: number; y: number \}\s*\| \{ kind: 'type_focused'; text: string; delay_ms\?: number \};/,
     );
   });
 
   it('GUIInputResponse: { ok: true (literal-true); duration_ms: number }', () => {
     expect(body).toMatch(
-      /export interface GUIInputResponse \{\s*\n?\s*ok: true;\s*\n?\s*duration_ms: number;\s*\n?\s*\}/,
+      /export interface GUIInputResponse \{\s*ok: true;\s*duration_ms: number;\s*\}/,
     );
   });
 
   it("GUIInputError class: extends Error + readonly status: number + readonly kind: string + super(message) + this.name = 'GUIInputError'", () => {
     expect(body).toMatch(
-      /export class GUIInputError extends Error \{\s*\n?\s*constructor\(\s*\n?\s*message: string,\s*\n?\s*readonly status: number,\s*\n?\s*readonly kind: string,\s*\n?\s*\) \{\s*\n?\s*super\(message\);\s*\n?\s*this\.name = 'GUIInputError';\s*\n?\s*\}\s*\n?\s*\}/,
+      /export class GUIInputError extends Error \{\s*constructor\(\s*message: string,\s*readonly status: number,\s*readonly kind: string,\s*\) \{\s*super\(message\);\s*this\.name = 'GUIInputError';\s*\}\s*\}/,
     );
   });
 
   it("sendGUIInput: empty/null apiKey → throw GUIInputError 'API key not configured', status:0, kind:'auth_missing'", () => {
     expect(body).toMatch(
-      /if \(settings\.apiKey === null \|\| settings\.apiKey\.length === 0\) \{\s*\n?\s*throw new GUIInputError\('API key not configured', 0, 'auth_missing'\);\s*\n?\s*\}/,
+      /if \(settings\.apiKey === null \|\| settings\.apiKey\.length === 0\) \{\s*throw new GUIInputError\('API key not configured', 0, 'auth_missing'\);\s*\}/,
     );
   });
 
@@ -103,13 +103,13 @@ describe('W464.C apps/gui-client/src/lib/gui-input.ts content parity', () => {
       /import \{ readBoundedApiJson, readBoundedDiagnosticJson \} from '\.\/read-bounded-json';/,
     );
     expect(body).toMatch(
-      /let detail = `HTTP \$\{res\.status\}`;\s*\n?\s*let kind = 'unknown';\s*\n?\s*try \{[\s\S]*?const body = await readBoundedDiagnosticJson<[\s\S]*?>\(res\);\s*\n?\s*detail = body\.detail \?\? body\.title \?\? detail;\s*\n?\s*\/\/ Server emits RFC 7807 `type` URIs like "https:\/\/errors\.driftstack\.dev\/forbidden"\.\s*\n?\s*if \(typeof body\.type === 'string'\) kind = body\.type\.split\('\/'\)\.pop\(\) \?\? 'unknown';/,
+      /let detail = `HTTP \$\{res\.status\}`;\s*let kind = 'unknown';\s*try \{[\s\S]*?const body = await readBoundedDiagnosticJson<[\s\S]*?>\(res\);\s*detail = body\.detail \?\? body\.title \?\? detail;\s*\/\/ Server emits RFC 7807 `type` URIs like "https:\/\/errors\.driftstack\.dev\/forbidden"\.\s*if \(typeof body\.type === 'string'\) kind = body\.type\.split\('\/'\)\.pop\(\) \?\? 'unknown';/,
     );
   });
 
   it('Catch fallback + GUIInputError + bounded success body are pinned', () => {
     expect(body).toMatch(
-      /\} catch \{\s*\n?\s*\/\/ Body wasn't JSON; keep the HTTP-status fallback\.\s*\n?\s*\}\s*\n?\s*throw new GUIInputError\(detail, res\.status, kind\);/,
+      /\} catch \{\s*\/\/ Body wasn't JSON; keep the HTTP-status fallback\.\s*\}\s*throw new GUIInputError\(detail, res\.status, kind\);/,
     );
     expect(body).toMatch(/return readBoundedApiJson<GUIInputResponse>\(res\);/);
     expect(body).not.toMatch(/res\.json\(\)/);

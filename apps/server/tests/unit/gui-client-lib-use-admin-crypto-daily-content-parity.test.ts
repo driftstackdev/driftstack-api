@@ -41,37 +41,37 @@ describe('W466.A apps/gui-client/src/lib/use-admin-crypto-daily.ts content parit
   it("V-534.AH framing pinned: 'V-534.AH — useAdminCryptoDaily hook.' + 'Wraps GET /v1/admin/crypto-orders/daily (V-666.O). Admin-only — requires the `driftstack_internal_admin` scope. Returns one row per (date, status) combination; the consuming view fills gaps + stacks statuses for display.'", () => {
     expect(body).toMatch(/\/\/ V-534\.AH — useAdminCryptoDaily hook\./);
     expect(body).toMatch(
-      /\/\/ Wraps GET \/v1\/admin\/crypto-orders\/daily \(V-666\.O\)\. Admin-only —\s*\n?\s*\/\/ requires the `driftstack_internal_admin` scope\. Returns one row per\s*\n?\s*\/\/ \(date, status\) combination; the consuming view fills gaps \+ stacks\s*\n?\s*\/\/ statuses for display\./,
+      /\/\/ Wraps GET \/v1\/admin\/crypto-orders\/daily \(V-666\.O\)\. Admin-only —\s*\/\/ requires the `driftstack_internal_admin` scope\. Returns one row per\s*\/\/ \(date, status\) combination; the consuming view fills gaps \+ stacks\s*\/\/ statuses for display\./,
     );
   });
 
   it("AdminDailyStatus 6-value union ('pending'|'confirming'|'paid'|'failed'|'partial'|'cancelled') matches server payment-status surface", () => {
     expect(body).toMatch(
-      /export type AdminDailyStatus =\s*\n?\s*\| 'pending'\s*\n?\s*\| 'confirming'\s*\n?\s*\| 'paid'\s*\n?\s*\| 'failed'\s*\n?\s*\| 'partial'\s*\n?\s*\| 'cancelled';/,
+      /export type AdminDailyStatus =\s*\| 'pending'\s*\| 'confirming'\s*\| 'paid'\s*\| 'failed'\s*\| 'partial'\s*\| 'cancelled';/,
     );
   });
 
   it("AdminDailyRow 3-field (date string 'YYYY-MM-DD (UTC)' comment + status AdminDailyStatus + count number); AdminDailyData 3-field (days + rows AdminDailyRow[] + truncated)", () => {
     expect(body).toMatch(
-      /export interface AdminDailyRow \{\s*\n?\s*date: string; \/\/ YYYY-MM-DD \(UTC\)\s*\n?\s*status: AdminDailyStatus;\s*\n?\s*count: number;\s*\n?\s*\}/,
+      /export interface AdminDailyRow \{\s*date: string; \/\/ YYYY-MM-DD \(UTC\)\s*status: AdminDailyStatus;\s*count: number;\s*\}/,
     );
     expect(body).toMatch(
-      /export interface AdminDailyData \{\s*\n?\s*days: number;\s*\n?\s*rows: AdminDailyRow\[\];\s*\n?\s*truncated: boolean;\s*\n?\s*\}/,
+      /export interface AdminDailyData \{\s*days: number;\s*rows: AdminDailyRow\[\];\s*truncated: boolean;\s*\}/,
     );
   });
 
   it("UseAdminCryptoDailyOpts: days? 'Lookback window in days (default unset — server defaults to 7, max 90).' + manual? 'Disable auto-fetch on mount.'", () => {
     expect(body).toMatch(
-      /export interface UseAdminCryptoDailyOpts \{\s*\n?\s*\/\*\* Lookback window in days \(default unset — server defaults to 7, max 90\)\. \*\/\s*\n?\s*days\?: number;\s*\n?\s*\/\*\* Disable auto-fetch on mount\. \*\/\s*\n?\s*manual\?: boolean;\s*\n?\s*\}/,
+      /export interface UseAdminCryptoDailyOpts \{\s*\/\*\* Lookback window in days \(default unset — server defaults to 7, max 90\)\. \*\/\s*days\?: number;\s*\/\*\* Disable auto-fetch on mount\. \*\/\s*manual\?: boolean;\s*\}/,
     );
   });
 
   it("URL-builder pattern: new URL(`${baseUrl}/v1/admin/crypto-orders/daily`) + days !== undefined → url.searchParams.set('days', days.toString()) (NOT manual query-string concat)", () => {
     expect(body).toMatch(
-      /const url = new URL\(`\$\{baseUrl\}\/v1\/admin\/crypto-orders\/daily`\);\s*\n?\s*if \(days !== undefined\) url\.searchParams\.set\('days', days\.toString\(\)\);/,
+      /const url = new URL\(`\$\{baseUrl\}\/v1\/admin\/crypto-orders\/daily`\);\s*if \(days !== undefined\) url\.searchParams\.set\('days', days\.toString\(\)\);/,
     );
     expect(body).toMatch(
-      /const res = await fetchWithDeadline\(url\.toString\(\), \{\s*\n?\s*method: 'GET',\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',/,
+      /const res = await fetchWithDeadline\(url\.toString\(\), \{\s*method: 'GET',\s*signal: controller\.signal,\s*headers: \{\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*accept: 'application\/json',/,
     );
     expect(body).toMatch(/import \{ readBoundedApiJson \} from '\.\/read-bounded-json';/);
     expect(body).toMatch(/const body = await readBoundedApiJson<AdminDailyData>\(res\);/);
@@ -80,7 +80,7 @@ describe('W466.A apps/gui-client/src/lib/use-admin-crypto-daily.ts content parit
 
   it('State-machine behavior remains while reads are single-flight, sequence-gated, and aborted on key/base/days changes or unmount', () => {
     expect(body).toMatch(
-      /const \[state, setState\] = useState<AdminDailyState>\(\s*\n?\s*opts\.manual === true \? \{ kind: 'idle' \} : \{ kind: 'loading' \},\s*\n?\s*\);/,
+      /const \[state, setState\] = useState<AdminDailyState>\(\s*opts\.manual === true \? \{ kind: 'idle' \} : \{ kind: 'loading' \},\s*\);/,
     );
     expect(body).toMatch(/if \(inFlightRef\.current\) return;/);
     expect(body).toMatch(
@@ -88,10 +88,10 @@ describe('W466.A apps/gui-client/src/lib/use-admin-crypto-daily.ts content parit
     );
     expect(body).toMatch(/\}, \[settings\.apiKey, settings\.baseUrl, days\]\);/);
     expect(body).toMatch(
-      /useEffect\(\s*\n?\s*\(\) => \(\) => \{\s*\n?\s*sequenceRef\.current \+= 1;\s*\n?\s*requestRef\.current\?\.abort\(\);\s*\n?\s*requestRef\.current = null;\s*\n?\s*inFlightRef\.current = false;\s*\n?\s*\},\s*\n?\s*\[settings\.apiKey, settings\.baseUrl, days\],/,
+      /useEffect\(\s*\(\) => \(\) => \{\s*sequenceRef\.current \+= 1;\s*requestRef\.current\?\.abort\(\);\s*requestRef\.current = null;\s*inFlightRef\.current = false;\s*\},\s*\[settings\.apiKey, settings\.baseUrl, days\],/,
     );
     expect(body).toMatch(
-      /useEffect\(\(\) => \{\s*\n?\s*if \(opts\.manual === true\) return;\s*\n?\s*void fetcher\(\);\s*\n?\s*\}, \[fetcher, opts\.manual\]\);/,
+      /useEffect\(\(\) => \{\s*if \(opts\.manual === true\) return;\s*void fetcher\(\);\s*\}, \[fetcher, opts\.manual\]\);/,
     );
   });
 

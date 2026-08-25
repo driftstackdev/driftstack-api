@@ -28,9 +28,9 @@ describe('sdk-python resources/profile_snapshots content parity', () => {
 
   it('Module-level docstring V-312 framing pinned: immutable point-in-time copies. Drift to dropping V-312 would orphan the engineering history; drift to claiming snapshots ARE mutable would break the load-bearing immutability contract pinned by slice 161 docs', () => {
     expect(body).toMatch(
-      /Profile snapshots resource — \/v1\/profiles\/:id\/snapshots \+\s*\n?\s*\/v1\/profile-snapshots \(V-312\)/,
+      /Profile snapshots resource — \/v1\/profiles\/:id\/snapshots \+\s*\/v1\/profile-snapshots \(V-312\)/,
     );
-    expect(body).toMatch(/Immutable point-in-time copies of\s*\n?\s*saved profiles\./);
+    expect(body).toMatch(/Immutable point-in-time copies of\s*saved profiles\./);
   });
 
   it('Pydantic-models-TODO framing pinned: dict[str, Any] pending scripts/generate.sh regeneration. Drift to dropping the TODO would let the next reader miss that this resource is on the list for typed-model upgrades', () => {

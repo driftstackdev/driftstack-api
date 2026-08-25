@@ -50,43 +50,43 @@ describe('W443.C apps/server/src/db/health-probes-repo.ts content parity', () =>
   it('ProbeDbRow type alias + toRow mapper (7 fields: id + target + probedAt + ok + latencyMs + httpStatus + errorMessage)', () => {
     expect(body).toMatch(/type ProbeDbRow = typeof systemHealthProbes\.\$inferSelect;/);
     expect(body).toMatch(
-      /function toRow\(row: ProbeDbRow\): ProbeRecordRow \{\s*\n?\s*return \{\s*\n?\s*id: row\.id,\s*\n?\s*target: row\.target,\s*\n?\s*probedAt: row\.probedAt,\s*\n?\s*ok: row\.ok,\s*\n?\s*latencyMs: row\.latencyMs,\s*\n?\s*httpStatus: row\.httpStatus,\s*\n?\s*errorMessage: row\.errorMessage,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function toRow\(row: ProbeDbRow\): ProbeRecordRow \{\s*return \{\s*id: row\.id,\s*target: row\.target,\s*probedAt: row\.probedAt,\s*ok: row\.ok,\s*latencyMs: row\.latencyMs,\s*httpStatus: row\.httpStatus,\s*errorMessage: row\.errorMessage,\s*\};\s*\}/,
     );
   });
 
   it("recordProbe: 6-field values write (target + ok + latencyMs + httpStatus + errorMessage + probedAt); returning(); throws 'system_health_probes insert returned no row' on empty", () => {
     expect(body).toMatch(
-      /\.values\(\{\s*\n?\s*target: input\.target,\s*\n?\s*ok: input\.ok,\s*\n?\s*latencyMs: input\.latencyMs,\s*\n?\s*httpStatus: input\.httpStatus,\s*\n?\s*errorMessage: input\.errorMessage,\s*\n?\s*probedAt: input\.probedAt,\s*\n?\s*\}\)\s*\n?\s*\.returning\(\);\s*\n?\s*if \(!row\) throw new Error\('system_health_probes insert returned no row'\);/,
+      /\.values\(\{\s*target: input\.target,\s*ok: input\.ok,\s*latencyMs: input\.latencyMs,\s*httpStatus: input\.httpStatus,\s*errorMessage: input\.errorMessage,\s*probedAt: input\.probedAt,\s*\}\)\s*\.returning\(\);\s*if \(!row\) throw new Error\('system_health_probes insert returned no row'\);/,
     );
   });
 
   it('recentForTarget: where target eq + orderBy desc(probedAt) + limit(n); rows.map(toRow)', () => {
     expect(body).toMatch(
-      /async recentForTarget\(target: string, n: number\): Promise<ProbeRecordRow\[\]> \{\s*\n?\s*const rows = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(systemHealthProbes\)\s*\n?\s*\.where\(eq\(systemHealthProbes\.target, target\)\)\s*\n?\s*\.orderBy\(desc\(systemHealthProbes\.probedAt\)\)\s*\n?\s*\.limit\(n\);\s*\n?\s*return rows\.map\(toRow\);\s*\n?\s*\}/,
+      /async recentForTarget\(target: string, n: number\): Promise<ProbeRecordRow\[\]> \{\s*const rows = await this\.database\.db\s*\.select\(\)\s*\.from\(systemHealthProbes\)\s*\.where\(eq\(systemHealthProbes\.target, target\)\)\s*\.orderBy\(desc\(systemHealthProbes\.probedAt\)\)\s*\.limit\(n\);\s*return rows\.map\(toRow\);\s*\}/,
     );
   });
 
   it('pruneOlderThan: delete where lt(probedAt, before) returning {id: systemHealthProbes.id}; returns rows.length', () => {
     expect(body).toMatch(
-      /async pruneOlderThan\(before: Date\): Promise<number> \{\s*\n?\s*const rows = await this\.database\.db\s*\n?\s*\.delete\(systemHealthProbes\)\s*\n?\s*\.where\(and\(lt\(systemHealthProbes\.probedAt, before\)\)\)\s*\n?\s*\.returning\(\{ id: systemHealthProbes\.id \}\);\s*\n?\s*return rows\.length;\s*\n?\s*\}/,
+      /async pruneOlderThan\(before: Date\): Promise<number> \{\s*const rows = await this\.database\.db\s*\.delete\(systemHealthProbes\)\s*\.where\(and\(lt\(systemHealthProbes\.probedAt, before\)\)\)\s*\.returning\(\{ id: systemHealthProbes\.id \}\);\s*return rows\.length;\s*\}/,
     );
   });
 
   it("countByTargetSince framing pinned: 'Single aggregation query — count ok vs not-ok per target, plus max(probed_at) overall + max(probed_at) where ok=false.'", () => {
     expect(body).toMatch(
-      /\/\/ Single aggregation query — count ok vs not-ok per target, plus\s*\n?\s*\/\/ max\(probed_at\) overall \+ max\(probed_at\) where ok=false\./,
+      /\/\/ Single aggregation query — count ok vs not-ok per target, plus\s*\/\/ max\(probed_at\) overall \+ max\(probed_at\) where ok=false\./,
     );
   });
 
   it('countByTargetSince: 5-field select (target + okCount via count(*) filter ok=true + failCount filter ok=false + lastProbeAt max + lastFailureAt max filter ok=false); WHERE gte(probedAt, since) (not gt); groupBy target', () => {
     expect(body).toMatch(
-      /\.select\(\{\s*\n?\s*target: systemHealthProbes\.target,\s*\n?\s*okCount: sql<string>`count\(\*\) filter \(where \$\{systemHealthProbes\.ok\} = true\)`,\s*\n?\s*failCount: sql<string>`count\(\*\) filter \(where \$\{systemHealthProbes\.ok\} = false\)`,\s*\n?\s*lastProbeAt: sql<Date>`max\(\$\{systemHealthProbes\.probedAt\}\)`,\s*\n?\s*lastFailureAt: sql<Date \| null>`max\(\$\{systemHealthProbes\.probedAt\}\) filter \(where \$\{systemHealthProbes\.ok\} = false\)`,\s*\n?\s*\}\)\s*\n?\s*\.from\(systemHealthProbes\)\s*\n?\s*\.where\(gte\(systemHealthProbes\.probedAt, since\)\)\s*\n?\s*\.groupBy\(systemHealthProbes\.target\);/,
+      /\.select\(\{\s*target: systemHealthProbes\.target,\s*okCount: sql<string>`count\(\*\) filter \(where \$\{systemHealthProbes\.ok\} = true\)`,\s*failCount: sql<string>`count\(\*\) filter \(where \$\{systemHealthProbes\.ok\} = false\)`,\s*lastProbeAt: sql<Date>`max\(\$\{systemHealthProbes\.probedAt\}\)`,\s*lastFailureAt: sql<Date \| null>`max\(\$\{systemHealthProbes\.probedAt\}\) filter \(where \$\{systemHealthProbes\.ok\} = false\)`,\s*\}\)\s*\.from\(systemHealthProbes\)\s*\.where\(gte\(systemHealthProbes\.probedAt, since\)\)\s*\.groupBy\(systemHealthProbes\.target\);/,
     );
   });
 
   it('Output mapping: Number() coerce okCount + failCount (SQL string return); new Date() on lastProbeAt; lastFailureAt new Date() iff truthy else null', () => {
     expect(body).toMatch(
-      /return rows\.map\(\(r\) => \(\{\s*\n?\s*target: r\.target,\s*\n?\s*okCount: Number\(r\.okCount\),\s*\n?\s*failCount: Number\(r\.failCount\),\s*\n?\s*lastProbeAt: new Date\(r\.lastProbeAt\),\s*\n?\s*lastFailureAt: r\.lastFailureAt \? new Date\(r\.lastFailureAt\) : null,\s*\n?\s*\}\)\);/,
+      /return rows\.map\(\(r\) => \(\{\s*target: r\.target,\s*okCount: Number\(r\.okCount\),\s*failCount: Number\(r\.failCount\),\s*lastProbeAt: new Date\(r\.lastProbeAt\),\s*lastFailureAt: r\.lastFailureAt \? new Date\(r\.lastFailureAt\) : null,\s*\}\)\);/,
     );
   });
 

@@ -37,23 +37,23 @@ describe('W387.C apps/server/src/lib/nowpayments-signing.ts content parity', () 
 
   it('V-487 framing + HMAC-SHA512 algorithm pinned', () => {
     expect(body).toMatch(
-      /V-487 — NowPayments IPN \(Instant Payment Notification\) signature\s*\n?\s*\/\/\s*verifier\. NowPayments signs every webhook payload with HMAC-SHA512/,
+      /V-487 — NowPayments IPN \(Instant Payment Notification\) signature\s*\/\/\s*verifier\. NowPayments signs every webhook payload with HMAC-SHA512/,
     );
   });
 
   it('x-nowpayments-sig header format pinned (hex HMAC-SHA512 of the canonicalised body)', () => {
     expect(body).toMatch(
-      /Header format:\s*\n?\s*\/\/\s*x-nowpayments-sig: <hex HMAC-SHA512 of the canonicalised body>/,
+      /Header format:\s*\/\/\s*x-nowpayments-sig: <hex HMAC-SHA512 of the canonicalised body>/,
     );
   });
 
   it('canonicalise-before-HMAC framing: sorted-key serialisation (not wire byte order); non-JSON falls back to raw-body HMAC', () => {
     expect(body).toMatch(
-      /The body is canonicalised before HMAC: JSON-parsed, keys sorted\s*\n?\s*\/\/\s*lexicographically at every level, then re-serialised/,
+      /The body is canonicalised before HMAC: JSON-parsed, keys sorted\s*\/\/\s*lexicographically at every level, then re-serialised/,
     );
-    expect(body).toMatch(/A non-JSON body falls back to\s*\n?\s*\/\/\s*raw-body HMAC\./);
+    expect(body).toMatch(/A non-JSON body falls back to\s*\/\/\s*raw-body HMAC\./);
     expect(body).toMatch(
-      /Fastify exposes the raw buffer via `request\.rawBody`\s*\n?\s*\/\/\s*when the route opts in/,
+      /Fastify exposes the raw buffer via `request\.rawBody`\s*\/\/\s*when the route opts in/,
     );
   });
 
@@ -63,11 +63,9 @@ describe('W387.C apps/server/src/lib/nowpayments-signing.ts content parity', () 
 
   it('Live-consumer framing pinned (webhooks-nowpayments route; gated on NOWPAYMENTS_IPN_SECRET)', () => {
     expect(body).toMatch(
-      /Consumed by the NowPayments IPN route\s*\n?\s*\/\/\s*\(`apps\/server\/src\/routes\/webhooks-nowpayments\.ts`\): it verifies the\s*\n?\s*\/\/\s*signature and rejects a mismatch with 401/,
+      /Consumed by the NowPayments IPN route\s*\/\/\s*\(`apps\/server\/src\/routes\/webhooks-nowpayments\.ts`\): it verifies the\s*\/\/\s*signature and rejects a mismatch with 401/,
     );
-    expect(body).toMatch(
-      /registered\s*\n?\s*\/\/\s*only when `NOWPAYMENTS_IPN_SECRET` is configured/,
-    );
+    expect(body).toMatch(/registered\s*\/\/\s*only when `NOWPAYMENTS_IPN_SECRET` is configured/);
   });
 
   it('VerifyNowpaymentsSignatureOpts: 3 fields (body / secret / signature)', () => {
@@ -83,7 +81,7 @@ describe('W387.C apps/server/src/lib/nowpayments-signing.ts content parity', () 
     expect(body).toMatch(/- empty body or empty secret or empty signature/);
     expect(body).toMatch(/- signature is not valid hex/);
     expect(body).toMatch(
-      /- hex-decoded signature has a length mismatch with the expected\s*\n?\s*\*\s*SHA-512 digest \(64 bytes\)/,
+      /- hex-decoded signature has a length mismatch with the expected\s*\*\s*SHA-512 digest \(64 bytes\)/,
     );
   });
 
@@ -95,19 +93,19 @@ describe('W387.C apps/server/src/lib/nowpayments-signing.ts content parity', () 
 
   it('canonicalizeJsonObject framing: sort keys lexicographically at every level', () => {
     expect(body).toMatch(
-      /Sort the parsed JSON body's keys lexicographically before signing —\s*\n?\s*\/\/\s*NowPayments' IPN signing protocol mandates this canonicalisation/,
+      /Sort the parsed JSON body's keys lexicographically before signing —\s*\/\/\s*NowPayments' IPN signing protocol mandates this canonicalisation/,
     );
     expect(body).toMatch(
-      /NowPayments signs the body with sorted keys; failing to canonicalise\s*\n?\s*\*\s*before HMAC produces a mismatch even with a correct secret/,
+      /NowPayments signs the body with sorted keys; failing to canonicalise\s*\*\s*before HMAC produces a mismatch even with a correct secret/,
     );
   });
 
   it('canonicalizeJsonObject: returns null when not a JSON object (falls through to raw-body HMAC)', () => {
     expect(body).toMatch(
-      /if \(parsed === null \|\| typeof parsed !== 'object' \|\| Array\.isArray\(parsed\)\) \{\s*\n?\s*return null;\s*\n?\s*\}/,
+      /if \(parsed === null \|\| typeof parsed !== 'object' \|\| Array\.isArray\(parsed\)\) \{\s*return null;\s*\}/,
     );
     expect(body).toMatch(
-      /we fall through to raw-body HMAC so the verifier is robust\s*\n?\s*\/\/\s*against either provider behaviour/,
+      /we fall through to raw-body HMAC so the verifier is robust\s*\/\/\s*against either provider behaviour/,
     );
     expect(body).toMatch(/const canonical = canonicalizeJsonObject\(bodyStr\) \?\? bodyStr;/);
   });
@@ -116,7 +114,7 @@ describe('W387.C apps/server/src/lib/nowpayments-signing.ts content parity', () 
     expect(body).toMatch(/function sortKeys\(value: unknown\): unknown/);
     expect(body).toMatch(/if \(Array\.isArray\(value\)\) return value\.map\(sortKeys\);/);
     expect(body).toMatch(
-      /for \(const key of Object\.keys\(obj\)\.sort\(\)\) \{\s*\n?\s*out\[key\] = sortKeys\(obj\[key\]\);/,
+      /for \(const key of Object\.keys\(obj\)\.sort\(\)\) \{\s*out\[key\] = sortKeys\(obj\[key\]\);/,
     );
   });
 
@@ -125,7 +123,7 @@ describe('W387.C apps/server/src/lib/nowpayments-signing.ts content parity', () 
       /const expected = createHmac\('sha512', opts\.secret\)\.update\(canonical\)\.digest\(\);/,
     );
     expect(body).toMatch(
-      /try \{\s*\n?\s*received = Buffer\.from\(opts\.signature, 'hex'\);\s*\n?\s*\} catch \{\s*\n?\s*return false;\s*\n?\s*\}/,
+      /try \{\s*received = Buffer\.from\(opts\.signature, 'hex'\);\s*\} catch \{\s*return false;\s*\}/,
     );
   });
 

@@ -27,7 +27,7 @@ describe('db/byok-anthropic-rotation-reminder-repo content parity', () => {
   it("v2-#11.5 module-level framing pinned: 'Drizzle-backed ByokAnthropicRotationReminderRepo. Queries accounts whose BYOK Anthropic API key is older than the threshold AND hasn't been reminded in the cooldown window. Mirrors the webhook-rotation pattern (v2-#10.5).' — pinned so the v2-#11.5 anchor + threshold+cooldown predicate + webhook-rotation-pattern cross-reference (v2-#10.5) contract all stay documented", () => {
     expect(body).toMatch(/\/\/ v2-#11\.5 — Drizzle-backed ByokAnthropicRotationReminderRepo\./);
     expect(body).toMatch(
-      /\/\/ Queries accounts whose BYOK Anthropic API key is older than the\s*\n?\s*\/\/ threshold AND hasn't been reminded in the cooldown window\. Mirrors\s*\n?\s*\/\/ the webhook-rotation pattern \(v2-#10\.5\)\./,
+      /\/\/ Queries accounts whose BYOK Anthropic API key is older than the\s*\/\/ threshold AND hasn't been reminded in the cooldown window\. Mirrors\s*\/\/ the webhook-rotation pattern \(v2-#10\.5\)\./,
     );
   });
 
@@ -37,31 +37,31 @@ describe('db/byok-anthropic-rotation-reminder-repo content parity', () => {
 
   it("findAccountsNeedingRotationReminder 3-predicate WHERE pinned: BYOK key set (not null) + key age > threshold + (never reminded OR last reminder older than cooldown). + 'BYOK key must be set (otherwise there's nothing to rotate).' + 'Key age exceeds threshold.' + 'Dedupe: never reminded or last reminder older than cooldown.' — pinned so the 3-predicate roster + dedupe contract stays documented (drift to dropping the never-reminded branch would suppress the very first reminder cycle for a fresh BYOK key past the threshold)", () => {
     expect(body).toMatch(
-      /\/\/ BYOK key must be set \(otherwise there's nothing to rotate\)\.\s*\n?\s*not\(isNull\(accounts\.byokAnthropicApiKeySetAt\)\),\s*\n?\s*\/\/ Key age exceeds threshold\.\s*\n?\s*lt\(accounts\.byokAnthropicApiKeySetAt, thresholdCutoff\),\s*\n?\s*\/\/ Dedupe: never reminded or last reminder older than cooldown\.\s*\n?\s*or\(\s*\n?\s*isNull\(accounts\.byokAnthropicApiKeyLastReminderSentAt\),\s*\n?\s*lt\(accounts\.byokAnthropicApiKeyLastReminderSentAt, cooldownCutoff\),\s*\n?\s*\),/,
+      /\/\/ BYOK key must be set \(otherwise there's nothing to rotate\)\.\s*not\(isNull\(accounts\.byokAnthropicApiKeySetAt\)\),\s*\/\/ Key age exceeds threshold\.\s*lt\(accounts\.byokAnthropicApiKeySetAt, thresholdCutoff\),\s*\/\/ Dedupe: never reminded or last reminder older than cooldown\.\s*or\(\s*isNull\(accounts\.byokAnthropicApiKeyLastReminderSentAt\),\s*lt\(accounts\.byokAnthropicApiKeyLastReminderSentAt, cooldownCutoff\),\s*\),/,
     );
   });
 
   it('thresholdCutoff + cooldownCutoff math pinned: new Date(args.now.getTime() - args.thresholdDays * MS_PER_DAY) + new Date(args.now.getTime() - args.cooldownDays * MS_PER_DAY). Drift to subtracting cooldown on threshold (or vice versa) would silently swap the windows and misroute reminders', () => {
     expect(body).toMatch(
-      /const thresholdCutoff = new Date\(args\.now\.getTime\(\) - args\.thresholdDays \* MS_PER_DAY\);\s*\n?\s*const cooldownCutoff = new Date\(args\.now\.getTime\(\) - args\.cooldownDays \* MS_PER_DAY\);/,
+      /const thresholdCutoff = new Date\(args\.now\.getTime\(\) - args\.thresholdDays \* MS_PER_DAY\);\s*const cooldownCutoff = new Date\(args\.now\.getTime\(\) - args\.cooldownDays \* MS_PER_DAY\);/,
     );
   });
 
   it('orderBy oldest-first + limit framing pinned: .orderBy(byokAnthropicApiKeySetAt) ASC + .limit(args.limit). Drift to ordering by lastReminderSentAt would prioritize recently-reminded accounts over the never-reminded oldest-key accounts (defeating the dedupe contract)', () => {
     expect(body).toMatch(
-      /\.orderBy\(accounts\.byokAnthropicApiKeySetAt\)\s*\n?\s*\.limit\(args\.limit\);/,
+      /\.orderBy\(accounts\.byokAnthropicApiKeySetAt\)\s*\.limit\(args\.limit\);/,
     );
   });
 
   it('Post-SELECT type-narrowing filter pinned: filter(r): r is typeof r & { byokAnthropicApiKeySetAt: Date } guard with r.byokAnthropicApiKeySetAt !== null narrowing. Drift to dropping the type guard would surface possibly-null setAt to downstream consumers via the TS inference path', () => {
     expect(body).toMatch(
-      /\.filter\(\s*\n?\s*\(r\): r is typeof r & \{ byokAnthropicApiKeySetAt: Date \} =>\s*\n?\s*r\.byokAnthropicApiKeySetAt !== null,\s*\n?\s*\)/,
+      /\.filter\(\s*\(r\): r is typeof r & \{ byokAnthropicApiKeySetAt: Date \} =>\s*r\.byokAnthropicApiKeySetAt !== null,\s*\)/,
     );
   });
 
   it("markReminderSent updates ONLY byokAnthropicApiKeyLastReminderSentAt framing pinned: .set({ byokAnthropicApiKeyLastReminderSentAt: args.now }). Drift to also bumping updatedAt would create artificial 'customer mutated' signals in the audit log; drift to clearing the existing reminder cycle would loop reminders into infinity", () => {
     expect(body).toMatch(
-      /async markReminderSent\(args: \{ accountId: string; now: Date \}\): Promise<void> \{\s*\n?\s*await this\.database\.db\s*\n?\s*\.update\(accounts\)\s*\n?\s*\.set\(\{ byokAnthropicApiKeyLastReminderSentAt: args\.now \}\)\s*\n?\s*\.where\(eq\(accounts\.id, args\.accountId\)\);/,
+      /async markReminderSent\(args: \{ accountId: string; now: Date \}\): Promise<void> \{\s*await this\.database\.db\s*\.update\(accounts\)\s*\.set\(\{ byokAnthropicApiKeyLastReminderSentAt: args\.now \}\)\s*\.where\(eq\(accounts\.id, args\.accountId\)\);/,
     );
   });
 });

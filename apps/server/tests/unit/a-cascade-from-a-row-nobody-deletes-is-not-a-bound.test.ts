@@ -141,7 +141,7 @@ const UNIQUENESS_KEY = new Map<string, string>([
 function declaredUniquenessKeys(): Map<string, string> {
   const schema = readFileSync(resolve(DB, 'schema.ts'), 'utf8');
   const out = new Map<string, string>();
-  for (const m of schema.matchAll(/export const (\w+) = pgTable\(\s*\n?\s*'([a-z_]+)'/g)) {
+  for (const m of schema.matchAll(/export const (\w+) = pgTable\(\s*'([a-z_]+)'/g)) {
     const start = m.index ?? 0;
     const next = schema.indexOf('export const', start + 10);
     const body = schema.slice(start, next === -1 ? schema.length : next);
@@ -169,7 +169,7 @@ interface Table {
 function parseSchema(): Map<string, Table> {
   const schema = readFileSync(resolve(DB, 'schema.ts'), 'utf8');
   const out = new Map<string, Table>();
-  for (const m of schema.matchAll(/export const (\w+) = pgTable\(\s*\n?\s*'([a-z_]+)'/g)) {
+  for (const m of schema.matchAll(/export const (\w+) = pgTable\(\s*'([a-z_]+)'/g)) {
     const start = m.index ?? 0;
     const next = schema.indexOf('export const', start + 10);
     const body = schema.slice(start, next === -1 ? schema.length : next);

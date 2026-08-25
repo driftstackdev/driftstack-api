@@ -31,7 +31,7 @@ describe('W523.B apps/marketing-site/src/layouts/LegalLayout.astro content parit
 
   it("LegalLayout framing pinned: 'Wraps a legal markdown page in BaseLayout with prose styling matching the rest of the site (oxblood links, mono code, slate palette). The header surfaces version + effective-date pulled from the markdown frontmatter so customers can see at a glance which version of a document they're viewing.' — pinned so the BaseLayout-wrap + prose-styling + version/effective-date-from-frontmatter commitment survives", () => {
     expect(body).toMatch(
-      /\/\/ Wraps a legal markdown page in BaseLayout with prose styling\s*\n?\s*\/\/ matching the rest of the site \(oxblood links, mono code, slate\s*\n?\s*\/\/ palette\)\. The header surfaces version \+ effective-date pulled from\s*\n?\s*\/\/ the markdown frontmatter so customers can see at a glance which\s*\n?\s*\/\/ version of a document they're viewing\./,
+      /\/\/ Wraps a legal markdown page in BaseLayout with prose styling\s*\/\/ matching the rest of the site \(oxblood links, mono code, slate\s*\/\/ palette\)\. The header surfaces version \+ effective-date pulled from\s*\/\/ the markdown frontmatter so customers can see at a glance which\s*\/\/ version of a document they're viewing\./,
     );
     expect(body).toMatch(/import BaseLayout from '\.\/BaseLayout\.astro';/);
   });
@@ -44,7 +44,7 @@ describe('W523.B apps/marketing-site/src/layouts/LegalLayout.astro content parit
       /const title = Astro\.props\.title \?\? frontmatter\?\.title \?\? 'Legal';/,
     );
     expect(body).toMatch(
-      /const description =\s*\n?\s*Astro\.props\.description \?\?\s*\n?\s*frontmatter\?\.description \?\?\s*\n?\s*'Driftstack legal documents\.';/,
+      /const description =\s*Astro\.props\.description \?\?\s*frontmatter\?\.description \?\?\s*'Driftstack legal documents\.';/,
     );
   });
 
@@ -92,7 +92,7 @@ describe('W523.B apps/marketing-site/src/layouts/LegalLayout.astro content parit
   it("Other-legal-documents nav framing pinned: 'aria-label=\"Other legal documents\"' + 'Other legal documents' eyebrow paragraph + 'mt-3 grid gap-1 sm:grid-cols-2' ul + 'text-sm text-tk-accent-text hover:underline' link styling (S24 2026-07-06: links are TEXT → the AA-safe accent-text tone) — pinned so the cross-doc-nav + aria-label + 2-col-on-sm-and-up grid + accent-link-styling commitment survives", () => {
     expect(body).toMatch(/aria-label="Other legal documents"/);
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">\s*\n?\s*Other legal documents\s*\n?\s*<\/p>/,
+      /<p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">\s*Other legal documents\s*<\/p>/,
     );
     expect(body).toMatch(/<ul class="mt-3 grid gap-1 sm:grid-cols-2">/);
     expect(body).toMatch(

@@ -48,10 +48,10 @@ describe('W452.B packages/webhook-delivery/src/mock.ts content parity', () => {
   it("V-144 framing pinned: 'V-144 — mock webhook delivery service.' + 'Deterministic outputs so tests can assert exact shape without timing flakiness' + 'Real production implementation in apps/server/src/services/webhooks.ts + webhook-worker.ts'", () => {
     expect(body).toMatch(/\/\/ V-144 — mock webhook delivery service\./);
     expect(body).toMatch(
-      /\/\/ Deterministic outputs so tests can assert exact shape without\s*\n?\s*\/\/ timing flakiness\. Same inputs always produce the same DeliveryRecord\s*\n?\s*\/\/ shapes \(matches the mock-driver discipline used elsewhere in the repo\)\./,
+      /\/\/ Deterministic outputs so tests can assert exact shape without\s*\/\/ timing flakiness\. Same inputs always produce the same DeliveryRecord\s*\/\/ shapes \(matches the mock-driver discipline used elsewhere in the repo\)\./,
     );
     expect(body).toMatch(
-      /\/\/ Real production implementation in apps\/server\/src\/services\/webhooks\.ts\s*\n?\s*\/\/ \+ webhook-worker\.ts\. Mock here lets future-system consumers exercise\s*\n?\s*\/\/ the seam without standing up the real worker pool\./,
+      /\/\/ Real production implementation in apps\/server\/src\/services\/webhooks\.ts\s*\/\/ \+ webhook-worker\.ts\. Mock here lets future-system consumers exercise\s*\/\/ the seam without standing up the real worker pool\./,
     );
   });
 
@@ -61,34 +61,34 @@ describe('W452.B packages/webhook-delivery/src/mock.ts content parity', () => {
 
   it("MockWebhookDeliveryService framing pinned: 'Mock delivery service backed by an in-memory map. Every enqueue resolves immediately to a delivered record; the mock isn't meant to model retry behavior, only the shape contract. Tests that need retry mechanics use MockDlqManager.'", () => {
     expect(body).toMatch(
-      /\* Mock delivery service backed by an in-memory map\. Every enqueue\s*\n?\s*\*\s*resolves immediately to a `delivered` record; the mock isn't meant\s*\n?\s*\*\s*to model retry behavior, only the shape contract\. Tests that need\s*\n?\s*\*\s*retry mechanics use `MockDlqManager`\./,
+      /\* Mock delivery service backed by an in-memory map\. Every enqueue\s*\*\s*resolves immediately to a `delivered` record; the mock isn't meant\s*\*\s*to model retry behavior, only the shape contract\. Tests that need\s*\*\s*retry mechanics use `MockDlqManager`\./,
     );
     expect(body).toMatch(
-      /export class MockWebhookDeliveryService implements WebhookDeliveryService \{\s*\n?\s*private readonly records = new Map<string, DeliveryRecord>\(\);\s*\n?\s*private nextSeq = 1;/,
+      /export class MockWebhookDeliveryService implements WebhookDeliveryService \{\s*private readonly records = new Map<string, DeliveryRecord>\(\);\s*private nextSeq = 1;/,
     );
   });
 
   it("enqueue: id format mock_del_ + padStart(8, '0'); nextSeq increment; fixed now=1714867200000 (2024-05-04T00:00:00Z deterministic-across-test-runs framing pinned); attempt 1 + responseStatus 200 + 'OK' excerpt; status:'delivered' + nextAttemptAtMs:null + completedAtMs = now + SUCCESS_ATTEMPT_DURATION_MS", () => {
     expect(body).toMatch(
-      /const id = `mock_del_\$\{this\.nextSeq\.toString\(\)\.padStart\(8, '0'\)\}`;\s*\n?\s*this\.nextSeq \+= 1;\s*\n?\s*const now = 1714867200000;[\s\S]*?\/\/ Fixed: 2024-05-04T00:00:00Z\. Deterministic across test runs\./,
+      /const id = `mock_del_\$\{this\.nextSeq\.toString\(\)\.padStart\(8, '0'\)\}`;\s*this\.nextSeq \+= 1;\s*const now = 1714867200000;[\s\S]*?\/\/ Fixed: 2024-05-04T00:00:00Z\. Deterministic across test runs\./,
     );
     expect(body).toMatch(
-      /const attempt: DeliveryAttempt = \{\s*\n?\s*attempt: 1,\s*\n?\s*completedAtMs: now \+ SUCCESS_ATTEMPT_DURATION_MS,\s*\n?\s*responseStatus: 200,\s*\n?\s*responseExcerpt: 'OK',\s*\n?\s*durationMs: SUCCESS_ATTEMPT_DURATION_MS,\s*\n?\s*outcome: 'success',\s*\n?\s*errorMessage: null,\s*\n?\s*\};/,
+      /const attempt: DeliveryAttempt = \{\s*attempt: 1,\s*completedAtMs: now \+ SUCCESS_ATTEMPT_DURATION_MS,\s*responseStatus: 200,\s*responseExcerpt: 'OK',\s*durationMs: SUCCESS_ATTEMPT_DURATION_MS,\s*outcome: 'success',\s*errorMessage: null,\s*\};/,
     );
     expect(body).toMatch(
-      /const record: DeliveryRecord = \{\s*\n?\s*id,\s*\n?\s*endpointId: opts\.endpoint\.id,\s*\n?\s*payload: opts\.payload,\s*\n?\s*status: 'delivered',\s*\n?\s*attempts: \[attempt\],\s*\n?\s*nextAttemptAtMs: null,\s*\n?\s*createdAtMs: now,\s*\n?\s*completedAtMs: now \+ SUCCESS_ATTEMPT_DURATION_MS,\s*\n?\s*\};/,
+      /const record: DeliveryRecord = \{\s*id,\s*endpointId: opts\.endpoint\.id,\s*payload: opts\.payload,\s*status: 'delivered',\s*attempts: \[attempt\],\s*nextAttemptAtMs: null,\s*createdAtMs: now,\s*completedAtMs: now \+ SUCCESS_ATTEMPT_DURATION_MS,\s*\};/,
     );
   });
 
   it('get: Promise.resolve(map.get(id) ?? null); list: filter by endpointId + optional status + limit ?? 50; nextCursor = `cursor_${limit}` when filtered.length > limit', () => {
     expect(body).toMatch(
-      /get\(deliveryId: string\): Promise<DeliveryRecord \| null> \{\s*\n?\s*return Promise\.resolve\(this\.records\.get\(deliveryId\) \?\? null\);\s*\n?\s*\}/,
+      /get\(deliveryId: string\): Promise<DeliveryRecord \| null> \{\s*return Promise\.resolve\(this\.records\.get\(deliveryId\) \?\? null\);\s*\}/,
     );
     expect(body).toMatch(
-      /const all = \[\.\.\.this\.records\.values\(\)\]\.filter\(\(r\) => r\.endpointId === opts\.endpointId\);\s*\n?\s*const filtered = opts\.status === undefined \? all : all\.filter\(\(r\) => r\.status === opts\.status\);\s*\n?\s*const limit = opts\.limit \?\? 50;/,
+      /const all = \[\.\.\.this\.records\.values\(\)\]\.filter\(\(r\) => r\.endpointId === opts\.endpointId\);\s*const filtered = opts\.status === undefined \? all : all\.filter\(\(r\) => r\.status === opts\.status\);\s*const limit = opts\.limit \?\? 50;/,
     );
     expect(body).toMatch(
-      /data: filtered\.slice\(0, limit\),\s*\n?\s*nextCursor: filtered\.length > limit \? `cursor_\$\{limit\.toString\(\)\}` : null,/,
+      /data: filtered\.slice\(0, limit\),\s*nextCursor: filtered\.length > limit \? `cursor_\$\{limit\.toString\(\)\}` : null,/,
     );
   });
 
@@ -98,16 +98,16 @@ describe('W452.B packages/webhook-delivery/src/mock.ts content parity', () => {
     );
     expect(body).toMatch(/const now = 1714867260000;/);
     expect(body).toMatch(
-      /const replayAttempt: DeliveryAttempt = \{\s*\n?\s*attempt: existing\.attempts\.length \+ 1,/,
+      /const replayAttempt: DeliveryAttempt = \{\s*attempt: existing\.attempts\.length \+ 1,/,
     );
     expect(body).toMatch(
-      /const updated: DeliveryRecord = \{\s*\n?\s*\.\.\.existing,\s*\n?\s*status: 'delivered',\s*\n?\s*attempts: \[\.\.\.existing\.attempts, replayAttempt\],\s*\n?\s*nextAttemptAtMs: null,\s*\n?\s*completedAtMs: now \+ SUCCESS_ATTEMPT_DURATION_MS,\s*\n?\s*\};/,
+      /const updated: DeliveryRecord = \{\s*\.\.\.existing,\s*status: 'delivered',\s*attempts: \[\.\.\.existing\.attempts, replayAttempt\],\s*nextAttemptAtMs: null,\s*completedAtMs: now \+ SUCCESS_ATTEMPT_DURATION_MS,\s*\};/,
     );
   });
 
   it("MockDlqManager seedEntry framing pinned: 'Test seam: insert a DLQ entry directly.'", () => {
     expect(body).toMatch(
-      /\/\*\* Test seam: insert a DLQ entry directly\. \*\/\s*\n?\s*seedEntry\(entry: DlqEntry\): void \{\s*\n?\s*this\.entries\.set\(entry\.deliveryId, entry\);\s*\n?\s*\}/,
+      /\/\*\* Test seam: insert a DLQ entry directly\. \*\/\s*seedEntry\(entry: DlqEntry\): void \{\s*this\.entries\.set\(entry\.deliveryId, entry\);\s*\}/,
     );
   });
 
@@ -116,13 +116,13 @@ describe('W452.B packages/webhook-delivery/src/mock.ts content parity', () => {
       /return Promise\.reject\(new Error\(`dlq entry not found: \$\{opts\.deliveryId\}`\)\);/,
     );
     expect(body).toMatch(
-      /this\.entries\.delete\(opts\.deliveryId\);\s*\n?\s*const now = 1714867320000;\s*\n?\s*const record: DeliveryRecord = \{\s*\n?\s*id: entry\.deliveryId,\s*\n?\s*endpointId: entry\.endpointId,\s*\n?\s*payload: entry\.payload,\s*\n?\s*status: 'pending',\s*\n?\s*attempts: entry\.attempts,\s*\n?\s*nextAttemptAtMs: now,\s*\n?\s*createdAtMs: entry\.enteredDlqAtMs,\s*\n?\s*completedAtMs: null,\s*\n?\s*\};/,
+      /this\.entries\.delete\(opts\.deliveryId\);\s*const now = 1714867320000;\s*const record: DeliveryRecord = \{\s*id: entry\.deliveryId,\s*endpointId: entry\.endpointId,\s*payload: entry\.payload,\s*status: 'pending',\s*attempts: entry\.attempts,\s*nextAttemptAtMs: now,\s*createdAtMs: entry\.enteredDlqAtMs,\s*completedAtMs: null,\s*\};/,
     );
   });
 
   it('MockDlqManager.discard: entries.delete + Promise.resolve()', () => {
     expect(body).toMatch(
-      /discard\(deliveryId: string\): Promise<void> \{\s*\n?\s*this\.entries\.delete\(deliveryId\);\s*\n?\s*return Promise\.resolve\(\);\s*\n?\s*\}/,
+      /discard\(deliveryId: string\): Promise<void> \{\s*this\.entries\.delete\(deliveryId\);\s*return Promise\.resolve\(\);\s*\}/,
     );
   });
 

@@ -41,19 +41,19 @@ describe('W399.A apps/server/src/services/account-audit.ts content parity', () =
   it('V-216 framing pinned + customer-visible event coverage list', () => {
     expect(body).toMatch(/V-216 — customer-facing audit log service\./);
     expect(body).toMatch(
-      /Records customer-visible events on the account: api-key mint \/\s*\n?\s*\/\/\s*revoke, session create \/ destroy, profile lifecycle, subscription\s*\n?\s*\/\/\s*changes, webhook-endpoint lifecycle\./,
+      /Records customer-visible events on the account: api-key mint \/\s*\/\/\s*revoke, session create \/ destroy, profile lifecycle, subscription\s*\/\/\s*changes, webhook-endpoint lifecycle\./,
     );
   });
 
   it("Customer-scoped framing: list(accountId) returns only calling account's entries, account_owner-gated", () => {
     expect(body).toMatch(
-      /Mirrors the admin-audit\s*\n?\s*\/\/\s*service shape but customer-scoped — `list\(accountId\)` returns only\s*\n?\s*\/\/\s*the calling account's own entries, gated on account_owner scope\./,
+      /Mirrors the admin-audit\s*\/\/\s*service shape but customer-scoped — `list\(accountId\)` returns only\s*\/\/\s*the calling account's own entries, gated on account_owner scope\./,
     );
   });
 
   it('D-025 append-only contract framing: insert + list, no UPDATE/DELETE', () => {
     expect(body).toMatch(
-      /Append-only contract: insert \+ list, no update \/ delete\. Same\s*\n?\s*\/\/\s*posture as admin_audit_log per D-025\./,
+      /Append-only contract: insert \+ list, no update \/ delete\. Same\s*\/\/\s*posture as admin_audit_log per D-025\./,
     );
   });
 
@@ -91,15 +91,13 @@ describe('W399.A apps/server/src/services/account-audit.ts content parity', () =
     expect(body).toMatch(/cursor\?: string;/);
     expect(body).toMatch(/action\?: AccountAuditAction;/);
     expect(body).toMatch(/\/\/ V-484 — additional filters layered on the base shape\./);
+    expect(body).toMatch(/\/\*\* Inclusive lower bound on `timestamp`\. \*\/\s*from\?: Date;/);
+    expect(body).toMatch(/\/\*\* Inclusive upper bound on `timestamp`\. \*\/\s*to\?: Date;/);
     expect(body).toMatch(
-      /\/\*\* Inclusive lower bound on `timestamp`\. \*\/\s*\n?\s*from\?: Date;/,
-    );
-    expect(body).toMatch(/\/\*\* Inclusive upper bound on `timestamp`\. \*\/\s*\n?\s*to\?: Date;/);
-    expect(body).toMatch(
-      /\/\*\* Filter by actor — `customer` \(most common\), `system`, `staff`\. \*\/\s*\n?\s*actorType\?: AccountAuditActorType;/,
+      /\/\*\* Filter by actor — `customer` \(most common\), `system`, `staff`\. \*\/\s*actorType\?: AccountAuditActorType;/,
     );
     expect(body).toMatch(
-      /\/\*\* Filter by exact target resource id \(e\.g\. `webhook_endpoint_<id>`\)\. \*\/\s*\n?\s*targetResourceId\?: string;/,
+      /\/\*\* Filter by exact target resource id \(e\.g\. `webhook_endpoint_<id>`\)\. \*\/\s*targetResourceId\?: string;/,
     );
   });
 
@@ -119,7 +117,7 @@ describe('W399.A apps/server/src/services/account-audit.ts content parity', () =
   // widening, not a behavior change for existing account_owner callers).
   it('list: requires read:audit scope (or a satisfying broad scope); effectiveAccountId fallback to ctx.account.id', () => {
     expect(body).toMatch(
-      /Customer-facing read\. Returns the calling account's own audit\s*\n?\s*\*\s*entries in newest-first order\. Requires the granular `read:audit`\s*\n?\s*\*\s*scope \(or a satisfying broad scope — `read` \/ `account_owner`; see\s*\n?\s*\*\s*V-481 broad-satisfies-granular in `lib\/errors-helpers\.ts`\)\./,
+      /Customer-facing read\. Returns the calling account's own audit\s*\*\s*entries in newest-first order\. Requires the granular `read:audit`\s*\*\s*scope \(or a satisfying broad scope — `read` \/ `account_owner`; see\s*\*\s*V-481 broad-satisfies-granular in `lib\/errors-helpers\.ts`\)\./,
     );
     expect(body).toMatch(/throwIfMissingScope\(ctx, 'read:audit'\);/);
     expect(body).toMatch(/const accountId = opts\.effectiveAccountId \?\? ctx\.account\.id;/);
@@ -128,13 +126,13 @@ describe('W399.A apps/server/src/services/account-audit.ts content parity', () =
 
   it("V-330b effectiveAccountId framing: team-member case → entries are OWNER's; scope check stays on caller apiKey", () => {
     expect(body).toMatch(
-      /V-330b — when `opts\.effectiveAccountId` is set \(route layer\s*\n?\s*\*\s*resolved X-Driftstack-Account to a team owner the caller is a\s*\n?\s*\*\s*member of\), the audit entries returned are the OWNER's, not the\s*\n?\s*\*\s*caller's\. The scope check stays on the caller's apiKey — being a\s*\n?\s*\*\s*team member doesn't waive the scope requirement on the calling\s*\n?\s*\*\s*principal\./,
+      /V-330b — when `opts\.effectiveAccountId` is set \(route layer\s*\*\s*resolved X-Driftstack-Account to a team owner the caller is a\s*\*\s*member of\), the audit entries returned are the OWNER's, not the\s*\*\s*caller's\. The scope check stays on the caller's apiKey — being a\s*\*\s*team member doesn't waive the scope requirement on the calling\s*\*\s*principal\./,
     );
   });
 
   it('record: fire-and-forget intent — call sites swallow errors so audit failures never break customer action', () => {
     expect(body).toMatch(
-      /Service-internal record-on-event\. Callers \(api-keys service,\s*\n?\s*\*\s*sessions service, etc\.\) invoke this to drop a customer-visible\s*\n?\s*\*\s*event into the account's audit log\. Fire-and-forget intent —\s*\n?\s*\*\s*call sites swallow errors so audit failures never break the\s*\n?\s*\*\s*underlying customer action\./,
+      /Service-internal record-on-event\. Callers \(api-keys service,\s*\*\s*sessions service, etc\.\) invoke this to drop a customer-visible\s*\*\s*event into the account's audit log\. Fire-and-forget intent —\s*\*\s*call sites swallow errors so audit failures never break the\s*\*\s*underlying customer action\./,
     );
     // Arc 7 obs.10 added a best-effort metrics bump labelled by
     // action prefix + actor type after the insert.

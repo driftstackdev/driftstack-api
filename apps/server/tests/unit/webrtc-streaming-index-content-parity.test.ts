@@ -39,13 +39,13 @@ describe('W455.A packages/webrtc-streaming/src/index.ts content parity', () => {
 
   it('8 type-only re-exports from ./types.js (IceCandidate + IceServer + SdpPayload + StreamConfig + StreamEvent + StreamId + StreamState + StreamStats)', () => {
     expect(body).toMatch(
-      /export type \{\s*\n?\s*IceCandidate,\s*\n?\s*IceServer,\s*\n?\s*SdpPayload,\s*\n?\s*StreamConfig,\s*\n?\s*StreamEvent,\s*\n?\s*StreamId,\s*\n?\s*StreamState,\s*\n?\s*StreamStats,\s*\n?\s*\} from '\.\/types\.js';/,
+      /export type \{\s*IceCandidate,\s*IceServer,\s*SdpPayload,\s*StreamConfig,\s*StreamEvent,\s*StreamId,\s*StreamState,\s*StreamStats,\s*\} from '\.\/types\.js';/,
     );
   });
 
   it('4 interface re-exports from ./interfaces.js (CreateStreamOpts + CreateStreamResult + StreamRegistry + WebRtcStreamingService)', () => {
     expect(body).toMatch(
-      /export type \{\s*\n?\s*CreateStreamOpts,\s*\n?\s*CreateStreamResult,\s*\n?\s*StreamRegistry,\s*\n?\s*WebRtcStreamingService,\s*\n?\s*\} from '\.\/interfaces\.js';/,
+      /export type \{\s*CreateStreamOpts,\s*CreateStreamResult,\s*StreamRegistry,\s*WebRtcStreamingService,\s*\} from '\.\/interfaces\.js';/,
     );
   });
 
@@ -55,7 +55,7 @@ describe('W455.A packages/webrtc-streaming/src/index.ts content parity', () => {
 
   it('frame-source: 4 type re-exports (FramePixelFormat + FrameSource + FrameSourceConfig + VideoFrame) + MockFrameSource value export', () => {
     expect(body).toMatch(
-      /export type \{\s*\n?\s*FramePixelFormat,\s*\n?\s*FrameSource,\s*\n?\s*FrameSourceConfig,\s*\n?\s*VideoFrame,\s*\n?\s*\} from '\.\/frame-source\.js';/,
+      /export type \{\s*FramePixelFormat,\s*FrameSource,\s*FrameSourceConfig,\s*VideoFrame,\s*\} from '\.\/frame-source\.js';/,
     );
     expect(body).toMatch(/export \{ MockFrameSource \} from '\.\/frame-source\.js';/);
   });

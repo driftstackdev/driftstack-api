@@ -51,7 +51,7 @@ describe('W424.C packages/sdk-typescript/src/resources/sessions.ts content parit
 
   it('Imports — 18 api-types verb shapes (sorted alphabetical block; Request/Response pairs for every per-id action + Session/SessionState models + PaginationQueryInput) + HttpClient + iteratePaginated. Drift to hand-rolling any shape would diverge from @driftstack/api-types Zod single-source-of-truth.', () => {
     expect(body).toMatch(
-      /import type \{\s*\n?\s*CaptureRequestInput,\s*\n?\s*CaptureResponse,\s*\n?\s*ExtractRequest,\s*\n?\s*ExtractResponse,\s*\n?\s*SearchRequestInput,\s*\n?\s*SearchResponse,\s*\n?\s*SessionLoginRequest,\s*\n?\s*SessionLoginResponse,\s*\n?\s*CreateSessionRequest,\s*\n?\s*InteractRequest,\s*\n?\s*InteractResponse,\s*\n?\s*NavigateRequestInput,\s*\n?\s*NavigateResponse,\s*\n?\s*PaginationQueryInput,\s*\n?\s*Session,\s*\n?\s*SessionState,\s*\n?\s*WaitRequest,\s*\n?\s*WaitResponse,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import type \{\s*CaptureRequestInput,\s*CaptureResponse,\s*ExtractRequest,\s*ExtractResponse,\s*SearchRequestInput,\s*SearchResponse,\s*SessionLoginRequest,\s*SessionLoginResponse,\s*CreateSessionRequest,\s*InteractRequest,\s*InteractResponse,\s*NavigateRequestInput,\s*NavigateResponse,\s*PaginationQueryInput,\s*Session,\s*SessionState,\s*WaitRequest,\s*WaitResponse,\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(/import type \{ HttpClient \} from '\.\.\/http\.js';/);
     expect(body).toMatch(
@@ -63,20 +63,20 @@ describe('W424.C packages/sdk-typescript/src/resources/sessions.ts content parit
 
   it('SessionsListPage envelope — 3-field cursor pagination (data: Session[] + has_more: boolean + next_cursor: string | null). Sessions are unbounded per account so cursor pagination is load-bearing for the list verb.', () => {
     expect(body).toMatch(
-      /export interface SessionsListPage \{\s*\n?\s*data: Session\[\];\s*\n?\s*has_more: boolean;\s*\n?\s*next_cursor: string \| null;\s*\n?\s*\}/,
+      /export interface SessionsListPage \{\s*data: Session\[\];\s*has_more: boolean;\s*next_cursor: string \| null;\s*\}/,
     );
   });
 
   it('SessionsResource class declaration + private-readonly http constructor field.', () => {
     expect(body).toMatch(
-      /export class SessionsResource \{\s*\n?\s*constructor\(private readonly http: HttpClient\) \{\}/,
+      /export class SessionsResource \{\s*constructor\(private readonly http: HttpClient\) \{\}/,
     );
   });
 
   it('create verb — POST /v1/sessions with `body: CreateSessionRequest = {}` DEFAULT-EMPTY parameter. Callers can write `sessions.create()` for the no-options case (covering "I just want a session" UX). Returns Session directly (not an envelope). Drift to required body would break the convenience UX.', () => {
     expect(body).toMatch(/\/\*\* Create a new session\. \*\//);
     expect(body).toMatch(
-      /create\(body: CreateSessionRequest = \{\}\): Promise<Session> \{\s*\n?\s*return this\.http\.request<Session>\(\{ method: 'POST', path: '\/v1\/sessions', body \}\);\s*\n?\s*\}/,
+      /create\(body: CreateSessionRequest = \{\}\): Promise<Session> \{\s*return this\.http\.request<Session>\(\{ method: 'POST', path: '\/v1\/sessions', body \}\);\s*\}/,
     );
   });
 
@@ -90,29 +90,29 @@ describe('W424.C packages/sdk-typescript/src/resources/sessions.ts content parit
       /List sessions for the current account/,
     );
     expect(body).toMatch(
-      /list\(query: PaginationQueryInput = \{\}\): Promise<SessionsListPage> \{\s*\n?\s*return this\.http\.request<SessionsListPage>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/sessions',\s*\n?\s*query: \{\s*\n?\s*\.\.\.\(query\.limit !== undefined \? \{ limit: query\.limit \} : \{\}\),\s*\n?\s*\.\.\.\(query\.cursor !== undefined \? \{ cursor: query\.cursor \} : \{\}\),\s*\n?\s*\},\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /list\(query: PaginationQueryInput = \{\}\): Promise<SessionsListPage> \{\s*return this\.http\.request<SessionsListPage>\(\{\s*method: 'GET',\s*path: '\/v1\/sessions',\s*query: \{\s*\.\.\.\(query\.limit !== undefined \? \{ limit: query\.limit \} : \{\}\),\s*\.\.\.\(query\.cursor !== undefined \? \{ cursor: query\.cursor \} : \{\}\),\s*\},\s*\}\);\s*\}/,
     );
   });
 
   it('CRITICAL V-118 iterate JSDoc — AsyncGenerator<Session, void, void>. 4-line invariant: walks cursor pages automatically + opts.limit controls per-page size + transparent next-page fetch on exhaustion + stops on `next_cursor: null`. Drift to dropping the stop-on-null framing would let iterators run forever on a misconfigured server. In-JSDoc `for await` example pinned per-line — load-bearing customer-facing guidance for the consumer pattern.', () => {
     expect(body).toMatch(
-      /\*\s*Lazily iterate every session for the EFFECTIVE account, walking\s*\n?\s*\*\s*cursor pages automatically\. `opts\.limit` controls per-page size;\s*\n?\s*\*\s*the iterator transparently fetches the next page once the current\s*\n?\s*\*\s*one is exhausted, and stops on `next_cursor: null`\./,
+      /\*\s*Lazily iterate every session for the EFFECTIVE account, walking\s*\*\s*cursor pages automatically\. `opts\.limit` controls per-page size;\s*\*\s*the iterator transparently fetches the next page once the current\s*\*\s*one is exhausted, and stops on `next_cursor: null`\./,
     );
     expect(body).toMatch(
-      /\*\s*for await \(const session of client\.sessions\.iterate\(\{ limit: 50 \}\)\) \{\s*\n?\s*\*\s*console\.log\(session\.id\);\s*\n?\s*\*\s*\}/,
+      /\*\s*for await \(const session of client\.sessions\.iterate\(\{ limit: 50 \}\)\) \{\s*\*\s*console\.log\(session\.id\);\s*\*\s*\}/,
     );
   });
 
   it('iterate verb implementation — thin wrapper around iteratePaginated<Session>. CRITICAL: limit re-threaded per page (opts.limit applied on EVERY page, not just first) + cursor `!== null` guard (NOT `!== undefined` — explicitly null on first page) means cursor only added after the first page returns a non-null next_cursor.', () => {
     expect(body).toMatch(
-      /iterate\(opts: \{ limit\?: number \} = \{\}\): AsyncGenerator<Session, void, void> \{\s*\n?\s*return iteratePaginated<Session>\(\(cursor\) =>\s*\n?\s*this\.list\(\{\s*\n?\s*\.\.\.\(opts\.limit !== undefined \? \{ limit: opts\.limit \} : \{\}\),\s*\n?\s*\.\.\.\(cursor !== null \? \{ cursor \} : \{\}\),\s*\n?\s*\}\),\s*\n?\s*\);\s*\n?\s*\}/,
+      /iterate\(opts: \{ limit\?: number \} = \{\}\): AsyncGenerator<Session, void, void> \{\s*return iteratePaginated<Session>\(\(cursor\) =>\s*this\.list\(\{\s*\.\.\.\(opts\.limit !== undefined \? \{ limit: opts\.limit \} : \{\}\),\s*\.\.\.\(cursor !== null \? \{ cursor \} : \{\}\),\s*\}\),\s*\);\s*\}/,
     );
   });
 
   it('navigate verb — POST /v1/sessions/${encodeURIComponent(sessionId)}/navigate with NavigateRequestInput body → Promise<NavigateResponse>. First of the 4 workhorse action verbs (navigate/interact/wait/capture). encodeURIComponent wrapping prevents path traversal via maliciously-crafted session ids.', () => {
     expect(body).toMatch(/\/\*\* Navigate the session to a URL\. \*\//);
     expect(body).toMatch(
-      /navigate\(sessionId: string, body: NavigateRequestInput\): Promise<NavigateResponse> \{\s*\n?\s*return this\.http\.request<NavigateResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: `\/v1\/sessions\/\$\{encodeURIComponent\(sessionId\)\}\/navigate`,\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /navigate\(sessionId: string, body: NavigateRequestInput\): Promise<NavigateResponse> \{\s*return this\.http\.request<NavigateResponse>\(\{\s*method: 'POST',\s*path: `\/v1\/sessions\/\$\{encodeURIComponent\(sessionId\)\}\/navigate`,\s*body,\s*\}\);\s*\}/,
     );
   });
 
@@ -121,7 +121,7 @@ describe('W424.C packages/sdk-typescript/src/resources/sessions.ts content parit
       /\/\*\* Send an interaction \(tap, type, scroll, press\) to the session\. \*\//,
     );
     expect(body).toMatch(
-      /interact\(sessionId: string, body: InteractRequest\): Promise<InteractResponse> \{\s*\n?\s*return this\.http\.request<InteractResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: `\/v1\/sessions\/\$\{encodeURIComponent\(sessionId\)\}\/interact`,\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /interact\(sessionId: string, body: InteractRequest\): Promise<InteractResponse> \{\s*return this\.http\.request<InteractResponse>\(\{\s*method: 'POST',\s*path: `\/v1\/sessions\/\$\{encodeURIComponent\(sessionId\)\}\/interact`,\s*body,\s*\}\);\s*\}/,
     );
   });
 
@@ -130,7 +130,7 @@ describe('W424.C packages/sdk-typescript/src/resources/sessions.ts content parit
       /\/\*\* Wait for a condition to be satisfied \(selector, url, time\)\. \*\//,
     );
     expect(body).toMatch(
-      /wait\(sessionId: string, body: WaitRequest\): Promise<WaitResponse> \{\s*\n?\s*return this\.http\.request<WaitResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: `\/v1\/sessions\/\$\{encodeURIComponent\(sessionId\)\}\/wait`,\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /wait\(sessionId: string, body: WaitRequest\): Promise<WaitResponse> \{\s*return this\.http\.request<WaitResponse>\(\{\s*method: 'POST',\s*path: `\/v1\/sessions\/\$\{encodeURIComponent\(sessionId\)\}\/wait`,\s*body,\s*\}\);\s*\}/,
     );
   });
 
@@ -139,21 +139,21 @@ describe('W424.C packages/sdk-typescript/src/resources/sessions.ts content parit
       /\/\*\* Snapshot current session state \(URL, title, cookies, localStorage\)\. \*\//,
     );
     expect(body).toMatch(
-      /getState\(sessionId: string\): Promise<SessionState> \{\s*\n?\s*return this\.http\.request<SessionState>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: `\/v1\/sessions\/\$\{encodeURIComponent\(sessionId\)\}\/state`,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /getState\(sessionId: string\): Promise<SessionState> \{\s*return this\.http\.request<SessionState>\(\{\s*method: 'GET',\s*path: `\/v1\/sessions\/\$\{encodeURIComponent\(sessionId\)\}\/state`,\s*\}\);\s*\}/,
     );
   });
 
   it('capture verb — POST /v1/sessions/${encodeURIComponent(sessionId)}/capture with CaptureRequestInput body → Promise<CaptureResponse>. CRITICAL 3-artifact set pinned: "screenshot, DOM snapshot, or PDF" — the kind discriminator on CaptureRequestInput. Drift to dropping any artifact type would lose a fundamental capture primitive.', () => {
     expect(body).toMatch(/\/\*\* Capture a screenshot, DOM snapshot, or PDF\. \*\//);
     expect(body).toMatch(
-      /capture\(sessionId: string, body: CaptureRequestInput\): Promise<CaptureResponse> \{\s*\n?\s*return this\.http\.request<CaptureResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: `\/v1\/sessions\/\$\{encodeURIComponent\(sessionId\)\}\/capture`,\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /capture\(sessionId: string, body: CaptureRequestInput\): Promise<CaptureResponse> \{\s*return this\.http\.request<CaptureResponse>\(\{\s*method: 'POST',\s*path: `\/v1\/sessions\/\$\{encodeURIComponent\(sessionId\)\}\/capture`,\s*body,\s*\}\);\s*\}/,
     );
   });
 
   it('CRITICAL destroy verb — DELETE /v1/sessions/${encodeURIComponent(sessionId)} → Promise<void>. "Idempotent" framing pinned — drift to non-idempotent (404 on already-destroyed) would break the standard cleanup-in-finally pattern where callers destroy without first checking liveness.', () => {
     expect(body).toMatch(/\/\*\* Destroy the session\. Idempotent\. \*\//);
     expect(body).toMatch(
-      /destroy\(sessionId: string\): Promise<void> \{\s*\n?\s*return this\.http\.request<void>\(\{\s*\n?\s*method: 'DELETE',\s*\n?\s*path: `\/v1\/sessions\/\$\{encodeURIComponent\(sessionId\)\}`,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /destroy\(sessionId: string\): Promise<void> \{\s*return this\.http\.request<void>\(\{\s*method: 'DELETE',\s*path: `\/v1\/sessions\/\$\{encodeURIComponent\(sessionId\)\}`,\s*\}\);\s*\}/,
     );
   });
 

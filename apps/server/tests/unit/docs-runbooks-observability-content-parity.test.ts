@@ -39,7 +39,7 @@ describe('W556.C /docs/runbooks/observability.md content parity', () => {
     expect(body).toMatch(/How Driftstack instruments, monitors, and alerts on its production/);
     expect(body).toMatch(/control plane\./);
     expect(body).toMatch(
-      /V-469\s*\n?\s*\(per-service Sentry projects\), V-289 \(synthetic checks\), V-474/,
+      /V-469\s*\(per-service Sentry projects\), V-289 \(synthetic checks\), V-474/,
     );
     expect(body).toMatch(/\(StatusBadge → \/v1\/status\), V-494 \(log \+ Sentry redaction\)\./);
     expect(body).toMatch(/Logs\s+\|\s+pino → stdout → journalctl on Hetzner/);
@@ -160,7 +160,7 @@ describe('W556.C /docs/runbooks/observability.md content parity', () => {
     expect(body).toMatch(/- `POST \/v1\/admin\/webhook-dlq\/:id\/requeue` — works on DLQ only;/);
     expect(body).toMatch(/409 if not in DLQ\. Records as `webhook_delivery\.requeued`\./);
     expect(body).toMatch(
-      /replay = "we asked\s*\n?\s*for this to be re-sent on purpose"; requeue = "this got stuck/,
+      /replay = "we asked\s*for this to be re-sent on purpose"; requeue = "this got stuck/,
     );
     expect(body).toMatch(/because something temporary\."/);
     expect(body).toMatch(/## Audit-log retention/);

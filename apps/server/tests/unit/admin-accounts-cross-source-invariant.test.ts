@@ -97,9 +97,7 @@ describe('W940 admin-accounts cross-source invariant', () => {
     // the count at 9 and the whole admin suite green (1711 tests, measured).
     // The roster is derived from the source instead and compared for PARITY —
     // one scope check per method that takes a caller context.
-    const methods = [...p.matchAll(/^ {2}async (\w+)\(\s*\n?\s*ctx: AccountContext/gm)].map(
-      (m) => m[1],
-    );
+    const methods = [...p.matchAll(/^ {2}async (\w+)\(\s*ctx: AccountContext/gm)].map((m) => m[1]);
     const matches = p.match(/throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);/g) ?? [];
     // A floor as well as the parity, because parity alone is satisfied by 0 === 0
     // if every method is ever renamed out of the pattern.

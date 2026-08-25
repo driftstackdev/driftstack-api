@@ -31,14 +31,14 @@ describe('W431.B apps/server/src/drivers/webkit.ts content parity', () => {
   it('Framing pinned: Real WebKit driver — NOT YET INTEGRATED; stub returned by factory when DRIVER=webkit; replaced when WebKit fork Phase 2 closes', () => {
     expect(body).toMatch(/\/\/ Real WebKit driver — NOT YET INTEGRATED\./);
     expect(body).toMatch(
-      /\/\/ This stub is what the driver factory returns when DRIVER=webkit is set\.\s*\n?\s*\/\/ Every method throws DriverNotIntegratedError\. The class exists so that the\s*\n?\s*\/\/ route layer can construct \+ use a Driver implementation; when the\s*\n?\s*\/\/ Driftstack WebKit fork closes its Phase 2, this file is replaced with the\s*\n?\s*\/\/ real adapter \(and the WebKit fork hands off the binding details\)\./,
+      /\/\/ This stub is what the driver factory returns when DRIVER=webkit is set\.\s*\/\/ Every method throws DriverNotIntegratedError\. The class exists so that the\s*\/\/ route layer can construct \+ use a Driver implementation; when the\s*\/\/ Driftstack WebKit fork closes its Phase 2, this file is replaced with the\s*\/\/ real adapter \(and the WebKit fork hands off the binding details\)\./,
     );
   });
 
   it('imports: DriverNotIntegratedError from lib/errors + full Driver type roster from ./types.js', () => {
     expect(body).toMatch(/import \{ DriverNotIntegratedError \} from '\.\.\/lib\/errors\.js';/);
     expect(body).toMatch(
-      /import type \{\s*\n?\s*CaptureInput,\s*\n?\s*CaptureResult,\s*\n?\s*ExtractInput,\s*\n?\s*ExtractResult,\s*\n?\s*SearchInput,\s*\n?\s*SearchResult,\s*\n?\s*LoginInput,\s*\n?\s*LoginResult,\s*\n?\s*CreateSessionInput,\s*\n?\s*CreateSessionResult,\s*\n?\s*Driver,\s*\n?\s*DriverSessionId,\s*\n?\s*GUIInputInput,\s*\n?\s*GUIInputResult,\s*\n?\s*InteractInput,\s*\n?\s*InteractResult,\s*\n?\s*NavigateInput,\s*\n?\s*NavigateResult,\s*\n?\s*SessionStateResult,\s*\n?\s*WaitInput,\s*\n?\s*WaitResult,\s*\n?\s*\} from '\.\/types\.js';/,
+      /import type \{\s*CaptureInput,\s*CaptureResult,\s*ExtractInput,\s*ExtractResult,\s*SearchInput,\s*SearchResult,\s*LoginInput,\s*LoginResult,\s*CreateSessionInput,\s*CreateSessionResult,\s*Driver,\s*DriverSessionId,\s*GUIInputInput,\s*GUIInputResult,\s*InteractInput,\s*InteractResult,\s*NavigateInput,\s*NavigateResult,\s*SessionStateResult,\s*WaitInput,\s*WaitResult,\s*\} from '\.\/types\.js';/,
     );
   });
 

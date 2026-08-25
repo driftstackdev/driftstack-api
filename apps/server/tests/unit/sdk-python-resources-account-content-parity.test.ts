@@ -214,7 +214,7 @@ describe('W581.C packages/sdk-python/src/driftstack/resources/account.py content
       /async def revoke_all_other_web_sessions\(self\) -> None:/,
     );
     expect(body, 'async confirm-intent query').toMatch(
-      /await self\._http\.request\(\s*\n?\s*"DELETE", "\/v1\/account\/web-sessions", params=\{"keep": "current"\}/,
+      /await self\._http\.request\(\s*"DELETE", "\/v1\/account\/web-sessions", params=\{"keep": "current"\}/,
     );
     expect(body).toMatch(
       /async def rate_limits\(self\) -> dict\[str, Any\]:\s*\n\s*return await self\._http\.request\("GET", "\/v1\/account\/rate-limits"\)/,

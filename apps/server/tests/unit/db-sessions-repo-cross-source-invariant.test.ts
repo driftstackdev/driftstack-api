@@ -68,7 +68,7 @@ describe('W998 db/sessions-repo cross-source invariant', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/sessions-repo.ts'));
     expect(p).toMatch(/async insertSession\(input: NewSessionInput\): Promise<SessionRecord> \{/);
     expect(p).toMatch(
-      /async insertSessionIfUnderLimit\(\s*\n?\s*input: NewSessionInput,\s*\n?\s*limit: number,\s*\n?\s*opts: \{ profileId\?: string \} = \{\},\s*\n?\s*\): Promise<SessionRecord \| null> \{/,
+      /async insertSessionIfUnderLimit\(\s*input: NewSessionInput,\s*limit: number,\s*opts: \{ profileId\?: string \} = \{\},\s*\): Promise<SessionRecord \| null> \{/,
     );
     expect(p).toMatch(
       /async findSession\(id: string, accountId: string\): Promise<SessionRecord \| null> \{/,
@@ -254,7 +254,7 @@ describe('W998 db/sessions-repo cross-source invariant', () => {
     );
 
     expect(
-      /const TERMINAL_SESSION_STATUSES[^=]*=\s*\n?\s*SessionStatusSchema\.options\.filter\(/.test(
+      /const TERMINAL_SESSION_STATUSES[^=]*=\s*SessionStatusSchema\.options\.filter\(/.test(
         doubleSrc,
       ),
       'the double no longer derives its terminal set from the enum minus the active constant',

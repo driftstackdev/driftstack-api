@@ -75,7 +75,7 @@ describe('W532.C packages/sdk-python/pyproject.toml content parity', () => {
   it('Hatch wheel + project URLs framing pinned: \'packages = ["src/driftstack"]\' (wheel content: src/driftstack only) + sdist include 3-path /src/driftstack + /README.md + /pyproject.toml + Homepage:driftstack.dev + Repository:github.com/driftstackdev/driftstack-api + Issues:.../issues — pinned so the wheel-content + 3-sdist-allowlist + 3-URL commitment survives', () => {
     expect(body).toMatch(/packages = \["src\/driftstack"\]/);
     expect(body).toMatch(
-      /include = \[\s*\n?\s*"\/src\/driftstack",\s*\n?\s*"\/README\.md",\s*\n?\s*"\/pyproject\.toml",\s*\n?\s*\]/,
+      /include = \[\s*"\/src\/driftstack",\s*"\/README\.md",\s*"\/pyproject\.toml",\s*\]/,
     );
     expect(body).toMatch(/Homepage = "https:\/\/driftstack\.dev"/);
     expect(body).toMatch(/Repository = "https:\/\/github\.com\/driftstackdev\/driftstack-api"/);
@@ -86,7 +86,7 @@ describe('W532.C packages/sdk-python/pyproject.toml content parity', () => {
     expect(body).toMatch(/testpaths = \["tests"\]/);
     expect(body).toMatch(/asyncio_mode = "auto"/);
     expect(body).toMatch(
-      /filterwarnings = \[\s*\n?\s*"error",\s*\n?\s*# Pydantic emits deprecation warnings for some patterns we generate\s*\n?\s*# via datamodel-code-generator; tolerate them so tests don't fail on\s*\n?\s*# codegen output we don't fully control\.\s*\n?\s*"default::DeprecationWarning:pydantic",\s*\n?\s*"default::DeprecationWarning:driftstack\._generated",\s*\n?\s*\]/,
+      /filterwarnings = \[\s*"error",\s*# Pydantic emits deprecation warnings for some patterns we generate\s*# via datamodel-code-generator; tolerate them so tests don't fail on\s*# codegen output we don't fully control\.\s*"default::DeprecationWarning:pydantic",\s*"default::DeprecationWarning:driftstack\._generated",\s*\]/,
     );
   });
 
@@ -101,7 +101,7 @@ describe('W532.C packages/sdk-python/pyproject.toml content parity', () => {
     expect(body).toMatch(/strict = true/);
     expect(body).toMatch(/module = "driftstack\._generated\.\*"/);
     expect(body).toMatch(
-      /# Codegen output isn't always strict-clean — `conint\(\.\.\.\)` \/\s*\n?\s*# `constr\(\.\.\.\)` factory calls aren't valid type annotations to mypy\s*\n?\s*# even though Pydantic v2 accepts them at runtime\. Skip type-checking\s*\n?\s*# for the codegen module entirely; the wrapper layer that customers\s*\n?\s*# actually touch stays strict, and the generated models are runtime-\s*\n?\s*# tested via tests\/test_generated_models\.py\./,
+      /# Codegen output isn't always strict-clean — `conint\(\.\.\.\)` \/\s*# `constr\(\.\.\.\)` factory calls aren't valid type annotations to mypy\s*# even though Pydantic v2 accepts them at runtime\. Skip type-checking\s*# for the codegen module entirely; the wrapper layer that customers\s*# actually touch stays strict, and the generated models are runtime-\s*# tested via tests\/test_generated_models\.py\./,
     );
     expect(body).toMatch(/ignore_errors = true/);
   });

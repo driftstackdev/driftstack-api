@@ -39,25 +39,25 @@ describe('W392.B apps/server/src/lib/slow-query-log.ts content parity', () => {
   it('V-113 framing + drizzle parameterized-query unsafe-path note pinned', () => {
     expect(body).toMatch(/V-113: postgres-js slow-query log instrumentation\./);
     expect(body).toMatch(
-      /Hooks into `client\.unsafe\(sql, params\)` — the path drizzle-orm uses\s*\n?\s*\/\/\s*for every parameterized query\. Times the resulting Pending and emits\s*\n?\s*\/\/\s*a structured warn-level log entry whenever duration ≥ threshold/,
+      /Hooks into `client\.unsafe\(sql, params\)` — the path drizzle-orm uses\s*\/\/\s*for every parameterized query\. Times the resulting Pending and emits\s*\/\/\s*a structured warn-level log entry whenever duration ≥ threshold/,
     );
   });
 
   it('Tagged-template gap framing pinned: NOT instrumented — boot SELECT 1 + migrations only', () => {
     expect(body).toMatch(
-      /Tagged-template direct queries \(`sql\\`SELECT 1\\``\) are NOT\s*\n?\s*\/\/\s*instrumented\. The control plane uses tagged-template form only at\s*\n?\s*\/\/\s*boot \(`bootstrap\.ts` SELECT 1 probe\) and during migrations; both are\s*\n?\s*\/\/\s*outside the request critical path so the gap is acceptable/,
+      /Tagged-template direct queries \(`sql\\`SELECT 1\\``\) are NOT\s*\/\/\s*instrumented\. The control plane uses tagged-template form only at\s*\/\/\s*boot \(`bootstrap\.ts` SELECT 1 probe\) and during migrations; both are\s*\/\/\s*outside the request critical path so the gap is acceptable/,
     );
   });
 
   it('bootstrap-wires-only-when-threshold-set framing pinned', () => {
     expect(body).toMatch(
-      /Wire via `createDb\(url, \{ slowQueryLog: \{ thresholdMs, logger \} \}\)`\.\s*\n?\s*\/\/\s*`bootstrap\.ts` reads `SLOW_QUERY_LOG_THRESHOLD_MS` from env and\s*\n?\s*\/\/\s*only enables instrumentation when set \(i\.e\. dev\/test default off\)/,
+      /Wire via `createDb\(url, \{ slowQueryLog: \{ thresholdMs, logger \} \}\)`\.\s*\/\/\s*`bootstrap\.ts` reads `SLOW_QUERY_LOG_THRESHOLD_MS` from env and\s*\/\/\s*only enables instrumentation when set \(i\.e\. dev\/test default off\)/,
     );
   });
 
   it('Proxy-on-Pending rationale framing pinned (preserves .cursor / .execute / .values chainable surface)', () => {
     expect(body).toMatch(
-      /Why a Proxy on Pending and not `await`-wrapping unsafe directly:\s*\n?\s*\/\/\s*postgres-js's Pending<T> is also a chainable cursor object exposing\s*\n?\s*\/\/\s*`\.cursor\(\)`, `\.execute\(\)`, `\.values\(\)`, etc\. drizzle-orm awaits it\s*\n?\s*\/\/\s*directly today, but the safer wrapping preserves the full Pending\s*\n?\s*\/\/\s*surface for any future code path \(or query type\) that uses those\s*\n?\s*\/\/\s*chained methods/,
+      /Why a Proxy on Pending and not `await`-wrapping unsafe directly:\s*\/\/\s*postgres-js's Pending<T> is also a chainable cursor object exposing\s*\/\/\s*`\.cursor\(\)`, `\.execute\(\)`, `\.values\(\)`, etc\. drizzle-orm awaits it\s*\/\/\s*directly today, but the safer wrapping preserves the full Pending\s*\/\/\s*surface for any future code path \(or query type\) that uses those\s*\/\/\s*chained methods/,
     );
   });
 
@@ -73,10 +73,10 @@ describe('W392.B apps/server/src/lib/slow-query-log.ts content parity', () => {
 
   it('instrumentSlowQueryLogging: mutates client.unsafe + returns same client for chaining', () => {
     expect(body).toMatch(
-      /Mutate `client\.unsafe` so postgres-js queries above `thresholdMs`\s*\n?\s*\*\s*emit a structured warn-level slow_query log\. Returns the same client\s*\n?\s*\*\s*for fluent chaining/,
+      /Mutate `client\.unsafe` so postgres-js queries above `thresholdMs`\s*\*\s*emit a structured warn-level slow_query log\. Returns the same client\s*\*\s*for fluent chaining/,
     );
     expect(body).toMatch(
-      /export function instrumentSlowQueryLogging\(\s*\n?\s*client: postgres\.Sql,\s*\n?\s*config: SlowQueryLogConfig,\s*\n?\s*\): postgres\.Sql \{/,
+      /export function instrumentSlowQueryLogging\(\s*client: postgres\.Sql,\s*config: SlowQueryLogConfig,\s*\): postgres\.Sql \{/,
     );
     expect(body).toMatch(/return client;/);
   });
@@ -94,7 +94,7 @@ describe('W392.B apps/server/src/lib/slow-query-log.ts content parity', () => {
 
   it('slow_query warn log: component="db" + event + 2-decimal-rounded durationMs + sql truncate with "…" + paramCount', () => {
     expect(body).toMatch(
-      /config\.logger\.warn\(\s*\n?\s*\{\s*\n?\s*component: 'db',\s*\n?\s*event: 'slow_query',\s*\n?\s*durationMs: Math\.round\(durationMs \* 100\) \/ 100,\s*\n?\s*thresholdMs: config\.thresholdMs,\s*\n?\s*sql: sql\.length > maxSqlLength \? `\$\{sql\.slice\(0, maxSqlLength\)\}…` : sql,\s*\n?\s*paramCount: params\?\.length \?\? 0,\s*\n?\s*\},\s*\n?\s*'Slow query exceeded threshold',\s*\n?\s*\);/,
+      /config\.logger\.warn\(\s*\{\s*component: 'db',\s*event: 'slow_query',\s*durationMs: Math\.round\(durationMs \* 100\) \/ 100,\s*thresholdMs: config\.thresholdMs,\s*sql: sql\.length > maxSqlLength \? `\$\{sql\.slice\(0, maxSqlLength\)\}…` : sql,\s*paramCount: params\?\.length \?\? 0,\s*\},\s*'Slow query exceeded threshold',\s*\);/,
     );
   });
 

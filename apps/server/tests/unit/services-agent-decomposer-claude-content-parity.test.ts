@@ -28,32 +28,32 @@ describe('services/agent-decomposer-claude content parity', () => {
   it("AI-B1.b module-level framing pinned: 'real Claude-wired AgentDecomposer implementation. Calls the Anthropic Messages API via raw fetch (no SDK install) and parses a JSON-shaped response into the same DecomposeResult union the DeterministicAgentDecomposer returns. Drop-in behind the AgentDecomposer interface; the AgentRuntime + executor + sessions repo do not change.' — pinned so the AI-B1.b anchor + raw-fetch-no-SDK + drop-in-replacement contract + same-DecomposeResult-union all stay documented", () => {
     expect(body).toMatch(/\/\/ AI-B1\.b — real Claude-wired AgentDecomposer implementation\./);
     expect(body).toMatch(
-      /\/\/ Calls the Anthropic Messages API via raw fetch \(no SDK install\) and\s*\n?\s*\/\/ parses a JSON-shaped response into the same DecomposeResult union the\s*\n?\s*\/\/ DeterministicAgentDecomposer returns\. Drop-in behind the AgentDecomposer\s*\n?\s*\/\/ interface; the AgentRuntime \+ executor \+ sessions repo do not change\./,
+      /\/\/ Calls the Anthropic Messages API via raw fetch \(no SDK install\) and\s*\/\/ parses a JSON-shaped response into the same DecomposeResult union the\s*\/\/ DeterministicAgentDecomposer returns\. Drop-in behind the AgentDecomposer\s*\/\/ interface; the AgentRuntime \+ executor \+ sessions repo do not change\./,
     );
   });
 
   it("Cost-tolerant + BYOK framing pinned: 'Cost-tolerant path: customer pays via BYOK Anthropic key per orchestrator verdict 2026-05-16. The deployment fallback (founder key) covers demos + integration tests only — bootstrap resolves the key before calling decompose() and never embeds a fallback at this layer.' — pinned so the BYOK-customer-pays + 2026-05-16 verdict + deployment-fallback-for-demos-only + bootstrap-resolves-not-this-layer contract all stay documented", () => {
     expect(body).toMatch(
-      /\/\/ Cost-tolerant path: customer pays via BYOK Anthropic key per\s*\n?\s*\/\/ orchestrator verdict 2026-05-16\. The deployment fallback \(founder key\)\s*\n?\s*\/\/ covers demos \+ integration tests only — bootstrap resolves the key\s*\n?\s*\/\/ before calling decompose\(\) and never embeds a fallback at this layer\./,
+      /\/\/ Cost-tolerant path: customer pays via BYOK Anthropic key per\s*\/\/ orchestrator verdict 2026-05-16\. The deployment fallback \(founder key\)\s*\/\/ covers demos \+ integration tests only — bootstrap resolves the key\s*\/\/ before calling decompose\(\) and never embeds a fallback at this layer\./,
     );
   });
 
   it("5-contract-guarantee catalog pinned (mirroring DeterministicAgentDecomposer): 1. budget-exhausted → refuse, never throws 2. AUP pre-filter → refuse with canned reason, pre-API short-circuit so we don't bill abuse 3. Anthropic 4xx → throws, route maps to 502 agent-misconfigured (not a customer charge) 4. Anthropic 5xx → single retry with backoff; network errors retried identically 5. Malformed JSON → throws (the wire is broken; refuse would mask the bug). — pinned so the 5-contract-guarantee + 4xx-vs-5xx-vs-malformed boundary stay documented", () => {
     expect(body).toMatch(/\/\/ Contract guarantees \(mirroring DeterministicAgentDecomposer\):/);
     expect(body).toMatch(
-      /\/\/ {3}- Token-budget exhaustion → refuse with the standard message, 0\s*\n?\s*\/\/ {5}tokens charged\. Never throws\./,
+      /\/\/ {3}- Token-budget exhaustion → refuse with the standard message, 0\s*\/\/ {5}tokens charged\. Never throws\./,
     );
     expect(body).toMatch(
-      /\/\/ {3}- AUP-prefilter hit → refuse with the canned reason\. Pre-filter\s*\n?\s*\/\/ {5}short-circuits BEFORE the API call so we don't bill the customer\s*\n?\s*\/\/ {5}for an obviously-bad task\. Never throws\./,
+      /\/\/ {3}- AUP-prefilter hit → refuse with the canned reason\. Pre-filter\s*\/\/ {5}short-circuits BEFORE the API call so we don't bill the customer\s*\/\/ {5}for an obviously-bad task\. Never throws\./,
     );
     expect(body).toMatch(
-      /\/\/ {3}- Anthropic 4xx \(auth \/ quota \/ validation\) → throws\. Caller maps\s*\n?\s*\/\/ {5}to a 502 problem-type so the dashboard surfaces "agent layer\s*\n?\s*\/\/ {5}misconfigured" rather than charging the customer for nothing\./,
+      /\/\/ {3}- Anthropic 4xx \(auth \/ quota \/ validation\) → throws\. Caller maps\s*\/\/ {5}to a 502 problem-type so the dashboard surfaces "agent layer\s*\/\/ {5}misconfigured" rather than charging the customer for nothing\./,
     );
     expect(body).toMatch(
-      /\/\/ {3}- Anthropic 5xx → single retry with backoff; post-retry 5xx\s*\n?\s*\/\/ {5}throws\. Network errors retried identically\./,
+      /\/\/ {3}- Anthropic 5xx → single retry with backoff; post-retry 5xx\s*\/\/ {5}throws\. Network errors retried identically\./,
     );
     expect(body).toMatch(
-      /\/\/ {3}- Malformed JSON content → throws \(the wire is broken; surfacing\s*\n?\s*\/\/ {5}a refuse would silently mask the bug\)\./,
+      /\/\/ {3}- Malformed JSON content → throws \(the wire is broken; surfacing\s*\/\/ {5}a refuse would silently mask the bug\)\./,
     );
   });
 
@@ -125,7 +125,7 @@ describe('services/agent-decomposer-claude content parity', () => {
 
   it("SYSTEM_PROMPT locked-constant framing pinned: 'locked constant — drift here = silent product behavior change. Any edit MUST come with a prompt-template parity test that the model still emits the discriminated union shape on a fixed eval corpus.' — pinned so the prompt-as-locked-constant + drift-needs-parity-test contract stays documented (drift to softening this rule would let prompt edits land without validation that the JSON-shape contract still holds)", () => {
     expect(body).toMatch(
-      /\/\/ System prompt is a locked constant — drift here = silent product\s*\n?\s*\/\/ behavior change\. Any edit MUST come with a prompt-template parity\s*\n?\s*\/\/ test that the model still emits the discriminated union shape on a\s*\n?\s*\/\/ fixed eval corpus\./,
+      /\/\/ System prompt is a locked constant — drift here = silent product\s*\/\/ behavior change\. Any edit MUST come with a prompt-template parity\s*\/\/ test that the model still emits the discriminated union shape on a\s*\/\/ fixed eval corpus\./,
     );
   });
 
@@ -153,7 +153,7 @@ describe('services/agent-decomposer-claude content parity', () => {
 
   it("SYSTEM_PROMPT OUTPUT FORMAT framing pinned: 'respond with EXACTLY ONE JSON object, no prose, no markdown fences. The object MUST be one of these three shapes' + 3-shape catalog (plan/clarify/refuse). Drift to allowing prose-or-fences would break the JSON.parse path + force the route into refuse-on-malformed", () => {
     expect(body).toMatch(
-      /'OUTPUT FORMAT: respond with EXACTLY ONE JSON object, no prose, no',\s*\n?\s*'markdown fences\. The object MUST be one of these three shapes:',/,
+      /'OUTPUT FORMAT: respond with EXACTLY ONE JSON object, no prose, no',\s*'markdown fences\. The object MUST be one of these three shapes:',/,
     );
     expect(body).toMatch(/' {2}\{ "kind": "plan", "intents": \[ \.\.\. \] \}',/);
     expect(body).toMatch(/' {2}\{ "kind": "clarify", "clarifyingQuestion": "\.\.\." \}',/);
@@ -162,19 +162,19 @@ describe('services/agent-decomposer-claude content parity', () => {
 
   it('SYSTEM_PROMPT field limits match the runtime parser and forbid semantic truncation', () => {
     expect(body).toMatch(
-      /'FIELD LIMITS: url <= 8192 chars; selector <= 4096 chars; type value <=',\s*\n?\s*'10000 chars; tap visible-text value <= 512 chars; clarify\/refuse copy <=',\s*\n?\s*'4096 chars\. Never split or truncate a field to evade these limits\.',/,
+      /'FIELD LIMITS: url <= 8192 chars; selector <= 4096 chars; type value <=',\s*'10000 chars; tap visible-text value <= 512 chars; clarify\/refuse copy <=',\s*'4096 chars\. Never split or truncate a field to evade these limits\.',/,
     );
   });
 
   it("SYSTEM_PROMPT WHEN-TO-REFUSE AUP-cite framing pinned: 'bypass captchas, brute-force credentials, stalk a specific person, generate CSAM, create non-consensual deepfakes, swat / make false emergency calls, or do anything else categorically prohibited by the AUP at https://driftstack.dev/legal/aup/. Refuse politely; cite the AUP.' — pinned so the 6-abuse-category catalog + AUP-URL + refuse-politely-cite-AUP contract all stay documented (URL updated 2026-05-20 — broken `docs.driftstack.dev/aup` retargeted to the live marketing-site `driftstack.dev/legal/aup/` path)", () => {
     expect(body).toMatch(
-      /'WHEN TO REFUSE: the task asks you to bypass captchas, brute-force',\s*\n?\s*'credentials, stalk a specific person, generate CSAM, create',\s*\n?\s*'non-consensual deepfakes, swat \/ make false emergency calls, or do',\s*\n?\s*'anything else categorically prohibited by the AUP at',\s*\n?\s*'https:\/\/driftstack\.dev\/legal\/aup\/\. Refuse politely; cite the AUP\.',/,
+      /'WHEN TO REFUSE: the task asks you to bypass captchas, brute-force',\s*'credentials, stalk a specific person, generate CSAM, create',\s*'non-consensual deepfakes, swat \/ make false emergency calls, or do',\s*'anything else categorically prohibited by the AUP at',\s*'https:\/\/driftstack\.dev\/legal\/aup\/\. Refuse politely; cite the AUP\.',/,
     );
   });
 
   it("SYSTEM_PROMPT 1-8 intent cap + always-end-with-capture framing pinned: 'OTHERWISE: emit a plan. Keep plans short (1-8 intents). Always end a plan with a capture intent so the customer gets something back.' — pinned so the plan-length-bound + always-end-with-capture contract stays documented (drift to plans-can-skip-capture would let plans complete with no inspect-able result)", () => {
     expect(body).toMatch(
-      /'OTHERWISE: emit a plan\. Keep plans short \(1-8 intents\)\. Always end',\s*\n?\s*'a plan with a capture intent so the customer gets something back\.',/,
+      /'OTHERWISE: emit a plan\. Keep plans short \(1-8 intents\)\. Always end',\s*'a plan with a capture intent so the customer gets something back\.',/,
     );
   });
 
@@ -192,29 +192,29 @@ describe('services/agent-decomposer-claude content parity', () => {
 
   it("decompose() 5-step pipeline pinned: 1. Pre-API AUP filter (don't put abusive prompts into third-party logs + don't bill the customer) 2. Budget pre-check (0 tokens charged on exhaustion refusal) 3. Credential check (BYOK or fallback resolved by bootstrap; missing = config error throw, not customer refuse) 4. Build request body + system prompt + interleaved messages 5. Call Anthropic with single retry on 5xx. Drift to re-ordering would let abusive prompts hit the API (step 1 must come first) OR charge customers for exhaustion (step 2 protection)", () => {
     expect(body).toMatch(
-      /\/\/ 1\. Pre-API AUP filter — short-circuit obvious abuse cases so the\s*\n?\s*\/\/ {4}Anthropic API never sees them \(don't put abusive prompts into\s*\n?\s*\/\/ {4}third-party logs, don't bill the customer for an inevitable\s*\n?\s*\/\/ {4}refusal\)\. Charges tokens — the input was processed by us\./,
+      /\/\/ 1\. Pre-API AUP filter — short-circuit obvious abuse cases so the\s*\/\/ {4}Anthropic API never sees them \(don't put abusive prompts into\s*\/\/ {4}third-party logs, don't bill the customer for an inevitable\s*\/\/ {4}refusal\)\. Charges tokens — the input was processed by us\./,
     );
     expect(body).toMatch(
-      /\/\/ 2\. Budget pre-check\. Refuse with 0 tokens charged so the customer\s*\n?\s*\/\/ {4}isn't billed for the exhaustion refusal itself\./,
+      /\/\/ 2\. Budget pre-check\. Refuse with 0 tokens charged so the customer\s*\/\/ {4}isn't billed for the exhaustion refusal itself\./,
     );
     expect(body).toMatch(
-      /\/\/ 3\. Credential check\. Bootstrap is responsible for resolving the\s*\n?\s*\/\/ {4}BYOK customer key OR the deployment fallback into this arg;\s*\n?\s*\/\/ {4}if neither resolved, that's a configuration error that should\s*\n?\s*\/\/ {4}surface — not a customer refusal\./,
+      /\/\/ 3\. Credential check\. Bootstrap is responsible for resolving the\s*\/\/ {4}BYOK customer key OR the deployment fallback into this arg;\s*\/\/ {4}if neither resolved, that's a configuration error that should\s*\/\/ {4}surface — not a customer refusal\./,
     );
     expect(body).toMatch(
-      /if \(args\.byokAnthropicApiKey === undefined \|\| args\.byokAnthropicApiKey === ''\) \{\s*\n?\s*throw new Error\('ClaudeAgentDecomposer: no Anthropic API key provided'\);\s*\n?\s*\}/,
+      /if \(args\.byokAnthropicApiKey === undefined \|\| args\.byokAnthropicApiKey === ''\) \{\s*throw new Error\('ClaudeAgentDecomposer: no Anthropic API key provided'\);\s*\}/,
     );
   });
 
   it('Anthropic call pinned (discrete pins — the prior single long-chain regex backtracked ~17s): POST to ANTHROPIC_API_URL + 3 headers + body + the per-request-timeout AbortSignal. Drift to a different header set diverges from the Anthropic Messages API contract; dropping the signal/AbortController removes the timeout so a hung upstream would hang the chat turn indefinitely.', () => {
     // Discrete pins per the no-long-chain-parity-regex lesson (>5 chained
-    // \s*\n?\s* groups → catastrophic backtracking).
+    // \s* groups → catastrophic backtracking).
     expect(body).toMatch(/res = await this\.fetchImpl\(ANTHROPIC_API_URL, \{/);
     expect(body).toMatch(/method: 'POST',/);
     expect(body).toMatch(/'content-type': 'application\/json',/);
     expect(body).toMatch(/'x-api-key': apiKey,/);
     expect(body).toMatch(/'anthropic-version': ANTHROPIC_VERSION_HEADER,/);
     // Body forwarded + the per-request-timeout AbortSignal wired (one short group).
-    expect(body).toMatch(/body,\s*\n?\s*redirect: 'error',\s*\n?\s*signal: ac\.signal,/);
+    expect(body).toMatch(/body,\s*redirect: 'error',\s*signal: ac\.signal,/);
     // The timeout machinery itself — AbortController + abort + teardown.
     expect(body).toMatch(/const ac = new AbortController\(\);/);
     expect(body).toMatch(/setTimeout\(\(\) => ac\.abort\(\), this\.requestTimeoutMs\)/);

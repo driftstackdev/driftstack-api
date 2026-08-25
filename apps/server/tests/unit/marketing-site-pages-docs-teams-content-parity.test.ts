@@ -35,22 +35,22 @@ describe('W519.A apps/marketing-site/src/pages/docs/teams.astro content parity',
 
   it("V-693 + W219.A 5-V-anchor framing pinned: 'teams developer docs. Walks through the team RBAC surface (invite → accept → member/admin roles) and the V-326c / V-330b/d/e/f effective-account model that lets team members act on the owner account's resources via X-Driftstack-Account.' + W219.A accuracy-pass pinned against apps/server/src/routes/team.ts — pinned so the V-693 + V-326c + V-330b/d/e/f effective-account-model anchors + W219.A team.ts-source-of-truth commitment all survive", () => {
     expect(body).toMatch(
-      /\/\/ V-693 — teams developer docs\. Walks through the team RBAC\s*\n?\s*\/\/ surface \(invite → accept → member\/admin roles\) and the V-326c \/\s*\n?\s*\/\/ V-330b\/d\/e\/f effective-account model that lets team members act\s*\n?\s*\/\/ on the owner account's resources via X-Driftstack-Account\./,
+      /\/\/ V-693 — teams developer docs\. Walks through the team RBAC\s*\/\/ surface \(invite → accept → member\/admin roles\) and the V-326c \/\s*\/\/ V-330b\/d\/e\/f effective-account model that lets team members act\s*\/\/ on the owner account's resources via X-Driftstack-Account\./,
     );
     expect(body).toMatch(
-      /\/\/ W219\.A — accuracy pass: every endpoint pinned against\s*\n?\s*\/\/ apps\/server\/src\/routes\/team\.ts\./,
+      /\/\/ W219\.A — accuracy pass: every endpoint pinned against\s*\/\/ apps\/server\/src\/routes\/team\.ts\./,
     );
   });
 
   it("3-role vocabulary pinned: Owner account (pays the bill, sessions/profiles/webhooks/billing live here) + Member (read access via X-Driftstack-Account) + Admin (member + write access on owner's resources) — pinned so the 3-role + bill-lives-on-owner + member-read-only + admin-write commitment survives", () => {
     expect(body).toMatch(
-      /<strong>Owner account<\/strong> — the account that pays the\s*\n?\s*bill\. Sessions, profiles, webhooks, and billing all live on\s*\n?\s*the owner account\./,
+      /<strong>Owner account<\/strong> — the account that pays the\s*bill\. Sessions, profiles, webhooks, and billing all live on\s*the owner account\./,
     );
     expect(body).toMatch(
-      /<strong>Member<\/strong> — a user invited to the owner\s*\n?\s*account with read access to its resources via\s*\n?\s*<code>X-Driftstack-Account<\/code>\./,
+      /<strong>Member<\/strong> — a user invited to the owner\s*account with read access to its resources via\s*<code>X-Driftstack-Account<\/code>\./,
     );
     expect(body).toMatch(
-      /<strong>Admin<\/strong> — a member who additionally has\s*\n?\s*write access \(create \+ modify sessions, profiles, webhooks\)\s*\n?\s*on the owner account\./,
+      /<strong>Admin<\/strong> — a member who additionally has\s*write access \(create \+ modify sessions, profiles, webhooks\)\s*on the owner account\./,
     );
   });
 
@@ -67,7 +67,7 @@ describe('W519.A apps/marketing-site/src/pages/docs/teams.astro content parity',
     expect(body).toMatch(/"id": "mem_…"/);
     expect(body).toMatch(/"member_account_id": "acc_invitee_…"/);
     expect(body).toMatch(
-      /Acceptance posts the <em>plaintext token<\/em> from the email —\s*\n?\s*there is no <code>\/v1\/team\/invites\/&lt;id&gt;\/accept<\/code>\s*\n?\s*endpoint\. The invite row itself can't be revoked via the API\s*\n?\s*today; the invite simply expires\./,
+      /Acceptance posts the <em>plaintext token<\/em> from the email —\s*there is no <code>\/v1\/team\/invites\/&lt;id&gt;\/accept<\/code>\s*endpoint\. The invite row itself can't be revoked via the API\s*today; the invite simply expires\./,
     );
   });
 
@@ -76,7 +76,7 @@ describe('W519.A apps/marketing-site/src/pages/docs/teams.astro content parity',
     expect(body).toMatch(/DELETE \/v1\/team\/members\/mem_…/);
     expect(body).toMatch(/→ 204 No Content/);
     expect(body).toMatch(
-      /The DELETE route takes the <code>mem_<\/code> membership id, not\s*\n?\s*an <code>acc_<\/code> account id\. Transferring ownership of an\s*\n?\s*account is a support-ticket operation today\./,
+      /The DELETE route takes the <code>mem_<\/code> membership id, not\s*an <code>acc_<\/code> account id\. Transferring ownership of an\s*account is a support-ticket operation today\./,
     );
   });
 
@@ -86,35 +86,35 @@ describe('W519.A apps/marketing-site/src/pages/docs/teams.astro content parity',
     expect(body).toMatch(/"role": "admin"/);
     expect(body).toMatch(/"membership_id": "mem_…"/);
     expect(body).toMatch(
-      /The mirror of <code>\/v1\/team\/members<\/code> — the latter\s*\n?\s*lists members of <em>my<\/em> team, this one lists teams\s*\n?\s*<em>I am on<\/em>\./,
+      /The mirror of <code>\/v1\/team\/members<\/code> — the latter\s*lists members of <em>my<\/em> team, this one lists teams\s*<em>I am on<\/em>\./,
     );
   });
 
   it("X-Driftstack-Account framing + role-enforcement pinned: 'Team members read + write the owner's resources by passing the owner's account id in the X-Driftstack-Account request header. The server validates the caller has a valid membership on that owner before routing the request.' + sample GET /v1/sessions + 'Role enforcement: reads are allowed for both member and admin. Writes (e.g. POST /v1/sessions, POST /v1/webhooks, POST /v1/webhooks/<id>/rotate-secret) require admin; members get 403.' — pinned so the X-Driftstack-Account + valid-membership-pre-route + read-both-roles + write-admin-only + 403-on-member-write commitment survives", () => {
     expect(body).toMatch(
-      /Team members read \+ write the owner's resources by passing the\s*\n?\s*owner's account id in the <code>X-Driftstack-Account<\/code>\s*\n?\s*request header\. The server validates the caller has a valid\s*\n?\s*membership on that owner before routing the request\./,
+      /Team members read \+ write the owner's resources by passing the\s*owner's account id in the <code>X-Driftstack-Account<\/code>\s*request header\. The server validates the caller has a valid\s*membership on that owner before routing the request\./,
     );
     expect(body).toMatch(/X-Driftstack-Account: acc_owner_…/);
     expect(body).toMatch(
-      /Role enforcement: <strong>reads<\/strong> are allowed for both\s*\n?\s*<code>member<\/code> and <code>admin<\/code>\. <strong>Writes<\/strong>\s*\n?\s*\(e\.g\. <code>POST \/v1\/sessions<\/code>,\s*\n?\s*<code>POST \/v1\/webhooks<\/code>,\s*\n?\s*<code>POST \/v1\/webhooks\/&lt;id&gt;\/rotate-secret<\/code>\) require\s*\n?\s*<code>admin<\/code>; members get <code>403<\/code>\./,
+      /Role enforcement: <strong>reads<\/strong> are allowed for both\s*<code>member<\/code> and <code>admin<\/code>\. <strong>Writes<\/strong>\s*\(e\.g\. <code>POST \/v1\/sessions<\/code>,\s*<code>POST \/v1\/webhooks<\/code>,\s*<code>POST \/v1\/webhooks\/&lt;id&gt;\/rotate-secret<\/code>\) require\s*<code>admin<\/code>; members get <code>403<\/code>\./,
     );
   });
 
   it("3-admins-cannot framing pinned: tier-change-or-checkout-is-owner-only + manage-the-team-itself (invite/remove/accept-on-behalf-of-someone-else) + see-or-modify-other-members-API-keys (each member's keys are private to their account) — pinned so the 3-admin-cannot ceiling commitment + owner-only-billing + admin-cannot-manage-team + per-member-key-privacy commitments survive (drift to letting admin invite/remove would erode the owner-only team-management commitment)", () => {
     expect(body).toMatch(
-      /<li>Change the owner's <strong>tier<\/strong> or initiate\s*\n?\s*checkout — those are owner-only operations\.<\/li>/,
+      /<li>Change the owner's <strong>tier<\/strong> or initiate\s*checkout — those are owner-only operations\.<\/li>/,
     );
     expect(body).toMatch(
-      /<li>Manage the team itself — invite, remove members, accept on\s*\n?\s*behalf of someone else\.<\/li>/,
+      /<li>Manage the team itself — invite, remove members, accept on\s*behalf of someone else\.<\/li>/,
     );
     expect(body).toMatch(
-      /<li>See or modify other members' API keys; each member's keys\s*\n?\s*are private to their account\.<\/li>/,
+      /<li>See or modify other members' API keys; each member's keys\s*are private to their account\.<\/li>/,
     );
   });
 
   it("Audit-trail framing pinned: 'Team mutations (invite sent, invite accepted, member removed) write entries on the owner's audit log. The action filter is exact-match (one action per request, no wildcards), e.g. GET /v1/account/audit-log?action=team.member_invited (also team.invite_accepted / team.member_removed) — see /docs/audit-log.' — pinned so the 3-team-mutation + on-owner-audit-log + exact-match-action-filter (no wildcards) + 3 concrete team.* action names + /docs/audit-log cross-ref survives. The filter was corrected: ?action= is exact-match, NOT a team.* wildcard, matching the audit-log action-filter semantics.", () => {
     expect(body).toMatch(
-      /Team mutations \(invite sent, invite accepted, member removed\)\s*\n?\s*write entries on the owner's audit log\. The <code>action<\/code>\s*\n?\s*filter is exact-match \(one action per request, no wildcards\),\s*\n?\s*e\.g\. <code>GET \/v1\/account\/audit-log\?action=team\.member_invited<\/code>\s*\n?\s*\(also <code>team\.invite_accepted<\/code> \/\s*\n?\s*<code>team\.member_removed<\/code>\) — see\s*\n?\s*<a href="\/docs\/audit-log\/">\/docs\/audit-log<\/a>\./,
+      /Team mutations \(invite sent, invite accepted, member removed\)\s*write entries on the owner's audit log\. The <code>action<\/code>\s*filter is exact-match \(one action per request, no wildcards\),\s*e\.g\. <code>GET \/v1\/account\/audit-log\?action=team\.member_invited<\/code>\s*\(also <code>team\.invite_accepted<\/code> \/\s*<code>team\.member_removed<\/code>\) — see\s*<a href="\/docs\/audit-log\/">\/docs\/audit-log<\/a>\./,
     );
     // Anti-drift: the action filter is exact-match, not a wildcard; the old
     // ?action=team.* glob framing must NOT return (no wildcard support).

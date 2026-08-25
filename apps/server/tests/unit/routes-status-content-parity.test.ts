@@ -66,7 +66,7 @@ describe('W412.C apps/server/src/routes/status.ts content parity', () => {
   it('V-176 framing pinned: customer-facing /v1/status distinct from /ready (k8s liveness orchestration probe)', () => {
     expect(body).toMatch(/V-176 — public-facing status endpoint\./);
     expect(body).toMatch(
-      /Distinct from \/ready \(which is the k8s \/ liveness probe consumed by\s*\n?\s*\/\/\s*orchestration infrastructure\)\. \/v1\/status is the CUSTOMER-FACING\s*\n?\s*\/\/\s*status surface — what the public status page \(apps\/status-site,\s*\n?\s*\/\/\s*deployed to Cloudflare\) consumes\./,
+      /Distinct from \/ready \(which is the k8s \/ liveness probe consumed by\s*\/\/\s*orchestration infrastructure\)\. \/v1\/status is the CUSTOMER-FACING\s*\/\/\s*status surface — what the public status page \(apps\/status-site,\s*\/\/\s*deployed to Cloudflare\) consumes\./,
     );
   });
 
@@ -83,7 +83,7 @@ describe('W412.C apps/server/src/routes/status.ts content parity', () => {
   // That is derived from runComponentCheck's returns rather than taken from prose.
   it('Aggregation rules: major_outage > degraded > operational, and NO component can be major_outage — derived from runComponentCheck, not from the comment claiming it', () => {
     expect(body).toMatch(
-      /Overall: any 'major_outage' → 'major_outage'; any 'degraded' →\s*\n?\s*\/\/\s*'degraded'; else 'operational'\./,
+      /Overall: any 'major_outage' → 'major_outage'; any 'degraded' →\s*\/\/\s*'degraded'; else 'operational'\./,
     );
     const check = body.slice(
       body.indexOf('async function runComponentCheck'),
@@ -98,18 +98,18 @@ describe('W412.C apps/server/src/routes/status.ts content parity', () => {
       body,
       'the header must say the component branch is unreachable rather than "reserved for future"',
     ).toMatch(
-      /No readiness check can produce 'major_outage': runComponentCheck\s*\n?\s*\/\/\s*returns only 'operational' or 'degraded'/,
+      /No readiness check can produce 'major_outage': runComponentCheck\s*\/\/\s*returns only 'operational' or 'degraded'/,
     );
     expect(
       body,
       'and must say the OVERALL verdict still reaches it, or the reader concludes the value is dead',
-    ).toMatch(/an open incident of outage severity\s*\n?\s*\/\/\s*sets 'major_outage' directly/);
+    ).toMatch(/an open incident of outage severity\s*\/\/\s*sets 'major_outage' directly/);
   });
 
   it('No-auth posture + Cloudflare ~30s cache framing pinned with public, max-age=30 header', () => {
     expect(body).toMatch(/No auth required — status pages are public\./);
     expect(body).toMatch(
-      /Caching: the caller \(Cloudflare Pages\) caches the response for ~30s\.\s*\n?\s*\/\/\s*Response includes Cache-Control: public, max-age=30\./,
+      /Caching: the caller \(Cloudflare Pages\) caches the response for ~30s\.\s*\/\/\s*Response includes Cache-Control: public, max-age=30\./,
     );
   });
 
@@ -163,24 +163,24 @@ describe('W412.C apps/server/src/routes/status.ts content parity', () => {
     );
     expect(body).toMatch(/const startedAt = new Date\(\);/);
     expect(body).toMatch(/const timeoutMs = check\.timeoutMs \?\? COMPONENT_TIMEOUT_MS;/);
-    expect(body).toMatch(/await Promise\.race\(\[\s*\n?\s*check\.fn\(\),/);
+    expect(body).toMatch(/await Promise\.race\(\[\s*check\.fn\(\),/);
     expect(body).toMatch(
       /timer = setTimeout\(\(\) => reject\(new Error\('timeout'\)\), timeoutMs\);/,
     );
     // The losing timer is cancelled — otherwise every /v1/status request leaves
     // one pending timer per readiness check alive for the full timeout.
-    expect(body).toMatch(/\} finally \{\s*\n?\s*if \(timer !== undefined\) clearTimeout\(timer\);/);
+    expect(body).toMatch(/\} finally \{\s*if \(timer !== undefined\) clearTimeout\(timer\);/);
     expect(body).toMatch(
-      /return \{\s*\n?\s*name: check\.name,\s*\n?\s*status: 'operational',\s*\n?\s*last_checked_at: startedAt\.toISOString\(\),\s*\n?\s*\};/,
+      /return \{\s*name: check\.name,\s*status: 'operational',\s*last_checked_at: startedAt\.toISOString\(\),\s*\};/,
     );
     expect(body).toMatch(
-      /\} catch \{\s*\n?\s*return \{\s*\n?\s*name: check\.name,\s*\n?\s*status: 'degraded',\s*\n?\s*last_checked_at: startedAt\.toISOString\(\),/,
+      /\} catch \{\s*return \{\s*name: check\.name,\s*status: 'degraded',\s*last_checked_at: startedAt\.toISOString\(\),/,
     );
   });
 
   it('aggregateOverall: major_outage > degraded > operational precedence via .some()', () => {
     expect(body).toMatch(
-      /function aggregateOverall\(components: readonly ComponentResult\[\]\): ComponentStatus \{\s*\n?\s*if \(components\.some\(\(c\) => c\.status === 'major_outage'\)\) return 'major_outage';\s*\n?\s*if \(components\.some\(\(c\) => c\.status === 'degraded'\)\) return 'degraded';\s*\n?\s*return 'operational';/,
+      /function aggregateOverall\(components: readonly ComponentResult\[\]\): ComponentStatus \{\s*if \(components\.some\(\(c\) => c\.status === 'major_outage'\)\) return 'major_outage';\s*if \(components\.some\(\(c\) => c\.status === 'degraded'\)\) return 'degraded';\s*return 'operational';/,
     );
   });
 
@@ -191,10 +191,10 @@ describe('W412.C apps/server/src/routes/status.ts content parity', () => {
       // public endpoint in the status family run unlimited — every request fans
       // out to all readiness checks. Requiring the preHandler here means the
       // gate cannot be dropped without this failing.
-      /app\.get\('\/v1\/status', \{ preHandler: statusSnapshotGate \}, async \(_request, reply\) => \{\s*\n?\s*const components = await Promise\.all\(opts\.readinessChecks\.map\(runComponentCheck\)\);/,
+      /app\.get\('\/v1\/status', \{ preHandler: statusSnapshotGate \}, async \(_request, reply\) => \{\s*const components = await Promise\.all\(opts\.readinessChecks\.map\(runComponentCheck\)\);/,
     );
     expect(body).toMatch(
-      /const recentIncidents: PublicIncidentSummary\[\] = \[\];[\s\S]*?let incidentDataComplete = opts\.incidentsService !== undefined;\s*\n?\s*if \(opts\.incidentsService\) \{/,
+      /const recentIncidents: PublicIncidentSummary\[\] = \[\];[\s\S]*?let incidentDataComplete = opts\.incidentsService !== undefined;\s*if \(opts\.incidentsService\) \{/,
     );
     expect(body).toContain('const feed = await opts.incidentsService.publicFeed({');
     expect(body).toContain('openIncidentCount = feed.openCount;');
@@ -209,7 +209,7 @@ describe('W412.C apps/server/src/routes/status.ts content parity', () => {
 
   it('StatusRoutesOptions: readinessChecks readonly + optional incidentsService (V-545.A)', () => {
     expect(body).toMatch(
-      /export interface StatusRoutesOptions \{\s*\n?\s*readinessChecks: readonly ReadinessCheck\[\];/,
+      /export interface StatusRoutesOptions \{\s*readinessChecks: readonly ReadinessCheck\[\];/,
     );
     expect(body).toMatch(/incidentsService\?: IncidentsService;/);
   });

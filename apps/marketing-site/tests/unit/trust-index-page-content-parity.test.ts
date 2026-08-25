@@ -40,7 +40,7 @@ describe('W374.A marketing-site /trust (trust center landing) page content parit
   it('V-477 framing comment pinned (one-bookmark trust-hub for buyer evaluations)', () => {
     expect(body).toMatch(/V-477 — trust center landing/);
     expect(body).toMatch(
-      /Aggregates the customer-trust\s*\n?\s*\/\/\s*surfaces \(security, sub-processors, legal documents, incident\s*\n?\s*\/\/\s*history\) on a single page/,
+      /Aggregates the customer-trust\s*\/\/\s*surfaces \(security, sub-processors, legal documents, incident\s*\/\/\s*history\) on a single page/,
     );
   });
 

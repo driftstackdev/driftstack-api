@@ -41,7 +41,7 @@ describe('W417.A apps/server/src/routes/account-mfa.ts content parity', () => {
 
   it('V-353b framing pins interactive credential mutations and API-key-readable status', () => {
     expect(body).toMatch(
-      /Every operation that changes MFA credential state requires an\s*\n?\s*\/\/ interactive web session\. API keys may read status, but cannot enroll an\s*\n?\s*\/\/ attacker-owned factor, replace recovery codes, or disable the human factor\./,
+      /Every operation that changes MFA credential state requires an\s*\/\/ interactive web session\. API keys may read status, but cannot enroll an\s*\/\/ attacker-owned factor, replace recovery codes, or disable the human factor\./,
     );
   });
 
@@ -56,23 +56,23 @@ describe('W417.A apps/server/src/routes/account-mfa.ts content parity', () => {
 
   it('V-353e framing pinned in disable handler: 403 + requires_mfa_step_up extension; POST /v1/auth/mfa/step-up refresh path', () => {
     expect(body).toMatch(
-      /\/\/ V-353b\/V-353e — disable\. Per V-353a verdict Q3 this is one of\s*\n?\s*\/\/ the two step-up-gated ops \(account-delete \+ MFA-disable\)\. The\s*\n?\s*\/\/ step-up gate \(`requireMfaFresh`\) refuses \(403 \+ requires_mfa_step_up\s*\n?\s*\/\/ extension\) when the caller's session hasn't satisfied MFA in the\s*\n?\s*\/\/ last 15 min\. Caller refreshes via POST \/v1\/auth\/mfa\/step-up\s*\n?\s*\/\/ \(separate route, also bearer-authed\) and retries\./,
+      /\/\/ V-353b\/V-353e — disable\. Per V-353a verdict Q3 this is one of\s*\/\/ the two step-up-gated ops \(account-delete \+ MFA-disable\)\. The\s*\/\/ step-up gate \(`requireMfaFresh`\) refuses \(403 \+ requires_mfa_step_up\s*\/\/ extension\) when the caller's session hasn't satisfied MFA in the\s*\/\/ last 15 min\. Caller refreshes via POST \/v1\/auth\/mfa\/step-up\s*\/\/ \(separate route, also bearer-authed\) and retries\./,
     );
   });
 
   it('Defensive confirm body: { confirm: "disable-mfa" } required + BadRequestError on miss', () => {
     expect(body).toMatch(
-      /\/\/ Body still requires `\{ confirm: "disable-mfa" \}` as a defensive\s*\n?\s*\/\/ check against accidental DELETEs from a stray client\./,
+      /\/\/ Body still requires `\{ confirm: "disable-mfa" \}` as a defensive\s*\/\/ check against accidental DELETEs from a stray client\./,
     );
     expect(body).toMatch(/const body = \(request\.body \?\? \{\}\) as \{ confirm\?: string \};/);
     expect(body).toMatch(
-      /if \(body\.confirm !== 'disable-mfa'\) \{\s*\n?\s*throw new BadRequestError\(\s*\n?\s*'Disable requires an explicit confirmation\. Pass \{ "confirm": "disable-mfa" \}\.',\s*\n?\s*\);/,
+      /if \(body\.confirm !== 'disable-mfa'\) \{\s*throw new BadRequestError\(\s*'Disable requires an explicit confirmation\. Pass \{ "confirm": "disable-mfa" \}\.',\s*\);/,
     );
   });
 
   it('V-353f framing pinned: POST /v1/account/mfa/disable alias same gate + same handler (founder-named canonical shape)', () => {
     expect(body).toMatch(
-      /\/\/ V-353f — POST alias per founder-named canonical shape\. Same gate,\s*\n?\s*\/\/ same handler\. Some clients prefer POST for non-idempotent ops\./,
+      /\/\/ V-353f — POST alias per founder-named canonical shape\. Same gate,\s*\/\/ same handler\. Some clients prefer POST for non-idempotent ops\./,
     );
     expect(body).toMatch(
       /app\.post\(\s*'\/v1\/account\/mfa\/disable',\s*\{\s*preHandler: \[\s*app\.requireAuth,\s*app\.requireScope\('account_owner'\),\s*requireInteractiveWebSession,\s*app\.requireMfaFresh\(\),\s*app\.rateLimit\('global'\),?\s*\],\s*\},\s*disableHandler,/,
@@ -81,7 +81,7 @@ describe('W417.A apps/server/src/routes/account-mfa.ts content parity', () => {
 
   it('DELETE /v1/account/mfa: same handler + same gate (back-compat with V-353b tests + clients)', () => {
     expect(body).toMatch(
-      /\/\/ DELETE retains the original verb for back-compat with the V-353b\s*\n?\s*\/\/ tests \+ clients\./,
+      /\/\/ DELETE retains the original verb for back-compat with the V-353b\s*\/\/ tests \+ clients\./,
     );
     expect(body).toMatch(
       /app\.delete\(\s*'\/v1\/account\/mfa',\s*\{\s*preHandler: \[\s*app\.requireAuth,\s*app\.requireScope\('account_owner'\),\s*requireInteractiveWebSession,\s*app\.requireMfaFresh\(\),\s*app\.rateLimit\('global'\),?\s*\],\s*\},\s*disableHandler,/,
@@ -90,7 +90,7 @@ describe('W417.A apps/server/src/routes/account-mfa.ts content parity', () => {
 
   it('Status: GET /v1/account/mfa enrolled + enrolled_at/last_used_at nullable ISO + unused_recovery_codes count', () => {
     expect(body).toMatch(
-      /app\.get\(\s*\n?\s*'\/v1\/account\/mfa',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('read'\), app\.rateLimit\('global'\)\] \},/,
+      /app\.get\(\s*'\/v1\/account\/mfa',\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('read'\), app\.rateLimit\('global'\)\] \},/,
     );
     expect(body).toMatch(/const status = await service\.getStatus\(ctx\.account\.id\);/);
     expect(body).toMatch(/enrolled: status\.enrolled,/);
@@ -108,10 +108,10 @@ describe('W417.A apps/server/src/routes/account-mfa.ts content parity', () => {
       /'\/v1\/account\/mfa\/enroll',[\s\S]{0,240}app\.requireScope\('account_owner'\),\s*requireInteractiveWebSession,\s*app\.rateLimit\('global'\)/,
     );
     expect(body).toMatch(
-      /const result = await service\.startEnrollment\(\{\s*\n?\s*accountId: ctx\.account\.id,\s*\n?\s*email: ctx\.account\.email,\s*\n?\s*\}\);/,
+      /const result = await service\.startEnrollment\(\{\s*accountId: ctx\.account\.id,\s*email: ctx\.account\.email,\s*\}\);/,
     );
     expect(body).toMatch(
-      /return \{\s*\n?\s*otpauth_uri: result\.otpauthUri,\s*\n?\s*secret_base32: result\.secretBase32,\s*\n?\s*algorithm: 'SHA1',\s*\n?\s*digits: 6,\s*\n?\s*period_seconds: 30,\s*\n?\s*\};/,
+      /return \{\s*otpauth_uri: result\.otpauthUri,\s*secret_base32: result\.secretBase32,\s*algorithm: 'SHA1',\s*digits: 6,\s*period_seconds: 30,\s*\};/,
     );
   });
 
@@ -120,10 +120,10 @@ describe('W417.A apps/server/src/routes/account-mfa.ts content parity', () => {
       /import \{ CompleteMfaEnrollmentRequestSchema \} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(
-      /const parsed = CompleteMfaEnrollmentRequestSchema\.safeParse\(request\.body \?\? \{\}\);\s*\n?\s*if \(!parsed\.success\) \{\s*\n?\s*throw new BadRequestError\(parsed\.error\.issues\[0\]\?\.message \?\? 'Invalid body\.'\);/,
+      /const parsed = CompleteMfaEnrollmentRequestSchema\.safeParse\(request\.body \?\? \{\}\);\s*if \(!parsed\.success\) \{\s*throw new BadRequestError\(parsed\.error\.issues\[0\]\?\.message \?\? 'Invalid body\.'\);/,
     );
     expect(body).toMatch(
-      /const result = await service\.completeEnrollment\(\{\s*\n?\s*accountId: ctx\.account\.id,\s*\n?\s*currentWebSessionId: interactiveWebSessionId\(request\),\s*\n?\s*code: parsed\.data\.code,\s*\n?\s*\}\);\s*\n?\s*return \{ recovery_codes: result\.recoveryCodes \};/,
+      /const result = await service\.completeEnrollment\(\{\s*accountId: ctx\.account\.id,\s*currentWebSessionId: interactiveWebSessionId\(request\),\s*code: parsed\.data\.code,\s*\}\);\s*return \{ recovery_codes: result\.recoveryCodes \};/,
     );
   });
 
@@ -134,16 +134,16 @@ describe('W417.A apps/server/src/routes/account-mfa.ts content parity', () => {
     expect(body).toMatch(/Without it a stolen web session could mint fresh/);
     expect(body).toMatch(/legitimate lost-device-but-logged-in flow still/);
     expect(body).toMatch(
-      /app\.post\(\s*\n?\s*'\/v1\/account\/mfa\/recovery-codes\/regenerate',\s*\{\s*preHandler: \[\s*app\.requireAuth,\s*app\.requireScope\('account_owner'\),\s*requireInteractiveWebSession,\s*app\.requireMfaFresh\(\),\s*app\.rateLimit\('global'\),?\s*\],\s*\},/,
+      /app\.post\(\s*'\/v1\/account\/mfa\/recovery-codes\/regenerate',\s*\{\s*preHandler: \[\s*app\.requireAuth,\s*app\.requireScope\('account_owner'\),\s*requireInteractiveWebSession,\s*app\.requireMfaFresh\(\),\s*app\.rateLimit\('global'\),?\s*\],\s*\},/,
     );
     expect(body).toMatch(
-      /const \{ recoveryCodes \} = await service\.regenerateRecoveryCodes\(\{\s*\n?\s*accountId: ctx\.account\.id,\s*\n?\s*\}\);\s*\n?\s*return \{ recovery_codes: recoveryCodes \};/,
+      /const \{ recoveryCodes \} = await service\.regenerateRecoveryCodes\(\{\s*accountId: ctx\.account\.id,\s*\}\);\s*return \{ recovery_codes: recoveryCodes \};/,
     );
   });
 
   it('disableHandler shape: shared async (request, reply) → null returning 204; reply.code(204) before return null', () => {
     expect(body).toMatch(
-      /const disableHandler = async \(request: FastifyRequest, reply: FastifyReply\): Promise<null> => \{[\s\S]+?await service\.disable\(\{ accountId: ctx\.account\.id \}\);\s*\n?\s*reply\.code\(204\);\s*\n?\s*return null;/,
+      /const disableHandler = async \(request: FastifyRequest, reply: FastifyReply\): Promise<null> => \{[\s\S]+?await service\.disable\(\{ accountId: ctx\.account\.id \}\);\s*reply\.code\(204\);\s*return null;/,
     );
   });
 

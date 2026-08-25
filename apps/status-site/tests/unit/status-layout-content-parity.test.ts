@@ -174,7 +174,7 @@ describe('W381.C status-site StatusLayout.astro content parity', () => {
 
   it('R13 header right-nav: driftstack.dev external cross-link — dark-theme ink-muted -> ink-primary hover after status-site migration', () => {
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev" class="text-ink-muted hover:text-ink-primary">\s*\n?\s*driftstack\.dev\s*\n?\s*<\/a>/,
+      /<a href="https:\/\/driftstack\.dev" class="text-ink-muted hover:text-ink-primary">\s*driftstack\.dev\s*<\/a>/,
     );
   });
 
@@ -186,7 +186,7 @@ describe('W381.C status-site StatusLayout.astro content parity', () => {
 
   it('R13 footer privacy-policy cross-link to driftstack.dev/legal/privacy — dark-theme hover:text-ink-primary after status-site migration', () => {
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/legal\/privacy\/" class="hover:text-ink-primary">\s*\n?\s*Privacy\s*\n?\s*<\/a>/,
+      /<a href="https:\/\/driftstack\.dev\/legal\/privacy\/" class="hover:text-ink-primary">\s*Privacy\s*<\/a>/,
     );
   });
 
@@ -196,7 +196,7 @@ describe('W381.C status-site StatusLayout.astro content parity', () => {
   });
 
   it('renders <slot /> inside <main>', () => {
-    expect(body).toMatch(/<main[^>]*>\s*\n?\s*<slot \/>\s*\n?\s*<\/main>/);
+    expect(body).toMatch(/<main[^>]*>\s*<slot \/>\s*<\/main>/);
   });
 
   it('WCAG 2.4.1 skip link: "Skip to main content" anchor → #main-content (sr-only until focused)', () => {

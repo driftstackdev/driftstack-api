@@ -33,7 +33,7 @@ describe('W440.A apps/server/src/lib/memory-rate-limit-store.ts content parity',
 
   it("test-only framing pinned: in-process token bucket; do NOT use in production (no persistence, doesn't work across multiple server instances)", () => {
     expect(body).toMatch(
-      /\/\/ In-process token bucket store\. Used by tests; do NOT use in production\s*\n?\s*\/\/ \(no persistence, doesn't work across multiple server instances\)\./,
+      /\/\/ In-process token bucket store\. Used by tests; do NOT use in production\s*\/\/ \(no persistence, doesn't work across multiple server instances\)\./,
     );
   });
 
@@ -46,14 +46,12 @@ describe('W440.A apps/server/src/lib/memory-rate-limit-store.ts content parity',
   });
 
   it('BucketState interface: tokens + lastRefillMs', () => {
-    expect(body).toMatch(
-      /interface BucketState \{\s*\n?\s*tokens: number;\s*\n?\s*lastRefillMs: number;\s*\n?\s*\}/,
-    );
+    expect(body).toMatch(/interface BucketState \{\s*tokens: number;\s*lastRefillMs: number;\s*\}/);
   });
 
   it('MemoryRateLimitStore implements RateLimitStore; private readonly buckets Map<string, BucketState>', () => {
     expect(body).toMatch(
-      /export class MemoryRateLimitStore implements RateLimitStore \{\s*\n?\s*private readonly buckets = new Map<string, BucketState>\(\);/,
+      /export class MemoryRateLimitStore implements RateLimitStore \{\s*private readonly buckets = new Map<string, BucketState>\(\);/,
     );
     expect(body).toMatch(/private readonly slidingWindows = new Map<string, number\[]>\(\);/);
   });
@@ -66,13 +64,13 @@ describe('W440.A apps/server/src/lib/memory-rate-limit-store.ts content parity',
 
   it('elapsedSec clamped at zero (Math.max(0, ...)) for clock-skew safety; refilled = min(capacity, tokens + elapsed*rate) (no over-refill past capacity)', () => {
     expect(body).toMatch(
-      /const elapsedSec = Math\.max\(0, \(now - existing\.lastRefillMs\) \/ 1000\);\s*\n?\s*const refill = elapsedSec \* refillPerSecond;\s*\n?\s*const refilled = Math\.min\(capacity, existing\.tokens \+ refill\);/,
+      /const elapsedSec = Math\.max\(0, \(now - existing\.lastRefillMs\) \/ 1000\);\s*const refill = elapsedSec \* refillPerSecond;\s*const refilled = Math\.min\(capacity, existing\.tokens \+ refill\);/,
     );
   });
 
   it('on sufficient (refilled >= cost): persist remaining + return {allowed:true, remaining, retryAfterMs:0}', () => {
     expect(body).toMatch(
-      /if \(refilled >= cost\) \{\s*\n?\s*const remaining = refilled - cost;\s*\n?\s*this\.buckets\.set\(key, \{ tokens: remaining, lastRefillMs: now \}\);\s*\n?\s*return Promise\.resolve\(\{ allowed: true, remaining, retryAfterMs: 0 \}\);\s*\n?\s*\}/,
+      /if \(refilled >= cost\) \{\s*const remaining = refilled - cost;\s*this\.buckets\.set\(key, \{ tokens: remaining, lastRefillMs: now \}\);\s*return Promise\.resolve\(\{ allowed: true, remaining, retryAfterMs: 0 \}\);\s*\}/,
     );
   });
 
@@ -82,7 +80,7 @@ describe('W440.A apps/server/src/lib/memory-rate-limit-store.ts content parity',
       /const retryAfterMs = Math\.ceil\(\(deficit \/ refillPerSecond\) \* 1000\);/,
     );
     expect(body).toMatch(
-      /\/\/ Persist refilled tokens but don't consume\.\s*\n?\s*this\.buckets\.set\(key, \{ tokens: refilled, lastRefillMs: now \}\);\s*\n?\s*return Promise\.resolve\(\{ allowed: false, remaining: refilled, retryAfterMs \}\);/,
+      /\/\/ Persist refilled tokens but don't consume\.\s*this\.buckets\.set\(key, \{ tokens: refilled, lastRefillMs: now \}\);\s*return Promise\.resolve\(\{ allowed: false, remaining: refilled, retryAfterMs \}\);/,
     );
   });
 
@@ -95,7 +93,7 @@ describe('W440.A apps/server/src/lib/memory-rate-limit-store.ts content parity',
 
   it('reset(): clears bucket Map and sliding-window history (for tests)', () => {
     expect(body).toMatch(
-      /reset\(\): void \{\s*\n?\s*this\.buckets\.clear\(\);\s*\n?\s*this\.slidingWindows\.clear\(\);\s*\n?\s*\}/,
+      /reset\(\): void \{\s*this\.buckets\.clear\(\);\s*this\.slidingWindows\.clear\(\);\s*\}/,
     );
   });
 

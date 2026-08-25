@@ -44,20 +44,18 @@ describe('secret-redaction list cross-source invariant (Sentry + Pino logger)', 
 
   it("Sentry cross-references the lib/logger.ts redact-paths via 'Sentry mirror of the lib/logger.ts redact-paths extension' — pinned so the mirror relationship stays documented (drift on one without updating the other would create asymmetric scrubbing)", () => {
     expect(sentry).toMatch(
-      /\/\/ Arc 7 obs\.2\.b — v2-#8 BYOK \+ gui_control_key Sentry mirror of\s*\n?\s*\/\/ the lib\/logger\.ts redact-paths extension\./,
+      /\/\/ Arc 7 obs\.2\.b — v2-#8 BYOK \+ gui_control_key Sentry mirror of\s*\/\/ the lib\/logger\.ts redact-paths extension\./,
     );
   });
 
   it("Sentry's case-insensitive matching is documented: 'Match keys are lowercase + hyphen/underscore variants (the SENTRY_SENSITIVE_KEYS Set is compared via key.toLowerCase()).' — pinned so the lowercase-key invariant stays documented (drift to case-sensitive matching would let mixed-case keys slip through)", () => {
     expect(sentry).toMatch(
-      /Match keys are\s*\n?\s*\/\/ lowercase \+ hyphen\/underscore variants \(the\s*\n?\s*\/\/ SENTRY_SENSITIVE_KEYS Set is compared via key\.toLowerCase\(\)\)\./,
+      /Match keys are\s*\/\/ lowercase \+ hyphen\/underscore variants \(the\s*\/\/ SENTRY_SENSITIVE_KEYS Set is compared via key\.toLowerCase\(\)\)\./,
     );
   });
 
   it("Pino logger pins both camelCase + snake_case variants of gui_control_key: 'gui_control_key' + 'guiControlKey' + 'body.gui_control_key' — pinned so both casings get scrubbed regardless of which call-site emits the field", () => {
-    expect(logger).toMatch(
-      /'gui_control_key',\s*\n?\s*'guiControlKey',\s*\n?\s*'body\.gui_control_key',/,
-    );
+    expect(logger).toMatch(/'gui_control_key',\s*'guiControlKey',\s*'body\.gui_control_key',/);
   });
 
   // ─── Full programmatic lockstep (mirror-or-leak guard) ──────────────────────

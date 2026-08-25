@@ -46,7 +46,7 @@ describe('W523.C apps/marketing-site/public/_headers content parity', () => {
     expect(body).toMatch(/# {3}2\. Marketing pages \(medium, 5m \/ 1d edge\) — html/);
     expect(body).toMatch(/# {3}3\. Crawler artefacts \(1h\) {16}— robots\.txt, sitemaps/);
     expect(body).toMatch(
-      /# Cloudflare Pages copies public\/_headers verbatim into the deploy and\s*\n?\s*# applies these per-path\. ⚠️ ALL matching rules apply and later\/broad\s*\n?\s*# matches MERGE onto earlier ones \(there is no first-match-wins\) — so\s*\n?\s*# the `\/\*` catch-all must never set Cache-Control\. More-\s*\n?\s*# specific patterns above broader ones\./,
+      /# Cloudflare Pages copies public\/_headers verbatim into the deploy and\s*# applies these per-path\. ⚠️ ALL matching rules apply and later\/broad\s*# matches MERGE onto earlier ones \(there is no first-match-wins\) — so\s*# the `\/\*` catch-all must never set Cache-Control\. More-\s*# specific patterns above broader ones\./,
     );
     expect(body).toMatch(
       /#\s+https:\/\/developers\.cloudflare\.com\/pages\/configuration\/headers\//,
@@ -56,7 +56,7 @@ describe('W523.C apps/marketing-site/public/_headers content parity', () => {
   it("Hashed-Astro-bundle tier framing pinned: '── Hashed Astro bundles + CSS ──' section + 'Astro emits hashed filenames under /_astro/* — the hash flips on every content change so customers always re-fetch on real updates; in between, the browser + edge cache the file forever.' + '/_astro/*' + 'Cache-Control: public, max-age=31536000, immutable' — pinned so the /_astro/* immutable-1y + hash-flips-on-content-change commitment survives", () => {
     expect(body).toMatch(/# ── Hashed Astro bundles \+ CSS ──/);
     expect(body).toMatch(
-      /# Astro emits hashed filenames under \/_astro\/\* — the hash flips on\s*\n?\s*# every content change so customers always re-fetch on real updates;\s*\n?\s*# in between, the browser \+ edge cache the file forever\./,
+      /# Astro emits hashed filenames under \/_astro\/\* — the hash flips on\s*# every content change so customers always re-fetch on real updates;\s*# in between, the browser \+ edge cache the file forever\./,
     );
     expect(body).toMatch(/^\/_astro\/\*$/m);
     expect(body).toMatch(/^ {2}Cache-Control: public, max-age=31536000, immutable$/m);
@@ -65,7 +65,7 @@ describe('W523.C apps/marketing-site/public/_headers content parity', () => {
   it("Static-media 7-extension immutable tier framing pinned: '── Static media (images, fonts) ──' section + 'Hash-versioned via Astro pipeline OR uploaded with stable names; in either case treat as immutable. If a stable-name image needs to change, deploy with a new filename (or add a query string).' + /*.svg + /*.png + /*.jpg + /*.jpeg + /*.webp + /*.avif + /*.ico + /*.woff + /*.woff2 — all 1y immutable — pinned so the 7-image-extension + 2-font-extension immutable-1y commitment survives", () => {
     expect(body).toMatch(/# ── Static media \(images, fonts\) ──/);
     expect(body).toMatch(
-      /# Hash-versioned via Astro pipeline OR uploaded with stable names; in\s*\n?\s*# either case treat as immutable\. If a stable-name image needs to\s*\n?\s*# change, deploy with a new filename \(or add a query string\)\./,
+      /# Hash-versioned via Astro pipeline OR uploaded with stable names; in\s*# either case treat as immutable\. If a stable-name image needs to\s*# change, deploy with a new filename \(or add a query string\)\./,
     );
     expect(body).toMatch(/^\/\*\.svg$/m);
     expect(body).toMatch(/^\/\*\.png$/m);
@@ -89,7 +89,7 @@ describe('W523.C apps/marketing-site/public/_headers content parity', () => {
   it("Crawler-artefact tier framing pinned: '── Crawler artefacts ──' section + 'Crawlers re-check robots + sitemaps periodically; 1h is the sweet spot — fast enough that a fresh sitemap propagates the same day, slow enough that we don't burn origin requests on every Googlebot visit.' + /robots.txt + /sitemap-index.xml + /sitemap-*.xml — all 'Cache-Control: public, max-age=3600' (1h) — pinned so the crawler-artefact-1h-cache + 3-path (robots + sitemap-index + sitemap-*) commitment survives", () => {
     expect(body).toMatch(/# ── Crawler artefacts ──/);
     expect(body).toMatch(
-      /# Crawlers re-check robots \+ sitemaps periodically; 1h is the sweet\s*\n?\s*# spot — fast enough that a fresh sitemap propagates the same day,\s*\n?\s*# slow enough that we don't burn origin requests on every Googlebot\s*\n?\s*# visit\./,
+      /# Crawlers re-check robots \+ sitemaps periodically; 1h is the sweet\s*# spot — fast enough that a fresh sitemap propagates the same day,\s*# slow enough that we don't burn origin requests on every Googlebot\s*# visit\./,
     );
     expect(body).toMatch(/^\/robots\.txt$/m);
     expect(body).toMatch(/^\/sitemap-index\.xml$/m);
@@ -100,7 +100,7 @@ describe('W523.C apps/marketing-site/public/_headers content parity', () => {
   it("Marketing-pages tier + 5m/1d/1d-SWR framing pinned: '── Marketing pages (HTML) ──' section + 2-path (/ + /index.html) + 'Cache-Control: public, max-age=300, s-maxage=86400, stale-while-revalidate=86400'. S17 2026-07-04: the tier is 2-path, NOT 3 — the `/*` catch-all must never carry Cache-Control (CF Pages merges `/*` headers onto EVERY path, which silently degraded all immutable asset tiers to the ~4h zone TTL; measured live). Non-home HTML takes the zone default; the edge is purged on every deploy", () => {
     expect(body).toMatch(/# ── Marketing pages \(HTML\) ──/);
     expect(body).toMatch(
-      /# 5min in the customer's browser, 1d at the edge, 1d\s*\n?\s*# stale-while-revalidate\. Means: customers see fresh-ish content \(max\s*\n?\s*# 5min stale on a return visit\), edge keeps a hot copy for 24h, and\s*\n?\s*# during a re-fetch the edge can serve stale-but-fresh while\s*\n?\s*# revalidating in the background\. Optimised for "we deploy a few\s*\n?\s*# times a week and want fast page loads in between\."/,
+      /# 5min in the customer's browser, 1d at the edge, 1d\s*# stale-while-revalidate\. Means: customers see fresh-ish content \(max\s*# 5min stale on a return visit\), edge keeps a hot copy for 24h, and\s*# during a re-fetch the edge can serve stale-but-fresh while\s*# revalidating in the background\. Optimised for "we deploy a few\s*# times a week and want fast page loads in between\."/,
     );
     expect(body).toMatch(/^\/$/m);
     expect(body).toMatch(/^\/index\.html$/m);
@@ -116,7 +116,7 @@ describe('W523.C apps/marketing-site/public/_headers content parity', () => {
 
   it('Catch-all /* — SECURITY HEADERS ONLY and each field is defined exactly once (S17 2026-07-04, matches the customer-dashboard pattern; Cloudflare merges matching rules, so repeating a field in / would duplicate it on the apex response): X-Frame-Options: DENY + X-Content-Type-Options: nosniff + Referrer-Policy: strict-origin-when-cross-origin + Permissions-Policy (sensor/payment deny) — pinned so the 4-security-header commitment survives without ambiguous duplicate fields', () => {
     expect(body).toMatch(
-      /# Catch-all — SECURITY HEADERS ONLY \(matches the customer-dashboard\s*\n?\s*# pattern\)\./,
+      /# Catch-all — SECURITY HEADERS ONLY \(matches the customer-dashboard\s*# pattern\)\./,
     );
     expect(body.match(/^ {2}X-Frame-Options: DENY$/gm)).toHaveLength(1);
     expect(body.match(/^ {2}X-Content-Type-Options: nosniff$/gm)).toHaveLength(1);

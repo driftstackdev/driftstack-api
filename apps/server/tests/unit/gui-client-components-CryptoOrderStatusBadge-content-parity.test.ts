@@ -54,7 +54,7 @@ describe('W476.C apps/gui-client/src/components/CryptoOrderStatusBadge.tsx conte
     expect(
       body,
       'the header lists a five-status roster again, while the maps below carry six',
-    ).not.toMatch(/status \(pending \/ confirming \/ paid \/ failed \/\s*\n?\s*\/\/ partial\)/);
+    ).not.toMatch(/status \(pending \/ confirming \/ paid \/ failed \/\s*\/\/ partial\)/);
   });
 
   it("V-1056 CryptoOrderStatus is the 6-value union CryptoOrderStatusSchema declares + CryptoOrderStatusBadgeProps: status + size? 'sm'|'md'. It was five, excluding 'cancelled', under a note claiming cancelled came through a separate code path — the maps in this same file have always carried it, and nothing imported the union, so the divergence was invisible.", () => {
@@ -70,31 +70,31 @@ describe('W476.C apps/gui-client/src/components/CryptoOrderStatusBadge.tsx conte
       /export type CryptoOrderStatus = 'pending' \| 'confirming' \| 'paid' \| 'failed' \| 'partial';/,
     );
     expect(body).toMatch(
-      /export interface CryptoOrderStatusBadgeProps \{\s*\n?\s*status: string;\s*\n?\s*size\?: 'sm' \| 'md';\s*\n?\s*\}/,
+      /export interface CryptoOrderStatusBadgeProps \{\s*status: string;\s*size\?: 'sm' \| 'md';\s*\}/,
     );
   });
 
   it("STATUS_LABEL pinned: pending→'Awaiting payment', confirming→'Confirming on-chain', paid→'Paid', failed→'Failed', partial→'Partial — contact support' (em-dash + 'contact support' framing — pinned so customers with partial-pay orders know they need to reach out)", () => {
     expect(body).toMatch(
-      /const STATUS_LABEL: Record<string, string> = \{\s*\n?\s*pending: 'Awaiting payment',\s*\n?\s*confirming: 'Confirming on-chain',\s*\n?\s*paid: 'Paid',\s*\n?\s*failed: 'Failed',\s*\n?\s*partial: 'Partial — contact support',\s*\n?\s*cancelled: 'Cancelled',\s*\n?\s*\};/,
+      /const STATUS_LABEL: Record<string, string> = \{\s*pending: 'Awaiting payment',\s*confirming: 'Confirming on-chain',\s*paid: 'Paid',\s*failed: 'Failed',\s*partial: 'Partial — contact support',\s*cancelled: 'Cancelled',\s*\};/,
     );
   });
 
   it('STATUS_TONE pinned: pending→neutral, confirming→busy, paid→success, failed→error, partial→warning + TONE_CLASSES 5-entry mapping + SIZE_CLASSES sm/md', () => {
     expect(body).toMatch(
-      /const STATUS_TONE: Record<string, Tone> = \{\s*\n?\s*pending: 'neutral',\s*\n?\s*confirming: 'busy',\s*\n?\s*paid: 'success',\s*\n?\s*failed: 'error',\s*\n?\s*partial: 'warning',\s*\n?\s*cancelled: 'neutral',\s*\n?\s*\};/,
+      /const STATUS_TONE: Record<string, Tone> = \{\s*pending: 'neutral',\s*confirming: 'busy',\s*paid: 'success',\s*failed: 'error',\s*partial: 'warning',\s*cancelled: 'neutral',\s*\};/,
     );
     expect(body).toMatch(
-      /const TONE_CLASSES: Record<Tone, string> = \{\s*\n?\s*neutral: 'bg-surface-inset text-ink-secondary border-surface-divider',\s*\n?\s*success: 'bg-status-success\/15 text-status-success border-status-success\/30',\s*\n?\s*busy: 'bg-status-busy\/15 text-status-busy border-status-busy\/30',\s*\n?\s*warning: 'bg-status-warning\/15 text-status-warning border-status-warning\/30',\s*\n?\s*error: 'bg-status-error\/15 text-status-error border-status-error\/30',\s*\n?\s*\};/,
+      /const TONE_CLASSES: Record<Tone, string> = \{\s*neutral: 'bg-surface-inset text-ink-secondary border-surface-divider',\s*success: 'bg-status-success\/15 text-status-success border-status-success\/30',\s*busy: 'bg-status-busy\/15 text-status-busy border-status-busy\/30',\s*warning: 'bg-status-warning\/15 text-status-warning border-status-warning\/30',\s*error: 'bg-status-error\/15 text-status-error border-status-error\/30',\s*\};/,
     );
     expect(body).toMatch(
-      /const SIZE_CLASSES: Record<NonNullable<CryptoOrderStatusBadgeProps\['size'\]>, string> = \{\s*\n?\s*sm: 'px-1\.5 py-0\.5 text-xs',\s*\n?\s*md: 'px-2 py-0\.5 text-sm',\s*\n?\s*\};/,
+      /const SIZE_CLASSES: Record<NonNullable<CryptoOrderStatusBadgeProps\['size'\]>, string> = \{\s*sm: 'px-1\.5 py-0\.5 text-xs',\s*md: 'px-2 py-0\.5 text-sm',\s*\};/,
     );
   });
 
   it("V-1056 isTerminalCryptoOrderStatus returns true for 'paid', 'failed' AND 'cancelled' — the set the server enforces in isTerminalForward, which refuses to move an order out of any of the three so a late IPN cannot revive an abandoned one. It excluded 'cancelled' under a rationale about the polling hook that was not true of the hook.", () => {
     expect(body).toMatch(
-      /export function isTerminalCryptoOrderStatus\(status: string\): boolean \{\s*\n?\s*return status === 'paid' \|\| status === 'failed' \|\| status === 'cancelled';\s*\n?\s*\}/,
+      /export function isTerminalCryptoOrderStatus\(status: string\): boolean \{\s*return status === 'paid' \|\| status === 'failed' \|\| status === 'cancelled';\s*\}/,
     );
 
     // The retracted two-value form does not come back.
@@ -109,19 +109,19 @@ describe('W476.C apps/gui-client/src/components/CryptoOrderStatusBadge.tsx conte
     expect(
       body,
       "'partial' was added to the terminal set; the server still lets paid/failed override it",
-    ).not.toMatch(/status === 'partial'[^;]*;\s*\n?\s*\}/);
+    ).not.toMatch(/status === 'partial'[^;]*;\s*\}/);
   });
 
   it("Render: role='status' + aria-label `Crypto order status: ${label}` + size default 'md' + busy-tone dot with animate-pulse (confirming on-chain visual indicator) + ternary chain for dot bg color; cryptoOrderStatusLabelFor + cryptoOrderStatusToneFor exported with ?? fallback for forward-compat", () => {
     expect(body).toMatch(
-      /export function cryptoOrderStatusLabelFor\(status: string\): string \{\s*\n?\s*return STATUS_LABEL\[status\] \?\? status;\s*\n?\s*\}/,
+      /export function cryptoOrderStatusLabelFor\(status: string\): string \{\s*return STATUS_LABEL\[status\] \?\? status;\s*\}/,
     );
     expect(body).toMatch(
-      /export function cryptoOrderStatusToneFor\(status: string\): Tone \{\s*\n?\s*return STATUS_TONE\[status\] \?\? 'neutral';\s*\n?\s*\}/,
+      /export function cryptoOrderStatusToneFor\(status: string\): Tone \{\s*return STATUS_TONE\[status\] \?\? 'neutral';\s*\}/,
     );
-    expect(body).toMatch(/role="status"\s*\n?\s*aria-label=\{`Crypto order status: \$\{label\}`\}/);
+    expect(body).toMatch(/role="status"\s*aria-label=\{`Crypto order status: \$\{label\}`\}/);
     expect(body).toMatch(
-      /tone === 'success'\s*\n?\s*\? 'bg-status-success'\s*\n?\s*: tone === 'busy'\s*\n?\s*\? 'bg-status-busy animate-pulse'\s*\n?\s*: tone === 'warning'\s*\n?\s*\? 'bg-status-warning'\s*\n?\s*: tone === 'error'\s*\n?\s*\? 'bg-status-error'\s*\n?\s*: 'bg-ink-muted'/,
+      /tone === 'success'\s*\? 'bg-status-success'\s*: tone === 'busy'\s*\? 'bg-status-busy animate-pulse'\s*: tone === 'warning'\s*\? 'bg-status-warning'\s*: tone === 'error'\s*\? 'bg-status-error'\s*: 'bg-ink-muted'/,
     );
   });
 

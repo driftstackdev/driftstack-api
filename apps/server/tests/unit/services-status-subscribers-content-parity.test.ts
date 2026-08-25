@@ -47,10 +47,10 @@ describe('W409.A apps/server/src/services/status-subscribers.ts content parity',
   it('V-295c3 framing pinned: 3-flow + double-opt-in gate + re-subscribe semantics', () => {
     expect(body).toMatch(/V-295c3 — public status-page email subscriber service\./);
     expect(body).toMatch(
-      /1\. subscribe\(email\) — generates confirm token, stores sha256 hash \+\s*\n?\s*\/\/\s*24h expiry, returns the plaintext token to the caller \(route\s*\n?\s*\/\/\s*hands it to email\.sendStatusSubscriptionConfirmation\)\./,
+      /1\. subscribe\(email\) — generates confirm token, stores sha256 hash \+\s*\/\/\s*24h expiry, returns the plaintext token to the caller \(route\s*\/\/\s*hands it to email\.sendStatusSubscriptionConfirmation\)\./,
     );
     expect(body).toMatch(
-      /Re-subscribe semantics: if the email already exists, we update only the\s*\n?\s*\/\/\s*pending confirm token\. Existing confirmed\/unsubscribed state remains\s*\n?\s*\/\/\s*authoritative until the mailbox owner uses that token\./,
+      /Re-subscribe semantics: if the email already exists, we update only the\s*\/\/\s*pending confirm token\. Existing confirmed\/unsubscribed state remains\s*\/\/\s*authoritative until the mailbox owner uses that token\./,
     );
   });
 
@@ -60,14 +60,14 @@ describe('W409.A apps/server/src/services/status-subscribers.ts content parity',
 
   it('V-295c3-tombstone framing: email column NULL after 90d purge; row persists for re-subscription fresh double-opt-in', () => {
     expect(body).toMatch(
-      /\/\*\* Null only when V-295c3-tombstone purge has zeroed the email out\s*\n?\s*\*\s*\(90d post-unsubscribe\)\. The row persists so re-subscription kicks\s*\n?\s*\*\s*off a fresh double-opt-in flow\. \*\/\s*\n?\s*email: string \| null;/,
+      /\/\*\* Null only when V-295c3-tombstone purge has zeroed the email out\s*\*\s*\(90d post-unsubscribe\)\. The row persists so re-subscription kicks\s*\*\s*off a fresh double-opt-in flow\. \*\/\s*email: string \| null;/,
     );
   });
 
   it('subscribe: email lowercase + @-check → BadRequestError; upsertPending with 24h TTL; sendStatusSubscriptionConfirmation', () => {
     expect(body).toMatch(/const normalized = rawEmail\.trim\(\)\.toLowerCase\(\);/);
     expect(body).toMatch(
-      /if \(!normalized \|\| !normalized\.includes\('@'\)\) \{\s*\n?\s*throw new BadRequestError\('Invalid email address\.'\);/,
+      /if \(!normalized \|\| !normalized\.includes\('@'\)\) \{\s*throw new BadRequestError\('Invalid email address\.'\);/,
     );
     expect(body).toMatch(/const expiresAt = new Date\(now\.getTime\(\) \+ CONFIRM_TOKEN_TTL_MS\);/);
     expect(body).toMatch(
@@ -75,28 +75,28 @@ describe('W409.A apps/server/src/services/status-subscribers.ts content parity',
     );
     expect(body).not.toMatch(/\/subscribe\/confirm\?token=/);
     expect(body).toMatch(
-      /await this\.email\.sendStatusSubscriptionConfirmation\(\{\s*\n?\s*to: normalized,\s*\n?\s*confirmLink,\s*\n?\s*expiresAt,\s*\n?\s*\}\);/,
+      /await this\.email\.sendStatusSubscriptionConfirmation\(\{\s*to: normalized,\s*confirmLink,\s*expiresAt,\s*\}\);/,
     );
   });
 
   it('confirm: validates expiry and atomically consumes the exact hash before sending one welcome', () => {
     expect(body).toMatch(
-      /if \(!row\) \{\s*\n?\s*throw new NotFoundError\('Confirmation link is invalid or has been used\.'\);/,
+      /if \(!row\) \{\s*throw new NotFoundError\('Confirmation link is invalid or has been used\.'\);/,
     );
     expect(body).toMatch(
-      /if \(row\.confirmExpiresAt && row\.confirmExpiresAt < now\) \{\s*\n?\s*throw new BadRequestError\(\s*\n?\s*'Confirmation link has expired\. Please subscribe again to receive a fresh link\.',\s*\n?\s*\);/,
+      /if \(row\.confirmExpiresAt && row\.confirmExpiresAt < now\) \{\s*throw new BadRequestError\(\s*'Confirmation link has expired\. Please subscribe again to receive a fresh link\.',\s*\);/,
     );
     expect(body).toMatch(
-      /\/\/ V-295c3-tombstone — purged rows clear confirmTokenHash, so this\s*\n?\s*\/\/ branch should be unreachable\. Guard for type-narrowing only\./,
+      /\/\/ V-295c3-tombstone — purged rows clear confirmTokenHash, so this\s*\/\/ branch should be unreachable\. Guard for type-narrowing only\./,
     );
     expect(body).toMatch(
-      /const confirmed = await this\.repo\.markConfirmed\(\{\s*\n?\s*id: row\.id,\s*\n?\s*expectedConfirmTokenHash: hash,/,
+      /const confirmed = await this\.repo\.markConfirmed\(\{\s*id: row\.id,\s*expectedConfirmTokenHash: hash,/,
     );
     expect(body).toMatch(
       /if \(confirmed === null\) \{[\s\S]*?throw new NotFoundError\('Confirmation link is invalid or has been used\.'\);/,
     );
     expect(body).toMatch(
-      /await this\.email\.sendStatusSubscriptionWelcome\(\{\s*\n?\s*to: email,\s*\n?\s*statusPageUrl: this\.baseUrl,\s*\n?\s*unsubscribeLink,\s*\n?\s*\}\);/,
+      /await this\.email\.sendStatusSubscriptionWelcome\(\{\s*to: email,\s*statusPageUrl: this\.baseUrl,\s*unsubscribeLink,\s*\}\);/,
     );
     expect(body.match(/\/subscribe\/unsubscribe\/\?token=/g)).toHaveLength(2);
     expect(body).not.toMatch(/\/subscribe\/unsubscribe\?token=/);
@@ -104,48 +104,48 @@ describe('W409.A apps/server/src/services/status-subscribers.ts content parity',
 
   it('unsubscribe: NotFoundError on unknown/stale hash + atomic exact-hash transition', () => {
     expect(body).toMatch(
-      /if \(!row\) \{\s*\n?\s*throw new NotFoundError\('Unsubscribe link is invalid\.'\);/,
+      /if \(!row\) \{\s*throw new NotFoundError\('Unsubscribe link is invalid\.'\);/,
     );
     expect(body).toMatch(/\/\/ Same purge-row defensive guard as confirm\(\) above\./);
     expect(body).toMatch(
-      /const unsubscribed = await this\.repo\.markUnsubscribed\(\{\s*\n?\s*id: row\.id,\s*\n?\s*expectedUnsubscribeTokenHash: hash,\s*\n?\s*unsubscribedAt: now,\s*\n?\s*\}\);\s*\n?\s*if \(unsubscribed === null\) \{\s*\n?\s*throw new NotFoundError\('Unsubscribe link is invalid\.'\);/,
+      /const unsubscribed = await this\.repo\.markUnsubscribed\(\{\s*id: row\.id,\s*expectedUnsubscribeTokenHash: hash,\s*unsubscribedAt: now,\s*\}\);\s*if \(unsubscribed === null\) \{\s*throw new NotFoundError\('Unsubscribe link is invalid\.'\);/,
     );
   });
 
   it('V-295c3-followup rotateUnsubscribeToken: per-email fresh token; old token invalidated as soon as new one issued (one-click unsub targets most recent email)', () => {
     expect(body).toMatch(
-      /V-295c3-followup — rotate the unsubscribe token for a subscriber \+\s*\n?\s*\*\s*return the fresh plaintext\. The fan-out caller embeds this in the\s*\n?\s*\*\s*unsubscribe URL of one outgoing email; the next notification\s*\n?\s*\*\s*rotates it again\./,
+      /V-295c3-followup — rotate the unsubscribe token for a subscriber \+\s*\*\s*return the fresh plaintext\. The fan-out caller embeds this in the\s*\*\s*unsubscribe URL of one outgoing email; the next notification\s*\*\s*rotates it again\./,
     );
     expect(body).toMatch(
-      /Old tokens become invalid as soon as a new one\s*\n?\s*\*\s*is issued — acceptable because one-click unsubscribe is meant to\s*\n?\s*\*\s*target the most recent email a recipient received\./,
+      /Old tokens become invalid as soon as a new one\s*\*\s*is issued — acceptable because one-click unsubscribe is meant to\s*\*\s*target the most recent email a recipient received\./,
     );
     expect(body).toMatch(
-      /async rotateUnsubscribeToken\(subscriberId: string\): Promise<string> \{\s*\n?\s*const plaintext = generateAuthToken\(\);\s*\n?\s*const hash = tokenHash\(plaintext\);\s*\n?\s*await this\.repo\.rotateUnsubscribeTokenHash\(\{ id: subscriberId, hash \}\);/,
+      /async rotateUnsubscribeToken\(subscriberId: string\): Promise<string> \{\s*const plaintext = generateAuthToken\(\);\s*const hash = tokenHash\(plaintext\);\s*await this\.repo\.rotateUnsubscribeTokenHash\(\{ id: subscriberId, hash \}\);/,
     );
   });
 
   it('V-295c3-tombstone forceUnsubscribe: admin no-token authority; idempotent on already-unsubscribed (returns email for audit)', () => {
     expect(body).toMatch(
-      /V-295c3-tombstone — admin force-unsubscribe \(no token; admin\s*\n?\s*\*\s*authority\)\. Returns the row before the change so the route can\s*\n?\s*\*\s*audit-log the email value\./,
+      /V-295c3-tombstone — admin force-unsubscribe \(no token; admin\s*\*\s*authority\)\. Returns the row before the change so the route can\s*\*\s*audit-log the email value\./,
     );
     expect(body).toMatch(
-      /if \(row\.unsubscribedAt !== null\) \{\s*\n?\s*\/\/ Idempotent — already unsubscribed; no-op but return the email\s*\n?\s*\/\/ so the audit-log entry is still informative\.\s*\n?\s*return \{ email: row\.email \};/,
+      /if \(row\.unsubscribedAt !== null\) \{\s*\/\/ Idempotent — already unsubscribed; no-op but return the email\s*\/\/ so the audit-log entry is still informative\.\s*return \{ email: row\.email \};/,
     );
   });
 
   it('V-295c3-tombstone processPurge: retentionMs default 90d; snapshot id+email BEFORE in-place mutation (stable for in-memory repos)', () => {
     expect(body).toMatch(
-      /V-295c3-tombstone — 90d purge of email column on rows that\s*\n?\s*\*\s*unsubscribed >= retentionMs ago\. Returns the purged subscribers\s*\n?\s*\*\s*\(with their pre-purge email\)/,
+      /V-295c3-tombstone — 90d purge of email column on rows that\s*\*\s*unsubscribed >= retentionMs ago\. Returns the purged subscribers\s*\*\s*\(with their pre-purge email\)/,
     );
     expect(body).toMatch(
-      /Snapshots id\+email BEFORE the in-place mutation so the return value\s*\n?\s*\*\s*is stable even with in-memory repos that mutate live row objects\./,
+      /Snapshots id\+email BEFORE the in-place mutation so the return value\s*\*\s*is stable even with in-memory repos that mutate live row objects\./,
     );
     expect(body).toMatch(
-      /async processPurge\(\s*\n?\s*now: Date,\s*\n?\s*retentionMs: number = 90 \* 24 \* 60 \* 60 \* 1000,\s*\n?\s*\): Promise<\{ purged: \{ id: string; email: string \| null \}\[\] \}> \{/,
+      /async processPurge\(\s*now: Date,\s*retentionMs: number = 90 \* 24 \* 60 \* 60 \* 1000,\s*\): Promise<\{ purged: \{ id: string; email: string \| null \}\[\] \}> \{/,
     );
     expect(body).toMatch(/const cutoff = new Date\(now\.getTime\(\) - retentionMs\);/);
     expect(body).toMatch(
-      /const snapshot = candidates\.map\(\(r\) => \(\{ id: r\.id, email: r\.email \}\)\);\s*\n?\s*await this\.repo\.purgeEmails\(snapshot\.map\(\(r\) => r\.id\)\);/,
+      /const snapshot = candidates\.map\(\(r\) => \(\{ id: r\.id, email: r\.email \}\)\);\s*await this\.repo\.purgeEmails\(snapshot\.map\(\(r\) => r\.id\)\);/,
     );
   });
 
@@ -163,26 +163,26 @@ describe('W409.A apps/server/src/services/status-subscribers.ts content parity',
       /expectedConfirmTokenHash: string;[\s\S]*?\}\): Promise<StatusSubscriberRow \| null>;/,
     );
     expect(body).toMatch(
-      /markUnsubscribed\(input: \{\s*\n?\s*id: string;[\s\S]*?expectedUnsubscribeTokenHash: string \| null;[\s\S]*?\}\): Promise<StatusSubscriberRow \| null>;/,
+      /markUnsubscribed\(input: \{\s*id: string;[\s\S]*?expectedUnsubscribeTokenHash: string \| null;[\s\S]*?\}\): Promise<StatusSubscriberRow \| null>;/,
     );
     expect(body).toMatch(
-      /V-295c3-followup — replaces ONLY `unsubscribe_token_hash` for an\s*\n?\s*\*\s*already-confirmed row\. Used by the fan-out path to issue a fresh\s*\n?\s*\*\s*per-email unsubscribe token\. Does NOT touch confirmed_at\./,
+      /V-295c3-followup — replaces ONLY `unsubscribe_token_hash` for an\s*\*\s*already-confirmed row\. Used by the fan-out path to issue a fresh\s*\*\s*per-email unsubscribe token\. Does NOT touch confirmed_at\./,
     );
     expect(body).toMatch(
       /rotateUnsubscribeTokenHash\(input: \{ id: string; hash: string \}\): Promise<void>;/,
     );
     expect(body).toMatch(/listConfirmed\(\): Promise<StatusSubscriberRow\[\]>;/);
     expect(body).toMatch(
-      /\/\*\* V-295c3-tombstone — admin endpoint paginated read\. \*\/\s*\n?\s*listAll\(opts: \{ limit: number; offset: number \}\): Promise<StatusSubscriberRow\[\]>;/,
+      /\/\*\* V-295c3-tombstone — admin endpoint paginated read\. \*\/\s*listAll\(opts: \{ limit: number; offset: number \}\): Promise<StatusSubscriberRow\[\]>;/,
     );
     expect(body).toMatch(
-      /\/\*\* V-295c3-tombstone — admin endpoint single read by id\. \*\/\s*\n?\s*getById\(id: string\): Promise<StatusSubscriberRow \| null>;/,
+      /\/\*\* V-295c3-tombstone — admin endpoint single read by id\. \*\/\s*getById\(id: string\): Promise<StatusSubscriberRow \| null>;/,
     );
     expect(body).toMatch(
-      /\/\*\* V-295c3-tombstone — purge candidates \(rows where unsubscribed_at < cutoff\s*\n?\s*\*\s*AND email IS NOT NULL\)\.[\s\S]+?listPurgeCandidates\(cutoff: Date\): Promise<StatusSubscriberRow\[\]>;/,
+      /\/\*\* V-295c3-tombstone — purge candidates \(rows where unsubscribed_at < cutoff\s*\*\s*AND email IS NOT NULL\)\.[\s\S]+?listPurgeCandidates\(cutoff: Date\): Promise<StatusSubscriberRow\[\]>;/,
     );
     expect(body).toMatch(
-      /\/\*\* V-295c3-tombstone — NULLs the email column for the given ids\. \*\/\s*\n?\s*purgeEmails\(ids: readonly string\[\]\): Promise<number>;/,
+      /\/\*\* V-295c3-tombstone — NULLs the email column for the given ids\. \*\/\s*purgeEmails\(ids: readonly string\[\]\): Promise<number>;/,
     );
   });
 

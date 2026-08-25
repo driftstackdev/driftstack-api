@@ -41,7 +41,7 @@ describe('W415.B apps/server/src/routes/admin-audit-log.ts content parity', () =
   it('Framing pinned: GET /v1/admin/audit-log; read-only — audits-would-recurse-forever rationale', () => {
     expect(body).toMatch(/Admin audit-log query route\./);
     expect(body).toMatch(
-      /Read-only — no audit row written for the read itself \(audits would\s*\n?\s*\/\/\s*recurse forever\)\. The route validates the admin scope, parses\s*\n?\s*\/\/\s*filters, paginates by timestamp DESC, and returns the page\./,
+      /Read-only — no audit row written for the read itself \(audits would\s*\/\/\s*recurse forever\)\. The route validates the admin scope, parses\s*\/\/\s*filters, paginates by timestamp DESC, and returns the page\./,
     );
   });
 
@@ -57,7 +57,7 @@ describe('W415.B apps/server/src/routes/admin-audit-log.ts content parity', () =
       /import \{ ListAuditLogQuerySchema, type ListAuditLogQueryInput \} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(
-      /const rawQuery = \(request\.query \?\? \{\}\) as ListAuditLogQueryInput;\s*\n?\s*const query = ListAuditLogQuerySchema\.parse\(rawQuery\);/,
+      /const rawQuery = \(request\.query \?\? \{\}\) as ListAuditLogQueryInput;\s*const query = ListAuditLogQuerySchema\.parse\(rawQuery\);/,
     );
   });
 
@@ -70,7 +70,7 @@ describe('W415.B apps/server/src/routes/admin-audit-log.ts content parity', () =
       // shape this file already declares for the cursor and for the same reason.
       // The doc comment moved to a block explaining that, so the pin anchors on
       // the branch rather than on the one-line comment above it.
-      /function maybeUuidFromInput\(value: string \| undefined\): string \| undefined \{\s*\n?\s*if \(value === undefined\) return undefined;\s*\n?\s*if \(CURSOR_UUID_RE\.test\(value\)\) return value;\s*\n?\s*const match = PUBLIC_ID_RE\.exec\(value\);\s*\n?\s*if \(!match \|\| !match\[1\]\) \{\s*\n?\s*throw new BadRequestError\(`Invalid id "\$\{value\}"\. Expected a UUID or prefixed id\.`\);/,
+      /function maybeUuidFromInput\(value: string \| undefined\): string \| undefined \{\s*if \(value === undefined\) return undefined;\s*if \(CURSOR_UUID_RE\.test\(value\)\) return value;\s*const match = PUBLIC_ID_RE\.exec\(value\);\s*if \(!match \|\| !match\[1\]\) \{\s*throw new BadRequestError\(`Invalid id "\$\{value\}"\. Expected a UUID or prefixed id\.`\);/,
     );
   });
 
@@ -93,10 +93,10 @@ describe('W415.B apps/server/src/routes/admin-audit-log.ts content parity', () =
 
   it('V-521 framing pinned: drill-down by target_resource_id (parity with V-484 customer-side filter)', () => {
     expect(body).toMatch(
-      /\/\/ V-521 — drill-down by resource id \(parity with V-484\s*\n?\s*\/\/ customer-side filter\)\./,
+      /\/\/ V-521 — drill-down by resource id \(parity with V-484\s*\/\/ customer-side filter\)\./,
     );
     expect(body).toMatch(
-      /\.\.\.\(query\.target_resource_id !== undefined\s*\n?\s*\? \{ targetResourceId: query\.target_resource_id \}\s*\n?\s*: \{\}\),/,
+      /\.\.\.\(query\.target_resource_id !== undefined\s*\? \{ targetResourceId: query\.target_resource_id \}\s*: \{\}\),/,
     );
   });
 
@@ -126,7 +126,7 @@ describe('W415.B apps/server/src/routes/admin-audit-log.ts content parity', () =
 
   it('Reply shape: { data: page.items.map(publicEntry), next_cursor: page.nextCursor }', () => {
     expect(body).toMatch(
-      /return \{\s*\n?\s*data: page\.items\.map\(publicEntry\),\s*\n?\s*next_cursor: page\.nextCursor,\s*\n?\s*\};/,
+      /return \{\s*data: page\.items\.map\(publicEntry\),\s*next_cursor: page\.nextCursor,\s*\};/,
     );
   });
 

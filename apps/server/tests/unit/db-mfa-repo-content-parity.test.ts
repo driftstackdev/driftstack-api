@@ -70,7 +70,7 @@ describe('W446.A apps/server/src/db/mfa-repo.ts content parity', () => {
 
   it('toEnrollmentRow: 9-field MfaEnrollmentRow (accountId + totpSecretCiphertext/Iv/Tag + enrolledAt + lastUsedAt + lastUsedTotpCounter + created/updated_at)', () => {
     expect(body).toMatch(
-      /function toEnrollmentRow\(r: typeof accountMfa\.\$inferSelect\): MfaEnrollmentRow \{\s*\n?\s*return \{\s*\n?\s*accountId: r\.accountId,\s*\n?\s*totpSecretCiphertext: r\.totpSecretCiphertext,\s*\n?\s*totpSecretIv: r\.totpSecretIv,\s*\n?\s*totpSecretTag: r\.totpSecretTag,\s*\n?\s*enrolledAt: r\.enrolledAt,\s*\n?\s*lastUsedAt: r\.lastUsedAt,\s*\n?\s*lastUsedTotpCounter: r\.lastUsedTotpCounter,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*updatedAt: r\.updatedAt,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function toEnrollmentRow\(r: typeof accountMfa\.\$inferSelect\): MfaEnrollmentRow \{\s*return \{\s*accountId: r\.accountId,\s*totpSecretCiphertext: r\.totpSecretCiphertext,\s*totpSecretIv: r\.totpSecretIv,\s*totpSecretTag: r\.totpSecretTag,\s*enrolledAt: r\.enrolledAt,\s*lastUsedAt: r\.lastUsedAt,\s*lastUsedTotpCounter: r\.lastUsedTotpCounter,\s*createdAt: r\.createdAt,\s*updatedAt: r\.updatedAt,\s*\};\s*\}/,
     );
   });
 
@@ -88,13 +88,13 @@ describe('W446.A apps/server/src/db/mfa-repo.ts content parity', () => {
 
   it('toRecoveryCodeRow: 5-field (id + accountId + codeHash + usedAt + createdAt)', () => {
     expect(body).toMatch(
-      /function toRecoveryCodeRow\(r: typeof accountMfaRecoveryCodes\.\$inferSelect\): RecoveryCodeRow \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*accountId: r\.accountId,\s*\n?\s*codeHash: r\.codeHash,\s*\n?\s*usedAt: r\.usedAt,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function toRecoveryCodeRow\(r: typeof accountMfaRecoveryCodes\.\$inferSelect\): RecoveryCodeRow \{\s*return \{\s*id: r\.id,\s*accountId: r\.accountId,\s*codeHash: r\.codeHash,\s*usedAt: r\.usedAt,\s*createdAt: r\.createdAt,\s*\};\s*\}/,
     );
   });
 
   it('findByAccount: account-scoped + limit 1', () => {
     expect(body).toMatch(
-      /async findByAccount\(accountId: string\): Promise<MfaEnrollmentRow \| null> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(accountMfa\)\s*\n?\s*\.where\(eq\(accountMfa\.accountId, accountId\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*return row \? toEnrollmentRow\(row\) : null;\s*\n?\s*\}/,
+      /async findByAccount\(accountId: string\): Promise<MfaEnrollmentRow \| null> \{\s*const \[row\] = await this\.database\.db\s*\.select\(\)\s*\.from\(accountMfa\)\s*\.where\(eq\(accountMfa\.accountId, accountId\)\)\s*\.limit\(1\);\s*return row \? toEnrollmentRow\(row\) : null;\s*\}/,
     );
   });
 
@@ -147,7 +147,7 @@ describe('W446.A apps/server/src/db/mfa-repo.ts content parity', () => {
     // is the cheap text layer beside it, in the shape the `listUnusedRecoveryCodes`
     // arm below already uses for its own predicate.
     expect(body).toMatch(
-      /\.delete\(accountMfaRecoveryCodes\)\s*\n?\s*\.where\(eq\(accountMfaRecoveryCodes\.accountId, accountId\)\)/,
+      /\.delete\(accountMfaRecoveryCodes\)\s*\.where\(eq\(accountMfaRecoveryCodes\.accountId, accountId\)\)/,
     );
     expect(body).toMatch(
       /await tx\.delete\(accountMfa\)\.where\(eq\(accountMfa\.accountId, accountId\)\)/,
@@ -156,19 +156,19 @@ describe('W446.A apps/server/src/db/mfa-repo.ts content parity', () => {
 
   it('nextRevision guarantees a stale snapshot cannot share the persisted revision', () => {
     expect(body).toMatch(
-      /function nextRevision\(now: Date, previous: Date\): Date \{\s*\n?\s*return new Date\(Math\.max\(now\.getTime\(\), previous\.getTime\(\) \+ 1\)\);/,
+      /function nextRevision\(now: Date, previous: Date\): Date \{\s*return new Date\(Math\.max\(now\.getTime\(\), previous\.getTime\(\) \+ 1\)\);/,
     );
   });
 
   it('listUnusedRecoveryCodes: where and(accountId, isNull(usedAt)); orderBy desc(createdAt)', () => {
     expect(body).toMatch(
-      /async listUnusedRecoveryCodes\(accountId: string\): Promise<RecoveryCodeRow\[\]> \{\s*\n?\s*const rows = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(accountMfaRecoveryCodes\)\s*\n?\s*\.where\(\s*\n?\s*and\(\s*\n?\s*eq\(accountMfaRecoveryCodes\.accountId, accountId\),\s*\n?\s*isNull\(accountMfaRecoveryCodes\.usedAt\),\s*\n?\s*\),\s*\n?\s*\)\s*\n?\s*\.orderBy\(desc\(accountMfaRecoveryCodes\.createdAt\)\);\s*\n?\s*return rows\.map\(toRecoveryCodeRow\);\s*\n?\s*\}/,
+      /async listUnusedRecoveryCodes\(accountId: string\): Promise<RecoveryCodeRow\[\]> \{\s*const rows = await this\.database\.db\s*\.select\(\)\s*\.from\(accountMfaRecoveryCodes\)\s*\.where\(\s*and\(\s*eq\(accountMfaRecoveryCodes\.accountId, accountId\),\s*isNull\(accountMfaRecoveryCodes\.usedAt\),\s*\),\s*\)\s*\.orderBy\(desc\(accountMfaRecoveryCodes\.createdAt\)\);\s*return rows\.map\(toRecoveryCodeRow\);\s*\}/,
     );
   });
 
   it('markRecoveryCodeUsed: atomic consume via and(eq(id), isNull(usedAt)) + .returning length===1 — replay-safe AND returns whether THIS call spent it (#5 double-spend gate)', () => {
     expect(body).toMatch(
-      /async markRecoveryCodeUsed\(id: string, now: Date\): Promise<boolean> \{[\s\S]*?const updated = await this\.database\.db\s*\n?\s*\.update\(accountMfaRecoveryCodes\)\s*\n?\s*\.set\(\{ usedAt: now \}\)\s*\n?\s*\.where\(and\(eq\(accountMfaRecoveryCodes\.id, id\), isNull\(accountMfaRecoveryCodes\.usedAt\)\)\)\s*\n?\s*\.returning\(\{ id: accountMfaRecoveryCodes\.id \}\);\s*\n?\s*return updated\.length === 1;\s*\n?\s*\}/,
+      /async markRecoveryCodeUsed\(id: string, now: Date\): Promise<boolean> \{[\s\S]*?const updated = await this\.database\.db\s*\.update\(accountMfaRecoveryCodes\)\s*\.set\(\{ usedAt: now \}\)\s*\.where\(and\(eq\(accountMfaRecoveryCodes\.id, id\), isNull\(accountMfaRecoveryCodes\.usedAt\)\)\)\s*\.returning\(\{ id: accountMfaRecoveryCodes\.id \}\);\s*return updated\.length === 1;\s*\}/,
     );
   });
 

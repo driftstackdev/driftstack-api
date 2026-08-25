@@ -111,7 +111,7 @@ describe('W379.B cross-app 404 pages content parity', () => {
 
     it('status-site uses subtle underline link (not btn-primary) + "← Back to overview"', () => {
       expect(body).toMatch(
-        /<a href="\/" class="text-sm text-ink-secondary underline hover:text-ink-primary">\s*\n?\s*← Back to overview\s*\n?\s*<\/a>/,
+        /<a href="\/" class="text-sm text-ink-secondary underline hover:text-ink-primary">\s*← Back to overview\s*<\/a>/,
       );
     });
 

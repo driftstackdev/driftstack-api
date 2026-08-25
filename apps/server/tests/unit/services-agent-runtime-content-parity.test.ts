@@ -26,31 +26,31 @@ describe('services/agent-runtime content parity', () => {
 
   it("AI-COMPOSE module-level framing pinned: 'AgentRuntime composes the three AI-CHAT primitives (AgentDecomposer + AgentSessionsRepo + AgentExecutor) into the single end-to-end loop the dashboard chat UI hits per turn: user-message → load AgentSession → decomposer.decompose() → (refuse | clarify | plan→executor.execute) → debit tokens → append transcripts → return turn result.' — pinned so the AI-COMPOSE anchor + 3-primitive composition + 6-step end-to-end pipeline all stay documented", () => {
     expect(body).toMatch(
-      /\/\/ AI-COMPOSE — AgentRuntime composes the three AI-CHAT primitives\s*\n?\s*\/\/ \(AgentDecomposer \+ AgentSessionsRepo \+ AgentExecutor\) into the\s*\n?\s*\/\/ single end-to-end loop the dashboard chat UI hits per turn:/,
+      /\/\/ AI-COMPOSE — AgentRuntime composes the three AI-CHAT primitives\s*\/\/ \(AgentDecomposer \+ AgentSessionsRepo \+ AgentExecutor\) into the\s*\/\/ single end-to-end loop the dashboard chat UI hits per turn:/,
     );
     expect(body).toMatch(
-      /\/\/ {3}user-message → load AgentSession → decomposer\.decompose\(\) →\s*\n?\s*\/\/ {5}\(refuse \| clarify \| plan→executor\.execute\) → debit tokens →\s*\n?\s*\/\/ {5}append transcripts → return turn result/,
+      /\/\/ {3}user-message → load AgentSession → decomposer\.decompose\(\) →\s*\/\/ {5}\(refuse \| clarify \| plan→executor\.execute\) → debit tokens →\s*\/\/ {5}append transcripts → return turn result/,
     );
   });
 
   it("3-primitive interface-stability framing pinned: 'the contract is testable end-to-end without any of them needing a real backend. Each can be swapped (Deterministic→Claude; Stub→Wired; InMemory→Drizzle) without changing the runtime.' — pinned so the 3-backend-swap-without-change-to-runtime contract stays documented", () => {
     expect(body).toMatch(
-      /\/\/ This is the FIRST place where the three primitive interfaces meet,\s*\n?\s*\/\/ so the contract is testable end-to-end without any of them needing\s*\n?\s*\/\/ a real backend\. Each can be swapped \(Deterministic→Claude;\s*\n?\s*\/\/ Stub→Wired; InMemory→Drizzle\) without changing the runtime\./,
+      /\/\/ This is the FIRST place where the three primitive interfaces meet,\s*\/\/ so the contract is testable end-to-end without any of them needing\s*\/\/ a real backend\. Each can be swapped \(Deterministic→Claude;\s*\/\/ Stub→Wired; InMemory→Drizzle\) without changing the runtime\./,
     );
   });
 
   it("BYOK byokApiKey RunTurnArgs framing pinned: 'BYOK Anthropic API key threaded through from the route layer (resolved from per-customer storage or the deployment fallback; see DecomposeArgs.byokAnthropicApiKey JSDoc for the priority order). NEVER logged, NEVER persisted into the transcript. DeterministicAgentDecomposer ignores it; AI-B1.b Claude wire forwards as the x-api-key header on the Anthropic API call.' — pinned so the route-resolves-the-key + NEVER-logged + NEVER-persisted-to-transcript + Deterministic-ignores + Claude-forwards-as-x-api-key contract stay documented", () => {
     expect(body).toMatch(
-      /\* BYOK Anthropic API key threaded through from the route layer\s*\n?\s*\*\s+\(resolved from per-customer storage or the deployment fallback;\s*\n?\s*\*\s+see `DecomposeArgs\.byokAnthropicApiKey` JSDoc for the priority\s*\n?\s*\*\s+order\)\. NEVER logged, NEVER persisted into the transcript\./,
+      /\* BYOK Anthropic API key threaded through from the route layer\s*\*\s+\(resolved from per-customer storage or the deployment fallback;\s*\*\s+see `DecomposeArgs\.byokAnthropicApiKey` JSDoc for the priority\s*\*\s+order\)\. NEVER logged, NEVER persisted into the transcript\./,
     );
     expect(body).toMatch(
-      /\*\s+DeterministicAgentDecomposer ignores it; AI-B1\.b Claude wire\s*\n?\s*\*\s+forwards as the `x-api-key` header on the Anthropic API call\./,
+      /\*\s+DeterministicAgentDecomposer ignores it; AI-B1\.b Claude wire\s*\*\s+forwards as the `x-api-key` header on the Anthropic API call\./,
     );
   });
 
   it("Arc 1 sub-slice 6.4 keySource discriminator framing pinned: 'which leg of the route's resolution chain produced byokApiKey. The usage recorder writes a distinct record_type for bundled so the soft-cap sweep (sub-slice 6.5) can sum bundled-only spend without double-counting BYOK turns. Defaults to none so existing callers (which don't pass keySource) keep recording under the generic agent_decomposer record_type.' — pinned so the 5-source-enum (header/cached/bundled/fallback/none) + bundled-distinct-record-type + sub-slice-6.5-soft-cap-sweep cross-reference all stay documented", () => {
     expect(body).toMatch(
-      /\* Arc 1 sub-slice 6\.4 \(v2-#6\) — which leg of the route's\s*\n?\s*\*\s+resolution chain produced `byokApiKey`\. The usage recorder\s*\n?\s*\*\s+writes a distinct record_type for 'bundled' so the soft-cap\s*\n?\s*\*\s+sweep \(sub-slice 6\.5\) can sum bundled-only spend without\s*\n?\s*\*\s+double-counting BYOK turns\./,
+      /\* Arc 1 sub-slice 6\.4 \(v2-#6\) — which leg of the route's\s*\*\s+resolution chain produced `byokApiKey`\. The usage recorder\s*\*\s+writes a distinct record_type for 'bundled' so the soft-cap\s*\*\s+sweep \(sub-slice 6\.5\) can sum bundled-only spend without\s*\*\s+double-counting BYOK turns\./,
     );
     expect(body).toMatch(/keySource\?: 'header' \| 'cached' \| 'bundled' \| 'fallback' \| 'none';/);
   });
@@ -65,7 +65,7 @@ describe('services/agent-runtime content parity', () => {
     expect(body).toMatch(/kind: 'account-turn-limit';/);
     expect(body).toMatch(/kind: 'logged-manual';/);
     expect(body).toMatch(
-      /\/\/ Arc 2 sub-slice 8\.6 \(v2-#8\) — manual mode pass-through\.\s*\n?\s*\/\/ The user_message was recorded as an actor='operator' transcript\s*\n?\s*\/\/ entry; no decompose \/ executor ran\./,
+      /\/\/ Arc 2 sub-slice 8\.6 \(v2-#8\) — manual mode pass-through\.\s*\/\/ The user_message was recorded as an actor='operator' transcript\s*\/\/ entry; no decompose \/ executor ran\./,
     );
   });
 
@@ -80,7 +80,7 @@ describe('services/agent-runtime content parity', () => {
 
   it("v2-#4 Q.1.e AgentDecomposerUsageRecorder framing pinned: 'per-turn usage recorder. AgentRuntime calls this after every decomposer.decompose() that returns a usage block. Bootstrap wires this to a usage_records writer when the Drizzle dependency direction is permitted. When unwired, AgentRuntime silently skips recording — the dashboard usage page only reflects what we successfully persisted, so a missing wire shows as missing cost data rather than a synthesized zero.' — pinned so the optional-recorder + silent-skip-when-unwired + no-synthesized-zero contract all stay documented", () => {
     expect(body).toMatch(
-      /\* v2-#4 Q\.1\.e — per-turn usage recorder\. AgentRuntime calls this\s*\n?\s*\*\s+after every decomposer\.decompose\(\) that returns a `usage` block\.\s*\n?\s*\*\s+Bootstrap wires this to a usage_records writer when the Drizzle\s*\n?\s*\*\s+dependency direction is permitted\. When unwired, AgentRuntime\s*\n?\s*\*\s+silently skips recording — the dashboard usage page only reflects\s*\n?\s*\*\s+what we successfully persisted, so a missing wire shows as missing\s*\n?\s*\*\s+cost data rather than a synthesized zero\./,
+      /\* v2-#4 Q\.1\.e — per-turn usage recorder\. AgentRuntime calls this\s*\*\s+after every decomposer\.decompose\(\) that returns a `usage` block\.\s*\*\s+Bootstrap wires this to a usage_records writer when the Drizzle\s*\*\s+dependency direction is permitted\. When unwired, AgentRuntime\s*\*\s+silently skips recording — the dashboard usage page only reflects\s*\*\s+what we successfully persisted, so a missing wire shows as missing\s*\*\s+cost data rather than a synthesized zero\./,
     );
   });
 
@@ -89,7 +89,7 @@ describe('services/agent-runtime content parity', () => {
     expect(body).toMatch(/decomposeResultKind: 'plan' \| 'clarify' \| 'refuse';/);
     expect(body).toMatch(/usage: DecomposeUsage;/);
     expect(body).toMatch(
-      /\* Arc 1 sub-slice 6\.4 \(v2-#6\) — drives the record_type column\s*\n?\s*\*\s+on the usage_records insert: 'bundled' → 'agent_decomposer_bundled',\s*\n?\s*\*\s+else → 'agent_decomposer'\. Bundled rows post a flat \$0\.10\/turn\s*\n?\s*\*\s+cost \(Q5=A hide actual upstream\); non-bundled rows keep the\s*\n?\s*\*\s+v2-#4 metadata\.cost_usd_cents Anthropic-derived value\./,
+      /\* Arc 1 sub-slice 6\.4 \(v2-#6\) — drives the record_type column\s*\*\s+on the usage_records insert: 'bundled' → 'agent_decomposer_bundled',\s*\*\s+else → 'agent_decomposer'\. Bundled rows post a flat \$0\.10\/turn\s*\*\s+cost \(Q5=A hide actual upstream\); non-bundled rows keep the\s*\*\s+v2-#4 metadata\.cost_usd_cents Anthropic-derived value\./,
     );
   });
 
@@ -106,50 +106,50 @@ describe('services/agent-runtime content parity', () => {
     expect(body).toMatch(/refusalPatterns\?: readonly RefusalPattern\[\];/);
     // Billing-integrity hardening — logger now also exposes `error?` for the
     // bundled-LLM spend-meter loud-log (the cost row is the only soft-cap input).
-    expect(body).toMatch(/logger\?: \{\s*\n?\s*warn\?: /);
+    expect(body).toMatch(/logger\?: \{\s*warn\?: /);
     expect(body).toMatch(/error\?: \(obj: Record<string, unknown>, msg: string\) => void;/);
     expect(body).toMatch(
-      /\*\s+Arc 2 sub-slice 8\.3 \(v2-#8\) — optional transcript event bus\.\s*\n?\s*\*\s+When wired, AgentRuntime publishes every transcript-append to\s*\n?\s*\*\s+the bus so the SSE endpoint can stream live turns to dashboard\s*\n?\s*\*\s+subscribers\. Omitting the bus is a silent no-op \(the runtime\s*\n?\s*\*\s+still writes to the repo\)\./,
+      /\*\s+Arc 2 sub-slice 8\.3 \(v2-#8\) — optional transcript event bus\.\s*\*\s+When wired, AgentRuntime publishes every transcript-append to\s*\*\s+the bus so the SSE endpoint can stream live turns to dashboard\s*\*\s+subscribers\. Omitting the bus is a silent no-op \(the runtime\s*\*\s+still writes to the repo\)\./,
     );
     expect(body).toMatch(
-      /\*\s+Arc 7 obs\.3 — optional metrics registry\. When wired, the\s*\n?\s*\*\s+runtime increments `driftstack_agent_decompose_total\{kind\}` on\s*\n?\s*\*\s+every decompose\(\) call \(kind = plan \/ clarify \/ refuse\) so the\s*\n?\s*\*\s+Grafana dashboard can ratio useful turns against no-op kinds\./,
+      /\*\s+Arc 7 obs\.3 — optional metrics registry\. When wired, the\s*\*\s+runtime increments `driftstack_agent_decompose_total\{kind\}` on\s*\*\s+every decompose\(\) call \(kind = plan \/ clarify \/ refuse\) so the\s*\*\s+Grafana dashboard can ratio useful turns against no-op kinds\./,
     );
   });
 
   it('Session-closed short-circuit preserves the paused-versus-closed lifecycle distinction', () => {
     expect(body).toMatch(
-      /if \(session\.status !== 'active'\) \{\s*\n?\s*\/\/ Closed\/paused sessions return a short-circuit result\. The\s*\n?\s*\/\/ caller \(route handler\) maps this to a 409 Conflict — the\s*\n?\s*\/\/ chat UI distinguishes resuming a pause from replacing a closed row\./,
+      /if \(session\.status !== 'active'\) \{\s*\/\/ Closed\/paused sessions return a short-circuit result\. The\s*\/\/ caller \(route handler\) maps this to a 409 Conflict — the\s*\/\/ chat UI distinguishes resuming a pause from replacing a closed row\./,
     );
     expect(body).toMatch(
-      /return \{\s*\n?\s*kind: 'session-closed',\s*\n?\s*reason: session\.closedReason \?\? `session \$\{session\.status\}`,\s*\n?\s*session,\s*\n?\s*\};/,
+      /return \{\s*kind: 'session-closed',\s*reason: session\.closedReason \?\? `session \$\{session\.status\}`,\s*session,\s*\};/,
     );
   });
 
   it("Arc 2 8.6 manual-mode framing pinned: 'manual mode pass-through. Record the customer's user_message as actor=operator on the transcript (no decompose / executor / token debit; the gui-client drives intents directly via the gui_control plane). Returns a distinct result kind so the route maps to a 200 logged response.' — pinned so the operator-not-user role + no-decompose/executor/token-debit + V-174 gui_control plane + 200-logged-response contract stay documented", () => {
     expect(body).toMatch(
-      /\/\/ Arc 2 sub-slice 8\.6 \(v2-#8\) — manual mode pass-through\. Record\s*\n?\s*\/\/ the customer's user_message as actor='operator' on the transcript\s*\n?\s*\/\/ \(no decompose \/ executor \/ token debit; the gui-client drives\s*\n?\s*\/\/ intents directly via the gui_control plane\)\. Returns a distinct\s*\n?\s*\/\/ result kind so the route maps to a 200 'logged' response\./,
+      /\/\/ Arc 2 sub-slice 8\.6 \(v2-#8\) — manual mode pass-through\. Record\s*\/\/ the customer's user_message as actor='operator' on the transcript\s*\/\/ \(no decompose \/ executor \/ token debit; the gui-client drives\s*\/\/ intents directly via the gui_control plane\)\. Returns a distinct\s*\/\/ result kind so the route maps to a 200 'logged' response\./,
     );
     expect(body).toMatch(
-      /if \(admission\.kind === 'manual-transcript'\) \{[\s\S]*const operatorEntry = \{\s*\n?\s*at,\s*\n?\s*role: 'operator' as const,\s*\n?\s*body: args\.userMessage,\s*\n?\s*\};/,
+      /if \(admission\.kind === 'manual-transcript'\) \{[\s\S]*const operatorEntry = \{\s*at,\s*role: 'operator' as const,\s*body: args\.userMessage,\s*\};/,
     );
     expect(body).toMatch(/return \{ kind: 'logged-manual', session: updated \};/);
   });
 
   it("Append-user-FIRST ordering framing pinned: 'Append the user turn FIRST so the decomposer sees its own prior plans + the new user task in the history.' — pinned so the decomposer-sees-current-turn-as-history rationale stays documented (drift to append-user-after-decompose would force the decomposer to receive the new task TWICE: once in args.task + once in history → potential double-handling)", () => {
     expect(body).toMatch(
-      /\/\/ Append the user turn FIRST so the decomposer sees its own\s*\n?\s*\/\/ prior plans \+ the new user task in the history\./,
+      /\/\/ Append the user turn FIRST so the decomposer sees its own\s*\/\/ prior plans \+ the new user task in the history\./,
     );
   });
 
   it("Q.1.b hybrid-error-classification framing pinned: 'hybrid error classification per founder verdict 2026-05-17. Transient operational failures (5xx after the decomposer's internal retry, network errors) return a synthesized refuse so the customer's session stays active and they can retry the same turn after upstream recovery. Fatal failures (credential errors / malformed responses / missing-key configuration) re-throw — the route layer maps them to 502 + Sentry alert.' — pinned so the Q.1.b verdict + 2026-05-17 lock-date + transient-as-refuse + fatal-as-throw-502 + Sentry-alert contract all stay documented", () => {
     expect(body).toMatch(
-      /\/\/ Q\.1\.b — hybrid error classification per founder verdict\s*\n?\s*\/\/ 2026-05-17\. Transient operational failures \(5xx after the\s*\n?\s*\/\/ decomposer's internal retry, network errors\) return a\s*\n?\s*\/\/ synthesized refuse so the customer's session stays active\s*\n?\s*\/\/ and they can retry the same turn after upstream recovery\./,
+      /\/\/ Q\.1\.b — hybrid error classification per founder verdict\s*\/\/ 2026-05-17\. Transient operational failures \(5xx after the\s*\/\/ decomposer's internal retry, network errors\) return a\s*\/\/ synthesized refuse so the customer's session stays active\s*\/\/ and they can retry the same turn after upstream recovery\./,
     );
     expect(body).toMatch(
-      /\/\/ Fatal failures \(credential errors \/ malformed responses \/\s*\n?\s*\/\/ missing-key configuration\) re-throw — the route layer maps\s*\n?\s*\/\/ them to 502 \+ Sentry alert\./,
+      /\/\/ Fatal failures \(credential errors \/ malformed responses \/\s*\/\/ missing-key configuration\) re-throw — the route layer maps\s*\/\/ them to 502 \+ Sentry alert\./,
     );
     expect(body).toMatch(
-      /decomposed = \{\s*\n?\s*kind: 'refuse',\s*\n?\s*refuseReason: 'agent layer temporarily unavailable; please retry',\s*\n?\s*tokensConsumed: 0,\s*\n?\s*\};/,
+      /decomposed = \{\s*kind: 'refuse',\s*refuseReason: 'agent layer temporarily unavailable; please retry',\s*tokensConsumed: 0,\s*\};/,
     );
   });
 

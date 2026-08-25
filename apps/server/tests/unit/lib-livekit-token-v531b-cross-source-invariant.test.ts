@@ -114,7 +114,7 @@ describe('W1052 lib/livekit-token V-531.B cross-source invariant', () => {
     expect(p).toMatch(/round-trips byte-identical when comparing tokens\./);
     // The order: exp, iss, nbf, sub, jti, video.
     expect(p).toMatch(
-      /exp,\s*\n?\s*iss: opts\.apiKey,\s*\n?\s*nbf: now,\s*\n?\s*sub: opts\.identity,\s*\n?\s*jti: opts\.jti \?\? randomJti\(\),\s*\n?\s*video: opts\.video,/,
+      /exp,\s*iss: opts\.apiKey,\s*nbf: now,\s*sub: opts\.identity,\s*jti: opts\.jti \?\? randomJti\(\),\s*video: opts\.video,/,
     );
   });
 

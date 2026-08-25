@@ -48,10 +48,10 @@ describe('W889 V-352 UpdateAccountMe cross-source invariant', () => {
   it('CRITICAL UpdateAccountMeRequestSchema declares 4 fields — name (trim 1-120) + timezone (trim 1-64) + slug (AccountSlugSchema) + region (AccountRegionSchema). All 4 are nullable + optional. The 4-field shape is the V-352 self-edit surface.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
     expect(p).toMatch(
-      /UpdateAccountMeRequestSchema = z\s*\n?\s*\.object\(\{[\s\S]+?name: z\.string\(\)\.trim\(\)\.min\(1\)\.max\(120\)\.nullable\(\)\.optional\(\)/,
+      /UpdateAccountMeRequestSchema = z\s*\.object\(\{[\s\S]+?name: z\.string\(\)\.trim\(\)\.min\(1\)\.max\(120\)\.nullable\(\)\.optional\(\)/,
     );
     expect(p).toMatch(
-      /UpdateAccountMeRequestSchema[\s\S]+?timezone: z\s*\n?\s*\.string\(\)\s*\n\s*\.trim\(\)\s*\n\s*\.min\(1\)\s*\n\s*\.max\(64\)/,
+      /UpdateAccountMeRequestSchema[\s\S]+?timezone: z\s*\.string\(\)\s*\n\s*\.trim\(\)\s*\n\s*\.min\(1\)\s*\n\s*\.max\(64\)/,
     );
     expect(p).toMatch(/slug: AccountSlugSchema\.nullable\(\)\.optional\(\)/);
     expect(p).toMatch(/region: AccountRegionSchema\.nullable\(\)\.optional\(\)/);

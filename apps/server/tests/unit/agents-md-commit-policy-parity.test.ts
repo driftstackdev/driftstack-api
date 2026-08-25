@@ -150,7 +150,7 @@ describe('W721 AGENTS.md commit-policy + V-205/V-211 classifier parity', () => {
   it('CRITICAL canonical-source framing — "version-controlled. Install per-clone with `scripts/install-git-hooks.sh` (copies this file to .git/hooks/)". The install-script pattern is what avoids Husky vendoring complexity; drift to using Husky would silently break the clone-time install.', () => {
     const h = read(HOOK);
     expect(h).toMatch(/Canonical source — version-controlled/);
-    expect(h).toMatch(/Install per-clone with\s*\n?\s*#\s*`scripts\/install-git-hooks\.sh`/);
+    expect(h).toMatch(/Install per-clone with\s*#\s*`scripts\/install-git-hooks\.sh`/);
     expect(h).toMatch(/copies this file to \.git\/hooks\//);
 
     // install-git-hooks.sh exists.

@@ -41,32 +41,32 @@ describe('W462.A apps/admin-panel/src/lib/api-base-url.ts content parity', () =>
 
   it("W193 framing pinned: 'W193 — single source of truth for the admin-panel's API base URL. Mirrors apps/customer-dashboard/src/lib/api-base-url.ts (W192) so the same prod-fail-fast guarantee applies to admin pages.'", () => {
     expect(body).toMatch(
-      /\/\/ W193 — single source of truth for the admin-panel's API base URL\.\s*\n?\s*\/\/ Mirrors `apps\/customer-dashboard\/src\/lib\/api-base-url\.ts` \(W192\) so\s*\n?\s*\/\/ the same prod-fail-fast guarantee applies to admin pages\./,
+      /\/\/ W193 — single source of truth for the admin-panel's API base URL\.\s*\/\/ Mirrors `apps\/customer-dashboard\/src\/lib\/api-base-url\.ts` \(W192\) so\s*\/\/ the same prod-fail-fast guarantee applies to admin pages\./,
     );
   });
 
   it("Before-state framing pinned: '10 .astro files as the inline expression `const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';` which would have silently broken every admin page in production if the env var was missed at deploy'", () => {
     expect(body).toMatch(
-      /\/\/ Before this lived in 10 \.astro files as the inline expression\s*\n?\s*\/\/\s*`const apiBaseUrl = import\.meta\.env\.PUBLIC_API_BASE_URL \?\? 'http:\/\/localhost:3000';`\s*\n?\s*\/\/ which would have silently broken every admin page in production if\s*\n?\s*\/\/ the env var was missed at deploy/,
+      /\/\/ Before this lived in 10 \.astro files as the inline expression\s*\/\/\s*`const apiBaseUrl = import\.meta\.env\.PUBLIC_API_BASE_URL \?\? 'http:\/\/localhost:3000';`\s*\/\/ which would have silently broken every admin page in production if\s*\/\/ the env var was missed at deploy/,
     );
   });
 
   it("2026-05-12 verify-email incident framing pinned: 'same bug class as the 2026-05-12 verify-email link incident, applied to the admin surface' + 'Worse, actually: an admin staring at a \"no accounts found\" page might assume the system is empty rather than realising the deployment is misconfigured.'", () => {
     expect(body).toMatch(
-      /same bug class as the\s*\n?\s*\/\/ 2026-05-12 verify-email link incident, applied to the admin\s*\n?\s*\/\/ surface\. Worse, actually: an admin staring at a "no accounts found"\s*\n?\s*\/\/ page might assume the system is empty rather than realising the\s*\n?\s*\/\/ deployment is misconfigured\./,
+      /same bug class as the\s*\/\/ 2026-05-12 verify-email link incident, applied to the admin\s*\/\/ surface\. Worse, actually: an admin staring at a "no accounts found"\s*\/\/ page might assume the system is empty rather than realising the\s*\/\/ deployment is misconfigured\./,
     );
   });
 
   it("DEV_FALLBACK constant pinned to 'http://localhost:3000' + stripTrailingSlash: replace(/\\/+$/, '')", () => {
     expect(body).toMatch(/const DEV_FALLBACK = 'http:\/\/localhost:3000';/);
     expect(body).toMatch(
-      /function stripTrailingSlash\(s: string\): string \{\s*\n?\s*return s\.replace\(\/\\\/\+\$\/, ''\);\s*\n?\s*\}/,
+      /function stripTrailingSlash\(s: string\): string \{\s*return s\.replace\(\/\\\/\+\$\/, ''\);\s*\}/,
     );
   });
 
   it('resolveApiBaseUrl 3-branch: (1) typeof raw === "string" && length>0 → stripTrailingSlash(raw); (2) import.meta.env.DEV → DEV_FALLBACK; (3) throw with admin-panel prefix + production-builds hint + `astro build` mention', () => {
     expect(body).toMatch(
-      /export function resolveApiBaseUrl\(\): string \{\s*\n?\s*const raw = import\.meta\.env\.PUBLIC_API_BASE_URL;\s*\n?\s*if \(typeof raw === 'string' && raw\.length > 0\) \{\s*\n?\s*return stripTrailingSlash\(raw\);\s*\n?\s*\}\s*\n?\s*if \(import\.meta\.env\.DEV\) \{\s*\n?\s*return DEV_FALLBACK;\s*\n?\s*\}\s*\n?\s*throw new Error\(\s*\n?\s*'admin-panel: PUBLIC_API_BASE_URL must be set for production builds\. ' \+\s*\n?\s*'Set it to the public API origin \(e\.g\. https:\/\/api\.driftstack\.dev\) before running `astro build`\.',\s*\n?\s*\);\s*\n?\s*\}/,
+      /export function resolveApiBaseUrl\(\): string \{\s*const raw = import\.meta\.env\.PUBLIC_API_BASE_URL;\s*if \(typeof raw === 'string' && raw\.length > 0\) \{\s*return stripTrailingSlash\(raw\);\s*\}\s*if \(import\.meta\.env\.DEV\) \{\s*return DEV_FALLBACK;\s*\}\s*throw new Error\(\s*'admin-panel: PUBLIC_API_BASE_URL must be set for production builds\. ' \+\s*'Set it to the public API origin \(e\.g\. https:\/\/api\.driftstack\.dev\) before running `astro build`\.',\s*\);\s*\}/,
     );
   });
 

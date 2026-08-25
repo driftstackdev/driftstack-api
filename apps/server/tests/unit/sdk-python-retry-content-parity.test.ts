@@ -64,7 +64,7 @@ describe('W586.A packages/sdk-python/src/driftstack/retry.py content parity', ()
     // (Python attributes a bare string literal to the preceding assignment).
     // `enabled` documents the on/off switch; `retryable_errors` documents the set.
     expect(body).toMatch(
-      /enabled: bool = True\n\s*"""If True, retry on TransportError \+ InternalError \(5xx\) \+ RateLimitError\.\s*\n?\s*If False, never retry\."""/,
+      /enabled: bool = True\n\s*"""If True, retry on TransportError \+ InternalError \(5xx\) \+ RateLimitError\.\s*If False, never retry\."""/,
     );
     expect(body).toMatch(
       /retryable_errors: tuple\[type\[BaseException\], \.\.\.\] = field\(\s*\n\s*default_factory=lambda: \(TransportError, RateLimitError, InternalError\)\s*\n\s*\)\n\s*"""Errors that ARE retryable when retries are enabled\."""/,
@@ -79,7 +79,7 @@ describe('W586.A packages/sdk-python/src/driftstack/retry.py content parity', ()
     expect(body).toMatch(/If the server set a POSITIVE ``Retry-After`` \(rate-limit case\), it/);
     expect(body).toMatch(/wins — we never retry sooner than the server asks\. Otherwise, and/);
     // Wrap-tolerant: the phrase spans a line break in the docstring.
-    expect(body).toMatch(/exponential-backoff with full jitter\s*\n?\s*\(random uniform between 0/);
+    expect(body).toMatch(/exponential-backoff with full jitter\s*\(random uniform between 0/);
     expect(body).toMatch(/and the next exponential value\)\./);
     // Gated on a strictly-positive hint. A non-positive value carries no
     // information and the hint path has no jitter, so returning it produced a

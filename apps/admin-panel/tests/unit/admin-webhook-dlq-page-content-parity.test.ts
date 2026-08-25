@@ -84,7 +84,7 @@ describe('W360.C admin-panel /webhook-dlq page content parity', () => {
     // future refactor might silently start displaying stale or
     // wrong owner info.
     expect(body).toMatch(
-      /Account email \+ webhook URL\s*\n?\s*\/\/\s*aren't part of the DLQ delivery shape today/,
+      /Account email \+ webhook URL\s*\/\/\s*aren't part of the DLQ delivery shape today/,
     );
   });
 

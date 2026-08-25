@@ -50,25 +50,25 @@ describe('W463.C apps/marketing-site/src/data/sub-processors.ts content parity',
       /\/\/ Sub-processor register — public surface for \/trust\/sub-processors\./,
     );
     expect(body).toMatch(
-      /\/\/ Mirrors the DPA Annex 3 entries from `docs\/legal\/dpa\.md` \(this repo\)\s*\n?\s*\/\/ plus the locked sub-processor list \(V-052 revision\)\./,
+      /\/\/ Mirrors the DPA Annex 3 entries from `docs\/legal\/dpa\.md` \(this repo\)\s*\/\/ plus the locked sub-processor list \(V-052 revision\)\./,
     );
   });
 
   it("DPA-binding framing pinned: 'When the DPA Annex 3 changes, this file updates in the same commit; the /trust page is a customer-facing transparency artifact, not a separate canonical source.'", () => {
     expect(body).toMatch(
-      /When the DPA\s*\n?\s*\/\/ Annex 3 changes, this file updates in the same commit; the \/trust\s*\n?\s*\/\/ page is a customer-facing transparency artifact, not a separate\s*\n?\s*\/\/ canonical source\./,
+      /When the DPA\s*\/\/ Annex 3 changes, this file updates in the same commit; the \/trust\s*\/\/ page is a customer-facing transparency artifact, not a separate\s*\/\/ canonical source\./,
     );
   });
 
   it("Art 28(2) notice obligation framing pinned: 'Changes to this list trigger Art 28(2) sub-processor amendment notice (30-day notice to customers) per the DPA. Adding or removing an entry is a content change with compliance implications.'", () => {
     expect(body).toMatch(
-      /\/\/ Changes to this list trigger Art 28\(2\) sub-processor amendment\s*\n?\s*\/\/ notice \(30-day notice to customers\) per the DPA\. Adding or removing\s*\n?\s*\/\/ an entry is a content change with compliance implications\./,
+      /\/\/ Changes to this list trigger Art 28\(2\) sub-processor amendment\s*\/\/ notice \(30-day notice to customers\) per the DPA\. Adding or removing\s*\/\/ an entry is a content change with compliance implications\./,
     );
   });
 
   it('SubProcessor 4-field (name + region + purpose + transferMechanism all strings) with DPA-mirror JSDoc framing', () => {
     expect(body).toMatch(
-      /export interface SubProcessor \{\s*\n?\s*\/\*\* Legal-entity name as it appears in the DPA Annex 3\. \*\/\s*\n?\s*name: string;\s*\n?\s*\/\*\* Region of operation; "EU" for EU-resident, country for specific\. \*\/\s*\n?\s*region: string;\s*\n?\s*\/\*\* What data flows through this sub-processor\. \*\/\s*\n?\s*purpose: string;\s*\n?\s*\/\*\* Transfer mechanism for any data outside the EU\. \*\/\s*\n?\s*transferMechanism: string;\s*\n?\s*\}/,
+      /export interface SubProcessor \{\s*\/\*\* Legal-entity name as it appears in the DPA Annex 3\. \*\/\s*name: string;\s*\/\*\* Region of operation; "EU" for EU-resident, country for specific\. \*\/\s*region: string;\s*\/\*\* What data flows through this sub-processor\. \*\/\s*purpose: string;\s*\/\*\* Transfer mechanism for any data outside the EU\. \*\/\s*transferMechanism: string;\s*\}/,
     );
   });
 
@@ -127,16 +127,16 @@ describe('W463.C apps/marketing-site/src/data/sub-processors.ts content parity',
   it("V-478 change-log framing pinned: 'V-478 — sub-processor change-log surface.' + 'Every material change to the SUB_PROCESSORS register lands here as an immutable entry.' + Art 28(2) 30-day notice email pairing", () => {
     expect(body).toMatch(/\*\s*V-478 — sub-processor change-log surface\./);
     expect(body).toMatch(
-      /\*\s*Every material change to the SUB_PROCESSORS register lands here as\s*\n?\s*\*\s*an immutable entry\. Customers can scan the list to see when each\s*\n?\s*\*\s*sub-processor was added or removed, and which Article 28\(2\) notice\s*\n?\s*\*\s*window applied\. Adding an entry is paired with the Art 28\(2\) 30-day\s*\n?\s*\*\s*notice email per the DPA\./,
+      /\*\s*Every material change to the SUB_PROCESSORS register lands here as\s*\*\s*an immutable entry\. Customers can scan the list to see when each\s*\*\s*sub-processor was added or removed, and which Article 28\(2\) notice\s*\*\s*window applied\. Adding an entry is paired with the Art 28\(2\) 30-day\s*\*\s*notice email per the DPA\./,
     );
   });
 
   it("SubProcessorChangeLogEntry: 4-value kind union + five fields + current 'initial transparency baseline' framing", () => {
     expect(body).toMatch(
-      /\*\s+- `register_published`: initial transparency baseline\. The register has\s*\n?\s*\*\s+been on-record from this date forward\./,
+      /\*\s+- `register_published`: initial transparency baseline\. The register has\s*\*\s+been on-record from this date forward\./,
     );
     expect(body).toMatch(
-      /export interface SubProcessorChangeLogEntry \{\s*\n?\s*date: string;\s*\n?\s*kind: 'added' \| 'removed' \| 'material_change' \| 'register_published';/,
+      /export interface SubProcessorChangeLogEntry \{\s*date: string;\s*kind: 'added' \| 'removed' \| 'material_change' \| 'register_published';/,
     );
   });
 
@@ -144,11 +144,9 @@ describe('W463.C apps/marketing-site/src/data/sub-processors.ts content parity',
     // S43 2026-07-07 — the correction entry leads the array (newest
     // first is not enforced; the baseline entry must still exist).
     expect(body).toMatch(
-      /date: '2026-07-07',\s*\n?\s*kind: 'material_change',\s*\n?\s*subject: 'Cloudflare R2',/,
+      /date: '2026-07-07',\s*kind: 'material_change',\s*subject: 'Cloudflare R2',/,
     );
-    expect(body).toMatch(
-      /date: '2026-05-10',\s*\n?\s*kind: 'register_published',\s*\n?\s*subject: '',/,
-    );
+    expect(body).toMatch(/date: '2026-05-10',\s*kind: 'register_published',\s*subject: '',/);
   });
 
   it('file exists at canonical path', () => {

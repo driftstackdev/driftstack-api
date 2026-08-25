@@ -85,7 +85,7 @@ function pythonMapping(): Map<string, string> {
   // Entries are `"URI": ErrorClass,` but some wrap across lines, so the class is
   // taken as the next identifier after the colon rather than same-line.
   for (const m of src.matchAll(
-    /"(https:\/\/errors\.driftstack\.dev\/[a-z0-9-]+)":\s*\(?\s*\n?\s*(\w+)/g,
+    /"(https:\/\/errors\.driftstack\.dev\/[a-z0-9-]+)":\s*\(?\s*(\w+)/g,
   )) {
     out.set(m[1]!, m[2]!);
   }

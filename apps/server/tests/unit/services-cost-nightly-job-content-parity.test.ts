@@ -39,19 +39,19 @@ describe('W397.A apps/server/src/services/cost-nightly-job.ts content parity', (
   it('V-541.E framing + V-202d ScheduledJobsService registration pinned', () => {
     expect(body).toMatch(/V-541\.E — nightly cost-recompute scheduled-job wiring\./);
     expect(body).toMatch(
-      /Registers a `cost\.recompute_nightly` handler against the existing\s*\n?\s*\/\/\s*V-202d ScheduledJobsService/,
+      /Registers a `cost\.recompute_nightly` handler against the existing\s*\/\/\s*V-202d ScheduledJobsService/,
     );
   });
 
   it('AccountIdProvider framing: pluggable provider (prod=accounts table, tests=stub)', () => {
     expect(body).toMatch(
-      /Pulls the account list to evaluate\s*\n?\s*\/\/\s*from a pluggable provider \(production wires it to the accounts\s*\n?\s*\/\/\s*table; tests pass a stub\)/,
+      /Pulls the account list to evaluate\s*\/\/\s*from a pluggable provider \(production wires it to the accounts\s*\/\/\s*table; tests pass a stub\)/,
     );
   });
 
   it('Cadence framing: bootstrap kicks off + each successful tick re-enqueues; idempotent via dedup-on-account-and-type', () => {
     expect(body).toMatch(
-      /Cadence: bootstrap calls `enqueueNextNightlyRun\(\)` on app start\s*\n?\s*\/\/\s*and after each successful run\. Re-enqueue is idempotent via the\s*\n?\s*\/\/\s*V-202d dedup-on-account-and-type flag \(job_type 'cost\.recompute_\s*\n?\s*\/\/\s*nightly', account_id null\)/,
+      /Cadence: bootstrap calls `enqueueNextNightlyRun\(\)` on app start\s*\/\/\s*and after each successful run\. Re-enqueue is idempotent via the\s*\/\/\s*V-202d dedup-on-account-and-type flag \(job_type 'cost\.recompute_\s*\/\/\s*nightly', account_id null\)/,
     );
   });
 
@@ -61,7 +61,7 @@ describe('W397.A apps/server/src/services/cost-nightly-job.ts content parity', (
 
   it('AccountIdProvider: listAllAccountIds returns readonly string[]', () => {
     expect(body).toMatch(
-      /export interface AccountIdProvider \{\s*\n?\s*\/\*\* Return the full set of account ids to evaluate in this tick\. \*\/\s*\n?\s*listAllAccountIds\(\): Promise<readonly string\[\]>;\s*\n?\s*\}/,
+      /export interface AccountIdProvider \{\s*\/\*\* Return the full set of account ids to evaluate in this tick\. \*\/\s*listAllAccountIds\(\): Promise<readonly string\[\]>;\s*\}/,
     );
   });
 
@@ -78,7 +78,7 @@ describe('W397.A apps/server/src/services/cost-nightly-job.ts content parity', (
 
   it('registerCostNightlyJob: idempotent re-register replaces previous handler', () => {
     expect(body).toMatch(
-      /Wire the nightly-recompute handler onto the ScheduledJobsService\.\s*\n?\s*\*\s*Idempotent: re-registering replaces the previous handler\./,
+      /Wire the nightly-recompute handler onto the ScheduledJobsService\.\s*\*\s*Idempotent: re-registering replaces the previous handler\./,
     );
     expect(body).toMatch(
       /opts\.scheduledJobs\.register\(COST_NIGHTLY_JOB_TYPE, async \(job: ScheduledJobRow\) => \{/,
@@ -89,12 +89,12 @@ describe('W397.A apps/server/src/services/cost-nightly-job.ts content parity', (
     expect(body).toMatch(/const tickStart = new Date\(now\(\)\);/);
     expect(body).toMatch(/const ids = await opts\.accounts\.listAllAccountIds\(\);/);
     expect(body).toMatch(
-      /const result = await opts\.dispatcher\.evaluate\(\{\s*\n?\s*accountIds: ids,[\s\S]*?billingCycle: billingCycleFromDate\(cycleAnchorForTick\(tickStart\)\),\s*\n?\s*\}\);/,
+      /const result = await opts\.dispatcher\.evaluate\(\{\s*accountIds: ids,[\s\S]*?billingCycle: billingCycleFromDate\(cycleAnchorForTick\(tickStart\)\),\s*\}\);/,
     );
     // W378 — log now also carries alerts_errored (+ alert_errors when >0) so a
     // per-account-isolated send failure surfaces here instead of killing the chain.
     expect(body).toMatch(
-      /opts\.logger\.info\?\.\(\s*\n?\s*\{\s*\n?\s*component: 'cost-nightly',\s*\n?\s*accounts: ids\.length,\s*\n?\s*alerts_fired: result\.alertsFired,\s*\n?\s*alerts_skipped: result\.alertsSkipped,[\s\S]*?alerts_errored: result\.alertsErrored,[\s\S]*?\},\s*\n?\s*'cost nightly recompute complete',\s*\n?\s*\);/,
+      /opts\.logger\.info\?\.\(\s*\{\s*component: 'cost-nightly',\s*accounts: ids\.length,\s*alerts_fired: result\.alertsFired,\s*alerts_skipped: result\.alertsSkipped,[\s\S]*?alerts_errored: result\.alertsErrored,[\s\S]*?\},\s*'cost nightly recompute complete',\s*\);/,
     );
     expect(body).toMatch(/\/\/ Re-arm the next run using future-successor dedup\./);
     expect(body).toMatch(
@@ -113,26 +113,26 @@ describe('W397.A apps/server/src/services/cost-nightly-job.ts content parity', (
     // The chain-survival try/catch deepened this branch's indentation, so
     // prettier wraps the zero-accounts re-arm across lines (semantics identical).
     expect(body).toMatch(
-      /await enqueueNextNightlyRun\(\{\s*\n?\s*scheduledJobs: opts\.scheduledJobs,\s*\n?\s*nowFn: now,\s*\n?\s*currentRunAt: job\.runAt,\s*\n?\s*\}\);\s*\n?\s*return;/,
+      /await enqueueNextNightlyRun\(\{\s*scheduledJobs: opts\.scheduledJobs,\s*nowFn: now,\s*currentRunAt: job\.runAt,\s*\}\);\s*return;/,
     );
   });
 
   it('enqueueNextNightlyRun: always dedups, with an optional future-successor boundary', () => {
     expect(body).toMatch(
-      /Enqueue the next nightly run\. Idempotent via the scheduled_jobs\s*\n?\s*\*\s*dedup flag: if there's already a pending row for this job_type\s*\n?\s*\*\s*with account_id IS NULL, the enqueue is a no-op\./,
+      /Enqueue the next nightly run\. Idempotent via the scheduled_jobs\s*\*\s*dedup flag: if there's already a pending row for this job_type\s*\*\s*with account_id IS NULL, the enqueue is a no-op\./,
     );
     expect(body).toMatch(/currentRunAt\?: Date;/);
     expect(body).toMatch(
-      /dedupOnAccountAndType: true,\s*\n?\s*\.\.\.\(opts\.currentRunAt === undefined\s*\n?\s*\? \{\}\s*\n?\s*: \{ dedupAfterRunAt: opts\.currentRunAt \}\),/,
+      /dedupOnAccountAndType: true,\s*\.\.\.\(opts\.currentRunAt === undefined\s*\? \{\}\s*: \{ dedupAfterRunAt: opts\.currentRunAt \}\),/,
     );
   });
 
   it('nextMidnightUtc: setUTCHours(0,0,0,0) + setUTCDate(+1) — strictly after now, predictable wall-clock', () => {
     expect(body).toMatch(
-      /Returns the next UTC midnight strictly after `now`\. Used so the\s*\n?\s*\*\s*nightly run lands at a predictable wall-clock time for ops\./,
+      /Returns the next UTC midnight strictly after `now`\. Used so the\s*\*\s*nightly run lands at a predictable wall-clock time for ops\./,
     );
     expect(body).toMatch(
-      /export function nextMidnightUtc\(now: Date\): Date \{\s*\n?\s*const next = new Date\(now\.getTime\(\)\);\s*\n?\s*next\.setUTCHours\(0, 0, 0, 0\);\s*\n?\s*next\.setUTCDate\(next\.getUTCDate\(\) \+ 1\);\s*\n?\s*return next;\s*\n?\s*\}/,
+      /export function nextMidnightUtc\(now: Date\): Date \{\s*const next = new Date\(now\.getTime\(\)\);\s*next\.setUTCHours\(0, 0, 0, 0\);\s*next\.setUTCDate\(next\.getUTCDate\(\) \+ 1\);\s*return next;\s*\}/,
     );
   });
 

@@ -72,7 +72,7 @@
 // The reason is structural rather than an oversight, and worth stating because
 // it will recur. The parity pin DOES assert the asymmetry:
 //
-//     /if \(account\.status === 'deleted'\) \{\s*\n?\s*throw new InvalidKeyError\(\);/
+//     /if \(account\.status === 'deleted'\) \{\s*throw new InvalidKeyError\(\);/
 //
 // but that regex matches ANYWHERE in the file, and the block it describes exists
 // TWICE — once in `slowPathApiKey`, once in `slowPathWebSession`. Mutating either

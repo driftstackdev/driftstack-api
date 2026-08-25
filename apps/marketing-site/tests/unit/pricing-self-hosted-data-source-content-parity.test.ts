@@ -43,17 +43,17 @@ describe('W386.A marketing-site src/data/pricing.ts self-hosted data-source cont
 
   it('ADR-004 + free-tier framing pinned in module comment', () => {
     expect(body).toMatch(
-      /Locked pricing values — single source of truth for the marketing\s*\n?\s*\/\/\s*site\. Per ADR-004/,
+      /Locked pricing values — single source of truth for the marketing\s*\/\/\s*site\. Per ADR-004/,
     );
     expect(body).toMatch(/The perpetual free tier replaced the one-time trial pack 2026-05-27/);
   });
 
   it('V-073 backend-equivalence framing pinned (TIER_CONCURRENT_SESSION_LIMITS, PROFILES_PER_TIER)', () => {
     expect(body).toMatch(
-      /apps\/server\/src\/services\/sessions\.ts\s*\n?\s*\/\/\s*\(TIER_CONCURRENT_SESSION_LIMITS, PROFILES_PER_TIER\) per V-073/,
+      /apps\/server\/src\/services\/sessions\.ts\s*\/\/\s*\(TIER_CONCURRENT_SESSION_LIMITS, PROFILES_PER_TIER\) per V-073/,
     );
     expect(body).toMatch(
-      /Both layers must agree on tier ids \+ concurrent caps \+ profile\s*\n?\s*\/\/\s*counts/,
+      /Both layers must agree on tier ids \+ concurrent caps \+ profile\s*\/\/\s*counts/,
     );
   });
 
@@ -70,7 +70,7 @@ describe('W386.A marketing-site src/data/pricing.ts self-hosted data-source cont
   it('V-131 license-tier-differentiator framing (multi-region + multi-node stripped)', () => {
     expect(body).toMatch(/V-131: license-tier differentiators surfaced in the SKU comparison/);
     expect(body).toMatch(
-      /Multi-region \+ multi-node-clustering were stripped here \(V-131\) —\s*\n?\s*\/\/\s*those were customer deployment choices, not license-tier gates/,
+      /Multi-region \+ multi-node-clustering were stripped here \(V-131\) —\s*\/\/\s*those were customer deployment choices, not license-tier gates/,
     );
   });
 
@@ -149,10 +149,10 @@ describe('W386.A marketing-site src/data/pricing.ts self-hosted data-source cont
 
   it('Self-hosted concurrent-ceiling-removed framing pinned (V-075+ founder Tier 3 spec)', () => {
     expect(body).toMatch(
-      /no\s*\n?\s*\*\s*`concurrentCeiling` field\. Differentiation is by profile count,/,
+      /no\s*\*\s*`concurrentCeiling` field\. Differentiation is by profile count,/,
     );
     expect(body).toMatch(
-      /concurrent capacity is bounded by customer\s*\n?\s*\*\s*hardware, NOT by license/,
+      /concurrent capacity is bounded by customer\s*\*\s*hardware, NOT by license/,
     );
   });
 

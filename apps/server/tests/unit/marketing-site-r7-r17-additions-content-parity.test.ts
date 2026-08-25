@@ -92,11 +92,9 @@ describe('W627 R7-R17 marketing additions content parity', () => {
 
     it('R9 capability-led headline pinned ("Built by engineers, not a growth team.") + "people who write the WebKit patches" body copy', () => {
       expect(body).toMatch(/Built by engineers, not a growth team\./);
+      expect(body).toMatch(/Driftstack is built by the people who write the WebKit\s*patches/);
       expect(body).toMatch(
-        /Driftstack is built by the people who write the WebKit\s*\n?\s*patches/,
-      );
-      expect(body).toMatch(
-        /no\s*\n?\s*cold-outreach sales team \(SDRs\), no upsell ladder, no product direction\s*\n?\s*chosen by investors/,
+        /no\s*cold-outreach sales team \(SDRs\), no upsell ladder, no product direction\s*chosen by investors/,
       );
       expect(body).not.toMatch(/roadmap chosen/i);
     });
@@ -109,7 +107,7 @@ describe('W627 R7-R17 marketing additions content parity', () => {
       expect(body).toMatch(/Sovereignty/);
       expect(body).toMatch(/Your account data stays in the EU/);
       expect(body).toMatch(
-        /uploaded files use Cloudflare's storage network,\s*\n?\s*which can replicate outside the EU/,
+        /uploaded files use Cloudflare's storage network,\s*which can replicate outside the EU/,
       );
       expect(body).toMatch(/href="\/trust\/sub-processors\/"/);
       expect(body).not.toMatch(/href="\/trust\/sub-processors"/);
@@ -125,7 +123,7 @@ describe('W627 R7-R17 marketing additions content parity', () => {
       expect(body).toMatch(/Works with your stack/);
       expect(body).toMatch(/Three SDKs\. One HTTPS API\. Slots into anything\./);
       expect(body).toMatch(
-        /Playwright tests, n8n\s*\n?\s*workflows, Make\.com scenarios, Zapier triggers/,
+        /Playwright tests, n8n\s*workflows, Make\.com scenarios, Zapier triggers/,
       );
     });
 

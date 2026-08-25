@@ -49,22 +49,22 @@ describe('W479.C apps/gui-client/src/views/CryptoOrderDetailView.tsx content par
     expect(body).toMatch(/\/\/ V-534\.AD — single-order detail view\./);
     expect(body).toMatch(/\/\/ V-534\.AF — body now rendered via CryptoOrderSummaryCard\./);
     expect(body).toMatch(
-      /\/\/ V-534\.BE — renders the V-666\.AU events timeline inline below the\s*\n?\s*\/\/\s+summary card so the customer can see when the order\s*\n?\s*\/\/\s+transitioned states \(useful for proving payment in\s*\n?\s*\/\/\s+support tickets\)\./,
+      /\/\/ V-534\.BE — renders the V-666\.AU events timeline inline below the\s*\/\/\s+summary card so the customer can see when the order\s*\/\/\s+transitioned states \(useful for proving payment in\s*\/\/\s+support tickets\)\./,
     );
   });
 
   it("Wiring framing pinned: 'Combines useCryptoOrder (poll), useCancelOrder (V-534.Y), and CryptoReceiptView (V-534.AB) on one page. Cancel is only offered while status === \\'pending\\'; a confirming/partial/paid/failed order shows an explanatory note instead. The receipt panel renders inline once the order reaches paid; before that we surface the polling status so the user knows we're waiting for on-chain confirmation.'", () => {
     expect(body).toMatch(
-      /\/\/ Combines useCryptoOrder \(poll\), useCancelOrder \(V-534\.Y\), and\s*\n?\s*\/\/ CryptoReceiptView \(V-534\.AB\) on one page\. Cancel is only offered\s*\n?\s*\/\/ while status === 'pending'; a confirming\/partial\/paid\/failed order\s*\n?\s*\/\/ shows an explanatory note instead\. The receipt panel renders inline\s*\n?\s*\/\/ once the order reaches paid; before that we surface the polling\s*\n?\s*\/\/ status so the user knows we're waiting for on-chain confirmation\./,
+      /\/\/ Combines useCryptoOrder \(poll\), useCancelOrder \(V-534\.Y\), and\s*\/\/ CryptoReceiptView \(V-534\.AB\) on one page\. Cancel is only offered\s*\/\/ while status === 'pending'; a confirming\/partial\/paid\/failed order\s*\/\/ shows an explanatory note instead\. The receipt panel renders inline\s*\/\/ once the order reaches paid; before that we surface the polling\s*\/\/ status so the user knows we're waiting for on-chain confirmation\./,
     );
   });
 
   it("EventsTimeline subcomponent: events.length === 0 returns <p>'No events recorded yet.' inline + non-empty returns <ol> aria-label='Order events timeline' with CryptoOrderStatusBadge size='sm' + 'via {source}' + font-mono at timestamp; key uses ${e.at}-${i.toString()}", () => {
     expect(body).toMatch(
-      /function EventsTimeline\(\{ events \}: \{ events: CryptoOrderEvent\[\] \}\): JSX\.Element \{\s*\n?\s*if \(events\.length === 0\) \{\s*\n?\s*return <p className="text-sm text-ink-secondary">No events recorded yet\.<\/p>;\s*\n?\s*\}/,
+      /function EventsTimeline\(\{ events \}: \{ events: CryptoOrderEvent\[\] \}\): JSX\.Element \{\s*if \(events\.length === 0\) \{\s*return <p className="text-sm text-ink-secondary">No events recorded yet\.<\/p>;\s*\}/,
     );
     expect(body).toMatch(
-      /<ol aria-label="Order events timeline" className="flex flex-col gap-1 text-sm">\s*\n?\s*\{events\.map\(\(e, i\) => \(\s*\n?\s*<li\s*\n?\s*key=\{`\$\{e\.at\}-\$\{i\.toString\(\)\}`\}/,
+      /<ol aria-label="Order events timeline" className="flex flex-col gap-1 text-sm">\s*\{events\.map\(\(e, i\) => \(\s*<li\s*key=\{`\$\{e\.at\}-\$\{i\.toString\(\)\}`\}/,
     );
     expect(body).toMatch(/<CryptoOrderStatusBadge status=\{e\.status\} size="sm" \/>/);
     expect(body).toMatch(/<span className="text-xs text-ink-secondary">via \{e\.source\}<\/span>/);
@@ -72,16 +72,16 @@ describe('W479.C apps/gui-client/src/views/CryptoOrderDetailView.tsx content par
 
   it("State-machine early returns: orderId === null → 'Pick an order to view its details.' empty state + loading|idle → 'Loading order…' + error → <ErrorBanner message + onDismiss={() => void refetch()}> (Dismiss retries the order fetch rather than dead-ending on a stale error); CryptoOrderDetailViewProps: orderId 'The order id to display. Pass null for the empty state.' nullable", () => {
     expect(body).toMatch(
-      /export interface CryptoOrderDetailViewProps \{\s*\n?\s*\/\*\* The order id to display\. Pass null for the empty state\. \*\/\s*\n?\s*orderId: string \| null;\s*\n?\s*\}/,
+      /export interface CryptoOrderDetailViewProps \{\s*\/\*\* The order id to display\. Pass null for the empty state\. \*\/\s*orderId: string \| null;\s*\}/,
     );
     expect(body).toMatch(
-      /if \(props\.orderId === null\) \{\s*\n?\s*return \(\s*\n?\s*<div className="rounded-md border border-surface-divider bg-surface-inset p-4 text-sm text-ink-secondary">\s*\n?\s*Pick an order to view its details\.\s*\n?\s*<\/div>\s*\n?\s*\);\s*\n?\s*\}/,
+      /if \(props\.orderId === null\) \{\s*return \(\s*<div className="rounded-md border border-surface-divider bg-surface-inset p-4 text-sm text-ink-secondary">\s*Pick an order to view its details\.\s*<\/div>\s*\);\s*\}/,
     );
     expect(body).toMatch(
-      /if \(state\.kind === 'loading' \|\| state\.kind === 'idle'\) \{\s*\n?\s*return \(\s*\n?\s*<div className="rounded-md border border-surface-divider bg-surface-inset p-4 text-sm text-ink-secondary">\s*\n?\s*Loading order…\s*\n?\s*<\/div>\s*\n?\s*\);\s*\n?\s*\}/,
+      /if \(state\.kind === 'loading' \|\| state\.kind === 'idle'\) \{\s*return \(\s*<div className="rounded-md border border-surface-divider bg-surface-inset p-4 text-sm text-ink-secondary">\s*Loading order…\s*<\/div>\s*\);\s*\}/,
     );
     expect(body).toMatch(
-      /if \(state\.kind === 'error'\) \{\s*\n?\s*\/\/ Dismiss retries the order fetch rather than dead-ending on a stale error\.\s*\n?\s*return <ErrorBanner message=\{state\.message\} onDismiss=\{\(\) => void refetch\(\)\} \/>;\s*\n?\s*\}/,
+      /if \(state\.kind === 'error'\) \{\s*\/\/ Dismiss retries the order fetch rather than dead-ending on a stale error\.\s*return <ErrorBanner message=\{state\.message\} onDismiss=\{\(\) => void refetch\(\)\} \/>;\s*\}/,
     );
   });
 
@@ -89,22 +89,22 @@ describe('W479.C apps/gui-client/src/views/CryptoOrderDetailView.tsx content par
     expect(body).toMatch(/const cancellable = order\.status === 'pending';/);
     expect(body).toMatch(/const isPaid = order\.status === 'paid';/);
     expect(body).toMatch(
-      /const onCancel = async \(\): Promise<void> => \{\s*\n?\s*await cancel\.cancel\(order\.order_id\);\s*\n?\s*\/\/ Refresh the order so the badge transitions out of "pending"\.\s*\n?\s*await refetch\(\);\s*\n?\s*\};/,
+      /const onCancel = async \(\): Promise<void> => \{\s*await cancel\.cancel\(order\.order_id\);\s*\/\/ Refresh the order so the badge transitions out of "pending"\.\s*await refetch\(\);\s*\};/,
     );
   });
 
   it("Cancel button: only inside cancellable branch + disabled when cancel.state.kind === 'submitting' + label 'Cancelling…' during submit else 'Cancel order' + on 'failed' state surfaces cancel.state.message inline below the button; payment-seen non-terminal explanatory copy: 'Payment activity has been detected on-chain. Cancellation is no longer self-service — contact support to reconcile or refund.' (shown only for 'confirming'/'partial' — NOT 'cancelled', which is terminal with no payment received)", () => {
     expect(body).toMatch(
-      /\{cancellable && \(\s*\n?\s*<div className="flex flex-col gap-2">\s*\n?\s*<button\s*\n?\s*type="button"\s*\n?\s*onClick=\{\(\) => setConfirmOpen\(true\)\}\s*\n?\s*disabled=\{cancel\.state\.kind === 'submitting'\}/,
+      /\{cancellable && \(\s*<div className="flex flex-col gap-2">\s*<button\s*type="button"\s*onClick=\{\(\) => setConfirmOpen\(true\)\}\s*disabled=\{cancel\.state\.kind === 'submitting'\}/,
     );
     expect(body).toMatch(
       /\{cancel\.state\.kind === 'submitting' \? 'Cancelling…' : 'Cancel order'\}/,
     );
     expect(body).toMatch(
-      /\{cancel\.state\.kind === 'failed' && \(\s*\n?\s*<p className="text-xs text-status-error">\{cancel\.state\.message\}<\/p>\s*\n?\s*\)\}/,
+      /\{cancel\.state\.kind === 'failed' && \(\s*<p className="text-xs text-status-error">\{cancel\.state\.message\}<\/p>\s*\)\}/,
     );
     expect(body).toMatch(
-      /\{\(order\.status === 'confirming' \|\| order\.status === 'partial'\) && \(\s*\n?\s*<p className="text-xs text-ink-secondary">\s*\n?\s*Payment activity has been detected on-chain\. Cancellation is no longer self-service —\s*\n?\s*contact support to reconcile or refund\.\s*\n?\s*<\/p>\s*\n?\s*\)\}/,
+      /\{\(order\.status === 'confirming' \|\| order\.status === 'partial'\) && \(\s*<p className="text-xs text-ink-secondary">\s*Payment activity has been detected on-chain\. Cancellation is no longer self-service —\s*contact support to reconcile or refund\.\s*<\/p>\s*\)\}/,
     );
   });
 
@@ -116,22 +116,22 @@ describe('W479.C apps/gui-client/src/views/CryptoOrderDetailView.tsx content par
       /useFocusTrap\(confirmOpen, confirmDialogRef, \(\) => setConfirmOpen\(false\)\);/,
     );
     expect(body).toMatch(
-      /\{confirmOpen && \(\s*\n?\s*<div\s*\n?\s*ref=\{confirmDialogRef\}\s*\n?\s*role="dialog"\s*\n?\s*aria-modal="true"\s*\n?\s*aria-label="Confirm order cancellation"/,
+      /\{confirmOpen && \(\s*<div\s*ref=\{confirmDialogRef\}\s*role="dialog"\s*aria-modal="true"\s*aria-label="Confirm order cancellation"/,
     );
     expect(body).toMatch(
-      /onClick=\{\(e\) => \{\s*\n?\s*if \(e\.target === e\.currentTarget\) setConfirmOpen\(false\);\s*\n?\s*\}\}/,
+      /onClick=\{\(e\) => \{\s*if \(e\.target === e\.currentTarget\) setConfirmOpen\(false\);\s*\}\}/,
     );
     expect(body).toMatch(
-      /onClick=\{\(\) => setConfirmOpen\(false\)\}\s*\n?\s*className="rounded border border-surface-divider px-3 py-1 text-sm hover:bg-surface-inset"\s*\n?\s*>\s*\n?\s*Keep order/,
+      /onClick=\{\(\) => setConfirmOpen\(false\)\}\s*className="rounded border border-surface-divider px-3 py-1 text-sm hover:bg-surface-inset"\s*>\s*Keep order/,
     );
     expect(body).toMatch(
-      /onClick=\{\(\) => \{\s*\n?\s*setConfirmOpen\(false\);\s*\n?\s*void onCancel\(\);\s*\n?\s*\}\}[\s\S]{0,200}Confirm cancel/,
+      /onClick=\{\(\) => \{\s*setConfirmOpen\(false\);\s*void onCancel\(\);\s*\}\}[\s\S]{0,200}Confirm cancel/,
     );
   });
 
   it('Final render: CryptoOrderSummaryCard order + footer + events !== undefined && events.length > 0 conditional EventsTimeline section + isPaid && <CryptoReceiptView orderId={order.order_id} /> (receipt panel renders only after status reaches paid)', () => {
     expect(body).toMatch(
-      /<CryptoOrderSummaryCard order=\{order\} footer=\{footer\} \/>\s*\n?\s*\{order\.events !== undefined && order\.events\.length > 0 && \(\s*\n?\s*<section aria-label="Timeline" className="flex flex-col gap-2">\s*\n?\s*<h4 className="text-xs uppercase text-ink-secondary">Timeline<\/h4>\s*\n?\s*<EventsTimeline events=\{order\.events\} \/>\s*\n?\s*<\/section>\s*\n?\s*\)\}\s*\n?\s*\{isPaid && <CryptoReceiptView orderId=\{order\.order_id\} \/>\}/,
+      /<CryptoOrderSummaryCard order=\{order\} footer=\{footer\} \/>\s*\{order\.events !== undefined && order\.events\.length > 0 && \(\s*<section aria-label="Timeline" className="flex flex-col gap-2">\s*<h4 className="text-xs uppercase text-ink-secondary">Timeline<\/h4>\s*<EventsTimeline events=\{order\.events\} \/>\s*<\/section>\s*\)\}\s*\{isPaid && <CryptoReceiptView orderId=\{order\.order_id\} \/>\}/,
     );
   });
 

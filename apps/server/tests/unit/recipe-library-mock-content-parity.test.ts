@@ -46,7 +46,7 @@ describe('W457.A packages/recipe-library/src/mock.ts content parity', () => {
   it("V-127 framing pinned: 'V-127 mock recipe runner + registry.' + 'Deterministic outputs — same inputs always produce the same RecipeResult. Real runner ships in Phase 3; mock here lets the GUI client + admin panel scaffolding integrate against the interface without waiting on Phase 3 implementation.'", () => {
     expect(body).toMatch(/\/\/ V-127 mock recipe runner \+ registry\./);
     expect(body).toMatch(
-      /\/\/ Deterministic outputs — same inputs always produce the same\s*\n?\s*\/\/ RecipeResult\. Real runner ships in Phase 3; mock here lets the\s*\n?\s*\/\/ GUI client \+ admin panel scaffolding integrate against the\s*\n?\s*\/\/ interface without waiting on Phase 3 implementation\./,
+      /\/\/ Deterministic outputs — same inputs always produce the same\s*\/\/ RecipeResult\. Real runner ships in Phase 3; mock here lets the\s*\/\/ GUI client \+ admin panel scaffolding integrate against the\s*\/\/ interface without waiting on Phase 3 implementation\./,
     );
   });
 
@@ -64,47 +64,47 @@ describe('W457.A packages/recipe-library/src/mock.ts content parity', () => {
       /\/\*\* Built-in mock recipes — minimal but realistic enough for tests\. \*\//,
     );
     expect(body).toMatch(
-      /\{\s*\n?\s*id: 'noop_smoke_test',\s*\n?\s*name: 'No-op smoke test',\s*\n?\s*category: 'diagnostic',\s*\n?\s*steps: \[\s*\n?\s*\{ kind: 'navigate', url: 'https:\/\/example\.com', waitUntil: 'load' \},\s*\n?\s*\{ kind: 'capture', what: 'screenshot' \},\s*\n?\s*\],\s*\n?\s*\},/,
+      /\{\s*id: 'noop_smoke_test',\s*name: 'No-op smoke test',\s*category: 'diagnostic',\s*steps: \[\s*\{ kind: 'navigate', url: 'https:\/\/example\.com', waitUntil: 'load' \},\s*\{ kind: 'capture', what: 'screenshot' \},\s*\],\s*\},/,
     );
   });
 
   it('login_form_demo recipe: id + login category + 7-step sequence (navigate /login + wait #username + type #username demo_user + type #password demo_pass + tap #submit + wait .dashboard + capture dom)', () => {
     expect(body).toMatch(
-      /\{\s*\n?\s*id: 'login_form_demo',\s*\n?\s*name: 'Generic login form \(demo\)',\s*\n?\s*category: 'login',\s*\n?\s*steps: \[\s*\n?\s*\{ kind: 'navigate', url: 'https:\/\/example\.com\/login' \},\s*\n?\s*\{ kind: 'wait', condition: 'selector', value: '#username' \},\s*\n?\s*\{ kind: 'type', selector: '#username', text: 'demo_user' \},\s*\n?\s*\{ kind: 'type', selector: '#password', text: 'demo_pass' \},\s*\n?\s*\{ kind: 'tap', selector: '#submit' \},\s*\n?\s*\{ kind: 'wait', condition: 'selector', value: '\.dashboard' \},\s*\n?\s*\{ kind: 'capture', what: 'dom' \},\s*\n?\s*\],\s*\n?\s*\},/,
+      /\{\s*id: 'login_form_demo',\s*name: 'Generic login form \(demo\)',\s*category: 'login',\s*steps: \[\s*\{ kind: 'navigate', url: 'https:\/\/example\.com\/login' \},\s*\{ kind: 'wait', condition: 'selector', value: '#username' \},\s*\{ kind: 'type', selector: '#username', text: 'demo_user' \},\s*\{ kind: 'type', selector: '#password', text: 'demo_pass' \},\s*\{ kind: 'tap', selector: '#submit' \},\s*\{ kind: 'wait', condition: 'selector', value: '\.dashboard' \},\s*\{ kind: 'capture', what: 'dom' \},\s*\],\s*\},/,
     );
   });
 
   it('MockRecipeRegistry: 3 methods (get via .find on recipeId + list returns this.recipes + listByCategory filters); default constructor falls back to DEFAULT_RECIPES', () => {
     expect(body).toMatch(
-      /export class MockRecipeRegistry implements RecipeRegistry \{\s*\n?\s*constructor\(private readonly recipes: readonly Recipe\[\] = DEFAULT_RECIPES\) \{\}\s*\n?\s*\n?\s*get\(recipeId: string\): Recipe \| undefined \{\s*\n?\s*return this\.recipes\.find\(\(r\) => r\.id === recipeId\);\s*\n?\s*\}\s*\n?\s*\n?\s*list\(\): readonly Recipe\[\] \{\s*\n?\s*return this\.recipes;\s*\n?\s*\}\s*\n?\s*\n?\s*listByCategory\(category: string\): readonly Recipe\[\] \{\s*\n?\s*return this\.recipes\.filter\(\(r\) => r\.category === category\);\s*\n?\s*\}/,
+      /export class MockRecipeRegistry implements RecipeRegistry \{\s*constructor\(private readonly recipes: readonly Recipe\[\] = DEFAULT_RECIPES\) \{\}\s*\n?\s*get\(recipeId: string\): Recipe \| undefined \{\s*return this\.recipes\.find\(\(r\) => r\.id === recipeId\);\s*\}\s*\n?\s*list\(\): readonly Recipe\[\] \{\s*return this\.recipes;\s*\}\s*\n?\s*listByCategory\(category: string\): readonly Recipe\[\] \{\s*return this\.recipes\.filter\(\(r\) => r\.category === category\);\s*\}/,
     );
   });
 
   it("MOCK_STEP_DURATION_MS=50 framing pinned: 'Constant per-step duration (ms) for the mock runner. Real runner surfaces actual driver timings. Kept small + uniform so tests can assert exact totals.'", () => {
     expect(body).toMatch(
-      /\*\s*Constant per-step duration \(ms\) for the mock runner\. Real runner\s*\n?\s*\*\s*surfaces actual driver timings\. Kept small \+ uniform so tests can\s*\n?\s*\*\s*assert exact totals\./,
+      /\*\s*Constant per-step duration \(ms\) for the mock runner\. Real runner\s*\*\s*surfaces actual driver timings\. Kept small \+ uniform so tests can\s*\*\s*assert exact totals\./,
     );
     expect(body).toMatch(/const MOCK_STEP_DURATION_MS = 50;/);
   });
 
   it("MockRecipeRunner: default registry = new MockRecipeRegistry(); run rejects with `recipe not found: ${recipeId}` on missing; maps every step through stepResultFor (status:'ok'); aggregate status:'ok'; durationMs = reduce-sum", () => {
     expect(body).toMatch(
-      /export class MockRecipeRunner implements RecipeRunner \{\s*\n?\s*constructor\(private readonly registry: RecipeRegistry = new MockRecipeRegistry\(\)\) \{\}/,
+      /export class MockRecipeRunner implements RecipeRunner \{\s*constructor\(private readonly registry: RecipeRegistry = new MockRecipeRegistry\(\)\) \{\}/,
     );
     expect(body).toMatch(
       /return Promise\.reject\(new Error\(`recipe not found: \$\{recipeId\}`\)\);/,
     );
     expect(body).toMatch(
-      /const steps: RecipeStepResult\[\] = recipe\.steps\.map\(\(step\) => stepResultFor\(step\)\);\s*\n?\s*const durationMs = steps\.reduce\(\(acc, s\) => acc \+ s\.durationMs, 0\);/,
+      /const steps: RecipeStepResult\[\] = recipe\.steps\.map\(\(step\) => stepResultFor\(step\)\);\s*const durationMs = steps\.reduce\(\(acc, s\) => acc \+ s\.durationMs, 0\);/,
     );
     expect(body).toMatch(
-      /return Promise\.resolve\(\{\s*\n?\s*recipeId: recipe\.id,\s*\n?\s*status: 'ok',\s*\n?\s*steps,\s*\n?\s*durationMs,\s*\n?\s*\}\);/,
+      /return Promise\.resolve\(\{\s*recipeId: recipe\.id,\s*status: 'ok',\s*steps,\s*durationMs,\s*\}\);/,
     );
   });
 
   it("stepResultFor: returns { step: redactStepForResult(step), status: 'ok', durationMs: MOCK_STEP_DURATION_MS } (credential redaction)", () => {
     expect(body).toMatch(
-      /function stepResultFor\(step: RecipeStep\): RecipeStepResult \{\s*\n?\s*return \{ step: redactStepForResult\(step\), status: 'ok', durationMs: MOCK_STEP_DURATION_MS \};\s*\n?\s*\}/,
+      /function stepResultFor\(step: RecipeStep\): RecipeStepResult \{\s*return \{ step: redactStepForResult\(step\), status: 'ok', durationMs: MOCK_STEP_DURATION_MS \};\s*\}/,
     );
     // the redaction helper must be imported (forward credential-leak guard).
     expect(body).toMatch(/import \{ redactStepForResult \} from '\.\/redact\.js';/);

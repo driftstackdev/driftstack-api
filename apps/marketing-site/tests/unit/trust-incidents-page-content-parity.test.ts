@@ -47,15 +47,15 @@ describe('W376.A marketing-site /trust/incidents page content parity', () => {
   });
 
   it('severityLabel maps to "Major outage" / "Degraded" / "Security" verbatim', () => {
-    expect(body).toMatch(/case 'major_outage':\s*\n?\s*return 'Major outage';/);
-    expect(body).toMatch(/case 'degraded':\s*\n?\s*return 'Degraded';/);
-    expect(body).toMatch(/case 'security':\s*\n?\s*return 'Security';/);
+    expect(body).toMatch(/case 'major_outage':\s*return 'Major outage';/);
+    expect(body).toMatch(/case 'degraded':\s*return 'Degraded';/);
+    expect(body).toMatch(/case 'security':\s*return 'Security';/);
   });
 
   it('severityClass color map pinned (red / amber / purple)', () => {
-    expect(body).toMatch(/case 'major_outage':\s*\n?\s*return 'bg-red-100 text-red-800';/);
-    expect(body).toMatch(/case 'degraded':\s*\n?\s*return 'bg-amber-100 text-amber-800';/);
-    expect(body).toMatch(/case 'security':\s*\n?\s*return 'bg-purple-100 text-purple-800';/);
+    expect(body).toMatch(/case 'major_outage':\s*return 'bg-red-100 text-red-800';/);
+    expect(body).toMatch(/case 'degraded':\s*return 'bg-amber-100 text-amber-800';/);
+    expect(body).toMatch(/case 'security':\s*return 'bg-purple-100 text-purple-800';/);
   });
 
   it('4 "What we publish" bar entries pinned (downtime / security / sub-processor / maintenance)', () => {
@@ -74,7 +74,7 @@ describe('W376.A marketing-site /trust/incidents page content parity', () => {
   it('72-hour-advance maintenance window notice claim pinned', () => {
     expect(body).toMatch(/Notice at least 72 hours in advance/);
     expect(body).toMatch(
-      /<a href="https:\/\/app\.driftstack\.dev\/settings\/"\s*\n?\s*class="text-tk-accent-text underline">\/settings → email preferences<\/a>/,
+      /<a href="https:\/\/app\.driftstack\.dev\/settings\/"\s*class="text-tk-accent-text underline">\/settings → email preferences<\/a>/,
     );
   });
 
@@ -86,7 +86,7 @@ describe('W376.A marketing-site /trust/incidents page content parity', () => {
 
   it('"24h impact summary, 7 days root-cause + remediation" SLA framing pinned', () => {
     expect(body).toMatch(
-      /Policy window: customer-impact summary within 24h; root-cause and\s*\n?\s*\/\/ remediation within 7 days of the incident closing/,
+      /Policy window: customer-impact summary within 24h; root-cause and\s*\/\/ remediation within 7 days of the incident closing/,
     );
     // Customer-facing version of the same commitment.
     expect(body).toMatch(
@@ -108,14 +108,14 @@ describe('W376.A marketing-site /trust/incidents page content parity', () => {
 
   it('live status CTA opens the public status page', () => {
     expect(body).toMatch(
-      /primaryHref="https:\/\/status\.driftstack\.dev"\s*\n?\s*primaryLabel="Open status page"/,
+      /primaryHref="https:\/\/status\.driftstack\.dev"\s*primaryLabel="Open status page"/,
     );
   });
 
   it("'Get notified' CTA + Manage notifications link to dashboard /settings", () => {
     expect(body).toMatch(/title="Get notified when status changes\."/);
     expect(body).toMatch(
-      /secondaryHref="https:\/\/app\.driftstack\.dev\/settings\/"\s*\n?\s*secondaryLabel="Manage notifications"/,
+      /secondaryHref="https:\/\/app\.driftstack\.dev\/settings\/"\s*secondaryLabel="Manage notifications"/,
     );
   });
 

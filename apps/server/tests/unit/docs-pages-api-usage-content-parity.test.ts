@@ -269,10 +269,10 @@ describe('W769 docs /api/usage content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Both endpoints accept any valid bearer \(API key OR web session\)\s*\n?\s*with `read` scope\./,
+      /Both endpoints accept any valid bearer \(API key OR web session\)\s*with `read` scope\./,
     );
     expect(p).toMatch(
-      /The X-Driftstack-Account header is honored for\s*\n?\s*team scopes — member roles read the owner's usage\./,
+      /The X-Driftstack-Account header is honored for\s*team scopes — member roles read the owner's usage\./,
     );
   });
 

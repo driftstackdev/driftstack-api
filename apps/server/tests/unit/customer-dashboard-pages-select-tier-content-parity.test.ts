@@ -39,10 +39,10 @@ describe('W494.A apps/customer-dashboard/src/pages/select-tier.astro content par
       /minimal placeholder|lands in V-184b|will replace with rich comparison/,
     );
     expect(body).toMatch(
-      /\/\/ "Change plan" reuse: this same page is reachable from \/billing\s*\n?\s*\/\/ "Change plan" link \(post-onboarding\)\. Every account starts on the\s*\n?\s*\/\/ perpetual free tier; the cards below upgrade to a paid tier\./,
+      /\/\/ "Change plan" reuse: this same page is reachable from \/billing\s*\/\/ "Change plan" link \(post-onboarding\)\. Every account starts on the\s*\/\/ perpetual free tier; the cards below upgrade to a paid tier\./,
     );
     expect(body).toMatch(
-      /\/\/ V-501 — disabled-while-pending guards on checkout buttons; copy\s*\n?\s*\/\/ micro-polish \(cancel-anytime line, clearer "what changes" framing\)\./,
+      /\/\/ V-501 — disabled-while-pending guards on checkout buttons; copy\s*\/\/ micro-polish \(cancel-anytime line, clearer "what changes" framing\)\./,
     );
   });
 
@@ -83,7 +83,7 @@ describe('W494.A apps/customer-dashboard/src/pages/select-tier.astro content par
   it('Hero accurately distinguishes the shared engine/archetypes from enforced operational and optional-capability differences while preserving refund honesty', () => {
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /Every tier runs the same verified browser engine and can use every\s*\n?\s*currently available archetype\. Operational limits and optional capabilities\s*\n?\s*differ — compare concurrency, profiles, storage, saved proxies, access,\s*\n?\s*and AI billing below\. Cancel or downgrade anytime — your plan stays active/,
+      /Every tier runs the same verified browser engine and can use every\s*currently available archetype\. Operational limits and optional capabilities\s*differ — compare concurrency, profiles, storage, saved proxies, access,\s*and AI billing below\. Cancel or downgrade anytime — your plan stays active/,
     );
     expect(body).not.toMatch(/Only concurrent caps and profile\s+counts change/);
     expect(body).toMatch(/We don't\s+provide automatic refunds for unused time/);
@@ -96,7 +96,7 @@ describe('W494.A apps/customer-dashboard/src/pages/select-tier.astro content par
     // admin-manual only; see admin-accounts.ts refund-record).
     expect(body).not.toMatch(/Cancel anytime; pro-rated refunds within the first 14 days\./);
     expect(body).not.toMatch(
-      /if you cancel within the\s*\n?\s*first 14 days of a billing cycle we refund the unused remainder/,
+      /if you cancel within the\s*first 14 days of a billing cycle we refund the unused remainder/,
     );
   });
 
@@ -122,7 +122,7 @@ describe('W494.A apps/customer-dashboard/src/pages/select-tier.astro content par
   it("POST /v1/billing/checkout-session contract: tier + billing_period:'monthly' + success_url with ?subscribed={tier} + cancel_url → /select-tier — pinned so the post-checkout landing URL signals which tier was purchased (for the dashboard home to read; 2026-07-02 the landing moved from /first-session to / with the account-portal IA) and billing_period stays 'monthly' (drift to dropping would silently default server-side, which may or may not match customer intent)", () => {
     expect(body).toMatch(/authedFetch\('\/v1\/billing\/checkout-session'/);
     expect(body).toMatch(/headers: \{ 'idempotency-key': checkoutKey \}/);
-    expect(body).toMatch(/tier,\s*\n?\s*billing_period: 'monthly'/);
+    expect(body).toMatch(/tier,\s*billing_period: 'monthly'/);
     expect(body).toMatch(/success_url: window\.location\.origin \+ '\/\?subscribed=' \+ tier/);
     expect(body).toMatch(/cancel_url: window\.location\.origin \+ '\/select-tier'/);
   });
@@ -204,9 +204,7 @@ describe('W494.A apps/customer-dashboard/src/pages/select-tier.astro content par
   });
 
   it("No-token guard: !token → showBanner('Sign up first.') + early-bail on the tier checkout buttons — pinned so customers landing on /select-tier from a deep-link without auth see a clear 'sign up first' message instead of an unhelpful 401 (drift would surface the raw server error)", () => {
-    expect(body).toMatch(
-      /if \(!token\) \{\s*\n?\s*showBanner\('Sign up first\.'\);\s*\n?\s*return;\s*\n?\s*\}/,
-    );
+    expect(body).toMatch(/if \(!token\) \{\s*showBanner\('Sign up first\.'\);\s*return;\s*\}/);
   });
 
   it('file exists at canonical path', () => {

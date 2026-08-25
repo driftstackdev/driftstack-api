@@ -44,31 +44,27 @@ describe('W496.C apps/customer-dashboard/src/pages/api-keys.astro content parity
 
   it("SCOPE_LABEL 6-entry map: read/write/admin/account_owner/driftstack_internal_admin (→ internal_admin) / gui_control (→ gui) — pinned so the scope vocabulary covers ALL emitted scope tokens (drift to dropping driftstack_internal_admin would render staff-emitted scopes as raw token; drift to dropping gui_control mapping would render the GUI client's scope as raw)", () => {
     expect(body).toMatch(
-      /const SCOPE_LABEL = \{\s*\n?\s*read: 'read',\s*\n?\s*write: 'write',\s*\n?\s*admin: 'admin',\s*\n?\s*account_owner: 'account_owner',\s*\n?\s*driftstack_internal_admin: 'internal_admin',\s*\n?\s*gui_control: 'gui',\s*\n?\s*\};/,
+      /const SCOPE_LABEL = \{\s*read: 'read',\s*write: 'write',\s*admin: 'admin',\s*account_owner: 'account_owner',\s*driftstack_internal_admin: 'internal_admin',\s*gui_control: 'gui',\s*\};/,
     );
   });
 
   it('4-option scope radio with account_owner default: account_owner (checked) / write / read / granular — pinned for trusted administration/automation without claiming desktop-app credential reuse', () => {
-    expect(body).toMatch(
-      /<input\s*\n?\s*type="radio"\s*\n?\s*name="scope"\s*\n?\s*value="account_owner"\s*\n?\s*checked/,
-    );
+    expect(body).toMatch(/<input\s*type="radio"\s*name="scope"\s*value="account_owner"\s*checked/);
     expect(body).toMatch(/<input type="radio" name="scope" value="write"/);
     expect(body).toMatch(/<input type="radio" name="scope" value="read"/);
+    expect(body).toMatch(/<input\s*type="radio"\s*name="scope"\s*value="granular"/);
     expect(body).toMatch(
-      /<input\s*\n?\s*type="radio"\s*\n?\s*name="scope"\s*\n?\s*value="granular"/,
-    );
-    expect(body).toMatch(
-      /Choose this for trusted account administration or your primary\s*\n?\s*automation/,
+      /Choose this for trusted account administration or your primary\s*automation/,
     );
     expect(body).not.toMatch(/keys driving the GUI client/);
   });
 
   it('V-481 granular scope picker framing pinned. Re-enabled by slice 268 after restoring the V-481 anchor on the HTML comment at api-keys.astro:124', () => {
     expect(body).toMatch(
-      /V-481 — granular scope picker\. Hidden by default; reveals when\s*\n?\s*the "granular" radio is selected\. Submits the raw array of\s*\n?\s*selected `verb:resource` scopes\./,
+      /V-481 — granular scope picker\. Hidden by default; reveals when\s*the "granular" radio is selected\. Submits the raw array of\s*selected `verb:resource` scopes\./,
     );
     expect(body).toMatch(
-      /Granular scopes do not satisfy broad checks —\s*\n?\s*if you select <code class="font-mono">read:sessions<\/code> only,/,
+      /Granular scopes do not satisfy broad checks —\s*if you select <code class="font-mono">read:sessions<\/code> only,/,
     );
   });
 
@@ -90,28 +86,28 @@ describe('W496.C apps/customer-dashboard/src/pages/api-keys.astro content parity
 
   it('V-296b dedicated rotate-reveal framing pinned. Re-enabled by slice 268 after restoring the V-296b + V-475 anchors on the HTML comment at api-keys.astro:268', () => {
     expect(body).toMatch(
-      /V-296b — dedicated rotate reveal pane\. Mirrors the V-475 webhook\s*\n?\s*rotate-secret pattern\. Surfaces the new plaintext \+ grace expiry\s*\n?\s*so the customer knows how long the OLD key keeps working\.\s*\n?\s*Replaces the previous reuse of the create-flow pane \(which\s*\n?\s*didn't surface the grace metadata\)\./,
+      /V-296b — dedicated rotate reveal pane\. Mirrors the V-475 webhook\s*rotate-secret pattern\. Surfaces the new plaintext \+ grace expiry\s*so the customer knows how long the OLD key keeps working\.\s*Replaces the previous reuse of the create-flow pane \(which\s*didn't surface the grace metadata\)\./,
     );
   });
 
   it('Rotate response field consumption: body.rotated_from + body.plaintext + body.grace_period_ends_at — pinned so the rotate reveal surfaces ALL 3 server-emitted fields (drift to dropping rotated_from would hide which key was rotated; drift to dropping grace_period_ends_at would hide when the old key stops working, creating downtime risk)', () => {
     expect(body).toMatch(
-      /showRotateReveal\(\s*\n?\s*body\.rotated_from \|\| '',\s*\n?\s*body\.plaintext \|\| '',\s*\n?\s*body\.grace_period_ends_at \|\| '',\s*\n?\s*\);/,
+      /showRotateReveal\(\s*body\.rotated_from \|\| '',\s*body\.plaintext \|\| '',\s*body\.grace_period_ends_at \|\| '',\s*\);/,
     );
   });
 
   it("'plaintext shown ONCE' framing pinned: 'Plaintext is shown ONCE on creation — store it now; we can't recover it later.' + 'This is the only time the full key is shown. Store it in your secret manager before dismissing.' — pinned so the recovery-impossibility framing survives in BOTH the header copy AND the just-created reveal (drift to dropping would lead to customers filing 'I lost my key, recover it' support tickets we can't satisfy)", () => {
     expect(body).toMatch(
-      /Plaintext is\s*\n?\s*shown ONCE on creation — store it now; we can't recover it later/,
+      /Plaintext is\s*shown ONCE on creation — store it now; we can't recover it later/,
     );
     expect(body).toMatch(
-      /This is the only time the full key is shown\. Store it in your secret manager before\s*\n?\s*dismissing\./,
+      /This is the only time the full key is shown\. Store it in your secret manager before\s*dismissing\./,
     );
   });
 
   it("scrypt-at-rest security framing pinned: 'API keys are scrypt-hashed at rest. Driftstack staff cannot read your keys — a database breach surfaces hashes, not keys. If a key leaks, revoke + rotate; no admin recovery path exists.' — pinned so the scrypt + breach-resistance + no-admin-recovery framing all survives (drift to dropping would let customers assume staff can read their keys, breaking the security trust model)", () => {
     expect(body).toMatch(
-      /API keys are scrypt-hashed at rest\. Driftstack staff cannot read your keys — a database\s*\n?\s*breach surfaces hashes, not keys\. If a key leaks, revoke \+ rotate; no admin recovery\s*\n?\s*path exists\./,
+      /API keys are scrypt-hashed at rest\. Driftstack staff cannot read your keys — a database\s*breach surfaces hashes, not keys\. If a key leaks, revoke \+ rotate; no admin recovery\s*path exists\./,
     );
   });
 
@@ -123,7 +119,7 @@ describe('W496.C apps/customer-dashboard/src/pages/api-keys.astro content parity
 
   it("Revoke confirm + 401-immediately framing pinned: 'Revoke \"<name>\"? Apps using this key will start receiving 401 immediately. This cannot be undone.' — pinned so customers know revocation is instant + irreversible (drift to dropping 'immediately' would let customers think there's a grace window for revoke too, breaking the 'incident response' use case)", () => {
     expect(body).toMatch(
-      /'Revoke "' \+\s*\n?\s*name \+\s*\n?\s*'"\? Apps using this key will start receiving 401 immediately\. This cannot be undone\.',/,
+      /'Revoke "' \+\s*name \+\s*'"\? Apps using this key will start receiving 401 immediately\. This cannot be undone\.',/,
     );
   });
 
@@ -143,13 +139,13 @@ describe('W496.C apps/customer-dashboard/src/pages/api-keys.astro content parity
       /function callerOnlyHeaders\(extra = \{\}\) \{\s*return \{\s*\.\.\.extra,\s*authorization: 'Bearer ' \+ token,\s*\};\s*\}/,
     );
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/api-keys', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: authedHeaders\(\{\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\}\),\s*\n?\s*body: JSON\.stringify\(\{ name: name, scopes: scopes \}\),\s*\n?\s*signal: controller\.signal,/,
+      /fetch\(apiBaseUrl \+ '\/v1\/api-keys', \{\s*method: 'POST',\s*headers: authedHeaders\(\{\s*'content-type': 'application\/json',\s*\}\),\s*body: JSON\.stringify\(\{ name: name, scopes: scopes \}\),\s*signal: controller\.signal,/,
     );
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/api-keys\/' \+ encodeURIComponent\(id\), \{\s*\n?\s*method: 'DELETE',\s*\n?\s*headers: authedHeaders\(\),\s*\n?\s*signal: controller\.signal,/,
+      /fetch\(apiBaseUrl \+ '\/v1\/api-keys\/' \+ encodeURIComponent\(id\), \{\s*method: 'DELETE',\s*headers: authedHeaders\(\),\s*signal: controller\.signal,/,
     );
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/api-keys\/' \+ encodeURIComponent\(id\) \+ '\/rotate', \{\s*\n?\s*method: 'POST',[\s\S]*?headers: authedHeaders\(\{\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\}\),\s*\n?\s*body: '\{\}',\s*\n?\s*signal: controller\.signal,/,
+      /fetch\(apiBaseUrl \+ '\/v1\/api-keys\/' \+ encodeURIComponent\(id\) \+ '\/rotate', \{\s*method: 'POST',[\s\S]*?headers: authedHeaders\(\{\s*'content-type': 'application\/json',\s*\}\),\s*body: '\{\}',\s*signal: controller\.signal,/,
     );
   });
 
@@ -212,7 +208,7 @@ describe('W496.C apps/customer-dashboard/src/pages/api-keys.astro content parity
 
   it("Granular at-least-one validation: scopes.length === 0 → granularWarning.hidden = false + early return — pinned so the form can't submit with zero granular scopes (drift to allowing zero would create keys with effectively no permissions; drift to surfacing only after server 400 would force customers through a round-trip for client-side-detectable validation)", () => {
     expect(body).toMatch(
-      /if \(scopes\.length === 0\) \{\s*\n?\s*if \(granularWarning\) granularWarning\.hidden = false;\s*\n?\s*return;\s*\n?\s*\}/,
+      /if \(scopes\.length === 0\) \{\s*if \(granularWarning\) granularWarning\.hidden = false;\s*return;\s*\}/,
     );
   });
 

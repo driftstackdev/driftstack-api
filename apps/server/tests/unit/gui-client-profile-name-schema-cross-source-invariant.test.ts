@@ -31,7 +31,7 @@ describe('gui-client profile-name pre-flight ↔ server ProfileNameSchema cross-
 
   it('server ProfileNameSchema carries the shared regex + max(120)', () => {
     expect(apiTypes).toContain(SHARED_NAME_RE);
-    expect(apiTypes).toMatch(/ProfileNameSchema = z\s*\n?\s*\.string\(\)\s*\n?\s*\.trim\(\)/);
+    expect(apiTypes).toMatch(/ProfileNameSchema = z\s*\.string\(\)\s*\.trim\(\)/);
     expect(apiTypes).toMatch(/\.max\(120\)/);
   });
 

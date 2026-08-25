@@ -111,8 +111,8 @@ describe('W1043 routes/admin-webhooks V-281 + V-512 cross-source invariant', () 
 
   it("CRITICAL audit action taxonomy — 'webhook_delivery.replayed' + 'webhook_delivery.requeued'. The two distinct action strings let the admin-audit-log UI render 'replayed: we asked for this' vs 'requeued: this was stuck' separately.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-webhooks.ts'));
-    expect(p).toMatch(/withAudit\(\s*\n?\s*request,\s*\n?\s*'webhook_delivery\.replayed',/);
-    expect(p).toMatch(/withAudit\(\s*\n?\s*request,\s*\n?\s*'webhook_delivery\.requeued',/);
+    expect(p).toMatch(/withAudit\(\s*request,\s*'webhook_delivery\.replayed',/);
+    expect(p).toMatch(/withAudit\(\s*request,\s*'webhook_delivery\.requeued',/);
   });
 
   it("CRITICAL withAudit pattern — audit-on-success + audit-on-error with error-code derivation (lowercase + strip 'Error' suffix). Same pattern as admin-incidents withAudit; drift would diverge admin-audit-log filter chips.", () => {
@@ -130,7 +130,7 @@ describe('W1043 routes/admin-webhooks V-281 + V-512 cross-source invariant', () 
   it("CRITICAL V-512 endpoint_id filter — accepts the 'webhook_endpoint_' public form or a bare uuid, refuses anything else, and calls the repo with the uuid. Keeping the public-id convention out of the storage layer is why the route translates; V-1590 is why it also judges, since the value lands in a uuid column and a strip alone made a mistyped filter a 500.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-webhooks.ts'));
     expect(p).toMatch(
-      /V-512 — accept the public `webhook_endpoint_` form on the optional\s*\n?\s*\/\/\s*drill-down filter and hand the repo a bare uuid\./,
+      /V-512 — accept the public `webhook_endpoint_` form on the optional\s*\/\/\s*drill-down filter and hand the repo a bare uuid\./,
     );
     // V-1590 — a strip is not a check, and the stripped value reaches a uuid
     // column. The filter is now validated and the refusal is a bad request.

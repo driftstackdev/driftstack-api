@@ -42,7 +42,7 @@ describe('W356.C /status-subscribers admin page parity', () => {
   });
 
   it('matches the route data-only envelope without inventing cursor or total metadata', () => {
-    expect(route).toMatch(/return \{\s*\n?\s*data: rows\.map/);
+    expect(route).toMatch(/return \{\s*data: rows\.map/);
     expect(body).toContain('const fetchedRows = parseSubscriberPage(body);');
     expect(body).toContain('const nextHasNext = fetchedRows.length > PAGE_SIZE;');
     expect(body).toContain('renderedHasNext = nextHasNext;');
@@ -83,9 +83,9 @@ describe('W356.C /status-subscribers admin page parity', () => {
   });
 
   it('force-unsubscribe retains the V-281 audit dual-write action and explicit confirmation', () => {
-    expect(body).toMatch(/Audit log dual-write happens\s*\n?\s*\/\/ server-side \(V-281 pattern\)/);
+    expect(body).toMatch(/Audit log dual-write happens\s*\/\/ server-side \(V-281 pattern\)/);
     expect(route).toContain("'status_subscriber.force_unsubscribed'");
-    expect(body).toMatch(/Force-unsubscribe '\s*\+\s*\n?\s*email/);
+    expect(body).toMatch(/Force-unsubscribe '\s*\+\s*email/);
     expect(body).toContain(
       'Writes admin_audit_log. Customer can re-subscribe via the public form.',
     );

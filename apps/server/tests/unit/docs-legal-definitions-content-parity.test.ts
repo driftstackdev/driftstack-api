@@ -90,7 +90,7 @@ describe('W574.B /docs/legal/definitions.md content parity', () => {
     expect(body).toMatch(/Driftstack that authorises calls to the API on Customer's behalf\./);
     expect(body).toMatch(/API/);
     expect(body).toMatch(
-      /API\s*\n?\s*Keys are revocable and limited by the scope taxonomy published in the/,
+      /API\s*Keys are revocable and limited by the scope taxonomy published in the/,
     );
     expect(body).toMatch(/current API reference\./);
     expect(body).toMatch(
@@ -114,7 +114,7 @@ describe('W574.B /docs/legal/definitions.md content parity', () => {
     expect(body).toMatch(/remain on Customer's device; the recording workflow/);
     expect(body).toMatch(/does not upload them to Driftstack\./);
     expect(body).toMatch(/\*\*"Capture"\*\* means a one-shot screenshot, DOM snapshot, or PDF/);
-    expect(body).toMatch(/returned\s*\n?\s*inline to Customer and not retained by that endpoint\./);
+    expect(body).toMatch(/returned\s*inline to Customer and not retained by that endpoint\./);
     expect(body).toMatch(
       /\*\*"Customer Workflow"\*\* means the automation logic, recipes, scripts,/,
     );
@@ -190,7 +190,7 @@ describe('W574.B /docs/legal/definitions.md content parity', () => {
     expect(body).toMatch(/\*\*"Sentry"\*\* means the error tracking and performance monitoring/);
     expect(body).toMatch(/service operated by Functional Software, Inc\. \(Delaware, USA\)/);
     expect(body).toMatch(/\*\*"Anthropic"\*\* means Anthropic, PBC \(Delaware, USA\)/);
-    expect(body).toMatch(/when Customer consents to\s*\n?\s*Driftstack-provided model access/);
+    expect(body).toMatch(/when Customer consents to\s*Driftstack-provided model access/);
     expect(body).toMatch(/Customers who supply their own/);
     expect(body).toMatch(/Anthropic credentials \(BYOK\) do not establish an Anthropic/);
     expect(body).toMatch(/Sub-processor relationship through Driftstack\./);

@@ -56,16 +56,16 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
 
   it('V-173 framing pinned + coexistence with V-164 inline webhooks.ts', () => {
     expect(body).toMatch(
-      /V-173 — DurableWebhookDeliveryService: Postgres-backed implementation\s*\n?\s*\/\/\s*of @driftstack\/webhook-delivery's WebhookDeliveryService \+ DlqManager\s*\n?\s*\/\/\s*interfaces\. Companion to V-164 InMemoryWebhookDelivery\./,
+      /V-173 — DurableWebhookDeliveryService: Postgres-backed implementation\s*\/\/\s*of @driftstack\/webhook-delivery's WebhookDeliveryService \+ DlqManager\s*\/\/\s*interfaces\. Companion to V-164 InMemoryWebhookDelivery\./,
     );
     expect(body).toMatch(
-      /COEXISTENCE NOTE: apps\/server\/src\/services\/webhooks\.ts is the existing\s*\n?\s*\/\/\s*inline implementation \(production today\)\. V-173 lands the\s*\n?\s*\/\/\s*package-interface-conformant Postgres-backed implementation as the\s*\n?\s*\/\/\s*FORWARD path\./,
+      /COEXISTENCE NOTE: apps\/server\/src\/services\/webhooks\.ts is the existing\s*\/\/\s*inline implementation \(production today\)\. V-173 lands the\s*\/\/\s*package-interface-conformant Postgres-backed implementation as the\s*\/\/\s*FORWARD path\./,
     );
   });
 
   it('SELECT...FOR UPDATE SKIP LOCKED claim invariant pinned (reused inline, not via WebhooksRepo.claim). Date interp converted to nowIso (2026-05-19 d9417a91 drift-guard: never interpolate raw Date in sql template literal — toISOString() at the boundary instead, since postgres-js Bind step calls Buffer.byteLength on the param).', () => {
     expect(body).toMatch(
-      /Worker uses SELECT\.\.\.FOR UPDATE SKIP LOCKED for cross-process\s*\n?\s*\/\/\s*coordination \(the existing webhook-worker\.ts already uses this\s*\n?\s*\/\/\s*pattern via WebhooksRepo\.claim; V-173 reuses the same primitive\s*\n?\s*\/\/\s*inline rather than depending on the existing repo\)\./,
+      /Worker uses SELECT\.\.\.FOR UPDATE SKIP LOCKED for cross-process\s*\/\/\s*coordination \(the existing webhook-worker\.ts already uses this\s*\/\/\s*pattern via WebhooksRepo\.claim; V-173 reuses the same primitive\s*\/\/\s*inline rather than depending on the existing repo\)\./,
     );
     expect(body).toMatch(/const nowIso = nowDate\.toISOString\(\);/);
     // V-173.R — claim widened to also reclaim stale in_flight rows (a crashed/
@@ -89,7 +89,7 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
 
   it('BACKOFF_MS_BY_ATTEMPT 5-entry ladder (60s / 5m / 15m / 30m / 60m); DEFAULT_TIMEOUT_MS=10_000; DEFAULT_MAX_ATTEMPTS=6', () => {
     expect(body).toMatch(
-      /export const BACKOFF_MS_BY_ATTEMPT: Record<number, number> = \{\s*\n?\s*1: 60_000,\s*\n?\s*2: 5 \* 60_000,\s*\n?\s*3: 15 \* 60_000,\s*\n?\s*4: 30 \* 60_000,\s*\n?\s*5: 60 \* 60_000,\s*\n?\s*\};/,
+      /export const BACKOFF_MS_BY_ATTEMPT: Record<number, number> = \{\s*1: 60_000,\s*2: 5 \* 60_000,\s*3: 15 \* 60_000,\s*4: 30 \* 60_000,\s*5: 60 \* 60_000,\s*\};/,
     );
     expect(body).toMatch(/export const DEFAULT_TIMEOUT_MS = 10_000;/);
     expect(body).toMatch(/export const DEFAULT_MAX_ATTEMPTS = 6;/);
@@ -104,23 +104,23 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
 
   it('enqueue: insert row status=pending + attempts=0 + nextAttemptAt=now; replay: flips to pending + deliveredAt null', () => {
     expect(body).toMatch(
-      /\.insert\(webhookDeliveries\)\s*\n?\s*\.values\(\{\s*\n?\s*webhookId: opts\.endpoint\.id,\s*\n?\s*eventId: opts\.payload\.eventId,\s*\n?\s*eventType: opts\.payload\.eventType as WebhookEventType,\s*\n?\s*payload: \{ body: opts\.payload\.body, emittedAtSec: opts\.payload\.emittedAtSec \},\s*\n?\s*status: 'pending',\s*\n?\s*attempts: 0,\s*\n?\s*nextAttemptAt: new Date\(nowMs\),/,
+      /\.insert\(webhookDeliveries\)\s*\.values\(\{\s*webhookId: opts\.endpoint\.id,\s*eventId: opts\.payload\.eventId,\s*eventType: opts\.payload\.eventType as WebhookEventType,\s*payload: \{ body: opts\.payload\.body, emittedAtSec: opts\.payload\.emittedAtSec \},\s*status: 'pending',\s*attempts: 0,\s*nextAttemptAt: new Date\(nowMs\),/,
     );
     // V-771 — this pinned a 3-key set that did NOT reset `attempts`, while the interface
     // promised "resets attempt counter" and the admin panel promised "retry budget refreshes".
     // One `toMatch` covers both the requeue and replay call sites, so it froze the bug twice.
     expect(body).toMatch(
-      /\.update\(webhookDeliveries\)\s*\n?\s*\.set\(\{\s*\n?\s*status: 'pending',[\s\S]{0,600}?attempts: 0,\s*\n?\s*nextAttemptAt: new Date\(nowMs\),\s*\n?\s*deliveredAt: null,\s*\n?\s*\}\)/,
+      /\.update\(webhookDeliveries\)\s*\.set\(\{\s*status: 'pending',[\s\S]{0,600}?attempts: 0,\s*nextAttemptAt: new Date\(nowMs\),\s*deliveredAt: null,\s*\}\)/,
     );
   });
 
   it('list: limit clamp 200 max + 50 default; cursor by createdAt desc + id desc; nextCursor only when hasMore', () => {
     expect(body).toMatch(/const limit = Math\.min\(opts\.limit \?\? 50, 200\);/);
     expect(body).toMatch(
-      /\.orderBy\(desc\(webhookDeliveries\.createdAt\), desc\(webhookDeliveries\.id\)\)\s*\n?\s*\.limit\(limit \+ 1\);/,
+      /\.orderBy\(desc\(webhookDeliveries\.createdAt\), desc\(webhookDeliveries\.id\)\)\s*\.limit\(limit \+ 1\);/,
     );
     expect(body).toMatch(
-      /const hasMore = rows\.length > limit;\s*\n?\s*const page = hasMore \? rows\.slice\(0, limit\) : rows;/,
+      /const hasMore = rows\.length > limit;\s*const page = hasMore \? rows\.slice\(0, limit\) : rows;/,
     );
     expect(body).toMatch(
       /const nextCursor = hasMore \? \(page\[page\.length - 1\]\?\.id \?\? null\) : null;/,
@@ -129,7 +129,7 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
 
   it('DurableDlqManager.discard: FK CASCADE on webhook_delivery_attempts.delivery_id auto-cleanup framing', () => {
     expect(body).toMatch(
-      /\/\/ FK CASCADE on webhook_delivery_attempts\.delivery_id cleans up the\s*\n?\s*\/\/ attempt log automatically\./,
+      /\/\/ FK CASCADE on webhook_delivery_attempts\.delivery_id cleans up the\s*\/\/ attempt log automatically\./,
     );
     expect(body).toMatch(
       /await this\.database\.db\.delete\(webhookDeliveries\)\.where\(eq\(webhookDeliveries\.id, deliveryId\)\);/,
@@ -142,7 +142,7 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
     // V-173.R — the in_flight flip sets updated_at = now so the reclaim
     // staleness anchor advances (otherwise a reclaimed row reads stale forever).
     expect(body).toMatch(
-      /await tx\s*\n?\s*\.update\(webhookDeliveries\)\s*\n?\s*\.set\(\{ status: 'in_flight', updatedAt: nowDate \}\)\s*\n?\s*\.where\(inArray\(webhookDeliveries\.id, ids\)\);/,
+      /await tx\s*\.update\(webhookDeliveries\)\s*\.set\(\{ status: 'in_flight', updatedAt: nowDate \}\)\s*\.where\(inArray\(webhookDeliveries\.id, ids\)\);/,
     );
   });
 
@@ -162,19 +162,19 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
     expect(body).toMatch(/if \(!updated\) return 'dlqed';/);
     // No terminal/retry UPDATE matches by id alone (the un-fenced pre-fix shape).
     expect(body).not.toMatch(
-      /\.set\(\{[\s\S]*?status: 'delivered',[\s\S]*?\}\)\s*\n?\s*\.where\(eq\(webhookDeliveries\.id, delivery\.id\)\);/,
+      /\.set\(\{[\s\S]*?status: 'delivered',[\s\S]*?\}\)\s*\.where\(eq\(webhookDeliveries\.id, delivery\.id\)\);/,
     );
   });
 
   it('V-359 dual-sign: prev secret folded into a second v1= via signWebhookPayload, only when secretPrev in grace window', () => {
-    expect(body).toMatch(/const prevInGrace =\s*\n?\s*endpoint\.secretPrev !== null &&/);
+    expect(body).toMatch(/const prevInGrace =\s*endpoint\.secretPrev !== null &&/);
     expect(body).toMatch(/endpoint\.secretPrevExpiresAt\.getTime\(\) > this\.now\(\);/);
     expect(body).toMatch(
-      /const sigHeader = signWebhookPayload\(\{\s*\n?\s*body,\s*\n?\s*secret: endpoint\.secret,\s*\n?\s*\.\.\.\(prevInGrace \? \{ secretPrev: endpoint\.secretPrev as string \} : \{\}\),\s*\n?\s*\}\);/,
+      /const sigHeader = signWebhookPayload\(\{\s*body,\s*secret: endpoint\.secret,\s*\.\.\.\(prevInGrace \? \{ secretPrev: endpoint\.secretPrev as string \} : \{\}\),\s*\}\);/,
     );
     // Re-signs at ATTEMPT TIME — no override pinning the signed timestamp to
     // the enqueue time (would fail the SDK ±300s window on retries).
-    expect(body).not.toMatch(/secretPrev as string \} : \{\}\),\s*\n?\s*timestampSec:/);
+    expect(body).not.toMatch(/secretPrev as string \} : \{\}\),\s*timestampSec:/);
   });
 
   it('deliver headers: 3 x-driftstack-* headers (event-id / event-type / signature) + content-type; no emitted-at or signature-prev header', () => {
@@ -189,10 +189,10 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
   it('deliver outcome: 2xx and session.failed suppress response bodies; other non-2xx retains bounded excerpt; timeout/transport stay classified', () => {
     expect(body).toMatch(/const successful = response\.status >= 200 && response\.status < 300;/);
     expect(body).toMatch(
-      /const suppressResponseDiagnostics =\s*\n?\s*successful \|\| delivery\.eventType === 'session\.failed';/,
+      /const suppressResponseDiagnostics =\s*successful \|\| delivery\.eventType === 'session\.failed';/,
     );
     expect(body).toMatch(
-      /const responseExcerpt = suppressResponseDiagnostics\s*\n?\s*\? null\s*\n?\s*: await readResponseExcerpt\(response\);/,
+      /const responseExcerpt = suppressResponseDiagnostics\s*\? null\s*: await readResponseExcerpt\(response\);/,
     );
     expect(body).toMatch(/if \(suppressResponseDiagnostics\) \{/);
     expect(body).toMatch(/outcome: successful \? 'success' : 'http_error',/);
@@ -216,7 +216,7 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
       /sliceWithoutSplittingSurrogate\(error\.message, TRANSPORT_ERROR_MAX_CHARS\)/,
     );
     expect(body).toMatch(
-      /sliceWithoutSplittingSurrogate\(\s*\n?\s*redactText\(bounded\) \|\| 'transport failure',\s*\n?\s*TRANSPORT_ERROR_MAX_CHARS,\s*\n?\s*\)/,
+      /sliceWithoutSplittingSurrogate\(\s*redactText\(bounded\) \|\| 'transport failure',\s*TRANSPORT_ERROR_MAX_CHARS,\s*\)/,
     );
     expect(body).not.toMatch(/errorMessage: e\?\.message/);
   });
@@ -254,7 +254,7 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
 
   it('rowToDeliveryRecord: terminal states (delivered/failed/dlq) → nextAttemptAtMs=null; else getTime()', () => {
     expect(body).toMatch(
-      /nextAttemptAtMs:\s*\n?\s*row\.status === 'delivered' \|\| row\.status === 'failed' \|\| row\.status === 'dlq'\s*\n?\s*\?\s*null\s*\n?\s*:\s*row\.nextAttemptAt\.getTime\(\),/,
+      /nextAttemptAtMs:\s*row\.status === 'delivered' \|\| row\.status === 'failed' \|\| row\.status === 'dlq'\s*\?\s*null\s*:\s*row\.nextAttemptAt\.getTime\(\),/,
     );
   });
 
@@ -262,10 +262,10 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
     expect(body).toMatch(/export interface DurableWebhookDeliveryDeps \{/);
     expect(body).toMatch(/database: Database;/);
     expect(body).toMatch(
-      /\/\*\* Test seam — defaults to the SSRF-guarded fetch \(connection-time DNS pin\)\. \*\/\s*\n?\s*fetch\?: typeof fetch;/,
+      /\/\*\* Test seam — defaults to the SSRF-guarded fetch \(connection-time DNS pin\)\. \*\/\s*fetch\?: typeof fetch;/,
     );
     expect(body).toMatch(
-      /\/\*\* Test seam — defaults to \(\) => Date\.now\(\)\. \*\/\s*\n?\s*now\?: \(\) => number;/,
+      /\/\*\* Test seam — defaults to \(\) => Date\.now\(\)\. \*\/\s*now\?: \(\) => number;/,
     );
     expect(body).toMatch(/const now = deps\.now \?\? \(\(\) => Date\.now\(\)\);/);
     // SSRF hardening — the outbound delivery fetch must NOT follow redirects
@@ -289,7 +289,7 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
       /import \{ and, asc, desc, eq, inArray, lt, or, sql \} from 'drizzle-orm';/,
     );
     expect(body).toMatch(
-      /import type \{\s*\n?\s*DlqManager,\s*\n?\s*EnqueueDeliveryOpts,\s*\n?\s*ListDeliveriesOpts,\s*\n?\s*ListDeliveriesPage,\s*\n?\s*RequeueDlqOpts,\s*\n?\s*WebhookDeliveryService,\s*\n?\s*\} from '@driftstack\/webhook-delivery';/,
+      /import type \{\s*DlqManager,\s*EnqueueDeliveryOpts,\s*ListDeliveriesOpts,\s*ListDeliveriesPage,\s*RequeueDlqOpts,\s*WebhookDeliveryService,\s*\} from '@driftstack\/webhook-delivery';/,
     );
     expect(body).toMatch(/import type \{ Database \} from '\.\.\/db\/client\.js';/);
     expect(body).toMatch(

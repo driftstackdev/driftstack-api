@@ -91,7 +91,7 @@ describe('W893 V-218 ValidationSchedule cross-source invariant', () => {
   it('CRITICAL UpsertValidationScheduleRequest cadence_seconds bounds = int().min(60).max(60 * 60 * 24 * 365). The 60s min prevents runaway-poll; the 1-year max prevents perpetually-stale schedules.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/admin.ts'));
     expect(p).toMatch(
-      /UpsertValidationScheduleRequestSchema = z\.object\(\{[\s\S]+?cadence_seconds: z\s*\n?\s*\.number\(\)\s*\n\s*\.int\(\)\s*\n\s*\.min\(60\)\s*\n\s*\.max\(60 \* 60 \* 24 \* 365\)/,
+      /UpsertValidationScheduleRequestSchema = z\.object\(\{[\s\S]+?cadence_seconds: z\s*\.number\(\)\s*\n\s*\.int\(\)\s*\n\s*\.min\(60\)\s*\n\s*\.max\(60 \* 60 \* 24 \* 365\)/,
     );
     // Sanity: the cadence-max evaluates to 1 year in seconds.
     expect(CADENCE_MAX_SECONDS).toBe(31_536_000);

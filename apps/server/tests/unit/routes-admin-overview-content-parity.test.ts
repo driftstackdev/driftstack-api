@@ -42,31 +42,31 @@ describe('W413.B apps/server/src/routes/admin-overview.ts content parity', () =>
 
   it('Framing pinned: single endpoint returning headline counts; read-only; no audit row', () => {
     expect(body).toMatch(
-      /Admin overview route — single endpoint returning the headline counts\s*\n?\s*\/\/\s*the admin panel renders on its index page \(active accounts,\s*\n?\s*\/\/\s*suspended accounts, DLQ depth\)\. Read-only; no audit row written\./,
+      /Admin overview route — single endpoint returning the headline counts\s*\/\/\s*the admin panel renders on its index page \(active accounts,\s*\/\/\s*suspended accounts, DLQ depth\)\. Read-only; no audit row written\./,
     );
   });
 
   it('Single-roundtrip rationale pinned: count methods (countByStatus, countDlqDeliveries) keep endpoint single-roundtrip vs iterating list endpoints', () => {
     expect(body).toMatch(
-      /Adding individual count methods \(countByStatus, countDlqDeliveries\)\s*\n?\s*\/\/\s*keeps this endpoint single-roundtrip rather than asking the\s*\n?\s*\/\/\s*dashboard to iterate the list endpoints\./,
+      /Adding individual count methods \(countByStatus, countDlqDeliveries\)\s*\/\/\s*keeps this endpoint single-roundtrip rather than asking the\s*\/\/\s*dashboard to iterate the list endpoints\./,
     );
   });
 
   it('Future-extension framing: leads.open deferred until leads endpoint lands (admin /leads page mock-only)', () => {
     expect(body).toMatch(
-      /Open-leads count is not\s*\n?\s*\/\/\s*included today — leads tracking has no Postgres surface yet \(the\s*\n?\s*\/\/\s*admin \/leads page is mock-only\)\. When the leads endpoint lands,\s*\n?\s*\/\/\s*extend this response with `leads: \{ open: number \}`\./,
+      /Open-leads count is not\s*\/\/\s*included today — leads tracking has no Postgres surface yet \(the\s*\/\/\s*admin \/leads page is mock-only\)\. When the leads endpoint lands,\s*\/\/\s*extend this response with `leads: \{ open: number \}`\./,
     );
   });
 
   it('AdminOverviewRoutesOptions: accountsAdmin (AccountsAdminService) + webhooksAdmin (WebhooksAdminService)', () => {
     expect(body).toMatch(
-      /export interface AdminOverviewRoutesOptions \{\s*\n?\s*accountsAdmin: AccountsAdminService;\s*\n?\s*webhooksAdmin: WebhooksAdminService;\s*\n?\s*\}/,
+      /export interface AdminOverviewRoutesOptions \{\s*accountsAdmin: AccountsAdminService;\s*webhooksAdmin: WebhooksAdminService;\s*\}/,
     );
   });
 
   it("Wire path + scope-gate: GET /v1/admin/overview + requireScope('driftstack_internal_admin') + rateLimit('global')", () => {
     expect(body).toMatch(
-      /app\.get\(\s*\n?\s*'\/v1\/admin\/overview',\s*\n?\s*\{\s*\n?\s*preHandler: \[app\.requireScope\('driftstack_internal_admin'\), app\.rateLimit\('global'\)\],\s*\n?\s*\},/,
+      /app\.get\(\s*'\/v1\/admin\/overview',\s*\{\s*preHandler: \[app\.requireScope\('driftstack_internal_admin'\), app\.rateLimit\('global'\)\],\s*\},/,
     );
   });
 
@@ -79,12 +79,12 @@ describe('W413.B apps/server/src/routes/admin-overview.ts content parity', () =>
 
   it('V-515 framing pinned: deleted-account count + computed total for "X of Y accounts active" admin panel copy', () => {
     expect(body).toMatch(
-      /\/\/ V-515 — also surface deleted-account count \+ computed total\s*\n?\s*\/\/ so the admin panel can show "X of Y accounts active" without\s*\n?\s*\/\/ a second roundtrip\./,
+      /\/\/ V-515 — also surface deleted-account count \+ computed total\s*\/\/ so the admin panel can show "X of Y accounts active" without\s*\/\/ a second roundtrip\./,
     );
   });
 
   it('6-way Promise.all: countByStatus active/suspended/deleted + countByTier + signupCounts + countDlq', () => {
-    // Individual line pins (no long \s*\n?\s* chain — avoids backtracking hazard).
+    // Individual line pins (no long \s* chain — avoids backtracking hazard).
     expect(body).toMatch(
       /const \[activeAccounts, suspendedAccounts, deletedAccounts, byTier, signups, dlqDepth\] =/,
     );

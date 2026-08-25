@@ -41,19 +41,19 @@ describe('W398.A apps/server/src/services/incident-event-bus.ts content parity',
   it('V-295e framing pinned: in-process EventEmitter, SSE /v1/status/stream subscriber, route unwires on disconnect', () => {
     expect(body).toMatch(/V-295e — incident event bus\./);
     expect(body).toMatch(
-      /In-process EventEmitter-style bus that the IncidentsService lifecycle\s*\n?\s*\/\/\s*publishes to and the \/v1\/status\/stream SSE route subscribes to\. Each\s*\n?\s*\/\/\s*connected SSE client is one subscription; subscriptions are cleaned\s*\n?\s*\/\/\s*up automatically when the client disconnects \(route handler unwires\s*\n?\s*\/\/\s*on `request\.raw\.on\('close', \.\.\.\)`\)/,
+      /In-process EventEmitter-style bus that the IncidentsService lifecycle\s*\/\/\s*publishes to and the \/v1\/status\/stream SSE route subscribes to\. Each\s*\/\/\s*connected SSE client is one subscription; subscriptions are cleaned\s*\/\/\s*up automatically when the client disconnects \(route handler unwires\s*\/\/\s*on `request\.raw\.on\('close', \.\.\.\)`\)/,
     );
   });
 
   it('Multi-instance follow-up framing pinned: Redis Pub/Sub deferred (single-instance launch + sticky-sessions scaling answer)', () => {
     expect(body).toMatch(
-      /This is intentionally in-process\. Multi-instance deployment would\s*\n?\s*\/\/\s*need Redis Pub\/Sub bridging on top — left as a follow-up because:\s*\n?\s*\/\/\s*1\. Driftstack ships a single API instance at launch \(Hetzner deploy\)\.\s*\n?\s*\/\/\s*2\. SSE clients hold open connections; routing them to a specific\s*\n?\s*\/\/\s*instance via sticky sessions is the eventual scaling answer\s*\n?\s*\/\/\s*anyway\./,
+      /This is intentionally in-process\. Multi-instance deployment would\s*\/\/\s*need Redis Pub\/Sub bridging on top — left as a follow-up because:\s*\/\/\s*1\. Driftstack ships a single API instance at launch \(Hetzner deploy\)\.\s*\/\/\s*2\. SSE clients hold open connections; routing them to a specific\s*\/\/\s*instance via sticky sessions is the eventual scaling answer\s*\/\/\s*anyway\./,
     );
   });
 
   it('IncidentEvent wire-shape framing: event + generated_at + incident + update (mirrors GET /v1/status/incidents)', () => {
     expect(body).toMatch(
-      /Event payload mirrors the public API wire shape of GET \/v1\/status\/incidents:\s*\n?\s*\/\/\s*\{ event: 'incident\.created' \| 'incident\.resolved', incident: PublicIncident, update: PublicIncidentUpdate \}/,
+      /Event payload mirrors the public API wire shape of GET \/v1\/status\/incidents:\s*\/\/\s*\{ event: 'incident\.created' \| 'incident\.resolved', incident: PublicIncident, update: PublicIncidentUpdate \}/,
     );
   });
 
@@ -71,7 +71,7 @@ describe('W398.A apps/server/src/services/incident-event-bus.ts content parity',
 
   it('publicIncident: inc_<row.id> id prefix, affected_components spread (defensive copy), ISO timestamps', () => {
     expect(body).toMatch(
-      /function publicIncident\(row: IncidentRow\): Incident \{\s*\n?\s*return \{\s*\n?\s*id: `inc_\$\{row\.id\}`,/,
+      /function publicIncident\(row: IncidentRow\): Incident \{\s*return \{\s*id: `inc_\$\{row\.id\}`,/,
     );
     expect(body).toMatch(/affected_components: \[\.\.\.row\.affectedComponents\],/);
     expect(body).toMatch(/started_at: row\.startedAt\.toISOString\(\),/);
@@ -84,7 +84,7 @@ describe('W398.A apps/server/src/services/incident-event-bus.ts content parity',
 
   it('publicIncidentUpdate: incu_<row.id> id + inc_<row.incidentId> incident_id prefixes', () => {
     expect(body).toMatch(
-      /function publicIncidentUpdate\(row: IncidentUpdateRow\): IncidentUpdate \{\s*\n?\s*return \{\s*\n?\s*id: `incu_\$\{row\.id\}`,\s*\n?\s*incident_id: `inc_\$\{row\.incidentId\}`,\s*\n?\s*message: row\.message,\s*\n?\s*status: row\.status,\s*\n?\s*posted_at: row\.postedAt\.toISOString\(\),\s*\n?\s*\};\s*\n?\s*\}/,
+      /function publicIncidentUpdate\(row: IncidentUpdateRow\): IncidentUpdate \{\s*return \{\s*id: `incu_\$\{row\.id\}`,\s*incident_id: `inc_\$\{row\.incidentId\}`,\s*message: row\.message,\s*status: row\.status,\s*posted_at: row\.postedAt\.toISOString\(\),\s*\};\s*\}/,
     );
   });
 
@@ -92,29 +92,29 @@ describe('W398.A apps/server/src/services/incident-event-bus.ts content parity',
     expect(body).toMatch(/export class IncidentEventBus \{/);
     expect(body).toMatch(/private readonly listeners = new Set<IncidentEventListener>\(\);/);
     expect(body).toMatch(
-      /subscribe\(listener: IncidentEventListener\): \(\) => void \{\s*\n?\s*this\.listeners\.add\(listener\);\s*\n?\s*return \(\) => \{\s*\n?\s*this\.listeners\.delete\(listener\);\s*\n?\s*\};\s*\n?\s*\}/,
+      /subscribe\(listener: IncidentEventListener\): \(\) => void \{\s*this\.listeners\.add\(listener\);\s*return \(\) => \{\s*this\.listeners\.delete\(listener\);\s*\};\s*\}/,
     );
   });
 
   it('publishCreated / publishResolved: emit event with new Date().toISOString() generated_at', () => {
     expect(body).toMatch(/\/\*\* V-295c3-followup-style — fires on lifecycle\. \*\//);
     expect(body).toMatch(
-      /publishCreated\(incident: IncidentRow, update: IncidentUpdateRow\): void \{\s*\n?\s*this\.emit\(\{\s*\n?\s*event: 'incident\.created',\s*\n?\s*generated_at: new Date\(\)\.toISOString\(\),\s*\n?\s*incident: publicIncident\(incident\),\s*\n?\s*update: publicIncidentUpdate\(update\),\s*\n?\s*\}\);/,
+      /publishCreated\(incident: IncidentRow, update: IncidentUpdateRow\): void \{\s*this\.emit\(\{\s*event: 'incident\.created',\s*generated_at: new Date\(\)\.toISOString\(\),\s*incident: publicIncident\(incident\),\s*update: publicIncidentUpdate\(update\),\s*\}\);/,
     );
     expect(body).toMatch(
-      /publishResolved\(incident: IncidentRow, update: IncidentUpdateRow\): void \{\s*\n?\s*this\.emit\(\{\s*\n?\s*event: 'incident\.resolved',\s*\n?\s*generated_at: new Date\(\)\.toISOString\(\),/,
+      /publishResolved\(incident: IncidentRow, update: IncidentUpdateRow\): void \{\s*this\.emit\(\{\s*event: 'incident\.resolved',\s*generated_at: new Date\(\)\.toISOString\(\),/,
     );
   });
 
   it('emit: try/catch per-listener — one throw must NOT prevent other listeners from firing', () => {
     expect(body).toMatch(
-      /private emit\(event: IncidentEvent\): void \{\s*\n?\s*for \(const listener of this\.listeners\) \{\s*\n?\s*try \{\s*\n?\s*listener\(event\);\s*\n?\s*\} catch \{\s*\n?\s*\/\/ A listener throwing must NOT prevent other listeners from firing\.\s*\n?\s*\}\s*\n?\s*\}/,
+      /private emit\(event: IncidentEvent\): void \{\s*for \(const listener of this\.listeners\) \{\s*try \{\s*listener\(event\);\s*\} catch \{\s*\/\/ A listener throwing must NOT prevent other listeners from firing\.\s*\}\s*\}/,
     );
   });
 
   it('listenerCount: test-only debug surface', () => {
     expect(body).toMatch(
-      /\/\*\* Test-only — exposes the listener count\. \*\/\s*\n?\s*listenerCount\(\): number \{\s*\n?\s*return this\.listeners\.size;\s*\n?\s*\}/,
+      /\/\*\* Test-only — exposes the listener count\. \*\/\s*listenerCount\(\): number \{\s*return this\.listeners\.size;\s*\}/,
     );
   });
 

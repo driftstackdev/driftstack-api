@@ -63,7 +63,7 @@ describe('W556.B /docs/runbooks/oauth-ops.md content parity', () => {
     expect(body).toMatch(/"\$BASE_URL\/v1\/admin\/oauth\/clients\/<client_id>\/rotate-secret"/);
     expect(body).toMatch(/The response carries the NEW plaintext `client_secret`\./);
     expect(body).toMatch(
-      /The old secret\s*\n?\s*is invalid immediately — any in-flight `\/token` exchanges using/,
+      /The old secret\s*is invalid immediately — any in-flight `\/token` exchanges using/,
     );
     expect(body).toMatch(/the old secret will fail\./);
     expect(body).toMatch(/\*\*Existing access tokens stay valid\*\*/);
@@ -79,16 +79,14 @@ describe('W556.B /docs/runbooks/oauth-ops.md content parity', () => {
     expect(body).toMatch(/there is no positive OAuth-auth cache or/);
     expect(body).toMatch(/one-hour residual-access window\./);
     expect(body).toMatch(
-      /Rotation replaces\s*\n?\s*only the client authenticator and keeps current bearer tokens alive/,
+      /Rotation replaces\s*only the client authenticator and keeps current bearer tokens alive/,
     );
   });
 
   it('Triage keeps token+secret with the developer, uses client-authenticated introspection, and shares only sanitized output', () => {
     expect(body).toMatch(/## Triage workflow — "this token is failing"/);
-    expect(body).toMatch(
-      /Do not ask\s*\n?\s*them to send Driftstack the bearer token or client secret/,
-    );
-    expect(body).toMatch(/base64 is\s*\n?\s*not encryption/);
+    expect(body).toMatch(/Do not ask\s*them to send Driftstack the bearer token or client secret/);
+    expect(body).toMatch(/base64 is\s*not encryption/);
     expect(body).toMatch(/--arg client_id "\$OAUTH_CLIENT_ID"/);
     expect(body).toMatch(/--arg client_secret "\$OAUTH_CLIENT_SECRET"/);
     expect(body).toMatch(/"\$BASE_URL\/v1\/oauth\/introspect"/);

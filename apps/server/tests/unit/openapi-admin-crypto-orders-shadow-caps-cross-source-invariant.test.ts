@@ -47,7 +47,7 @@ describe('OpenAPI shadow ↔ admin-crypto-orders.ts route caps', () => {
 
   it('shadow defines AdminCryptoOrderIdOpenApi as min(1).max(100)', () => {
     expect(openapi).toMatch(
-      /AdminCryptoOrderIdOpenApi[\s\S]{0,200}z\s*\n?\s*\.string\(\)\s*\n?\s*\.min\(1\)\s*\n?\s*\.max\(100\)/,
+      /AdminCryptoOrderIdOpenApi[\s\S]{0,200}z\s*\.string\(\)\s*\.min\(1\)\s*\.max\(100\)/,
     );
   });
 
@@ -59,12 +59,8 @@ describe('OpenAPI shadow ↔ admin-crypto-orders.ts route caps', () => {
     expect(slice.length).toBeGreaterThan(100);
     expect(slice).toMatch(/account_id:\s*z\.string\(\)\.min\(1\)\.max\(100\)\.optional\(\)/);
     expect(slice).toMatch(/search:\s*z\.string\(\)\.min\(1\)\.max\(200\)\.optional\(\)/);
-    expect(slice).toMatch(
-      /payment_id:\s*z\s*\n?\s*\.string\(\)\s*\n?\s*\.min\(1\)\s*\n?\s*\.max\(128\)/,
-    );
-    expect(slice).toMatch(
-      /cursor:\s*z\s*\n?\s*\.string\(\)\s*\n?\s*\.min\(1\)\s*\n?\s*\.max\(512\)/,
-    );
+    expect(slice).toMatch(/payment_id:\s*z\s*\.string\(\)\s*\.min\(1\)\s*\.max\(128\)/);
+    expect(slice).toMatch(/cursor:\s*z\s*\.string\(\)\s*\.min\(1\)\s*\.max\(512\)/);
   });
 
   it('shadow admin CSV-export query carries account_id + search caps (drift surface that mirrors the list)', () => {

@@ -168,7 +168,7 @@ describe('W967 errors-helpers V-174 + V-481 + V-485 cross-source invariant', () 
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/errors-helpers.ts'));
     expect(p).toMatch(/Today's matrix: `apiAccess`, `aiAgent` and `vpnEgress` are gated this/);
     expect(p).toMatch(
-      /Future\s*\n?\s*\*\s*features extend `TierFeatures` and pass through the same guard/,
+      /Future\s*\*\s*features extend `TierFeatures` and pass through the same guard/,
     );
     expect(p).not.toMatch(/trialPack/);
   });

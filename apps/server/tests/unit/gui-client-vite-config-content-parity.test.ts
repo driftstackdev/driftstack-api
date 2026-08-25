@@ -34,11 +34,11 @@ describe('W536.A apps/gui-client/vite.config.ts content parity', () => {
     expect(body).toMatch(/import \{ defineConfig \} from 'vite';/);
     expect(body).toMatch(/import react from '@vitejs\/plugin-react';/);
     expect(body).toMatch(
-      /\/\/ https:\/\/vitejs\.dev\/config\/\s*\n?\s*\/\/ Tauri integration: https:\/\/tauri\.app\/v2\/start\/frontend\/vite\//,
+      /\/\/ https:\/\/vitejs\.dev\/config\/\s*\/\/ Tauri integration: https:\/\/tauri\.app\/v2\/start\/frontend\/vite\//,
     );
     expect(body).toMatch(/plugins: \[react\(\)\],/);
     expect(body).toMatch(
-      /\/\/ Vite assumes `index\.html` is at the project root; Tauri reads from\s*\n?\s*\/\/ the same directory, so no `root:` override needed\./,
+      /\/\/ Vite assumes `index\.html` is at the project root; Tauri reads from\s*\/\/ the same directory, so no `root:` override needed\./,
     );
     expect(body).toMatch(/clearScreen: false,/);
   });
@@ -51,7 +51,7 @@ describe('W536.A apps/gui-client/vite.config.ts content parity', () => {
 
   it("Tauri-bundled-binary + envPrefix framing pinned: 'Tauri builds the frontend to `dist/` and bundles it into the application binary; no need to publish dist to a CDN.' + 'envPrefix: [\"VITE_\", \"TAURI_ENV_\"]' — pinned so the no-CDN-publish (Tauri bundles dist into app binary) + 2-envPrefix (both Vite-standard VITE_ + Tauri's TAURI_ENV_) commitment survives (drift to dropping TAURI_ENV_ prefix would block Tauri env-var pass-through into the frontend)", () => {
     expect(body).toMatch(
-      /\/\/ Tauri builds the frontend to `dist\/` and bundles it into the\s*\n?\s*\/\/ application binary; no need to publish dist to a CDN\./,
+      /\/\/ Tauri builds the frontend to `dist\/` and bundles it into the\s*\/\/ application binary; no need to publish dist to a CDN\./,
     );
     expect(body).toMatch(/envPrefix: \['VITE_', 'TAURI_ENV_'\],/);
   });

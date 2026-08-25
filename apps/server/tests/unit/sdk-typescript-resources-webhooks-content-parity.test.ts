@@ -63,7 +63,7 @@ describe('W425.B packages/sdk-typescript/src/resources/webhooks.ts content parit
 
   it("Imports — 8 api-types shapes (sorted alphabetical block) covering every verb's wire shape + HttpClient + iteratePaginated. CRITICAL: 8-shape import surface — drift to hand-rolling any of these types would diverge from @driftstack/api-types Zod single-source-of-truth.", () => {
     expect(body).toMatch(
-      /import type \{\s*\n?\s*CreateWebhookRequest,\s*\n?\s*CreateWebhookResponse,\s*\n?\s*ListDeliveriesQueryInput,\s*\n?\s*RotateWebhookSecretResponse,\s*\n?\s*UpdateWebhookRequest,\s*\n?\s*WebhookDelivery,\s*\n?\s*WebhookDeliveryStatus,\s*\n?\s*WebhookEndpoint,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import type \{\s*CreateWebhookRequest,\s*CreateWebhookResponse,\s*ListDeliveriesQueryInput,\s*RotateWebhookSecretResponse,\s*UpdateWebhookRequest,\s*WebhookDelivery,\s*WebhookDeliveryStatus,\s*WebhookEndpoint,\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(/import type \{ HttpClient \} from '\.\.\/http\.js';/);
     expect(body).toMatch(/import \{ iteratePaginated \} from '\.\.\/pagination\.js';/);
@@ -71,13 +71,13 @@ describe('W425.B packages/sdk-typescript/src/resources/webhooks.ts content parit
 
   it('WebhookEndpointList envelope — 1-field (data: WebhookEndpoint[]) NO pagination. Endpoints are a small per-account finite set so list-all-once is sound; drift to adding pagination would silently change the contract.', () => {
     expect(body).toMatch(
-      /export interface WebhookEndpointList \{\s*\n?\s*data: WebhookEndpoint\[\];\s*\n?\s*\}/,
+      /export interface WebhookEndpointList \{\s*data: WebhookEndpoint\[\];\s*\}/,
     );
   });
 
   it('WebhookDeliveryListPage envelope — 3-field cursor pagination (data + has_more + next_cursor: string | null). Deliveries are unbounded per endpoint so cursor pagination is load-bearing.', () => {
     expect(body).toMatch(
-      /export interface WebhookDeliveryListPage \{\s*\n?\s*data: WebhookDelivery\[\];\s*\n?\s*has_more: boolean;\s*\n?\s*next_cursor: string \| null;\s*\n?\s*\}/,
+      /export interface WebhookDeliveryListPage \{\s*data: WebhookDelivery\[\];\s*has_more: boolean;\s*next_cursor: string \| null;\s*\}/,
     );
   });
 
@@ -88,42 +88,42 @@ describe('W425.B packages/sdk-typescript/src/resources/webhooks.ts content parit
 
   it('create verb — POST /v1/webhooks. CRITICAL: "Plaintext signing secret is returned once; store it now — it cannot be retrieved later." + "Requires the `account_owner` scope on the calling key." Two load-bearing invariants — plaintext-once + admin-scope. Drift to dropping admin-scope would let any key create new endpoints (privilege escalation).', () => {
     expect(body).toMatch(
-      /\*\s*Create a webhook subscription\. Plaintext signing secret is returned\s*\n?\s*\*\s*once; store it now — it cannot be retrieved later\. Requires the\s*\n?\s*\*\s*`account_owner` scope on the calling key\./,
+      /\*\s*Create a webhook subscription\. Plaintext signing secret is returned\s*\*\s*once; store it now — it cannot be retrieved later\. Requires the\s*\*\s*`account_owner` scope on the calling key\./,
     );
     expect(body).toMatch(
-      /create\(body: CreateWebhookRequest\): Promise<CreateWebhookResponse> \{\s*\n?\s*return this\.http\.request<CreateWebhookResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/webhooks',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /create\(body: CreateWebhookRequest\): Promise<CreateWebhookResponse> \{\s*return this\.http\.request<CreateWebhookResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/webhooks',\s*body,\s*\}\);\s*\}/,
     );
   });
 
   it('list verb — GET /v1/webhooks → WebhookEndpointList. CRITICAL: "Plaintext is never returned" — drift to including plaintext on list would leak ALL signing secrets on every list call. NO admin-scope requirement (read-only verb).', () => {
     expect(body).toMatch(
-      /\/\*\* List webhook endpoints for the EFFECTIVE account — your own, or the owner\s*\n?\s*\*\s*you are acting as via `X-Driftstack-Account`\. Plaintext is never returned\./,
+      /\/\*\* List webhook endpoints for the EFFECTIVE account — your own, or the owner\s*\*\s*you are acting as via `X-Driftstack-Account`\. Plaintext is never returned\./,
     );
     expect(body).toMatch(
-      /list\(\): Promise<WebhookEndpointList> \{\s*\n?\s*return this\.http\.request<WebhookEndpointList>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/webhooks',\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /list\(\): Promise<WebhookEndpointList> \{\s*return this\.http\.request<WebhookEndpointList>\(\{\s*method: 'GET',\s*path: '\/v1\/webhooks',\s*\}\);\s*\}/,
     );
   });
 
   it('get verb — GET /v1/webhooks/${encodeURIComponent(id)} → WebhookEndpoint. encodeURIComponent wrapping prevents "abc/../../admin" path traversal. NO admin-scope requirement.', () => {
     expect(body).toMatch(/\/\*\* Get a single webhook endpoint\. \*\//);
     expect(body).toMatch(
-      /get\(id: string\): Promise<WebhookEndpoint> \{\s*\n?\s*return this\.http\.request<WebhookEndpoint>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: `\/v1\/webhooks\/\$\{encodeURIComponent\(id\)\}`,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /get\(id: string\): Promise<WebhookEndpoint> \{\s*return this\.http\.request<WebhookEndpoint>\(\{\s*method: 'GET',\s*path: `\/v1\/webhooks\/\$\{encodeURIComponent\(id\)\}`,\s*\}\);\s*\}/,
     );
   });
 
   it('delete verb — DELETE /v1/webhooks/${encodeURIComponent(id)} → Promise<void>. CRITICAL "Disable (soft-delete) a webhook endpoint. Idempotent." — drift to hard-delete would lose audit-log linkage retroactively; drift to non-idempotent would break the standard cleanup-in-finally pattern.', () => {
     expect(body).toMatch(/\/\*\* Disable \(soft-delete\) a webhook endpoint\. Idempotent\. \*\//);
     expect(body).toMatch(
-      /delete\(id: string\): Promise<void> \{\s*\n?\s*return this\.http\.request<void>\(\{\s*\n?\s*method: 'DELETE',\s*\n?\s*path: `\/v1\/webhooks\/\$\{encodeURIComponent\(id\)\}`,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /delete\(id: string\): Promise<void> \{\s*return this\.http\.request<void>\(\{\s*method: 'DELETE',\s*path: `\/v1\/webhooks\/\$\{encodeURIComponent\(id\)\}`,\s*\}\);\s*\}/,
     );
   });
 
   it('V-351 update verb — PATCH /v1/webhooks/${encodeURIComponent(id)}. CRITICAL 3 stacked invariants pinned per-line: (1) "At least one of `url`, `events`, `description`, or `active` must be present" (drift to allowing zero fields lets no-op PATCH succeed silently). (2) "The signing secret is NOT rotated by update; use `rotateSecret` for that" (drift to rotating-on-update would force rotation on every UI tweak). (3) "Disabled endpoints cannot be updated (returns 409)" (after soft-delete the endpoint is read-only). + admin-scope requirement.', () => {
     expect(body).toMatch(
-      /\*\s*V-351 — partial-update a webhook endpoint\. At least one of `url`,\s*\n?\s*\*\s*`events`, `description`, or `active` must be present\. The\s*\n?\s*\*\s*signing secret is NOT rotated by update; use `rotateSecret` for\s*\n?\s*\*\s*that\. Disabled endpoints cannot be updated \(returns 409\)\.\s*\n?\s*\*\s*Requires the `account_owner` scope on the calling key\./,
+      /\*\s*V-351 — partial-update a webhook endpoint\. At least one of `url`,\s*\*\s*`events`, `description`, or `active` must be present\. The\s*\*\s*signing secret is NOT rotated by update; use `rotateSecret` for\s*\*\s*that\. Disabled endpoints cannot be updated \(returns 409\)\.\s*\*\s*Requires the `account_owner` scope on the calling key\./,
     );
     expect(body).toMatch(
-      /update\(id: string, body: UpdateWebhookRequest\): Promise<WebhookEndpoint> \{\s*\n?\s*return this\.http\.request<WebhookEndpoint>\(\{\s*\n?\s*method: 'PATCH',\s*\n?\s*path: `\/v1\/webhooks\/\$\{encodeURIComponent\(id\)\}`,\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /update\(id: string, body: UpdateWebhookRequest\): Promise<WebhookEndpoint> \{\s*return this\.http\.request<WebhookEndpoint>\(\{\s*method: 'PATCH',\s*path: `\/v1\/webhooks\/\$\{encodeURIComponent\(id\)\}`,\s*body,\s*\}\);\s*\}/,
     );
   });
 
@@ -132,16 +132,16 @@ describe('W425.B packages/sdk-typescript/src/resources/webhooks.ts content parit
       /\/\*\* Paginated delivery log for a webhook endpoint\. Filter by status \(e\.g\. `'dlq'`\)\. \*\//,
     );
     expect(body).toMatch(
-      /listDeliveries\(\s*\n?\s*id: string,\s*\n?\s*query: ListDeliveriesQueryInput & \{ status\?: WebhookDeliveryStatus \} = \{\},\s*\n?\s*\): Promise<WebhookDeliveryListPage> \{\s*\n?\s*return this\.http\.request<WebhookDeliveryListPage>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: `\/v1\/webhooks\/\$\{encodeURIComponent\(id\)\}\/deliveries`,\s*\n?\s*query: \{\s*\n?\s*\.\.\.\(query\.limit !== undefined \? \{ limit: query\.limit \} : \{\}\),\s*\n?\s*\.\.\.\(query\.cursor !== undefined \? \{ cursor: query\.cursor \} : \{\}\),\s*\n?\s*\.\.\.\(query\.status !== undefined \? \{ status: query\.status \} : \{\}\),\s*\n?\s*\},\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /listDeliveries\(\s*id: string,\s*query: ListDeliveriesQueryInput & \{ status\?: WebhookDeliveryStatus \} = \{\},\s*\): Promise<WebhookDeliveryListPage> \{\s*return this\.http\.request<WebhookDeliveryListPage>\(\{\s*method: 'GET',\s*path: `\/v1\/webhooks\/\$\{encodeURIComponent\(id\)\}\/deliveries`,\s*query: \{\s*\.\.\.\(query\.limit !== undefined \? \{ limit: query\.limit \} : \{\}\),\s*\.\.\.\(query\.cursor !== undefined \? \{ cursor: query\.cursor \} : \{\}\),\s*\.\.\.\(query\.status !== undefined \? \{ status: query\.status \} : \{\}\),\s*\},\s*\}\);\s*\}/,
     );
   });
 
   it("V-118 iterateDeliveries verb — AsyncGenerator<WebhookDelivery, void, void> via iteratePaginated. CRITICAL: status filter walks ONE bucket — example given: `{ status: 'dlq' }` to enumerate the DLQ for replay tooling. The status + limit filters are RE-THREADED per page (drift to dropping the re-threading would broaden iteration mid-walk and leak deliveries from other buckets). cursor !== null guard correctly omits cursor on the first page.", () => {
     expect(body).toMatch(
-      /\*\s*Lazily iterate every delivery for a webhook endpoint, walking cursor\s*\n?\s*\*\s*pages automatically\. Filter by status to walk just one bucket\s*\n?\s*\*\s*\(e\.g\. `\{ status: 'dlq' \}` to enumerate the DLQ for replay tooling\)\./,
+      /\*\s*Lazily iterate every delivery for a webhook endpoint, walking cursor\s*\*\s*pages automatically\. Filter by status to walk just one bucket\s*\*\s*\(e\.g\. `\{ status: 'dlq' \}` to enumerate the DLQ for replay tooling\)\./,
     );
     expect(body).toMatch(
-      /iterateDeliveries\(\s*\n?\s*id: string,\s*\n?\s*opts: \{ limit\?: number; status\?: WebhookDeliveryStatus \} = \{\},\s*\n?\s*\): AsyncGenerator<WebhookDelivery, void, void> \{\s*\n?\s*return iteratePaginated<WebhookDelivery>\(\(cursor\) =>\s*\n?\s*this\.listDeliveries\(id, \{\s*\n?\s*\.\.\.\(opts\.limit !== undefined \? \{ limit: opts\.limit \} : \{\}\),\s*\n?\s*\.\.\.\(opts\.status !== undefined \? \{ status: opts\.status \} : \{\}\),\s*\n?\s*\.\.\.\(cursor !== null \? \{ cursor \} : \{\}\),\s*\n?\s*\}\),\s*\n?\s*\);\s*\n?\s*\}/,
+      /iterateDeliveries\(\s*id: string,\s*opts: \{ limit\?: number; status\?: WebhookDeliveryStatus \} = \{\},\s*\): AsyncGenerator<WebhookDelivery, void, void> \{\s*return iteratePaginated<WebhookDelivery>\(\(cursor\) =>\s*this\.listDeliveries\(id, \{\s*\.\.\.\(opts\.limit !== undefined \? \{ limit: opts\.limit \} : \{\}\),\s*\.\.\.\(opts\.status !== undefined \? \{ status: opts\.status \} : \{\}\),\s*\.\.\.\(cursor !== null \? \{ cursor \} : \{\}\),\s*\}\),\s*\);\s*\}/,
     );
   });
 
@@ -155,25 +155,25 @@ describe('W425.B packages/sdk-typescript/src/resources/webhooks.ts content parit
       /an endpoint the calling account owns/,
     );
     expect(body).toMatch(
-      /replayDelivery\(deliveryId: string\): Promise<WebhookDelivery> \{\s*\n?\s*return this\.http\.request<WebhookDelivery>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: `\/v1\/webhook-deliveries\/\$\{encodeURIComponent\(deliveryId\)\}\/replay`,\s*\n?\s*body: \{\},\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /replayDelivery\(deliveryId: string\): Promise<WebhookDelivery> \{\s*return this\.http\.request<WebhookDelivery>\(\{\s*method: 'POST',\s*path: `\/v1\/webhook-deliveries\/\$\{encodeURIComponent\(deliveryId\)\}\/replay`,\s*body: \{\},\s*\}\);\s*\}/,
     );
   });
 
   it('CRITICAL V-359 rotateSecret verb — POST /v1/webhooks/${encodeURIComponent(id)}/rotate-secret. 6-line grace-window claim pinned per-line: fresh plaintext ONCE + 24h via grace_expires_at + Driftstack DUAL-SIGNS every outbound delivery (both new + old HMAC) + customer rolls verifier infra inside the window + admin-scope. Drift to a different window OR dropping dual-sign would silently change rotation semantics customers anchor their verifier-rollout timelines on.', () => {
     expect(body).toMatch(
-      /\*\s*V-359 — rotate the webhook signing secret\. The fresh plaintext is\s*\n?\s*\*\s*returned ONCE\. The previous secret stays active for 24h\s*\n?\s*\*\s*\(`grace_expires_at`\) during which Driftstack dual-signs every\s*\n?\s*\*\s*outbound delivery \(both the new \+ old HMAC\)\. Roll the new secret\s*\n?\s*\*\s*across your verifier infra inside that window\. Requires the\s*\n?\s*\*\s*`account_owner` scope on the calling key\./,
+      /\*\s*V-359 — rotate the webhook signing secret\. The fresh plaintext is\s*\*\s*returned ONCE\. The previous secret stays active for 24h\s*\*\s*\(`grace_expires_at`\) during which Driftstack dual-signs every\s*\*\s*outbound delivery \(both the new \+ old HMAC\)\. Roll the new secret\s*\*\s*across your verifier infra inside that window\. Requires the\s*\*\s*`account_owner` scope on the calling key\./,
     );
     expect(body).toMatch(
-      /rotateSecret\(id: string\): Promise<RotateWebhookSecretResponse> \{\s*\n?\s*return this\.http\.request<RotateWebhookSecretResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: `\/v1\/webhooks\/\$\{encodeURIComponent\(id\)\}\/rotate-secret`,\s*\n?\s*body: \{\},\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /rotateSecret\(id: string\): Promise<RotateWebhookSecretResponse> \{\s*return this\.http\.request<RotateWebhookSecretResponse>\(\{\s*method: 'POST',\s*path: `\/v1\/webhooks\/\$\{encodeURIComponent\(id\)\}\/rotate-secret`,\s*body: \{\},\s*\}\);\s*\}/,
     );
   });
 
   it("V-356 sendTest verb — POST /v1/webhooks/${encodeURIComponent(id)}/test. CRITICAL: \"Bypasses subscription (the endpoint receives it regardless of which event types it's subscribed to)\" — drift to requiring test.ping in the subscription would break first-time-setup verification (chicken-and-egg). Response carries 3-field shape with `event_type: 'test.ping'` as TS LITERAL type (not `string`) — drift to widening would lose compile-time enforcement that the synthetic event NEVER claims a real event_type from the customer's subscription.", () => {
     expect(body).toMatch(
-      /\*\s*V-356 — send a synthetic `test\.ping` event to the endpoint\.\s*\n?\s*\*\s*Bypasses subscription \(the endpoint receives it regardless of\s*\n?\s*\*\s*which event types it's subscribed to\), so customers can verify\s*\n?\s*\*\s*their handler is reachable \+ signature-valid before depending on\s*\n?\s*\*\s*it for real events\. Returns 202 \+ the synthetic delivery id\.\s*\n?\s*\*\s*Requires the `account_owner` scope on the calling key\./,
+      /\*\s*V-356 — send a synthetic `test\.ping` event to the endpoint\.\s*\*\s*Bypasses subscription \(the endpoint receives it regardless of\s*\*\s*which event types it's subscribed to\), so customers can verify\s*\*\s*their handler is reachable \+ signature-valid before depending on\s*\*\s*it for real events\. Returns 202 \+ the synthetic delivery id\.\s*\*\s*Requires the `account_owner` scope on the calling key\./,
     );
     expect(body).toMatch(
-      /sendTest\(id: string\): Promise<\{\s*\n?\s*delivery_id: string;\s*\n?\s*event_id: string;\s*\n?\s*event_type: 'test\.ping';\s*\n?\s*\}> \{/,
+      /sendTest\(id: string\): Promise<\{\s*delivery_id: string;\s*event_id: string;\s*event_type: 'test\.ping';\s*\}> \{/,
     );
     expect(body).toMatch(/path: `\/v1\/webhooks\/\$\{encodeURIComponent\(id\)\}\/test`,/);
   });

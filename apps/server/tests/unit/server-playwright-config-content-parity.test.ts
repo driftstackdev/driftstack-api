@@ -41,7 +41,7 @@ describe('W530.C apps/server/playwright.config.ts content parity', () => {
 
   it("V-009 workers=1 + fullyParallel=false framing pinned: 'Single shared Postgres DB with truncate-between-tests; workers=1 to serialise. Postgres enum types aren't schema-scoped, so per-worker schema isolation doesn't work without per-worker databases (V-009).' + 'workers: 1' + 'fullyParallel: false' — pinned so the V-009 anchor + single-shared-DB + truncate-between-tests + workers=1-serialisation + fullyParallel:false commitment survives (drift to workers>1 would surface Postgres enum-type-conflict failures intermittently)", () => {
     expect(body).toMatch(
-      /\/\/ Single shared Postgres DB with truncate-between-tests; workers=1 to\s*\n?\s*\/\/ serialise\. Postgres enum types aren't schema-scoped, so per-worker\s*\n?\s*\/\/ schema isolation doesn't work without per-worker databases \(V-009\)\./,
+      /\/\/ Single shared Postgres DB with truncate-between-tests; workers=1 to\s*\/\/ serialise\. Postgres enum types aren't schema-scoped, so per-worker\s*\/\/ schema isolation doesn't work without per-worker databases \(V-009\)\./,
     );
     expect(body).toMatch(/workers: 1,/);
     expect(body).toMatch(/fullyParallel: false,/);
@@ -57,9 +57,7 @@ describe('W530.C apps/server/playwright.config.ts content parity', () => {
   it("Timeouts + e2e-tagging-header framing pinned: 'timeout: 30_000' (30s per-test) + 'expect: { timeout: 5_000 }' (5s per-assertion) + 'extraHTTPHeaders: { \"x-driftstack-test-suite\": \"phase-8-e2e\" }' — pinned so the 30s-per-test + 5s-per-assertion + e2e-tagging-header (every e2e request gets x-driftstack-test-suite=phase-8-e2e so server logs can attribute) commitment survives (drift to dropping the e2e header would un-tag every e2e request from server-side log attribution)", () => {
     expect(body).toMatch(/timeout: 30_000,/);
     expect(body).toMatch(/expect: \{ timeout: 5_000 \},/);
-    expect(body).toMatch(
-      /extraHTTPHeaders: \{\s*\n?\s*'x-driftstack-test-suite': 'phase-8-e2e',\s*\n?\s*\},/,
-    );
+    expect(body).toMatch(/extraHTTPHeaders: \{\s*'x-driftstack-test-suite': 'phase-8-e2e',\s*\},/);
   });
 
   it('file exists at canonical path', () => {

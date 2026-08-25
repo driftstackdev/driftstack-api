@@ -49,7 +49,7 @@ describe('W532.B packages/sdk-typescript/tsconfig.json content parity', () => {
 
   it('SDK-B Web-Crypto DOM-lib injection framing pinned: \'SDK-B: webhook-signature.ts now uses Web Crypto API (SubtleCrypto) for browser-isomorphism. SubtleCrypto is in the DOM lib in older TS releases; pulling DOM in here so the type resolves on Node-only builds too. The runtime check inside the helper handles browsers without crypto.subtle.\' + \'lib: ["ES2023", "DOM"]\' — pinned so the SDK-B anchor + DOM-lib-for-SubtleCrypto + browser-isomorphism + runtime-check-inside-helper commitment survives', () => {
     expect(body).toMatch(
-      /\/\/ SDK-B: webhook-signature\.ts now uses Web Crypto API \(SubtleCrypto\)\s*\n?\s*\/\/ for browser-isomorphism\. SubtleCrypto is in the DOM lib in older\s*\n?\s*\/\/ TS releases; pulling DOM in here so the type resolves on Node-only\s*\n?\s*\/\/ builds too\. The runtime check inside the helper handles browsers\s*\n?\s*\/\/ without crypto\.subtle\./,
+      /\/\/ SDK-B: webhook-signature\.ts now uses Web Crypto API \(SubtleCrypto\)\s*\/\/ for browser-isomorphism\. SubtleCrypto is in the DOM lib in older\s*\/\/ TS releases; pulling DOM in here so the type resolves on Node-only\s*\/\/ builds too\. The runtime check inside the helper handles browsers\s*\/\/ without crypto\.subtle\./,
     );
     expect(body).toMatch(/"lib": \["ES2023", "DOM"\]/);
   });

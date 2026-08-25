@@ -33,13 +33,13 @@ describe('W513.B apps/marketing-site/src/pages/docs/sdk-python-crypto-orders.ast
 
   it("W187 framing + non-refundable banner pinned: 'Python SDK reference for the crypto-orders surface. Companion to /docs/sdk-python (the general Python SDK quickstart). Crypto payments are non-refundable.' — pinned so the W187 anchor + sdk-python companion + non-refundable banner all survive (drift to dropping the non-refundable banner would orphan the legal posture from the SDK doc)", () => {
     expect(body).toMatch(
-      /\/\/ W187 — Python SDK reference for the crypto-orders surface\.\s*\n?\s*\/\/ Companion to \/docs\/sdk-python \(the general Python SDK quickstart\)\.\s*\n?\s*\/\/ Crypto payments are non-refundable\./,
+      /\/\/ W187 — Python SDK reference for the crypto-orders surface\.\s*\/\/ Companion to \/docs\/sdk-python \(the general Python SDK quickstart\)\.\s*\/\/ Crypto payments are non-refundable\./,
     );
   });
 
   it("client.crypto_orders + AsyncDriftstack mirror + admin-not-exposed framing pinned (drift to claiming admin endpoints are exposed would mislead integrators about the SDK surface). Re-enabled by slice 201 after refreshing the regex against the current 'on the surface' text (the V-666 anchor was paraphrased away in a prior edit; the sync/async-mirror + admin-not-exposed contract survives)", () => {
     expect(body).toMatch(
-      /The <code>client\.crypto_orders<\/code> resource wraps every\s*\n?\s*customer-facing endpoint on the surface from both\s*\n?\s*<code>Driftstack<\/code> \(sync\) and <code>AsyncDriftstack<\/code>\s*\n?\s*\(asyncio\)\. Admin endpoints are not exposed; integrators that need\s*\n?\s*them call the REST surface directly\./,
+      /The <code>client\.crypto_orders<\/code> resource wraps every\s*customer-facing endpoint on the surface from both\s*<code>Driftstack<\/code> \(sync\) and <code>AsyncDriftstack<\/code>\s*\(asyncio\)\. Admin endpoints are not exposed; integrators that need\s*them call the REST surface directly\./,
     );
   });
 
@@ -52,7 +52,7 @@ describe('W513.B apps/marketing-site/src/pages/docs/sdk-python-crypto-orders.ast
     );
     expect(body).toMatch(/idempotency_key=key/);
     expect(body).toMatch(
-      /The SDK\s*\n?\s*forwards it as the <code>Idempotency-Key<\/code> header; on a\s*\n?\s*duplicate key within the 24h window the server returns the\s*\n?\s*original order\./,
+      /The SDK\s*forwards it as the <code>Idempotency-Key<\/code> header; on a\s*duplicate key within the 24h window the server returns the\s*original order\./,
     );
   });
 
@@ -62,13 +62,13 @@ describe('W513.B apps/marketing-site/src/pages/docs/sdk-python-crypto-orders.ast
     expect(body).toMatch(/# Narrow to a single status server-side\./);
     expect(body).toMatch(/print\(single\["events"\]\) {2}# Event timeline/);
     expect(body).toMatch(
-      /<code>status<\/code> accepts <code>pending<\/code>,\s*\n?\s*<code>confirming<\/code>, <code>paid<\/code>, <code>failed<\/code>,\s*\n?\s*<code>partial<\/code>, or <code>cancelled<\/code>\. Unknown values\s*\n?\s*return a 400\. <code>limit<\/code> is clamped to 1\.\.=100\./,
+      /<code>status<\/code> accepts <code>pending<\/code>,\s*<code>confirming<\/code>, <code>paid<\/code>, <code>failed<\/code>,\s*<code>partial<\/code>, or <code>cancelled<\/code>\. Unknown values\s*return a 400\. <code>limit<\/code> is clamped to 1\.\.=100\./,
     );
   });
 
   it("iterate() prefer-cursor-helper framing pinned: 'The iterate() helper walks every page until the server stops emitting a next_cursor. Cursor handoff is managed internally — do not pass cursor= to iterate() (use list() for an explicit page).' + manual-cursor-while-loop pattern — pinned so the iterate-walks-all + do-not-pass-cursor + manual-cursor-while-pattern survive (drift to letting iterate take cursor= would invite cursor double-handling)", () => {
     expect(body).toMatch(
-      /The <code>iterate\(\)<\/code> helper walks every page until the\s*\n?\s*server stops emitting a <code>next_cursor<\/code>\. Cursor handoff\s*\n?\s*is managed internally — <strong>do not<\/strong> pass\s*\n?\s*<code>cursor=<\/code> to <code>iterate\(\)<\/code> \(use\s*\n?\s*<code>list\(\)<\/code> for an explicit page\)\./,
+      /The <code>iterate\(\)<\/code> helper walks every page until the\s*server stops emitting a <code>next_cursor<\/code>\. Cursor handoff\s*is managed internally — <strong>do not<\/strong> pass\s*<code>cursor=<\/code> to <code>iterate\(\)<\/code> \(use\s*<code>list\(\)<\/code> for an explicit page\)\./,
     );
     expect(body).toMatch(/for order in client\.crypto_orders\.iterate\(/);
     expect(body).toMatch(/cursor = page\.get\("next_cursor"\)/);
@@ -77,7 +77,7 @@ describe('W513.B apps/marketing-site/src/pages/docs/sdk-python-crypto-orders.ast
 
   it("Async parity framing pinned: 'Every method on client.crypto_orders mirrors onto AsyncDriftstack with async def; iterate() returns an AsyncIterator[dict] that you walk with async for' + AsyncDriftstack context-manager pattern — pinned so the 1:1-mirror commitment + AsyncIterator[dict] return-type + async-with context-manager pattern survive (drift to dropping AsyncIterator[dict] would weaken the typed-async story)", () => {
     expect(body).toMatch(
-      /Every method on <code>client\.crypto_orders<\/code> mirrors onto\s*\n?\s*<code>AsyncDriftstack<\/code> with <code>async def<\/code>;\s*\n?\s*<code>iterate\(\)<\/code> returns an\s*\n?\s*<code>AsyncIterator\[dict\]<\/code> that you walk with\s*\n?\s*<code>async for<\/code>/,
+      /Every method on <code>client\.crypto_orders<\/code> mirrors onto\s*<code>AsyncDriftstack<\/code> with <code>async def<\/code>;\s*<code>iterate\(\)<\/code> returns an\s*<code>AsyncIterator\[dict\]<\/code> that you walk with\s*<code>async for<\/code>/,
     );
     expect(body).toMatch(/async with AsyncDriftstack\(api_key="ds_live_…"\) as client:/);
     expect(body).toMatch(/async for order in client\.crypto_orders\.iterate\(status="paid"\):/);
@@ -94,7 +94,7 @@ describe('W513.B apps/marketing-site/src/pages/docs/sdk-python-crypto-orders.ast
     );
     expect(body).toMatch(/# 404: order doesn't exist or belongs to another account\./);
     expect(body).toMatch(
-      /Crypto payments are non-refundable\. Cancelling a pending order\s*\n?\s*halts its pay window; cancelling a paid order is not supported\s*\n?\s*— past billing periods stay billed\./,
+      /Crypto payments are non-refundable\. Cancelling a pending order\s*halts its pay window; cancelling a paid order is not supported\s*— past billing periods stay billed\./,
     );
   });
 
@@ -105,13 +105,13 @@ describe('W513.B apps/marketing-site/src/pages/docs/sdk-python-crypto-orders.ast
 
   it("Now-subscribable + polling-fallback framing pinned: 'crypto.order.paid / crypto.order.failed events are emitted server-side and are now subscribable' + 'poll client.crypto_orders.get(order_id) until status transitions to paid or failed' + verify_webhook_signature for every live event type including crypto.order.* — pinned so the now-subscribable + polling-as-fallback + verify_webhook_signature-every-domain trio survives (drift to claiming the events are NOT subscribable would create marketing↔SubscribableWebhookEventTypeSchema divergence)", () => {
     expect(body).toMatch(
-      /<code>crypto\.order\.paid<\/code> \/ <code>crypto\.order\.failed<\/code>\s*\n?\s*events are emitted server-side and are now subscribable/,
+      /<code>crypto\.order\.paid<\/code> \/ <code>crypto\.order\.failed<\/code>\s*events are emitted server-side and are now subscribable/,
     );
     expect(body).toMatch(
-      /poll\s*\n?\s*<code>client\.crypto_orders\.get\(order_id\)<\/code> until\s*\n?\s*<code>status<\/code> transitions to <code>paid<\/code> or\s*\n?\s*<code>failed<\/code>/,
+      /poll\s*<code>client\.crypto_orders\.get\(order_id\)<\/code> until\s*<code>status<\/code> transitions to <code>paid<\/code> or\s*<code>failed<\/code>/,
     );
     expect(body).toMatch(
-      /The Python SDK ships\s*\n?\s*<code>verify_webhook_signature<\/code> for every live event type,\s*\n?\s*including the now-live crypto\.order\.\* events alongside the\s*\n?\s*session \+ quota \+ api-key \+ egress-capability event domains\./,
+      /The Python SDK ships\s*<code>verify_webhook_signature<\/code> for every live event type,\s*including the now-live crypto\.order\.\* events alongside the\s*session \+ quota \+ api-key \+ egress-capability event domains\./,
     );
   });
 

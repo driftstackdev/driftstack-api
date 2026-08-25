@@ -45,37 +45,37 @@ describe('W474.A apps/gui-client/src/lib/use-crypto-orders-list.ts content parit
   it("V-534.W framing pinned: 'V-534.W — useCryptoOrdersList hook.' + 'Wraps GET /v1/billing/crypto-orders (V-666.G) for the GUI history view. Returns the caller account's own orders, newest first. Auto-fetches on mount; manual mode + refetch() supported.'", () => {
     expect(body).toMatch(/\/\/ V-534\.W — useCryptoOrdersList hook\./);
     expect(body).toMatch(
-      /\/\/ Wraps GET \/v1\/billing\/crypto-orders \(V-666\.G\) for the GUI history\s*\n?\s*\/\/ view\. Returns the caller account's own orders, newest first\. Auto-\s*\n?\s*\/\/ fetches on mount; manual mode \+ refetch\(\) supported\./,
+      /\/\/ Wraps GET \/v1\/billing\/crypto-orders \(V-666\.G\) for the GUI history\s*\/\/ view\. Returns the caller account's own orders, newest first\. Auto-\s*\/\/ fetches on mount; manual mode \+ refetch\(\) supported\./,
     );
   });
 
   it("V-534.BT cursor-pagination framing pinned: 'cursor pagination (V-666.BU). When the server returns a non-null `next_cursor`, the caller can invoke `loadMore` to append the next page in place. Changing any filter resets pagination.'", () => {
     expect(body).toMatch(
-      /\/\/ V-534\.BT — cursor pagination \(V-666\.BU\)\. When the server returns a\s*\n?\s*\/\/ non-null `next_cursor`, the caller can invoke `loadMore` to append\s*\n?\s*\/\/ the next page in place\. Changing any filter resets pagination\./,
+      /\/\/ V-534\.BT — cursor pagination \(V-666\.BU\)\. When the server returns a\s*\/\/ non-null `next_cursor`, the caller can invoke `loadMore` to append\s*\/\/ the next page in place\. Changing any filter resets pagination\./,
     );
   });
 
   it("CryptoOrdersListData 2-field (orders: CryptoOrderData[] + nextCursor nullable V-666.BU 'opaque cursor for the next page, or null on the terminal page.'); ListApiResponse with next_cursor? optional+nullable for older-build wire-compat; CryptoOrdersListState 5-variant with loading_more{data} preserving baseline", () => {
     expect(body).toMatch(
-      /export interface CryptoOrdersListData \{\s*\n?\s*orders: CryptoOrderData\[\];\s*\n?\s*\/\*\* V-666\.BU — opaque cursor for the next page, or null on the terminal page\. \*\/\s*\n?\s*nextCursor: string \| null;\s*\n?\s*\}/,
+      /export interface CryptoOrdersListData \{\s*orders: CryptoOrderData\[\];\s*\/\*\* V-666\.BU — opaque cursor for the next page, or null on the terminal page\. \*\/\s*nextCursor: string \| null;\s*\}/,
     );
     expect(body).toMatch(
-      /interface ListApiResponse \{\s*\n?\s*orders: CryptoOrderData\[\];\s*\n?\s*next_cursor\?: string \| null;\s*\n?\s*\}/,
+      /interface ListApiResponse \{\s*orders: CryptoOrderData\[\];\s*next_cursor\?: string \| null;\s*\}/,
     );
     expect(body).toMatch(
-      /export type CryptoOrdersListState =\s*\n?\s*\| \{ kind: 'idle' \}\s*\n?\s*\| \{ kind: 'loading' \}\s*\n?\s*\| \{ kind: 'ready'; data: CryptoOrdersListData \}\s*\n?\s*\| \{ kind: 'loading_more'; data: CryptoOrdersListData \}\s*\n?\s*\| \{ kind: 'error'; message: string \};/,
+      /export type CryptoOrdersListState =\s*\| \{ kind: 'idle' \}\s*\| \{ kind: 'loading' \}\s*\| \{ kind: 'ready'; data: CryptoOrdersListData \}\s*\| \{ kind: 'loading_more'; data: CryptoOrdersListData \}\s*\| \{ kind: 'error'; message: string \};/,
     );
   });
 
   it("UseCryptoOrdersListOpts: manual? + limit? 'Page size override; server caps at 100. Default unset = server default (50).' + status? 6-value union V-666.BR + createdAfter? V-666.BX inclusive + createdBefore? V-666.BX exclusive", () => {
     expect(body).toMatch(
-      /export interface UseCryptoOrdersListOpts \{\s*\n?\s*\/\*\* Disable auto-fetch on mount\. Default false\. \*\/\s*\n?\s*manual\?: boolean;\s*\n?\s*\/\*\* Page size override; server caps at 100\. Default unset = server default \(50\)\. \*\/\s*\n?\s*limit\?: number;\s*\n?\s*\/\*\* V-666\.BR — server-side single-status filter\. Omit for all statuses\. \*\/\s*\n?\s*status\?: 'pending' \| 'confirming' \| 'paid' \| 'failed' \| 'partial' \| 'cancelled';\s*\n?\s*\/\*\* V-666\.BX — ISO 8601 lower bound on created_at \(inclusive\)\. \*\/\s*\n?\s*createdAfter\?: string;\s*\n?\s*\/\*\* V-666\.BX — ISO 8601 upper bound on created_at \(exclusive\)\. \*\/\s*\n?\s*createdBefore\?: string;\s*\n?\s*\}/,
+      /export interface UseCryptoOrdersListOpts \{\s*\/\*\* Disable auto-fetch on mount\. Default false\. \*\/\s*manual\?: boolean;\s*\/\*\* Page size override; server caps at 100\. Default unset = server default \(50\)\. \*\/\s*limit\?: number;\s*\/\*\* V-666\.BR — server-side single-status filter\. Omit for all statuses\. \*\/\s*status\?: 'pending' \| 'confirming' \| 'paid' \| 'failed' \| 'partial' \| 'cancelled';\s*\/\*\* V-666\.BX — ISO 8601 lower bound on created_at \(inclusive\)\. \*\/\s*createdAfter\?: string;\s*\/\*\* V-666\.BX — ISO 8601 upper bound on created_at \(exclusive\)\. \*\/\s*createdBefore\?: string;\s*\}/,
     );
   });
 
   it('buildUrl: URL ${baseUrl}/v1/billing/crypto-orders + limit set (.toString()) + status set + created_after/created_before set when defined && length>0 + cursor set when !== null; useCallback deps [settings.baseUrl, opts.limit, opts.status, opts.createdAfter, opts.createdBefore]', () => {
     expect(body).toMatch(
-      /const url = new URL\(`\$\{baseUrl\}\/v1\/billing\/crypto-orders`\);\s*\n?\s*if \(opts\.limit !== undefined\) url\.searchParams\.set\('limit', opts\.limit\.toString\(\)\);\s*\n?\s*if \(opts\.status !== undefined\) url\.searchParams\.set\('status', opts\.status\);\s*\n?\s*if \(opts\.createdAfter !== undefined && opts\.createdAfter\.length > 0\) \{\s*\n?\s*url\.searchParams\.set\('created_after', opts\.createdAfter\);\s*\n?\s*\}\s*\n?\s*if \(opts\.createdBefore !== undefined && opts\.createdBefore\.length > 0\) \{\s*\n?\s*url\.searchParams\.set\('created_before', opts\.createdBefore\);\s*\n?\s*\}\s*\n?\s*if \(cursor !== null\) url\.searchParams\.set\('cursor', cursor\);/,
+      /const url = new URL\(`\$\{baseUrl\}\/v1\/billing\/crypto-orders`\);\s*if \(opts\.limit !== undefined\) url\.searchParams\.set\('limit', opts\.limit\.toString\(\)\);\s*if \(opts\.status !== undefined\) url\.searchParams\.set\('status', opts\.status\);\s*if \(opts\.createdAfter !== undefined && opts\.createdAfter\.length > 0\) \{\s*url\.searchParams\.set\('created_after', opts\.createdAfter\);\s*\}\s*if \(opts\.createdBefore !== undefined && opts\.createdBefore\.length > 0\) \{\s*url\.searchParams\.set\('created_before', opts\.createdBefore\);\s*\}\s*if \(cursor !== null\) url\.searchParams\.set\('cursor', cursor\);/,
     );
     expect(body).toMatch(
       /\[settings\.baseUrl, opts\.limit, opts\.status, opts\.createdAfter, opts\.createdBefore\]/,
@@ -93,7 +93,7 @@ describe('W474.A apps/gui-client/src/lib/use-crypto-orders-list.ts content parit
     expect(body).toContain('refreshRequestRef.current?.abort();');
     expect(body).toContain('pageRequestRef.current?.abort();');
     expect(body).toMatch(
-      /setState\(\{\s*\n?\s*kind: 'ready',\s*\n?\s*data: \{\s*\n?\s*orders: \[\.\.\.baseline\.orders, \.\.\.body\.orders\],\s*\n?\s*nextCursor: body\.next_cursor \?\? null,\s*\n?\s*\},\s*\n?\s*\}\);/,
+      /setState\(\{\s*kind: 'ready',\s*data: \{\s*orders: \[\.\.\.baseline\.orders, \.\.\.body\.orders\],\s*nextCursor: body\.next_cursor \?\? null,\s*\},\s*\}\);/,
     );
   });
 

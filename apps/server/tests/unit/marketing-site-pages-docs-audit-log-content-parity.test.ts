@@ -46,11 +46,11 @@ describe('W518.B apps/marketing-site/src/pages/docs/audit-log.astro content pari
   it('GET /v1/account/audit-log + no-per-scope-gate-on-read + X-Driftstack-Account team RBAC + /export?format=csv 10,000-row ceiling + x-driftstack-export-truncated framing pinned — pinned so the endpoint + no-scope-gate + team-RBAC-header + 10000-row-export-ceiling + truncated-signal commitments survive', () => {
     expect(body).toMatch(/GET \/v1\/account\/audit-log/);
     expect(body).toMatch(
-      /The endpoint is reachable with any authenticated key — there\s*\n?\s*is no per-scope gate on read\./,
+      /The endpoint is reachable with any authenticated key — there\s*is no per-scope gate on read\./,
     );
     expect(body).toMatch(/<code>X-Driftstack-Account<\/code>/);
     expect(body).toMatch(
-      /<code>GET \/v1\/account\/audit-log\/export\?format=csv<\/code> \(10,000-row\s*\n?\s*ceiling, signalled by <code>x-driftstack-export-truncated<\/code>\s*\n?\s*on the response\)/,
+      /<code>GET \/v1\/account\/audit-log\/export\?format=csv<\/code> \(10,000-row\s*ceiling, signalled by <code>x-driftstack-export-truncated<\/code>\s*on the response\)/,
     );
   });
 
@@ -67,7 +67,7 @@ describe('W518.B apps/marketing-site/src/pages/docs/audit-log.astro content pari
     expect(body).toMatch(/"user_agent": "DriftstackCLI\/2\.3\.1"/);
     expect(body).toMatch(/"timestamp": "2026-05-11T13:42:00\.000Z"/);
     expect(body).toMatch(
-      /Entry ids are raw UUIDs \(no <code>aud_<\/code> prefix\)\. The\s*\n?\s*response envelope uses <code>data<\/code> and\s*\n?\s*<code>next_cursor<\/code> — there is no <code>items<\/code> field\./,
+      /Entry ids are raw UUIDs \(no <code>aud_<\/code> prefix\)\. The\s*response envelope uses <code>data<\/code> and\s*<code>next_cursor<\/code> — there is no <code>items<\/code> field\./,
     );
   });
 
@@ -97,29 +97,29 @@ describe('W518.B apps/marketing-site/src/pages/docs/audit-log.astro content pari
 
   it("3-actor-type taxonomy framing pinned: customer (authenticated API key or web session, actor_account_id + actor_key_id identify) + system (automated by infra, actor_account_id/actor_key_id null) + staff (Driftstack staff via internal admin tools, refund recording / support-note / exceptional interventions, 'We notify the affected account by email when this happens for any action that modifies state.') — pinned so the 3-actor-type + email-notify-on-staff-mutation commitment survives (drift to silently-staff-modifying would break the customer-trust commitment)", () => {
     expect(body).toMatch(
-      /<strong><code>customer<\/code><\/strong> — action performed\s*\n?\s*by an authenticated API key or web session\. The\s*\n?\s*<code>actor_account_id<\/code> \+ <code>actor_key_id<\/code>\s*\n?\s*fields identify which account \/ key performed it\./,
+      /<strong><code>customer<\/code><\/strong> — action performed\s*by an authenticated API key or web session\. The\s*<code>actor_account_id<\/code> \+ <code>actor_key_id<\/code>\s*fields identify which account \/ key performed it\./,
     );
     expect(body).toMatch(
-      /<strong><code>system<\/code><\/strong> — automated action by\s*\n?\s*Driftstack infrastructure \(e\.g\. scheduled-job triggered\s*\n?\s*revocation, expired-card subscription downgrade\)\./,
+      /<strong><code>system<\/code><\/strong> — automated action by\s*Driftstack infrastructure \(e\.g\. scheduled-job triggered\s*revocation, expired-card subscription downgrade\)\./,
     );
     expect(body).toMatch(
-      /<strong><code>staff<\/code><\/strong> — Driftstack staff\s*\n?\s*performed the action via internal admin tools\. Used for\s*\n?\s*refund recording, support-note insertion, and exceptional\s*\n?\s*manual interventions\. We notify the affected account by\s*\n?\s*email when this happens for any action that modifies state\./,
+      /<strong><code>staff<\/code><\/strong> — Driftstack staff\s*performed the action via internal admin tools\. Used for\s*refund recording, support-note insertion, and exceptional\s*manual interventions\. We notify the affected account by\s*email when this happens for any action that modifies state\./,
     );
   });
 
   it('4-filter compositional framing pinned: action (single action string) + actor_type (customer/system/staff) + target_resource_id (per-resource filter) + from + to (ISO-8601 inclusive) + sample GET query with action=api_key.minted&from=2026-05-01Z&to=2026-05-31Z — pinned so the 4-filter set + ISO-8601-inclusive + filter-composition commitment survives', () => {
     expect(body).toMatch(/<strong><code>action<\/code><\/strong> — single action string/);
     expect(body).toMatch(
-      /<strong><code>actor_type<\/code><\/strong> — <code>customer<\/code>,\s*\n?\s*<code>system<\/code>, or <code>staff<\/code>\./,
+      /<strong><code>actor_type<\/code><\/strong> — <code>customer<\/code>,\s*<code>system<\/code>, or <code>staff<\/code>\./,
     );
     expect(body).toMatch(
-      /<strong><code>target_resource_id<\/code><\/strong> — filter to\s*\n?\s*a specific resource id/,
+      /<strong><code>target_resource_id<\/code><\/strong> — filter to\s*a specific resource id/,
     );
     expect(body).toMatch(
-      /<code>\?target_resource_id=api_key_key_xyz<\/code> to see every\s*\n?\s*action on that key/,
+      /<code>\?target_resource_id=api_key_key_xyz<\/code> to see every\s*action on that key/,
     );
     expect(body).toMatch(
-      /<strong><code>from<\/code><\/strong>,\s*\n?\s*<strong><code>to<\/code><\/strong> — ISO-8601 timestamps, inclusive\./,
+      /<strong><code>from<\/code><\/strong>,\s*<strong><code>to<\/code><\/strong> — ISO-8601 timestamps, inclusive\./,
     );
     expect(body).toMatch(
       /GET \/v1\/account\/audit-log\?action=api_key\.minted&from=2026-05-01Z&to=2026-05-31Z/,
@@ -128,13 +128,13 @@ describe('W518.B apps/marketing-site/src/pages/docs/audit-log.astro content pari
 
   it("Pagination + effectiveAccountId team-RBAC framing pinned: 'Standard cursor pagination — see /docs/pagination. Sort order is timestamp DESC with id DESC tiebreaker, so newest entries appear first.' + effectiveAccountId behaviour + 'both member and admin team roles are read-allowed on this surface' + '/v1/account/audit-log/export effective-account header gate applies too' — pinned so the timestamp-DESC + id-DESC-tiebreaker + effectiveAccountId + member-AND-admin-can-read + export-also-gated commitments survive. The previous skip pinned an inline `(V-330b` anchor that was removed from the customer-facing copy (internal V-labels should not bleed into marketing pages); the structural framing survives without it.", () => {
     expect(body).toMatch(
-      /Standard cursor pagination — see <a href="\/docs\/pagination\/">\/docs\/pagination<\/a>\.\s*\n?\s*Sort order is <code>timestamp DESC<\/code> with <code>id DESC<\/code>\s*\n?\s*tiebreaker, so newest entries appear first\./,
+      /Standard cursor pagination — see <a href="\/docs\/pagination\/">\/docs\/pagination<\/a>\.\s*Sort order is <code>timestamp DESC<\/code> with <code>id DESC<\/code>\s*tiebreaker, so newest entries appear first\./,
     );
     expect(body).toMatch(
-      /<code>X-Driftstack-Account: acc_&lt;owner-uuid&gt;<\/code>\s*\n?\s*header, the server returns the <strong>owner's<\/strong> audit\s*\n?\s*log — both <code>member<\/code> and <code>admin<\/code> team\s*\n?\s*roles are read-allowed on this surface \(\s*\n?\s*<code>effectiveAccountId<\/code> behaviour\)/,
+      /<code>X-Driftstack-Account: acc_&lt;owner-uuid&gt;<\/code>\s*header, the server returns the <strong>owner's<\/strong> audit\s*log — both <code>member<\/code> and <code>admin<\/code> team\s*roles are read-allowed on this surface \(\s*<code>effectiveAccountId<\/code> behaviour\)/,
     );
     expect(body).toMatch(
-      /The same effective-account header gate applies to\s*\n?\s*<code>\/v1\/account\/audit-log\/export<\/code>\./,
+      /The same effective-account header gate applies to\s*<code>\/v1\/account\/audit-log\/export<\/code>\./,
     );
     // Internal V-anchors must NOT bleed into customer-facing copy.
     expect(body).not.toMatch(/\(V-330b\s/);
@@ -142,13 +142,13 @@ describe('W518.B apps/marketing-site/src/pages/docs/audit-log.astro content pari
 
   it("Indefinite-retention framing pinned: 'Audit log entries are retained indefinitely, on every tier — there is no tier-based retention window and no scheduled prune job. An account's entries are removed only when the account itself is deleted (a cascading delete tied to the account record, not a time-based sweep).' + SIEM-export-cron pattern framing — pinned so the honest no-prune-job/indefinite-retention statement survives (a fictional 5-tier retention table + 'pruned by a nightly sweep' claim was corrected 2026-06-30: account_audit_log has no expires_at/retention column and the only real audit-shaped sweep, AuditArchiveService, explicitly excludes this table — see apps/server/src/services/audit-archive.ts AUDIT_TABLES. Drift back to a fabricated retention promise would re-create a compliance-adjacent doc/code mismatch; drift to dropping the SIEM-export-cron suggestion would orphan customers who want their own offline retention copy)", () => {
     expect(body).toMatch(
-      /Audit log entries are retained <strong>indefinitely<\/strong>,\s*\n?\s*on every tier — there is no tier-based retention window and no\s*\n?\s*scheduled prune job\. An account's entries are removed only when\s*\n?\s*the account itself is deleted \(a cascading delete tied to the\s*\n?\s*account record, not a time-based sweep\)\./,
+      /Audit log entries are retained <strong>indefinitely<\/strong>,\s*on every tier — there is no tier-based retention window and no\s*scheduled prune job\. An account's entries are removed only when\s*the account itself is deleted \(a cascading delete tied to the\s*account record, not a time-based sweep\)\./,
     );
     expect(body).toMatch(
-      /most\s*\n?\s*enterprise customers ship a daily cron that calls the endpoint\s*\n?\s*with <code>from=yesterday&amp;to=today<\/code> and forwards the\s*\n?\s*response into their SIEM\./,
+      /most\s*enterprise customers ship a daily cron that calls the endpoint\s*with <code>from=yesterday&amp;to=today<\/code> and forwards the\s*response into their SIEM\./,
     );
     // The fabricated tier-retention table must not reappear.
-    expect(body).not.toMatch(/pruned by a nightly\s*\n?\s*sweep/);
+    expect(body).not.toMatch(/pruned by a nightly\s*sweep/);
 
     // V-1518 — the half of this arm's title that was never checked. It names
     // AUDIT_TABLES as the reason the promise above is true, and until now only
@@ -176,23 +176,23 @@ describe('W518.B apps/marketing-site/src/pages/docs/audit-log.astro content pari
 
   it("Immutability + admin.support_note-pointer correction framing pinned: 'Audit entries are append-only. There's no delete or update endpoint; even staff cannot mutate existing entries. If a correction is needed (e.g. a misattributed action), staff append an admin.support_note pointing at the original entry rather than editing it.' — pinned so the append-only + no-delete-or-update + even-staff-cannot-mutate + admin.support_note-pointer-correction commitment survives (drift to allowing staff edit would break the immutable audit-trail commitment)", () => {
     expect(body).toMatch(
-      /Audit entries are <strong>append-only<\/strong>\. There's no\s*\n?\s*delete or update endpoint; even staff cannot mutate existing\s*\n?\s*entries\. If a correction is needed \(e\.g\. a misattributed\s*\n?\s*action\), staff append an <code>admin\.support_note<\/code>\s*\n?\s*pointing at the original entry rather than editing it\./,
+      /Audit entries are <strong>append-only<\/strong>\. There's no\s*delete or update endpoint; even staff cannot mutate existing\s*entries\. If a correction is needed \(e\.g\. a misattributed\s*action\), staff append an <code>admin\.support_note<\/code>\s*pointing at the original entry rather than editing it\./,
     );
   });
 
   it("No-per-entry-webhook + feedback-loop-avoidance framing pinned: 'The audit log itself does not emit a per-entry webhook event — that would create a feedback loop (writing a webhook delivery would itself generate an audit entry). Subscribe to the underlying resource webhooks instead (api_key.revoked, session.completed, etc.) — see /docs/webhooks.' — pinned so the no-per-entry-webhook + feedback-loop-rationale + subscribe-to-underlying-resource-webhooks-instead commitment survives", () => {
     expect(body).toMatch(
-      /The audit log itself does <strong>not<\/strong> emit a per-entry\s*\n?\s*webhook event — that would create a feedback loop \(writing a\s*\n?\s*webhook delivery would itself generate an audit entry\)\.\s*\n?\s*Subscribe to the underlying resource webhooks instead\s*\n?\s*\(<code>api_key\.revoked<\/code>, <code>session\.completed<\/code>,\s*\n?\s*etc\.\) — see <a href="\/docs\/webhooks\/">\/docs\/webhooks<\/a>\./,
+      /The audit log itself does <strong>not<\/strong> emit a per-entry\s*webhook event — that would create a feedback loop \(writing a\s*webhook delivery would itself generate an audit entry\)\.\s*Subscribe to the underlying resource webhooks instead\s*\(<code>api_key\.revoked<\/code>, <code>session\.completed<\/code>,\s*etc\.\) — see <a href="\/docs\/webhooks\/">\/docs\/webhooks<\/a>\./,
     );
     expect(body).not.toMatch(/href="\/docs\/(?:pagination|webhooks)"/);
   });
 
   it('Support 2-channel framing pinned: compliance@driftstack.dev for compliance/audit-export questions + developers@driftstack.dev for technical questions — pinned so the 2-channel split (compliance vs technical) stays consistent', () => {
     expect(body).toMatch(
-      /Compliance \/ audit-export questions:\s*\n?\s*<a href="mailto:compliance@driftstack\.dev">compliance@driftstack\.dev<\/a>\./,
+      /Compliance \/ audit-export questions:\s*<a href="mailto:compliance@driftstack\.dev">compliance@driftstack\.dev<\/a>\./,
     );
     expect(body).toMatch(
-      /Technical questions about the endpoint:\s*\n?\s*<a href="mailto:developers@driftstack\.dev">developers@driftstack\.dev<\/a>\./,
+      /Technical questions about the endpoint:\s*<a href="mailto:developers@driftstack\.dev">developers@driftstack\.dev<\/a>\./,
     );
   });
 

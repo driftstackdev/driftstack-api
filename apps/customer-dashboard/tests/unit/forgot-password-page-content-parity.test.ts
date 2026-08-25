@@ -41,7 +41,7 @@ describe('W370.B customer-dashboard /forgot-password page content parity', () =>
   it('V-273 anti-enumeration framing pinned in page comment (server never confirms account existence)', () => {
     expect(body).toMatch(/V-273 — Password-reset request page/);
     expect(body).toMatch(
-      /the server\s*\n?\s*\/\/\s*never confirms account existence via this endpoint — anti-\s*\n?\s*\/\/\s*enumeration/,
+      /the server\s*\/\/\s*never confirms account existence via this endpoint — anti-\s*\/\/\s*enumeration/,
     );
   });
 
@@ -60,12 +60,12 @@ describe('W370.B customer-dashboard /forgot-password page content parity', () =>
 
   it('expires_at countdown rendered as minutes from server response', () => {
     expect(body).toMatch(
-      /const minutes = Math\.max\(\s*\n?\s*1,\s*\n?\s*Math\.round\(\(new Date\(body\.expires_at\)\.getTime\(\) - Date\.now\(\)\) \/ 60000\),\s*\n?\s*\);/,
+      /const minutes = Math\.max\(\s*1,\s*Math\.round\(\(new Date\(body\.expires_at\)\.getTime\(\) - Date\.now\(\)\) \/ 60000\),\s*\);/,
     );
     expect(body).toMatch(/successWindow\.textContent = minutes \+ ' minutes'/);
     // Default fallback copy when no expires_at returned.
     // (Astro source splits the closing `</span\n>` across lines.)
-    expect(body).toMatch(/<span\s*\n?\s*data-success-window[^>]*>60 minutes<\/span\s*>/);
+    expect(body).toMatch(/<span\s*data-success-window[^>]*>60 minutes<\/span\s*>/);
   });
 
   it('AUTH_EXPOSE_DEBUG_TOKEN dev paste-in: debug_token surfaces /reset-password?token=…', () => {
@@ -81,9 +81,7 @@ describe('W370.B customer-dashboard /forgot-password page content parity', () =>
   });
 
   it('/login cross-link present ("Remembered it? Sign in")', () => {
-    expect(body).toMatch(
-      /<a\s*\n?\s*href="\/login\/"\s*\n?\s*class="[^"]+"\s*>\s*Sign in\s*<\/a\s*>/,
-    );
+    expect(body).toMatch(/<a\s*href="\/login\/"\s*class="[^"]+"\s*>\s*Sign in\s*<\/a\s*>/);
     expect(body).toMatch(/Remembered it\?/);
   });
 
@@ -94,7 +92,7 @@ describe('W370.B customer-dashboard /forgot-password page content parity', () =>
 
   it('success-state replaces form (form hidden, success surfaced) — no double-submit', () => {
     expect(body).toMatch(
-      /form\.classList\.add\('hidden'\);\s*\n?\s*success\.classList\.remove\('hidden'\);/,
+      /form\.classList\.add\('hidden'\);\s*success\.classList\.remove\('hidden'\);/,
     );
   });
 
@@ -135,6 +133,6 @@ describe('W370.B customer-dashboard /forgot-password page content parity', () =>
     expect(body).toMatch(/User enters their email \+ submits/);
     expect(body).toMatch(/Server returns `\{sent: true, expires_at\}`/);
     expect(body).toMatch(/Page shows "Check your inbox" message/);
-    expect(body).toMatch(/\/reset-password\?token=…\s*\n?\s*\/\/\s*page handles the actual reset/);
+    expect(body).toMatch(/\/reset-password\?token=…\s*\/\/\s*page handles the actual reset/);
   });
 });

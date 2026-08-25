@@ -45,7 +45,7 @@ describe('W539.A /.gitignore content parity', () => {
     expect(body).toMatch(/^\.env\.\*$/m);
     expect(body).toMatch(/^!\.env\.example$/m);
     expect(body).toMatch(
-      /# V-278 deploy \.env files \(REAL secrets; never committed\)\. The\s*\n?\s*# \.template versions ARE committed\./,
+      /# V-278 deploy \.env files \(REAL secrets; never committed\)\. The\s*# \.template versions ARE committed\./,
     );
     expect(body).toMatch(/^\/infra\/env-templates\/\*\.env$/m);
     expect(body).toMatch(/^!\/infra\/env-templates\/\*\.env\.template$/m);
@@ -65,7 +65,7 @@ describe('W539.A /.gitignore content parity', () => {
 
   it("V-165 bench-artefact + Drizzle-migration-marker framing pinned: '# Bench artifacts (V-165) — bench output is recorded per-run; only the canonical baseline at docs/benchmarks/baseline.ci.json is committed.' + 'tmp/' + '# Drizzle' + 'drizzle/.migrations-applied' — pinned so the V-165 bench-per-run-tmp + baseline-in-docs-only + Drizzle-idempotency-marker-ignored commitment survives (drift to tracking drizzle/.migrations-applied would break the migration-runner's idempotency check across machines)", () => {
     expect(body).toMatch(
-      /# Bench artifacts \(V-165\) — bench output is recorded per-run; only\s*\n?\s*# the canonical baseline at docs\/benchmarks\/baseline\.ci\.json is\s*\n?\s*# committed\./,
+      /# Bench artifacts \(V-165\) — bench output is recorded per-run; only\s*# the canonical baseline at docs\/benchmarks\/baseline\.ci\.json is\s*# committed\./,
     );
     expect(body).toMatch(/^tmp\/$/m);
     expect(body).toMatch(/^# Drizzle$/m);

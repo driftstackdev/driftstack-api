@@ -83,7 +83,7 @@ describe('W1019 routes/admin-usage V-689 cross-source invariant', () => {
     // bad request. The shape is checked first; getAccount still runs, so the V-689
     // framing above is untouched — a well-formed id for no account is still a 404.
     expect(p).toMatch(
-      /const account = await deps\.accountsAdminService\.getAccount\(\s*\n?\s*req\.account!,\s*\n?\s*accountUuidFromParam\(params\.id\),\s*\n?\s*\);/,
+      /const account = await deps\.accountsAdminService\.getAccount\(\s*req\.account!,\s*accountUuidFromParam\(params\.id\),\s*\);/,
     );
   });
 

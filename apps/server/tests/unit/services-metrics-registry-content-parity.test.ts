@@ -28,19 +28,19 @@ describe('services/metrics-registry content parity', () => {
       /\/\/ Arc 4 Wave 2\.B sub-slice 8\.18 \(v2-#8\) — in-process metrics registry\./,
     );
     expect(body).toMatch(
-      /\/\/ Renders Prometheus exposition format directly; no external deps\. The\s*\n?\s*\/\/ surface is intentionally narrow \(counters \+ gauges, no histograms\) —\s*\n?\s*\/\/ histograms can land in a follow-up when the first signal calls for\s*\n?\s*\/\/ them\. The \/metrics route \(registerMetricsRoutes\) scrapes via\s*\n?\s*\/\/ registry\.render\(\)\./,
+      /\/\/ Renders Prometheus exposition format directly; no external deps\. The\s*\/\/ surface is intentionally narrow \(counters \+ gauges, no histograms\) —\s*\/\/ histograms can land in a follow-up when the first signal calls for\s*\/\/ them\. The \/metrics route \(registerMetricsRoutes\) scrapes via\s*\/\/ registry\.render\(\)\./,
     );
   });
 
   it("Format-spec framing pinned: 'https://prometheus.io/docs/instrumenting/exposition_formats/ (text 0.0.4 — the simple line-based variant Prometheus + VictoriaMetrics + Grafana Agent all consume.)' — pinned so the 0.0.4 spec anchor + 3-consumer-compatibility (Prometheus + VictoriaMetrics + Grafana Agent) stay documented", () => {
     expect(body).toMatch(
-      /\/\/ Format spec: https:\/\/prometheus\.io\/docs\/instrumenting\/exposition_formats\/\s*\n?\s*\/\/ \(text 0\.0\.4 — the simple line-based variant Prometheus \+ VictoriaMetrics\s*\n?\s*\/\/ \+ Grafana Agent all consume\.\)/,
+      /\/\/ Format spec: https:\/\/prometheus\.io\/docs\/instrumenting\/exposition_formats\/\s*\/\/ \(text 0\.0\.4 — the simple line-based variant Prometheus \+ VictoriaMetrics\s*\/\/ \+ Grafana Agent all consume\.\)/,
     );
   });
 
   it("Label-cardinality framing pinned: 'callers MUST keep label values bounded (enum-like). The registry doesn't enforce this — it would punish legitimate dynamic label use — but high-cardinality labels (account_id, session_id) WILL blow up the scrape size. Convention: only enum-shaped labels (state names, action kinds, success/error) appear in counter labels here.' — pinned so the bounded-cardinality CONVENTION + 2-bad-example (account_id/session_id) + enum-shape rule stay documented (drift would invite per-customer-id labels that blow up the scrape)", () => {
     expect(body).toMatch(
-      /\/\/ Label cardinality: callers MUST keep label values bounded \(enum-like\)\.\s*\n?\s*\/\/ The registry doesn't enforce this — it would punish legitimate dynamic\s*\n?\s*\/\/ label use — but high-cardinality labels \(account_id, session_id\) WILL\s*\n?\s*\/\/ blow up the scrape size\. Convention: only enum-shaped labels \(state\s*\n?\s*\/\/ names, action kinds, success\/error\) appear in counter labels here\./,
+      /\/\/ Label cardinality: callers MUST keep label values bounded \(enum-like\)\.\s*\/\/ The registry doesn't enforce this — it would punish legitimate dynamic\s*\/\/ label use — but high-cardinality labels \(account_id, session_id\) WILL\s*\/\/ blow up the scrape size\. Convention: only enum-shaped labels \(state\s*\/\/ names, action kinds, success\/error\) appear in counter labels here\./,
     );
   });
 
@@ -51,13 +51,13 @@ describe('services/metrics-registry content parity', () => {
 
   it("NUL-byte composite-key delimiter pinned: 'labelKey(labelKeys, labels)' joins labels-by-key with \\x00. Drift to a printable delimiter would let attackers smuggle composite-key collisions where one label-value contains the delimiter character", () => {
     expect(body).toMatch(
-      /function labelKey\(labelKeys: readonly string\[\], labels: Labels \| undefined\): string \{\s*\n?\s*if \(labelKeys\.length === 0\) return '';\s*\n?\s*return labelKeys\.map\(\(k\) => labels\?\.\[k\] \?\? ''\)\.join\('\\x00'\);\s*\n?\s*\}/,
+      /function labelKey\(labelKeys: readonly string\[\], labels: Labels \| undefined\): string \{\s*if \(labelKeys\.length === 0\) return '';\s*return labelKeys\.map\(\(k\) => labels\?\.\[k\] \?\? ''\)\.join\('\\x00'\);\s*\}/,
     );
   });
 
   it('Label-value escapeLabelValue 3-char escape pinned: backslash → \\\\ + double-quote → \\" + newline → \\n. Drift would let label values break the Prometheus line-based exposition format (especially newlines, which terminate samples in the wire format)', () => {
     expect(body).toMatch(
-      /function escapeLabelValue\(v: string\): string \{\s*\n?\s*return v\.replace\(\/\\\\\/g, '\\\\\\\\'\)\.replace\(\/"\/g, '\\\\"'\)\.replace\(\/\\n\/g, '\\\\n'\);\s*\n?\s*\}/,
+      /function escapeLabelValue\(v: string\): string \{\s*return v\.replace\(\/\\\\\/g, '\\\\\\\\'\)\.replace\(\/"\/g, '\\\\"'\)\.replace\(\/\\n\/g, '\\\\n'\);\s*\}/,
     );
   });
 
@@ -81,7 +81,7 @@ describe('services/metrics-registry content parity', () => {
 
   it('render() emits HELP + TYPE comment lines + sorted samples. Drift to skipping HELP/TYPE would diverge from the Prometheus spec; drift to unsorted samples would make scrape diffs noisy in observability tools', () => {
     expect(body).toMatch(
-      /lines\.push\(`# HELP \$\{name\} \$\{def\.help\}`\);\s*\n?\s*lines\.push\(`# TYPE \$\{name\} \$\{def\.kind\}`\);/,
+      /lines\.push\(`# HELP \$\{name\} \$\{def\.help\}`\);\s*lines\.push\(`# TYPE \$\{name\} \$\{def\.kind\}`\);/,
     );
     expect(body).toMatch(/const sortedNames = Array\.from\(this\.metrics\.keys\(\)\)\.sort\(\);/);
     expect(body).toMatch(/const sortedKeys = Array\.from\(def\.values\.keys\(\)\)\.sort\(\);/);
@@ -89,7 +89,7 @@ describe('services/metrics-registry content parity', () => {
 
   it("METRIC_NAMES catalog framing pinned: 'Stable metric-name catalog — single source-of-truth for counters emitted across the codebase. Drift guards key on these constants.' — pinned so the single-source-of-truth role + drift-guards-key-on-this contract stay documented", () => {
     expect(body).toMatch(
-      /\/\*\* Stable metric-name catalog — single source-of-truth for counters\s*\n?\s*\*\s+emitted across the codebase\. Drift guards key on these constants\. \*\/\s*\n?\s*export const METRIC_NAMES = \{/,
+      /\/\*\* Stable metric-name catalog — single source-of-truth for counters\s*\*\s+emitted across the codebase\. Drift guards key on these constants\. \*\/\s*export const METRIC_NAMES = \{/,
     );
     expect(body).toMatch(/\} as const;/);
   });
@@ -126,7 +126,7 @@ describe('services/metrics-registry content parity', () => {
 
   it("obs.15 HTTP-request route-template-not-URL framing pinned: 'The route label uses the TEMPLATE, never the URL, so account ids / session ids / etc. don't leak.' — pinned so the no-PII-in-route-label privacy contract stays documented (drift to logging raw URLs in the route label would create per-customer-id high-cardinality + leak PII into scrape output)", () => {
     expect(body).toMatch(
-      /\/\/ The route label uses the TEMPLATE, never the URL, so account ids\s*\n?\s*\/\/ \/ session ids \/ etc\. don't leak\./,
+      /\/\/ The route label uses the TEMPLATE, never the URL, so account ids\s*\/\/ \/ session ids \/ etc\. don't leak\./,
     );
   });
 });

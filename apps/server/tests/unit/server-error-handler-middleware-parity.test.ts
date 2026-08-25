@@ -50,9 +50,7 @@ describe('W711 server-side error-handler middleware parity', () => {
 
   it('CRITICAL "every escaping error becomes an RFC 7807 problem+json response" header framing pinned. The wording is what tells engineers the middleware is the SINGLE wire-conversion point; drift to dropping would let new routes bypass with hand-rolled error shapes.', () => {
     const src = read(ERROR_HANDLER);
-    expect(src).toMatch(
-      /every escaping error becomes an RFC 7807\s*\n?\s*\/\/\s*problem\+json response/,
-    );
+    expect(src).toMatch(/every escaping error becomes an RFC 7807\s*\/\/\s*problem\+json response/);
   });
 
   it('CRITICAL registerErrorHandler() pinned — sets BOTH .setErrorHandler() and .setNotFoundHandler(). Drift to only setting one would let either uncaught throws OR route-misses bypass the problem+json shape.', () => {
@@ -81,7 +79,7 @@ describe('W711 server-side error-handler middleware parity', () => {
 
   it('CRITICAL replyWithProblem() helper sets status via reply.code() + content-type via reply.header() + body via reply.send(). The 3-call pipeline is what produces the wire-correct problem+json response; drift to merging or dropping would mis-format.', () => {
     const src = read(ERROR_HANDLER);
-    expect(src).toMatch(/return reply\s*\n?\s*\.code\(problem\.status\)\s*\n?\s*\.header\(/);
+    expect(src).toMatch(/return reply\s*\.code\(problem\.status\)\s*\.header\(/);
     expect(src).toMatch(/\.send\(problem\)/);
   });
 
@@ -93,7 +91,7 @@ describe('W711 server-side error-handler middleware parity', () => {
   it('CRITICAL ZodError → ValidationError conversion pinned with .flatten() call. The .flatten() output is what the ValidationError extension shape (issues field, W710) carries. Drift to passing raw err.issues would change the wire-format shape.', () => {
     const src = read(ERROR_HANDLER);
     expect(src).toMatch(
-      /if \(err instanceof ZodError\) \{\s*\n?\s*return new ValidationError\(err\.flatten\(\)\)/,
+      /if \(err instanceof ZodError\) \{\s*return new ValidationError\(err\.flatten\(\)\)/,
     );
   });
 
@@ -102,10 +100,10 @@ describe('W711 server-side error-handler middleware parity', () => {
 
     // Status-derived problem-type mapping.
     expect(src).toMatch(
-      /fastifyErr\.statusCode === 401\s*\n?\s*\?\s*\(\[PROBLEM_TYPES\.Unauthorized, 'Unauthorized'\] as const\)/,
+      /fastifyErr\.statusCode === 401\s*\?\s*\(\[PROBLEM_TYPES\.Unauthorized, 'Unauthorized'\] as const\)/,
     );
     expect(src).toMatch(
-      /fastifyErr\.statusCode === 403\s*\n?\s*\?\s*\(\[PROBLEM_TYPES\.Forbidden, 'Forbidden'\] as const\)/,
+      /fastifyErr\.statusCode === 403\s*\?\s*\(\[PROBLEM_TYPES\.Forbidden, 'Forbidden'\] as const\)/,
     );
     expect(src).toMatch(/\(\[PROBLEM_TYPES\.BadRequest, 'Bad Request'\] as const\)/);
   });
@@ -128,7 +126,7 @@ describe('W711 server-side error-handler middleware parity', () => {
 
     // 5xx: log.error with full err.
     expect(src).toMatch(
-      /if \(apiError\.status >= 500\) \{\s*\n?\s*request\.log\.error\(\{ err, problem: apiError\.toProblem\(\) \}/,
+      /if \(apiError\.status >= 500\) \{\s*request\.log\.error\(\{ err, problem: apiError\.toProblem\(\) \}/,
     );
 
     // 4xx: log.warn with FULL err (post-2026-05-19 scheduled-jobs-poller
@@ -170,7 +168,7 @@ describe('W711 server-side error-handler middleware parity', () => {
   it("CRITICAL handleError signature returns `Promise<FastifyReply> | void`. The union return type matches Fastify's error-handler contract (sync or async return); drift to a stricter `Promise<FastifyReply>` only would force unnecessary awaits.", () => {
     const src = read(ERROR_HANDLER);
     expect(src).toMatch(
-      /function handleError\(\s*\n?\s*err: FastifyError \| Error,\s*\n?\s*request: FastifyRequest,\s*\n?\s*reply: FastifyReply,\s*\n?\s*\): Promise<FastifyReply> \| void/,
+      /function handleError\(\s*err: FastifyError \| Error,\s*request: FastifyRequest,\s*reply: FastifyReply,\s*\): Promise<FastifyReply> \| void/,
     );
   });
 

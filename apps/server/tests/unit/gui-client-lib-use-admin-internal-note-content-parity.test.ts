@@ -44,7 +44,7 @@ describe('W470.C apps/gui-client/src/lib/use-admin-internal-note.ts content pari
   it("V-534.AL framing pinned: 'V-534.AL — useAdminInternalNote hook.' + 'Wraps PATCH /v1/admin/crypto-orders/:id/internal-note (V-666.AA). Admin-only — caller must hold the `driftstack_internal_admin` scope. Returns a state machine + a single `save(orderId, note)` action; passing null OR an empty string clears the note (the server-side service normalises both to null).'", () => {
     expect(body).toMatch(/\/\/ V-534\.AL — useAdminInternalNote hook\./);
     expect(body).toMatch(
-      /\/\/ Wraps PATCH \/v1\/admin\/crypto-orders\/:id\/internal-note \(V-666\.AA\)\.\s*\n?\s*\/\/ Admin-only — caller must hold the `driftstack_internal_admin` scope\.\s*\n?\s*\/\/ Returns a state machine \+ a single `save\(orderId, note\)` action;\s*\n?\s*\/\/ passing null OR an empty string clears the note \(the server-side\s*\n?\s*\/\/ service normalises both to null\)\./,
+      /\/\/ Wraps PATCH \/v1\/admin\/crypto-orders\/:id\/internal-note \(V-666\.AA\)\.\s*\/\/ Admin-only — caller must hold the `driftstack_internal_admin` scope\.\s*\/\/ Returns a state machine \+ a single `save\(orderId, note\)` action;\s*\/\/ passing null OR an empty string clears the note \(the server-side\s*\/\/ service normalises both to null\)\./,
     );
   });
 
@@ -62,19 +62,19 @@ describe('W470.C apps/gui-client/src/lib/use-admin-internal-note.ts content pari
 
   it('AdminInternalNoteState 4-variant union: idle | submitting{orderId} | succeeded{orderId + order: AdminCryptoOrder} | failed{orderId + status + message}', () => {
     expect(body).toMatch(
-      /export type AdminInternalNoteState =\s*\n?\s*\| \{ kind: 'idle' \}\s*\n?\s*\| \{ kind: 'submitting'; orderId: string \}\s*\n?\s*\| \{ kind: 'succeeded'; orderId: string; order: AdminCryptoOrder \}\s*\n?\s*\| \{ kind: 'failed'; orderId: string; status: number; message: string \};/,
+      /export type AdminInternalNoteState =\s*\| \{ kind: 'idle' \}\s*\| \{ kind: 'submitting'; orderId: string \}\s*\| \{ kind: 'succeeded'; orderId: string; order: AdminCryptoOrder \}\s*\| \{ kind: 'failed'; orderId: string; status: number; message: string \};/,
     );
   });
 
   it('UseAdminInternalNoteResult: state + save(orderId, internalNote: string | null) => Promise<void> + reset(): void', () => {
     expect(body).toMatch(
-      /export interface UseAdminInternalNoteResult \{\s*\n?\s*state: AdminInternalNoteState;\s*\n?\s*save: \(orderId: string, internalNote: string \| null\) => Promise<void>;\s*\n?\s*reset: \(\) => void;\s*\n?\s*\}/,
+      /export interface UseAdminInternalNoteResult \{\s*state: AdminInternalNoteState;\s*save: \(orderId: string, internalNote: string \| null\) => Promise<void>;\s*reset: \(\) => void;\s*\}/,
     );
   });
 
   it('save transport: deadline-bounded PATCH with encoded id, abort signal, JSON/auth headers, and exact snake_case nullable body', () => {
     expect(body).toMatch(
-      /const res = await fetchWithDeadline\(\s*\n?\s*`\$\{baseUrl\}\/v1\/admin\/crypto-orders\/\$\{encodeURIComponent\(orderId\)\}\/internal-note`,\s*\n?\s*\{\s*\n?\s*method: 'PATCH',\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*accept: 'application\/json',\s*\n?\s*\},\s*\n?\s*body: JSON\.stringify\(\{ internal_note: internalNote \}\),/,
+      /const res = await fetchWithDeadline\(\s*`\$\{baseUrl\}\/v1\/admin\/crypto-orders\/\$\{encodeURIComponent\(orderId\)\}\/internal-note`,\s*\{\s*method: 'PATCH',\s*signal: controller\.signal,\s*headers: \{\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*'content-type': 'application\/json',\s*accept: 'application\/json',\s*\},\s*body: JSON\.stringify\(\{ internal_note: internalNote \}\),/,
     );
   });
 
@@ -83,19 +83,19 @@ describe('W470.C apps/gui-client/src/lib/use-admin-internal-note.ts content pari
       /const \[state, setState\] = useState<AdminInternalNoteState>\(\{ kind: 'idle' \}\);/,
     );
     expect(body).toMatch(
-      /if \(!settings\.apiKey\) \{[\s\S]*?kind: 'failed',[\s\S]*?status: 0,[\s\S]*?message: 'No API key configured\.',[\s\S]*?return;\s*\n?\s*\}/,
+      /if \(!settings\.apiKey\) \{[\s\S]*?kind: 'failed',[\s\S]*?status: 0,[\s\S]*?message: 'No API key configured\.',[\s\S]*?return;\s*\}/,
     );
     expect(body).toMatch(
-      /inFlightRef\.current = true;\s*\n?\s*const sequence = \+\+sequenceRef\.current;\s*\n?\s*const controller = new AbortController\(\);\s*\n?\s*requestRef\.current = controller;\s*\n?\s*setState\(\{ kind: 'submitting', orderId \}\);/,
+      /inFlightRef\.current = true;\s*const sequence = \+\+sequenceRef\.current;\s*const controller = new AbortController\(\);\s*requestRef\.current = controller;\s*setState\(\{ kind: 'submitting', orderId \}\);/,
     );
     const boundedSuccess =
-      /const order = await readBoundedApiJson<AdminCryptoOrder>\(res\);\s*\n?\s*if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'succeeded', orderId, order \}\);/;
+      /const order = await readBoundedApiJson<AdminCryptoOrder>\(res\);\s*if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'succeeded', orderId, order \}\);/;
     expect(body).toMatch(boundedSuccess);
     expect(body.replace('readBoundedApiJson<AdminCryptoOrder>(res)', 'res.json()')).not.toMatch(
       boundedSuccess,
     );
     expect(body).toMatch(
-      /err instanceof DOMException && err\.name === 'AbortError'\s*\n?\s*\? 'Saving the internal note timed out\. Check your connection and try again\.'\s*\n?\s*: humanizeError\(err, "Couldn't save the internal note\. Try again\."\)/,
+      /err instanceof DOMException && err\.name === 'AbortError'\s*\? 'Saving the internal note timed out\. Check your connection and try again\.'\s*: humanizeError\(err, "Couldn't save the internal note\. Try again\."\)/,
     );
     const rawErrorMutation = body.replace('humanizeError(err,', 'String(err) || (');
     expect(rawErrorMutation).not.toMatch(/humanizeError\(err,/);
@@ -104,10 +104,10 @@ describe('W470.C apps/gui-client/src/lib/use-admin-internal-note.ts content pari
   it('save is single-flight; reset and unmount abort/invalidate active work; return contract remains', () => {
     expect(body).toMatch(/if \(inFlightRef\.current\) return;/);
     expect(body).toMatch(
-      /const reset = useCallback\(\(\): void => \{\s*\n?\s*sequenceRef\.current \+= 1;\s*\n?\s*requestRef\.current\?\.abort\(\);\s*\n?\s*requestRef\.current = null;\s*\n?\s*inFlightRef\.current = false;\s*\n?\s*setState\(\{ kind: 'idle' \}\);/,
+      /const reset = useCallback\(\(\): void => \{\s*sequenceRef\.current \+= 1;\s*requestRef\.current\?\.abort\(\);\s*requestRef\.current = null;\s*inFlightRef\.current = false;\s*setState\(\{ kind: 'idle' \}\);/,
     );
     expect(body).toMatch(
-      /useEffect\(\s*\n?\s*\(\) => \(\) => \{\s*\n?\s*sequenceRef\.current \+= 1;\s*\n?\s*requestRef\.current\?\.abort\(\);[\s\S]*?\},\s*\n?\s*\[\],\s*\n?\s*\);\s*\n?\s*return \{ state, save, reset \};/,
+      /useEffect\(\s*\(\) => \(\) => \{\s*sequenceRef\.current \+= 1;\s*requestRef\.current\?\.abort\(\);[\s\S]*?\},\s*\[\],\s*\);\s*return \{ state, save, reset \};/,
     );
   });
 

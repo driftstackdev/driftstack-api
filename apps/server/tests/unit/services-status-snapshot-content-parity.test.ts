@@ -39,13 +39,13 @@ describe('W410.A apps/server/src/services/status-snapshot.ts content parity', ()
   it('V-295c2 framing pinned: writes /v1/status/incidents data to R2 as single JSON object; status-site fallback', () => {
     expect(body).toMatch(/V-295c2 — public status snapshot writer\./);
     expect(body).toMatch(
-      /Reads the same data the public `\/v1\/status\/incidents` endpoint\s*\n?\s*\/\/\s*surfaces and writes it as a single JSON object to R2 under\s*\n?\s*\/\/\s*`status\/incidents-public\.json`\. The status-site CF Pages frontend\s*\n?\s*\/\/\s*falls back to the R2 URL when the live API fetch fails — keeping\s*\n?\s*\/\/\s*the page current even during API outages\./,
+      /Reads the same data the public `\/v1\/status\/incidents` endpoint\s*\/\/\s*surfaces and writes it as a single JSON object to R2 under\s*\/\/\s*`status\/incidents-public\.json`\. The status-site CF Pages frontend\s*\/\/\s*falls back to the R2 URL when the live API fetch fails — keeping\s*\/\/\s*the page current even during API outages\./,
     );
   });
 
   it('Cadence framing pinned: 60s poller shared with health probe + per-tick rewrite same key (no history)', () => {
     expect(body).toMatch(
-      /Cadence: bootstrap calls processSnapshot\(\) in the same 60s poller\s*\n?\s*\/\/\s*as the health probe\. Each tick rewrites the same key \(no history,\s*\n?\s*\/\/\s*no per-tick proliferation\)\./,
+      /Cadence: bootstrap calls processSnapshot\(\) in the same 60s poller\s*\/\/\s*as the health probe\. Each tick rewrites the same key \(no history,\s*\/\/\s*no per-tick proliferation\)\./,
     );
   });
 
@@ -83,7 +83,7 @@ describe('W410.A apps/server/src/services/status-snapshot.ts content parity', ()
 
   it('processSnapshot: exact publicFeed envelope + R2 same-key overwrite', () => {
     expect(body).toMatch(
-      /\/\*\* Write one snapshot to R2\. Idempotent — same key, full overwrite\. \*\/\s*\n?\s*async processSnapshot\(now: Date\): Promise<\{ count: number; bytes: number \}> \{/,
+      /\/\*\* Write one snapshot to R2\. Idempotent — same key, full overwrite\. \*\/\s*async processSnapshot\(now: Date\): Promise<\{ count: number; bytes: number \}> \{/,
     );
     expect(body).toMatch(/const since = new Date\(now\.getTime\(\) - this\.windowMs\);/);
     expect(body).toContain('const feed = await this.incidents.publicFeed({');
@@ -93,7 +93,7 @@ describe('W410.A apps/server/src/services/status-snapshot.ts content parity', ()
     expect(body).toContain('open_outage_count: feed.openOutageCount');
     expect(body).toContain('truncated: feed.truncated');
     expect(body).toMatch(
-      /await this\.r2\.putObject\(\{\s*\n?\s*key: this\.key,\s*\n?\s*body: buffer,\s*\n?\s*contentType: 'application\/json; charset=utf-8',\s*\n?\s*\}\);/,
+      /await this\.r2\.putObject\(\{\s*key: this\.key,\s*body: buffer,\s*contentType: 'application\/json; charset=utf-8',\s*\}\);/,
     );
   });
 

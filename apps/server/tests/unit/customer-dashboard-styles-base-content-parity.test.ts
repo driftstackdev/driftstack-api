@@ -38,7 +38,7 @@ describe('customer-dashboard styles/base content parity', () => {
 
   it("tokens-shared-with-marketing commitment pinned: 'Tokens shared with apps/marketing-site/src/styles/base.css. Keep synchronised — customer experience reads as one product.' — drift would let the two apps drift visually apart", () => {
     expect(body).toMatch(
-      /Tokens shared with apps\/marketing-\s*\n?\s*site\/src\/styles\/base\.css\. Keep synchronised — customer experience\s*\n?\s*reads as one product\./,
+      /Tokens shared with apps\/marketing-\s*site\/src\/styles\/base\.css\. Keep synchronised — customer experience\s*reads as one product\./,
     );
   });
 
@@ -67,6 +67,6 @@ describe('customer-dashboard styles/base content parity', () => {
   });
 
   it('::selection bg-tk-accent pinned: brand-accent color for text selection. Drift to a different selection color would break cross-app brand recognition on selection', () => {
-    expect(body).toMatch(/::selection \{\s*\n?\s*@apply bg-tk-accent text-white;\s*\n?\s*\}/);
+    expect(body).toMatch(/::selection \{\s*@apply bg-tk-accent text-white;\s*\}/);
   });
 });

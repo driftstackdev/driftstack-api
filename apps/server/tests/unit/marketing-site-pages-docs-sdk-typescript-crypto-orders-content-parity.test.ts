@@ -37,7 +37,7 @@ describe('W510.A apps/marketing-site/src/pages/docs/sdk-typescript-crypto-orders
 
   it("V-722 framing pinned: 'TypeScript SDK reference for the crypto-orders surface. Companion to /docs/sdk-typescript (the general SDK quickstart). Crypto payments are non-refundable.' — pinned so the V-722 anchor + the companion-to-sdk-typescript cross-reference + the explicit 'crypto non-refundable' commitment in the doc-comment all survive (drift to softening 'non-refundable' would let customer expectations drift from the legal posture)", () => {
     expect(body).toMatch(
-      /\/\/ V-722 — TypeScript SDK reference for the crypto-orders surface\.\s*\n?\s*\/\/ Companion to \/docs\/sdk-typescript \(the general SDK quickstart\)\.\s*\n?\s*\/\/ Crypto payments are non-refundable\./,
+      /\/\/ V-722 — TypeScript SDK reference for the crypto-orders surface\.\s*\/\/ Companion to \/docs\/sdk-typescript \(the general SDK quickstart\)\.\s*\/\/ Crypto payments are non-refundable\./,
     );
   });
 
@@ -53,17 +53,17 @@ describe('W510.A apps/marketing-site/src/pages/docs/sdk-typescript-crypto-orders
 
   it('quote is an authoritative fiat-price preview; crypto amount and address arrive only with checkout creation', () => {
     expect(body).toMatch(
-      /Preview a tier's authoritative fiat price without minting an\s*\n?\s*order\. The exact crypto amount and deposit address are returned\s*\n?\s*only when you create the checkout:/,
+      /Preview a tier's authoritative fiat price without minting an\s*order\. The exact crypto amount and deposit address are returned\s*only when you create the checkout:/,
     );
     expect(body).not.toMatch(/pay range|once NowPayments is wired up/i);
   });
 
   it("Idempotency-Key pairing on createCheckout pinned: 'Always pair the call with an idempotencyKey so accidental double-submits don't mint duplicate orders' + 'On a duplicate key within the 24h window, the SDK returns the original order — same order_id, same created_at.' — pinned so the always-pair-with-key + 24h-window + same-order_id-same-created_at-on-replay commitment all survive (drift to dropping 24h window would create marketing↔server divergence with /docs/idempotency-keys)", () => {
     expect(body).toMatch(
-      /Always pair the call with an <code>idempotencyKey<\/code> so\s*\n?\s*accidental double-submits don't mint duplicate orders/,
+      /Always pair the call with an <code>idempotencyKey<\/code> so\s*accidental double-submits don't mint duplicate orders/,
     );
     expect(body).toMatch(
-      /On a duplicate key within the 24h window, the SDK returns the\s*\n?\s*original order — same <code>order_id<\/code>, same\s*\n?\s*<code>created_at<\/code>\./,
+      /On a duplicate key within the 24h window, the SDK returns the\s*original order — same <code>order_id<\/code>, same\s*<code>created_at<\/code>\./,
     );
   });
 
@@ -75,10 +75,10 @@ describe('W510.A apps/marketing-site/src/pages/docs/sdk-typescript-crypto-orders
 
   it("6-state status filter enum: pending + confirming + paid + failed + partial + cancelled + 'limit clamped to 1..=100; the default is 50.' — pinned so the 6-state enum (consistent with admin CSV + docs/crypto-orders-polling-vs-webhooks) + the limit-default-50-with-1-100-range survive (drift to dropping a state would orphan that status from filterable view; drift to a different limit default would create marketing↔SDK divergence)", () => {
     expect(body).toMatch(
-      /<code>status<\/code> accepts <code>pending<\/code>,\s*\n?\s*<code>confirming<\/code>, <code>paid<\/code>, <code>failed<\/code>,\s*\n?\s*<code>partial<\/code>, or <code>cancelled<\/code>\./,
+      /<code>status<\/code> accepts <code>pending<\/code>,\s*<code>confirming<\/code>, <code>paid<\/code>, <code>failed<\/code>,\s*<code>partial<\/code>, or <code>cancelled<\/code>\./,
     );
     expect(body).toMatch(
-      /<code>limit<\/code> is clamped to\s*\n?\s*<code>1\.\.=100<\/code>; the default is 50\./,
+      /<code>limit<\/code> is clamped to\s*<code>1\.\.=100<\/code>; the default is 50\./,
     );
   });
 
@@ -97,16 +97,16 @@ describe('W510.A apps/marketing-site/src/pages/docs/sdk-typescript-crypto-orders
 
   it("Crypto non-refundable framing pinned: 'Crypto payments are non-refundable. Cancelling a pending order halts its pay window; cancelling a paid order is not supported — past billing periods stay billed.' + /legal/refunds cross-reference — pinned so the non-refundable commitment + the pending-vs-paid cancel-semantics + the /legal/refunds anchor all survive (drift to dropping the legal cross-reference would orphan the SDK doc from the contractual posture)", () => {
     expect(body).toMatch(
-      /Crypto payments are non-refundable\. Cancelling a pending\s*\n?\s*order halts its pay window; cancelling a paid order is not\s*\n?\s*supported — past billing periods stay billed\. See\s*\n?\s*<a href="\/legal\/refunds\/">\/legal\/refunds<\/a>\./,
+      /Crypto payments are non-refundable\. Cancelling a pending\s*order halts its pay window; cancelling a paid order is not\s*supported — past billing periods stay billed\. See\s*<a href="\/legal\/refunds\/">\/legal\/refunds<\/a>\./,
     );
   });
 
   it("crypto.order.* now-subscribable + verifyWebhookSignature for every live event type pinned: 'crypto.order.paid / crypto.order.failed events are emitted server-side and are now subscribable' + 'The SDK ships verifyWebhookSignature for every live event type, including the now-live crypto.order.* events alongside the session + quota + api-key + egress-capability event domains.' — pinned so the now-subscribable framing + the verifyWebhookSignature-every-domain commitment survive (drift to dropping any live-domain would let customers miss a webhook event family)", () => {
     expect(body).toMatch(
-      /<code>crypto\.order\.paid<\/code> \/ <code>crypto\.order\.failed<\/code>\s*\n?\s*events are emitted server-side and are now subscribable/,
+      /<code>crypto\.order\.paid<\/code> \/ <code>crypto\.order\.failed<\/code>\s*events are emitted server-side and are now subscribable/,
     );
     expect(body).toMatch(
-      /<code>verifyWebhookSignature<\/code> for every live event type,\s*\n?\s*including the now-live crypto\.order\.\* events alongside the\s*\n?\s*session \+ quota \+ api-key \+ egress-capability event domains\./,
+      /<code>verifyWebhookSignature<\/code> for every live event type,\s*including the now-live crypto\.order\.\* events alongside the\s*session \+ quota \+ api-key \+ egress-capability event domains\./,
     );
   });
 

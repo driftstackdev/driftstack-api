@@ -175,7 +175,7 @@ describe('W1049 routes/admin V-326e6 + V-330e cross-source invariant', () => {
   it('CRITICAL POST /v1/api-keys 201 envelope — publicApiKey + plaintext field. The plaintext is shown once at creation; the row never carries it.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin.ts'));
     expect(p).toMatch(
-      /return reply\.code\(201\)\.send\(\{\s*\n?\s*\.\.\.publicApiKey\(created\.row\),\s*\n?\s*plaintext: created\.plaintext,/,
+      /return reply\.code\(201\)\.send\(\{\s*\.\.\.publicApiKey\(created\.row\),\s*plaintext: created\.plaintext,/,
     );
   });
 

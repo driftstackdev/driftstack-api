@@ -48,7 +48,7 @@ describe('W419.A apps/server/src/routes/admin-webhooks.ts content parity', () =>
     ];
     expect(registrations.length, 'routes registered in admin-webhooks.ts').toBe(5);
     expect(body).toMatch(
-      /Admin-only webhook ops routes — replay, requeue, get-by-id, DLQ list\.\s*\n?\s*\/\/\s*All require admin scope\. Each mutating endpoint records an audit row\s*\n?\s*\/\/\s*before returning \(D-025 audit-write-before-response contract\)\./,
+      /Admin-only webhook ops routes — replay, requeue, get-by-id, DLQ list\.\s*\/\/\s*All require admin scope\. Each mutating endpoint records an audit row\s*\/\/\s*before returning \(D-025 audit-write-before-response contract\)\./,
     );
   });
 
@@ -78,10 +78,10 @@ describe('W419.A apps/server/src/routes/admin-webhooks.ts content parity', () =>
 
   it('withAudit framing pinned: targetResourceId is PUBLIC-prefixed id (audit captures what admin sees, not raw uuid); dual-write success + error with err.name lowercase /error$/ strip', () => {
     expect(body).toMatch(
-      /\/\/ Wrap a mutation in audit-on-success \/ audit-on-error\. The\s*\n?\s*\/\/ targetResourceId is the public-prefixed delivery id \(the audit row\s*\n?\s*\/\/ captures what the admin sees, not the raw uuid\)\./,
+      /\/\/ Wrap a mutation in audit-on-success \/ audit-on-error\. The\s*\/\/ targetResourceId is the public-prefixed delivery id \(the audit row\s*\/\/ captures what the admin sees, not the raw uuid\)\./,
     );
     expect(body).toMatch(
-      /const code =\s*\n?\s*err instanceof Error && err\.name \? err\.name\.toLowerCase\(\)\.replace\(\/error\$\/, ''\) : 'unknown';/,
+      /const code =\s*err instanceof Error && err\.name \? err\.name\.toLowerCase\(\)\.replace\(\/error\$\/, ''\) : 'unknown';/,
     );
     expect(body).toMatch(/result: 'success',/);
     expect(body).toMatch(/result: `error: \$\{code\}`,/);
@@ -96,16 +96,16 @@ describe('W419.A apps/server/src/routes/admin-webhooks.ts content parity', () =>
 
   it('GET delivery-by-id: typed Params + uuidFromPrefixedId(id, "wdl"); webhooksAdmin.getDelivery; returns publicDelivery(row)', () => {
     expect(body).toMatch(
-      /app\.get<\{ Params: \{ id: string \} \}>\(\s*\n?\s*'\/v1\/admin\/webhook-deliveries\/:id',[\s\S]+?const id = uuidFromPrefixedId\(request\.params\.id, 'wdl'\);\s*\n?\s*const row = await webhooksAdmin\.getDelivery\(ctx, id\);\s*\n?\s*return publicDelivery\(row\);/,
+      /app\.get<\{ Params: \{ id: string \} \}>\(\s*'\/v1\/admin\/webhook-deliveries\/:id',[\s\S]+?const id = uuidFromPrefixedId\(request\.params\.id, 'wdl'\);\s*const row = await webhooksAdmin\.getDelivery\(ctx, id\);\s*return publicDelivery\(row\);/,
     );
   });
 
   it("POST replay: action='webhook_delivery.replayed'; targetResourceId is request.params.id (prefixed); empty inputPayload {}; webhooksAdmin.replayDelivery", () => {
     expect(body).toMatch(
-      /app\.post<\{ Params: \{ id: string \} \}>\(\s*\n?\s*'\/v1\/admin\/webhook-deliveries\/:id\/replay',/,
+      /app\.post<\{ Params: \{ id: string \} \}>\(\s*'\/v1\/admin\/webhook-deliveries\/:id\/replay',/,
     );
     expect(body).toMatch(
-      /const updated = await withAudit\(\s*\n?\s*request,\s*\n?\s*'webhook_delivery\.replayed',\s*\n?\s*request\.params\.id,\s*\n?\s*\{\},\s*\n?\s*\(\) => webhooksAdmin\.replayDelivery\(ctx, id\),\s*\n?\s*\);/,
+      /const updated = await withAudit\(\s*request,\s*'webhook_delivery\.replayed',\s*request\.params\.id,\s*\{\},\s*\(\) => webhooksAdmin\.replayDelivery\(ctx, id\),\s*\);/,
     );
   });
 
@@ -115,40 +115,40 @@ describe('W419.A apps/server/src/routes/admin-webhooks.ts content parity', () =>
   // public form is one of two it accepts.
   it('V-512 endpoint_id filter: accepts `webhook_endpoint_<uuid>` or a bare uuid and refuses anything else, passing the bare uuid to the repo (admin GUI drill-down compatibility)', () => {
     expect(body).toMatch(
-      /const ENDPOINT_FILTER_RE =\s*\n?\s*\/\^\(\?:webhook_endpoint_\)\?\(\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{12\}\)\$\/i;/,
+      /const ENDPOINT_FILTER_RE =\s*\/\^\(\?:webhook_endpoint_\)\?\(\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{12\}\)\$\/i;/,
     );
     expect(body).toMatch(
-      /throw new BadRequestError\(\s*\n?\s*'Invalid endpoint_id\. Expected "webhook_endpoint_<uuid>" or a bare UUID\.',\s*\n?\s*\);/,
+      /throw new BadRequestError\(\s*'Invalid endpoint_id\. Expected "webhook_endpoint_<uuid>" or a bare UUID\.',\s*\);/,
     );
     expect(body).toMatch(
-      /const endpointId =\s*\n?\s*endpointIdRaw !== undefined \? endpointUuidFromFilter\(endpointIdRaw\) : undefined;/,
+      /const endpointId =\s*endpointIdRaw !== undefined \? endpointUuidFromFilter\(endpointIdRaw\) : undefined;/,
     );
   });
 
   it('GET DLQ list: ListDlqQuerySchema.parse + spread-conditional cursor + endpointId; reply { data: page.items.map(publicDelivery), next_cursor }', () => {
     expect(body).toMatch(
-      /const rawQuery = \(request\.query \?\? \{\}\) as ListDlqQueryInput;\s*\n?\s*const query = ListDlqQuerySchema\.parse\(rawQuery\);/,
+      /const rawQuery = \(request\.query \?\? \{\}\) as ListDlqQueryInput;\s*const query = ListDlqQuerySchema\.parse\(rawQuery\);/,
     );
     expect(body).toMatch(
-      /const page = await webhooksAdmin\.listDlq\(ctx, \{\s*\n?\s*limit: query\.limit,\s*\n?\s*\.\.\.\(query\.cursor !== undefined \? \{ cursor: query\.cursor \} : \{\}\),\s*\n?\s*\.\.\.\(endpointId !== undefined \? \{ endpointId \} : \{\}\),\s*\n?\s*\}\);/,
+      /const page = await webhooksAdmin\.listDlq\(ctx, \{\s*limit: query\.limit,\s*\.\.\.\(query\.cursor !== undefined \? \{ cursor: query\.cursor \} : \{\}\),\s*\.\.\.\(endpointId !== undefined \? \{ endpointId \} : \{\}\),\s*\}\);/,
     );
     expect(body).toMatch(
-      /return \{\s*\n?\s*data: page\.items\.map\(publicDelivery\),\s*\n?\s*next_cursor: page\.nextCursor,\s*\n?\s*\};/,
+      /return \{\s*data: page\.items\.map\(publicDelivery\),\s*next_cursor: page\.nextCursor,\s*\};/,
     );
   });
 
   it("POST DLQ requeue: action='webhook_delivery.requeued'; webhooksAdmin.requeueFromDlq", () => {
     expect(body).toMatch(
-      /app\.post<\{ Params: \{ id: string \} \}>\(\s*\n?\s*'\/v1\/admin\/webhook-dlq\/:id\/requeue',/,
+      /app\.post<\{ Params: \{ id: string \} \}>\(\s*'\/v1\/admin\/webhook-dlq\/:id\/requeue',/,
     );
     expect(body).toMatch(
-      /const updated = await withAudit\(\s*\n?\s*request,\s*\n?\s*'webhook_delivery\.requeued',\s*\n?\s*request\.params\.id,\s*\n?\s*\{\},\s*\n?\s*\(\) => webhooksAdmin\.requeueFromDlq\(ctx, id\),\s*\n?\s*\);/,
+      /const updated = await withAudit\(\s*request,\s*'webhook_delivery\.requeued',\s*request\.params\.id,\s*\{\},\s*\(\) => webhooksAdmin\.requeueFromDlq\(ctx, id\),\s*\);/,
     );
   });
 
   it('AdminWebhooksRoutesOptions: webhooksAdmin (WebhooksAdminService) + audit (AdminAuditService)', () => {
     expect(body).toMatch(
-      /export interface AdminWebhooksRoutesOptions \{\s*\n?\s*webhooksAdmin: WebhooksAdminService;\s*\n?\s*audit: AdminAuditService;\s*\n?\s*\}/,
+      /export interface AdminWebhooksRoutesOptions \{\s*webhooksAdmin: WebhooksAdminService;\s*audit: AdminAuditService;\s*\}/,
     );
   });
 
@@ -158,7 +158,7 @@ describe('W419.A apps/server/src/routes/admin-webhooks.ts content parity', () =>
       /import \{ ListDlqQuerySchema, type ListDlqQueryInput \} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(
-      /import type \{\s*\n?\s*WebhookDeliveryRow,\s*\n?\s*WebhookEventType,\s*\n?\s*WebhookDeliveryStatus,\s*\n?\s*WebhooksAdminService,\s*\n?\s*\} from '\.\.\/services\/webhooks\.js';/,
+      /import type \{\s*WebhookDeliveryRow,\s*WebhookEventType,\s*WebhookDeliveryStatus,\s*WebhooksAdminService,\s*\} from '\.\.\/services\/webhooks\.js';/,
     );
     expect(body).toMatch(
       /import type \{ AdminAuditAction, AdminAuditService \} from '\.\.\/services\/admin-audit\.js';/,

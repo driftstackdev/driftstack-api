@@ -44,10 +44,10 @@ describe('W437.C apps/server/src/routes/team.ts content parity', () => {
     expect(body).toMatch(
       // Team directory reads require broad read; membership mutations remain
       // account-control operations. Each query is still scoped to ctx.account.id.
-      /\/\/\s*POST\s+\/v1\/team\/invites\s+— owner invites email \(account_owner\)\s*\n?\s*\/\/\s*GET\s+\/v1\/team\/invites\s+— list pending \(read; owner-scoped by query\)\s*\n?\s*\/\/\s*POST\s+\/v1\/team\/invites\/accept\s+— invitee accepts \(account_owner\)\s*\n?\s*\/\/\s*GET\s+\/v1\/team\/members\s+— list confirmed \(read; owner-scoped by query\)\s*\n?\s*\/\/\s*GET\s+\/v1\/team\/owners\s+— list teams caller joined \(read\)\s*\n?\s*\/\/\s*DELETE \/v1\/team\/members\/:id\s+— remove member \(account_owner\)/,
+      /\/\/\s*POST\s+\/v1\/team\/invites\s+— owner invites email \(account_owner\)\s*\/\/\s*GET\s+\/v1\/team\/invites\s+— list pending \(read; owner-scoped by query\)\s*\/\/\s*POST\s+\/v1\/team\/invites\/accept\s+— invitee accepts \(account_owner\)\s*\/\/\s*GET\s+\/v1\/team\/members\s+— list confirmed \(read; owner-scoped by query\)\s*\/\/\s*GET\s+\/v1\/team\/owners\s+— list teams caller joined \(read\)\s*\/\/\s*DELETE \/v1\/team\/members\/:id\s+— remove member \(account_owner\)/,
     );
     expect(body).toMatch(
-      /V-298c registered these routes; the auth-path integration it left for\s*\n?\s*\/\/ a later slice is now LIVE\./,
+      /V-298c registered these routes; the auth-path integration it left for\s*\/\/ a later slice is now LIVE\./,
     );
     // The retracted claims, paraphrased in the negative. The stronger one — that
     // membership grants no permissions at all — was false: an admin member acts on
@@ -76,10 +76,10 @@ describe('W437.C apps/server/src/routes/team.ts content parity', () => {
 
   it('InviteBody: email trim + email() + .max(254) + role enum (member|admin) optional; AcceptBody: token min 20', () => {
     expect(body).toMatch(
-      /const InviteBodySchema = z\.object\(\{\s*\n?\s*email: z\.string\(\)\.trim\(\)\.email\('Must be a valid email\.'\)\.max\(254\),\s*\n?\s*role: z\.enum\(\['member', 'admin'\]\)\.optional\(\),\s*\n?\s*\}\);/,
+      /const InviteBodySchema = z\.object\(\{\s*email: z\.string\(\)\.trim\(\)\.email\('Must be a valid email\.'\)\.max\(254\),\s*role: z\.enum\(\['member', 'admin'\]\)\.optional\(\),\s*\}\);/,
     );
     expect(body).toMatch(
-      /const AcceptBodySchema = z\.object\(\{\s*\n?\s*token: z\.string\(\)\.min\(20, 'Missing or malformed token\.'\),\s*\n?\s*\}\);/,
+      /const AcceptBodySchema = z\.object\(\{\s*token: z\.string\(\)\.min\(20, 'Missing or malformed token\.'\),\s*\}\);/,
     );
   });
 
@@ -88,52 +88,52 @@ describe('W437.C apps/server/src/routes/team.ts content parity', () => {
       /const MEMBER_ID_RE = \/\^mem_\(\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{12\}\)\$\/;/,
     );
     expect(body).toMatch(
-      /function uuidFromMemberId\(value: string\): string \{\s*\n?\s*const match = MEMBER_ID_RE\.exec\(value\);\s*\n?\s*if \(!match \|\| !match\[1\]\) \{\s*\n?\s*throw new ValidationError\(\{\s*\n?\s*formErrors: \['Invalid id format\. Expected "mem_<uuid>"\.'\],\s*\n?\s*fieldErrors: \{\},\s*\n?\s*\}\);\s*\n?\s*\}\s*\n?\s*return match\[1\];\s*\n?\s*\}/,
+      /function uuidFromMemberId\(value: string\): string \{\s*const match = MEMBER_ID_RE\.exec\(value\);\s*if \(!match \|\| !match\[1\]\) \{\s*throw new ValidationError\(\{\s*formErrors: \['Invalid id format\. Expected "mem_<uuid>"\.'\],\s*fieldErrors: \{\},\s*\}\);\s*\}\s*return match\[1\];\s*\}/,
     );
   });
 
   it('publicMember mapper (9 fields wire: id mem_ + owner_account_id acc_ + member_account_id acc_ + member_email + role + invited_at + accepted_at + invited_by_account_id acc_ nullable)', () => {
     expect(body).toMatch(
-      /function publicMember\(row: TeamMemberRow\): Record<string, unknown> \{\s*\n?\s*return \{\s*\n?\s*id: `mem_\$\{row\.id\}`,\s*\n?\s*owner_account_id: `acc_\$\{row\.ownerAccountId\}`,\s*\n?\s*member_account_id: `acc_\$\{row\.memberAccountId\}`,\s*\n?\s*member_email: row\.memberEmail,\s*\n?\s*role: row\.role,\s*\n?\s*invited_at: row\.invitedAt\.toISOString\(\),\s*\n?\s*accepted_at: row\.acceptedAt\.toISOString\(\),\s*\n?\s*invited_by_account_id: row\.invitedByAccountId \? `acc_\$\{row\.invitedByAccountId\}` : null,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function publicMember\(row: TeamMemberRow\): Record<string, unknown> \{\s*return \{\s*id: `mem_\$\{row\.id\}`,\s*owner_account_id: `acc_\$\{row\.ownerAccountId\}`,\s*member_account_id: `acc_\$\{row\.memberAccountId\}`,\s*member_email: row\.memberEmail,\s*role: row\.role,\s*invited_at: row\.invitedAt\.toISOString\(\),\s*accepted_at: row\.acceptedAt\.toISOString\(\),\s*invited_by_account_id: row\.invitedByAccountId \? `acc_\$\{row\.invitedByAccountId\}` : null,\s*\};\s*\}/,
     );
   });
 
   it('publicInvite mapper (8 fields wire: id inv_ + owner_account_id acc_ + invitee_email + role + expires_at + invited_by_account_id acc_ nullable + accepted_at nullable + created_at)', () => {
     expect(body).toMatch(
-      /function publicInvite\(row: TeamInviteRow\): Record<string, unknown> \{\s*\n?\s*return \{\s*\n?\s*id: `inv_\$\{row\.id\}`,\s*\n?\s*owner_account_id: `acc_\$\{row\.ownerAccountId\}`,\s*\n?\s*invitee_email: row\.inviteeEmail,\s*\n?\s*role: row\.role,\s*\n?\s*expires_at: row\.inviteExpiresAt\.toISOString\(\),\s*\n?\s*invited_by_account_id: row\.invitedByAccountId \? `acc_\$\{row\.invitedByAccountId\}` : null,\s*\n?\s*accepted_at: row\.acceptedAt \? row\.acceptedAt\.toISOString\(\) : null,\s*\n?\s*created_at: row\.createdAt\.toISOString\(\),\s*\n?\s*\};\s*\n?\s*\}/,
+      /function publicInvite\(row: TeamInviteRow\): Record<string, unknown> \{\s*return \{\s*id: `inv_\$\{row\.id\}`,\s*owner_account_id: `acc_\$\{row\.ownerAccountId\}`,\s*invitee_email: row\.inviteeEmail,\s*role: row\.role,\s*expires_at: row\.inviteExpiresAt\.toISOString\(\),\s*invited_by_account_id: row\.invitedByAccountId \? `acc_\$\{row\.invitedByAccountId\}` : null,\s*accepted_at: row\.acceptedAt \? row\.acceptedAt\.toISOString\(\) : null,\s*created_at: row\.createdAt\.toISOString\(\),\s*\};\s*\}/,
     );
   });
 
   it('POST /v1/team/invites: invite request body (email + optional role) + service.invite + 202 with "Invite sent. The invitee can accept via the email link." message', () => {
     expect(body).toMatch(
-      /await service\.invite\(\{\s*\n?\s*ownerAccountId: ctx\.account\.id,\s*\n?\s*invitedByAccountId: ctx\.account\.id,\s*\n?\s*inviteeEmail: parsed\.data\.email,\s*\n?\s*\.\.\.\(parsed\.data\.role !== undefined \? \{ role: parsed\.data\.role \} : \{\}\),\s*\n?\s*\}\);\s*\n?\s*return reply\s*\n?\s*\.code\(202\)\s*\n?\s*\.send\(\{ message: 'Invite sent\. The invitee can accept via the email link\.' \}\);/,
+      /await service\.invite\(\{\s*ownerAccountId: ctx\.account\.id,\s*invitedByAccountId: ctx\.account\.id,\s*inviteeEmail: parsed\.data\.email,\s*\.\.\.\(parsed\.data\.role !== undefined \? \{ role: parsed\.data\.role \} : \{\}\),\s*\}\);\s*return reply\s*\.code\(202\)\s*\.send\(\{ message: 'Invite sent\. The invitee can accept via the email link\.' \}\);/,
     );
   });
 
   it('GET /v1/team/invites: listPendingInvites(ownerAccountId) → data array of publicInvite', () => {
     expect(body).toMatch(
-      /const rows = await service\.listPendingInvites\(ctx\.account\.id\);\s*\n?\s*return \{ data: rows\.map\(publicInvite\) \};/,
+      /const rows = await service\.listPendingInvites\(ctx\.account\.id\);\s*return \{ data: rows\.map\(publicInvite\) \};/,
     );
   });
 
   it('POST /v1/team/invites/accept: AcceptBodySchema parse + service.accept({plaintextToken, acceptingAccountId}) → 200 with membership: publicMember', () => {
     expect(body).toMatch(
-      /const result = await service\.accept\(\{\s*\n?\s*plaintextToken: parsed\.data\.token,\s*\n?\s*acceptingAccountId: ctx\.account\.id,\s*\n?\s*\}\);\s*\n?\s*return reply\.code\(200\)\.send\(\{ membership: publicMember\(result\.membership\) \}\);/,
+      /const result = await service\.accept\(\{\s*plaintextToken: parsed\.data\.token,\s*acceptingAccountId: ctx\.account\.id,\s*\}\);\s*return reply\.code\(200\)\.send\(\{ membership: publicMember\(result\.membership\) \}\);/,
     );
   });
 
   it('GET /v1/team/members: listMembers(ownerAccountId) → data array of publicMember', () => {
     expect(body).toMatch(
-      /const rows = await service\.listMembers\(ctx\.account\.id\);\s*\n?\s*return \{ data: rows\.map\(publicMember\) \};/,
+      /const rows = await service\.listMembers\(ctx\.account\.id\);\s*return \{ data: rows\.map\(publicMember\) \};/,
     );
   });
 
   it('V-326c GET /v1/team/owners framing pinned: list owner accounts caller is a member of; read straight from ctx.teams (already loaded on auth-cache miss); no DB call; mirror of GET /v1/team/members ("MY members") — this is "teams I am ON"', () => {
     expect(body).toMatch(
-      /\/\/ V-326c — list owner accounts the caller is a member of\. Read\s*\n?\s*\/\/ straight from ctx\.teams \(already loaded on auth-cache miss\); no\s*\n?\s*\/\/ DB call\. The mirror of GET \/v1\/team\/members \(which lists "MY\s*\n?\s*\/\/ members"\); this is "teams I am ON"\./,
+      /\/\/ V-326c — list owner accounts the caller is a member of\. Read\s*\/\/ straight from ctx\.teams \(already loaded on auth-cache miss\); no\s*\/\/ DB call\. The mirror of GET \/v1\/team\/members \(which lists "MY\s*\/\/ members"\); this is "teams I am ON"\./,
     );
     expect(body).toMatch(
-      /return \{\s*\n?\s*data: ctx\.teams\.map\(\(t\) => \(\{\s*\n?\s*owner_account_id: `acc_\$\{t\.ownerAccountId\}`,\s*\n?\s*owner_email: t\.ownerEmail \?\? `acc_\$\{t\.ownerAccountId\}`,\s*\n?\s*owner_name: t\.ownerName \?\? null,\s*\n?\s*role: t\.role,\s*\n?\s*membership_id: `mem_\$\{t\.membershipId\}`,\s*\n?\s*\}\)\),\s*\n?\s*\};/,
+      /return \{\s*data: ctx\.teams\.map\(\(t\) => \(\{\s*owner_account_id: `acc_\$\{t\.ownerAccountId\}`,\s*owner_email: t\.ownerEmail \?\? `acc_\$\{t\.ownerAccountId\}`,\s*owner_name: t\.ownerName \?\? null,\s*role: t\.role,\s*membership_id: `mem_\$\{t\.membershipId\}`,\s*\}\)\),\s*\};/,
     );
   });
 

@@ -203,7 +203,7 @@ describe('W950 api-keys service V-174 + V-296 cross-source invariant', () => {
       /import \{ BadRequestError, ForbiddenError, LegalAcceptanceRequiredError \} from '\.\.\/lib\/errors\.js';/,
     );
     expect(p).toMatch(
-      /import \{\s*\n?\s*NotFoundError,\s*\n?\s*hasScope,\s*\n?\s*requireScope as throwIfMissingScope,\s*\n?\s*requireTierFeature,\s*\n?\s*\} from '\.\.\/lib\/errors-helpers\.js';/,
+      /import \{\s*NotFoundError,\s*hasScope,\s*requireScope as throwIfMissingScope,\s*requireTierFeature,\s*\} from '\.\.\/lib\/errors-helpers\.js';/,
     );
   });
 

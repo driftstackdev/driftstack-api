@@ -111,7 +111,7 @@ describe('W990 production entry V-117 + V-167 cross-source invariant', () => {
   it('CRITICAL shutdown 3-step — app.close() (RACED against a CLOSE_DEADLINE_MS timeout) → teardown() → process.exit(0). The 3-step graceful-drain matches the V-167 lifecycle order; the timeout race keeps an active SSE stream from hanging the close past the systemd stop window while still guaranteeing teardown runs.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/index.ts'));
     expect(p).toMatch(/const shutdown = shareFirstAsyncCall\(async \(signal: string\)/);
-    expect(p).toMatch(/await Promise\.race\(\[\s*\n?\s*app\.close\(\),/);
+    expect(p).toMatch(/await Promise\.race\(\[\s*app\.close\(\),/);
     expect(p).toMatch(/const CLOSE_DEADLINE_MS = 10_000;/);
     expect(p).toMatch(/await teardown\(\);/);
     expect(p).toMatch(/process\.exit\(0\);/);

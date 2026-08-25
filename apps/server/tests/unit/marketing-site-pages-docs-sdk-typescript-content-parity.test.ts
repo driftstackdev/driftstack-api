@@ -43,10 +43,10 @@ describe('W512.B apps/marketing-site/src/pages/docs/sdk-typescript.astro content
 
   it("V-703 + V-680 framing pinned: 'TypeScript SDK quickstart. Companion to the curl quickstart. Pitched at teams that already have a Node/Bun/Deno service and want a typed surface instead of hand-rolling fetch calls. Posture matches V-680: code samples runnable verbatim once a key is in hand.' — pinned so the V-703 + V-680 anchors + real curl companion + verbatim-runnable posture all survive without advertising an unpublished CLI", () => {
     expect(body).toMatch(
-      /\/\/ V-703 — TypeScript SDK quickstart\. Companion to https:\/\/docs\.driftstack\.dev\/quickstart-curl\/\s*\n?\s*\/\/ \(raw HTTP \/ curl\)\. Pitched at teams that already have a Node\/Bun\/Deno service/,
+      /\/\/ V-703 — TypeScript SDK quickstart\. Companion to https:\/\/docs\.driftstack\.dev\/quickstart-curl\/\s*\/\/ \(raw HTTP \/ curl\)\. Pitched at teams that already have a Node\/Bun\/Deno service/,
     );
     expect(body).toMatch(
-      /\/\/ and want a typed surface instead of hand-rolling fetch calls\. Posture matches V-680: code\s*\n?\s*\/\/ samples runnable verbatim once a key is in hand\./,
+      /\/\/ and want a typed surface instead of hand-rolling fetch calls\. Posture matches V-680: code\s*\/\/ samples runnable verbatim once a key is in hand\./,
     );
     expect(body).not.toContain('/docs/cli-quickstart');
   });
@@ -60,7 +60,7 @@ describe('W512.B apps/marketing-site/src/pages/docs/sdk-typescript.astro content
 
   it('Node ≥ 18 + dual-publish commitment is pinned without unsupported runtime claims', () => {
     expect(body).toMatch(
-      /Node ≥ 18 is supported\. The package is dual-published \(ESM \+ CommonJS via conditional\s*\n?\s*<code>exports<\/code>\); both <code>import<\/code> and\s*\n?\s*<code>require\('@driftstack\/sdk'\)<\/code> work out of the box\./,
+      /Node ≥ 18 is supported\. The package is dual-published \(ESM \+ CommonJS via conditional\s*<code>exports<\/code>\); both <code>import<\/code> and\s*<code>require\('@driftstack\/sdk'\)<\/code> work out of the box\./,
     );
     // The stale ESM-only / dynamic-import-required framing must NOT return.
     expect(body).not.toMatch(/ships ESM-only/);
@@ -72,25 +72,25 @@ describe('W512.B apps/marketing-site/src/pages/docs/sdk-typescript.astro content
     expect(body).toMatch(/apiKey: process\.env\.DRIFTSTACK_API_KEY!/);
     expect(body).toMatch(/\/\/ baseUrl defaults to https:\/\/api\.driftstack\.dev/);
     expect(body).toMatch(
-      /The constructor does not make any network calls\. Reuse one\s*\n?\s*client across your process — it is internally pooled and safe\s*\n?\s*for concurrent use\./,
+      /The constructor does not make any network calls\. Reuse one\s*client across your process — it is internally pooled and safe\s*for concurrent use\./,
     );
   });
 
   it("Session lifecycle states pinned: 'creating → ready → busy → destroyed / errored' — pinned so the 5-state session-lifecycle taxonomy stays consistent (drift to dropping 'errored' as a terminal state would leave customers unprepared for failures; drift to changing the order would create marketing↔state-machine divergence)", () => {
     expect(body).toMatch(
-      /TypeScript narrows <code>session\.status<\/code> through the\s*\n?\s*lifecycle \(<code>creating<\/code> → <code>ready<\/code> →\s*\n?\s*<code>busy<\/code> → <code>destroyed<\/code> \/\s*\n?\s*<code>errored<\/code>\)\./,
+      /TypeScript narrows <code>session\.status<\/code> through the\s*lifecycle \(<code>creating<\/code> → <code>ready<\/code> →\s*<code>busy<\/code> → <code>destroyed<\/code> \/\s*<code>errored<\/code>\)\./,
     );
   });
 
   it("sessions.create no-target-URL framing + sessions.navigate() separate-call pinned: 'The session creation call does NOT take a target URL — drive the session to a URL with client.sessions.navigate()' — pinned so the explicit-no-URL-on-create + navigate-separately commitment stays consistent with /docs/sdk-python (drift to claiming sessions.create takes a URL would create marketing↔OpenAPI divergence)", () => {
     expect(body).toMatch(
-      /The session creation call does NOT take\s*\n?\s*a target URL — drive the session to a URL with\s*\n?\s*<code>client\.sessions\.navigate\(\)<\/code>/,
+      /The session creation call does NOT take\s*a target URL — drive the session to a URL with\s*<code>client\.sessions\.navigate\(\)<\/code>/,
     );
   });
 
   it("5-method session-drive surface + 'no built-in waitUntil helper' + idempotent destroy pinned — pinned so the 5-method drive surface + no-magic-wait helper + idempotent-destroy all survive (drift to claiming a waitUntil() helper exists would mislead about the SDK surface; consistent with /docs/sdk-python)", () => {
     expect(body).toMatch(
-      /There is no built-in <code>waitUntil<\/code> helper — drive the\s*\n?\s*lifecycle with the methods that fit your workflow\s*\n?\s*\(<code>navigate<\/code>, <code>interact<\/code>,\s*\n?\s*<code>wait<\/code>, <code>capture<\/code>\)/,
+      /There is no built-in <code>waitUntil<\/code> helper — drive the\s*lifecycle with the methods that fit your workflow\s*\(<code>navigate<\/code>, <code>interact<\/code>,\s*<code>wait<\/code>, <code>capture<\/code>\)/,
     );
     expect(body).toMatch(/\/\/ Clean up — destroy is idempotent\./);
   });
@@ -100,13 +100,13 @@ describe('W512.B apps/marketing-site/src/pages/docs/sdk-typescript.astro content
       /for await \(const s of client\.sessions\.iterate\(\{ limit: 50 \}\)\) \{/,
     );
     expect(body).toMatch(
-      /<code>iterate<\/code> walks cursor pages transparently and\s*\n?\s*stops when the server returns\s*\n?\s*<code>next_cursor: null<\/code>\./,
+      /<code>iterate<\/code> walks cursor pages transparently and\s*stops when the server returns\s*<code>next_cursor: null<\/code>\./,
     );
   });
 
   it('DriftstackError kind discriminator + RFC 9457 fields are pinned', () => {
     expect(body).toMatch(
-      /The error carries <code>kind<\/code>\s*\n?\s*\(discriminator, narrow with <code>===<\/code>\),\s*\n?\s*<code>status<\/code>, <code>type<\/code> \(the RFC 9457 URI\),\s*\n?\s*<code>detail<\/code>, and any extension fields from the problem\s*\n?\s*response\./,
+      /The error carries <code>kind<\/code>\s*\(discriminator, narrow with <code>===<\/code>\),\s*<code>status<\/code>, <code>type<\/code> \(the RFC 9457 URI\),\s*<code>detail<\/code>, and any extension fields from the problem\s*response\./,
     );
     expect(body).toMatch(/err instanceof DriftstackError && err\.kind === 'validation'/);
     expect(body).toMatch(/err instanceof DriftstackError && err\.kind === 'rate_limited'/);

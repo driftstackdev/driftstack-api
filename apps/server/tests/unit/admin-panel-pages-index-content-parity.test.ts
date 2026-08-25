@@ -37,7 +37,7 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
       /\/\/ V-190 — progressive-enhancement against \/v1\/admin\/overview \+\s*\/\/ \/v1\/admin\/audit-log\?limit=5\. SSG renders an inert unavailable shell;\s*\/\/ an inline <script> fetches both endpoints and replaces the tile values\s*\/\/ \+ recent-activity list\.[\s\S]*?without presenting sample data as operational truth\./,
     );
     expect(body).toMatch(
-      /\/\/ 2026-06-03 — the 3rd health tile is now a REAL "Open incidents" count\s*\n?\s*\/\/ from \/v1\/admin\/incidents\?state=open&limit=1 \(SQL-before-limit \+ exact\s*\n?\s*\/\/ open_count\), replacing a prior mock tile so the grid carries no fabricated number\./,
+      /\/\/ 2026-06-03 — the 3rd health tile is now a REAL "Open incidents" count\s*\/\/ from \/v1\/admin\/incidents\?state=open&limit=1 \(SQL-before-limit \+ exact\s*\/\/ open_count\), replacing a prior mock tile so the grid carries no fabricated number\./,
     );
   });
 
@@ -76,21 +76,21 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
 
   it("D-025 audit-before-response framing pinned: 'All actions on this panel are audit-logged with admin id + target id + input payload + ip address. Audit trail is append-only and cannot be mutated by admins (D-025 audit-before-response contract).' — pinned so the audit-trail integrity guarantee survives (drift to a softer phrasing weakens the immutability contract that operators rely on for compliance review)", () => {
     expect(body).toMatch(
-      /All actions on this panel are audit-logged with admin id \+ target id \+\s*\n?\s*input payload \+ ip address\. Audit trail is append-only and cannot be\s*\n?\s*mutated by admins \(D-025 audit-before-response contract\)\./,
+      /All actions on this panel are audit-logged with admin id \+ target id \+\s*input payload \+ ip address\. Audit trail is append-only and cannot be\s*mutated by admins \(D-025 audit-before-response contract\)\./,
     );
   });
 
   it('Signed-out, forbidden, and failed overview states keep their distinct operator guidance', () => {
     expect(body).toMatch(/showBanner\('Sign in with a staff admin account to see live data\.'\);/);
     expect(body).toMatch(
-      /showBanner\(\s*\n?\s*'Access denied — admin scope required\. You are signed in as a customer account\.',\s*\n?\s*\);/,
+      /showBanner\(\s*'Access denied — admin scope required\. You are signed in as a customer account\.',\s*\);/,
     );
     expect(body).toMatch(/showBanner\("Couldn't load overview \(" \+ msg \+ '\)\.'\);/);
   });
 
   it("Token storage key 'ds_web_session_token' + authedFetch helper: apiBaseUrl + path + 'authorization: Bearer ' + credentials:'include' — pinned so the customer-dashboard ↔ admin-panel token-storage key stays in sync and the credentials-include flag carries the session cookie (required for V-269 dual-cookie session model on cross-origin admin requests)", () => {
     expect(body).toMatch(
-      /let token = '';\s*\n?\s*try \{\s*\n?\s*token = localStorage\.getItem\('ds_web_session_token'\) \|\| '';\s*\n?\s*\} catch \(_\) \{\s*\n?\s*token = '';/,
+      /let token = '';\s*try \{\s*token = localStorage\.getItem\('ds_web_session_token'\) \|\| '';\s*\} catch \(_\) \{\s*token = '';/,
     );
     // 2026-06-05: authedFetch gained an optional `init` (so the owner pricing
     // PATCH can issue a non-GET) — it still injects the bearer + credentials.
@@ -106,7 +106,7 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
     expect(body).toContain('data-live-status>Waiting for live data</span>');
     expect(body).toMatch(/data-live-age class="hidden"/);
     expect(body).toMatch(
-      /data-live-refresh\s*\n?\s*disabled\s*\n?\s*aria-disabled="true"\s*\n?\s*title="Available after staff sign-in\."/,
+      /data-live-refresh\s*disabled\s*aria-disabled="true"\s*title="Available after staff sign-in\."/,
     );
     expect(body).not.toMatch(/data-live-dot[\s\S]{0,120}bg-emerald-500/);
     expect(body).not.toContain('Live · updated <span data-live-age>just now</span>');
@@ -114,7 +114,7 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
 
   it('waits for AdminLayout SSO handoff before acquiring token authority or starting overview reads', () => {
     expect(body).toMatch(
-      /\(async function \(\) \{\s*\n?\s*if \(document\.readyState === 'loading'\) \{\s*\n?\s*await new Promise\(\(resolve\) => \{\s*\n?\s*document\.addEventListener\('DOMContentLoaded', resolve, \{ once: true \}\);/,
+      /\(async function \(\) \{\s*if \(document\.readyState === 'loading'\) \{\s*await new Promise\(\(resolve\) => \{\s*document\.addEventListener\('DOMContentLoaded', resolve, \{ once: true \}\);/,
     );
     expect(body.indexOf("localStorage.getItem('ds_web_session_token')")).toBeGreaterThan(
       body.indexOf("document.addEventListener('DOMContentLoaded', resolve"),
@@ -123,13 +123,13 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
 
   it('publishes activity freshness only after the audit read succeeds and visibly revokes it on failure', () => {
     expect(body).toMatch(
-      /function fetchAudit\(\) \{\s*\n?\s*setAuditLiveState\('loading', 'Loading live activity…'\);/,
+      /function fetchAudit\(\) \{\s*setAuditLiveState\('loading', 'Loading live activity…'\);/,
     );
     expect(body).toMatch(
-      /renderAudits\(body\.data \|\| \[\]\);\s*\n?\s*lastAuditFetch = Date\.now\(\);\s*\n?\s*setAuditLiveState\('success', 'Live'\);/,
+      /renderAudits\(body\.data \|\| \[\]\);\s*lastAuditFetch = Date\.now\(\);\s*setAuditLiveState\('success', 'Live'\);/,
     );
     expect(body).toMatch(
-      /\.catch\(\(err\) => \{\s*\n?\s*setAuditLiveState\('error', 'Live activity unavailable'\);\s*\n?\s*renderAuditsUnavailable\('Could not load recent admin activity\. Refresh to try again\.'\);/,
+      /\.catch\(\(err\) => \{\s*setAuditLiveState\('error', 'Live activity unavailable'\);\s*renderAuditsUnavailable\('Could not load recent admin activity\. Refresh to try again\.'\);/,
     );
     expect(body).toContain('let lastAuditFetch = null;');
   });
@@ -150,7 +150,7 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
   it("Audit-log render: per-entry timestamp via fmtIso to 'YYYY-MM-DD HH:MM:SS UTC' (slice(0, 19) — not 16 like the leads page, because audit-log needs second-level precision) + admin identity + arrow + entry.action code + entry.result success/error badge. V-1514 — the email-primary half is a PLACEHOLDER and this title used to describe it as a rendering. `publicEntry` in routes/admin-audit-log.ts projects no email of any kind, so `entry.admin_email` is undefined on every entry the route has ever sent and the `||` always falls through to the id. The pattern is real on the Accounts list, whose AdminAccount payload does carry `email` — it was copied to a surface whose endpoint does not enrich. The operand stays, deliberately, and the assertion below anchors WHY it is inert so the day the route starts enriching, this arm has to be revisited rather than quietly becoming true.", () => {
     expect(body).toMatch(/\.slice\(0, 19\) \+ ' UTC';/);
     expect(body).toMatch(
-      /entry\.result === 'success'\s*\n?\s*\? 'bg-emerald-50 text-emerald-700'\s*\n?\s*: 'bg-red-50 text-red-700';/,
+      /entry\.result === 'success'\s*\? 'bg-emerald-50 text-emerald-700'\s*: 'bg-red-50 text-red-700';/,
     );
     // Actor is email-primary with the admin_account_id UUID as the fallback.
     expect(body).toMatch(/escapeHtml\(entry\.admin_email \|\| entry\.admin_account_id\)/);

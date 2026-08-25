@@ -38,7 +38,7 @@ describe('W486.C-2 apps/gui-client/src/components/ProxyChip.tsx content parity',
     expect(body).toMatch(/<DetailRow label="Host" value=\{proxy\.host\} mono \/>/);
     expect(body).toMatch(/<DetailRow label="Port" value=\{String\(proxy\.port\)\} mono \/>/);
     expect(body).toMatch(/<DetailRow label="Auth" value=\{auth \? 'yes' : 'no'\} \/>/);
-    expect(body).toMatch(/<DetailRow\s*\n?\s*label="Added"/);
+    expect(body).toMatch(/<DetailRow\s*label="Added"/);
   });
 
   it("'no proxy' affordance when proxy is null — pinned so a row without a binding doesn't render a blank chip (the customer would assume the field was elided rather than uninitialized)", () => {

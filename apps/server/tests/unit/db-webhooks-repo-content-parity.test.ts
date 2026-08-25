@@ -83,7 +83,7 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
       expect(body).toMatch(new RegExp(`\\b${token}\\b`));
     }
     expect(body).toMatch(
-      /import type \{\s*\n?\s*EndpointDeliveryCounts,\s*\n?\s*ListDeliveriesPage,\s*\n?\s*NewWebhookDeliveryInput,\s*\n?\s*NewWebhookEndpointInput,\s*\n?\s*WebhookDeliveryRow,\s*\n?\s*WebhookDeliveryStatus,\s*\n?\s*WebhookEndpointRow,\s*\n?\s*WebhookEventType,\s*\n?\s*WebhooksRepo,\s*\n?\s*\} from '\.\.\/services\/webhooks\.js';/,
+      /import type \{\s*EndpointDeliveryCounts,\s*ListDeliveriesPage,\s*NewWebhookDeliveryInput,\s*NewWebhookEndpointInput,\s*WebhookDeliveryRow,\s*WebhookDeliveryStatus,\s*WebhookEndpointRow,\s*WebhookEventType,\s*WebhooksRepo,\s*\} from '\.\.\/services\/webhooks\.js';/,
     );
     expect(body).toMatch(
       /import \{ accounts, webhookDeliveries, webhookEndpoints \} from '\.\/schema\.js';/,
@@ -93,40 +93,40 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
   it("insertEndpoint preallocates the final UUID and encrypts under its account+endpoint tuple; throws 'insertEndpoint returned no row'", () => {
     expect(body).toMatch(/const endpointId = randomUUID\(\);/);
     expect(body).toMatch(
-      /\.values\(\{\s*\n?\s*id: endpointId,\s*\n?\s*accountId: input\.accountId,[\s\S]*?secret: this\.encryptForStorage\(input\.secret, \{\s*\n?\s*accountId: input\.accountId,\s*\n?\s*endpointId,\s*\n?\s*\}\),[\s\S]*?description: input\.description,\s*\n?\s*\}\)\s*\n?\s*\.returning\(\);/,
+      /\.values\(\{\s*id: endpointId,\s*accountId: input\.accountId,[\s\S]*?secret: this\.encryptForStorage\(input\.secret, \{\s*accountId: input\.accountId,\s*endpointId,\s*\}\),[\s\S]*?description: input\.description,\s*\}\)\s*\.returning\(\);/,
     );
     expect(body).toMatch(/if \(!row\) throw new Error\('insertEndpoint returned no row'\);/);
   });
 
   it("deliveryCountsByEndpoint framing pinned: 'GROUP BY endpoint_id + status — one row per (endpoint, status) tuple. Only counts statuses we care about for the dashboard surface; pending / in_flight aren't aggregated here.' + delivered/failed/dlq aggregation", () => {
     expect(body).toMatch(
-      /\/\/ GROUP BY endpoint_id \+ status — one row per \(endpoint, status\)\s*\n?\s*\/\/ tuple\. Only counts statuses we care about for the dashboard\s*\n?\s*\/\/ surface; pending \/ in_flight aren't aggregated here\./,
+      /\/\/ GROUP BY endpoint_id \+ status — one row per \(endpoint, status\)\s*\/\/ tuple\. Only counts statuses we care about for the dashboard\s*\/\/ surface; pending \/ in_flight aren't aggregated here\./,
     );
     expect(body).toMatch(/\.groupBy\(webhookDeliveries\.webhookId, webhookDeliveries\.status\);/);
     expect(body).toMatch(
-      /if \(r\.status === 'delivered'\) existing\.delivered = r\.cnt;\s*\n?\s*else if \(r\.status === 'failed'\) existing\.failed = r\.cnt;\s*\n?\s*else if \(r\.status === 'dlq'\) existing\.dlq = r\.cnt;/,
+      /if \(r\.status === 'delivered'\) existing\.delivered = r\.cnt;\s*else if \(r\.status === 'failed'\) existing\.failed = r\.cnt;\s*else if \(r\.status === 'dlq'\) existing\.dlq = r\.cnt;/,
     );
   });
 
   it('countActiveEndpoints: count(*)::int where and(accountId, active=true); disableEndpoint: 3-field set (active:false + disabledAt + updatedAt:new Date())', () => {
     expect(body).toMatch(
-      /\.select\(\{ count: sql<number>`count\(\*\)::int` \}\)\s*\n?\s*\.from\(webhookEndpoints\)\s*\n?\s*\.where\(and\(eq\(webhookEndpoints\.accountId, accountId\), eq\(webhookEndpoints\.active, true\)\)\);/,
+      /\.select\(\{ count: sql<number>`count\(\*\)::int` \}\)\s*\.from\(webhookEndpoints\)\s*\.where\(and\(eq\(webhookEndpoints\.accountId, accountId\), eq\(webhookEndpoints\.active, true\)\)\);/,
     );
     expect(body).toMatch(
-      /async disableEndpoint\(id: string, at: Date\): Promise<void> \{\s*\n?\s*await this\.database\.db\s*\n?\s*\.update\(webhookEndpoints\)\s*\n?\s*\.set\(\{ active: false, disabledAt: at, updatedAt: new Date\(\) \}\)\s*\n?\s*\.where\(eq\(webhookEndpoints\.id, id\)\);\s*\n?\s*\}/,
+      /async disableEndpoint\(id: string, at: Date\): Promise<void> \{\s*await this\.database\.db\s*\.update\(webhookEndpoints\)\s*\.set\(\{ active: false, disabledAt: at, updatedAt: new Date\(\) \}\)\s*\.where\(eq\(webhookEndpoints\.id, id\)\);\s*\}/,
     );
   });
 
   it("updateEndpoint: account-scoped + isNull(disabledAt) tombstone rationale 'disabled rows are tombstones'", () => {
     expect(body).toMatch(/\/\/ Account-scoped \+ not-disabled — disabled rows are tombstones\./);
     expect(body).toMatch(
-      /\.where\(\s*\n?\s*and\(\s*\n?\s*eq\(webhookEndpoints\.id, input\.id\),\s*\n?\s*eq\(webhookEndpoints\.accountId, input\.accountId\),\s*\n?\s*isNull\(webhookEndpoints\.disabledAt\),\s*\n?\s*\),\s*\n?\s*\)\s*\n?\s*\.returning\(\);/,
+      /\.where\(\s*and\(\s*eq\(webhookEndpoints\.id, input\.id\),\s*eq\(webhookEndpoints\.accountId, input\.accountId\),\s*isNull\(webhookEndpoints\.disabledAt\),\s*\),\s*\)\s*\.returning\(\);/,
     );
   });
 
   it("rotateSecret framing pinned: 'Single UPDATE: copy current secret/prefix INTO the prev slot, overwrite current with the new pair, set the grace expiry. No SELECT-then-UPDATE race — Postgres reads the row's current values at UPDATE time.'", () => {
     expect(body).toMatch(
-      /\/\/ Single UPDATE: copy current secret\/prefix INTO the prev slot,\s*\n?\s*\/\/ overwrite current with the new pair, set the grace expiry\.\s*\n?\s*\/\/ No SELECT-then-UPDATE race — Postgres reads the row's current\s*\n?\s*\/\/ values at UPDATE time\./,
+      /\/\/ Single UPDATE: copy current secret\/prefix INTO the prev slot,\s*\/\/ overwrite current with the new pair, set the grace expiry\.\s*\/\/ No SELECT-then-UPDATE race — Postgres reads the row's current\s*\/\/ values at UPDATE time\./,
     );
     // V-359.G.2 (Fable audit 2026-07-03): the prev slot preserves the customer's
     // still-deployed secret under a live FORCE-rotation grace (forceRotatedAt set +
@@ -140,7 +140,7 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
 
   it('enqueueDelivery: 4-field base values (webhookId + eventId + eventType + payload) + conditional nextAttemptAt spread + RETURNING id (returns the real delivery row id)', () => {
     expect(body).toMatch(
-      /const \[row\] = await this\.database\.db\s*\n?\s*\.insert\(webhookDeliveries\)\s*\n?\s*\.values\(\{\s*\n?\s*webhookId: input\.webhookId,\s*\n?\s*eventId: input\.eventId,\s*\n?\s*eventType: input\.eventType,\s*\n?\s*payload: input\.payload,\s*\n?\s*\.\.\.\(input\.nextAttemptAt !== undefined \? \{ nextAttemptAt: input\.nextAttemptAt \} : \{\}\),\s*\n?\s*\}\)\s*\n?\s*\.returning\(\{ id: webhookDeliveries\.id \}\);/,
+      /const \[row\] = await this\.database\.db\s*\.insert\(webhookDeliveries\)\s*\.values\(\{\s*webhookId: input\.webhookId,\s*eventId: input\.eventId,\s*eventType: input\.eventType,\s*payload: input\.payload,\s*\.\.\.\(input\.nextAttemptAt !== undefined \? \{ nextAttemptAt: input\.nextAttemptAt \} : \{\}\),\s*\}\)\s*\.returning\(\{ id: webhookDeliveries\.id \}\);/,
     );
     // returns the real DB row id (not the eventId) so a test-event delivery_id resolves.
     expect(body).toMatch(/return row\.id;/);
@@ -148,7 +148,7 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
 
   it('listEndpointsSubscribedTo: events @> ARRAY[<eventType>] raw SQL contains-array on Postgres enum array; account+active filter', () => {
     expect(body).toMatch(
-      /\/\/ events @> ARRAY\[<eventType>\] — every endpoint whose events array\s*\n?\s*\/\/ contains the eventType\./,
+      /\/\/ events @> ARRAY\[<eventType>\] — every endpoint whose events array\s*\/\/ contains the eventType\./,
     );
     expect(body).toMatch(
       /sql`\$\{webhookEndpoints\.events\} @> ARRAY\[\$\{eventType\}\]::webhook_event_type\[\]`/,
@@ -157,7 +157,7 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
 
   it("claim framing pinned: 'Atomic claim: SELECT ... FOR UPDATE SKIP LOCKED → UPDATE status = in_flight → RETURNING.' + ISO-string timestamp binder caveat; CTE with FOR UPDATE SKIP LOCKED + UPDATE...RETURNING", () => {
     expect(body).toMatch(
-      /\/\/ Atomic claim: SELECT \.\.\. FOR UPDATE SKIP LOCKED → UPDATE status = in_flight\s*\n?\s*\/\/ → RETURNING\. ISO-string the timestamp because postgres-js's\s*\n?\s*\/\/ tagged-template binder rejects raw Date in this position\./,
+      /\/\/ Atomic claim: SELECT \.\.\. FOR UPDATE SKIP LOCKED → UPDATE status = in_flight\s*\/\/ → RETURNING\. ISO-string the timestamp because postgres-js's\s*\/\/ tagged-template binder rejects raw Date in this position\./,
     );
     expect(body).toMatch(/const nowIso = opts\.now\.toISOString\(\);/);
     // The claim is now three CTEs: `due` ranks per endpoint, `fair` caps and
@@ -183,16 +183,16 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
       /const staleBeforeIso = new Date\(opts\.now\.getTime\(\) - RECLAIM_STALE_IN_FLIGHT_MS\)\.toISOString\(\);/,
     );
     expect(body).toMatch(
-      /UPDATE webhook_deliveries\s*\n?\s*SET status = 'in_flight', updated_at = NOW\(\)\s*\n?\s*WHERE id IN \(SELECT id FROM claimed\)\s*\n?\s*RETURNING \*/,
+      /UPDATE webhook_deliveries\s*SET status = 'in_flight', updated_at = NOW\(\)\s*WHERE id IN \(SELECT id FROM claimed\)\s*RETURNING \*/,
     );
   });
 
   it("recordDelivered: tx-bracketed; delivery set status='delivered' + endpoint counter RESET (consecutiveFailures:0 + lastSuccessAt); recordRetry: status='pending' + lastFailureAt only (the per-DELIVERY counter is NOT advanced by a retry attempt); recordDlq: status='dlq' + consecutiveFailures+=1 + lastFailureAt:opts.at", () => {
     expect(body).toMatch(
-      /\.set\(\{\s*\n?\s*status: 'delivered',\s*\n?\s*lastResponseStatus: opts\.responseStatus,\s*\n?\s*deliveredAt: opts\.at,\s*\n?\s*updatedAt: new Date\(\),\s*\n?\s*\}\)/,
+      /\.set\(\{\s*status: 'delivered',\s*lastResponseStatus: opts\.responseStatus,\s*deliveredAt: opts\.at,\s*updatedAt: new Date\(\),\s*\}\)/,
     );
     expect(body).toMatch(
-      /\.set\(\{\s*\n?\s*consecutiveFailures: 0,\s*\n?\s*lastSuccessAt: opts\.at,\s*\n?\s*updatedAt: new Date\(\),\s*\n?\s*\}\)/,
+      /\.set\(\{\s*consecutiveFailures: 0,\s*lastSuccessAt: opts\.at,\s*updatedAt: new Date\(\),\s*\}\)/,
     );
     // recordRetry must NOT advance consecutiveFailures. That counter is the
     // per-DELIVERY signal the docs tell customers to monitor ("increments on
@@ -200,42 +200,42 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
     // deliveries"), and MAX_ATTEMPTS is 6 — counting attempts tombstoned an
     // endpoint after ~9 failed deliveries instead of 50, irreversibly. The
     // behavioural proof is db-webhooks-repo-consecutive-failures-drizzle.
-    expect(body).toMatch(/\.set\(\{\s*\n?\s*\/\/ NOT consecutiveFailures\./);
+    expect(body).toMatch(/\.set\(\{\s*\/\/ NOT consecutiveFailures\./);
     expect(body).not.toMatch(
-      /\.set\(\{\s*\n?\s*consecutiveFailures: sql`\$\{webhookEndpoints\.consecutiveFailures\} \+ 1`,\s*\n?\s*lastFailureAt: new Date\(\),/,
+      /\.set\(\{\s*consecutiveFailures: sql`\$\{webhookEndpoints\.consecutiveFailures\} \+ 1`,\s*lastFailureAt: new Date\(\),/,
     );
     expect(body).toMatch(
-      /\.set\(\{\s*\n?\s*status: 'dlq',\s*\n?\s*lastResponseStatus: opts\.responseStatus,\s*\n?\s*lastError: opts\.lastError,\s*\n?\s*updatedAt: opts\.at,\s*\n?\s*\}\)/,
+      /\.set\(\{\s*status: 'dlq',\s*lastResponseStatus: opts\.responseStatus,\s*lastError: opts\.lastError,\s*updatedAt: opts\.at,\s*\}\)/,
     );
   });
 
   it('listDlqDeliveries: V-512 endpointId filter drill-down; limit+1 hasMore + composite (createdAt,id) keyset cursor (#125, no boundary-ms row drops); listDeliveriesForEndpoint: findEndpoint ownership-verify-before-listing + early-return on unowned', () => {
     expect(body).toMatch(
-      /\/\/ V-512 — drill-down filter; uuid scoped to a single endpoint\s*\n?\s*\/\/ \(column is `webhook_id` at the schema level\)\./,
+      /\/\/ V-512 — drill-down filter; uuid scoped to a single endpoint\s*\/\/ \(column is `webhook_id` at the schema level\)\./,
     );
     // #125 — deterministic composite ordering (createdAt DESC, id DESC) so the
     // keyset can tiebreak on id and never drop rows sharing the boundary ms.
     expect(body).toMatch(
-      /\.orderBy\(desc\(webhookDeliveries\.createdAt\), desc\(webhookDeliveries\.id\)\)\s*\n?\s*\.limit\(opts\.limit \+ 1\);\s*\n?\s*const hasMore = rows\.length > opts\.limit;\s*\n?\s*const items = hasMore \? rows\.slice\(0, opts\.limit\) : rows;\s*\n?\s*const last = items\[items\.length - 1\];\s*\n?\s*return \{\s*\n?\s*items: items\.map\(toDeliveryRow\),\s*\n?\s*nextCursor: hasMore && last \? encodeDeliveryCursor\(last\.createdAt, last\.id\) : null,\s*\n?\s*\};/,
+      /\.orderBy\(desc\(webhookDeliveries\.createdAt\), desc\(webhookDeliveries\.id\)\)\s*\.limit\(opts\.limit \+ 1\);\s*const hasMore = rows\.length > opts\.limit;\s*const items = hasMore \? rows\.slice\(0, opts\.limit\) : rows;\s*const last = items\[items\.length - 1\];\s*return \{\s*items: items\.map\(toDeliveryRow\),\s*nextCursor: hasMore && last \? encodeDeliveryCursor\(last\.createdAt, last\.id\) : null,\s*\};/,
     );
     // The composite keyset predicate (created_at < T OR (created_at = T AND id < lastId)).
     expect(body).toMatch(
-      /return or\(\s*\n?\s*lt\(webhookDeliveries\.createdAt, cursor\.createdAt\),\s*\n?\s*and\(eq\(webhookDeliveries\.createdAt, cursor\.createdAt\), lt\(webhookDeliveries\.id, cursor\.id\)\),\s*\n?\s*\);/,
+      /return or\(\s*lt\(webhookDeliveries\.createdAt, cursor\.createdAt\),\s*and\(eq\(webhookDeliveries\.createdAt, cursor\.createdAt\), lt\(webhookDeliveries\.id, cursor\.id\)\),\s*\);/,
     );
     expect(body).toMatch(
-      /\/\/ Verify ownership before listing\.\s*\n?\s*const owned = await this\.findEndpoint\(endpointId, accountId\);\s*\n?\s*if \(!owned\) return \{ items: \[\], nextCursor: null \};/,
+      /\/\/ Verify ownership before listing\.\s*const owned = await this\.findEndpoint\(endpointId, accountId\);\s*if \(!owned\) return \{ items: \[\], nextCursor: null \};/,
     );
   });
 
   it("resetDeliveryToPending: 8-field reset (status:'pending' + attempts:0 + nextAttemptAt + 4× null clears + updatedAt)", () => {
     expect(body).toMatch(
-      /\.set\(\{\s*\n?\s*status: 'pending',\s*\n?\s*attempts: 0,\s*\n?\s*nextAttemptAt: at,\s*\n?\s*lastResponseStatus: null,\s*\n?\s*lastResponseExcerpt: null,\s*\n?\s*lastError: null,\s*\n?\s*deliveredAt: null,\s*\n?\s*updatedAt: at,\s*\n?\s*\}\)/,
+      /\.set\(\{\s*status: 'pending',\s*attempts: 0,\s*nextAttemptAt: at,\s*lastResponseStatus: null,\s*lastResponseExcerpt: null,\s*lastError: null,\s*deliveredAt: null,\s*updatedAt: at,\s*\}\)/,
     );
   });
 
   it("resetDeliveryToPending: WHERE and(id, status != 'in_flight') — fences OUT in_flight (not IN 'dlq') so customer/admin replay of a non-DLQ row still works, but can't stomp a row a worker currently has claimed", () => {
     expect(body).toMatch(
-      /\.where\(and\(eq\(webhookDeliveries\.id, deliveryId\), ne\(webhookDeliveries\.status, 'in_flight'\)\)\)\s*\n?\s*\.returning\(\);\s*\n?\s*return row \? toDeliveryRow\(row\) : null;/,
+      /\.where\(and\(eq\(webhookDeliveries\.id, deliveryId\), ne\(webhookDeliveries\.status, 'in_flight'\)\)\)\s*\.returning\(\);\s*return row \? toDeliveryRow\(row\) : null;/,
     );
   });
 
@@ -244,7 +244,7 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
     // admin discard path relies on (WebhooksAdminService.discardFromDlq).
     // Dropping it would silently allow hard-deleting a now-active row.
     expect(body).toMatch(
-      /\.delete\(webhookDeliveries\)\s*\n?\s*\.where\(and\(eq\(webhookDeliveries\.id, deliveryId\), eq\(webhookDeliveries\.status, 'dlq'\)\)\)\s*\n?\s*\.returning\(\{ id: webhookDeliveries\.id \}\);\s*\n?\s*return result\.length > 0;/,
+      /\.delete\(webhookDeliveries\)\s*\.where\(and\(eq\(webhookDeliveries\.id, deliveryId\), eq\(webhookDeliveries\.status, 'dlq'\)\)\)\s*\.returning\(\{ id: webhookDeliveries\.id \}\);\s*return result\.length > 0;/,
     );
   });
 

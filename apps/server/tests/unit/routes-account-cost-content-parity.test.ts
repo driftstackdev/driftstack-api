@@ -41,13 +41,13 @@ describe('W414.B apps/server/src/routes/account-cost.ts content parity', () => {
     expect(body).toMatch(/V-541\.D — customer-facing cost surface\./);
     expect(body).toMatch(/GET \/v1\/account\/cost\?billing_cycle=YYYY-MM/);
     expect(body).toMatch(
-      /Scoped to the calling account via requireAuth — the service is\s*\n?\s*\/\/\s*reused from the admin path \(V-541\.B\) but the account id is pinned\s*\n?\s*\/\/\s*to ctx\.account\.id, not pulled from a URL param\./,
+      /Scoped to the calling account via requireAuth — the service is\s*\/\/\s*reused from the admin path \(V-541\.B\) but the account id is pinned\s*\/\/\s*to ctx\.account\.id, not pulled from a URL param\./,
     );
   });
 
   it('Query zod schema: shared strict billing-cycle authority + optional', () => {
     expect(body).toMatch(
-      /const Query = z\.object\(\{\s*\n?\s*billing_cycle: z\.string\(\)\.regex\(BILLING_CYCLE_PATTERN\)\.optional\(\),\s*\n?\s*\}\);/,
+      /const Query = z\.object\(\{\s*billing_cycle: z\.string\(\)\.regex\(BILLING_CYCLE_PATTERN\)\.optional\(\),\s*\}\);/,
     );
   });
 
@@ -55,7 +55,7 @@ describe('W414.B apps/server/src/routes/account-cost.ts content parity', () => {
     expect(body).toMatch(/export interface RegisterAccountCostRoutesDeps \{/);
     expect(body).toMatch(/service: CostMonitoringService;/);
     expect(body).toMatch(
-      /\/\*\* Test seam\. Defaults to Date\.now\. \*\/\s*\n?\s*nowFn\?: \(\) => number;/,
+      /\/\*\* Test seam\. Defaults to Date\.now\. \*\/\s*nowFn\?: \(\) => number;/,
     );
     expect(body).toMatch(/const now = deps\.nowFn \?\? Date\.now;/);
   });
@@ -69,42 +69,42 @@ describe('W414.B apps/server/src/routes/account-cost.ts content parity', () => {
   it('Account id pinned to ctx.account.id; billing_cycle fallback via billingCycleFromDate(new Date(now()))', () => {
     expect(body).toMatch(/const ctx = request\.account;/);
     expect(body).toMatch(
-      /const summary = await deps\.service\.getAccountSummary\(\{\s*\n?\s*accountId: ctx\.account\.id,\s*\n?\s*billingCycle: query\.billing_cycle \?\? billingCycleFromDate\(new Date\(now\(\)\)\),\s*\n?\s*\}\);/,
+      /const summary = await deps\.service\.getAccountSummary\(\{\s*accountId: ctx\.account\.id,\s*billingCycle: query\.billing_cycle \?\? billingCycleFromDate\(new Date\(now\(\)\)\),\s*\}\);/,
     );
   });
 
   it('Null-summary policy: fresh-account zero breakdown (NOT 404) with thresholdState under-soft as const', () => {
     expect(body).toMatch(
-      /if \(summary === null\) \{\s*\n?\s*\/\/ Not 404 — for a fresh account with no usage in the cycle the\s*\n?\s*\/\/ customer should see "you've spent €0 this cycle", not "not\s*\n?\s*\/\/ found"\. Synthesize a zero breakdown response\./,
+      /if \(summary === null\) \{\s*\/\/ Not 404 — for a fresh account with no usage in the cycle the\s*\/\/ customer should see "you've spent €0 this cycle", not "not\s*\/\/ found"\. Synthesize a zero breakdown response\./,
     );
     // S46 2026-07-07 (founder-approved) — account_id now carries the canonical
     // acc_ prefix (mirrors GET /v1/account/me); the S46 comment lines sit
     // between reply.send({ and the field, hence the comment-skipping group.
     expect(body).toMatch(
-      /return reply\.send\(\{\s*\n(?:\s*\/\/[^\n]*\n)*\s*account_id: `acc_\$\{ctx\.account\.id\}`,\s*\n?\s*billing_cycle: query\.billing_cycle \?\? billingCycleFromDate\(new Date\(now\(\)\)\),\s*\n?\s*tier: ctx\.account\.tier,\s*\n?\s*breakdown: \{\s*\n?\s*computeCents: 0,\s*\n?\s*storageCents: 0,\s*\n?\s*egressCents: 0,\s*\n?\s*emailCents: 0,\s*\n?\s*llmCents: 0,\s*\n?\s*totalCents: 0,\s*\n?\s*thresholdState: 'under-soft' as const,\s*\n?\s*\},\s*\n?\s*\}\);/,
+      /return reply\.send\(\{\s*\n(?:\s*\/\/[^\n]*\n)*\s*account_id: `acc_\$\{ctx\.account\.id\}`,\s*billing_cycle: query\.billing_cycle \?\? billingCycleFromDate\(new Date\(now\(\)\)\),\s*tier: ctx\.account\.tier,\s*breakdown: \{\s*computeCents: 0,\s*storageCents: 0,\s*egressCents: 0,\s*emailCents: 0,\s*llmCents: 0,\s*totalCents: 0,\s*thresholdState: 'under-soft' as const,\s*\},\s*\}\);/,
     );
   });
 
   it('Customer-surface policy: omit operator-tuned threshold values (admin-only); customers see only their actual spend', () => {
     expect(body).toMatch(
-      /\/\/ Customer surface omits the operator-tuned threshold values\s*\n?\s*\/\/ \(those are admin-only configuration; we don't surface the\s*\n?\s*\/\/ numeric caps to customers — they see only their actual spend\)\./,
+      /\/\/ Customer surface omits the operator-tuned threshold values\s*\/\/ \(those are admin-only configuration; we don't surface the\s*\/\/ numeric caps to customers — they see only their actual spend\)\./,
     );
     // S46 2026-07-07 — acc_ prefix on the populated branch too.
     expect(body).toMatch(
-      /return reply\.send\(\{\s*\n(?:\s*\/\/[^\n]*\n)*\s*account_id: `acc_\$\{summary\.account_id\}`,\s*\n?\s*billing_cycle: summary\.billing_cycle,\s*\n?\s*tier: summary\.tier,\s*\n?\s*breakdown: summary\.breakdown,\s*\n?\s*\}\);/,
+      /return reply\.send\(\{\s*\n(?:\s*\/\/[^\n]*\n)*\s*account_id: `acc_\$\{summary\.account_id\}`,\s*billing_cycle: summary\.billing_cycle,\s*tier: summary\.tier,\s*breakdown: summary\.breakdown,\s*\}\);/,
     );
   });
 
   it('V-541.E hook: void NotFoundError; reserved for explicit "account exists, no data" distinction', () => {
     expect(body).toMatch(
-      /\/\/ Make the 404 reachable explicitly for clients that want to\s*\n?\s*\/\/ distinguish "account exists, no data" from "account doesn't\s*\n?\s*\/\/ exist"\. Not currently routed; left as a hook for V-541\.E\s*\n?\s*\/\/ detailed-view scope\./,
+      /\/\/ Make the 404 reachable explicitly for clients that want to\s*\/\/ distinguish "account exists, no data" from "account doesn't\s*\/\/ exist"\. Not currently routed; left as a hook for V-541\.E\s*\/\/ detailed-view scope\./,
     );
     expect(body).toMatch(/void NotFoundError;/);
   });
 
   it('parseOrThrow helper: zod safeParse + a fixed BadRequestError message (no raw zod JSON leaked into the customer problem detail)', () => {
     expect(body).toMatch(
-      /function parseOrThrow<T>\(schema: z\.ZodSchema<T>, input: unknown\): T \{\s*\n?\s*const result = schema\.safeParse\(input\);/,
+      /function parseOrThrow<T>\(schema: z\.ZodSchema<T>, input: unknown\): T \{\s*const result = schema\.safeParse\(input\);/,
     );
     expect(body).toContain(
       "if (!result.success) throw new BadRequestError('Invalid query: billing_cycle must be YYYY-MM.');",
@@ -116,7 +116,7 @@ describe('W414.B apps/server/src/routes/account-cost.ts content parity', () => {
     expect(body).toMatch(/import type \{ FastifyInstance \} from 'fastify';/);
     expect(body).toMatch(/import \{ z \} from 'zod';/);
     expect(body).toMatch(
-      /import \{\s*\n?\s*BILLING_CYCLE_PATTERN,\s*\n?\s*type CostMonitoringService,\s*\n?\s*billingCycleFromDate,\s*\n?\s*\} from '\.\.\/services\/cost-monitoring\.js';/,
+      /import \{\s*BILLING_CYCLE_PATTERN,\s*type CostMonitoringService,\s*billingCycleFromDate,\s*\} from '\.\.\/services\/cost-monitoring\.js';/,
     );
     expect(body).toMatch(
       /import \{ BadRequestError, NotFoundError \} from '\.\.\/lib\/errors\.js';/,

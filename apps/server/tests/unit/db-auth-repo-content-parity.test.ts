@@ -48,7 +48,7 @@ describe('W448.B apps/server/src/db/auth-repo.ts content parity', () => {
       /import \{ and, eq, getTableColumns, gt, isNull, lt, or \} from 'drizzle-orm';/,
     );
     expect(body).toMatch(
-      /import type \{\s*\n?\s*AccountAuthRepo,\s*\n?\s*AccountRow,\s*\n?\s*ApiKeyRow,\s*\n?\s*RateLimitOverride,\s*\n?\s*TeamMembership,\s*\n?\s*WebSessionAuthRow,\s*\n?\s*\} from '\.\.\/services\/auth\.js';/,
+      /import type \{\s*AccountAuthRepo,\s*AccountRow,\s*ApiKeyRow,\s*RateLimitOverride,\s*TeamMembership,\s*WebSessionAuthRow,\s*\} from '\.\.\/services\/auth\.js';/,
     );
     expect(body).toMatch(
       /import \{ accounts, apiKeys, rateLimitOverrides, teamMembers, webSessions \} from '\.\/schema\.js';/,
@@ -57,19 +57,19 @@ describe('W448.B apps/server/src/db/auth-repo.ts content parity', () => {
 
   it('findApiKeyByPrefix + getAccount: each are limit 1 lookups', () => {
     expect(body).toMatch(
-      /async findApiKeyByPrefix\(prefix: string\): Promise<ApiKeyRow \| null> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(apiKeys\)\s*\n?\s*\.where\(eq\(apiKeys\.keyPrefix, prefix\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*return row \? toApiKeyRow\(row\) : null;\s*\n?\s*\}/,
+      /async findApiKeyByPrefix\(prefix: string\): Promise<ApiKeyRow \| null> \{\s*const \[row\] = await this\.database\.db\s*\.select\(\)\s*\.from\(apiKeys\)\s*\.where\(eq\(apiKeys\.keyPrefix, prefix\)\)\s*\.limit\(1\);\s*return row \? toApiKeyRow\(row\) : null;\s*\}/,
     );
     expect(body).toMatch(
-      /async getAccount\(id: string\): Promise<AccountRow \| null> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(accounts\)\s*\n?\s*\.where\(eq\(accounts\.id, id\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*return row \? toAccountRow\(row\) : null;\s*\n?\s*\}/,
+      /async getAccount\(id: string\): Promise<AccountRow \| null> \{\s*const \[row\] = await this\.database\.db\s*\.select\(\)\s*\.from\(accounts\)\s*\.where\(eq\(accounts\.id, id\)\)\s*\.limit\(1\);\s*return row \? toAccountRow\(row\) : null;\s*\}/,
     );
   });
 
   it('findActiveRateLimitOverrides: and(eq(accountId), gt(expiresAt, now)); V-016 centi-rate divide-back (refillPerSecondCenti / 100); quantization caveat pinned', () => {
     expect(body).toMatch(
-      /\.where\(\s*\n?\s*and\(eq\(rateLimitOverrides\.accountId, accountId\), gt\(rateLimitOverrides\.expiresAt, now\)\),\s*\n?\s*\);/,
+      /\.where\(\s*and\(eq\(rateLimitOverrides\.accountId, accountId\), gt\(rateLimitOverrides\.expiresAt, now\)\),\s*\);/,
     );
     expect(body).toMatch(
-      /\/\/ Centi-rate stored as 100x; multiply back\. See V-016 for the\s*\n?\s*\/\/ quantization caveat \(1\/60 → 2 → 1\/50 effective\)\. Acceptable\s*\n?\s*\/\/ until\/unless an exact-match requirement emerges\./,
+      /\/\/ Centi-rate stored as 100x; multiply back\. See V-016 for the\s*\/\/ quantization caveat \(1\/60 → 2 → 1\/50 effective\)\. Acceptable\s*\/\/ until\/unless an exact-match requirement emerges\./,
     );
     expect(body).toMatch(
       /import \{ REFILL_CENTI_SCALE \} from '\.\/rate-limit-overrides-repo\.js';/,
@@ -79,14 +79,14 @@ describe('W448.B apps/server/src/db/auth-repo.ts content parity', () => {
 
   it("touchApiKeyLastUsed: 30s staleness rationale 'Skip the write if last_used_at was set within the last 30s — saves a row update on every authenticated request.'", () => {
     expect(body).toMatch(
-      /\/\/ Skip the write if last_used_at was set within the last 30s — saves\s*\n?\s*\/\/ a row update on every authenticated request\./,
+      /\/\/ Skip the write if last_used_at was set within the last 30s — saves\s*\/\/ a row update on every authenticated request\./,
     );
     // The throttle predicate MUST include both the null branch AND the
     // staleness comparison — a regression to `or(isNull(...))`-only silently
     // freezes last_used_at at first use (the row only updates while NULL).
     expect(body).toMatch(/const API_KEY_LAST_USED_THROTTLE_MS = 30_000;/);
     expect(body).toMatch(
-      /or\(\s*\n?\s*isNull\(apiKeys\.lastUsedAt\),\s*\n?\s*lt\(apiKeys\.lastUsedAt, new Date\(at\.getTime\(\) - API_KEY_LAST_USED_THROTTLE_MS\)\),\s*\n?\s*\),/,
+      /or\(\s*isNull\(apiKeys\.lastUsedAt\),\s*lt\(apiKeys\.lastUsedAt, new Date\(at\.getTime\(\) - API_KEY_LAST_USED_THROTTLE_MS\)\),\s*\),/,
     );
   });
 
@@ -94,19 +94,19 @@ describe('W448.B apps/server/src/db/auth-repo.ts content parity', () => {
     expect(body).toMatch(/\.select\(getTableColumns\(webSessions\)\)/);
     expect(body).toMatch(/eq\(accounts\.authEpoch, webSessions\.authEpoch\)/);
     expect(body).toMatch(
-      /\.where\(\s*\n?\s*and\(\s*\n?\s*eq\(webSessions\.tokenHash, args\.tokenHash\),\s*\n?\s*gt\(webSessions\.expiresAt, args\.now\),\s*\n?\s*isNull\(webSessions\.revokedAt\),\s*\n?\s*\),\s*\n?\s*\)\s*\n?\s*\.limit\(1\);/,
+      /\.where\(\s*and\(\s*eq\(webSessions\.tokenHash, args\.tokenHash\),\s*gt\(webSessions\.expiresAt, args\.now\),\s*isNull\(webSessions\.revokedAt\),\s*\),\s*\)\s*\.limit\(1\);/,
     );
     expect(body).toMatch(
-      /return \{\s*\n?\s*id: row\.id,\s*\n?\s*accountId: row\.accountId,\s*\n?\s*expiresAt: row\.expiresAt,\s*\n?\s*revokedAt: row\.revokedAt,\s*\n?\s*lastUsedAt: row\.lastUsedAt,\s*\n?\s*mfaSatisfiedAt: row\.mfaSatisfiedAt,\s*\n?\s*createdAt: row\.createdAt,\s*\n?\s*\};/,
+      /return \{\s*id: row\.id,\s*accountId: row\.accountId,\s*expiresAt: row\.expiresAt,\s*revokedAt: row\.revokedAt,\s*lastUsedAt: row\.lastUsedAt,\s*mfaSatisfiedAt: row\.mfaSatisfiedAt,\s*createdAt: row\.createdAt,\s*\};/,
     );
   });
 
   it('touchWebSessionLastUsed: 1-field set lastUsedAt where id; findTeamMemberships joins active owners and maps the five-field grant', () => {
     expect(body).toMatch(
-      /async touchWebSessionLastUsed\(id: string, at: Date\): Promise<void> \{\s*\n?\s*await this\.database\.db\s*\n?\s*\.update\(webSessions\)\s*\n?\s*\.set\(\{ lastUsedAt: at \}\)\s*\n?\s*\.where\(eq\(webSessions\.id, id\)\);\s*\n?\s*\}/,
+      /async touchWebSessionLastUsed\(id: string, at: Date\): Promise<void> \{\s*await this\.database\.db\s*\.update\(webSessions\)\s*\.set\(\{ lastUsedAt: at \}\)\s*\.where\(eq\(webSessions\.id, id\)\);\s*\}/,
     );
     expect(body).toMatch(
-      /\.select\(\{\s*\n?\s*id: teamMembers\.id,\s*\n?\s*ownerAccountId: teamMembers\.ownerAccountId,\s*\n?\s*ownerEmail: accounts\.email,\s*\n?\s*ownerName: accounts\.name,\s*\n?\s*role: teamMembers\.role,\s*\n?\s*\}\)[\s\S]*?\.innerJoin\(accounts, eq\(accounts\.id, teamMembers\.ownerAccountId\)\)[\s\S]*?return rows\.map\(\(r\) => \(\{\s*\n?\s*membershipId: r\.id,\s*\n?\s*ownerAccountId: r\.ownerAccountId,\s*\n?\s*ownerEmail: r\.ownerEmail,\s*\n?\s*ownerName: r\.ownerName,\s*\n?\s*role: r\.role,\s*\n?\s*\}\)\);/,
+      /\.select\(\{\s*id: teamMembers\.id,\s*ownerAccountId: teamMembers\.ownerAccountId,\s*ownerEmail: accounts\.email,\s*ownerName: accounts\.name,\s*role: teamMembers\.role,\s*\}\)[\s\S]*?\.innerJoin\(accounts, eq\(accounts\.id, teamMembers\.ownerAccountId\)\)[\s\S]*?return rows\.map\(\(r\) => \(\{\s*membershipId: r\.id,\s*ownerAccountId: r\.ownerAccountId,\s*ownerEmail: r\.ownerEmail,\s*ownerName: r\.ownerName,\s*role: r\.role,\s*\}\)\);/,
     );
     expect(body).toMatch(
       /and\(eq\(teamMembers\.memberAccountId, memberAccountId\), eq\(accounts\.status, 'active'\)\)/,
@@ -115,25 +115,25 @@ describe('W448.B apps/server/src/db/auth-repo.ts content parity', () => {
 
   it("updateAccountBasics: selective spread (5 fields: name + timezone + avatarR2Key + slug + region) + always-bump updatedAt; V-298a 23505 + constraint_name='accounts_slug_unique' → throws 'SLUG_TAKEN'", () => {
     expect(body).toMatch(
-      /const set: Record<string, unknown> = \{ updatedAt: new Date\(\) \};\s*\n?\s*if \(patch\.name !== undefined\) set\.name = patch\.name;\s*\n?\s*if \(patch\.timezone !== undefined\) set\.timezone = patch\.timezone;\s*\n?\s*if \(patch\.avatarR2Key !== undefined\) set\.avatarR2Key = patch\.avatarR2Key;\s*\n?\s*if \(patch\.slug !== undefined\) set\.slug = patch\.slug;\s*\n?\s*if \(patch\.region !== undefined\) set\.region = patch\.region;/,
+      /const set: Record<string, unknown> = \{ updatedAt: new Date\(\) \};\s*if \(patch\.name !== undefined\) set\.name = patch\.name;\s*if \(patch\.timezone !== undefined\) set\.timezone = patch\.timezone;\s*if \(patch\.avatarR2Key !== undefined\) set\.avatarR2Key = patch\.avatarR2Key;\s*if \(patch\.slug !== undefined\) set\.slug = patch\.slug;\s*if \(patch\.region !== undefined\) set\.region = patch\.region;/,
     );
     expect(body).toMatch(
-      /\/\/ V-298a — translate Postgres unique-violation on the slug\s*\n?\s*\/\/ index into a SlugTakenError so the route layer returns 409\./,
+      /\/\/ V-298a — translate Postgres unique-violation on the slug\s*\/\/ index into a SlugTakenError so the route layer returns 409\./,
     );
     expect(body).toMatch(
-      /if \(isUniqueViolation\(err, 'accounts_slug_unique'\)\) \{\s*\n?\s*throw new Error\('SLUG_TAKEN'\);/,
+      /if \(isUniqueViolation\(err, 'accounts_slug_unique'\)\) \{\s*throw new Error\('SLUG_TAKEN'\);/,
     );
   });
 
   it('toApiKeyRow: 11-field ApiKeyRow (id + accountId + name + keyPrefix + keyHash + scopes + lastUsedAt + revokedAt + expiresAt + provenance + createdAt)', () => {
     expect(body).toMatch(
-      /function toApiKeyRow\(r: typeof apiKeys\.\$inferSelect\): ApiKeyRow \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*accountId: r\.accountId,\s*\n?\s*name: r\.name,\s*\n?\s*keyPrefix: r\.keyPrefix,\s*\n?\s*keyHash: r\.keyHash,\s*\n?\s*scopes: r\.scopes,\s*\n?\s*lastUsedAt: r\.lastUsedAt,\s*\n?\s*revokedAt: r\.revokedAt,\s*\n?\s*expiresAt: r\.expiresAt,\s*\n?\s*provenance: r\.provenance,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function toApiKeyRow\(r: typeof apiKeys\.\$inferSelect\): ApiKeyRow \{\s*return \{\s*id: r\.id,\s*accountId: r\.accountId,\s*name: r\.name,\s*keyPrefix: r\.keyPrefix,\s*keyHash: r\.keyHash,\s*scopes: r\.scopes,\s*lastUsedAt: r\.lastUsedAt,\s*revokedAt: r\.revokedAt,\s*expiresAt: r\.expiresAt,\s*provenance: r\.provenance,\s*createdAt: r\.createdAt,\s*\};\s*\}/,
     );
   });
 
   it('toAccountRow: 11-field AccountRow (id + email + name + tier + status + timezone + avatarR2Key + slug + region + created/updated_at)', () => {
     expect(body).toMatch(
-      /function toAccountRow\(r: typeof accounts\.\$inferSelect\): AccountRow \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*email: r\.email,\s*\n?\s*name: r\.name,\s*\n?\s*tier: r\.tier,\s*\n?\s*status: r\.status,\s*\n?\s*timezone: r\.timezone,\s*\n?\s*avatarR2Key: r\.avatarR2Key,\s*\n?\s*slug: r\.slug,\s*\n?\s*region: r\.region,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*updatedAt: r\.updatedAt,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function toAccountRow\(r: typeof accounts\.\$inferSelect\): AccountRow \{\s*return \{\s*id: r\.id,\s*email: r\.email,\s*name: r\.name,\s*tier: r\.tier,\s*status: r\.status,\s*timezone: r\.timezone,\s*avatarR2Key: r\.avatarR2Key,\s*slug: r\.slug,\s*region: r\.region,\s*createdAt: r\.createdAt,\s*updatedAt: r\.updatedAt,\s*\};\s*\}/,
     );
   });
 

@@ -72,14 +72,14 @@ describe('W440.C apps/server/src/db/client.ts content parity', () => {
 
   it('slow-query log instrumentation: client = instrumentSlowQueryLogging(client, opts.slowQueryLog) wraps client when configured', () => {
     expect(body).toMatch(
-      /if \(opts\?\.slowQueryLog\) \{\s*\n?\s*client = instrumentSlowQueryLogging\(client, opts\.slowQueryLog\);\s*\n?\s*\}/,
+      /if \(opts\?\.slowQueryLog\) \{\s*client = instrumentSlowQueryLogging\(client, opts\.slowQueryLog\);\s*\}/,
     );
   });
 
   it('drizzle wires postgres client + schema; close() = client.end({timeout:5}) bounded graceful shutdown', () => {
     expect(body).toMatch(/const db = drizzle\(client, \{ schema \}\);/);
     expect(body).toMatch(
-      /return \{\s*\n?\s*client,\s*\n?\s*db,\s*\n?\s*close: async \(\) => \{\s*\n?\s*await client\.end\(\{ timeout: 5 \}\);\s*\n?\s*\},\s*\n?\s*\};/,
+      /return \{\s*client,\s*db,\s*close: async \(\) => \{\s*await client\.end\(\{ timeout: 5 \}\);\s*\},\s*\};/,
     );
   });
 

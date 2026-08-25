@@ -42,19 +42,19 @@ describe('W401.A apps/server/src/services/incidents.ts content parity', () => {
   it('V-295a framing pinned + admin-only + withAudit + 2-write-1-read posture', () => {
     expect(body).toMatch(/V-295a — public-status incidents service\./);
     expect(body).toMatch(
-      /Owns the incident \+ incident_updates write paths\. Admin-only;\s*\n?\s*\/\/\s*scope-checked by the route layer \(driftstack_internal_admin\)\./,
+      /Owns the incident \+ incident_updates write paths\. Admin-only;\s*\/\/\s*scope-checked by the route layer \(driftstack_internal_admin\)\./,
     );
     expect(body).toMatch(
-      /Posts go through `withAudit` in the route to write\s*\n?\s*\/\/\s*admin_audit_log rows in the same request lifecycle\./,
+      /Posts go through `withAudit` in the route to write\s*\/\/\s*admin_audit_log rows in the same request lifecycle\./,
     );
   });
 
   it('2 write semantics framing: create (incident + initial update, one txn) + addUpdate (timeline + bump status)', () => {
     expect(body).toMatch(
-      /Two write semantics:\s*\n?\s*\/\/\s*- create\(\) — inserts the incident \+ initial update in one\s*\n?\s*\/\/\s*transaction\. Initial update mirrors incident\.status\/description\./,
+      /Two write semantics:\s*\/\/\s*- create\(\) — inserts the incident \+ initial update in one\s*\/\/\s*transaction\. Initial update mirrors incident\.status\/description\./,
     );
     expect(body).toMatch(
-      /- addUpdate\(\) — appends a timeline entry \+ bumps incident\.status\s*\n?\s*\/\/\s*in one transaction\. Resolved-state advances incident\.resolved_at\./,
+      /- addUpdate\(\) — appends a timeline entry \+ bumps incident\.status\s*\/\/\s*in one transaction\. Resolved-state advances incident\.resolved_at\./,
     );
   });
 
@@ -70,11 +70,11 @@ describe('W401.A apps/server/src/services/incidents.ts content parity', () => {
     expect(body).toMatch(/startedAt: Date;/);
     expect(body).toMatch(/resolvedAt: Date \| null;/);
     expect(body).toMatch(
-      /\/\*\* Null when auto-created by V-295b health probe poller\. \*\/\s*\n?\s*createdByAdminId: string \| null;/,
+      /\/\*\* Null when auto-created by V-295b health probe poller\. \*\/\s*createdByAdminId: string \| null;/,
     );
     expect(body).toMatch(/createdByAdminKeyId: string \| null;/);
     expect(body).toMatch(
-      /\/\*\* Non-null only for poller-auto-created incidents \(e\.g\. 'api'\)\. \*\/\s*\n?\s*autoProbeTarget: string \| null;/,
+      /\/\*\* Non-null only for poller-auto-created incidents \(e\.g\. 'api'\)\. \*\/\s*autoProbeTarget: string \| null;/,
     );
     expect(body).toMatch(/createdAt: Date;/);
     expect(body).toMatch(/updatedAt: Date;/);
@@ -86,7 +86,7 @@ describe('W401.A apps/server/src/services/incidents.ts content parity', () => {
     expect(body).toMatch(/message: string;/);
     expect(body).toMatch(/status: IncidentStatus;/);
     expect(body).toMatch(
-      /\/\*\* Null when posted by V-295b health probe poller\. \*\/\s*\n?\s*postedByAdminId: string \| null;/,
+      /\/\*\* Null when posted by V-295b health probe poller\. \*\/\s*postedByAdminId: string \| null;/,
     );
     expect(body).toMatch(/postedByAdminKeyId: string \| null;/);
     expect(body).toMatch(/postedAt: Date;/);
@@ -122,33 +122,31 @@ describe('W401.A apps/server/src/services/incidents.ts content parity', () => {
     expect(body).toMatch(/listUpdates\(incidentId: string\): Promise<IncidentUpdateRow\[\]>;/);
     expect(body).toMatch(/addUpdate\(input: AddUpdateInput\): Promise<IncidentUpdateRow>;/);
     expect(body).toMatch(
-      /resolve\(\s*\n?\s*input: ResolveIncidentInput,\s*\n?\s*\): Promise<\{ incident: IncidentRow; update: IncidentUpdateRow \}>;/,
+      /resolve\(\s*input: ResolveIncidentInput,\s*\): Promise<\{ incident: IncidentRow; update: IncidentUpdateRow \}>;/,
     );
     expect(body).toMatch(
-      /V-295b — find the open auto-incident for a given probe target,\s*\n?\s*\*\s*or null\. Used by the poller to decide auto-resolve vs\. no-op\./,
+      /V-295b — find the open auto-incident for a given probe target,\s*\*\s*or null\. Used by the poller to decide auto-resolve vs\. no-op\./,
     );
     expect(body).toMatch(/findOpenAutoIncident\(target: string\): Promise<IncidentRow \| null>;/);
   });
 
   it('V-295c3-followup IncidentsLifecycle: onPublicCreated + onPublicResolved + V-545.B onPublicUpdated; throw logged+swallowed (never roll back)', () => {
     expect(body).toMatch(
-      /All fire AFTER the incident write commits successfully, and are dispatched\s*\n?\s*\*\s*FIRE-AND-FORGET \(`void …`\) rather than awaited/,
+      /All fire AFTER the incident write commits successfully, and are dispatched\s*\*\s*FIRE-AND-FORGET \(`void …`\) rather than awaited/,
     );
     // V-807 — both halves of the old sentence were false, and contradicted by the
     // implementation twenty lines below: `void this.lifecycle.on*()` is
     // fire-and-forget, and all four catch handlers were empty, so a fan-out that
     // reached nobody left no trace. The doc now matches, and the logger makes the
     // reported half true rather than aspirational.
-    expect(body).toMatch(
-      /but it IS reported through the\s*\n?\s*\*\s*optional logger, at error level\./,
-    );
+    expect(body).toMatch(/but it IS reported through the\s*\*\s*optional logger, at error level\./);
     expect(body).toMatch(/private reportNotificationFailure\(/);
     expect(body).toMatch(/event: 'incident_notification_failed',/);
     expect(body, 'the awaited-and-logged claim must not return').not.toMatch(
       /are awaited; a throw is logged/,
     );
     expect(body, 'no catch handler may be silent again').not.toMatch(
-      /\.catch\(\(\) => \{\s*\n?\s*\/\/ Notification failures must never roll back/,
+      /\.catch\(\(\) => \{\s*\/\/ Notification failures must never roll back/,
     );
     expect(body).toMatch(/export interface IncidentsLifecycle \{/);
     expect(body).toMatch(
@@ -180,13 +178,13 @@ describe('W401.A apps/server/src/services/incidents.ts content parity', () => {
 
   it('get: NotFoundError when missing; returns {incident, updates: repo.listUpdates(id)}', () => {
     expect(body).toMatch(
-      /async get\(\s*\n?\s*id: string,\s*\n?\s*opts\?: \{ publicOnly\?: boolean \},\s*\n?\s*\): Promise<\{ incident: IncidentRow; updates: IncidentUpdateRow\[\] \}> \{\s*\n?\s*const incident = await this\.repo\.get\(id, opts\);\s*\n?\s*if \(!incident\) throw new NotFoundError\(`Incident \$\{id\} not found\.`\);\s*\n?\s*const updates = await this\.repo\.listUpdates\(id\);\s*\n?\s*return \{ incident, updates \};\s*\n?\s*\}/,
+      /async get\(\s*id: string,\s*opts\?: \{ publicOnly\?: boolean \},\s*\): Promise<\{ incident: IncidentRow; updates: IncidentUpdateRow\[\] \}> \{\s*const incident = await this\.repo\.get\(id, opts\);\s*if \(!incident\) throw new NotFoundError\(`Incident \$\{id\} not found\.`\);\s*const updates = await this\.repo\.listUpdates\(id\);\s*return \{ incident, updates \};\s*\}/,
     );
   });
 
   it('resolve: fire onPublicResolved only when public; catch-swallow', () => {
     expect(body).toMatch(
-      /async resolve\(\s*\n?\s*input: ResolveIncidentInput,\s*\n?\s*\): Promise<\{ incident: IncidentRow; update: IncidentUpdateRow \}> \{\s*\n?\s*const result = await this\.repo\.resolve\(input\);/,
+      /async resolve\(\s*input: ResolveIncidentInput,\s*\): Promise<\{ incident: IncidentRow; update: IncidentUpdateRow \}> \{\s*const result = await this\.repo\.resolve\(input\);/,
     );
     // V-807 — the resolve hook's catch now reports instead of swallowing silently.
     expect(body).toMatch(
@@ -199,7 +197,7 @@ describe('W401.A apps/server/src/services/incidents.ts content parity', () => {
 
   it('V-295b findOpenAutoIncident: auto-poller hook delegates to repo', () => {
     expect(body).toMatch(
-      /\/\*\* V-295b — auto-poller hook\. \*\/\s*\n?\s*async findOpenAutoIncident\(target: string\): Promise<IncidentRow \| null> \{\s*\n?\s*return this\.repo\.findOpenAutoIncident\(target\);\s*\n?\s*\}/,
+      /\/\*\* V-295b — auto-poller hook\. \*\/\s*async findOpenAutoIncident\(target: string\): Promise<IncidentRow \| null> \{\s*return this\.repo\.findOpenAutoIncident\(target\);\s*\}/,
     );
   });
 

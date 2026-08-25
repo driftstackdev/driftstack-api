@@ -54,7 +54,7 @@ describe('W540.C /tsconfig.eslint.json content parity', () => {
     expect(body).toMatch(/"lib": \["ES2023", "DOM", "DOM\.Iterable"\]/);
     expect(body).toMatch(/"jsx": "react-jsx"/);
     expect(body).toMatch(
-      /\/\/ Override the base's NodeNext for the eslint pass — React's types\s*\n?\s*\/\/ ship without `exports` maps, which NodeNext rejects\. Bundler\s*\n?\s*\/\/ resolution covers both the React\/Vite source files \(gui-client\)\s*\n?\s*\/\/ and the Node\/server source files in one pass\./,
+      /\/\/ Override the base's NodeNext for the eslint pass — React's types\s*\/\/ ship without `exports` maps, which NodeNext rejects\. Bundler\s*\/\/ resolution covers both the React\/Vite source files \(gui-client\)\s*\/\/ and the Node\/server source files in one pass\./,
     );
     expect(body).toMatch(/"module": "ESNext"/);
     expect(body).toMatch(/"moduleResolution": "bundler"/);

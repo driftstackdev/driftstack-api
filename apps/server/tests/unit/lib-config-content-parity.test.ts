@@ -37,19 +37,19 @@ describe('W390.A apps/server/src/lib/config.ts content parity', () => {
 
   it('V-266 + W190 DASHBOARD_ORIGIN trailing-slash strip at zod schema (single normalisation point)', () => {
     expect(body).toMatch(
-      /V-266 — origin of the customer dashboard\. Used to build the\s*\n?\s*\*\s*browser_url returned by \/v1\/auth\/cli-authorize\/initiate/,
+      /V-266 — origin of the customer dashboard\. Used to build the\s*\*\s*browser_url returned by \/v1\/auth\/cli-authorize\/initiate/,
     );
     expect(body).toMatch(
-      /W190 — strip any trailing slash so consumers can safely do\s*\n?\s*\/\/\s*`\$\{dashboardOrigin\}\/billing` etc\. without producing `https:\/\/…\/\/billing`/,
+      /W190 — strip any trailing slash so consumers can safely do\s*\/\/\s*`\$\{dashboardOrigin\}\/billing` etc\. without producing `https:\/\/…\/\/billing`/,
     );
     expect(body).toMatch(
-      /dashboardOrigin: z\s*\n?\s*\.string\(\)\s*\n?\s*\.url\(\)\s*\n?\s*\.default\('http:\/\/localhost:5173'\)\s*\n?\s*\.transform\(\(s\) => s\.replace\(\/\\\/\+\$\/, ''\)\),/,
+      /dashboardOrigin: z\s*\.string\(\)\s*\.url\(\)\s*\.default\('http:\/\/localhost:5173'\)\s*\.transform\(\(s\) => s\.replace\(\/\\\/\+\$\/, ''\)\),/,
     );
   });
 
   it('V-079.B/C dashboard route paths: /verify-email, /reset-password, /auth/magic-link', () => {
     expect(body).toMatch(
-      /V-079\.B\/C — dashboard route paths\. The customer-dashboard\s*\n?\s*\/\/\s*\(apps\/customer-dashboard\) serves these at:\s*\n?\s*\/\/\s*\/verify-email, \/reset-password, \/auth\/magic-link/,
+      /V-079\.B\/C — dashboard route paths\. The customer-dashboard\s*\/\/\s*\(apps\/customer-dashboard\) serves these at:\s*\/\/\s*\/verify-email, \/reset-password, \/auth\/magic-link/,
     );
     expect(body).toMatch(
       /verifyEmail: env\.AUTH_VERIFY_EMAIL_URL \?\? fromOrigin\('\/verify-email'\),/,
@@ -64,34 +64,34 @@ describe('W390.A apps/server/src/lib/config.ts content parity', () => {
 
   it('V-079 production refusal: localhost-resolving auth URL → throw at boot', () => {
     expect(body).toMatch(
-      /In production, any resolved URL still pointing at localhost is a\s*\n?\s*\*\s*misconfiguration — the boot-time guard at the bottom rejects it\s*\n?\s*\*\s*rather than letting customers receive broken links again/,
+      /In production, any resolved URL still pointing at localhost is a\s*\*\s*misconfiguration — the boot-time guard at the bottom rejects it\s*\*\s*rather than letting customers receive broken links again/,
     );
     expect(body).toMatch(
-      /if \(value !== undefined && \/\\blocalhost\\b\/\.test\(value\)\) \{\s*\n?\s*throw new Error\(\s*\n?\s*`Refusing to boot: \$\{name\} resolves to a localhost URL/,
+      /if \(value !== undefined && \/\\blocalhost\\b\/\.test\(value\)\) \{\s*throw new Error\(\s*`Refusing to boot: \$\{name\} resolves to a localhost URL/,
     );
   });
 
   it('V-079 production refusal: DASHBOARD_ORIGIN unset or empty → throw at boot', () => {
     expect(body).toMatch(
-      /Reject the "no DASHBOARD_ORIGIN at all" case too — the zod\s*\n?\s*\/\/\s*default would otherwise land on the localhost fallback/,
+      /Reject the "no DASHBOARD_ORIGIN at all" case too — the zod\s*\/\/\s*default would otherwise land on the localhost fallback/,
     );
     expect(body).toMatch(
-      /if \(env\.DASHBOARD_ORIGIN === undefined \|\| env\.DASHBOARD_ORIGIN\.length === 0\) \{\s*\n?\s*throw new Error\(\s*\n?\s*'Refusing to boot: DASHBOARD_ORIGIN must be set in production/,
+      /if \(env\.DASHBOARD_ORIGIN === undefined \|\| env\.DASHBOARD_ORIGIN\.length === 0\) \{\s*throw new Error\(\s*'Refusing to boot: DASHBOARD_ORIGIN must be set in production/,
     );
   });
 
   it('deriveAuthFlowUrls: 3-step resolution order (per-URL → DASHBOARD_ORIGIN+path → localhost default)', () => {
     expect(body).toMatch(
-      /Resolution order for each URL:\s*\n?\s*\*\s*1\. explicit per-URL env var \(AUTH_VERIFY_EMAIL_URL etc\.\)\s*\n?\s*\*\s*2\. DASHBOARD_ORIGIN \+ the conventional path\s*\n?\s*\*\s*3\. dev-friendly localhost default \(final fallback, dev-only\)/,
+      /Resolution order for each URL:\s*\*\s*1\. explicit per-URL env var \(AUTH_VERIFY_EMAIL_URL etc\.\)\s*\*\s*2\. DASHBOARD_ORIGIN \+ the conventional path\s*\*\s*3\. dev-friendly localhost default \(final fallback, dev-only\)/,
     );
   });
 
   it('Sentry EU-region DSN refinement: .de. or .ingest.de.sentry.io', () => {
     expect(body).toMatch(
-      /Sentry — error tracking\. EU region required: DSN must contain\s*\n?\s*\/\/\s*`\.de\.` \(per docs\/deployment\/env-vars\.md validation checklist\)/,
+      /Sentry — error tracking\. EU region required: DSN must contain\s*\/\/\s*`\.de\.` \(per docs\/deployment\/env-vars\.md validation checklist\)/,
     );
     expect(body).toMatch(
-      /\.refine\(\(u\) => u\.includes\('\.de\.'\) \|\| u\.includes\('\.ingest\.de\.sentry\.io'\), \{\s*\n?\s*message: 'SENTRY_DSN must use the EU region \(\.de\.\) per data-residency policy',\s*\n?\s*\}\),/,
+      /\.refine\(\(u\) => u\.includes\('\.de\.'\) \|\| u\.includes\('\.ingest\.de\.sentry\.io'\), \{\s*message: 'SENTRY_DSN must use the EU region \(\.de\.\) per data-residency policy',\s*\}\),/,
     );
   });
 
@@ -113,13 +113,13 @@ describe('W390.A apps/server/src/lib/config.ts content parity', () => {
 
   it('R2 readiness fire-and-forget framing: missing R2 disables R2, readiness skips the R2 check', () => {
     expect(body).toMatch(
-      /All\s*\n?\s*\/\/\s*four required to enable R2; if any is missing, R2 is disabled and\s*\n?\s*\/\/\s*the readiness probe skips the R2 check \(logged at boot\)/,
+      /All\s*\/\/\s*four required to enable R2; if any is missing, R2 is disabled and\s*\/\/\s*the readiness probe skips the R2 check \(logged at boot\)/,
     );
   });
 
   it('Postmark fire-and-forget framing: readiness does NOT gate on Postmark connectivity', () => {
     expect(body).toMatch(
-      /Fire-and-forget; readiness does NOT gate on Postmark connectivity\s*\n?\s*\/\/\s*\(per founder direction V-054 follow-up: SDK init failures logged\s*\n?\s*\/\/\s*clearly at boot, then service operates degraded — no email path\s*\n?\s*\/\/\s*is in the request critical-path\)/,
+      /Fire-and-forget; readiness does NOT gate on Postmark connectivity\s*\/\/\s*\(per founder direction V-054 follow-up: SDK init failures logged\s*\/\/\s*clearly at boot, then service operates degraded — no email path\s*\/\/\s*is in the request critical-path\)/,
     );
   });
 
@@ -129,28 +129,28 @@ describe('W390.A apps/server/src/lib/config.ts content parity', () => {
 
   it('V-487 NowPayments scaffold: 501-stub until apiKey + ipnSecret set (launch-day flip)', () => {
     expect(body).toMatch(
-      /V-487 — NowPayments crypto-rail scaffold\. Conditional, opt-in\s*\n?\s*\*\s*sub-processor \(Estonia EEA-internal per the V-308a legal\s*\n?\s*\*\s*scaffolding\)\. When `ipnSecret` is unset, `cryptoOrdersService` is\s*\n?\s*\*\s*never constructed/,
+      /V-487 — NowPayments crypto-rail scaffold\. Conditional, opt-in\s*\*\s*sub-processor \(Estonia EEA-internal per the V-308a legal\s*\*\s*scaffolding\)\. When `ipnSecret` is unset, `cryptoOrdersService` is\s*\*\s*never constructed/,
     );
     expect(body).toMatch(
-      /inactive until the account is created and the credentials are\s*\n?\s*\*\s*SSH-written\. This lets launch-day flip the rail on without\s*\n?\s*\*\s*redeploying/,
+      /inactive until the account is created and the credentials are\s*\*\s*SSH-written\. This lets launch-day flip the rail on without\s*\*\s*redeploying/,
     );
   });
 
   it('V-080 / V-082 / V-088 Stripe sub-fields all individually optional', () => {
     expect(body).toMatch(/V-080 \/ V-082 \/ V-088: Stripe configuration\./);
     expect(body).toMatch(
-      /Sub-fields are individually optional so dev\s*\n?\s*\/\/\s*can run without any Stripe config \(routes simply don't register\)/,
+      /Sub-fields are individually optional so dev\s*\/\/\s*can run without any Stripe config \(routes simply don't register\)/,
     );
     expect(body).toMatch(/webhookSecret: z\.string\(\)\.min\(1\)\.optional\(\),/);
     expect(body).toMatch(/secretKey: z\.string\(\)\.min\(1\)\.optional\(\),/);
     expect(body).toMatch(
-      /tierPrices: z\s*\n?\s*\.record\(z\.string\(\), z\.object\(\{ monthly: z\.string\(\), annual: z\.string\(\) \}\)\)\s*\n?\s*\.optional\(\),/,
+      /tierPrices: z\s*\.record\(z\.string\(\), z\.object\(\{ monthly: z\.string\(\), annual: z\.string\(\) \}\)\)\s*\.optional\(\),/,
     );
   });
 
   it('V-353b MFA encryption key: base64-encoded 32-byte AES-256-GCM, optional (when unset MFA disabled); length-validated EAGERLY at config-parse (not just lazily in decodeKey) so a wrong-length key fails the boot rather than the first customer', () => {
     expect(body).toMatch(
-      /V-353b — base64-encoded 32-byte AES-256-GCM key used to encrypt\s*\n?\s*\*\s*TOTP secrets at rest\. When unset, \/v1\/account\/mfa\/\* routes are\s*\n?\s*\*\s*not registered \(MFA disabled\)/,
+      /V-353b — base64-encoded 32-byte AES-256-GCM key used to encrypt\s*\*\s*TOTP secrets at rest\. When unset, \/v1\/account\/mfa\/\* routes are\s*\*\s*not registered \(MFA disabled\)/,
     );
     // Field present (still optional → conditional-feature: unset = MFA disabled,
     // asserted behaviorally in config.test.ts). Short focused pins, not one
@@ -164,7 +164,7 @@ describe('W390.A apps/server/src/lib/config.ts content parity', () => {
 
   it('V-333b Playwright driver channel: webkit default + headed=false default', () => {
     expect(body).toMatch(
-      /V-333b — Playwright driver channel\. Consulted only when\s*\n?\s*\/\/\s*driver === 'playwright'\. Defaults to webkit \(closest to iPhone\s*\n?\s*\/\/\s*Safari for non-stealth E2E smoke testing on Mac\)/,
+      /V-333b — Playwright driver channel\. Consulted only when\s*\/\/\s*driver === 'playwright'\. Defaults to webkit \(closest to iPhone\s*\/\/\s*Safari for non-stealth E2E smoke testing on Mac\)/,
     );
     expect(body).toMatch(
       /playwrightBrowser: z\.enum\(\['webkit', 'chromium', 'firefox'\]\)\.default\('webkit'\),/,
@@ -180,7 +180,7 @@ describe('W390.A apps/server/src/lib/config.ts content parity', () => {
 
   it('V-113 slow-query log threshold: optional, unset = disabled (default for dev/test)', () => {
     expect(body).toMatch(
-      /V-113: Slow-query log threshold\. When set, queries at or above this\s*\n?\s*\/\/\s*duration emit a warn-level structured log via postgres-js client\s*\n?\s*\/\/\s*instrumentation\. Unset = disabled \(default for dev\/test\)/,
+      /V-113: Slow-query log threshold\. When set, queries at or above this\s*\/\/\s*duration emit a warn-level structured log via postgres-js client\s*\/\/\s*instrumentation\. Unset = disabled \(default for dev\/test\)/,
     );
     expect(body).toMatch(
       /slowQueryLogThresholdMs: z\.coerce\.number\(\)\.int\(\)\.positive\(\)\.optional\(\),/,
@@ -200,7 +200,7 @@ describe('W390.A apps/server/src/lib/config.ts content parity', () => {
 
   it('parseTierPrices: accepts legacy flat-string shape OR {monthly, annual}; throws on malformed', () => {
     expect(body).toMatch(
-      /Accepts either the new nested shape \(monthly \+ annual per tier\) or the\s*\n?\s*\/\/\s*legacy flat shape from the env-vars\.md placeholder \(single price id per\s*\n?\s*\/\/\s*tier — synthesised as monthly only\)\. Throws on malformed input so a\s*\n?\s*\/\/\s*misconfigured deploy fails fast at boot/,
+      /Accepts either the new nested shape \(monthly \+ annual per tier\) or the\s*\/\/\s*legacy flat shape from the env-vars\.md placeholder \(single price id per\s*\/\/\s*tier — synthesised as monthly only\)\. Throws on malformed input so a\s*\/\/\s*misconfigured deploy fails fast at boot/,
     );
     expect(body).toMatch(/out\[tier\] = \{ monthly: value, annual: value \};/);
     expect(body).toMatch(
@@ -210,7 +210,7 @@ describe('W390.A apps/server/src/lib/config.ts content parity', () => {
 
   it('exposeDebugToken: dev/test only — production must never leak token via response body', () => {
     expect(body).toMatch(
-      /When true, signup \/ magic-link \/ password-reset responses include\s*\n?\s*\*\s*a `debug_token` field containing the plaintext token\. ENABLE ONLY\s*\n?\s*\*\s*in dev \/ test — production must never leak these tokens via the\s*\n?\s*\*\s*response body\. Default false/,
+      /When true, signup \/ magic-link \/ password-reset responses include\s*\*\s*a `debug_token` field containing the plaintext token\. ENABLE ONLY\s*\*\s*in dev \/ test — production must never leak these tokens via the\s*\*\s*response body\. Default false/,
     );
     expect(body).toMatch(/exposeDebugToken: z\.boolean\(\)\.default\(false\),/);
     expect(body).toMatch(/exposeDebugToken: envFlag\(env\.AUTH_EXPOSE_DEBUG_TOKEN\)/);

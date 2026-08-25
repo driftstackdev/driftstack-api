@@ -96,14 +96,14 @@ describe('W916 V-202b/c AccountLifecycle emit dispatcher cross-source invariant'
   it('CRITICAL S44 billing.payment_succeeded honors the billing-receipt opt-out; billing.payment_failed DELIBERATELY has no shouldSend gate (billing-failure is critical-path, absent from OptOutableEmailEventSchema). Drift to gating the failure email would let a customer silently miss "your card failed".', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/account-lifecycle.ts'));
     expect(p).toMatch(
-      /const allowed = await this\.emailPreferences\.shouldSend\(accountId, 'billing-receipt'\);\s*\n?\s*if \(!allowed\) return;/,
+      /const allowed = await this\.emailPreferences\.shouldSend\(accountId, 'billing-receipt'\);\s*if \(!allowed\) return;/,
     );
     expect(p).toMatch(/DELIBERATELY no shouldSend gate/);
     // C6 — a per-(event, kind) claim now sits between the account check and
     // the send, but there must still be NO emailPreferences consult on the
     // failure notice (it is critical-path, never opt-outable).
     expect(p).toMatch(
-      /private async handlePaymentFailed\([\s\S]+?const account = await this\.repo\.findForLifecycle\(accountId\);\s*\n?\s*if \(account === null\) return;[\s\S]+?await this\.email\.sendBillingFailure\(\{/,
+      /private async handlePaymentFailed\([\s\S]+?const account = await this\.repo\.findForLifecycle\(accountId\);\s*if \(account === null\) return;[\s\S]+?await this\.email\.sendBillingFailure\(\{/,
     );
     expect(p).not.toMatch(/shouldSend\(accountId, 'billing-failure'\)/);
   });

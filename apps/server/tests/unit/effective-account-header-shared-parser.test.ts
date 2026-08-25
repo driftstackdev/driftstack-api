@@ -212,7 +212,7 @@ describe('readEffectiveAccountHeader — shared parser', () => {
         body,
         'the crypto-checkout guard no longer tests EVERY duplicate header value, so a request ' +
           'sending an empty first value and a real second one would slip the self-workspace check',
-      ).toMatch(/Array\.isArray\(rawActAsAccount\)\s*\n?\s*\?\s*rawActAsAccount\.some\(/);
+      ).toMatch(/Array\.isArray\(rawActAsAccount\)\s*\?\s*rawActAsAccount\.some\(/);
       expect(
         body,
         'the crypto-checkout guard no longer rejects on a present header, so an impersonation ' +

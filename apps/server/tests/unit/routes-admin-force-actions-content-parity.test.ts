@@ -51,7 +51,7 @@ describe('W419.C apps/server/src/routes/admin-force-actions.ts content parity', 
       /POST \/v1\/admin\/api-keys\/:id\/revoke\s+— force-revoke a customer API key/,
     );
     expect(body).toMatch(
-      /These bypass the usual ownership check \(admin scope only\)\. Both\s*\n?\s*\/\/\s*write an admin_audit_log row before responding \(D-025: audit-write\s*\n?\s*\/\/\s*before response is not best-effort\)\./,
+      /These bypass the usual ownership check \(admin scope only\)\. Both\s*\/\/\s*write an admin_audit_log row before responding \(D-025: audit-write\s*\/\/\s*before response is not best-effort\)\./,
     );
   });
 
@@ -65,7 +65,7 @@ describe('W419.C apps/server/src/routes/admin-force-actions.ts content parity', 
 
   it('ForceActionBodySchema: zod reason 1..500 optional + whole body optional', () => {
     expect(body).toMatch(
-      /const ForceActionBodySchema = z\s*\n?\s*\.object\(\{\s*\n?\s*reason: z\.string\(\)\.min\(1\)\.max\(500\)\.optional\(\),\s*\n?\s*\}\)\s*\n?\s*\.optional\(\);/,
+      /const ForceActionBodySchema = z\s*\.object\(\{\s*reason: z\.string\(\)\.min\(1\)\.max\(500\)\.optional\(\),\s*\}\)\s*\.optional\(\);/,
     );
   });
 
@@ -76,19 +76,19 @@ describe('W419.C apps/server/src/routes/admin-force-actions.ts content parity', 
 
   it('AdminForceActionsRoutesOptions: sessionRepo + apiKeysRepo + driver + audit + authCache (nullable)', () => {
     expect(body).toMatch(
-      /export interface AdminForceActionsRoutesOptions \{\s*\n?\s*sessionRepo: SessionRepo;\s*\n?\s*apiKeysRepo: ApiKeysRepo;\s*\n?\s*driver: Driver;\s*\n?\s*audit: AdminAuditService;\s*\n?\s*authCache: AuthCache \| null;\s*\n?\s*\}/,
+      /export interface AdminForceActionsRoutesOptions \{\s*sessionRepo: SessionRepo;\s*apiKeysRepo: ApiKeysRepo;\s*driver: Driver;\s*audit: AdminAuditService;\s*authCache: AuthCache \| null;\s*\}/,
     );
   });
 
   it('withAudit wrapper: D-025 success + error dual-write with deferred target/payload authority', () => {
     expect(body).toMatch(/Wrap a force-action with audit-on-success \+ audit-on-error per D-025\./);
     expect(body).toMatch(
-      /async function withAudit<T>\(\s*\n?\s*request: FastifyRequest,\s*\n?\s*action: AdminAuditAction,\s*\n?\s*args: \{\s*\n?\s*targetAccountId: DeferredAuditValue<string \| null>;\s*\n?\s*targetResourceId: string;\s*\n?\s*inputPayload: DeferredAuditValue<Record<string, unknown>>;\s*\n?\s*perform: \(\) => Promise<T>;\s*\n?\s*\},\s*\n?\s*\): Promise<T> \{/,
+      /async function withAudit<T>\(\s*request: FastifyRequest,\s*action: AdminAuditAction,\s*args: \{\s*targetAccountId: DeferredAuditValue<string \| null>;\s*targetResourceId: string;\s*inputPayload: DeferredAuditValue<Record<string, unknown>>;\s*perform: \(\) => Promise<T>;\s*\},\s*\): Promise<T> \{/,
     );
     expect(body).toContain('targetAccountId: resolveAuditValue(args.targetAccountId),');
     expect(body).toContain('inputPayload: resolveAuditValue(args.inputPayload),');
     expect(body).toMatch(
-      /const normalizedCode =\s*\n?\s*err instanceof Error && err\.name \? err\.name\.toLowerCase\(\)\.replace\(\/error\$\/, ''\) : 'unknown';/,
+      /const normalizedCode =\s*err instanceof Error && err\.name \? err\.name\.toLowerCase\(\)\.replace\(\/error\$\/, ''\) : 'unknown';/,
     );
     expect(body).toContain("const code = normalizedCode || 'unknown';");
   });
@@ -104,7 +104,7 @@ describe('W419.C apps/server/src/routes/admin-force-actions.ts content parity', 
 
   it('Session destroy fresh path: explicit admin-unscoped serialized authority with driver callback + destroyed {force:true, by_admin:true, reason?} event', () => {
     expect(body).toMatch(
-      /const result = await sessionRepo\.destroySessionSerialized\([\s\S]+?id: sessionId,\s*\n?\s*accountId: null,[\s\S]+?type: 'destroyed',[\s\S]+?force: true,\s*\n?\s*by_admin: true,[\s\S]+?destroyDriverSessionWithTimeout\(\(\) => driver\.destroy\(session\.driverSessionId\)\)/,
+      /const result = await sessionRepo\.destroySessionSerialized\([\s\S]+?id: sessionId,\s*accountId: null,[\s\S]+?type: 'destroyed',[\s\S]+?force: true,\s*by_admin: true,[\s\S]+?destroyDriverSessionWithTimeout\(\(\) => driver\.destroy\(session\.driverSessionId\)\)/,
     );
     expect(body).toContain("if (result.kind === 'driver_error') throw result.error;");
   });
@@ -121,10 +121,10 @@ describe('W419.C apps/server/src/routes/admin-force-actions.ts content parity', 
 
   it('D-020 cache invalidation on key revoke: authCache.invalidateKey(key.id); failure non-fatal (swallow); pattern rationale comment', () => {
     expect(body).toMatch(
-      /\/\/ Invalidate any cached AccountContext entries for this key\s*\n?\s*\/\/ so the next auth read sees the revocation immediately\s*\n?\s*\/\/ \(D-020 cache invalidation pattern\)\./,
+      /\/\/ Invalidate any cached AccountContext entries for this key\s*\/\/ so the next auth read sees the revocation immediately\s*\/\/ \(D-020 cache invalidation pattern\)\./,
     );
     expect(body).toMatch(
-      /if \(authCache !== null\) \{\s*\n?\s*try \{\s*\n?\s*await authCache\.invalidateKey\(key\.id\);\s*\n?\s*\} catch \{\s*\n?\s*\/\* cache failure non-fatal \*\/\s*\n?\s*\}\s*\n?\s*\}/,
+      /if \(authCache !== null\) \{\s*try \{\s*await authCache\.invalidateKey\(key\.id\);\s*\} catch \{\s*\/\* cache failure non-fatal \*\/\s*\}\s*\}/,
     );
   });
 

@@ -38,39 +38,39 @@ describe('W396.B apps/server/src/services/cost-aggregator.ts content parity', ()
 
   it('V-541.H framing pinned + V-073 UsageRepo wiring + V-541.B cost-monitoring connection', () => {
     expect(body).toMatch(
-      /V-541\.H — production UsageAggregator wiring the V-541\.B cost\s*\n?\s*\/\/\s*monitoring service to real usage data from the V-073 UsageRepo/,
+      /V-541\.H — production UsageAggregator wiring the V-541\.B cost\s*\/\/\s*monitoring service to real usage data from the V-073 UsageRepo/,
     );
   });
 
   it('6-dimension UsageInputs framing pinned: sessionMinutes / storageGbMonths / egressGb / emailSends / llmInputTokens / llmOutputTokens', () => {
     expect(body).toMatch(
-      /The cost estimator's UsageInputs has six dimensions:\s*\n?\s*\/\/\s*sessionMinutes \/ storageGbMonths \/ egressGb \/ emailSends \/\s*\n?\s*\/\/\s*llmInputTokens \/ llmOutputTokens/,
+      /The cost estimator's UsageInputs has six dimensions:\s*\/\/\s*sessionMinutes \/ storageGbMonths \/ egressGb \/ emailSends \/\s*\/\/\s*llmInputTokens \/ llmOutputTokens/,
     );
   });
 
   it('Today-coverage framing: sessionMinutes only (session_minute UsageRecordType) + 4 follow-up meters', () => {
     expect(body).toMatch(
-      /Today, the only one we have a per-account ledger for is\s*\n?\s*\/\/\s*session_minute \(UsageRecordType\)/,
+      /Today, the only one we have a per-account ledger for is\s*\/\/\s*session_minute \(UsageRecordType\)/,
     );
     expect(body).toMatch(/- storage: {2}per-account R2 quota \(V-541\.I follow-up\)/);
     expect(body).toMatch(/- egress: {3}TURN \/ R2 egress meter \(V-531 follow-up\)/);
     expect(body).toMatch(
-      /- email: {4}Postmark fan-out is account-level but not yet\s*\n?\s*\/\/\s*aggregated into usage_records \(V-541\.J follow-up\)/,
+      /- email: {4}Postmark fan-out is account-level but not yet\s*\/\/\s*aggregated into usage_records \(V-541\.J follow-up\)/,
     );
     expect(body).toMatch(
-      /- llm: {6}sub-processor tokens are accounted-for in the\s*\n?\s*\/\/\s*LLM-billing module \(V-487\) but not yet rolled\s*\n?\s*\/\/\s*into usage_records \(V-541\.K follow-up\)/,
+      /- llm: {6}sub-processor tokens are accounted-for in the\s*\/\/\s*LLM-billing module \(V-487\) but not yet rolled\s*\/\/\s*into usage_records \(V-541\.K follow-up\)/,
     );
   });
 
   it('Customer-facing /v1/account/cost contract framing: real compute + zeros until meters land', () => {
     expect(body).toMatch(
-      /For now, the aggregator fills sessionMinutes from real data and\s*\n?\s*\/\/\s*returns zero for the rest\. That matches the customer-facing\s*\n?\s*\/\/\s*\/v1\/account\/cost contract — the customer sees a real compute\s*\n?\s*\/\/\s*number \+ zeros for the other lines until the meters land/,
+      /For now, the aggregator fills sessionMinutes from real data and\s*\/\/\s*returns zero for the rest\. That matches the customer-facing\s*\/\/\s*\/v1\/account\/cost contract — the customer sees a real compute\s*\/\/\s*number \+ zeros for the other lines until the meters land/,
     );
   });
 
   it('V-541.G prod-bootstrap swap hook framing pinned (stub aggregator → this implementation when founder ready)', () => {
     expect(body).toMatch(
-      /The\s*\n?\s*\/\/\s*V-541\.G prod bootstrap can swap its stub aggregator for this\s*\n?\s*\/\/\s*implementation when the founder is ready to expose real numbers\s*\n?\s*\/\/\s*to customers/,
+      /The\s*\/\/\s*V-541\.G prod bootstrap can swap its stub aggregator for this\s*\/\/\s*implementation when the founder is ready to expose real numbers\s*\/\/\s*to customers/,
     );
   });
 
@@ -90,23 +90,23 @@ describe('W396.B apps/server/src/services/cost-aggregator.ts content parity', ()
     expect(body).toMatch(/const sessionMinutes = totals\.totals\.session_minute \?\? 0;/);
     expect(body).toMatch(/if \(sessionMinutes === 0\) return null;/);
     expect(body).toMatch(
-      /return \{\s*\n?\s*sessionMinutes,\s*\n?\s*\/\/ V-541\.I\/J\/K follow-ups — zero placeholders until the meters\s*\n?\s*\/\/\s*for these dimensions exist at the per-account granularity\.\s*\n?\s*storageGbMonths: 0,\s*\n?\s*egressGb: 0,\s*\n?\s*emailSends: 0,\s*\n?\s*llmInputTokens: 0,\s*\n?\s*llmOutputTokens: 0,\s*\n?\s*\};/,
+      /return \{\s*sessionMinutes,\s*\/\/ V-541\.I\/J\/K follow-ups — zero placeholders until the meters\s*\/\/\s*for these dimensions exist at the per-account granularity\.\s*storageGbMonths: 0,\s*egressGb: 0,\s*emailSends: 0,\s*llmInputTokens: 0,\s*llmOutputTokens: 0,\s*\};/,
     );
   });
 
   it('billingCycleWindow: ^\\d{4}-\\d{2}$ regex; null on malformed (admin-tool friendlier error than 500)', () => {
     expect(body).toMatch(
-      /Parse a billing_cycle string \('YYYY-MM'\) into a \[start, end\) UTC\s*\n?\s*\*\s*Date pair\. Returns null for malformed input \(callers treat as no\s*\n?\s*\*\s*usage rather than throwing — admin tools display a friendlier\s*\n?\s*\*\s*error than a 500\)/,
+      /Parse a billing_cycle string \('YYYY-MM'\) into a \[start, end\) UTC\s*\*\s*Date pair\. Returns null for malformed input \(callers treat as no\s*\*\s*usage rather than throwing — admin tools display a friendlier\s*\*\s*error than a 500\)/,
     );
     expect(body).toMatch(
-      /export function billingCycleWindow\(billingCycle: string\): \{ start: Date; end: Date \} \| null \{\s*\n?\s*const match = \/\^\(\\d\{4\}\)-\(\\d\{2\}\)\$\/\.exec\(billingCycle\);/,
+      /export function billingCycleWindow\(billingCycle: string\): \{ start: Date; end: Date \} \| null \{\s*const match = \/\^\(\\d\{4\}\)-\(\\d\{2\}\)\$\/\.exec\(billingCycle\);/,
     );
     expect(body).toMatch(/if \(!match\) return null;/);
   });
 
   it('billingCycleWindow: month bounds 1..12 OR null (Number.isFinite guard for year + month)', () => {
     expect(body).toMatch(
-      /if \(!Number\.isFinite\(year\) \|\| !Number\.isFinite\(month\) \|\| month < 1 \|\| month > 12\) \{\s*\n?\s*return null;\s*\n?\s*\}/,
+      /if \(!Number\.isFinite\(year\) \|\| !Number\.isFinite\(month\) \|\| month < 1 \|\| month > 12\) \{\s*return null;\s*\}/,
     );
   });
 

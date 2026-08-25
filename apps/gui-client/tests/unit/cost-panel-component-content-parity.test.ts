@@ -34,7 +34,7 @@ describe('W385.C gui-client CostPanel content parity', () => {
   it('V-534.G framing pinned (pure presentation, caller supplies pre-formatted breakdown)', () => {
     expect(body).toMatch(/V-534\.G — cost-panel React component/);
     expect(body).toMatch(
-      /Pure\s*\n?\s*\/\/\s*presentation; no data fetching here — caller supplies the\s*\n?\s*\/\/\s*pre-formatted breakdown/,
+      /Pure\s*\/\/\s*presentation; no data fetching here — caller supplies the\s*\/\/\s*pre-formatted breakdown/,
     );
   });
 

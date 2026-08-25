@@ -35,20 +35,20 @@ describe('db/agent-sessions-repo content parity', () => {
       /\/\/ AI-A\.c — Drizzle implementation of AgentSessionsRepo \(migration 0042\)\./,
     );
     expect(body).toMatch(
-      /\/\/ Production wires this; tests\/dev use InMemoryAgentSessionsRepo from\s*\n?\s*\/\/ services\/agent-sessions\.ts\./,
+      /\/\/ Production wires this; tests\/dev use InMemoryAgentSessionsRepo from\s*\/\/ services\/agent-sessions\.ts\./,
     );
   });
 
   it('4-key-shape rules framing pinned: text PK agt_<uuid> + record-bound v2 jsonb transcript append-only via full-row UPDATE rewrite + debitTokens floors remaining at 0 with CHECK remaining<=total + closeWithReason atomic status+closed_reason flip. Bootstrap drains legacy rows before serving; drift on any invariant would risk plaintext, relocation, lost appends, or budget breakage', () => {
     expect(body).toMatch(/\/\/\s+- text PK `agt_<uuid>` minted at create\./);
     expect(body).toMatch(
-      /\/\/\s+- jsonb transcript stores a versioned application-encrypted envelope and\s*\n?\s*\/\/\s+grows append-only via appendTranscript \(full-row UPDATE rewrites the\s*\n?\s*\/\/\s+encrypted jsonb; OK at the expected per-session volume — a transcript\s*\n?\s*\/\/\s+with 100 messages is ~few KB jsonb\)\. Ordinary reads accept only the\s*\n?\s*\/\/\s+purpose\/account\/session-bound v2 envelope; bootstrap CAS-converts every\s*\n?\s*\/\/\s+plaintext\/v1 row to v2 before the app starts serving\./,
+      /\/\/\s+- jsonb transcript stores a versioned application-encrypted envelope and\s*\/\/\s+grows append-only via appendTranscript \(full-row UPDATE rewrites the\s*\/\/\s+encrypted jsonb; OK at the expected per-session volume — a transcript\s*\/\/\s+with 100 messages is ~few KB jsonb\)\. Ordinary reads accept only the\s*\/\/\s+purpose\/account\/session-bound v2 envelope; bootstrap CAS-converts every\s*\/\/\s+plaintext\/v1 row to v2 before the app starts serving\./,
     );
     expect(body).toMatch(
-      /\/\/\s+- debitTokens floors remaining at 0 \(matches the in-memory\s*\n?\s*\/\/\s+`Math\.max\(0, \.\.\.\)`\); the CHECK constraint `remaining <= total`\s*\n?\s*\/\/\s+prevents the opposite drift\./,
+      /\/\/\s+- debitTokens floors remaining at 0 \(matches the in-memory\s*\/\/\s+`Math\.max\(0, \.\.\.\)`\); the CHECK constraint `remaining <= total`\s*\/\/\s+prevents the opposite drift\./,
     );
     expect(body).toMatch(
-      /\/\/\s+- closeWithReason flips status to 'closed' \+ writes closed_reason\s*\n?\s*\/\/\s+atomically\./,
+      /\/\/\s+- closeWithReason flips status to 'closed' \+ writes closed_reason\s*\/\/\s+atomically\./,
     );
   });
 
@@ -77,7 +77,7 @@ describe('db/agent-sessions-repo content parity', () => {
 
   it('Concurrency note framing pinned (race CLOSED): debitTokens AND appendTranscript run their read-modify-write inside a db.transaction() that SELECTs the row FOR UPDATE first (mirrors setAccountTier), so the row lock SERIALISES concurrent same-session debits/appends — no debit lost (no under-billing), no transcript entry dropped (no data loss). Pinned so the atomic FOR-UPDATE approach stays documented, the false "single statement … serialize at the row level" claim cannot return, AND the now-fixed code cannot silently regress to a bare read-modify-write without this pin failing.', () => {
     expect(body).toMatch(
-      /\/\/ Concurrency note: debitTokens AND appendTranscript perform their\s*\n?\s*\/\/ read-modify-write inside a `db\.transaction\(\)` that SELECTs the row\s*\n?\s*\/\/ `FOR UPDATE` before mutating/,
+      /\/\/ Concurrency note: debitTokens AND appendTranscript perform their\s*\/\/ read-modify-write inside a `db\.transaction\(\)` that SELECTs the row\s*\/\/ `FOR UPDATE` before mutating/,
     );
     expect(body).toMatch(/row lock SERIALISES concurrent same-session debits\/appends/);
     expect(body).toMatch(/no transcript entry is dropped \(no data loss\)/);
@@ -142,10 +142,10 @@ describe('db/agent-sessions-repo content parity', () => {
 
   it("rowToRecord field-mapper framing pinned: 'v2-#9 + v2-#19 hardening columns — present on every row even when migration 0047 left them NULL on legacy rows.' + 'Arc 2 sub-slice 8.2 (v2-#8) — pair-mode + GUI-key columns from migration 0052. Existing rows pick up mode=\"ai\" from the CHECK default; null for pair_mode_state + gui_control_key_expires_at.' + mode: (row.mode as 'manual' | 'ai' | 'pair') ?? 'ai' fallback — pinned so the v2-#9/19 + Arc 2 sub-slice 8.2 + migration 0052 + 3-mode enum + 'ai' fallback contract all stay documented", () => {
     expect(body).toMatch(
-      /\/\/ v2-#9 \+ v2-#19 hardening columns — present on every row even\s*\n?\s*\/\/ when migration 0047 left them NULL on legacy rows\./,
+      /\/\/ v2-#9 \+ v2-#19 hardening columns — present on every row even\s*\/\/ when migration 0047 left them NULL on legacy rows\./,
     );
     expect(body).toMatch(
-      /\/\/ Arc 2 sub-slice 8\.2 \(v2-#8\) — pair-mode \+ GUI-key columns from\s*\n?\s*\/\/ migration 0052\. Existing rows pick up mode='ai' from the CHECK\s*\n?\s*\/\/ default; null for pair_mode_state \+ gui_control_key_expires_at\./,
+      /\/\/ Arc 2 sub-slice 8\.2 \(v2-#8\) — pair-mode \+ GUI-key columns from\s*\/\/ migration 0052\. Existing rows pick up mode='ai' from the CHECK\s*\/\/ default; null for pair_mode_state \+ gui_control_key_expires_at\./,
     );
     expect(body).toMatch(/mode: \(row\.mode as 'manual' \| 'ai' \| 'pair'\) \?\? 'ai',/);
   });
@@ -153,7 +153,7 @@ describe('db/agent-sessions-repo content parity', () => {
   it("create agt_<uuid> minting + v2-#19 first-write-wins framing pinned: const id = `agt_${randomUUID()}` + 'v2-#19 hardening columns — partial unique index on (account_id, idempotency_key) enforces \"first-write wins\" if the route layer races two POSTs with the same key. Postgres raises a UniqueViolation; the route layer's findByIdempotencyKey pre-check is the primary dedupe surface.' + 'Arc 2 sub-slice 8.2 — mode forwarded from caller (or default via DB CHECK constraint when args.mode is omitted).' + conditional spread when args.mode is undefined — pinned so the v2-#19 first-write-wins + UniqueViolation-from-Postgres + route-layer-pre-check-is-primary + Arc 2 sub-slice 8.2 DB-CHECK-default-when-omitted contract all stay documented", () => {
     expect(body).toMatch(/const id = `agt_\$\{randomUUID\(\)\}`;/);
     expect(body).toMatch(
-      /\/\/ v2-#19 hardening columns — partial unique index on\s*\n?\s*\/\/ \(account_id, idempotency_key\) enforces "first-write wins" if\s*\n?\s*\/\/ the route layer races two POSTs with the same key\. Postgres\s*\n?\s*\/\/ raises a UniqueViolation; the route layer's findByIdempotencyKey\s*\n?\s*\/\/ pre-check is the primary dedupe surface\./,
+      /\/\/ v2-#19 hardening columns — partial unique index on\s*\/\/ \(account_id, idempotency_key\) enforces "first-write wins" if\s*\/\/ the route layer races two POSTs with the same key\. Postgres\s*\/\/ raises a UniqueViolation; the route layer's findByIdempotencyKey\s*\/\/ pre-check is the primary dedupe surface\./,
     );
     expect(body).toMatch(/\.\.\.\(args\.mode !== undefined \? \{ mode: args\.mode \} : \{\}\),/);
   });

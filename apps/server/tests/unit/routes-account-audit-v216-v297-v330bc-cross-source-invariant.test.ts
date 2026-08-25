@@ -128,7 +128,7 @@ describe('W1037 routes/account-audit V-216 + V-297 + V-330b/c + V-484 cross-sour
       /const redact = redactActorPrivacy \|\| rowNeedsActorPrivacyRedaction\(row\);/,
     );
     expect(p).toMatch(
-      /function rowNeedsActorPrivacyRedaction\(row: AccountAuditEntryRow\): boolean \{\s*\n?\s*return row\.actorAccountId !== null && row\.actorAccountId !== row\.accountId;\s*\n?\s*\}/,
+      /function rowNeedsActorPrivacyRedaction\(row: AccountAuditEntryRow\): boolean \{\s*return row\.actorAccountId !== null && row\.actorAccountId !== row\.accountId;\s*\}/,
     );
     expect(p).toMatch(/payload: redact \? scrubActorPrivacy\(row\.payload\) : row\.payload,/);
     expect(p).toMatch(/ip_address: redact \? null : row\.ipAddress,/);

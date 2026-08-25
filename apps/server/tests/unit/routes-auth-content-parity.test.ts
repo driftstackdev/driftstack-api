@@ -81,7 +81,7 @@ describe('W421.B apps/server/src/routes/auth.ts content parity', () => {
       /POST \/v1\/auth\/mfa\/step-up\s+— re-assert MFA on an already-authenticated session/,
     );
     expect(body).toMatch(
-      /Every endpoint here is public \(no requireAuth — these ARE the gate\) EXCEPT\s*\n?\s*\/\/ POST \/v1\/auth\/mfa\/step-up/,
+      /Every endpoint here is public \(no requireAuth — these ARE the gate\) EXCEPT\s*\/\/ POST \/v1\/auth\/mfa\/step-up/,
     );
     // V-1021 — the retracted sentence claimed the property held for every route.
     expect(body, 'the blanket all-public claim is back').not.toMatch(
@@ -106,7 +106,7 @@ describe('W421.B apps/server/src/routes/auth.ts content parity', () => {
 
   it('V-251 framing pinned: signup/login/verify-email/password-reset-request rate-limited per IP; auth-ip: prefix; AUTH_IP_LIMITS source; founder P1-004 override 2026-05-07', () => {
     expect(body).toMatch(
-      /V-251 — IP-based rate limiting wired on signup \/ login \/ verify-email\s*\n?\s*\/\/\s*\/ password-reset-request\. Per-IP token-bucket via the same\s*\n?\s*\/\/\s*`RateLimitStore` the account-keyed limiter uses; bucket key prefix\s*\n?\s*\/\/\s*per endpoint\. Limits set in `middleware\/ip-rate-limit\.ts::AUTH_IP_LIMITS`\s*\n?\s*\/\/\s*per founder direction \(P1-004 deferral overridden 2026-05-07\)\./,
+      /V-251 — IP-based rate limiting wired on signup \/ login \/ verify-email\s*\/\/\s*\/ password-reset-request\. Per-IP token-bucket via the same\s*\/\/\s*`RateLimitStore` the account-keyed limiter uses; bucket key prefix\s*\/\/\s*per endpoint\. Limits set in `middleware\/ip-rate-limit\.ts::AUTH_IP_LIMITS`\s*\/\/\s*per founder direction \(P1-004 deferral overridden 2026-05-07\)\./,
     );
   });
 
@@ -132,25 +132,25 @@ describe('W421.B apps/server/src/routes/auth.ts content parity', () => {
       /function clientIp\(req: FastifyRequest\): string \| null \{[\s\S]{0,600}?return req\.ip \?\? null;/,
     );
     expect(body).toMatch(
-      /function userAgent\(req: FastifyRequest\): string \| null \{\s*\n?\s*const v = req\.headers\['user-agent'\];\s*\n?\s*if \(typeof v !== 'string' \|\| v\.length === 0\) return null;\s*\n?\s*return v\.slice\(0, 512\);/,
+      /function userAgent\(req: FastifyRequest\): string \| null \{\s*const v = req\.headers\['user-agent'\];\s*if \(typeof v !== 'string' \|\| v\.length === 0\) return null;\s*return v\.slice\(0, 512\);/,
     );
   });
 
   it('sessionResponse: { session: { token, expires_at ISO, account_id=acc_<uuid> } } — common shape', () => {
     expect(body).toMatch(
-      /function sessionResponse\(args: \{[\s\S]+?\}\): \{[\s\S]+?\} \{\s*\n?\s*return \{\s*\n?\s*session: \{\s*\n?\s*token: args\.session\.plaintext,\s*\n?\s*expires_at: args\.session\.row\.expiresAt\.toISOString\(\),\s*\n?\s*account_id: `acc_\$\{args\.account\.id\}`,\s*\n?\s*\},\s*\n?\s*\};/,
+      /function sessionResponse\(args: \{[\s\S]+?\}\): \{[\s\S]+?\} \{\s*return \{\s*session: \{\s*token: args\.session\.plaintext,\s*expires_at: args\.session\.row\.expiresAt\.toISOString\(\),\s*account_id: `acc_\$\{args\.account\.id\}`,\s*\},\s*\};/,
     );
   });
 
   it('mapAuthFlowError: 5-code exhaustive switch (email_already_registered + invalid_credentials + invalid_auth_token + email_not_verified + account_suspended); rethrow if not AuthFlowError', () => {
     expect(body).toMatch(
-      /function mapAuthFlowError\(err: unknown\): never \{\s*\n?\s*if \(!\(err instanceof AuthFlowError\)\) throw err;\s*\n?\s*switch \(err\.code\) \{\s*\n?\s*case 'email_already_registered':\s*\n?\s*throw new EmailAlreadyRegisteredError\(\);\s*\n?\s*case 'invalid_credentials':\s*\n?\s*throw new InvalidCredentialsError\(\);\s*\n?\s*case 'invalid_auth_token':\s*\n?\s*throw new InvalidAuthTokenError\(\);\s*\n?\s*case 'email_not_verified':\s*\n?\s*throw new EmailNotVerifiedError\(\);\s*\n?\s*case 'account_suspended':\s*\n?\s*throw new ForbiddenError\('Account is suspended\.'\);/,
+      /function mapAuthFlowError\(err: unknown\): never \{\s*if \(!\(err instanceof AuthFlowError\)\) throw err;\s*switch \(err\.code\) \{\s*case 'email_already_registered':\s*throw new EmailAlreadyRegisteredError\(\);\s*case 'invalid_credentials':\s*throw new InvalidCredentialsError\(\);\s*case 'invalid_auth_token':\s*throw new InvalidAuthTokenError\(\);\s*case 'email_not_verified':\s*throw new EmailNotVerifiedError\(\);\s*case 'account_suspended':\s*throw new ForbiddenError\('Account is suspended\.'\);/,
     );
   });
 
   it('MFA-required responses use one challenge-token/expiry serializer', () => {
     expect(body).toMatch(
-      /\/\/ V-353d — discriminated-union response\. MFA-enrolled accounts\s*\n?\s*\/\/ get a challenge token instead of a session; client posts the\s*\n?\s*\/\/ token \+ 6-digit \(or recovery\) to \/v1\/auth\/mfa\/challenge\./,
+      /\/\/ V-353d — discriminated-union response\. MFA-enrolled accounts\s*\/\/ get a challenge token instead of a session; client posts the\s*\/\/ token \+ 6-digit \(or recovery\) to \/v1\/auth\/mfa\/challenge\./,
     );
     expect(body).toMatch(
       /function mfaRequiredResponse\(args: \{[\s\S]+?mfa_required: true,[\s\S]+?challenge_token: args\.challengeToken,[\s\S]+?challenge_expires_at: args\.challengeExpiresAt\.toISOString\(\),/,
@@ -160,26 +160,26 @@ describe('W421.B apps/server/src/routes/auth.ts content parity', () => {
       body.match(/if \(result\.kind === 'mfa_required'\) return mfaRequiredResponse\(result\);/g),
     ).toHaveLength(3);
     expect(body).toMatch(
-      /if \(result\.kind === 'mfa_required'\) \{\s*\n?\s*return mfaRequiredResponse\(result\);/,
+      /if \(result\.kind === 'mfa_required'\) \{\s*return mfaRequiredResponse\(result\);/,
     );
   });
 
   it('V-353d mfa/challenge: rate-limited via same loginGate; service.completeMfaChallenge with code OR recovery_code; returns { session, via }', () => {
     expect(body).toMatch(
-      /\/\/ V-353d — exchange the challenge_token \+ 6-digit \(or recovery\) for\s*\n?\s*\/\/ a real session\. Rate-limited via the same loginGate \(per-IP\)\./,
+      /\/\/ V-353d — exchange the challenge_token \+ 6-digit \(or recovery\) for\s*\/\/ a real session\. Rate-limited via the same loginGate \(per-IP\)\./,
     );
     expect(body).toMatch(
       /app\.post\('\/v1\/auth\/mfa\/challenge', \{ preHandler: \[loginGate\] \}, async \(req\) => \{/,
     );
     expect(body).toMatch(
-      /const result = await service\.completeMfaChallenge\(\{\s*\n?\s*challengeToken: parsed\.data\.challenge_token,\s*\n?\s*code: parsed\.data\.code,\s*\n?\s*recoveryCode: parsed\.data\.recovery_code,/,
+      /const result = await service\.completeMfaChallenge\(\{\s*challengeToken: parsed\.data\.challenge_token,\s*code: parsed\.data\.code,\s*recoveryCode: parsed\.data\.recovery_code,/,
     );
     expect(body).toMatch(/via: result\.via,/);
   });
 
   it("V-353e step-up reauth: requires bearer auth + web-session (API-key callers refused with 403 'only callable from a web session'); stamps mfa_satisfied_at; refreshes 15-min step-up window", () => {
     expect(body).toMatch(
-      /\/\/ V-353e — step-up reauth on the EXISTING web session\. Caller is\s*\n?\s*\/\/ bearer-authed; we verify the 6-digit \(or recovery\) code and stamp\s*\n?\s*\/\/ `mfa_satisfied_at` on their session\. Step-up-gated routes\s*\n?\s*\/\/ \(DELETE \/v1\/account\/mfa, future DELETE \/v1\/account\) pass for the\s*\n?\s*\/\/ next 15 min\./,
+      /\/\/ V-353e — step-up reauth on the EXISTING web session\. Caller is\s*\/\/ bearer-authed; we verify the 6-digit \(or recovery\) code and stamp\s*\/\/ `mfa_satisfied_at` on their session\. Step-up-gated routes\s*\/\/ \(DELETE \/v1\/account\/mfa, future DELETE \/v1\/account\) pass for the\s*\/\/ next 15 min\./,
     );
     // V-947 — the gate list is the claim in this test's name; the handler's
     // parameter list was never part of it. The pin used to include
@@ -188,20 +188,20 @@ describe('W421.B apps/server/src/routes/auth.ts content parity', () => {
     // registration past the print width — broke a pin about authentication for a
     // reason that had nothing to do with authentication. Path and gates only.
     expect(body).toMatch(
-      /'\/v1\/auth\/mfa\/step-up',\s*\n?\s*\{ preHandler: \[app\.requireAuth, loginGate\] \}/,
+      /'\/v1\/auth\/mfa\/step-up',\s*\{ preHandler: \[app\.requireAuth, loginGate\] \}/,
     );
     expect(body).toMatch(
-      /if \(ctx\.webSession === null\) \{\s*\n?\s*throw new ForbiddenError\('MFA step-up is only callable from a web session\.'\);/,
+      /if \(ctx\.webSession === null\) \{\s*throw new ForbiddenError\('MFA step-up is only callable from a web session\.'\);/,
     );
     expect(body).toMatch(/mfa_satisfied_at: result\.mfaSatisfiedAt\.toISOString\(\),/);
   });
 
   it('Resend-verification framing pinned (#187): shape-stable response regardless of email match (silent no-op service prevents existence leak); 3/min IP-rate-limited (parity with password-reset since each call fires Postmark)', () => {
     expect(body).toMatch(
-      /\/\/ #187 — self-service resend of the signup verification email\. The\s*\n?\s*\/\/ response shape is identical whether the email matched an unverified\s*\n?\s*\/\/ account, an already-verified account, or no account at all \(the\s*\n?\s*\/\/ service silently no-ops in the latter two cases so the wire never\s*\n?\s*\/\/ leaks account-existence\)\. IP-rate-limited at 3\/min same as\s*\n?\s*\/\/ password-reset since each call fires a Postmark send\./,
+      /\/\/ #187 — self-service resend of the signup verification email\. The\s*\/\/ response shape is identical whether the email matched an unverified\s*\/\/ account, an already-verified account, or no account at all \(the\s*\/\/ service silently no-ops in the latter two cases so the wire never\s*\/\/ leaks account-existence\)\. IP-rate-limited at 3\/min same as\s*\/\/ password-reset since each call fires a Postmark send\./,
     );
     expect(body).toMatch(
-      /return \{\s*\n?\s*sent: true as const,\s*\n?\s*expires_at: result\.expiresAt\.toISOString\(\),\s*\n?\s*\.\.\.\(result\.debugToken !== null \? \{ debug_token: result\.debugToken \} : \{\}\),\s*\n?\s*\};/,
+      /return \{\s*sent: true as const,\s*expires_at: result\.expiresAt\.toISOString\(\),\s*\.\.\.\(result\.debugToken !== null \? \{ debug_token: result\.debugToken \} : \{\}\),\s*\};/,
     );
   });
 
@@ -210,19 +210,19 @@ describe('W421.B apps/server/src/routes/auth.ts content parity', () => {
       /app\.post\('\/v1\/auth\/magic-link\/request', \{ preHandler: \[magicLinkRequestGate\] \}, async \(req\) => \{/,
     );
     expect(body).toMatch(
-      /\/\/ Always shape-stable: client never learns whether the email\s*\n?\s*\/\/ matched an account from this response\./,
+      /\/\/ Always shape-stable: client never learns whether the email\s*\/\/ matched an account from this response\./,
     );
   });
 
   it('Logout: IP-gated (W484) + always returns { ok: true as const } regardless of token match (no leak)', () => {
     expect(body).toMatch(
-      /app\.post\('\/v1\/auth\/logout', \{ preHandler: \[logoutGate\] \}, async \(req\) => \{[\s\S]+?await service\.logout\(parsed\.data\.token\);\s*\n?\s*return \{ ok: true as const \};/,
+      /app\.post\('\/v1\/auth\/logout', \{ preHandler: \[logoutGate\] \}, async \(req\) => \{[\s\S]+?await service\.logout\(parsed\.data\.token\);\s*return \{ ok: true as const \};/,
     );
   });
 
   it('Signup: optional debugToken spread; verification_email_expires_at ISO; clientIp captured as requestedFromIp (bundled-LLM consent/cap spread REMOVED 2026-06-30 — no longer settable at signup, see api-types-auth-content-parity.test.ts)', () => {
     expect(body).toMatch(
-      /const result = await service\.signup\(\{\s*\n?\s*email: parsed\.data\.email,\s*\n?\s*password: parsed\.data\.password,\s*\n?\s*name: parsed\.data\.name,\s*\n?\s*requestedFromIp: clientIp\(req\),[\s\S]*?\}\);\s*\n?\s*return \{\s*\n?\s*verification_email_expires_at: result\.verifyExpiresAt\.toISOString\(\),\s*\n?\s*\.\.\.\(result\.debugToken !== null \? \{ debug_token: result\.debugToken \} : \{\}\),\s*\n?\s*\};/,
+      /const result = await service\.signup\(\{\s*email: parsed\.data\.email,\s*password: parsed\.data\.password,\s*name: parsed\.data\.name,\s*requestedFromIp: clientIp\(req\),[\s\S]*?\}\);\s*return \{\s*verification_email_expires_at: result\.verifyExpiresAt\.toISOString\(\),\s*\.\.\.\(result\.debugToken !== null \? \{ debug_token: result\.debugToken \} : \{\}\),\s*\};/,
     );
     expect(body).not.toMatch(/parsed\.data\.bundled_llm_consent/);
     expect(body).not.toMatch(/bundledLlmConsent:/);
@@ -238,10 +238,10 @@ describe('W421.B apps/server/src/routes/auth.ts content parity', () => {
       /const result = await service\.verifyEmail\(\{[\s\S]+?if \(result\.kind === 'mfa_required'\) return mfaRequiredResponse\(result\);\s*return sessionResponse\(result\);/,
     );
     expect(body).toMatch(
-      /const result = await service\.consumeMagicLink\(\{[\s\S]+?if \(result\.kind === 'mfa_required'\) return mfaRequiredResponse\(result\);\s*\n?\s*return sessionResponse\(result\);/,
+      /const result = await service\.consumeMagicLink\(\{[\s\S]+?if \(result\.kind === 'mfa_required'\) return mfaRequiredResponse\(result\);\s*return sessionResponse\(result\);/,
     );
     expect(body).toMatch(
-      /const result = await service\.confirmPasswordReset\(\{[\s\S]+?if \(result\.kind === 'mfa_required'\) return mfaRequiredResponse\(result\);\s*\n?\s*return sessionResponse\(result\);/,
+      /const result = await service\.confirmPasswordReset\(\{[\s\S]+?if \(result\.kind === 'mfa_required'\) return mfaRequiredResponse\(result\);\s*return sessionResponse\(result\);/,
     );
     expect(body).toMatch(
       /const result = await service\.refreshSession\(\{[\s\S]+?return sessionResponse\(result\);/,
@@ -252,19 +252,19 @@ describe('W421.B apps/server/src/routes/auth.ts content parity', () => {
     expect(body).toMatch(/export interface AuthRoutesDeps \{/);
     expect(body).toMatch(/service: AuthFlowsService;/);
     expect(body).toMatch(
-      /\/\*\*\s*\n?\s*\*\s*V-251 — rate-limit store shared with the account-keyed limiter\.\s*\n?\s*\*\s*IP-keyed buckets use distinct namespaces \(`auth-ip:\*`\) so they\s*\n?\s*\*\s*don't conflict with account-keyed buckets \(`rl:\*`\)\.\s*\n?\s*\*\/\s*\n?\s*rateLimitStore: RateLimitStore;/,
+      /\/\*\*\s*\*\s*V-251 — rate-limit store shared with the account-keyed limiter\.\s*\*\s*IP-keyed buckets use distinct namespaces \(`auth-ip:\*`\) so they\s*\*\s*don't conflict with account-keyed buckets \(`rl:\*`\)\.\s*\*\/\s*rateLimitStore: RateLimitStore;/,
     );
   });
 
   it('imports: 12 SDK schemas from @driftstack/api-types + AuthFlowError/Service/WebSessionRow/AuthFlowAccountRow + errors + AUTH_IP_LIMITS/ipRateLimit + RateLimitStore', () => {
     expect(body).toMatch(
-      /import \{\s*\n?\s*LoginRequestSchema,\s*\n?\s*LogoutRequestSchema,\s*\n?\s*MagicLinkConsumeRequestSchema,\s*\n?\s*MagicLinkRequestSchema,\s*\n?\s*MfaChallengeRequestSchema,\s*\n?\s*MfaStepUpRequestSchema,\s*\n?\s*PasswordResetConfirmRequestSchema,\s*\n?\s*PasswordResetRequestSchema,\s*\n?\s*RefreshSessionRequestSchema,\s*\n?\s*ResendVerificationRequestSchema,\s*\n?\s*SignupRequestSchema,\s*\n?\s*VerifyEmailRequestSchema,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import \{\s*LoginRequestSchema,\s*LogoutRequestSchema,\s*MagicLinkConsumeRequestSchema,\s*MagicLinkRequestSchema,\s*MfaChallengeRequestSchema,\s*MfaStepUpRequestSchema,\s*PasswordResetConfirmRequestSchema,\s*PasswordResetRequestSchema,\s*RefreshSessionRequestSchema,\s*ResendVerificationRequestSchema,\s*SignupRequestSchema,\s*VerifyEmailRequestSchema,\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(
-      /import \{\s*\n?\s*AuthFlowError,\s*\n?\s*type AuthFlowsService,\s*\n?\s*type WebSessionRow,\s*\n?\s*type AuthFlowAccountRow,\s*\n?\s*\} from '\.\.\/services\/auth-flows\.js';/,
+      /import \{\s*AuthFlowError,\s*type AuthFlowsService,\s*type WebSessionRow,\s*type AuthFlowAccountRow,\s*\} from '\.\.\/services\/auth-flows\.js';/,
     );
     expect(body).toMatch(
-      /import \{\s*\n?\s*EmailAlreadyRegisteredError,\s*\n?\s*EmailNotVerifiedError,\s*\n?\s*InvalidAuthTokenError,\s*\n?\s*InvalidCredentialsError,\s*\n?\s*ValidationError,\s*\n?\s*ForbiddenError,\s*\n?\s*\} from '\.\.\/lib\/errors\.js';/,
+      /import \{\s*EmailAlreadyRegisteredError,\s*EmailNotVerifiedError,\s*InvalidAuthTokenError,\s*InvalidCredentialsError,\s*ValidationError,\s*ForbiddenError,\s*\} from '\.\.\/lib\/errors\.js';/,
     );
     expect(body).toMatch(
       /import \{ AUTH_IP_LIMITS, ipRateLimit \} from '\.\.\/middleware\/ip-rate-limit\.js';/,

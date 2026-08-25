@@ -60,7 +60,7 @@ describe('W499.A apps/marketing-site/src/pages/changelog.astro content parity', 
 
   it('CATEGORY_COLOR 6-entry styling map: launch accent / sdk raised-ink / docs raised-ink / security red-100/900 / pricing amber-100/900 / self-hosted emerald-100/900 — pinned so every category resolves to a real badge color. S20 2026-07-06: the pricing chip completed the -900 correction its siblings got — it still used text-tk-accent-soft (the 13%-alpha WASH token misused as a text color; rendered 1.21:1, effectively invisible).', () => {
     expect(body).toMatch(
-      /const CATEGORY_COLOR: Record<ChangelogEntry\['category'\], string> = \{\s*\n?\s*launch: 'bg-tk-accent text-white',\s*\n?\s*(?:\s*\/\/[^\n]*)*\s*sdk: 'border border-tk-border bg-tk-raised text-tk-ink',\s*\n?\s*docs: 'border border-tk-border bg-tk-raised text-tk-ink',\s*\n?\s*security: 'bg-red-100 text-red-900',\s*\n?\s*(?:\s*\/\/[^\n]*)*\s*pricing: 'bg-amber-100 text-amber-900',\s*\n?\s*'self-hosted': 'bg-emerald-100 text-emerald-900',\s*\n?\s*\};/,
+      /const CATEGORY_COLOR: Record<ChangelogEntry\['category'\], string> = \{\s*launch: 'bg-tk-accent text-white',\s*(?:\s*\/\/[^\n]*)*\s*sdk: 'border border-tk-border bg-tk-raised text-tk-ink',\s*docs: 'border border-tk-border bg-tk-raised text-tk-ink',\s*security: 'bg-red-100 text-red-900',\s*(?:\s*\/\/[^\n]*)*\s*pricing: 'bg-amber-100 text-amber-900',\s*'self-hosted': 'bg-emerald-100 text-emerald-900',\s*\};/,
     );
   });
 
@@ -133,7 +133,7 @@ describe('W499.A apps/marketing-site/src/pages/changelog.astro content parity', 
     expect(body).toMatch(/Want changelog entries delivered\?/);
     expect(body).toMatch(/mailto:hello@driftstack\.dev\?subject=Changelog%20subscribe/);
     expect(body).toMatch(
-      /Roughly one email\s*\n?\s*every 2-4 weeks; only material changes \(no internal-noise\s*\n?\s*spam\)\./,
+      /Roughly one email\s*every 2-4 weeks; only material changes \(no internal-noise\s*spam\)\./,
     );
   });
 

@@ -51,28 +51,28 @@ describe('W407.B apps/server/src/services/team-members.ts content parity', () =>
   it('V-298b framing pinned: team model + V-298c auth path integration deferred + service is pure', () => {
     expect(body).toMatch(/V-298b — Team RBAC v1 service\./);
     expect(body).toMatch(
-      /Models a "team" as one owner-account \+ N member-accounts joined via\s*\n?\s*\/\/\s*the team_members table\. Each member is itself a regular `accounts`\s*\n?\s*\/\/\s*row \(their own login \+ email\); team membership is a separate\s*\n?\s*\/\/\s*relationship\./,
+      /Models a "team" as one owner-account \+ N member-accounts joined via\s*\/\/\s*the team_members table\. Each member is itself a regular `accounts`\s*\/\/\s*row \(their own login \+ email\); team membership is a separate\s*\/\/\s*relationship\./,
     );
     expect(body).toMatch(
-      /The auth path integration lives in V-298c — for\s*\n?\s*\/\/\s*V-298b, the service is pure \(no auth-cache writes, no scope checks\s*\n?\s*\/\/\s*beyond what the route layer enforces at construction-time\)\./,
+      /The auth path integration lives in V-298c — for\s*\/\/\s*V-298b, the service is pure \(no auth-cache writes, no scope checks\s*\/\/\s*beyond what the route layer enforces at construction-time\)\./,
     );
   });
 
   it('Invite flow framing pinned: 3-step + 7-day token + email-match invariant', () => {
     expect(body).toMatch(
-      /1\. Owner \(or admin team member\) calls invite\(inviterId, email, role\)\.\s*\n?\s*\/\/\s*Service generates a 7-day token \+ emails the invitee\./,
+      /1\. Owner \(or admin team member\) calls invite\(inviterId, email, role\)\.\s*\/\/\s*Service generates a 7-day token \+ emails the invitee\./,
     );
     expect(body).toMatch(
-      /3\. Invitee clicks the accept link\. Service looks up the invite by\s*\n?\s*\/\/\s*token-hash, asserts the invitee's account email matches, writes\s*\n?\s*\/\/\s*the team_members row, marks the invite accepted\./,
+      /3\. Invitee clicks the accept link\. Service looks up the invite by\s*\/\/\s*token-hash, asserts the invitee's account email matches, writes\s*\/\/\s*the team_members row, marks the invite accepted\./,
     );
   });
 
   it('Idempotency framing pinned: re-invite refreshes token; re-accept is no-op via unique-keyed (owner+member)', () => {
     expect(body).toMatch(
-      /Re-inviting the same email = the existing pending invite gets a\s*\n?\s*\/\/\s*fresh token \(old token invalidated\)\. No duplicate row\./,
+      /Re-inviting the same email = the existing pending invite gets a\s*\/\/\s*fresh token \(old token invalidated\)\. No duplicate row\./,
     );
     expect(body).toMatch(
-      /Re-accepting = the team_members row is unique-keyed \(owner \+\s*\n?\s*\/\/\s*member\); the second accept finds the row already there and\s*\n?\s*\/\/\s*returns the existing membership without error\./,
+      /Re-accepting = the team_members row is unique-keyed \(owner \+\s*\/\/\s*member\); the second accept finds the row already there and\s*\/\/\s*returns the existing membership without error\./,
     );
   });
 
@@ -104,20 +104,20 @@ describe('W407.B apps/server/src/services/team-members.ts content parity', () =>
 
   it('V-326b authCache.invalidateAccount: best-effort framing + 30s TTL self-heal', () => {
     expect(body).toMatch(
-      /V-326b — optional auth cache\. When wired, accept \/ removeMember\s*\n?\s*\*\s*bump the affected member account's auth version so cached\s*\n?\s*\*\s*AccountContext entries miss on the next request and rebuild\s*\n?\s*\*\s*with the updated teams\[\]\. Without it, membership changes only\s*\n?\s*\*\s*take effect after the 30s cache TTL elapses\./,
+      /V-326b — optional auth cache\. When wired, accept \/ removeMember\s*\*\s*bump the affected member account's auth version so cached\s*\*\s*AccountContext entries miss on the next request and rebuild\s*\*\s*with the updated teams\[\]\. Without it, membership changes only\s*\*\s*take effect after the 30s cache TTL elapses\./,
     );
     expect(body).toMatch(
-      /V-326b — best-effort cache invalidation\. Failures swallowed:\s*\n?\s*\*\s*stale teams\[\] degrades to "no team grants" \(safe default\), and\s*\n?\s*\*\s*the next 30s TTL expiry self-heals\./,
+      /V-326b — best-effort cache invalidation\. Failures swallowed:\s*\*\s*stale teams\[\] degrades to "no team grants" \(safe default\), and\s*\*\s*the next 30s TTL expiry self-heals\./,
     );
     expect(body).toMatch(
-      /private async invalidateAuthCache\(memberAccountId: string\): Promise<void> \{\s*\n?\s*if \(!this\.authCache\) return;\s*\n?\s*try \{\s*\n?\s*await this\.authCache\.invalidateAccount\(memberAccountId\);\s*\n?\s*\} catch \{\s*\n?\s*\/\* swallow \*\//,
+      /private async invalidateAuthCache\(memberAccountId: string\): Promise<void> \{\s*if \(!this\.authCache\) return;\s*try \{\s*await this\.authCache\.invalidateAccount\(memberAccountId\);\s*\} catch \{\s*\/\* swallow \*\//,
     );
   });
 
   it("invite: normalize email lowercase + @-check → BadRequestError; default role='member'; generateAuthToken + 7-day TTL + sendTeamInvite + team.member_invited audit", () => {
     expect(body).toMatch(/const normalized = input\.inviteeEmail\.trim\(\)\.toLowerCase\(\);/);
     expect(body).toMatch(
-      /if \(!normalized \|\| !normalized\.includes\('@'\)\) \{\s*\n?\s*throw new BadRequestError\('Invalid invitee email\.'\);/,
+      /if \(!normalized \|\| !normalized\.includes\('@'\)\) \{\s*throw new BadRequestError\('Invalid invitee email\.'\);/,
     );
     expect(body).toMatch(/const role: TeamRole = input\.role \?\? 'member';/);
     expect(body).toMatch(
@@ -127,32 +127,32 @@ describe('W407.B apps/server/src/services/team-members.ts content parity', () =>
     expect(body).toMatch(/`\$\{this\.dashboardBaseUrl\}\/team\/accept`/);
     expect(body).not.toMatch(/\/team\/accept\?token=/);
     expect(body).toMatch(
-      /action: 'team\.member_invited',\s*\n?\s*targetResourceId: null,\s*\n?\s*payload: \{ invitee_email: normalized, role \},/,
+      /action: 'team\.member_invited',\s*targetResourceId: null,\s*payload: \{ invitee_email: normalized, role \},/,
     );
   });
 
   it('accept: lookup/error guards + exact presented-hash atomic consume + invalidateAuthCache', () => {
     expect(body).toMatch(
-      /The accepting account's email MUST match\s*\n?\s*\*\s*the invite's invitee email — prevents accidentally accepting an\s*\n?\s*\*\s*invite addressed to someone else even if they shared the URL\./,
+      /The accepting account's email MUST match\s*\*\s*the invite's invitee email — prevents accidentally accepting an\s*\*\s*invite addressed to someone else even if they shared the URL\./,
     );
     expect(body).toMatch(
-      /if \(!invite\) \{\s*\n?\s*throw new NotFoundError\('Invite not found or already used\.'\);/,
+      /if \(!invite\) \{\s*throw new NotFoundError\('Invite not found or already used\.'\);/,
     );
     expect(body).toMatch(
-      /if \(invite\.inviteExpiresAt < new Date\(\)\) \{\s*\n?\s*throw new BadRequestError\('Invite has expired\. Ask the team to send a fresh invite\.'\);/,
+      /if \(invite\.inviteExpiresAt < new Date\(\)\) \{\s*throw new BadRequestError\('Invite has expired\. Ask the team to send a fresh invite\.'\);/,
     );
     expect(body).toMatch(
-      /if \(acceptingEmail\.trim\(\)\.toLowerCase\(\) !== invite\.inviteeEmail\) \{\s*\n?\s*throw new ConflictError\(\s*\n?\s*'The signed-in account does not match the invitee email\. Sign in with the address the invite was sent to, or ask for a fresh invite\.',/,
+      /if \(acceptingEmail\.trim\(\)\.toLowerCase\(\) !== invite\.inviteeEmail\) \{\s*throw new ConflictError\(\s*'The signed-in account does not match the invitee email\. Sign in with the address the invite was sent to, or ask for a fresh invite\.',/,
     );
     expect(body).toMatch(
-      /const membership = await this\.repo\.acceptInviteAtomic\(\{\s*\n?\s*inviteId: invite\.id,\s*\n?\s*inviteTokenHash: hash,\s*\n?\s*memberAccountId: input\.acceptingAccountId,\s*\n?\s*memberEmail: acceptingEmail,\s*\n?\s*acceptedAt: now,\s*\n?\s*\}\);/,
+      /const membership = await this\.repo\.acceptInviteAtomic\(\{\s*inviteId: invite\.id,\s*inviteTokenHash: hash,\s*memberAccountId: input\.acceptingAccountId,\s*memberEmail: acceptingEmail,\s*acceptedAt: now,\s*\}\);/,
     );
     expect(body).toMatch(
-      /if \(membership === null\) \{\s*\n?\s*throw new NotFoundError\('Invite not found or already used\.'\);/,
+      /if \(membership === null\) \{\s*throw new NotFoundError\('Invite not found or already used\.'\);/,
     );
     expect(body).toMatch(/await this\.invalidateAuthCache\(input\.acceptingAccountId\);/);
     expect(body).toMatch(
-      /action: 'team\.invite_accepted',\s*\n?\s*targetResourceId: `mem_\$\{membership\.id\}`,/,
+      /action: 'team\.invite_accepted',\s*targetResourceId: `mem_\$\{membership\.id\}`,/,
     );
   });
 
@@ -164,7 +164,7 @@ describe('W407.B apps/server/src/services/team-members.ts content parity', () =>
 
   it('removeMember: returns false when removeMember repo returns null (membership not-found / wrong-owner); on success: invalidateAuthCache + team.member_removed audit', () => {
     expect(body).toMatch(
-      /\/\*\*\s*\n?\s*\*\s*Remove a member by membership id\. Returns the removed member's\s*\n?\s*\*\s*account id when the row was found \+ deleted \(so the caller can\s*\n?\s*\*\s*invalidate that member's auth cache\); null when the row was not\s*\n?\s*\*\s*found or owned by a different account\./,
+      /\/\*\*\s*\*\s*Remove a member by membership id\. Returns the removed member's\s*\*\s*account id when the row was found \+ deleted \(so the caller can\s*\*\s*invalidate that member's auth cache\); null when the row was not\s*\*\s*found or owned by a different account\./,
     );
     // Removal atomically drops the membership AND cancels the member's
     // OUTSTANDING invites in one transaction (TOCTOU fix 2026-07-10; also
@@ -195,7 +195,7 @@ describe('W407.B apps/server/src/services/team-members.ts content parity', () =>
     expect(body).toMatch(/findAccountEmail\(accountId: string\): Promise<string \| null>;/);
     expect(body).toMatch(/upsertMembership\(input: \{/);
     expect(body).toMatch(
-      /acceptInviteAtomic\(input: \{\s*\n?\s*inviteId: string;\s*\n?\s*inviteTokenHash: string;\s*\n?\s*memberAccountId: string;\s*\n?\s*memberEmail: string;\s*\n?\s*acceptedAt: Date;\s*\n?\s*\}\): Promise<TeamMemberRow \| null>;/,
+      /acceptInviteAtomic\(input: \{\s*inviteId: string;\s*inviteTokenHash: string;\s*memberAccountId: string;\s*memberEmail: string;\s*acceptedAt: Date;\s*\}\): Promise<TeamMemberRow \| null>;/,
     );
     expect(body).toMatch(/markInviteAccepted\(inviteId: string, at: Date\): Promise<void>;/);
     expect(body).toMatch(/listMembers\(ownerAccountId: string\): Promise<TeamMemberRow\[\]>;/);

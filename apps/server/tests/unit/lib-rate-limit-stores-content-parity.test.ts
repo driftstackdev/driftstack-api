@@ -46,14 +46,12 @@ describe('W393.A apps/server/src/lib/memory-rate-limit-store.ts content parity',
 
   it('"in-process token bucket, do NOT use in production" framing pinned', () => {
     expect(body).toMatch(
-      /In-process token bucket store\. Used by tests; do NOT use in production\s*\n?\s*\/\/\s*\(no persistence, doesn't work across multiple server instances\)/,
+      /In-process token bucket store\. Used by tests; do NOT use in production\s*\/\/\s*\(no persistence, doesn't work across multiple server instances\)/,
     );
   });
 
   it('BucketState shape: tokens + lastRefillMs', () => {
-    expect(body).toMatch(
-      /interface BucketState \{\s*\n?\s*tokens: number;\s*\n?\s*lastRefillMs: number;\s*\n?\s*\}/,
-    );
+    expect(body).toMatch(/interface BucketState \{\s*tokens: number;\s*lastRefillMs: number;\s*\}/);
   });
 
   it('MemoryRateLimitStore: implements RateLimitStore + private buckets Map', () => {
@@ -78,7 +76,7 @@ describe('W393.A apps/server/src/lib/memory-rate-limit-store.ts content parity',
 
   it('allowed branch: tokens -= cost, allowed=true, retryAfterMs=0', () => {
     expect(body).toMatch(
-      /if \(refilled >= cost\) \{\s*\n?\s*const remaining = refilled - cost;\s*\n?\s*this\.buckets\.set\(key, \{ tokens: remaining, lastRefillMs: now \}\);\s*\n?\s*return Promise\.resolve\(\{ allowed: true, remaining, retryAfterMs: 0 \}\);\s*\n?\s*\}/,
+      /if \(refilled >= cost\) \{\s*const remaining = refilled - cost;\s*this\.buckets\.set\(key, \{ tokens: remaining, lastRefillMs: now \}\);\s*return Promise\.resolve\(\{ allowed: true, remaining, retryAfterMs: 0 \}\);\s*\}/,
     );
   });
 
@@ -88,7 +86,7 @@ describe('W393.A apps/server/src/lib/memory-rate-limit-store.ts content parity',
       /const retryAfterMs = Math\.ceil\(\(deficit \/ refillPerSecond\) \* 1000\);/,
     );
     expect(body).toMatch(
-      /\/\/ Persist refilled tokens but don't consume\.\s*\n?\s*this\.buckets\.set\(key, \{ tokens: refilled, lastRefillMs: now \}\);\s*\n?\s*return Promise\.resolve\(\{ allowed: false, remaining: refilled, retryAfterMs \}\);/,
+      /\/\/ Persist refilled tokens but don't consume\.\s*this\.buckets\.set\(key, \{ tokens: refilled, lastRefillMs: now \}\);\s*return Promise\.resolve\(\{ allowed: false, remaining: refilled, retryAfterMs \}\);/,
     );
   });
 
@@ -104,7 +102,7 @@ describe('W393.A apps/server/src/lib/memory-rate-limit-store.ts content parity',
 
   it('reset(): clears token buckets and exact-window history', () => {
     expect(body).toMatch(
-      /reset\(\): void \{\s*\n?\s*this\.buckets\.clear\(\);\s*\n?\s*this\.slidingWindows\.clear\(\);\s*\n?\s*\}/,
+      /reset\(\): void \{\s*this\.buckets\.clear\(\);\s*this\.slidingWindows\.clear\(\);\s*\}/,
     );
   });
 
@@ -127,19 +125,19 @@ describe('W393.A apps/server/src/lib/redis-rate-limit-store.ts content parity', 
 
   it('Lua-script atomicity framing pinned (single EVAL command, no race)', () => {
     expect(body).toMatch(
-      /The Lua script is the source of truth for atomicity:\s*\n?\s*\/\/\s*- read current \(tokens, lastRefillMs\)\s*\n?\s*\/\/\s*- refill based on elapsed time and refill rate\s*\n?\s*\/\/\s*- subtract cost iff sufficient\s*\n?\s*\/\/\s*- write new \(tokens, lastRefillMs\) with TTL = full-refill time \+ slack/,
+      /The Lua script is the source of truth for atomicity:\s*\/\/\s*- read current \(tokens, lastRefillMs\)\s*\/\/\s*- refill based on elapsed time and refill rate\s*\/\/\s*- subtract cost iff sufficient\s*\/\/\s*- write new \(tokens, lastRefillMs\) with TTL = full-refill time \+ slack/,
     );
     expect(body).toMatch(
-      /The whole script runs as a single Redis command \(EVAL\), so concurrent\s*\n?\s*\/\/\s*callers cannot race/,
+      /The whole script runs as a single Redis command \(EVAL\), so concurrent\s*\/\/\s*callers cannot race/,
     );
   });
 
   it('Lua script: HMGET (tokens, last_ms) — first-time defaults to capacity', () => {
     expect(body).toMatch(
-      /local data = redis\.call\('HMGET', key, 'tokens', 'last_ms'\)\s*\n?\s*local tokens = tonumber\(data\[1\]\)\s*\n?\s*local last_ms = tonumber\(data\[2\]\)/,
+      /local data = redis\.call\('HMGET', key, 'tokens', 'last_ms'\)\s*local tokens = tonumber\(data\[1\]\)\s*local last_ms = tonumber\(data\[2\]\)/,
     );
     expect(body).toMatch(
-      /if tokens == nil or last_ms == nil then\s*\n?\s*tokens = capacity\s*\n?\s*last_ms = now_ms\s*\n?\s*end/,
+      /if tokens == nil or last_ms == nil then\s*tokens = capacity\s*last_ms = now_ms\s*end/,
     );
   });
 
@@ -165,7 +163,7 @@ describe('W393.A apps/server/src/lib/redis-rate-limit-store.ts content parity', 
 
   it('Lua allowed branch: HMSET (tokens=remaining, last_ms=now_ms), return {1, remaining, 0}', () => {
     expect(body).toMatch(
-      /if refilled >= cost then\s*\n?\s*local remaining = refilled - cost\s*\n?\s*redis\.call\('HMSET', key, 'tokens', remaining, 'last_ms', now_ms\)/,
+      /if refilled >= cost then\s*local remaining = refilled - cost\s*redis\.call\('HMSET', key, 'tokens', remaining, 'last_ms', now_ms\)/,
     );
     expect(body).toMatch(/return \{1, remaining, 0\}/);
   });
@@ -198,13 +196,13 @@ describe('W393.A apps/server/src/lib/redis-rate-limit-store.ts content parity', 
 
   it('consume: redis.eval(LUA, 1, key, capacity, refillPerSecond, cost, now) — 1 KEY + 4 ARGV', () => {
     expect(body).toMatch(
-      /const result = \(await this\.redis\.eval\(\s*\n?\s*LUA,\s*\n?\s*1,\s*\n?\s*opts\.key,\s*\n?\s*opts\.capacity\.toString\(\),\s*\n?\s*opts\.refillPerSecond\.toString\(\),\s*\n?\s*opts\.cost\.toString\(\),\s*\n?\s*opts\.now\.toString\(\),\s*\n?\s*\)\) as \[number, number, number\];/,
+      /const result = \(await this\.redis\.eval\(\s*LUA,\s*1,\s*opts\.key,\s*opts\.capacity\.toString\(\),\s*opts\.refillPerSecond\.toString\(\),\s*opts\.cost\.toString\(\),\s*opts\.now\.toString\(\),\s*\)\) as \[number, number, number\];/,
     );
   });
 
   it('consume return shape: {allowed: flag===1, remaining, retryAfterMs}', () => {
     expect(body).toMatch(
-      /const \[allowedFlag, remaining, retryAfterMs\] = result;\s*\n?\s*return \{\s*\n?\s*allowed: allowedFlag === 1,\s*\n?\s*remaining,\s*\n?\s*retryAfterMs,\s*\n?\s*\};/,
+      /const \[allowedFlag, remaining, retryAfterMs\] = result;\s*return \{\s*allowed: allowedFlag === 1,\s*remaining,\s*retryAfterMs,\s*\};/,
     );
   });
 

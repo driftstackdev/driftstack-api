@@ -38,19 +38,19 @@ describe('W386.B apps/server/src/lib/api-keys.ts content parity', () => {
 
   it('env semantics pinned: "live" prod + "test" Phase 6+ sandbox reservation', () => {
     expect(body).toMatch(
-      /env ∈ \{"live", "test"\}; "live" for any production-style account,\s*\n?\s*\/\/\s*"test" reserved for sandbox accounts \(Phase 6\+\)/,
+      /env ∈ \{"live", "test"\}; "live" for any production-style account,\s*\/\/\s*"test" reserved for sandbox accounts \(Phase 6\+\)/,
     );
   });
 
   it('key_prefix column framing: first 16 chars (NOT secret, equivalent to a username)', () => {
     expect(body).toMatch(
-      /first 16 chars of\s*\n?\s*\/\/\s*the plaintext \(which is \*not\* secret on its own, equivalent to a username\)/,
+      /first 16 chars of\s*\/\/\s*the plaintext \(which is \*not\* secret on its own, equivalent to a username\)/,
     );
   });
 
   it('verification re-hash + constant-time compare framing', () => {
     expect(body).toMatch(
-      /Verification re-hashes the supplied plaintext and constant-time-compares\s*\n?\s*\/\/\s*against `key_hash` \(scrypt-kdf encoded\)/,
+      /Verification re-hashes the supplied plaintext and constant-time-compares\s*\/\/\s*against `key_hash` \(scrypt-kdf encoded\)/,
     );
   });
 
@@ -76,7 +76,7 @@ describe('W386.B apps/server/src/lib/api-keys.ts content parity', () => {
 
   it('keyPrefixFromPlaintext: slice(0, PREFIX_PUBLIC_LEN)', () => {
     expect(body).toMatch(
-      /export function keyPrefixFromPlaintext\(plaintext: string\): string \{\s*\n?\s*return plaintext\.slice\(0, PREFIX_PUBLIC_LEN\);\s*\n?\s*\}/,
+      /export function keyPrefixFromPlaintext\(plaintext: string\): string \{\s*return plaintext\.slice\(0, PREFIX_PUBLIC_LEN\);\s*\}/,
     );
   });
 
@@ -90,7 +90,7 @@ describe('W386.B apps/server/src/lib/api-keys.ts content parity', () => {
 
   it('hashApiKey docs: scrypt-kdf returns base64-encoded standard-format hash', () => {
     expect(body).toMatch(
-      /scrypt-kdf returns a base64-encoded standard-format hash\s*\n?\s*\/\/\s*\("scrypt"\+params\+salt\+key\)/,
+      /scrypt-kdf returns a base64-encoded standard-format hash\s*\/\/\s*\("scrypt"\+params\+salt\+key\)/,
     );
   });
 
@@ -100,12 +100,12 @@ describe('W386.B apps/server/src/lib/api-keys.ts content parity', () => {
     );
     expect(body).toMatch(/scryptKdf\.verify\(Buffer\.from\(encodedHash, 'base64'\), plaintext\)/);
     expect(body).toMatch(/return ok === true;/);
-    expect(body).toMatch(/\} catch \{\s*\n?\s*return false;\s*\n?\s*\}/);
+    expect(body).toMatch(/\} catch \{\s*return false;\s*\}/);
   });
 
   it('constantTimeStringEq: length pre-check + timingSafeEqual (no early-exit on length-mismatch)', () => {
     expect(body).toMatch(
-      /export function constantTimeStringEq\(a: string, b: string\): boolean \{\s*\n?\s*if \(a\.length !== b\.length\) return false;\s*\n?\s*return timingSafeEqual\(Buffer\.from\(a\), Buffer\.from\(b\)\);\s*\n?\s*\}/,
+      /export function constantTimeStringEq\(a: string, b: string\): boolean \{\s*if \(a\.length !== b\.length\) return false;\s*return timingSafeEqual\(Buffer\.from\(a\), Buffer\.from\(b\)\);\s*\}/,
     );
   });
 

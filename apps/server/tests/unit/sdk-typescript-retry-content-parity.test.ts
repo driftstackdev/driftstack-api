@@ -54,13 +54,13 @@ describe('W422.B packages/sdk-typescript/src/retry.ts content parity', () => {
   it('file exists at canonical path + module framing pinned (exponential backoff with full jitter + explicit 429 Retry-After + pure function over attempt closure)', () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(
-      /\/\/ Retry logic — exponential backoff with full jitter, with explicit support\s*\n?\s*\/\/ for 429 Retry-After\. Pure function over an attempt-producing closure;\s*\n?\s*\/\/ reused by the HTTP layer\./,
+      /\/\/ Retry logic — exponential backoff with full jitter, with explicit support\s*\/\/ for 429 Retry-After\. Pure function over an attempt-producing closure;\s*\/\/ reused by the HTTP layer\./,
     );
   });
 
   it('CRITICAL default policy pinned per-line — 5 bullet points: (1) "Up to 3 retry attempts (4 total tries) on transient failures"; (2) "Initial backoff 200 ms, doubling each attempt, cap 10 s"; (3) "Random jitter in [0, computed delay] (full jitter)" — the "full jitter" wording matters because half-jitter / decorrelated-jitter / equal-jitter are alternative AWS-style policies; (4) "Honour Retry-After when the error is a RateLimitError or 429"; (5) "Retry ONLY transient kinds — transport / internal (5xx) / rate_limited; do NOT retry on 4xx (except 429), nor the terminal 5xx kinds DriverError/DriverNotIntegrated/SessionTimeout". CRITICAL: bullet 5 is the load-bearing policy — it delegates to isRetryable() so the loop and the public predicate cannot drift, and it keeps parity with the Go (IsRetryable) + Python (is_retryable) SDKs which retry ONLY the transient set (NOT blanket-5xx). Drift to retrying 4xx would blast the server with auth failures; drift to blanket-5xx would auto-retry terminal driver/timeout failures.', () => {
     expect(body).toMatch(
-      /\/\/ Default policy \(kept in lockstep with the Python \+ Go SDKs —\s*\n?\s*\/\/\s*3 retries, 200 ms initial, 10 s cap\):\s*\n?\s*\/\/\s*- Up to 3 retry attempts \(4 total tries\) on transient failures\s*\n?\s*\/\/\s*- Initial backoff 200 ms, doubling each attempt, cap 10 s\s*\n?\s*\/\/\s*- Random jitter in \[0, computed delay\] \(full jitter\)\s*\n?\s*\/\/\s*- Honour Retry-After when the error is a RateLimitError or 429\s*\n?\s*\/\/\s*- Retry ONLY transient kinds — transport \(network\), internal \(5xx\),\s*\n?\s*\/\/\s*and rate_limited \(429\)\. do NOT retry on 4xx \(except 429\), and do\s*\n?\s*\/\/\s*NOT retry the terminal 5xx kinds DriverError \(502\),\s*\n?\s*\/\/\s*DriverNotIntegratedError \(503\), or SessionTimeoutError \(504\)/,
+      /\/\/ Default policy \(kept in lockstep with the Python \+ Go SDKs —\s*\/\/\s*3 retries, 200 ms initial, 10 s cap\):\s*\/\/\s*- Up to 3 retry attempts \(4 total tries\) on transient failures\s*\/\/\s*- Initial backoff 200 ms, doubling each attempt, cap 10 s\s*\/\/\s*- Random jitter in \[0, computed delay\] \(full jitter\)\s*\/\/\s*- Honour Retry-After when the error is a RateLimitError or 429\s*\/\/\s*- Retry ONLY transient kinds — transport \(network\), internal \(5xx\),\s*\/\/\s*and rate_limited \(429\)\. do NOT retry on 4xx \(except 429\), and do\s*\/\/\s*NOT retry the terminal 5xx kinds DriverError \(502\),\s*\/\/\s*DriverNotIntegratedError \(503\), or SessionTimeoutError \(504\)/,
     );
   });
 
@@ -70,19 +70,19 @@ describe('W422.B packages/sdk-typescript/src/retry.ts content parity', () => {
 
   it('RetryConfig interface — 5-field shape with all OPTIONAL. JSDoc defaults pinned (3 / 200 / 10000) so customers can read the values without grep-ing the implementation. test-seam framing pinned on rng + sleep ("Test override") so future maintainers know NOT to surface these in production docs.', () => {
     expect(body).toMatch(
-      /export interface RetryConfig \{\s*\n?\s*\/\*\* Max retry attempts \(in addition to the initial try\)\. Default 3\. \*\/\s*\n?\s*maxAttempts\?: number;\s*\n?\s*\/\*\* Initial backoff in ms\. Default 200\. \*\/\s*\n?\s*initialDelayMs\?: number;\s*\n?\s*\/\*\* Backoff cap in ms\. Default 10000\. \*\/\s*\n?\s*maxDelayMs\?: number;\s*\n?\s*\/\*\* Random source for jitter; defaults to Math\.random\. Test override\. \*\/\s*\n?\s*rng\?: \(\) => number;\s*\n?\s*\/\*\* Sleep function; defaults to setTimeout\. Test override\. \*\/\s*\n?\s*sleep\?: \(ms: number\) => Promise<void>;\s*\n?\s*\}/,
+      /export interface RetryConfig \{\s*\/\*\* Max retry attempts \(in addition to the initial try\)\. Default 3\. \*\/\s*maxAttempts\?: number;\s*\/\*\* Initial backoff in ms\. Default 200\. \*\/\s*initialDelayMs\?: number;\s*\/\*\* Backoff cap in ms\. Default 10000\. \*\/\s*maxDelayMs\?: number;\s*\/\*\* Random source for jitter; defaults to Math\.random\. Test override\. \*\/\s*rng\?: \(\) => number;\s*\/\*\* Sleep function; defaults to setTimeout\. Test override\. \*\/\s*sleep\?: \(ms: number\) => Promise<void>;\s*\}/,
     );
   });
 
   it('CRITICAL DEFAULTS constant — 3-field shape (maxAttempts:3 + initialDelayMs:200 + maxDelayMs:10_000, unified across TS/Python/Go per the audit). The numeric separator `10_000` is pinned (NOT `10000`) — it makes the value scannable at a glance. Drift to a higher maxDelayMs (e.g. 60_000) would let stuck flows wait full minutes between attempts.', () => {
     expect(body).toMatch(
-      /const DEFAULTS = \{\s*\n?\s*maxAttempts: 3,\s*\n?\s*initialDelayMs: 200,\s*\n?\s*maxDelayMs: 10_000,\s*\n?\s*\};/,
+      /const DEFAULTS = \{\s*maxAttempts: 3,\s*initialDelayMs: 200,\s*maxDelayMs: 10_000,\s*\};/,
     );
   });
 
   it('withRetry signature — async function with explicit generic `<T>`, `attempt: () => Promise<T>` closure parameter + `config: RetryConfig = {}` default-empty + `Promise<T>` return type. Drift to a non-generic return would force callers to type-assert the result; drift to required config would lose the zero-config default.', () => {
     expect(body).toMatch(
-      /export async function withRetry<T>\(\s*\n?\s*attempt: \(\) => Promise<T>,\s*\n?\s*config: RetryConfig = \{\},\s*\n?\s*\): Promise<T> \{/,
+      /export async function withRetry<T>\(\s*attempt: \(\) => Promise<T>,\s*config: RetryConfig = \{\},\s*\): Promise<T> \{/,
     );
   });
 
@@ -102,13 +102,13 @@ describe('W422.B packages/sdk-typescript/src/retry.ts content parity', () => {
 
   it("withRetry try-catch — return-await attempt() in try; capture err in lastErr + check `i === maxAttempts || !shouldRetry(err)` to throw; compute delay + sleep otherwise. The early-throw condition is OR — if EITHER we're out of attempts OR the error class is non-retryable, throw immediately (skip the sleep).", () => {
     expect(body).toMatch(
-      /try \{\s*\n?\s*return await attempt\(\);\s*\n?\s*\} catch \(err\) \{\s*\n?\s*lastErr = err;\s*\n?\s*if \(i === maxAttempts \|\| !shouldRetry\(err\)\) \{\s*\n?\s*throw err;\s*\n?\s*\}\s*\n?\s*const wait = computeDelay\(err, i, initialDelay, maxDelay, rng\);\s*\n?\s*await sleep\(wait\);\s*\n?\s*\}/,
+      /try \{\s*return await attempt\(\);\s*\} catch \(err\) \{\s*lastErr = err;\s*if \(i === maxAttempts \|\| !shouldRetry\(err\)\) \{\s*throw err;\s*\}\s*const wait = computeDelay\(err, i, initialDelay, maxDelay, rng\);\s*await sleep\(wait\);\s*\}/,
     );
   });
 
   it('withRetry trailing unreachable throw — `// Unreachable — we either return or throw inside the loop.` + `throw lastErr;`. TypeScript requires the throw for type-narrowing (otherwise the function appears to return void at the end). Drift to removing the comment would leave a confusing unreachable statement; drift to removing the throw would make TS infer Promise<T | undefined>.', () => {
     expect(body).toMatch(
-      /\/\/ Unreachable — we either return or throw inside the loop\.\s*\n?\s*throw lastErr;/,
+      /\/\/ Unreachable — we either return or throw inside the loop\.\s*throw lastErr;/,
     );
   });
 
@@ -120,25 +120,25 @@ describe('W422.B packages/sdk-typescript/src/retry.ts content parity', () => {
 
   it('computeDelay signature — 5-parameter signature (err + attemptIndex + initialDelay + maxDelay + rng). Returns number (the delay in ms). Drift to a void return would force the caller to manage the sleep separately; drift to dropping initialDelay/maxDelay parameters would force computeDelay to read DEFAULTS directly (defeating the test-seam pattern).', () => {
     expect(body).toMatch(
-      /function computeDelay\(\s*\n?\s*err: unknown,\s*\n?\s*attemptIndex: number,\s*\n?\s*initialDelay: number,\s*\n?\s*maxDelay: number,\s*\n?\s*rng: \(\) => number,\s*\n?\s*\): number \{/,
+      /function computeDelay\(\s*err: unknown,\s*attemptIndex: number,\s*initialDelay: number,\s*maxDelay: number,\s*rng: \(\) => number,\s*\): number \{/,
     );
   });
 
   it('CRITICAL computeDelay path 1 — RateLimitError with retryAfterSeconds>0 → `Math.min(err.retryAfterSeconds * 1000, maxDelay) + Math.floor(rng() * 100)`. The server hint is CAPPED at maxDelay (cross-SDK parity with Go nextDelay + Python _backoff_delay_ms: `min(retryAfter, maxDelay)`) so a buggy / hostile `Retry-After: 86400` can\'t pin the SDK in a 24h sleep. The "small jitter on top" stays — dropping the ≤100ms jitter would let multiple clients hammering the same rate-limited endpoint all wake up at the EXACT same millisecond (thundering herd). Drift to scaling the jitter to retryAfterSeconds*1000 would over-shoot the server\'s hint.', () => {
     expect(body).toMatch(
-      /if \(err instanceof RateLimitError && err\.retryAfterSeconds > 0\) \{[\s\S]*?return Math\.min\(err\.retryAfterSeconds \* 1000, maxDelay\) \+ Math\.floor\(rng\(\) \* 100\);\s*\n?\s*\}/,
+      /if \(err instanceof RateLimitError && err\.retryAfterSeconds > 0\) \{[\s\S]*?return Math\.min\(err\.retryAfterSeconds \* 1000, maxDelay\) \+ Math\.floor\(rng\(\) \* 100\);\s*\}/,
     );
   });
 
   it('CRITICAL computeDelay path 2 — full-jitter exponential: `const exp = Math.min(maxDelay, initialDelay * 2 ** attemptIndex); return Math.floor(rng() * exp);`. The 2 lines combined implement: (1) cap exponential growth at maxDelay, then (2) full-jitter in [0, exp]. Drift to `rng() * (max - initialDelay)` would change to equal-jitter (AWS variant) — different convergence characteristics under load.', () => {
     expect(body).toMatch(
-      /const exp = Math\.min\(maxDelay, initialDelay \* 2 \*\* attemptIndex\);\s*\n?\s*return Math\.floor\(rng\(\) \* exp\);/,
+      /const exp = Math\.min\(maxDelay, initialDelay \* 2 \*\* attemptIndex\);\s*return Math\.floor\(rng\(\) \* exp\);/,
     );
   });
 
   it("defaultSleep — setTimeout-backed Promise<void>. `new Promise((resolve) => setTimeout(resolve, ms))` 1-liner. Drift to using `clearTimeout` cleanup would over-engineer (the SDK doesn't support cancellation here). Drift to a queueMicrotask shim would skip the timer entirely.", () => {
     expect(body).toMatch(
-      /function defaultSleep\(ms: number\): Promise<void> \{\s*\n?\s*return new Promise\(\(resolve\) => setTimeout\(resolve, ms\)\);\s*\n?\s*\}/,
+      /function defaultSleep\(ms: number\): Promise<void> \{\s*return new Promise\(\(resolve\) => setTimeout\(resolve, ms\)\);\s*\}/,
     );
   });
 

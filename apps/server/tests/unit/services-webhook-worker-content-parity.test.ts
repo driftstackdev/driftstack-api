@@ -49,10 +49,10 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
   it('V-164 framing pinned: 5-step loop (claim → sign+POST → observe → record* → maybe auto-disable)', () => {
     expect(body).toMatch(/Webhook delivery worker\./);
     expect(body).toMatch(
-      /1\. Claim a batch of pending deliveries whose nextAttemptAt is past\s*\n?\s*\/\/\s*2\. For each: build the signed POST, send via fetch, observe response\s*\n?\s*\/\/\s*3\. On 2xx → recordDelivered \(resets endpoint\.consecutiveFailures\)\s*\n?\s*\/\/\s*4\. On non-2xx \/ network \/ timeout → recordRetry \(if attempts < MAX\) or\s*\n?\s*\/\/\s*recordDlq \(if attempts == MAX\)\. Only recordDlq bumps\s*\n?\s*\/\/\s*endpoint\.consecutiveFailures: that counter is a per-DELIVERY signal, and\s*\n?\s*\/\/\s*a retry is an attempt WITHIN one delivery\.\s*\n?\s*\/\/\s*5\. If endpoint\.consecutiveFailures crosses the auto-disable threshold,\s*\n?\s*\/\/\s*mark the endpoint disabled\./,
+      /1\. Claim a batch of pending deliveries whose nextAttemptAt is past\s*\/\/\s*2\. For each: build the signed POST, send via fetch, observe response\s*\/\/\s*3\. On 2xx → recordDelivered \(resets endpoint\.consecutiveFailures\)\s*\/\/\s*4\. On non-2xx \/ network \/ timeout → recordRetry \(if attempts < MAX\) or\s*\/\/\s*recordDlq \(if attempts == MAX\)\. Only recordDlq bumps\s*\/\/\s*endpoint\.consecutiveFailures: that counter is a per-DELIVERY signal, and\s*\/\/\s*a retry is an attempt WITHIN one delivery\.\s*\/\/\s*5\. If endpoint\.consecutiveFailures crosses the auto-disable threshold,\s*\/\/\s*mark the endpoint disabled\./,
     );
     expect(body).toMatch(
-      /The loop is process-local; in production we'd run one worker per app\s*\n?\s*\/\/\s*instance and rely on SELECT\.\.\.FOR UPDATE SKIP LOCKED to coordinate\s*\n?\s*\/\/\s*\(already in DrizzleWebhooksRepo\.claim\)\./,
+      /The loop is process-local; in production we'd run one worker per app\s*\/\/\s*instance and rely on SELECT\.\.\.FOR UPDATE SKIP LOCKED to coordinate\s*\/\/\s*\(already in DrizzleWebhooksRepo\.claim\)\./,
     );
   });
 
@@ -65,10 +65,10 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
 
   it('BACKOFF_MS_BY_ATTEMPT: 5-entry exponential ladder (1min / 5min / 15min / 30min / 60min)', () => {
     expect(body).toMatch(
-      /Backoff schedule per attempt-index AFTER a failure\. Index = the next\s*\n?\s*\*\s*attempt number \(1 = first retry … 5 = fifth\/last retry, scheduled\s*\n?\s*\*\s*60 min out\)\.[\s\S]*?\*\s*1: 1 min\s*\n?\s*\*\s*2: 5 min\s*\n?\s*\*\s*3: 15 min\s*\n?\s*\*\s*4: 30 min\s*\n?\s*\*\s*5: 60 min/,
+      /Backoff schedule per attempt-index AFTER a failure\. Index = the next\s*\*\s*attempt number \(1 = first retry … 5 = fifth\/last retry, scheduled\s*\*\s*60 min out\)\.[\s\S]*?\*\s*1: 1 min\s*\*\s*2: 5 min\s*\*\s*3: 15 min\s*\*\s*4: 30 min\s*\*\s*5: 60 min/,
     );
     expect(body).toMatch(
-      /const BACKOFF_MS_BY_ATTEMPT: Record<number, number> = \{\s*\n?\s*1: 60_000,\s*\n?\s*2: 5 \* 60_000,\s*\n?\s*3: 15 \* 60_000,\s*\n?\s*4: 30 \* 60_000,\s*\n?\s*5: 60 \* 60_000,\s*\n?\s*\};/,
+      /const BACKOFF_MS_BY_ATTEMPT: Record<number, number> = \{\s*1: 60_000,\s*2: 5 \* 60_000,\s*3: 15 \* 60_000,\s*4: 30 \* 60_000,\s*5: 60 \* 60_000,\s*\};/,
     );
   });
 
@@ -80,10 +80,10 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
 
   it('Endpoint disabled/deleted between enqueue and claim → direct DLQ (no recoverable path)', () => {
     expect(body).toMatch(
-      /\/\/ Fallback: endpoint not in subscriber set \(might have been deleted \/\s*\n?\s*\/\/ disabled between enqueue and claim\)\. Treat as DLQ — there's no\s*\n?\s*\/\/ recoverable path\./,
+      /\/\/ Fallback: endpoint not in subscriber set \(might have been deleted \/\s*\/\/ disabled between enqueue and claim\)\. Treat as DLQ — there's no\s*\/\/ recoverable path\./,
     );
     expect(body).toMatch(
-      /if \(!endpoint \|\| !endpoint\.active \|\| endpoint\.disabledAt !== null\) \{\s*\n?\s*await this\.config\.repo\.recordDlq\(delivery\.id, \{\s*\n?\s*responseStatus: null,\s*\n?\s*lastError: 'endpoint disabled or deleted between enqueue and claim',/,
+      /if \(!endpoint \|\| !endpoint\.active \|\| endpoint\.disabledAt !== null\) \{\s*await this\.config\.repo\.recordDlq\(delivery\.id, \{\s*responseStatus: null,\s*lastError: 'endpoint disabled or deleted between enqueue and claim',/,
     );
   });
 
@@ -97,7 +97,7 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
 
   it('V-093 durationMs framing: Date.now() reporting; excludes body serialization + signing; includes DNS+TCP+TLS+HTTP', () => {
     expect(body).toMatch(
-      /\/\/ V-093: wall-clock duration of the actual fetch call\. Excludes\s*\n?\s*\/\/ body serialization \+ signing \(negligible\) but includes DNS \+\s*\n?\s*\/\/ TCP \+ TLS \+ HTTP exchange\./,
+      /\/\/ V-093: wall-clock duration of the actual fetch call\. Excludes\s*\/\/ body serialization \+ signing \(negligible\) but includes DNS \+\s*\/\/ TCP \+ TLS \+ HTTP exchange\./,
     );
     expect(body).toMatch(/const fetchStartMs = Date\.now\(\);/);
     expect(body).toMatch(/const durationMs = Date\.now\(\) - fetchStartMs;/);
@@ -105,7 +105,7 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
 
   it("handleOutcome: 2xx → recordDelivered; network failures use the bounded credential-safe sanitizer; AbortError.name → lastError='timeout'", () => {
     expect(body).toMatch(
-      /if \(response && response\.ok\) \{\s*\n?\s*await this\.config\.repo\.recordDelivered\(delivery\.id, \{\s*\n?\s*responseStatus: response\.status,\s*\n?\s*at,\s*\n?\s*\}\);/,
+      /if \(response && response\.ok\) \{\s*await this\.config\.repo\.recordDelivered\(delivery\.id, \{\s*responseStatus: response\.status,\s*at,\s*\}\);/,
     );
     expect(body).toMatch(/'webhook delivered',/);
     expect(body).toMatch(
@@ -121,17 +121,17 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
       /sliceWithoutSplittingSurrogate\(error\.message, TRANSPORT_ERROR_MAX_CHARS\)/,
     );
     expect(body).toMatch(
-      /sliceWithoutSplittingSurrogate\(\s*\n?\s*redactText\(bounded\) \|\| 'transport failure',\s*\n?\s*TRANSPORT_ERROR_MAX_CHARS,\s*\n?\s*\)/,
+      /sliceWithoutSplittingSurrogate\(\s*redactText\(bounded\) \|\| 'transport failure',\s*TRANSPORT_ERROR_MAX_CHARS,\s*\)/,
     );
   });
 
   it('handleOutcome: nextAttemptIndex >= MAX_ATTEMPTS → recordDlq + auto-disable check (via maybeAutoDisable, re-reading the CURRENT consecutiveFailures)', () => {
     expect(body).toMatch(
-      /if \(nextAttemptIndex >= MAX_ATTEMPTS\) \{\s*\n?\s*await this\.config\.repo\.recordDlq\(delivery\.id, \{\s*\n?\s*responseStatus,\s*\n?\s*lastError,\s*\n?\s*at,\s*\n?\s*\}\);/,
+      /if \(nextAttemptIndex >= MAX_ATTEMPTS\) \{\s*await this\.config\.repo\.recordDlq\(delivery\.id, \{\s*responseStatus,\s*lastError,\s*at,\s*\}\);/,
     );
     expect(body).toMatch(/'webhook delivery → DLQ \(max attempts\)',/);
     expect(body).toMatch(
-      /\/\/ Auto-disable check\s*\n?\s*await this\.maybeAutoDisable\(endpoint\.id, at\);/,
+      /\/\/ Auto-disable check\s*await this\.maybeAutoDisable\(endpoint\.id, at\);/,
     );
   });
 
@@ -146,7 +146,7 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
     expect(body).toMatch(/if \(!current \|\| current\.disabledAt !== null\) return;/);
     // Threshold check is against the re-read CURRENT count, not snapshot+1.
     expect(body).toMatch(
-      /if \(current\.consecutiveFailures >= AUTO_DISABLE_AFTER_CONSECUTIVE_FAILURES\) \{\s*\n?\s*await this\.config\.repo\.disableEndpoint\(endpointId, at\);/,
+      /if \(current\.consecutiveFailures >= AUTO_DISABLE_AFTER_CONSECUTIVE_FAILURES\) \{\s*await this\.config\.repo\.disableEndpoint\(endpointId, at\);/,
     );
   });
 
@@ -163,7 +163,7 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
 
   it('DeliveryOutcome: 3-kind union (delivered with status / retry with nextAttemptAt / dlq)', () => {
     expect(body).toMatch(
-      /export type DeliveryOutcome =\s*\n?\s*\| \{ kind: 'delivered'; delivery: WebhookDeliveryRow; status: number \}\s*\n?\s*\| \{ kind: 'retry'; delivery: WebhookDeliveryRow; nextAttemptAt: Date \}\s*\n?\s*\| \{ kind: 'dlq'; delivery: WebhookDeliveryRow \};/,
+      /export type DeliveryOutcome =\s*\| \{ kind: 'delivered'; delivery: WebhookDeliveryRow; status: number \}\s*\| \{ kind: 'retry'; delivery: WebhookDeliveryRow; nextAttemptAt: Date \}\s*\| \{ kind: 'dlq'; delivery: WebhookDeliveryRow \};/,
     );
   });
 
@@ -180,18 +180,18 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
     expect(body).toMatch(/chunks\.push\(value\.slice\(0, bytesToKeep\)\);/);
     expect(body).toMatch(/await reader\.cancel\(\)\.catch\(\(\) => undefined\);/);
     expect(body).toMatch(
-      /sliceWithoutSplittingSurrogate\(\s*\n?\s*Buffer\.concat\(chunks, total\)\.toString\('utf8'\),\s*\n?\s*EXCERPT_MAX_CHARS,\s*\n?\s*\)/,
+      /sliceWithoutSplittingSurrogate\(\s*Buffer\.concat\(chunks, total\)\.toString\('utf8'\),\s*EXCERPT_MAX_CHARS,\s*\)/,
     );
     // text() fallback only for bodyless test-double responses; null on throw.
     expect(body).toMatch(
-      /if \(!body\) \{\s*\n?\s*const text = await response\.text\(\);\s*\n?\s*return sliceWithoutSplittingSurrogate\(text, EXCERPT_MAX_CHARS\);/,
+      /if \(!body\) \{\s*const text = await response\.text\(\);\s*return sliceWithoutSplittingSurrogate\(text, EXCERPT_MAX_CHARS\);/,
     );
-    expect(body).toMatch(/\} catch \{\s*\n?\s*return null;\s*\n?\s*\}/);
+    expect(body).toMatch(/\} catch \{\s*return null;\s*\}/);
   });
 
   it('2xx bodies are cancelled before the attempt timer is cleared', () => {
     expect(body).toMatch(
-      /if \(!response\.ok\) \{\s*\n?\s*responseExcerpt = await readExcerpt\(response\);\s*\n?\s*\} else \{\s*\n?\s*await response\.body\?\.cancel\(\)\.catch\(\(\) => undefined\);/,
+      /if \(!response\.ok\) \{\s*responseExcerpt = await readExcerpt\(response\);\s*\} else \{\s*await response\.body\?\.cancel\(\)\.catch\(\(\) => undefined\);/,
     );
   });
 
@@ -202,10 +202,10 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
   // is that it delegates.
   it('run(): while-loop on this.running; delegates the batch to tickOnce; empty claim → sleep idleSleepMs', () => {
     expect(body).toMatch(
-      /async run\(\): Promise<void> \{\s*\n?\s*if \(this\.running\) return;\s*\n?\s*this\.running = true;/,
+      /async run\(\): Promise<void> \{\s*if \(this\.running\) return;\s*this\.running = true;/,
     );
     expect(body).toMatch(
-      /while \(this\.running\) \{\s*\n?\s*const \{ claimed \} = await this\.tickOnce\(\);\s*\n?\s*if \(claimed === 0\) await sleep\(idleSleepMs\);\s*\n?\s*\}/,
+      /while \(this\.running\) \{\s*const \{ claimed \} = await this\.tickOnce\(\);\s*if \(claimed === 0\) await sleep\(idleSleepMs\);\s*\}/,
     );
     expect(body, 'run() must not grow its own delivery path again').not.toMatch(
       /await Promise\.all\(claimed\.map\(\(d\) => this\.deliver\(d\)\)\);/,
@@ -214,22 +214,22 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
 
   it('tickOnce: single claim + deliver-batch sync (used in tests)', () => {
     expect(body).toMatch(
-      /\/\*\* Tick once: claim \+ deliver one batch synchronously\. Used in tests\. \*\/\s*\n?\s*async tickOnce\(\): Promise<\{ claimed: number; outcomes: DeliveryOutcome\[\] \}>/,
+      /\/\*\* Tick once: claim \+ deliver one batch synchronously\. Used in tests\. \*\/\s*async tickOnce\(\): Promise<\{ claimed: number; outcomes: DeliveryOutcome\[\] \}>/,
     );
   });
 
   it('WebhookWorkerConfig: 4 test seams (fetch / sleep / now / deliveryTimeoutMs); idleSleepMs + batchSize tunables', () => {
     expect(body).toMatch(
-      /\/\*\* Override the global fetch \(test seam\)\. \*\/\s*\n?\s*fetch\?: typeof fetch;/,
+      /\/\*\* Override the global fetch \(test seam\)\. \*\/\s*fetch\?: typeof fetch;/,
     );
     expect(body).toMatch(
-      /\/\*\* Override sleep — useful for tight test loops\. \*\/\s*\n?\s*sleep\?: \(ms: number\) => Promise<void>;/,
+      /\/\*\* Override sleep — useful for tight test loops\. \*\/\s*sleep\?: \(ms: number\) => Promise<void>;/,
     );
     expect(body).toMatch(
-      /\/\*\* Override "now" — useful for deterministic backoff tests\. \*\/\s*\n?\s*now\?: \(\) => Date;/,
+      /\/\*\* Override "now" — useful for deterministic backoff tests\. \*\/\s*now\?: \(\) => Date;/,
     );
     expect(body).toMatch(
-      /\/\*\* Per-attempt delivery timeout \(ms\)\. Default 10s\. \*\/\s*\n?\s*deliveryTimeoutMs\?: number;/,
+      /\/\*\* Per-attempt delivery timeout \(ms\)\. Default 10s\. \*\/\s*deliveryTimeoutMs\?: number;/,
     );
   });
 
@@ -244,7 +244,7 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
 
   it('defaultSleep: setTimeout-resolves-Promise helper', () => {
     expect(body).toMatch(
-      /function defaultSleep\(ms: number\): Promise<void> \{\s*\n?\s*return new Promise\(\(resolve\) => setTimeout\(resolve, ms\)\);\s*\n?\s*\}/,
+      /function defaultSleep\(ms: number\): Promise<void> \{\s*return new Promise\(\(resolve\) => setTimeout\(resolve, ms\)\);\s*\}/,
     );
   });
 

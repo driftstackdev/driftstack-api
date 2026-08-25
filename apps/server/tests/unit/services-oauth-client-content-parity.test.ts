@@ -26,22 +26,22 @@ describe('services/oauth-client content parity', () => {
   it("V-667.C 3-verdict framing pinned: 'The service composes 4 repos (oauth-links + oauth-pending-links + accounts + email-sender) to fulfil the founder-locked verdicts: Verdict 1: existing-email collision → merge-with-verification via oauth_pending_links token sent to existing account's email. Verdict 2: IDP revocation → mark account_oauth_links.last_revoked_at on next-login-failure; graceful fallback to password (if set). Verdict 3: avatar/name sync → first-link-only; user-override wins (driven by accounts.avatar_source enum).' — pinned so the V-667.C anchor + 4-repo composition + 3-founder-verdict catalog + accounts.avatar_source enum cross-reference all stay documented", () => {
     expect(body).toMatch(/\/\/ V-667\.C — OAuth-client service interfaces\./);
     expect(body).toMatch(
-      /\/\/ The service composes 4 repos \(oauth-links \+ oauth-pending-links \+\s*\n?\s*\/\/ accounts \+ email-sender\) to fulfil the founder-locked verdicts:/,
+      /\/\/ The service composes 4 repos \(oauth-links \+ oauth-pending-links \+\s*\/\/ accounts \+ email-sender\) to fulfil the founder-locked verdicts:/,
     );
     expect(body).toMatch(
-      /\/\/ {3}Verdict 1: existing-email collision → merge-with-verification via\s*\n?\s*\/\/ {5}oauth_pending_links token sent to existing account's email\./,
+      /\/\/ {3}Verdict 1: existing-email collision → merge-with-verification via\s*\/\/ {5}oauth_pending_links token sent to existing account's email\./,
     );
     expect(body).toMatch(
-      /\/\/ {3}Verdict 2: IDP revocation → mark account_oauth_links\.last_revoked_at\s*\n?\s*\/\/ {5}on next-login-failure; graceful fallback to password \(if set\)\./,
+      /\/\/ {3}Verdict 2: IDP revocation → mark account_oauth_links\.last_revoked_at\s*\/\/ {5}on next-login-failure; graceful fallback to password \(if set\)\./,
     );
     expect(body).toMatch(
-      /\/\/ {3}Verdict 3: avatar\/name sync → first-link-only; user-override\s*\n?\s*\/\/ {5}wins \(driven by accounts\.avatar_source enum\)\./,
+      /\/\/ {3}Verdict 3: avatar\/name sync → first-link-only; user-override\s*\/\/ {5}wins \(driven by accounts\.avatar_source enum\)\./,
     );
   });
 
   it('landing-plan framing pinned: both implementations SHIPPED. This header described db/oauth-links-repo.ts and services/oauth-client-service.ts as later slices long after both existed, so a reader planning work would have believed the persistence layer was still to be written. The negative keeps that wording from coming back.', () => {
     expect(body).toMatch(
-      /\/\/ This file defines the REPO interfaces \+ the SERVICE interface\. The\s*\n?\s*\/\/ Drizzle implementation is in db\/oauth-links-repo\.ts and the service\s*\n?\s*\/\/ implementation is in services\/oauth-client-service\.ts\. Both shipped;/,
+      /\/\/ This file defines the REPO interfaces \+ the SERVICE interface\. The\s*\/\/ Drizzle implementation is in db\/oauth-links-repo\.ts and the service\s*\/\/ implementation is in services\/oauth-client-service\.ts\. Both shipped;/,
     );
     // V-1017 — the retracted framing named each file as a future slice.
     expect(body, 'the deferred landing-plan wording is back').not.toMatch(
@@ -66,7 +66,7 @@ describe('services/oauth-client content parity', () => {
   it("OAuthLinksRepo 5-method surface pinned: findByProviderSub + listForAccount + insertLink + markLoginAt + markRevokedAt. + 'Stamp last_revoked_at when the token-exchange returns an IDP-revoke error. Subsequent login attempts fall back to password per the founder verdict.' framing — pinned so the Verdict-2 token-exchange-revoke-detection contract stays documented (drift to dropping markRevokedAt would defeat the Verdict 2 fallback)", () => {
     expect(body).toMatch(/export interface OAuthLinksRepo \{/);
     expect(body).toMatch(
-      /findByProviderSub\(\s*\n?\s*provider: OAuthClientProvider,\s*\n?\s*providerSub: string,\s*\n?\s*\): Promise<OAuthLinkRow \| null>;/,
+      /findByProviderSub\(\s*provider: OAuthClientProvider,\s*providerSub: string,\s*\): Promise<OAuthLinkRow \| null>;/,
     );
     expect(body).toMatch(
       /listForAccount\(accountId: string\): Promise<readonly OAuthLinkRow\[\]>;/,
@@ -75,7 +75,7 @@ describe('services/oauth-client content parity', () => {
     expect(body).toMatch(/markLoginAt\(id: string, at: Date\): Promise<void>;/);
     expect(body).toMatch(/markRevokedAt\(id: string, at: Date\): Promise<void>;/);
     expect(body).toMatch(
-      /\/\*\* Verdict 2 — stamp last_revoked_at when the token-exchange returns\s*\n?\s*\*\s+an IDP-revoke error\. Subsequent login attempts fall back to\s*\n?\s*\*\s+password per the founder verdict\. \*\//,
+      /\/\*\* Verdict 2 — stamp last_revoked_at when the token-exchange returns\s*\*\s+an IDP-revoke error\. Subsequent login attempts fall back to\s*\*\s+password per the founder verdict\. \*\//,
     );
   });
 
@@ -93,7 +93,7 @@ describe('services/oauth-client content parity', () => {
       /insertPending\(input: InsertPendingLinkInput\): Promise<OAuthPendingLinkRow>;/,
     );
     expect(body).toMatch(
-      /\/\*\* Find by hash \+ check it isn't expired or already consumed\. The\s*\n?\s*\*\s+`now` arg makes the time-check deterministic for tests\. \*\//,
+      /\/\*\* Find by hash \+ check it isn't expired or already consumed\. The\s*\*\s+`now` arg makes the time-check deterministic for tests\. \*\//,
     );
     expect(body).toMatch(
       /findActiveByTokenHash\(tokenHash: string, now: Date\): Promise<OAuthPendingLinkRow \| null>;/,
@@ -117,16 +117,16 @@ describe('services/oauth-client content parity', () => {
 
   it("Per-variant framing pinned: 'Existing link found — return the resolved account_id. The route should immediately issue a web session.' + 'New account created — IDP identity is the first + only account for this email.' + 'Email already has a password account; Verdict 1 collision flow: a oauth_pending_links token has been issued + emailed to the account's address. The route renders a \"check your email\" page.' + 'Existing link was previously marked revoked (Verdict 2). The route should prompt the user to re-link or sign in via password.' — pinned so the per-variant route-handler-action contract stays documented (drift would orphan the route logic from the service's discriminator)", () => {
     expect(body).toMatch(
-      /\* Existing link found — return the resolved account_id\. The\s*\n?\s*\*\s+route should immediately issue a web session\./,
+      /\* Existing link found — return the resolved account_id\. The\s*\*\s+route should immediately issue a web session\./,
     );
     expect(body).toMatch(
-      /\* New account created — IDP identity is the first \+ only\s*\n?\s*\*\s+account for this email\./,
+      /\* New account created — IDP identity is the first \+ only\s*\*\s+account for this email\./,
     );
     expect(body).toMatch(
-      /\* Email already has a password account; Verdict 1 collision\s*\n?\s*\*\s+flow: a oauth_pending_links token has been issued \+ emailed\s*\n?\s*\*\s+to the account's address\. The route renders a "check your\s*\n?\s*\*\s+email" page\./,
+      /\* Email already has a password account; Verdict 1 collision\s*\*\s+flow: a oauth_pending_links token has been issued \+ emailed\s*\*\s+to the account's address\. The route renders a "check your\s*\*\s+email" page\./,
     );
     expect(body).toMatch(
-      /\* Existing link was previously marked revoked \(Verdict 2\)\. The\s*\n?\s*\*\s+route should prompt the user to re-link or sign in via\s*\n?\s*\*\s+password\./,
+      /\* Existing link was previously marked revoked \(Verdict 2\)\. The\s*\*\s+route should prompt the user to re-link or sign in via\s*\*\s+password\./,
     );
   });
 
@@ -136,10 +136,10 @@ describe('services/oauth-client content parity', () => {
       /linkOrCreateAccount\(args: LinkOrCreateAccountArgs\): Promise<LinkOrCreateAccountResult>;/,
     );
     expect(body).toMatch(
-      /confirmPendingLink\(\s*\n?\s*plaintextToken: string,\s*\n?\s*now\?: Date,\s*\n?\s*\): Promise<\{ accountId: string; linkId: string \} \| null>;/,
+      /confirmPendingLink\(\s*plaintextToken: string,\s*now\?: Date,\s*\): Promise<\{ accountId: string; linkId: string \} \| null>;/,
     );
     expect(body).toMatch(
-      /\/\*\* Consume a pending-link token \(Verdict 1 collision-flow\s*\n?\s*\*\s+completion\)\. Returns the resolved account_id \+ the newly-\s*\n?\s*\*\s+inserted link, or `null` if the token is expired \/ consumed \/\s*\n?\s*\*\s+not found\. \*\//,
+      /\/\*\* Consume a pending-link token \(Verdict 1 collision-flow\s*\*\s+completion\)\. Returns the resolved account_id \+ the newly-\s*\*\s+inserted link, or `null` if the token is expired \/ consumed \/\s*\*\s+not found\. \*\//,
     );
   });
 
@@ -150,6 +150,6 @@ describe('services/oauth-client content parity', () => {
     expect(body).toMatch(/email: string;/);
     expect(body).toMatch(/name: string \| null;/);
     expect(body).toMatch(/avatarUrl: string \| null;/);
-    expect(body).toMatch(/\/\*\* Override `now` for tests\. \*\/\s*\n?\s*now\?: Date;/);
+    expect(body).toMatch(/\/\*\* Override `now` for tests\. \*\/\s*now\?: Date;/);
   });
 });

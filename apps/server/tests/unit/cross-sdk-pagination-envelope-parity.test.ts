@@ -95,7 +95,7 @@ describe('W689 cross-SDK pagination envelope shape parity', () => {
     const body = read(TS_AUDIT);
     // AuditLogListPage carries data + next_cursor (no has_more).
     expect(body).toMatch(
-      /export interface AuditLogListPage \{\s*\n?\s*data: AuditLogEntry\[\];\s*\n?\s*next_cursor: string \| null;\s*\n?\s*\}/,
+      /export interface AuditLogListPage \{\s*data: AuditLogEntry\[\];\s*next_cursor: string \| null;\s*\}/,
     );
   });
 

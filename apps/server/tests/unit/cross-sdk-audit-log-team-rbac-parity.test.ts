@@ -83,7 +83,7 @@ describe('W697 cross-SDK V-216/V-326c audit-log team-RBAC passthrough parity', (
 
     // sdk-go: same.
     expect(go).toMatch(
-      /a member with read access on the team owner[\s\S]{0,80}pull the\s*\n?\s*\/\/\s*OWNER's audit log/,
+      /a member with read access on the team owner[\s\S]{0,80}pull the\s*\/\/\s*OWNER's audit log/,
     );
   });
 
@@ -190,10 +190,10 @@ describe('W697 cross-SDK V-216/V-326c audit-log team-RBAC passthrough parity', (
     const py = read(PY_AUDIT);
 
     // sdk-typescript: "CSV download in a browser is not\n   * surfaced here"
-    expect(ts).toMatch(/CSV download[\s\S]{0,80}not\s*\n?\s*\*\s*surfaced here/);
+    expect(ts).toMatch(/CSV download[\s\S]{0,80}not\s*\*\s*surfaced here/);
 
     // sdk-go: "CSV branch is not surfaced through the SDK"
-    expect(go).toMatch(/CSV branch is not\s*\n?\s*\/\/\s*surfaced through the SDK/);
+    expect(go).toMatch(/CSV branch is not\s*\/\/\s*surfaced through the SDK/);
 
     // sdk-python: "CSV branch is not exposed here"
     expect(py).toMatch(/CSV branch is not[\s\S]{0,30}exposed here/);

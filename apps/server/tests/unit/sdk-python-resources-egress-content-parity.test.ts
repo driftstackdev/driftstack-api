@@ -25,7 +25,7 @@ describe('sdk-python resources/egress content parity', () => {
 
   it('docstring documents the LIVE account-proxies API + write-only secrets; no stale 503-stub framing', () => {
     expect(body).toMatch(/\/v1\/account\/me\/proxies/);
-    expect(body).toMatch(/the same backend the desktop app \+\s*\n?\s*dashboard use/);
+    expect(body).toMatch(/the same backend the desktop app \+\s*dashboard use/);
     expect(body).toMatch(/write-only/);
     expect(body).not.toMatch(/returns 503 ``FeatureUnavailable``/);
   });

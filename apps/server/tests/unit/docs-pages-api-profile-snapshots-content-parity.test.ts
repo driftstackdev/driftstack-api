@@ -99,7 +99,7 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
     // separate errors. This pin froze one of them.
     expect(p).toMatch(/`404 not-found` — the profile id doesn't belong to the effective/);
     expect(p, 'the calling-account 404 wording must not return anywhere on this page').not.toMatch(
-      /belong to the calling\s*\n?\s*account/,
+      /belong to the calling\s*account/,
     );
     // Guard against a 409-on-duplicate-label reappearing in the Capture
     // errors block — capture() does not enforce label uniqueness.

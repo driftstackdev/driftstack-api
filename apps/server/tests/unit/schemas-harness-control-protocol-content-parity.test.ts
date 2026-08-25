@@ -105,7 +105,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
 
   it('server-internal posture pinned: never on @driftstack/api-types (harness is internal infra, not a customer)', () => {
     expect(body).toMatch(
-      /This schema is \*\*server-internal only\*\*\. Like gui-input\.ts \(L-001\),\s*\n?\s*\/\/ it never appears on the customer-facing surface \(`@driftstack\/api-types`\)/,
+      /This schema is \*\*server-internal only\*\*\. Like gui-input\.ts \(L-001\),\s*\/\/ it never appears on the customer-facing surface \(`@driftstack\/api-types`\)/,
     );
   });
 
@@ -119,7 +119,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(body).toMatch(
       /Wire codec \(RESOLVED 2026-06-05 by Agent-3\): IntentDispatch\.inputParams/,
     );
-    expect(body).toMatch(/cross the wire as a BASE64\s*\n?\s*\/\/ STRING of the UTF-8 JSON/);
+    expect(body).toMatch(/cross the wire as a BASE64\s*\/\/ STRING of the UTF-8 JSON/);
   });
 
   it('18 live IntentExecutor names are dispatchable in canonical order', () => {
@@ -155,15 +155,15 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
 
   it('caps are NOT pre-clamped by the sender (harness clamps + reports the flag)', () => {
     expect(body).toMatch(
-      /The sender passes values through; do NOT pre-clamp \(that\s*\n?\s*\/\/ would suppress the flag the customer should see\)\./,
+      /The sender passes values through; do NOT pre-clamp \(that\s*\/\/ would suppress the flag the customer should see\)\./,
     );
   });
 
   it('navigate params pinned: { url } required (.min(1)) + V-820.sec http(s)-only scheme allow-list (refine isHttpOrHttpsUrl rejecting file:/javascript:/data:)', () => {
     expect(body).toMatch(
-      /export const NavigateParamsSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*url: z\.string\(\)\.min\(1\)\.refine\(isHttpOrHttpsUrl, \{/,
+      /export const NavigateParamsSchema = z\s*\.object\(\{\s*url: z\.string\(\)\.min\(1\)\.refine\(isHttpOrHttpsUrl, \{/,
     );
-    expect(body).toMatch(/\}\)\s*\n?\s*\.strict\(\);/);
+    expect(body).toMatch(/\}\)\s*\.strict\(\);/);
     // The scheme guard itself: http:/https: only (everything else, + relative, rejected).
     expect(body).toMatch(/function isHttpOrHttpsUrl\(raw: string\): boolean \{/);
     expect(body).toMatch(/return parsed\.protocol === 'http:' \|\| parsed\.protocol === 'https:';/);
@@ -197,7 +197,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
   });
 
   it('behavioral_pause params pinned: { duration_ms } OR { kind:reading, word_count, scroll_through? } OR none (idle)', () => {
-    // Split into small assertions (each ≤6 \s*\n?\s* groups) to avoid the
+    // Split into small assertions (each ≤6 \s* groups) to avoid the
     // long-chain parity-regex backtracking hazard now that the reading variant is
     // multi-line (W1223 added the optional scroll_through read-through flag).
     expect(body).toContain('export const BehavioralPauseParamsSchema = z.union([');
@@ -208,7 +208,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(body).toContain('word_count: z.number().nonnegative(),');
     expect(body).toContain('scroll_through: z.boolean().optional(),');
     // idle variant + union close.
-    expect(body).toMatch(/NoParamsSchema,\s*\n?\s*\]\);/);
+    expect(body).toMatch(/NoParamsSchema,\s*\]\);/);
   });
 
   it('wait_for pins raw predicate and structured safe-template variants', () => {
@@ -239,7 +239,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
 
   it('IntentDispatch envelope pinned: type:intentDispatch discriminator + sessionId, intentId, intentName (enum), inputParams (base64 string)', () => {
     expect(body).toMatch(
-      /export const IntentDispatchSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('intentDispatch'\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*intentId: z\.string\(\)\.min\(1\),\s*\n?\s*intentName: HarnessIntentNameSchema,\s*\n?\s*inputParams: z\.string\(\),\s*\n?\s*\}\);/,
+      /export const IntentDispatchSchema = z\.object\(\{\s*type: z\.literal\('intentDispatch'\),\s*sessionId: z\.string\(\)\.min\(1\),\s*intentId: z\.string\(\)\.min\(1\),\s*intentName: HarnessIntentNameSchema,\s*inputParams: z\.string\(\),\s*\}\);/,
     );
   });
 
@@ -255,7 +255,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       'durationMs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),',
     );
     expect(body).toMatch(
-      /outputData: boundedBase64Schema\(\s*\n?\s*HARNESS_INTENT_OUTPUT_MAX_BASE64_LENGTH,\s*\n?\s*HARNESS_INTENT_OUTPUT_MAX_BYTES,\s*\n?\s*\),/,
+      /outputData: boundedBase64Schema\(\s*HARNESS_INTENT_OUTPUT_MAX_BASE64_LENGTH,\s*HARNESS_INTENT_OUTPUT_MAX_BYTES,\s*\),/,
     );
     expect(body).toContain('errorCode: HarnessErrorCodeSchema,');
     expect(body).toContain(
@@ -284,11 +284,11 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       /export const TERMINAL_SESSION_STATUSES = new Set<string>\(\['ended', 'errored'\]\);/,
     );
     expect(body).toMatch(
-      /export const HarnessOutboundSchema = z\.union\(\[\s*\n?\s*IntentResultEnvelopeSchema,\s*\n?\s*SessionStatusSchema,\s*\n?\s*HeartbeatSchema,\s*\n?\s*CapabilityReportSchema,\s*\n?\s*ErrorEventSchema,\s*\n?\s*ProfileSavedSchema,\s*\n?\s*ChallengeDetectedSchema,\s*\n?\s*PageStateFrameSchema,\s*\n?\s*ProfileSaveFailedSchema,\s*\n?\s*CookiesResultSchema,\s*\n?\s*SetCookiesResultSchema,\s*\n?\s*NavigateHistoryResultSchema,\s*\n?\s*UploadResultSchema,\s*\n?\s*DownloadsListResultSchema,\s*\n?\s*DownloadDataResultSchema,\s*\n?\s*TrimProfileResultSchema,\s*\n?\s*\]\);/,
+      /export const HarnessOutboundSchema = z\.union\(\[\s*IntentResultEnvelopeSchema,\s*SessionStatusSchema,\s*HeartbeatSchema,\s*CapabilityReportSchema,\s*ErrorEventSchema,\s*ProfileSavedSchema,\s*ChallengeDetectedSchema,\s*PageStateFrameSchema,\s*ProfileSaveFailedSchema,\s*CookiesResultSchema,\s*SetCookiesResultSchema,\s*NavigateHistoryResultSchema,\s*UploadResultSchema,\s*DownloadsListResultSchema,\s*DownloadDataResultSchema,\s*TrimProfileResultSchema,\s*\]\);/,
     );
     // ControlInbound.sessionEnd — the trivial W122 teardown envelope (source-pinned).
     expect(body).toMatch(
-      /export const SessionEndSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*type: z\.literal\('sessionEnd'\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\);/,
+      /export const SessionEndSchema = z\s*\.object\(\{\s*type: z\.literal\('sessionEnd'\),\s*sessionId: z\.string\(\)\.min\(1\),\s*\}\)\s*\.strict\(\);/,
     );
   });
 
@@ -296,7 +296,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     // CP→node REQUEST — strict, carries the jar as z.array(CookieSchema) (no
     // divergent Cookie shape — the import is the write-twin of the read).
     expect(body).toMatch(
-      /export const SetCookiesRequestSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*type: z\.literal\('setCookies'\),\s*\n?\s*requestId: z\.string\(\)\.min\(1\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*cookies: z\.array\(CookieSchema\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\);/,
+      /export const SetCookiesRequestSchema = z\s*\.object\(\{\s*type: z\.literal\('setCookies'\),\s*requestId: z\.string\(\)\.min\(1\),\s*sessionId: z\.string\(\)\.min\(1\),\s*cookies: z\.array\(CookieSchema\),\s*\}\)\s*\.strict\(\);/,
     );
     // node→CP RESULT — ok?/error?, lenient forward-compat like cookiesResult.
     expect(body).toContain('export const SetCookiesResultSchema = z.object({');
@@ -332,7 +332,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     // CP→node envelope convention). sealed_blob_put_url REQUIRED, one of
     // sealed_blob/sealed_blob_url supplies the input.
     expect(body).toMatch(
-      /export const TrimProfileRequestSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*type: z\.literal\('trimProfile'\),\s*\n?\s*requestId: z\.string\(\)\.min\(1\),\s*\n?\s*profile_id: z\.string\(\)\.min\(1\),\s*\n?\s*dek: z\.string\(\)\.min\(1\),\s*\n?\s*sealed_blob: z\.string\(\)\.min\(1\)\.optional\(\),\s*\n?\s*sealed_blob_url: z\.string\(\)\.min\(1\)\.optional\(\),\s*\n?\s*sealed_blob_put_url: z\.string\(\)\.min\(1\),/,
+      /export const TrimProfileRequestSchema = z\s*\.object\(\{\s*type: z\.literal\('trimProfile'\),\s*requestId: z\.string\(\)\.min\(1\),\s*profile_id: z\.string\(\)\.min\(1\),\s*dek: z\.string\(\)\.min\(1\),\s*sealed_blob: z\.string\(\)\.min\(1\)\.optional\(\),\s*sealed_blob_url: z\.string\(\)\.min\(1\)\.optional\(\),\s*sealed_blob_put_url: z\.string\(\)\.min\(1\),/,
     );
     // W3120 — the scope rides as an OPTIONAL enum. Pinned separately from the
     // block above so its optionality is visible as its own assertion: absent
@@ -345,7 +345,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     // list here would have frozen a COPY: re-inlining the four values would
     // still have matched, which is the state this replaced.
     expect(body).toMatch(
-      /scope: z\.enum\(TRIM_PROFILE_SCOPES\)\.optional\(\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\);/,
+      /scope: z\.enum\(TRIM_PROFILE_SCOPES\)\.optional\(\),\s*\}\)\s*\.strict\(\);/,
     );
     expect(body).toMatch(
       /export const TRIM_PROFILE_SCOPES = \['cache', 'cookies', 'history', 'all'\] as const;/,
@@ -419,10 +419,10 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
   it('W393 challenge-handling contract: pauseSession/resumeSession inbound (strict) + challengeDetected outbound (in union) + behavioral parse', () => {
     // ControlInbound.pauseSession / resumeSession (server → harness, strict).
     expect(body).toMatch(
-      /export const PauseSessionSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*type: z\.literal\('pauseSession'\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\);/,
+      /export const PauseSessionSchema = z\s*\.object\(\{\s*type: z\.literal\('pauseSession'\),\s*sessionId: z\.string\(\)\.min\(1\),\s*\}\)\s*\.strict\(\);/,
     );
     expect(body).toMatch(
-      /export const ResumeSessionSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*type: z\.literal\('resumeSession'\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*challengeId: z\.string\(\)\.min\(1\)\.optional\(\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\);/,
+      /export const ResumeSessionSchema = z\s*\.object\(\{\s*type: z\.literal\('resumeSession'\),\s*sessionId: z\.string\(\)\.min\(1\),\s*challengeId: z\.string\(\)\.min\(1\)\.optional\(\),\s*\}\)\s*\.strict\(\);/,
     );
     // HarnessOutbound.challengeDetected (harness → server) — shape pinned.
     // toContain fragments (not a closed multi-line regex) so the security-audit
@@ -724,7 +724,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(body).toContain(
       'export const ErrorEventSchema = ErrorEventPayloadSchema.transform((frame, ctx) => {',
     );
-    expect(body).toMatch(/customerActionable: z\.boolean\(\),\s*\n?\s*retryable: z\.boolean\(\),/);
+    expect(body).toMatch(/customerActionable: z\.boolean\(\),\s*retryable: z\.boolean\(\),/);
     // capabilityReport — bounded payload + the three live customer signals the
     // harness emits (these used to be stripped, making the whole channel inert).
     expect(body).toContain('const CapabilityReportPayloadSchema = z.object({');

@@ -44,7 +44,7 @@ describe('v2-#31 clearStaleSecretPrev Drizzle ↔ InMemory parity', () => {
     const body = read(DRIZZLE);
     // The impl uses drizzle-orm helpers; pin the AND-clause shape.
     expect(body).toMatch(
-      /isNotNull\(webhookEndpoints\.secretPrev\),\s*\n?\s*isNotNull\(webhookEndpoints\.secretPrevExpiresAt\),\s*\n?\s*lt\(webhookEndpoints\.secretPrevExpiresAt,\s*args\.now\)/,
+      /isNotNull\(webhookEndpoints\.secretPrev\),\s*isNotNull\(webhookEndpoints\.secretPrevExpiresAt\),\s*lt\(webhookEndpoints\.secretPrevExpiresAt,\s*args\.now\)/,
     );
   });
 
@@ -61,15 +61,13 @@ describe('v2-#31 clearStaleSecretPrev Drizzle ↔ InMemory parity', () => {
   it('InMemory impl pins the same predicate shape: secretPrev !== null && secretPrevExpiresAt !== null && secretPrevExpiresAt.getTime() < args.now.getTime()', () => {
     const body = read(IN_MEMORY);
     expect(body).toMatch(
-      /r\.secretPrev\s*!==\s*null\s*&&\s*\n?\s*r\.secretPrevExpiresAt\s*!==\s*null\s*&&\s*\n?\s*r\.secretPrevExpiresAt\.getTime\(\)\s*<\s*args\.now\.getTime\(\)/,
+      /r\.secretPrev\s*!==\s*null\s*&&\s*r\.secretPrevExpiresAt\s*!==\s*null\s*&&\s*r\.secretPrevExpiresAt\.getTime\(\)\s*<\s*args\.now\.getTime\(\)/,
     );
   });
 
   it('InMemory impl pins the same mutation: secretPrev = null + secretPrevExpiresAt = null (preserves every other field)', () => {
     const body = read(IN_MEMORY);
-    expect(body).toMatch(
-      /\.\.\.r,\s*\n?\s*secretPrev:\s*null,\s*\n?\s*secretPrevExpiresAt:\s*null,/,
-    );
+    expect(body).toMatch(/\.\.\.r,\s*secretPrev:\s*null,\s*secretPrevExpiresAt:\s*null,/);
   });
 
   it('InMemory impl returns { cleared } — variable named `cleared` so the parity test pins the same shape', () => {

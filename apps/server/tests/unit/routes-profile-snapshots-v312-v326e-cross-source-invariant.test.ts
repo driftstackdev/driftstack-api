@@ -102,7 +102,7 @@ describe('W1048 routes/profile-snapshots V-312 + V-326e cross-source invariant',
 
   it('CRITICAL effectiveAccountIdForWrite — non-team caller returns undefined; team caller with non-admin role throws. The 3-branch decision (non-team / team-admin / team-non-admin) is the canonical V-326e write-gate flow.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/profile-snapshots.ts'));
-    expect(p).toMatch(/function effectiveAccountIdForWrite\(\s*\n?\s*request: FastifyRequest,/);
+    expect(p).toMatch(/function effectiveAccountIdForWrite\(\s*request: FastifyRequest,/);
     expect(p).toMatch(/if \(eff\.kind !== 'team'\) return undefined;/);
     expect(p).toMatch(/if \(eff\.role !== 'admin'\) \{/);
   });

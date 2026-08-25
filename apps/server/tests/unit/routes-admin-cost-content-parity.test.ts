@@ -48,22 +48,22 @@ describe('W416.A apps/server/src/routes/admin-cost.ts content parity', () => {
 
   it('V-683 framing pinned: config inspector returns wired rate-card + tier thresholds without touching usage', () => {
     expect(body).toMatch(
-      /\/\/ V-683 — config inspector\. Returns the wired rate card \+ tier\s*\n?\s*\/\/ thresholds without touching usage data\. Useful for ops to verify\s*\n?\s*\/\/ a deploy \+ for the "what did we ship\?" admin dashboard\./,
+      /\/\/ V-683 — config inspector\. Returns the wired rate card \+ tier\s*\/\/ thresholds without touching usage data\. Useful for ops to verify\s*\/\/ a deploy \+ for the "what did we ship\?" admin dashboard\./,
     );
     expect(body).toMatch(
-      /app\.get\(\s*\n?\s*'\/v1\/admin\/cost\/config',\s*\n?\s*\{ preHandler: \[app\.requireScope\('driftstack_internal_admin'\)\] \},\s*\n?\s*\(_req, reply\) => \{\s*\n?\s*return reply\.send\(deps\.service\.getConfig\(\)\);/,
+      /app\.get\(\s*'\/v1\/admin\/cost\/config',\s*\{ preHandler: \[app\.requireScope\('driftstack_internal_admin'\)\] \},\s*\(_req, reply\) => \{\s*return reply\.send\(deps\.service\.getConfig\(\)\);/,
     );
   });
 
   it('Schemas: AccountSummaryParams id min(1) + both queries share strict billing-cycle authority', () => {
     expect(body).toMatch(
-      /const AccountSummaryParams = z\.object\(\{[\s\S]*?id: z\.string\(\)\.min\(1\)\.max\(100\),\s*\n?\s*\}\);/,
+      /const AccountSummaryParams = z\.object\(\{[\s\S]*?id: z\.string\(\)\.min\(1\)\.max\(100\),\s*\}\);/,
     );
     expect(body).toMatch(
-      /const AccountSummaryQuery = z\.object\(\{\s*\n?\s*billing_cycle: z\.string\(\)\.regex\(BILLING_CYCLE_PATTERN\)\.optional\(\),\s*\n?\s*\}\);/,
+      /const AccountSummaryQuery = z\.object\(\{\s*billing_cycle: z\.string\(\)\.regex\(BILLING_CYCLE_PATTERN\)\.optional\(\),\s*\}\);/,
     );
     expect(body).toMatch(
-      /const OverviewQuery = z\.object\(\{[\s\S]*?account_ids: z\.string\(\)\.min\(1\)\.max\(4096\),\s*\n?\s*billing_cycle: z\.string\(\)\.regex\(BILLING_CYCLE_PATTERN\)\.optional\(\),\s*\n?\s*\}\);/,
+      /const OverviewQuery = z\.object\(\{[\s\S]*?account_ids: z\.string\(\)\.min\(1\)\.max\(4096\),\s*billing_cycle: z\.string\(\)\.regex\(BILLING_CYCLE_PATTERN\)\.optional\(\),\s*\}\);/,
     );
   });
 
@@ -71,7 +71,7 @@ describe('W416.A apps/server/src/routes/admin-cost.ts content parity', () => {
     expect(body).toMatch(/export interface RegisterAdminCostRoutesDeps \{/);
     expect(body).toMatch(/service: CostMonitoringService;/);
     expect(body).toMatch(
-      /\/\*\* Time source — defaults to `Date\.now`\. Test seam\. \*\/\s*\n?\s*nowFn\?: \(\) => number;/,
+      /\/\*\* Time source — defaults to `Date\.now`\. Test seam\. \*\/\s*nowFn\?: \(\) => number;/,
     );
     expect(body).toMatch(/const now = deps\.nowFn \?\? Date\.now;/);
   });
@@ -81,22 +81,22 @@ describe('W416.A apps/server/src/routes/admin-cost.ts content parity', () => {
   // column and the cast error surfaced as a 500. They now validate the shape first.
   it('Account summary: getAccountSummary dispatch + null → 404 NotFoundError (distinct from customer V-541.D synthesis)', () => {
     expect(body).toMatch(
-      /const summary = await deps\.service\.getAccountSummary\(\{\s*\n?\s*accountId: accountUuidFromParam\(params\.id\),\s*\n?\s*billingCycle: query\.billing_cycle \?\? billingCycleFromDate\(new Date\(now\(\)\)\),\s*\n?\s*\}\);/,
+      /const summary = await deps\.service\.getAccountSummary\(\{\s*accountId: accountUuidFromParam\(params\.id\),\s*billingCycle: query\.billing_cycle \?\? billingCycleFromDate\(new Date\(now\(\)\)\),\s*\}\);/,
     );
     expect(body).toMatch(
-      /if \(summary === null\) \{\s*\n?\s*throw new NotFoundError\('Account has no usage in the requested billing cycle\.'\);/,
+      /if \(summary === null\) \{\s*throw new NotFoundError\('Account has no usage in the requested billing cycle\.'\);/,
     );
   });
 
   it('Overview: account_ids CSV split + trim + filter(Boolean); empty → 400 "account_ids must contain at least one id."', () => {
     expect(body).toMatch(
-      /const ids = query\.account_ids\s*\n?\s*\.split\(','\)\s*\n?\s*\.map\(\(s\) => s\.trim\(\)\)\s*\n?\s*\.filter\(Boolean\)\s*\n?\s*\.map\(accountUuidFromParam\);/,
+      /const ids = query\.account_ids\s*\.split\(','\)\s*\.map\(\(s\) => s\.trim\(\)\)\s*\.filter\(Boolean\)\s*\.map\(accountUuidFromParam\);/,
     );
     expect(body).toMatch(
-      /if \(ids\.length === 0\) \{\s*\n?\s*throw new BadRequestError\('account_ids must contain at least one id\.'\);/,
+      /if \(ids\.length === 0\) \{\s*throw new BadRequestError\('account_ids must contain at least one id\.'\);/,
     );
     expect(body).toMatch(
-      /const summaries = await deps\.service\.getOverview\(\{\s*\n?\s*accountIds: ids,\s*\n?\s*billingCycle: query\.billing_cycle \?\? billingCycleFromDate\(new Date\(now\(\)\)\),\s*\n?\s*\}\);/,
+      /const summaries = await deps\.service\.getOverview\(\{\s*accountIds: ids,\s*billingCycle: query\.billing_cycle \?\? billingCycleFromDate\(new Date\(now\(\)\)\),\s*\}\);/,
     );
     expect(body).toMatch(/return reply\.send\(\{ summaries \}\);/);
   });
@@ -108,7 +108,7 @@ describe('W416.A apps/server/src/routes/admin-cost.ts content parity', () => {
 
   it('parseOrThrow helper: zod safeParse + BadRequestError(result.error.message)', () => {
     expect(body).toMatch(
-      /function parseOrThrow<T>\(schema: z\.ZodSchema<T>, input: unknown\): T \{\s*\n?\s*const result = schema\.safeParse\(input\);\s*\n?\s*if \(!result\.success\) throw new BadRequestError\(result\.error\.message\);\s*\n?\s*return result\.data;/,
+      /function parseOrThrow<T>\(schema: z\.ZodSchema<T>, input: unknown\): T \{\s*const result = schema\.safeParse\(input\);\s*if \(!result\.success\) throw new BadRequestError\(result\.error\.message\);\s*return result\.data;/,
     );
   });
 
@@ -119,7 +119,7 @@ describe('W416.A apps/server/src/routes/admin-cost.ts content parity', () => {
       /import \{ NotFoundError, BadRequestError \} from '\.\.\/lib\/errors\.js';/,
     );
     expect(body).toMatch(
-      /import \{\s*\n?\s*BILLING_CYCLE_PATTERN,\s*\n?\s*type CostMonitoringService,\s*\n?\s*billingCycleFromDate,\s*\n?\s*\} from '\.\.\/services\/cost-monitoring\.js';/,
+      /import \{\s*BILLING_CYCLE_PATTERN,\s*type CostMonitoringService,\s*billingCycleFromDate,\s*\} from '\.\.\/services\/cost-monitoring\.js';/,
     );
   });
 

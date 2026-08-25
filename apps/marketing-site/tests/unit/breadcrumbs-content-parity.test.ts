@@ -60,9 +60,7 @@ describe('S19 Breadcrumbs component + adoption', () => {
       expect(body, `${page} imports Breadcrumbs`).toMatch(
         /import Breadcrumbs from '\.\.\/\.\.\/components\/Breadcrumbs\.astro';/,
       );
-      expect(body, `${page} renders it in the crumbs slot`).toMatch(
-        /<Breadcrumbs\s*\n?\s*slot="crumbs"/,
-      );
+      expect(body, `${page} renders it in the crumbs slot`).toMatch(/<Breadcrumbs\s*slot="crumbs"/);
       expect(body, `${page} roots the trail at Home`).toMatch(/\{ name: 'Home', href: '\/' \}/);
       expect(body, `${page} ends on its own page (no href = current)`).toContain(finalCrumb);
     }

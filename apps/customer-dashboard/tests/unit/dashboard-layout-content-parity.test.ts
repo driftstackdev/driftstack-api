@@ -126,7 +126,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(body).toMatch(/V-331 — backend API base URL/);
     expect(body).toMatch(/localStorage uses `ds_web_session_token`/);
     expect(body).toMatch(/for the bearer \(V-141\)/);
-    expect(body).toMatch(/`ds_act_as_account` for the\s*\n?\s*\/\/\s*optional team-owner override/);
+    expect(body).toMatch(/`ds_act_as_account` for the\s*\/\/\s*optional team-owner override/);
   });
 
   it('R15 brand mark (/driftstack-mark.svg <img>) appears in both withSidebar=true sidebar + withSidebar=false header branches — replaces the prior bg-gradient-accent + shadow-glow-accent D chip with the real iPhone-D SVG brand asset', () => {
@@ -145,9 +145,9 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(body).toMatch(/V-331 — "Acting as" picker/);
     expect(body).toMatch(/data-act-as-picker-wrap/);
     expect(body).toMatch(/class="hidden border-b border-tk-border px-4 py-3"/);
-    expect(body).toMatch(/<label\s*\n?\s*for="act-as-picker"/);
-    expect(body).toMatch(/Acting as\s*\n?\s*<\/label>/);
-    expect(body).toMatch(/<select\s*\n?\s*id="act-as-picker"\s*\n?\s*data-act-as-picker/);
+    expect(body).toMatch(/<label\s*for="act-as-picker"/);
+    expect(body).toMatch(/Acting as\s*<\/label>/);
+    expect(body).toMatch(/<select\s*id="act-as-picker"\s*data-act-as-picker/);
   });
 
   it('"Acting as" banner: provisional read-only + exact verified role truth + clear control', () => {
@@ -159,7 +159,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(body).toContain("Member access: read-only for this team's resources.");
     expect(body).not.toContain("All actions read +\n                write that team's resources.");
     expect(body).toMatch(/data-act-as-clear/);
-    expect(body).toMatch(/>\s*\n?\s*Switch back to self\s*\n?\s*</);
+    expect(body).toMatch(/>\s*Switch back to self\s*</);
   });
 
   it('window.driftstackActAsHeaders() is installed before <slot /> and accepts canonical owner ids only', () => {
@@ -207,7 +207,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
 
   it('W211 absolute-URL footer 5 legal links to https://driftstack.dev/* (Privacy / Terms / DPA / AUP / Sub-processors)', () => {
     expect(body).toMatch(
-      /W211 — these pages live on the marketing-site at\s*\n?\s*[\s\S]*?driftstack\.dev/,
+      /W211 — these pages live on the marketing-site at\s*[\s\S]*?driftstack\.dev/,
     );
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
@@ -227,7 +227,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     );
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/trust\/sub-processors\/" class="hover:text-tk-accent-text"\s*\n?\s*>Sub-processors<\/a\s*>/,
+      /<a href="https:\/\/driftstack\.dev\/trust\/sub-processors\/" class="hover:text-tk-accent-text"\s*>Sub-processors<\/a\s*>/,
     );
   });
 
@@ -271,7 +271,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     // requireAuthEventSource reads it) — same contract as the transcript
     // stream. Drift back to ?token= would 401 every notification connect.
     expect(body).toMatch(
-      /apiBaseUrl \+\s*\n?\s*'\/v1\/account\/me\/notifications\?ds_token=' \+ encodeURIComponent\(token\)/,
+      /apiBaseUrl \+\s*'\/v1\/account\/me\/notifications\?ds_token=' \+ encodeURIComponent\(token\)/,
     );
     expect(body).toMatch(/new EventSource\(url\)/);
     expect(body).toMatch(/es\.addEventListener\(kind,/);
@@ -279,7 +279,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
 
   it('active-route highlighting: exact match for "/" (Overview) OR prefix match for the rest → glow-red bg/text + inset-divider shadow. 2026-05-21 — added the "/" exact-match exception so Overview no longer highlights on every nested route. font-medium now applied on BOTH active + inactive (constant width prevents click-induced layout shift); active state distinguished by bg + text color + inset divider only.', () => {
     expect(body).toMatch(
-      /item\.href === '\/'\s*\n?\s*\?\s*pathname === '\/'\s*\n?\s*:\s*pathname === item\.href \|\|\s*\n?\s*pathname\.startsWith\(item\.href \+ '\/'\)/,
+      /item\.href === '\/'\s*\?\s*pathname === '\/'\s*:\s*pathname === item\.href \|\|\s*pathname\.startsWith\(item\.href \+ '\/'\)/,
     );
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(/'bg-tk-accent\/10 text-tk-accent-text shadow-inset-divider'/);

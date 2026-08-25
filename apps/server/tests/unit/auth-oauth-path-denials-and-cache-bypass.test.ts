@@ -43,7 +43,7 @@
 //
 // The parity pin's anchor for it is braced —
 //
-//     /if \(account\.status === 'deleted'\) \{\s*\n?\s*throw new InvalidKeyError\(\);/
+//     /if \(account\.status === 'deleted'\) \{\s*throw new InvalidKeyError\(\);/
 //
 // — and this path writes the check on ONE line without braces, so that anchor
 // matches the other two copies and not this one. It is not that the pin sees

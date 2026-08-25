@@ -214,7 +214,7 @@ describe('W947 V-295a incidents cross-source invariant', () => {
     expect(p).toMatch(/All fire AFTER the incident write commits successfully, and are dispatched/);
     expect(p).toMatch(/FIRE-AND-FORGET \(`void …`\) rather than awaited/);
     expect(p).toMatch(
-      /the incident IS the source of\s*\n?\s*\*\s*truth and the notification is best-effort/,
+      /the incident IS the source of\s*\*\s*truth and the notification is best-effort/,
     );
     expect(p).toMatch(/but it IS reported through the/);
     // V-807 — both halves of the retired sentence, banned per-occurrence.

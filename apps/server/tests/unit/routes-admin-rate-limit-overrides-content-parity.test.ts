@@ -38,7 +38,7 @@ describe('W415.C apps/server/src/routes/admin-rate-limit-overrides.ts content pa
 
   it('Framing pinned: GET /v1/admin/rate-limit-overrides read-only no-audit + set/clear at /v1/admin/accounts/:id/quota-override', () => {
     expect(body).toMatch(
-      /Admin-only cross-account rate-limit override list —\s*\n?\s*\/\/\s*GET \/v1\/admin\/rate-limit-overrides\. Read-only; no audit row written\s*\n?\s*\/\/\s*for the read\. Set \/ clear are per-account at\s*\n?\s*\/\/\s*\/v1\/admin\/accounts\/:id\/quota-override\./,
+      /Admin-only cross-account rate-limit override list —\s*\/\/\s*GET \/v1\/admin\/rate-limit-overrides\. Read-only; no audit row written\s*\/\/\s*for the read\. Set \/ clear are per-account at\s*\/\/\s*\/v1\/admin\/accounts\/:id\/quota-override\./,
     );
   });
 
@@ -47,13 +47,13 @@ describe('W415.C apps/server/src/routes/admin-rate-limit-overrides.ts content pa
       /const PUBLIC_ID_RE = \/\^\[a-z\]\{3\}_\(\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{12\}\)\$\/;/,
     );
     expect(body).toMatch(
-      /function uuidFromPrefixedId\(value: string, expectedPrefix: string\): string \{\s*\n?\s*const match = PUBLIC_ID_RE\.exec\(value\);\s*\n?\s*if \(!match \|\| !match\[1\] \|\| !value\.startsWith\(`\$\{expectedPrefix\}_`\)\) \{\s*\n?\s*throw new BadRequestError\(`Invalid id format\. Expected "\$\{expectedPrefix\}_<uuid>"\.`\);/,
+      /function uuidFromPrefixedId\(value: string, expectedPrefix: string\): string \{\s*const match = PUBLIC_ID_RE\.exec\(value\);\s*if \(!match \|\| !match\[1\] \|\| !value\.startsWith\(`\$\{expectedPrefix\}_`\)\) \{\s*throw new BadRequestError\(`Invalid id format\. Expected "\$\{expectedPrefix\}_<uuid>"\.`\);/,
     );
   });
 
   it("ListAdminOverridesQuerySchema: limit coerce 1..100 default 50 + cursor min-1 max-512 optional (slice 149 cap) + optional account_id + include_expired zod enum 'true'|'false'", () => {
     expect(body).toMatch(
-      /const ListAdminOverridesQuerySchema = z\.object\(\{\s*\n?\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),\s*\n?\s*\/\/ Slice 146[\s\S]*?cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),\s*\n?\s*account_id: z\.string\(\)\.min\(1\)\.max\(100\)\.optional\(\),\s*\n?\s*include_expired: z\.enum\(\['true', 'false'\]\)\.optional\(\),\s*\n?\s*\}\);/,
+      /const ListAdminOverridesQuerySchema = z\.object\(\{\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),\s*\/\/ Slice 146[\s\S]*?cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),\s*account_id: z\.string\(\)\.min\(1\)\.max\(100\)\.optional\(\),\s*include_expired: z\.enum\(\['true', 'false'\]\)\.optional\(\),\s*\}\);/,
     );
   });
 
@@ -81,7 +81,7 @@ describe('W415.C apps/server/src/routes/admin-rate-limit-overrides.ts content pa
 
   it('account_id resolution: 36-char raw uuid OR uuidFromPrefixedId(value, "acc")', () => {
     expect(body).toMatch(
-      /const accountUuid =\s*\n?\s*parsed\.data\.account_id !== undefined\s*\n?\s*\? parsed\.data\.account_id\.length === 36\s*\n?\s*\? parsed\.data\.account_id\s*\n?\s*: uuidFromPrefixedId\(parsed\.data\.account_id, 'acc'\)\s*\n?\s*: undefined;/,
+      /const accountUuid =\s*parsed\.data\.account_id !== undefined\s*\? parsed\.data\.account_id\.length === 36\s*\? parsed\.data\.account_id\s*: uuidFromPrefixedId\(parsed\.data\.account_id, 'acc'\)\s*: undefined;/,
     );
   });
 
@@ -91,13 +91,13 @@ describe('W415.C apps/server/src/routes/admin-rate-limit-overrides.ts content pa
 
   it('Service dispatch: rateLimitOverrides.listAll with includeExpired always set + spread-conditional cursor + accountId', () => {
     expect(body).toMatch(
-      /const page = await rateLimitOverrides\.listAll\(ctx, \{\s*\n?\s*limit: parsed\.data\.limit,\s*\n?\s*\.\.\.\(parsed\.data\.cursor !== undefined \? \{ cursor: parsed\.data\.cursor \} : \{\}\),\s*\n?\s*\.\.\.\(accountUuid !== undefined \? \{ accountId: accountUuid \} : \{\}\),\s*\n?\s*includeExpired,\s*\n?\s*\}\);/,
+      /const page = await rateLimitOverrides\.listAll\(ctx, \{\s*limit: parsed\.data\.limit,\s*\.\.\.\(parsed\.data\.cursor !== undefined \? \{ cursor: parsed\.data\.cursor \} : \{\}\),\s*\.\.\.\(accountUuid !== undefined \? \{ accountId: accountUuid \} : \{\}\),\s*includeExpired,\s*\}\);/,
     );
   });
 
   it('Reply shape: { data: page.items.map(publicOverride), next_cursor: page.nextCursor }', () => {
     expect(body).toMatch(
-      /return \{\s*\n?\s*data: page\.items\.map\(publicOverride\),\s*\n?\s*next_cursor: page\.nextCursor,\s*\n?\s*\};/,
+      /return \{\s*data: page\.items\.map\(publicOverride\),\s*next_cursor: page\.nextCursor,\s*\};/,
     );
   });
 
@@ -111,7 +111,7 @@ describe('W415.C apps/server/src/routes/admin-rate-limit-overrides.ts content pa
     expect(body).toMatch(/import type \{ FastifyInstance \} from 'fastify';/);
     expect(body).toMatch(/import \{ z \} from 'zod';/);
     expect(body).toMatch(
-      /import type \{\s*\n?\s*RateLimitOverrideRecord,\s*\n?\s*RateLimitOverridesService,\s*\n?\s*\} from '\.\.\/services\/rate-limit-overrides\.js';/,
+      /import type \{\s*RateLimitOverrideRecord,\s*RateLimitOverridesService,\s*\} from '\.\.\/services\/rate-limit-overrides\.js';/,
     );
     expect(body).toMatch(/import \{ BadRequestError \} from '\.\.\/lib\/errors\.js';/);
   });

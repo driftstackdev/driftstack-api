@@ -39,21 +39,21 @@ describe('W488.A apps/admin-panel/src/pages/audit-log.astro content parity', () 
 
   it('V-188 framing pins an inert SSG shell and the server/client filter split', () => {
     expect(body).toMatch(
-      /\/\/ V-188 — progressive-enhancement against \/v1\/admin\/audit-log\. SSG\s*\n?\s*\/\/ renders an inert shell; an inline <script> reads ds_web_session_token\s*\n?\s*\/\/ from localStorage and replaces the table body with live entries\./,
+      /\/\/ V-188 — progressive-enhancement against \/v1\/admin\/audit-log\. SSG\s*\/\/ renders an inert shell; an inline <script> reads ds_web_session_token\s*\/\/ from localStorage and replaces the table body with live entries\./,
     );
   });
 
   it('ships no sample security event or green live claim before authority', () => {
     expect(body).not.toContain('MOCK_AUDIT_LOG');
     expect(body).toContain('Live audit entries are unavailable until loaded.');
-    expect(body).toMatch(/data-live-dot\s*\n?\s*class="[^"]*bg-amber-500"/);
+    expect(body).toMatch(/data-live-dot\s*class="[^"]*bg-amber-500"/);
     expect(body).toContain('<span data-live-status>Waiting for live data</span>');
-    expect(body).toMatch(/data-live-refresh\s*\n?\s*disabled\s*\n?\s*aria-disabled="true"/);
+    expect(body).toMatch(/data-live-refresh\s*disabled\s*aria-disabled="true"/);
   });
 
   it("D-025 framing pinned: 'Append-only record of every admin action. Cannot be mutated by admins (D-025). Filter by action, admin id, or target account.' — pinned so the immutability contract stays explicit on the page operators see (drift to softer phrasing weakens the compliance-review guarantee). The filter list names the REAL filters (action / admin id / target account) — it must NOT advertise a non-existent 'admin email' filter (the endpoint has no such param)", () => {
     expect(body).toMatch(
-      /Append-only record of every admin action\. Cannot be mutated by admins\s*\n?\s*\(D-025\)\. Filter by action, admin id, or target account\./,
+      /Append-only record of every admin action\. Cannot be mutated by admins\s*\(D-025\)\. Filter by action, admin id, or target account\./,
     );
     // The page must not promise an 'admin email' filter the endpoint can't honor.
     expect(body).not.toMatch(/Filter by action, target account, or admin email/);
@@ -121,10 +121,10 @@ describe('W488.A apps/admin-panel/src/pages/audit-log.astro content parity', () 
 
   it('pins live PostgreSQL/page-all truth without promising an unwired archive scheduler', () => {
     expect(body).toMatch(
-      /'Showing ' \+\s*\n?\s*entries\.length \+\s*\n?\s*' entr' \+\s*\n?\s*\(entries\.length === 1 \? 'y' : 'ies'\) \+\s*\n?\s*' from a loaded window of ' \+\s*\n?\s*loadedEntries\.length \+\s*\n?\s*'\. This console reads live PostgreSQL audit rows; page the API for a complete live extract\.';/,
+      /'Showing ' \+\s*entries\.length \+\s*' entr' \+\s*\(entries\.length === 1 \? 'y' : 'ies'\) \+\s*' from a loaded window of ' \+\s*loadedEntries\.length \+\s*'\. This console reads live PostgreSQL audit rows; page the API for a complete live extract\.';/,
     );
     expect(body).toMatch(
-      /This console reads the live PostgreSQL audit rows newest first and paginates\s*\n?\s*by cursor\. For a complete live admin-side extract, pull every page from\s*\n?\s*<code class="font-mono">\/v1\/admin\/audit-log<\/code>/,
+      /This console reads the live PostgreSQL audit rows newest first and paginates\s*by cursor\. For a complete live admin-side extract, pull every page from\s*<code class="font-mono">\/v1\/admin\/audit-log<\/code>/,
     );
     expect(body).not.toMatch(/R2 archive thereafter|90 days hot/i);
     expect(body).not.toMatch(/not yet|coming soon|roadmap|planned feature/i);
@@ -180,7 +180,7 @@ describe('W488.A apps/admin-panel/src/pages/audit-log.astro content parity', () 
   it('keeps DOMContentLoaded token deferral and treats denied localStorage as signed out for the AdminLayout SSO bridge', () => {
     expect(body).toMatch(/let token = null;/);
     expect(body).toMatch(
-      /function start\(\) \{\s*\n?\s*try \{\s*\n?\s*token = localStorage\.getItem\('ds_web_session_token'\);\s*\n?\s*\} catch \{\s*\n?\s*token = null;\s*\n?\s*\}\s*\n?\s*if \(!token\) \{/,
+      /function start\(\) \{\s*try \{\s*token = localStorage\.getItem\('ds_web_session_token'\);\s*\} catch \{\s*token = null;\s*\}\s*if \(!token\) \{/,
     );
     expect(body).toMatch(
       /document\.addEventListener\('DOMContentLoaded', start, \{ once: true \}\);/,

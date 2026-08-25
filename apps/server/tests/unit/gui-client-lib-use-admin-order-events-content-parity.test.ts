@@ -43,19 +43,19 @@ describe('W466.C apps/gui-client/src/lib/use-admin-order-events.ts content parit
   it("V-534.BD framing pinned: 'V-534.BD — useAdminOrderEvents hook.' + 'Wraps GET /v1/admin/crypto-orders/:order_id/events (V-666.AT). Fetches on mount and on orderId change. The detail drawer consumes this to render an inline timeline below the envelope.'", () => {
     expect(body).toMatch(/\/\/ V-534\.BD — useAdminOrderEvents hook\./);
     expect(body).toMatch(
-      /\/\/ Wraps GET \/v1\/admin\/crypto-orders\/:order_id\/events \(V-666\.AT\)\.\s*\n?\s*\/\/ Fetches on mount and on orderId change\. The detail drawer\s*\n?\s*\/\/ consumes this to render an inline timeline below the envelope\./,
+      /\/\/ Wraps GET \/v1\/admin\/crypto-orders\/:order_id\/events \(V-666\.AT\)\.\s*\/\/ Fetches on mount and on orderId change\. The detail drawer\s*\/\/ consumes this to render an inline timeline below the envelope\./,
     );
   });
 
   it("AdminOrderEvent: 3-field with status 6-union ('pending'|'confirming'|'paid'|'failed'|'partial'|'cancelled') + at + source 5-union ('create'|'ipn'|'cancel'|'expired'|'swept')", () => {
     expect(body).toMatch(
-      /export interface AdminOrderEvent \{\s*\n?\s*status: 'pending' \| 'confirming' \| 'paid' \| 'failed' \| 'partial' \| 'cancelled';\s*\n?\s*at: string;\s*\n?\s*source: 'create' \| 'ipn' \| 'cancel' \| 'expired' \| 'swept';\s*\n?\s*\}/,
+      /export interface AdminOrderEvent \{\s*status: 'pending' \| 'confirming' \| 'paid' \| 'failed' \| 'partial' \| 'cancelled';\s*at: string;\s*source: 'create' \| 'ipn' \| 'cancel' \| 'expired' \| 'swept';\s*\}/,
     );
   });
 
   it('AdminOrderEventsState 4-variant union: idle | loading | ready{events: AdminOrderEvent[]} | error{message} — note: events array, NOT data wrapped, distinct from other V-534 hooks', () => {
     expect(body).toMatch(
-      /export type AdminOrderEventsState =\s*\n?\s*\| \{ kind: 'idle' \}\s*\n?\s*\| \{ kind: 'loading' \}\s*\n?\s*\| \{ kind: 'ready'; events: AdminOrderEvent\[\] \}\s*\n?\s*\| \{ kind: 'error'; message: string \};/,
+      /export type AdminOrderEventsState =\s*\| \{ kind: 'idle' \}\s*\| \{ kind: 'loading' \}\s*\| \{ kind: 'ready'; events: AdminOrderEvent\[\] \}\s*\| \{ kind: 'error'; message: string \};/,
     );
   });
 
@@ -67,19 +67,19 @@ describe('W466.C apps/gui-client/src/lib/use-admin-order-events.ts content parit
 
   it("Initial state: orderId === null → {kind:'idle'} else {kind:'loading'} (null-orderId pre-mount stays idle, drawer hasn't opened)", () => {
     expect(body).toMatch(
-      /const \[state, setState\] = useState<AdminOrderEventsState>\(\s*\n?\s*orderId === null \? \{ kind: 'idle' \} : \{ kind: 'loading' \},\s*\n?\s*\);/,
+      /const \[state, setState\] = useState<AdminOrderEventsState>\(\s*orderId === null \? \{ kind: 'idle' \} : \{ kind: 'loading' \},\s*\);/,
     );
   });
 
   it("Fetcher orderId-null guard: orderId === null → setState({kind:'idle'}) reset (NOT error — drawer closed is not a failure)", () => {
     expect(body).toMatch(
-      /if \(orderId === null\) \{\s*\n?\s*setState\(\{ kind: 'idle' \}\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*if \(!settings\.apiKey\) \{\s*\n?\s*setState\(\{ kind: 'error', message: 'No API key configured\.' \}\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /if \(orderId === null\) \{\s*setState\(\{ kind: 'idle' \}\);\s*return;\s*\}\s*if \(!settings\.apiKey\) \{\s*setState\(\{ kind: 'error', message: 'No API key configured\.' \}\);\s*return;\s*\}/,
     );
   });
 
   it('URL with encodeURIComponent(orderId): deadline-bounded GET + signal + Bearer + accept JSON', () => {
     expect(body).toMatch(
-      /const res = await fetchWithDeadline\(\s*\n?\s*`\$\{baseUrl\}\/v1\/admin\/crypto-orders\/\$\{encodeURIComponent\(orderId\)\}\/events`,/,
+      /const res = await fetchWithDeadline\(\s*`\$\{baseUrl\}\/v1\/admin\/crypto-orders\/\$\{encodeURIComponent\(orderId\)\}\/events`,/,
     );
     expect(body).toContain("method: 'GET',");
     expect(body).toContain('signal: controller.signal,');
@@ -103,9 +103,7 @@ describe('W466.C apps/gui-client/src/lib/use-admin-order-events.ts content parit
     expect(body).toContain('if (sequence === sequenceRef.current) {');
     expect(body).toContain('requestRef.current?.abort();');
     expect(body).toContain('[settings.apiKey, settings.baseUrl, orderId],');
-    expect(body).toMatch(
-      /useEffect\(\(\) => \{\s*\n?\s*void fetcher\(\);\s*\n?\s*\}, \[fetcher\]\);/,
-    );
+    expect(body).toMatch(/useEffect\(\(\) => \{\s*void fetcher\(\);\s*\}, \[fetcher\]\);/);
     expect(body).toMatch(/\}, \[settings\.apiKey, settings\.baseUrl, orderId\]\);/);
   });
 

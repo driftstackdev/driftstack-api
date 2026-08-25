@@ -42,7 +42,7 @@ describe('W386.C gui-client CryptoOrderSummaryCard content parity', () => {
 
   it('"Replaces the inline <dl> block previously embedded in CryptoOrderDetailView" framing pinned', () => {
     expect(body).toMatch(
-      /Replaces the inline <dl> block previously embedded in\s*\n?\s*\/\/\s*CryptoOrderDetailView\. Pure presentational; no fetching, no actions/,
+      /Replaces the inline <dl> block previously embedded in\s*\/\/\s*CryptoOrderDetailView\. Pure presentational; no fetching, no actions/,
     );
   });
 
@@ -72,7 +72,7 @@ describe('W386.C gui-client CryptoOrderSummaryCard content parity', () => {
 
   it('expires_at countdown gated on pending status + non-empty expires_at', () => {
     expect(body).toMatch(
-      /const showExpiry =\s*\n?\s*order\.status === 'pending' &&\s*\n?\s*typeof order\.expires_at === 'string' &&\s*\n?\s*order\.expires_at\.length > 0;/,
+      /const showExpiry =\s*order\.status === 'pending' &&\s*typeof order\.expires_at === 'string' &&\s*order\.expires_at\.length > 0;/,
     );
   });
 

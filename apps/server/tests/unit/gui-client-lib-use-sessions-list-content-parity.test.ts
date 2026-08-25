@@ -41,51 +41,51 @@ describe('W472.B apps/gui-client/src/lib/use-sessions-list.ts content parity', (
   it("V-534.O framing pinned: 'V-534.O — useSessionsList hook.' + 'Fetches GET /v1/sessions and exposes a loading/error/ready state machine + a refetch fn. Mirrors useAccountCost (V-534.H) / useCryptoCheckout (V-534.J): direct fetch against baseUrl + apiKey from SettingsContext until an SDK client.sessions.list() lands.'", () => {
     expect(body).toMatch(/\/\/ V-534\.O — useSessionsList hook\./);
     expect(body).toMatch(
-      /\/\/ Fetches GET \/v1\/sessions and exposes a loading\/error\/ready state\s*\n?\s*\/\/ machine \+ a refetch fn\. Mirrors useAccountCost \(V-534\.H\) \/\s*\n?\s*\/\/ useCryptoCheckout \(V-534\.J\): direct fetch against baseUrl \+ apiKey\s*\n?\s*\/\/ from SettingsContext until an SDK client\.sessions\.list\(\) lands\./,
+      /\/\/ Fetches GET \/v1\/sessions and exposes a loading\/error\/ready state\s*\/\/ machine \+ a refetch fn\. Mirrors useAccountCost \(V-534\.H\) \/\s*\/\/ useCryptoCheckout \(V-534\.J\): direct fetch against baseUrl \+ apiKey\s*\/\/ from SettingsContext until an SDK client\.sessions\.list\(\) lands\./,
     );
   });
 
   it('SessionListItem 5-field (id + status + url + createdAt + endedAt nullable); SessionsListResponse 2-field (sessions: SessionListItem[] + nextCursor nullable)', () => {
     expect(body).toMatch(
-      /export interface SessionListItem \{\s*\n?\s*id: string;\s*\n?\s*status: string;\s*\n?\s*url: string;\s*\n?\s*createdAt: string;\s*\n?\s*endedAt: string \| null;\s*\n?\s*\}/,
+      /export interface SessionListItem \{\s*id: string;\s*status: string;\s*url: string;\s*createdAt: string;\s*endedAt: string \| null;\s*\}/,
     );
     expect(body).toMatch(
-      /export interface SessionsListResponse \{\s*\n?\s*sessions: SessionListItem\[\];\s*\n?\s*nextCursor: string \| null;\s*\n?\s*\}/,
+      /export interface SessionsListResponse \{\s*sessions: SessionListItem\[\];\s*nextCursor: string \| null;\s*\}/,
     );
   });
 
   it("UseSessionsListOpts: limit? 'Page size. Default 25.' + manual? 'Disable auto-fetch on mount. Default false.'", () => {
     expect(body).toMatch(
-      /export interface UseSessionsListOpts \{\s*\n?\s*\/\*\* Page size\. Default 25\. \*\/\s*\n?\s*limit\?: number;\s*\n?\s*\/\*\* Disable auto-fetch on mount\. Default false\. \*\/\s*\n?\s*manual\?: boolean;\s*\n?\s*\}/,
+      /export interface UseSessionsListOpts \{\s*\/\*\* Page size\. Default 25\. \*\/\s*limit\?: number;\s*\/\*\* Disable auto-fetch on mount\. Default false\. \*\/\s*manual\?: boolean;\s*\}/,
     );
   });
 
   it('limit default 25 + URL `${baseUrl}/v1/sessions?limit=${limit.toString()}` exact (.toString() preserved for explicit number-to-string cast)', () => {
     expect(body).toMatch(/const limit = opts\.limit \?\? 25;/);
     expect(body).toMatch(
-      /const res = await fetchWithDeadline\(\s*\n?\s*`\$\{baseUrl\}\/v1\/sessions\?limit=\$\{limit\.toString\(\)\}`,\s*\n?\s*\{\s*\n?\s*method: 'GET',\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',/,
+      /const res = await fetchWithDeadline\(\s*`\$\{baseUrl\}\/v1\/sessions\?limit=\$\{limit\.toString\(\)\}`,\s*\{\s*method: 'GET',\s*signal: controller\.signal,\s*headers: \{\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*accept: 'application\/json',/,
     );
   });
 
   it('State machine retains manual behavior while reads are single-flight, sequence-gated, and dependency/unmount-aborted', () => {
     expect(body).toMatch(
-      /export type SessionsListState =\s*\n?\s*\| \{ kind: 'idle' \}\s*\n?\s*\| \{ kind: 'loading' \}\s*\n?\s*\| \{ kind: 'ready'; data: SessionsListResponse \}\s*\n?\s*\| \{ kind: 'error'; message: string \};/,
+      /export type SessionsListState =\s*\| \{ kind: 'idle' \}\s*\| \{ kind: 'loading' \}\s*\| \{ kind: 'ready'; data: SessionsListResponse \}\s*\| \{ kind: 'error'; message: string \};/,
     );
     expect(body).toMatch(
-      /const \[state, setState\] = useState<SessionsListState>\(\s*\n?\s*opts\.manual === true \? \{ kind: 'idle' \} : \{ kind: 'loading' \},\s*\n?\s*\);/,
+      /const \[state, setState\] = useState<SessionsListState>\(\s*opts\.manual === true \? \{ kind: 'idle' \} : \{ kind: 'loading' \},\s*\);/,
     );
     expect(body).toMatch(/const requestRef = useRef<AbortController \| null>\(null\);/);
     expect(body).toMatch(
-      /const fetcher = useCallback\(async \(\): Promise<void> => \{\s*\n?\s*if \(inFlightRef\.current\) return;/,
+      /const fetcher = useCallback\(async \(\): Promise<void> => \{\s*if \(inFlightRef\.current\) return;/,
     );
     expect(body).toMatch(
       /if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'ready', data: body \}\);/,
     );
     expect(body).toMatch(
-      /useEffect\(\s*\n?\s*\(\) => \(\) => \{\s*\n?\s*sequenceRef\.current \+= 1;\s*\n?\s*requestRef\.current\?\.abort\(\);\s*\n?\s*requestRef\.current = null;\s*\n?\s*inFlightRef\.current = false;\s*\n?\s*\},\s*\n?\s*\[settings\.apiKey, settings\.baseUrl, limit\],/,
+      /useEffect\(\s*\(\) => \(\) => \{\s*sequenceRef\.current \+= 1;\s*requestRef\.current\?\.abort\(\);\s*requestRef\.current = null;\s*inFlightRef\.current = false;\s*\},\s*\[settings\.apiKey, settings\.baseUrl, limit\],/,
     );
     expect(body).toMatch(
-      /useEffect\(\(\) => \{\s*\n?\s*if \(opts\.manual === true\) return;\s*\n?\s*void fetcher\(\);\s*\n?\s*\}, \[fetcher, opts\.manual\]\);\s*\n?\s*return \{ state, refetch: fetcher \};/,
+      /useEffect\(\(\) => \{\s*if \(opts\.manual === true\) return;\s*void fetcher\(\);\s*\}, \[fetcher, opts\.manual\]\);\s*return \{ state, refetch: fetcher \};/,
     );
   });
 

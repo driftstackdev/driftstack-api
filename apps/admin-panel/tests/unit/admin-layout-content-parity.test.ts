@@ -115,7 +115,7 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
 
   it('active-route highlighting: exact match OR startsWith href+"/" → oxblood-50 + oxblood-700. 2026-05-21 — font-medium moved from active-only to the base class (constant width prevents click-induced layout shift; same fix as DashboardLayout 50b0dd7a).', () => {
     expect(body).toMatch(
-      /pathname === item\.href \|\| pathname\.startsWith\(item\.href \+ '\/'\)\s*\n?\s*\?\s*'bg-tk-accent\/10 text-tk-accent'/,
+      /pathname === item\.href \|\| pathname\.startsWith\(item\.href \+ '\/'\)\s*\?\s*'bg-tk-accent\/10 text-tk-accent'/,
     );
     expect(body).toMatch(/text-sm font-medium transition-colors/);
   });
@@ -124,9 +124,7 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
     expect(body).toMatch(
       /V-219\* \/ Fleet port — W2 wordmark \(DRIFTSTACK black-italic two-tone\)/,
     );
-    expect(body).toMatch(
-      /<img\s*\n?\s*src="\/driftstack-mark\.svg(\?v=\d+)?"\s*\n?\s*alt="Driftstack"/,
-    );
+    expect(body).toMatch(/<img\s*src="\/driftstack-mark\.svg(\?v=\d+)?"\s*alt="Driftstack"/);
   });
 
   it('W2 wordmark (Fleet port): DRIFTSTACK black-italic two-tone; link keeps the group/hover-scale wrap.', () => {
@@ -138,7 +136,7 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
 
   it('"admin" staff-context pill (oxblood-50 bg + oxblood-700 text + mono uppercase)', () => {
     expect(body).toMatch(
-      /<span\s*\n?\s*class="rounded-full bg-tk-accent\/10 px-2 py-0\.5 font-mono text-xs uppercase tracking-wide text-tk-accent"\s*\n?\s*>\s*\n?\s*admin\s*\n?\s*<\/span>/,
+      /<span\s*class="rounded-full bg-tk-accent\/10 px-2 py-0\.5 font-mono text-xs uppercase tracking-wide text-tk-accent"\s*>\s*admin\s*<\/span>/,
     );
   });
 

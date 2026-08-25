@@ -53,7 +53,7 @@ describe('W712 server-side auth middleware parity', () => {
     const src = read(AUTH_MIDDLEWARE);
 
     expect(src).toMatch(/declare module 'fastify' \{/);
-    expect(src).toMatch(/interface FastifyRequest \{\s*\n?\s*account: AccountContext \| null;/);
+    expect(src).toMatch(/interface FastifyRequest \{\s*account: AccountContext \| null;/);
     expect(src).toMatch(/interface FastifyInstance \{/);
     expect(src).toMatch(/requireAuth:/);
     // SSE/EventSource auth variant — accepts the bearer token from a
@@ -82,7 +82,7 @@ describe('W712 server-side auth middleware parity', () => {
     expect(authenticateCalls).toHaveLength(2);
     for (const call of authenticateCalls) {
       expect(call).toMatch(
-        /await authenticate\(\s*\n?\s*opts\.authRepo,\s*\n?\s*token,\s*\n?\s*opts\.authCache,\s*\n?\s*new Date\(\),\s*\n?\s*opts\.authCoalescer,\s*\n?\s*opts\.staffEmails \?\? new Set\(\),\s*\n?\s*opts\.negativeAuthCache \?\? null,\s*\n?\s*opts\.oauthStore \?\? null,\s*\n?\s*\)/,
+        /await authenticate\(\s*opts\.authRepo,\s*token,\s*opts\.authCache,\s*new Date\(\),\s*opts\.authCoalescer,\s*opts\.staffEmails \?\? new Set\(\),\s*opts\.negativeAuthCache \?\? null,\s*opts\.oauthStore \?\? null,\s*\)/,
       );
     }
   });
@@ -97,7 +97,7 @@ describe('W712 server-side auth middleware parity', () => {
   it("CRITICAL requireScope decorator factory pinned — returns a per-route hook that calls requireAuth first (if needed) then requireScope on the context. The 2-step shape is what lets routes compose `app.requireScope('admin')` directly in route options without manual auth chaining.", () => {
     const src = read(AUTH_MIDDLEWARE);
     expect(src).toMatch(/app\.decorate\('requireScope', \(scope: ApiKeyScope\) => \{/);
-    expect(src).toMatch(/if \(!request\.account\) \{\s*\n?\s*await requireAuth\(request, reply\);/);
+    expect(src).toMatch(/if \(!request\.account\) \{\s*await requireAuth\(request, reply\);/);
     expect(src).toMatch(/if \(request\.account\) requireScope\(request\.account, scope\)/);
   });
 
@@ -111,14 +111,14 @@ describe('W712 server-side auth middleware parity', () => {
   it("CRITICAL V-353e bypass-when-MfaService-not-wired pinned — when MFA is disabled in the deploy (no MfaService injected), the gate becomes a no-op. Drift to throwing without an MfaService would break test fixtures + deploys that haven't wired MFA yet.", () => {
     const src = read(AUTH_MIDDLEWARE);
     expect(src).toMatch(
-      /No MfaService wired = MFA disabled in this deploy.*\s*\n?\s*if \(!opts\.mfaService\) return;/,
+      /No MfaService wired = MFA disabled in this deploy.*\s*if \(!opts\.mfaService\) return;/,
     );
   });
 
   it("CRITICAL V-353e bypass-when-not-enrolled pinned — `if (!status.enrolled) return;`. The bypass is what lets the gate apply only to accounts that have completed enrollment; drift to gating non-enrolled would force a chicken-and-egg flow (can't enroll because not enrolled).", () => {
     const src = read(AUTH_MIDDLEWARE);
     expect(src).toMatch(
-      /const status = await opts\.mfaService\.getStatus\(ctx\.account\.id\);\s*\n?\s*if \(!status\.enrolled\) return;/,
+      /const status = await opts\.mfaService\.getStatus\(ctx\.account\.id\);\s*if \(!status\.enrolled\) return;/,
     );
   });
 
@@ -127,12 +127,12 @@ describe('W712 server-side auth middleware parity', () => {
 
     // never_satisfied on null sat.
     expect(src).toMatch(
-      /if \(sat === null\) \{\s*\n?\s*throw new MfaStepUpRequiredError\('never_satisfied'\);/,
+      /if \(sat === null\) \{\s*throw new MfaStepUpRequiredError\('never_satisfied'\);/,
     );
 
     // expired on ageSec > window.
     expect(src).toMatch(
-      /const ageSec = \(Date\.now\(\) - sat\.getTime\(\)\) \/ 1000;\s*\n?\s*if \(ageSec > window\) \{\s*\n?\s*throw new MfaStepUpRequiredError\('expired'\);/,
+      /const ageSec = \(Date\.now\(\) - sat\.getTime\(\)\) \/ 1000;\s*if \(ageSec > window\) \{\s*throw new MfaStepUpRequiredError\('expired'\);/,
     );
   });
 

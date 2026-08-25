@@ -81,14 +81,14 @@ describe('Activation-gate disabled-stub registrar roster cross-source invariant'
   it("routes/account-byok-anthropic header claims '6th gated feature' + lists the 5 prior features (billing / session-proxy / saved-proxies / agent-sessions / fleet-events) — pinned so the historical-count claim stays accurate to its commit-time position (recipes was added later; the comment is correct as-of-when-written, not as-of-now)", () => {
     const byokSrc = read(resolve(REPO_ROOT, 'apps/server/src/routes/account-byok-anthropic.ts'));
     expect(byokSrc).toMatch(
-      /Activation-gate pattern \(6th gated feature; matches billing \/\s*\n?\s*\/\/ session-proxy \/ saved-proxies \/ agent-sessions \/ fleet-events\)/,
+      /Activation-gate pattern \(6th gated feature; matches billing \/\s*\/\/ session-proxy \/ saved-proxies \/ agent-sessions \/ fleet-events\)/,
     );
   });
 
   it('routes/recipes header lists 3 prior gated-feature patterns (agent-sessions / billing / session-egress) — pinned so the same-activation-gate-pattern reference stays documented', () => {
     const recipesSrc = read(resolve(REPO_ROOT, 'apps/server/src/routes/recipes.ts'));
     expect(recipesSrc).toMatch(
-      /Same activation-gate pattern as agent-sessions \/ billing \/\s*\n?\s*\/\/ session-egress\./,
+      /Same activation-gate pattern as agent-sessions \/ billing \/\s*\/\/ session-egress\./,
     );
   });
 

@@ -45,22 +45,22 @@ describe('W441.B apps/server/src/db/account-lifecycle-repo.ts content parity', (
 
   it('DrizzleAccountLifecycleRepo class implements AccountLifecycleRepo; constructor(private readonly database: Database)', () => {
     expect(body).toMatch(
-      /export class DrizzleAccountLifecycleRepo implements AccountLifecycleRepo \{\s*\n?\s*constructor\(private readonly database: Database\) \{\}/,
+      /export class DrizzleAccountLifecycleRepo implements AccountLifecycleRepo \{\s*constructor\(private readonly database: Database\) \{\}/,
     );
   });
 
   it('findForLifecycle: 4-field select (id + email + firstFailureEmailSentAt + firstSuccessEmailSentAt) from accounts where id matches + limit 1; returns rows[0] ?? null', () => {
     expect(body).toMatch(
-      /async findForLifecycle\(accountId: string\): Promise<AccountLifecycleRow \| null> \{\s*\n?\s*const rows = await this\.database\.db\s*\n?\s*\.select\(\{\s*\n?\s*id: accounts\.id,\s*\n?\s*email: accounts\.email,\s*\n?\s*firstFailureEmailSentAt: accounts\.firstFailureEmailSentAt,\s*\n?\s*firstSuccessEmailSentAt: accounts\.firstSuccessEmailSentAt,\s*\n?\s*\}\)\s*\n?\s*\.from\(accounts\)\s*\n?\s*\.where\(eq\(accounts\.id, accountId\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*return rows\[0\] \?\? null;\s*\n?\s*\}/,
+      /async findForLifecycle\(accountId: string\): Promise<AccountLifecycleRow \| null> \{\s*const rows = await this\.database\.db\s*\.select\(\{\s*id: accounts\.id,\s*email: accounts\.email,\s*firstFailureEmailSentAt: accounts\.firstFailureEmailSentAt,\s*firstSuccessEmailSentAt: accounts\.firstSuccessEmailSentAt,\s*\}\)\s*\.from\(accounts\)\s*\.where\(eq\(accounts\.id, accountId\)\)\s*\.limit\(1\);\s*return rows\[0\] \?\? null;\s*\}/,
     );
   });
 
   it("markFirstFailureEmailSent framing pinned: conditional UPDATE ... WHERE first_failure_email_sent_at IS NULL; sets updatedAt so row's mutation timestamp reflects lifecycle state change; returning {id} with result.length > 0 boolean", () => {
     expect(body).toMatch(
-      /\/\/ Conditional UPDATE \.\.\. WHERE first_failure_email_sent_at IS NULL\.\s*\n?\s*\/\/ Drizzle's update returns affected rows; we set updatedAt so the\s*\n?\s*\/\/ row's mutation timestamp reflects the lifecycle state change\./,
+      /\/\/ Conditional UPDATE \.\.\. WHERE first_failure_email_sent_at IS NULL\.\s*\/\/ Drizzle's update returns affected rows; we set updatedAt so the\s*\/\/ row's mutation timestamp reflects the lifecycle state change\./,
     );
     expect(body).toMatch(
-      /const result = await this\.database\.db\s*\n?\s*\.update\(accounts\)\s*\n?\s*\.set\(\{ firstFailureEmailSentAt: at, updatedAt: at \}\)\s*\n?\s*\.where\(and\(eq\(accounts\.id, accountId\), isNull\(accounts\.firstFailureEmailSentAt\)\)\)\s*\n?\s*\.returning\(\{ id: accounts\.id \}\);\s*\n?\s*return result\.length > 0;/,
+      /const result = await this\.database\.db\s*\.update\(accounts\)\s*\.set\(\{ firstFailureEmailSentAt: at, updatedAt: at \}\)\s*\.where\(and\(eq\(accounts\.id, accountId\), isNull\(accounts\.firstFailureEmailSentAt\)\)\)\s*\.returning\(\{ id: accounts\.id \}\);\s*return result\.length > 0;/,
     );
   });
 
@@ -69,7 +69,7 @@ describe('W441.B apps/server/src/db/account-lifecycle-repo.ts content parity', (
       /\/\/ V-304a — same pattern as markFirstFailureEmailSent\. Different column\./,
     );
     expect(body).toMatch(
-      /\.set\(\{ firstSuccessEmailSentAt: at, updatedAt: at \}\)\s*\n?\s*\.where\(and\(eq\(accounts\.id, accountId\), isNull\(accounts\.firstSuccessEmailSentAt\)\)\)\s*\n?\s*\.returning\(\{ id: accounts\.id \}\);\s*\n?\s*return result\.length > 0;/,
+      /\.set\(\{ firstSuccessEmailSentAt: at, updatedAt: at \}\)\s*\.where\(and\(eq\(accounts\.id, accountId\), isNull\(accounts\.firstSuccessEmailSentAt\)\)\)\s*\.returning\(\{ id: accounts\.id \}\);\s*return result\.length > 0;/,
     );
   });
 

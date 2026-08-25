@@ -42,14 +42,14 @@ describe('W433.C packages/api-types/src/billing.ts content parity', () => {
   it('V-082 framing pinned + 3 endpoints listed (POST checkout-session/portal-session + GET subscription) + trial_pack retirement note', () => {
     expect(body).toMatch(/\/\/ Billing flow schemas \(V-082\)\./);
     expect(body).toMatch(
-      /\/\/ Endpoints exposed under \/v1\/billing\/\*:\s*\n?\s*\/\/\s*- POST \/v1\/billing\/checkout-session\s+\(start a paid-tier subscription\)\s*\n?\s*\/\/\s*- POST \/v1\/billing\/portal-session\s+\(open Stripe Customer Portal\)\s*\n?\s*\/\/\s*- GET\s+\/v1\/billing\/subscription\s+\(current subscription state\)/,
+      /\/\/ Endpoints exposed under \/v1\/billing\/\*:\s*\/\/\s*- POST \/v1\/billing\/checkout-session\s+\(start a paid-tier subscription\)\s*\/\/\s*- POST \/v1\/billing\/portal-session\s+\(open Stripe Customer Portal\)\s*\/\/\s*- GET\s+\/v1\/billing\/subscription\s+\(current subscription state\)/,
     );
     expect(body).toMatch(/The one-time \$2\.99 trial_pack was retired 2026-05-27 in favour of a/);
   });
 
   it('BillingProvider seam rationale pinned: scaffolding-time Stripe calls gated behind interface; in-memory deterministic test provider returns checkout URLs / customer IDs', () => {
     expect(body).toMatch(
-      /\/\/ At scaffolding time, the actual Stripe API calls are gated behind\s*\n?\s*\/\/ a `BillingProvider` interface so tests run against an in-memory\s*\n?\s*\/\/ provider that returns deterministic checkout URLs \/ customer IDs\./,
+      /\/\/ At scaffolding time, the actual Stripe API calls are gated behind\s*\/\/ a `BillingProvider` interface so tests run against an in-memory\s*\/\/ provider that returns deterministic checkout URLs \/ customer IDs\./,
     );
   });
 
@@ -70,7 +70,7 @@ describe('W433.C packages/api-types/src/billing.ts content parity', () => {
       /\* Target tier\. Must be a self-serve paid tier \(not 'free' or 'enterprise'\)\./,
     );
     expect(body).toMatch(
-      /tier: z\.enum\(PURCHASABLE_TIERS, \{\s*\n?\s*message: 'tier must be a self-serve paid tier \(free and enterprise excluded\)',\s*\n?\s*\}\),/,
+      /tier: z\.enum\(PURCHASABLE_TIERS, \{\s*message: 'tier must be a self-serve paid tier \(free and enterprise excluded\)',\s*\}\),/,
     );
     // Per-occurrence negative. A refine is a runtime predicate that JSON Schema
     // cannot represent, so the generated spec published all eight tiers and
@@ -80,7 +80,7 @@ describe('W433.C packages/api-types/src/billing.ts content parity', () => {
     );
     expect(body).toMatch(/billing_period: BillingPeriodSchema,/);
     expect(body).toMatch(
-      /\*\s*Where Stripe redirects on success\. The `\{CHECKOUT_SESSION_ID\}` token\s*\n?\s*\*\s*is replaced server-side\. Defaults to the configured success URL when\s*\n?\s*\*\s*omitted\./,
+      /\*\s*Where Stripe redirects on success\. The `\{CHECKOUT_SESSION_ID\}` token\s*\*\s*is replaced server-side\. Defaults to the configured success URL when\s*\*\s*omitted\./,
     );
     expect(body).toMatch(/success_url: z\.string\(\)\.url\(\)\.optional\(\),/);
     expect(body).toMatch(/cancel_url: z\.string\(\)\.url\(\)\.optional\(\),/);
@@ -88,31 +88,31 @@ describe('W433.C packages/api-types/src/billing.ts content parity', () => {
 
   it('CreateCheckoutSessionResponse: checkout_url + checkout_session_id (echoed for client-side correlation)', () => {
     expect(body).toMatch(
-      /export const CreateCheckoutSessionResponseSchema = z\.object\(\{\s*\n?\s*checkout_url: z\.string\(\)\.url\(\),\s*\n?\s*\/\*\* Stripe checkout session id\. Echoed for client-side correlation\. \*\/\s*\n?\s*checkout_session_id: z\.string\(\),\s*\n?\s*\}\);/,
+      /export const CreateCheckoutSessionResponseSchema = z\.object\(\{\s*checkout_url: z\.string\(\)\.url\(\),\s*\/\*\* Stripe checkout session id\. Echoed for client-side correlation\. \*\/\s*checkout_session_id: z\.string\(\),\s*\}\);/,
     );
   });
 
   it('CreatePortalSessionResponse: portal_url only', () => {
     expect(body).toMatch(
-      /export const CreatePortalSessionResponseSchema = z\.object\(\{\s*\n?\s*portal_url: z\.string\(\)\.url\(\),\s*\n?\s*\}\);/,
+      /export const CreatePortalSessionResponseSchema = z\.object\(\{\s*portal_url: z\.string\(\)\.url\(\),\s*\}\);/,
     );
   });
 
   it('SubscriptionStatus enum: 8 Stripe-mirror values (incomplete/incomplete_expired/trialing/active/past_due/canceled/unpaid/paused)', () => {
     expect(body).toMatch(
-      /export const SubscriptionStatusSchema = z\.enum\(\[\s*\n?\s*'incomplete',\s*\n?\s*'incomplete_expired',\s*\n?\s*'trialing',\s*\n?\s*'active',\s*\n?\s*'past_due',\s*\n?\s*'canceled',\s*\n?\s*'unpaid',\s*\n?\s*'paused',\s*\n?\s*\]\);/,
+      /export const SubscriptionStatusSchema = z\.enum\(\[\s*'incomplete',\s*'incomplete_expired',\s*'trialing',\s*'active',\s*'past_due',\s*'canceled',\s*'unpaid',\s*'paused',\s*\]\);/,
     );
   });
 
   it('Subscription shape: tier + status + stripe_subscription_id + nullable current_period_end + cancel_at_period_end + nullable canceled_at + created_at + updated_at', () => {
     expect(body).toMatch(
-      /export const SubscriptionSchema = z\.object\(\{\s*\n?\s*tier: AccountTierSchema,\s*\n?\s*status: SubscriptionStatusSchema,\s*\n?\s*stripe_subscription_id: z\.string\(\),\s*\n?\s*current_period_end: Iso8601Schema\.nullable\(\),\s*\n?\s*cancel_at_period_end: z\.boolean\(\),\s*\n?\s*canceled_at: Iso8601Schema\.nullable\(\),\s*\n?\s*created_at: Iso8601Schema,\s*\n?\s*updated_at: Iso8601Schema,\s*\n?\s*\}\);/,
+      /export const SubscriptionSchema = z\.object\(\{\s*tier: AccountTierSchema,\s*status: SubscriptionStatusSchema,\s*stripe_subscription_id: z\.string\(\),\s*current_period_end: Iso8601Schema\.nullable\(\),\s*cancel_at_period_end: z\.boolean\(\),\s*canceled_at: Iso8601Schema\.nullable\(\),\s*created_at: Iso8601Schema,\s*updated_at: Iso8601Schema,\s*\}\);/,
     );
   });
 
   it('GetBillingStateResponse: subscription nullable only (trial_pack state removed)', () => {
     expect(body).toMatch(
-      /export const GetBillingStateResponseSchema = z\.object\(\{\s*\n?\s*subscription: SubscriptionSchema\.nullable\(\),\s*\n?\s*\}\);/,
+      /export const GetBillingStateResponseSchema = z\.object\(\{\s*subscription: SubscriptionSchema\.nullable\(\),\s*\}\);/,
     );
   });
 

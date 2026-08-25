@@ -66,7 +66,7 @@ describe('W1045 routes/oauth V-667.B + V-667.C/D/E cross-source invariant', () =
   it('CRITICAL public provider roster and separately web-session-gated consent completion', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/oauth.ts'));
     expect(p).toMatch(
-      /OAuth provider surface \(no account auth; client credentials protect\s*\n?\s*\/\/\s*token exchange, introspection, and revocation\)/,
+      /OAuth provider surface \(no account auth; client credentials protect\s*\/\/\s*token exchange, introspection, and revocation\)/,
     );
     expect(p).toMatch(/GET\s+\/v1\/oauth\/authorize\s+— stage authorization/);
     expect(p).toMatch(/POST\s+\/v1\/oauth\/token\s+— code → access_token/);
@@ -138,7 +138,7 @@ describe('W1045 routes/oauth V-667.B + V-667.C/D/E cross-source invariant', () =
   it("CRITICAL V-667.D single-client lookup — 'Returns 404 when the client doesn't exist, the full envelope (minus the hashed secret) when it does. Revoked clients are returned with their revoked_at populated so ops can audit who/when revoked'. The revoked-but-returned posture is what makes the audit-via-API workable.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/oauth.ts'));
     expect(p).toMatch(/V-667\.D — single-client lookup for the founder admin UI\./);
-    expect(p).toMatch(/Returns\s*\n?\s*\/\/\s*404 when the client doesn't exist/);
+    expect(p).toMatch(/Returns\s*\/\/\s*404 when the client doesn't exist/);
     expect(p).toMatch(/Revoked clients are returned with/);
     expect(p).toMatch(/their revoked_at populated so ops can audit "who\/when revoked\."/);
   });

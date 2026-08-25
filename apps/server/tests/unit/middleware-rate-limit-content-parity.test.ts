@@ -42,13 +42,13 @@ describe('W394.C apps/server/src/middleware/rate-limit.ts content parity', () =>
 
   it('Module framing pinned: per-bucket factory app.rateLimit(bucketKey, costFn?) returns preHandler', () => {
     expect(body).toMatch(
-      /Rate-limit middleware\. Decorates `request` with no state and exposes a\s*\n?\s*\/\/\s*per-bucket factory: `app\.rateLimit\(bucketKey, costFn\?\)` returns a Fastify\s*\n?\s*\/\/\s*preHandler that consumes from the named bucket \(account-keyed\) and either\s*\n?\s*\/\/\s*allows the request or throws `RateLimitedError` with retry hint/,
+      /Rate-limit middleware\. Decorates `request` with no state and exposes a\s*\/\/\s*per-bucket factory: `app\.rateLimit\(bucketKey, costFn\?\)` returns a Fastify\s*\/\/\s*preHandler that consumes from the named bucket \(account-keyed\) and either\s*\/\/\s*allows the request or throws `RateLimitedError` with retry hint/,
     );
   });
 
   it('FastifyInstance augmentation: rateLimit(bucketKey, cost?) factory', () => {
     expect(body).toMatch(
-      /interface FastifyInstance \{\s*\n?\s*rateLimit: \(\s*\n?\s*bucketKey: string,\s*\n?\s*cost\?: number,\s*\n?\s*\) => \(request: FastifyRequest, reply: FastifyReply\) => Promise<void>;/,
+      /interface FastifyInstance \{\s*rateLimit: \(\s*bucketKey: string,\s*cost\?: number,\s*\) => \(request: FastifyRequest, reply: FastifyReply\) => Promise<void>;/,
     );
   });
 
@@ -58,7 +58,7 @@ describe('W394.C apps/server/src/middleware/rate-limit.ts content parity', () =>
 
   it('Unauthenticated route guard: throws UnauthorizedError with misconfiguration signal text', () => {
     expect(body).toMatch(
-      /\/\/ Rate limit only applies to authenticated requests\. If we ever wire\s*\n?\s*\/\/\s*this on a public route, that's a misconfiguration — return 401\./,
+      /\/\/ Rate limit only applies to authenticated requests\. If we ever wire\s*\/\/\s*this on a public route, that's a misconfiguration — return 401\./,
     );
     expect(body).toMatch(
       /throw new UnauthorizedError\('Rate limit requires an authenticated request\.'\);/,
@@ -94,7 +94,7 @@ describe('W394.C apps/server/src/middleware/rate-limit.ts content parity', () =>
   it('W199 framing pinned: full RateLimit-header set documented at /docs/rate-limits', () => {
     expect(body).toMatch(
       // V-754 — roster extended to the 4th enforced bucket (agent_sessions:input_event).
-      /W199 — full RateLimit-header set as documented at\s*\n?\s*\/\/\s*`\/docs\/rate-limits`\. `bucket` lets clients distinguish which\s*\n?\s*\/\/\s*limiter fired \(`global` \/ `sessions:create` \/\s*\n?\s*\/\/\s*`agent_sessions:message` \/ `agent_sessions:input_event` today[\s\S]*?`limit` is the bucket\s*\n?\s*\/\/\s*capacity; `reset` is unix seconds at which the bucket will\s*\n?\s*\/\/\s*be back at capacity/,
+      /W199 — full RateLimit-header set as documented at\s*\/\/\s*`\/docs\/rate-limits`\. `bucket` lets clients distinguish which\s*\/\/\s*limiter fired \(`global` \/ `sessions:create` \/\s*\/\/\s*`agent_sessions:message` \/ `agent_sessions:input_event` today[\s\S]*?`limit` is the bucket\s*\/\/\s*capacity; `reset` is unix seconds at which the bucket will\s*\/\/\s*be back at capacity/,
     );
   });
 
@@ -102,7 +102,7 @@ describe('W394.C apps/server/src/middleware/rate-limit.ts content parity', () =>
     expect(body).toMatch(/const nowSec = Math\.floor\(Date\.now\(\) \/ 1000\);/);
     expect(body).toMatch(/const tokensNeededForFull = result\.capacity - result\.remaining;/);
     expect(body).toMatch(
-      /const secondsToFull =\s*\n?\s*tokensNeededForFull > 0 && result\.refillPerSecond > 0\s*\n?\s*\?\s*Math\.ceil\(tokensNeededForFull \/ result\.refillPerSecond\)\s*\n?\s*:\s*0;/,
+      /const secondsToFull =\s*tokensNeededForFull > 0 && result\.refillPerSecond > 0\s*\?\s*Math\.ceil\(tokensNeededForFull \/ result\.refillPerSecond\)\s*:\s*0;/,
     );
   });
 
@@ -130,10 +130,10 @@ describe('W394.C apps/server/src/middleware/rate-limit.ts content parity', () =>
 
   it('V-092 structured log framing: 2 levels (debug=allowed → high-volume / warn=denied → operational signal)', () => {
     expect(body).toMatch(
-      /V-092: structured log line on every consume so observability\s*\n?\s*\/\/\s*tooling \(Sentry breadcrumbs, log search\) can answer "is account\s*\n?\s*\/\/\s*X near its rate-limit budget right now\?" without piecing it\s*\n?\s*\/\/\s*together from the egress log/,
+      /V-092: structured log line on every consume so observability\s*\/\/\s*tooling \(Sentry breadcrumbs, log search\) can answer "is account\s*\/\/\s*X near its rate-limit budget right now\?" without piecing it\s*\/\/\s*together from the egress log/,
     );
     expect(body).toMatch(
-      /Allowed → debug level \(high-volume; avoid noise at default\s*\n?\s*\/\/\s*info-level production logs\)\. Exceeded → warn level \(carries the\s*\n?\s*\/\/\s*operational signal for capacity planning \+ abuse detection\)/,
+      /Allowed → debug level \(high-volume; avoid noise at default\s*\/\/\s*info-level production logs\)\. Exceeded → warn level \(carries the\s*\/\/\s*operational signal for capacity planning \+ abuse detection\)/,
     );
   });
 
@@ -174,7 +174,7 @@ describe('W394.C apps/server/src/middleware/rate-limit.ts content parity', () =>
   it('imports: rateLimitConsume + RateLimitStore type + ForbiddenError + RateLimitedError + UnauthorizedError', () => {
     expect(body).toMatch(/import \{[\s\S]*?rateLimitConsume,/);
     expect(body).toMatch(/type ConsumeResultWithBucket,/);
-    expect(body).toMatch(/type RateLimitStore,?\s*\n?\s*\} from '\.\.\/services\/rate-limit\.js';/);
+    expect(body).toMatch(/type RateLimitStore,?\s*\} from '\.\.\/services\/rate-limit\.js';/);
     // ForbiddenError joined the roster with the effective-owner limiter: owner
     // AVAILABILITY (missing / suspended / deleted) is a deterministic
     // authorization outcome and must not be published as a retryable 429,

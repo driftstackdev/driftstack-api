@@ -35,7 +35,7 @@ describe('W391.A apps/server/src/lib/logger.ts content parity', () => {
 
   it('Logger type re-exports pino.Logger (FastifyBaseLogger structurally subset note)', () => {
     expect(body).toMatch(
-      /We re-export pino's Logger as our `Logger` type\. Fastify's FastifyBaseLogger\s*\n?\s*\/\/\s*is structurally a subset of pino's Logger, so passing a pino instance to\s*\n?\s*\/\/\s*Fastify's `loggerInstance` works/,
+      /We re-export pino's Logger as our `Logger` type\. Fastify's FastifyBaseLogger\s*\/\/\s*is structurally a subset of pino's Logger, so passing a pino instance to\s*\/\/\s*Fastify's `loggerInstance` works/,
     );
     expect(body).toMatch(/export type Logger = PinoLogger;/);
   });
@@ -54,7 +54,7 @@ describe('W391.A apps/server/src/lib/logger.ts content parity', () => {
 
   it('V-494 framing: defense-in-depth + sentry.ts mirror requirement pinned', () => {
     expect(body).toMatch(
-      /V-494 — defense-in-depth log redaction\. Pino dot-paths cannot\s*\n?\s*\/\/\s*wildcard-match every nested location, so we list the known\s*\n?\s*\/\/\s*fields\. New sensitive fields MUST be added here whenever a\s*\n?\s*\/\/\s*request\/response shape gains them\. Mirrored in\s*\n?\s*\/\/\s*`lib\/sentry\.ts::beforeSend` so Sentry captures don't carry\s*\n?\s*\/\/\s*secrets even when pino is bypassed/,
+      /V-494 — defense-in-depth log redaction\. Pino dot-paths cannot\s*\/\/\s*wildcard-match every nested location, so we list the known\s*\/\/\s*fields\. New sensitive fields MUST be added here whenever a\s*\/\/\s*request\/response shape gains them\. Mirrored in\s*\/\/\s*`lib\/sentry\.ts::beforeSend` so Sentry captures don't carry\s*\/\/\s*secrets even when pino is bypassed/,
     );
   });
 
@@ -127,14 +127,12 @@ describe('W391.A apps/server/src/lib/logger.ts content parity', () => {
   });
 
   it('formatters.level: object-form ({ level: label }) so level surfaces as a structured field', () => {
-    expect(body).toMatch(
-      /formatters: \{\s*\n?\s*level: \(label\) => \(\{ level: label \}\),\s*\n?\s*\},/,
-    );
+    expect(body).toMatch(/formatters: \{\s*level: \(label\) => \(\{ level: label \}\),\s*\},/);
   });
 
   it('createTestLogger: level="silent" (tests don\'t spam stdout)', () => {
     expect(body).toMatch(
-      /export function createTestLogger\(\): Logger \{\s*\n?\s*return pino\(\{ level: 'silent' \}\);\s*\n?\s*\}/,
+      /export function createTestLogger\(\): Logger \{\s*return pino\(\{ level: 'silent' \}\);\s*\}/,
     );
   });
 

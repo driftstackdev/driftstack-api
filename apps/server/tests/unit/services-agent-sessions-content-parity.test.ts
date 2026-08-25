@@ -26,7 +26,7 @@ describe('services/agent-sessions content parity', () => {
 
   it('AI-A framing names both durable implementations and keeps the authority epoch internal', () => {
     expect(body).toMatch(
-      /\/\/ AI-A — agent-sessions persistence contract shared by the production\s*\n?\s*\/\/ Drizzle\/PostgreSQL repository and the in-memory test\/dev implementation\./,
+      /\/\/ AI-A — agent-sessions persistence contract shared by the production\s*\/\/ Drizzle\/PostgreSQL repository and the in-memory test\/dev implementation\./,
     );
     expect(body).toMatch(/migration 0107 adds its internal monotonic authority epoch/);
     expect(body).toMatch(/public API\/SDK resource shapes remain unchanged/);
@@ -35,7 +35,7 @@ describe('services/agent-sessions content parity', () => {
 
   it("Design SOT pointer pinned: 'docs/internal/ai-chat-agent-layer-design.md (in-repo) + Wave 1119+ founder verdict moving AI-CHAT from v1.1 → v1.0 launch arc (per the V-361 framing comment in agent-decomposer.ts).' — pinned so the design-doc location + the v1.1→v1.0 promotion verdict + the V-361 cross-reference all survive", () => {
     expect(body).toMatch(
-      /\/\/ Design source of truth: `docs\/internal\/ai-chat-agent-layer-design\.md`\s*\n?\s*\/\/ \(in-repo\) \+ Wave 1119\+ founder verdict moving AI-CHAT from v1\.1 → v1\.0\s*\n?\s*\/\/ launch arc \(per the V-361 framing comment in agent-decomposer\.ts\)\./,
+      /\/\/ Design source of truth: `docs\/internal\/ai-chat-agent-layer-design\.md`\s*\/\/ \(in-repo\) \+ Wave 1119\+ founder verdict moving AI-CHAT from v1\.1 → v1\.0\s*\/\/ launch arc \(per the V-361 framing comment in agent-decomposer\.ts\)\./,
     );
   });
 
@@ -46,7 +46,7 @@ describe('services/agent-sessions content parity', () => {
   it("AgentSessionMode 3-value enum pinned: manual | ai | pair. 'ai' default = legacy decompose-driven; 'manual' = pass-through (human drives intents); 'pair' = takeover state-machine (sub-slice 8.7). Drift would silently change behavior for callers omitting mode", () => {
     expect(body).toMatch(/export type AgentSessionMode = 'manual' \| 'ai' \| 'pair';/);
     expect(body).toMatch(
-      /Arc 2 sub-slice 8\.2 \(v2-#8\) — operational mode for the agent\s*\n?\s*\*\s+session\. 'ai' \(the default\) keeps the legacy decompose-driven\s*\n?\s*\*\s+behaviour\. 'manual' makes AgentRuntime\.runTurn pass-through —\s*\n?\s*\*\s+the human drives intents directly \(sub-slice 8\.6\)\. 'pair' enables\s*\n?\s*\*\s+the takeover state-machine \(sub-slice 8\.7\)/,
+      /Arc 2 sub-slice 8\.2 \(v2-#8\) — operational mode for the agent\s*\*\s+session\. 'ai' \(the default\) keeps the legacy decompose-driven\s*\*\s+behaviour\. 'manual' makes AgentRuntime\.runTurn pass-through —\s*\*\s+the human drives intents directly \(sub-slice 8\.6\)\. 'pair' enables\s*\*\s+the takeover state-machine \(sub-slice 8\.7\)/,
     );
   });
 
@@ -56,19 +56,19 @@ describe('services/agent-sessions content parity', () => {
 
   it("driftstackSessionId optional framing pinned: 'NULL when the agent-session is still in pre-plan phase (the customer hasn't reached for the harness yet — chat is happening but no browser session is open). The intent executor (AI-B2 follow-up) is what attaches a session id.' — pinned so the pre-plan-vs-attached-phase split + the AI-B2-attaches-the-id contract stay documented", () => {
     expect(body).toMatch(
-      /NULL when the agent-session is still in pre-plan\s*\n?\s*\*\s+phase \(the customer hasn't reached for the harness yet — chat\s*\n?\s*\*\s+is happening but no browser session is open\)\. The intent\s*\n?\s*\*\s+executor \(AI-B2 follow-up\) is what attaches a session id\./,
+      /NULL when the agent-session is still in pre-plan\s*\*\s+phase \(the customer hasn't reached for the harness yet — chat\s*\*\s+is happening but no browser session is open\)\. The intent\s*\*\s+executor \(AI-B2 follow-up\) is what attaches a session id\./,
     );
   });
 
   it("idempotencyKey framing pinned: 'v2-#9 + v2-#19 — Stripe-pattern idempotency key. NULL when the caller didn't pass an Idempotency-Key header on POST /v1/agent-sessions. Repo enforces (account_id, idempotency_key) uniqueness via the partial unique index from migration 0047. Lookup via findByIdempotencyKey is what the route layer uses to replay a prior 201 response on retry instead of minting a duplicate row.' — pinned so the migration-0047 partial-unique-index + findByIdempotencyKey-replay-pattern cross-reference survive (drift would let duplicate rows mint on retry, breaking the cross-SDK Stripe-pattern contract)", () => {
     expect(body).toMatch(
-      /v2-#9 \+ v2-#19 — Stripe-pattern idempotency key\.\s*\n?\s*\*\s+NULL when the caller didn't pass an `Idempotency-Key` header on\s*\n?\s*\*\s+POST \/v1\/agent-sessions\. Repo enforces \(account_id, idempotency_key\)\s*\n?\s*\*\s+uniqueness via the partial unique index from migration 0047\./,
+      /v2-#9 \+ v2-#19 — Stripe-pattern idempotency key\.\s*\*\s+NULL when the caller didn't pass an `Idempotency-Key` header on\s*\*\s+POST \/v1\/agent-sessions\. Repo enforces \(account_id, idempotency_key\)\s*\*\s+uniqueness via the partial unique index from migration 0047\./,
     );
   });
 
   it('Arc 2 v2-#8 guiControlKey encryption framing pinned: gui_control_key plaintext stored as AES-256-GCM ciphertext blob (Buffer | null), decrypted via decryptGuiControlKey with MFA_ENCRYPTION_KEY env value. Drift to plaintext storage would leak the per-session control key in db dumps + violate the at-rest encryption guarantee', () => {
     expect(body).toMatch(
-      /Arc 2 sub-slice 8\.4 \(v2-#8\) — AES-256-GCM ciphertext blob for\s*\n?\s*\*\s+the gui_control_key plaintext\. NULL when no key has been minted\.\s*\n?\s*\*\s+Decrypted at the route layer via `decryptGuiControlKey` with the\s*\n?\s*\*\s+MFA_ENCRYPTION_KEY env value\./,
+      /Arc 2 sub-slice 8\.4 \(v2-#8\) — AES-256-GCM ciphertext blob for\s*\*\s+the gui_control_key plaintext\. NULL when no key has been minted\.\s*\*\s+Decrypted at the route layer via `decryptGuiControlKey` with the\s*\*\s+MFA_ENCRYPTION_KEY env value\./,
     );
     expect(body).toMatch(/guiControlKeyCiphertext: Buffer \| null;/);
   });
@@ -135,7 +135,7 @@ describe('services/agent-sessions content parity', () => {
     expect(body).toMatch(/closeActiveByNodeExcept\(/);
     expect(body).toMatch(/keepIds: readonly string\[\]/);
     expect(body).toMatch(
-      /findByIdempotencyKey\(\s*\n?\s*accountId: string,\s*\n?\s*idempotencyKey: string,\s*\n?\s*\): Promise<AgentSessionRecord \| null>;/,
+      /findByIdempotencyKey\(\s*accountId: string,\s*idempotencyKey: string,\s*\): Promise<AgentSessionRecord \| null>;/,
     );
     expect(body).toMatch(
       /setPairModeState\(id: string, state: unknown\): Promise<AgentSessionRecord>;/,
@@ -145,7 +145,7 @@ describe('services/agent-sessions content parity', () => {
     expect(body).toMatch(/nextState: unknown/);
     expect(body).toMatch(/Promise<AgentSessionRecord \| null>;/);
     expect(body).toMatch(
-      /setGuiControlKey\(args: \{\s*\n?\s*id: string;\s*\n?\s*ciphertext: Buffer \| null;\s*\n?\s*expiresAt: Date \| null;\s*\n?\s*\}\): Promise<AgentSessionRecord>;/,
+      /setGuiControlKey\(args: \{\s*id: string;\s*ciphertext: Buffer \| null;\s*expiresAt: Date \| null;\s*\}\): Promise<AgentSessionRecord>;/,
     );
     expect(body).toMatch(/setGuiControlKeyIfActive\(args: \{/);
     expect(body).toMatch(/setModeIfActive\(/);
@@ -165,10 +165,10 @@ describe('services/agent-sessions content parity', () => {
 
   it("InMemoryAgentSessionsRepo framing pinned: 'In-memory implementation for tests + dev mode. Production wires the Drizzle-backed repo (AI-A.c follow-up). The two share this exact interface so the executor + dashboard chat UI never have to know which backend they're talking to.' + 'Thread-safety: the repo is intended for single-threaded use (Node's single event loop suffices for the API server). Concurrent calls to debitTokens on the same id are serialized by the JS event loop.' — pinned so the dual-backend interface + the Node-event-loop thread-safety rationale stay documented", () => {
     expect(body).toMatch(
-      /\* In-memory implementation for tests \+ dev mode\. Production wires the\s*\n?\s*\* Drizzle-backed repo \(AI-A\.c follow-up\)\. The two share this exact\s*\n?\s*\* interface so the executor \+ dashboard chat UI never have to know\s*\n?\s*\* which backend they're talking to\./,
+      /\* In-memory implementation for tests \+ dev mode\. Production wires the\s*\* Drizzle-backed repo \(AI-A\.c follow-up\)\. The two share this exact\s*\* interface so the executor \+ dashboard chat UI never have to know\s*\* which backend they're talking to\./,
     );
     expect(body).toMatch(
-      /\* Thread-safety: the repo is intended for single-threaded use \(Node's\s*\n?\s*\* single event loop suffices for the API server\)\. Concurrent calls\s*\n?\s*\* to debitTokens on the same id are serialized by the JS event loop\./,
+      /\* Thread-safety: the repo is intended for single-threaded use \(Node's\s*\* single event loop suffices for the API server\)\. Concurrent calls\s*\* to debitTokens on the same id are serialized by the JS event loop\./,
     );
   });
 

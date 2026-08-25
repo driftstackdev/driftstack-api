@@ -35,10 +35,10 @@ describe('W495.A apps/customer-dashboard/src/pages/usage.astro content parity', 
 
   it('V-171 framing pinned: \'page progressively enhances from a neutral-placeholder SSG shell to real /v1/usage + /v1/usage/series fetches via inline <script>. Token absent → small banner: "Sign in to see live usage." Placeholders stay (no fabricated numbers).\' — pinned so the SSG-shell + live-replace pattern survives. 2026-06-24 — SSG no longer paints fabricated MOCK numbers; the no-token path keeps neutral placeholders, never a fabricated preview.', () => {
     expect(body).toMatch(
-      /\/\/ V-171 — page progressively enhances from a neutral-placeholder SSG\s*\n?\s*\/\/ shell to real \/v1\/usage \+ \/v1\/usage\/series fetches via inline/,
+      /\/\/ V-171 — page progressively enhances from a neutral-placeholder SSG\s*\/\/ shell to real \/v1\/usage \+ \/v1\/usage\/series fetches via inline/,
     );
     expect(body).toMatch(
-      /\/\/ {3}4\. Token absent → small banner: "Sign in to see live usage\."\s*\n?\s*\/\/ {6}Placeholders stay \(no fabricated numbers\)\./,
+      /\/\/ {3}4\. Token absent → small banner: "Sign in to see live usage\."\s*\/\/ {6}Placeholders stay \(no fabricated numbers\)\./,
     );
   });
 
@@ -50,7 +50,7 @@ describe('W495.A apps/customer-dashboard/src/pages/usage.astro content parity', 
   });
 
   it('SPARK_W = 200 and SPARK_H = 48 sparkline viewBox constants — pinned so the sparkline aspect ratio (200×48, ~4:1) stays consistent across all 4 tiles (drift to different dimensions would break the visual grid alignment)', () => {
-    expect(body).toMatch(/const SPARK_W = 200;\s*\n?\s*const SPARK_H = 48;/);
+    expect(body).toMatch(/const SPARK_W = 200;\s*const SPARK_H = 48;/);
   });
 
   it("4-tile metric grid: data-stat='session_minute' / 'navigate' / 'interact' / 'captures_total' — pinned so the at-a-glance usage view stays 4-tile (drift to dropping a tile would force customers to interpret raw numbers in a deeper view; drift to renaming would break the inline script's [data-stat=…] selectors)", () => {
@@ -62,13 +62,13 @@ describe('W495.A apps/customer-dashboard/src/pages/usage.astro content parity', 
 
   it("Captures combined tile sums state_capture + screenshot_capture in live JS (totals.state_capture + totals.screenshot_capture) — pinned so the 'Captures' tile combines DOM snapshots + screenshots (drift to showing only one would hide the other from the at-a-glance view). The SSG shell renders a neutral placeholder, not fabricated MOCK totals.", () => {
     expect(body).toMatch(
-      /capturesTotalEl\.textContent = \(\s*\n?\s*\(totals\.state_capture \|\| 0\) \+ \(totals\.screenshot_capture \|\| 0\)\s*\n?\s*\)\.toLocaleString\('en-US'\);/,
+      /capturesTotalEl\.textContent = \(\s*\(totals\.state_capture \|\| 0\) \+ \(totals\.screenshot_capture \|\| 0\)\s*\)\.toLocaleString\('en-US'\);/,
     );
   });
 
   it("V-331b act-as header propagation in usage fetches: '...(typeof window.driftstackActAsHeaders === 'function' ? window.driftstackActAsHeaders() : {})' — pinned so the team-scoped 'view as another account' flow propagates to usage reads (drift would silently show the operator's own usage when they're trying to debug a team-mate's pipeline)", () => {
     expect(body).toMatch(
-      /\/\/ V-331b — act-as header for team-scoped reads\.\s*\n?\s*\.\.\.\(typeof window\.driftstackActAsHeaders === 'function'\s*\n?\s*\? window\.driftstackActAsHeaders\(\)\s*\n?\s*: \{\}\),/,
+      /\/\/ V-331b — act-as header for team-scoped reads\.\s*\.\.\.\(typeof window\.driftstackActAsHeaders === 'function'\s*\? window\.driftstackActAsHeaders\(\)\s*: \{\}\),/,
     );
   });
 
@@ -76,35 +76,35 @@ describe('W495.A apps/customer-dashboard/src/pages/usage.astro content parity', 
     expect(body).toMatch(/function readJsonResponse\(response\) \{/);
     expect(body).toMatch(/window\.driftstackResponseError\(response, body\)/);
     expect(body).toMatch(
-      /const summaryPromise = boundedFetch\(apiBaseUrl \+ '\/v1\/usage', \{\s*\n?\s*headers,\s*\n?\s*credentials: 'include',\s*\n?\s*\}\)\.then\(readJsonResponse\);/,
+      /const summaryPromise = boundedFetch\(apiBaseUrl \+ '\/v1\/usage', \{\s*headers,\s*credentials: 'include',\s*\}\)\.then\(readJsonResponse\);/,
     );
     expect(body).toMatch(
-      /const initialSeriesPromise = boundedFetch\(apiBaseUrl \+ '\/v1\/usage\/series\?days=30', \{\s*\n?\s*headers,\s*\n?\s*credentials: 'include',\s*\n?\s*\}\)\.then\(readJsonResponse\);/,
+      /const initialSeriesPromise = boundedFetch\(apiBaseUrl \+ '\/v1\/usage\/series\?days=30', \{\s*headers,\s*credentials: 'include',\s*\}\)\.then\(readJsonResponse\);/,
     );
     expect(body).toMatch(/Promise\.all\(\[summaryPromise, initialSeriesPromise\]\)/);
   });
 
   it("Empty-data state: allZero → 'Live usage loaded. No activity in the current period yet — counts will populate as you run sessions.' — pinned so customers with newly-onboarded accounts (zero usage) see a positive 'data is loaded' message rather than confused by all-zero tiles (drift to silent zero would leave customers uncertain whether the fetch failed or they really have no activity)", () => {
     expect(body).toMatch(
-      /const allZero = Object\.values\(totals\)\.every\(\(v\) => !v \|\| v === 0\);\s*\n?\s*if \(allZero\) \{\s*\n?\s*showBanner\(\s*\n?\s*'Live usage loaded\. No activity in the current period yet — counts will populate as you run sessions\.',\s*\n?\s*\);/,
+      /const allZero = Object\.values\(totals\)\.every\(\(v\) => !v \|\| v === 0\);\s*if \(allZero\) \{\s*showBanner\(\s*'Live usage loaded\. No activity in the current period yet — counts will populate as you run sessions\.',\s*\);/,
     );
   });
 
   it("ADR-004 framing pinned: 'None of these counters drive billing. Concurrent caps are the only meter per ADR-004. We surface counts so you can spot pipeline regressions — e.g. a sudden 10× spike in navigates may indicate a runaway script.' — pinned so the 'no per-event billing' contract stays explicit (drift to dropping ADR-004 reference would let customers assume they're being charged per navigate/capture; drift to dropping the regression-spotting framing would lose the 'why' for surfacing these counters at all)", () => {
     expect(body).toMatch(
-      /None of these counters drive billing\. Concurrent caps are the only meter\s*\n?\s*per ADR-004\. We surface counts so you can spot pipeline regressions —\s*\n?\s*e\.g\. a sudden 10× spike in navigates may indicate a runaway script\./,
+      /None of these counters drive billing\. Concurrent caps are the only meter\s*per ADR-004\. We surface counts so you can spot pipeline regressions —\s*e\.g\. a sudden 10× spike in navigates may indicate a runaway script\./,
     );
   });
 
   it("No-token state: !token → 'Sign in to see live usage.' + early bail (neutral placeholders painted via SSG — no fabricated numbers) — pinned so unauthenticated visitors see a clean shell + a clear sign-in prompt", () => {
     expect(body).toMatch(
-      /if \(!token\) \{\s*\n?\s*showBanner\('Sign in to see live usage\.'\);\s*\n?\s*if \(typeof window\.dashboardHydrated === 'function'\) window\.dashboardHydrated\(\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /if \(!token\) \{\s*showBanner\('Sign in to see live usage\.'\);\s*if \(typeof window\.dashboardHydrated === 'function'\) window\.dashboardHydrated\(\);\s*return;\s*\}/,
     );
   });
 
   it('Fetch-failure banner uses the shared fixed request mapper while neutral placeholders stay — remote diagnostics and raw HTTP jargon are never reflected', () => {
     expect(body).toMatch(
-      /"Couldn't load live usage \(" \+\s*\n?\s*window\.driftstackRequestErrorMessage\(err, "Couldn't load live usage\. Try again\."\) \+\s*\n?\s*'\)\.',/,
+      /"Couldn't load live usage \(" \+\s*window\.driftstackRequestErrorMessage\(err, "Couldn't load live usage\. Try again\."\) \+\s*'\)\.',/,
     );
     expect(body).not.toMatch(/summary HTTP|series HTTP/);
   });

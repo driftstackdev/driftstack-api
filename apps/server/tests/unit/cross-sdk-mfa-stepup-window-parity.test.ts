@@ -89,19 +89,15 @@ describe('W682 cross-SDK V-353e MFA step-up 15-min window parity', () => {
 
     // sdk-typescript: "No new session\n   * issued; the existing session row's mfa timestamp advances"
     expect(ts).toMatch(
-      /No new session\s*\n?\s*\*\s*issued; the existing session row's mfa timestamp advances/,
+      /No new session\s*\*\s*issued; the existing session row's mfa timestamp advances/,
     );
 
     // sdk-go uses a slightly shorter form: "No new\n// session issued;
     // returns the new mfa_satisfied_at timestamp."
-    expect(go).toMatch(
-      /No new\s*\n?\s*\/\/ session issued; returns the new mfa_satisfied_at timestamp/,
-    );
+    expect(go).toMatch(/No new\s*\/\/ session issued; returns the new mfa_satisfied_at timestamp/);
 
     // sdk-python: "No new session\n        issued; the existing session's mfa timestamp advances"
-    expect(py).toMatch(
-      /No new session\s*\n?\s*issued; the existing session's mfa timestamp advances/,
-    );
+    expect(py).toMatch(/No new session\s*issued; the existing session's mfa timestamp advances/);
   });
 
   it("Cross-flow consistency — mfa.disable + auth.mfaStepUp + MfaStepUpRequiredError all reference the SAME 15-min window. Drift to different windows across the 3 surfaces would fragment the customer's mental model (e.g. customer steps up because mfaStepUp says 15min, but then mfa.disable enforces 5min and the second call fails immediately).", () => {

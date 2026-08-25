@@ -93,9 +93,7 @@ describe('W681 cross-SDK plaintext-shown-ONCE invariant parity', () => {
     const go = read(GO_WEBHOOKS);
     const py = read(PY_WEBHOOKS);
 
-    expect(ts).toMatch(
-      /Plaintext signing secret is returned\s*\n?\s*\*\s*once|signing secret.*ONCE/,
-    );
+    expect(ts).toMatch(/Plaintext signing secret is returned\s*\*\s*once|signing secret.*ONCE/);
     expect(go).toMatch(/signing secret.*ONCE|plaintext.*ONCE|Plaintext is in/);
     expect(py).toMatch(/Plaintext signing secret/);
     expect(py).toMatch(/returned ONCE/);
@@ -107,7 +105,7 @@ describe('W681 cross-SDK plaintext-shown-ONCE invariant parity', () => {
     const py = read(PY_WEBHOOKS);
 
     // sdk-typescript: "The fresh plaintext is\n   * returned ONCE."
-    expect(ts).toMatch(/fresh plaintext is\s*\n?\s*\*\s*returned ONCE/);
+    expect(ts).toMatch(/fresh plaintext is\s*\*\s*returned ONCE/);
 
     // sdk-go: "plaintext is returned ONCE" or similar.
     expect(go).toMatch(/plaintext.*ONCE|fresh plaintext|new plaintext|shown ONCE/i);
@@ -128,7 +126,7 @@ describe('W681 cross-SDK plaintext-shown-ONCE invariant parity', () => {
     expect(go).toMatch(/SecretBase32 is shown ONCE/);
 
     // sdk-python: "Returns otpauth URI + base32 secret\n        (shown ONCE)"
-    expect(py).toMatch(/base32 secret\s*\n?\s*\(shown ONCE\)|secret.*shown ONCE/);
+    expect(py).toMatch(/base32 secret\s*\(shown ONCE\)|secret.*shown ONCE/);
   });
 
   it('CRITICAL mfa.verify 10-recovery-codes shown-ONCE framing in ALL 3 SDKs. The 10 single-use recovery codes are the customer\'s break-glass authentication path if they lose their TOTP device. Drift to dropping "shown ONCE" would lose the warning; drift to "shown twice" would mean server-side persistence of codes (defeating the single-use security model).', () => {
@@ -144,7 +142,7 @@ describe('W681 cross-SDK plaintext-shown-ONCE invariant parity', () => {
 
     // sdk-python: "Returns 10 single-\n        use recovery codes (shown ONCE)"
     expect(py).toMatch(
-      /single-\s*\n?\s*use recovery codes \(shown ONCE\)|single-use recovery codes \(shown ONCE\)/,
+      /single-\s*use recovery codes \(shown ONCE\)|single-use recovery codes \(shown ONCE\)/,
     );
   });
 
@@ -157,9 +155,7 @@ describe('W681 cross-SDK plaintext-shown-ONCE invariant parity', () => {
     expect(ts).toMatch(/10 fresh recovery codes\. Old codes invalidated; shown ONCE/);
 
     // sdk-go: "mint 10 fresh recovery codes; old codes\n// invalidated. Shown ONCE."
-    expect(go).toMatch(
-      /mint 10 fresh recovery codes; old codes\s*\n?\s*\/\/ invalidated\. Shown ONCE/,
-    );
+    expect(go).toMatch(/mint 10 fresh recovery codes; old codes\s*\/\/ invalidated\. Shown ONCE/);
 
     // sdk-python: "Mint 10 fresh recovery codes. Old codes invalidated."
     expect(py).toMatch(/Mint 10 fresh recovery codes\. Old codes invalidated/);

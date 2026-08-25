@@ -73,11 +73,11 @@ describe('W539.C /.env.example content parity', () => {
 
   it("AUTH_EXPOSE_DEBUG_TOKEN + V-266 DASHBOARD_ORIGIN framing pinned: 'AUTH_EXPOSE_DEBUG_TOKEN — dev/test only. When true, signup / magic-link / password-reset responses include a `debug_token` plaintext field so dev scripts (scripts/dev-bootstrap.sh) can complete the flow without a wired email service. Production MUST leave this false.' + 'AUTH_EXPOSE_DEBUG_TOKEN=true' + 'V-266 — origin of the customer dashboard. Used to build the browser_url returned by /v1/auth/cli-authorize/initiate (browser-OAuth-style GUI activation). Override per environment.' + 'DASHBOARD_ORIGIN=http://localhost:5173' — pinned so the AUTH_EXPOSE_DEBUG_TOKEN-dev-only-prod-false + dev-bootstrap-script-anchor + V-266 CLI-authorize browser_url + per-env-override commitment survives (drift to AUTH_EXPOSE_DEBUG_TOKEN=true leaking into prod would expose plaintext tokens in API responses; drift to dropping DASHBOARD_ORIGIN would break /v1/auth/cli-authorize/initiate browser_url construction)", () => {
     expect(body).toMatch(
-      /# AUTH_EXPOSE_DEBUG_TOKEN — dev\/test only\. When true, signup \/ magic-link \/\s*\n?\s*# password-reset responses include a `debug_token` plaintext field so dev\s*\n?\s*# scripts \(scripts\/dev-bootstrap\.sh\) can complete the flow without a\s*\n?\s*# wired email service\. Production MUST leave this false\./,
+      /# AUTH_EXPOSE_DEBUG_TOKEN — dev\/test only\. When true, signup \/ magic-link \/\s*# password-reset responses include a `debug_token` plaintext field so dev\s*# scripts \(scripts\/dev-bootstrap\.sh\) can complete the flow without a\s*# wired email service\. Production MUST leave this false\./,
     );
     expect(body).toMatch(/^AUTH_EXPOSE_DEBUG_TOKEN=true$/m);
     expect(body).toMatch(
-      /# V-266 — origin of the customer dashboard\. Used to build the browser_url\s*\n?\s*# returned by \/v1\/auth\/cli-authorize\/initiate \(browser-OAuth-style GUI\s*\n?\s*# activation\)\. Override per environment\./,
+      /# V-266 — origin of the customer dashboard\. Used to build the browser_url\s*# returned by \/v1\/auth\/cli-authorize\/initiate \(browser-OAuth-style GUI\s*# activation\)\. Override per environment\./,
     );
     expect(body).toMatch(/^DASHBOARD_ORIGIN=http:\/\/localhost:5173$/m);
   });

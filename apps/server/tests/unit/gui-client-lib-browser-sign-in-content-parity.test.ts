@@ -63,7 +63,7 @@ describe('W474.C apps/gui-client/src/lib/browser-sign-in.ts content parity', () 
   it("V-274 framing pinned: 'V-274 — Shared browser-OAuth-sign-in state machine.' + V-328 framing pinned: 'extended with deep-link primary path. When the dashboard completion page redirects to driftstack://auth/callback?code=...&state=..., the OS hands off to this app and the deep-link listener fires synchronously. The 2s polling loop stays as a FALLBACK for platforms / installs where the URL scheme registration didn't take (e.g. Linux without a desktop env, Windows without HKCU write access). Both paths converge on the same setState path.'", () => {
     expect(body).toMatch(/\/\/ V-274 — Shared browser-OAuth-sign-in state machine\./);
     expect(body).toMatch(
-      /\/\/ V-328 — extended with deep-link primary path\. When the dashboard\s*\n?\s*\/\/ completion page redirects to driftstack:\/\/auth\/callback\?code=\.\.\.&\s*\n?\s*\/\/ state=\.\.\., the OS hands off to this app and the deep-link listener\s*\n?\s*\/\/ fires synchronously\. The 2s polling loop stays as a FALLBACK for\s*\n?\s*\/\/ platforms \/ installs where the URL scheme registration didn't\s*\n?\s*\/\/ take \(e\.g\. Linux without a desktop env, Windows without HKCU\s*\n?\s*\/\/ write access\)\. Both paths converge on the same setState path\./,
+      /\/\/ V-328 — extended with deep-link primary path\. When the dashboard\s*\/\/ completion page redirects to driftstack:\/\/auth\/callback\?code=\.\.\.&\s*\/\/ state=\.\.\., the OS hands off to this app and the deep-link listener\s*\/\/ fires synchronously\. The 2s polling loop stays as a FALLBACK for\s*\/\/ platforms \/ installs where the URL scheme registration didn't\s*\/\/ take \(e\.g\. Linux without a desktop env, Windows without HKCU\s*\/\/ write access\)\. Both paths converge on the same setState path\./,
     );
   });
 
@@ -74,22 +74,22 @@ describe('W474.C apps/gui-client/src/lib/browser-sign-in.ts content parity', () 
 
   it('InitiateResponse includes the separate user_code + ExchangeResponse retains the 3-status union', () => {
     expect(body).toMatch(
-      /interface InitiateResponse \{\s*\n?\s*code: string;\s*\n?\s*user_code: string;\s*\n?\s*browser_url: string;\s*\n?\s*expires_at: string;\s*\n?\s*\}/,
+      /interface InitiateResponse \{\s*code: string;\s*user_code: string;\s*browser_url: string;\s*expires_at: string;\s*\}/,
     );
     expect(body).toMatch(
-      /interface ExchangeResponse \{\s*\n?\s*status: 'pending' \| 'bound' \| 'expired';\s*\n?\s*api_key\?: string;\s*\n?\s*account_id\?: string;\s*\n?\s*\}/,
+      /interface ExchangeResponse \{\s*status: 'pending' \| 'bound' \| 'expired';\s*api_key\?: string;\s*account_id\?: string;\s*\}/,
     );
   });
 
   it('BrowserSignInState carries userCode while waiting and options retain the timing/deep-link seams', () => {
     expect(body).toMatch(
-      /export type BrowserSignInState =\s*\n?\s*\| \{ kind: 'idle' \}\s*\n?\s*\| \{ kind: 'opening' \}\s*\n?\s*\| \{ kind: 'waiting'; code: string; userCode: string; state: string; expiresAt: number \}\s*\n?\s*\| \{ kind: 'success' \}\s*\n?\s*\| \{ kind: 'error'; message: string \};/,
+      /export type BrowserSignInState =\s*\| \{ kind: 'idle' \}\s*\| \{ kind: 'opening' \}\s*\| \{ kind: 'waiting'; code: string; userCode: string; state: string; expiresAt: number \}\s*\| \{ kind: 'success' \}\s*\| \{ kind: 'error'; message: string \};/,
     );
     expect(body).toMatch(
-      /export interface UseBrowserSignInOptions \{\s*\n?\s*baseUrl: string;\s*\n?\s*clientLabel\?: string;\s*\n?\s*onSuccess: \(apiKey: string, accountId: string\) => void \| Promise<void>;\s*\n?\s*\/\*\* Test-only: override the 2s poll cadence\. \*\/\s*\n?\s*__pollIntervalMs\?: number;\s*\n?\s*\/\*\* Test-only: override the 5-minute backstop\. \*\/\s*\n?\s*__pollTimeoutMs\?: number;/,
+      /export interface UseBrowserSignInOptions \{\s*baseUrl: string;\s*clientLabel\?: string;\s*onSuccess: \(apiKey: string, accountId: string\) => void \| Promise<void>;\s*\/\*\* Test-only: override the 2s poll cadence\. \*\/\s*__pollIntervalMs\?: number;\s*\/\*\* Test-only: override the 5-minute backstop\. \*\/\s*__pollTimeoutMs\?: number;/,
     );
     expect(body).toMatch(
-      /\* V-328 test seam: override the deep-link listener registration so\s*\n?\s*\*\s+unit tests can simulate a deep-link arrival without booting the\s*\n?\s*\*\s+Tauri runtime\. Production passes undefined and the real\s*\n?\s*\*\s+`@tauri-apps\/plugin-deep-link\.onOpenUrl` is used\./,
+      /\* V-328 test seam: override the deep-link listener registration so\s*\*\s+unit tests can simulate a deep-link arrival without booting the\s*\*\s+Tauri runtime\. Production passes undefined and the real\s*\*\s+`@tauri-apps\/plugin-deep-link\.onOpenUrl` is used\./,
     );
     expect(body).toMatch(
       /__onOpenUrl\?: \(handler: \(urls: string\[\]\) => void\) => Promise<\(\) => void>;/,
@@ -98,7 +98,7 @@ describe('W474.C apps/gui-client/src/lib/browser-sign-in.ts content parity', () 
 
   it("generateBrowserSignInState exported: Uint8Array(24) + crypto.getRandomValues + Array.from + toString(16).padStart(2,'0') hex join — pinned so the 24-byte (48-hex-char) CSRF token surface isn't accidentally shrunk", () => {
     expect(body).toMatch(
-      /export function generateBrowserSignInState\(\): string \{\s*\n?\s*const bytes = new Uint8Array\(24\);\s*\n?\s*crypto\.getRandomValues\(bytes\);\s*\n?\s*return Array\.from\(bytes, \(b\) => b\.toString\(16\)\.padStart\(2, '0'\)\)\.join\(''\);\s*\n?\s*\}/,
+      /export function generateBrowserSignInState\(\): string \{\s*const bytes = new Uint8Array\(24\);\s*crypto\.getRandomValues\(bytes\);\s*return Array\.from\(bytes, \(b\) => b\.toString\(16\)\.padStart\(2, '0'\)\)\.join\(''\);\s*\}/,
     );
   });
 
@@ -107,7 +107,7 @@ describe('W474.C apps/gui-client/src/lib/browser-sign-in.ts content parity', () 
       /const trimmedUrl = opts\.baseUrl\.trim\(\)\.replace\(\/\\\/\+\$\/, ''\);/,
     );
     expect(body).toMatch(
-      /const initiateRes = await fetchWithDeadline\(`\$\{trimmedUrl\}\/v1\/auth\/cli-authorize\/initiate`, \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*body: JSON\.stringify\(\{\s*\n?\s*state: stateToken,\s*\n?\s*client_label: opts\.clientLabel \?\? `Driftstack desktop on \$\{navigator\.platform\}`,\s*\n?\s*\}\),\s*\n?\s*\}\);/,
+      /const initiateRes = await fetchWithDeadline\(`\$\{trimmedUrl\}\/v1\/auth\/cli-authorize\/initiate`, \{\s*method: 'POST',\s*headers: \{ 'content-type': 'application\/json' \},\s*body: JSON\.stringify\(\{\s*state: stateToken,\s*client_label: opts\.clientLabel \?\? `Driftstack desktop on \$\{navigator\.platform\}`,\s*\}\),\s*\}\);/,
     );
     expect(body).toMatch(
       /throw Object\.assign\(new Error\(await readApiErrorMessage\(initiateRes\)\), \{\s*customerSafe: true,\s*\}\);/,
@@ -116,37 +116,37 @@ describe('W474.C apps/gui-client/src/lib/browser-sign-in.ts content parity', () 
       /if \(!\/\^\[A-HJ-NP-Z2-9\]\{4\}-\[A-HJ-NP-Z2-9\]\{4\}\$\/\.test\(initiate\.user_code\)\) \{[\s\S]*?does not support secure browser sign-in[\s\S]*?\}/,
     );
     expect(body).toMatch(
-      /setState\(\{\s*\n?\s*kind: 'waiting',\s*\n?\s*code: initiate\.code,\s*\n?\s*userCode: initiate\.user_code,\s*\n?\s*state: stateToken,\s*\n?\s*expiresAt,\s*\n?\s*\}\);/,
+      /setState\(\{\s*kind: 'waiting',\s*code: initiate\.code,\s*userCode: initiate\.user_code,\s*state: stateToken,\s*expiresAt,\s*\}\);/,
     );
   });
 
   it("Deep-link seam wiring: onUrl = opts.__onOpenUrl ?? onOpenUrl (V-328 test seam fallthrough to real plugin) + handler iterates urls + handleDeepLink with trimmedUrl + initiate.code + stateToken; deepLinkUnlistenRef stop() cleanup with try/catch swallow comment 'the listener may have already been torn down' + on-unmount cleanup useEffect", () => {
     expect(body).toMatch(
-      /const onUrl = opts\.__onOpenUrl \?\? onOpenUrl;\s*\n?\s*const unlisten = await onUrl\(\(urls\) => \{\s*\n?\s*for \(const url of urls\) \{\s*\n?\s*void handleDeepLink\(url, trimmedUrl, initiate\.code, stateToken\);\s*\n?\s*\}\s*\n?\s*\}\);\s*\n?\s*deepLinkUnlistenRef\.current = unlisten;/,
+      /const onUrl = opts\.__onOpenUrl \?\? onOpenUrl;\s*const unlisten = await onUrl\(\(urls\) => \{\s*for \(const url of urls\) \{\s*void handleDeepLink\(url, trimmedUrl, initiate\.code, stateToken\);\s*\}\s*\}\);\s*deepLinkUnlistenRef\.current = unlisten;/,
     );
     expect(body).toMatch(
-      /if \(deepLinkUnlistenRef\.current !== null\) \{\s*\n?\s*try \{\s*\n?\s*deepLinkUnlistenRef\.current\(\);\s*\n?\s*\} catch \{\s*\n?\s*\/\* swallow — the listener may have already been torn down \*\/\s*\n?\s*\}\s*\n?\s*deepLinkUnlistenRef\.current = null;\s*\n?\s*\}/,
+      /if \(deepLinkUnlistenRef\.current !== null\) \{\s*try \{\s*deepLinkUnlistenRef\.current\(\);\s*\} catch \{\s*\/\* swallow — the listener may have already been torn down \*\/\s*\}\s*deepLinkUnlistenRef\.current = null;\s*\}/,
     );
     expect(body).toMatch(
-      /\/\/ Cleanup on unmount\.\s*\n?\s*useEffect\(\(\) => \{\s*\n?\s*return \(\) => stop\(\);\s*\n?\s*\}, \[\]\);/,
+      /\/\/ Cleanup on unmount\.\s*useEffect\(\(\) => \{\s*return \(\) => stop\(\);\s*\}, \[\]\);/,
     );
   });
 
   it("handleDeepLink CSRF guard: parseDeepLink(rawUrl) + !result.ok silent skip + result.payload.kind !== 'cli-authorize' silent skip + code !== expectedCode || state !== expectedState silent skip (CSRF guard against arbitrary attacker-armed driftstack:// URL) + pollOnce delegation", () => {
     expect(body).toMatch(
-      /async function handleDeepLink\(\s*\n?\s*rawUrl: string,\s*\n?\s*serverUrl: string,\s*\n?\s*expectedCode: string,\s*\n?\s*expectedState: string,\s*\n?\s*\): Promise<void> \{\s*\n?\s*const result = parseDeepLink\(rawUrl\);\s*\n?\s*if \(!result\.ok\) return;\s*\n?\s*if \(result\.payload\.kind !== 'cli-authorize'\) return;\s*\n?\s*if \(result\.payload\.code !== expectedCode \|\| result\.payload\.state !== expectedState\) return;\s*\n?\s*await pollOnce\(serverUrl, expectedCode, expectedState\);\s*\n?\s*\}/,
+      /async function handleDeepLink\(\s*rawUrl: string,\s*serverUrl: string,\s*expectedCode: string,\s*expectedState: string,\s*\): Promise<void> \{\s*const result = parseDeepLink\(rawUrl\);\s*if \(!result\.ok\) return;\s*if \(result\.payload\.kind !== 'cli-authorize'\) return;\s*if \(result\.payload\.code !== expectedCode \|\| result\.payload\.state !== expectedState\) return;\s*await pollOnce\(serverUrl, expectedCode, expectedState\);\s*\}/,
     );
   });
 
   it('pollOnce branches: POST /v1/auth/cli-authorize/exchange with {code, state: stateToken} + !res.ok 4xx → stop + fixed typed/status copy + pending/expired/bound terminal handling + silent network retry', () => {
     expect(body).toMatch(
-      /const res = await fetchWithDeadline\(`\$\{serverUrl\}\/v1\/auth\/cli-authorize\/exchange`, \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*body: JSON\.stringify\(\{ code, state: stateToken \}\),\s*\n?\s*\}\);/,
+      /const res = await fetchWithDeadline\(`\$\{serverUrl\}\/v1\/auth\/cli-authorize\/exchange`, \{\s*method: 'POST',\s*headers: \{ 'content-type': 'application\/json' \},\s*body: JSON\.stringify\(\{ code, state: stateToken \}\),\s*\}\);/,
     );
     expect(body).toMatch(
-      /if \(res\.status >= 400 && res\.status < 500\) \{\s*\n?\s*stop\(\);\s*\n?\s*setState\(\{\s*\n?\s*kind: 'error',\s*\n?\s*message: await readApiErrorMessage\(res\),\s*\n?\s*\}\);/,
+      /if \(res\.status >= 400 && res\.status < 500\) \{\s*stop\(\);\s*setState\(\{\s*kind: 'error',\s*message: await readApiErrorMessage\(res\),\s*\}\);/,
     );
     expect(body).toMatch(
-      /if \(body\.status === 'expired'\) \{[\s\S]*?if \(body\.status === 'bound' && body\.api_key && body\.account_id\) \{\s*\n?\s*stop\(\);\s*\n?\s*try \{\s*\n?\s*await opts\.onSuccess\(body\.api_key, body\.account_id\);[\s\S]*?catch \(error\) \{[\s\S]*?kind: 'error',[\s\S]*?humanizeError\([\s\S]*?return;\s*\n?\s*\}\s*\n?\s*setState\(\{ kind: 'success' \}\);/,
+      /if \(body\.status === 'expired'\) \{[\s\S]*?if \(body\.status === 'bound' && body\.api_key && body\.account_id\) \{\s*stop\(\);\s*try \{\s*await opts\.onSuccess\(body\.api_key, body\.account_id\);[\s\S]*?catch \(error\) \{[\s\S]*?kind: 'error',[\s\S]*?humanizeError\([\s\S]*?return;\s*\}\s*setState\(\{ kind: 'success' \}\);/,
     );
     expect(body).toMatch(/\/\/ network blip — silent retry/);
   });
@@ -159,7 +159,7 @@ describe('W474.C apps/gui-client/src/lib/browser-sign-in.ts content parity', () 
 
   it('Poll timer wiring: setInterval cadence opts.__pollIntervalMs ?? POLL_INTERVAL_MS + setTimeout backstop opts.__pollTimeoutMs ?? POLL_TIMEOUT_MS firing stop() + setState error \'Authorization expired. Click "Sign in with browser" to try again.\'', () => {
     expect(body).toMatch(
-      /pollHandleRef\.current = window\.setInterval\(\(\) => \{\s*\n?\s*void pollOnce\(trimmedUrl, initiate\.code, stateToken\);\s*\n?\s*\}, opts\.__pollIntervalMs \?\? POLL_INTERVAL_MS\);\s*\n?\s*timeoutHandleRef\.current = window\.setTimeout\(\(\) => \{\s*\n?\s*stop\(\);\s*\n?\s*setState\(\{\s*\n?\s*kind: 'error',\s*\n?\s*message: 'Authorization expired\. Click "Sign in with browser" to try again\.',\s*\n?\s*\}\);\s*\n?\s*\}, opts\.__pollTimeoutMs \?\? POLL_TIMEOUT_MS\);/,
+      /pollHandleRef\.current = window\.setInterval\(\(\) => \{\s*void pollOnce\(trimmedUrl, initiate\.code, stateToken\);\s*\}, opts\.__pollIntervalMs \?\? POLL_INTERVAL_MS\);\s*timeoutHandleRef\.current = window\.setTimeout\(\(\) => \{\s*stop\(\);\s*setState\(\{\s*kind: 'error',\s*message: 'Authorization expired\. Click "Sign in with browser" to try again\.',\s*\}\);\s*\}, opts\.__pollTimeoutMs \?\? POLL_TIMEOUT_MS\);/,
     );
   });
 
@@ -179,7 +179,7 @@ describe('W474.C apps/gui-client/src/lib/browser-sign-in.ts content parity', () 
       /for \(const controller of activeControllersRef\.current\) controller\.abort\(\);/,
     );
     expect(body).toMatch(/if \(pollInFlightRef\.current \|\| settledRef\.current\) return;/);
-    expect(body).toMatch(/finally \{\s*\n?\s*pollInFlightRef\.current = false;/);
+    expect(body).toMatch(/finally \{\s*pollInFlightRef\.current = false;/);
   });
 
   it('file exists at canonical path', () => {

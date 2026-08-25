@@ -28,25 +28,25 @@ describe('routes/agent-sessions-livekit-token content parity', () => {
   it("LK.3 module-level framing pinned: 'POST /v1/agent-sessions/:id/livekit-token. Mint a per-Mac LiveKit JWT for the gui-client (or any other LiveKit-aware subscriber) to connect to the room hosting this agent session's video stream.' — pinned so the LK.3 anchor + gui-client-subscriber audience + room-hosts-video-stream contract stays documented", () => {
     expect(body).toMatch(/\/\/ LK\.3 — POST \/v1\/agent-sessions\/:id\/livekit-token/);
     expect(body).toMatch(
-      /\/\/ Mint a per-Mac LiveKit JWT for the gui-client \(or any other\s*\n?\s*\/\/ LiveKit-aware subscriber\) to connect to the room hosting this\s*\n?\s*\/\/ agent session's video stream\./,
+      /\/\/ Mint a per-Mac LiveKit JWT for the gui-client \(or any other\s*\/\/ LiveKit-aware subscriber\) to connect to the room hosting this\s*\/\/ agent session's video stream\./,
     );
   });
 
   it("5-step flow framing pinned: '1. Verify the agent session exists + belongs to the caller. 2. Pick a Mac with LiveKit credentials registered (LK.2's output). v1.0: picks the most-recently-registered Mac. Per-session Mac assignment is a follow-up; once the session-create flow assigns a Mac, this route reads the specific Mac from agent_sessions instead. 3. Decrypt the per-Mac api_secret (MFA_ENCRYPTION_KEY). 4. Mint a JWT scoped to the agent_session.id (used as the LiveKit room name) with canSubscribe+canPublishData grants. 5. Return ws_url + room + token + participant_identity + expires_at.' — pinned so the 5-step flow + v1.0-most-recent-Mac + agent_session.id-as-room-name contract all stay documented", () => {
     expect(body).toMatch(
-      /\/\/ Flow:\s*\n?\s*\/\/\s+1\. Verify the agent session exists \+ belongs to the caller\.\s*\n?\s*\/\/\s+2\. Pick a Mac with LiveKit credentials registered \(LK\.2's\s*\n?\s*\/\/\s+output\)\. v1\.0: picks the most-recently-registered Mac\./,
+      /\/\/ Flow:\s*\/\/\s+1\. Verify the agent session exists \+ belongs to the caller\.\s*\/\/\s+2\. Pick a Mac with LiveKit credentials registered \(LK\.2's\s*\/\/\s+output\)\. v1\.0: picks the most-recently-registered Mac\./,
     );
     expect(body).toMatch(
-      /\/\/\s+3\. Decrypt the per-Mac api_secret \(MFA_ENCRYPTION_KEY\)\.\s*\n?\s*\/\/\s+4\. Mint a JWT scoped to the agent_session\.id \(used as the\s*\n?\s*\/\/\s+LiveKit room name\) with canSubscribe\+canPublishData grants\.\s*\n?\s*\/\/\s+5\. Return ws_url \+ room \+ token \+ participant_identity \+ expires_at\./,
+      /\/\/\s+3\. Decrypt the per-Mac api_secret \(MFA_ENCRYPTION_KEY\)\.\s*\/\/\s+4\. Mint a JWT scoped to the agent_session\.id \(used as the\s*\/\/\s+LiveKit room name\) with canSubscribe\+canPublishData grants\.\s*\/\/\s+5\. Return ws_url \+ room \+ token \+ participant_identity \+ expires_at\./,
     );
   });
 
   it("24h-TTL + gui_control_key match + LiveKit-6h-cap framing pinned: 'Token TTL: 24h to match the gui_control_key TTL. The room name is the agent_session id (one room per session); the participant identity is `customer-<account-id>` so the SFU can dedupe joins.' + 'LiveKit's max is 6h, but the SFU re-checks at handshake only, so post-handshake long-lived connections survive the token expiry. Customer reconnects re-mint via this route.' + LIVEKIT_TOKEN_TTL_SECONDS = 24 * 60 * 60 — pinned so the 24h-TTL + gui_control_key-symmetry + customer-prefixed-identity + handshake-only-recheck contract all stay documented", () => {
     expect(body).toMatch(
-      /\/\/ Token TTL: 24h to match the gui_control_key TTL\. The room name\s*\n?\s*\/\/ is the agent_session id \(one room per session\); the participant\s*\n?\s*\/\/ identity is `customer-<account-id>` so the SFU can dedupe joins\./,
+      /\/\/ Token TTL: 24h to match the gui_control_key TTL\. The room name\s*\/\/ is the agent_session id \(one room per session\); the participant\s*\/\/ identity is `customer-<account-id>` so the SFU can dedupe joins\./,
     );
     expect(body).toMatch(
-      /\/\*\* Token TTL — 24h matches gui_control_key \+ the agent-session\s*\n?\s*\*\s+lifecycle\. LiveKit's max is 6h, but the SFU re-checks at\s*\n?\s*\*\s+handshake only, so post-handshake long-lived connections survive\s*\n?\s*\*\s+the token expiry\. Customer reconnects re-mint via this route\. \*\/\s*\n?\s*export const LIVEKIT_TOKEN_TTL_SECONDS = 24 \* 60 \* 60;/,
+      /\/\*\* Token TTL — 24h matches gui_control_key \+ the agent-session\s*\*\s+lifecycle\. LiveKit's max is 6h, but the SFU re-checks at\s*\*\s+handshake only, so post-handshake long-lived connections survive\s*\*\s+the token expiry\. Customer reconnects re-mint via this route\. \*\/\s*export const LIVEKIT_TOKEN_TTL_SECONDS = 24 \* 60 \* 60;/,
     );
   });
 
@@ -63,10 +63,10 @@ describe('routes/agent-sessions-livekit-token content parity', () => {
     expect(body).toMatch(/\(anti-enumeration; same posture as \/v1\/sessions\/:id\)/);
     expect(body).toMatch(/!callerCanAccessAgentSession\(ctx, session\.accountId\)/);
     expect(body).toMatch(
-      /Control-key path: the key was already\s*\n?\s*\/\/ decrypt-matched against THIS session in the preHandler/,
+      /Control-key path: the key was already\s*\/\/ decrypt-matched against THIS session in the preHandler/,
     );
     expect(body).toMatch(
-      /\/\/ 403 rather than 404 — the customer DID own this session,\s*\n?\s*\/\/ they just can't mint a token for a closed one\. Matches the\s*\n?\s*\/\/ existing pair-mode-action posture\./,
+      /\/\/ 403 rather than 404 — the customer DID own this session,\s*\/\/ they just can't mint a token for a closed one\. Matches the\s*\/\/ existing pair-mode-action posture\./,
     );
     expect(body).toMatch(
       /throw new ForbiddenError\(`Cannot mint LiveKit token for \$\{session\.status\} agent session\.`\);/,
@@ -75,13 +75,13 @@ describe('routes/agent-sessions-livekit-token content parity', () => {
 
   it("No-Mac-with-LiveKit-503 framing pinned: 'No Mac in the fleet has registered LiveKit credentials yet. POST /v1/mac-nodes/register must run for at least one Mac before tokens can be minted.' — pinned so the LK.2-cross-reference operator-facing detail stays documented (drift to a generic 500 would lose the actionable 'register a Mac first' guidance)", () => {
     expect(body).toMatch(
-      /throw new FeatureUnavailableError\(\s*\n?\s*'No Mac in the fleet has registered LiveKit credentials yet\. ' \+\s*\n?\s*'POST \/v1\/mac-nodes\/register must run for at least one Mac before ' \+\s*\n?\s*'tokens can be minted\.',\s*\n?\s*\);/,
+      /throw new FeatureUnavailableError\(\s*'No Mac in the fleet has registered LiveKit credentials yet\. ' \+\s*'POST \/v1\/mac-nodes\/register must run for at least one Mac before ' \+\s*'tokens can be minted\.',\s*\);/,
     );
   });
 
   it("Secret-unreadable catastrophic framing pinned: 'Decryption failure = catastrophic ... Surface as 503 + ops alert (the throw lands in Sentry via the error-handler).' + a GENERIC customer-facing 503 message — the node id + underlying crypto error are ops detail (Sentry), NOT leaked to the authenticated customer", () => {
     expect(body).toMatch(
-      /\/\/ Decryption failure = catastrophic: either the secret is\s*\n?\s*\/\/ corrupted or the key has rotated without re-registering\s*\n?\s*\/\/ Macs\. Surface as 503 \+ ops alert \(the throw lands in\s*\n?\s*\/\/ Sentry via the error-handler\)\./,
+      /\/\/ Decryption failure = catastrophic: either the secret is\s*\/\/ corrupted or the key has rotated without re-registering\s*\/\/ Macs\. Surface as 503 \+ ops alert \(the throw lands in\s*\/\/ Sentry via the error-handler\)\./,
     );
     expect(body).toContain(
       "'Session media credentials are temporarily unavailable — please retry in a moment.',",
@@ -95,9 +95,7 @@ describe('routes/agent-sessions-livekit-token content parity', () => {
     // ownerAccountId is session.accountId on both the account path (== ctx) and
     // the control-key reconnect path (sweep-3) — the identity is the owner either way.
     expect(body).toMatch(/identity: `customer-\$\{ownerAccountId\}`,/);
-    expect(body).toMatch(
-      /canPublish: false,\s*\n?\s*canSubscribe: true,\s*\n?\s*canPublishData: true,/,
-    );
+    expect(body).toMatch(/canPublish: false,\s*canSubscribe: true,\s*canPublishData: true,/);
     // The capability boundary: the customer can publish DATA (control) but NOT
     // a video track — drift to canPublish:true would let gui-client inject video.
     expect(body).not.toMatch(/canPublish: true/);
@@ -105,7 +103,7 @@ describe('routes/agent-sessions-livekit-token content parity', () => {
 
   it('Response 5-field shape pinned: ws_url + room + token + participant_identity + expires_at (ISO from nowMs + ttlSeconds * 1000). + bump("subscriber", "ok") + bump on every error branch. Drift to dropping expires_at would force clients to re-derive token-expiry from JWT exp claim', () => {
     expect(body).toMatch(
-      /const expiresAt = new Date\(tokenNowMs \+ ttlSeconds \* 1000\)\.toISOString\(\);\s*\n?\s*return reply\.code\(200\)\.send\(\{\s*\n?\s*ws_url: mac\.livekit\.wsUrl,\s*\n?\s*room: sessionId,\s*\n?\s*token,\s*\n?\s*participant_identity: `customer-\$\{ownerAccountId\}`,\s*\n?\s*expires_at: expiresAt,\s*\n?\s*\}\);/,
+      /const expiresAt = new Date\(tokenNowMs \+ ttlSeconds \* 1000\)\.toISOString\(\);\s*return reply\.code\(200\)\.send\(\{\s*ws_url: mac\.livekit\.wsUrl,\s*room: sessionId,\s*token,\s*participant_identity: `customer-\$\{ownerAccountId\}`,\s*expires_at: expiresAt,\s*\}\);/,
     );
     expect(body).toMatch(/bump\('ok'\);/);
     expect(body).toMatch(/bump\('not_found'\);/);

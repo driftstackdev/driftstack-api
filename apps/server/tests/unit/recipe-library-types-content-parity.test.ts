@@ -42,31 +42,31 @@ describe('W456.B packages/recipe-library/src/types.ts content parity', () => {
   it("V-127 framing pinned: 'Phase 3 recipe types — V-127 stub.' + 'Recipes are pre-built scripts that orchestrate a sequence of session operations (navigate, interact, wait, capture). The catalogue ships in Phase 3; the runner interface + mock land here so callers can integrate against the seam now.'", () => {
     expect(body).toMatch(/\/\/ Phase 3 recipe types — V-127 stub\./);
     expect(body).toMatch(
-      /\/\/ Recipes are pre-built scripts that orchestrate a sequence of session\s*\n?\s*\/\/ operations \(navigate, interact, wait, capture\)\. The catalogue ships\s*\n?\s*\/\/ in Phase 3; the runner interface \+ mock land here so callers can\s*\n?\s*\/\/ integrate against the seam now\./,
+      /\/\/ Recipes are pre-built scripts that orchestrate a sequence of session\s*\/\/ operations \(navigate, interact, wait, capture\)\. The catalogue ships\s*\/\/ in Phase 3; the runner interface \+ mock land here so callers can\s*\/\/ integrate against the seam now\./,
     );
   });
 
   it("RecipeStep: 6-kind discriminated union; navigate with optional waitUntil 3-value union ('load'|'domcontentloaded'|'networkidle'); tap + type + scroll 4-direction + wait condition 3-value + capture 3-value", () => {
     expect(body).toMatch(
-      /export type RecipeStep =\s*\n?\s*\| \{ kind: 'navigate'; url: string; waitUntil\?: 'load' \| 'domcontentloaded' \| 'networkidle' \}\s*\n?\s*\| \{ kind: 'tap'; selector: string \}\s*\n?\s*\| \{ kind: 'type'; selector: string; text: string \}\s*\n?\s*\| \{ kind: 'scroll'; direction: 'up' \| 'down' \| 'left' \| 'right'; pixels: number \}\s*\n?\s*\| \{ kind: 'wait'; condition: 'selector' \| 'url' \| 'time'; value: string \| number \}\s*\n?\s*\| \{ kind: 'capture'; what: 'screenshot' \| 'dom' \| 'pdf' \};/,
+      /export type RecipeStep =\s*\| \{ kind: 'navigate'; url: string; waitUntil\?: 'load' \| 'domcontentloaded' \| 'networkidle' \}\s*\| \{ kind: 'tap'; selector: string \}\s*\| \{ kind: 'type'; selector: string; text: string \}\s*\| \{ kind: 'scroll'; direction: 'up' \| 'down' \| 'left' \| 'right'; pixels: number \}\s*\| \{ kind: 'wait'; condition: 'selector' \| 'url' \| 'time'; value: string \| number \}\s*\| \{ kind: 'capture'; what: 'screenshot' \| 'dom' \| 'pdf' \};/,
     );
   });
 
   it("Recipe: 4-field (id 'Stable identifier (e.g. login_to_example_com)' + name 'Human-readable name surfaced in the GUI catalogue' + optional category 'Optional category for catalogue grouping' + steps readonly RecipeStep[])", () => {
     expect(body).toMatch(
-      /export interface Recipe \{[\s\S]*?\/\*\* Stable identifier \(e\.g\. `'login_to_example_com'`\)\. \*\/\s*\n?\s*id: string;[\s\S]*?\/\*\* Human-readable name surfaced in the GUI catalogue\. \*\/\s*\n?\s*name: string;[\s\S]*?\/\*\* Optional category for catalogue grouping\. \*\/\s*\n?\s*category\?: string;[\s\S]*?\/\*\* Ordered steps\. \*\/\s*\n?\s*steps: readonly RecipeStep\[\];/,
+      /export interface Recipe \{[\s\S]*?\/\*\* Stable identifier \(e\.g\. `'login_to_example_com'`\)\. \*\/\s*id: string;[\s\S]*?\/\*\* Human-readable name surfaced in the GUI catalogue\. \*\/\s*name: string;[\s\S]*?\/\*\* Optional category for catalogue grouping\. \*\/\s*category\?: string;[\s\S]*?\/\*\* Ordered steps\. \*\/\s*steps: readonly RecipeStep\[\];/,
     );
   });
 
   it("RecipeStepResult: 4-field (step + status 3-value 'ok'|'failed'|'skipped' + durationMs + optional error {message, optional cause}) + 'Per-step run state. Surfaced to the runner caller as the recipe progresses.' framing pinned", () => {
     expect(body).toMatch(
-      /\/\*\* Per-step run state\. Surfaced to the runner caller as the recipe progresses\. \*\/\s*\n?\s*export interface RecipeStepResult \{\s*\n?\s*step: RecipeStep;[\s\S]*?status: 'ok' \| 'failed' \| 'skipped';[\s\S]*?durationMs: number;[\s\S]*?\/\*\* Error detail when status === 'failed'\. \*\/\s*\n?\s*error\?: \{ message: string; cause\?: unknown \};/,
+      /\/\*\* Per-step run state\. Surfaced to the runner caller as the recipe progresses\. \*\/\s*export interface RecipeStepResult \{\s*step: RecipeStep;[\s\S]*?status: 'ok' \| 'failed' \| 'skipped';[\s\S]*?durationMs: number;[\s\S]*?\/\*\* Error detail when status === 'failed'\. \*\/\s*error\?: \{ message: string; cause\?: unknown \};/,
     );
   });
 
   it("RecipeResult: 4-field (recipeId + status 3-value 'ok'|'failed'|'partial' framing 'Aggregate result for a complete recipe run' + steps readonly + durationMs)", () => {
     expect(body).toMatch(
-      /\/\*\* Aggregate result for a complete recipe run\. \*\/\s*\n?\s*export interface RecipeResult \{\s*\n?\s*recipeId: string;\s*\n?\s*status: 'ok' \| 'failed' \| 'partial';[\s\S]*?\/\*\* Per-step results in execution order\. \*\/\s*\n?\s*steps: readonly RecipeStepResult\[\];[\s\S]*?durationMs: number;/,
+      /\/\*\* Aggregate result for a complete recipe run\. \*\/\s*export interface RecipeResult \{\s*recipeId: string;\s*status: 'ok' \| 'failed' \| 'partial';[\s\S]*?\/\*\* Per-step results in execution order\. \*\/\s*steps: readonly RecipeStepResult\[\];[\s\S]*?durationMs: number;/,
     );
   });
 

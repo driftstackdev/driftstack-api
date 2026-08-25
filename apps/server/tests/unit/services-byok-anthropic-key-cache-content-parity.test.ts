@@ -26,36 +26,36 @@ describe('services/byok-anthropic-key-cache content parity', () => {
   it("Q.1.c founder verdict 2026-05-17 framing pinned: 'in-memory per-session BYOK Anthropic plaintext cache. Founder verdict 2026-05-17: decrypt the customer's stored key ONCE at agent-session create, hold the plaintext in process memory for the session lifetime, never re-decrypt mid-session. Bounds AES-GCM ciphertext unwrap to one operation per session-create (matching how MFA TOTP is decrypted once on enrollment-flow load).' — pinned so the Q.1.c verdict + 2026-05-17 lock-date + decrypt-once-per-session + AES-GCM unwrap-bound + MFA-TOTP comparison cross-reference all stay documented", () => {
     expect(body).toMatch(/\/\/ Q\.1\.c — in-memory per-session BYOK Anthropic plaintext cache\./);
     expect(body).toMatch(
-      /\/\/ Founder verdict 2026-05-17: decrypt the customer's stored key ONCE\s*\n?\s*\/\/ at agent-session create, hold the plaintext in process memory for\s*\n?\s*\/\/ the session lifetime, never re-decrypt mid-session\. Bounds AES-GCM\s*\n?\s*\/\/ ciphertext unwrap to one operation per session-create \(matching how\s*\n?\s*\/\/ MFA TOTP is decrypted once on enrollment-flow load\)\./,
+      /\/\/ Founder verdict 2026-05-17: decrypt the customer's stored key ONCE\s*\/\/ at agent-session create, hold the plaintext in process memory for\s*\/\/ the session lifetime, never re-decrypt mid-session\. Bounds AES-GCM\s*\/\/ ciphertext unwrap to one operation per session-create \(matching how\s*\/\/ MFA TOTP is decrypted once on enrollment-flow load\)\./,
     );
   });
 
   it("3-event lifecycle framing pinned: SET on agent-session create with a stored BYOK key, GET on each /message without an x-byok header (header overrides per Q.1.c option 2), DELETE on session close — BOTH clear paths now at the route layer (customer DELETE + the /message handler when a turn closes the session, e.g. runtime budget-exhausted close). 2026-05-31: corrected from the inaccurate 'from the runtime' wording — the runtime has no handle on the route-owned cache, so the budget-exhausted clear happens in the message route via post-turn status 'closed'", () => {
     expect(body).toMatch(
-      /\/\/ {3}- SET on POST \/v1\/agent-sessions when the customer has a stored\s*\n?\s*\/\/ {5}BYOK key \(after BYOKAnthropicService\.getPlaintext returns\s*\n?\s*\/\/ {5}non-null\)\./,
+      /\/\/ {3}- SET on POST \/v1\/agent-sessions when the customer has a stored\s*\/\/ {5}BYOK key \(after BYOKAnthropicService\.getPlaintext returns\s*\/\/ {5}non-null\)\./,
     );
     expect(body).toMatch(
-      /\/\/ {3}- GET on every POST \/v1\/agent-sessions\/:id\/message that doesn't\s*\n?\s*\/\/ {5}carry an x-byok-anthropic-api-key header \(header overrides per\s*\n?\s*\/\/ {5}Q\.1\.c verdict option 2\)\./,
+      /\/\/ {3}- GET on every POST \/v1\/agent-sessions\/:id\/message that doesn't\s*\/\/ {5}carry an x-byok-anthropic-api-key header \(header overrides per\s*\/\/ {5}Q\.1\.c verdict option 2\)\./,
     );
     // Discrete pins (no long backtracking chain) for the corrected,
     // route-layer-accurate DELETE lifecycle bullet.
     expect(body).toMatch(
       /\/\/ {3}- DELETE on session close — both at the route layer, since this cache/,
     );
-    expect(body).toMatch(/the customer\s*\n?\s*\/\/ {5}DELETE \/v1\/agent-sessions\/:id handler/);
+    expect(body).toMatch(/the customer\s*\/\/ {5}DELETE \/v1\/agent-sessions\/:id handler/);
     expect(body).toMatch(/POST \/:id\/message/);
     expect(body).toMatch(/post-turn status 'closed'/);
   });
 
   it("Memory-shape framing pinned: 'in-process Map keyed by agent_session_id. Plaintext strings are held in JS heap; not persisted; not serialized to logs. On process restart the cache is empty; existing customer sessions fall through to the header-only path (still works because the route resolution chain is header > cache > fallback).' — pinned so the JS-heap + no-persist + no-log + empty-on-restart + header>cache>fallback resolution-chain contract all stay documented (drift to logging plaintext would leak customer Anthropic keys)", () => {
     expect(body).toMatch(
-      /\/\/ Memory shape: in-process Map keyed by agent_session_id\. Plaintext\s*\n?\s*\/\/ strings are held in JS heap; not persisted; not serialized to logs\.\s*\n?\s*\/\/ On process restart the cache is empty; existing customer sessions\s*\n?\s*\/\/ fall through to the header-only path \(still works because the route\s*\n?\s*\/\/ resolution chain is header > cache > fallback\)\./,
+      /\/\/ Memory shape: in-process Map keyed by agent_session_id\. Plaintext\s*\/\/ strings are held in JS heap; not persisted; not serialized to logs\.\s*\/\/ On process restart the cache is empty; existing customer sessions\s*\/\/ fall through to the header-only path \(still works because the route\s*\/\/ resolution chain is header > cache > fallback\)\./,
     );
   });
 
   it("Why-not-Redis framing pinned: 'Redis adds round-trip latency per turn (~1-2 ms each way) for a value that's only useful within one process's memory. The orchestrator's verdict was explicit about per-SESSION caching, not cross-process; the trade-off is acceptable for v1.0.' — pinned so the latency-rationale + per-SESSION-not-cross-process + v1.0-acceptable scope all stay documented (drift to Redis-backed would add 2-4ms per turn for no benefit)", () => {
     expect(body).toMatch(
-      /\/\/ Why not Redis-backed: Redis adds round-trip latency per turn \(~1-2\s*\n?\s*\/\/ ms each way\) for a value that's only useful within one process's\s*\n?\s*\/\/ memory\. The orchestrator's verdict was explicit about per-SESSION\s*\n?\s*\/\/ caching, not cross-process; the trade-off is acceptable for v1\.0\./,
+      /\/\/ Why not Redis-backed: Redis adds round-trip latency per turn \(~1-2\s*\/\/ ms each way\) for a value that's only useful within one process's\s*\/\/ memory\. The orchestrator's verdict was explicit about per-SESSION\s*\/\/ caching, not cross-process; the trade-off is acceptable for v1\.0\./,
     );
   });
 
@@ -79,25 +79,25 @@ describe('services/byok-anthropic-key-cache content parity', () => {
     expect(body).toMatch(/get\(agentSessionId: string\): string \| undefined/);
     expect(body).toMatch(/delete\(agentSessionId: string\): void/);
     expect(body).toMatch(
-      /\/\*\* Test seam: observable size for cache-pressure assertions\. \*\/\s*\n?\s*size\(\): number/,
+      /\/\*\* Test seam: observable size for cache-pressure assertions\. \*\/\s*size\(\): number/,
     );
   });
 
   it("set() overwrite-on-existing framing pinned: 'Overwrites any prior value (no-op on first call; intentional for the rare key-rotation-during-active-session edge case).' — pinned so the deliberate-overwrite-not-throw contract + the key-rotation-during-session edge case stay documented (drift to throwing on existing would break customer rotation mid-flight)", () => {
     expect(body).toMatch(
-      /\*\s+Stash the plaintext key for the given agent-session id\. Overwrites any\s*\n?\s*\*\s+prior value \(intentional for the rare key-rotation-during-active-session\s*\n?\s*\*\s+edge case\)\./,
+      /\*\s+Stash the plaintext key for the given agent-session id\. Overwrites any\s*\*\s+prior value \(intentional for the rare key-rotation-during-active-session\s*\*\s+edge case\)\./,
     );
   });
 
   it("get() cache-miss-returns-undefined framing pinned: 'Returns the cached plaintext or undefined when no entry exists (cache miss on process restart, never-stashed session, or post-delete read).' — pinned so the undefined-on-miss + 3-miss-scenario catalog (restart / never-stashed / post-delete) stay documented (drift to throwing on miss would crash the route's normal cache-miss-falls-through-to-header path)", () => {
     expect(body).toMatch(
-      /\/\*\* Returns the cached plaintext or undefined when no entry exists \(cache\s*\n?\s*\*\s+miss on process restart, never-stashed session, post-delete read, or an\s*\n?\s*\*\s+entry past its TTL/,
+      /\/\*\* Returns the cached plaintext or undefined when no entry exists \(cache\s*\*\s+miss on process restart, never-stashed session, post-delete read, or an\s*\*\s+entry past its TTL/,
     );
   });
 
   it("delete() idempotent framing pinned: 'Drop the cached plaintext. Idempotent — safe to call on already-empty entries (e.g. when the route's DELETE handler fires concurrent with the runtime's budget-exhausted close).' — pinned so the idempotent contract + the route-vs-runtime concurrent-delete race rationale stay documented (drift to throwing on missing-entry would crash one of the two concurrent close paths)", () => {
     expect(body).toMatch(
-      /\*\s+Drop the cached plaintext\. Idempotent — safe to call on already-\s*\n?\s*\*\s+empty entries \(e\.g\. when the route's DELETE handler fires\s*\n?\s*\*\s+concurrent with the runtime's budget-exhausted close\)\./,
+      /\*\s+Drop the cached plaintext\. Idempotent — safe to call on already-\s*\*\s+empty entries \(e\.g\. when the route's DELETE handler fires\s*\*\s+concurrent with the runtime's budget-exhausted close\)\./,
     );
   });
 

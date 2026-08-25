@@ -43,7 +43,7 @@ describe('magic-link 15-min-TTL cross-source invariant', () => {
 
   it("Dynamic-minutes-from-expires_at fallback math still rounds to >=1 minute — pinned so the Math.max(1, …) floor stays in the dashboard script (prevents '0 minutes' surface on sub-30s windows)", () => {
     expect(dashboard).toMatch(
-      /const minutes = Math\.max\(\s*\n?\s*1,\s*\n?\s*Math\.round\(\(new Date\(body\.expires_at\)\.getTime\(\) - Date\.now\(\)\) \/ 60000\),\s*\n?\s*\);/,
+      /const minutes = Math\.max\(\s*1,\s*Math\.round\(\(new Date\(body\.expires_at\)\.getTime\(\) - Date\.now\(\)\) \/ 60000\),\s*\);/,
     );
   });
 });

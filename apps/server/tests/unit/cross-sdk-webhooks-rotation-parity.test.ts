@@ -83,7 +83,7 @@ describe('W702 cross-SDK V-359/V-307/V-351/V-356 webhooks rotation + replay pari
       /Scoped to the EFFECTIVE account: the delivery[\s\S]{0,80}must belong to an endpoint your own account owns/,
     );
     expect(go).toMatch(
-      /Scoped to the EFFECTIVE account: the delivery must\s*\n?\s*\/\/\s*belong to an endpoint the caller's own account owns/,
+      /Scoped to the EFFECTIVE account: the delivery must\s*\/\/\s*belong to an endpoint the caller's own account owns/,
     );
   });
 
@@ -93,8 +93,8 @@ describe('W702 cross-SDK V-359/V-307/V-351/V-356 webhooks rotation + replay pari
     const py = read(PY_WH);
 
     expect(ts).toMatch(/signing secret is NOT rotated by update/);
-    expect(go).toMatch(/signing secret is NOT rotated by\s*\n?\s*\/\/\s*Update/);
-    expect(py).toMatch(/signing secret is NOT rotated by|signing secret\s*\n?\s*is NOT rotated/);
+    expect(go).toMatch(/signing secret is NOT rotated by\s*\/\/\s*Update/);
+    expect(py).toMatch(/signing secret is NOT rotated by|signing secret\s*is NOT rotated/);
   });
 
   it("CRITICAL V-356 test.ping framing pinned in all 3 SDKs. The synthetic test.ping is what lets customers verify their handler is reachable + signature-valid BEFORE depending on real events. The 'bypasses subscription' wording is load-bearing — without it customers would think they need to subscribe to test.ping first.", () => {
@@ -174,15 +174,15 @@ describe('W702 cross-SDK V-359/V-307/V-351/V-356 webhooks rotation + replay pari
     const py = read(PY_WH);
 
     // sdk-typescript: "Plaintext signing secret is returned\n   * once"
-    expect(ts).toMatch(/Plaintext signing secret is returned\s*\n?\s*\*?\s*once/);
+    expect(ts).toMatch(/Plaintext signing secret is returned\s*\*?\s*once/);
     expect(ts).toMatch(/cannot be retrieved later/);
 
     // sdk-go: "Plaintext signing secret is returned\n// ONCE"
-    expect(go).toMatch(/Plaintext signing secret is returned\s*\n?\s*\/\/\s*ONCE/);
+    expect(go).toMatch(/Plaintext signing secret is returned\s*\/\/\s*ONCE/);
 
     // sdk-python: similar.
     expect(py).toMatch(
-      /Plaintext signing secret is returned\s*\n?\s*once|Plaintext signing secret is returned ONCE/,
+      /Plaintext signing secret is returned\s*once|Plaintext signing secret is returned ONCE/,
     );
   });
 
@@ -192,22 +192,22 @@ describe('W702 cross-SDK V-359/V-307/V-351/V-356 webhooks rotation + replay pari
     const py = read(PY_WH);
 
     // sdk-typescript: "fresh plaintext is\n   * returned ONCE"
-    expect(ts).toMatch(/fresh plaintext is\s*\n?\s*\*?\s*returned ONCE/);
+    expect(ts).toMatch(/fresh plaintext is\s*\*?\s*returned ONCE/);
 
     // sdk-go: "The fresh\n// plaintext is returned ONCE"
     expect(go).toMatch(
-      /fresh\s*\n?\s*\/\/\s*plaintext is returned ONCE|fresh plaintext is returned ONCE/,
+      /fresh\s*\/\/\s*plaintext is returned ONCE|fresh plaintext is returned ONCE/,
     );
 
     // sdk-python: "Returns the fresh plaintext (shown ONCE)"
-    expect(py).toMatch(/fresh plaintext \(shown ONCE\)|fresh plaintext is\s*\n?\s*returned ONCE/);
+    expect(py).toMatch(/fresh plaintext \(shown ONCE\)|fresh plaintext is\s*returned ONCE/);
   });
 
   it('CRITICAL admin-scope requirement pinned on 4 mutating verbs in sdk-typescript — create + update + rotateSecret + sendTest. The admin-scope gating is what prevents read-keys from chain-escalating to full webhook control.', () => {
     const ts = read(TS_WH);
 
     // sdk-typescript: 4 "account_owner scope" mentions (create + update + rotateSecret + sendTest).
-    const tsAdminScope = (ts.match(/`account_owner` scope\s*\n?\s*\*?\s*on the calling key/g) ?? [])
+    const tsAdminScope = (ts.match(/`account_owner` scope\s*\*?\s*on the calling key/g) ?? [])
       .length;
     expect(tsAdminScope, 'sdk-typescript account_owner-scope mentions').toBeGreaterThanOrEqual(4);
   });

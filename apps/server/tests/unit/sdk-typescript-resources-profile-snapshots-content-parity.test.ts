@@ -50,23 +50,23 @@ describe('W426.C packages/sdk-typescript/src/resources/profile-snapshots.ts cont
   it('file exists at canonical path + module header V-312 anchor + dual-base-path (/v1/profiles/:id/snapshots + /v1/profile-snapshots) coverage', () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(
-      /\/\/ ProfileSnapshotsResource — typed methods for \/v1\/profiles\/:id\/snapshots\s*\n?\s*\/\/ \+ \/v1\/profile-snapshots \(V-312\)\./,
+      /\/\/ ProfileSnapshotsResource — typed methods for \/v1\/profiles\/:id\/snapshots\s*\/\/ \+ \/v1\/profile-snapshots \(V-312\)\./,
     );
   });
 
   it('CRITICAL "Immutable point-in-time copies of saved profiles" framing pinned. Drift to allowing in-place edit of a snapshot would BREAK the point-in-time guarantee — snapshots are supposed to capture state at a moment + survive subsequent edits to the parent profile. Mutation via restore (mint NEW profile) is the only path; no PATCH on snapshots.', () => {
-    expect(body).toMatch(/Immutable point-in-time copies of\s*\n?\s*\/\/ saved profiles\./);
+    expect(body).toMatch(/Immutable point-in-time copies of\s*\/\/ saved profiles\./);
   });
 
   it('Per-profile vs account-wide listing split framing pinned: "Capture from a parent profile, list per-profile or across the whole account, restore into a new profile (tier-cap + name-conflict checked the same way as profiles.create), or delete." The 3-verb listing API (capture per-profile + listForProfile per-profile + list account-wide) is what lets the dashboard render the "snapshots for THIS profile" tab AND the "all my snapshots" tab without pre-fetching all profiles.', () => {
     expect(body).toMatch(
-      /Capture from a parent profile, list per-profile or\s*\n?\s*\/\/ across the whole account, restore into a new profile \(tier-cap \+\s*\n?\s*\/\/ name-conflict checked the same way as profiles\.create\), or delete\./,
+      /Capture from a parent profile, list per-profile or\s*\/\/ across the whole account, restore into a new profile \(tier-cap \+\s*\/\/ name-conflict checked the same way as profiles\.create\), or delete\./,
     );
   });
 
   it('Imports — 5 api-types shapes (CaptureSnapshotRequest + PaginationQueryInput + Profile + ProfileSnapshot + RestoreSnapshotRequest) + HttpClient + iteratePaginated. CRITICAL: Profile (not just ProfileSnapshot) is imported because restore() returns Profile — drift to returning a discriminated union would break customer code that calls .name on the result.', () => {
     expect(body).toMatch(
-      /import type \{\s*\n?\s*CaptureSnapshotRequest,\s*\n?\s*PaginationQueryInput,\s*\n?\s*Profile,\s*\n?\s*ProfileSnapshot,\s*\n?\s*RestoreSnapshotRequest,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import type \{\s*CaptureSnapshotRequest,\s*PaginationQueryInput,\s*Profile,\s*ProfileSnapshot,\s*RestoreSnapshotRequest,\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(/import type \{ HttpClient \} from '\.\.\/http\.js';/);
     expect(body).toMatch(/import \{ iteratePaginated \} from '\.\.\/pagination\.js';/);
@@ -74,7 +74,7 @@ describe('W426.C packages/sdk-typescript/src/resources/profile-snapshots.ts cont
 
   it('ProfileSnapshotsListPage envelope — 3-field cursor pagination (data + has_more + next_cursor: string | null). Snapshots are unbounded per account so cursor pagination is load-bearing for the account-wide list verb.', () => {
     expect(body).toMatch(
-      /export interface ProfileSnapshotsListPage \{\s*\n?\s*data: ProfileSnapshot\[\];\s*\n?\s*has_more: boolean;\s*\n?\s*next_cursor: string \| null;\s*\n?\s*\}/,
+      /export interface ProfileSnapshotsListPage \{\s*data: ProfileSnapshot\[\];\s*has_more: boolean;\s*next_cursor: string \| null;\s*\}/,
     );
   });
 
@@ -86,14 +86,14 @@ describe('W426.C packages/sdk-typescript/src/resources/profile-snapshots.ts cont
   it('capture verb — POST /v1/profiles/${encodeURIComponent(profileId)}/snapshots with CaptureSnapshotRequest body → Promise<ProfileSnapshot>. Nested under /v1/profiles/... (NOT /v1/profile-snapshots) because the parent-child relationship is load-bearing — capture requires a parent profile to snapshot from.', () => {
     expect(body).toMatch(/\/\*\* Capture a snapshot of an existing profile\. \*\//);
     expect(body).toMatch(
-      /capture\(profileId: string, body: CaptureSnapshotRequest\): Promise<ProfileSnapshot> \{\s*\n?\s*return this\.http\.request<ProfileSnapshot>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: `\/v1\/profiles\/\$\{encodeURIComponent\(profileId\)\}\/snapshots`,\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /capture\(profileId: string, body: CaptureSnapshotRequest\): Promise<ProfileSnapshot> \{\s*return this\.http\.request<ProfileSnapshot>\(\{\s*method: 'POST',\s*path: `\/v1\/profiles\/\$\{encodeURIComponent\(profileId\)\}\/snapshots`,\s*body,\s*\}\);\s*\}/,
     );
   });
 
   it('listForProfile verb — GET /v1/profiles/${encodeURIComponent(profileId)}/snapshots with PaginationQueryInput. CRITICAL "newest-first" ordering pinned. Drift to oldest-first would invert the dashboard\'s default "show me my most recent snapshots" UX. Same nesting under /v1/profiles/... as capture — both per-profile verbs share the parent-child URL family.', () => {
     expect(body).toMatch(/\/\*\* List snapshots for one specific profile\. Newest-first\. \*\//);
     expect(body).toMatch(
-      /listForProfile\(\s*\n?\s*profileId: string,\s*\n?\s*query: PaginationQueryInput = \{\},\s*\n?\s*\): Promise<ProfileSnapshotsListPage> \{\s*\n?\s*return this\.http\.request<ProfileSnapshotsListPage>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: `\/v1\/profiles\/\$\{encodeURIComponent\(profileId\)\}\/snapshots`,\s*\n?\s*query: \{\s*\n?\s*\.\.\.\(query\.limit !== undefined \? \{ limit: query\.limit \} : \{\}\),\s*\n?\s*\.\.\.\(query\.cursor !== undefined \? \{ cursor: query\.cursor \} : \{\}\),\s*\n?\s*\},\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /listForProfile\(\s*profileId: string,\s*query: PaginationQueryInput = \{\},\s*\): Promise<ProfileSnapshotsListPage> \{\s*return this\.http\.request<ProfileSnapshotsListPage>\(\{\s*method: 'GET',\s*path: `\/v1\/profiles\/\$\{encodeURIComponent\(profileId\)\}\/snapshots`,\s*query: \{\s*\.\.\.\(query\.limit !== undefined \? \{ limit: query\.limit \} : \{\}\),\s*\.\.\.\(query\.cursor !== undefined \? \{ cursor: query\.cursor \} : \{\}\),\s*\},\s*\}\);\s*\}/,
     );
   });
 
@@ -104,39 +104,39 @@ describe('W426.C packages/sdk-typescript/src/resources/profile-snapshots.ts cont
       /List every snapshot owned by the calling account/,
     );
     expect(body).toMatch(
-      /list\(query: PaginationQueryInput = \{\}\): Promise<ProfileSnapshotsListPage> \{\s*\n?\s*return this\.http\.request<ProfileSnapshotsListPage>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/profile-snapshots',\s*\n?\s*query: \{\s*\n?\s*\.\.\.\(query\.limit !== undefined \? \{ limit: query\.limit \} : \{\}\),\s*\n?\s*\.\.\.\(query\.cursor !== undefined \? \{ cursor: query\.cursor \} : \{\}\),\s*\n?\s*\},\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /list\(query: PaginationQueryInput = \{\}\): Promise<ProfileSnapshotsListPage> \{\s*return this\.http\.request<ProfileSnapshotsListPage>\(\{\s*method: 'GET',\s*path: '\/v1\/profile-snapshots',\s*query: \{\s*\.\.\.\(query\.limit !== undefined \? \{ limit: query\.limit \} : \{\}\),\s*\.\.\.\(query\.cursor !== undefined \? \{ cursor: query\.cursor \} : \{\}\),\s*\},\s*\}\);\s*\}/,
     );
   });
 
   it('iterate verb — V-118 cursor walker over the ACCOUNT-WIDE list (NOT per-profile). AsyncGenerator<ProfileSnapshot, void, void> via iteratePaginated. CRITICAL: iterate calls this.list() (account-wide), NOT this.listForProfile() — drift to a per-profile iterate would conflict with the existing listForProfile pagination + would require a profileId parameter (breaking the convenience UX).', () => {
     expect(body).toMatch(
-      /\*\s*Lazily iterate every snapshot for the EFFECTIVE account, walking\s*\n?\s*\*\s*cursor pages automatically\. See `iteratePaginated` for semantics\./,
+      /\*\s*Lazily iterate every snapshot for the EFFECTIVE account, walking\s*\*\s*cursor pages automatically\. See `iteratePaginated` for semantics\./,
     );
     expect(body).toMatch(
-      /iterate\(opts: \{ limit\?: number \} = \{\}\): AsyncGenerator<ProfileSnapshot, void, void> \{\s*\n?\s*return iteratePaginated<ProfileSnapshot>\(\(cursor\) =>\s*\n?\s*this\.list\(\{\s*\n?\s*\.\.\.\(opts\.limit !== undefined \? \{ limit: opts\.limit \} : \{\}\),\s*\n?\s*\.\.\.\(cursor !== null \? \{ cursor \} : \{\}\),\s*\n?\s*\}\),\s*\n?\s*\);\s*\n?\s*\}/,
+      /iterate\(opts: \{ limit\?: number \} = \{\}\): AsyncGenerator<ProfileSnapshot, void, void> \{\s*return iteratePaginated<ProfileSnapshot>\(\(cursor\) =>\s*this\.list\(\{\s*\.\.\.\(opts\.limit !== undefined \? \{ limit: opts\.limit \} : \{\}\),\s*\.\.\.\(cursor !== null \? \{ cursor \} : \{\}\),\s*\}\),\s*\);\s*\}/,
     );
   });
 
   it('get verb — GET /v1/profile-snapshots/${encodeURIComponent(id)} → Promise<ProfileSnapshot>. Account-wide URL family (not nested under profiles) because callers can know a snapshot id alone (e.g. logged in customer infra after a capture) without knowing the parent profile id.', () => {
     expect(body).toMatch(/\/\*\* Get a single snapshot\. \*\//);
     expect(body).toMatch(
-      /get\(id: string\): Promise<ProfileSnapshot> \{\s*\n?\s*return this\.http\.request<ProfileSnapshot>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: `\/v1\/profile-snapshots\/\$\{encodeURIComponent\(id\)\}`,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /get\(id: string\): Promise<ProfileSnapshot> \{\s*return this\.http\.request<ProfileSnapshot>\(\{\s*method: 'GET',\s*path: `\/v1\/profile-snapshots\/\$\{encodeURIComponent\(id\)\}`,\s*\}\);\s*\}/,
     );
   });
 
   it("CRITICAL restore verb — POST /v1/profile-snapshots/${encodeURIComponent(id)}/restore with RestoreSnapshotRequest body → Promise<Profile>. Returns a NEW Profile (NOT ProfileSnapshot — restore MINTS a fresh profile from the snapshot data, leaving the snapshot unchanged). 2 typed errors: TierLimitError on cap + ConflictError on name conflict. Drift to skipping the tier-cap check would let customers bypass their per-tier profile limit by restoring snapshots; drift to silently overwriting on name conflict would silently destroy a customer's existing profile.", () => {
     expect(body).toMatch(
-      /\*\s*Restore a snapshot into a new profile\. Throws TierLimitError on\s*\n?\s*\*\s*cap, ConflictError on name conflict\./,
+      /\*\s*Restore a snapshot into a new profile\. Throws TierLimitError on\s*\*\s*cap, ConflictError on name conflict\./,
     );
     expect(body).toMatch(
-      /restore\(id: string, body: RestoreSnapshotRequest\): Promise<Profile> \{\s*\n?\s*return this\.http\.request<Profile>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: `\/v1\/profile-snapshots\/\$\{encodeURIComponent\(id\)\}\/restore`,\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /restore\(id: string, body: RestoreSnapshotRequest\): Promise<Profile> \{\s*return this\.http\.request<Profile>\(\{\s*method: 'POST',\s*path: `\/v1\/profile-snapshots\/\$\{encodeURIComponent\(id\)\}\/restore`,\s*body,\s*\}\);\s*\}/,
     );
   });
 
   it('delete verb — DELETE /v1/profile-snapshots/${encodeURIComponent(id)} → Promise<void>. NO idempotent framing in this JSDoc (vs. webhooks delete which IS framed idempotent) — drift in either direction (making this explicitly idempotent OR making webhooks non-idempotent) would create inconsistent contracts across resources. Single-line minimalist JSDoc reflects the intentional "this is just a hard delete" semantic.', () => {
     expect(body).toMatch(/\/\*\* Delete a snapshot\. \*\//);
     expect(body).toMatch(
-      /delete\(id: string\): Promise<void> \{\s*\n?\s*return this\.http\.request<void>\(\{\s*\n?\s*method: 'DELETE',\s*\n?\s*path: `\/v1\/profile-snapshots\/\$\{encodeURIComponent\(id\)\}`,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /delete\(id: string\): Promise<void> \{\s*return this\.http\.request<void>\(\{\s*method: 'DELETE',\s*path: `\/v1\/profile-snapshots\/\$\{encodeURIComponent\(id\)\}`,\s*\}\);\s*\}/,
     );
   });
 

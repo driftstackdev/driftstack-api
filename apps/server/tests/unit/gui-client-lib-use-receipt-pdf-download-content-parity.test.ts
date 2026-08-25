@@ -40,10 +40,10 @@ describe('W472.A apps/gui-client/src/lib/use-receipt-pdf-download.ts content par
   it('V-534.BM/.BN dual framing pins auth-gated PDF/text receipts plus bounded native-capable saves', () => {
     expect(body).toMatch(/\/\/ V-534\.BM — useReceiptPdfDownload hook\./);
     expect(body).toMatch(
-      /\/\/ V-534\.BN — extended to also handle the plain-text variant\s*\n?\s*\/\/\s+\(\/receipt\.txt, V-666\.P\)\. Both endpoints are auth-gated,\s*\n?\s*\/\/\s+so the blob-fetch \+ synthesized anchor click pattern is\s*\n?\s*\/\/\s+required either way\./,
+      /\/\/ V-534\.BN — extended to also handle the plain-text variant\s*\/\/\s+\(\/receipt\.txt, V-666\.P\)\. Both endpoints are auth-gated,\s*\/\/\s+so the blob-fetch \+ synthesized anchor click pattern is\s*\/\/\s+required either way\./,
     );
     expect(body).toMatch(
-      /\/\/ Fetches \/v1\/billing\/crypto-orders\/:id\/receipt\.\{pdf,txt\} with the\s*\n?\s*\/\/ auth header attached, bounds the body, then uses the shared Tauri\s*\n?\s*\/\/ filesystem\/browser fallback so desktop downloads are real writes\./,
+      /\/\/ Fetches \/v1\/billing\/crypto-orders\/:id\/receipt\.\{pdf,txt\} with the\s*\/\/ auth header attached, bounds the body, then uses the shared Tauri\s*\/\/ filesystem\/browser fallback so desktop downloads are real writes\./,
     );
     expect(body).toMatch(/import \{ downloadBlob, readBoundedDownloadBlob \} from '\.\/download';/);
   });
@@ -51,52 +51,52 @@ describe('W472.A apps/gui-client/src/lib/use-receipt-pdf-download.ts content par
   it("ReceiptDownloadFormat 2-value union ('pdf'|'txt') + FORMAT_ACCEPT Record (pdf → 'application/pdf', txt → 'text/plain') — pinned so the .txt variant doesn't silently fall back to PDF bytes", () => {
     expect(body).toMatch(/export type ReceiptDownloadFormat = 'pdf' \| 'txt';/);
     expect(body).toMatch(
-      /const FORMAT_ACCEPT: Record<ReceiptDownloadFormat, string> = \{\s*\n?\s*pdf: 'application\/pdf',\s*\n?\s*txt: 'text\/plain',\s*\n?\s*\};/,
+      /const FORMAT_ACCEPT: Record<ReceiptDownloadFormat, string> = \{\s*pdf: 'application\/pdf',\s*txt: 'text\/plain',\s*\};/,
     );
   });
 
   it('ReceiptPdfDownloadState retains format in active/failure variants', () => {
     expect(body).toMatch(
-      /export type ReceiptPdfDownloadState =\s*\n?\s*\| \{ kind: 'idle' \}\s*\n?\s*\| \{ kind: 'downloading'; format: ReceiptDownloadFormat \}\s*\n?\s*\| \{ kind: 'failed'; format: ReceiptDownloadFormat; message: string \};/,
+      /export type ReceiptPdfDownloadState =\s*\| \{ kind: 'idle' \}\s*\| \{ kind: 'downloading'; format: ReceiptDownloadFormat \}\s*\| \{ kind: 'failed'; format: ReceiptDownloadFormat; message: string \};/,
     );
     expect(body).toMatch(
-      /export interface UseReceiptPdfDownloadResult \{\s*\n?\s*state: ReceiptPdfDownloadState;\s*\n?\s*download: \(orderId: string, format\?: ReceiptDownloadFormat\) => Promise<void>;\s*\n?\s*reset: \(\) => void;\s*\n?\s*\}/,
+      /export interface UseReceiptPdfDownloadResult \{\s*state: ReceiptPdfDownloadState;\s*download: \(orderId: string, format\?: ReceiptDownloadFormat\) => Promise<void>;\s*reset: \(\) => void;\s*\}/,
     );
   });
 
   it("download signature: format default 'pdf'; single-flight; no-apiKey → failed; active request gets a controller and downloading state", () => {
     expect(body).toMatch(
-      /async \(orderId: string, format: ReceiptDownloadFormat = 'pdf'\): Promise<void> => \{\s*\n?\s*if \(inFlightRef\.current\) return;\s*\n?\s*if \(!settings\.apiKey\) \{\s*\n?\s*setState\(\{ kind: 'failed', format, message: 'No API key configured\.' \}\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*inFlightRef\.current = true;\s*\n?\s*const sequence = \+\+sequenceRef\.current;\s*\n?\s*const controller = new AbortController\(\);\s*\n?\s*requestRef\.current = controller;\s*\n?\s*setState\(\{ kind: 'downloading', format \}\);/,
+      /async \(orderId: string, format: ReceiptDownloadFormat = 'pdf'\): Promise<void> => \{\s*if \(inFlightRef\.current\) return;\s*if \(!settings\.apiKey\) \{\s*setState\(\{ kind: 'failed', format, message: 'No API key configured\.' \}\);\s*return;\s*\}\s*inFlightRef\.current = true;\s*const sequence = \+\+sequenceRef\.current;\s*const controller = new AbortController\(\);\s*requestRef\.current = controller;\s*setState\(\{ kind: 'downloading', format \}\);/,
     );
   });
 
   it('uses the shared deadline with abort signal, URL-safe order id, and per-format Accept header', () => {
     expect(body).toMatch(
-      /const res = await fetchWithDeadline\(\s*\n?\s*`\$\{baseUrl\}\/v1\/billing\/crypto-orders\/\$\{encodeURIComponent\(orderId\)\}\/receipt\.\$\{format\}`,\s*\n?\s*\{\s*\n?\s*method: 'GET',\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: FORMAT_ACCEPT\[format\],/,
+      /const res = await fetchWithDeadline\(\s*`\$\{baseUrl\}\/v1\/billing\/crypto-orders\/\$\{encodeURIComponent\(orderId\)\}\/receipt\.\$\{format\}`,\s*\{\s*method: 'GET',\s*signal: controller\.signal,\s*headers: \{\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*accept: FORMAT_ACCEPT\[format\],/,
     );
   });
 
   it('bounds the body, sequence-gates both save phases, delegates native/browser writing, and reports refused saves', () => {
     expect(body).toMatch(
-      /const blob = await readBoundedDownloadBlob\(res\);\s*\n?\s*if \(sequence !== sequenceRef\.current\) return;\s*\n?\s*const saved = await downloadBlob\(`receipt-\$\{orderId\}\.\$\{format\}`, blob\);\s*\n?\s*if \(sequence !== sequenceRef\.current\) return;/,
+      /const blob = await readBoundedDownloadBlob\(res\);\s*if \(sequence !== sequenceRef\.current\) return;\s*const saved = await downloadBlob\(`receipt-\$\{orderId\}\.\$\{format\}`, blob\);\s*if \(sequence !== sequenceRef\.current\) return;/,
     );
     expect(body).toMatch(
-      /saved\s*\n?\s*\? \{ kind: 'idle' \}\s*\n?\s*: \{\s*\n?\s*kind: 'failed',\s*\n?\s*format,\s*\n?\s*message: 'The receipt could not be saved\. Check Downloads access and try again\.',/,
+      /saved\s*\? \{ kind: 'idle' \}\s*: \{\s*kind: 'failed',\s*format,\s*message: 'The receipt could not be saved\. Check Downloads access and try again\.',/,
     );
     expect(body).not.toMatch(/await res\.blob\(\)/);
     expect(body).not.toMatch(/URL\.createObjectURL/);
     expect(body).toMatch(
-      /\} finally \{\s*\n?\s*if \(requestRef\.current === controller\) \{\s*\n?\s*requestRef\.current = null;\s*\n?\s*inFlightRef\.current = false;/,
+      /\} finally \{\s*if \(requestRef\.current === controller\) \{\s*requestRef\.current = null;\s*inFlightRef\.current = false;/,
     );
   });
 
   it('reset and unmount abort and invalidate active work; download dependencies stay complete', () => {
-    expect(body).toMatch(/\[settings\.apiKey, settings\.baseUrl\],\s*\n?\s*\);/);
+    expect(body).toMatch(/\[settings\.apiKey, settings\.baseUrl\],\s*\);/);
     expect(body).toMatch(
-      /const reset = useCallback\(\(\): void => \{\s*\n?\s*sequenceRef\.current \+= 1;\s*\n?\s*requestRef\.current\?\.abort\(\);\s*\n?\s*requestRef\.current = null;\s*\n?\s*inFlightRef\.current = false;\s*\n?\s*setState\(\{ kind: 'idle' \}\);/,
+      /const reset = useCallback\(\(\): void => \{\s*sequenceRef\.current \+= 1;\s*requestRef\.current\?\.abort\(\);\s*requestRef\.current = null;\s*inFlightRef\.current = false;\s*setState\(\{ kind: 'idle' \}\);/,
     );
     expect(body).toMatch(
-      /useEffect\(\s*\n?\s*\(\) => \(\) => \{\s*\n?\s*sequenceRef\.current \+= 1;\s*\n?\s*requestRef\.current\?\.abort\(\);[\s\S]*?\},\s*\n?\s*\[\],\s*\n?\s*\);\s*\n?\s*return \{ state, download, reset \};/,
+      /useEffect\(\s*\(\) => \(\) => \{\s*sequenceRef\.current \+= 1;\s*requestRef\.current\?\.abort\(\);[\s\S]*?\},\s*\[\],\s*\);\s*return \{ state, download, reset \};/,
     );
   });
 

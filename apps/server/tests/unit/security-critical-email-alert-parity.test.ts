@@ -79,6 +79,6 @@ describe('the account-recovery email alert covers every security-critical templa
       yaml,
     );
     expect(rule?.[1], 'the expression must exclude ok outcomes').toMatch(/outcome!="ok"/);
-    expect(rule?.[1], 'and must not be a ratio').not.toMatch(/\/\s*\n?\s*sum/);
+    expect(rule?.[1], 'and must not be a ratio').not.toMatch(/\/\s*sum/);
   });
 });

@@ -40,16 +40,16 @@ describe('W397.C apps/server/src/services/rate-limit-overrides.ts content parity
 
   it('Module framing pinned: admin-only set/clear, AccountContext-loaded, invalidate-cache-on-mutation', () => {
     expect(body).toMatch(
-      /Rate-limit override service \(admin-only\)\.\s*\n?\s*\/\/\s*\n?\s*\/\/\s*Sets \/ clears per-account, per-bucket overrides of the rate-limit\s*\n?\s*\/\/\s*config\. Override storage is a separate table \(rate_limit_overrides\);\s*\n?\s*\/\/\s*the consume path picks them up via AccountContext, which is loaded\s*\n?\s*\/\/\s*at auth time and cached\. Set \/ clear invalidate the auth cache so\s*\n?\s*\/\/\s*the next auth read picks up the change/,
+      /Rate-limit override service \(admin-only\)\.\s*\/\/\s*\/\/\s*Sets \/ clears per-account, per-bucket overrides of the rate-limit\s*\/\/\s*config\. Override storage is a separate table \(rate_limit_overrides\);\s*\/\/\s*the consume path picks them up via AccountContext, which is loaded\s*\/\/\s*at auth time and cached\. Set \/ clear invalidate the auth cache so\s*\/\/\s*the next auth read picks up the change/,
     );
   });
 
   it('V-016 centi-rate quantization framing pinned (1/60 → 2 → 1/50 effective; numeric(10,4) migration path)', () => {
     expect(body).toMatch(
-      /Centi-rate quantization: the schema stores refill_per_second as 100×\s*\n?\s*\/\/\s*the actual rate \(centi-rate\) to avoid float drift\./,
+      /Centi-rate quantization: the schema stores refill_per_second as 100×\s*\/\/\s*the actual rate \(centi-rate\) to avoid float drift\./,
     );
     expect(body).toMatch(
-      /V-016 documented the quantization caveat \(1\/60 → 2 → 1\/50 effective\)\.\s*\n?\s*\/\/\s*Acceptable for overrides because they're more permissive than tier\s*\n?\s*\/\/\s*defaults; if exact tier matching is ever required, migrate the column\s*\n?\s*\/\/\s*to numeric\(10,4\)/,
+      /V-016 documented the quantization caveat \(1\/60 → 2 → 1\/50 effective\)\.\s*\/\/\s*Acceptable for overrides because they're more permissive than tier\s*\/\/\s*defaults; if exact tier matching is ever required, migrate the column\s*\/\/\s*to numeric\(10,4\)/,
     );
   });
 
@@ -74,10 +74,10 @@ describe('W397.C apps/server/src/services/rate-limit-overrides.ts content parity
     expect(body).toMatch(/Returns true if a row was deleted, false if no override existed\./);
     expect(body).toMatch(/clear\(accountId: string, bucketKey: string\): Promise<boolean>;/);
     expect(body).toMatch(
-      /Cross-account list for admin tooling\. Filters by accountId\s*\n?\s*\*\s*optionally; supports cursor pagination by createdAt DESC\./,
+      /Cross-account list for admin tooling\. Filters by accountId\s*\*\s*optionally; supports cursor pagination by createdAt DESC\./,
     );
     expect(body).toMatch(
-      /listAll\(opts: \{\s*\n?\s*limit: number;\s*\n?\s*cursor\?: string;\s*\n?\s*accountId\?: string;\s*\n?\s*includeExpired\?: boolean;\s*\n?\s*\}\): Promise<\{ items: RateLimitOverrideRecord\[\]; nextCursor: string \| null \}>;/,
+      /listAll\(opts: \{\s*limit: number;\s*cursor\?: string;\s*accountId\?: string;\s*includeExpired\?: boolean;\s*\}\): Promise<\{ items: RateLimitOverrideRecord\[\]; nextCursor: string \| null \}>;/,
     );
   });
 
@@ -91,7 +91,7 @@ describe('W397.C apps/server/src/services/rate-limit-overrides.ts content parity
   it('RateLimitOverridesService: constructor takes repo + authCache?', () => {
     expect(body).toMatch(/export class RateLimitOverridesService \{/);
     expect(body).toMatch(
-      /constructor\(\s*\n?\s*private readonly repo: RateLimitOverridesRepo,\s*\n?\s*private readonly authCache: AuthCache \| null = null,\s*\n?\s*\) \{\}/,
+      /constructor\(\s*private readonly repo: RateLimitOverridesRepo,\s*private readonly authCache: AuthCache \| null = null,\s*\) \{\}/,
     );
   });
 
@@ -101,32 +101,32 @@ describe('W397.C apps/server/src/services/rate-limit-overrides.ts content parity
 
   it('set validation: capacity≥1 + finite → ConflictError', () => {
     expect(body).toMatch(
-      /if \(input\.capacity < 1 \|\| !Number\.isFinite\(input\.capacity\)\) \{\s*\n?\s*throw new ConflictError\('capacity must be a positive integer\.'\);\s*\n?\s*\}/,
+      /if \(input\.capacity < 1 \|\| !Number\.isFinite\(input\.capacity\)\) \{\s*throw new ConflictError\('capacity must be a positive integer\.'\);\s*\}/,
     );
   });
 
   it('set validation: refillPerSecond finite and between MIN_REFILL and MAX_REFILL → ConflictError', () => {
     expect(body).toMatch(
-      /if \(\s*\n?\s*!Number\.isFinite\(input\.refillPerSecond\) \|\|\s*\n?\s*input\.refillPerSecond < MIN_REFILL \|\|\s*\n?\s*input\.refillPerSecond > MAX_REFILL\s*\n?\s*\) \{\s*\n?\s*throw new ConflictError\(\s*\n?\s*`refill_per_second must be between \$\{MIN_REFILL\.toString\(\)\} and \$\{MAX_REFILL\.toString\(\)\}\.`,\s*\n?\s*\);\s*\n?\s*\}/,
+      /if \(\s*!Number\.isFinite\(input\.refillPerSecond\) \|\|\s*input\.refillPerSecond < MIN_REFILL \|\|\s*input\.refillPerSecond > MAX_REFILL\s*\) \{\s*throw new ConflictError\(\s*`refill_per_second must be between \$\{MIN_REFILL\.toString\(\)\} and \$\{MAX_REFILL\.toString\(\)\}\.`,\s*\);\s*\}/,
     );
   });
 
   it('set validation: expiresAt is finite and strictly in the future → ConflictError', () => {
     expect(body).toMatch(
-      /const expiresAtMs = input\.expiresAt\.getTime\(\);\s*\n?\s*if \(!Number\.isFinite\(expiresAtMs\) \|\| expiresAtMs <= Date\.now\(\)\) \{\s*\n?\s*throw new ConflictError\('expires_at must be in the future\.'\);\s*\n?\s*\}/,
+      /const expiresAtMs = input\.expiresAt\.getTime\(\);\s*if \(!Number\.isFinite\(expiresAtMs\) \|\| expiresAtMs <= Date\.now\(\)\) \{\s*throw new ConflictError\('expires_at must be in the future\.'\);\s*\}/,
     );
   });
 
   it('set upsert: capacity floored, reason spread-included only when defined, setByKeyId=ctx.apiKey.id (audit)', () => {
     expect(body).toMatch(
-      /const record = await this\.repo\.upsert\(\{\s*\n?\s*accountId: input\.accountId,\s*\n?\s*bucketKey: input\.bucketKey,\s*\n?\s*capacity: Math\.floor\(input\.capacity\),\s*\n?\s*refillPerSecond: input\.refillPerSecond,\s*\n?\s*expiresAt: input\.expiresAt,\s*\n?\s*\.\.\.\(input\.reason !== undefined \? \{ reason: input\.reason \} : \{\}\),\s*\n?\s*setByKeyId: ctx\.apiKey\.id,\s*\n?\s*\}\);/,
+      /const record = await this\.repo\.upsert\(\{\s*accountId: input\.accountId,\s*bucketKey: input\.bucketKey,\s*capacity: Math\.floor\(input\.capacity\),\s*refillPerSecond: input\.refillPerSecond,\s*expiresAt: input\.expiresAt,\s*\.\.\.\(input\.reason !== undefined \? \{ reason: input\.reason \} : \{\}\),\s*setByKeyId: ctx\.apiKey\.id,\s*\}\);/,
     );
     expect(body).toMatch(/await this\.invalidateCache\(input\.accountId\);/);
   });
 
   it('clear: driftstack_internal_admin scope, NotFoundError when no row removed, then invalidate cache', () => {
     expect(body).toMatch(
-      /async clear\(ctx: AccountContext, accountId: string, bucketKey: string\): Promise<void> \{\s*\n?\s*throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);\s*\n?\s*const removed = await this\.repo\.clear\(accountId, bucketKey\);\s*\n?\s*if \(!removed\) \{\s*\n?\s*throw new NotFoundError\(\s*\n?\s*`No active override for account "\$\{accountId\}" bucket "\$\{bucketKey\}"\.`,\s*\n?\s*\);\s*\n?\s*\}\s*\n?\s*await this\.invalidateCache\(accountId\);/,
+      /async clear\(ctx: AccountContext, accountId: string, bucketKey: string\): Promise<void> \{\s*throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);\s*const removed = await this\.repo\.clear\(accountId, bucketKey\);\s*if \(!removed\) \{\s*throw new NotFoundError\(\s*`No active override for account "\$\{accountId\}" bucket "\$\{bucketKey\}"\.`,\s*\);\s*\}\s*await this\.invalidateCache\(accountId\);/,
     );
   });
 
@@ -137,7 +137,7 @@ describe('W397.C apps/server/src/services/rate-limit-overrides.ts content parity
 
   it('invalidateCache: try/catch absorbs failure (override committed; cache TTLs out within 30s)', () => {
     expect(body).toMatch(
-      /private async invalidateCache\(accountId: string\): Promise<void> \{\s*\n?\s*if \(!this\.authCache\) return;\s*\n?\s*try \{\s*\n?\s*await this\.authCache\.invalidateAccount\(accountId\);\s*\n?\s*\} catch \{\s*\n?\s*\/\/ Cache failure must not propagate as admin-action failure —\s*\n?\s*\/\/ override is committed; cache TTLs out within 30s in worst case\./,
+      /private async invalidateCache\(accountId: string\): Promise<void> \{\s*if \(!this\.authCache\) return;\s*try \{\s*await this\.authCache\.invalidateAccount\(accountId\);\s*\} catch \{\s*\/\/ Cache failure must not propagate as admin-action failure —\s*\/\/ override is committed; cache TTLs out within 30s in worst case\./,
     );
   });
 

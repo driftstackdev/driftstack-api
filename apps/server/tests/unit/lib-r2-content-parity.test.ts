@@ -41,11 +41,11 @@ describe('W389.C apps/server/src/lib/r2.ts content parity', () => {
 
   it('3 consumer paths framing: recordings durability / cross-device presigned GET / future source-map artefacts', () => {
     expect(body).toMatch(
-      /Recordings durability \(ndjson session-event logs uploaded async\s*\n?\s*\/\/\s*after STOP\) — bucket: `R2_BUCKET_RECORDINGS`/,
+      /Recordings durability \(ndjson session-event logs uploaded async\s*\/\/\s*after STOP\) — bucket: `R2_BUCKET_RECORDINGS`/,
     );
     expect(body).toMatch(/Cross-device GUI access to recordings \(presigned GET URLs\)\./);
     expect(body).toMatch(
-      /Future: source-map artifacts from Sentry uploads \(separate\s*\n?\s*\/\/\s*bucket; not configured here yet\)/,
+      /Future: source-map artifacts from Sentry uploads \(separate\s*\/\/\s*bucket; not configured here yet\)/,
     );
   });
 
@@ -55,10 +55,10 @@ describe('W389.C apps/server/src/lib/r2.ts content parity', () => {
 
   it('sentinel-readiness 404 framing: bucket reachable but sentinel missing → still passes; credentials/network errors hard-fail', () => {
     expect(body).toMatch(
-      /Sentinel-key readiness probe: HEAD on the well-known key\s*\n?\s*\/\/\s*`__driftstack_sentinel__` in `R2_BUCKET_RECORDINGS`/,
+      /Sentinel-key readiness probe: HEAD on the well-known key\s*\/\/\s*`__driftstack_sentinel__` in `R2_BUCKET_RECORDINGS`/,
     );
     expect(body).toMatch(
-      /HEAD returning 404 means the bucket exists\s*\n?\s*\/\/\s*and the credentials work but the sentinel is missing — still\s*\n?\s*\/\/\s*counts as "R2 reachable" for readiness, with a separate logged\s*\n?\s*\/\/\s*warning\. HEAD throwing a credentials\/network error is hard-fail/,
+      /HEAD returning 404 means the bucket exists\s*\/\/\s*and the credentials work but the sentinel is missing — still\s*\/\/\s*counts as "R2 reachable" for readiness, with a separate logged\s*\/\/\s*warning\. HEAD throwing a credentials\/network error is hard-fail/,
     );
   });
 
@@ -66,7 +66,7 @@ describe('W389.C apps/server/src/lib/r2.ts content parity', () => {
     expect(body).toMatch(/export interface R2 \{/);
     expect(body).toMatch(/headObject\(key: string\): Promise<\{ exists: boolean \}>;/);
     expect(body).toMatch(
-      /putObject\(args: \{\s*\n?\s*key: string;\s*\n?\s*body: Buffer \| Uint8Array \| string;\s*\n?\s*contentType\?: string;\s*\n?\s*\}\): Promise<void>;/,
+      /putObject\(args: \{\s*key: string;\s*body: Buffer \| Uint8Array \| string;\s*contentType\?: string;\s*\}\): Promise<void>;/,
     );
     expect(body).toMatch(/deleteObject\(key: string\): Promise<void>;/);
     expect(body).toMatch(
@@ -84,16 +84,16 @@ describe('W389.C apps/server/src/lib/r2.ts content parity', () => {
 
   it('createR2Client: returns client bound to bucketRecordings', () => {
     expect(body).toMatch(
-      /export function createR2Client\(config: R2Config\): R2 \{\s*\n?\s*return createR2ClientForBucket\(config, config\.bucketRecordings\);\s*\n?\s*\}/,
+      /export function createR2Client\(config: R2Config\): R2 \{\s*return createR2ClientForBucket\(config, config\.bucketRecordings\);\s*\}/,
     );
   });
 
   it('V-295c2 createR2PublicClient: returns null when bucketPublic absent (status-snapshot writer treats as feature-disabled)', () => {
     expect(body).toMatch(
-      /V-295c2 — factory for the public-snapshot bucket\. Same R2 credentials,\s*\n?\s*\*\s*different bucket\. Returns null when the public bucket is not configured;\s*\n?\s*\*\s*callers \(status-snapshot writer\) treat this as "feature disabled"/,
+      /V-295c2 — factory for the public-snapshot bucket\. Same R2 credentials,\s*\*\s*different bucket\. Returns null when the public bucket is not configured;\s*\*\s*callers \(status-snapshot writer\) treat this as "feature disabled"/,
     );
     expect(body).toMatch(
-      /export function createR2PublicClient\(config: R2Config\): R2 \| null \{\s*\n?\s*if \(!config\.bucketPublic\) return null;\s*\n?\s*return createR2ClientForBucket\(config, config\.bucketPublic\);\s*\n?\s*\}/,
+      /export function createR2PublicClient\(config: R2Config\): R2 \| null \{\s*if \(!config\.bucketPublic\) return null;\s*return createR2ClientForBucket\(config, config\.bucketPublic\);\s*\}/,
     );
   });
 
@@ -101,10 +101,10 @@ describe('W389.C apps/server/src/lib/r2.ts content parity', () => {
     expect(body).toMatch(/region: 'auto',/);
     expect(body).toMatch(/endpoint: config\.endpointUrl,/);
     expect(body).toMatch(
-      /credentials: \{\s*\n?\s*accessKeyId: config\.accessKeyId,\s*\n?\s*secretAccessKey: config\.secretAccessKey,\s*\n?\s*\},/,
+      /credentials: \{\s*accessKeyId: config\.accessKeyId,\s*secretAccessKey: config\.secretAccessKey,\s*\},/,
     );
     expect(body).toMatch(
-      /\/\/ R2 uses path-style access via the auto region\.\s*\n?\s*forcePathStyle: false,/,
+      /\/\/ R2 uses path-style access via the auto region\.\s*forcePathStyle: false,/,
     );
     // Bounded R2 requests so a stuck connection can't hang a background worker
     // (AWS SDK v3 has maxAttempts:3 but NO socket timeout by default).
@@ -113,7 +113,7 @@ describe('W389.C apps/server/src/lib/r2.ts content parity', () => {
 
   it('headObject: returns {exists:false} on 404 or NotFound name; rethrows other errors', () => {
     expect(body).toMatch(
-      /if \(e\?\.\$metadata\?\.httpStatusCode === 404 \|\| e\?\.name === 'NotFound'\) \{\s*\n?\s*return \{ exists: false \};\s*\n?\s*\}\s*\n?\s*throw err;/,
+      /if \(e\?\.\$metadata\?\.httpStatusCode === 404 \|\| e\?\.name === 'NotFound'\) \{\s*return \{ exists: false \};\s*\}\s*throw err;/,
     );
   });
 
@@ -125,41 +125,41 @@ describe('W389.C apps/server/src/lib/r2.ts content parity', () => {
 
   it('r2ReadinessCheck: name="r2", timeoutMs=2000, fn = HEAD sentinel', () => {
     expect(body).toMatch(
-      /Readiness probe: HEAD the sentinel key\. Treats 404 as "bucket\s*\n?\s*\*\s*reachable but sentinel missing" — still passes/,
+      /Readiness probe: HEAD the sentinel key\. Treats 404 as "bucket\s*\*\s*reachable but sentinel missing" — still passes/,
     );
     expect(body).toMatch(
-      /export function r2ReadinessCheck\(r2: R2, key: string = R2_SENTINEL_KEY\): ReadinessCheck \{\s*\n?\s*return \{\s*\n?\s*name: 'r2',\s*\n?\s*timeoutMs: 2000,\s*\n?\s*fn: async \(\) => r2\.headObject\(key\),\s*\n?\s*\};/,
+      /export function r2ReadinessCheck\(r2: R2, key: string = R2_SENTINEL_KEY\): ReadinessCheck \{\s*return \{\s*name: 'r2',\s*timeoutMs: 2000,\s*fn: async \(\) => r2\.headObject\(key\),\s*\};/,
     );
   });
 
   it('recordingKey: stable shape "recordings/<account_id>/<session_id>.ndjson"', () => {
     expect(body).toMatch(
-      /Recording object key for a given session\. Stable shape:\s*\n?\s*\*\s*recordings\/<account_id>\/<session_id>\.ndjson/,
+      /Recording object key for a given session\. Stable shape:\s*\*\s*recordings\/<account_id>\/<session_id>\.ndjson/,
     );
     expect(body).toMatch(
-      /export function recordingKey\(accountId: string, sessionId: string\): string \{\s*\n?\s*return `recordings\/\$\{accountId\}\/\$\{sessionId\}\.ndjson`;\s*\n?\s*\}/,
+      /export function recordingKey\(accountId: string, sessionId: string\): string \{\s*return `recordings\/\$\{accountId\}\/\$\{sessionId\}\.ndjson`;\s*\}/,
     );
   });
 
   it('profile-backed: profileSealedBlobKey shape "profiles/<profile_id>.sealed" (keyed by profile_id uuid; opaque blob)', () => {
     expect(body).toMatch(
-      /export function profileSealedBlobKey\(profileId: string\): string \{\s*\n?\s*return `profiles\/\$\{profileId\}\.sealed`;\s*\n?\s*\}/,
+      /export function profileSealedBlobKey\(profileId: string\): string \{\s*return `profiles\/\$\{profileId\}\.sealed`;\s*\}/,
     );
   });
 
   it('V-352b avatarKey: png/jpg/webp → matching ext, else "bin"; shape "avatars/<account_id>.<ext>"', () => {
     expect(body).toMatch(
-      /V-352b — avatar object key for a given account on the public-snapshot\s*\n?\s*\*\s*bucket\. Extension matches the uploaded content-type so the presigned\s*\n?\s*\*\s*GET surfaces a sensible Content-Type header\./,
+      /V-352b — avatar object key for a given account on the public-snapshot\s*\*\s*bucket\. Extension matches the uploaded content-type so the presigned\s*\*\s*GET surfaces a sensible Content-Type header\./,
     );
     expect(body).toMatch(
-      /contentType === 'image\/png'\s*\n?\s*\?\s*'png'\s*\n?\s*:\s*contentType === 'image\/jpeg'\s*\n?\s*\?\s*'jpg'\s*\n?\s*:\s*contentType === 'image\/webp'\s*\n?\s*\?\s*'webp'\s*\n?\s*:\s*'bin';/,
+      /contentType === 'image\/png'\s*\?\s*'png'\s*:\s*contentType === 'image\/jpeg'\s*\?\s*'jpg'\s*:\s*contentType === 'image\/webp'\s*\?\s*'webp'\s*:\s*'bin';/,
     );
     expect(body).toMatch(/return `avatars\/\$\{accountId\}\.\$\{ext\}`;/);
   });
 
   it('imports: @aws-sdk/client-s3 (S3Client + 5 commands incl. DeleteObjectCommand + #158 ListObjectsV2Command) + @aws-sdk/s3-request-presigner', () => {
     expect(body).toMatch(
-      /import \{\s*\n?\s*S3Client,\s*\n?\s*HeadObjectCommand,\s*\n?\s*PutObjectCommand,\s*\n?\s*GetObjectCommand,\s*\n?\s*DeleteObjectCommand,\s*\n?\s*ListObjectsV2Command,\s*\n?\s*type S3ClientConfig,\s*\n?\s*\} from '@aws-sdk\/client-s3';/,
+      /import \{\s*S3Client,\s*HeadObjectCommand,\s*PutObjectCommand,\s*GetObjectCommand,\s*DeleteObjectCommand,\s*ListObjectsV2Command,\s*type S3ClientConfig,\s*\} from '@aws-sdk\/client-s3';/,
     );
     expect(body).toMatch(/import \{ getSignedUrl \} from '@aws-sdk\/s3-request-presigner';/);
   });

@@ -42,16 +42,16 @@ describe('W387.B apps/server/src/lib/stripe-signing.ts content parity', () => {
 
   it('v1 = HMAC-SHA256 of "<timestamp>.<raw body>" framing pinned', () => {
     expect(body).toMatch(
-      /`v1` is the current scheme \(HMAC-SHA256 of `<timestamp>\.<raw body>`\s*\n?\s*\/\/\s*with the webhook secret as the key\)/,
+      /`v1` is the current scheme \(HMAC-SHA256 of `<timestamp>\.<raw body>`\s*\/\/\s*with the webhook secret as the key\)/,
     );
     expect(body).toMatch(
-      /We verify only `v1`; v0 is\s*\n?\s*\/\/\s*legacy SHA-1 and Stripe stopped issuing it for new webhooks/,
+      /We verify only `v1`; v0 is\s*\/\/\s*legacy SHA-1 and Stripe stopped issuing it for new webhooks/,
     );
   });
 
   it('No SDK dependency framing pinned (lightweight, uncoupled)', () => {
     expect(body).toMatch(
-      /We do NOT depend on the `stripe` SDK for this — the verification is a\s*\n?\s*\/\/\s*few lines of HMAC and we don't want a heavy dependency/,
+      /We do NOT depend on the `stripe` SDK for this — the verification is a\s*\/\/\s*few lines of HMAC and we don't want a heavy dependency/,
     );
   });
 
@@ -63,7 +63,7 @@ describe('W387.B apps/server/src/lib/stripe-signing.ts content parity', () => {
 
   it('5-minute default tolerance framing pinned (matches Stripe SDK default)', () => {
     expect(body).toMatch(
-      /`t=` timestamp is checked against a tolerance window \(default 5\s*\n?\s*\/\/\s*minutes\) to bound replay/,
+      /`t=` timestamp is checked against a tolerance window \(default 5\s*\/\/\s*minutes\) to bound replay/,
     );
     expect(body).toMatch(
       /Tolerance window in seconds\. Default 300 \(5 min\) — matches Stripe's SDK default/,
@@ -73,19 +73,19 @@ describe('W387.B apps/server/src/lib/stripe-signing.ts content parity', () => {
 
   it('VerifyFailureReason: 4-literal union (malformed_header / missing_v1 / invalid_signature / timestamp_outside_tolerance)', () => {
     expect(body).toMatch(
-      /export type VerifyFailureReason =\s*\n?\s*\|\s*'malformed_header'\s*\n?\s*\|\s*'missing_v1'\s*\n?\s*\|\s*'invalid_signature'\s*\n?\s*\|\s*'timestamp_outside_tolerance';/,
+      /export type VerifyFailureReason =\s*\|\s*'malformed_header'\s*\|\s*'missing_v1'\s*\|\s*'invalid_signature'\s*\|\s*'timestamp_outside_tolerance';/,
     );
   });
 
   it('VerifyResult discriminated union ({ok:true,timestampSec} | {ok:false,reason})', () => {
     expect(body).toMatch(
-      /export type VerifyResult =\s*\n?\s*\|\s*\{ ok: true; timestampSec: number \}\s*\n?\s*\|\s*\{ ok: false; reason: VerifyFailureReason \};/,
+      /export type VerifyResult =\s*\|\s*\{ ok: true; timestampSec: number \}\s*\|\s*\{ ok: false; reason: VerifyFailureReason \};/,
     );
   });
 
   it('verifyStripeSignature: HMAC-SHA256 of "${t}.${rawBody}" + constant-time accept-any-v1 compare', () => {
     expect(body).toMatch(
-      /const expectedHex = createHmac\('sha256', args\.secret\)\s*\n?\s*\.update\(`\$\{parsed\.t\.toString\(\)\}\.\$\{args\.rawBody\}`\)\s*\n?\s*\.digest\('hex'\);/,
+      /const expectedHex = createHmac\('sha256', args\.secret\)\s*\.update\(`\$\{parsed\.t\.toString\(\)\}\.\$\{args\.rawBody\}`\)\s*\.digest\('hex'\);/,
     );
     // Accept-any-v1 (Stripe dual-signs during a secret roll); constant-time per candidate.
     expect(body).toMatch(
@@ -108,13 +108,11 @@ describe('W387.B apps/server/src/lib/stripe-signing.ts content parity', () => {
   });
 
   it('parseHeader: tolerates ordering, collects EVERY v1 (secret-roll), ignores future keys (e.g. v2)', () => {
-    expect(body).toMatch(/We tolerate\s*\n?\s*\/\/\s*ordering, collect EVERY `v1`/);
+    expect(body).toMatch(/We tolerate\s*\/\/\s*ordering, collect EVERY `v1`/);
     expect(body).toMatch(/and ignore unknown keys \(e\.g\., a future `v2`\)/);
     // The v1 collection itself: typed string[] + push-every.
     expect(body).toMatch(/const v1: string\[\] = \[\];/);
-    expect(body).toMatch(
-      /else if \(key === 'v1' && value\.length > 0\) \{\s*\n?\s*v1\.push\(value\);/,
-    );
+    expect(body).toMatch(/else if \(key === 'v1' && value\.length > 0\) \{\s*v1\.push\(value\);/);
   });
 
   it('parseHeader: returns null on non-finite t (Number.isFinite guard)', () => {

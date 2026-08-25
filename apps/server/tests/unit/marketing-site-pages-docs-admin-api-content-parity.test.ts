@@ -40,40 +40,38 @@ describe('W518.A apps/marketing-site/src/pages/docs/admin-api.astro content pari
 
   it("V-710 framing pinned: 'overview of the admin API surface. Pitched at the founder + support ops; the page is publicly indexed so customers running audit reviews see what admin keys are capable of. Companion to /docs/api-quickstart (customer-facing surface) and /docs/audit-log (where admin actions land).' — pinned so the V-710 anchor + publicly-indexed-for-audit-reviewers + 2-companion-doc cross-refs survive (drift to making this internal-only would orphan customers from security-review evidence). Re-enabled by slice 169 after verifying the V-710 comment exists at admin-api.astro:4-8 with the matching shape", () => {
     expect(body).toMatch(
-      /\/\/ V-710 — overview of the admin API surface\. Pitched at the founder\s*\n?\s*\/\/ \+ support ops; the page is publicly indexed so customers running\s*\n?\s*\/\/ audit reviews see what admin keys are capable of\. Companion to\s*\n?\s*\/\/ https:\/\/docs\.driftstack\.dev\/quickstart-curl\/ \(customer-facing surface\) and \/docs\/audit-log\s*\n?\s*\/\/ \(where admin actions land\)\./,
+      /\/\/ V-710 — overview of the admin API surface\. Pitched at the founder\s*\/\/ \+ support ops; the page is publicly indexed so customers running\s*\/\/ audit reviews see what admin keys are capable of\. Companion to\s*\/\/ https:\/\/docs\.driftstack\.dev\/quickstart-curl\/ \(customer-facing surface\) and \/docs\/audit-log\s*\/\/ \(where admin actions land\)\./,
     );
   });
 
   it('pins the staff web-session allowlist and generated-OpenAPI authority boundary', () => {
     expect(body).toMatch(
-      /Every admin endpoint is preHandler-gated on\s*\n?\s*<code>driftstack_internal_admin<\/code>\. Customer key-management\s*\n?\s*APIs cannot grant that scope\./,
+      /Every admin endpoint is preHandler-gated on\s*<code>driftstack_internal_admin<\/code>\. Customer key-management\s*APIs cannot grant that scope\./,
     );
     expect(body).toMatch(
-      /normal authenticated web session whose exact account email is\s*\n?\s*present in the server's boot-time staff allowlist/,
+      /normal authenticated web session whose exact account email is\s*present in the server's boot-time staff allowlist/,
     );
-    expect(body).toMatch(/no\s*\n?\s*public or self-service "promote to admin" operation/);
-    expect(body).toMatch(
-      /generated\s*\n?\s*OpenAPI document is the authoritative current route list/,
-    );
+    expect(body).toMatch(/no\s*public or self-service "promote to admin" operation/);
+    expect(body).toMatch(/generated\s*OpenAPI document is the authoritative current route list/);
   });
 
   it('pins bounded metadata authority, no impersonation/plaintext, local recordings, refunds, and charges', () => {
     expect(body).toMatch(
-      /Impersonate a customer or turn an admin credential into a\s*\n?\s*customer-scoped API credential\. Bounded admin routes can inspect\s*\n?\s*cross-account session and API-key <em>metadata<\/em>, force-destroy a\s*\n?\s*session, and revoke a key, but they do not reveal API-key plaintext or\s*\n?\s*expose customer-scoped resources through impersonation\. Desktop\s*\n?\s*recordings are local files and never enter the admin API\./,
+      /Impersonate a customer or turn an admin credential into a\s*customer-scoped API credential\. Bounded admin routes can inspect\s*cross-account session and API-key <em>metadata<\/em>, force-destroy a\s*session, and revoke a key, but they do not reveal API-key plaintext or\s*expose customer-scoped resources through impersonation\. Desktop\s*recordings are local files and never enter the admin API\./,
     );
     expect(body).not.toMatch(/<strong>recordings<\/strong>/);
     expect(body).toMatch(
-      /Issue a crypto refund\. Crypto payments are non-refundable\s*\n?\s*by policy; there is no admin endpoint that initiates a\s*\n?\s*crypto-side reversal\. See\s*\n?\s*<a href="\/legal\/refunds\/">\/legal\/refunds<\/a> for the binding\s*\n?\s*rules\. Stripe refund handling is unchanged and runs through\s*\n?\s*the Stripe dashboard with audit-only records on our side\./,
+      /Issue a crypto refund\. Crypto payments are non-refundable\s*by policy; there is no admin endpoint that initiates a\s*crypto-side reversal\. See\s*<a href="\/legal\/refunds\/">\/legal\/refunds<\/a> for the binding\s*rules\. Stripe refund handling is unchanged and runs through\s*the Stripe dashboard with audit-only records on our side\./,
     );
     expect(body).toMatch(
-      /Charge a customer\. Stripe \+ NowPayments are the only\s*\n?\s*money-moving paths and neither is reachable from the admin\s*\n?\s*scope\./,
+      /Charge a customer\. Stripe \+ NowPayments are the only\s*money-moving paths and neither is reachable from the admin\s*scope\./,
     );
   });
 
   it('11-admin-crypto-orders endpoint, filters, cursor, and idempotency metrics surface pinned', () => {
     expect(body).toMatch(/<td><code>GET \/v1\/admin\/crypto-orders<\/code><\/td>/);
     expect(body).toMatch(
-      /<code>created_after<\/code> \/\s*\n?\s*<code>created_before<\/code>\. Cursor-paginated via\s*\n?\s*<code>next_cursor<\/code>\./,
+      /<code>created_after<\/code> \/\s*<code>created_before<\/code>\. Cursor-paginated via\s*<code>next_cursor<\/code>\./,
     );
     expect(body).toMatch(/<td><code>GET \/v1\/admin\/crypto-orders\.csv<\/code><\/td>/);
     expect(body).toMatch(/<td>Same filter set, CSV export \(up to 1000 rows \/ call\)\.<\/td>/);
@@ -128,18 +126,18 @@ describe('W518.A apps/marketing-site/src/pages/docs/admin-api.astro content pari
 
   it('pins admin audit rows without claiming an unwired R2 archive', () => {
     expect(body).toMatch(
-      /Every admin write lands in <code>admin_audit_log<\/code> with the\s*\n?\s*acting admin key id, the action, the resource it touched, and\s*\n?\s*a timestamp\./,
+      /Every admin write lands in <code>admin_audit_log<\/code> with the\s*acting admin key id, the action, the resource it touched, and\s*a timestamp\./,
     );
     expect(body).toMatch(/does not claim an active R2 archive pipeline/);
     expect(body).not.toMatch(/archived to R2 after 90 days/);
     expect(body).toMatch(
-      /The customer-facing\s*\n?\s*<a href="\/docs\/audit-log\/">audit log<\/a> page documents the\s*\n?\s*schema\./,
+      /The customer-facing\s*<a href="\/docs\/audit-log\/">audit log<\/a> page documents the\s*schema\./,
     );
   });
 
   it('pins implemented staff allowlist access and controlled revocation without a fictional CLI', () => {
     expect(body).toMatch(
-      /server adds\s*\n?\s*<code>driftstack_internal_admin<\/code> only when the account email matches\s*\n?\s*<code>DRIFTSTACK_STAFF_EMAILS<\/code> or the configured\s*\n?\s*<code>DRIFTSTACK_OWNER_EMAIL<\/code>/,
+      /server adds\s*<code>driftstack_internal_admin<\/code> only when the account email matches\s*<code>DRIFTSTACK_STAFF_EMAILS<\/code> or the configured\s*<code>DRIFTSTACK_OWNER_EMAIL<\/code>/,
     );
     expect(body).toMatch(
       /Revoke the affected web session and remove the email from staff authority/,

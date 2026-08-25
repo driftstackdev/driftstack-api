@@ -30,7 +30,7 @@ describe('W492.A apps/customer-dashboard/src/pages/reset-password.astro content 
 
   it('V-273 + V-079 framing pins session-or-MFA recovery and one-shot tokens', () => {
     expect(body).toMatch(
-      /\/\/ V-273 — Password-reset confirmation page\. Pairs with the V-079\s*\n?\s*\/\/ backend route `POST \/v1\/auth\/password-reset\/confirm`\./,
+      /\/\/ V-273 — Password-reset confirmation page\. Pairs with the V-079\s*\/\/ backend route `POST \/v1\/auth\/password-reset\/confirm`\./,
     );
     expect(body).toMatch(
       /\/\/ {3}6\. Token is one-shot — second use returns 400; a successful MFA challenge is too\./,
@@ -42,34 +42,34 @@ describe('W492.A apps/customer-dashboard/src/pages/reset-password.astro content 
 
   it("Missing-token bail: URLSearchParams + params.get('token') → if !token: form.add('hidden') + missing.remove('hidden') + early return — pinned so the form doesn't allow submission without a token (drift to leaving the form visible would let customers fill in a password and get a confusing server error instead of the clear 'No reset token in URL' explanation)", () => {
     expect(body).toMatch(
-      /const params = new URLSearchParams\(window\.location\.search\);\s*\n?\s*const token = params\.get\('token'\);/,
+      /const params = new URLSearchParams\(window\.location\.search\);\s*const token = params\.get\('token'\);/,
     );
     expect(body).toMatch(
       /if \(token\) \{\s*params\.delete\('token'\);[\s\S]*?window\.history\.replaceState\([\s\S]*?window\.location\.pathname[\s\S]*?window\.location\.hash/,
     );
     expect(body).toMatch(
-      /if \(!token\) \{\s*\n?\s*form\.classList\.add\('hidden'\);\s*\n?\s*missing\.classList\.remove\('hidden'\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /if \(!token\) \{\s*form\.classList\.add\('hidden'\);\s*missing\.classList\.remove\('hidden'\);\s*return;\s*\}/,
     );
     // S23 2026-07-06 — this link sits INSIDE the rose-wash missing-token notice
     // (bg-rose-400/10 over the auth-card surface), where accent-text measures
     // 4.42:1 — so it reads the ink underline tone instead (hover accent-text).
     expect(body).toMatch(
-      /No reset token in URL\. Open the page from the link in your reset email, or\s*\n?\s*<a\s*\n?\s*href="\/forgot-password\/"\s*\n?\s*class="font-medium text-tk-ink underline[^"]*"\s*\n?\s*>request a new one<\/a\s*\n?\s*>\./,
+      /No reset token in URL\. Open the page from the link in your reset email, or\s*<a\s*href="\/forgot-password\/"\s*class="font-medium text-tk-ink underline[^"]*"\s*>request a new one<\/a\s*>\./,
     );
   });
 
   it("Client-side validation: password !== confirm → 'Passwords do not match.' bail-banner + password.length < 12 → 'Password must be at least 12 characters.' bail-banner — pinned so the dual checks happen client-side before the server roundtrip (drift to relying on server-only validation would surface 422s for what should be inline UX errors)", () => {
     expect(body).toMatch(
-      /if \(password !== confirm\) \{\s*\n?\s*showBanner\('Passwords do not match\.'\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*if \(password\.length < 12\) \{\s*\n?\s*showBanner\('Password must be at least 12 characters\.'\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /if \(password !== confirm\) \{\s*showBanner\('Passwords do not match\.'\);\s*return;\s*\}\s*if \(password\.length < 12\) \{\s*showBanner\('Password must be at least 12 characters\.'\);\s*return;\s*\}/,
     );
   });
 
   it("Input minlength=12 + autocomplete='new-password' on both password fields — pinned so browsers + password managers know this is a new password (not a sign-in form) and don't auto-fill with the OLD password from the customer's vault (which would defeat the entire reset flow)", () => {
     expect(body).toMatch(
-      /<input\s*\n?\s*id="reset-password-input"\s*\n?\s*name="password"\s*\n?\s*type="password"\s*\n?\s*required\s*\n?\s*minlength="12"\s*\n?\s*autocomplete="new-password"/,
+      /<input\s*id="reset-password-input"\s*name="password"\s*type="password"\s*required\s*minlength="12"\s*autocomplete="new-password"/,
     );
     expect(body).toMatch(
-      /<input\s*\n?\s*id="reset-confirm-input"\s*\n?\s*name="confirm"\s*\n?\s*type="password"\s*\n?\s*required\s*\n?\s*minlength="12"\s*\n?\s*autocomplete="new-password"/,
+      /<input\s*id="reset-confirm-input"\s*name="confirm"\s*type="password"\s*required\s*minlength="12"\s*autocomplete="new-password"/,
     );
   });
 
@@ -112,7 +112,7 @@ describe('W492.A apps/customer-dashboard/src/pages/reset-password.astro content 
     expect(body).toMatch(/<DashboardLayout title="Reset password" withSidebar=\{false\}>/);
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /Choose a new password for your Driftstack account\. The link is single-use; if you need\s*\n?\s*another, request one from the\s*\n?\s*<a\s*\n?\s*href="\/forgot-password\/"\s*\n?\s*class="text-tk-accent-text[^"]*"\s*\n?\s*>forgot-password<\/a\s*\n?\s*> page\./,
+      /Choose a new password for your Driftstack account\. The link is single-use; if you need\s*another, request one from the\s*<a\s*href="\/forgot-password\/"\s*class="text-tk-accent-text[^"]*"\s*>forgot-password<\/a\s*> page\./,
     );
   });
 

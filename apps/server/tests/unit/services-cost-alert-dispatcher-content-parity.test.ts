@@ -46,19 +46,19 @@ describe('W396.C apps/server/src/services/cost-alert-dispatcher.ts content parit
   it('V-541.C framing + sits-on-top-of-V-541.B-CostMonitoringService pinned', () => {
     expect(body).toMatch(/V-541\.C — cost alert dispatcher\./);
     expect(body).toMatch(
-      /Sits on top of V-541\.B CostMonitoringService\. Takes a list of\s*\n?\s*\/\/\s*per-account cost summaries, detects threshold-state transitions\s*\n?\s*\/\/\s*against a remembered prior state, and dispatches alerts for the\s*\n?\s*\/\/\s*ones that newly cross a threshold/,
+      /Sits on top of V-541\.B CostMonitoringService\. Takes a list of\s*\/\/\s*per-account cost summaries, detects threshold-state transitions\s*\/\/\s*against a remembered prior state, and dispatches alerts for the\s*\/\/\s*ones that newly cross a threshold/,
     );
   });
 
   it('In-memory persistence framing: deploys reset → worst-case 1 duplicate per deploy (acceptable sub-daily cadence)', () => {
     expect(body).toMatch(
-      /V-541\.C posture: persistence is in-memory \(no `cost_alerts_sent`\s*\n?\s*\/\/\s*table yet\)\. The dispatcher remembers the last threshold state per\s*\n?\s*\/\/\s*account across calls within the same process; deploys reset the\s*\n?\s*\/\/\s*memory, so the worst-case is one duplicate alert per deploy\. That's\s*\n?\s*\/\/\s*acceptable for a sub-daily nightly-recompute cadence/,
+      /V-541\.C posture: persistence is in-memory \(no `cost_alerts_sent`\s*\/\/\s*table yet\)\. The dispatcher remembers the last threshold state per\s*\/\/\s*account across calls within the same process; deploys reset the\s*\/\/\s*memory, so the worst-case is one duplicate alert per deploy\. That's\s*\/\/\s*acceptable for a sub-daily nightly-recompute cadence/,
     );
   });
 
   it('Pluggable channel framing: Postmark / Slack / both via sendAlert AlertSink', () => {
     expect(body).toMatch(
-      /Channel is pluggable via `sendAlert` — pass a Postmark-driven email\s*\n?\s*\/\/\s*sender, a Slack webhook POST, or both\. The dispatcher only decides\s*\n?\s*\/\/\s*"fire or skip" and packages the alert payload/,
+      /Channel is pluggable via `sendAlert` — pass a Postmark-driven email\s*\/\/\s*sender, a Slack webhook POST, or both\. The dispatcher only decides\s*\/\/\s*"fire or skip" and packages the alert payload/,
     );
   });
 
@@ -96,19 +96,19 @@ describe('W396.C apps/server/src/services/cost-alert-dispatcher.ts content parit
   it('cycle-scoped state: lastCycle field + evaluate drops remembered state when billingCycle changes (no spurious rollover transition)', () => {
     expect(body).toMatch(/private lastCycle: string \| null = null;/);
     expect(body).toMatch(
-      /if \(this\.lastCycle !== args\.billingCycle\) \{\s*\n?\s*this\.lastState\.clear\(\);\s*\n?\s*this\.lastCycle = args\.billingCycle;\s*\n?\s*\}/,
+      /if \(this\.lastCycle !== args\.billingCycle\) \{\s*this\.lastState\.clear\(\);\s*this\.lastCycle = args\.billingCycle;\s*\}/,
     );
   });
 
   it('evaluate: getOverview accounts + cycle; prior === current → skip (no transition)', () => {
     expect(body).toMatch(
-      /Evaluate the given account ids for the given billing cycle\.\s*\n?\s*\*\s*Fires an alert for any account whose threshold state transitioned/,
+      /Evaluate the given account ids for the given billing cycle\.\s*\*\s*Fires an alert for any account whose threshold state transitioned/,
     );
     expect(body).toMatch(
-      /Accounts the cost service can't summarise \(no usage in cycle\) are\s*\n?\s*\*\s*silently skipped — no alert needs firing if there's no spend\./,
+      /Accounts the cost service can't summarise \(no usage in cycle\) are\s*\*\s*silently skipped — no alert needs firing if there's no spend\./,
     );
     expect(body).toMatch(
-      /const summaries = await this\.opts\.service\.getOverview\(\{\s*\n?\s*accountIds: args\.accountIds,\s*\n?\s*billingCycle: args\.billingCycle,\s*\n?\s*\}\);/,
+      /const summaries = await this\.opts\.service\.getOverview\(\{\s*accountIds: args\.accountIds,\s*billingCycle: args\.billingCycle,\s*\}\);/,
     );
     expect(body).toMatch(/const prior = this\.lastState\.get\(summary\.account_id\) \?\? null;/);
     expect(body).toMatch(/const current = summary\.breakdown\.thresholdState;/);
@@ -122,7 +122,7 @@ describe('W396.C apps/server/src/services/cost-alert-dispatcher.ts content parit
     expect(body).toMatch(/const severity = classifyTransition\(prior, current\);/);
     // null-severity (first-run under-soft) still records state before skipping.
     expect(body).toMatch(
-      /if \(severity === null\) \{[\s\S]*?this\.lastState\.set\(summary\.account_id, current\);\s*\n?\s*alertsSkipped \+= 1;\s*\n?\s*continue;\s*\n?\s*\}/,
+      /if \(severity === null\) \{[\s\S]*?this\.lastState\.set\(summary\.account_id, current\);\s*alertsSkipped \+= 1;\s*continue;\s*\}/,
     );
     // W378 — the send is awaited FIRST inside a try; lastState advances AFTER it
     // resolves (only on success → a rejecting sink leaves prior state intact for
@@ -148,19 +148,19 @@ describe('W396.C apps/server/src/services/cost-alert-dispatcher.ts content parit
 
   it('reset(): test seam — production never resets (deploys do)', () => {
     expect(body).toMatch(
-      /Test seam: reset the remembered prior-state map\. Production\s*\n?\s*\*\s*doesn't reset \(deploys do that implicitly\)\./,
+      /Test seam: reset the remembered prior-state map\. Production\s*\*\s*doesn't reset \(deploys do that implicitly\)\./,
     );
     expect(body).toMatch(
-      /reset\(\): void \{\s*\n?\s*this\.lastState\.clear\(\);\s*\n?\s*this\.lastCycle = null;\s*\n?\s*\}/,
+      /reset\(\): void \{\s*this\.lastState\.clear\(\);\s*this\.lastCycle = null;\s*\}/,
     );
   });
 
   it('classifyTransition: prior=null first-ever rules — over-hard→critical, between→warn, under-soft→null', () => {
     expect(body).toMatch(
-      /\/\/ First-ever evaluation \(prior null\): only fire if we're already\s*\n?\s*\/\/\s*over a threshold\. Don't alert "still under-soft" on first run\./,
+      /\/\/ First-ever evaluation \(prior null\): only fire if we're already\s*\/\/\s*over a threshold\. Don't alert "still under-soft" on first run\./,
     );
     expect(body).toMatch(
-      /if \(prior === null\) \{\s*\n?\s*if \(current === 'over-hard'\) return 'critical';\s*\n?\s*if \(current === 'between-soft-and-hard'\) return 'warn';\s*\n?\s*return null;\s*\n?\s*\}/,
+      /if \(prior === null\) \{\s*if \(current === 'over-hard'\) return 'critical';\s*if \(current === 'between-soft-and-hard'\) return 'warn';\s*return null;\s*\}/,
     );
   });
 
@@ -176,7 +176,7 @@ describe('W396.C apps/server/src/services/cost-alert-dispatcher.ts content parit
 
   it('classifyTransition: recovery — !under-soft→under-soft→resolved, over-hard→between→resolved', () => {
     expect(body).toMatch(
-      /\/\/ Recovering: spend dropped back below the threshold\. Fire a\s*\n?\s*\/\/\s*'resolved' alert so on-call knows to stand down\./,
+      /\/\/ Recovering: spend dropped back below the threshold\. Fire a\s*\/\/\s*'resolved' alert so on-call knows to stand down\./,
     );
     expect(body).toMatch(
       /if \(current === 'under-soft' && prior !== 'under-soft'\) return 'resolved';/,
@@ -189,7 +189,7 @@ describe('W396.C apps/server/src/services/cost-alert-dispatcher.ts content parit
 
   it('buildAlertPayload: snake_case fields — total_cents/threshold_soft_cents/threshold_hard_cents from summary', () => {
     expect(body).toMatch(
-      /function buildAlertPayload\(\s*\n?\s*summary: CostMonitoringAccountSummary,\s*\n?\s*prior: ThresholdState \| null,\s*\n?\s*current: ThresholdState,\s*\n?\s*severity: AlertSeverity,\s*\n?\s*\): CostAlertPayload/,
+      /function buildAlertPayload\(\s*summary: CostMonitoringAccountSummary,\s*prior: ThresholdState \| null,\s*current: ThresholdState,\s*severity: AlertSeverity,\s*\): CostAlertPayload/,
     );
     expect(body).toMatch(/total_cents: summary\.breakdown\.totalCents,/);
     expect(body).toMatch(/threshold_soft_cents: summary\.thresholds\.softCents,/);

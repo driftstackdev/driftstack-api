@@ -32,7 +32,7 @@ describe('docs layouts/DocLayout content parity', () => {
   it('V-254 doc-comment framing pinned: doc-page layout wraps BaseLayout with sidebar + content; S22.2 three-pane framing pinned (Stoplight pattern — left tree / center article / right rail)', () => {
     expect(body).toMatch(/\/\/ V-254 — doc-page layout\. Wraps BaseLayout with a sidebar nav/);
     expect(body).toMatch(
-      /Used as `layout:` frontmatter\s*\n?\s*\/\/ in `\.md` doc pages so markdown content renders into the slot/,
+      /Used as `layout:` frontmatter\s*\/\/ in `\.md` doc pages so markdown content renders into the slot/,
     );
     expect(body).toMatch(/S22\.2 \(2026-07-06\) — Stoplight-style three-pane relayout/);
     expect(body).toMatch(/rendered by the LAYOUT, never injected into the \.md sources/);
@@ -41,7 +41,7 @@ describe('docs layouts/DocLayout content parity', () => {
   it("Frontmatter Props contract pinned: title (required) + description (optional, overrides BaseLayout default). Drift to a different shape would break every .md page's frontmatter that targets DocLayout", () => {
     expect(body).toMatch(/frontmatter\?: \{ title: string; description\?: string \}/);
     expect(body).toMatch(
-      /Frontmatter contract: pages set `title` \(required\), optionally\s*\n?\s*\/\/ `description` \(overrides BaseLayout default\)/,
+      /Frontmatter contract: pages set `title` \(required\), optionally\s*\/\/ `description` \(overrides BaseLayout default\)/,
     );
   });
 
@@ -103,7 +103,7 @@ describe('docs layouts/DocLayout content parity', () => {
   });
 
   it('S22.2 right rail pinned: sticky ≥xl "On this page" nav ([data-toc]) populated by the scroll-spy script — REPLACES the old inline-injected TOC box (insertBefore into the article must NOT come back)', () => {
-    expect(body).toMatch(/data-toc\s*\n?\s*aria-label="On this page"/);
+    expect(body).toMatch(/data-toc\s*aria-label="On this page"/);
     expect(body).toMatch(/sticky top-6 hidden max-h-\[calc\(100vh-3rem\)\] overflow-y-auto/);
     expect(body).toMatch(/data-toc-list/);
     expect(body).toMatch(/IntersectionObserver/);
@@ -172,11 +172,11 @@ describe('docs layouts/DocLayout content parity', () => {
     expect(body).toMatch(/data-langtabs/);
     expect(body).toMatch(/if \(run\.length < 2\) return;/); // zero multi-lang runs → no tab UI
     expect(body).toMatch(/Runs in document order AFTER the copy-button script/);
-    expect(body).toMatch(/dead-inline-script\s*\n?\s*\**\s*trap/);
+    expect(body).toMatch(/dead-inline-script\s*\**\s*trap/);
   });
 
   it('S22.3 (2026-07-06) — data-pagefind-body on the ARTICLE pinned: scopes the Pagefind search index to article content only (once any page carries the attribute, everything without it — header, tree, TOC rail, footer, breadcrumbs, prev/next, the 404 page — stays out of the index, so chrome text never pollutes search results). Drift to dropping it would silently flip Pagefind to whole-page indexing of every route', () => {
-    expect(body).toMatch(/<article\s*\n?\s*data-pagefind-body\s*\n?\s*class="prose max-w-3xl/);
+    expect(body).toMatch(/<article\s*data-pagefind-body\s*class="prose max-w-3xl/);
   });
 
   it("S35 2026-07-07 (fable-frontend-audit) — TOC labels read the heading's FULL text pinned: clone the heading, remove the appended [data-anchor] '#' link, then read textContent. The old h.firstChild.textContent read truncated any heading that STARTS with inline code to just that first element (18 of 30 rail entries on /webhooks/events lost everything after the code span, including [LIVE]/[PLANNED] tags)", () => {

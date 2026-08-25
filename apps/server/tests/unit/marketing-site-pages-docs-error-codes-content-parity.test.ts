@@ -36,19 +36,19 @@ describe('W510.C apps/marketing-site/src/pages/docs/error-codes.astro content pa
 
   it('V-688 / W203 framing pinned: \'error-codes developer reference. Lets developers grep logs for a problem-type URI + jump straight to "what does this mean / what should I do."\' + \'W203 rewrote this doc to match reality: every Driftstack error response is RFC 7807 (application/problem+json) with a flat shape — type URI + title + status + detail + extension keys at the top level. The previous version of this page advertised a fictional { "error": { "code": ..., "message": ... } } envelope and a code field that the server doesn\'t emit; clients dispatching on error.code would have hit undefined on every error path.\' — pinned so the V-688 + W203 anchors + the explicit-no-error.code commitment + the flat-RFC-7807 framing all survive (drift to re-introducing { error: {...} } would mislead clients into a non-existent dispatch path)', () => {
     expect(body).toMatch(
-      /\/\/ V-688 \/ W203 — error-codes developer reference\. Lets developers\s*\n?\s*\/\/ grep logs for a problem-type URI \+ jump straight to "what does this\s*\n?\s*\/\/ mean \/ what should I do\."/,
+      /\/\/ V-688 \/ W203 — error-codes developer reference\. Lets developers\s*\/\/ grep logs for a problem-type URI \+ jump straight to "what does this\s*\/\/ mean \/ what should I do\."/,
     );
     expect(body).toMatch(
-      /\/\/ W203 rewrote this doc to match reality: every Driftstack error\s*\n?\s*\/\/ response is RFC 7807 \(`application\/problem\+json`\) with a flat\s*\n?\s*\/\/ shape — `type` URI \+ `title` \+ `status` \+ `detail` \+ extension\s*\n?\s*\/\/ keys at the top level\./,
+      /\/\/ W203 rewrote this doc to match reality: every Driftstack error\s*\/\/ response is RFC 7807 \(`application\/problem\+json`\) with a flat\s*\/\/ shape — `type` URI \+ `title` \+ `status` \+ `detail` \+ extension\s*\/\/ keys at the top level\./,
     );
     expect(body).toMatch(
-      /\/\/ and a `code` field that the server doesn't emit; clients dispatching\s*\n?\s*\/\/ on `error\.code` would have hit `undefined` on every error path\./,
+      /\/\/ and a `code` field that the server doesn't emit; clients dispatching\s*\/\/ on `error\.code` would have hit `undefined` on every error path\./,
     );
   });
 
   it("Lead-paragraph dispatch-on-type framing pinned: 'Every error response from Driftstack is RFC 7807 application/problem+json. The stable identifier is the type URI; dispatch your client logic on type, not on the HTTP status or the human-readable title / detail.' — pinned so the 'dispatch on type, not on status/title/detail' commitment survives (drift to dropping the explicit guidance would let clients dispatch on the wrong field and miss the type-stability guarantee)", () => {
     expect(body).toMatch(
-      /Every error response from Driftstack is RFC 7807\s*\n?\s*<code>application\/problem\+json<\/code>\. The stable identifier is\s*\n?\s*the <code>type<\/code> URI; dispatch your client logic on\s*\n?\s*<code>type<\/code>, not on the HTTP status or the human-readable\s*\n?\s*<code>title<\/code> \/ <code>detail<\/code>\./,
+      /Every error response from Driftstack is RFC 7807\s*<code>application\/problem\+json<\/code>\. The stable identifier is\s*the <code>type<\/code> URI; dispatch your client logic on\s*<code>type<\/code>, not on the HTTP status or the human-readable\s*<code>title<\/code> \/ <code>detail<\/code>\./,
     );
   });
 
@@ -62,13 +62,13 @@ describe('W510.C apps/marketing-site/src/pages/docs/error-codes.astro content pa
 
   it("Required-vs-optional field 5-list pinned: required type + title + status + optional detail + optional instance + 'problem-specific extensions (flat keys on the top-level, per RFC 7807 §3.2)' — pinned so the 5-field RFC-7807 + flat-extensions commitment survive (drift to nesting extensions would create marketing↔server divergence; drift to dropping the §3.2 anchor would weaken the RFC-citation specificity)", () => {
     expect(body).toMatch(
-      /Required fields: <code>type<\/code>, <code>title<\/code>,\s*\n?\s*<code>status<\/code>\. Optional: <code>detail<\/code> \(human\s*\n?\s*message\), <code>instance<\/code> \(request id when present\), and\s*\n?\s*problem-specific extensions \(flat keys on the top-level, per RFC\s*\n?\s*7807 §3\.2\)\./,
+      /Required fields: <code>type<\/code>, <code>title<\/code>,\s*<code>status<\/code>\. Optional: <code>detail<\/code> \(human\s*message\), <code>instance<\/code> \(request id when present\), and\s*problem-specific extensions \(flat keys on the top-level, per RFC\s*7807 §3\.2\)\./,
     );
   });
 
   it("Same-status-multiple-types framing pinned: 'Always check type, not the HTTP status alone — the same status can correspond to multiple types (e.g. 429 covers both rate-limited and concurrency-limit; 401 covers six distinct types).' — pinned so the explicit warning + the 429-multi-type + 401-six-types examples all survive (drift to dropping the multi-type warning would let clients dispatch incorrectly on status alone)", () => {
     expect(body).toMatch(
-      /Always check <code>type<\/code>, not the HTTP status\s*\n?\s*alone — the same status can correspond to multiple types\s*\n?\s*\(e\.g\. 429 covers both <code>rate-limited<\/code> and\s*\n?\s*<code>concurrency-limit<\/code>; 401 covers six distinct types\)\./,
+      /Always check <code>type<\/code>, not the HTTP status\s*alone — the same status can correspond to multiple types\s*\(e\.g\. 429 covers both <code>rate-limited<\/code> and\s*<code>concurrency-limit<\/code>; 401 covers six distinct types\)\./,
     );
   });
 
@@ -117,13 +117,13 @@ describe('W510.C apps/marketing-site/src/pages/docs/error-codes.astro content pa
 
   it("https://errors.driftstack.dev/<slug> URI-format + slug-stability commitment pinned: 'The full URI is https://errors.driftstack.dev/<slug> where <slug> is the value in the first column. Slugs are stable; they will not be renamed without a deprecation window.' — pinned so the canonical URI format + the slug-stability guarantee survive (drift to renaming a slug without deprecation would break customer log-grep pipelines)", () => {
     expect(body).toMatch(
-      /The full URI is <code>https:\/\/errors\.driftstack\.dev\/&lt;slug&gt;<\/code>\s*\n?\s*where <code>&lt;slug&gt;<\/code> is the value in the first column\.\s*\n?\s*Slugs are stable; they will not be renamed without a deprecation\s*\n?\s*window\./,
+      /The full URI is <code>https:\/\/errors\.driftstack\.dev\/&lt;slug&gt;<\/code>\s*where <code>&lt;slug&gt;<\/code> is the value in the first column\.\s*Slugs are stable; they will not be renamed without a deprecation\s*window\./,
     );
   });
 
   it("Defensive 'treat unknown types as internal' framing + stability guarantee pinned: 'The type URI slugs listed above are part of the API contract — they will not be renamed or removed without a deprecation window. New types may be added; defensive clients should treat unknown types as internal (i.e. retry with backoff and surface detail to the operator).' — pinned so the contract-stability + defensive-unknown-handling commitments survive (drift to dropping the 'unknown as internal' guidance would let clients crash on new error types)", () => {
     expect(body).toMatch(
-      /The <code>type<\/code> URI slugs listed above are part of the API\s*\n?\s*contract — they will not be renamed or removed without a\s*\n?\s*deprecation window\. New types may be added; defensive clients\s*\n?\s*should treat unknown types as <code>internal<\/code>\s*\n?\s*\(i\.e\. retry with backoff and surface <code>detail<\/code> to the\s*\n?\s*operator\)\./,
+      /The <code>type<\/code> URI slugs listed above are part of the API\s*contract — they will not be renamed or removed without a\s*deprecation window\. New types may be added; defensive clients\s*should treat unknown types as <code>internal<\/code>\s*\(i\.e\. retry with backoff and surface <code>detail<\/code> to the\s*operator\)\./,
     );
   });
 
@@ -138,7 +138,7 @@ describe('W510.C apps/marketing-site/src/pages/docs/error-codes.astro content pa
 
   it("X-Request-Id support-correlation framing pinned: 'Include the X-Request-Id header from the response — every Driftstack response carries one, and we use it to find the corresponding server logs.' — pinned so the always-on X-Request-Id + log-correlation commitment survives (drift to dropping the always-set guarantee would let customers question whether they can include it; consistent with /docs/api-versioning framing)", () => {
     expect(body).toMatch(
-      /Include the <code>X-Request-Id<\/code> header from the response —\s*\n?\s*every Driftstack response carries one, and we use it to find the\s*\n?\s*corresponding server logs\./,
+      /Include the <code>X-Request-Id<\/code> header from the response —\s*every Driftstack response carries one, and we use it to find the\s*corresponding server logs\./,
     );
   });
 

@@ -91,14 +91,14 @@ describe('a reason an SDK branches on must be documented', () => {
     const md = read('apps/docs/src/pages/api/proxies.md');
     const section = md.slice(md.indexOf('## Why a launch is refused'));
     expect(section, 'the page must state that no session is created').toMatch(
-      /no session is created and\s*\n?\s*nothing is billed/,
+      /no session is created and\s*nothing is billed/,
     );
   });
 
   it('CRITICAL the Test endpoint is not described as reachability-only. It ran a TCP probe until 2026-08-18 and now runs the launch gate’s own probe for socks5; the page said "SOCKS5 authentication is not exercised by the probe", which inverted the meaning of a red result. A proxy that authenticates and cannot route is the case customers actually hit, and the old text told them it was untested.', () => {
     const md = read('apps/docs/src/pages/api/proxies.md');
     expect(md, 'the superseded reachability-only claim is back').not.toMatch(
-      /SOCKS5 authentication is not\s*\n?\s*exercised/,
+      /SOCKS5 authentication is not\s*exercised/,
     );
     const section = md.slice(md.indexOf('## Test a proxy'), md.indexOf('## Route a session'));
     expect(section, 'the page must say the test runs the launch check for socks5').toMatch(

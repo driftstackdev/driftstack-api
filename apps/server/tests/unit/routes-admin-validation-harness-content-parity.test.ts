@@ -76,36 +76,36 @@ describe('W416.B apps/server/src/routes/admin-validation-harness.ts content pari
 
   it('GET: harness.list(ctx) + { data: rows.map(publicSchedule) }', () => {
     expect(body).toMatch(
-      /app\.get\(\s*\n?\s*'\/v1\/admin\/validation-schedules',[\s\S]+?const rows = await harness\.list\(ctx\);\s*\n?\s*return \{ data: rows\.map\(publicSchedule\) \};/,
+      /app\.get\(\s*'\/v1\/admin\/validation-schedules',[\s\S]+?const rows = await harness\.list\(ctx\);\s*return \{ data: rows\.map\(publicSchedule\) \};/,
     );
   });
 
   it("PUT upsert: zod safeParse → 400 'Invalid request body.'; snake→camel + spread-conditional reason; returns publicSchedule(row); D-025 audit-gap fix wraps the call in withAudit action validation_schedule.upserted", () => {
     expect(body).toMatch(
-      /const parsed = UpsertValidationScheduleRequestSchema\.safeParse\(request\.body \?\? \{\}\);\s*\n?\s*if \(!parsed\.success\) throw new BadRequestError\('Invalid request body\.'\);/,
+      /const parsed = UpsertValidationScheduleRequestSchema\.safeParse\(request\.body \?\? \{\}\);\s*if \(!parsed\.success\) throw new BadRequestError\('Invalid request body\.'\);/,
     );
     expect(body).toMatch(
-      /const row = await withAudit\(\s*\n?\s*request,\s*\n?\s*'validation_schedule\.upserted',\s*\n?\s*parsed\.data\.archetype_id,/,
+      /const row = await withAudit\(\s*request,\s*'validation_schedule\.upserted',\s*parsed\.data\.archetype_id,/,
     );
     expect(body).toMatch(
-      /harness\.upsert\(ctx, \{\s*\n?\s*archetypeId: parsed\.data\.archetype_id,\s*\n?\s*cadenceSeconds: parsed\.data\.cadence_seconds,\s*\n?\s*enabled: parsed\.data\.enabled,\s*\n?\s*\.\.\.\(parsed\.data\.reason !== undefined \? \{ reason: parsed\.data\.reason \} : \{\}\),\s*\n?\s*\}\),/,
+      /harness\.upsert\(ctx, \{\s*archetypeId: parsed\.data\.archetype_id,\s*cadenceSeconds: parsed\.data\.cadence_seconds,\s*enabled: parsed\.data\.enabled,\s*\.\.\.\(parsed\.data\.reason !== undefined \? \{ reason: parsed\.data\.reason \} : \{\}\),\s*\}\),/,
     );
     expect(body).toMatch(/return publicSchedule\(row\);/);
   });
 
   it('DELETE: typed :archetype Params; harness.remove(ctx, archetype) wrapped in withAudit action validation_schedule.removed; 204 reply', () => {
     expect(body).toMatch(
-      /app\.delete<\{ Params: \{ archetype: string \} \}>\(\s*\n?\s*'\/v1\/admin\/validation-schedules\/:archetype',/,
+      /app\.delete<\{ Params: \{ archetype: string \} \}>\(\s*'\/v1\/admin\/validation-schedules\/:archetype',/,
     );
     expect(body).toMatch(
-      /await withAudit\(request, 'validation_schedule\.removed', request\.params\.archetype, \{\}, \(\) =>\s*\n?\s*harness\.remove\(ctx, request\.params\.archetype\),\s*\n?\s*\);/,
+      /await withAudit\(request, 'validation_schedule\.removed', request\.params\.archetype, \{\}, \(\) =>\s*harness\.remove\(ctx, request\.params\.archetype\),\s*\);/,
     );
     expect(body).toMatch(/return reply\.code\(204\)\.send\(\);/);
   });
 
   it('POST trigger: body validated (reason optional, capped) → parsed.data?.reason; harness.triggerNow returns runId wrapped in withAudit action validation_schedule.triggered; reply { run_id }', () => {
     expect(body).toMatch(
-      /app\.post<\{ Params: \{ archetype: string \} \}>\(\s*\n?\s*'\/v1\/admin\/validation-schedules\/:archetype\/trigger',/,
+      /app\.post<\{ Params: \{ archetype: string \} \}>\(\s*'\/v1\/admin\/validation-schedules\/:archetype\/trigger',/,
     );
     // Body is zod-validated + length-capped (no unchecked `as` cast).
     expect(body).toMatch(/reason: z\.string\(\)\.min\(1\)\.max\(500\)\.optional\(\),/);
@@ -116,7 +116,7 @@ describe('W416.B apps/server/src/routes/admin-validation-harness.ts content pari
       /if \(!parsed\.success\) throw new BadRequestError\('Invalid request body\.'\);/,
     );
     expect(body).toMatch(
-      /const out = await withAudit\(\s*\n?\s*request,\s*\n?\s*'validation_schedule\.triggered',\s*\n?\s*request\.params\.archetype,/,
+      /const out = await withAudit\(\s*request,\s*'validation_schedule\.triggered',\s*request\.params\.archetype,/,
     );
     expect(body).toMatch(
       /\(\) => harness\.triggerNow\(ctx, request\.params\.archetype, parsed\.data\?\.reason\),/,
@@ -133,7 +133,7 @@ describe('W416.B apps/server/src/routes/admin-validation-harness.ts content pari
 
   it('AdminValidationHarnessRoutesOptions: { harness: ValidationHarnessService; audit: AdminAuditService } (D-025 audit-gap fix)', () => {
     expect(body).toMatch(
-      /export interface AdminValidationHarnessRoutesOptions \{\s*\n?\s*harness: ValidationHarnessService;/,
+      /export interface AdminValidationHarnessRoutesOptions \{\s*harness: ValidationHarnessService;/,
     );
     expect(body).toMatch(/audit: AdminAuditService;/);
   });
@@ -141,7 +141,7 @@ describe('W416.B apps/server/src/routes/admin-validation-harness.ts content pari
   it('imports: FastifyInstance + FastifyRequest + ValidationHarnessService/ValidationScheduleRow + BadRequestError + AdminAuditService/AdminAuditAction + readClientIp (D-025 audit-gap fix)', () => {
     expect(body).toMatch(/import type \{ FastifyInstance, FastifyRequest \} from 'fastify';/);
     expect(body).toMatch(
-      /import type \{\s*\n?\s*ValidationHarnessService,\s*\n?\s*ValidationScheduleRow,\s*\n?\s*\} from '\.\.\/services\/validation-harness\.js';/,
+      /import type \{\s*ValidationHarnessService,\s*ValidationScheduleRow,\s*\} from '\.\.\/services\/validation-harness\.js';/,
     );
     expect(body).toMatch(/import \{ BadRequestError \} from '\.\.\/lib\/errors\.js';/);
     expect(body).toMatch(
@@ -152,7 +152,7 @@ describe('W416.B apps/server/src/routes/admin-validation-harness.ts content pari
 
   it('D-025 audit-gap fix: withAudit helper wraps upsert/remove/trigger with audit-on-success + audit-on-error, matching admin-accounts.ts withAudit shape', () => {
     expect(body).toMatch(
-      /async function withAudit<T>\(\s*\n?\s*request: FastifyRequest,\s*\n?\s*action: AdminAuditAction,\s*\n?\s*archetypeId: string,\s*\n?\s*inputPayload: Record<string, unknown>,\s*\n?\s*perform: \(\) => Promise<T>,\s*\n?\s*\): Promise<T> \{/,
+      /async function withAudit<T>\(\s*request: FastifyRequest,\s*action: AdminAuditAction,\s*archetypeId: string,\s*inputPayload: Record<string, unknown>,\s*perform: \(\) => Promise<T>,\s*\): Promise<T> \{/,
     );
     expect(body).toMatch(/result: 'success',/);
     expect(body).toMatch(/result: `error: \$\{code\}`,/);

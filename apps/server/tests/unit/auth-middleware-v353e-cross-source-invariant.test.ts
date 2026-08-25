@@ -231,7 +231,7 @@ describe('W980 auth middleware V-353e MFA step-up cross-source invariant', () =>
     expect(p).toMatch(
       /const ownerEmail = opts\.ownerEmail != null \? opts\.ownerEmail\.trim\(\)\.toLowerCase\(\) : null;/,
     );
-    expect(p).toMatch(/app\.decorate\(\s*\n?\s*'requireOwner',/);
+    expect(p).toMatch(/app\.decorate\(\s*'requireOwner',/);
     expect(p).toMatch(/if \(ownerEmail === null \|\| ownerEmail\.length === 0\) \{/);
     expect(p).toMatch(/if \(ctx\.account\.email\.toLowerCase\(\) !== ownerEmail\) \{/);
     expect(p).toMatch(/This action requires the project owner account\./);

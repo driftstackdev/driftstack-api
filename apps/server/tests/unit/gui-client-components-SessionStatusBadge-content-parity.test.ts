@@ -44,7 +44,7 @@ describe('W476.B apps/gui-client/src/components/SessionStatusBadge.tsx content p
   it("V-534.N framing pinned: 'V-534.N — SessionStatusBadge presentational component.' + 'Mirrors V-534.M TierBadge for session statuses. Maps a session status to a label + tone so views (FleetView, LiveSessionView, SessionsHistoryView) can render a consistent chip without duplicating the mapping.'", () => {
     expect(body).toMatch(/\/\/ V-534\.N — SessionStatusBadge presentational component\./);
     expect(body).toMatch(
-      /\/\/ Mirrors V-534\.M TierBadge for session statuses\. Maps a session\s*\n?\s*\/\/ status to a label \+ tone so views \(FleetView, LiveSessionView,\s*\n?\s*\/\/ SessionsHistoryView\) can render a consistent chip without\s*\n?\s*\/\/ duplicating the mapping\./,
+      /\/\/ Mirrors V-534\.M TierBadge for session statuses\. Maps a session\s*\/\/ status to a label \+ tone so views \(FleetView, LiveSessionView,\s*\/\/ SessionsHistoryView\) can render a consistent chip without\s*\/\/ duplicating the mapping\./,
     );
   });
 
@@ -53,43 +53,43 @@ describe('W476.B apps/gui-client/src/components/SessionStatusBadge.tsx content p
       /export type SessionStatus = 'creating' \| 'ready' \| 'busy' \| 'destroyed' \| 'errored';/,
     );
     expect(body).toMatch(
-      /export interface SessionStatusBadgeProps \{\s*\n?\s*\/\*\* Accepts any string for forward-compat with future statuses\. \*\/\s*\n?\s*status: string;\s*\n?\s*size\?: 'sm' \| 'md';\s*\n?\s*\}/,
+      /export interface SessionStatusBadgeProps \{\s*\/\*\* Accepts any string for forward-compat with future statuses\. \*\/\s*status: string;\s*size\?: 'sm' \| 'md';\s*\}/,
     );
   });
 
   it('STATUS_LABEL 5-entry (Creating/Ready/Busy/Destroyed/Errored) + STATUS_TONE 5-entry mapping to Tone 5-union (neutral/success/busy/warning/error) with creating→neutral, ready→success, busy→busy, destroyed→warning, errored→error', () => {
     expect(body).toMatch(
-      /const STATUS_LABEL: Record<string, string> = \{\s*\n?\s*creating: 'Creating',\s*\n?\s*ready: 'Ready',\s*\n?\s*busy: 'Busy',\s*\n?\s*destroyed: 'Destroyed',\s*\n?\s*errored: 'Errored',\s*\n?\s*\};/,
+      /const STATUS_LABEL: Record<string, string> = \{\s*creating: 'Creating',\s*ready: 'Ready',\s*busy: 'Busy',\s*destroyed: 'Destroyed',\s*errored: 'Errored',\s*\};/,
     );
     expect(body).toMatch(/type Tone = 'neutral' \| 'success' \| 'busy' \| 'warning' \| 'error';/);
     expect(body).toMatch(
-      /const STATUS_TONE: Record<string, Tone> = \{\s*\n?\s*creating: 'neutral',\s*\n?\s*ready: 'success',\s*\n?\s*busy: 'busy',\s*\n?\s*destroyed: 'warning',\s*\n?\s*errored: 'error',\s*\n?\s*\};/,
+      /const STATUS_TONE: Record<string, Tone> = \{\s*creating: 'neutral',\s*ready: 'success',\s*busy: 'busy',\s*destroyed: 'warning',\s*errored: 'error',\s*\};/,
     );
   });
 
   it('TONE_CLASSES 5-entry (neutral/success/busy/warning/error) with bg-status-{success,info,warning,error}/15 + text-status-{success,info,warning,error} + border-status-{success,info,warning,error}/30 (info for busy tone); SIZE_CLASSES sm (px-1.5 py-0.5 text-xs) + md (px-2 py-0.5 text-sm)', () => {
     expect(body).toMatch(
-      /const TONE_CLASSES: Record<Tone, string> = \{\s*\n?\s*neutral: 'bg-surface-inset text-ink-secondary border-surface-divider',\s*\n?\s*success: 'bg-status-success\/15 text-status-success border-status-success\/30',\s*\n?\s*busy: 'bg-status-busy\/15 text-status-busy border-status-busy\/30',\s*\n?\s*warning: 'bg-status-warning\/15 text-status-warning border-status-warning\/30',\s*\n?\s*error: 'bg-status-error\/15 text-status-error border-status-error\/30',\s*\n?\s*\};/,
+      /const TONE_CLASSES: Record<Tone, string> = \{\s*neutral: 'bg-surface-inset text-ink-secondary border-surface-divider',\s*success: 'bg-status-success\/15 text-status-success border-status-success\/30',\s*busy: 'bg-status-busy\/15 text-status-busy border-status-busy\/30',\s*warning: 'bg-status-warning\/15 text-status-warning border-status-warning\/30',\s*error: 'bg-status-error\/15 text-status-error border-status-error\/30',\s*\};/,
     );
     expect(body).toMatch(
-      /const SIZE_CLASSES: Record<NonNullable<SessionStatusBadgeProps\['size'\]>, string> = \{\s*\n?\s*sm: 'px-1\.5 py-0\.5 text-xs',\s*\n?\s*md: 'px-2 py-0\.5 text-sm',\s*\n?\s*\};/,
+      /const SIZE_CLASSES: Record<NonNullable<SessionStatusBadgeProps\['size'\]>, string> = \{\s*sm: 'px-1\.5 py-0\.5 text-xs',\s*md: 'px-2 py-0\.5 text-sm',\s*\};/,
     );
   });
 
   it("Exported helpers: sessionStatusLabelFor + sessionStatusToneFor with ?? fallback (label→raw status, tone→'neutral') for forward-compat with future server statuses", () => {
     expect(body).toMatch(
-      /export function sessionStatusLabelFor\(status: string\): string \{\s*\n?\s*return STATUS_LABEL\[status\] \?\? status;\s*\n?\s*\}/,
+      /export function sessionStatusLabelFor\(status: string\): string \{\s*return STATUS_LABEL\[status\] \?\? status;\s*\}/,
     );
     expect(body).toMatch(
-      /export function sessionStatusToneFor\(status: string\): Tone \{\s*\n?\s*return STATUS_TONE\[status\] \?\? 'neutral';\s*\n?\s*\}/,
+      /export function sessionStatusToneFor\(status: string\): Tone \{\s*return STATUS_TONE\[status\] \?\? 'neutral';\s*\}/,
     );
   });
 
   it("Render: role='status' + aria-label `Session status: ${label}` + size default 'md' + busy-tone dot with animate-pulse (live-activity indicator) + ternary chain for dot bg color", () => {
-    expect(body).toMatch(/role="status"\s*\n?\s*aria-label=\{`Session status: \$\{label\}`\}/);
+    expect(body).toMatch(/role="status"\s*aria-label=\{`Session status: \$\{label\}`\}/);
     expect(body).toMatch(/const size = props\.size \?\? 'md';/);
     expect(body).toMatch(
-      /tone === 'success'\s*\n?\s*\? 'bg-status-success'\s*\n?\s*: tone === 'busy'\s*\n?\s*\? 'bg-status-busy animate-pulse'\s*\n?\s*: tone === 'warning'\s*\n?\s*\? 'bg-status-warning'\s*\n?\s*: tone === 'error'\s*\n?\s*\? 'bg-status-error'\s*\n?\s*: 'bg-ink-muted'/,
+      /tone === 'success'\s*\? 'bg-status-success'\s*: tone === 'busy'\s*\? 'bg-status-busy animate-pulse'\s*: tone === 'warning'\s*\? 'bg-status-warning'\s*: tone === 'error'\s*\? 'bg-status-error'\s*: 'bg-ink-muted'/,
     );
   });
 

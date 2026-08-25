@@ -71,7 +71,7 @@ describe('abandoned pending crypto orders are actually swept', () => {
     // Registering a handler with nothing ever enqueued is the same dead chain
     // in a different shape, so both halves are pinned, not just the import.
     expect(bootstrap).toMatch(
-      /import \{\s*\n?\s*registerCryptoOrderExpirySweepJob,\s*\n?\s*enqueueNextCryptoOrderExpirySweep,\s*\n?\s*\} from '\.\.\/services\/crypto-order-expiry-sweep-job\.js';/,
+      /import \{\s*registerCryptoOrderExpirySweepJob,\s*enqueueNextCryptoOrderExpirySweep,\s*\} from '\.\.\/services\/crypto-order-expiry-sweep-job\.js';/,
     );
   });
 

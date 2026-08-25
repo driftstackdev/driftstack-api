@@ -54,7 +54,7 @@ describe('W383.A marketing-site StatusBadge.astro content parity', () => {
     expect(body).toMatch(/case 'operational':/);
     expect(body).toMatch(/case 'degraded':/);
     expect(body).toMatch(/case 'major_outage':/);
-    expect(body).toMatch(/case 'unknown':\s*\n?\s*default:/);
+    expect(body).toMatch(/case 'unknown':\s*default:/);
   });
 
   it('4 status labels pinned ("All systems operational" / "Degraded performance" / "Major outage" / "Status unavailable")', () => {
@@ -73,13 +73,13 @@ describe('W383.A marketing-site StatusBadge.astro content parity', () => {
 
   it('color-reset list before applying new state (no stale color carry-over)', () => {
     expect(body).toMatch(
-      /dot\.classList\.remove\(\s*\n?\s*'bg-slate-300',\s*\n?\s*'bg-emerald-500',\s*\n?\s*'bg-amber-500',\s*\n?\s*'bg-red-500',\s*\n?\s*\);/,
+      /dot\.classList\.remove\(\s*'bg-slate-300',\s*'bg-emerald-500',\s*'bg-amber-500',\s*'bg-red-500',\s*\);/,
     );
   });
 
   it('4-second AbortController hard timeout pinned', () => {
     expect(body).toMatch(
-      /4-second hard timeout — a slow status endpoint shouldn't keep\s*\n?\s*\/\/\s*the badge spinning forever/,
+      /4-second hard timeout — a slow status endpoint shouldn't keep\s*\/\/\s*the badge spinning forever/,
     );
     expect(body).toMatch(/const controller = new AbortController\(\);/);
     expect(body).toMatch(/window\.setTimeout\(\(\) => controller\.abort\(\), 4000\);/);
@@ -88,14 +88,14 @@ describe('W383.A marketing-site StatusBadge.astro content parity', () => {
 
   it('failure-mode honesty: "nothing is implied about uptime from a fetch error alone"', () => {
     expect(body).toMatch(
-      /if the fetch fails \(CORS, timeout, network\), the\s*\n?\s*\/\/\s*badge falls back to "status unavailable"/,
+      /if the fetch fails \(CORS, timeout, network\), the\s*\/\/\s*badge falls back to "status unavailable"/,
     );
-    expect(body).toMatch(/nothing is implied about uptime from\s*\n?\s*\/\/\s*a fetch error alone/);
+    expect(body).toMatch(/nothing is implied about uptime from\s*\/\/\s*a fetch error alone/);
   });
 
   it('anchor is safe and the dot-only accessible name starts in checking state', () => {
     expect(body).toMatch(
-      /<a\s*\n?\s*href="https:\/\/status\.driftstack\.dev"\s*\n?\s*target="_blank"\s*\n?\s*rel="noopener noreferrer"/,
+      /<a\s*href="https:\/\/status\.driftstack\.dev"\s*target="_blank"\s*rel="noopener noreferrer"/,
     );
     expect(body).toMatch(/aria-label=\{withLabel \? undefined : 'Platform status: checking'\}/);
   });
@@ -107,9 +107,7 @@ describe('W383.A marketing-site StatusBadge.astro content parity', () => {
   });
 
   it('withLabel=false dot-only variant suitable for header strips (no label rendered)', () => {
-    expect(body).toMatch(
-      /renders a tighter dot-only variant suitable\s*\n?\s*\*\s*for header strips/,
-    );
+    expect(body).toMatch(/renders a tighter dot-only variant suitable\s*\*\s*for header strips/);
     expect(body).toMatch(
       /\{withLabel \? <span class="driftstack-status-label" aria-live="polite">checking…<\/span> : null\}/,
     );
@@ -138,13 +136,13 @@ describe('W383.A marketing-site StatusBadge.astro content parity', () => {
 
   it('reads body.overall_status from the response (V-474 contract)', () => {
     expect(body).toMatch(
-      /body && typeof body\.overall_status === 'string'\s*\n?\s*\?\s*body\.overall_status\s*\n?\s*:\s*'unknown'/,
+      /body && typeof body\.overall_status === 'string'\s*\?\s*body\.overall_status\s*:\s*'unknown'/,
     );
   });
 
   it('server-side cache framing pinned (30s + cf-edge cache framing)', () => {
     expect(body).toMatch(
-      /Cached server-side for 30s by \/v1\/status itself; cf-edge cache\s*\n?\s*\/\/\s*likely extends that/,
+      /Cached server-side for 30s by \/v1\/status itself; cf-edge cache\s*\/\/\s*likely extends that/,
     );
   });
 

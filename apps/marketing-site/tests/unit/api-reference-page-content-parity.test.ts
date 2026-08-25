@@ -117,7 +117,7 @@ describe('W373.A marketing-site /api-reference page content parity', () => {
 
   it('isRetryable predicate cross-SDK convention pinned', () => {
     expect(body).toMatch(
-      /<code class="font-mono">isRetryable\(err\)<\/code>\s*\n?\s*\(TypeScript\) \/ equivalent predicates in Python \+ Go/,
+      /<code class="font-mono">isRetryable\(err\)<\/code>\s*\(TypeScript\) \/ equivalent predicates in Python \+ Go/,
     );
   });
 
@@ -209,7 +209,7 @@ describe('W373.A marketing-site /api-reference page content parity', () => {
 
   it('"Capture kind" pins the three live inline capture variants only', () => {
     expect(body).toMatch(
-      /capture<\/code> takes one of three kinds:\s*\n?\s*<code class="font-mono">screenshot<\/code>,\s*\n?\s*<code class="font-mono">dom_snapshot<\/code>, or\s*\n?\s*<code class="font-mono">pdf<\/code>/,
+      /capture<\/code> takes one of three kinds:\s*<code class="font-mono">screenshot<\/code>,\s*<code class="font-mono">dom_snapshot<\/code>, or\s*<code class="font-mono">pdf<\/code>/,
     );
     expect(body).toMatch(/nothing is stored\s+server-side/);
     expect(body).not.toMatch(/recording|roadmap/i);

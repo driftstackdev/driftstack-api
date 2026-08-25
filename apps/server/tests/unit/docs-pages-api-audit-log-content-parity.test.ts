@@ -251,7 +251,7 @@ describe('W768 docs /api/audit-log content parity', () => {
 
     expect(p).toMatch(/`Content-Type` — `text\/csv` or `application\/json`/);
     expect(p).toMatch(
-      /`Content-Disposition` —\s*\n?\s*`attachment; filename="driftstack-audit-log-<YYYY-MM-DD>\.\{ext\}"`/,
+      /`Content-Disposition` —\s*`attachment; filename="driftstack-audit-log-<YYYY-MM-DD>\.\{ext\}"`/,
     );
     // Cross-source: the server really builds that filename base.
     expect(route).toMatch(

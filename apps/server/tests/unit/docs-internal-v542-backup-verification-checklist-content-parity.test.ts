@@ -100,9 +100,7 @@ describe('W563.C /docs/internal/v542-backup-verification-checklist.md content pa
 
   it('V-1098 CRITICAL the module count B5 quotes is the module count on disk. B5 was corrected to derive both sides rather than gate on a remembered number, and it closes by dating what the derivation returned. The instruction is now right and the illustration beside it can still rot, which is the fix-one-copy shape V-1094 found in the CI figures. The module half is a directory listing, so it is checkable here; the path half is not, and is left alone deliberately.', () => {
     const body = read(LIB);
-    const stated = /At the time of writing that is (\d+) modules\s*\n?\s*and (\d+) paths\./.exec(
-      body,
-    );
+    const stated = /At the time of writing that is (\d+) modules\s*and (\d+) paths\./.exec(body);
     expect(stated, 'B5 no longer dates what the two commands returned').not.toBeNull();
 
     // Exactly the command B5 tells the operator to run.

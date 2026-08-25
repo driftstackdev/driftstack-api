@@ -49,19 +49,19 @@ describe('W417.B apps/server/src/routes/account-web-sessions.ts content parity',
     expect(body).toMatch(/\/v1\/account\/web-sessions\/:id DELETE — revoke a specific session\./);
     expect(body).toMatch(/\/v1\/account\/web-sessions\s+DELETE\s+— `\?keep=current` revokes every/);
     expect(body).toMatch(
-      /Distinct from \/v1\/sessions \(driver sessions running browsers in the\s*\n?\s*\/\/\s*fleet\) — these are the customer's own dashboard sign-ins\./,
+      /Distinct from \/v1\/sessions \(driver sessions running browsers in the\s*\/\/\s*fleet\) — these are the customer's own dashboard sign-ins\./,
     );
   });
 
   it('Privacy framing pinned: IP omitted; UA bucketed coarse to defeat fingerprint + point-release churn', () => {
     expect(body).toMatch(
-      /IP and user-agent are surfaced as broad bucket strings rather than the\s*\n?\s*\/\/\s*raw values: \/settings already comments "IP omitted from dashboard for\s*\n?\s*\/\/\s*privacy", and the user-agent string is fingerprintable enough that we\s*\n?\s*\/\/\s*reduce it to "macOS · Safari" before render\./,
+      /IP and user-agent are surfaced as broad bucket strings rather than the\s*\/\/\s*raw values: \/settings already comments "IP omitted from dashboard for\s*\/\/\s*privacy", and the user-agent string is fingerprintable enough that we\s*\/\/\s*reduce it to "macOS · Safari" before render\./,
     );
   });
 
   it('bucketUserAgent: 5 OS + 5 browser families; Safari LAST (WebKit signature); "Unknown · Unknown" miss fallback', () => {
     expect(body).toMatch(
-      /export function bucketUserAgent\(ua: string \| null\): \{ os: string; browser: string \} \{\s*\n?\s*if \(!ua\) return \{ os: 'Unknown', browser: 'Unknown' \};/,
+      /export function bucketUserAgent\(ua: string \| null\): \{ os: string; browser: string \} \{\s*if \(!ua\) return \{ os: 'Unknown', browser: 'Unknown' \};/,
     );
     expect(body).toMatch(/if \(\/Mac OS X\|macOS\/i\.test\(ua\)\) os = 'macOS';/);
     expect(body).toMatch(/else if \(\/Windows\/i\.test\(ua\)\) os = 'Windows';/);
@@ -69,7 +69,7 @@ describe('W417.B apps/server/src/routes/account-web-sessions.ts content parity',
     expect(body).toMatch(/else if \(\/iPhone\|iPad\|iOS\/i\.test\(ua\)\) os = 'iOS';/);
     expect(body).toMatch(/else if \(\/Linux\/i\.test\(ua\)\) os = 'Linux';/);
     expect(body).toMatch(
-      /\/\/ Order matters: Edg \/ OPR \/ Chrome \/ Safari \(Safari signature is in\s*\n?\s*\/\/ every WebKit UA so it has to be checked LAST\)\./,
+      /\/\/ Order matters: Edg \/ OPR \/ Chrome \/ Safari \(Safari signature is in\s*\/\/ every WebKit UA so it has to be checked LAST\)\./,
     );
     expect(body).toMatch(/if \(\/Edg\\\/\/i\.test\(ua\)\) browser = 'Edge';/);
     expect(body).toMatch(/else if \(\/OPR\\\/\/i\.test\(ua\)\) browser = 'Opera';/);
@@ -80,16 +80,16 @@ describe('W417.B apps/server/src/routes/account-web-sessions.ts content parity',
 
   it('currentWebSessionIdFromRequest: synthetic apiKey id `wsk_<uuid>` strip; non-web-session callers return null', () => {
     expect(body).toMatch(
-      /V-355 — extract the calling web session's id from the AccountContext\.\s*\n?\s*\*\s*The auth path stamps the synthetic ApiKeyRow's id as `wsk_<uuid>` for\s*\n?\s*\*\s*web sessions; non-web-session callers \(a real API key\) have a\s*\n?\s*\*\s*different prefix and return null here\. Callers should treat null as\s*\n?\s*\*\s*"this isn't a web-session-authed request" and refuse the operation\./,
+      /V-355 — extract the calling web session's id from the AccountContext\.\s*\*\s*The auth path stamps the synthetic ApiKeyRow's id as `wsk_<uuid>` for\s*\*\s*web sessions; non-web-session callers \(a real API key\) have a\s*\*\s*different prefix and return null here\. Callers should treat null as\s*\*\s*"this isn't a web-session-authed request" and refuse the operation\./,
     );
     expect(body).toMatch(
-      /function currentWebSessionIdFromRequest\(request: FastifyRequest\): string \| null \{\s*\n?\s*const ctx = request\.account;\s*\n?\s*if \(!ctx\) return null;\s*\n?\s*const id = ctx\.apiKey\.id;\s*\n?\s*if \(typeof id !== 'string' \|\| !id\.startsWith\('wsk_'\)\) return null;\s*\n?\s*return id\.slice\('wsk_'\.length\);/,
+      /function currentWebSessionIdFromRequest\(request: FastifyRequest\): string \| null \{\s*const ctx = request\.account;\s*if \(!ctx\) return null;\s*const id = ctx\.apiKey\.id;\s*if \(typeof id !== 'string' \|\| !id\.startsWith\('wsk_'\)\) return null;\s*return id\.slice\('wsk_'\.length\);/,
     );
   });
 
   it('publicSession: id=wsess_ + bucketed os/browser + last_used_at/expires_at ISO + current boolean (row.id === currentId)', () => {
     expect(body).toMatch(
-      /function publicSession\(\s*\n?\s*row: WebSessionRow,\s*\n?\s*currentId: string \| null,/,
+      /function publicSession\(\s*row: WebSessionRow,\s*currentId: string \| null,/,
     );
     expect(body).toMatch(/const ua = bucketUserAgent\(row\.userAgent\);/);
     expect(body).toMatch(/id: `wsess_\$\{row\.id\}`,/);
@@ -117,14 +117,14 @@ describe('W417.B apps/server/src/routes/account-web-sessions.ts content parity',
 
   it("DELETE per-id: requireAuth + requireScope('account_owner') (W492) + rateLimit('global'); 204 on success; NotFoundError 'Session not found.' when service returns false", () => {
     expect(body).toMatch(
-      /app\.delete<\{ Params: \{ id: string \} \}>\(\s*\n?\s*'\/v1\/account\/web-sessions\/:id',[\s\S]*?\{ preHandler: \[app\.requireAuth, app\.requireScope\('account_owner'\), app\.rateLimit\('global'\)\] \},/,
+      /app\.delete<\{ Params: \{ id: string \} \}>\(\s*'\/v1\/account\/web-sessions\/:id',[\s\S]*?\{ preHandler: \[app\.requireAuth, app\.requireScope\('account_owner'\), app\.rateLimit\('global'\)\] \},/,
     );
     expect(body).toMatch(
-      /const ok = await service\.revokeWebSessionForAccount\(ctx\.account\.id, sessionId\);\s*\n?\s*if \(!ok\) throw new NotFoundError\('Session not found\.'\);/,
+      /const ok = await service\.revokeWebSessionForAccount\(ctx\.account\.id, sessionId\);\s*if \(!ok\) throw new NotFoundError\('Session not found\.'\);/,
     );
     // Security-relevant revocation is audited (account.web_session_revoked).
     expect(body).toMatch(
-      /await emitRevoked\(request, ctx\.account\.id, `wsess_\$\{sessionId\}`, \{ scope: 'single' \}\);\s*\n?\s*reply\.code\(204\);/,
+      /await emitRevoked\(request, ctx\.account\.id, `wsess_\$\{sessionId\}`, \{ scope: 'single' \}\);\s*reply\.code\(204\);/,
     );
   });
 
@@ -134,16 +134,16 @@ describe('W417.B apps/server/src/routes/account-web-sessions.ts content parity',
     // ?keep answered 500 rather than the 400 this gate gives every other unusable value.
     // The schema narrows the type; the case-insensitive comparison below is unchanged.
     expect(body).toMatch(
-      /const query = BulkRevokeQuerySchema\.safeParse\(request\.query \?\? \{\}\);\s*\n?\s*if \(!query\.success\) throw new ValidationError\(query\.error\.flatten\(\)\);\s*\n?\s*const keep = \(query\.data\.keep \?\? ''\)\.toLowerCase\(\);/,
+      /const query = BulkRevokeQuerySchema\.safeParse\(request\.query \?\? \{\}\);\s*if \(!query\.success\) throw new ValidationError\(query\.error\.flatten\(\)\);\s*const keep = \(query\.data\.keep \?\? ''\)\.toLowerCase\(\);/,
     );
     expect(body, 'a literal here would drop the case-insensitivity the gate commits to').toMatch(
-      /const BulkRevokeQuerySchema = z\.object\(\{\s*\n?\s*keep: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
+      /const BulkRevokeQuerySchema = z\.object\(\{\s*keep: z\.string\(\)\.optional\(\),\s*\}\);/,
     );
     expect(body).toMatch(
-      /if \(keep !== 'current'\) \{\s*\n?\s*throw new BadRequestError\(\s*\n?\s*'Bulk revoke requires `\?keep=current`\. Pass it explicitly to confirm intent\.',\s*\n?\s*\);/,
+      /if \(keep !== 'current'\) \{\s*throw new BadRequestError\(\s*'Bulk revoke requires `\?keep=current`\. Pass it explicitly to confirm intent\.',\s*\);/,
     );
     expect(body).toMatch(
-      /\/\/ Non-web-session caller can't bulk revoke \+ keep current —\s*\n?\s*\/\/ there is no "current" to keep\. Refuse rather than guess\./,
+      /\/\/ Non-web-session caller can't bulk revoke \+ keep current —\s*\/\/ there is no "current" to keep\. Refuse rather than guess\./,
     );
     expect(body).toMatch(
       /throw new BadRequestError\('Bulk revoke is only callable from a dashboard web session\.'\);/,
@@ -155,16 +155,16 @@ describe('W417.B apps/server/src/routes/account-web-sessions.ts content parity',
       /const n = await service\.revokeAllWebSessionsExceptCurrent\(ctx\.account\.id, currentId\);/,
     );
     // Bulk revocation is audited too (only when something was actually revoked).
-    expect(body).toMatch(/if \(n > 0\) \{\s*\n?\s*await emitRevoked\(/);
-    expect(body).toMatch(/reply\.code\(200\);\s*\n?\s*return \{ revoked: n \};/);
+    expect(body).toMatch(/if \(n > 0\) \{\s*await emitRevoked\(/);
+    expect(body).toMatch(/reply\.code\(200\);\s*return \{ revoked: n \};/);
   });
 
   it('GET list: requireAuth + broad read scope + rateLimit; service.listActiveWebSessions(accountId); { data: rows.map(publicSession) }', () => {
     expect(body).toMatch(
-      /app\.get\(\s*\n?\s*'\/v1\/account\/web-sessions',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('read'\), app\.rateLimit\('global'\)\] \},/,
+      /app\.get\(\s*'\/v1\/account\/web-sessions',\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('read'\), app\.rateLimit\('global'\)\] \},/,
     );
     expect(body).toMatch(
-      /const rows = await service\.listActiveWebSessions\(ctx\.account\.id\);\s*\n?\s*return \{ data: rows\.map\(\(r\) => publicSession\(r, currentId\)\) \};/,
+      /const rows = await service\.listActiveWebSessions\(ctx\.account\.id\);\s*return \{ data: rows\.map\(\(r\) => publicSession\(r, currentId\)\) \};/,
     );
   });
 

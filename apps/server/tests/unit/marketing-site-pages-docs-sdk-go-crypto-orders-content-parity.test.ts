@@ -33,13 +33,13 @@ describe('W515.A apps/marketing-site/src/pages/docs/sdk-go-crypto-orders.astro c
 
   it("W190 framing + non-refundable banner pinned: 'Go SDK reference for the crypto-orders surface. Companion to /docs/sdk-go (the general Go SDK quickstart). Crypto payments are non-refundable.' — pinned so the W190 anchor + sdk-go companion + non-refundable banner all survive (drift to dropping the non-refundable banner would orphan the legal posture from the SDK doc)", () => {
     expect(body).toMatch(
-      /\/\/ W190 — Go SDK reference for the crypto-orders surface\.\s*\n?\s*\/\/ Companion to \/docs\/sdk-go \(the general Go SDK quickstart\)\.\s*\n?\s*\/\/ Crypto payments are non-refundable\./,
+      /\/\/ W190 — Go SDK reference for the crypto-orders surface\.\s*\/\/ Companion to \/docs\/sdk-go \(the general Go SDK quickstart\)\.\s*\/\/ Crypto payments are non-refundable\./,
     );
   });
 
   it('client.CryptoOrders customer surface and admin-not-exposed framing pinned', () => {
     expect(body).toMatch(
-      /The <code>client\.CryptoOrders<\/code> resource wraps every\s*\n?\s*customer-facing crypto-order endpoint\. Admin endpoints\s*\n?\s*are not exposed; integrators that need them call the REST\s*\n?\s*surface directly\./,
+      /The <code>client\.CryptoOrders<\/code> resource wraps every\s*customer-facing crypto-order endpoint\. Admin endpoints\s*are not exposed; integrators that need them call the REST\s*surface directly\./,
     );
   });
 
@@ -58,7 +58,7 @@ describe('W515.A apps/marketing-site/src/pages/docs/sdk-go-crypto-orders.astro c
     expect(body).toMatch(/"price_currency":\s+"USD"/);
     expect(body).toMatch(/&driftstack\.CreateCheckoutOptions\{IdempotencyKey: &key\}/);
     expect(body).toMatch(
-      /The SDK forwards it\s*\n?\s*as the <code>Idempotency-Key<\/code> header; on a duplicate key\s*\n?\s*within the 24h window the server returns the original order\./,
+      /The SDK forwards it\s*as the <code>Idempotency-Key<\/code> header; on a duplicate key\s*within the 24h window the server returns the original order\./,
     );
   });
 
@@ -68,13 +68,13 @@ describe('W515.A apps/marketing-site/src/pages/docs/sdk-go-crypto-orders.astro c
     expect(body).toMatch(/\/\/ Narrow to a single status server-side\./);
     expect(body).toMatch(/&driftstack\.ListCryptoOrdersOptions\{/);
     expect(body).toMatch(
-      /<code>Status<\/code> accepts <code>pending<\/code>,\s*\n?\s*<code>confirming<\/code>, <code>paid<\/code>, <code>failed<\/code>,\s*\n?\s*<code>partial<\/code>, or <code>cancelled<\/code>\. Unknown values\s*\n?\s*return a 400\. <code>Limit<\/code> is clamped to 1\.\.=100\./,
+      /<code>Status<\/code> accepts <code>pending<\/code>,\s*<code>confirming<\/code>, <code>paid<\/code>, <code>failed<\/code>,\s*<code>partial<\/code>, or <code>cancelled<\/code>\. Unknown values\s*return a 400\. <code>Limit<\/code> is clamped to 1\.\.=100\./,
     );
   });
 
   it("Iterate cursor-walker framing pinned: 'Iterate walks every page until the server stops emitting a NextCursor. Cursor handoff is managed internally — do not set opts.Cursor when calling Iterate. Return false from the visit callback to stop iteration early (no further pages are fetched).' + visit-callback signature + manual-cursor while-loop fallback — pinned so the Iterate + do-not-set-opts.Cursor + bool-return-false-stops + manual-cursor while-loop commitments survive (drift to letting Iterate take opts.Cursor would invite cursor double-handling)", () => {
     expect(body).toMatch(
-      /<code>Iterate<\/code> walks every page until the server stops\s*\n?\s*emitting a <code>NextCursor<\/code>\. Cursor handoff is managed\s*\n?\s*internally — <strong>do not<\/strong> set\s*\n?\s*<code>opts\.Cursor<\/code> when calling <code>Iterate<\/code>\.\s*\n?\s*Return <code>false<\/code> from the visit callback to stop\s*\n?\s*iteration early \(no further pages are fetched\)\./,
+      /<code>Iterate<\/code> walks every page until the server stops\s*emitting a <code>NextCursor<\/code>\. Cursor handoff is managed\s*internally — <strong>do not<\/strong> set\s*<code>opts\.Cursor<\/code> when calling <code>Iterate<\/code>\.\s*Return <code>false<\/code> from the visit callback to stop\s*iteration early \(no further pages are fetched\)\./,
     );
     expect(body).toMatch(/func\(o driftstack\.CryptoOrderEnvelope\) bool \{/);
     expect(body).toMatch(/return true \/\/ keep going/);
@@ -98,19 +98,19 @@ describe('W515.A apps/marketing-site/src/pages/docs/sdk-go-crypto-orders.astro c
 
   it("Non-refundable + cancel-pending-halts-pay-window framing pinned: 'Crypto payments are non-refundable. Cancelling a pending order halts its pay window; cancelling a paid order is not supported — past billing periods stay billed.' + /legal/refunds cross-ref — pinned so the non-refundable + halt-pay-window + paid-not-cancellable + /legal/refunds anchor commitment survives", () => {
     expect(body).toMatch(
-      /Crypto payments are non-refundable\. Cancelling a pending order\s*\n?\s*halts its pay window; cancelling a paid order is not supported —\s*\n?\s*past billing periods stay billed\. See\s*\n?\s*<a href="\/legal\/refunds\/">\/legal\/refunds<\/a>\./,
+      /Crypto payments are non-refundable\. Cancelling a pending order\s*halts its pay window; cancelling a paid order is not supported —\s*past billing periods stay billed\. See\s*<a href="\/legal\/refunds\/">\/legal\/refunds<\/a>\./,
     );
   });
 
   it("Now-subscribable + polling-fallback framing pinned: 'crypto.order.paid / crypto.order.failed events are emitted server-side and are now subscribable' + 'poll client.CryptoOrders.Get(ctx, orderID) until status transitions to paid or failed' + 'The Go SDK ships VerifyWebhookSignature for every live event type including crypto.order.* alongside session + quota + api-key + egress-capability.' — pinned so the now-subscribable + polling-as-fallback + VerifyWebhookSignature-every-domain trio survives (drift to claiming the events are NOT subscribable would create marketing↔SubscribableWebhookEventTypeSchema divergence)", () => {
     expect(body).toMatch(
-      /<code>crypto\.order\.paid<\/code> \/ <code>crypto\.order\.failed<\/code>\s*\n?\s*events are emitted server-side and are now subscribable/,
+      /<code>crypto\.order\.paid<\/code> \/ <code>crypto\.order\.failed<\/code>\s*events are emitted server-side and are now subscribable/,
     );
     expect(body).toMatch(
-      /poll\s*\n?\s*<code>client\.CryptoOrders\.Get\(ctx, orderID\)<\/code> until\s*\n?\s*<code>status<\/code> transitions to <code>paid<\/code> or\s*\n?\s*<code>failed<\/code>/,
+      /poll\s*<code>client\.CryptoOrders\.Get\(ctx, orderID\)<\/code> until\s*<code>status<\/code> transitions to <code>paid<\/code> or\s*<code>failed<\/code>/,
     );
     expect(body).toMatch(
-      /The Go SDK ships\s*\n?\s*<code>VerifyWebhookSignature<\/code> for every live event type,\s*\n?\s*including the now-live crypto\.order\.\* events alongside the\s*\n?\s*session \+ quota \+ api-key \+ egress-capability event domains\./,
+      /The Go SDK ships\s*<code>VerifyWebhookSignature<\/code> for every live event type,\s*including the now-live crypto\.order\.\* events alongside the\s*session \+ quota \+ api-key \+ egress-capability event domains\./,
     );
   });
 

@@ -86,7 +86,7 @@ describe('W547.B /docs/security-audit-2026-05-06.md content parity', () => {
       /\*\*Status \(V-883, 2026-08-18\): resolved in application code\.\*\*/,
     );
     expect(body, 'and names the mechanism that closed it').toMatch(
-      /per-key version counter\s*\n?\s*\(`auth:keyid:<id>:v`\), bumped by `invalidateKey\(\)`/,
+      /per-key version counter\s*\(`auth:keyid:<id>:v`\), bumped by `invalidateKey\(\)`/,
     );
   });
 
@@ -113,7 +113,7 @@ describe('W547.B /docs/security-audit-2026-05-06.md content parity', () => {
       /\*\*Status \(V-884, 2026-08-18\): resolved in application code\.\*\* `billing\.ts`/,
     );
     expect(body, 'and names the allowlist that closed it').toMatch(
-      /rejects any origin not\s*\n?\s*on `ALLOWED_RETURN_ORIGINS`/,
+      /rejects any origin not\s*on `ALLOWED_RETURN_ORIGINS`/,
     );
     expect(body, 'P1-002 records that its documentation action is complete').toMatch(
       /\*\*Status \(V-884, 2026-08-18\): action complete\.\*\*/,

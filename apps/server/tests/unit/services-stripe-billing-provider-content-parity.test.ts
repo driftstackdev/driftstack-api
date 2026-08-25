@@ -40,19 +40,19 @@ describe('W410.B apps/server/src/services/stripe-billing-provider.ts content par
 
   it('V-088 framing pinned: implements V-082 BillingProvider via hand-rolled StripeApiClient (no `stripe` npm SDK dep)', () => {
     expect(body).toMatch(
-      /Production BillingProvider implementation backed by the Stripe API\s*\n?\s*\/\/\s*\(V-088\)\. Implements the V-082 BillingProvider interface using the\s*\n?\s*\/\/\s*hand-rolled StripeApiClient \(no `stripe` npm SDK dep\)\./,
+      /Production BillingProvider implementation backed by the Stripe API\s*\/\/\s*\(V-088\)\. Implements the V-082 BillingProvider interface using the\s*\/\/\s*hand-rolled StripeApiClient \(no `stripe` npm SDK dep\)\./,
     );
   });
 
   it('Customer-lookup posture pinned: never search Stripe by email; always create fresh + persist on accounts.stripe_customer_id', () => {
     expect(body).toMatch(
-      /Customer lookup: we don't search Stripe for an existing customer by\s*\n?\s*\/\/\s*email\. Instead, we always create a fresh Customer the first time\s*\n?\s*\/\/\s*`ensureCustomer` is called, then persist the Stripe customer id on\s*\n?\s*\/\/\s*`accounts\.stripe_customer_id` \(BillingService\.ensureCustomerId path\)\./,
+      /Customer lookup: we don't search Stripe for an existing customer by\s*\/\/\s*email\. Instead, we always create a fresh Customer the first time\s*\/\/\s*`ensureCustomer` is called, then persist the Stripe customer id on\s*\/\/\s*`accounts\.stripe_customer_id` \(BillingService\.ensureCustomerId path\)\./,
     );
   });
 
   it('Race-avoidance rationale pinned: skips lookup-per-checkout + avoids parallel-create race', () => {
     expect(body).toMatch(
-      /Future calls find the persisted id and skip this provider entirely\.\s*\n?\s*\/\/\s*This avoids a Stripe lookup-per-checkout and avoids the failure mode\s*\n?\s*\/\/\s*where two parallel ensureCustomer calls would race to create two\s*\n?\s*\/\/\s*customers\./,
+      /Future calls find the persisted id and skip this provider entirely\.\s*\/\/\s*This avoids a Stripe lookup-per-checkout and avoids the failure mode\s*\/\/\s*where two parallel ensureCustomer calls would race to create two\s*\/\/\s*customers\./,
     );
   });
 
@@ -64,7 +64,7 @@ describe('W410.B apps/server/src/services/stripe-billing-provider.ts content par
 
   it('class StripeBillingProvider implements BillingProvider; client injected', () => {
     expect(body).toMatch(
-      /export class StripeBillingProvider implements BillingProvider \{\s*\n?\s*constructor\(private readonly client: StripeApiClient\) \{\}/,
+      /export class StripeBillingProvider implements BillingProvider \{\s*constructor\(private readonly client: StripeApiClient\) \{\}/,
     );
   });
 
@@ -109,7 +109,7 @@ describe('W410.B apps/server/src/services/stripe-billing-provider.ts content par
 
   it('createPortalSession: { customerId, returnUrl } → { url }', () => {
     expect(body).toMatch(
-      /async createPortalSession\(args: \{\s*\n?\s*customerId: string;\s*\n?\s*returnUrl: string;\s*\n?\s*\}\): Promise<\{ url: string \}> \{\s*\n?\s*const result = await this\.client\.createBillingPortalSession\(\{\s*\n?\s*customerId: args\.customerId,\s*\n?\s*returnUrl: args\.returnUrl,\s*\n?\s*\}\);\s*\n?\s*return \{ url: result\.url \};/,
+      /async createPortalSession\(args: \{\s*customerId: string;\s*returnUrl: string;\s*\}\): Promise<\{ url: string \}> \{\s*const result = await this\.client\.createBillingPortalSession\(\{\s*customerId: args\.customerId,\s*returnUrl: args\.returnUrl,\s*\}\);\s*return \{ url: result\.url \};/,
     );
   });
 

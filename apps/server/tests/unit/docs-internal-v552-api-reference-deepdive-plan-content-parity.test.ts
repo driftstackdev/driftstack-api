@@ -118,7 +118,7 @@ describe('W564.B /docs/internal/v552-api-reference-deepdive-plan.md content pari
     expect(body).toMatch(/## Sub-slices/);
     expect(body).toMatch(/- \*\*V-552\.A\*\* — concept docs for top 10 resources/);
     expect(body).toMatch(
-      /\(account \/ profile \/\s*\n?\s*session \/ api-key \/ web-session \/ webhook \/ capture \/ billing \//,
+      /\(account \/ profile \/\s*session \/ api-key \/ web-session \/ webhook \/ capture \/ billing \//,
     );
     expect(body).toMatch(
       /- \*\*V-552\.B\*\* — code-sample directory scaffolding \+ samples for top/,

@@ -205,7 +205,7 @@ describe('W501.B apps/marketing-site/src/pages/security.astro content parity', (
   // (apps/server/src/lib/app.ts V-195).
   it("V-503 supply-chain framing pinned: 'Node 22 LTS, TypeScript strict, Fastify, Drizzle, Postgres 17, Redis 7.' + Dependabot-only card (weekly, CI-gated, patch-only auto-merge) + honest deploy controls (lockfile installs, staging-first gated pipeline, auto-rollback health-check, public /version SHA) — pinned so the corrected S26 wording survives and the retracted SBOM/signed-image claims cannot silently return", () => {
     expect(body).toMatch(
-      /Node 22 LTS, TypeScript strict, Fastify, Drizzle, Postgres 17,\s*\n?\s*Redis 7\./,
+      /Node 22 LTS, TypeScript strict, Fastify, Drizzle, Postgres 17,\s*Redis 7\./,
     );
     expect(body).toMatch(/<h3 class="text-base font-medium text-tk-ink">Dependabot<\/h3>/);
     expect(body).toMatch(
@@ -231,7 +231,7 @@ describe('W501.B apps/marketing-site/src/pages/security.astro content parity', (
 
   it("security@driftstack.dev contact framing pinned: 'Email security@driftstack.dev with the question. We answer everything in writing — no NDAs to read a one-paragraph answer about scrypt parameters or TLS cipher suites.' — pinned so the no-NDA-for-security-questions commitment survives (drift to dropping would create friction for security-team buyers; drift to a different email would orphan canonical contact)", () => {
     expect(body).toMatch(
-      /Email security@driftstack\.dev with the question\. We answer\s*\n?\s*everything in writing — no NDAs to read a one-paragraph\s*\n?\s*answer about scrypt parameters or TLS cipher suites\./,
+      /Email security@driftstack\.dev with the question\. We answer\s*everything in writing — no NDAs to read a one-paragraph\s*answer about scrypt parameters or TLS cipher suites\./,
     );
     // 2026-07-03 Fleet v2 — the contact CTA is the shared CtaBand
     // component; mailto destination + button label pinned via props.

@@ -80,7 +80,7 @@ describe('W1014 db/scheduled-jobs-repo V-202d cross-source invariant', () => {
     expect(p).toMatch(/if \(input\.dedupOnAccountAndType === true\) \{/);
     expect(p).toMatch(/pg_advisory_xact_lock\(hashtextextended\(\$\{dedupLockTuple\}, 0\)\)/);
     expect(p).toMatch(
-      /input\.accountId === null\s*\n?\s*\?\s*isNull\(scheduledJobs\.accountId\)\s*\n?\s*:\s*eq\(scheduledJobs\.accountId, input\.accountId\),/,
+      /input\.accountId === null\s*\?\s*isNull\(scheduledJobs\.accountId\)\s*:\s*eq\(scheduledJobs\.accountId, input\.accountId\),/,
     );
     expect(p).toMatch(/eq\(scheduledJobs\.jobType, input\.jobType\),/);
     expect(p).toMatch(/isNull\(scheduledJobs\.completedAt\),/);

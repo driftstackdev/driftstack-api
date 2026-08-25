@@ -35,7 +35,7 @@ describe('W526.B apps/customer-dashboard/tailwind.config.mjs content parity', ()
   it("Shared-with-marketing-site framing pinned: 'Design tokens shared with the marketing site (apps/marketing-site/tailwind.config.mjs). Keep these synchronised — the customer experience reads as one product, not two.' + @type JSDoc + 8-extension content glob — pinned so the cross-app shared-token + one-product-not-two posture survives (drift here without parallel drift in marketing-site would create marketing↔dashboard brand divergence)", () => {
     expect(body).toMatch(/\/\*\* @type \{import\('tailwindcss'\)\.Config\} \*\//);
     expect(body).toMatch(
-      /\/\/ Design tokens shared with the marketing site \(apps\/marketing-site\/\s*\n?\s*\/\/ tailwind\.config\.mjs\)\. Keep these synchronised — the customer\s*\n?\s*\/\/ experience reads as one product, not two\./,
+      /\/\/ Design tokens shared with the marketing site \(apps\/marketing-site\/\s*\/\/ tailwind\.config\.mjs\)\. Keep these synchronised — the customer\s*\/\/ experience reads as one product, not two\./,
     );
     expect(body).toMatch(/content: \['\.\/src\/\*\*\/\*\.\{astro,html,js,jsx,md,mdx,ts,tsx\}'\],/);
   });
@@ -72,7 +72,7 @@ describe('W526.B apps/customer-dashboard/tailwind.config.mjs content parity', ()
     expect(body).toMatch(
       /mono: \['Berkeley Mono', 'JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'\],/,
     );
-    expect(body).toMatch(/maxWidth: \{\s*\n?\s*prose: '65ch',\s*\n?\s*\},/);
+    expect(body).toMatch(/maxWidth: \{\s*prose: '65ch',\s*\},/);
     expect(body).toMatch(/plugins: \[\],/);
   });
 

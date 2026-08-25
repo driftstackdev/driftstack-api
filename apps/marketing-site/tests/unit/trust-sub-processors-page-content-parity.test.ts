@@ -38,7 +38,7 @@ describe('W376.B marketing-site /trust/sub-processors page content parity', () =
   it('imports from canonical data source (SUB_PROCESSORS + LAST_UPDATED + CHANGELOG + type)', () => {
     expect(existsSync(DATA_SOURCE)).toBe(true);
     expect(body).toMatch(
-      /import \{\s*\n?\s*SUB_PROCESSORS,\s*\n?\s*SUB_PROCESSOR_REGISTER_LAST_UPDATED,\s*\n?\s*SUB_PROCESSOR_CHANGELOG,\s*\n?\s*type SubProcessorChangeLogEntry,\s*\n?\s*\} from '\.\.\/\.\.\/data\/sub-processors\.ts';/,
+      /import \{\s*SUB_PROCESSORS,\s*SUB_PROCESSOR_REGISTER_LAST_UPDATED,\s*SUB_PROCESSOR_CHANGELOG,\s*type SubProcessorChangeLogEntry,\s*\} from '\.\.\/\.\.\/data\/sub-processors\.ts';/,
     );
   });
 
@@ -47,18 +47,18 @@ describe('W376.B marketing-site /trust/sub-processors page content parity', () =
       expect(body, `change-log kind missing: ${kind}`).toMatch(new RegExp(`case '${kind}':`));
     }
     // Labels.
-    expect(body).toMatch(/case 'added':\s*\n?\s*return 'Added';/);
-    expect(body).toMatch(/case 'removed':\s*\n?\s*return 'Removed';/);
-    expect(body).toMatch(/case 'material_change':\s*\n?\s*return 'Material change';/);
-    expect(body).toMatch(/case 'register_published':\s*\n?\s*return 'Register published';/);
+    expect(body).toMatch(/case 'added':\s*return 'Added';/);
+    expect(body).toMatch(/case 'removed':\s*return 'Removed';/);
+    expect(body).toMatch(/case 'material_change':\s*return 'Material change';/);
+    expect(body).toMatch(/case 'register_published':\s*return 'Register published';/);
   });
 
   it('change-log color map pinned (emerald / red / amber / neutral token). Fleet v2 (S10): register_published moved from the legacy bg-slate-200 to the tokened neutral bg-tk-raised (same neutral visual intent, mode-aware)', () => {
-    expect(body).toMatch(/case 'added':\s*\n?\s*return 'bg-emerald-100 text-emerald-800';/);
-    expect(body).toMatch(/case 'removed':\s*\n?\s*return 'bg-red-100 text-red-800';/);
-    expect(body).toMatch(/case 'material_change':\s*\n?\s*return 'bg-amber-100 text-amber-800';/);
+    expect(body).toMatch(/case 'added':\s*return 'bg-emerald-100 text-emerald-800';/);
+    expect(body).toMatch(/case 'removed':\s*return 'bg-red-100 text-red-800';/);
+    expect(body).toMatch(/case 'material_change':\s*return 'bg-amber-100 text-amber-800';/);
     expect(body).toMatch(
-      /case 'register_published':\s*\n?\s*return 'border border-tk-border bg-tk-raised text-tk-ink-2';/,
+      /case 'register_published':\s*return 'border border-tk-border bg-tk-raised text-tk-ink-2';/,
     );
   });
 

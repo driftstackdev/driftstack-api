@@ -38,12 +38,12 @@ describe('W498.B apps/marketing-site/src/pages/500.astro content parity', () => 
 
   it("500 monogram + 'Something broke on our side.' heading (Fleet v2 2026-07-03 — plain-words heading; the SEO description keeps the original phrasing) — pinned so the typography hierarchy + the 'on us not you' tone survive (drift to a 'try again' heading would shift blame to the customer; drift to dropping the 500 monogram would lose the at-a-glance error-code signal)", () => {
     expect(body).toMatch(/<p class="section-label">500<\/p>/);
-    expect(body).toMatch(/<h1[\s\S]*?>\s*\n?\s*Something broke on our side\.\s*\n?\s*<\/h1>/);
+    expect(body).toMatch(/<h1[\s\S]*?>\s*Something broke on our side\.\s*<\/h1>/);
   });
 
   it("'This is on us, not you. The error has been captured; we'll look at it. If this is blocking something time-sensitive, email support@driftstack.dev with the URL you were on.' framing pinned — pinned so the explicit blame-claim + the captured-error reassurance + the URL-required escape-hatch all survive (drift to dropping 'with the URL you were on' would force support to play 20 questions to find which page failed)", () => {
     expect(body).toMatch(
-      /This is on us, not you\. The error has been captured and we'll look\s*\n?\s*into it\. If this is blocking something time-sensitive, email\s*\n?\s*<a href="mailto:support@driftstack\.dev" class="text-tk-accent[^"]*">support@driftstack\.dev<\/a>\s*\n?\s*with the URL you were on\b/,
+      /This is on us, not you\. The error has been captured and we'll look\s*into it\. If this is blocking something time-sensitive, email\s*<a href="mailto:support@driftstack\.dev" class="text-tk-accent[^"]*">support@driftstack\.dev<\/a>\s*with the URL you were on\b/,
     );
   });
 

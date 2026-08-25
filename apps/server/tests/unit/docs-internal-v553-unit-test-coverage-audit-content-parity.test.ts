@@ -81,7 +81,7 @@ describe('W562.C /docs/internal/v553-unit-test-coverage-audit.md content parity'
     expect(body).toMatch(/Unit tests should cover template-not-found rejection, recipient/);
     expect(body).toMatch(/suppression \(opt-out list\), provider-503 retry semantics\./);
     expect(body).toMatch(
-      /Integration\s*\n?\s*tests don't exercise the retry path because Postmark mocks/,
+      /Integration\s*tests don't exercise the retry path because Postmark mocks/,
     );
     expect(body).toMatch(/short-circuit it\./);
     expect(body).toMatch(

@@ -75,7 +75,7 @@ describe('W557.C /docs/runbooks/v295c-status-site-cf-pages.md content parity', (
     expect(body).toMatch(/be a compliance break\)\./);
     expect(body).toMatch(/`driftstack-public` \(or chosen name\)\. Region: same as the recordings/);
     expect(body).toMatch(/bucket \(EU per data-residency\)\./);
-    expect(body).toMatch(/\*\*Custom domain\*\* →\s*\n?\s*connect `r2-public\.driftstack\.dev`/);
+    expect(body).toMatch(/\*\*Custom domain\*\* →\s*connect `r2-public\.driftstack\.dev`/);
     expect(body).toMatch(/3\. Set the API server env `R2_BUCKET_PUBLIC` to the new bucket name in/);
     expect(body).toMatch(/the Hetzner deploy `\.env`\./);
     expect(body).toMatch(/snapshot writer poller should produce the file/);
@@ -127,9 +127,7 @@ describe('W557.C /docs/runbooks/v295c-status-site-cf-pages.md content parity', (
     expect(body).toMatch(/shares the same SLA as Cloudflare's edge, which is the same edge/);
     expect(body).toMatch(/that fronts api\.driftstack\.dev\./);
     expect(body).toMatch(/- \*\*DNS misconfiguration\*\*: covered by step-2 verification above\./);
-    expect(body).toMatch(
-      /If\s*\n?\s*`status\.driftstack\.dev` returns a CF "page not found" error, the/,
-    );
+    expect(body).toMatch(/If\s*`status\.driftstack\.dev` returns a CF "page not found" error, the/);
     expect(body).toMatch(/CNAME is wrong; if TLS fails, the custom-domain hookup in CF Pages/);
     expect(body).toMatch(/is incomplete\./);
   });

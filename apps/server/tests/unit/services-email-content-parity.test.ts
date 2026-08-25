@@ -50,17 +50,17 @@ describe('W405.A apps/server/src/services/email.ts content parity', () => {
 
   it('V-057 Postmark + fire-and-forget framing + inline templates (no Postmark templates feature)', () => {
     expect(body).toMatch(
-      /Wraps Postmark \(`postmark` npm package, V-057\)\. All sends are\s*\n?\s*\/\/\s*fire-and-forget: errors are logged at warn-level but never thrown\s*\n?\s*\/\/\s*to the caller, because email is never on a request critical path\./,
+      /Wraps Postmark \(`postmark` npm package, V-057\)\. All sends are\s*\/\/\s*fire-and-forget: errors are logged at warn-level but never thrown\s*\/\/\s*to the caller, because email is never on a request critical path\./,
     );
     expect(body).toMatch(
-      /Templates are owned in this file as plain TS objects \(subject \+\s*\n?\s*\/\/\s*text body \+ HTML body\)\. No Postmark "templates" feature dependency/,
+      /Templates are owned in this file as plain TS objects \(subject \+\s*\/\/\s*text body \+ HTML body\)\. No Postmark "templates" feature dependency/,
     );
   });
 
   it('V-665 EmailErrorCategory: 7-literal union (pending-approval / inactive-recipient / account-inactive / invalid-request / rate-limited / transport / unknown)', () => {
     expect(body).toMatch(/V-665 — classifying email-send failure categories\./);
     expect(body).toMatch(
-      /export type EmailErrorCategory =\s*\n?\s*\| 'pending-approval'\s*\n?\s*\| 'inactive-recipient'\s*\n?\s*\| 'account-inactive'\s*\n?\s*\| 'invalid-request'\s*\n?\s*\| 'rate-limited'\s*\n?\s*\| 'transport'\s*\n?\s*\| 'unknown';/,
+      /export type EmailErrorCategory =\s*\| 'pending-approval'\s*\| 'inactive-recipient'\s*\| 'account-inactive'\s*\| 'invalid-request'\s*\| 'rate-limited'\s*\| 'transport'\s*\| 'unknown';/,
     );
   });
 
@@ -84,7 +84,7 @@ describe('W405.A apps/server/src/services/email.ts content parity', () => {
 
   it('V-665 transport-error names: 7-entry Set (ECONNRESET/ECONNREFUSED/ETIMEDOUT/ENOTFOUND/EHOSTUNREACH/EAI_AGAIN/FetchError)', () => {
     expect(body).toMatch(
-      /const transportNames = new Set\(\[\s*\n?\s*'ECONNRESET',\s*\n?\s*'ECONNREFUSED',\s*\n?\s*'ETIMEDOUT',\s*\n?\s*'ENOTFOUND',\s*\n?\s*'EHOSTUNREACH',\s*\n?\s*'EAI_AGAIN',\s*\n?\s*'FetchError',\s*\n?\s*\]\);/,
+      /const transportNames = new Set\(\[\s*'ECONNRESET',\s*'ECONNREFUSED',\s*'ETIMEDOUT',\s*'ENOTFOUND',\s*'EHOSTUNREACH',\s*'EAI_AGAIN',\s*'FetchError',\s*\]\);/,
     );
     expect(body).toMatch(
       /if \(transportNames\.has\(name\)\) return \{ category: 'transport', postmarkCode: null \};/,
@@ -93,10 +93,10 @@ describe('W405.A apps/server/src/services/email.ts content parity', () => {
 
   it('V-665 pending-approval message-pattern fallback for wrapper libs with string code', () => {
     expect(body).toMatch(
-      /\/\/ Pattern-match the message as a last resort: Postmark's `Message`\s*\n?\s*\/\/ field for pending-approval errors contains a recognizable phrase,\s*\n?\s*\/\/ and some wrapper libraries set `code` as a string instead of a\s*\n?\s*\/\/ number\./,
+      /\/\/ Pattern-match the message as a last resort: Postmark's `Message`\s*\/\/ field for pending-approval errors contains a recognizable phrase,\s*\/\/ and some wrapper libraries set `code` as a string instead of a\s*\/\/ number\./,
     );
     expect(body).toMatch(
-      /if \(message\.includes\('pending approval'\) \|\| message\.includes\('not yet approved'\)\) \{\s*\n?\s*return \{ category: 'pending-approval', postmarkCode: code \};/,
+      /if \(message\.includes\('pending approval'\) \|\| message\.includes\('not yet approved'\)\) \{\s*return \{ category: 'pending-approval', postmarkCode: code \};/,
     );
   });
 
@@ -112,7 +112,7 @@ describe('W405.A apps/server/src/services/email.ts content parity', () => {
       /S44 2026-07-07 \(founder-approved\) — Driftstack-branded payment[\s\S]+?sendBillingReceipt\(args: \{/,
     );
     expect(body).toMatch(
-      /S44 2026-07-07 \(founder-approved\) — payment-failure notice\.[\s\S]+?sendBillingFailure\(args: \{\s*\n?\s*to: string;\s*\n?\s*amountFormatted: string;\s*\n?\s*retryAt: Date \| null;\s*\n?\s*portalUrl: string;\s*\n?\s*\}\): Promise<void>;/,
+      /S44 2026-07-07 \(founder-approved\) — payment-failure notice\.[\s\S]+?sendBillingFailure\(args: \{\s*to: string;\s*amountFormatted: string;\s*retryAt: Date \| null;\s*portalUrl: string;\s*\}\): Promise<void>;/,
     );
     expect(body).toMatch(
       /V-304b — fires ~7 days before subscription renewal[\s\S]+?sendBillingRenewalReminder\(args: \{/,
@@ -173,7 +173,7 @@ describe('W405.A apps/server/src/services/email.ts content parity', () => {
   it('S44 billing-failure template renders the pre-computed retryLine (nullable Stripe next_payment_attempt: timestamped retry sentence OR final-attempt sentence)', () => {
     expect(body).toMatch(/\$\{v\.retryLine\} To update payment details, visit the billing portal/);
     expect(body).toMatch(
-      /retryAt !== null\s*\n?\s*\? `We'll retry automatically at \$\{retryAt\.toISOString\(\)\} \(UTC\)\.`\s*\n?\s*: `This was the final automatic attempt — no further retries are scheduled\.`,/,
+      /retryAt !== null\s*\? `We'll retry automatically at \$\{retryAt\.toISOString\(\)\} \(UTC\)\.`\s*: `This was the final automatic attempt — no further retries are scheduled\.`,/,
     );
   });
 
@@ -191,7 +191,7 @@ describe('W405.A apps/server/src/services/email.ts content parity', () => {
     expect(body).toMatch(/messageStream = 'outbound',/);
     expect(body).toMatch(/MessageStream: messageStream,/);
     expect(body).toMatch(
-      /export interface PostmarkSendApi \{\s*\n?\s*sendEmail\(input: \{\s*\n?\s*From: string;\s*\n?\s*To: string;\s*\n?\s*Subject: string;\s*\n?\s*TextBody: string;\s*\n?\s*HtmlBody: string;\s*\n?\s*ReplyTo: string;\s*\n?\s*MessageStream: string;\s*\n?\s*\}\): Promise<unknown>;/,
+      /export interface PostmarkSendApi \{\s*sendEmail\(input: \{\s*From: string;\s*To: string;\s*Subject: string;\s*TextBody: string;\s*HtmlBody: string;\s*ReplyTo: string;\s*MessageStream: string;\s*\}\): Promise<unknown>;/,
     );
   });
 
@@ -209,7 +209,7 @@ describe('W405.A apps/server/src/services/email.ts content parity', () => {
 
   it("sendStatusIncidentNotification: kind 'created' → 'status-incident-created' template; 'updated' → 'status-incident-updated' (V-545.B); 'resolved' → 'status-incident-resolved' template", () => {
     expect(body).toMatch(
-      /send\(\s*\n?\s*kind === 'created'\s*\n?\s*\? 'status-incident-created'\s*\n?\s*: kind === 'updated'\s*\n?\s*\? 'status-incident-updated'\s*\n?\s*: 'status-incident-resolved',/,
+      /send\(\s*kind === 'created'\s*\? 'status-incident-created'\s*: kind === 'updated'\s*\? 'status-incident-updated'\s*: 'status-incident-resolved',/,
     );
   });
 

@@ -54,47 +54,47 @@ describe('W411.A apps/server/src/routes/status-subscribe.ts content parity', () 
 
   it('Auth posture pinned: unauthenticated by design + IP rate-limited 3/min default via statusSubscribe config', () => {
     expect(body).toMatch(
-      /All three routes are unauthenticated by design \(the status site is\s*\n?\s*\/\/\s*public; visitors don't have Driftstack accounts\)\. IP rate-limited\s*\n?\s*\/\/\s*via `statusSubscribe` config \(3\/min by default\)\./,
+      /All three routes are unauthenticated by design \(the status site is\s*\/\/\s*public; visitors don't have Driftstack accounts\)\. IP rate-limited\s*\/\/\s*via `statusSubscribe` config \(3\/min by default\)\./,
     );
   });
 
   it('SubscribeBodySchema: zod email trim + .email() + .max(254) with "Must be a valid email address." copy', () => {
     expect(body).toMatch(
-      /const SubscribeBodySchema = z\.object\(\{\s*\n?\s*email: z\.string\(\)\.trim\(\)\.email\('Must be a valid email address\.'\)\.max\(254\),\s*\n?\s*\}\);/,
+      /const SubscribeBodySchema = z\.object\(\{\s*email: z\.string\(\)\.trim\(\)\.email\('Must be a valid email address\.'\)\.max\(254\),\s*\}\);/,
     );
   });
 
   it('TokenQuerySchema: zod string min(20) with "Missing or malformed token." copy', () => {
     expect(body).toMatch(
-      /const TokenQuerySchema = z\.object\(\{\s*\n?\s*token: z\.string\(\)\.min\(20, 'Missing or malformed token\.'\),\s*\n?\s*\}\);/,
+      /const TokenQuerySchema = z\.object\(\{\s*token: z\.string\(\)\.min\(20, 'Missing or malformed token\.'\),\s*\}\);/,
     );
   });
 
   it("ipRateLimit gate: bucketPrefix='ip:status-subscribe' + AUTH_IP_LIMITS.statusSubscribe spread", () => {
     expect(body).toMatch(
-      /const subscribeGate = ipRateLimit\(rateLimitStore, \{\s*\n?\s*bucketPrefix: 'ip:status-subscribe',\s*\n?\s*\.\.\.AUTH_IP_LIMITS\.statusSubscribe,\s*\n?\s*\}\);/,
+      /const subscribeGate = ipRateLimit\(rateLimitStore, \{\s*bucketPrefix: 'ip:status-subscribe',\s*\.\.\.AUTH_IP_LIMITS\.statusSubscribe,\s*\}\);/,
     );
   });
 
   it('POST /v1/status/subscribe: preHandler subscribeGate + service.subscribe(email, now) + 202 reply', () => {
     expect(body).toMatch(
-      /app\.post\('\/v1\/status\/subscribe', \{ preHandler: \[subscribeGate\] \}, async \(request, reply\) => \{\s*\n?\s*const parsed = SubscribeBodySchema\.safeParse\(request\.body\);\s*\n?\s*if \(!parsed\.success\) throw new ValidationError\(parsed\.error\.flatten\(\)\);\s*\n?\s*await service\.subscribe\(parsed\.data\.email, new Date\(\)\);\s*\n?\s*return reply\.code\(202\)\.send\(\{\s*\n?\s*message: 'Confirmation email sent\. Click the link to finish subscribing\.',\s*\n?\s*\}\);/,
+      /app\.post\('\/v1\/status\/subscribe', \{ preHandler: \[subscribeGate\] \}, async \(request, reply\) => \{\s*const parsed = SubscribeBodySchema\.safeParse\(request\.body\);\s*if \(!parsed\.success\) throw new ValidationError\(parsed\.error\.flatten\(\)\);\s*await service\.subscribe\(parsed\.data\.email, new Date\(\)\);\s*return reply\.code\(202\)\.send\(\{\s*message: 'Confirmation email sent\. Click the link to finish subscribing\.',\s*\}\);/,
     );
   });
 
   it('GET /v1/status/subscribe/confirm: subscribeGate + TokenQuerySchema + service.confirm + 200 with confirmation copy', () => {
     expect(body).toMatch(
-      /app\.get<\{ Querystring: \{ token: string \} \}>\(\s*\n?\s*'\/v1\/status\/subscribe\/confirm',\s*\n?\s*\{ preHandler: \[subscribeGate\] \},/,
+      /app\.get<\{ Querystring: \{ token: string \} \}>\(\s*'\/v1\/status\/subscribe\/confirm',\s*\{ preHandler: \[subscribeGate\] \},/,
     );
     expect(body).toMatch(/await service\.confirm\(parsed\.data\.token, new Date\(\)\);/);
     expect(body).toMatch(
-      /return reply\.code\(200\)\.send\(\{\s*\n?\s*message: 'Subscription confirmed\. You will receive incident notifications by email\.',\s*\n?\s*\}\);/,
+      /return reply\.code\(200\)\.send\(\{\s*message: 'Subscription confirmed\. You will receive incident notifications by email\.',\s*\}\);/,
     );
   });
 
   it('GET /v1/status/subscribe/unsubscribe: subscribeGate + TokenQuerySchema + service.unsubscribe + 200 "Unsubscribed."', () => {
     expect(body).toMatch(
-      /app\.get<\{ Querystring: \{ token: string \} \}>\(\s*\n?\s*'\/v1\/status\/subscribe\/unsubscribe',\s*\n?\s*\{ preHandler: \[subscribeGate\] \},/,
+      /app\.get<\{ Querystring: \{ token: string \} \}>\(\s*'\/v1\/status\/subscribe\/unsubscribe',\s*\{ preHandler: \[subscribeGate\] \},/,
     );
     expect(body).toMatch(/await service\.unsubscribe\(parsed\.data\.token, new Date\(\)\);/);
     expect(body).toMatch(/return reply\.code\(200\)\.send\(\{ message: 'Unsubscribed\.' \}\);/);
@@ -130,7 +130,7 @@ describe('W411.A apps/server/src/routes/status-subscribe.ts content parity', () 
 
   it('StatusSubscribeRoutesOptions: service + rateLimitStore deps', () => {
     expect(body).toMatch(
-      /export interface StatusSubscribeRoutesOptions \{\s*\n?\s*service: StatusSubscribersService;\s*\n?\s*rateLimitStore: RateLimitStore;\s*\n?\s*\}/,
+      /export interface StatusSubscribeRoutesOptions \{\s*service: StatusSubscribersService;\s*rateLimitStore: RateLimitStore;\s*\}/,
     );
   });
 

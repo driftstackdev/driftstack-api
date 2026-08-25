@@ -28,19 +28,19 @@ describe('services/agent-pair-mode-heartbeat content parity', () => {
       /\/\/ Arc 4 Wave 2\.B sub-slice 8\.13b \(v2-#8\) — pair-mode heartbeat tracker\./,
     );
     expect(body).toMatch(
-      /\/\/ Pure data structure that maps `sessionId → lastHeartbeatAt` and\s*\n?\s*\/\/ exposes `findStaleSessions\(now, ttlMs\)` so a sweep service can\s*\n?\s*\/\/ fire the `heartbeat-timeout` state-machine transition \(sub-slice\s*\n?\s*\/\/ 8\.13\) for each stale session\./,
+      /\/\/ Pure data structure that maps `sessionId → lastHeartbeatAt` and\s*\/\/ exposes `findStaleSessions\(now, ttlMs\)` so a sweep service can\s*\/\/ fire the `heartbeat-timeout` state-machine transition \(sub-slice\s*\/\/ 8\.13\) for each stale session\./,
     );
   });
 
   it("Sweep-service-not-wired-here framing pinned: 'The sweep service itself is intentionally not wired here — that follow-up adds a scheduled-job entry that scans this tracker every 5s and fires the transition + audit emit (sub-slice 8.13c). This slice ships the tracker primitive in isolation so its semantics are pinned by unit tests before any cron-driver couples to it.' — pinned so the 8.13c sweep cross-reference + the 5s-scan cadence + the deliberate-isolation rationale stay documented", () => {
     expect(body).toMatch(
-      /\/\/ The sweep service itself is intentionally not wired here — that\s*\n?\s*\/\/ follow-up adds a scheduled-job entry that scans this tracker every\s*\n?\s*\/\/ 5s and fires the transition \+ audit emit \(sub-slice 8\.13c\)\. This\s*\n?\s*\/\/ slice ships the tracker primitive in isolation so its semantics\s*\n?\s*\/\/ are pinned by unit tests before any cron-driver couples to it\./,
+      /\/\/ The sweep service itself is intentionally not wired here — that\s*\/\/ follow-up adds a scheduled-job entry that scans this tracker every\s*\/\/ 5s and fires the transition \+ audit emit \(sub-slice 8\.13c\)\. This\s*\/\/ slice ships the tracker primitive in isolation so its semantics\s*\/\/ are pinned by unit tests before any cron-driver couples to it\./,
     );
   });
 
   it("Single-replica + future-redis-swap framing pinned: 'Single-replica today. A future redis-backed swap can replace the in-memory Map with redis-hash storage; the public interface stays the same so the swap is invisible to callers.' — pinned so the v1.0-single-replica posture + invisible-redis-swap contract survive", () => {
     expect(body).toMatch(
-      /\/\/ Single-replica today\. A future redis-backed swap can replace the\s*\n?\s*\/\/ in-memory Map with redis-hash storage; the public interface stays\s*\n?\s*\/\/ the same so the swap is invisible to callers\./,
+      /\/\/ Single-replica today\. A future redis-backed swap can replace the\s*\/\/ in-memory Map with redis-hash storage; the public interface stays\s*\/\/ the same so the swap is invisible to callers\./,
     );
   });
 
@@ -56,25 +56,25 @@ describe('services/agent-pair-mode-heartbeat content parity', () => {
 
   it("findStaleSessions sort-order framing pinned: 'Returns sessions sorted by lastHeartbeatAt ascending (oldest first) so the sweep handles the most-stuck sessions first if it has to truncate.' — pinned so the oldest-first contract stays documented (drift to a different sort order would silently change which sessions get auto-handback first when the sweep has to skip some)", () => {
     expect(body).toMatch(
-      /Returns sessions sorted by lastHeartbeatAt ascending \(oldest\s*\n?\s*\*\s+first\) so the sweep handles the most-stuck sessions first if it\s*\n?\s*\*\s+has to truncate\./,
+      /Returns sessions sorted by lastHeartbeatAt ascending \(oldest\s*\*\s+first\) so the sweep handles the most-stuck sessions first if it\s*\*\s+has to truncate\./,
     );
   });
 
   it("forget()-on-session-close framing pinned: 'Forget a session's heartbeat (called on session close or explicit handback-complete so the tracker doesn't accumulate stale entries indefinitely).' — pinned so the cleanup-on-close + cleanup-on-handback-complete contract stays documented", () => {
     expect(body).toMatch(
-      /Forget a session's heartbeat \(called on session close or\s*\n?\s*\*\s+explicit handback-complete so the tracker doesn't accumulate\s*\n?\s*\*\s+stale entries indefinitely\)\./,
+      /Forget a session's heartbeat \(called on session close or\s*\*\s+explicit handback-complete so the tracker doesn't accumulate\s*\*\s+stale entries indefinitely\)\./,
     );
   });
 
   it('InMemoryPairModeHeartbeatTracker findStaleSessions() sort-then-map pattern pinned: collect (id, ts) tuples below cutoff, sort by ts ascending, map to ids. Drift to a different sort key OR dropping the sort would violate the oldest-first contract', () => {
     expect(body).toMatch(
-      /const cutoff = args\.now\.getTime\(\) - args\.ttlMs;\s*\n?\s*const stale: Array<\{ id: string; ts: number \}> = \[\];\s*\n?\s*for \(const \[sessionId, last\] of this\.entries\) \{\s*\n?\s*const ts = last\.getTime\(\);\s*\n?\s*if \(ts < cutoff\) stale\.push\(\{ id: sessionId, ts \}\);\s*\n?\s*\}\s*\n?\s*stale\.sort\(\(a, b\) => a\.ts - b\.ts\);\s*\n?\s*return stale\.map\(\(s\) => s\.id\);/,
+      /const cutoff = args\.now\.getTime\(\) - args\.ttlMs;\s*const stale: Array<\{ id: string; ts: number \}> = \[\];\s*for \(const \[sessionId, last\] of this\.entries\) \{\s*const ts = last\.getTime\(\);\s*if \(ts < cutoff\) stale\.push\(\{ id: sessionId, ts \}\);\s*\}\s*stale\.sort\(\(a, b\) => a\.ts - b\.ts\);\s*return stale\.map\(\(s\) => s\.id\);/,
     );
   });
 
   it("PAIR_MODE_HEARTBEAT_TTL_MS = 30_000 pinned: 'Default heartbeat-timeout window per founder verdict on the Wave 2.A 8.13 transition (30 seconds). Exported as a constant so the sweep service + docs + state-machine commentary stay aligned.' — pinned so the 30s window + cross-source single-source-of-truth contract survives. Drift would diverge from the state-machine's heartbeat-timeout transition framing", () => {
     expect(body).toMatch(
-      /\/\*\* Default heartbeat-timeout window per founder verdict on the\s*\n?\s*\*\s+Wave 2\.A 8\.13 transition \(30 seconds\)\. Exported as a constant so\s*\n?\s*\*\s+the sweep service \+ docs \+ state-machine commentary stay aligned\. \*\/\s*\n?\s*export const PAIR_MODE_HEARTBEAT_TTL_MS = 30_000;/,
+      /\/\*\* Default heartbeat-timeout window per founder verdict on the\s*\*\s+Wave 2\.A 8\.13 transition \(30 seconds\)\. Exported as a constant so\s*\*\s+the sweep service \+ docs \+ state-machine commentary stay aligned\. \*\/\s*export const PAIR_MODE_HEARTBEAT_TTL_MS = 30_000;/,
     );
   });
 });

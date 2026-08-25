@@ -60,23 +60,23 @@ describe('W372.B customer-dashboard /reset-password page content parity', () => 
   });
 
   it('missing-token UX: data-missing block + back-to-/forgot-password cross-link', () => {
-    expect(body).toMatch(/<div\s*\n?\s*data-missing[\s\S]*?No reset token in URL/);
+    expect(body).toMatch(/<div\s*data-missing[\s\S]*?No reset token in URL/);
     expect(body).toMatch(
-      /Open the page from the link in your reset email, or\s+<a\s*\n?\s*href="\/forgot-password\/"\s*\n?\s*class="[^"]+"\s*>\s*request a new one\s*<\/a\s*>/,
+      /Open the page from the link in your reset email, or\s+<a\s*href="\/forgot-password\/"\s*class="[^"]+"\s*>\s*request a new one\s*<\/a\s*>/,
     );
     expect(existsSync(FORGOT)).toBe(true);
     // Token-absent branch swaps form for missing UI.
     expect(body).toMatch(
-      /if \(!token\) \{\s*\n?\s*form\.classList\.add\('hidden'\);\s*\n?\s*missing\.classList\.remove\('hidden'\);/,
+      /if \(!token\) \{\s*form\.classList\.add\('hidden'\);\s*missing\.classList\.remove\('hidden'\);/,
     );
   });
 
   it('confirm-password match check (client-side) before POST', () => {
     expect(body).toMatch(
-      /if \(password !== confirm\) \{\s*\n?\s*showBanner\('Passwords do not match\.'\);/,
+      /if \(password !== confirm\) \{\s*showBanner\('Passwords do not match\.'\);/,
     );
     expect(body).toMatch(
-      /if \(password\.length < 12\) \{\s*\n?\s*showBanner\('Password must be at least 12 characters\.'\);/,
+      /if \(password\.length < 12\) \{\s*showBanner\('Password must be at least 12 characters\.'\);/,
     );
   });
 

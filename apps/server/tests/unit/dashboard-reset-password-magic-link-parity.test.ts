@@ -95,7 +95,7 @@ describe('W736 reset-password + magic-link dashboard pages parity', () => {
     const m = read(MAGIC);
 
     expect(m).toMatch(/#190 — magic-link consume page\. Pairs with the V-079/);
-    expect(m).toMatch(/backend route\s*\n?\s*\/\/\s*`POST \/v1\/auth\/magic-link\/consume`/);
+    expect(m).toMatch(/backend route\s*\/\/\s*`POST \/v1\/auth\/magic-link\/consume`/);
     expect(m).toMatch(
       /Token is one-shot — second use returns 400; a successful MFA challenge is too/,
     );

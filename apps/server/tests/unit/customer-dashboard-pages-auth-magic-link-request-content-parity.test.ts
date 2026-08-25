@@ -30,7 +30,7 @@ describe('customer-dashboard auth/magic-link-request content parity', () => {
 
   it("anti-enumeration response-shape contract pinned: 'shape is stable regardless of whether the email matches an account'. Drift to returning different shapes on match-vs-no-match would re-introduce email-enumeration as a side channel", () => {
     expect(body).toMatch(
-      /shape is stable regardless of whether the email matches an\s*\n?\s*\/\/?\s*account \(anti-enumeration — same posture as forgot-password\)/,
+      /shape is stable regardless of whether the email matches an\s*\/\/?\s*account \(anti-enumeration — same posture as forgot-password\)/,
     );
   });
 
@@ -41,7 +41,7 @@ describe('customer-dashboard auth/magic-link-request content parity', () => {
 
   it('forgot-password shape-parity framing pinned: drift to diverging the two no-leak self-service flows would create UX inconsistency + complicate cross-flow help-text', () => {
     expect(body).toMatch(
-      /Mirrors forgot-password\.astro's shape so the visual \+ behavior are\s*\n?\s*\/\/?\s*consistent across the two no-leak self-service flows/,
+      /Mirrors forgot-password\.astro's shape so the visual \+ behavior are\s*\/\/?\s*consistent across the two no-leak self-service flows/,
     );
   });
 
@@ -59,7 +59,7 @@ describe('customer-dashboard auth/magic-link-request content parity', () => {
     expect(body).toMatch(/const REQUEST_TIMEOUT_MS = 15_000;/);
     expect(body).toMatch(/signal: controller\.signal,/);
     expect(body).toMatch(
-      /if \(controller\.signal\.aborted\) \{\s*\n?\s*showUnknownOutcome\(email\);\s*\n?\s*return;/,
+      /if \(controller\.signal\.aborted\) \{\s*showUnknownOutcome\(email\);\s*return;/,
     );
     expect(body).toMatch(
       /requestInFlight = false;\s*if \(!requestOutcomeUnknown && !requestResponseAccepted\) setSubmitting\(false\);/,

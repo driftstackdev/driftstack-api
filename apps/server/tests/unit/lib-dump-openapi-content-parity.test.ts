@@ -32,7 +32,7 @@ describe('W429.C apps/server/src/lib/dump-openapi.ts content parity', () => {
 
   it('Framing pinned: SDK build-pipeline input (Python, Go codegen); tsx invocation', () => {
     expect(body).toMatch(
-      /\/\/ Dump the generated OpenAPI 3\.1 spec to disk\. Used by SDK build\s*\n?\s*\/\/ pipelines \(Python, Go\) as the input to their codegen tooling\.\s*\n?\s*\/\/ Run with: tsx src\/lib\/dump-openapi\.ts <output-path>/,
+      /\/\/ Dump the generated OpenAPI 3\.1 spec to disk\. Used by SDK build\s*\/\/ pipelines \(Python, Go\) as the input to their codegen tooling\.\s*\/\/ Run with: tsx src\/lib\/dump-openapi\.ts <output-path>/,
     );
   });
 
@@ -46,7 +46,7 @@ describe('W429.C apps/server/src/lib/dump-openapi.ts content parity', () => {
     expect(body).toMatch(/async function main\(\): Promise<void> \{/);
     expect(body).toMatch(/const outArg = process\.argv\[2\];/);
     expect(body).toMatch(
-      /if \(!outArg\) \{\s*\n?\s*console\.error\('Usage: tsx src\/lib\/dump-openapi\.ts <output-path>'\);\s*\n?\s*process\.exit\(1\);\s*\n?\s*\}/,
+      /if \(!outArg\) \{\s*console\.error\('Usage: tsx src\/lib\/dump-openapi\.ts <output-path>'\);\s*process\.exit\(1\);\s*\}/,
     );
   });
 
@@ -64,7 +64,7 @@ describe('W429.C apps/server/src/lib/dump-openapi.ts content parity', () => {
 
   it('top-level invocation: main().catch logs err to stderr + process.exit(1)', () => {
     expect(body).toMatch(
-      /main\(\)\.catch\(\(err: unknown\) => \{\s*\n?\s*console\.error\(err\);\s*\n?\s*process\.exit\(1\);\s*\n?\s*\}\);/,
+      /main\(\)\.catch\(\(err: unknown\) => \{\s*console\.error\(err\);\s*process\.exit\(1\);\s*\}\);/,
     );
   });
 

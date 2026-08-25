@@ -81,7 +81,7 @@ describe('W881 CliAuthorizeExchange cross-source invariant', () => {
     // JSDoc wraps across lines; check the key phrases separately.
     expect(p).toMatch(/`bound` → key delivered \(one-shot;/);
     expect(p).toMatch(/`\{ status: 'expired' \}` with HTTP 200/);
-    expect(p).toMatch(/`expired` → user took too\s*\n?\s*\*?\s*long/);
+    expect(p).toMatch(/`expired` → user took too\s*\*?\s*long/);
   });
 
   // ─── 4-step flow framing ────────────────────────────────────

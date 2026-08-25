@@ -63,18 +63,18 @@ describe('W428.A packages/sdk-typescript/src/resources/api-keys.ts content parit
   });
 
   it('ApiKeyList envelope — single field shape (data: ApiKey[]). No pagination because api-keys are a small per-account set; drift to adding has_more / next_cursor would silently change the contract from "list all" to "paginated", which would break the dashboard\'s 1-call key-management UX.', () => {
-    expect(body).toMatch(/export interface ApiKeyList \{\s*\n?\s*data: ApiKey\[\];\s*\n?\s*\}/);
+    expect(body).toMatch(/export interface ApiKeyList \{\s*data: ApiKey\[\];\s*\}/);
   });
 
   it('V-296 RotateApiKeyResponse doc-comment pinned per-line — covers "Includes the new key\'s plaintext (shown ONCE)" + "the previous key\'s id" + "the timestamp at which the previous key auto-revokes via the existing expires_at-driven auth gate". CRITICAL: the auto-revoke mechanism ("existing expires_at-driven auth gate") is what makes V-296 work without a separate cleanup job — the auth gate already checks expires_at on every request, so setting OLD.expires_at = now+24h is the entire rotation logic on the server side.', () => {
     expect(body).toMatch(
-      /\*\s*V-296 — response shape for POST \/v1\/api-keys\/:id\/rotate\. Includes the\s*\n?\s*\*\s*new key's plaintext \(shown ONCE\), the previous key's id, and the\s*\n?\s*\*\s*timestamp at which the previous key auto-revokes via the existing\s*\n?\s*\*\s*expires_at-driven auth gate\./,
+      /\*\s*V-296 — response shape for POST \/v1\/api-keys\/:id\/rotate\. Includes the\s*\*\s*new key's plaintext \(shown ONCE\), the previous key's id, and the\s*\*\s*timestamp at which the previous key auto-revokes via the existing\s*\*\s*expires_at-driven auth gate\./,
     );
   });
 
   it("RotateApiKeyResponse — extends CreateApiKeyResponse + 2 NEW fields (rotated_from + grace_period_ends_at). CRITICAL: extends-inheritance lets RotateApiKeyResponse share the plaintext + id + name fields with CreateApiKeyResponse without duplicating the shape. Drift to hand-rolling all fields would silently allow the response shapes to diverge if CreateApiKeyResponse adds a field but RotateApiKeyResponse doesn't.", () => {
     expect(body).toMatch(
-      /export interface RotateApiKeyResponse extends CreateApiKeyResponse \{\s*\n?\s*rotated_from: string;\s*\n?\s*grace_period_ends_at: string;\s*\n?\s*\}/,
+      /export interface RotateApiKeyResponse extends CreateApiKeyResponse \{\s*rotated_from: string;\s*grace_period_ends_at: string;\s*\}/,
     );
   });
 
@@ -85,7 +85,7 @@ describe('W428.A packages/sdk-typescript/src/resources/api-keys.ts content parit
 
   it('RotateApiKeyOptions.name — optional with "Defaults to the old name" semantic. Drift to making name required would break the "just rotate, keep the rest" call site where customers don\'t want to change the human-readable label. Drift to dropping the default-to-old-name semantic would force every rotate call to specify a name.', () => {
     expect(body).toMatch(
-      /export interface RotateApiKeyOptions \{\s*\n?\s*\/\*\* Optional new name for the rotated key\. Defaults to the old name\. \*\/\s*\n?\s*name\?: string;\s*\n?\s*\}/,
+      /export interface RotateApiKeyOptions \{\s*\/\*\* Optional new name for the rotated key\. Defaults to the old name\. \*\/\s*name\?: string;\s*\}/,
     );
   });
 
@@ -96,13 +96,13 @@ describe('W428.A packages/sdk-typescript/src/resources/api-keys.ts content parit
 
   it('create verb JSDoc — CRITICAL plaintext-once invariant: "The plaintext is returned ONCE in the response; store it now — it cannot be retrieved later." Also pinned: "Requires the `account_owner` scope on the calling key" (V-174). The scope check is what prevents a non-owner key from minting new keys (privilege escalation guard).', () => {
     expect(body).toMatch(
-      /\*\s*Create a new API key\. The plaintext is returned ONCE in the response;\s*\n?\s*\*\s*store it now — it cannot be retrieved later\. Requires the\s*\n?\s*\*\s*`account_owner` scope on the calling key\./,
+      /\*\s*Create a new API key\. The plaintext is returned ONCE in the response;\s*\*\s*store it now — it cannot be retrieved later\. Requires the\s*\*\s*`account_owner` scope on the calling key\./,
     );
   });
 
   it('create verb implementation — POST /v1/api-keys with CreateApiKeyRequest body → Promise<CreateApiKeyResponse>. Single-line wire-mapping; the validation lives on the server side.', () => {
     expect(body).toMatch(
-      /create\(body: CreateApiKeyRequest\): Promise<CreateApiKeyResponse> \{\s*\n?\s*return this\.http\.request<CreateApiKeyResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/api-keys',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /create\(body: CreateApiKeyRequest\): Promise<CreateApiKeyResponse> \{\s*return this\.http\.request<CreateApiKeyResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/api-keys',\s*body,\s*\}\);\s*\}/,
     );
   });
 
@@ -111,7 +111,7 @@ describe('W428.A packages/sdk-typescript/src/resources/api-keys.ts content parit
       /\/\*\* List all API keys for the current account\. Plaintext is never included\. \*\//,
     );
     expect(body).toMatch(
-      /list\(\): Promise<ApiKeyList> \{\s*\n?\s*return this\.http\.request<ApiKeyList>\(\{ method: 'GET', path: '\/v1\/api-keys' \}\);\s*\n?\s*\}/,
+      /list\(\): Promise<ApiKeyList> \{\s*return this\.http\.request<ApiKeyList>\(\{ method: 'GET', path: '\/v1\/api-keys' \}\);\s*\}/,
     );
   });
 
@@ -120,13 +120,13 @@ describe('W428.A packages/sdk-typescript/src/resources/api-keys.ts content parit
       /\/\*\* Revoke an API key\. Idempotent — revoking an already-revoked key is a no-op\. \*\//,
     );
     expect(body).toMatch(
-      /revoke\(keyId: string\): Promise<void> \{\s*\n?\s*return this\.http\.request<void>\(\{\s*\n?\s*method: 'DELETE',\s*\n?\s*path: `\/v1\/api-keys\/\$\{encodeURIComponent\(keyId\)\}`,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /revoke\(keyId: string\): Promise<void> \{\s*return this\.http\.request<void>\(\{\s*method: 'DELETE',\s*path: `\/v1\/api-keys\/\$\{encodeURIComponent\(keyId\)\}`,\s*\}\);\s*\}/,
     );
   });
 
   it('V-296 rotate verb JSDoc — pinned per-line: (1) "Mints a fresh plaintext + sets the OLD key\'s expires_at to now + 24h grace" (the SERVER-SIDE rotation logic — atomic mint + expires_at update). (2) "Both keys work concurrently during the grace window; deploy the new key, then the old key auto-revokes at the grace boundary via the existing expires_at-driven auth gate" (the CUSTOMER-FACING deploy flow). Drift to a non-24h window OR a non-auto-revoke mechanism would silently change rotation semantics customers anchor their deploy timelines on.', () => {
     expect(body).toMatch(
-      /\*\s*V-296 — rotate an API key\. Mints a fresh plaintext \+ sets the OLD key's\s*\n?\s*\*\s*expires_at to now \+ 24h grace\. Both keys work concurrently during the\s*\n?\s*\*\s*grace window; deploy the new key, then the old key auto-revokes at the\s*\n?\s*\*\s*grace boundary via the existing expires_at-driven auth gate\./,
+      /\*\s*V-296 — rotate an API key\. Mints a fresh plaintext \+ sets the OLD key's\s*\*\s*expires_at to now \+ 24h grace\. Both keys work concurrently during the\s*\*\s*grace window; deploy the new key, then the old key auto-revokes at the\s*\*\s*grace boundary via the existing expires_at-driven auth gate\./,
     );
     expect(body).toMatch(
       /\*\s*The new plaintext is returned ONCE in the response — store it now\./,
@@ -135,7 +135,7 @@ describe('W428.A packages/sdk-typescript/src/resources/api-keys.ts content parit
 
   it('V-296 rotate verb implementation — POST /v1/api-keys/${encodeURIComponent(keyId)}/rotate with RotateApiKeyOptions body (default-empty `= {}`) → Promise<RotateApiKeyResponse>. Default-empty options lets callers write `apiKeys.rotate(keyId)` without passing options at all (covering the "rotate, keep the old name" common case).', () => {
     expect(body).toMatch(
-      /rotate\(keyId: string, options: RotateApiKeyOptions = \{\}\): Promise<RotateApiKeyResponse> \{\s*\n?\s*return this\.http\.request<RotateApiKeyResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: `\/v1\/api-keys\/\$\{encodeURIComponent\(keyId\)\}\/rotate`,\s*\n?\s*body: options,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /rotate\(keyId: string, options: RotateApiKeyOptions = \{\}\): Promise<RotateApiKeyResponse> \{\s*return this\.http\.request<RotateApiKeyResponse>\(\{\s*method: 'POST',\s*path: `\/v1\/api-keys\/\$\{encodeURIComponent\(keyId\)\}\/rotate`,\s*body: options,\s*\}\);\s*\}/,
     );
   });
 

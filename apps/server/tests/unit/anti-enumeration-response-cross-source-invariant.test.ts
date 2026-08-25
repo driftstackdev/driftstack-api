@@ -83,10 +83,8 @@ describe('W882 anti-enumeration response cross-source invariant', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/auth.ts'));
     expect(p).toMatch(/Always `true` to the/);
     expect(p).toMatch(/client even when the email doesn't exist/);
-    expect(p).toMatch(/response shape\s*\n?\s*\/\/ doesn't leak account-existence/);
-    expect(p).toMatch(
-      /service layer either sends or\s*\n?\s*\/\/ silently no-ops based on the lookup/,
-    );
+    expect(p).toMatch(/response shape\s*\/\/ doesn't leak account-existence/);
+    expect(p).toMatch(/service layer either sends or\s*\/\/ silently no-ops based on the lookup/);
   });
 
   // ─── ResendVerificationResponse anti-enum framing pinned ─────
@@ -106,7 +104,7 @@ describe('W882 anti-enumeration response cross-source invariant', () => {
   it("CRITICAL ResendVerificationResponse debug_token has describe('Stub email mode only — the plaintext verification token'). The describe makes it clear this is test-only.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/auth.ts'));
     expect(p).toMatch(
-      /debug_token: z\s*\n?\s*\.string\(\)\s*\n?\s*\.optional\(\)\s*\n?\s*\.describe\('Stub email mode only — the plaintext verification token'\)/,
+      /debug_token: z\s*\.string\(\)\s*\.optional\(\)\s*\.describe\('Stub email mode only — the plaintext verification token'\)/,
     );
   });
 
@@ -123,7 +121,7 @@ describe('W882 anti-enumeration response cross-source invariant', () => {
       if (start === -1) return true;
       const end = p.indexOf('\n});', start);
       const block = end === -1 ? p.slice(start) : p.slice(start, end);
-      return !/debug_token: z\s*\n?\s*\.string\(\)\s*\n?\s*\.optional\(\)\s*\n?\s*\.describe\('Stub email mode only — [^']+'\)/.test(
+      return !/debug_token: z\s*\.string\(\)\s*\.optional\(\)\s*\.describe\('Stub email mode only — [^']+'\)/.test(
         block,
       );
     });

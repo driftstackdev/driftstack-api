@@ -42,7 +42,7 @@ describe('W388.B apps/server/src/lib/oauth-pkce.ts content parity', () => {
   it('customer story framing: 3rd-party app authorize → code → exchange-with-verifier', () => {
     expect(body).toMatch(/Customer story: a third-party app/);
     expect(body).toMatch(
-      /PKCE binds the code to the calling client\s*\n?\s*\/\/\s*session so a leaked authorization code is unusable without the\s*\n?\s*\/\/\s*matching `code_verifier`/,
+      /PKCE binds the code to the calling client\s*\/\/\s*session so a leaked authorization code is unusable without the\s*\/\/\s*matching `code_verifier`/,
     );
   });
 
@@ -57,7 +57,7 @@ describe('W388.B apps/server/src/lib/oauth-pkce.ts content parity', () => {
 
   it('constant-time framing: timingSafeEqual prevents verifier leak via timing side channels', () => {
     expect(body).toMatch(
-      /Constant-time comparison via timingSafeEqual avoids leaking the\s*\n?\s*\/\/\s*verifier through timing side channels/,
+      /Constant-time comparison via timingSafeEqual avoids leaking the\s*\/\/\s*verifier through timing side channels/,
     );
   });
 
@@ -70,13 +70,13 @@ describe('W388.B apps/server/src/lib/oauth-pkce.ts content parity', () => {
   it('CHALLENGE_PATTERN: 43-char base64url shape (RFC 7636 §4.2 sha256 digest)', () => {
     expect(body).toMatch(/const CHALLENGE_PATTERN = \/\^\[A-Za-z0-9\\-\._~\]\{43\}\$\/;/);
     expect(body).toMatch(
-      /RFC 7636 §4\.2 challenge alphabet: base64url-encoded sha256 digest\s*\n?\s*\*\s*\(43 chars after `=` stripping\)/,
+      /RFC 7636 §4\.2 challenge alphabet: base64url-encoded sha256 digest\s*\*\s*\(43 chars after `=` stripping\)/,
     );
   });
 
   it('computeS256Challenge: throws on malformed verifier (loud fail at construction, not silent reject)', () => {
     expect(body).toMatch(
-      /Throws on a verifier that does not match the RFC 7636 alphabet —\s*\n?\s*\*\s*client-side libraries that hand us a malformed verifier deserve a\s*\n?\s*\*\s*loud failure, not a silent reject at compare time/,
+      /Throws on a verifier that does not match the RFC 7636 alphabet —\s*\*\s*client-side libraries that hand us a malformed verifier deserve a\s*\*\s*loud failure, not a silent reject at compare time/,
     );
     expect(body).toMatch(
       /throw new Error\('Invalid PKCE code_verifier — must be 43–128 unreserved URL-safe chars\.'\);/,
@@ -100,14 +100,14 @@ describe('W388.B apps/server/src/lib/oauth-pkce.ts content parity', () => {
     expect(body).toMatch(/if \(!VERIFIER_PATTERN\.test\(opts\.verifier\)\) return false;/);
     expect(body).toMatch(/if \(!CHALLENGE_PATTERN\.test\(opts\.challenge\)\) return false;/);
     expect(body).toMatch(
-      /try \{\s*\n?\s*provided = base64UrlDecode\(opts\.challenge\);\s*\n?\s*\} catch \{\s*\n?\s*return false;\s*\n?\s*\}/,
+      /try \{\s*provided = base64UrlDecode\(opts\.challenge\);\s*\} catch \{\s*return false;\s*\}/,
     );
     expect(body).toMatch(/if \(provided\.length !== expected\.length\) return false;/);
   });
 
   it('verifyPlainChallenge: RFC 7636 §4.2 plain method (constant-time string compare)', () => {
     expect(body).toMatch(
-      /Plain `plain` method per RFC 7636 §4\.2 — supported for completeness\s*\n?\s*\*\s*but the route layer \(V-488-followup\) refuses anything other than\s*\n?\s*\*\s*S256 at registration time/,
+      /Plain `plain` method per RFC 7636 §4\.2 — supported for completeness\s*\*\s*but the route layer \(V-488-followup\) refuses anything other than\s*\*\s*S256 at registration time/,
     );
     expect(body).toMatch(
       /return timingSafeEqual\(Buffer\.from\(opts\.verifier\), Buffer\.from\(opts\.challenge\)\);/,

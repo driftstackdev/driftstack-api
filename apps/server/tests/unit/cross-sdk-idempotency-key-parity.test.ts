@@ -101,7 +101,7 @@ describe('W683 cross-SDK V-666.AO Idempotency-Key parity', () => {
     expect(go).toMatch(/don't mint duplicates/);
 
     // sdk-python: "retries don't\nmint duplicate orders"
-    expect(py).toMatch(/retries don't\s*\n?\s*mint duplicate orders|don't mint duplicate/);
+    expect(py).toMatch(/retries don't\s*mint duplicate orders|don't mint duplicate/);
   });
 
   it('CRITICAL conditional-spread / fast-path pattern for header injection in all 3 SDKs. Each SDK ONLY sends the Idempotency-Key header when the param is set (NOT always-set). Drift to always-set would pay the overhead on every call and confuse server-side dedup logic.', () => {
@@ -111,7 +111,7 @@ describe('W683 cross-SDK V-666.AO Idempotency-Key parity', () => {
 
     // sdk-typescript: conditional spread `opts.idempotencyKey !== undefined ? { headers: { ... } } : {}`.
     expect(ts).toMatch(
-      /\.\.\.\(opts\.idempotencyKey !== undefined\s*\n?\s*\? \{ headers: \{ 'idempotency-key': opts\.idempotencyKey \} \}\s*\n?\s*: \{\}\)/,
+      /\.\.\.\(opts\.idempotencyKey !== undefined\s*\? \{ headers: \{ 'idempotency-key': opts\.idempotencyKey \} \}\s*: \{\}\)/,
     );
 
     // sdk-go: `if opts != nil && opts.IdempotencyKey != nil { req.headers = ... }`

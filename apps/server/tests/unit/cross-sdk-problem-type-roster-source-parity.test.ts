@@ -59,7 +59,7 @@ describe('W709 api-types Problem-type URI canonical roster parity', () => {
 
   it('CRITICAL Type URI validation pinned — `type` field is z.string().url() (not just z.string()). Drift to dropping .url() would let server-side handlers emit non-URI type values and break the closed-set switch on clients.', () => {
     const src = read(PROBLEM_SCHEMA);
-    expect(src).toMatch(/type: z\s*\n?\s*\.string\(\)\s*\n?\s*\.url\(\)/);
+    expect(src).toMatch(/type: z\s*\.string\(\)\s*\.url\(\)/);
   });
 
   it('CRITICAL HTTP-status bound pinned — status: z.number().int().min(100).max(599). Drift to widening would let server emit 700-class status codes (invalid HTTP); drift to narrowing would force runtime exceptions on legitimate 1xx-5xx.', () => {
@@ -70,9 +70,7 @@ describe('W709 api-types Problem-type URI canonical roster parity', () => {
   it('CRITICAL "keep these URIs forever" framing pinned. The comment is what tells engineers PROBLEM_TYPES entries are FROZEN — adding new ones is safe but renaming/removing breaks every customer error-handler. Drift to dropping would let engineers assume the roster is mutable.', () => {
     const src = read(PROBLEM_SCHEMA);
     expect(src).toMatch(/keep these URIs forever/);
-    expect(src).toMatch(
-      /Adding new ones is fine;\s*\n?\s*\/\/\s*renaming or removing breaks consumers/,
-    );
+    expect(src).toMatch(/Adding new ones is fine;\s*\/\/\s*renaming or removing breaks consumers/);
   });
 
   it('CRITICAL 32-entry PROBLEM_TYPES roster pinned with `as const`. Each entry is a https://errors.driftstack.dev/<slug> URL. Drift to dropping any entry or changing a URI breaks consumers.', () => {

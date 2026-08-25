@@ -54,16 +54,16 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
   it('V-079 scaffolding framing pinned: repo-driven + EmailService fire-and-forget + 32-byte URL-safe base64 sha256-at-rest + AuthFlowError RFC 7807', () => {
     expect(body).toMatch(/V-079 scaffolding shape:/);
     expect(body).toMatch(
-      /Service is repo-driven \(`AuthFlowsRepo`\) so tests can swap an\s*\n?\s*\/\/\s*in-memory implementation for the Drizzle one\./,
+      /Service is repo-driven \(`AuthFlowsRepo`\) so tests can swap an\s*\/\/\s*in-memory implementation for the Drizzle one\./,
     );
     expect(body).toMatch(
-      /Email sends fan out to the existing `EmailService` \(Postmark,\s*\n?\s*\/\/\s*V-057\)\. Sends are fire-and-forget;/,
+      /Email sends fan out to the existing `EmailService` \(Postmark,\s*\/\/\s*V-057\)\. Sends are fire-and-forget;/,
     );
     expect(body).toMatch(
-      /Tokens generate as 32-byte URL-safe base64 plaintext, sha256-hashed\s*\n?\s*\/\/\s*at rest\. Re-presentation hashes-and-equality-compares\./,
+      /Tokens generate as 32-byte URL-safe base64 plaintext, sha256-hashed\s*\/\/\s*at rest\. Re-presentation hashes-and-equality-compares\./,
     );
     expect(body).toMatch(
-      /Error surface is `AuthFlowError` codes the route layer maps to\s*\n?\s*\/\/\s*RFC 7807 problem responses\./,
+      /Error surface is `AuthFlowError` codes the route layer maps to\s*\/\/\s*RFC 7807 problem responses\./,
     );
   });
 
@@ -75,24 +75,24 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
 
   it('AuthFlowErrorCode: 5-code union (email_already_registered / invalid_credentials / email_not_verified / invalid_auth_token / account_suspended)', () => {
     expect(body).toMatch(
-      /export type AuthFlowErrorCode =\s*\n?\s*\| 'email_already_registered'\s*\n?\s*\| 'invalid_credentials'\s*\n?\s*\| 'email_not_verified'\s*\n?\s*\| 'invalid_auth_token'\s*\n?\s*\| 'account_suspended';/,
+      /export type AuthFlowErrorCode =\s*\| 'email_already_registered'\s*\| 'invalid_credentials'\s*\| 'email_not_verified'\s*\| 'invalid_auth_token'\s*\| 'account_suspended';/,
     );
     expect(body).toMatch(/this\.name = 'AuthFlowError';/);
   });
 
   it('V-353d WebSessionRow.mfaSatisfiedAt: step-up gate (15-min freshness window); legacy pre-MFA sessions start null + lazy-satisfied', () => {
     expect(body).toMatch(
-      /\/\*\* V-353d — most recent successful MFA challenge on this session,\s*\n?\s*\*\s*or null if never satisfied\. Step-up gates check\s*\n?\s*\*\s*`now - mfaSatisfiedAt < 15min`\. Sessions issued via the legacy\s*\n?\s*\*\s*pre-MFA-enrollment login path also start null and are lazily\s*\n?\s*\*\s*satisfied on first post-enrollment request\. \*\/\s*\n?\s*mfaSatisfiedAt: Date \| null;/,
+      /\/\*\* V-353d — most recent successful MFA challenge on this session,\s*\*\s*or null if never satisfied\. Step-up gates check\s*\*\s*`now - mfaSatisfiedAt < 15min`\. Sessions issued via the legacy\s*\*\s*pre-MFA-enrollment login path also start null and are lazily\s*\*\s*satisfied on first post-enrollment request\. \*\/\s*mfaSatisfiedAt: Date \| null;/,
     );
   });
 
   it('signup: email lowercase + email_already_registered on collision + hashPassword + insertAuthToken kind=email_verify + fire-and-forget sendSignupVerification', () => {
     expect(body).toMatch(/const email = args\.email\.trim\(\)\.toLowerCase\(\);/);
     expect(body).toMatch(
-      /if \(existing !== null\) \{\s*\n?\s*throw new AuthFlowError\('email_already_registered'\);/,
+      /if \(existing !== null\) \{\s*throw new AuthFlowError\('email_already_registered'\);/,
     );
     expect(body).toMatch(/const passwordHash = await hashPassword\(args\.password\);/);
-    expect(body).toMatch(/await this\.repo\.insertAuthToken\(\{\s*\n?\s*kind: 'email_verify',/);
+    expect(body).toMatch(/await this\.repo\.insertAuthToken\(\{\s*kind: 'email_verify',/);
     expect(body).toMatch(
       /void this\.email\.sendSignupVerification\(\{ to: email, link, expiresAt \}\);/,
     );
@@ -101,20 +101,20 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
   it('V-187 resendSignupVerification: shape-stable and either delivered link may win before family consumption', () => {
     expect(body).toMatch(/\/\/ #187 — self-service resend of the signup verification email\./);
     expect(body).toMatch(
-      /\/\/ Shape-stable: response is identical whether the email matches an\s*\n?\s*\/\/ unverified account, an already-verified account, or no account at\s*\n?\s*\/\/ all — clients can't enumerate\./,
+      /\/\/ Shape-stable: response is identical whether the email matches an\s*\/\/ unverified account, an already-verified account, or no account at\s*\/\/ all — clients can't enumerate\./,
     );
     expect(body).toMatch(
-      /if \(account === null \|\| account\.emailVerifiedAt !== null\) \{\s*\n?\s*\/\/ Don't leak account-existence or verification-state\.[\s\S]+?return \{ sent: false, expiresAt, debugToken: null \};/,
+      /if \(account === null \|\| account\.emailVerifiedAt !== null\) \{\s*\/\/ Don't leak account-existence or verification-state\.[\s\S]+?return \{ sent: false, expiresAt, debugToken: null \};/,
     );
   });
 
   it('verifyEmail: account-family first-winner claim retires siblings and checks active status before session issuance', () => {
     expect(body).toMatch(/if \(row === null\) throw new AuthFlowError\('invalid_auth_token'\);/);
     expect(body).toMatch(
-      /const consumed = await this\.repo\.consumeAuthTokenFamily\(\{\s*\n?\s*kind: 'email_verify',\s*\n?\s*id: row\.id,\s*\n?\s*accountId: row\.accountId,\s*\n?\s*at: now,\s*\n?\s*\}\);\s*\n?\s*if \(!consumed\) throw new AuthFlowError\('invalid_auth_token'\);\s*\n?\s*const account = await this\.requireAccount\(row\.accountId\);\s*\n?\s*if \(account\.status !== 'active'\) throw new AuthFlowError\('account_suspended'\);\s*\n?\s*const firstVerification = await this\.repo\.markEmailVerified\(row\.accountId, now\);/,
+      /const consumed = await this\.repo\.consumeAuthTokenFamily\(\{\s*kind: 'email_verify',\s*id: row\.id,\s*accountId: row\.accountId,\s*at: now,\s*\}\);\s*if \(!consumed\) throw new AuthFlowError\('invalid_auth_token'\);\s*const account = await this\.requireAccount\(row\.accountId\);\s*if \(account\.status !== 'active'\) throw new AuthFlowError\('account_suspended'\);\s*const firstVerification = await this\.repo\.markEmailVerified\(row\.accountId, now\);/,
     );
     expect(body).toMatch(
-      /\/\/ V-202 — fire signup-welcome email after the verify lands\. Derive\s*\n?\s*\/\/ the dashboard origin from `verifyEmailUrl`/,
+      /\/\/ V-202 — fire signup-welcome email after the verify lands\. Derive\s*\/\/ the dashboard origin from `verifyEmailUrl`/,
     );
     // C9 — welcome fires only on the first null→verified transition + honors
     // the 'signup-welcome' opt-out.
@@ -123,19 +123,19 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
       /!\(await this\.emailPreferences\.shouldSend\(account\.id, 'signup-welcome'\)\)/,
     );
     expect(body).toMatch(
-      /await this\.email\.sendSignupWelcome\(\{\s*\n?\s*to: account\.email,\s*\n?\s*dashboardUrl: `\$\{origin\}\/select-tier`,/,
+      /await this\.email\.sendSignupWelcome\(\{\s*to: account\.email,\s*dashboardUrl: `\$\{origin\}\/select-tier`,/,
     );
   });
 
   it('password reset atomically consumes the presented token and all account siblings before changing credentials', () => {
     expect(body).toMatch(
-      /const consumed = await this\.repo\.consumeAuthTokenFamily\(\{\s*\n?\s*kind: 'password_reset',\s*\n?\s*id: row\.id,\s*\n?\s*accountId: row\.accountId,\s*\n?\s*at: now,\s*\n?\s*\}\);\s*\n?\s*if \(!consumed\) throw new AuthFlowError\('invalid_auth_token'\);\s*\n?\s*const account = await this\.requireAccount\(row\.accountId\);\s*\n?\s*if \(account\.status !== 'active'\) throw new AuthFlowError\('account_suspended'\);\s*\n?\s*const mfaRequired = this\.mfa !== null && \(await this\.mfa\.getStatus\(account\.id\)\)\.enrolled;\s*\n?\s*const newHash = await hashPassword\(args\.newPassword\);/,
+      /const consumed = await this\.repo\.consumeAuthTokenFamily\(\{\s*kind: 'password_reset',\s*id: row\.id,\s*accountId: row\.accountId,\s*at: now,\s*\}\);\s*if \(!consumed\) throw new AuthFlowError\('invalid_auth_token'\);\s*const account = await this\.requireAccount\(row\.accountId\);\s*if \(account\.status !== 'active'\) throw new AuthFlowError\('account_suspended'\);\s*const mfaRequired = this\.mfa !== null && \(await this\.mfa\.getStatus\(account\.id\)\)\.enrolled;\s*const newHash = await hashPassword\(args\.newPassword\);/,
     );
   });
 
   it('magic-link and password-reset recovery return MFA challenges before any session mint', () => {
     expect(body).toMatch(
-      /if \(this\.mfa !== null && \(await this\.mfa\.getStatus\(account\.id\)\)\.enrolled\) \{\s*\n?\s*return \{\s*\n?\s*kind: 'mfa_required',\s*\n?\s*account,\s*\n?\s*\.\.\.\(await this\.createMfaChallenge\(account, args\.issuedFromIp, args\.userAgent\)\),/,
+      /if \(this\.mfa !== null && \(await this\.mfa\.getStatus\(account\.id\)\)\.enrolled\) \{\s*return \{\s*kind: 'mfa_required',\s*account,\s*\.\.\.\(await this\.createMfaChallenge\(account, args\.issuedFromIp, args\.userAgent\)\),/,
     );
     expect(body).toMatch(
       /if \(mfaRequired\) \{[\s\S]+?await this\.revokeSessionsAfterPasswordReset\(account\.id, null, now\);[\s\S]+?kind: 'mfa_required',[\s\S]+?createMfaChallenge/,
@@ -145,20 +145,20 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
 
   it('login: 4-failure-mode cascade (invalid_credentials × 2 + account_suspended + email_not_verified) + V-353d branch returns mfa_required with challenge_token', () => {
     expect(body).toMatch(
-      /if \(account === null \|\| account\.passwordHash === null \|\| account\.passwordHash === ''\) \{\s*\n?\s*await verifyPassword\(args\.password, await dummyPasswordHash\(\)\);\s*\n?\s*throw new AuthFlowError\('invalid_credentials'\);/,
+      /if \(account === null \|\| account\.passwordHash === null \|\| account\.passwordHash === ''\) \{\s*await verifyPassword\(args\.password, await dummyPasswordHash\(\)\);\s*throw new AuthFlowError\('invalid_credentials'\);/,
     );
     expect(body).toMatch(
-      /if \(account\.status !== 'active'\) \{\s*\n?\s*throw new AuthFlowError\('account_suspended'\);/,
+      /if \(account\.status !== 'active'\) \{\s*throw new AuthFlowError\('account_suspended'\);/,
     );
     expect(body).toMatch(/if \(!ok\) throw new AuthFlowError\('invalid_credentials'\);/);
     expect(body).toMatch(
-      /if \(account\.emailVerifiedAt === null\) \{\s*\n?\s*throw new AuthFlowError\('email_not_verified'\);/,
+      /if \(account\.emailVerifiedAt === null\) \{\s*throw new AuthFlowError\('email_not_verified'\);/,
     );
     expect(body).toMatch(
-      /\/\/ V-353d — branch on MFA enrollment\. If enrolled, issue a\s*\n?\s*\/\/ challenge token instead of a session;/,
+      /\/\/ V-353d — branch on MFA enrollment\. If enrolled, issue a\s*\/\/ challenge token instead of a session;/,
     );
     expect(body).toMatch(
-      /const challenge = await this\.createMfaChallenge\(account, args\.issuedFromIp, args\.userAgent\);\s*\n?\s*return \{\s*\n?\s*kind: 'mfa_required',\s*\n?\s*account,\s*\n?\s*\.\.\.challenge,/,
+      /const challenge = await this\.createMfaChallenge\(account, args\.issuedFromIp, args\.userAgent\);\s*return \{\s*kind: 'mfa_required',\s*account,\s*\.\.\.challenge,/,
     );
   });
 
@@ -174,7 +174,7 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     // null AND the empty-string OAuth sentinel (C3), else an IdP-only account
     // returns fast and is enumerable.
     expect(body).toMatch(
-      /if \(account === null \|\| account\.passwordHash === null \|\| account\.passwordHash === ''\) \{\s*\n?\s*await verifyPassword\(args\.password, await dummyPasswordHash\(\)\);\s*\n?\s*throw new AuthFlowError\('invalid_credentials'\);/,
+      /if \(account === null \|\| account\.passwordHash === null \|\| account\.passwordHash === ''\) \{\s*await verifyPassword\(args\.password, await dummyPasswordHash\(\)\);\s*throw new AuthFlowError\('invalid_credentials'\);/,
     );
     // dummyPasswordHash lazily computes one fixed scrypt hash, then reuses it.
     expect(body).toMatch(/dummyPasswordHashPromise \?\?= hashPassword\(/);
@@ -190,14 +190,14 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
 
   it("V-353d completeMfaChallenge: peek-before-consume (IP mismatch doesn't consume); markWebSessionMfaSatisfied on success; via='totp'|'recovery' result", () => {
     expect(body).toMatch(
-      /\/\/ Peek first so an IP mismatch doesn't consume the token \(legit\s*\n?\s*\/\/ user can still retry from the right IP\)\./,
+      /\/\/ Peek first so an IP mismatch doesn't consume the token \(legit\s*\/\/ user can still retry from the right IP\)\./,
     );
     expect(body).toMatch(
-      /if \(payload\.source_ip !== null && payload\.source_ip !== args\.sourceIp\) \{\s*\n?\s*throw new AuthFlowError\(\s*\n?\s*'invalid_auth_token',\s*\n?\s*'Challenge token was issued from a different IP\. Sign in again\.',/,
+      /if \(payload\.source_ip !== null && payload\.source_ip !== args\.sourceIp\) \{\s*throw new AuthFlowError\(\s*'invalid_auth_token',\s*'Challenge token was issued from a different IP\. Sign in again\.',/,
     );
     expect(body).toMatch(/await this\.mfaChallenges\.consume\(challengeKey\);/);
     expect(body).toMatch(
-      /\/\/ V-353d — mark the freshly-issued session as MFA-satisfied so\s*\n?\s*\/\/ step-up gates pass on it\./,
+      /\/\/ V-353d — mark the freshly-issued session as MFA-satisfied so\s*\/\/ step-up gates pass on it\./,
     );
     expect(body).toMatch(
       /await this\.repo\.markWebSessionMfaSatisfied\(session\.row\.id, new Date\(\)\);/,
@@ -215,7 +215,7 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     expect(body).toMatch(/typeof account_id !== 'string' \|\| account_id\.length === 0/);
     expect(body).toMatch(/typeof issued_at !== 'number' \|\| !Number\.isFinite\(issued_at\)/);
     expect(body).toMatch(
-      /const payload = parseMfaChallengePayload\(peek\);\s*\n?\s*if \(payload === null\) \{[\s\S]+?await this\.mfaChallenges\.consume\(challengeKey\);[\s\S]+?'Challenge token is invalid\. Sign in again\.'/,
+      /const payload = parseMfaChallengePayload\(peek\);\s*if \(payload === null\) \{[\s\S]+?await this\.mfaChallenges\.consume\(challengeKey\);[\s\S]+?'Challenge token is invalid\. Sign in again\.'/,
     );
   });
 
@@ -224,16 +224,16 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     // racing the same valid code both pass peek+verify, but consume() (atomic
     // GETDEL) returns the payload to exactly one — the loser must be rejected.
     expect(body).toMatch(
-      /const consumed = await this\.mfaChallenges\.consume\(challengeKey\);\s*\n?\s*if \(consumed === null\) \{\s*\n?\s*throw new AuthFlowError\(\s*\n?\s*'invalid_auth_token',\s*\n?\s*'Challenge token was already used\. Sign in again\.',/,
+      /const consumed = await this\.mfaChallenges\.consume\(challengeKey\);\s*if \(consumed === null\) \{\s*throw new AuthFlowError\(\s*'invalid_auth_token',\s*'Challenge token was already used\. Sign in again\.',/,
     );
   });
 
   it('V-353e stepUpReauth: distinct from completeMfaChallenge (login-path hand-off); refreshes mfa_satisfied_at + invalidateAccount cache', () => {
     expect(body).toMatch(
-      /V-353e — step-up reauth WITHOUT re-logging-in\. Caller is already\s*\n?\s*\*\s*authenticated via web session;[\s\S]+?Distinct from\s*\n?\s*\*\s*`completeMfaChallenge` which is the LOGIN-PATH hand-off \(no\s*\n?\s*\*\s*pre-existing session\)\./,
+      /V-353e — step-up reauth WITHOUT re-logging-in\. Caller is already\s*\*\s*authenticated via web session;[\s\S]+?Distinct from\s*\*\s*`completeMfaChallenge` which is the LOGIN-PATH hand-off \(no\s*\*\s*pre-existing session\)\./,
     );
     expect(body).toMatch(
-      /async stepUpReauth\(args: \{\s*\n?\s*accountId: string;\s*\n?\s*sessionId: string;\s*\n?\s*input: string;\s*\n?\s*\}\): Promise<\{ via: 'totp' \| 'recovery'; mfaSatisfiedAt: Date \}>/,
+      /async stepUpReauth\(args: \{\s*accountId: string;\s*sessionId: string;\s*input: string;\s*\}\): Promise<\{ via: 'totp' \| 'recovery'; mfaSatisfiedAt: Date \}>/,
     );
     expect(body).toMatch(/await this\.repo\.markWebSessionMfaSatisfied\(args\.sessionId, now\);/);
   });
@@ -242,13 +242,13 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     expect(body).toMatch(/const attemptKey = stepUpAttemptsKey\(args\.accountId\);/);
     expect(body).toMatch(/const attempts = await this\.mfaChallenges\.incrAttempts\(/);
     expect(body).toMatch(
-      /if \(attempts > MAX_MFA_CHALLENGE_ATTEMPTS\) \{\s*\n?\s*await this\.releaseStepUpAttemptBestEffort\(attemptKey\);/,
+      /if \(attempts > MAX_MFA_CHALLENGE_ATTEMPTS\) \{\s*await this\.releaseStepUpAttemptBestEffort\(attemptKey\);/,
     );
     expect(body).toMatch(
-      /catch \(err\) \{\s*\n?\s*if \(this\.mfaChallenges\) await this\.releaseStepUpAttemptBestEffort\(attemptKey\);\s*\n?\s*throw err;/,
+      /catch \(err\) \{\s*if \(this\.mfaChallenges\) await this\.releaseStepUpAttemptBestEffort\(attemptKey\);\s*throw err;/,
     );
     expect(body).toMatch(
-      /if \(result === null\) \{\s*\n?\s*\/\/ Invalid proofs retain the reservation as one failed attempt\./,
+      /if \(result === null\) \{\s*\/\/ Invalid proofs retain the reservation as one failed attempt\./,
     );
     expect(body).toMatch(
       /if \(this\.mfaChallenges\) await this\.releaseStepUpAttemptBestEffort\(attemptKey\);/,
@@ -257,7 +257,7 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
 
   it('requestMagicLink + requestPasswordReset: silent no-op on unknown / non-active account (no enumeration via shape)', () => {
     expect(body).toMatch(
-      /\/\/ Always return the same shape so the response doesn't leak account\s*\n?\s*\/\/ existence\. If no account, no token is issued and no email is sent\./,
+      /\/\/ Always return the same shape so the response doesn't leak account\s*\/\/ existence\. If no account, no token is issued and no email is sent\./,
     );
     expect(body).toMatch(
       /'magic-link requested for unknown email — no-op',[\s\S]+?return \{ sent: false, expiresAt, debugToken: null \};/,
@@ -274,22 +274,22 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
 
   it('consumeMagicLink: atomically invalidates siblings, then implicitly verifies inbox ownership', () => {
     expect(body).toMatch(
-      /const consumed = await this\.repo\.consumeAuthTokenFamily\(\{\s*\n?\s*kind: 'magic_link',\s*\n?\s*id: row\.id,\s*\n?\s*accountId: row\.accountId,\s*\n?\s*at: now,\s*\n?\s*\}\);\s*\n?\s*if \(!consumed\) throw new AuthFlowError\('invalid_auth_token'\);/,
+      /const consumed = await this\.repo\.consumeAuthTokenFamily\(\{\s*kind: 'magic_link',\s*id: row\.id,\s*accountId: row\.accountId,\s*at: now,\s*\}\);\s*if \(!consumed\) throw new AuthFlowError\('invalid_auth_token'\);/,
     );
     expect(body).toMatch(
-      /\/\/ Magic-link consumption also implicitly verifies the email — the user\s*\n?\s*\/\/ demonstrably owns the inbox by clicking the link\./,
+      /\/\/ Magic-link consumption also implicitly verifies the email — the user\s*\/\/ demonstrably owns the inbox by clicking the link\./,
     );
     expect(body).toMatch(
-      /if \(account\.emailVerifiedAt === null\) \{\s*\n?\s*await this\.repo\.markEmailVerified\(account\.id, now\);\s*\n?\s*\}/,
+      /if \(account\.emailVerifiedAt === null\) \{\s*await this\.repo\.markEmailVerified\(account\.id, now\);\s*\}/,
     );
   });
 
   it('refreshSession: atomic revoke claim precedes replacement mint + cache invalidation', () => {
     expect(body).toMatch(
-      /\/\/ Rotate: revoke the old row, issue a new one\. The plaintext returned\s*\n?\s*\/\/ is the new token; the old plaintext is now useless\./,
+      /\/\/ Rotate: revoke the old row, issue a new one\. The plaintext returned\s*\/\/ is the new token; the old plaintext is now useless\./,
     );
     expect(body).toMatch(
-      /const claimed = await this\.repo\.revokeWebSession\(old\.id, now\);\s*\n?\s*if \(!claimed\) throw new AuthFlowError\('invalid_auth_token'\);/,
+      /const claimed = await this\.repo\.revokeWebSession\(old\.id, now\);\s*if \(!claimed\) throw new AuthFlowError\('invalid_auth_token'\);/,
     );
     // The rotated-out token must be evicted from the auth cache — the fast-path
     // re-checks only expiresAt (not revokedAt), so without this the DB-revoked
@@ -303,7 +303,7 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
       /if \(row === null\) return; \/\/ already-revoked \/ unknown token: no-op/,
     );
     expect(body).toMatch(
-      /\/\/ V-168 — invalidate any cached web-session AccountContext\. Same\s*\n?\s*\/\/ pattern API key revocation uses \(V-016 \/ D-025\)\. Best-effort —\s*\n?\s*\/\/ a cache failure here doesn't undo the DB-level revocation\./,
+      /\/\/ V-168 — invalidate any cached web-session AccountContext\. Same\s*\/\/ pattern API key revocation uses \(V-016 \/ D-025\)\. Best-effort —\s*\/\/ a cache failure here doesn't undo the DB-level revocation\./,
     );
     expect(body).toMatch(/await this\.authCache\.invalidateAccount\(row\.accountId\);/);
   });
@@ -311,23 +311,23 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
   it('V-355 revokeWebSessionForAccount: account-scoped + already-revoked short-circuit returns true (idempotent); authCache invalidate + audit emit', () => {
     expect(body).toMatch(/V-355 — revoke a single web session by id, scoped to an account\./);
     expect(body).toMatch(
-      /async revokeWebSessionForAccount\(\s*\n?\s*accountId: string,\s*\n?\s*sessionId: string,\s*\n?\s*now = new Date\(\),\s*\n?\s*\): Promise<boolean> \{/,
+      /async revokeWebSessionForAccount\(\s*accountId: string,\s*sessionId: string,\s*now = new Date\(\),\s*\): Promise<boolean> \{/,
     );
     expect(body).toMatch(/if \(row === null\) return false;/);
     expect(body).toMatch(
-      /if \(row\.revokedAt === null\) \{\s*\n?\s*await this\.repo\.revokeWebSession\(row\.id, now\);/,
+      /if \(row\.revokedAt === null\) \{\s*await this\.repo\.revokeWebSession\(row\.id, now\);/,
     );
     expect(body).toMatch(
-      /await this\.emitAuditBestEffort\(accountId, 'account\.logout', \{\s*\n?\s*session_id: row\.id,\s*\n?\s*revoked_via: 'self_dashboard',/,
+      /await this\.emitAuditBestEffort\(accountId, 'account\.logout', \{\s*session_id: row\.id,\s*revoked_via: 'self_dashboard',/,
     );
   });
 
   it('V-355 revokeAllWebSessionsExceptCurrent: bulk + cache invalidate when n > 0 + audit with revoked_count + kept_session_id', () => {
     expect(body).toMatch(
-      /async revokeAllWebSessionsExceptCurrent\(\s*\n?\s*accountId: string,\s*\n?\s*currentSessionId: string,\s*\n?\s*now = new Date\(\),\s*\n?\s*\): Promise<number> \{/,
+      /async revokeAllWebSessionsExceptCurrent\(\s*accountId: string,\s*currentSessionId: string,\s*now = new Date\(\),\s*\): Promise<number> \{/,
     );
     expect(body).toMatch(
-      /revoked_via: 'self_dashboard_revoke_all',\s*\n?\s*revoked_count: n,\s*\n?\s*kept_session_id: currentSessionId,/,
+      /revoked_via: 'self_dashboard_revoke_all',\s*revoked_count: n,\s*kept_session_id: currentSessionId,/,
     );
   });
 
@@ -369,7 +369,7 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     expect(body).toMatch(/MAX_MFA_CHALLENGE_ATTEMPTS,/);
     expect(body).toMatch(/\} from '\.\/mfa-challenge-store\.js';/);
     expect(body).toMatch(
-      /import \{\s*\n?\s*AUTH_TOKEN_TTL_MS,\s*\n?\s*generateAuthToken,\s*\n?\s*hashPassword,\s*\n?\s*tokenHash,\s*\n?\s*verifyPassword,\s*\n?\s*\} from '\.\.\/lib\/auth-tokens\.js';/,
+      /import \{\s*AUTH_TOKEN_TTL_MS,\s*generateAuthToken,\s*hashPassword,\s*tokenHash,\s*verifyPassword,\s*\} from '\.\.\/lib\/auth-tokens\.js';/,
     );
     expect(body).toMatch(
       /import type \{ AccountStatus, AccountTier \} from '@driftstack\/api-types';/,

@@ -45,7 +45,7 @@ describe('W387.A apps/server/src/lib/mfa-totp.ts content parity', () => {
   it('SHA-1 / 30s / 6 digits algorithm choice pinned (auth-app compat)', () => {
     expect(body).toMatch(/SHA-1 \/ 30s period \/ 6 digits — auth-app compat/);
     expect(body).toMatch(
-      /Google\s*\n?\s*\/\/\s*Authenticator, 1Password, Authy, Bitwarden, etc\. all support/,
+      /Google\s*\/\/\s*Authenticator, 1Password, Authy, Bitwarden, etc\. all support/,
     );
   });
 
@@ -55,7 +55,7 @@ describe('W387.A apps/server/src/lib/mfa-totp.ts content parity', () => {
 
   it('AES-256-GCM at-rest encryption framing pinned (MFA_ENCRYPTION_KEY = 32 random bytes base64)', () => {
     expect(body).toMatch(
-      /At-rest encryption: AES-256-GCM with the env-supplied\s*\n?\s*\/\/\s*`MFA_ENCRYPTION_KEY` \(32 random bytes, base64\)/,
+      /At-rest encryption: AES-256-GCM with the env-supplied\s*\/\/\s*`MFA_ENCRYPTION_KEY` \(32 random bytes, base64\)/,
     );
     expect(body).toMatch(/The v2 envelope binds/);
     expect(body).toMatch(/its purpose \+ account identity as GCM additional authenticated data/);
@@ -110,7 +110,7 @@ describe('W387.A apps/server/src/lib/mfa-totp.ts content parity', () => {
     );
     expect(body).toMatch(/matchedCounter = Math\.floor\(whenSeconds \/ TOTP_PERIOD_SECONDS\);/);
     expect(body).toMatch(
-      /export function verifyTotpCode\([\s\S]*?\): boolean \{\s*\n?\s*return verifyTotpCodeWithCounter\(secretBytes, code, nowSeconds\) !== null;/,
+      /export function verifyTotpCode\([\s\S]*?\): boolean \{\s*return verifyTotpCodeWithCounter\(secretBytes, code, nowSeconds\) !== null;/,
     );
   });
 
@@ -185,7 +185,7 @@ describe('W387.A apps/server/src/lib/mfa-totp.ts content parity', () => {
 
   it('Recovery code framing: shown ONCE at enrollment + scrypt-hashed (same KDF as API keys)', () => {
     expect(body).toMatch(
-      /Raw codes are shown ONCE at enrollment and scrypt-hashed\s*\n?\s*\*\s*before persisting \(same KDF as API keys\)/,
+      /Raw codes are shown ONCE at enrollment and scrypt-hashed\s*\*\s*before persisting \(same KDF as API keys\)/,
     );
   });
 
@@ -195,7 +195,7 @@ describe('W387.A apps/server/src/lib/mfa-totp.ts content parity', () => {
 
   it('normalizeRecoveryCode: strip whitespace + hyphens, uppercase (accepts "abcde-fghjk" or "ABCDEFGHJK")', () => {
     expect(body).toMatch(
-      /export function normalizeRecoveryCode\(input: string\): string \{\s*\n?\s*return input\.replace\(\/\[\\s-\]\/g, ''\)\.toUpperCase\(\);\s*\n?\s*\}/,
+      /export function normalizeRecoveryCode\(input: string\): string \{\s*return input\.replace\(\/\[\\s-\]\/g, ''\)\.toUpperCase\(\);\s*\}/,
     );
   });
 

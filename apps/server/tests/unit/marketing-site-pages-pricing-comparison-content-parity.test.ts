@@ -39,7 +39,7 @@ describe('W503.A apps/marketing-site/src/pages/pricing/comparison.astro content 
 
   it("V-668 framing pinned: 'per-tier comparison page. The main /pricing page is a glanceable overview; /pricing/comparison is the spreadsheet-style deep dive sales evaluations actually need. Pulls every dimension directly from the same data file so the two pages can't drift.' — pinned so the V-668 doc-comment + the /pricing-vs-/pricing/comparison division-of-labor + the 'two pages can't drift' commitment all survive (drift to hardcoding would re-introduce divergence that V-668 was created to fix)", () => {
     expect(body).toMatch(
-      /\/\/ V-668 — per-tier comparison page\. The main \/pricing page is a\s*\n?\s*\/\/ glanceable overview; \/pricing\/comparison is the spreadsheet-style\s*\n?\s*\/\/ deep dive sales evaluations actually need\. Pulls every dimension\s*\n?\s*\/\/ directly from the same data file so the two pages can't drift\./,
+      /\/\/ V-668 — per-tier comparison page\. The main \/pricing page is a\s*\/\/ glanceable overview; \/pricing\/comparison is the spreadsheet-style\s*\/\/ deep dive sales evaluations actually need\. Pulls every dimension\s*\/\/ directly from the same data file so the two pages can't drift\./,
     );
   });
 
@@ -51,11 +51,9 @@ describe('W503.A apps/marketing-site/src/pages/pricing/comparison.astro content 
 
   it("fmtAiAgent 4-state map: !aiAgent → 'Not on this tier' / byok_only → 'BYOK only' / byok_or_bundled → 'BYOK or bundled' / byok_or_bundled_custom → 'BYOK or bundled (custom)' — pinned so the per-tier AI-agent availability display strings stay consistent (drift to dropping 'Not on this tier' would lose the explicit-absence signal customers scan for; drift to dropping 'custom' on Enterprise would lose the dedicated-rate signal)", () => {
     expect(body).toMatch(/if \(!aiAgent\) return 'Not on this tier';/);
-    expect(body).toMatch(/case 'byok_only':\s*\n?\s*return 'BYOK only';/);
-    expect(body).toMatch(/case 'byok_or_bundled':\s*\n?\s*return 'BYOK or bundled';/);
-    expect(body).toMatch(
-      /case 'byok_or_bundled_custom':\s*\n?\s*return 'BYOK or bundled \(custom\)';/,
-    );
+    expect(body).toMatch(/case 'byok_only':\s*return 'BYOK only';/);
+    expect(body).toMatch(/case 'byok_or_bundled':\s*return 'BYOK or bundled';/);
+    expect(body).toMatch(/case 'byok_or_bundled_custom':\s*return 'BYOK or bundled \(custom\)';/);
   });
 
   it("DIMENSIONS 3-group taxonomy: 'Pricing' + 'Quotas' + 'Features' — pinned so the 3-group comparison-table structure stays consistent (drift to merging groups would lose the buyer-mental-model split between $-questions / capacity-questions / feature-questions)", () => {
@@ -90,12 +88,12 @@ describe('W503.A apps/marketing-site/src/pages/pricing/comparison.astro content 
 
   it("Free-tier standalone card pinned: 'Free ({fmtUsd(freeTier.monthlyUsd)}, forever)' + 'a try-before-you-buy tier, no card required' (S20b plain words, same evaluate-before-committing positioning)", () => {
     expect(body).toMatch(/Free \(\{fmtUsd\(freeTier\.monthlyUsd\)\}, forever\)/);
-    expect(body).toMatch(/a try-before-you-buy tier, no card\s*\n?\s*required/);
+    expect(body).toMatch(/a try-before-you-buy tier, no card\s*required/);
   });
 
   it("★ popular-tier framing pinned: '★ = team's most popular tier in active evaluations. Not a sales push — just what prospective customers are picking right now.' (S20b: 'cohort signal' reworded plain) — pinned so the honest 'data signal, not sales pressure' framing survives (drift to dropping 'Not a sales push' would let the highlight read as upsell rather than data signal)", () => {
     expect(body).toMatch(
-      /★ = team's most popular tier in active evaluations\. Not a sales\s*\n?\s*push — just what prospective customers are picking right now\./,
+      /★ = team's most popular tier in active evaluations\. Not a sales\s*push — just what prospective customers are picking right now\./,
     );
   });
 
@@ -105,15 +103,15 @@ describe('W503.A apps/marketing-site/src/pages/pricing/comparison.astro content 
     // retention then DPA-schedule deletion, ~20% annual).
     expect(body).toMatch(/Upgrade mid-month/);
     expect(body).toMatch(
-      /Switching to a higher tier is immediate\. You pay only the\s*\n?\s*difference for the rest of the billing period \(prorated\)/,
+      /Switching to a higher tier is immediate\. You pay only the\s*difference for the rest of the billing period \(prorated\)/,
     );
     expect(body).toMatch(/Downgrade at renewal/);
     expect(body).toMatch(
-      /If you have more profiles than\s*\n?\s*the lower tier allows, you keep and can view them all — you\s*\n?\s*just can't create new ones until you're back under the limit\./,
+      /If you have more profiles than\s*the lower tier allows, you keep and can view them all — you\s*just can't create new ones until you're back under the limit\./,
     );
     expect(body).toMatch(/Cancel any time/);
     expect(body).toMatch(
-      /we keep your data for\s*\n?\s*30 days after cancellation in case you come back, then delete\s*\n?\s*it on the schedule promised in our data-processing agreement\s*\n?\s*\(DPA\)\./,
+      /we keep your data for\s*30 days after cancellation in case you come back, then delete\s*it on the schedule promised in our data-processing agreement\s*\(DPA\)\./,
     );
     expect(body).toMatch(/Annual vs monthly/);
     expect(body).toMatch(/Annual billing is ~20% off the monthly rate, paid up-front\./);
@@ -121,7 +119,7 @@ describe('W503.A apps/marketing-site/src/pages/pricing/comparison.astro content 
 
   it("Custom-quote CTA pinned: 'Need a custom quote?' + 'we'll quote in one business day.' + mailto:sales@driftstack.dev — pinned so the enterprise-quote escalation + the one-business-day commitment + the sales-team routing survive (drift to dropping the 'one business day' SLA would let prospects expect indefinite waits; drift to dropping the sales@ address would orphan the inbound)", () => {
     expect(body).toMatch(/Need a custom quote\?/);
-    expect(body).toMatch(/we'll quote in one business\s*\n?\s*day\./);
+    expect(body).toMatch(/we'll quote in one business\s*day\./);
     expect(body).toMatch(
       /<a href="mailto:sales@driftstack\.dev" class="btn-primary">Email sales<\/a>/,
     );
@@ -129,7 +127,7 @@ describe('W503.A apps/marketing-site/src/pages/pricing/comparison.astro content 
 
   it("Cross-link to glanceable /pricing pinned: 'Looking for the glanceable view? /pricing has the headline cards.' — pinned so the back-link to the glanceable page survives (drift to dropping would orphan buyers who land on /pricing/comparison first and want the simpler overview)", () => {
     expect(body).toMatch(
-      /Looking for the glanceable view\?\s*\n?\s*<a href="\/pricing\/" class="text-tk-accent-text underline">\/pricing<\/a>\s*\n?\s*has the headline cards\./,
+      /Looking for the glanceable view\?\s*<a href="\/pricing\/" class="text-tk-accent-text underline">\/pricing<\/a>\s*has the headline cards\./,
     );
     expect(body).not.toMatch(/href="\/pricing"/);
   });

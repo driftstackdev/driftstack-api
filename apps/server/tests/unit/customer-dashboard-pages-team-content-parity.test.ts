@@ -33,19 +33,19 @@ describe('W495.C apps/customer-dashboard/src/pages/team.astro content parity', (
 
   it("V-298c / V-326e framing pinned: 'wires the page to the live /v1/team/* endpoints. Members view shows confirmed memberships; pending invites surfaced below. Invite form posts to POST /v1/team/invites; remove posts DELETE /v1/team/members/:id.' — pinned so the 2-endpoint read pattern (members + invites separately) + the explicit endpoint mapping for invite/remove survives (drift to a single endpoint would lose the 'pending vs confirmed' separation)", () => {
     expect(body).toMatch(
-      /\/\/ V-298c \/ V-326e — wires the page to the live \/v1\/team\/\* endpoints\.\s*\n?\s*\/\/ Members view shows confirmed memberships; pending invites surfaced\s*\n?\s*\/\/ below\. Invite form posts to POST \/v1\/team\/invites; remove posts\s*\n?\s*\/\/ DELETE \/v1\/team\/members\/:id\./,
+      /\/\/ V-298c \/ V-326e — wires the page to the live \/v1\/team\/\* endpoints\.\s*\/\/ Members view shows confirmed memberships; pending invites surfaced\s*\/\/ below\. Invite form posts to POST \/v1\/team\/invites; remove posts\s*\/\/ DELETE \/v1\/team\/members\/:id\./,
     );
   });
 
   it('V-326a–V-326e6 auth integration framing pinned: \'Members can act on the owner\'s resources via the X-Driftstack-Account header; the V-331 picker handles toggling. Reads accept both "member" and "admin" roles; writes require "admin".\' — pinned so the role-gating asymmetry (member-read + admin-write) stays explicit (drift to hiding would surprise members who try to write and get 403\'d without explanation)', () => {
     expect(body).toMatch(
-      /\/\/ Auth integration: V-326a–V-326e6 closed the cycle\. Members can act\s*\n?\s*\/\/ on the owner's resources via the X-Driftstack-Account header; the\s*\n?\s*\/\/ V-331 picker handles toggling\. Reads accept both 'member' and\s*\n?\s*\/\/ 'admin' roles; writes require 'admin'\./,
+      /\/\/ Auth integration: V-326a–V-326e6 closed the cycle\. Members can act\s*\/\/ on the owner's resources via the X-Driftstack-Account header; the\s*\/\/ V-331 picker handles toggling\. Reads accept both 'member' and\s*\/\/ 'admin' roles; writes require 'admin'\./,
     );
   });
 
   it('Members + invites stay parallel, deadline-bounded, and stale-refresh safe', () => {
     expect(body).toMatch(
-      /Promise\.all\(\[\s*\n?\s*boundedFetch\(\s*\n?\s*apiBaseUrl \+ '\/v1\/team\/members',\s*\n?\s*\{ headers: \{ authorization: 'Bearer ' \+ token \} \},\s*\n?\s*membersController,\s*\n?\s*\)\.then\(function \(r\) \{\s*\n?\s*if \(!r\.ok\) throw new Error\('members HTTP ' \+ r\.status\);\s*\n?\s*return r\.json\(\);\s*\n?\s*\}\),\s*\n?\s*boundedFetch\(\s*\n?\s*apiBaseUrl \+ '\/v1\/team\/invites',/,
+      /Promise\.all\(\[\s*boundedFetch\(\s*apiBaseUrl \+ '\/v1\/team\/members',\s*\{ headers: \{ authorization: 'Bearer ' \+ token \} \},\s*membersController,\s*\)\.then\(function \(r\) \{\s*if \(!r\.ok\) throw new Error\('members HTTP ' \+ r\.status\);\s*return r\.json\(\);\s*\}\),\s*boundedFetch\(\s*apiBaseUrl \+ '\/v1\/team\/invites',/,
     );
     expect(body).toMatch(/const TEAM_TIMEOUT_MS = 15_000;/);
     expect(body).toMatch(
@@ -56,7 +56,7 @@ describe('W495.C apps/customer-dashboard/src/pages/team.astro content parity', (
 
   it('POST /v1/team/invites stays bounded, serializes the role, maps API errors, and blocks ambiguous retries', () => {
     expect(body).toMatch(
-      /boundedFetch\(apiBaseUrl \+ '\/v1\/team\/invites', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{\s*\n?\s*authorization: 'Bearer ' \+ token,\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\},\s*\n?\s*body: JSON\.stringify\(\{ email: email, role: role \}\),\s*\n?\s*\}\)/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/team\/invites', \{\s*method: 'POST',\s*headers: \{\s*authorization: 'Bearer ' \+ token,\s*'content-type': 'application\/json',\s*\},\s*body: JSON\.stringify\(\{ email: email, role: role \}\),\s*\}\)/,
     );
     expect(body).toMatch(/if \(!r\.ok && r\.status !== 202\) \{/);
     expect(body).toMatch(/throw window\.driftstackResponseError\(r, b\);/);
@@ -67,10 +67,10 @@ describe('W495.C apps/customer-dashboard/src/pages/team.astro content parity', (
 
   it('DELETE /v1/team/members/:id stays bounded, encoded, confirmed, latched, and reconciles timeout outcomes', () => {
     expect(body).toMatch(
-      /boundedFetch\(apiBaseUrl \+ '\/v1\/team\/members\/' \+ encodeURIComponent\(id\), \{\s*\n?\s*method: 'DELETE',\s*\n?\s*headers: \{ authorization: 'Bearer ' \+ token \},\s*\n?\s*\}\)\s*\n?\s*\.then\(function \(r\) \{\s*\n?\s*if \(!r\.ok && r\.status !== 204\) throw new Error\('HTTP ' \+ r\.status\);/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/team\/members\/' \+ encodeURIComponent\(id\), \{\s*method: 'DELETE',\s*headers: \{ authorization: 'Bearer ' \+ token \},\s*\}\)\s*\.then\(function \(r\) \{\s*if \(!r\.ok && r\.status !== 204\) throw new Error\('HTTP ' \+ r\.status\);/,
     );
     expect(body).toMatch(
-      /const ok = await window\.driftstackConfirm\(\s*\n?\s*'Remove ' \+\s*\n?\s*email \+\s*\n?\s*' from the team\? They keep their Driftstack account but lose team access\.',/,
+      /const ok = await window\.driftstackConfirm\(\s*'Remove ' \+\s*email \+\s*' from the team\? They keep their Driftstack account but lose team access\.',/,
     );
     expect(body).toMatch(/if \(removalButtonsInFlight\.has\(btn\)\) return;/);
     expect(body).toMatch(/const refreshed = await refresh\(false\);/);
@@ -81,7 +81,7 @@ describe('W495.C apps/customer-dashboard/src/pages/team.astro content parity', (
 
   it('Invite role <select> 2-option: member (default) / admin — pinned so the role vocabulary stays {member, admin} and the form defaults to the less-privileged role (drift to defaulting admin would let customers accidentally grant write access on every invite; drift to dropping the 2-option enum would couple the form to an undocumented role)', () => {
     expect(body).toMatch(
-      /<option value="member">Member<\/option>\s*\n?\s*<option value="admin">Admin<\/option>/,
+      /<option value="member">Member<\/option>\s*<option value="admin">Admin<\/option>/,
     );
   });
 
@@ -99,16 +99,16 @@ describe('W495.C apps/customer-dashboard/src/pages/team.astro content parity', (
 
   it("7-day accept-link + same-email-required framing pinned: 'Invitees receive an email with a 7-day accept link. They must accept while signed in to the same email address. Once accepted, members can act on this account's resources by toggling the \"Acting as\" picker in the sidebar — reads work for both member and admin roles; writes require admin.' — pinned so the email-matching requirement + 7-day window + the act-as-picker mechanic + the role-gating asymmetry all survive (drift to dropping the same-email rule would let invitees be confused by accept-failures when signed in as a different account)", () => {
     expect(body).toMatch(
-      /Invitees receive an email with a 7-day accept link\. They must accept while signed in to the\s*\n?\s*same email address\. Once accepted, members can act on this account's resources by toggling\s*\n?\s*the "Acting as" picker in the sidebar — reads work for both <code>member<\/code> and\s*\n?\s*<code>admin<\/code> roles; writes require <code>admin<\/code>\./,
+      /Invitees receive an email with a 7-day accept link\. They must accept while signed in to the\s*same email address\. Once accepted, members can act on this account's resources by toggling\s*the "Acting as" picker in the sidebar — reads work for both <code>member<\/code> and\s*<code>admin<\/code> roles; writes require <code>admin<\/code>\./,
     );
   });
 
   it('Remove-button busy state disables and exposes aria-busy while deleting, then restores in finally — pinned so accidental double-clicks cannot fire duplicate DELETE calls and assistive technology receives the in-flight state', () => {
     expect(body).toMatch(
-      /btn\.disabled = true;\s*\n?\s*btn\.setAttribute\('aria-busy', 'true'\);\s*\n?\s*btn\.textContent = 'Removing…';/,
+      /btn\.disabled = true;\s*btn\.setAttribute\('aria-busy', 'true'\);\s*btn\.textContent = 'Removing…';/,
     );
     expect(body).toMatch(
-      /btn\.disabled = false;\s*\n?\s*btn\.setAttribute\('aria-busy', 'false'\);\s*\n?\s*btn\.textContent = 'Remove';/,
+      /btn\.disabled = false;\s*btn\.setAttribute\('aria-busy', 'false'\);\s*btn\.textContent = 'Remove';/,
     );
   });
 
@@ -123,8 +123,8 @@ describe('W495.C apps/customer-dashboard/src/pages/team.astro content parity', (
 
   it("Empty-state (2026-05-29 polished icon+headline+body, consistent with snapshots/recipes): members → headline 'No team members yet' + body 'Invite one above to collaborate…' / invites → headline 'No pending invites' + body 'Invitations you send will appear here…' — pinned so the two empty states stay distinct (drift to identical copy would lose the 'next step: invite' affordance on the members empty) and use the shared emptyState() helper", () => {
     expect(body).toMatch(/function emptyState\(iconPath, headline, body\)/);
-    expect(body).toMatch(/'No team members yet',\s*\n?\s*'Invite one above to collaborate/);
-    expect(body).toMatch(/'No pending invites',\s*\n?\s*'Invitations you send will appear here/);
+    expect(body).toMatch(/'No team members yet',\s*'Invite one above to collaborate/);
+    expect(body).toMatch(/'No pending invites',\s*'Invitations you send will appear here/);
   });
 
   it('file exists at canonical path', () => {

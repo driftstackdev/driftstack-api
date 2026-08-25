@@ -40,19 +40,19 @@ describe('W475.A apps/gui-client/src/components/ApiKeyMaskedSpan.tsx content par
   it("V-534.R framing pinned: 'V-534.R — ApiKeyMaskedSpan presentational primitive.' + 'Renders a Driftstack API key as `ds_live_abcd…wxyz` so views can confirm \"this is the right key\" without exposing the full secret on-screen. Used by SettingsView's \"connected\" banner today (which rolls its own mask); standalone primitive keeps the masking rule in one place.'", () => {
     expect(body).toMatch(/\/\/ V-534\.R — ApiKeyMaskedSpan presentational primitive\./);
     expect(body).toMatch(
-      /\/\/ Renders a Driftstack API key as `ds_live_abcd…wxyz` so views can\s*\n?\s*\/\/ confirm "this is the right key" without exposing the full secret\s*\n?\s*\/\/ on-screen\. Used by SettingsView's "connected" banner today \(which\s*\n?\s*\/\/ rolls its own mask\); standalone primitive keeps the masking rule\s*\n?\s*\/\/ in one place\./,
+      /\/\/ Renders a Driftstack API key as `ds_live_abcd…wxyz` so views can\s*\/\/ confirm "this is the right key" without exposing the full secret\s*\/\/ on-screen\. Used by SettingsView's "connected" banner today \(which\s*\/\/ rolls its own mask\); standalone primitive keeps the masking rule\s*\/\/ in one place\./,
     );
   });
 
   it("ApiKeyMaskedSpanProps 4-field: apiKey 'string | null | undefined' (3-way for missing vs null vs unset) + visiblePrefixChars? 'Number of leading chars to show (after the prefix). Default 4.' + visibleSuffixChars? 'Number of trailing chars to show. Default 4.' + className?", () => {
     expect(body).toMatch(
-      /export interface ApiKeyMaskedSpanProps \{\s*\n?\s*\/\*\* Plaintext API key, or null when no key is configured\. \*\/\s*\n?\s*apiKey: string \| null \| undefined;\s*\n?\s*\/\*\* Number of leading chars to show \(after the prefix\)\. Default 4\. \*\/\s*\n?\s*visiblePrefixChars\?: number;\s*\n?\s*\/\*\* Number of trailing chars to show\. Default 4\. \*\/\s*\n?\s*visibleSuffixChars\?: number;\s*\n?\s*\/\*\* Class to apply to the wrapping span\. \*\/\s*\n?\s*className\?: string;\s*\n?\s*\}/,
+      /export interface ApiKeyMaskedSpanProps \{\s*\/\*\* Plaintext API key, or null when no key is configured\. \*\/\s*apiKey: string \| null \| undefined;\s*\/\*\* Number of leading chars to show \(after the prefix\)\. Default 4\. \*\/\s*visiblePrefixChars\?: number;\s*\/\*\* Number of trailing chars to show\. Default 4\. \*\/\s*visibleSuffixChars\?: number;\s*\/\*\* Class to apply to the wrapping span\. \*\/\s*className\?: string;\s*\}/,
     );
   });
 
   it("maskApiKey exported with 5-prefix known list ['ds_live_', 'ds_test_', 'whsec_v1_', 'oas_', 'oat_'] — pinned so the webhook-secret + OAuth-client + access-token prefixes don't get dropped from the type-indicator surface", () => {
     expect(body).toMatch(
-      /export function maskApiKey\(\s*\n?\s*apiKey: string \| null \| undefined,\s*\n?\s*opts: \{ visiblePrefixChars\?: number; visibleSuffixChars\?: number \} = \{\},\s*\n?\s*\): string \{/,
+      /export function maskApiKey\(\s*apiKey: string \| null \| undefined,\s*opts: \{ visiblePrefixChars\?: number; visibleSuffixChars\?: number \} = \{\},\s*\): string \{/,
     );
     expect(body).toMatch(/const known = \['ds_live_', 'ds_test_', 'whsec_v1_', 'oas_', 'oat_'\];/);
   });
@@ -62,13 +62,13 @@ describe('W475.A apps/gui-client/src/components/ApiKeyMaskedSpan.tsx content par
     expect(body).toMatch(/const prefixChars = opts\.visiblePrefixChars \?\? 4;/);
     expect(body).toMatch(/const suffixChars = opts\.visibleSuffixChars \?\? 4;/);
     expect(body).toMatch(
-      /for \(const p of known\) \{\s*\n?\s*if \(apiKey\.startsWith\(p\)\) \{\s*\n?\s*prefix = p;\s*\n?\s*body = apiKey\.slice\(p\.length\);\s*\n?\s*break;\s*\n?\s*\}\s*\n?\s*\}\s*\n?\s*if \(body\.length <= prefixChars \+ suffixChars\) \{\s*\n?\s*return `\$\{prefix\}\$\{body\}`;\s*\n?\s*\}\s*\n?\s*return `\$\{prefix\}\$\{body\.slice\(0, prefixChars\)\}…\$\{body\.slice\(-suffixChars\)\}`;/,
+      /for \(const p of known\) \{\s*if \(apiKey\.startsWith\(p\)\) \{\s*prefix = p;\s*body = apiKey\.slice\(p\.length\);\s*break;\s*\}\s*\}\s*if \(body\.length <= prefixChars \+ suffixChars\) \{\s*return `\$\{prefix\}\$\{body\}`;\s*\}\s*return `\$\{prefix\}\$\{body\.slice\(0, prefixChars\)\}…\$\{body\.slice\(-suffixChars\)\}`;/,
     );
   });
 
   it("ApiKeyMaskedSpan component: spread-undefined-skip props (visiblePrefixChars/visibleSuffixChars only passed when !== undefined to keep maskApiKey's ?? 4 default intact) + className default 'font-mono text-sm text-ink-primary' + aria-label 'API key (masked)'", () => {
     expect(body).toMatch(
-      /export function ApiKeyMaskedSpan\(props: ApiKeyMaskedSpanProps\): JSX\.Element \{\s*\n?\s*const masked = maskApiKey\(props\.apiKey, \{\s*\n?\s*\.\.\.\(props\.visiblePrefixChars !== undefined\s*\n?\s*\? \{ visiblePrefixChars: props\.visiblePrefixChars \}\s*\n?\s*: \{\}\),\s*\n?\s*\.\.\.\(props\.visibleSuffixChars !== undefined\s*\n?\s*\? \{ visibleSuffixChars: props\.visibleSuffixChars \}\s*\n?\s*: \{\}\),\s*\n?\s*\}\);\s*\n?\s*const cls = props\.className \?\? 'font-mono text-sm text-ink-primary';\s*\n?\s*return \(\s*\n?\s*<span className=\{cls\} aria-label="API key \(masked\)">\s*\n?\s*\{masked\}\s*\n?\s*<\/span>\s*\n?\s*\);\s*\n?\s*\}/,
+      /export function ApiKeyMaskedSpan\(props: ApiKeyMaskedSpanProps\): JSX\.Element \{\s*const masked = maskApiKey\(props\.apiKey, \{\s*\.\.\.\(props\.visiblePrefixChars !== undefined\s*\? \{ visiblePrefixChars: props\.visiblePrefixChars \}\s*: \{\}\),\s*\.\.\.\(props\.visibleSuffixChars !== undefined\s*\? \{ visibleSuffixChars: props\.visibleSuffixChars \}\s*: \{\}\),\s*\}\);\s*const cls = props\.className \?\? 'font-mono text-sm text-ink-primary';\s*return \(\s*<span className=\{cls\} aria-label="API key \(masked\)">\s*\{masked\}\s*<\/span>\s*\);\s*\}/,
     );
   });
 

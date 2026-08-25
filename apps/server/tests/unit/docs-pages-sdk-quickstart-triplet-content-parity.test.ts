@@ -168,7 +168,7 @@ describe('W779 docs /sdk quickstart triplet content parity', () => {
 
     expect(p).toMatch(/const session = await client\.sessions\.create\(\{ label: 'demo' \}\);/);
     expect(p).toMatch(
-      /Always destroy — the concurrent slot stays held until you do\.\s*\n?\s*\/\/ There is no idle timeout on any tier; the only auto-destroy is\s*\n?\s*\/\/ the free tier's 20-minute duration cap\./,
+      /Always destroy — the concurrent slot stays held until you do\.\s*\/\/ There is no idle timeout on any tier; the only auto-destroy is\s*\/\/ the free tier's 20-minute duration cap\./,
     );
     // Negative pin — the fictional idle timeout must not come back.
     expect(p).not.toMatch(/per-tier idle timeout/);
@@ -271,8 +271,8 @@ describe('W779 docs /sdk quickstart triplet content parity', () => {
       const p = read(page);
       expect(p).toMatch(/Any paid Driftstack tier, including Manual/);
       expect(p).toMatch(/A `ds_live_…` customer API key/);
-      expect(p).toMatch(/restricted\s*\n?\s*`ds_test_…` device credential/);
-      expect(p).toMatch(/not a general SDK or\s*\n?\s*sandbox key/);
+      expect(p).toMatch(/restricted\s*`ds_test_…` device credential/);
+      expect(p).toMatch(/not a general SDK or\s*sandbox key/);
     }
   });
 

@@ -107,11 +107,9 @@ describe('W586.C packages/sdk-python/src/driftstack/webhook_signature.py content
     expect(body).toMatch(/V-359 — ``header_prev`` is an OPTIONAL fallback for a/);
     expect(body).toMatch(/separately-supplied previous-secret signature\. Driftstack does/);
     expect(body).toMatch(/NOT emit a separate header:/);
-    expect(body).toMatch(
-      /second ``v1=`` inside the\s*\n?\s*main ``x-driftstack-signature`` header/,
-    );
+    expect(body).toMatch(/second ``v1=`` inside the\s*main ``x-driftstack-signature`` header/);
     expect(body).toMatch(/passing ``header`` alone/);
-    expect(body).toMatch(/``header`` OR\s*\n?\s*``header_prev`` matching ``secret``\./);
+    expect(body).toMatch(/``header`` OR\s*``header_prev`` matching ``secret``\./);
     expect(body).toMatch(
       /body_bytes = body\.encode\("utf-8"\) if isinstance\(body, str\) else bytes\(body\)/,
     );

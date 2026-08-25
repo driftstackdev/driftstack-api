@@ -273,7 +273,7 @@ describe('W764 docs /api/auth content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /`\{ status: "pending" \}` to\s*\n?\s*`\{ status: "bound", api_key, account_id \}`/,
+      /`\{ status: "pending" \}` to\s*`\{ status: "bound", api_key, account_id \}`/,
     );
     expect(p).toMatch(/`\{ status: "expired" \}`/);
     // The code is deleted on delivery, so a re-poll returns expired

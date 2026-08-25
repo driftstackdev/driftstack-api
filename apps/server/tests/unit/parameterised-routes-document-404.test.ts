@@ -309,9 +309,9 @@ describe('path-parameterised routes document 404 or are exempt with a reason', (
     let compared = 0;
     for (const file of readdirSync(routesDir).filter((f) => f.endsWith('.ts'))) {
       const src = readFileSync(resolve(routesDir, file), 'utf8');
-      const regs = [
-        ...src.matchAll(/app\.(get|post|put|patch|delete)[^(]*\(\s*\n?\s*'([^']+)'/g),
-      ].map((m) => ({ at: m.index ?? 0, verb: (m[1] ?? '').toLowerCase(), path: m[2] ?? '' }));
+      const regs = [...src.matchAll(/app\.(get|post|put|patch|delete)[^(]*\(\s*'([^']+)'/g)].map(
+        (m) => ({ at: m.index ?? 0, verb: (m[1] ?? '').toLowerCase(), path: m[2] ?? '' }),
+      );
       for (const [i, reg] of regs.entries()) {
         const block = src.slice(reg.at, regs[i + 1]?.at ?? src.length);
         const statuses = new Set(
@@ -410,9 +410,9 @@ describe('path-parameterised routes document 404 or are exempt with a reason', (
         if (raised.size > 0) gates.set(d[1] ?? '', raised);
       }
 
-      const regs = [
-        ...src.matchAll(/app\.(get|post|put|patch|delete)[^(]*\(\s*\n?\s*'([^']+)'/g),
-      ].map((m) => ({ at: m.index ?? 0, verb: (m[1] ?? '').toLowerCase(), path: m[2] ?? '' }));
+      const regs = [...src.matchAll(/app\.(get|post|put|patch|delete)[^(]*\(\s*'([^']+)'/g)].map(
+        (m) => ({ at: m.index ?? 0, verb: (m[1] ?? '').toLowerCase(), path: m[2] ?? '' }),
+      );
       for (const [i, reg] of regs.entries()) {
         const block = src.slice(reg.at, regs[i + 1]?.at ?? src.length);
         const pre = /preHandler:\s*\[([^\]]*)\]/.exec(block)?.[1];
@@ -533,7 +533,7 @@ describe('path-parameterised routes document 404 or are exempt with a reason', (
     const routesDir = resolve(HERE, '..', '..', 'src', 'routes');
     const registrations = (body: string): Set<string> =>
       new Set(
-        [...body.matchAll(/app\.(get|post|put|patch|delete)[^(]*\(\s*\n?\s*'([^']+)'/g)].map(
+        [...body.matchAll(/app\.(get|post|put|patch|delete)[^(]*\(\s*'([^']+)'/g)].map(
           (m) => `${(m[1] ?? '').toLowerCase()} ${(m[2] ?? '').replace(/:([a-zA-Z_]+)/g, '{$1}')}`,
         ),
       );

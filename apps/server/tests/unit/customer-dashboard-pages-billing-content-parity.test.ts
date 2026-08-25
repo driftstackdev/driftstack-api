@@ -49,17 +49,17 @@ describe('W494.C apps/customer-dashboard/src/pages/billing.astro content parity'
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     // S25 2026-07-06 — status-toned TEXT re-pinned raw tk-ready/tk-err → AA-safe tk-ready-text/tk-err-text (washes stay raw).
     expect(body).toMatch(
-      /const STATUS_BADGE_CLASS: Record<string, string> = \{\s*\n?\s*active: 'bg-tk-ready\/10 text-tk-ready-text',\s*\n?\s*trialing: 'bg-tk-accent\/10 text-tk-accent-text',\s*\n?\s*past_due: 'bg-tk-err\/10 text-tk-err-text',\s*\n?\s*canceled: 'bg-tk-hover text-tk-ink-2',\s*\n?\s*unpaid: 'bg-tk-err\/10 text-tk-err-text',\s*\n?\s*incomplete: 'bg-tk-accent\/10 text-tk-accent-text',\s*\n?\s*incomplete_expired: 'bg-tk-hover text-tk-ink-2',\s*\n?\s*paused: 'bg-tk-hover text-tk-ink-2',\s*\n?\s*no_subscription: 'bg-tk-hover text-tk-ink-2',\s*\n?\s*\};/,
+      /const STATUS_BADGE_CLASS: Record<string, string> = \{\s*active: 'bg-tk-ready\/10 text-tk-ready-text',\s*trialing: 'bg-tk-accent\/10 text-tk-accent-text',\s*past_due: 'bg-tk-err\/10 text-tk-err-text',\s*canceled: 'bg-tk-hover text-tk-ink-2',\s*unpaid: 'bg-tk-err\/10 text-tk-err-text',\s*incomplete: 'bg-tk-accent\/10 text-tk-accent-text',\s*incomplete_expired: 'bg-tk-hover text-tk-ink-2',\s*paused: 'bg-tk-hover text-tk-ink-2',\s*no_subscription: 'bg-tk-hover text-tk-ink-2',\s*\};/,
     );
   });
 
   it('billing authedFetch preserves act-as headers and delegates its exact 15s deadline to the shared layout transport', () => {
     expect(body).toMatch(
-      /\/\/ V-331b — act-as header for team-scoped requests\.\s*\n?\s*\.\.\.\(typeof window\.driftstackActAsHeaders === 'function'\s*\n?\s*\? window\.driftstackActAsHeaders\(\)\s*\n?\s*: \{\}\),/,
+      /\/\/ V-331b — act-as header for team-scoped requests\.\s*\.\.\.\(typeof window\.driftstackActAsHeaders === 'function'\s*\? window\.driftstackActAsHeaders\(\)\s*: \{\}\),/,
     );
     expect(body).toContain('const BILLING_REQUEST_TIMEOUT_MS = 15_000;');
     expect(body).toMatch(
-      /window\.driftstackFetchWithDeadline\(\s*\n?\s*apiBaseUrl \+ path,[\s\S]*?credentials: 'include',[\s\S]*?BILLING_REQUEST_TIMEOUT_MS,\s*\n?\s*\);/,
+      /window\.driftstackFetchWithDeadline\(\s*apiBaseUrl \+ path,[\s\S]*?credentials: 'include',[\s\S]*?BILLING_REQUEST_TIMEOUT_MS,\s*\);/,
     );
     expect(layout).toContain('var callerSignal = init && init.signal;');
     expect(layout).toContain(
@@ -97,7 +97,7 @@ describe('W494.C apps/customer-dashboard/src/pages/billing.astro content parity'
 
   it('POST /v1/billing/portal-session contract: serialized action, empty {} body, validated portal URL, and redirect — pinned so the portal handoff stays minimal and duplicate clicks cannot create concurrent sessions', () => {
     expect(body).toMatch(
-      /const response = await authedFetch\('\/v1\/billing\/portal-session', \{\s*\n?\s*method: 'POST',\s*\n?\s*body: '\{\}',\s*\n?\s*\}\);/,
+      /const response = await authedFetch\('\/v1\/billing\/portal-session', \{\s*method: 'POST',\s*body: '\{\}',\s*\}\);/,
     );
     expect(body).toMatch(
       /const portalUrl = window\.driftstackTrustedRedirectUrl\(body && body\.portal_url, \[\s*'https:\/\/billing\.stripe\.com',\s*\]\);\s*if \(!portalUrl\) throw new Error\('portal URL invalid'\);/,
@@ -114,7 +114,7 @@ describe('W494.C apps/customer-dashboard/src/pages/billing.astro content parity'
       /data-action="cancel"\s*disabled\s*aria-disabled="true"[\s\S]*?class:list=\{\[\s*'btn-secondary text-red-700',\s*'hidden',/,
     );
     expect(body).toMatch(
-      /if \(cancelBtn\) \{\s*\n?\s*if \(sub\.cancel_at_period_end\) cancelBtn\.classList\.add\('hidden'\);\s*\n?\s*else cancelBtn\.classList\.remove\('hidden'\);\s*\n?\s*\}/,
+      /if \(cancelBtn\) \{\s*if \(sub\.cancel_at_period_end\) cancelBtn\.classList\.add\('hidden'\);\s*else cancelBtn\.classList\.remove\('hidden'\);\s*\}/,
     );
   });
 
@@ -126,7 +126,7 @@ describe('W494.C apps/customer-dashboard/src/pages/billing.astro content parity'
 
   it("Tax + receipts framing pinned: 'All prices in USD. VAT/BTW added per region per applicable EU rules. Stripe handles tax computation + invoicing per ADR-002.' — pinned so the EU-VAT framing + the ADR-002 Stripe-tax delegation reference survive (drift to handling tax ourselves would violate ADR-002 + create compliance liability)", () => {
     expect(body).toMatch(
-      /All prices in USD\. VAT\/BTW added per region per applicable EU rules\.\s*\n?\s*Stripe handles tax computation \+ invoicing per ADR-002\./,
+      /All prices in USD\. VAT\/BTW added per region per applicable EU rules\.\s*Stripe handles tax computation \+ invoicing per ADR-002\./,
     );
   });
 

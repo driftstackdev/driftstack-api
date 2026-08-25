@@ -53,23 +53,23 @@ describe('W445.B apps/server/src/db/admin-accounts-repo.ts content parity', () =
       /import \{ AccountTierSchema, type AccountTier \} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(
-      /import type \{\s*\n?\s*AccountsAdminRepo,\s*\n?\s*ListAccountsArgs,\s*\n?\s*ListAccountsPage,\s*\n?\s*\} from '\.\.\/services\/admin-accounts\.js';/,
+      /import type \{\s*AccountsAdminRepo,\s*ListAccountsArgs,\s*ListAccountsPage,\s*\} from '\.\.\/services\/admin-accounts\.js';/,
     );
     expect(body).toMatch(/import type \{ AccountRow \} from '\.\.\/services\/auth\.js';/);
   });
 
   it('findById: select * where eq(id) + limit 1 → toRow(row) or null', () => {
     expect(body).toMatch(
-      /async findById\(id: string\): Promise<AccountRow \| null> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(accounts\)\s*\n?\s*\.where\(eq\(accounts\.id, id\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*return row \? toRow\(row\) : null;\s*\n?\s*\}/,
+      /async findById\(id: string\): Promise<AccountRow \| null> \{\s*const \[row\] = await this\.database\.db\s*\.select\(\)\s*\.from\(accounts\)\s*\.where\(eq\(accounts\.id, id\)\)\s*\.limit\(1\);\s*return row \? toRow\(row\) : null;\s*\}/,
     );
   });
 
   it("setTier: update accounts set tier + updatedAt where id returning(); setStatus: same pattern with status enum 'active'|'suspended'|'deleted'", () => {
     expect(body).toMatch(
-      /async setTier\(id: string, tier: AccountTier, at: Date\): Promise<AccountRow \| null> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.update\(accounts\)\s*\n?\s*\.set\(\{ tier, updatedAt: at \}\)\s*\n?\s*\.where\(eq\(accounts\.id, id\)\)\s*\n?\s*\.returning\(\);\s*\n?\s*return row \? toRow\(row\) : null;\s*\n?\s*\}/,
+      /async setTier\(id: string, tier: AccountTier, at: Date\): Promise<AccountRow \| null> \{\s*const \[row\] = await this\.database\.db\s*\.update\(accounts\)\s*\.set\(\{ tier, updatedAt: at \}\)\s*\.where\(eq\(accounts\.id, id\)\)\s*\.returning\(\);\s*return row \? toRow\(row\) : null;\s*\}/,
     );
     expect(body).toMatch(
-      /async setStatus\(\s*\n?\s*id: string,\s*\n?\s*status: 'active' \| 'suspended' \| 'deleted',\s*\n?\s*at: Date,\s*\n?\s*\): Promise<AccountRow \| null> \{/,
+      /async setStatus\(\s*id: string,\s*status: 'active' \| 'suspended' \| 'deleted',\s*at: Date,\s*\): Promise<AccountRow \| null> \{/,
     );
   });
 
@@ -80,25 +80,25 @@ describe('W445.B apps/server/src/db/admin-accounts-repo.ts content parity', () =
       /const limit = Math\.min\(args\.limit \?\? ADMIN_ACCOUNTS_PAGE_DEFAULT, ADMIN_ACCOUNTS_PAGE_MAX\);/,
     );
     expect(body).toMatch(
-      /if \(args\.status !== undefined\) filters\.push\(eq\(accounts\.status, args\.status\)\);\s*\n?\s*if \(args\.tier !== undefined\) filters\.push\(eq\(accounts\.tier, args\.tier\)\);\s*\n?\s*if \(args\.emailContains !== undefined && args\.emailContains\.length > 0\) \{\s*\n?\s*filters\.push\(ilike\(accounts\.email, `%\$\{args\.emailContains\.toLowerCase\(\)\}%`\)\);\s*\n?\s*\}/,
+      /if \(args\.status !== undefined\) filters\.push\(eq\(accounts\.status, args\.status\)\);\s*if \(args\.tier !== undefined\) filters\.push\(eq\(accounts\.tier, args\.tier\)\);\s*if \(args\.emailContains !== undefined && args\.emailContains\.length > 0\) \{\s*filters\.push\(ilike\(accounts\.email, `%\$\{args\.emailContains\.toLowerCase\(\)\}%`\)\);\s*\}/,
     );
   });
 
   it('Composite cursor over (createdAt, id): lookup row by id via 2-field select; OR(lt(createdAt), and(eq(createdAt), lt(id))) — required because multiple accounts can share createdAt', () => {
     expect(body).toMatch(
-      /if \(args\.cursor !== undefined && parseUuidCursor\(args\.cursor\) !== undefined\) \{\s*\n?\s*const \[cursorRow\] = await this\.database\.db\s*\n?\s*\.select\(\{ createdAt: accounts\.createdAt, id: accounts\.id \}\)\s*\n?\s*\.from\(accounts\)\s*\n?\s*\.where\(eq\(accounts\.id, args\.cursor\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*if \(cursorRow !== undefined\) \{\s*\n?\s*const cursorClause = or\(\s*\n?\s*lt\(accounts\.createdAt, cursorRow\.createdAt\),\s*\n?\s*and\(eq\(accounts\.createdAt, cursorRow\.createdAt\), lt\(accounts\.id, cursorRow\.id\)\),\s*\n?\s*\);\s*\n?\s*if \(cursorClause !== undefined\) filters\.push\(cursorClause\);\s*\n?\s*\}\s*\n?\s*\}/,
+      /if \(args\.cursor !== undefined && parseUuidCursor\(args\.cursor\) !== undefined\) \{\s*const \[cursorRow\] = await this\.database\.db\s*\.select\(\{ createdAt: accounts\.createdAt, id: accounts\.id \}\)\s*\.from\(accounts\)\s*\.where\(eq\(accounts\.id, args\.cursor\)\)\s*\.limit\(1\);\s*if \(cursorRow !== undefined\) \{\s*const cursorClause = or\(\s*lt\(accounts\.createdAt, cursorRow\.createdAt\),\s*and\(eq\(accounts\.createdAt, cursorRow\.createdAt\), lt\(accounts\.id, cursorRow\.id\)\),\s*\);\s*if \(cursorClause !== undefined\) filters\.push\(cursorClause\);\s*\}\s*\}/,
     );
   });
 
   it('Query orderBy desc(createdAt), desc(id); limit+1 hasMore + slice; nextCursor = last id', () => {
     expect(body).toMatch(
-      /\.orderBy\(desc\(accounts\.createdAt\), desc\(accounts\.id\)\)\s*\n?\s*\.limit\(limit \+ 1\);\s*\n?\s*const hasMore = rows\.length > limit;\s*\n?\s*const data = rows\.slice\(0, limit\)\.map\(toRow\);\s*\n?\s*const nextCursor = hasMore && data\.length > 0 \? data\[data\.length - 1\]!\.id : null;\s*\n?\s*return \{ data, hasMore, nextCursor \};/,
+      /\.orderBy\(desc\(accounts\.createdAt\), desc\(accounts\.id\)\)\s*\.limit\(limit \+ 1\);\s*const hasMore = rows\.length > limit;\s*const data = rows\.slice\(0, limit\)\.map\(toRow\);\s*const nextCursor = hasMore && data\.length > 0 \? data\[data\.length - 1\]!\.id : null;\s*return \{ data, hasMore, nextCursor \};/,
     );
   });
 
   it('countByStatus: select count(*)::int where status eq; row?.cnt ?? 0', () => {
     expect(body).toMatch(
-      /async countByStatus\(status: 'active' \| 'suspended' \| 'deleted'\): Promise<number> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\{ cnt: sql<number>`count\(\*\)::int` \}\)\s*\n?\s*\.from\(accounts\)\s*\n?\s*\.where\(eq\(accounts\.status, status\)\);\s*\n?\s*return row\?\.cnt \?\? 0;\s*\n?\s*\}/,
+      /async countByStatus\(status: 'active' \| 'suspended' \| 'deleted'\): Promise<number> \{\s*const \[row\] = await this\.database\.db\s*\.select\(\{ cnt: sql<number>`count\(\*\)::int` \}\)\s*\.from\(accounts\)\s*\.where\(eq\(accounts\.status, status\)\);\s*return row\?\.cnt \?\? 0;\s*\}/,
     );
   });
 
@@ -111,7 +111,7 @@ describe('W445.B apps/server/src/db/admin-accounts-repo.ts content parity', () =
     expect(body).toMatch(/const out = emptyTierCounts\(\);/);
     expect(body).toMatch(/for \(const row of rows\) out\[row\.tier\] = row\.cnt;/);
     expect(body).toMatch(
-      /function emptyTierCounts\(\): Record<AccountTier, number> \{\s*\n?\s*const out = \{\} as Record<AccountTier, number>;\s*\n?\s*for \(const tier of AccountTierSchema\.options\) out\[tier\] = 0;\s*\n?\s*return out;\s*\n?\s*\}/,
+      /function emptyTierCounts\(\): Record<AccountTier, number> \{\s*const out = \{\} as Record<AccountTier, number>;\s*for \(const tier of AccountTierSchema\.options\) out\[tier\] = 0;\s*return out;\s*\}/,
     );
   });
 
@@ -122,7 +122,7 @@ describe('W445.B apps/server/src/db/admin-accounts-repo.ts content parity', () =
 
   it('toRow: 11-field AccountRow (id + email + name + tier + status + V-237 timezone + V-352b avatarR2Key + V-298a slug + V-298b region + created/updated_at)', () => {
     expect(body).toMatch(
-      /function toRow\(r: typeof accounts\.\$inferSelect\): AccountRow \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*email: r\.email,\s*\n?\s*name: r\.name,\s*\n?\s*tier: r\.tier,\s*\n?\s*status: r\.status,\s*\n?\s*timezone: r\.timezone,\s*\n?\s*avatarR2Key: r\.avatarR2Key,\s*\n?\s*slug: r\.slug,\s*\n?\s*region: r\.region,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*updatedAt: r\.updatedAt,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function toRow\(r: typeof accounts\.\$inferSelect\): AccountRow \{\s*return \{\s*id: r\.id,\s*email: r\.email,\s*name: r\.name,\s*tier: r\.tier,\s*status: r\.status,\s*timezone: r\.timezone,\s*avatarR2Key: r\.avatarR2Key,\s*slug: r\.slug,\s*region: r\.region,\s*createdAt: r\.createdAt,\s*updatedAt: r\.updatedAt,\s*\};\s*\}/,
     );
   });
 

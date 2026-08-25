@@ -88,11 +88,9 @@ describe('W717 recapture-automation dedupKey NUL-byte delimiter parity', () => {
 
   it('CRITICAL dedupKey docstring framing pinned — "notes and other free-form fields are dropped from the dedup key — they may differ by run timestamp / capture environment without changing the semantic outcome". The drop-notes-from-key invariant is what lets multiple runs of the same surface collapse to one entry.', () => {
     const src = read(MATRIX);
+    expect(src).toMatch(/`notes` and\s*\*\s*other free-form fields are dropped from the dedup key/);
     expect(src).toMatch(
-      /`notes` and\s*\n?\s*\*\s*other free-form fields are dropped from the dedup key/,
-    );
-    expect(src).toMatch(
-      /they may differ\s*\n?\s*\*\s*by run timestamp \/ capture environment without changing the semantic\s*\n?\s*\*\s*outcome/,
+      /they may differ\s*\*\s*by run timestamp \/ capture environment without changing the semantic\s*\*\s*outcome/,
     );
   });
 
@@ -118,7 +116,7 @@ describe('W717 recapture-automation dedupKey NUL-byte delimiter parity', () => {
   it('CRITICAL expandCaptureMatrix at-least-1-archetype guard pinned — `if (spec.archetypeIds.length === 0) { throw new Error(...) }`. Drift to allowing zero archetypes would let a no-op matrix run silently fan out to nothing.', () => {
     const src = read(MATRIX);
     expect(src).toMatch(
-      /if \(spec\.archetypeIds\.length === 0\) \{\s*\n?\s*throw new Error\('expandCaptureMatrix: archetypeIds must contain at least 1 entry'\);/,
+      /if \(spec\.archetypeIds\.length === 0\) \{\s*throw new Error\('expandCaptureMatrix: archetypeIds must contain at least 1 entry'\);/,
     );
   });
 

@@ -58,34 +58,34 @@ describe('W469.C apps/gui-client/src/lib/telemetry.ts content parity', () => {
 
   it("V-242 / D-2026-05-06-02 framing pinned: 'V-242 / D-2026-05-06-02 — telemetry: Sentry crash-only, opt-in, gated to cloud customers.'", () => {
     expect(body).toMatch(
-      /\/\/ V-242 \/ D-2026-05-06-02 — telemetry: Sentry crash-only, opt-in,\s*\n?\s*\/\/ gated to cloud customers\./,
+      /\/\/ V-242 \/ D-2026-05-06-02 — telemetry: Sentry crash-only, opt-in,\s*\/\/ gated to cloud customers\./,
     );
   });
 
   it("Posture 3-bullet framing pinned: '**Cloud customers** (baseUrl ends in driftstack.dev) — telemetry defaults ON; can opt out via Settings toggle. Helps Driftstack diagnose crashes affecting paying customers.' + '**Self-hosted customers** — telemetry defaults OFF; can opt IN explicitly. The whole point of self-hosted is keeping data on premise; telemetry would defeat that pitch unless explicitly chosen.' + '**Privacy contract** — crash-only. Errors + stack traces + anonymous version metadata (app version, OS, platform). NEVER captures: API keys, profile data, customer email/name, request bodies, or anything else PII-shaped. Sentry's `beforeSend` hook scrubs known-sensitive fields as a defense-in-depth.'", () => {
     expect(body).toMatch(
-      /\/\/\s+\* \*\*Cloud customers\*\* \(baseUrl ends in driftstack\.dev\) — telemetry\s*\n?\s*\/\/\s+defaults ON; can opt out via Settings toggle\. Helps Driftstack\s*\n?\s*\/\/\s+diagnose crashes affecting paying customers\./,
+      /\/\/\s+\* \*\*Cloud customers\*\* \(baseUrl ends in driftstack\.dev\) — telemetry\s*\/\/\s+defaults ON; can opt out via Settings toggle\. Helps Driftstack\s*\/\/\s+diagnose crashes affecting paying customers\./,
     );
     expect(body).toMatch(
-      /\/\/\s+\* \*\*Self-hosted customers\*\* — telemetry defaults OFF; can opt IN\s*\n?\s*\/\/\s+explicitly\. The whole point of self-hosted is keeping data on\s*\n?\s*\/\/\s+premise; telemetry would defeat that pitch unless explicitly\s*\n?\s*\/\/\s+chosen\./,
+      /\/\/\s+\* \*\*Self-hosted customers\*\* — telemetry defaults OFF; can opt IN\s*\/\/\s+explicitly\. The whole point of self-hosted is keeping data on\s*\/\/\s+premise; telemetry would defeat that pitch unless explicitly\s*\/\/\s+chosen\./,
     );
     expect(body).toMatch(
-      /\/\/\s+\* \*\*Privacy contract\*\* — crash-only\. Errors \+ stack traces \+\s*\n?\s*\/\/\s+anonymous version metadata \(app version, OS, platform\)\. NEVER\s*\n?\s*\/\/\s+captures: API keys, profile data, customer email\/name, request\s*\n?\s*\/\/\s+bodies, or anything else PII-shaped\. Sentry's `beforeSend` hook\s*\n?\s*\/\/\s+scrubs known-sensitive fields as a defense-in-depth\./,
+      /\/\/\s+\* \*\*Privacy contract\*\* — crash-only\. Errors \+ stack traces \+\s*\/\/\s+anonymous version metadata \(app version, OS, platform\)\. NEVER\s*\/\/\s+captures: API keys, profile data, customer email\/name, request\s*\/\/\s+bodies, or anything else PII-shaped\. Sentry's `beforeSend` hook\s*\/\/\s+scrubs known-sensitive fields as a defense-in-depth\./,
     );
   });
 
   it("Cross-platform framing pinned: '@sentry/browser runs identically on Tauri's WebView across Windows / macOS / Linux. No native-side Sentry yet (the Rust shell is thin; most customer-facing crashes originate in the React layer).'", () => {
     expect(body).toMatch(
-      /\/\/ Cross-platform: `@sentry\/browser` runs identically on Tauri's\s*\n?\s*\/\/ WebView across Windows \/ macOS \/ Linux\. No native-side Sentry yet\s*\n?\s*\/\/ \(the Rust shell is thin; most customer-facing crashes originate in\s*\n?\s*\/\/ the React layer\)\./,
+      /\/\/ Cross-platform: `@sentry\/browser` runs identically on Tauri's\s*\/\/ WebView across Windows \/ macOS \/ Linux\. No native-side Sentry yet\s*\/\/ \(the Rust shell is thin; most customer-facing crashes originate in\s*\/\/ the React layer\)\./,
     );
   });
 
   it("DSN-via-import.meta.env framing pinned: 'Sentry DSN for the Driftstack cloud GUI client. Filled in at build time via VITE_SENTRY_DSN env var. Empty string = no DSN configured (telemetry effectively disabled regardless of toggle state).' + 'The DSN is a public identifier; embedding it in the bundle is standard Sentry practice. The DSN identifies WHERE crashes go (Driftstack's Sentry project), not WHO is sending them — Sentry's server-side enforcement on accepted events handles abuse.'", () => {
     expect(body).toMatch(
-      /\*\s*Sentry DSN for the Driftstack cloud GUI client\. Filled in at build\s*\n?\s*\*\s*time via VITE_SENTRY_DSN env var\. Empty string = no DSN configured\s*\n?\s*\*\s*\(telemetry effectively disabled regardless of toggle state\)\./,
+      /\*\s*Sentry DSN for the Driftstack cloud GUI client\. Filled in at build\s*\*\s*time via VITE_SENTRY_DSN env var\. Empty string = no DSN configured\s*\*\s*\(telemetry effectively disabled regardless of toggle state\)\./,
     );
     expect(body).toMatch(
-      /\*\s*The DSN is a public identifier; embedding it in the bundle is\s*\n?\s*\*\s*standard Sentry practice\. The DSN identifies WHERE crashes go\s*\n?\s*\*\s*\(Driftstack's Sentry project\), not WHO is sending them — Sentry's\s*\n?\s*\*\s*server-side enforcement on accepted events handles abuse\./,
+      /\*\s*The DSN is a public identifier; embedding it in the bundle is\s*\*\s*standard Sentry practice\. The DSN identifies WHERE crashes go\s*\*\s*\(Driftstack's Sentry project\), not WHO is sending them — Sentry's\s*\*\s*server-side enforcement on accepted events handles abuse\./,
     );
     expect(body).toMatch(
       /const SENTRY_DSN: string = \(import\.meta\.env\.VITE_SENTRY_DSN as string \| undefined\) \?\? '';/,
@@ -97,28 +97,28 @@ describe('W469.C apps/gui-client/src/lib/telemetry.ts content parity', () => {
 
   it("TelemetryConfig 2-field (baseUrl + optIn boolean|null 'use platform default'); telemetryEnabled: SENTRY_DSN === '' → false short-circuit 'no DSN → never fires' + optIn===true → true + optIn===false → false + null fallthrough → isCloud", () => {
     expect(body).toMatch(
-      /export interface TelemetryConfig \{\s*\n?\s*\/\*\* Customer's configured base URL \(cloud detection\)\. \*\/\s*\n?\s*baseUrl: string;\s*\n?\s*\/\*\* Customer's explicit opt-in\/out \(null = "use platform default"\)\. \*\/\s*\n?\s*optIn: boolean \| null;\s*\n?\s*\}/,
+      /export interface TelemetryConfig \{\s*\/\*\* Customer's configured base URL \(cloud detection\)\. \*\/\s*baseUrl: string;\s*\/\*\* Customer's explicit opt-in\/out \(null = "use platform default"\)\. \*\/\s*optIn: boolean \| null;\s*\}/,
     );
     expect(body).toMatch(
-      /export function telemetryEnabled\(cfg: TelemetryConfig\): boolean \{\s*\n?\s*if \(SENTRY_DSN === ''\) return false; \/\/ no DSN → never fires\s*\n?\s*const isCloud = isCloudBaseUrl\(cfg\.baseUrl\);\s*\n?\s*if \(cfg\.optIn === true\) return true;\s*\n?\s*if \(cfg\.optIn === false\) return false;\s*\n?\s*\/\/ null = use platform default: ON for cloud, OFF for self-hosted\.\s*\n?\s*return isCloud;\s*\n?\s*\}/,
+      /export function telemetryEnabled\(cfg: TelemetryConfig\): boolean \{\s*if \(SENTRY_DSN === ''\) return false; \/\/ no DSN → never fires\s*const isCloud = isCloudBaseUrl\(cfg\.baseUrl\);\s*if \(cfg\.optIn === true\) return true;\s*if \(cfg\.optIn === false\) return false;\s*\/\/ null = use platform default: ON for cloud, OFF for self-hosted\.\s*return isCloud;\s*\}/,
     );
   });
 
   it("isCloudBaseUrl: hostname === 'driftstack.dev' OR endsWith('.driftstack.dev'); try/catch → false on malformed URL + framing 'Mirrors App.tsx::deploymentLabel logic; not cross-imported to avoid a circular boot path between App + telemetry init.'", () => {
     expect(body).toMatch(
-      /\*\s*Extract whether a baseUrl points at the Driftstack cloud surface\.\s*\n?\s*\*\s*Mirrors `App\.tsx::deploymentLabel` logic; not cross-imported to\s*\n?\s*\*\s*avoid a circular boot path between App \+ telemetry init\./,
+      /\*\s*Extract whether a baseUrl points at the Driftstack cloud surface\.\s*\*\s*Mirrors `App\.tsx::deploymentLabel` logic; not cross-imported to\s*\*\s*avoid a circular boot path between App \+ telemetry init\./,
     );
     expect(body).toMatch(
-      /export function isCloudBaseUrl\(baseUrl: string\): boolean \{\s*\n?\s*try \{\s*\n?\s*const host = new URL\(baseUrl\)\.hostname;\s*\n?\s*return host === 'driftstack\.dev' \|\| host\.endsWith\('\.driftstack\.dev'\);\s*\n?\s*\} catch \{\s*\n?\s*return false;\s*\n?\s*\}\s*\n?\s*\}/,
+      /export function isCloudBaseUrl\(baseUrl: string\): boolean \{\s*try \{\s*const host = new URL\(baseUrl\)\.hostname;\s*return host === 'driftstack\.dev' \|\| host\.endsWith\('\.driftstack\.dev'\);\s*\} catch \{\s*return false;\s*\}\s*\}/,
     );
   });
 
   it("initTelemetry: !telemetryEnabled branch closes existing client 'Customer just opted out — close the client to flush + stop.'; idempotent if initialized + telemetry enabled; Sentry.init with release `driftstack-gui@${APP_VERSION}` + tracesSampleRate 0 + sendDefaultPii: false + integration-filter (keepSentryIntegration) dropping BrowserTracing/Replay/BrowserProfilingIntegration/Breadcrumbs", () => {
     expect(body).toMatch(
-      /if \(!telemetryEnabled\(cfg\)\) \{\s*\n?\s*if \(initialized\) \{\s*\n?\s*\/\/ Customer just opted out — close the client to flush \+ stop\.\s*\n?\s*void Sentry\.close\(\);\s*\n?\s*initialized = false;\s*\n?\s*\}\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*if \(initialized\) return; \/\/ already running/,
+      /if \(!telemetryEnabled\(cfg\)\) \{\s*if \(initialized\) \{\s*\/\/ Customer just opted out — close the client to flush \+ stop\.\s*void Sentry\.close\(\);\s*initialized = false;\s*\}\s*return;\s*\}\s*if \(initialized\) return; \/\/ already running/,
     );
     expect(body).toMatch(
-      /Sentry\.init\(\{\s*\n?\s*dsn: SENTRY_DSN,\s*\n?\s*release: `driftstack-gui@\$\{APP_VERSION\}`,/,
+      /Sentry\.init\(\{\s*dsn: SENTRY_DSN,\s*release: `driftstack-gui@\$\{APP_VERSION\}`,/,
     );
     // Crash-only integration filter via keepSentryIntegration. Breadcrumbs
     // MUST stay in the dropped set — it auto-captures console/DOM/fetch/xhr
@@ -134,14 +134,14 @@ describe('W469.C apps/gui-client/src/lib/telemetry.ts content parity', () => {
     expect(body).toMatch(/'BrowserProfilingIntegration',/);
     expect(body).toMatch(/'Breadcrumbs',/);
     expect(body).toMatch(
-      /export function keepSentryIntegration\(name: string\): boolean \{\s*\n?\s*return !DROPPED_SENTRY_INTEGRATIONS\.includes\(name\);\s*\n?\s*\}/,
+      /export function keepSentryIntegration\(name: string\): boolean \{\s*return !DROPPED_SENTRY_INTEGRATIONS\.includes\(name\);\s*\}/,
     );
     expect(body).toMatch(/tracesSampleRate: 0,/);
-    expect(body).toMatch(/sendDefaultPii: false,\s*\n?\s*beforeSend: scrubEvent,/);
+    expect(body).toMatch(/sendDefaultPii: false,\s*beforeSend: scrubEvent,/);
   });
 
   it('scrubEvent covers headers and drops request bodies before recursively scrubbing extra/contexts', () => {
-    expect(body).toMatch(/k\.toLowerCase\(\) === 'set-cookie' \|\|\s*\n?\s*isSensitiveKey\(k\)/);
+    expect(body).toMatch(/k\.toLowerCase\(\) === 'set-cookie' \|\|\s*isSensitiveKey\(k\)/);
     expect(body).toMatch(/const SENSITIVE_KEYS = new Set\(\[/);
     expect(body).toMatch(/function isSensitiveKey\(key: string\): boolean/);
     expect(body).toMatch(/event\.request\.data = '\[scrubbed: request body\]';/);
@@ -160,7 +160,7 @@ describe('W469.C apps/gui-client/src/lib/telemetry.ts content parity', () => {
   it("URL + breadcrumb PII hardening: scrubEvent strips credential-shaped query params from request.url (the `?ds_token=<apiKey>` notification-stream vector) + scrubs breadcrumb data; SENSITIVE_QUERY_PARAMS includes 'ds_token'; scrubUrl uses new URL + searchParams.set('[scrubbed]') with try/catch passthrough", () => {
     // request.url query scrub.
     expect(body).toMatch(
-      /if \(typeof event\.request\?\.url === 'string'\) \{\s*\n?\s*event\.request\.url = scrubUrl\(event\.request\.url\);\s*\n?\s*\}/,
+      /if \(typeof event\.request\?\.url === 'string'\) \{\s*event\.request\.url = scrubUrl\(event\.request\.url\);\s*\}/,
     );
     // breadcrumb data scrub (field names + nested url query).
     expect(body).toMatch(/if \(event\.breadcrumbs\) \{/);

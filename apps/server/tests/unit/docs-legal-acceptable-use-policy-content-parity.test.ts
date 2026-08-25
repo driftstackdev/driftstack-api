@@ -162,7 +162,7 @@ describe('W574.C /docs/legal/acceptable-use-policy.md content parity', () => {
     expect(body).toMatch(/the API rejects authenticated requests/);
     expect(body).toMatch(/with HTTP 403 carrying a problem type/);
     expect(body).toMatch(/`https:\/\/errors\.driftstack\.dev\/forbidden`/);
-    expect(body).toMatch(/Suspension typically lasts up\s*\n?\s*to 30 days/);
+    expect(body).toMatch(/Suspension typically lasts up\s*to 30 days/);
     // V-758 — the billing-pauses clause now states its mechanism, because it is finally
     // implemented: suspend() sets pause_collection with Stripe's `void` behaviour and
     // unsuspend() clears it. `void` rather than deferral is the part that matters to a

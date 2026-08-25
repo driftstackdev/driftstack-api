@@ -149,9 +149,7 @@ describe('deploy-bridge runbook content parity', () => {
     // TL;DR line and the prose below it — and a first-match regex passed happily
     // while the second said something else, which is the same one-of-N hole the
     // guard is meant to close.
-    const claimed = [...runbook.matchAll(/(\d+)\s*\n?\s*--check refusals/g)].map((m) =>
-      Number(m[1]),
-    );
+    const claimed = [...runbook.matchAll(/(\d+)\s*--check refusals/g)].map((m) => Number(m[1]));
     expect(
       claimed.length,
       'the runbook no longer states how many refusals --check emits',

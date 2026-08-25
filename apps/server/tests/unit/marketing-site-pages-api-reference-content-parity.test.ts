@@ -63,45 +63,23 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
   // to the AA-safe text-tk-accent-text tone (accent-colored TEXT fails
   // AA on the dark bg; heading text + grouping are unchanged).
   it('curated surface map includes archetypes, agent sessions, recipes, and the primary account resources', () => {
+    expect(body).toMatch(/uppercase tracking-widest text-tk-accent-text">\s*Sessions\s*<\/h3>/);
+    expect(body).toMatch(/uppercase tracking-widest text-tk-accent-text">\s*Archetypes\s*<\/h3>/);
     expect(body).toMatch(
-      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Sessions\s*\n?\s*<\/h3>/,
+      /uppercase tracking-widest text-tk-accent-text">\s*Agent sessions\s*<\/h3>/,
     );
+    expect(body).toMatch(/uppercase tracking-widest text-tk-accent-text">\s*Recipes\s*<\/h3>/);
+    expect(body).toMatch(/uppercase tracking-widest text-tk-accent-text">\s*Profiles\s*<\/h3>/);
+    expect(body).toMatch(/uppercase tracking-widest text-tk-accent-text">\s*API keys\s*<\/h3>/);
+    expect(body).toMatch(/uppercase tracking-widest text-tk-accent-text">\s*Webhooks\s*<\/h3>/);
+    expect(body).toMatch(/uppercase tracking-widest text-tk-accent-text">\s*Account\s*<\/h3>/);
+    expect(body).toMatch(/uppercase tracking-widest text-tk-accent-text">\s*Team\s*<\/h3>/);
     expect(body).toMatch(
-      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Archetypes\s*\n?\s*<\/h3>/,
+      /uppercase tracking-widest text-tk-accent-text">\s*Billing — crypto orders\s*<\/h3>/,
     );
-    expect(body).toMatch(
-      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Agent sessions\s*\n?\s*<\/h3>/,
-    );
-    expect(body).toMatch(
-      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Recipes\s*\n?\s*<\/h3>/,
-    );
-    expect(body).toMatch(
-      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Profiles\s*\n?\s*<\/h3>/,
-    );
-    expect(body).toMatch(
-      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*API keys\s*\n?\s*<\/h3>/,
-    );
-    expect(body).toMatch(
-      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Webhooks\s*\n?\s*<\/h3>/,
-    );
-    expect(body).toMatch(
-      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Account\s*\n?\s*<\/h3>/,
-    );
-    expect(body).toMatch(
-      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Team\s*\n?\s*<\/h3>/,
-    );
-    expect(body).toMatch(
-      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Billing — crypto orders\s*\n?\s*<\/h3>/,
-    );
-    expect(body).toMatch(
-      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Status\s*\n?\s*<\/h3>/,
-    );
-    expect(body).toMatch(
-      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Auth flows\s*\n?\s*<\/h3>/,
-    );
-    expect(body).toMatch(
-      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Billing\s*\n?\s*<\/h3>/,
-    );
+    expect(body).toMatch(/uppercase tracking-widest text-tk-accent-text">\s*Status\s*<\/h3>/);
+    expect(body).toMatch(/uppercase tracking-widest text-tk-accent-text">\s*Auth flows\s*<\/h3>/);
+    expect(body).toMatch(/uppercase tracking-widest text-tk-accent-text">\s*Billing\s*<\/h3>/);
   });
 
   it('Sessions route enumeration 9-endpoint: POST + GET + GET /:id + POST /:id/navigate + POST /:id/interact + POST /:id/wait + GET /:id/state + POST /:id/capture + DELETE /:id — pinned so the sessions REST contract enumeration stays consistent with the live OpenAPI spec (drift to dropping any would create marketing↔server divergence for prospects browsing the surface)', () => {
@@ -171,7 +149,7 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
 
   it("V-662 Common patterns framing pinned: 'Common patterns: side-by-side cURL / TS / Python / Go samples for the three most-used flows. Reduces the \"what does it actually look like to call this?\" friction that the route-list above doesn't answer on its own.' + 'Three flows, four languages.' — pinned so the 4-language coverage commitment + the 3-flow scope survive (drift to dropping a language would shrink the SDK example surface)", () => {
     expect(body).toMatch(
-      /V-662 — Common patterns: side-by-side cURL \/ TS \/ Python \/ Go\s*\n?\s*samples for the three most-used flows\./,
+      /V-662 — Common patterns: side-by-side cURL \/ TS \/ Python \/ Go\s*samples for the three most-used flows\./,
     );
     expect(body).toMatch(/Three flows, four languages\./);
   });
@@ -210,7 +188,7 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
 
   it("V-662 isRetryable predicate framing pinned: 'SDK consumers can use isRetryable(err) (TypeScript) / equivalent predicates in Python + Go to filter which errors to retry without re-implementing the mapping.' — pinned so the cross-language retry-predicate helper survives (drift to dropping would force SDK consumers to re-implement the retryable-error mapping per-language)", () => {
     expect(body).toMatch(
-      /SDK consumers can use <code class="font-mono">isRetryable\(err\)<\/code>\s*\n?\s*\(TypeScript\) \/ equivalent predicates in Python \+ Go to filter\s*\n?\s*which errors to retry without re-implementing the mapping\./,
+      /SDK consumers can use <code class="font-mono">isRetryable\(err\)<\/code>\s*\(TypeScript\) \/ equivalent predicates in Python \+ Go to filter\s*which errors to retry without re-implementing the mapping\./,
     );
   });
 
@@ -245,7 +223,7 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
       /<a href=\{OPENAPI_JSON_URL\} class="btn-secondary">Download openapi\.json<\/a>/,
     );
     expect(body).toMatch(
-      /Interactive reference uses Scalar — try requests against your API\s*\n?\s*key directly in the browser\./,
+      /Interactive reference uses Scalar — try requests against your API\s*key directly in the browser\./,
     );
   });
 

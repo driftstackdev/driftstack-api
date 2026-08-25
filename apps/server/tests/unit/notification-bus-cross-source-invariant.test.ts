@@ -113,7 +113,7 @@ describe('Notification v0 schema cross-source-invariant', () => {
   it('S45: bootstrap publishes incident.broadcast from every public-incident lifecycle hook (created/updated/resolved) via publishBroadcast — the kind is LIVE, not declared-only', () => {
     const bootstrap = read(resolve(REPO_ROOT, 'apps/server/src/lib/bootstrap.ts'));
     expect(bootstrap).toMatch(
-      /notificationEventBus\.publishBroadcast\(\{\s*\n?\s*kind: 'incident\.broadcast',[\s\S]{0,300}?incidentId: `inc_\$\{incident\.id\}`,\s*\n?\s*severity: incident\.severity,\s*\n?\s*title: incident\.title,\s*\n?\s*at: new Date\(\)\.toISOString\(\),/,
+      /notificationEventBus\.publishBroadcast\(\{\s*kind: 'incident\.broadcast',[\s\S]{0,300}?incidentId: `inc_\$\{incident\.id\}`,\s*severity: incident\.severity,\s*title: incident\.title,\s*at: new Date\(\)\.toISOString\(\),/,
     );
     // All three hooks route through the shared helper.
     const publishCalls = bootstrap.match(/publishIncidentNotification\(incident\);/g) ?? [];

@@ -39,23 +39,23 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
       /\/\/ Proxy management — protected local registry plus encrypted account sync\./,
     );
     expect(body).toMatch(
-      /owner-scoped account_proxies record whose secret fields are encrypted under\s*\n?\s*\/\/ the account key hierarchy\./,
+      /owner-scoped account_proxies record whose secret fields are encrypted under\s*\/\/ the account key hierarchy\./,
     );
     expect(body).not.toMatch(/never uploaded|never go to the Driftstack control plane/i);
   });
 
   it("ListState 4-field (proxies + loading + error nullable + notice nullable — the transient unbind confirmation, e.g. 'N profiles were unbound from the deleted proxy'); EMPTY_DRAFT 6-field with label:'' + scheme:'socks5' + host:'' + port:1080 (SOCKS5 default) + username:null + password:null — pinned so the SOCKS5 default port doesn't drift, customer can submit without typing a port", () => {
     expect(body).toMatch(
-      /interface ListState \{\s*\n?\s*proxies: ProxyConfig\[\];\s*\n?\s*loading: boolean;\s*\n?\s*error: string \| null;\s*\n?\s*\/\*\* Transient confirmation, e\.g\. "N profiles were unbound from the deleted proxy"\. \*\/\s*\n?\s*notice: string \| null;\s*\n?\s*\}/,
+      /interface ListState \{\s*proxies: ProxyConfig\[\];\s*loading: boolean;\s*error: string \| null;\s*\/\*\* Transient confirmation, e\.g\. "N profiles were unbound from the deleted proxy"\. \*\/\s*notice: string \| null;\s*\}/,
     );
     expect(body).toMatch(
-      /const EMPTY_DRAFT: ProxyDraft = \{\s*\n?\s*label: '',\s*\n?\s*scheme: 'socks5',\s*\n?\s*host: '',\s*\n?\s*port: 1080,\s*\n?\s*username: null,\s*\n?\s*password: null,\s*\n?\s*\};/,
+      /const EMPTY_DRAFT: ProxyDraft = \{\s*label: '',\s*scheme: 'socks5',\s*host: '',\s*port: 1080,\s*username: null,\s*password: null,\s*\};/,
     );
   });
 
   it("editor state-machine 3-variant union: { kind: 'idle' } | { kind: 'add' } | { kind: 'edit'; id: string }; busyId nullable for remove operation gating; handleSave dispatches on editor.kind (add → addProxy / edit → updateProxy with editor.id); on a connection-field change the edit path invalidates the cached probe; handleRemove sets busyId + invalidates the deleted proxy's cached probe", () => {
     expect(body).toMatch(
-      /const \[editor, setEditor\] = useState<\s*\n?\s*\{ kind: 'idle' \} \| \{ kind: 'add' \} \| \{ kind: 'edit'; id: string \}\s*\n?\s*>\(\{ kind: 'idle' \}\);/,
+      /const \[editor, setEditor\] = useState<\s*\{ kind: 'idle' \} \| \{ kind: 'add' \} \| \{ kind: 'edit'; id: string \}\s*>\(\{ kind: 'idle' \}\);/,
     );
     // dispatch on editor.kind: add → addProxy, edit → updateProxy(editId, …).
     // Pinned as two independent branch anchors rather than one regex chained
@@ -118,7 +118,7 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
 
   it('pins honest protected-local and encrypted account-sync empty-state copy plus the Add CTA', () => {
     expect(body).toMatch(
-      /Add a SOCKS5 endpoint to route session traffic through your own egress IP\. Proxy\s*\n?\s*credentials are protected locally and synced in encrypted form to your account when used\s*\n?\s*for a session\./,
+      /Add a SOCKS5 endpoint to route session traffic through your own egress IP\. Proxy\s*credentials are protected locally and synced in encrypted form to your account when used\s*for a session\./,
     );
     expect(body).toMatch(/>\s*Add a proxy\s*<\/button>/);
   });
@@ -131,42 +131,42 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
     expect(body).toMatch(/aria-busy=\{locked\}/);
     expect(body).toMatch(/aria-disabled=\{locked\}/);
     expect(body).toMatch(
-      /if \(locked\) form\.setAttribute\('inert', ''\);\s*\n?\s*else form\.removeAttribute\('inert'\);/,
+      /if \(locked\) form\.setAttribute\('inert', ''\);\s*else form\.removeAttribute\('inert'\);/,
     );
-    expect(body).toMatch(/\? mode === 'add'\s*\n?\s*\? 'Adding…'\s*\n?\s*: 'Saving…'/);
+    expect(body).toMatch(/\? mode === 'add'\s*\? 'Adding…'\s*: 'Saving…'/);
     expect(body).toMatch(
-      /<input\s*\n?\s*type="number"\s*\n?\s*className="form-input mono"\s*\n?\s*min=\{1\}\s*\n?\s*max=\{65535\}\s*\n?\s*value=\{draft\.port\}\s*\n?\s*onChange=\{\(e\) => setField\('port', Number\(e\.target\.value\)\)\}/,
-    );
-    expect(body).toMatch(
-      /onChange=\{\(e\) =>\s*\n?\s*setField\('username', e\.target\.value\.length > 0 \? e\.target\.value : null\)\s*\n?\s*\}/,
+      /<input\s*type="number"\s*className="form-input mono"\s*min=\{1\}\s*max=\{65535\}\s*value=\{draft\.port\}\s*onChange=\{\(e\) => setField\('port', Number\(e\.target\.value\)\)\}/,
     );
     expect(body).toMatch(
-      /onChange=\{\(e\) =>\s*\n?\s*setField\('password', e\.target\.value\.length > 0 \? e\.target\.value : null\)\s*\n?\s*\}/,
+      /onChange=\{\(e\) =>\s*setField\('username', e\.target\.value\.length > 0 \? e\.target\.value : null\)\s*\}/,
+    );
+    expect(body).toMatch(
+      /onChange=\{\(e\) =>\s*setField\('password', e\.target\.value\.length > 0 \? e\.target\.value : null\)\s*\}/,
     );
   });
 
   it('parent save is also ref-single-flight, keeps the editor locked through refresh, and releases in finally', () => {
     expect(body).toMatch(/const saveInFlightRef = useRef\(false\);/);
     expect(body).toMatch(
-      /async function handleSave\(draft: ProxyDraft\): Promise<void> \{\s*\n?\s*if \(saveInFlightRef\.current\) return;\s*\n?\s*saveInFlightRef\.current = true;\s*\n?\s*setSaving\(true\);/,
+      /async function handleSave\(draft: ProxyDraft\): Promise<void> \{\s*if \(saveInFlightRef\.current\) return;\s*saveInFlightRef\.current = true;\s*setSaving\(true\);/,
     );
     expect(body).toMatch(
-      /await refresh\(\);\s*\n?\s*\/\/ Keep the form mounted and locked through refresh[\s\S]*?setEditor\(\{ kind: 'idle' \}\);/,
+      /await refresh\(\);\s*\/\/ Keep the form mounted and locked through refresh[\s\S]*?setEditor\(\{ kind: 'idle' \}\);/,
     );
     expect(body).toMatch(
-      /finally \{\s*\n?\s*saveInFlightRef\.current = false;\s*\n?\s*setSaving\(false\);\s*\n?\s*\}/,
+      /finally \{\s*saveInFlightRef\.current = false;\s*setSaving\(false\);\s*\}/,
     );
     expect(body).toMatch(/saving=\{saving\}[\s\S]*?onSave=\{handleSave\}/);
   });
 
   it("Edit-mode initial draft via toDraft helper: ProxyConfig → ProxyDraft carries label/host/port/username/password + scheme + the openvpn/wireguard config block (each only when present), strips id+createdAt+other server-side fields; ProxyForm label conditional 'Add proxy' / 'Edit proxy' for mode header + 'Add proxy' / 'Save changes' submit button — pinned so the verb matches the noun (add vs edit) AND so editing a VPN proxy doesn't drop its scheme/config (the silent revert-to-SOCKS5 data-loss bug)", () => {
     expect(body).toMatch(
-      /function toDraft\(p: ProxyConfig\): ProxyDraft \{[\s\S]*?return \{\s*\n?\s*label: p\.label,\s*\n?\s*host: p\.host,\s*\n?\s*port: p\.port,\s*\n?\s*username: p\.username,\s*\n?\s*password: p\.password,\s*\n?\s*\.\.\.\(p\.scheme !== undefined \? \{ scheme: p\.scheme \} : \{\}\),\s*\n?\s*\.\.\.\(p\.openvpn !== undefined \? \{ openvpn: p\.openvpn \} : \{\}\),\s*\n?\s*\.\.\.\(p\.wireguard !== undefined \? \{ wireguard: p\.wireguard \} : \{\}\),\s*\n?\s*\};\s*\n?\s*\}/,
+      /function toDraft\(p: ProxyConfig\): ProxyDraft \{[\s\S]*?return \{\s*label: p\.label,\s*host: p\.host,\s*port: p\.port,\s*username: p\.username,\s*password: p\.password,\s*\.\.\.\(p\.scheme !== undefined \? \{ scheme: p\.scheme \} : \{\}\),\s*\.\.\.\(p\.openvpn !== undefined \? \{ openvpn: p\.openvpn \} : \{\}\),\s*\.\.\.\(p\.wireguard !== undefined \? \{ wireguard: p\.wireguard \} : \{\}\),\s*\};\s*\}/,
     );
     expect(body).toMatch(
-      /<span className="section-label text-accent">\s*\n?\s*\{mode === 'add' \? 'Add proxy' : 'Edit proxy'\}\s*\n?\s*<\/span>/,
+      /<span className="section-label text-accent">\s*\{mode === 'add' \? 'Add proxy' : 'Edit proxy'\}\s*<\/span>/,
     );
-    expect(body).toMatch(/: mode === 'add'\s*\n?\s*\? 'Add proxy'\s*\n?\s*: 'Save changes'/);
+    expect(body).toMatch(/: mode === 'add'\s*\? 'Add proxy'\s*: 'Save changes'/);
   });
 
   it("ProxyRow (the W3121 sortable grid, replacing the card deck): per-row host:port endpoint + username shown only when set (no leak when blank) + createdAt via <RelativeTime iso=p.createdAt tooltipPrefix=\"Added\"> + Edit + Remove (Remove disabled while that row is busy with a 'Removing…' label, gated through `busy` = busyId===p.id at the call site); password never rendered anywhere — pinned so credentials don't leak into the UI", () => {
@@ -187,7 +187,7 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
     // ProxyTable call site).
     expect(body).toMatch(/busy=\{busyId === p\.id\}/);
     expect(body).toMatch(
-      /onClick=\{onRemove\}\s*\n?\s*disabled=\{busy\}\s*\n?\s*>\s*\n?\s*\{busy \? 'Removing…' : 'Remove'\}/,
+      /onClick=\{onRemove\}\s*disabled=\{busy\}\s*>\s*\{busy \? 'Removing…' : 'Remove'\}/,
     );
     // ⛔ The password must never be rendered into the markup. Unchanged, and the
     // reason this arm exists at all.
@@ -197,7 +197,7 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
   it('friendlyError delegates to shared safe humanization with operation-specific actionable fallbacks; Field subcomponent keeps label + optional error + children', () => {
     expect(body).toMatch(/import \{ humanizeError \} from '\.\.\/lib\/humanize-error';/);
     expect(body).toMatch(
-      /function friendlyError\(err: unknown, fallback: string\): string \{\s*\n?\s*return humanizeError\(err, fallback\);\s*\n?\s*\}/,
+      /function friendlyError\(err: unknown, fallback: string\): string \{\s*return humanizeError\(err, fallback\);\s*\}/,
     );
     expect(body).toContain('friendlyError(err, "Couldn\'t load proxies. Try again.")');
     expect(body).toContain(
@@ -206,7 +206,7 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
     expect(body).toContain('friendlyError(err, "Couldn\'t remove this proxy. Try again.")');
     expect(body).not.toContain("return 'unknown error'");
     expect(body).toMatch(
-      /function Field\(\{\s*\n?\s*label,\s*\n?\s*error,\s*\n?\s*children,\s*\n?\s*\}: \{\s*\n?\s*label: string;\s*\n?\s*error\?: string;\s*\n?\s*children: React\.ReactNode;\s*\n?\s*\}\): JSX\.Element \{/,
+      /function Field\(\{\s*label,\s*error,\s*children,\s*\}: \{\s*label: string;\s*error\?: string;\s*children: React\.ReactNode;\s*\}\): JSX\.Element \{/,
     );
   });
 
@@ -228,7 +228,7 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
     // has not committed, so component state is still the PREVIOUS registry and
     // would not contain the row that was just added.
     expect(body).toContain('const fresh = await listProxies()');
-    expect(body).toMatch(/const target =\s*\n?\s*fresh === null/);
+    expect(body).toMatch(/const target =\s*fresh === null/);
     // addProxy does not return the created row, so the added one is matched on
     // the endpoint tuple the customer just entered.
     expect(body).toContain('p.host === draft.host && p.port === draft.port');

@@ -47,7 +47,7 @@ describe('W546.A /docs/CAPABILITIES.md content parity', () => {
       /This document is the \*\*closure backlog for fingerprint parity\*\* — not/,
     );
     expect(body).toMatch(/marketing copy, not a status report\./);
-    expect(body).toMatch(/The bar is \*\*100% match against\s*\n?\s*genuine iPhone 17 Pro/);
+    expect(body).toMatch(/The bar is \*\*100% match against\s*genuine iPhone 17 Pro/);
     expect(body).toMatch(/iOS 26 Safari\*\*, measured by the/);
     expect(body).toMatch(/detection rig\./);
     expect(body).toMatch(/Every non-zero residual listed here is an open item/);

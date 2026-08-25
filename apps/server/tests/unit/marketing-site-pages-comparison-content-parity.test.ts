@@ -35,22 +35,22 @@ describe('W501.A apps/marketing-site/src/pages/comparison.astro content parity',
 
   it("V-472 framing pinned: 'comparison page. Driftstack vs Browserless / Bright Data / ScrapingBee / Browserbase. Tone: differentiation, not disparagement. Each competitor has a legitimate audience and use-case; the page names where Driftstack's posture is materially different and where it isn't a fit.' — pinned so the differentiation-not-disparagement tone + the 4-vendor scope + the 'name where Driftstack isn't a fit' commitment all survive (drift to disparagement would invite legal-shaped pushback; drift to adding more vendors would dilute the comparison)", () => {
     expect(body).toMatch(
-      /\/\/ V-472 — comparison page\. Driftstack vs Browserless \/ Bright Data \/\s*\n?\s*\/\/ ScrapingBee \/ Browserbase\. Tone: differentiation, not disparagement\./,
+      /\/\/ V-472 — comparison page\. Driftstack vs Browserless \/ Bright Data \/\s*\/\/ ScrapingBee \/ Browserbase\. Tone: differentiation, not disparagement\./,
     );
     expect(body).toMatch(
-      /\/\/ Each competitor has a legitimate audience and use-case; the page\s*\n?\s*\/\/ names where Driftstack's posture is materially different and where\s*\n?\s*\/\/ it isn't a fit\./,
+      /\/\/ Each competitor has a legitimate audience and use-case; the page\s*\/\/ names where Driftstack's posture is materially different and where\s*\/\/ it isn't a fit\./,
     );
   });
 
   it("'No performance benchmarks vs them — those land on the future /benchmarks subdomain (V-345) once empirical data is collected.' — pinned so the no-benchmarks-without-data commitment + the V-345 future-page reference survive (drift to claiming benchmarks would invite empirical pushback; drift to dropping V-345 reference would orphan the future-benchmarks plan)", () => {
     expect(body).toMatch(
-      /\/\/ No performance benchmarks vs them — those land on the future\s*\n?\s*\/\/ \/benchmarks subdomain \(V-345\) once empirical data is collected\./,
+      /\/\/ No performance benchmarks vs them — those land on the future\s*\/\/ \/benchmarks subdomain \(V-345\) once empirical data is collected\./,
     );
   });
 
   it('ComparisonRow interface 6-field shape: feature + driftstack + browserless + brightData + scrapingBee + browserbase — pinned so the comparison-row TS shape stays correct (drift to dropping a vendor field would break the table render; drift to adding a vendor would require updating the table header alongside)', () => {
     expect(body).toMatch(
-      /interface ComparisonRow \{\s*\n?\s*feature: string;\s*\n?\s*driftstack: string;\s*\n?\s*browserless: string;\s*\n?\s*brightData: string;\s*\n?\s*scrapingBee: string;\s*\n?\s*browserbase: string;\s*\n?\s*\}/,
+      /interface ComparisonRow \{\s*feature: string;\s*driftstack: string;\s*browserless: string;\s*brightData: string;\s*scrapingBee: string;\s*browserbase: string;\s*\}/,
     );
   });
 
@@ -104,12 +104,12 @@ describe('W501.A apps/marketing-site/src/pages/comparison.astro content parity',
 
   it("vs Bright Data BYO-proxy framing pinned: 'Bring your own proxy network or use SOCKS5 / OpenVPN / WireGuard to whatever IP pool you've already paid for. We don't sell proxies; we don't mark up egress.' — pinned so the 'BYO egress, no markup' positioning survives (drift to dropping would weaken the cost-comparison case against Bright Data who sells proxies). Priority order SOCKS5 / OpenVPN / WireGuard matches the API server's user-facing 503 messages + the founder verdict 2026-05-16 (Phase 1 / Phase 2 / Phase 3 deferred).", () => {
     expect(body).toMatch(
-      /Bring your own\s*\n?\s*proxy network or use SOCKS5 \/ OpenVPN \/ WireGuard to whatever IP\s*\n?\s*pool you've already paid for\. We don't sell proxies; we don't\s*\n?\s*mark up egress/,
+      /Bring your own\s*proxy network or use SOCKS5 \/ OpenVPN \/ WireGuard to whatever IP\s*pool you've already paid for\. We don't sell proxies; we don't\s*mark up egress/,
     );
     // S20b 2026-07-06: the load-bearing sentence continues with a plain
     // gloss of what egress means.
     expect(body).toMatch(
-      /the traffic leaving for the open internet runs\s*\n?\s*over your own exit, so it's not ours to meter\./,
+      /the traffic leaving for the open internet runs\s*over your own exit, so it's not ours to meter\./,
     );
   });
 
@@ -125,7 +125,7 @@ describe('W501.A apps/marketing-site/src/pages/comparison.astro content parity',
   it("Freshness stamp: 'Last reviewed 2026-05-10' + drift-correction mailto:support@driftstack.dev — pinned so the page-staleness signal + the customer-driven correction channel survive (drift to dropping the timestamp would let competitor rows go stale without a reviewer signal)", () => {
     expect(body).toMatch(/Last reviewed 2026-05-10\./);
     expect(body).toMatch(
-      /If a competitor row drifts from current\s*\n?\s*public marketing, mail\s*\n?\s*<a href="mailto:support@driftstack\.dev"/,
+      /If a competitor row drifts from current\s*public marketing, mail\s*<a href="mailto:support@driftstack\.dev"/,
     );
   });
 

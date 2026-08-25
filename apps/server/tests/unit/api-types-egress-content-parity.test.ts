@@ -50,7 +50,7 @@ describe('EG-API-1.1 packages/api-types/src/egress.ts content parity', () => {
       /SUPERSEDES the earlier `apps\/server\/src\/services\/session-egress\.ts`/,
     );
     expect(body).toMatch(
-      /any breaking change here is a breaking change to the\s*\n?\s*\/\/ cross-agent contract/,
+      /any breaking change here is a breaking change to the\s*\/\/ cross-agent contract/,
     );
   });
 

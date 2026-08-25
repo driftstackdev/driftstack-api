@@ -41,33 +41,33 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
   it('Module framing: D-020 + D-025 cache-invalidation pattern + audit-ownership-on-route', () => {
     expect(body).toMatch(/Account-state mutations \(admin-only\)\./);
     expect(body).toMatch(
-      /Each mutation invalidates the auth\s*\n?\s*\/\/\s*cache for the target account so cached AccountContext reads pick up\s*\n?\s*\/\/\s*the new state on the next request \(D-020 \+ D-025 cache invalidation\s*\n?\s*\/\/\s*pattern\)/,
+      /Each mutation invalidates the auth\s*\/\/\s*cache for the target account so cached AccountContext reads pick up\s*\/\/\s*the new state on the next request \(D-020 \+ D-025 cache invalidation\s*\/\/\s*pattern\)/,
     );
     expect(body).toMatch(
-      /Audit logging is the route's responsibility — the route writes the\s*\n?\s*\/\/\s*audit row in the same handler that calls the service\. The service\s*\n?\s*\/\/\s*stays focused on the mutation; the route owns the request\/response\s*\n?\s*\/\/\s*envelope\./,
+      /Audit logging is the route's responsibility — the route writes the\s*\/\/\s*audit row in the same handler that calls the service\. The service\s*\/\/\s*stays focused on the mutation; the route owns the request\/response\s*\/\/\s*envelope\./,
     );
   });
 
   it('ListAccountsArgs: cursor (created_at desc + id desc tie-break) + limit + status/tier/emailContains optional', () => {
     expect(body).toMatch(/export interface ListAccountsArgs \{/);
     expect(body).toMatch(
-      /\/\*\* Cursor is the prior page's last `id` \(created_at desc \+ id desc tie-break\)\. \*\/\s*\n?\s*cursor\?: string;/,
+      /\/\*\* Cursor is the prior page's last `id` \(created_at desc \+ id desc tie-break\)\. \*\/\s*cursor\?: string;/,
     );
     expect(body).toMatch(/limit\?: number;/);
     expect(body).toMatch(
-      /\/\*\* Filter by account status\. Default: no filter\. \*\/\s*\n?\s*status\?: 'active' \| 'suspended' \| 'deleted';/,
+      /\/\*\* Filter by account status\. Default: no filter\. \*\/\s*status\?: 'active' \| 'suspended' \| 'deleted';/,
     );
     expect(body).toMatch(
-      /\/\*\* Filter by tier\. Default: no filter\. \*\/\s*\n?\s*tier\?: AccountTier;/,
+      /\/\*\* Filter by tier\. Default: no filter\. \*\/\s*tier\?: AccountTier;/,
     );
     expect(body).toMatch(
-      /\/\*\* Substring filter on email \(lowercased\)\. Default: no filter\. \*\/\s*\n?\s*emailContains\?: string;/,
+      /\/\*\* Substring filter on email \(lowercased\)\. Default: no filter\. \*\/\s*emailContains\?: string;/,
     );
   });
 
   it('ListAccountsPage: 3 fields (data + hasMore + nextCursor)', () => {
     expect(body).toMatch(
-      /export interface ListAccountsPage \{\s*\n?\s*data: AccountRow\[\];\s*\n?\s*hasMore: boolean;\s*\n?\s*nextCursor: string \| null;\s*\n?\s*\}/,
+      /export interface ListAccountsPage \{\s*data: AccountRow\[\];\s*hasMore: boolean;\s*nextCursor: string \| null;\s*\}/,
     );
   });
 
@@ -78,7 +78,7 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
       /setTier\(id: string, tier: AccountTier, at: Date\): Promise<AccountRow \| null>;/,
     );
     expect(body).toMatch(
-      /setStatus\(\s*\n?\s*id: string,\s*\n?\s*status: 'active' \| 'suspended' \| 'deleted',\s*\n?\s*at: Date,\s*\n?\s*\): Promise<AccountRow \| null>;/,
+      /setStatus\(\s*id: string,\s*status: 'active' \| 'suspended' \| 'deleted',\s*at: Date,\s*\): Promise<AccountRow \| null>;/,
     );
     expect(body).toMatch(/list\(args: ListAccountsArgs\): Promise<ListAccountsPage>;/);
     expect(body).toMatch(
@@ -118,7 +118,7 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
   it('AccountsAdminService: constructor takes repo + optional authCache + optional sessions reclaimer + optional GDPR Article 17 delete-reclaim trio (web sessions / API keys / webhooks)', () => {
     expect(body).toMatch(/export class AccountsAdminService \{/);
     expect(body).toMatch(
-      /constructor\(\s*\n?\s*private readonly repo: AccountsAdminRepo,\s*\n?\s*private readonly authCache: AuthCache \| null = null,\s*\n?\s*private readonly sessions: SuspendSessionReclaimer \| null = null,\s*\n?\s*private readonly webSessions: DeleteWebSessionReclaimer \| null = null,\s*\n?\s*private readonly apiKeys: DeleteApiKeyReclaimer \| null = null,\s*\n?\s*private readonly webhooks: DeleteWebhookReclaimer \| null = null,[\s\S]*?private readonly logger: \{[\s\S]*?\} \| null = null,[\s\S]*?private readonly billing: BillingCollectionPauser \| null = null,\s*\n?\s*\) \{\}/,
+      /constructor\(\s*private readonly repo: AccountsAdminRepo,\s*private readonly authCache: AuthCache \| null = null,\s*private readonly sessions: SuspendSessionReclaimer \| null = null,\s*private readonly webSessions: DeleteWebSessionReclaimer \| null = null,\s*private readonly apiKeys: DeleteApiKeyReclaimer \| null = null,\s*private readonly webhooks: DeleteWebhookReclaimer \| null = null,[\s\S]*?private readonly logger: \{[\s\S]*?\} \| null = null,[\s\S]*?private readonly billing: BillingCollectionPauser \| null = null,\s*\) \{\}/,
     );
     // V-758 — the pauser is the dependency that makes AUP §5.2 true. Optional so every
     // existing construction site and test double keeps working; when absent, suspension
@@ -135,10 +135,10 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
     expect(body).toMatch(/this\.reclaim\('billing_pause'/);
     expect(body).toMatch(/this\.reclaim\('billing_resume'/);
     expect(body).toMatch(
-      /export interface SuspendSessionReclaimer \{\s*\n?\s*destroyAllForAccount\(accountId: string\): Promise<number>;\s*\n?\s*\}/,
+      /export interface SuspendSessionReclaimer \{\s*destroyAllForAccount\(accountId: string\): Promise<number>;\s*\}/,
     );
     expect(body).toMatch(
-      /export interface DeleteWebSessionReclaimer \{\s*\n?\s*revokeAllWebSessionsForAccount\(accountId: string, now: Date\): Promise<number>;\s*\n?\s*\}/,
+      /export interface DeleteWebSessionReclaimer \{\s*revokeAllWebSessionsForAccount\(accountId: string, now: Date\): Promise<number>;\s*\}/,
     );
     // V-727 — the reclaimer now has TWO methods. revokeAllForAccount filters on
     // account_id and so can only reach credentials ON the account; a team
@@ -148,7 +148,7 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
       /export interface DeleteApiKeyReclaimer \{\s*revokeAllForAccount\(ctx: AccountContext, accountId: string\): Promise<number>;[\s\S]*?revokeAllMintedByAccount\(ctx: AccountContext, minterAccountId: string\): Promise<number>;\s*\}/,
     );
     expect(body).toMatch(
-      /export interface DeleteWebhookReclaimer \{\s*\n?\s*deleteAllForAccount\(ctx: AccountContext, accountId: string\): Promise<number>;\s*\n?\s*\}/,
+      /export interface DeleteWebhookReclaimer \{\s*deleteAllForAccount\(ctx: AccountContext, accountId: string\): Promise<number>;\s*\}/,
     );
   });
 
@@ -162,7 +162,7 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
 
   it('deleteAccount (GDPR Article 17): scope check → setStatus(deleted) → NotFoundError on null → 4 best-effort reclaim steps (sessions/webSessions/apiKeys/webhooks) → invalidateCache', () => {
     expect(body).toMatch(
-      /async deleteAccount\(ctx: AccountContext, accountId: string\): Promise<AccountRow> \{\s*\n?\s*throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);\s*\n?\s*const now = new Date\(\);\s*\n?\s*const updated = await this\.repo\.setStatus\(accountId, 'deleted', now\);\s*\n?\s*if \(!updated\) throw new NotFoundError\(`Account "\$\{accountId\}" not found\.`\);/,
+      /async deleteAccount\(ctx: AccountContext, accountId: string\): Promise<AccountRow> \{\s*throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);\s*const now = new Date\(\);\s*const updated = await this\.repo\.setStatus\(accountId, 'deleted', now\);\s*if \(!updated\) throw new NotFoundError\(`Account "\$\{accountId\}" not found\.`\);/,
     );
     // Each surface must go through reclaim(), which is what keeps the step
     // best-effort AND recorded. Pinning the step NAMES matters as much as the
@@ -182,25 +182,25 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
 
   it('getAccount: scope check → repo.findById → NotFoundError-or-row', () => {
     expect(body).toMatch(
-      /async getAccount\(ctx: AccountContext, accountId: string\): Promise<AccountRow> \{\s*\n?\s*throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);\s*\n?\s*const row = await this\.repo\.findById\(accountId\);\s*\n?\s*if \(!row\) throw new NotFoundError\(`Account "\$\{accountId\}" not found\.`\);\s*\n?\s*return row;\s*\n?\s*\}/,
+      /async getAccount\(ctx: AccountContext, accountId: string\): Promise<AccountRow> \{\s*throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);\s*const row = await this\.repo\.findById\(accountId\);\s*if \(!row\) throw new NotFoundError\(`Account "\$\{accountId\}" not found\.`\);\s*return row;\s*\}/,
     );
   });
 
   it('changeTier / suspend / unsuspend: repo update with new Date() at → NotFoundError on null → invalidateCache', () => {
     expect(body).toMatch(
-      /async changeTier\(\s*\n?\s*ctx: AccountContext,\s*\n?\s*accountId: string,\s*\n?\s*newTier: AccountTier,\s*\n?\s*\): Promise<AccountRow> \{[\s\S]+?const updated = await this\.repo\.setTier\(accountId, newTier, new Date\(\)\);\s*\n?\s*if \(!updated\) throw new NotFoundError\(`Account "\$\{accountId\}" not found\.`\);\s*\n?\s*await this\.invalidateCache\(accountId\);\s*\n?\s*return updated;/,
+      /async changeTier\(\s*ctx: AccountContext,\s*accountId: string,\s*newTier: AccountTier,\s*\): Promise<AccountRow> \{[\s\S]+?const updated = await this\.repo\.setTier\(accountId, newTier, new Date\(\)\);\s*if \(!updated\) throw new NotFoundError\(`Account "\$\{accountId\}" not found\.`\);\s*await this\.invalidateCache\(accountId\);\s*return updated;/,
     );
     expect(body).toMatch(
-      /async suspend\(ctx: AccountContext, accountId: string\): Promise<AccountRow> \{[\s\S]+?const updated = await this\.repo\.setStatus\(accountId, 'suspended', new Date\(\)\);\s*\n?\s*if \(!updated\) throw new NotFoundError\(`Account "\$\{accountId\}" not found\.`\);\s*\n?\s*await this\.invalidateCache\(accountId\);/,
+      /async suspend\(ctx: AccountContext, accountId: string\): Promise<AccountRow> \{[\s\S]+?const updated = await this\.repo\.setStatus\(accountId, 'suspended', new Date\(\)\);\s*if \(!updated\) throw new NotFoundError\(`Account "\$\{accountId\}" not found\.`\);\s*await this\.invalidateCache\(accountId\);/,
     );
     expect(body).toMatch(
-      /async unsuspend\(ctx: AccountContext, accountId: string\): Promise<AccountRow> \{[\s\S]+?const updated = await this\.repo\.setStatus\(accountId, 'active', new Date\(\)\);\s*\n?\s*if \(!updated\) throw new NotFoundError\(`Account "\$\{accountId\}" not found\.`\);\s*\n?\s*await this\.invalidateCache\(accountId\);/,
+      /async unsuspend\(ctx: AccountContext, accountId: string\): Promise<AccountRow> \{[\s\S]+?const updated = await this\.repo\.setStatus\(accountId, 'active', new Date\(\)\);\s*if \(!updated\) throw new NotFoundError\(`Account "\$\{accountId\}" not found\.`\);\s*await this\.invalidateCache\(accountId\);/,
     );
   });
 
   it('invalidateCache: try/catch absorbs failure (mutation committed; cache TTLs out within 30s worst-case)', () => {
     expect(body).toMatch(
-      /private async invalidateCache\(accountId: string\): Promise<void> \{\s*\n?\s*if \(!this\.authCache\) return;\s*\n?\s*try \{\s*\n?\s*await this\.authCache\.invalidateAccount\(accountId\);\s*\n?\s*\} catch \{\s*\n?\s*\/\/ Cache failures must not propagate as admin-action failures —\s*\n?\s*\/\/ the underlying mutation is committed\. The next auth-path read\s*\n?\s*\/\/ will TTL out the stale entry within 30s in the worst case\./,
+      /private async invalidateCache\(accountId: string\): Promise<void> \{\s*if \(!this\.authCache\) return;\s*try \{\s*await this\.authCache\.invalidateAccount\(accountId\);\s*\} catch \{\s*\/\/ Cache failures must not propagate as admin-action failures —\s*\/\/ the underlying mutation is committed\. The next auth-path read\s*\/\/ will TTL out the stale entry within 30s in the worst case\./,
     );
   });
 

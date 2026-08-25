@@ -36,13 +36,13 @@ describe('GUI FirstRunWizard archetype options ↔ ARCHETYPE_REGISTRY selectable
     // Imports the registry + the status type from the SDK barrel (prettier
     // may reflow this import across lines, so match members flexibly).
     expect(wizardBody).toMatch(/ARCHETYPE_REGISTRY,/);
-    expect(wizardBody).toMatch(/type ArchetypeStatus,?\s*\n?\s*\}? from '@driftstack\/sdk';/);
+    expect(wizardBody).toMatch(/type ArchetypeStatus,?\s*\}? from '@driftstack\/sdk';/);
     // Filters by the same launch|available selectable statuses ProfilesView uses.
     expect(wizardBody).toMatch(
       /const SELECTABLE_STATUSES = new Set<ArchetypeStatus>\(\['launch', 'available'\]\);/,
     );
     expect(wizardBody).toMatch(
-      /const PROFILE_ARCHETYPE_OPTIONS = ARCHETYPE_REGISTRY\.filter\(\(a\) =>\s*\n?\s*SELECTABLE_STATUSES\.has\(a\.status\),\s*\n?\s*\)\.map\(/,
+      /const PROFILE_ARCHETYPE_OPTIONS = ARCHETYPE_REGISTRY\.filter\(\(a\) =>\s*SELECTABLE_STATUSES\.has\(a\.status\),\s*\)\.map\(/,
     );
     // No hardcoded archetype-shaped option-object literals remain.
     const literalValues = (wizardBody.match(/value: '([a-z0-9_]+)'/g) || [])

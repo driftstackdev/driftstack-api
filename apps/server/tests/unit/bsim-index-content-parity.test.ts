@@ -49,19 +49,19 @@ describe('W450.B packages/behavioural-simulation/src/index.ts content parity', (
 
   it('9 type-only re-exports from ./types.js (BehaviouralProfile + ElementBounds + ElementClass + KeyboardCadence + MouseTrajectory + ScrollPattern + TouchDistribution + TouchEvent + TouchSample)', () => {
     expect(body).toMatch(
-      /export type \{\s*\n?\s*BehaviouralProfile,\s*\n?\s*ElementBounds,\s*\n?\s*ElementClass,\s*\n?\s*KeyboardCadence,\s*\n?\s*MouseTrajectory,\s*\n?\s*ScrollPattern,\s*\n?\s*TouchDistribution,\s*\n?\s*TouchEvent,\s*\n?\s*TouchSample,\s*\n?\s*\} from '\.\/types\.js';/,
+      /export type \{\s*BehaviouralProfile,\s*ElementBounds,\s*ElementClass,\s*KeyboardCadence,\s*MouseTrajectory,\s*ScrollPattern,\s*TouchDistribution,\s*TouchEvent,\s*TouchSample,\s*\} from '\.\/types\.js';/,
     );
   });
 
   it('5 interface re-exports from ./interfaces.js (BehaviouralSimulator + 4 GenerateXxxOpts: KeyboardCadence + MouseTrajectory + ScrollPattern + ScrollVelocityProfile + TouchEvent)', () => {
     expect(body).toMatch(
-      /export type \{\s*\n?\s*BehaviouralSimulator,\s*\n?\s*GenerateKeyboardCadenceOpts,\s*\n?\s*GenerateMouseTrajectoryOpts,\s*\n?\s*GenerateScrollPatternOpts,\s*\n?\s*GenerateScrollVelocityProfileOpts,\s*\n?\s*GenerateTouchEventOpts,\s*\n?\s*\} from '\.\/interfaces\.js';/,
+      /export type \{\s*BehaviouralSimulator,\s*GenerateKeyboardCadenceOpts,\s*GenerateMouseTrajectoryOpts,\s*GenerateScrollPatternOpts,\s*GenerateScrollVelocityProfileOpts,\s*GenerateTouchEventOpts,\s*\} from '\.\/interfaces\.js';/,
     );
   });
 
   it('3 scroll-velocity types from ./scroll.js (ScrollVelocityClassDefaults + ScrollVelocityProfile + ScrollVelocityTick)', () => {
     expect(body).toMatch(
-      /export type \{\s*\n?\s*ScrollVelocityClassDefaults,\s*\n?\s*ScrollVelocityProfile,\s*\n?\s*ScrollVelocityTick,\s*\n?\s*\} from '\.\/scroll\.js';/,
+      /export type \{\s*ScrollVelocityClassDefaults,\s*ScrollVelocityProfile,\s*ScrollVelocityTick,\s*\} from '\.\/scroll\.js';/,
     );
   });
 
@@ -89,7 +89,7 @@ describe('W450.B packages/behavioural-simulation/src/index.ts content parity', (
 
   it('V-530.C dwell+region-aware types, generator, defaults and region cap are exported', () => {
     expect(body).toMatch(
-      /export type \{\s*\n?\s*ClickRegion,\s*\n?\s*DwellShape,\s*\n?\s*GenerateRegionAwareTouchOpts,\s*\n?\s*RegionAwareTouchEvent,\s*\n?\s*\} from '\.\/dwell\.js';/,
+      /export type \{\s*ClickRegion,\s*DwellShape,\s*GenerateRegionAwareTouchOpts,\s*RegionAwareTouchEvent,\s*\} from '\.\/dwell\.js';/,
     );
     expect(body).toContain('CLICK_REGIONS,');
     expect(body).toContain('DWELL_SHAPES,');
@@ -101,7 +101,7 @@ describe('W450.B packages/behavioural-simulation/src/index.ts content parity', (
   it('V-530.D framing, types, generators, defaults and sequence cap are exported', () => {
     expect(body).toMatch(/\/\/ V-530\.D — idle-period jitter generator\./);
     expect(body).toMatch(
-      /export type \{\s*\n?\s*GenerateIdlePeriodOpts,\s*\n?\s*GenerateIdleSequenceOpts,\s*\n?\s*IdleClass,\s*\n?\s*IdleClassDefaults,\s*\n?\s*IdlePeriod,\s*\n?\s*IdleSequence,\s*\n?\s*IdleSequenceEntry,\s*\n?\s*\} from '\.\/idle\.js';/,
+      /export type \{\s*GenerateIdlePeriodOpts,\s*GenerateIdleSequenceOpts,\s*IdleClass,\s*IdleClassDefaults,\s*IdlePeriod,\s*IdleSequence,\s*IdleSequenceEntry,\s*\} from '\.\/idle\.js';/,
     );
     expect(body).toContain('generateIdlePeriod,');
     expect(body).toContain('generateIdleSequence,');
@@ -113,7 +113,7 @@ describe('W450.B packages/behavioural-simulation/src/index.ts content parity', (
   it("V-530.E framing pinned: 'multi-touch gesture sequencing.' + 7 multi-touch type re-exports + 4 multi-touch generator value exports", () => {
     expect(body).toMatch(/\/\/ V-530\.E — multi-touch gesture sequencing\./);
     expect(body).toMatch(
-      /export type \{\s*\n?\s*FingerSample,\s*\n?\s*FingerTrack,\s*\n?\s*GestureKind,\s*\n?\s*GeneratePinchOpts,\s*\n?\s*GenerateTwoFingerScrollOpts,\s*\n?\s*GenerateThreeFingerSwipeOpts,\s*\n?\s*MultiTouchGesture,\s*\n?\s*\} from '\.\/multi-touch\.js';/,
+      /export type \{\s*FingerSample,\s*FingerTrack,\s*GestureKind,\s*GeneratePinchOpts,\s*GenerateTwoFingerScrollOpts,\s*GenerateThreeFingerSwipeOpts,\s*MultiTouchGesture,\s*\} from '\.\/multi-touch\.js';/,
     );
     // toContain fragments so MAX_SAMPLES_PER_FINGER (audit fix BSIM-2,
     // 2026-07-01) doesn't break the pin.

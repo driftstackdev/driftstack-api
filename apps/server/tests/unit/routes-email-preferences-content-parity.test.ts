@@ -43,7 +43,7 @@ describe('W414.A apps/server/src/routes/email-preferences.ts content parity', ()
 
   it('V-330d framing pinned: X-Driftstack-Account team-member effective-account read + Q2 admin-only write verdict', () => {
     expect(body).toMatch(
-      /V-330d — both endpoints honor X-Driftstack-Account: a team member\s*\n?\s*\/\/\s*with a valid membership can read the OWNER's preferences\. The PUT\s*\n?\s*\/\/\s*case requires the member's role to be 'admin' \(Q2 verdict — member\s*\n?\s*\/\/\s*is read-only on writes\); 'member' role gets 403\. No header \(or\s*\n?\s*\/\/\s*own-account header\) keeps pre-V-330d behavior\./,
+      /V-330d — both endpoints honor X-Driftstack-Account: a team member\s*\/\/\s*with a valid membership can read the OWNER's preferences\. The PUT\s*\/\/\s*case requires the member's role to be 'admin' \(Q2 verdict — member\s*\/\/\s*is read-only on writes\); 'member' role gets 403\. No header \(or\s*\/\/\s*own-account header\) keeps pre-V-330d behavior\./,
     );
   });
 
@@ -62,40 +62,40 @@ describe('W414.A apps/server/src/routes/email-preferences.ts content parity', ()
 
   it("Auth posture on both routes: requireAuth + rateLimit('global')", () => {
     expect(body).toMatch(
-      /app\.get\(\s*\n?\s*'\/v1\/account\/email-preferences',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/,
+      /app\.get\(\s*'\/v1\/account\/email-preferences',\s*\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/,
     );
     expect(body).toMatch(
-      /app\.put\(\s*\n?\s*'\/v1\/account\/email-preferences',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/,
+      /app\.put\(\s*'\/v1\/account\/email-preferences',\s*\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/,
     );
   });
 
   it('GET: resolveEffectiveAccount + emailPreferences.list with effectiveAccountId when team kind; reply shape data:[{event_type, opted_in}]', () => {
     expect(body).toMatch(
-      /const effective = resolveEffectiveAccount\(ctx, readEffectiveAccountHeader\(request\)\);\s*\n?\s*const records = await emailPreferences\.list\(\s*\n?\s*ctx,\s*\n?\s*effective\.kind === 'team' \? \{ effectiveAccountId: effective\.accountId \} : \{\},\s*\n?\s*\);/,
+      /const effective = resolveEffectiveAccount\(ctx, readEffectiveAccountHeader\(request\)\);\s*const records = await emailPreferences\.list\(\s*ctx,\s*effective\.kind === 'team' \? \{ effectiveAccountId: effective\.accountId \} : \{\},\s*\);/,
     );
     expect(body).toMatch(
-      /return \{\s*\n?\s*data: records\.map\(\(r\) => \(\{\s*\n?\s*event_type: r\.eventType,\s*\n?\s*opted_in: r\.optedIn,\s*\n?\s*\}\)\),\s*\n?\s*\};/,
+      /return \{\s*data: records\.map\(\(r\) => \(\{\s*event_type: r\.eventType,\s*opted_in: r\.optedIn,\s*\}\)\),\s*\};/,
     );
   });
 
   it('PUT body validation: SetEmailPreferenceRequestSchema safeParse → BadRequestError("Invalid request body.") on fail', () => {
     expect(body).toMatch(
-      /const parsed = SetEmailPreferenceRequestSchema\.safeParse\(request\.body \?\? \{\}\);\s*\n?\s*if \(!parsed\.success\) \{\s*\n?\s*throw new BadRequestError\('Invalid request body\.'\);/,
+      /const parsed = SetEmailPreferenceRequestSchema\.safeParse\(request\.body \?\? \{\}\);\s*if \(!parsed\.success\) \{\s*throw new BadRequestError\('Invalid request body\.'\);/,
     );
   });
 
   it("PUT Q2 role gate: effective.kind === 'team' && effective.role !== 'admin' → 403 ForbiddenError; self-account writes bypass entirely", () => {
     expect(body).toMatch(
-      /\/\/ V-330d Q2 — when the request targets an owner via\s*\n?\s*\/\/ X-Driftstack-Account, the caller MUST be 'admin' on that\s*\n?\s*\/\/ owner's team\. 'member' role gets 403\. Self-account writes\s*\n?\s*\/\/ \(no header \/ own-id header\) bypass the role check entirely\./,
+      /\/\/ V-330d Q2 — when the request targets an owner via\s*\/\/ X-Driftstack-Account, the caller MUST be 'admin' on that\s*\/\/ owner's team\. 'member' role gets 403\. Self-account writes\s*\/\/ \(no header \/ own-id header\) bypass the role check entirely\./,
     );
     expect(body).toMatch(
-      /if \(effective\.kind === 'team' && effective\.role !== 'admin'\) \{\s*\n?\s*throw new ForbiddenError\(\s*\n?\s*'Setting email preferences on a team owner requires admin role on that team\.',\s*\n?\s*\);/,
+      /if \(effective\.kind === 'team' && effective\.role !== 'admin'\) \{\s*throw new ForbiddenError\(\s*'Setting email preferences on a team owner requires admin role on that team\.',\s*\);/,
     );
   });
 
   it('PUT dispatch: emailPreferences.set with event_type + opted_in + effectiveAccountId on team; 204 reply (+ 2026-05-20 best-effort accountAudit.record account.email_preferences_changed)', () => {
     expect(body).toMatch(
-      /await emailPreferences\.set\(\s*\n?\s*ctx,\s*\n?\s*parsed\.data\.event_type,\s*\n?\s*parsed\.data\.opted_in,\s*\n?\s*effective\.kind === 'team' \? \{ effectiveAccountId: effective\.accountId \} : \{\},\s*\n?\s*\);/,
+      /await emailPreferences\.set\(\s*ctx,\s*parsed\.data\.event_type,\s*parsed\.data\.opted_in,\s*effective\.kind === 'team' \? \{ effectiveAccountId: effective\.accountId \} : \{\},\s*\);/,
     );
     expect(body).toMatch(/action: 'account\.email_preferences_changed',/);
     expect(body).toMatch(/return reply\.code\(204\)\.send\(\);/);

@@ -38,10 +38,10 @@ describe('W515.B apps/marketing-site/src/pages/docs/webhooks.astro content parit
 
   it('V-684 + W213.A 5-source-file accuracy-pass framing pinned: companion to /docs/api-quickstart + /docs/oauth-apps + 5-source-of-truth (webhook-signing.ts / durable-webhook-delivery.ts / webhook-worker.ts / webhooks.ts route / db/schema.ts) — pinned so the V-684 anchor + 5-source-file accuracy-pass commitment survives (drift to dropping the source-file list would let the doc drift away from server reality)', () => {
     expect(body).toMatch(
-      /\/\/ V-684 — webhooks developer docs\. Companion to https:\/\/docs\.driftstack\.dev\/quickstart-curl\/\s*\n?\s*\/\/ \+ \/docs\/oauth-apps; covers the subscribe→deliver→verify→retry\s*\n?\s*\/\/ loop developers integrate against\./,
+      /\/\/ V-684 — webhooks developer docs\. Companion to https:\/\/docs\.driftstack\.dev\/quickstart-curl\/\s*\/\/ \+ \/docs\/oauth-apps; covers the subscribe→deliver→verify→retry\s*\/\/ loop developers integrate against\./,
     );
     expect(body).toMatch(
-      /\/\/ W213\.A — full accuracy pass against the source of truth:\s*\n?\s*\/\/\s+- apps\/server\/src\/lib\/webhook-signing\.ts \(signature format\)\s*\n?\s*\/\/\s+- apps\/server\/src\/services\/durable-webhook-delivery\.ts \(retry\s*\n?\s*\/\/\s+schedule \+ max attempts\)\s*\n?\s*\/\/\s+- apps\/server\/src\/services\/webhook-worker\.ts \(auto-disable\s*\n?\s*\/\/\s+threshold\)/,
+      /\/\/ W213\.A — full accuracy pass against the source of truth:\s*\/\/\s+- apps\/server\/src\/lib\/webhook-signing\.ts \(signature format\)\s*\/\/\s+- apps\/server\/src\/services\/durable-webhook-delivery\.ts \(retry\s*\/\/\s+schedule \+ max attempts\)\s*\/\/\s+- apps\/server\/src\/services\/webhook-worker\.ts \(auto-disable\s*\/\/\s+threshold\)/,
     );
   });
 
@@ -59,19 +59,19 @@ describe('W515.B apps/marketing-site/src/pages/docs/webhooks.astro content parit
 
   it("test.ping bypass-only framing pinned: 'test.ping is an additional event type that exists only for the POST /v1/webhooks/<id>/test endpoint; it bypasses subscriptions, so you don't list it under events when creating an endpoint.' — pinned so the test.ping-bypass + don't-list-on-create commitment survives (drift to claiming test.ping is subscribable would create marketing↔schema divergence)", () => {
     expect(body).toMatch(
-      /<code>test\.ping<\/code> is an additional event type that exists\s*\n?\s*only for the <code>POST \/v1\/webhooks\/&lt;id&gt;\/test<\/code> endpoint;\s*\n?\s*it bypasses subscriptions, so you don't list it under\s*\n?\s*<code>events<\/code> when creating an endpoint\./,
+      /<code>test\.ping<\/code> is an additional event type that exists\s*only for the <code>POST \/v1\/webhooks\/&lt;id&gt;\/test<\/code> endpoint;\s*it bypasses subscriptions, so you don't list it under\s*<code>events<\/code> when creating an endpoint\./,
     );
   });
 
   it("10-endpoint cap + narrow-purpose-over-mega framing pinned: 'Each account can have up to 10 active endpoints. Mint as many narrow-purpose endpoints as you need rather than one mega-endpoint that fans out — easier to retire individual integrations later.' — pinned so the 10-cap + narrow-over-mega commitment survives (drift to a different cap would create marketing↔server-limit divergence)", () => {
     expect(body).toMatch(
-      /Each account can have up to 10 active endpoints\. Mint as many\s*\n?\s*narrow-purpose endpoints as you need rather than one mega-endpoint\s*\n?\s*that fans out — easier to retire individual integrations later\./,
+      /Each account can have up to 10 active endpoints\. Mint as many\s*narrow-purpose endpoints as you need rather than one mega-endpoint\s*that fans out — easier to retire individual integrations later\./,
     );
   });
 
   it("POST /v1/webhooks create response framing pinned: 201 Created + 'secret': 'whsec_…' shown ONCE + 'secret_prefix': 'whsec_xxxx' + active true + consecutive_failures 0 + delivery_counts {pending,delivered,failed,dlq} all 0 — pinned so the canonical create-response shape + secret-once + 4-counter delivery_counts + active+consecutive_failures+created_at fields survives", () => {
     expect(body).toMatch(/→ 201 Created/);
-    expect(body).toMatch(/"secret": "whsec_…",\s*\n?\s*← shown ONCE; copy it now/);
+    expect(body).toMatch(/"secret": "whsec_…",\s*← shown ONCE; copy it now/);
     expect(body).toMatch(/"secret_prefix": "whsec_xxxx"/);
     expect(body).toMatch(/"active": true/);
     expect(body).toMatch(/"consecutive_failures": 0/);
@@ -82,16 +82,16 @@ describe('W515.B apps/marketing-site/src/pages/docs/webhooks.astro content parit
 
   it('Secret-shown-ONCE + rotate-secret + secret_prefix-12-plaintext-chars framing pinned + HTTPS-only enforcement at registration — pinned so the secret-once-immutable + rotate-secret endpoint + 12-plaintext-chars-non-sensitive + HTTPS-only-rejected commitments survive (drift to leaking the secret on GET would create marketing↔server divergence)', () => {
     expect(body).toMatch(
-      /the <code>secret<\/code> is shown\s*\n?\s*once in the create response and never again/,
+      /the <code>secret<\/code> is shown\s*once in the create response and never again/,
     );
     expect(body).toMatch(
-      /rotate via\s*\n?\s*<code>POST \/v1\/webhooks\/&lt;id&gt;\/rotate-secret<\/code>\./,
+      /rotate via\s*<code>POST \/v1\/webhooks\/&lt;id&gt;\/rotate-secret<\/code>\./,
     );
     expect(body).toMatch(
-      /<code>secret_prefix<\/code> \(first 12 plaintext\s*\n?\s*chars, non-sensitive\) for display\./,
+      /<code>secret_prefix<\/code> \(first 12 plaintext\s*chars, non-sensitive\) for display\./,
     );
     expect(body).toMatch(
-      /Endpoint URLs MUST be HTTPS\. <code>http:\/\/<\/code> is rejected\s*\n?\s*at registration time\./,
+      /Endpoint URLs MUST be HTTPS\. <code>http:\/\/<\/code> is rejected\s*at registration time\./,
     );
   });
 
@@ -113,7 +113,7 @@ describe('W515.B apps/marketing-site/src/pages/docs/webhooks.astro content parit
     expect(body).not.toContain('X-Driftstack-Signature-Prev');
     expect(body).toMatch(/X-Driftstack-Signature: t=1747051200,v1=<hex hmac>/);
     expect(body).toMatch(
-      /the single\s*\n?\s*<code>X-Driftstack-Signature<\/code> header carries both the new/,
+      /the single\s*<code>X-Driftstack-Signature<\/code> header carries both the new/,
     );
     expect(body).not.toMatch(/X-Driftstack-Signature-Prev/);
   });
@@ -122,7 +122,7 @@ describe('W515.B apps/marketing-site/src/pages/docs/webhooks.astro content parit
     expect(body).toMatch(/hmac = HMAC-SHA256\(/);
     expect(body).toMatch(/<unix-seconds> \+ "\." \+ <raw request body>/);
     expect(body).toMatch(
-      /The timestamp lives inside the header \(the <code>t=<\/code>\s*\n?\s*component\), not in a separate header\. There is no\s*\n?\s*<code>X-Driftstack-Emitted-At<\/code> header: the delivery path\s*\n?\s*sends exactly three <code>X-Driftstack-\*<\/code> headers —\s*\n?\s*Event-Id, Event-Type and Signature\./,
+      /The timestamp lives inside the header \(the <code>t=<\/code>\s*component\), not in a separate header\. There is no\s*<code>X-Driftstack-Emitted-At<\/code> header: the delivery path\s*sends exactly three <code>X-Driftstack-\*<\/code> headers —\s*Event-Id, Event-Type and Signature\./,
     );
   });
 
@@ -145,23 +145,23 @@ describe('W515.B apps/marketing-site/src/pages/docs/webhooks.astro content parit
     expect(body).toMatch(/<tr><td>5<\/td><td>30 minutes after attempt 4<\/td><\/tr>/);
     expect(body).toMatch(/<tr><td>6 \(final\)<\/td><td>60 minutes after attempt 5<\/td><\/tr>/);
     expect(body).toMatch(
-      /After <strong>6 attempts<\/strong> \(the initial delivery plus\s*\n?\s*5 retries\), the delivery moves to a dead-letter queue \(DLQ\)/,
+      /After <strong>6 attempts<\/strong> \(the initial delivery plus\s*5 retries\), the delivery moves to a dead-letter queue \(DLQ\)/,
     );
     expect(body).toMatch(
-      /After <strong>50 consecutive failures across all deliveries<\/strong>\s*\n?\s*for one endpoint, the endpoint is auto-disabled\./,
+      /After <strong>50 consecutive failures across all deliveries<\/strong>\s*for one endpoint, the endpoint is auto-disabled\./,
     );
     expect(body).toMatch(
-      /Request timeout is <strong>10 seconds<\/strong> — slower than\s*\n?\s*that, we consider the delivery failed and back off\./,
+      /Request timeout is <strong>10 seconds<\/strong> — slower than\s*that, we consider the delivery failed and back off\./,
     );
   });
 
   it('Endpoint requirements 3-rule framing pinned: 2xx-within-10s + idempotent-on-X-Driftstack-Event-Id (we may retry the same id if our delivery infra retried before getting your response) + ack-fast-process-async — pinned so the 3-rule receiver-contract survives', () => {
     expect(body).toMatch(/<li>Return 2xx within 10 seconds\.<\/li>/);
     expect(body).toMatch(
-      /Be <strong>idempotent<\/strong> — we may retry the same\s*\n?\s*<code>X-Driftstack-Event-Id<\/code> if our delivery infra\s*\n?\s*retried before getting your response\./,
+      /Be <strong>idempotent<\/strong> — we may retry the same\s*<code>X-Driftstack-Event-Id<\/code> if our delivery infra\s*retried before getting your response\./,
     );
     expect(body).toMatch(
-      /Acknowledge fast \+ process asynchronously\. A 200 response\s*\n?\s*means "I have the payload"; process it on your side after\./,
+      /Acknowledge fast \+ process asynchronously\. A 200 response\s*means "I have the payload"; process it on your side after\./,
     );
   });
 
@@ -171,7 +171,7 @@ describe('W515.B apps/marketing-site/src/pages/docs/webhooks.astro content parit
     expect(body).toMatch(/"prev_secret_prefix": "whsec_xxxx"/);
     expect(body).toMatch(/"grace_expires_at":/);
     expect(body).toMatch(
-      /Driftstack signs every\s*\n?\s*outbound delivery with <strong>both secrets inside the single/,
+      /Driftstack signs every\s*outbound delivery with <strong>both secrets inside the single/,
     );
     expect(body).toMatch(/<code>v1=&lt;new&gt;<\/code> — signed with the new secret\./);
     expect(body).toMatch(/<code>v1=&lt;old&gt;<\/code> — signed with the old secret\./);
@@ -189,27 +189,27 @@ describe('W515.B apps/marketing-site/src/pages/docs/webhooks.astro content parit
     expect(body).toMatch(/"event_id": "<uuid>"/);
     expect(body).toMatch(/"event_type": "test\.ping"/);
     expect(body).toMatch(
-      /The test event arrives at your endpoint with the same headers \+\s*\n?\s*signature as a real event\./,
+      /The test event arrives at your endpoint with the same headers \+\s*signature as a real event\./,
     );
   });
 
   it("Inspecting deliveries + GET /v1/webhooks/<id>/deliveries + 'Failed deliveries surface the response status + first 200 bytes of your endpoint's response body so you can debug.' — pinned so the deliveries endpoint + 200-byte-response-body-capture survives", () => {
     expect(body).toMatch(/<code>GET \/v1\/webhooks\/&lt;id&gt;\/deliveries<\/code>/);
     expect(body).toMatch(
-      /Failed deliveries surface the response status \+ first 200 bytes\s*\n?\s*of your endpoint's response body so you can debug\./,
+      /Failed deliveries surface the response status \+ first 200 bytes\s*of your endpoint's response body so you can debug\./,
     );
   });
 
   it("Troubleshooting 4-section framing: signatures-don't-verify (raw body + ts inside -Signature header) + auto-disabled (re-enable from dashboard) + duplicate-events expected (dedupe on -Event-Id) + missing-events (check registration includes event type) — pinned so the 4-section troubleshooting cluster survives (drift to dropping the dedupe-on-Event-Id guidance would mislead receivers about at-least-once delivery)", () => {
     expect(body).toMatch(
-      /<strong>Signatures don't verify<\/strong> — confirm you're\s*\n?\s*hashing the <em>raw<\/em> request body, not the parsed JSON\./,
+      /<strong>Signatures don't verify<\/strong> — confirm you're\s*hashing the <em>raw<\/em> request body, not the parsed JSON\./,
     );
     expect(body).toMatch(/<strong>Endpoint auto-disabled<\/strong>/);
     expect(body).toMatch(
-      /<strong>Duplicate events<\/strong> — expected\. Dedupe on\s*\n?\s*<code>X-Driftstack-Event-Id<\/code>\./,
+      /<strong>Duplicate events<\/strong> — expected\. Dedupe on\s*<code>X-Driftstack-Event-Id<\/code>\./,
     );
     expect(body).toMatch(
-      /<strong>Missing events<\/strong> — check the endpoint\s*\n?\s*registration includes the event type you're expecting/,
+      /<strong>Missing events<\/strong> — check the endpoint\s*registration includes the event type you're expecting/,
     );
   });
 

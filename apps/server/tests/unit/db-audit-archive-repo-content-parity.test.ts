@@ -48,7 +48,7 @@ describe('W448.A apps/server/src/db/audit-archive-repo.ts content parity', () =>
     // stale number mandatory. The count now lives in an assertion that derives
     // it from AUDIT_TABLES; see the cross-source invariant file.
     expect(body).toMatch(
-      /\/\/ V-172 — Drizzle-backed ArchiveTableRepo \+ ArchiveLedgerRepo for the\s*\n?\s*\/\/ V-163 AuditArchiveService\./,
+      /\/\/ V-172 — Drizzle-backed ArchiveTableRepo \+ ArchiveLedgerRepo for the\s*\/\/ V-163 AuditArchiveService\./,
     );
     expect(body).toMatch(/this repo dispatches to the right table \+/);
     expect(body).toMatch(/per `tableName` argument\./);
@@ -63,26 +63,26 @@ describe('W448.A apps/server/src/db/audit-archive-repo.ts content parity', () =>
   it('imports: asc/eq/inArray/lt from drizzle-orm; 3 service types from audit-archive; Database; 6 schema tables (adminAuditLog + auditArchiveRuns + legalAcceptances + processedStripeEvents + sessionEvents + webhookDeliveries)', () => {
     expect(body).toMatch(/import \{ asc, eq, inArray, lt \} from 'drizzle-orm';/);
     expect(body).toMatch(
-      /import type \{\s*\n?\s*ArchiveLedgerRepo,\s*\n?\s*ArchiveTableName,\s*\n?\s*ArchiveTableRepo,\s*\n?\s*\} from '\.\.\/services\/audit-archive\.js';/,
+      /import type \{\s*ArchiveLedgerRepo,\s*ArchiveTableName,\s*ArchiveTableRepo,\s*\} from '\.\.\/services\/audit-archive\.js';/,
     );
     expect(body).toMatch(
-      /import \{\s*\n?\s*adminAuditLog,\s*\n?\s*auditArchiveRuns,\s*\n?\s*legalAcceptances,\s*\n?\s*processedStripeEvents,\s*\n?\s*sessionEvents,\s*\n?\s*webhookDeliveries,\s*\n?\s*\} from '\.\/schema\.js';/,
+      /import \{\s*adminAuditLog,\s*auditArchiveRuns,\s*legalAcceptances,\s*processedStripeEvents,\s*sessionEvents,\s*webhookDeliveries,\s*\} from '\.\/schema\.js';/,
     );
   });
 
   it('selectArchivableRows: admin_audit_log → lt(timestamp) + orderBy(asc(timestamp), asc(id))', () => {
     expect(body).toMatch(
-      /case 'admin_audit_log': \{\s*\n?\s*const query = this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(adminAuditLog\)\s*\n?\s*\.where\(lt\(adminAuditLog\.timestamp, olderThan\)\)\s*\n?\s*\.orderBy\(asc\(adminAuditLog\.timestamp\), asc\(adminAuditLog\.id\)\);\s*\n?\s*const rows = await \(cap === null \? query : query\.limit\(cap\)\);\s*\n?\s*return rows;\s*\n?\s*\}/,
+      /case 'admin_audit_log': \{\s*const query = this\.database\.db\s*\.select\(\)\s*\.from\(adminAuditLog\)\s*\.where\(lt\(adminAuditLog\.timestamp, olderThan\)\)\s*\.orderBy\(asc\(adminAuditLog\.timestamp\), asc\(adminAuditLog\.id\)\);\s*const rows = await \(cap === null \? query : query\.limit\(cap\)\);\s*return rows;\s*\}/,
     );
   });
 
   it("processed_stripe_events framing pinned: 'AuditArchiveService.extractId() reads row.id — project event_id → id so the row shape matches the other tables.' + map((r) => ({ ...r, id: r.eventId }))", () => {
     expect(body).toMatch(
-      /\/\/ processed_stripe_events\.PK is event_id \(no separate id col\)\.\s*\n?\s*\/\/ AuditArchiveService\.extractId\(\) reads row\.id — project\s*\n?\s*\/\/ event_id → id so the row shape matches the other tables\./,
+      /\/\/ processed_stripe_events\.PK is event_id \(no separate id col\)\.\s*\/\/ AuditArchiveService\.extractId\(\) reads row\.id — project\s*\/\/ event_id → id so the row shape matches the other tables\./,
     );
     expect(body).toMatch(/return rows\.map\(\(r\) => \(\{ \.\.\.r, id: r\.eventId \}\)\);/);
     expect(body).toMatch(
-      /\.where\(lt\(processedStripeEvents\.receivedAt, olderThan\)\)\s*\n?\s*\.orderBy\(asc\(processedStripeEvents\.receivedAt\), asc\(processedStripeEvents\.eventId\)\);/,
+      /\.where\(lt\(processedStripeEvents\.receivedAt, olderThan\)\)\s*\.orderBy\(asc\(processedStripeEvents\.receivedAt\), asc\(processedStripeEvents\.eventId\)\);/,
     );
   });
 
@@ -103,45 +103,45 @@ describe('W448.A apps/server/src/db/audit-archive-repo.ts content parity', () =>
 
   it('selectArchivableRows: legal_acceptances → lt(acceptedAt) + orderBy(asc(acceptedAt), asc(id)); webhook_deliveries → lt(createdAt) + orderBy(asc(createdAt), asc(id))', () => {
     expect(body).toMatch(
-      /case 'legal_acceptances': \{[\s\S]*?\.where\(lt\(legalAcceptances\.acceptedAt, olderThan\)\)\s*\n?\s*\.orderBy\(asc\(legalAcceptances\.acceptedAt\), asc\(legalAcceptances\.id\)\);/,
+      /case 'legal_acceptances': \{[\s\S]*?\.where\(lt\(legalAcceptances\.acceptedAt, olderThan\)\)\s*\.orderBy\(asc\(legalAcceptances\.acceptedAt\), asc\(legalAcceptances\.id\)\);/,
     );
     expect(body).toMatch(
-      /case 'webhook_deliveries': \{[\s\S]*?\.where\(lt\(webhookDeliveries\.createdAt, olderThan\)\)\s*\n?\s*\.orderBy\(asc\(webhookDeliveries\.createdAt\), asc\(webhookDeliveries\.id\)\);/,
+      /case 'webhook_deliveries': \{[\s\S]*?\.where\(lt\(webhookDeliveries\.createdAt, olderThan\)\)\s*\.orderBy\(asc\(webhookDeliveries\.createdAt\), asc\(webhookDeliveries\.id\)\);/,
     );
   });
 
   it('deleteRowsById: empty early-return; processed_stripe_events WHERE switches to event_id (PK); other tables WHERE on id', () => {
     expect(body).toMatch(/if \(ids\.length === 0\) return 0;/);
     expect(body).toMatch(
-      /case 'processed_stripe_events': \{[\s\S]*?\.delete\(processedStripeEvents\)\s*\n?\s*\.where\(inArray\(processedStripeEvents\.eventId, idArray\)\);/,
+      /case 'processed_stripe_events': \{[\s\S]*?\.delete\(processedStripeEvents\)\s*\.where\(inArray\(processedStripeEvents\.eventId, idArray\)\);/,
     );
     expect(body).toMatch(
-      /\.delete\(adminAuditLog\)\s*\n?\s*\.where\(inArray\(adminAuditLog\.id, idArray\)\);/,
+      /\.delete\(adminAuditLog\)\s*\.where\(inArray\(adminAuditLog\.id, idArray\)\);/,
     );
     expect(body).toMatch(
-      /\.delete\(legalAcceptances\)\s*\n?\s*\.where\(inArray\(legalAcceptances\.id, idArray\)\);/,
+      /\.delete\(legalAcceptances\)\s*\.where\(inArray\(legalAcceptances\.id, idArray\)\);/,
     );
     expect(body).toMatch(
-      /\.delete\(webhookDeliveries\)\s*\n?\s*\.where\(inArray\(webhookDeliveries\.id, idArray\)\);/,
+      /\.delete\(webhookDeliveries\)\s*\.where\(inArray\(webhookDeliveries\.id, idArray\)\);/,
     );
   });
 
   it("insertRun: 9-field values (8 args + deletedFromPostgres:false seed); .returning({id}); throws 'insertRun returned no row'", () => {
     expect(body).toMatch(
-      /\.values\(\{\s*\n?\s*tableName: args\.tableName,\s*\n?\s*windowStart: args\.windowStart,\s*\n?\s*windowEnd: args\.windowEnd,\s*\n?\s*rowsArchived: args\.rowsArchived,\s*\n?\s*r2ObjectKey: args\.r2ObjectKey,\s*\n?\s*sha256Checksum: args\.sha256Checksum,\s*\n?\s*startedAt: args\.startedAt,\s*\n?\s*completedAt: args\.completedAt,\s*\n?\s*deletedFromPostgres: false,\s*\n?\s*\}\)\s*\n?\s*\.returning\(\{ id: auditArchiveRuns\.id \}\);/,
+      /\.values\(\{\s*tableName: args\.tableName,\s*windowStart: args\.windowStart,\s*windowEnd: args\.windowEnd,\s*rowsArchived: args\.rowsArchived,\s*r2ObjectKey: args\.r2ObjectKey,\s*sha256Checksum: args\.sha256Checksum,\s*startedAt: args\.startedAt,\s*completedAt: args\.completedAt,\s*deletedFromPostgres: false,\s*\}\)\s*\.returning\(\{ id: auditArchiveRuns\.id \}\);/,
     );
     expect(body).toMatch(/if \(!row\) throw new Error\('insertRun returned no row'\);/);
   });
 
   it('markDeletedFromPostgres: 1-field set deletedFromPostgres:true where id=runId', () => {
     expect(body).toMatch(
-      /async markDeletedFromPostgres\(runId: string\): Promise<void> \{\s*\n?\s*await this\.database\.db\s*\n?\s*\.update\(auditArchiveRuns\)\s*\n?\s*\.set\(\{ deletedFromPostgres: true \}\)\s*\n?\s*\.where\(eq\(auditArchiveRuns\.id, runId\)\);\s*\n?\s*\}/,
+      /async markDeletedFromPostgres\(runId: string\): Promise<void> \{\s*await this\.database\.db\s*\.update\(auditArchiveRuns\)\s*\.set\(\{ deletedFromPostgres: true \}\)\s*\.where\(eq\(auditArchiveRuns\.id, runId\)\);\s*\}/,
     );
   });
 
   it('rowsAffected: defensive cast for postgres-js driver shape ({rowCount?} or {count?}); return r.rowCount ?? r.count ?? 0', () => {
     expect(body).toMatch(
-      /function rowsAffected\(result: unknown\): number \{[\s\S]*?const r = result as \{ rowCount\?: number; count\?: number \};\s*\n?\s*return r\.rowCount \?\? r\.count \?\? 0;\s*\n?\s*\}/,
+      /function rowsAffected\(result: unknown\): number \{[\s\S]*?const r = result as \{ rowCount\?: number; count\?: number \};\s*return r\.rowCount \?\? r\.count \?\? 0;\s*\}/,
     );
   });
 

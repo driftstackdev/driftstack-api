@@ -26,7 +26,7 @@ describe('sdk-python resources/recipes content parity', () => {
   it('frames recipes as an available management and suggestion resource', () => {
     expect(body).toMatch(/"""Saved recipes and recipe suggestions\./);
     expect(body).toMatch(
-      /Surface: ``create`` \+ ``list`` \+ ``iterate`` \+ ``get`` \+ ``delete`` \+\s*\n?\s*``suggest``\. Deployments without recipe storage return the typed\s*\n?\s*``FeatureUnavailable`` error\./,
+      /Surface: ``create`` \+ ``list`` \+ ``iterate`` \+ ``get`` \+ ``delete`` \+\s*``suggest``\. Deployments without recipe storage return the typed\s*``FeatureUnavailable`` error\./,
     );
   });
 
@@ -39,7 +39,7 @@ describe('sdk-python resources/recipes content parity', () => {
   it('Sync RecipesResource surface pinned: create + list + iterate + get + delete + suggest. No execute() because execution is outside this resource', () => {
     expect(body).toMatch(/class RecipesResource:/);
     expect(body).toMatch(
-      /def create\(\s*\n?\s*self,\s*\n?\s*\*,\s*\n?\s*agent_session_id: str,\s*\n?\s*label: str,\s*\n?\s*description: str \| None = None,\s*\n?\s*\) -> dict\[str, Any\]:/,
+      /def create\(\s*self,\s*\*,\s*agent_session_id: str,\s*label: str,\s*description: str \| None = None,\s*\) -> dict\[str, Any\]:/,
     );
     expect(body).toMatch(
       /def list\(self, \*, limit: int \| None = None, cursor: str \| None = None\) -> dict\[str, Any\]:/,
@@ -53,7 +53,7 @@ describe('sdk-python resources/recipes content parity', () => {
   it('Async AsyncRecipesResource surface mirror pinned: create + list + iterate + get + delete (sync/async parity)', () => {
     expect(body).toMatch(/class AsyncRecipesResource:/);
     expect(body).toMatch(
-      /async def create\(\s*\n?\s*self,\s*\n?\s*\*,\s*\n?\s*agent_session_id: str,\s*\n?\s*label: str,\s*\n?\s*description: str \| None = None,\s*\n?\s*\) -> dict\[str, Any\]:/,
+      /async def create\(\s*self,\s*\*,\s*agent_session_id: str,\s*label: str,\s*description: str \| None = None,\s*\) -> dict\[str, Any\]:/,
     );
     expect(body).toMatch(/async def get\(self, recipe_id: str\) -> dict\[str, Any\]:/);
     expect(body).toMatch(/async def delete\(self, recipe_id: str\) -> None:/);
@@ -68,26 +68,24 @@ describe('sdk-python resources/recipes content parity', () => {
 
   it("Recipe return-shape framing pinned: 'Returns the inserted Recipe payload (id + account_id + agent_session_id + label + description + intent_count + timestamps).' — pinned so the 7-field returned-shape stays documented (matches TS RecipesResource + the server's recipe-row projection)", () => {
     expect(body).toMatch(
-      /Returns the inserted ``Recipe`` payload \(id \+ account_id \+\s*\n?\s*agent_session_id \+ label \+ description \+ intent_count \+\s*\n?\s*timestamps\)\./,
+      /Returns the inserted ``Recipe`` payload \(id \+ account_id \+\s*agent_session_id \+ label \+ description \+ intent_count \+\s*timestamps\)\./,
     );
   });
 
   it("V-1120 ACCESS-scoped 404 framing pinned: agent_session_id must be a session you can ACCESS, and anything else 404s rather than 403s. The old docstring read as though any cross-account id 404s, which is the rule V-812 retracted — a team admin snapshotting the owner's session gets a 201, filed under the admin's own account.", () => {
     const body = read(LIB);
     expect(body).toMatch(
-      /``agent_session_id`` must be a session you can\s*\n?\s*ACCESS — one your own account owns, or one owned by a team you/,
+      /``agent_session_id`` must be a session you can\s*ACCESS — one your own account owns, or one owned by a team you/,
     );
-    expect(body, 'the 404-not-403 reason must stay').toMatch(
-      /returns 404 \(not 403\) by\s*\n?\s*design/,
-    );
+    expect(body, 'the 404-not-403 reason must stay').toMatch(/returns 404 \(not 403\) by\s*design/);
     expect(body, 'the any-cross-account-404s claim must not return').not.toMatch(
-      /cross-account access on ``agent_session_id``\s*\n?\s*returns 404/,
+      /cross-account access on ``agent_session_id``\s*returns 404/,
     );
   });
 
   it('description-when-not-None body composition pattern pinned (sync + async). Drift to always-include-description would send `description: null` on the wire instead of omitting; the server treats absent + null differently for some other resources, so the conservative path is omit-when-None', () => {
     expect(body).toMatch(
-      /body: dict\[str, Any\] = \{\s*\n?\s*"agent_session_id": agent_session_id,\s*\n?\s*"label": label,\s*\n?\s*\}\s*\n?\s*if description is not None:\s*\n?\s*body\["description"\] = description/,
+      /body: dict\[str, Any\] = \{\s*"agent_session_id": agent_session_id,\s*"label": label,\s*\}\s*if description is not None:\s*body\["description"\] = description/,
     );
   });
 

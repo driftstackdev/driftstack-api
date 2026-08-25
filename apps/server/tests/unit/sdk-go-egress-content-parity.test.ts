@@ -32,7 +32,7 @@ describe('sdk-go egress content parity', () => {
 
   it('SessionProxyAttachResponse public-safe envelope (Type + Safeguards) — never raw secret material', () => {
     expect(body).toMatch(
-      /type SessionProxyAttachResponse struct \{\s*\n?\s*Type\s+string\s+`json:"type"`\s*\n?\s*Safeguards map\[string\]bool `json:"safeguards"`\s*\n?\s*\}/,
+      /type SessionProxyAttachResponse struct \{\s*Type\s+string\s+`json:"type"`\s*Safeguards map\[string\]bool `json:"safeguards"`\s*\}/,
     );
   });
 

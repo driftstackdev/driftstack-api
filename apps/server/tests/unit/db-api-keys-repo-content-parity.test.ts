@@ -65,16 +65,16 @@ describe('W444.C apps/server/src/db/api-keys-repo.ts content parity', () => {
 
   it('listApiKeys(accountId): account-scoped + orderBy desc(createdAt); rows.map(toApiKeyRow)', () => {
     expect(body).toMatch(
-      /async listApiKeys\(accountId: string\): Promise<ApiKeyRow\[\]> \{\s*\n?\s*const rows = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(apiKeys\)\s*\n?\s*\.where\(eq\(apiKeys\.accountId, accountId\)\)\s*\n?\s*\.orderBy\(desc\(apiKeys\.createdAt\)\);\s*\n?\s*return rows\.map\(toApiKeyRow\);\s*\n?\s*\}/,
+      /async listApiKeys\(accountId: string\): Promise<ApiKeyRow\[\]> \{\s*const rows = await this\.database\.db\s*\.select\(\)\s*\.from\(apiKeys\)\s*\.where\(eq\(apiKeys\.accountId, accountId\)\)\s*\.orderBy\(desc\(apiKeys\.createdAt\)\);\s*return rows\.map\(toApiKeyRow\);\s*\}/,
     );
   });
 
   it('findApiKey: account-scoped via and(eq(id), eq(accountId)) + limit 1; findApiKeyUnscoped: id-only no account scope', () => {
     expect(body).toMatch(
-      /async findApiKey\(id: string, accountId: string\): Promise<ApiKeyRow \| null> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(apiKeys\)\s*\n?\s*\.where\(and\(eq\(apiKeys\.id, id\), eq\(apiKeys\.accountId, accountId\)\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*return row \? toApiKeyRow\(row\) : null;\s*\n?\s*\}/,
+      /async findApiKey\(id: string, accountId: string\): Promise<ApiKeyRow \| null> \{\s*const \[row\] = await this\.database\.db\s*\.select\(\)\s*\.from\(apiKeys\)\s*\.where\(and\(eq\(apiKeys\.id, id\), eq\(apiKeys\.accountId, accountId\)\)\)\s*\.limit\(1\);\s*return row \? toApiKeyRow\(row\) : null;\s*\}/,
     );
     expect(body).toMatch(
-      /async findApiKeyUnscoped\(id: string\): Promise<ApiKeyRow \| null> \{\s*\n?\s*const \[row\] = await this\.database\.db\.select\(\)\.from\(apiKeys\)\.where\(eq\(apiKeys\.id, id\)\)\.limit\(1\);\s*\n?\s*return row \? toApiKeyRow\(row\) : null;\s*\n?\s*\}/,
+      /async findApiKeyUnscoped\(id: string\): Promise<ApiKeyRow \| null> \{\s*const \[row\] = await this\.database\.db\.select\(\)\.from\(apiKeys\)\.where\(eq\(apiKeys\.id, id\)\)\.limit\(1\);\s*return row \? toApiKeyRow\(row\) : null;\s*\}/,
     );
   });
 
@@ -90,7 +90,7 @@ describe('W444.C apps/server/src/db/api-keys-repo.ts content parity', () => {
     expect(body).toContain("if (!existing) return { kind: 'not_found' };");
     expect(body).toContain("return { kind: 'already_revoked', key };");
     expect(body).toMatch(
-      /async setExpiresAt\(id: string, expiresAt: Date\): Promise<void> \{\s*\n?\s*await this\.database\.db\.update\(apiKeys\)\.set\(\{ expiresAt \}\)\.where\(eq\(apiKeys\.id, id\)\);\s*\n?\s*\}/,
+      /async setExpiresAt\(id: string, expiresAt: Date\): Promise<void> \{\s*await this\.database\.db\.update\(apiKeys\)\.set\(\{ expiresAt \}\)\.where\(eq\(apiKeys\.id, id\)\);\s*\}/,
     );
   });
 
@@ -110,7 +110,7 @@ describe('W444.C apps/server/src/db/api-keys-repo.ts content parity', () => {
 
   it('listAllApiKeys tri-state revoked filter: revoked===true → isNotNull(revokedAt); revoked===false → isNull(revokedAt); undefined → no filter; cursor lt(createdAt, parsed-date); accountId optional', () => {
     expect(body).toMatch(
-      /if \(opts\.revoked === true\) filters\.push\(isNotNull\(apiKeys\.revokedAt\)\);\s*\n?\s*if \(opts\.revoked === false\) filters\.push\(isNull\(apiKeys\.revokedAt\)\);/,
+      /if \(opts\.revoked === true\) filters\.push\(isNotNull\(apiKeys\.revokedAt\)\);\s*if \(opts\.revoked === false\) filters\.push\(isNull\(apiKeys\.revokedAt\)\);/,
     );
     // Keyset cursor (createdAt, id) — looked up by cursor id.
     expect(body).toMatch(/lt\(apiKeys\.createdAt, c\.createdAt\),/);
@@ -124,13 +124,13 @@ describe('W444.C apps/server/src/db/api-keys-repo.ts content parity', () => {
 
   it('listAllApiKeys query: orderBy desc(createdAt) + limit(limit+1); hasMore + slice; nextCursor = last.createdAt.toISOString()', () => {
     expect(body).toMatch(
-      /const rows = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(apiKeys\)\s*\n?\s*\.where\(whereClause\)\s*\n?\s*\.orderBy\(desc\(apiKeys\.createdAt\), desc\(apiKeys\.id\)\)\s*\n?\s*\.limit\(opts\.limit \+ 1\);\s*\n?\s*const hasMore = rows\.length > opts\.limit;\s*\n?\s*const items = hasMore \? rows\.slice\(0, opts\.limit\) : rows;\s*\n?\s*const last = items\[items\.length - 1\];\s*\n?\s*return \{\s*\n?\s*items: items\.map\(toApiKeyRow\),\s*\n?\s*nextCursor: hasMore && last \? last\.id : null,\s*\n?\s*\};/,
+      /const rows = await this\.database\.db\s*\.select\(\)\s*\.from\(apiKeys\)\s*\.where\(whereClause\)\s*\.orderBy\(desc\(apiKeys\.createdAt\), desc\(apiKeys\.id\)\)\s*\.limit\(opts\.limit \+ 1\);\s*const hasMore = rows\.length > opts\.limit;\s*const items = hasMore \? rows\.slice\(0, opts\.limit\) : rows;\s*const last = items\[items\.length - 1\];\s*return \{\s*items: items\.map\(toApiKeyRow\),\s*nextCursor: hasMore && last \? last\.id : null,\s*\};/,
     );
   });
 
   it('toApiKeyRow: 11-field ApiKeyRow (id + accountId + name + keyPrefix + keyHash + scopes + lastUsedAt + revokedAt + expiresAt + provenance + createdAt)', () => {
     expect(body).toMatch(
-      /function toApiKeyRow\(r: typeof apiKeys\.\$inferSelect\): ApiKeyRow \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*accountId: r\.accountId,\s*\n?\s*name: r\.name,\s*\n?\s*keyPrefix: r\.keyPrefix,\s*\n?\s*keyHash: r\.keyHash,\s*\n?\s*scopes: r\.scopes,\s*\n?\s*lastUsedAt: r\.lastUsedAt,\s*\n?\s*revokedAt: r\.revokedAt,\s*\n?\s*expiresAt: r\.expiresAt,\s*\n?\s*provenance: r\.provenance,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function toApiKeyRow\(r: typeof apiKeys\.\$inferSelect\): ApiKeyRow \{\s*return \{\s*id: r\.id,\s*accountId: r\.accountId,\s*name: r\.name,\s*keyPrefix: r\.keyPrefix,\s*keyHash: r\.keyHash,\s*scopes: r\.scopes,\s*lastUsedAt: r\.lastUsedAt,\s*revokedAt: r\.revokedAt,\s*expiresAt: r\.expiresAt,\s*provenance: r\.provenance,\s*createdAt: r\.createdAt,\s*\};\s*\}/,
     );
   });
 

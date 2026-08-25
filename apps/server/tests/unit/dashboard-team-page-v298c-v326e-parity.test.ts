@@ -192,8 +192,8 @@ describe('W757 dashboard /team page V-298c + V-326e parity', () => {
   it("CRITICAL empty-list framing distinct per section (2026-05-29 polished icon+headline+body via emptyState()) — members headline 'No team members yet' + 'Invite one above…' body vs invites 'No pending invites' + 'Invitations you send…' body. Drift to a single message would erode the section's individual identity.", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/'No team members yet',\s*\n?\s*'Invite one above to collaborate/);
-    expect(p).toMatch(/'No pending invites',\s*\n?\s*'Invitations you send will appear here/);
+    expect(p).toMatch(/'No team members yet',\s*'Invite one above to collaborate/);
+    expect(p).toMatch(/'No pending invites',\s*'Invitations you send will appear here/);
   });
 
   it('CRITICAL escapeHtml() 5-char XSS guard pinned in inline-script. Email + id flow through it.', () => {

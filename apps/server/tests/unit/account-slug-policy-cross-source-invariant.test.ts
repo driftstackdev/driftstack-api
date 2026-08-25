@@ -43,10 +43,10 @@ describe('W874 AccountSlug policy cross-source invariant', () => {
 
   it('CRITICAL packages/api-types/src/accounts.ts AccountSlugSchema = z.string().min(3).max(32).regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/, ...). The 3-32 length bounds + regex enforce GitHub-username-style handles.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
-    expect(p).toMatch(/export const AccountSlugSchema = z\s*\n?\s*\.string\(\)/);
+    expect(p).toMatch(/export const AccountSlugSchema = z\s*\.string\(\)/);
     expect(p).toMatch(/\.min\(3\)/);
     expect(p).toMatch(/\.max\(32\)/);
-    expect(p).toMatch(/\.regex\(\s*\n?\s*\/\^\[a-z0-9\]\(\?:\[a-z0-9-\]\*\[a-z0-9\]\)\?\$\//);
+    expect(p).toMatch(/\.regex\(\s*\/\^\[a-z0-9\]\(\?:\[a-z0-9-\]\*\[a-z0-9\]\)\?\$\//);
   });
 
   it("CRITICAL AccountSlugSchema regex error message is 'Must be 3-32 chars, lowercase a-z + 0-9 + hyphen, with no leading/trailing hyphen.'. The customer-facing error string is what the dashboard renders on rejection.", () => {
@@ -80,11 +80,9 @@ describe('W874 AccountSlug policy cross-source invariant', () => {
   it("CRITICAL AccountSlug comment pins the 'reject mixed case rather than silently lowercase' strict-normalisation policy. The rationale is 'customers don't get surprised by what they typed vs what's stored'.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
     expect(p).toMatch(
-      /Server-side normalisation is deliberately strict: we\s*\n?\s* \* reject mixed case rather than silently lowercase/,
+      /Server-side normalisation is deliberately strict: we\s* \* reject mixed case rather than silently lowercase/,
     );
-    expect(p).toMatch(
-      /customers\s*\n?\s* \* don't get surprised by what they typed vs what's stored/,
-    );
+    expect(p).toMatch(/customers\s* \* don't get surprised by what they typed vs what's stored/);
   });
 
   // ─── Customer-dashboard helper text ──────────────────────────
@@ -99,7 +97,7 @@ describe('W874 AccountSlug policy cross-source invariant', () => {
     // SAID, not whether it was true, and kept it in place. Now pins the corrected
     // wording, and `a-timezone-claim-needs-a-timezone-implementation` pairs the
     // surface claims against the code that would have to carry them.
-    expect(p).toMatch(/A unique handle for\s*\n?\s*your account, saved and returned by the API/);
+    expect(p).toMatch(/A unique handle for\s*your account, saved and returned by the API/);
     expect(p).toMatch(/Leave blank to keep using the account UUID/);
   });
 

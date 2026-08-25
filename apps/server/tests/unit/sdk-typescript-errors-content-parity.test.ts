@@ -50,10 +50,10 @@ describe('W423.A packages/sdk-typescript/src/errors.ts content parity', () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(/\/\/ SDK error classes — one per Driftstack RFC 7807 problem-type URI\./);
     expect(body).toMatch(
-      /\/\/ All errors extend `DriftstackError` \(the base\) so consumers can catch the\s*\n?\s*\/\/ whole class with a single `instanceof DriftstackError`/,
+      /\/\/ All errors extend `DriftstackError` \(the base\) so consumers can catch the\s*\/\/ whole class with a single `instanceof DriftstackError`/,
     );
     expect(body).toMatch(
-      /\/\/ Anything else \(network failure, parse error, etc\.\) surfaces as a\s*\n?\s*\/\/ `DriftstackError` with `kind: 'transport'` set on the instance\./,
+      /\/\/ Anything else \(network failure, parse error, etc\.\) surfaces as a\s*\/\/ `DriftstackError` with `kind: 'transport'` set on the instance\./,
     );
   });
 
@@ -88,33 +88,33 @@ describe('W423.A packages/sdk-typescript/src/errors.ts content parity', () => {
 
   it('CRITICAL DriftstackErrorKind union — 26 string-literal values + 3 V-441 closing-parity values + Q.1.d byok_anthropic_required (2026-05-17). Includes `payment_required` (402, bundled-LLM rail). Drift to widening the union without coordinated server+client update would break exhaustive switch statements in isRetryable.', () => {
     expect(body).toMatch(
-      /export type DriftstackErrorKind =\s*\n?\s*\|\s*'bad_request'\s*\n?\s*\|\s*'validation'\s*\n?\s*\|\s*'unauthorized'\s*\n?\s*\|\s*'invalid_key'\s*\n?\s*\|\s*'revoked_key'\s*\n?\s*\|\s*'expired_key'\s*\n?\s*\|\s*'forbidden'\s*\n?\s*\|\s*'not_found'\s*\n?\s*\|\s*'conflict'\s*\n?\s*\|\s*'payment_required'\s*\n?\s*\|\s*'rate_limited'\s*\n?\s*\|\s*'concurrency_limit'\s*\n?\s*\|\s*'tier_limit'\s*\n?\s*\|\s*'session_destroyed'\s*\n?\s*\|\s*'session_timeout'\s*\n?\s*\|\s*'legal_acceptance_required'\s*\n?\s*\|\s*'driver_error'\s*\n?\s*\|\s*'driver_not_integrated'\s*\n?\s*\|\s*'internal'\s*\n?\s*\|\s*'email_already_registered'\s*\n?\s*\|\s*'invalid_credentials'\s*\n?\s*\|\s*'invalid_auth_token'\s*\n?\s*\|\s*'email_not_verified'/,
+      /export type DriftstackErrorKind =\s*\|\s*'bad_request'\s*\|\s*'validation'\s*\|\s*'unauthorized'\s*\|\s*'invalid_key'\s*\|\s*'revoked_key'\s*\|\s*'expired_key'\s*\|\s*'forbidden'\s*\|\s*'not_found'\s*\|\s*'conflict'\s*\|\s*'payment_required'\s*\|\s*'rate_limited'\s*\|\s*'concurrency_limit'\s*\|\s*'tier_limit'\s*\|\s*'session_destroyed'\s*\|\s*'session_timeout'\s*\|\s*'legal_acceptance_required'\s*\|\s*'driver_error'\s*\|\s*'driver_not_integrated'\s*\|\s*'internal'\s*\|\s*'email_already_registered'\s*\|\s*'invalid_credentials'\s*\|\s*'invalid_auth_token'\s*\|\s*'email_not_verified'/,
     );
     expect(body).toMatch(/\/\/ V-441 — closing problem-type parity with Go \+ Python\./);
     expect(body).toMatch(
-      /\|\s*'feature_unavailable'\s*\n?\s*\|\s*'mfa_step_up_required'\s*\n?\s*\|\s*'byok_anthropic_required'\s*\n?\s*\|\s*'proxy_validation_failed'\s*\n?\s*\|\s*'transport';/,
+      /\|\s*'feature_unavailable'\s*\|\s*'mfa_step_up_required'\s*\|\s*'byok_anthropic_required'\s*\|\s*'proxy_validation_failed'\s*\|\s*'transport';/,
     );
   });
 
   it('DriftstackError base class — 7 readonly fields (kind/status/type/title/detail/instance/extensions). CRITICAL: detail + instance are explicitly typed `string | undefined` (NOT `string?`) so callers must handle the undefined case in strict type-checking. extensions is `Record<string, unknown>` (default {} in constructor).', () => {
     expect(body).toMatch(
-      /export class DriftstackError extends Error \{\s*\n?\s*readonly kind: DriftstackErrorKind;\s*\n?\s*readonly status: number;\s*\n?\s*readonly type: string;\s*\n?\s*readonly title: string;\s*\n?\s*readonly detail: string \| undefined;\s*\n?\s*readonly instance: string \| undefined;\s*\n?\s*readonly extensions: Record<string, unknown>;/,
+      /export class DriftstackError extends Error \{\s*readonly kind: DriftstackErrorKind;\s*readonly status: number;\s*readonly type: string;\s*readonly title: string;\s*readonly detail: string \| undefined;\s*readonly instance: string \| undefined;\s*readonly extensions: Record<string, unknown>;/,
     );
   });
 
   it('DriftstackError constructor super-pattern — `super(opts.detail ?? opts.title, opts.cause !== undefined ? { cause: opts.cause } : undefined)`. CRITICAL: detail-or-title fallback (NOT `||` — empty detail string would be hidden) + conditional cause option (drift to always spreading cause: undefined would set cause to undefined on the error instance, breaking Error.cause null-check). this.name = "DriftstackError" pinned. extensions ?? {} default pinned.', () => {
     expect(body).toMatch(
-      /super\(opts\.detail \?\? opts\.title, opts\.cause !== undefined \? \{ cause: opts\.cause \} : undefined\);\s*\n?\s*this\.name = 'DriftstackError';/,
+      /super\(opts\.detail \?\? opts\.title, opts\.cause !== undefined \? \{ cause: opts\.cause \} : undefined\);\s*this\.name = 'DriftstackError';/,
     );
     expect(body).toMatch(/this\.extensions = opts\.extensions \?\? \{\};/);
   });
 
   it('Standard 4xx classes — BadRequestError + AuthError + ForbiddenError + NotFoundError + ConflictError. Each is a thin DriftstackError subclass that sets the kind via toOpts() + overrides this.name with its own class name. Drift to dropping any would force errorFromProblem to fall back to a generic DriftstackError.', () => {
     expect(body).toMatch(
-      /export class BadRequestError extends DriftstackError \{\s*\n?\s*constructor\(p: Problem\) \{\s*\n?\s*super\(toOpts\('bad_request', p\)\);\s*\n?\s*this\.name = 'BadRequestError';\s*\n?\s*\}\s*\n?\s*\}/,
+      /export class BadRequestError extends DriftstackError \{\s*constructor\(p: Problem\) \{\s*super\(toOpts\('bad_request', p\)\);\s*this\.name = 'BadRequestError';\s*\}\s*\}/,
     );
     expect(body).toMatch(
-      /export class AuthError extends DriftstackError \{[\s\S]*?super\(toOpts\('unauthorized', p\)\);\s*\n?\s*this\.name = 'AuthError';/,
+      /export class AuthError extends DriftstackError \{[\s\S]*?super\(toOpts\('unauthorized', p\)\);\s*this\.name = 'AuthError';/,
     );
     expect(body).toMatch(/this\.name = 'ForbiddenError';/);
     expect(body).toMatch(/this\.name = 'NotFoundError';/);
@@ -123,34 +123,34 @@ describe('W423.A packages/sdk-typescript/src/errors.ts content parity', () => {
 
   it('API-key lifecycle 3-class trio — InvalidKeyError + RevokedKeyError + ExpiredKeyError. The 3 separate classes let callers distinguish 401-because-typo from 401-because-revoked from 401-because-expired (each requires different remediation). Drift to collapsing into AuthError would lose this remediation distinction.', () => {
     expect(body).toMatch(
-      /export class InvalidKeyError extends DriftstackError \{[\s\S]*?super\(toOpts\('invalid_key', p\)\);\s*\n?\s*this\.name = 'InvalidKeyError';/,
+      /export class InvalidKeyError extends DriftstackError \{[\s\S]*?super\(toOpts\('invalid_key', p\)\);\s*this\.name = 'InvalidKeyError';/,
     );
     expect(body).toMatch(
-      /export class RevokedKeyError extends DriftstackError \{[\s\S]*?super\(toOpts\('revoked_key', p\)\);\s*\n?\s*this\.name = 'RevokedKeyError';/,
+      /export class RevokedKeyError extends DriftstackError \{[\s\S]*?super\(toOpts\('revoked_key', p\)\);\s*this\.name = 'RevokedKeyError';/,
     );
     expect(body).toMatch(
-      /export class ExpiredKeyError extends DriftstackError \{[\s\S]*?super\(toOpts\('expired_key', p\)\);\s*\n?\s*this\.name = 'ExpiredKeyError';/,
+      /export class ExpiredKeyError extends DriftstackError \{[\s\S]*?super\(toOpts\('expired_key', p\)\);\s*this\.name = 'ExpiredKeyError';/,
     );
   });
 
   it('CRITICAL ValidationError — carries `issues: unknown` extension data. JSDoc rationale: "Server-supplied issues array; shape varies (often a Zod flatten())." Drift to typing issues as a specific shape would lock the SDK to one server-side validation library version.', () => {
     expect(body).toMatch(
-      /\/\*\* Server-supplied issues array; shape varies \(often a Zod flatten\(\)\)\. \*\/\s*\n?\s*readonly issues: unknown;/,
+      /\/\*\* Server-supplied issues array; shape varies \(often a Zod flatten\(\)\)\. \*\/\s*readonly issues: unknown;/,
     );
   });
 
   it('CRITICAL RateLimitError — carries `retryAfterSeconds: number` + 2-param constructor (Problem + retryAfterSeconds). Sourced from "retry_after_seconds extension or Retry-After header". Drift to making retryAfterSeconds optional would force every customer\'s catch to handle undefined.', () => {
     expect(body).toMatch(
-      /\/\*\* Suggested wait before retrying\. Sourced from `retry_after_seconds` extension or `Retry-After` header\. \*\/\s*\n?\s*readonly retryAfterSeconds: number;\s*\n?\s*constructor\(p: Problem, retryAfterSeconds: number\) \{\s*\n?\s*super\(toOpts\('rate_limited', p\)\);\s*\n?\s*this\.name = 'RateLimitError';\s*\n?\s*this\.retryAfterSeconds = retryAfterSeconds;\s*\n?\s*\}/,
+      /\/\*\* Suggested wait before retrying\. Sourced from `retry_after_seconds` extension or `Retry-After` header\. \*\/\s*readonly retryAfterSeconds: number;\s*constructor\(p: Problem, retryAfterSeconds: number\) \{\s*super\(toOpts\('rate_limited', p\)\);\s*this\.name = 'RateLimitError';\s*this\.retryAfterSeconds = retryAfterSeconds;\s*\}/,
     );
   });
 
   it('CRITICAL ConcurrencyLimitError — carries `currentSessions: number | undefined` + `limit: number | undefined`. Extracted from problem extensions (current_sessions / limit). Lets dashboards render "X/Y sessions in use" badges. Drift to dropping the typed fields would force callers to manually parse the extensions Record.', () => {
     expect(body).toMatch(
-      /export class ConcurrencyLimitError extends DriftstackError \{\s*\n?\s*readonly currentSessions: number \| undefined;\s*\n?\s*readonly limit: number \| undefined;/,
+      /export class ConcurrencyLimitError extends DriftstackError \{\s*readonly currentSessions: number \| undefined;\s*readonly limit: number \| undefined;/,
     );
     expect(body).toMatch(
-      /const ext = p as \{ current_sessions\?: number; limit\?: number \};\s*\n?\s*this\.currentSessions = ext\.current_sessions;\s*\n?\s*this\.limit = ext\.limit;/,
+      /const ext = p as \{ current_sessions\?: number; limit\?: number \};\s*this\.currentSessions = ext\.current_sessions;\s*this\.limit = ext\.limit;/,
     );
   });
 
@@ -165,22 +165,22 @@ describe('W423.A packages/sdk-typescript/src/errors.ts content parity', () => {
 
   it('CRITICAL LegalAcceptanceRequiredError — carries `pendingAcceptances: PendingAcceptance[]` with TYPE-NARROWED filter. The Array.isArray + element-wise typeof check guards against malformed server responses. Each pending acceptance carries (document_key + current_version). 2-field rationale pinned: "drive the user through the acceptance flow without a follow-up GET" — drift to dropping pendingAcceptances would force a doubled round-trip.', () => {
     expect(body).toMatch(
-      /export interface PendingAcceptance \{\s*\n?\s*document_key: string;\s*\n?\s*current_version: string;\s*\n?\s*\}/,
+      /export interface PendingAcceptance \{\s*document_key: string;\s*current_version: string;\s*\}/,
     );
     expect(body).toMatch(
-      /export class LegalAcceptanceRequiredError extends DriftstackError \{\s*\n?\s*readonly pendingAcceptances: PendingAcceptance\[\];/,
+      /export class LegalAcceptanceRequiredError extends DriftstackError \{\s*readonly pendingAcceptances: PendingAcceptance\[\];/,
     );
     expect(body).toMatch(
-      /this\.pendingAcceptances = Array\.isArray\(ext\)\s*\n?\s*\? \(ext\.filter\(\s*\n?\s*\(e\) =>\s*\n?\s*typeof e === 'object' &&\s*\n?\s*e !== null &&\s*\n?\s*typeof \(e as \{ document_key\?: unknown \}\)\.document_key === 'string' &&\s*\n?\s*typeof \(e as \{ current_version\?: unknown \}\)\.current_version === 'string',\s*\n?\s*\) as PendingAcceptance\[\]\)\s*\n?\s*: \[\];/,
+      /this\.pendingAcceptances = Array\.isArray\(ext\)\s*\? \(ext\.filter\(\s*\(e\) =>\s*typeof e === 'object' &&\s*e !== null &&\s*typeof \(e as \{ document_key\?: unknown \}\)\.document_key === 'string' &&\s*typeof \(e as \{ current_version\?: unknown \}\)\.current_version === 'string',\s*\) as PendingAcceptance\[\]\)\s*: \[\];/,
     );
   });
 
   it('CRITICAL SessionTimeoutError — carries `timeoutMs: number | undefined`. JSDoc rationale: distinguished from DriverError so customers can react SPECIFICALLY to "the operation didn\'t finish within the per-call timeout" without conflating with downstream driver failures. The "server actually applied" wording acknowledges the server may CLAMP the customer\'s requested timeout.', () => {
     expect(body).toMatch(
-      /\/\/ SessionTimeoutError — distinguished from DriverError so customers can\s*\n?\s*\/\/ react specifically to "the operation didn't finish within the per-call\s*\n?\s*\/\/ timeout I supplied" without conflating with downstream driver failures\./,
+      /\/\/ SessionTimeoutError — distinguished from DriverError so customers can\s*\/\/ react specifically to "the operation didn't finish within the per-call\s*\/\/ timeout I supplied" without conflating with downstream driver failures\./,
     );
     expect(body).toMatch(
-      /export class SessionTimeoutError extends DriftstackError \{\s*\n?\s*readonly timeoutMs: number \| undefined;/,
+      /export class SessionTimeoutError extends DriftstackError \{\s*readonly timeoutMs: number \| undefined;/,
     );
     expect(body).toMatch(/this\.timeoutMs = typeof ext === 'number' \? ext : undefined;/);
   });
@@ -204,16 +204,16 @@ describe('W423.A packages/sdk-typescript/src/errors.ts content parity', () => {
       /\/\/ V-441 — typed errors closing TS SDK problem-type parity with Go \+ Python\./,
     );
     expect(body).toMatch(
-      /\/\*\* V-353e — operation requires fresh MFA proof \(15-minute step-up window\)\.\s*\n?\s*\*\s*Customer should call `client\.auth\.mfaStepUp\(\{ code \}\)` and retry\. \*\//,
+      /\/\*\* V-353e — operation requires fresh MFA proof \(15-minute step-up window\)\.\s*\*\s*Customer should call `client\.auth\.mfaStepUp\(\{ code \}\)` and retry\. \*\//,
     );
     expect(body).toMatch(
-      /\/\*\* Endpoint requires infrastructure not configured in this deployment\s*\n?\s*\*\s*\(e\.g\. avatar uploads when R2 isn't wired\)\. HTTP 503\. \*\//,
+      /\/\*\* Endpoint requires infrastructure not configured in this deployment\s*\*\s*\(e\.g\. avatar uploads when R2 isn't wired\)\. HTTP 503\. \*\//,
     );
   });
 
   it('CRITICAL TransportError — kind="transport" + status=0 default + type="about:blank" + title="Transport error". RFC 7807 says type="about:blank" indicates "no further metadata"; using it here tells customers this came from the SDK transport layer, NOT the server. status=0 default means "no HTTP status" — the request never reached the server.', () => {
     expect(body).toMatch(
-      /\/\*\* Network \/ parse \/ non-Problem failure — server didn't return a structured error\. \*\/\s*\n?\s*export class TransportError extends DriftstackError \{\s*\n?\s*constructor\(message: string, status = 0, cause\?: unknown\) \{\s*\n?\s*super\(\{\s*\n?\s*kind: 'transport',\s*\n?\s*status,\s*\n?\s*type: 'about:blank',\s*\n?\s*title: 'Transport error',\s*\n?\s*detail: message,/,
+      /\/\*\* Network \/ parse \/ non-Problem failure — server didn't return a structured error\. \*\/\s*export class TransportError extends DriftstackError \{\s*constructor\(message: string, status = 0, cause\?: unknown\) \{\s*super\(\{\s*kind: 'transport',\s*status,\s*type: 'about:blank',\s*title: 'Transport error',\s*detail: message,/,
     );
   });
 
@@ -255,7 +255,7 @@ describe('W423.A packages/sdk-typescript/src/errors.ts content parity', () => {
       /export function errorFromProblem\(p: Problem, retryAfterHeader: string \| null\): DriftstackError \{/,
     );
     expect(body).toMatch(
-      /if \(p\.type === 'https:\/\/errors\.driftstack\.dev\/rate-limited'\) \{\s*\n?\s*const fromBody = \(p as \{ retry_after_seconds\?: number \}\)\.retry_after_seconds;\s*\n?\s*const fromHeader = retryAfterHeader !== null \? Number\(retryAfterHeader\) : NaN;\s*\n?\s*const retryAfter = fromBody \?\? \(Number\.isFinite\(fromHeader\) \? fromHeader : 1\);\s*\n?\s*return new RateLimitError\(p, retryAfter\);\s*\n?\s*\}/,
+      /if \(p\.type === 'https:\/\/errors\.driftstack\.dev\/rate-limited'\) \{\s*const fromBody = \(p as \{ retry_after_seconds\?: number \}\)\.retry_after_seconds;\s*const fromHeader = retryAfterHeader !== null \? Number\(retryAfterHeader\) : NaN;\s*const retryAfter = fromBody \?\? \(Number\.isFinite\(fromHeader\) \? fromHeader : 1\);\s*return new RateLimitError\(p, retryAfter\);\s*\}/,
     );
   });
 
@@ -269,21 +269,19 @@ describe('W423.A packages/sdk-typescript/src/errors.ts content parity', () => {
   });
 
   it('toOpts helper — maps Problem → DriftstackError constructor opts. Conditional spread on detail + instance (NOT always-include) keeps undefined-vs-missing-key distinction so extensions={} stays clean of fake "detail: undefined" entries. extensions: extensionMembers(p) call pinned.', () => {
-    expect(body).toMatch(
-      /function toOpts\(\s*\n?\s*kind: DriftstackErrorKind,\s*\n?\s*p: Problem,\s*\n?\s*\):/,
-    );
+    expect(body).toMatch(/function toOpts\(\s*kind: DriftstackErrorKind,\s*p: Problem,\s*\):/);
     expect(body).toMatch(/extensions: extensionMembers\(p\),/);
   });
 
   it('CRITICAL extensionMembers helper — extracts non-RFC-7807-standard keys from Problem. 5-key known-set (type/title/status/detail/instance) ALL filtered out; everything else copied to the extensions Record. Drift to dropping any of the 5 standard keys would let them leak into extensions (e.g. customer code accessing extensions.title would shadow the standard field).', () => {
     expect(body).toMatch(
-      /function extensionMembers\(p: Problem\): Record<string, unknown> \{\s*\n?\s*const known = new Set\(\['type', 'title', 'status', 'detail', 'instance'\]\);\s*\n?\s*const out: Record<string, unknown> = \{\};\s*\n?\s*for \(const \[k, v\] of Object\.entries\(p\)\) \{\s*\n?\s*if \(!known\.has\(k\)\) out\[k\] = v;\s*\n?\s*\}\s*\n?\s*return out;\s*\n?\s*\}/,
+      /function extensionMembers\(p: Problem\): Record<string, unknown> \{\s*const known = new Set\(\['type', 'title', 'status', 'detail', 'instance'\]\);\s*const out: Record<string, unknown> = \{\};\s*for \(const \[k, v\] of Object\.entries\(p\)\) \{\s*if \(!known\.has\(k\)\) out\[k\] = v;\s*\}\s*return out;\s*\}/,
     );
   });
 
   it('CRITICAL V-489 isRetryable JSDoc — 4-line framing pinned: predicate exposed for "SDK consumers who run their own retry/backoff loop instead of the built-in one in retry.ts." 3 retryable-kinds documented (transport / internal / rate_limited) + non-retryable rationale: 4xx + non-DriftstackError throws. The "any DriftstackError where ... not in the retryable set" framing tells customers this is closed-set.', () => {
     expect(body).toMatch(
-      /\/\*\*\s*\n?\s*\*\s*V-489 — `isRetryable\(err\)` predicate exposed for SDK consumers\s*\n?\s*\*\s*who run their own retry\/backoff loop instead of the built-in one\s*\n?\s*\*\s*in `retry\.ts`\./,
+      /\/\*\*\s*\*\s*V-489 — `isRetryable\(err\)` predicate exposed for SDK consumers\s*\*\s*who run their own retry\/backoff loop instead of the built-in one\s*\*\s*in `retry\.ts`\./,
     );
     expect(body).toMatch(/Retryable kinds:/);
     expect(body).toMatch(/NOT retryable:/);
@@ -291,7 +289,7 @@ describe('W423.A packages/sdk-typescript/src/errors.ts content parity', () => {
 
   it('CRITICAL V-489 isRetryable implementation — `if (!(err instanceof DriftstackError)) return false;` + `switch (err.kind) { case "transport": case "internal": case "rate_limited": return true; default: return false; }`. Drift to fall-through cases would silently make new kinds retryable; drift to dropping the instanceof check would let non-DS errors retry.', () => {
     expect(body).toMatch(
-      /export function isRetryable\(err: unknown\): boolean \{\s*\n?\s*if \(!\(err instanceof DriftstackError\)\) return false;\s*\n?\s*switch \(err\.kind\) \{\s*\n?\s*case 'transport':\s*\n?\s*case 'internal':\s*\n?\s*case 'rate_limited':\s*\n?\s*return true;\s*\n?\s*default:\s*\n?\s*return false;\s*\n?\s*\}\s*\n?\s*\}/,
+      /export function isRetryable\(err: unknown\): boolean \{\s*if \(!\(err instanceof DriftstackError\)\) return false;\s*switch \(err\.kind\) \{\s*case 'transport':\s*case 'internal':\s*case 'rate_limited':\s*return true;\s*default:\s*return false;\s*\}\s*\}/,
     );
   });
 

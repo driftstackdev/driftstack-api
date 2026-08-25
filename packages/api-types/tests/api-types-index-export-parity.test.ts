@@ -69,13 +69,13 @@ describe('W384.C packages/api-types/src/index.ts public-surface content parity',
 
   it('Versioning framing pinned: any breaking schema change = public-API breaking change', () => {
     expect(body).toMatch(
-      /Versioning: any breaking change to a schema in this package is a breaking\s*\n?\s*\/\/\s*change to the public API/,
+      /Versioning: any breaking change to a schema in this package is a breaking\s*\/\/\s*change to the public API/,
     );
   });
 
   it('Server-internal-shapes-live-elsewhere framing pinned (apps/server/src/schemas/ convention)', () => {
     expect(body).toMatch(
-      /Server-internal shapes that aren't part of the\s*\n?\s*\/\/\s*public contract live in `apps\/server\/src\/schemas\/` instead/,
+      /Server-internal shapes that aren't part of the\s*\/\/\s*public contract live in `apps\/server\/src\/schemas\/` instead/,
     );
   });
 

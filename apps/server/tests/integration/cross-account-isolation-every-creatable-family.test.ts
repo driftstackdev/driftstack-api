@@ -89,9 +89,7 @@ function registeredRoutes(): Set<string> {
   for (const file of readdirSync(routesDir)) {
     if (!file.endsWith('.ts')) continue;
     const src = readFileSync(resolve(routesDir, file), 'utf8');
-    for (const m of src.matchAll(
-      /app\.(get|post|put|patch|delete)[^(]*\(\s*\n?\s*'(\/v1\/[^']*)'/g,
-    )) {
+    for (const m of src.matchAll(/app\.(get|post|put|patch|delete)[^(]*\(\s*'(\/v1\/[^']*)'/g)) {
       out.add(`${(m[1] ?? '').toUpperCase()} ${(m[2] ?? '').replace(/:[A-Za-z_][\w]*/g, ':p')}`);
     }
   }
@@ -104,7 +102,7 @@ function collectionLevelCreates(): { path: string; staffOnly: boolean }[] {
   for (const file of readdirSync(routesDir)) {
     if (!file.endsWith('.ts')) continue;
     const src = readFileSync(resolve(routesDir, file), 'utf8');
-    for (const m of src.matchAll(/app\.post[^(]*\(\s*\n?\s*'(\/v1\/[^']*)'/g)) {
+    for (const m of src.matchAll(/app\.post[^(]*\(\s*'(\/v1\/[^']*)'/g)) {
       const path = m[1] ?? '';
       if (path.includes('{') || path.includes(':')) continue;
       if (path.split('/').length !== 3) continue;

@@ -33,7 +33,7 @@ describe('W441.A apps/server/src/db/migrate.ts content parity', () => {
 
   it("header framing pinned: 'Apply pending Drizzle migrations to the configured Postgres. Run with `npm run db:migrate` (i.e. `tsx src/db/migrate.ts`).'", () => {
     expect(body).toMatch(
-      /\/\/ Apply pending Drizzle migrations to the configured Postgres\.\s*\n?\s*\/\/ Run with `npm run db:migrate` \(i\.e\. `tsx src\/db\/migrate\.ts`\)\./,
+      /\/\/ Apply pending Drizzle migrations to the configured Postgres\.\s*\/\/ Run with `npm run db:migrate` \(i\.e\. `tsx src\/db\/migrate\.ts`\)\./,
     );
   });
 
@@ -52,14 +52,14 @@ describe('W441.A apps/server/src/db/migrate.ts content parity', () => {
     expect(body).toMatch(/function resolveMigrationsFolder\(here: string\): string \{/);
     expect(body).toMatch(/const compiledNeighbour = resolve\(here, 'migrations'\);/);
     expect(body).toMatch(
-      /if \(existsSync\(resolve\(compiledNeighbour, 'meta\/_journal\.json'\)\)\) \{\s*\n?\s*return compiledNeighbour;\s*\n?\s*\}/,
+      /if \(existsSync\(resolve\(compiledNeighbour, 'meta\/_journal\.json'\)\)\) \{\s*return compiledNeighbour;\s*\}/,
     );
     expect(body).toMatch(/return resolve\(here, '\.\.', '\.\.', 'src', 'db', 'migrations'\);/);
   });
 
   it('main(): loadConfig + migrationsFolder via resolveMigrationsFolder(here)', () => {
     expect(body).toMatch(
-      /async function main\(\): Promise<void> \{\s*\n?\s*const config = loadConfig\(\);\s*\n?\s*const here = dirname\(fileURLToPath\(import\.meta\.url\)\);\s*\n?\s*const migrationsFolder = resolveMigrationsFolder\(here\);/,
+      /async function main\(\): Promise<void> \{\s*const config = loadConfig\(\);\s*const here = dirname\(fileURLToPath\(import\.meta\.url\)\);\s*const migrationsFolder = resolveMigrationsFolder\(here\);/,
     );
   });
 
@@ -76,12 +76,12 @@ describe('W441.A apps/server/src/db/migrate.ts content parity', () => {
 
   it("console.warn JSON before+after migrate; 'applying migrations' with folder + expectedCount; 'migrations applied' with appliedCount; post-condition assertion exits 2 on silent-skip drift", () => {
     expect(body).toMatch(
-      /console\.warn\(JSON\.stringify\(\{ msg: 'applying migrations', migrationsFolder, expectedCount \}\)\);\s*\n?\s*await migrate\(db, \{ migrationsFolder \}\);/,
+      /console\.warn\(JSON\.stringify\(\{ msg: 'applying migrations', migrationsFolder, expectedCount \}\)\);\s*await migrate\(db, \{ migrationsFolder \}\);/,
     );
     expect(body).toMatch(
       /console\.warn\(JSON\.stringify\(\{ msg: 'migrations applied', appliedCount: actualCount \}\)\);/,
     );
-    expect(body).toMatch(/if \(actualCount !== expectedCount\) \{\s*\n?\s*console\.error\(/);
+    expect(body).toMatch(/if \(actualCount !== expectedCount\) \{\s*console\.error\(/);
     expect(body).toMatch(/process\.exit\(2\);/);
   });
 
@@ -91,7 +91,7 @@ describe('W441.A apps/server/src/db/migrate.ts content parity', () => {
 
   it('main().catch: console.error(err) + process.exit(1) — CLI failure code', () => {
     expect(body).toMatch(
-      /main\(\)\.catch\(\(err: unknown\) => \{\s*\n?\s*console\.error\(err\);\s*\n?\s*process\.exit\(1\);\s*\n?\s*\}\);/,
+      /main\(\)\.catch\(\(err: unknown\) => \{\s*console\.error\(err\);\s*process\.exit\(1\);\s*\}\);/,
     );
   });
 

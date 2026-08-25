@@ -34,13 +34,13 @@ describe('W390.C apps/server/src/lib/cost-defaults.ts content parity', () => {
   it('V-541.F framing pinned (production defaults, centralised — one edit + runbook entry)', () => {
     expect(body).toMatch(/V-541\.F — production defaults for cost rates \+ tier thresholds\./);
     expect(body).toMatch(
-      /Production wiring needs concrete defaults; before this module they\s*\n?\s*\/\/\s*lived as inline literals in tests \/ fixtures, which drifts the\s*\n?\s*\/\/\s*"what we actually deploy" from "what we test\." Centralising them\s*\n?\s*\/\/\s*here means a rate change is one edit \+ a runbook entry/,
+      /Production wiring needs concrete defaults; before this module they\s*\/\/\s*lived as inline literals in tests \/ fixtures, which drifts the\s*\/\/\s*"what we actually deploy" from "what we test\." Centralising them\s*\/\/\s*here means a rate change is one edit \+ a runbook entry/,
     );
   });
 
   it('Posture framing: rates are cost-to-serve, NOT customer pricing (pricing lives in api-types + Stripe)', () => {
     expect(body).toMatch(
-      /Posture: rates are an internal accounting concept \(cost-to-serve\);\s*\n?\s*\/\/\s*they do NOT drive customer pricing\. Pricing lives in\s*\n?\s*\/\/\s*`packages\/api-types` \(tier configs\) \+ the Stripe price-list/,
+      /Posture: rates are an internal accounting concept \(cost-to-serve\);\s*\/\/\s*they do NOT drive customer pricing\. Pricing lives in\s*\/\/\s*`packages\/api-types` \(tier configs\) \+ the Stripe price-list/,
     );
   });
 
@@ -82,30 +82,30 @@ describe('W390.C apps/server/src/lib/cost-defaults.ts content parity', () => {
 
   it('deriveThresholdsFromMonthlyPrice: 0.6 soft + 0.9 hard multipliers (runbook formula)', () => {
     expect(body).toMatch(
-      /V-541\.F — derive \(softCents, hardCents\) from a tier's monthly\s*\n?\s*\*\s*subscription price using the runbook formula:[\s\S]+?softCents = round\(P × 0\.6\)[\s\S]+?hardCents = round\(P × 0\.9\)/,
+      /V-541\.F — derive \(softCents, hardCents\) from a tier's monthly\s*\*\s*subscription price using the runbook formula:[\s\S]+?softCents = round\(P × 0\.6\)[\s\S]+?hardCents = round\(P × 0\.9\)/,
     );
     expect(body).toMatch(/Soft = "approaching the operator-tolerated cost ceiling\."/);
     expect(body).toMatch(/Hard = "10% margin between cost-to-serve and revenue\."/);
     expect(body).toMatch(
-      /export function deriveThresholdsFromMonthlyPrice\(monthlyPriceCents: number\): AlertThresholds \{\s*\n?\s*return \{\s*\n?\s*softCents: Math\.round\(monthlyPriceCents \* 0\.6\),\s*\n?\s*hardCents: Math\.round\(monthlyPriceCents \* 0\.9\),\s*\n?\s*\};\s*\n?\s*\}/,
+      /export function deriveThresholdsFromMonthlyPrice\(monthlyPriceCents: number\): AlertThresholds \{\s*return \{\s*softCents: Math\.round\(monthlyPriceCents \* 0\.6\),\s*hardCents: Math\.round\(monthlyPriceCents \* 0\.9\),\s*\};\s*\}/,
     );
   });
 
   it('runbook-sync framing: tweaking multipliers requires editing BOTH file + runbook', () => {
     expect(body).toMatch(
-      /The runbook \(`docs\/runbooks\/cost-monitoring\.md`\) documents this\s*\n?\s*\*\s*rationale; tweaking the multipliers means editing both this file\s*\n?\s*\*\s*AND the runbook so the operator's interpretation stays in sync/,
+      /The runbook \(`docs\/runbooks\/cost-monitoring\.md`\) documents this\s*\*\s*rationale; tweaking the multipliers means editing both this file\s*\*\s*AND the runbook so the operator's interpretation stays in sync/,
     );
   });
 
   it('DEFAULT_TIER_THRESHOLDS_DERIVED: Object.fromEntries map over TIER_MONTHLY_PRICE_CENTS (price-driven, not hand-tuned)', () => {
     expect(body).toMatch(
-      /export const DEFAULT_TIER_THRESHOLDS_DERIVED: Record<string, AlertThresholds> = Object\.fromEntries\(\s*\n?\s*Object\.entries\(TIER_MONTHLY_PRICE_CENTS\)\.map\(\(\[tier, price\]\) => \[\s*\n?\s*tier,\s*\n?\s*deriveThresholdsFromMonthlyPrice\(price\),\s*\n?\s*\]\),\s*\n?\s*\);/,
+      /export const DEFAULT_TIER_THRESHOLDS_DERIVED: Record<string, AlertThresholds> = Object\.fromEntries\(\s*Object\.entries\(TIER_MONTHLY_PRICE_CENTS\)\.map\(\(\[tier, price\]\) => \[\s*tier,\s*deriveThresholdsFromMonthlyPrice\(price\),\s*\]\),\s*\);/,
     );
   });
 
   it('both-defaults-kept framing: estimator hand-tuned vs cost-defaults price-driven (intentional)', () => {
     expect(body).toMatch(
-      /Compared with the in-estimator DEFAULT_TIER_THRESHOLDS, this map\s*\n?\s*\*\s*is derived \(price-driven\) rather than hand-tuned\. Both are\s*\n?\s*\*\s*intentionally kept around: the estimator's defaults exist so the\s*\n?\s*\*\s*pure module is self-contained, this map exists so production\s*\n?\s*\*\s*wiring is anchored to tier pricing/,
+      /Compared with the in-estimator DEFAULT_TIER_THRESHOLDS, this map\s*\*\s*is derived \(price-driven\) rather than hand-tuned\. Both are\s*\*\s*intentionally kept around: the estimator's defaults exist so the\s*\*\s*pure module is self-contained, this map exists so production\s*\*\s*wiring is anchored to tier pricing/,
     );
   });
 

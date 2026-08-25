@@ -33,7 +33,7 @@ describe('gui-client lib/log-buffer content parity', () => {
     expect(body).toMatch(/if \(installed\) return;/);
     expect(body).toMatch(/installed = true;/);
     // Capture then delegate to the bound original (not the other way / not instead).
-    expect(body).toMatch(/record\(level, args\);\s*\n?\s*original\(\.\.\.args\);/);
+    expect(body).toMatch(/record\(level, args\);\s*original\(\.\.\.args\);/);
   });
 
   it('Captures uncaught window errors + promise rejections into the buffer — pinned so a self-hosted operator sees crashes without remote devtools', () => {
@@ -54,7 +54,7 @@ describe('gui-client lib/log-buffer content parity', () => {
       /await writeTextFile\(logFile, formatLogEntries\(\) \+ '\\n', \{ baseDir: BaseDirectory\.AppData \}\);/,
     );
     // Best-effort: persistNow must swallow all errors (no throw can escape).
-    expect(body).toMatch(/async function persistNow\(\): Promise<void> \{\s*\n?\s*try \{/);
+    expect(body).toMatch(/async function persistNow\(\): Promise<void> \{\s*try \{/);
     // Debounced: at most one write per second.
     expect(body).toMatch(/if \(persistTimer !== null\) return;/);
     expect(body).toMatch(/\}, 1000\);/);

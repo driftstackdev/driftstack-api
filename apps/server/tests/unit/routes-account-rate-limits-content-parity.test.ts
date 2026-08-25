@@ -39,7 +39,7 @@ describe('W413.A apps/server/src/routes/account-rate-limits.ts content parity', 
   it('V-219 framing pinned: GET /v1/account/rate-limits returns effective config (tier default OR active admin override)', () => {
     expect(body).toMatch(/V-219 — customer-facing rate-limit view\./);
     expect(body).toMatch(
-      /GET \/v1\/account\/rate-limits — returns the calling account's\s*\n?\s*\/\/\s*effective rate-limit config per bucket \(tier default OR admin\s*\n?\s*\/\/\s*override if currently active\)\./,
+      /GET \/v1\/account\/rate-limits — returns the calling account's\s*\/\/\s*effective rate-limit config per bucket \(tier default OR admin\s*\/\/\s*override if currently active\)\./,
     );
   });
 
@@ -72,13 +72,13 @@ describe('W413.A apps/server/src/routes/account-rate-limits.ts content parity', 
     expect(body).toMatch(/const tierDefaults = TIER_RATE_LIMIT_DEFAULTS\[tier\];/);
     expect(body).toMatch(/const now = Date\.now\(\);/);
     expect(body).toMatch(
-      /const override = ctx\.rateLimitOverrides\[bucketKey\];\s*\n?\s*if \(override && override\.expiresAt\.getTime\(\) > now\) \{\s*\n?\s*return \{\s*\n?\s*bucket_key: bucketKey,\s*\n?\s*capacity: override\.capacity,\s*\n?\s*refill_per_second: override\.refillPerSecond,\s*\n?\s*source: 'override' as const,\s*\n?\s*override_expires_at: override\.expiresAt\.toISOString\(\),\s*\n?\s*\};/,
+      /const override = ctx\.rateLimitOverrides\[bucketKey\];\s*if \(override && override\.expiresAt\.getTime\(\) > now\) \{\s*return \{\s*bucket_key: bucketKey,\s*capacity: override\.capacity,\s*refill_per_second: override\.refillPerSecond,\s*source: 'override' as const,\s*override_expires_at: override\.expiresAt\.toISOString\(\),\s*\};/,
     );
   });
 
   it("Tier-default fallback: source: 'tier_default' as const + override_expires_at: null", () => {
     expect(body).toMatch(
-      /const def = tierDefaults\[bucketKey\];\s*\n?\s*return \{\s*\n?\s*bucket_key: bucketKey,\s*\n?\s*capacity: def\.capacity,\s*\n?\s*refill_per_second: def\.refill_per_second,\s*\n?\s*source: 'tier_default' as const,\s*\n?\s*override_expires_at: null,\s*\n?\s*\};/,
+      /const def = tierDefaults\[bucketKey\];\s*return \{\s*bucket_key: bucketKey,\s*capacity: def\.capacity,\s*refill_per_second: def\.refill_per_second,\s*source: 'tier_default' as const,\s*override_expires_at: null,\s*\};/,
     );
   });
 

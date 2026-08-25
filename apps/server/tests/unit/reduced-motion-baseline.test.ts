@@ -31,7 +31,7 @@ describe('prefers-reduced-motion global baseline across apps', () => {
       // A global rule: prefers-reduced-motion media query containing a `*`
       // selector that forces animation/transition durations near-zero.
       expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)/);
-      expect(css).toMatch(/\*,\s*\n?\s*\*::before,\s*\n?\s*\*::after\s*\{/);
+      expect(css).toMatch(/\*,\s*\*::before,\s*\*::after\s*\{/);
       expect(css).toMatch(/animation-duration: 0\.01ms !important/);
       expect(css).toMatch(/transition-duration: 0\.01ms !important/);
     });

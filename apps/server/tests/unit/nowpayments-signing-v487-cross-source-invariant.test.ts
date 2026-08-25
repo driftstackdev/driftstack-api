@@ -108,7 +108,7 @@ describe('W963 V-487 nowpayments-signing IPN cross-source invariant', () => {
     expect(p).toMatch(/Consumed by the NowPayments IPN route/);
     expect(p).toMatch(/`apps\/server\/src\/routes\/webhooks-nowpayments\.ts`\): it verifies the/);
     expect(p).toMatch(/signature and rejects a mismatch with 401\./);
-    expect(p).toMatch(/registered\s*\n?\s*\/\/ only when `NOWPAYMENTS_IPN_SECRET` is configured/);
+    expect(p).toMatch(/registered\s*\/\/ only when `NOWPAYMENTS_IPN_SECRET` is configured/);
     expect(p).toMatch(/so the verifier stays dormant until the/);
   });
 

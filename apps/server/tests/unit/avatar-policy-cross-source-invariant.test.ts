@@ -81,7 +81,7 @@ describe('W873 Avatar policy cross-source invariant', () => {
   it("CRITICAL UploadAvatarRequestSchema.data_base64 has /^[A-Za-z0-9+/=]+$/ regex with 'Must be base64-encoded.' message + min(4) + max bound calculated from AVATAR_MAX_BYTES via Math.ceil(AVATAR_MAX_BYTES * 4 / 3) + 4. The base64-character-set regex is the validation gate.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
     expect(p).toMatch(
-      /UploadAvatarRequestSchema = z\.object\(\{[\s\S]+?data_base64: z\s*\n?\s*\.string\(\)\s*\n\s*\.min\(4\)\s*\n\s*\.max\(Math\.ceil\(\(AVATAR_MAX_BYTES \* 4\) \/ 3\) \+ 4\)\s*\n\s*\.regex\(\/\^\[A-Za-z0-9\+\/=\]\+\$\/, 'Must be base64-encoded\.'\)/,
+      /UploadAvatarRequestSchema = z\.object\(\{[\s\S]+?data_base64: z\s*\.string\(\)\s*\n\s*\.min\(4\)\s*\n\s*\.max\(Math\.ceil\(\(AVATAR_MAX_BYTES \* 4\) \/ 3\) \+ 4\)\s*\n\s*\.regex\(\/\^\[A-Za-z0-9\+\/=\]\+\$\/, 'Must be base64-encoded\.'\)/,
     );
   });
 

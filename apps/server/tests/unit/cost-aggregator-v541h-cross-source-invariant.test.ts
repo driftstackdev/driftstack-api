@@ -184,11 +184,11 @@ describe('W925 V-541.H cost-aggregator cross-source invariant', () => {
     );
     // V-1017 — the retracted paragraph called it a stub returning null.
     expect(boot, 'bootstrap.ts calls the aggregator a stub again').not.toMatch(
-      /aggregator is a stub\s*\n?\s*\/\/\s*returning null/,
+      /aggregator is a stub\s*\/\/\s*returning null/,
     );
     expect(
       boot,
       'bootstrap.ts says the cost routes always return an empty cycle again',
-    ).not.toMatch(/always return "no usage in\s*\n?\s*\/\/\s*cycle"/);
+    ).not.toMatch(/always return "no usage in\s*\/\/\s*cycle"/);
   });
 });

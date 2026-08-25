@@ -28,12 +28,12 @@ describe('sdk-typescript resources/egress content parity', () => {
     expect(body).toMatch(/the same backend the[\s\S]{0,12}desktop app \+ dashboard use/);
     expect(body).toMatch(/WRITE-ONLY/);
     // The old planning-133 503-stub framing is gone.
-    expect(body).not.toMatch(/503\s*\n?\s*\/\/ FeatureUnavailable stubs/);
+    expect(body).not.toMatch(/503\s*\/\/ FeatureUnavailable stubs/);
   });
 
   it('SessionProxyAttachResponse 3-safeguard catalog pinned (per-session attach surface unchanged)', () => {
     expect(body).toMatch(
-      /export interface SessionProxyAttachResponse \{\s*\n?\s*type: ProxyType;\s*\n?\s*safeguards: \{\s*\n?\s*block_direct_internet: boolean;\s*\n?\s*block_unproxied_dns: boolean;\s*\n?\s*block_webrtc_stun_leakage: boolean;\s*\n?\s*\};\s*\n?\s*\}/,
+      /export interface SessionProxyAttachResponse \{\s*type: ProxyType;\s*safeguards: \{\s*block_direct_internet: boolean;\s*block_unproxied_dns: boolean;\s*block_webrtc_stun_leakage: boolean;\s*\};\s*\}/,
     );
   });
 

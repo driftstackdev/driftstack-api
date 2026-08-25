@@ -78,7 +78,7 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     // not silently return.
     expect(body).not.toMatch(/Compute, database, and object storage all run in the EU/);
     expect(body).toMatch(
-      /Session execution and a few processors[\s\S]{0,140}transfer to the US\s*\n?\s*under Standard Contractual Clauses \+ the EU-US Data Privacy\s*\n?\s*Framework — no undisclosed flows\./,
+      /Session execution and a few processors[\s\S]{0,140}transfer to the US\s*under Standard Contractual Clauses \+ the EU-US Data Privacy\s*Framework — no undisclosed flows\./,
     );
     // Drift sentinel — the absolute "single-region / no transatlantic
     // flows" claim contradicted the real sub-processor list. MUST NOT
@@ -95,7 +95,7 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     // legitimate compliance surfaces).
     expect(body).not.toMatch(/Compute in Hetzner Falkenstein\./);
     expect(body).not.toMatch(/Database on Neon EU\./);
-    expect(body).not.toMatch(/Object\s*\n?\s*storage on Cloudflare R2 EU\./);
+    expect(body).not.toMatch(/Object\s*storage on Cloudflare R2 EU\./);
   });
 
   it("'No behavioural data collection' posture, corrected by V-789. This card used to say \"We don't log your destination URLs\" and close with \"That's everything we touch\" — a denial and a closed enumeration that BOTH contradicted Driftstack's own binding privacy policy (§3.3 lists target URL) and its own trust page (which answers 'Do you see our destination URLs?' with 'Yes'). Agent navigate intents carry a full url and are persisted verbatim into the transcript (agent-runtime.ts spreads decomposed.intents), and the driver path records origin. Three of four surfaces already matched the code; this page was the outlier. What is pinned now is the part that IS true, plus the pointer to the binding document instead of a marketing-side enumeration that can drift out of date.", () => {
@@ -138,11 +138,11 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     // Drift sentinel — the pre-slice-143 "recipe libraries are Phase 3"
     // shape was wrong (contradicted slice 121's roadmap NOW promotion
     // + the live docs/api/recipes.md page). MUST NOT come back.
-    expect(body).not.toMatch(/Behavioural simulation\s*\n?\s*and recipe libraries are Phase 3/);
+    expect(body).not.toMatch(/Behavioural simulation\s*and recipe libraries are Phase 3/);
     // Drift sentinel — the behavioural input engine ships at v1.0 (index.astro
     // markets it live, packages/behavioural-simulation is prod-wired), so the
     // stale "Behavioural simulation is Phase 3" claim MUST NOT come back.
-    expect(body).not.toMatch(/Behavioural simulation\s*\n?\s*is Phase 3/);
+    expect(body).not.toMatch(/Behavioural simulation\s*is Phase 3/);
     // Drift sentinel — the read/management path shipped at v1.0, so the
     // old "write-only form" framing is now inaccurate. MUST NOT come back.
     expect(body).not.toMatch(/recipe library is live at v1\.0 in its write-only form/);
@@ -150,7 +150,7 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
 
   it('V-506 Operating commitments doc-comment framing pinned: \'transparency commitments. Surfaces public-facing trust signals already shipped (security audit cadence, DR runbooks, incident protocol, source-escrow for self-hosted) so the about page is not just "what we are" but "what we commit to". Visible in the About narrative because customers evaluating us read this page before /security and /trust.\' — pinned so the why-on-about-not-just-trust placement rationale survives', () => {
     expect(body).toMatch(
-      /<!-- V-506 — transparency commitments\. Surfaces public-facing\s*\n?\s*trust signals already shipped \(security audit cadence, DR\s*\n?\s*runbooks, incident protocol, source-escrow for self-hosted\)/,
+      /<!-- V-506 — transparency commitments\. Surfaces public-facing\s*trust signals already shipped \(security audit cadence, DR\s*runbooks, incident protocol, source-escrow for self-hosted\)/,
     );
   });
 
@@ -207,7 +207,7 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
       /Enterprise customers and Self-hosted licensees get\s+access to our source code — the modified WebKit engine\s+\(the WebKit fork\) \+ the control-plane source —\s+under a written escrow agreement: a neutral third party\s+holds a copy\./,
     );
     expect(body).toMatch(
-      /If Driftstack\s*\n?\s*sunsets the cloud service, escrow releases the source\s*\n?\s*so customers can continue running on their own\s*\n?\s*hardware indefinitely\./,
+      /If Driftstack\s*sunsets the cloud service, escrow releases the source\s*so customers can continue running on their own\s*hardware indefinitely\./,
     );
   });
 
@@ -222,7 +222,7 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
   it("Free-tier bottom CTA: 'Want to try it?' + 'Start free — one profile, 20-minute sessions on real iPhone Safari, no card required. Perpetual, no expiry.' + 'Start free' button → /pricing#free — pinned so the free-tier value-prop (one profile / 20-minute / no card / perpetual) + the CTA destination all survive (drift would re-introduce the retired trial-pack framing). 2026-07-03 Fleet v2 — the CTA is the shared CtaBand component, so destination + button label are pinned via its props.", () => {
     expect(body).toMatch(/Want to try it\?/);
     expect(body).toMatch(
-      /Start free — one profile, 20-minute sessions on real\s*\n?\s*iPhone Safari, no card required\. Perpetual, no expiry\./,
+      /Start free — one profile, 20-minute sessions on real\s*iPhone Safari, no card required\. Perpetual, no expiry\./,
     );
     expect(body).toMatch(/primaryHref="\/pricing\/#free"/);
     expect(body).toMatch(/primaryLabel="Start free"/);

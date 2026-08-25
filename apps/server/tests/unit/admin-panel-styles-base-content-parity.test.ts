@@ -35,14 +35,12 @@ describe('admin-panel styles/base content parity', () => {
   });
 
   it('tokens-shared-with-marketing commitment pinned (admin uses light-mode but shares the OXBLOOD brand + Geist font tokens). Drift to dropping the comment would orphan the cross-app token-sync rationale', () => {
-    expect(body).toMatch(
-      /Tokens shared with apps\/marketing-\s*\n?\s*site\/src\/styles\/base\.css\./,
-    );
+    expect(body).toMatch(/Tokens shared with apps\/marketing-\s*site\/src\/styles\/base\.css\./);
   });
 
   it("F-1 mobile-scroll prevention rationale pinned: 'operators occasionally check pages from phones' — drift to dropping the rationale would let a future refactor strip overflow-x:clip thinking it's not needed on a desktop-only admin surface", () => {
     expect(body).toMatch(
-      /F-1 — prevent admin-panel horizontal scroll on narrow viewports\s*\n?\s*\(operators occasionally check pages from phones\)/,
+      /F-1 — prevent admin-panel horizontal scroll on narrow viewports\s*\(operators occasionally check pages from phones\)/,
     );
   });
 

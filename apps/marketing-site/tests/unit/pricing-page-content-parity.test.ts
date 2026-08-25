@@ -64,7 +64,7 @@ describe('W372.A marketing-site /pricing page content parity', () => {
   });
 
   it('Band-A decision fork pinned: "who drives the sessions" question + #manual / #api anchor cards + both-workflows card', () => {
-    expect(body).toMatch(/who drives the sessions — a person\s*\n?\s*clicking, or code calling\?/);
+    expect(body).toMatch(/who drives the sessions — a person\s*clicking, or code calling\?/);
     // The two fork cards are anchor links straight into the ladders.
     expect(body).toMatch(/<a href="#manual" class="card block p-8">/);
     expect(body).toMatch(/<a href="#api" class="card block p-8">/);
@@ -79,12 +79,12 @@ describe('W372.A marketing-site /pricing page content parity', () => {
 
   it('one-sentence glossary above the ladders: concurrent (browser-tabs metaphor, matches homepage) + profile (saved iPhone identity)', () => {
     expect(body).toMatch(
-      /concurrent<\/strong> means\s*\n?\s*sessions running at the same time — think browser tabs/,
+      /concurrent<\/strong> means\s*sessions running at the same time — think browser tabs/,
     );
     // S20b 2026-07-06: the glossary line grew a third term (BYOK) — the
     // profile definition now continues with ", and" instead of a period.
     expect(body).toMatch(
-      /profile<\/strong> is a saved iPhone identity\s*\n?\s*that keeps its logins and history/,
+      /profile<\/strong> is a saved iPhone identity\s*that keeps its logins and history/,
     );
   });
 
@@ -125,7 +125,7 @@ describe('W372.A marketing-site /pricing page content parity', () => {
 
   it('monthly/annual toggle wired (id=billing-toggle + data-period-target=monthly/annual)', () => {
     expect(body).toMatch(/id="billing-toggle"/);
-    expect(body).toMatch(/role="group"\s*\n?\s*aria-label="Billing period"/);
+    expect(body).toMatch(/role="group"\s*aria-label="Billing period"/);
     expect(body).toContain('aria-pressed="true"');
     expect(body).toContain('aria-pressed="false"');
     expect(body).toMatch(/btn\.setAttribute\(\s*'aria-pressed'/);
@@ -152,7 +152,7 @@ describe('W372.A marketing-site /pricing page content parity', () => {
     expect(body).toMatch(/BYOK or bundled — your call\./);
     expect(body).toContain('console.anthropic.com');
     expect(body).toMatch(/Bundled LLM \(API Builder, API Scale, Enterprise\)/);
-    expect(body).toMatch(/Self-hosted\s*\n?\s*plans are BYOK-only/);
+    expect(body).toMatch(/Self-hosted\s*plans are BYOK-only/);
     expect(body).toMatch(/\$0\.10 per agent turn/);
     expect(body).toMatch(/included-service accounting value/);
     expect(body).toMatch(/not separately itemized on\s+today's Stripe invoice/);
@@ -203,7 +203,7 @@ describe('W372.A marketing-site /pricing page content parity', () => {
     // text-tk-accent-text token (raw text-tk-accent fails WCAG AA on
     // the dark bg).
     expect(body).toMatch(
-      /<a\s*\n?\s*href="\/pricing\/comparison\/"\s*\n?\s*class="font-medium text-tk-accent-text underline[^"]*"\s*\n?\s*>/,
+      /<a\s*href="\/pricing\/comparison\/"\s*class="font-medium text-tk-accent-text underline[^"]*"\s*>/,
     );
     expect(
       existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/pricing/comparison.astro')),
@@ -212,13 +212,13 @@ describe('W372.A marketing-site /pricing page content parity', () => {
 
   it("'sessions-at-once limited by your hardware, not the license' self-hosted teaser pinned (S20b plain words, same fact) + the source-escrow gloss", () => {
     expect(body).toMatch(
-      /How many sessions run at once is limited by your hardware, not\s*\n?\s*by the license\./,
+      /How many sessions run at once is limited by your hardware, not\s*by the license\./,
     );
     expect(body).toMatch(/Source escrow means a neutral third party/);
     expect(body).toMatch(/Hardware procurement detail at\{' '\}/);
     // v2: accent-colored TEXT uses the AA-safe text-tk-accent-text token.
     expect(body).toMatch(
-      /<a\s*\n?\s*href="\/self-hosted\/"\s*\n?\s*class="text-tk-accent-text underline[^"]*"\s*\n?\s*>/,
+      /<a\s*href="\/self-hosted\/"\s*class="text-tk-accent-text underline[^"]*"\s*>/,
     );
   });
 });

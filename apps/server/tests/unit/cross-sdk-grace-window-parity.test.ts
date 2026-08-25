@@ -133,9 +133,7 @@ describe('W680 cross-SDK 24h grace-window parity', () => {
     const py = read(PY_WEBHOOKS);
 
     // "Roll the new secret\n   * across your verifier infra inside that window."
-    expect(ts).toMatch(
-      /Roll the new secret\s*\n?\s*\*\s*across your verifier infra inside that window/,
-    );
+    expect(ts).toMatch(/Roll the new secret\s*\*\s*across your verifier infra inside that window/);
     expect(py).toMatch(/Roll the new/);
   });
 

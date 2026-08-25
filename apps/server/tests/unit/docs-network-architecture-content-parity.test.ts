@@ -64,7 +64,7 @@ describe('W548.C /docs/network-architecture.md content parity', () => {
     expect(body).toMatch(/1\. \*\*Customer ↔ control plane\*\* — public HTTPS API on/);
     expect(body).toMatch(/`api\.driftstack\.dev`\. TLS terminated at Cloudflare and again at the/);
     // V-1088 — the overview repeated the §1 Tunnel claim. Same correction.
-    expect(body).toMatch(/TLS terminated at Cloudflare and again at the\s*\n?\s*origin's nginx/);
+    expect(body).toMatch(/TLS terminated at Cloudflare and again at the\s*origin's nginx/);
     expect(body, 'the overview again routes traffic over a Tunnel').not.toMatch(
       /the Hetzner VM over a Cloudflare Tunnel/,
     );
@@ -72,7 +72,7 @@ describe('W548.C /docs/network-architecture.md content parity', () => {
       /2\. \*\*Customer ↔ marketing site\*\* — public HTTPS on `driftstack\.dev`,/,
     );
     expect(body).toMatch(
-      /`docs\.driftstack\.dev`, and `app\.driftstack\.dev`, all static on\s*\n?\s*Cloudflare Pages\./,
+      /`docs\.driftstack\.dev`, and `app\.driftstack\.dev`, all static on\s*Cloudflare Pages\./,
     );
     expect(body, 'the (future) qualifier is retired — the dashboard is deployed').not.toMatch(
       /\(future\) `app\.driftstack\.dev`/,
@@ -80,14 +80,14 @@ describe('W548.C /docs/network-architecture.md content parity', () => {
     // V-809 — the dashboard is a static Pages SPA calling the API cross-origin;
     // the signup flow is not served by a control-plane reverse proxy.
     expect(body).toMatch(
-      /The dashboard is a\s*\n?\s*static SPA that calls the control-plane API cross-origin/,
+      /The dashboard is a\s*static SPA that calls the control-plane API cross-origin/,
     );
     expect(body).not.toMatch(/signup flow lives on the control plane/);
     // V-809 — app.driftstack.dev is its own Cloudflare Pages project, deployed by
     // deploy-customer-dashboard.yml. It is neither "(future)" nor reverse-proxied.
-    expect(body).toMatch(/`app\.driftstack\.dev` is its own Cloudflare\s*\n?\s*Pages project/);
+    expect(body).toMatch(/`app\.driftstack\.dev` is its own Cloudflare\s*Pages project/);
     expect(body).toMatch(
-      /it is neither a future\s*\n?\s*surface nor served through the Hetzner VM at all\./,
+      /it is neither a future\s*surface nor served through the Hetzner VM at all\./,
     );
     expect(body, 'the reverse-proxy claim must not return').not.toMatch(
       /reverse-proxied to the Hetzner VM\./,
@@ -114,7 +114,7 @@ describe('W548.C /docs/network-architecture.md content parity', () => {
     // corrected while saying nothing.
     expect(body).toMatch(/- Cloudflare proxies to the origin over the public internet\./);
     expect(body, 'the no-Tunnel fact is gone').toMatch(
-      /There is\s*\n?\s*no Cloudflare Tunnel: nothing in `infra\/` runs `cloudflared`/,
+      /There is\s*no Cloudflare Tunnel: nothing in `infra\/` runs `cloudflared`/,
     );
     expect(body, 'the open-port evidence is gone').toMatch(/opens 22, 80 AND 443 inbound/);
     expect(body, 'the incident that the old claim contradicted is no longer named').toMatch(
@@ -124,7 +124,7 @@ describe('W548.C /docs/network-architecture.md content parity', () => {
       /it does NOT close the port/,
     );
     expect(body).toMatch(/- TLS terminates at Cloudflare's edge AND again at the origin/);
-    expect(body).toMatch(/the app\s*\n?\s*container binds `127\.0\.0\.1:7780`/);
+    expect(body).toMatch(/the app\s*container binds `127\.0\.0\.1:7780`/);
 
     // The retracted claims must not come back.
     expect(
@@ -160,7 +160,7 @@ describe('W548.C /docs/network-architecture.md content parity', () => {
     expect(body, 'the failure table again lists a Tunnel restart').not.toMatch(
       /\*\*Cloudflare Tunnel restart\*\*/,
     );
-    expect(body).toMatch(/readiness probe catches\s*\n?\s*it\./);
+    expect(body).toMatch(/readiness probe catches\s*it\./);
     expect(body).toMatch(/- \*\*Hetzner VM down\*\*: 503s from Cloudflare\. Customer SDK retry/);
     expect(body).toMatch(/policy \(V-005\) handles transient ones; persistent failure/);
     expect(body).toMatch(/triggers the alert path\./);
@@ -186,10 +186,10 @@ describe('W548.C /docs/network-architecture.md content parity', () => {
       /`app\.driftstack\.dev` \(onboarding \+ dashboard\) keeps the marketing site/,
     );
     expect(body, 'the dashboard is a Pages SPA calling the API cross-origin').toMatch(
-      /Both are Cloudflare Pages projects; the dashboard\s*\n?\s*is a static SPA that calls `api\.driftstack\.dev` cross-origin/,
+      /Both are Cloudflare Pages projects; the dashboard\s*is a static SPA that calls `api\.driftstack\.dev` cross-origin/,
     );
     expect(body, 'the §2 Tunnel hop must not return').not.toMatch(
-      /the dynamic surface goes\s*\n?\s*through the Tunnel/,
+      /the dynamic surface goes\s*through the Tunnel/,
     );
     // The diagrams are drawn with U+2502 BOX DRAWINGS LIGHT VERTICAL, not an
     // ASCII pipe. V-1119 — the first version of this sentinel used `\|` and

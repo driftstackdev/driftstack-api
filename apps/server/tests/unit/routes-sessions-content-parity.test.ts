@@ -38,16 +38,16 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
   it('header doc framing pinned: 8 endpoints; every route auth-gated + rate-limit("global") + sessions:create bucket + Zod parse + public session shape (account/key ids prefixed, driver_session_id stripped) + SessionsService delegate', () => {
     expect(body).toMatch(/\/\/ Session routes — eight endpoints under \/v1\/sessions\./);
     expect(body).toMatch(
-      /\/\/ Every route:\s*\n?\s*\/\/\s*- is auth-gated via app\.requireAuth\s*\n?\s*\/\/\s*- is rate-limited via app\.rateLimit\('global'\), session-create gets a\s*\n?\s*\/\/\s*dedicated bucket \(sessions:create\) for tighter throttling\s*\n?\s*\/\/\s*- parses request body\/params\/query through Zod schemas in @driftstack\/api-types\s*\n?\s*\/\/\s*- returns the public session shape \(account\/key ids prefixed, internal\s*\n?\s*\/\/\s*fields like driver_session_id stripped\)\s*\n?\s*\/\/\s*- delegates to SessionsService for business logic/,
+      /\/\/ Every route:\s*\/\/\s*- is auth-gated via app\.requireAuth\s*\/\/\s*- is rate-limited via app\.rateLimit\('global'\), session-create gets a\s*\/\/\s*dedicated bucket \(sessions:create\) for tighter throttling\s*\/\/\s*- parses request body\/params\/query through Zod schemas in @driftstack\/api-types\s*\/\/\s*- returns the public session shape \(account\/key ids prefixed, internal\s*\/\/\s*fields like driver_session_id stripped\)\s*\/\/\s*- delegates to SessionsService for business logic/,
     );
     expect(body).toMatch(
-      /\/\/ Public id format: `acc_<uuid>`, `key_<uuid>`, `ses_<uuid>`\. The route\s*\n?\s*\/\/ layer is the prefix-conversion boundary; service \+ DB use raw uuids\./,
+      /\/\/ Public id format: `acc_<uuid>`, `key_<uuid>`, `ses_<uuid>`\. The route\s*\/\/ layer is the prefix-conversion boundary; service \+ DB use raw uuids\./,
     );
   });
 
   it('imports request schemas including strict profile launch + AccountTier from @driftstack/api-types', () => {
     expect(body).toMatch(
-      /import \{\s*\n?\s*CaptureRequestSchema,\s*\n?\s*ExtractRequestSchema,\s*\n?\s*SearchRequestSchema,\s*\n?\s*SessionLoginRequestSchema,\s*\n?\s*CreateSessionRequestSchema,\s*\n?\s*LaunchProfileRequestSchema,\s*\n?\s*InteractRequestSchema,\s*\n?\s*NavigateRequestSchema,\s*\n?\s*PaginationQuerySchema,\s*\n?\s*WaitRequestSchema,\s*\n?\s*type AccountTier,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import \{\s*CaptureRequestSchema,\s*ExtractRequestSchema,\s*SearchRequestSchema,\s*SessionLoginRequestSchema,\s*CreateSessionRequestSchema,\s*LaunchProfileRequestSchema,\s*InteractRequestSchema,\s*NavigateRequestSchema,\s*PaginationQuerySchema,\s*WaitRequestSchema,\s*type AccountTier,\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(
       /import type \{ SessionRecord, SessionsService \} from '\.\.\/services\/sessions\.js';/,
@@ -69,13 +69,13 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
 
   it('effectiveAccountIdForLiveOperation gates all nine live-driver routes while persisted metadata reads remain member-readable', () => {
     expect(body).toMatch(
-      /\*\s*Resolves the effective account for a live driver operation and enforces\s*\n?\s*\*\s*the team-admin role gate before the service can claim or contact that\s*\n?\s*\*\s*runtime\./,
+      /\*\s*Resolves the effective account for a live driver operation and enforces\s*\*\s*the team-admin role gate before the service can claim or contact that\s*\*\s*runtime\./,
     );
     expect(body).toMatch(
-      /\*\s*Persisted metadata reads \(list \/ describe\) remain available to team\s*\n?\s*\*\s*members and use resolveEffectiveAccount inline\. Live state is deliberately\s*\n?\s*\*\s*different: it exposes cookies and localStorage and owns the driver while\s*\n?\s*\*\s*capturing, so it must use this gate too\./,
+      /\*\s*Persisted metadata reads \(list \/ describe\) remain available to team\s*\*\s*members and use resolveEffectiveAccount inline\. Live state is deliberately\s*\*\s*different: it exposes cookies and localStorage and owns the driver while\s*\*\s*capturing, so it must use this gate too\./,
     );
     expect(body).toMatch(
-      /function effectiveAccountIdForLiveOperation\(\s*\n?\s*request: FastifyRequest,\s*\n?\s*ctx: NonNullable<FastifyRequest\['account'\]>,\s*\n?\s*\): string \| undefined \{\s*\n?\s*const effective = resolveEffectiveAccount\(ctx, readEffectiveAccountHeader\(request\)\);\s*\n?\s*if \(effective\.kind !== 'team'\) return undefined;\s*\n?\s*if \(effective\.role !== 'admin'\) \{\s*\n?\s*throw new ForbiddenError\(\s*\n?\s*'Live session operations on a team owner require admin role on that team\.',\s*\n?\s*\);\s*\n?\s*\}\s*\n?\s*return effective\.accountId;\s*\n?\s*\}/,
+      /function effectiveAccountIdForLiveOperation\(\s*request: FastifyRequest,\s*ctx: NonNullable<FastifyRequest\['account'\]>,\s*\): string \| undefined \{\s*const effective = resolveEffectiveAccount\(ctx, readEffectiveAccountHeader\(request\)\);\s*if \(effective\.kind !== 'team'\) return undefined;\s*if \(effective\.role !== 'admin'\) \{\s*throw new ForbiddenError\(\s*'Live session operations on a team owner require admin role on that team\.',\s*\);\s*\}\s*return effective\.accountId;\s*\}/,
     );
     const liveRoutes = [
       ['/v1/sessions/:id/navigate', 'navigate'],
@@ -140,25 +140,25 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
       /const PUBLIC_ID_RE = \/\^\[a-z\]\{3\}_\(\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{12\}\)\$\/;/,
     );
     expect(body).toMatch(
-      /function uuidFromPrefixedId\(value: string, expectedPrefix: string\): string \{\s*\n?\s*const match = PUBLIC_ID_RE\.exec\(value\);\s*\n?\s*if \(!match \|\| !match\[1\] \|\| !value\.startsWith\(`\$\{expectedPrefix\}_`\)\) \{\s*\n?\s*throw new BadRequestError\(`Invalid id format\. Expected "\$\{expectedPrefix\}_<uuid>"\.`\);\s*\n?\s*\}\s*\n?\s*return match\[1\];\s*\n?\s*\}/,
+      /function uuidFromPrefixedId\(value: string, expectedPrefix: string\): string \{\s*const match = PUBLIC_ID_RE\.exec\(value\);\s*if \(!match \|\| !match\[1\] \|\| !value\.startsWith\(`\$\{expectedPrefix\}_`\)\) \{\s*throw new BadRequestError\(`Invalid id format\. Expected "\$\{expectedPrefix\}_<uuid>"\.`\);\s*\}\s*return match\[1\];\s*\}/,
     );
     expect(body).toMatch(
-      /function prefixId\(prefix: string, uuid: string\): string \{\s*\n?\s*return `\$\{prefix\}_\$\{uuid\}`;\s*\n?\s*\}/,
+      /function prefixId\(prefix: string, uuid: string\): string \{\s*return `\$\{prefix\}_\$\{uuid\}`;\s*\}/,
     );
   });
 
   it('publicSession mapper: 13 fields wire (id ses_ + account_id acc_ + api_key_id key_ + status + archetype + purpose + label + metadata + egress_capabilities (migration 0045) + egress_capability_report (Arc 5 EGRESS eg.1 migration 0054) + 4 timestamps incl. nullable last_state_at/destroyed_at)', () => {
     expect(body).toMatch(
-      /function publicSession\(s: SessionRecord\): Record<string, unknown> \{\s*\n?\s*return \{\s*\n?\s*id: prefixId\('ses', s\.id\),\s*\n?\s*account_id: prefixId\('acc', s\.accountId\),\s*\n?\s*api_key_id: prefixId\('key', s\.apiKeyId\),\s*\n?\s*status: s\.status,\s*\n?\s*archetype: s\.archetype,\s*\n?\s*purpose: s\.purpose,\s*\n?\s*label: s\.label,\s*\n?\s*metadata: s\.metadata,\s*\n?\s*[\s\S]*?egress_capabilities: s\.egressCapabilities,\s*\n?\s*[\s\S]*?egress_capability_report: s\.egressCapabilityReport,\s*\n?\s*created_at: s\.createdAt\.toISOString\(\),\s*\n?\s*updated_at: s\.updatedAt\.toISOString\(\),\s*\n?\s*last_state_at: s\.lastStateAt \? s\.lastStateAt\.toISOString\(\) : null,\s*\n?\s*destroyed_at: s\.destroyedAt \? s\.destroyedAt\.toISOString\(\) : null,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function publicSession\(s: SessionRecord\): Record<string, unknown> \{\s*return \{\s*id: prefixId\('ses', s\.id\),\s*account_id: prefixId\('acc', s\.accountId\),\s*api_key_id: prefixId\('key', s\.apiKeyId\),\s*status: s\.status,\s*archetype: s\.archetype,\s*purpose: s\.purpose,\s*label: s\.label,\s*metadata: s\.metadata,\s*[\s\S]*?egress_capabilities: s\.egressCapabilities,\s*[\s\S]*?egress_capability_report: s\.egressCapabilityReport,\s*created_at: s\.createdAt\.toISOString\(\),\s*updated_at: s\.updatedAt\.toISOString\(\),\s*last_state_at: s\.lastStateAt \? s\.lastStateAt\.toISOString\(\) : null,\s*destroyed_at: s\.destroyedAt \? s\.destroyedAt\.toISOString\(\) : null,\s*\};\s*\}/,
     );
   });
 
   it('SessionRoutesOptions retains the authRepo registration seam while live owner tier/override authority is centralized in the limiter', () => {
     expect(body).toMatch(
-      /\*\s*V-326e1 — retained as the route-registration authority seam while\s*\n?\s*\*\s*effective-owner tier\/override consumption is centralized in the limiter\./,
+      /\*\s*V-326e1 — retained as the route-registration authority seam while\s*\*\s*effective-owner tier\/override consumption is centralized in the limiter\./,
     );
     expect(body).toMatch(
-      /export interface SessionRoutesOptions \{\s*\n?\s*service: SessionsService;[\s\S]*?authRepo: AccountAuthRepo;[\s\S]*?egressProxyRequired\?: boolean;\s*\n?\s*\}/,
+      /export interface SessionRoutesOptions \{\s*service: SessionsService;[\s\S]*?authRepo: AccountAuthRepo;[\s\S]*?egressProxyRequired\?: boolean;\s*\}/,
     );
     expect(body).toMatch(
       /import \{ consumeEffectiveOwnerRateLimit \} from '\.\.\/middleware\/rate-limit\.js';/,
@@ -175,10 +175,10 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     expect(body).toMatch(/raw proxy field is not supported/);
     expect(body).toMatch(/owned saved proxy_id/);
     expect(body).toMatch(
-      /const rawBody = request\.body \?\? \{\};[\s\S]{0,500}?assertDirectSessionEgressAvailable\(rawBody, egressProxyRequired\);\s*\n?\s*const body = CreateSessionRequestSchema\.parse\(rawBody\);/,
+      /const rawBody = request\.body \?\? \{\};[\s\S]{0,500}?assertDirectSessionEgressAvailable\(rawBody, egressProxyRequired\);\s*const body = CreateSessionRequestSchema\.parse\(rawBody\);/,
     );
     expect(body).toMatch(
-      /assertDirectSessionEgressAvailable\(rawBody, egressProxyRequired\);\s*\n?\s*const launchBody = LaunchProfileRequestSchema\.parse\(rawBody\);[\s\S]{0,1800}?const binding = await resolveProfileBinding/,
+      /assertDirectSessionEgressAvailable\(rawBody, egressProxyRequired\);\s*const launchBody = LaunchProfileRequestSchema\.parse\(rawBody\);[\s\S]{0,1800}?const binding = await resolveProfileBinding/,
     );
     expect(body).toMatch(/label: launchBody\.label,/);
     expect(body).not.toMatch(/rawBody\.proxy/);
@@ -186,16 +186,16 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
 
   it("V-326e1 POST /v1/sessions framing pinned: X-Driftstack-Account → new session on OWNER's account; caller role MUST be admin on that team (Q1 — member is read-only on writes); member role 403; tier-derived concurrent cap uses OWNER tier", () => {
     expect(body).toMatch(
-      /\/\/ V-326e1 — when X-Driftstack-Account is set, the new session is\s*\n?\s*\/\/ created on the OWNER's account\. Caller's role MUST be 'admin' on\s*\n?\s*\/\/ that team \(Q1 verdict — member is read-only on writes\); 'member'\s*\n?\s*\/\/ role gets 403\. Tier-derived concurrent cap uses the OWNER's tier\./,
+      /\/\/ V-326e1 — when X-Driftstack-Account is set, the new session is\s*\/\/ created on the OWNER's account\. Caller's role MUST be 'admin' on\s*\/\/ that team \(Q1 verdict — member is read-only on writes\); 'member'\s*\/\/ role gets 403\. Tier-derived concurrent cap uses the OWNER's tier\./,
     );
-    expect(body).toMatch(/app\.post\(\s*\n?\s*'\/v1\/sessions',/);
+    expect(body).toMatch(/app\.post\(\s*'\/v1\/sessions',/);
     // prettier may wrap the preHandler array multi-line once requireScope
     // is added; \s* spans the newlines either way.
     expect(body).toMatch(
       /preHandler: \[\s*app\.requireAuth,\s*app\.requireScope\('write:sessions'\),\s*app\.rateLimit\('sessions:create'\),?\s*\]/,
     );
     expect(body).toMatch(
-      /throw new ForbiddenError\(\s*\n?\s*'Creating a session on a team owner requires admin role on that team\.',\s*\n?\s*\);/,
+      /throw new ForbiddenError\(\s*'Creating a session on a team owner requires admin role on that team\.',\s*\);/,
     );
     // 2026-05-20 — profile_id binding lifted out of the branch as
     // bodyWithProfile; the create call now references bodyWithProfile.
@@ -226,29 +226,29 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
 
   it('V-326d GET /v1/sessions framing pinned: honors X-Driftstack-Account — team member with valid membership sees owner sessions; without header behaves identically to pre-V-326d; response data + has_more (nextCursor !== null) + next_cursor', () => {
     expect(body).toMatch(
-      /\/\/ V-326d — honors X-Driftstack-Account: a team member with a valid\s*\n?\s*\/\/ membership on the requested owner sees the owner's sessions\.\s*\n?\s*\/\/ Without the header \(or with the caller's own account id\), behaves\s*\n?\s*\/\/ identically to pre-V-326d\./,
+      /\/\/ V-326d — honors X-Driftstack-Account: a team member with a valid\s*\/\/ membership on the requested owner sees the owner's sessions\.\s*\/\/ Without the header \(or with the caller's own account id\), behaves\s*\/\/ identically to pre-V-326d\./,
     );
     expect(body).toMatch(
-      /return \{\s*\n?\s*data: page\.items\.map\(publicSession\),\s*\n?\s*has_more: page\.nextCursor !== null,\s*\n?\s*next_cursor: page\.nextCursor,\s*\n?\s*\};/,
+      /return \{\s*data: page\.items\.map\(publicSession\),\s*has_more: page\.nextCursor !== null,\s*next_cursor: page\.nextCursor,\s*\};/,
     );
   });
 
   it('V-326e3 POST /v1/sessions/:id/navigate: NavigateRequestSchema + live-operation gate + response (url + final_url + status + duration_ms snake_case)', () => {
     expect(body).toMatch(
-      /\/\/ ── POST \/v1\/sessions\/:id\/navigate ─[\s\S]*?\/\/ V-326e3 — admin-only when targeting an owner via X-Driftstack-\s*\n?\s*\/\/ Account; member role gets 403\./,
+      /\/\/ ── POST \/v1\/sessions\/:id\/navigate ─[\s\S]*?\/\/ V-326e3 — admin-only when targeting an owner via X-Driftstack-\s*\/\/ Account; member role gets 403\./,
     );
     // Item 6 — the raw body is kept so the unknown-key reporter sees what the
     // caller actually sent, not the parsed result with defaults filled in.
     expect(body).toMatch(/const body = NavigateRequestSchema\.parse\(rawActionBody\);/);
     expect(body).toContain("route: 'POST /v1/sessions/:id/navigate',");
     expect(body).toMatch(
-      /return \{\s*\n?\s*url: result\.url,\s*\n?\s*final_url: result\.finalUrl,\s*\n?\s*status: result\.status,\s*\n?\s*duration_ms: result\.durationMs,\s*\n?\s*\};/,
+      /return \{\s*url: result\.url,\s*final_url: result\.finalUrl,\s*status: result\.status,\s*duration_ms: result\.durationMs,\s*\};/,
     );
   });
 
   it('L-001 framing pinned on /v1/sessions/:id/gui-input: coordinate-level primitives bypass the behavioral-simulation layer, gated behind the gui_control scope which no broad scope satisfies; V-326e3 admin-only on team. V-788 RETRACTED the rest — "customer keys never carry this; only enterprise self-hosted GUI keys do" was false on both halves, since ELEVATED_SCOPES withholds only admin + driftstack_internal_admin. The retraction is held down per-occurrence below and derived from code in gui-control-is-a-scope-boundary-not-a-tier-one.test.ts.', () => {
     expect(body).toMatch(
-      /\/\/ GUI-control plane \(L-001\)\. Coordinate-level primitives that bypass\s*\n?\s*\/\/ the behavioral simulation layer\. Gated behind the `gui_control` scope:\s*\n?\s*\/\/ no broad scope satisfies it, so a key must request it explicitly\./,
+      /\/\/ GUI-control plane \(L-001\)\. Coordinate-level primitives that bypass\s*\/\/ the behavioral simulation layer\. Gated behind the `gui_control` scope:\s*\/\/ no broad scope satisfies it, so a key must request it explicitly\./,
     );
     expect(body).toMatch(
       /preHandler: \[app\.requireAuth, app\.requireScope\('gui_control'\), app\.rateLimit\('global'\)\],/,
@@ -256,7 +256,7 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     expect(body, 'the retracted boundary claim must not return').not.toMatch(
       /customer keys never carry this;/,
     );
-    expect(body).not.toMatch(/only enterprise self-hosted GUI\s*\n?\s*\/\/ keys do\./);
+    expect(body).not.toMatch(/only enterprise self-hosted GUI\s*\/\/ keys do\./);
     expect(body, 'and the retraction itself stays').toMatch(
       /V-788 — this used to say customer keys never carry it and only/,
     );
@@ -266,38 +266,38 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
 
   it('getState retains read:sessions but requires team-admin live-operation authority before service/driver contact', () => {
     expect(body).toMatch(
-      /app\.get<\{ Params: \{ id: string \} \}>\(\s*\n?\s*'\/v1\/sessions\/:id\/state',[\s\S]{0,300}?preHandler: \[app\.requireAuth, app\.requireScope\('read:sessions'\), app\.rateLimit\('global'\)\],[\s\S]{0,300}?const eff = effectiveAccountIdForLiveOperation\(request, ctx\);\s*\n?\s*await consumeEffectiveOwnerRateLimit\(app, request, reply, eff \?\? ctx\.account\.id, 'global'\);\s*\n?\s*const state = await service\.getState\(\s*\n?\s*ctx,\s*\n?\s*id,\s*\n?\s*eff !== undefined \? \{ effectiveAccountId: eff \} : \{\},\s*\n?\s*\);/,
+      /app\.get<\{ Params: \{ id: string \} \}>\(\s*'\/v1\/sessions\/:id\/state',[\s\S]{0,300}?preHandler: \[app\.requireAuth, app\.requireScope\('read:sessions'\), app\.rateLimit\('global'\)\],[\s\S]{0,300}?const eff = effectiveAccountIdForLiveOperation\(request, ctx\);\s*await consumeEffectiveOwnerRateLimit\(app, request, reply, eff \?\? ctx\.account\.id, 'global'\);\s*const state = await service\.getState\(\s*ctx,\s*id,\s*eff !== undefined \? \{ effectiveAccountId: eff \} : \{\},\s*\);/,
     );
     expect(body).toMatch(
       // W615 — page_state (lifecycle for pollers) sits between local_storage
       // and captured_at; the comment line is matched loosely.
-      /return \{\s*\n?\s*url: state\.url,\s*\n?\s*title: state\.title,\s*\n?\s*cookies: state\.cookies,\s*\n?\s*local_storage: state\.localStorage,[\s\S]{0,200}?page_state: state\.pageState,\s*\n?\s*captured_at: state\.capturedAt\.toISOString\(\),\s*\n?\s*\};/,
+      /return \{\s*url: state\.url,\s*title: state\.title,\s*cookies: state\.cookies,\s*local_storage: state\.localStorage,[\s\S]{0,200}?page_state: state\.pageState,\s*captured_at: state\.capturedAt\.toISOString\(\),\s*\};/,
     );
   });
 
   it('session list rejects insufficient scope before actor or selected-owner rate-limit consumption', () => {
     expect(body).toMatch(
-      /app\.get\(\s*\n?\s*'\/v1\/sessions',\s*\n?\s*\{\s*\n?\s*preHandler: \[app\.requireAuth, app\.requireScope\('read:sessions'\), app\.rateLimit\('global'\)\],\s*\n?\s*\},[\s\S]{0,300}?const effective = resolveEffectiveAccount\(ctx, readEffectiveAccountHeader\(request\)\);\s*\n?\s*await consumeEffectiveOwnerRateLimit\(app, request, reply, effective\.accountId, 'global'\);/,
+      /app\.get\(\s*'\/v1\/sessions',\s*\{\s*preHandler: \[app\.requireAuth, app\.requireScope\('read:sessions'\), app\.rateLimit\('global'\)\],\s*\},[\s\S]{0,300}?const effective = resolveEffectiveAccount\(ctx, readEffectiveAccountHeader\(request\)\);\s*await consumeEffectiveOwnerRateLimit\(app, request, reply, effective\.accountId, 'global'\);/,
     );
   });
 
   it('V-326e3 capture WRITE rationale pinned: mutates driver state via screenshot/snapshot ops + records billed events; admin-only on team-scoped; CaptureRequestSchema + response (kind + data + encoding + byte_size + duration_ms)', () => {
     expect(body).toMatch(
-      /\/\/ V-326e3 — capture is a WRITE \(it mutates the driver state via\s*\n?\s*\/\/ screenshot\/snapshot ops \+ records billed events\)\. Admin-only on\s*\n?\s*\/\/ team-scoped requests\./,
+      /\/\/ V-326e3 — capture is a WRITE \(it mutates the driver state via\s*\/\/ screenshot\/snapshot ops \+ records billed events\)\. Admin-only on\s*\/\/ team-scoped requests\./,
     );
     expect(body).toMatch(/const body = CaptureRequestSchema\.parse\(rawActionBody\);/);
     expect(body).toContain("route: 'POST /v1/sessions/:id/capture',");
     expect(body).toMatch(
-      /return \{\s*\n?\s*kind: result\.kind,\s*\n?\s*data: result\.data,\s*\n?\s*encoding: result\.encoding,\s*\n?\s*byte_size: result\.byteSize,\s*\n?\s*duration_ms: result\.durationMs,\s*\n?\s*\};/,
+      /return \{\s*kind: result\.kind,\s*data: result\.data,\s*encoding: result\.encoding,\s*byte_size: result\.byteSize,\s*duration_ms: result\.durationMs,\s*\};/,
     );
   });
 
   it('V-326e2 DELETE /v1/sessions/:id: admin-only when targeting an owner via X-Driftstack-Account; member role 403; self-account behavior unchanged; 204 No Content on success', () => {
     expect(body).toMatch(
-      /\/\/ V-326e2 — admin-only when targeting an owner via X-Driftstack-\s*\n?\s*\/\/ Account; member role gets 403\. Self-account behavior unchanged\./,
+      /\/\/ V-326e2 — admin-only when targeting an owner via X-Driftstack-\s*\/\/ Account; member role gets 403\. Self-account behavior unchanged\./,
     );
     expect(body).toMatch(
-      /if \(effective\.kind === 'team' && effective\.role !== 'admin'\) \{\s*\n?\s*throw new ForbiddenError\(\s*\n?\s*'Destroying a session on a team owner requires admin role on that team\.',\s*\n?\s*\);\s*\n?\s*\}/,
+      /if \(effective\.kind === 'team' && effective\.role !== 'admin'\) \{\s*throw new ForbiddenError\(\s*'Destroying a session on a team owner requires admin role on that team\.',\s*\);\s*\}/,
     );
     expect(body).toMatch(/return reply\.code\(204\)\.send\(\);/);
   });

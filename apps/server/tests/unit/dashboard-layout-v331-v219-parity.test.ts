@@ -247,7 +247,7 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
     const l = read(LAYOUT);
 
     expect(l).toMatch(
-      /item\.href === '\/'\s*\n?\s*\?\s*pathname === '\/'\s*\n?\s*:\s*pathname === item\.href \|\|\s*\n?\s*pathname\.startsWith\(item\.href \+ '\/'\)/,
+      /item\.href === '\/'\s*\?\s*pathname === '\/'\s*:\s*pathname === item\.href \|\|\s*pathname\.startsWith\(item\.href \+ '\/'\)/,
     );
   });
 

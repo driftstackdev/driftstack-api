@@ -52,14 +52,14 @@ describe('W229.A security-overview doc parity', () => {
     const residency = read(RESIDENCY_DOC);
     // S47 re-pin: the docs successor states the same EU-control-plane
     // posture in its own (deliberately softened) canonical wording.
-    expect(residency).toMatch(/customer data in our\s*\n?\s*databases is EU-resident/);
+    expect(residency).toMatch(/customer data in our\s*databases is EU-resident/);
     expect(doc).toMatch(/primarily in the EU/);
     // Rule out the fictional 3-region claim:
     expect(doc).not.toMatch(/three regions \(EU, US-East/);
     expect(doc).not.toMatch(/GeoDNS-routed/);
     expect(doc).not.toMatch(/cross-region failover is automatic/);
     expect(residency).toMatch(/Setting it does not route execution or move stored data\./);
-    expect(residency).toMatch(/the authoritative physical-location\s*\n?\s*contract\./i);
+    expect(residency).toMatch(/the authoritative physical-location\s*contract\./i);
     expect(residency).not.toMatch(/multi-region rollout|once .* lands/i);
   });
 

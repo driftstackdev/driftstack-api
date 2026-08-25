@@ -156,7 +156,7 @@ describe('W783 docs /guides/team-rbac content parity', () => {
     // qualification, which is false for agent sessions: GET /v1/agent-sessions
     // is admin-only because it carries transcripts and live control state.
     expect(p, 'the agent-session read exception is no longer stated').toMatch(
-      /`GET \/v1\/agent-sessions`\s*\n?\s*requires `admin` even though it is a read/,
+      /`GET \/v1\/agent-sessions`\s*requires `admin` even though it is a read/,
     );
     expect(
       p,
@@ -388,7 +388,7 @@ describe('W783 docs /guides/team-rbac content parity', () => {
       /`\/v1\/recipes\/\*` — the header is IGNORED here, not rejected/,
     );
     expect(p, 'the source-reach half is gone').toMatch(
-      /accepts an\s*\n?\s*`agent_session_id` owned by a team you hold `admin` on/,
+      /accepts an\s*`agent_session_id` owned by a team you hold `admin` on/,
     );
     expect(p, 'the recipes row must not return to the honouring table').not.toMatch(
       /\| Recipes\s+\|/,

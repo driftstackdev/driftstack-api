@@ -24,7 +24,7 @@ describe('W380.B admin-panel /status-subscribers.astro page content parity', () 
     expect(body).toContain("import AdminLayout from '../layouts/AdminLayout.astro';");
     expect(body).toContain('<AdminLayout title="Status-page subscribers">');
     expect(body).toMatch(/V-312 — admin view of status-page email subscribers/);
-    expect(body).toMatch(/V-295c3 \+\s*\n?\s*\/\/\s*V-295c3-tombstone/);
+    expect(body).toMatch(/V-295c3 \+\s*\/\/\s*V-295c3-tombstone/);
     expect(body).toMatch(/V-281 pattern/);
     expect(body).toMatch(
       /Email addresses subscribed to status\.driftstack\.dev incident notifications\. Confirmed\s+subscribers receive emails when public incidents are posted or resolved\. A forced\s+unsubscribe is also written to the admin audit log\./,
@@ -124,7 +124,7 @@ describe('W380.B admin-panel /status-subscribers.astro page content parity', () 
     expect(body).toContain('return explicitStatus >= 500;');
     expect(body).toContain('const originOffset = renderedOffset;');
     expect(body).toMatch(
-      /requestedOffset = originOffset;\s*\n?\s*const reconciliation = await refreshWithLive\(\)/,
+      /requestedOffset = originOffset;\s*const reconciliation = await refreshWithLive\(\)/,
     );
     expect(body).toContain(
       'reconciliation.fetchedRows.find((subscriber) => String(subscriber.id) === id)',
@@ -146,7 +146,7 @@ describe('W380.B admin-panel /status-subscribers.astro page content parity', () 
 
   it('latches an accepted force-subscribe before body parsing and validates all returned details', () => {
     expect(body).toMatch(
-      /acceptedStatusCommitted = true;\s*\n?\s*const body = await response\.json\(\)\.catch\(\(\) => null\)/,
+      /acceptedStatusCommitted = true;\s*const body = await response\.json\(\)\.catch\(\(\) => null\)/,
     );
     expect(body).toContain('function validForceSubscribeResult(body)');
     expect(body).toContain("typeof body.unsubscribe_link === 'string'");
@@ -154,7 +154,7 @@ describe('W380.B admin-panel /status-subscribers.astro page content parity', () 
     expect(body).toContain('Add subscriber committed, but result details are unavailable.');
     expect(body).toContain('requestedOffset = 0;');
     expect(body).toMatch(
-      /addOutcomeUnknown \|\|\s*\n?\s*addCommitDetailsUnavailable \|\|\s*\n?\s*forceUnsubsInFlight\.size > 0 \|\|\s*\n?\s*refreshOwner !== null/,
+      /addOutcomeUnknown \|\|\s*addCommitDetailsUnavailable \|\|\s*forceUnsubsInFlight\.size > 0 \|\|\s*refreshOwner !== null/,
     );
   });
 
@@ -164,7 +164,7 @@ describe('W380.B admin-panel /status-subscribers.astro page content parity', () 
     expect(body).toContain('reconciliation.offset === 0');
     expect(body).toContain('Array.isArray(reconciliation.rows)');
     expect(body).toMatch(
-      /typeof subscriber\.email === 'string' &&\s*\n?\s*!subscriber\.unsubscribed_at &&\s*\n?\s*subscriber\.email\.toLowerCase\(\) === normalizedEmail/,
+      /typeof subscriber\.email === 'string' &&\s*!subscriber\.unsubscribed_at &&\s*subscriber\.email\.toLowerCase\(\) === normalizedEmail/,
     );
     expect(body).toContain('absence from that page is not evidence that the add failed');
     expect(body).toContain('returned unsubscribe link cannot be recovered');

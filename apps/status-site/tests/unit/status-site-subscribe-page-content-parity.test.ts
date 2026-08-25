@@ -123,7 +123,7 @@ describe('W369.C status-site /subscribe page content parity', () => {
     expect(body).toMatch(/if \(form\) form\.classList\.add\('hidden'\);/);
     // "Subscribe another address" reverts.
     expect(body).toMatch(
-      /subscribeAnotherBtn\?\.addEventListener\('click', \(\) => \{\s*\n?\s*if \(confirmPane\) confirmPane\.classList\.add\('hidden'\);\s*\n?\s*if \(form\) form\.classList\.remove\('hidden'\);/,
+      /subscribeAnotherBtn\?\.addEventListener\('click', \(\) => \{\s*if \(confirmPane\) confirmPane\.classList\.add\('hidden'\);\s*if \(form\) form\.classList\.remove\('hidden'\);/,
     );
   });
 
@@ -162,7 +162,7 @@ describe('W369.C status-site /subscribe page content parity', () => {
   });
 
   it('page is static-served from Cloudflare Pages framing pinned', () => {
-    expect(body).toMatch(/the page itself is static-served from Cloudflare\s*\n?\s*\/\/\s*Pages/);
+    expect(body).toMatch(/the page itself is static-served from Cloudflare\s*\/\/\s*Pages/);
   });
 
   it('PUBLIC_API_BASE_URL env-var drives the fetch (no hardcoded prod URL)', () => {
@@ -190,6 +190,6 @@ describe('W369.C status-site /subscribe page content parity', () => {
 
   it('V-657 comment pinned (V-540.B-11-tested double-opt-in flow)', () => {
     expect(body).toMatch(/V-657 — incident-email subscription handler/);
-    expect(body).toMatch(/V-540\.B-11-tested\s*\n?\s*\/\/\s*double-opt-in flow/);
+    expect(body).toMatch(/V-540\.B-11-tested\s*\/\/\s*double-opt-in flow/);
   });
 });

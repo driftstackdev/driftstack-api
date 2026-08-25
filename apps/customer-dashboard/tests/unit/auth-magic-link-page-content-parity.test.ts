@@ -46,7 +46,7 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
       /Token is one-shot — second use returns 400; a successful MFA challenge is too\./,
     );
     expect(body).toMatch(
-      /The form is rendered as a fallback for the rare case where a mail\s*\n?\s*\/\/\s*client mangles the link/,
+      /The form is rendered as a fallback for the rare case where a mail\s*\/\/\s*client mangles the link/,
     );
   });
 
@@ -60,7 +60,7 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
 
   it('URL-token auto-submit when ?token= present (no manual paste required)', () => {
     expect(body).toMatch(
-      /const linkToken = params\.get\('token'\);[\s\S]*?if \(linkToken && linkToken\.length > 0\) \{\s*\n?\s*submitToken\(linkToken\);/,
+      /const linkToken = params\.get\('token'\);[\s\S]*?if \(linkToken && linkToken\.length > 0\) \{\s*submitToken\(linkToken\);/,
     );
     expect(body).toMatch(
       /if \(linkToken\) \{\s*params\.delete\('token'\);[\s\S]*?window\.history\.replaceState\([\s\S]*?window\.location\.pathname[\s\S]*?window\.location\.hash/,
@@ -146,7 +146,7 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
   });
 
   it('authoritative error path: fallback form revealed + banner shown (retry by paste)', () => {
-    expect(body).toMatch(/showFallbackForm\(token\);\s*\n?\s*showBanner/);
+    expect(body).toMatch(/showFallbackForm\(token\);\s*showBanner/);
     expect(body).toMatch(/data-state="fallback"/);
   });
 
@@ -158,9 +158,7 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
 
   it('/login cross-link present ("Link expired? Request a fresh one")', () => {
     expect(body).toMatch(/Link expired\? Request a fresh one from the/);
-    expect(body).toMatch(
-      /<a\s*\n?\s*href="\/login\/"\s*\n?\s*class="[^"]+"\s*>\s*login page\s*<\/a\s*>/,
-    );
+    expect(body).toMatch(/<a\s*href="\/login\/"\s*class="[^"]+"\s*>\s*login page\s*<\/a\s*>/);
     expect(existsSync(LOGIN_PAGE)).toBe(true);
   });
 
@@ -177,7 +175,7 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
 
   it('intro swap on no-token: "Couldn\'t find a token in the URL. Paste it from your email"', () => {
     expect(body).toMatch(
-      /intro\.textContent =\s*\n?\s*"Couldn't find a token in the URL\. Paste it from your email to sign in\."/,
+      /intro\.textContent =\s*"Couldn't find a token in the URL\. Paste it from your email to sign in\."/,
     );
   });
 });

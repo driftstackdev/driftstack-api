@@ -63,7 +63,7 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
     expect(body).toMatch(/\| 'session\.failed'/);
     expect(body).toMatch(/\| 'api_key\.revoked'/);
     expect(body).toMatch(
-      /\/\/ V-356 — synthetic event sent only via POST \/v1\/webhooks\/:id\/test\.\s*\n?\s*\/\/ Customers cannot subscribe to it \(Zod schemas reject it\)/,
+      /\/\/ V-356 — synthetic event sent only via POST \/v1\/webhooks\/:id\/test\.\s*\/\/ Customers cannot subscribe to it \(Zod schemas reject it\)/,
     );
     expect(body).toMatch(/\| 'test\.ping'/);
     expect(body).toMatch(/\| 'session\.egress_capability_changed'/);
@@ -82,7 +82,7 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
 
   it('V-359 secretPrev + secretPrevExpiresAt rotation grace; worker dual-signs while secretPrevExpiresAt > now', () => {
     expect(body).toMatch(
-      /\/\*\* V-359 — previous signing secret during the rotation grace\s*\n?\s*\*\s*period\. Null when no rotation in flight or grace expired\. The\s*\n?\s*\*\s*worker dual-signs every outbound delivery with both `secret`\s*\n?\s*\*\s*and `secretPrev` while `secretPrevExpiresAt > now`\. \*\/\s*\n?\s*secretPrev: string \| null;\s*\n?\s*secretPrevExpiresAt: Date \| null;/,
+      /\/\*\* V-359 — previous signing secret during the rotation grace\s*\*\s*period\. Null when no rotation in flight or grace expired\. The\s*\*\s*worker dual-signs every outbound delivery with both `secret`\s*\*\s*and `secretPrev` while `secretPrevExpiresAt > now`\. \*\/\s*secretPrev: string \| null;\s*secretPrevExpiresAt: Date \| null;/,
     );
   });
 
@@ -92,21 +92,21 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
 
   it("V-326e5/V-174 create: when effectiveAccountId set → trust route's team-admin gate; else throwIfMissingScope 'account_owner'", () => {
     expect(body).toMatch(
-      /\/\/ V-326e5 — when effectiveAccountId is set, the route layer has\s*\n?\s*\/\/ already enforced team admin role on the OWNER's team\. Trust\s*\n?\s*\/\/ that decision and skip the account_owner apiKey-scope check/,
+      /\/\/ V-326e5 — when effectiveAccountId is set, the route layer has\s*\/\/ already enforced team admin role on the OWNER's team\. Trust\s*\/\/ that decision and skip the account_owner apiKey-scope check/,
     );
     expect(body).toMatch(
-      /if \(opts\.effectiveAccountId === undefined\) \{\s*\n?\s*throwIfMissingScope\(ctx, 'account_owner'\);/,
+      /if \(opts\.effectiveAccountId === undefined\) \{\s*throwIfMissingScope\(ctx, 'account_owner'\);/,
     );
   });
 
   it('create: events.length===0 → ConflictError; atomic insertEndpointIfUnderLimit cap (null → ConflictError); emits webhook_endpoint.created audit', () => {
     expect(body).toMatch(
-      /if \(input\.events\.length === 0\) \{\s*\n?\s*throw new ConflictError\('events must contain at least one event type\.'\);/,
+      /if \(input\.events\.length === 0\) \{\s*throw new ConflictError\('events must contain at least one event type\.'\);/,
     );
     // TOCTOU fix — the cap is enforced atomically by insertEndpointIfUnderLimit
     // (count+insert under a per-account advisory lock); null → over the cap.
     expect(body).toMatch(/await this\.repo\.insertEndpointIfUnderLimit\(/);
-    expect(body).toMatch(/if \(row === null\) \{\s*\n?\s*throw new ConflictError\(/);
+    expect(body).toMatch(/if \(row === null\) \{\s*throw new ConflictError\(/);
     expect(body).toMatch(
       // V-735 — the helper now takes the account the ROW belongs to (the owner
       // under a team-scoped write) as its second argument. It used to hardcode
@@ -119,25 +119,25 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
 
   it('update: disabled-endpoint sticky tombstone (mint fresh instead); events empty → ConflictError', () => {
     expect(body).toMatch(
-      /if \(before\.disabledAt !== null\) \{\s*\n?\s*throw new ConflictError\('Cannot update a disabled endpoint\. Mint a fresh one instead\.'\);/,
+      /if \(before\.disabledAt !== null\) \{\s*throw new ConflictError\('Cannot update a disabled endpoint\. Mint a fresh one instead\.'\);/,
     );
     expect(body).toMatch(
-      /if \(input\.events !== undefined && input\.events\.length === 0\) \{\s*\n?\s*throw new ConflictError\('events must contain at least one event type\.'\);/,
+      /if \(input\.events !== undefined && input\.events\.length === 0\) \{\s*throw new ConflictError\('events must contain at least one event type\.'\);/,
     );
   });
 
   it('V-359 rotateSecret: 24h grace default; cannot rotate disabled; emits webhook_endpoint.secret_rotated audit with new+old prefix + grace_expires_at', () => {
     expect(body).toMatch(
-      /V-359 — rotate the signing secret with a 24h grace\. Returns the\s*\n?\s*\*\s*fresh plaintext secret ONCE alongside the updated row\./,
+      /V-359 — rotate the signing secret with a 24h grace\. Returns the\s*\*\s*fresh plaintext secret ONCE alongside the updated row\./,
     );
     expect(body).toMatch(
-      /if \(before\.disabledAt !== null\) \{\s*\n?\s*throw new ConflictError\('Cannot rotate the secret on a disabled endpoint\.'\);/,
+      /if \(before\.disabledAt !== null\) \{\s*throw new ConflictError\('Cannot rotate the secret on a disabled endpoint\.'\);/,
     );
     expect(body).toMatch(
       /const graceMs = opts\.graceMs \?\? 24 \* 60 \* 60 \* 1000; \/\/ 24h default/,
     );
     expect(body).toMatch(
-      /'webhook_endpoint\.secret_rotated',\s*\n?\s*`webhook_endpoint_\$\{id\}`,\s*\n?\s*\{\s*\n?\s*new_secret_prefix: newPrefix,\s*\n?\s*old_secret_prefix: before\.secretPrefix,\s*\n?\s*grace_expires_at: graceExpiresAt\.toISOString\(\),/,
+      /'webhook_endpoint\.secret_rotated',\s*`webhook_endpoint_\$\{id\}`,\s*\{\s*new_secret_prefix: newPrefix,\s*old_secret_prefix: before\.secretPrefix,\s*grace_expires_at: graceExpiresAt\.toISOString\(\),/,
     );
   });
 
@@ -153,13 +153,13 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
 
   it('V-185 listWithCounts: 2-query parallel Promise.all + per-endpoint zeros default + V-330f read-only role-agnostic', () => {
     expect(body).toMatch(
-      /V-185 — list endpoints \+ per-endpoint aggregate delivery counts\s*\n?\s*\*\s*\(delivered \/ failed \/ dlq\)\./,
+      /V-185 — list endpoints \+ per-endpoint aggregate delivery counts\s*\*\s*\(delivered \/ failed \/ dlq\)\./,
     );
     expect(body).toMatch(
-      /\/\/ V-330f — when effectiveAccountId is set, lists the OWNER's\s*\n?\s*\/\/ endpoints\. Read-only; both 'member' and 'admin' roles allowed\./,
+      /\/\/ V-330f — when effectiveAccountId is set, lists the OWNER's\s*\/\/ endpoints\. Read-only; both 'member' and 'admin' roles allowed\./,
     );
     expect(body).toMatch(
-      /const \[endpoints, countsMap\] = await Promise\.all\(\[\s*\n?\s*this\.repo\.listEndpoints\(accountId\),\s*\n?\s*this\.repo\.deliveryCountsByEndpoint\(accountId\),\s*\n?\s*\]\);/,
+      /const \[endpoints, countsMap\] = await Promise\.all\(\[\s*this\.repo\.listEndpoints\(accountId\),\s*this\.repo\.deliveryCountsByEndpoint\(accountId\),\s*\]\);/,
     );
     expect(body).toMatch(
       /counts: countsMap\.get\(endpoint\.id\) \?\? \{ delivered: 0, failed: 0, dlq: 0 \},/,
@@ -168,10 +168,10 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
 
   it('V-356 sendTestEvent: synthetic test.ping; admin/team-admin gate; disabled-endpoint → BadRequestError', () => {
     expect(body).toMatch(
-      /V-356 — enqueue a one-off `test\.ping` delivery to a single\s*\n?\s*\*\s*endpoint, regardless of subscription\./,
+      /V-356 — enqueue a one-off `test\.ping` delivery to a single\s*\*\s*endpoint, regardless of subscription\./,
     );
     expect(body).toMatch(
-      /if \(!row\.active \|\| row\.disabledAt !== null\) \{\s*\n?\s*throw new BadRequestError\(\s*\n?\s*'This endpoint is paused\. Re-enable it before sending a test event\.',\s*\n?\s*\);/,
+      /if \(!row\.active \|\| row\.disabledAt !== null\) \{\s*throw new BadRequestError\(\s*'This endpoint is paused\. Re-enable it before sending a test event\.',\s*\);/,
     );
     expect(body).toMatch(/type: 'test\.ping' as WebhookEventType,/);
     expect(body).toMatch(/triggered_by_account_id: `acc_\$\{ctx\.account\.id\}`,/);
@@ -183,17 +183,15 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
   // skipped when the route resolved an effective team account
   // (mirrors create()/listDeliveries()).
   it('V-307+S32 replayDeliveryAsCustomer: effective-account ownership + conditional scope + webhook_delivery.replayed audit', () => {
+    expect(body).toMatch(/replay was the ONLY delivery surface that\s*\/\/ ignored team act-as/);
     expect(body).toMatch(
-      /replay was the ONLY delivery surface that\s*\n?\s*\/\/ ignored team act-as/,
-    );
-    expect(body).toMatch(
-      /if \(opts\.effectiveAccountId === undefined\) \{\s*\n?\s*throwIfMissingScope\(ctx, 'account_owner'\);/,
+      /if \(opts\.effectiveAccountId === undefined\) \{\s*throwIfMissingScope\(ctx, 'account_owner'\);/,
     );
     expect(body).toMatch(
       /const endpoint = await this\.repo\.findEndpoint\(delivery\.webhookId, accountId\);/,
     );
     expect(body).toMatch(
-      /action: 'webhook_delivery\.replayed',\s*\n?\s*targetResourceId: `wdl_\$\{deliveryId\}`,/,
+      /action: 'webhook_delivery\.replayed',\s*targetResourceId: `wdl_\$\{deliveryId\}`,/,
     );
   });
 
@@ -202,7 +200,7 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
       /const closedData = eventType === 'session\.failed' \? projectSessionFailedData\(data\) : data;/,
     );
     expect(body).toMatch(
-      /\/\/ Skip endpoints that are disabled even if listEndpointsSubscribedTo\s*\n?\s*\/\/ returned them \(defence in depth\)\.\s*\n?\s*if \(!ep\.active \|\| ep\.disabledAt !== null\) continue;/,
+      /\/\/ Skip endpoints that are disabled even if listEndpointsSubscribedTo\s*\/\/ returned them \(defence in depth\)\.\s*if \(!ep\.active \|\| ep\.disabledAt !== null\) continue;/,
     );
     expect(body).toMatch(
       /const payload = \{ id: eventId, type: eventType, created_at: createdAt, data: closedData \};/,
@@ -211,10 +209,10 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
 
   it('V-225 emitAuditBestEffort: 4-action union (webhook_endpoint.created/updated/deleted/secret_rotated)', () => {
     expect(body).toMatch(
-      /V-225 — optional customer-facing audit log\. When wired, emits\s*\n?\s*\*\s*webhook_endpoint\.created \/ webhook_endpoint\.deleted entries\./,
+      /V-225 — optional customer-facing audit log\. When wired, emits\s*\*\s*webhook_endpoint\.created \/ webhook_endpoint\.deleted entries\./,
     );
     expect(body).toMatch(
-      /action:\s*\n?\s*\| 'webhook_endpoint\.created'\s*\n?\s*\| 'webhook_endpoint\.updated'\s*\n?\s*\| 'webhook_endpoint\.deleted'\s*\n?\s*\| 'webhook_endpoint\.secret_rotated',/,
+      /action:\s*\| 'webhook_endpoint\.created'\s*\| 'webhook_endpoint\.updated'\s*\| 'webhook_endpoint\.deleted'\s*\| 'webhook_endpoint\.secret_rotated',/,
     );
     // V-735 — the row is scoped to the passed account; only the ACTOR is the
     // caller. Both halves matter: an owner-scoped row with the member recorded
@@ -238,26 +236,26 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
     ).toHaveLength(6);
     expect(adminService).not.toMatch(/throwIfMissingScope\(ctx, 'admin'\);/);
     expect(body).toMatch(
-      /async requeueFromDlq\(ctx: AccountContext, deliveryId: string\): Promise<WebhookDeliveryRow> \{\s*\n?\s*throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);/,
+      /async requeueFromDlq\(ctx: AccountContext, deliveryId: string\): Promise<WebhookDeliveryRow> \{\s*throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);/,
     );
-    expect(body).toMatch(/if \(current\.status !== 'dlq'\) \{\s*\n?\s*throw new ConflictError\(/);
+    expect(body).toMatch(/if \(current\.status !== 'dlq'\) \{\s*throw new ConflictError\(/);
   });
 
   it('parseHttpsUrl: https:// only; http:// rejected for security; malformed → ConflictError', () => {
     expect(body).toMatch(
-      /function parseHttpsUrl\(raw: string\): string \{\s*\n?\s*let url: URL;\s*\n?\s*try \{\s*\n?\s*url = new URL\(raw\);\s*\n?\s*\} catch \{\s*\n?\s*throw new ConflictError\(`Invalid URL: \$\{raw\}`\);/,
+      /function parseHttpsUrl\(raw: string\): string \{\s*let url: URL;\s*try \{\s*url = new URL\(raw\);\s*\} catch \{\s*throw new ConflictError\(`Invalid URL: \$\{raw\}`\);/,
     );
     expect(body).toMatch(
-      /if \(url\.protocol !== 'https:'\) \{\s*\n?\s*throw new ConflictError\('Webhook URL must use https:\/\/ — http:\/\/ is rejected for security\.'\);/,
+      /if \(url\.protocol !== 'https:'\) \{\s*throw new ConflictError\('Webhook URL must use https:\/\/ — http:\/\/ is rejected for security\.'\);/,
     );
   });
 
   it("V-512 listDlqDeliveries opts: optional endpointId drills into one webhook's DLQ; unset returns rows across every account", () => {
     expect(body).toMatch(
-      /V-512 — optional `endpointId` drills into one webhook endpoint's\s*\n?\s*\*\s*DLQ rows \(uuid; the route layer strips the `webhook_endpoint_`\s*\n?\s*\*\s*prefix before forwarding\)\. When unset, returns rows across every\s*\n?\s*\*\s*account\./,
+      /V-512 — optional `endpointId` drills into one webhook endpoint's\s*\*\s*DLQ rows \(uuid; the route layer strips the `webhook_endpoint_`\s*\*\s*prefix before forwarding\)\. When unset, returns rows across every\s*\*\s*account\./,
     );
     expect(body).toMatch(
-      /listDlqDeliveries\(opts: \{\s*\n?\s*limit: number;\s*\n?\s*cursor\?: string;\s*\n?\s*endpointId\?: string;\s*\n?\s*\}\): Promise<ListDeliveriesPage>;/,
+      /listDlqDeliveries\(opts: \{\s*limit: number;\s*cursor\?: string;\s*endpointId\?: string;\s*\}\): Promise<ListDeliveriesPage>;/,
     );
   });
 

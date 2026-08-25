@@ -110,7 +110,7 @@ describe('W366.A marketing-site /comparison page content parity', () => {
     // benchmarks — a future "we benchmarked X% faster" copy add
     // must update this comment first.
     expect(body).toMatch(
-      /No performance benchmarks vs them — those land on the future\s*\n?\s*\/\/\s*\/benchmarks subdomain \(V-345\)/,
+      /No performance benchmarks vs them — those land on the future\s*\/\/\s*\/benchmarks subdomain \(V-345\)/,
     );
   });
 

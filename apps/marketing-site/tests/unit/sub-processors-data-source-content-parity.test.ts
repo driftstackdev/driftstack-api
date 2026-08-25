@@ -46,17 +46,17 @@ describe('W385.A marketing-site src/data/sub-processors.ts content parity', () =
 
   it('Article 28(2) 30-day notice posture pinned in module comment', () => {
     expect(body).toMatch(
-      /Changes to this list trigger Art 28\(2\) sub-processor amendment\s*\n?\s*\/\/\s*notice \(30-day notice to customers\) per the DPA/,
+      /Changes to this list trigger Art 28\(2\) sub-processor amendment\s*\/\/\s*notice \(30-day notice to customers\) per the DPA/,
     );
     expect(body).toMatch(
-      /Adding or removing\s*\n?\s*\/\/\s*an entry is a content change with compliance implications/,
+      /Adding or removing\s*\/\/\s*an entry is a content change with compliance implications/,
     );
   });
 
   it('SubProcessor interface: 4 fields (name / region / purpose / transferMechanism)', () => {
     expect(body).toMatch(/export interface SubProcessor \{/);
     expect(body).toMatch(
-      /\/\*\* Legal-entity name as it appears in the DPA Annex 3\. \*\/\s*\n?\s*name: string;/,
+      /\/\*\* Legal-entity name as it appears in the DPA Annex 3\. \*\/\s*name: string;/,
     );
     expect(body).toMatch(/region: string;/);
     expect(body).toMatch(/purpose: string;/);
@@ -196,9 +196,9 @@ describe('W385.A marketing-site src/data/sub-processors.ts content parity', () =
   });
 
   it('SUB_PROCESSOR_CHANGELOG carries the S43 Cloudflare R2 material_change correction entry', () => {
-    expect(body).toMatch(/kind: 'material_change',\s*\n?\s*subject: 'Cloudflare R2',/);
+    expect(body).toMatch(/kind: 'material_change',\s*subject: 'Cloudflare R2',/);
     expect(body).toMatch(
-      /correction of the register to describe existing processing ' \+\s*\n?\s*'accurately/,
+      /correction of the register to describe existing processing ' \+\s*'accurately/,
     );
   });
 
@@ -231,16 +231,16 @@ describe('W385.A marketing-site src/data/sub-processors.ts content parity', () =
     expect(body).toMatch(
       /export const SUB_PROCESSOR_CHANGELOG: SubProcessorChangeLogEntry\[\] = \[/,
     );
-    expect(body).toMatch(/date: '2026-05-10',\s*\n?\s*kind: 'register_published',/);
+    expect(body).toMatch(/date: '2026-05-10',\s*kind: 'register_published',/);
     expect(body).toMatch(
-      /Initial sub-processor transparency register published\. The ' \+\s*\n?\s*'register reflects/,
+      /Initial sub-processor transparency register published\. The ' \+\s*'register reflects/,
     );
     expect(body).toMatch(/effective_at: '2026-05-10',/);
   });
 
   it('changelog effective_at field on schema (post-notice-window date semantics)', () => {
     expect(body).toMatch(
-      /\/\*\* Date the change took effect \(post-notice-window if applicable\)\. \*\/\s*\n?\s*effective_at: string;/,
+      /\/\*\* Date the change took effect \(post-notice-window if applicable\)\. \*\/\s*effective_at: string;/,
     );
   });
 

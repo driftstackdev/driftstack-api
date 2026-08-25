@@ -198,7 +198,7 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     expect(p).toMatch(/✅ valid — wizard advances\./);
     expect(p).toMatch(/❌ wrong fallback key — the message is deployment-aware/);
     expect(p).toMatch(/Authentication failed \(401\)\. Double-check the key/);
-    expect(p).toMatch(/cloud key will not\s*\n?\s*authenticate against a self-hosted server/);
+    expect(p).toMatch(/cloud key will not\s*authenticate against a self-hosted server/);
     expect(p).toMatch(/❌ unreachable — the message starts with "Couldn't reach `<url>`\."/);
     expect(p).toMatch(/URL, connection, firewall, VPN, and self-hosted-server guidance/);
     expect(p).toMatch(/❌ not permitted — the privacy-safe fixed message is "You do not have/);
@@ -209,7 +209,7 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     const p = read(LIC);
 
     expect(p).toMatch(
-      /\*\*Device credential or fallback API key\*\* — stored in macOS Keychain through\s*\n?\s*`keyring-rs`\. It never lands in `settings\.json` on disk\./,
+      /\*\*Device credential or fallback API key\*\* — stored in macOS Keychain through\s*`keyring-rs`\. It never lands in `settings\.json` on disk\./,
     );
     expect(p).toMatch(
       /\*\*Base URL\*\* — stored in the Tauri settings store \(`settings\.json`\)\. Plaintext is fine here; the URL alone confers no access\./,
@@ -231,10 +231,10 @@ describe('W785 docs quickstart + license-activation content parity', () => {
       /\*\*macOS on Apple silicon\*\* is the current supported distribution target\./,
     );
     expect(p).toMatch(
-      /Builds are \*\*not\*\* Apple Developer ID code-signed, hardened-runtime, or\s*\n?\s*notarised\./,
+      /Builds are \*\*not\*\* Apple Developer ID code-signed, hardened-runtime, or\s*notarised\./,
     );
     expect(p, 'the first-launch workaround must be actionable, not just a warning').toMatch(
-      /right-click it in Applications, choose \*\*Open\*\*, and\s*\n?\s*confirm\./,
+      /right-click it in Applications, choose \*\*Open\*\*, and\s*confirm\./,
     );
     expect(p, 'updater signing is real and must stay distinguished from Apple signing').toMatch(
       /signed with our Tauri updater key/,
@@ -243,7 +243,7 @@ describe('W785 docs quickstart + license-activation content parity', () => {
       /must pass Developer ID signature/,
     );
     expect(p).toMatch(
-      /The release pipeline also builds Windows \(`\.exe`, NSIS\) and Linux\s*\n?\s*\(`\.AppImage`, `\.deb`\) bundles, but macOS on Apple silicon is the only platform\s*\n?\s*we support\./,
+      /The release pipeline also builds Windows \(`\.exe`, NSIS\) and Linux\s*\(`\.AppImage`, `\.deb`\) bundles, but macOS on Apple silicon is the only platform\s*we support\./,
     );
     // V-796 — the old line said the channel "does not publish Windows or Linux
     // installers", which read as though macOS IS published. The matrix in
@@ -286,7 +286,7 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     const p = read(LIC);
     const settingsView = read(SETTINGS_VIEW);
 
-    expect(p).toMatch(/Removes the current deployment's\s*\n?\s*credential from Keychain/);
+    expect(p).toMatch(/Removes the current deployment's\s*credential from Keychain/);
     expect(p).toMatch(/without revoking it on the server/);
     expect(p).toMatch(/base URL and other preferences remain in `settings\.json`/);
     expect(p).toMatch(/The first-run wizard reappears immediately/);
@@ -343,7 +343,7 @@ describe('W785 docs quickstart + license-activation content parity', () => {
         'nothing in .github/ signs or notarises the build, so the page must keep saying so — this ' +
           'is the sentence that read the opposite way and promised Gatekeeper verification:',
       ).toMatch(
-        /Builds are \*\*not\*\* Apple Developer ID code-signed, hardened-runtime, or\s*\n?\s*notarised\./,
+        /Builds are \*\*not\*\* Apple Developer ID code-signed, hardened-runtime, or\s*notarised\./,
       );
       expect(page, 'the first-launch workaround must stay while the builds are unsigned').toMatch(
         /unidentified-developer warning/,

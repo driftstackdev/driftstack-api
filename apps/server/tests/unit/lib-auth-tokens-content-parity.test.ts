@@ -37,25 +37,23 @@ describe('W388.A apps/server/src/lib/auth-tokens.ts content parity', () => {
 
   it('framing: distinct from api-keys.ts (user-facing auth flow, not SDK consumers)', () => {
     expect(body).toMatch(
-      /Helpers for the user-facing auth flow \(signup\/verify\/login\/magic-link\/\s*\n?\s*\/\/\s*password-reset\/web-session\)\. Distinct from `api-keys\.ts`/,
+      /Helpers for the user-facing auth flow \(signup\/verify\/login\/magic-link\/\s*\/\/\s*password-reset\/web-session\)\. Distinct from `api-keys\.ts`/,
     );
   });
 
   it('2 primitives framing: scrypt-kdf password hash + opaque sha256-hashed tokens', () => {
     expect(body).toMatch(
-      /Password hashing — scrypt-kdf, same parameters as the API-key path\s*\n?\s*\/\/\s*\(logN=15, r=8, p=1\)/,
+      /Password hashing — scrypt-kdf, same parameters as the API-key path\s*\/\/\s*\(logN=15, r=8, p=1\)/,
     );
+    expect(body).toMatch(/Re-uses the api-keys hashing functions to\s*\/\/\s*avoid divergence/);
     expect(body).toMatch(
-      /Re-uses the api-keys hashing functions to\s*\n?\s*\/\/\s*avoid divergence/,
-    );
-    expect(body).toMatch(
-      /Opaque single-use tokens — 32 random bytes encoded as URL-safe\s*\n?\s*\/\/\s*base64, sha256-hashed at rest/,
+      /Opaque single-use tokens — 32 random bytes encoded as URL-safe\s*\/\/\s*base64, sha256-hashed at rest/,
     );
   });
 
   it('plaintext-sent-ONCE framing pinned (Postmark for email flows; response body for web-session)', () => {
     expect(body).toMatch(
-      /The plaintext is sent ONCE\s*\n?\s*\/\/\s*\(via Postmark for email-bearing flows; in the response body for\s*\n?\s*\/\/\s*web-session login\)/,
+      /The plaintext is sent ONCE\s*\/\/\s*\(via Postmark for email-bearing flows; in the response body for\s*\/\/\s*web-session login\)/,
     );
   });
 
@@ -72,35 +70,35 @@ describe('W388.A apps/server/src/lib/auth-tokens.ts content parity', () => {
 
   it('generateAuthToken: randomBytes(32).toString("base64url")', () => {
     expect(body).toMatch(
-      /export function generateAuthToken\(\): string \{\s*\n?\s*return randomBytes\(TOKEN_RANDOM_BYTES\)\.toString\('base64url'\);\s*\n?\s*\}/,
+      /export function generateAuthToken\(\): string \{\s*return randomBytes\(TOKEN_RANDOM_BYTES\)\.toString\('base64url'\);\s*\}/,
     );
   });
 
   it('tokenHash: sha256 hex (sufficient — scrypt reserved for low-entropy passwords)', () => {
     expect(body).toMatch(
-      /Sha256 is sufficient\s*\n?\s*\*\s*here because the input has full random entropy \(256 bits\) — scrypt is\s*\n?\s*\*\s*reserved for low-entropy user-chosen passwords/,
+      /Sha256 is sufficient\s*\*\s*here because the input has full random entropy \(256 bits\) — scrypt is\s*\*\s*reserved for low-entropy user-chosen passwords/,
     );
     expect(body).toMatch(
-      /export function tokenHash\(plaintext: string\): string \{\s*\n?\s*return createHash\('sha256'\)\.update\(plaintext\)\.digest\('hex'\);\s*\n?\s*\}/,
+      /export function tokenHash\(plaintext: string\): string \{\s*return createHash\('sha256'\)\.update\(plaintext\)\.digest\('hex'\);\s*\}/,
     );
   });
 
   it('hashPassword: DELEGATES to hashApiKey (single scrypt path, no divergence)', () => {
     expect(body).toMatch(/import \{ hashApiKey, verifyApiKey \} from '\.\/api-keys\.js';/);
     expect(body).toMatch(
-      /export function hashPassword\(plaintext: string\): Promise<string> \{\s*\n?\s*return hashApiKey\(plaintext\);\s*\n?\s*\}/,
+      /export function hashPassword\(plaintext: string\): Promise<string> \{\s*return hashApiKey\(plaintext\);\s*\}/,
     );
   });
 
   it('verifyPassword: DELEGATES to verifyApiKey (single scrypt path, no divergence)', () => {
     expect(body).toMatch(
-      /export function verifyPassword\(plaintext: string, encodedHash: string\): Promise<boolean> \{\s*\n?\s*return verifyApiKey\(plaintext, encodedHash\);\s*\n?\s*\}/,
+      /export function verifyPassword\(plaintext: string, encodedHash: string\): Promise<boolean> \{\s*return verifyApiKey\(plaintext, encodedHash\);\s*\}/,
     );
   });
 
   it('accounts.password_hash + api_keys.key_hash framing: both round-trip via scrypt-kdf standard format', () => {
     expect(body).toMatch(
-      /Both columns\s*\n?\s*\*\s*\(`api_keys\.key_hash` and `accounts\.password_hash`\) round-trip through\s*\n?\s*\*\s*scrypt-kdf's standard-format string/,
+      /Both columns\s*\*\s*\(`api_keys\.key_hash` and `accounts\.password_hash`\) round-trip through\s*\*\s*scrypt-kdf's standard-format string/,
     );
   });
 

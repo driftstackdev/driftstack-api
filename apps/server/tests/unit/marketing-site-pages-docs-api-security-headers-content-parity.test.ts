@@ -34,50 +34,50 @@ describe('W511.A apps/marketing-site/src/pages/docs/api-security-headers.astro c
 
   it("V-712.C framing pinned: 'public reference for the security-relevant response headers Driftstack's API sets. Security reviewers + integrators ask for this regularly; gathering it on one page is faster than answering individually.' — pinned so the V-712.C anchor + security-reviewer-self-serve rationale survive (drift to dropping would orphan the page from the engineering reason it exists)", () => {
     expect(body).toMatch(
-      /\/\/ V-712\.C — public reference for the security-relevant response\s*\n?\s*\/\/ headers Driftstack's API sets\. Security reviewers \+ integrators\s*\n?\s*\/\/ ask for this regularly; gathering it on one page is faster than\s*\n?\s*\/\/ answering individually\./,
+      /\/\/ V-712\.C — public reference for the security-relevant response\s*\/\/ headers Driftstack's API sets\. Security reviewers \+ integrators\s*\/\/ ask for this regularly; gathering it on one page is faster than\s*\/\/ answering individually\./,
     );
   });
 
   it("Strict-Transport-Security 'max-age=63072000; includeSubDomains; preload' (2-year HSTS) + browser-preload-list eligibility framing pinned — pinned so the 63072000-second (2-year) + includeSubDomains + preload directives all survive (drift to a shorter max-age would weaken first-visit-downgrade protection; drift to dropping 'preload' would block browser preload-list eligibility)", () => {
     expect(body).toMatch(/<td><code>max-age=63072000; includeSubDomains; preload<\/code><\/td>/);
     expect(body).toMatch(
-      /2-year HSTS, eligible for the browser preload list\.\s*\n?\s*Closes first-visit downgrade attacks before TLS upgrade\s*\n?\s*kicks in\./,
+      /2-year HSTS, eligible for the browser preload list\.\s*Closes first-visit downgrade attacks before TLS upgrade\s*kicks in\./,
     );
   });
 
   it('Always-on 5-transport-header table: X-Content-Type-Options nosniff + X-Frame-Options SAMEORIGIN + Referrer-Policy no-referrer + X-DNS-Prefetch-Control off — pinned so the 4-additional-header values stay consistent (drift to dropping X-Frame-Options would let Driftstack be framed; drift to dropping Referrer-Policy would leak referrer to third parties)', () => {
     expect(body).toMatch(
-      /<td><code>X-Content-Type-Options<\/code><\/td>\s*\n?\s*<td><code>nosniff<\/code><\/td>/,
+      /<td><code>X-Content-Type-Options<\/code><\/td>\s*<td><code>nosniff<\/code><\/td>/,
     );
     expect(body).toMatch(
-      /<td><code>X-Frame-Options<\/code><\/td>\s*\n?\s*<td><code>SAMEORIGIN<\/code><\/td>/,
+      /<td><code>X-Frame-Options<\/code><\/td>\s*<td><code>SAMEORIGIN<\/code><\/td>/,
     );
     expect(body).toMatch(
-      /<td><code>Referrer-Policy<\/code><\/td>\s*\n?\s*<td><code>no-referrer<\/code><\/td>/,
+      /<td><code>Referrer-Policy<\/code><\/td>\s*<td><code>no-referrer<\/code><\/td>/,
     );
     expect(body).toMatch(
-      /<td><code>X-DNS-Prefetch-Control<\/code><\/td>\s*\n?\s*<td><code>off<\/code><\/td>/,
+      /<td><code>X-DNS-Prefetch-Control<\/code><\/td>\s*<td><code>off<\/code><\/td>/,
     );
   });
 
   it('Cache-Control posture: all caller-private /v1 responses default private no-store; authenticated transcript/notification SSE retain private no-store plus no-cache/no-transform; status mailbox mutations are private; every public status JSON read and stream retain explicit policies', () => {
     expect(body).toMatch(
-      /<td><code>\/v1\/\*<\/code> \(caller-private default\)<\/td>\s*\n?\s*<td><code>no-store, private<\/code><\/td>/,
+      /<td><code>\/v1\/\*<\/code> \(caller-private default\)<\/td>\s*<td><code>no-store, private<\/code><\/td>/,
     );
     expect(body).toMatch(
-      /<td><code>\/v1\/agent-sessions\/&#123;id&#125;\/transcript<\/code> \(authenticated SSE\)<\/td>\s*\n?\s*<td><code>no-cache, no-store, private, no-transform<\/code><\/td>/,
+      /<td><code>\/v1\/agent-sessions\/&#123;id&#125;\/transcript<\/code> \(authenticated SSE\)<\/td>\s*<td><code>no-cache, no-store, private, no-transform<\/code><\/td>/,
     );
     expect(body).toMatch(
-      /<td><code>\/v1\/account\/me\/notifications<\/code> \(authenticated SSE\)<\/td>\s*\n?\s*<td><code>no-cache, no-store, private, no-transform<\/code><\/td>/,
+      /<td><code>\/v1\/account\/me\/notifications<\/code> \(authenticated SSE\)<\/td>\s*<td><code>no-cache, no-store, private, no-transform<\/code><\/td>/,
     );
     expect(body).toMatch(
-      /<td><code>\/v1\/status\/subscribe\*<\/code> \(mailbox mutation\)<\/td>\s*\n?\s*<td><code>no-store, private<\/code><\/td>/,
+      /<td><code>\/v1\/status\/subscribe\*<\/code> \(mailbox mutation\)<\/td>\s*<td><code>no-store, private<\/code><\/td>/,
     );
     expect(body).toMatch(
       /<td>\s*<code>\/v1\/status<\/code>, <code>\/v1\/status\/incidents<\/code>,\s*<code>\/v1\/status\/incidents\/&#123;id&#125;<\/code>, and\s*<code>\/v1\/status\/sla<\/code> \(public JSON\)\s*<\/td>\s*<td><code>public, max-age=30<\/code><\/td>/,
     );
     expect(body).toMatch(
-      /<td><code>\/v1\/status\/stream<\/code> \(SSE\)<\/td>\s*\n?\s*<td><code>no-cache, no-transform<\/code><\/td>/,
+      /<td><code>\/v1\/status\/stream<\/code> \(SSE\)<\/td>\s*<td><code>no-cache, no-transform<\/code><\/td>/,
     );
     // Internal V-anchors must NOT bleed into customer-facing copy.
     expect(body).not.toMatch(/\(V-666\.BS\)/);
@@ -88,26 +88,26 @@ describe('W511.A apps/marketing-site/src/pages/docs/api-security-headers.astro c
   it('Defense-in-depth rationale pins authenticated SSE Origin variance and prevents public-status cache policy from reaching mailbox workflow responses', () => {
     expect(body).toMatch(/Caller-private <code>\/v1\/\*<\/code> responses default to/);
     expect(body).toMatch(
-      /The authenticated transcript and notification\s*\n?\s*streams listed above add <code>no-cache<\/code> and <code>no-transform<\/code>/,
+      /The authenticated transcript and notification\s*streams listed above add <code>no-cache<\/code> and <code>no-transform<\/code>/,
     );
     expect(body).not.toMatch(/Authenticated event streams add/);
     expect(body).toMatch(
-      /reflect only an\s*\n?\s*allowed <code>Origin<\/code> and send <code>Vary: Origin<\/code>/,
+      /reflect only an\s*allowed <code>Origin<\/code> and send <code>Vary: Origin<\/code>/,
     );
     expect(body).toMatch(
-      /defense-in-depth so shared \/ proxy caches can't hold onto private\s*\n?\s*payloads and browser back-forward cache can't serve stale state\s*\n?\s*after logout\./,
+      /defense-in-depth so shared \/ proxy caches can't hold onto private\s*payloads and browser back-forward cache can't serve stale state\s*after logout\./,
     );
     expect(body).toMatch(
-      /subscription, confirmation, and unsubscribe responses\s*\n?\s*never inherit them/,
+      /subscription, confirmation, and unsubscribe responses\s*never inherit them/,
     );
   });
 
   it("CORS framing: 'explicit allow-list of origins; SDK consumers can call from any origin because the SDK ships Authorization: Bearer … and never relies on browser-cookie auth. Pre-flight responses cache for 10 minutes. credentials: true is required only by the Driftstack customer dashboard's cookie-based session (Article-13 auth).' — pinned so the allow-list + SDK-from-any-origin + 10-min preflight + credentials-for-dashboard-only commitment survive (drift to dropping 'credentials: true required only by dashboard' would mislead third-party developers about cookie sharing)", () => {
     expect(body).toMatch(
-      /The API uses an explicit allow-list of origins; SDK consumers\s*\n?\s*can call from any origin because the SDK ships\s*\n?\s*<code>Authorization: Bearer …<\/code> and never relies on\s*\n?\s*browser-cookie auth\./,
+      /The API uses an explicit allow-list of origins; SDK consumers\s*can call from any origin because the SDK ships\s*<code>Authorization: Bearer …<\/code> and never relies on\s*browser-cookie auth\./,
     );
     expect(body).toMatch(
-      /<code>credentials: true<\/code> is required only by the\s*\n?\s*Driftstack customer dashboard's cookie-based session\s*\n?\s*\(Article-13 auth\)\./,
+      /<code>credentials: true<\/code> is required only by the\s*Driftstack customer dashboard's cookie-based session\s*\(Article-13 auth\)\./,
     );
   });
 
@@ -127,25 +127,25 @@ describe('W511.A apps/marketing-site/src/pages/docs/api-security-headers.astro c
 
   it("Cross-Origin-Resource-Policy framing: 'Cross-Origin-Resource-Policy: cross-origin is set explicitly. The default helmet value (same-origin) would block legitimate SDK calls from third-party origins because the CORS layer is our boundary, not CORP.' — pinned so the CORP-cross-origin choice + the rationale (CORS-is-boundary-not-CORP) survives (drift to changing to same-origin would block SDK calls from customer origins)", () => {
     expect(body).toMatch(
-      /<code>Cross-Origin-Resource-Policy: cross-origin<\/code> is set\s*\n?\s*explicitly\. The default helmet value\s*\n?\s*\(<code>same-origin<\/code>\) would block legitimate SDK calls\s*\n?\s*from third-party origins because the CORS layer is our\s*\n?\s*boundary, not CORP\./,
+      /<code>Cross-Origin-Resource-Policy: cross-origin<\/code> is set\s*explicitly\. The default helmet value\s*\(<code>same-origin<\/code>\) would block legitimate SDK calls\s*from third-party origins because the CORS layer is our\s*boundary, not CORP\./,
     );
   });
 
   it("'What we don't set' 3-explicit-no list: Content-Security-Policy (no HTML, CSP would be no-op) + Cross-Origin-Embedder-Policy (no embeds) + Cookie security flags (REST is bearer-only) — pinned so the 3-no-by-design explanations survive (drift to claiming CSP would mislead reviewers; drift to dropping the cookie-flags clarification would let reviewers question dashboard cookie posture)", () => {
     expect(body).toMatch(
-      /<strong>Content-Security-Policy\.<\/strong> Driftstack serves\s*\n?\s*no HTML — every endpoint returns JSON, plain text, CSV, or\s*\n?\s*PDF\. CSP would be a no-op\./,
+      /<strong>Content-Security-Policy\.<\/strong> Driftstack serves\s*no HTML — every endpoint returns JSON, plain text, CSV, or\s*PDF\. CSP would be a no-op\./,
     );
     expect(body).toMatch(
-      /<strong>Cross-Origin-Embedder-Policy\.<\/strong> Same logic —\s*\n?\s*no embeddable surfaces\./,
+      /<strong>Cross-Origin-Embedder-Policy\.<\/strong> Same logic —\s*no embeddable surfaces\./,
     );
     expect(body).toMatch(
-      /<strong>Cookie security flags\.<\/strong> The public REST API\s*\n?\s*is bearer-auth only\. The dashboard's Article-13 cookie sets\s*\n?\s*<code>Secure; HttpOnly; SameSite=Lax<\/code>/,
+      /<strong>Cookie security flags\.<\/strong> The public REST API\s*is bearer-auth only\. The dashboard's Article-13 cookie sets\s*<code>Secure; HttpOnly; SameSite=Lax<\/code>/,
     );
   });
 
   it('Reporting framing: security@driftstack.dev + PGP key on /.well-known/security.txt + /legal/vulnerability-disclosure cross-link — pinned so the 3-disclosure-channel (email + PGP-discovery + policy-doc) survives (drift to dropping security.txt would orphan the standard PGP-discovery path; drift to dropping /legal/vulnerability-disclosure would orphan the safe-harbour policy reference)', () => {
     expect(body).toMatch(
-      /Send disclosures to\s*\n?\s*<a href="mailto:security@driftstack\.dev">security@driftstack\.dev<\/a>\./,
+      /Send disclosures to\s*<a href="mailto:security@driftstack\.dev">security@driftstack\.dev<\/a>\./,
     );
     expect(body).toMatch(
       /<a href="https:\/\/driftstack\.dev\/\.well-known\/security\.txt">security\.txt<\/a>/,

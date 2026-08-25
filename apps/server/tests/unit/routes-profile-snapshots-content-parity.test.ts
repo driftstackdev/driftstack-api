@@ -36,16 +36,16 @@ describe('W438.C apps/server/src/routes/profile-snapshots.ts content parity', ()
   it('V-312 framing pinned: 6 endpoints (capture / list-per-profile / list-per-account / get one / restore / hard-delete); snapshot = immutable point-in-time copy of parent profile metadata (founder Tier-2 verdict 2026-05-09); parent keeps evolving independently; restore creates NEW profile row carrying snapshot archetype + customer-supplied name', () => {
     expect(body).toMatch(/\/\/ V-312 — profile snapshot routes\./);
     expect(body).toMatch(
-      /\/\/\s*POST\s+\/v1\/profiles\/:id\/snapshots\s+— capture a snapshot\s*\n?\s*\/\/\s*GET\s+\/v1\/profiles\/:id\/snapshots\s+— list per-profile \(cursor-paginated\)\s*\n?\s*\/\/\s*GET\s+\/v1\/profile-snapshots\s+— list per-account \(across all profiles\)\s*\n?\s*\/\/\s*GET\s+\/v1\/profile-snapshots\/:id\s+— get one\s*\n?\s*\/\/\s*POST\s+\/v1\/profile-snapshots\/:id\/restore\s+— create a fresh profile from snapshot\s*\n?\s*\/\/\s*DELETE \/v1\/profile-snapshots\/:id\s+— hard-delete the snapshot/,
+      /\/\/\s*POST\s+\/v1\/profiles\/:id\/snapshots\s+— capture a snapshot\s*\/\/\s*GET\s+\/v1\/profiles\/:id\/snapshots\s+— list per-profile \(cursor-paginated\)\s*\/\/\s*GET\s+\/v1\/profile-snapshots\s+— list per-account \(across all profiles\)\s*\/\/\s*GET\s+\/v1\/profile-snapshots\/:id\s+— get one\s*\/\/\s*POST\s+\/v1\/profile-snapshots\/:id\/restore\s+— create a fresh profile from snapshot\s*\/\/\s*DELETE \/v1\/profile-snapshots\/:id\s+— hard-delete the snapshot/,
     );
     expect(body).toMatch(
-      /\/\/ The snapshot is an immutable point-in-time copy of the parent\s*\n?\s*\/\/ profile's metadata \(per founder Tier-2 verdict 2026-05-09\); the\s*\n?\s*\/\/ parent keeps evolving independently\. Restore creates a NEW profile\s*\n?\s*\/\/ row carrying the snapshot's archetype \+ a customer-supplied name\./,
+      /\/\/ The snapshot is an immutable point-in-time copy of the parent\s*\/\/ profile's metadata \(per founder Tier-2 verdict 2026-05-09\); the\s*\/\/ parent keeps evolving independently\. Restore creates a NEW profile\s*\/\/ row carrying the snapshot's archetype \+ a customer-supplied name\./,
     );
   });
 
   it('imports: 3 Zod schemas (CaptureSnapshot + Pagination + RestoreSnapshot) + BadRequest/Forbidden/Validation errors + ProfilesService/ProfileRecord + ProfileSnapshotRecord/Service + resolveEffectiveAccount + AccountAuthRepo', () => {
     expect(body).toMatch(
-      /import \{\s*\n?\s*CaptureSnapshotRequestSchema,\s*\n?\s*PaginationQuerySchema,\s*\n?\s*RestoreSnapshotRequestSchema,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import \{\s*CaptureSnapshotRequestSchema,\s*PaginationQuerySchema,\s*RestoreSnapshotRequestSchema,\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(
       /import \{ BadRequestError, ForbiddenError \} from '\.\.\/lib\/errors\.js';/,
@@ -54,13 +54,13 @@ describe('W438.C apps/server/src/routes/profile-snapshots.ts content parity', ()
       /import type \{ ProfilesService, ProfileRecord \} from '\.\.\/services\/profiles\.js';/,
     );
     expect(body).toMatch(
-      /import type \{\s*\n?\s*ProfileSnapshotRecord,\s*\n?\s*ProfileSnapshotsService,\s*\n?\s*\} from '\.\.\/services\/profile-snapshots\.js';/,
+      /import type \{\s*ProfileSnapshotRecord,\s*ProfileSnapshotsService,\s*\} from '\.\.\/services\/profile-snapshots\.js';/,
     );
   });
 
   it('effectiveAccountIdForWrite admin-only gate: throws ForbiddenError "Snapshot writes on a team owner require admin role." on member', () => {
     expect(body).toMatch(
-      /function effectiveAccountIdForWrite\(\s*\n?\s*request: FastifyRequest,\s*\n?\s*ctx: NonNullable<FastifyRequest\['account'\]>,\s*\n?\s*\): string \| undefined \{\s*\n?\s*const eff = resolveEffectiveAccount\(ctx, readEffectiveAccountHeader\(request\)\);\s*\n?\s*if \(eff\.kind !== 'team'\) return undefined;\s*\n?\s*if \(eff\.role !== 'admin'\) \{\s*\n?\s*throw new ForbiddenError\('Snapshot writes on a team owner require admin role\.'\);\s*\n?\s*\}\s*\n?\s*return eff\.accountId;\s*\n?\s*\}/,
+      /function effectiveAccountIdForWrite\(\s*request: FastifyRequest,\s*ctx: NonNullable<FastifyRequest\['account'\]>,\s*\): string \| undefined \{\s*const eff = resolveEffectiveAccount\(ctx, readEffectiveAccountHeader\(request\)\);\s*if \(eff\.kind !== 'team'\) return undefined;\s*if \(eff\.role !== 'admin'\) \{\s*throw new ForbiddenError\('Snapshot writes on a team owner require admin role\.'\);\s*\}\s*return eff\.accountId;\s*\}/,
     );
   });
 
@@ -70,13 +70,13 @@ describe('W438.C apps/server/src/routes/profile-snapshots.ts content parity', ()
       /const PUBLIC_ID_RE = \/\^\[a-z\]\+_\(\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{12\}\)\$\/i;/,
     );
     expect(body).toMatch(
-      /function uuidFromPrefixedId\(value: string, expectedPrefix: string\): string \{\s*\n?\s*const m = PUBLIC_ID_RE\.exec\(value\);\s*\n?\s*if \(!m \|\| !m\[1\] \|\| !value\.startsWith\(`\$\{expectedPrefix\}_`\)\) \{\s*\n?\s*throw new BadRequestError\(`Invalid id format\. Expected "\$\{expectedPrefix\}_<uuid>"\.`\);\s*\n?\s*\}\s*\n?\s*return m\[1\];\s*\n?\s*\}/,
+      /function uuidFromPrefixedId\(value: string, expectedPrefix: string\): string \{\s*const m = PUBLIC_ID_RE\.exec\(value\);\s*if \(!m \|\| !m\[1\] \|\| !value\.startsWith\(`\$\{expectedPrefix\}_`\)\) \{\s*throw new BadRequestError\(`Invalid id format\. Expected "\$\{expectedPrefix\}_<uuid>"\.`\);\s*\}\s*return m\[1\];\s*\}/,
     );
   });
 
   it('publicSnapshot mapper (8 fields: id psnap_ + parent_profile_id prof_ nullable + label + description + parent_archetype + parent_name + captured_at + created_at)', () => {
     expect(body).toMatch(
-      /function publicSnapshot\(s: ProfileSnapshotRecord\): Record<string, unknown> \{\s*\n?\s*return \{\s*\n?\s*id: `psnap_\$\{s\.id\}`,\s*\n?\s*parent_profile_id: s\.parentProfileId \? `prof_\$\{s\.parentProfileId\}` : null,\s*\n?\s*label: s\.label,\s*\n?\s*description: s\.description,\s*\n?\s*parent_archetype: s\.parentArchetype,\s*\n?\s*parent_name: s\.parentName,\s*\n?\s*captured_at: s\.capturedAt\.toISOString\(\),\s*\n?\s*created_at: s\.createdAt\.toISOString\(\),\s*\n?\s*\};\s*\n?\s*\}/,
+      /function publicSnapshot\(s: ProfileSnapshotRecord\): Record<string, unknown> \{\s*return \{\s*id: `psnap_\$\{s\.id\}`,\s*parent_profile_id: s\.parentProfileId \? `prof_\$\{s\.parentProfileId\}` : null,\s*label: s\.label,\s*description: s\.description,\s*parent_archetype: s\.parentArchetype,\s*parent_name: s\.parentName,\s*captured_at: s\.capturedAt\.toISOString\(\),\s*created_at: s\.createdAt\.toISOString\(\),\s*\};\s*\}/,
     );
   });
 
@@ -144,58 +144,58 @@ describe('W438.C apps/server/src/routes/profile-snapshots.ts content parity', ()
 
   it('ProfileSnapshotsRoutesDeps: service + profilesService + authRepo', () => {
     expect(body).toMatch(
-      /export interface ProfileSnapshotsRoutesDeps \{\s*\n?\s*service: ProfileSnapshotsService;\s*\n?\s*profilesService: ProfilesService;\s*\n?\s*authRepo: AccountAuthRepo;\s*\n?\s*\}/,
+      /export interface ProfileSnapshotsRoutesDeps \{\s*service: ProfileSnapshotsService;\s*profilesService: ProfilesService;\s*authRepo: AccountAuthRepo;\s*\}/,
     );
   });
 
   it('POST /v1/profiles/:id/snapshots capture: prof_ uuid + CaptureSnapshotRequest safeParse → Validation; effectiveAccountIdForWrite admin gate; calls service.capture with optional description', () => {
     expect(body).toMatch(
-      /const profileId = uuidFromPrefixedId\(req\.params\.id, 'prof'\);\s*\n?\s*const body = parseRequestBodyReportingUnknown\(\{[\s\S]*?\}\);\s*\n?\s*const eff = effectiveAccountIdForWrite\(req, ctx\);\s*\n?\s*const accountId = eff \?\? ctx\.account\.id;/,
+      /const profileId = uuidFromPrefixedId\(req\.params\.id, 'prof'\);\s*const body = parseRequestBodyReportingUnknown\(\{[\s\S]*?\}\);\s*const eff = effectiveAccountIdForWrite\(req, ctx\);\s*const accountId = eff \?\? ctx\.account\.id;/,
     );
     expect(body).toMatch(
-      /const snapshot = await service\.capture\(\{\s*\n?\s*accountId,\s*\n?\s*profileId,\s*\n?\s*label: body\.label,\s*\n?\s*\.\.\.\(body\.description !== undefined \? \{ description: body\.description \} : \{\}\),\s*\n?\s*\}\);/,
+      /const snapshot = await service\.capture\(\{\s*accountId,\s*profileId,\s*label: body\.label,\s*\.\.\.\(body\.description !== undefined \? \{ description: body\.description \} : \{\}\),\s*\}\);/,
     );
   });
 
   it('GET /v1/profiles/:id/snapshots: read accepts both roles via resolveEffectiveAccount inline; list({parentProfileId, accountId, cursor?, limit?}) → data + has_more + next_cursor', () => {
     expect(body).toMatch(
-      /const eff = resolveEffectiveAccount\(ctx, readEffectiveAccountHeader\(req\)\);\s*\n?\s*const accountId = eff\.kind === 'team' \? eff\.accountId : ctx\.account\.id;\s*\n?\s*const query = PaginationQuerySchema\.parse\(req\.query \?\? \{\}\);\s*\n?\s*const page = await service\.list\(\{\s*\n?\s*accountId,\s*\n?\s*parentProfileId: profileId,/,
+      /const eff = resolveEffectiveAccount\(ctx, readEffectiveAccountHeader\(req\)\);\s*const accountId = eff\.kind === 'team' \? eff\.accountId : ctx\.account\.id;\s*const query = PaginationQuerySchema\.parse\(req\.query \?\? \{\}\);\s*const page = await service\.list\(\{\s*accountId,\s*parentProfileId: profileId,/,
     );
     expect(body).toMatch(
-      /return \{\s*\n?\s*data: page\.data\.map\(publicSnapshot\),\s*\n?\s*has_more: page\.hasMore,\s*\n?\s*next_cursor: page\.nextCursor,\s*\n?\s*\};/,
+      /return \{\s*data: page\.data\.map\(publicSnapshot\),\s*has_more: page\.hasMore,\s*next_cursor: page\.nextCursor,\s*\};/,
     );
   });
 
   it('GET /v1/profile-snapshots: account-wide list (no parentProfileId); reads accept both team roles; read:profiles scope floor (C9 2026-07-07)', () => {
     expect(body).toMatch(
-      /app\.get\(\s*\n?\s*'\/v1\/profile-snapshots',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('read:profiles'\), app\.rateLimit\('global'\)\] \},/,
+      /app\.get\(\s*'\/v1\/profile-snapshots',\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('read:profiles'\), app\.rateLimit\('global'\)\] \},/,
     );
   });
 
   it('GET /v1/profile-snapshots/:id: psnap_ uuid + service.get({id, accountId}) → publicSnapshot', () => {
     expect(body).toMatch(
-      /const id = uuidFromPrefixedId\(req\.params\.id, 'psnap'\);\s*\n?\s*const eff = resolveEffectiveAccount\(ctx, readEffectiveAccountHeader\(req\)\);\s*\n?\s*const accountId = eff\.kind === 'team' \? eff\.accountId : ctx\.account\.id;\s*\n?\s*const snapshot = await service\.get\(\{ id, accountId \}\);\s*\n?\s*return publicSnapshot\(snapshot\);/,
+      /const id = uuidFromPrefixedId\(req\.params\.id, 'psnap'\);\s*const eff = resolveEffectiveAccount\(ctx, readEffectiveAccountHeader\(req\)\);\s*const accountId = eff\.kind === 'team' \? eff\.accountId : ctx\.account\.id;\s*const snapshot = await service\.get\(\{ id, accountId \}\);\s*return publicSnapshot\(snapshot\);/,
     );
   });
 
   it('POST /v1/profile-snapshots/:id/restore: admin-only on team; owner tier resolved from authRepo when team-scoped ("Owner account no longer exists." on missing); RestoreSnapshotRequest safeParse → Validation; service.restore({accountId, snapshotId, tier, name}) → publicProfile (NEW profile row)', () => {
     expect(body).toMatch(
-      /const body = parseRequestBodyReportingUnknown\(\{[\s\S]*?\}\);\s*\n?\s*const eff = effectiveAccountIdForWrite\(req, ctx\);\s*\n?\s*let accountId = ctx\.account\.id;\s*\n?\s*let tier = ctx\.account\.tier;\s*\n?\s*if \(eff !== undefined\) \{\s*\n?\s*const owner = await authRepo\.getAccount\(eff\);\s*\n?\s*if \(!owner\) throw new ForbiddenError\('Owner account no longer exists\.'\);\s*\n?\s*accountId = owner\.id;\s*\n?\s*tier = owner\.tier;\s*\n?\s*\}/,
+      /const body = parseRequestBodyReportingUnknown\(\{[\s\S]*?\}\);\s*const eff = effectiveAccountIdForWrite\(req, ctx\);\s*let accountId = ctx\.account\.id;\s*let tier = ctx\.account\.tier;\s*if \(eff !== undefined\) \{\s*const owner = await authRepo\.getAccount\(eff\);\s*if \(!owner\) throw new ForbiddenError\('Owner account no longer exists\.'\);\s*accountId = owner\.id;\s*tier = owner\.tier;\s*\}/,
     );
     expect(body).toMatch(
-      /const restored = await service\.restore\(\{\s*\n?\s*accountId,\s*\n?\s*snapshotId: id,\s*\n?\s*tier,\s*\n?\s*name: body\.name,\s*\n?\s*\}\);\s*\n?\s*return publicProfile\(restored\);/,
+      /const restored = await service\.restore\(\{\s*accountId,\s*snapshotId: id,\s*tier,\s*name: body\.name,\s*\}\);\s*return publicProfile\(restored\);/,
     );
   });
 
   it('DELETE /v1/profile-snapshots/:id: admin-only on team scope; service.delete({id, accountId}); 204 No Content', () => {
     expect(body).toMatch(
-      /const eff = effectiveAccountIdForWrite\(req, ctx\);\s*\n?\s*const accountId = eff \?\? ctx\.account\.id;\s*\n?\s*await service\.delete\(\{ id, accountId \}\);\s*\n?\s*return reply\.code\(204\)\.send\(\);/,
+      /const eff = effectiveAccountIdForWrite\(req, ctx\);\s*const accountId = eff \?\? ctx\.account\.id;\s*await service\.delete\(\{ id, accountId \}\);\s*return reply\.code\(204\)\.send\(\);/,
     );
   });
 
   it("profilesService unused-warn suppression rationale (wired in deps but route doesn't directly use)", () => {
     expect(body).toMatch(
-      /\/\/ Reference profilesService to satisfy the unused-warn in deploys\s*\n?\s*\/\/ where the param is wired but the route doesn't use it directly\.\s*\n?\s*void profilesService;/,
+      /\/\/ Reference profilesService to satisfy the unused-warn in deploys\s*\/\/ where the param is wired but the route doesn't use it directly\.\s*void profilesService;/,
     );
   });
 

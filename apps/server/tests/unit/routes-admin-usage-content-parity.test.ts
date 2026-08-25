@@ -41,25 +41,25 @@ describe('W413.C apps/server/src/routes/admin-usage.ts content parity', () => {
     expect(body).toMatch(/V-689 — admin usage-summary route\./);
     expect(body).toMatch(/GET \/v1\/admin\/usage\/accounts\/:id/);
     expect(body).toMatch(
-      /Returns the same shape UsageService\.currentPeriodSummary produces\s*\n?\s*\/\/\s*for the caller, but for an arbitrary account by id\. Used by ops\s*\n?\s*\/\/\s*when triaging "is this customer hitting our infra harder than\s*\n?\s*\/\/\s*their tier suggests\?" without needing a customer-side API key\./,
+      /Returns the same shape UsageService\.currentPeriodSummary produces\s*\/\/\s*for the caller, but for an arbitrary account by id\. Used by ops\s*\/\/\s*when triaging "is this customer hitting our infra harder than\s*\/\/\s*their tier suggests\?" without needing a customer-side API key\./,
     );
   });
 
   it('Scope-gate framing pinned: driftstack_internal_admin + tier lookup via AccountsAdminService so it cannot drift from admin dashboard', () => {
     expect(body).toMatch(
-      /Auth: driftstack_internal_admin\. Tier lookup goes through\s*\n?\s*\/\/\s*AccountsAdminService \(same source the admin accounts route uses\)\s*\n?\s*\/\/\s*so the answer can't drift from what the admin dashboard shows\./,
+      /Auth: driftstack_internal_admin\. Tier lookup goes through\s*\/\/\s*AccountsAdminService \(same source the admin accounts route uses\)\s*\/\/\s*so the answer can't drift from what the admin dashboard shows\./,
     );
   });
 
   it('Defense-in-depth pinned: AccountsAdminService.getAccount enforces same scope as preHandler; kept for standard NotFoundError 404 shape', () => {
     expect(body).toMatch(
-      /\/\/ AccountsAdminService\.getAccount enforces the same scope check\s*\n?\s*\/\/ as our preHandler — kept to surface 404 on unknown ids using\s*\n?\s*\/\/ the same NotFoundError shape every other admin route uses\./,
+      /\/\/ AccountsAdminService\.getAccount enforces the same scope check\s*\/\/ as our preHandler — kept to surface 404 on unknown ids using\s*\/\/ the same NotFoundError shape every other admin route uses\./,
     );
   });
 
   it('RegisterAdminUsageRoutesDeps: usageService + accountsAdminService', () => {
     expect(body).toMatch(
-      /export interface RegisterAdminUsageRoutesDeps \{\s*\n?\s*usageService: UsageService;\s*\n?\s*accountsAdminService: AccountsAdminService;\s*\n?\s*\}/,
+      /export interface RegisterAdminUsageRoutesDeps \{\s*usageService: UsageService;\s*accountsAdminService: AccountsAdminService;\s*\}/,
     );
   });
 
@@ -71,25 +71,25 @@ describe('W413.C apps/server/src/routes/admin-usage.ts content parity', () => {
 
   it("Route handler: preHandler requireScope('driftstack_internal_admin') only (no rate-limit); typed Params generic", () => {
     expect(body).toMatch(
-      /app\.get<\{ Params: \{ id: string \} \}>\(\s*\n?\s*'\/v1\/admin\/usage\/accounts\/:id',\s*\n?\s*\{ preHandler: \[app\.requireScope\('driftstack_internal_admin'\)\] \},/,
+      /app\.get<\{ Params: \{ id: string \} \}>\(\s*'\/v1\/admin\/usage\/accounts\/:id',\s*\{ preHandler: \[app\.requireScope\('driftstack_internal_admin'\)\] \},/,
     );
   });
 
   it('getAccount + summaryFor dispatch: accountsAdminService.getAccount(req.account!, params.id) + usageService.summaryFor(account.id, account.tier)', () => {
     expect(body).toMatch(
-      /const account = await deps\.accountsAdminService\.getAccount\(\s*\n?\s*req\.account!,\s*\n?\s*accountUuidFromParam\(params\.id\),\s*\n?\s*\);\s*\n?\s*const summary = await deps\.usageService\.summaryFor\(account\.id, account\.tier\);/,
+      /const account = await deps\.accountsAdminService\.getAccount\(\s*req\.account!,\s*accountUuidFromParam\(params\.id\),\s*\);\s*const summary = await deps\.usageService\.summaryFor\(account\.id, account\.tier\);/,
     );
   });
 
   it('Reply shape: account_id + tier + period_start/period_end ISO + totals + quotas (passed through verbatim)', () => {
     expect(body).toMatch(
-      /return reply\.send\(\{\s*\n?\s*account_id: account\.id,\s*\n?\s*tier: account\.tier,\s*\n?\s*period_start: summary\.periodStart\.toISOString\(\),\s*\n?\s*period_end: summary\.periodEnd\.toISOString\(\),\s*\n?\s*totals: summary\.totals,\s*\n?\s*quotas: summary\.quotas,\s*\n?\s*\}\);/,
+      /return reply\.send\(\{\s*account_id: account\.id,\s*tier: account\.tier,\s*period_start: summary\.periodStart\.toISOString\(\),\s*period_end: summary\.periodEnd\.toISOString\(\),\s*totals: summary\.totals,\s*quotas: summary\.quotas,\s*\}\);/,
     );
   });
 
   it('parseOrThrow helper: generic zod parse wrapper; BadRequestError(result.error.message) on failure', () => {
     expect(body).toMatch(
-      /function parseOrThrow<T>\(schema: z\.ZodSchema<T>, input: unknown\): T \{\s*\n?\s*const result = schema\.safeParse\(input\);\s*\n?\s*if \(!result\.success\) throw new BadRequestError\(result\.error\.message\);\s*\n?\s*return result\.data;/,
+      /function parseOrThrow<T>\(schema: z\.ZodSchema<T>, input: unknown\): T \{\s*const result = schema\.safeParse\(input\);\s*if \(!result\.success\) throw new BadRequestError\(result\.error\.message\);\s*return result\.data;/,
     );
   });
 

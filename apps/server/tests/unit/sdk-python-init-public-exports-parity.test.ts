@@ -57,7 +57,7 @@ describe('Python SDK __init__.py public-export parity', () => {
   it('imports the 7 team types from driftstack.resources.team in a single grouped statement', () => {
     // Grouped import keeps the public-surface footprint readable.
     expect(body).toMatch(
-      /from driftstack\.resources\.team import \(\s*\n?\s*AcceptInviteResponse,\s*\n?\s*TeamInvite,\s*\n?\s*TeamInvitesList,\s*\n?\s*TeamMember,\s*\n?\s*TeamMembersList,\s*\n?\s*TeamOwner,\s*\n?\s*TeamOwnersList,\s*\n?\s*\)/,
+      /from driftstack\.resources\.team import \(\s*AcceptInviteResponse,\s*TeamInvite,\s*TeamInvitesList,\s*TeamMember,\s*TeamMembersList,\s*TeamOwner,\s*TeamOwnersList,\s*\)/,
     );
   });
 

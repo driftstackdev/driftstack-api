@@ -35,19 +35,19 @@ describe('W398.C apps/server/src/services/sla-reporting.ts content parity', () =
   it('V-295e framing + V-295b probe history source pinned', () => {
     expect(body).toMatch(/V-295e — rolling-window SLA reporting from V-295b probe history\./);
     expect(body).toMatch(
-      /Computes uptime % per probe target over a configurable lookback\s*\n?\s*\/\/\s*window \(default 30 days\)\./,
+      /Computes uptime % per probe target over a configurable lookback\s*\/\/\s*window \(default 30 days\)\./,
     );
   });
 
   it('"operational since {timestamp}" framing pinned via lastFailureAt', () => {
     expect(body).toMatch(
-      /Surfaces per-target lastFailureAt so the\s*\n?\s*\/\/\s*status page can show "operational since \{timestamp\}" if there hasn't\s*\n?\s*\/\/\s*been a recent incident/,
+      /Surfaces per-target lastFailureAt so the\s*\/\/\s*status page can show "operational since \{timestamp\}" if there hasn't\s*\/\/\s*been a recent incident/,
     );
   });
 
   it('Pure-logic posture framing: no side effects, no caching, cache later if QPS demands', () => {
     expect(body).toMatch(
-      /Pure-logic service: takes a ProbesRepo \+ a window\. Returns a snapshot;\s*\n?\s*\/\/\s*no side effects, no caching\. Cache later if QPS demands\./,
+      /Pure-logic service: takes a ProbesRepo \+ a window\. Returns a snapshot;\s*\/\/\s*no side effects, no caching\. Cache later if QPS demands\./,
     );
   });
 

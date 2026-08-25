@@ -31,7 +31,7 @@ describe('docs layouts/BaseLayout content parity', () => {
 
   it('Props contract pinned: title (required) + description (optional, default) + pathname (optional, falls back to Astro.url.pathname). Drift to a different shape would break every page that wraps in BaseLayout', () => {
     expect(body).toMatch(
-      /interface Props \{\s*\n?\s*title: string;\s*\n?\s*description\?: string;\s*\n?\s*pathname\?: string;\s*\n?\s*\}/,
+      /interface Props \{\s*title: string;\s*description\?: string;\s*pathname\?: string;\s*\}/,
     );
   });
 
@@ -116,19 +116,15 @@ describe('docs layouts/BaseLayout content parity', () => {
   it('S22.3 (2026-07-06) — Pagefind search modal markup pinned: hidden-by-default [data-search-modal] overlay with a [data-search-backdrop] scrim, role=dialog aria-modal=true dialog, and the combobox/listbox pattern (role=combobox input with aria-controls + aria-activedescendant + aria-autocomplete=list; role=listbox results ul restyling Pagefind <mark> highlights to the accent wash + AA accent-text via [&_mark] variants; role=status live line). Drift on the ARIA shape would break screen-reader operability of search', () => {
     expect(body).toMatch(/<div data-search-modal hidden class="fixed inset-0 z-50">/);
     expect(body).toMatch(/data-search-backdrop/);
-    expect(body).toMatch(
-      /role="dialog"\s*\n?\s*aria-modal="true"\s*\n?\s*aria-label="Search documentation"/,
-    );
-    expect(body).toMatch(/data-search-input\s*\n?\s*type="text"\s*\n?\s*role="combobox"/);
+    expect(body).toMatch(/role="dialog"\s*aria-modal="true"\s*aria-label="Search documentation"/);
+    expect(body).toMatch(/data-search-input\s*type="text"\s*role="combobox"/);
     expect(body).toMatch(/aria-controls="docs-search-results"/);
     expect(body).toMatch(/aria-activedescendant=""/);
     expect(body).toMatch(/aria-autocomplete="list"/);
-    expect(body).toMatch(
-      /id="docs-search-results"\s*\n?\s*data-search-results\s*\n?\s*role="listbox"/,
-    );
+    expect(body).toMatch(/id="docs-search-results"\s*data-search-results\s*role="listbox"/);
     expect(body).toMatch(/\[&_mark\]:bg-tk-accent-soft/);
     expect(body).toMatch(/\[&_mark\]:text-tk-accent-text/);
-    expect(body).toMatch(/data-search-status\s*\n?\s*role="status"/);
+    expect(body).toMatch(/data-search-status\s*role="status"/);
     expect(body).toMatch(/Type to search the docs\./);
   });
 
@@ -163,7 +159,7 @@ describe('docs layouts/BaseLayout content parity', () => {
   });
 
   it("S35 2026-07-07 (fable-frontend-audit) — search rejection handling pinned: the runSearch chain (pf.search + fragment r.data() Promise.all) carries a .catch that surfaces 'Search hit a snag — press Enter to try again.' instead of leaving the status stuck on 'Searching…' when a redeploy rotates the hashed /pagefind/ chunk URLs or the connection blips; Enter with no active result re-runs the query (keyboard retry path); the astro-dev missing-index DEV_MSG state stays distinct (loadFailed short-circuits the retry)", () => {
-    expect(body).toMatch(/pf\.search\(query\)\s*\n?\s*\.then\(/);
+    expect(body).toMatch(/pf\.search\(query\)\s*\.then\(/);
     expect(body).toMatch(/\.catch\(function \(\) \{/);
     expect(body).toMatch(/clearResults\('Search hit a snag — press Enter to try again\.'\);/);
     // Enter retry path: no active result + non-empty query + index loaded.

@@ -42,7 +42,7 @@ describe('W870 V-353 MFA cross-source invariant', () => {
   it('CRITICAL packages/api-types/src/auth.ts MfaChallengeRequestSchema code field uses /^\\d{6}$/ regex with "Must be a 6-digit code." message. The V-353d login-mfa challenge accepts only exactly-6-digit codes.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/auth.ts'));
     expect(p).toMatch(
-      /MfaChallengeRequestSchema = z\s*\n?\s*\.object\(\{[\s\S]+?code: z\s*\n?\s*\.string\(\)\s*\n\s*\.regex\(\/\^\\d\{6\}\$\/, 'Must be a 6-digit code\.'\)/,
+      /MfaChallengeRequestSchema = z\s*\.object\(\{[\s\S]+?code: z\s*\.string\(\)\s*\n\s*\.regex\(\/\^\\d\{6\}\$\/, 'Must be a 6-digit code\.'\)/,
     );
   });
 
@@ -56,7 +56,7 @@ describe('W870 V-353 MFA cross-source invariant', () => {
   it('CRITICAL packages/api-types/src/auth.ts MfaStepUpRequestSchema code field uses /^\\d{6}$/ regex. The V-353e step-up reauth path matches the V-353d login path on code shape.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/auth.ts'));
     expect(p).toMatch(
-      /MfaStepUpRequestSchema = z\s*\n?\s*\.object\(\{[\s\S]+?code: z\s*\n?\s*\.string\(\)\s*\n\s*\.regex\(\/\^\\d\{6\}\$\/, 'Must be a 6-digit code\.'\)/,
+      /MfaStepUpRequestSchema = z\s*\.object\(\{[\s\S]+?code: z\s*\.string\(\)\s*\n\s*\.regex\(\/\^\\d\{6\}\$\/, 'Must be a 6-digit code\.'\)/,
     );
   });
 

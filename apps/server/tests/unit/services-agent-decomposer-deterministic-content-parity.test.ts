@@ -29,19 +29,19 @@ describe('services/agent-decomposer-deterministic content parity', () => {
 
   it("3-reason 'why deterministic before Claude wire' framing pinned: 1. interface-contract invariants (token-budget = refuse / AUP = refuse / only upstream-5xx + cred-decryption escape as exceptions) 2. dashboard chat-UI can wire immediately (BYOK-vs-bundled Tier-3 verdict still pending) 3. executor (B2) tests need predictable intents without mocking the Anthropic SDK. — pinned so the 3-reason justification + invariant-locking purpose + dashboard-unblock + test-fixture role all stay documented", () => {
     expect(body).toMatch(
-      /\/\/ Why deterministic before the Anthropic Claude wire \(AI-B1\.b\):\s*\n?\s*\/\/ {3}1\. The AgentDecomposer interface contract has subtle invariants\s*\n?\s*\/\/ {6}\(token-budget exhaustion = refuse, NOT throw; AUP violations =\s*\n?\s*\/\/ {6}refuse, NOT throw; only upstream 5xx \/ credential decryption\s*\n?\s*\/\/ {6}errors escape as exceptions\)\. Locking the contract via a fully\s*\n?\s*\/\/ {6}tested deterministic impl prevents the LLM-wired version from\s*\n?\s*\/\/ {6}drifting on these edge cases\./,
+      /\/\/ Why deterministic before the Anthropic Claude wire \(AI-B1\.b\):\s*\/\/ {3}1\. The AgentDecomposer interface contract has subtle invariants\s*\/\/ {6}\(token-budget exhaustion = refuse, NOT throw; AUP violations =\s*\/\/ {6}refuse, NOT throw; only upstream 5xx \/ credential decryption\s*\/\/ {6}errors escape as exceptions\)\. Locking the contract via a fully\s*\/\/ {6}tested deterministic impl prevents the LLM-wired version from\s*\/\/ {6}drifting on these edge cases\./,
     );
     expect(body).toMatch(
-      /\/\/ {3}2\. Dashboard chat-UI work can wire against this immediately —\s*\n?\s*\/\/ {6}consumers don't have to wait on Anthropic key path decisions\s*\n?\s*\/\/ {6}\(BYOK vs bundled is itself a Tier-3 founder question still\s*\n?\s*\/\/ {6}pending\)\./,
+      /\/\/ {3}2\. Dashboard chat-UI work can wire against this immediately —\s*\/\/ {6}consumers don't have to wait on Anthropic key path decisions\s*\/\/ {6}\(BYOK vs bundled is itself a Tier-3 founder question still\s*\/\/ {6}pending\)\./,
     );
     expect(body).toMatch(
-      /\/\/ {3}3\. Tests of the executor \(B2 follow-up slice\) need a decomposer\s*\n?\s*\/\/ {6}that returns predictable intents; a deterministic impl gives\s*\n?\s*\/\/ {6}that without mocking the entire Anthropic SDK\./,
+      /\/\/ {3}3\. Tests of the executor \(B2 follow-up slice\) need a decomposer\s*\/\/ {6}that returns predictable intents; a deterministic impl gives\s*\/\/ {6}that without mocking the entire Anthropic SDK\./,
     );
   });
 
   it("'NOT meant to be the product' framing pinned: 'simple keyword heuristics — NOT meant to be the product. AI-B1.b replaces the heuristic guts with a real Claude Opus 4.7 call against the documented prompt template; the interface surface stays identical.' — pinned so the keyword-heuristics-not-product + AI-B1.b-replaces-the-guts + interface-surface-stays-identical contract all stay documented", () => {
     expect(body).toMatch(
-      /\/\/ This impl uses simple keyword heuristics — NOT meant to be the\s*\n?\s*\/\/ product\. AI-B1\.b replaces the heuristic guts with a real Claude\s*\n?\s*\/\/ Opus 4\.7 call against the documented prompt template; the interface\s*\n?\s*\/\/ surface stays identical\./,
+      /\/\/ This impl uses simple keyword heuristics — NOT meant to be the\s*\/\/ product\. AI-B1\.b replaces the heuristic guts with a real Claude\s*\/\/ Opus 4\.7 call against the documented prompt template; the interface\s*\/\/ surface stays identical\./,
     );
   });
 
@@ -69,7 +69,7 @@ describe('services/agent-decomposer-deterministic content parity', () => {
     );
     expect(body).toMatch(/'Tasks that endanger people in the physical world are prohibited\.',/);
     expect(body).toMatch(
-      /'Driftstack does not orchestrate captcha bypass or evasion of platform safety controls\. ' \+\s*\n?\s*'See https:\/\/driftstack\.dev\/legal\/aup\/',/,
+      /'Driftstack does not orchestrate captcha bypass or evasion of platform safety controls\. ' \+\s*'See https:\/\/driftstack\.dev\/legal\/aup\/',/,
     );
     expect(body).toMatch(/'Credential-attack tasks are prohibited by our AUP\.',/);
   });
@@ -77,22 +77,22 @@ describe('services/agent-decomposer-deterministic content parity', () => {
   it('detectAmbiguity 3-rule framing pinned: empty-task → "I need a task description…" + length<12 → "very short — can you describe…" + do/something/stuff/try without verb-vocabulary → "Can you tell me what action you want…". Drift would let underspecified tasks flow through to plan synthesis + invite hallucinated intents', () => {
     expect(body).toMatch(/function detectAmbiguity\(task: string\): string \| null \{/);
     expect(body).toMatch(
-      /if \(trimmed\.length === 0\) \{\s*\n?\s*return 'I need a task description to plan\. What would you like me to do\?';\s*\n?\s*\}/,
+      /if \(trimmed\.length === 0\) \{\s*return 'I need a task description to plan\. What would you like me to do\?';\s*\}/,
     );
     expect(body).toMatch(
-      /if \(trimmed\.length < 12\) \{\s*\n?\s*return `"\$\{trimmed\}" is very short — can you describe what you want me to do in a sentence\?`;\s*\n?\s*\}/,
+      /if \(trimmed\.length < 12\) \{\s*return `"\$\{trimmed\}" is very short — can you describe what you want me to do in a sentence\?`;\s*\}/,
     );
     expect(body).toMatch(
-      /if \(\s*\n?\s*\/\^\(do\|something\|stuff\|try\)\\b\/i\.test\(trimmed\) &&\s*\n?\s*!\/\(open\|visit\|go to\|click\|tap\|type\|fill\|search\|extract\|capture\)\/i\.test\(trimmed\)\s*\n?\s*\) \{/,
+      /if \(\s*\/\^\(do\|something\|stuff\|try\)\\b\/i\.test\(trimmed\) &&\s*!\/\(open\|visit\|go to\|click\|tap\|type\|fill\|search\|extract\|capture\)\/i\.test\(trimmed\)\s*\) \{/,
     );
   });
 
   it('estimateTokens char-by-4 heuristic + 600-token system-prompt overhead pinned: taskTokens + historyTokens + 600. Drift to dropping the 600 overhead would undercount the actual prompt cost when the AI-B1.b LLM wire lands + lets customers exhaust their tier budget on smaller-looking tasks than they were charged for', () => {
     expect(body).toMatch(
-      /function estimateTokens\(task: string, history: readonly \{ body: string \}\[\]\): number \{\s*\n?\s*const taskTokens = Math\.ceil\(task\.length \/ 4\);\s*\n?\s*const historyTokens = history\.reduce\(\(acc, h\) => acc \+ Math\.ceil\(h\.body\.length \/ 4\), 0\);/,
+      /function estimateTokens\(task: string, history: readonly \{ body: string \}\[\]\): number \{\s*const taskTokens = Math\.ceil\(task\.length \/ 4\);\s*const historyTokens = history\.reduce\(\(acc, h\) => acc \+ Math\.ceil\(h\.body\.length \/ 4\), 0\);/,
     );
     expect(body).toMatch(
-      /\/\/ System-prompt overhead \(intent vocabulary, formatting rules\) is\s*\n?\s*\/\/ ~600 tokens against the AI-B1\.b prompt template; charge it\.\s*\n?\s*return 600 \+ taskTokens \+ historyTokens;/,
+      /\/\/ System-prompt overhead \(intent vocabulary, formatting rules\) is\s*\/\/ ~600 tokens against the AI-B1\.b prompt template; charge it\.\s*return 600 \+ taskTokens \+ historyTokens;/,
     );
   });
 
@@ -103,13 +103,13 @@ describe('services/agent-decomposer-deterministic content parity', () => {
     );
     expect(body).toMatch(/for \(const url of urlMatches\.slice\(0, 3\)\) \{/);
     expect(body).toMatch(
-      /\/\/ Match greedily then strip a SINGLE trailing punctuation char that's\s*\n?\s*\/\/ almost always grammatical rather than part of the URL\. We don't\s*\n?\s*\/\/ strip all trailing punctuation because `\.example` has a meaningful\s*\n?\s*\/\/ dot — only the very last char is suspect\./,
+      /\/\/ Match greedily then strip a SINGLE trailing punctuation char that's\s*\/\/ almost always grammatical rather than part of the URL\. We don't\s*\/\/ strip all trailing punctuation because `\.example` has a meaningful\s*\/\/ dot — only the very last char is suspect\./,
     );
   });
 
   it("No-URL fallback to https://duckduckgo.com/ + 3-intent pinned plan: navigate + wait(idle) + capture(dom_snapshot). Drift to a different fallback URL would diverge from the deterministic-test fixture expectations; drift to a different intent sequence would break the executor's stub-success run-result test fixtures", () => {
     expect(body).toMatch(
-      /\/\/ No URL — assume the user wants a generic web search via the\s*\n?\s*\/\/ archetype's default search engine\. AI-B1\.b's LLM will pick a\s*\n?\s*\/\/ real start URL based on task semantics\./,
+      /\/\/ No URL — assume the user wants a generic web search via the\s*\/\/ archetype's default search engine\. AI-B1\.b's LLM will pick a\s*\/\/ real start URL based on task semantics\./,
     );
     expect(body).toMatch(
       /intents\.push\(\{ kind: 'navigate', url: 'https:\/\/duckduckgo\.com\/' \}\);/,
@@ -120,7 +120,7 @@ describe('services/agent-decomposer-deterministic content parity', () => {
 
   it("v2-#4 Q.1.e DETERMINISTIC_USAGE constant pinned: { decomposerKind: 'deterministic' as const }. + 'uniform usage block so AgentRuntime records a row for deterministic turns too. Zero anthropic tokens + zero cost; the audit trail just shows we ran a deterministic plan.' framing — pinned so the AgentRuntime-records-usage-for-deterministic contract + zero-cost-but-tracked rationale stay documented", () => {
     expect(body).toMatch(
-      /\/\/ v2-#4 Q\.1\.e — uniform usage block so AgentRuntime records a row for\s*\n?\s*\/\/ deterministic turns too\. Zero anthropic tokens \+ zero cost; the\s*\n?\s*\/\/ audit trail just shows "we ran a deterministic plan"\./,
+      /\/\/ v2-#4 Q\.1\.e — uniform usage block so AgentRuntime records a row for\s*\/\/ deterministic turns too\. Zero anthropic tokens \+ zero cost; the\s*\/\/ audit trail just shows "we ran a deterministic plan"\./,
     );
     expect(body).toMatch(
       /const DETERMINISTIC_USAGE = \{ decomposerKind: 'deterministic' as const \};/,
@@ -129,12 +129,12 @@ describe('services/agent-decomposer-deterministic content parity', () => {
 
   it("decompose() 4-branch dispatch pinned: 1. budget-exhausted → refuse w/ 'token budget exhausted; start a new session' + tokensConsumed=0 2. AUP → refuse w/ pattern-matched reason 3. ambiguous → clarify 4. default → plan w/ synthesizePlan. Drift to re-ordering would let AUP-violating-but-budget-exhausted requests refuse on the wrong reason (the budget-vs-AUP order is significant — exhausted budget is a system-state refuse; AUP is a customer-content refuse). Drift to dropping tokensConsumed=0 on budget-exhausted would force the runtime to debit tokens for a refused turn", () => {
     expect(body).toMatch(
-      /if \(args\.budgetTokensRemaining < tokensConsumed\) \{\s*\n?\s*return Promise\.resolve\(\{\s*\n?\s*kind: 'refuse',\s*\n?\s*refuseReason: 'token budget exhausted; start a new session',\s*\n?\s*tokensConsumed: 0,\s*\n?\s*usage: DETERMINISTIC_USAGE,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /if \(args\.budgetTokensRemaining < tokensConsumed\) \{\s*return Promise\.resolve\(\{\s*kind: 'refuse',\s*refuseReason: 'token budget exhausted; start a new session',\s*tokensConsumed: 0,\s*usage: DETERMINISTIC_USAGE,\s*\}\);\s*\}/,
     );
     expect(body).toMatch(/const aupRefusal = checkAupRefusal\(args\.task\);/);
     expect(body).toMatch(/const ambiguity = detectAmbiguity\(args\.task\);/);
     expect(body).toMatch(
-      /return Promise\.resolve\(\{\s*\n?\s*kind: 'plan',\s*\n?\s*intents: synthesizePlan\(args\.task\),\s*\n?\s*tokensConsumed,\s*\n?\s*usage: DETERMINISTIC_USAGE,\s*\n?\s*\}\);/,
+      /return Promise\.resolve\(\{\s*kind: 'plan',\s*intents: synthesizePlan\(args\.task\),\s*tokensConsumed,\s*usage: DETERMINISTIC_USAGE,\s*\}\);/,
     );
   });
 });

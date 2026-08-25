@@ -62,7 +62,7 @@ describe('rotation-reminder cross-source invariant (webhook + byok-anthropic sha
 
   it("byok-anthropic-rotation-reminder header explicitly cross-references the webhook pattern: 'Mirrors v2-#10.5 (webhook secret rotation reminder) for the per-account BYOK Anthropic API key.' — pinned so the parallel-feature relationship stays documented (drift on one without the other would orphan this cross-reference)", () => {
     expect(byokSrc).toMatch(
-      /\/\/ Mirrors v2-#10\.5 \(webhook secret rotation reminder\) for the\s*\n?\s*\/\/ per-account BYOK Anthropic API key\./,
+      /\/\/ Mirrors v2-#10\.5 \(webhook secret rotation reminder\) for the\s*\/\/ per-account BYOK Anthropic API key\./,
     );
   });
 });

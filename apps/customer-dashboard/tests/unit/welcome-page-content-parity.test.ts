@@ -51,7 +51,7 @@ describe('W367.B customer-dashboard /welcome page content parity', () => {
     // /welcome under-promises or over-promises.
     expect(body).toMatch(/\$79–\$1,499 \/ mo/);
     // "Personal" + "API Scale" tier names also pinned.
-    expect(body).toMatch(/Personal for hand-\s*\n?\s*driven sessions, all the way up to API Scale/);
+    expect(body).toMatch(/Personal for hand-\s*driven sessions, all the way up to API Scale/);
   });
 
   it('"What happens next" separates Free desktop credentialing from paid customer API keys', () => {
@@ -94,7 +94,7 @@ describe('W367.B customer-dashboard /welcome page content parity', () => {
     // customers via the dashboard home, not a session-specific page.
     expect(body).toMatch(/Skip to dashboard\s*<\/a>/);
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
-    expect(body).toMatch(/<a\s*\n?\s*href="\/"\s*\n?\s*class="text-tk-accent-text[^"]*"\s*\n?\s*>/);
+    expect(body).toMatch(/<a\s*href="\/"\s*class="text-tk-accent-text[^"]*"\s*>/);
   });
 
   it('localStorage key ds_web_session_token (customer-dashboard convention)', () => {

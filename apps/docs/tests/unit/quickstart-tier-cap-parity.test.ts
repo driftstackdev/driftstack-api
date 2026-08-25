@@ -62,7 +62,7 @@ describe('W338.A /quickstart tier-cap parity', () => {
 
   it('does not present the restricted Free desktop credential as a curl or sandbox key', () => {
     expect(body).toMatch(/This code quickstart requires a paid tier with API access/);
-    expect(body).toMatch(/restricted\s*\n?\s*`ds_test_…` device credential/);
+    expect(body).toMatch(/restricted\s*`ds_test_…` device credential/);
     expect(body).toMatch(/not a general sandbox or SDK key/);
     expect(curl).toMatch(/this HTTP quickstart is paid-only/i);
     expect(curl).toMatch(/not a general sandbox\/customer key/);

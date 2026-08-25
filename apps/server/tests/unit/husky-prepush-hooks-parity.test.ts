@@ -55,7 +55,7 @@ describe('W722 Husky pre-push gate + installer parity', () => {
     const p = read(PRE_PUSH);
     expect(p).toMatch(/V-223 — pre-push gate/);
     expect(p).toMatch(
-      /Catches the class of regression where a\s*\n?\s*#\s*previous commit pushed broken/,
+      /Catches the class of regression where a\s*#\s*previous commit pushed broken/,
     );
   });
 
@@ -163,11 +163,9 @@ describe('W722 Husky pre-push gate + installer parity', () => {
   it('CRITICAL installer fail-loud-if-missing-dirs pinned. The SRC + DST existence checks emit a clear error before silently no-oping. Drift to skipping would let `bash install-git-hooks.sh` from outside a git clone silently fail.', () => {
     const i = read(INSTALLER);
 
+    expect(i).toMatch(/if \[\[ ! -d "\$SRC" \]\]; then\s*echo "✗ source dir not found: \$SRC"/);
     expect(i).toMatch(
-      /if \[\[ ! -d "\$SRC" \]\]; then\s*\n?\s*echo "✗ source dir not found: \$SRC"/,
-    );
-    expect(i).toMatch(
-      /if \[\[ ! -d "\$DST" \]\]; then\s*\n?\s*echo "✗ destination dir not found: \$DST \(run from a git clone\)"/,
+      /if \[\[ ! -d "\$DST" \]\]; then\s*echo "✗ destination dir not found: \$DST \(run from a git clone\)"/,
     );
   });
 
@@ -190,9 +188,7 @@ describe('W722 Husky pre-push gate + installer parity', () => {
 
     expect(i).toMatch(/echo "✓ installed: \$NAME"/);
     expect(i).toMatch(/INSTALLED=\$\(\(INSTALLED \+ 1\)\)/);
-    expect(i).toMatch(
-      /if \[\[ \$INSTALLED -eq 0 \]\]; then\s*\n?\s*echo "\(no hooks found in \$SRC\)"/,
-    );
+    expect(i).toMatch(/if \[\[ \$INSTALLED -eq 0 \]\]; then\s*echo "\(no hooks found in \$SRC\)"/);
     expect(i).toMatch(/echo "✓ \$INSTALLED hook\(s\) installed into \$DST"/);
   });
 

@@ -49,7 +49,7 @@ describe('W720 sdk-go-crypto-orders marketing-doc parity', () => {
   it('CRITICAL doc-claim "Admin endpoints are not exposed" matches the SDK source customer-facing-only framing.', () => {
     const doc = read(DOC);
     const src = read(GO_CRYPTO);
-    expect(doc).toMatch(/Admin endpoints\s*\n?\s*are not exposed/);
+    expect(doc).toMatch(/Admin endpoints\s*are not exposed/);
     expect(src).toMatch(/Customer-facing only; admin endpoints aren't exposed here/);
   });
 
@@ -78,7 +78,7 @@ describe('W720 sdk-go-crypto-orders marketing-doc parity', () => {
 
     // Every method call passes ctx as first arg.
     expect(doc).toMatch(/client\.CryptoOrders\.Quote\(ctx,/);
-    expect(doc).toMatch(/client\.CryptoOrders\.CreateCheckout\(\s*\n?\s*ctx,/);
+    expect(doc).toMatch(/client\.CryptoOrders\.CreateCheckout\(\s*ctx,/);
     expect(doc).toMatch(/client\.CryptoOrders\.List\(ctx,/);
     expect(doc).toMatch(/client\.CryptoOrders\.Get\(ctx,/);
     expect(doc).toMatch(/client\.CryptoOrders\.UpdateNote\(ctx,/);
@@ -105,7 +105,7 @@ describe('W720 sdk-go-crypto-orders marketing-doc parity', () => {
     expect(doc).toMatch(/<code>failed<\/code>/);
     expect(doc).toMatch(/<code>partial<\/code>/);
     expect(doc).toMatch(/<code>cancelled<\/code>/);
-    expect(doc).toMatch(/Unknown values\s*\n?\s*return a 400/);
+    expect(doc).toMatch(/Unknown values\s*return a 400/);
   });
 
   it('CRITICAL limit-clamp doc claim — 1..=100. Drift to a different bound would mismatch the server.', () => {
@@ -128,16 +128,16 @@ describe('W720 sdk-go-crypto-orders marketing-doc parity', () => {
   it('CRITICAL "prefer Iterate" pagination framing pinned + "do not set opts.Cursor when calling Iterate" warning. Drift would let customers stumble on `Iterate(ctx, &opts{Cursor: ...})` (which silently breaks the helper).', () => {
     const doc = read(DOC);
     expect(doc).toMatch(/Pagination — prefer <code>Iterate<\/code>/);
-    expect(doc).toMatch(/Cursor handoff is managed\s*\n?\s*internally/);
+    expect(doc).toMatch(/Cursor handoff is managed\s*internally/);
     expect(doc).toMatch(
-      /<strong>do not<\/strong> set\s*\n?\s*<code>opts\.Cursor<\/code> when calling <code>Iterate<\/code>/,
+      /<strong>do not<\/strong> set\s*<code>opts\.Cursor<\/code> when calling <code>Iterate<\/code>/,
     );
   });
 
   it('CRITICAL Iterate callback-returns-bool framing pinned. The bool-return-controls-iteration shape is Go-idiomatic for early-exit; drift to error-return-only would lose the customer-facing claim about stopping early.', () => {
     const doc = read(DOC);
     expect(doc).toMatch(
-      /Return <code>false<\/code> from the visit callback to stop\s*\n?\s*iteration early/,
+      /Return <code>false<\/code> from the visit callback to stop\s*iteration early/,
     );
     expect(doc).toMatch(/func\(o driftstack\.CryptoOrderEnvelope\) bool/);
     expect(doc).toMatch(/return true \/\/ keep going/);
@@ -228,7 +228,7 @@ describe('W720 sdk-go-crypto-orders marketing-doc parity', () => {
     expect(doc).toMatch(/func\(o driftstack\.CryptoOrderEnvelope\) bool/);
     expect(doc).toMatch(/time\.RFC3339/);
     expect(doc).toMatch(/Crypto payments are non-refundable/);
-    expect(doc).toMatch(/Admin endpoints\s*\n?\s*are not exposed/);
+    expect(doc).toMatch(/Admin endpoints\s*are not exposed/);
   });
 
   it('test file metadata — file exists at canonical path', () => {

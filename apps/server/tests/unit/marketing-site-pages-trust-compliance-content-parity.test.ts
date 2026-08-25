@@ -35,13 +35,13 @@ describe('W504.A apps/marketing-site/src/pages/trust/compliance.astro content pa
   it('pins practical safe-harbour boundaries', () => {
     expect(body).toMatch(/will not pursue legal action against good-faith research/);
     expect(body).toMatch(
-      /avoids customer data,\s*\n?\s*service disruption, and public disclosure before remediation/,
+      /avoids customer data,\s*service disruption, and public disclosure before remediation/,
     );
   });
 
   it('pins the Article 28 sub-processor notice and objection route', () => {
     expect(body).toMatch(/GDPR Article 28\(2\) and Annex 3 of our DPA/);
-    expect(body).toMatch(/30\s*\n?\s*calendar days' notice/);
+    expect(body).toMatch(/30\s*calendar days' notice/);
     expect(body).toMatch(/href="\/trust\/sub-processors\/"/);
     expect(body).toMatch(/mailto:support@driftstack\.dev/);
   });

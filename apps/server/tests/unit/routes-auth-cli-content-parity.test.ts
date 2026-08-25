@@ -56,7 +56,7 @@ describe('W418.B apps/server/src/routes/auth-cli.ts content parity', () => {
 
   it('Bind framing pinned: requires authenticated account (dashboard web session); mints API key on that account; hands plaintext to CLI via exchange', () => {
     expect(body).toMatch(
-      /The bind endpoint requires an authenticated account \(typically via\s*\n?\s*\/\/\s*the dashboard's web session\)\. It mints an API key on that account\s*\n?\s*\/\/\s*and hands the plaintext to the CLI\/GUI via the exchange endpoint\./,
+      /The bind endpoint requires an authenticated account \(typically via\s*\/\/\s*the dashboard's web session\)\. It mints an API key on that account\s*\/\/\s*and hands the plaintext to the CLI\/GUI via the exchange endpoint\./,
     );
   });
 
@@ -67,34 +67,34 @@ describe('W418.B apps/server/src/routes/auth-cli.ts content parity', () => {
 
   it('Schemas + types from @driftstack/api-types: Initiate/Bind/Exchange + ApiKeyScope (SDK mirror)', () => {
     expect(body).toMatch(
-      /import \{\s*\n?\s*CliAuthorizeBindRequestSchema,\s*\n?\s*CliAuthorizeExchangeRequestSchema,\s*\n?\s*CliAuthorizeInitiateRequestSchema,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import \{\s*CliAuthorizeBindRequestSchema,\s*CliAuthorizeExchangeRequestSchema,\s*CliAuthorizeInitiateRequestSchema,\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(/import type \{ ApiKeyScope \} from '@driftstack\/api-types';/);
   });
 
   it('Initiate returns the separate device-displayed user_code', () => {
     expect(body).toMatch(
-      /app\.post\('\/v1\/auth\/cli-authorize\/initiate', \{ preHandler: \[initiateGate\] \}, async \(req\) => \{\s*\n?\s*const parsed = CliAuthorizeInitiateRequestSchema\.safeParse\(req\.body\);\s*\n?\s*if \(!parsed\.success\) throw new ValidationError\(parsed\.error\.flatten\(\)\);/,
+      /app\.post\('\/v1\/auth\/cli-authorize\/initiate', \{ preHandler: \[initiateGate\] \}, async \(req\) => \{\s*const parsed = CliAuthorizeInitiateRequestSchema\.safeParse\(req\.body\);\s*if \(!parsed\.success\) throw new ValidationError\(parsed\.error\.flatten\(\)\);/,
     );
     // The IP gates are built from the shared store + the AUTH_IP_LIMITS buckets.
     expect(body).toMatch(
-      /const initiateGate = ipRateLimit\(rateLimitStore, \{\s*\n?\s*bucketPrefix: 'auth-ip:cli-authorize-initiate',/,
+      /const initiateGate = ipRateLimit\(rateLimitStore, \{\s*bucketPrefix: 'auth-ip:cli-authorize-initiate',/,
     );
     expect(body).toMatch(/AUTH_IP_LIMITS\.cliAuthorizeInitiate\.capacity/);
     expect(body).toMatch(
-      /const result = await cliAuthorizeService\.initiate\([\s\S]*?return \{\s*\n?\s*code: result\.code,\s*\n?\s*user_code: result\.user_code,\s*\n?\s*browser_url: result\.browser_url,\s*\n?\s*expires_at: result\.expires_at\.toISOString\(\),\s*\n?\s*\};/,
+      /const result = await cliAuthorizeService\.initiate\([\s\S]*?return \{\s*code: result\.code,\s*user_code: result\.user_code,\s*browser_url: result\.browser_url,\s*expires_at: result\.expires_at\.toISOString\(\),\s*\};/,
     );
   });
 
   it("Bind: requireAuth + rateLimit('global'); apiKeysService.create with DEFAULT_KEY_NAME + scopes + expiresAt:null; account_id stamped as acc_<uuid>", () => {
     expect(body).toMatch(
-      /app\.post\(\s*\n?\s*'\/v1\/auth\/cli-authorize\/bind-device-code',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/,
+      /app\.post\(\s*'\/v1\/auth\/cli-authorize\/bind-device-code',\s*\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/,
     );
     expect(body).toMatch(/const scopes = parsed\.data\.scopes \?\? DEFAULT_SCOPES;/);
     // C1 — the minted device key is stamped provenance:'cli_device' so the
     // deny-gate bars it from account-takeover operations.
     expect(body).toMatch(
-      /const created = await apiKeysService\.create\(ctx, \{\s*\n?\s*name: DEFAULT_KEY_NAME,\s*\n?\s*scopes,\s*\n?\s*expiresAt: null,[\s\S]*?provenance: 'cli_device',\s*\n?\s*\}\);/,
+      /const created = await apiKeysService\.create\(ctx, \{\s*name: DEFAULT_KEY_NAME,\s*scopes,\s*expiresAt: null,[\s\S]*?provenance: 'cli_device',\s*\}\);/,
     );
     // C1 — bind requires an interactive web session (no API-key-authed bind).
     expect(body).toMatch(/if \(ctx\.webSession === null\) \{/);
@@ -106,25 +106,25 @@ describe('W418.B apps/server/src/routes/auth-cli.ts content parity', () => {
 
   it('Bind compensation pinned: every bind failure revokes the just-minted key, logs secondary revoke failure, and preserves/maps the original error', () => {
     expect(body).toMatch(
-      /\/\/ Every failed bind must retire the just-minted key, including\s*\n?\s*\/\/ infrastructure\/serialization failures that are not expressed as\s*\n?\s*\/\/ CliAuthorizeError\./,
+      /\/\/ Every failed bind must retire the just-minted key, including\s*\/\/ infrastructure\/serialization failures that are not expressed as\s*\/\/ CliAuthorizeError\./,
     );
     expect(body).toMatch(
-      /try \{\s*\n?\s*await apiKeysService\.revoke\(ctx, created\.row\.id\);\s*\n?\s*\} catch \(revokeErr\) \{[\s\S]*?req\.log\.error\([\s\S]*?apiKeyId: created\.row\.id[\s\S]*?\);\s*\n?\s*\}\s*\n?\s*if \(err instanceof CliAuthorizeError\) throw mapCliAuthorizeError\(err\);\s*\n?\s*throw err;/,
+      /try \{\s*await apiKeysService\.revoke\(ctx, created\.row\.id\);\s*\} catch \(revokeErr\) \{[\s\S]*?req\.log\.error\([\s\S]*?apiKeyId: created\.row\.id[\s\S]*?\);\s*\}\s*if \(err instanceof CliAuthorizeError\) throw mapCliAuthorizeError\(err\);\s*throw err;/,
     );
   });
 
   it('Bind success reply: { ok: true as const, account_id, expires_at ISO }', () => {
     expect(body).toMatch(
-      /return \{\s*\n?\s*ok: true as const,\s*\n?\s*account_id: result\.account_id,\s*\n?\s*expires_at: result\.expires_at\.toISOString\(\),\s*\n?\s*\};/,
+      /return \{\s*ok: true as const,\s*account_id: result\.account_id,\s*expires_at: result\.expires_at\.toISOString\(\),\s*\};/,
     );
   });
 
   it('Exchange: public but IP-gated (exchangeGate preHandler, generous 60/min poll bucket); cliAuthorizeService.exchange dispatch; pass-through result; CliAuthorizeError → HTTP map', () => {
     expect(body).toMatch(
-      /app\.post\('\/v1\/auth\/cli-authorize\/exchange', \{ preHandler: \[exchangeGate\] \}, async \(req\) => \{[\s\S]+?const result = await cliAuthorizeService\.exchange\(\{\s*\n?\s*code: parsed\.data\.code,\s*\n?\s*state: parsed\.data\.state,\s*\n?\s*\}\);\s*\n?\s*return result;[\s\S]+?if \(err instanceof CliAuthorizeError\) throw mapCliAuthorizeError\(err\);/,
+      /app\.post\('\/v1\/auth\/cli-authorize\/exchange', \{ preHandler: \[exchangeGate\] \}, async \(req\) => \{[\s\S]+?const result = await cliAuthorizeService\.exchange\(\{\s*code: parsed\.data\.code,\s*state: parsed\.data\.state,\s*\}\);\s*return result;[\s\S]+?if \(err instanceof CliAuthorizeError\) throw mapCliAuthorizeError\(err\);/,
     );
     expect(body).toMatch(
-      /const exchangeGate = ipRateLimit\(rateLimitStore, \{\s*\n?\s*bucketPrefix: 'auth-ip:cli-authorize-exchange',/,
+      /const exchangeGate = ipRateLimit\(rateLimitStore, \{\s*bucketPrefix: 'auth-ip:cli-authorize-exchange',/,
     );
     expect(body).toMatch(/AUTH_IP_LIMITS\.cliAuthorizeExchange\.capacity/);
   });
@@ -132,19 +132,19 @@ describe('W418.B apps/server/src/routes/auth-cli.ts content parity', () => {
   it('mapCliAuthorizeError: user_code_mismatch has a stable 400 response', () => {
     expect(body).toMatch(/function mapCliAuthorizeError\(err: CliAuthorizeError\): Error \{/);
     expect(body).toMatch(
-      /case 'state_mismatch':\s*\n?\s*return new BadRequestError\('State parameter does not match\.'\);/,
+      /case 'state_mismatch':\s*return new BadRequestError\('State parameter does not match\.'\);/,
     );
     expect(body).toMatch(
-      /case 'user_code_mismatch':\s*\n?\s*return new BadRequestError\('Device verification code does not match\.'\);/,
+      /case 'user_code_mismatch':\s*return new BadRequestError\('Device verification code does not match\.'\);/,
     );
     expect(body).toMatch(
-      /case 'already_bound':\s*\n?\s*return new BadRequestError\('Authorization code has already been bound\.'\);/,
+      /case 'already_bound':\s*return new BadRequestError\('Authorization code has already been bound\.'\);/,
     );
     expect(body).toMatch(
-      /case 'not_found':\s*\n?\s*case 'expired':\s*\n?\s*return new NotFoundError\('Authorization code not found or expired\.'\);/,
+      /case 'not_found':\s*case 'expired':\s*return new NotFoundError\('Authorization code not found or expired\.'\);/,
     );
     expect(body).toMatch(
-      /case 'invalid_code':\s*\n?\s*return new BadRequestError\('Authorization code is invalid\.'\);/,
+      /case 'invalid_code':\s*return new BadRequestError\('Authorization code is invalid\.'\);/,
     );
   });
 

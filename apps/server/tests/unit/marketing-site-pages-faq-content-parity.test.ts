@@ -63,7 +63,7 @@ describe('W500.A apps/marketing-site /faq (src/data/faq.ts + faq.astro) content 
 
   it("V-500 'Architecture + sessions' group doc-comment framing pinned: 'V-500 — architecture + sessions group. Three buyer-recurring questions buried in support threads pre-launch; pulling them up so prospects answer themselves.' — pinned so the why-we-added-V-500-groups rationale survives (drift to dropping would let a future maintainer remove these groups thinking they're noise)", () => {
     expect(body).toMatch(
-      /\/\/ V-500 — architecture \+ sessions group\. Three buyer-recurring\s*\n?\s*\/\/ questions buried in support threads pre-launch; pulling them\s*\n?\s*\/\/ up so prospects answer themselves\./,
+      /\/\/ V-500 — architecture \+ sessions group\. Three buyer-recurring\s*\/\/ questions buried in support threads pre-launch; pulling them\s*\/\/ up so prospects answer themselves\./,
     );
   });
 

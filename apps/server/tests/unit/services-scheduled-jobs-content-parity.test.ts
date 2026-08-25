@@ -45,7 +45,7 @@ describe('W409.B apps/server/src/services/scheduled-jobs.ts content parity', () 
   it('V-202d framing pinned: founder verdict 2026-05-05 + V-173-pattern setInterval + SELECT FOR UPDATE SKIP LOCKED', () => {
     expect(body).toMatch(/V-202d — generic time-shifted job dispatcher built on the/);
     expect(body).toMatch(
-      /`scheduled_jobs` table\. Per founder verdict \(2026-05-05\),\s*\n?\s*\/\/\s*V-173-pattern extension: bootstrap runs setInterval poller that\s*\n?\s*\/\/\s*calls `processTick\(now\)`; the service claims due jobs via\s*\n?\s*\/\/\s*SELECT \.\.\. FOR UPDATE SKIP LOCKED, dispatches each to its\s*\n?\s*\/\/\s*registered handler keyed by job_type/,
+      /`scheduled_jobs` table\. Per founder verdict \(2026-05-05\),\s*\/\/\s*V-173-pattern extension: bootstrap runs setInterval poller that\s*\/\/\s*calls `processTick\(now\)`; the service claims due jobs via\s*\/\/\s*SELECT \.\.\. FOR UPDATE SKIP LOCKED, dispatches each to its\s*\/\/\s*registered handler keyed by job_type/,
     );
   });
 
@@ -76,11 +76,11 @@ describe('W409.B apps/server/src/services/scheduled-jobs.ts content parity', () 
 
   it('dedupOnAccountAndType framing pinned: pending = completed_at IS NULL AND failed_at IS NULL; one pending job per account regardless of webhook re-fires', () => {
     expect(body).toMatch(
-      /When true, `enqueue` no-ops if a pending job \(completed_at IS NULL\s*\n?\s*\*\s*AND failed_at IS NULL\) already exists with the same\s*\n?\s*\*\s*\(account_id, job_type\)\. Used to ensure one pending job per account\s*\n?\s*\*\s*regardless of how many times the triggering event re-fires\./,
+      /When true, `enqueue` no-ops if a pending job \(completed_at IS NULL\s*\*\s*AND failed_at IS NULL\) already exists with the same\s*\*\s*\(account_id, job_type\)\. Used to ensure one pending job per account\s*\*\s*regardless of how many times the triggering event re-fires\./,
     );
     expect(body).toMatch(/dedupOnAccountAndType\?: boolean;/);
     expect(body).toMatch(/dedupAfterRunAt\?: Date;/);
-    expect(body).toMatch(/Self-arming handlers pass their current\s*\n?\s*\* job's runAt/);
+    expect(body).toMatch(/Self-arming handlers pass their current\s*\* job's runAt/);
     expect(body).toMatch(/leave unset for ordinary\/bootstrap enqueue/);
   });
 
@@ -108,19 +108,19 @@ describe('W409.B apps/server/src/services/scheduled-jobs.ts content parity', () 
 
   it('claimDue framing pinned: atomic + run_at <= now + not completed/failed + not locked + SELECT FOR UPDATE SKIP LOCKED required', () => {
     expect(body).toMatch(
-      /Atomically claim up to `batchSize` due jobs \(run_at <= now,\s*\n?\s*\*\s*not yet completed\/failed, not currently locked\)\. Sets\s*\n?\s*\*\s*locked_by \+ locked_at \+ increments attempts\. The implementation\s*\n?\s*\*\s*MUST use SELECT \.\.\. FOR UPDATE SKIP LOCKED so concurrent workers\s*\n?\s*\*\s*never claim the same row\./,
+      /Atomically claim up to `batchSize` due jobs \(run_at <= now,\s*\*\s*not yet completed\/failed, not currently locked\)\. Sets\s*\*\s*locked_by \+ locked_at \+ increments attempts\. The implementation\s*\*\s*MUST use SELECT \.\.\. FOR UPDATE SKIP LOCKED so concurrent workers\s*\*\s*never claim the same row\./,
     );
   });
 
   it('register: last-write-wins Map insert', () => {
     expect(body).toMatch(
-      /\/\*\* Register a handler for a job_type\. Last-write-wins if called twice\. \*\/\s*\n?\s*register\(jobType: string, handler: ScheduledJobHandler\): void \{\s*\n?\s*this\.handlers\.set\(jobType, handler\);/,
+      /\/\*\* Register a handler for a job_type\. Last-write-wins if called twice\. \*\/\s*register\(jobType: string, handler: ScheduledJobHandler\): void \{\s*this\.handlers\.set\(jobType, handler\);/,
     );
   });
 
   it('processTick: claims due → Promise.all dispatch → info-log on non-empty + returns processed count; early-return {processed:0} on empty', () => {
     expect(body).toMatch(
-      /async processTick\(now: Date\): Promise<\{ processed: number \}> \{\s*\n?\s*const due = await this\.repo\.claimDue\(\{\s*\n?\s*batchSize: this\.batchSize,\s*\n?\s*now,\s*\n?\s*workerId: this\.workerId,\s*\n?\s*\}\);\s*\n?\s*if \(due\.length === 0\) return \{ processed: 0 \};/,
+      /async processTick\(now: Date\): Promise<\{ processed: number \}> \{\s*const due = await this\.repo\.claimDue\(\{\s*batchSize: this\.batchSize,\s*now,\s*workerId: this\.workerId,\s*\}\);\s*if \(due\.length === 0\) return \{ processed: 0 \};/,
     );
     expect(body).toMatch(/await Promise\.all\(due\.map\(\(job\) => this\.runOne\(job, now\)\)\);/);
     expect(body).toMatch(/'scheduled-jobs tick processed due jobs',/);
@@ -133,16 +133,16 @@ describe('W409.B apps/server/src/services/scheduled-jobs.ts content parity', () 
       /'no handler registered for job_type — marking failed \(operator should register or delete\)',/,
     );
     expect(body).toMatch(
-      /markFailed\(job\.id, \{\s*\n?\s*lastError: `no handler registered for job_type=\$\{job\.jobType\}`,\s*\n?\s*at: now,\s*\n?\s*workerId: this\.workerId,\s*\n?\s*\}\)/,
+      /markFailed\(job\.id, \{\s*lastError: `no handler registered for job_type=\$\{job\.jobType\}`,\s*at: now,\s*workerId: this\.workerId,\s*\}\)/,
     );
   });
 
   it('Exhausted-attempts: attempts >= maxAttempts → error-log + markFailed (not markRetry)', () => {
     expect(body).toMatch(/const exhausted = job\.attempts >= job\.maxAttempts;/);
-    expect(body).toMatch(/if \(exhausted\) \{\s*\n?\s*this\.logger\.error\(/);
+    expect(body).toMatch(/if \(exhausted\) \{\s*this\.logger\.error\(/);
     expect(body).toMatch(/'job failed permanently — attempts exhausted',/);
     expect(body).toMatch(
-      /markFailed\(job\.id, \{\s*\n?\s*lastError: message,\s*\n?\s*at: now,\s*\n?\s*workerId: this\.workerId,\s*\n?\s*\}\)/,
+      /markFailed\(job\.id, \{\s*lastError: message,\s*at: now,\s*workerId: this\.workerId,\s*\}\)/,
     );
   });
 
@@ -157,7 +157,7 @@ describe('W409.B apps/server/src/services/scheduled-jobs.ts content parity', () 
   it('Retry path: markRetry with lastError + nextRunAt; warn-log includes attempts + nextRunAt', () => {
     expect(body).toMatch(/'job failed — scheduling retry',/);
     expect(body).toMatch(
-      /markRetry\(job\.id, \{\s*\n?\s*lastError: message,\s*\n?\s*nextRunAt,\s*\n?\s*workerId: this\.workerId,\s*\n?\s*\}\)/,
+      /markRetry\(job\.id, \{\s*lastError: message,\s*nextRunAt,\s*workerId: this\.workerId,\s*\}\)/,
     );
   });
 

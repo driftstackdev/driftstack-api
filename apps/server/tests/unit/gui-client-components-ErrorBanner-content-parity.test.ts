@@ -34,13 +34,13 @@ describe('W478.A apps/gui-client/src/components/ErrorBanner.tsx content parity',
 
   it("Framing pinned: 'Shared inline error banner. Lifted out of three views during GUI8 polish so all error surfaces look identical and dismiss the same way.' — pinned so a refactor doesn't fork the banner back into per-view copies and three different-looking error surfaces creep back in", () => {
     expect(body).toMatch(
-      /\/\/ Shared inline error banner\. Lifted out of three views during GUI8\s*\n?\s*\/\/ polish so all error surfaces look identical and dismiss the same way\./,
+      /\/\/ Shared inline error banner\. Lifted out of three views during GUI8\s*\/\/ polish so all error surfaces look identical and dismiss the same way\./,
     );
   });
 
   it('ErrorBannerProps keeps message + onDismiss required while recovery remains optional', () => {
     expect(body).toMatch(
-      /export interface ErrorBannerProps \{[\s\S]*?message: string;\s*\n?\s*onDismiss: \(\) => void;[\s\S]*?onRetry\?: \(\) => void;[\s\S]*?retrying\?: boolean;\s*\n?\s*\}/,
+      /export interface ErrorBannerProps \{[\s\S]*?message: string;\s*onDismiss: \(\) => void;[\s\S]*?onRetry\?: \(\) => void;[\s\S]*?retrying\?: boolean;\s*\}/,
     );
   });
 
@@ -53,10 +53,10 @@ describe('W478.A apps/gui-client/src/components/ErrorBanner.tsx content parity',
     );
     // role="alert" so screen readers announce the error (a11y, 2026-06-15).
     expect(body).toMatch(
-      /<div\s*\n?\s*role="alert"\s*\n?\s*className="flex items-start justify-between gap-3 rounded border border-status-error\/30 bg-status-error\/10 px-3 py-2"\s*\n?\s*>\s*\n?\s*<div className="flex flex-col gap-0\.5 min-w-0">\s*\n?\s*<span className="section-label text-status-error\/80">Error<\/span>/,
+      /<div\s*role="alert"\s*className="flex items-start justify-between gap-3 rounded border border-status-error\/30 bg-status-error\/10 px-3 py-2"\s*>\s*<div className="flex flex-col gap-0\.5 min-w-0">\s*<span className="section-label text-status-error\/80">Error<\/span>/,
     );
     expect(body).toMatch(
-      /<span className="whitespace-pre-line text-sm text-ink-primary">\{message\}<\/span>[\s\S]*?<button type="button" className="btn-secondary" onClick=\{onDismiss\}>\s*\n?\s*Dismiss\s*\n?\s*<\/button>/,
+      /<span className="whitespace-pre-line text-sm text-ink-primary">\{message\}<\/span>[\s\S]*?<button type="button" className="btn-secondary" onClick=\{onDismiss\}>\s*Dismiss\s*<\/button>/,
     );
     expect(body).toMatch(
       /\/\/ 2026-05-20 — whitespace-pre-line so multi-line diagnostic|whitespace-pre-line so multi-line diagnostic/,
@@ -66,7 +66,7 @@ describe('W478.A apps/gui-client/src/components/ErrorBanner.tsx content parity',
   it("W609 — every visible error mirrors into Dev Logs: useEffect keyed on message calls record('error', ['[ui] ' + message]) — pinned so the banner stays the chokepoint that makes the Dev Logs panel useful during user-facing failures (views render friendly messages without touching console.*)", () => {
     expect(body).toMatch(/import \{ record \} from '\.\.\/lib\/log-buffer';/);
     expect(body).toMatch(
-      /useEffect\(\(\) => \{\s*\n?\s*record\('error', \['\[ui\] ' \+ message\]\);\s*\n?\s*\}, \[message\]\);/,
+      /useEffect\(\(\) => \{\s*record\('error', \['\[ui\] ' \+ message\]\);\s*\}, \[message\]\);/,
     );
   });
 

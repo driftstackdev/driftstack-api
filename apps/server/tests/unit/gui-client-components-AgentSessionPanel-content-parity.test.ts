@@ -26,7 +26,7 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
   it('LK.6.b doc-comment framing pinned: AgentSessionPanel = LiveKit subscriber. Drift to dropping the LK.6.b anchor would orphan the engineering trace; drift to claiming the panel also captures input would mislead (LK.6.d is the input-capture follow-up)', () => {
     expect(body).toMatch(/\/\/ LK\.6\.b — AgentSessionPanel React component\./);
     expect(body).toMatch(
-      /Subscribes to the LiveKit room hosting an agent session's video\s*\n?\s*\/\/ stream/,
+      /Subscribes to the LiveKit room hosting an agent session's video\s*\/\/ stream/,
     );
   });
 
@@ -44,7 +44,7 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
 
   it('subscriber-only LK.6.b scope pinned: input capture (LK.6.d) + latency measurement (LK.6.e) are deferred to follow-up sub-slices. Drift to growing the panel into input/latency would mix concerns that the LK.6.* split deliberately separates', () => {
     expect(body).toMatch(
-      /Input capture \(LK\.6\.d\) \+ latency measurement \(LK\.6\.e\) land in\s*\n?\s*\/\/ follow-up sub-slices; the panel stays subscriber-only at LK\.6\.b/,
+      /Input capture \(LK\.6\.d\) \+ latency measurement \(LK\.6\.e\) land in\s*\/\/ follow-up sub-slices; the panel stays subscriber-only at LK\.6\.b/,
     );
   });
 
@@ -97,7 +97,7 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
 
   it('LiveKit helpers imported from ../lib/livekit pinned: createLivekitRoom + connectToAgentSession + LivekitConnectionState. Drift to inlining LiveKit-SDK calls would duplicate the helper logic + break the test-injectability', () => {
     expect(body).toMatch(
-      /RoomEvent,\s*\n?\s*connectToAgentSession,\s*\n?\s*createLivekitRoom,\s*\n?\s*type LivekitConnectionState,\s*\n?\s*type Room,\s*\n?\s*\} from '\.\.\/lib\/livekit';/,
+      /RoomEvent,\s*connectToAgentSession,\s*createLivekitRoom,\s*type LivekitConnectionState,\s*type Room,\s*\} from '\.\.\/lib\/livekit';/,
     );
     // Simulator control (founder 2026-06-11): the LK.6.d input-capture hook is
     // wired so `interactive` embeds (the floating-iPhone window) drive the device.
@@ -109,7 +109,7 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     // scroll mapping adapts to the dispatched device — still wired through the
     // ../lib/livekit-input-capture helper, not inlined SDK calls.
     expect(body).toMatch(/useInputCapture\(\{/);
-    expect(body).toMatch(/room,\s*\n?\s*videoElement: videoEl,\s*\n?\s*enabled: interactive,/);
+    expect(body).toMatch(/room,\s*videoElement: videoEl,\s*enabled: interactive,/);
     expect(body).toMatch(/onPublishError,/);
     expect(body).toMatch(/logical: inputLogical,/);
   });
@@ -200,7 +200,7 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     expect(body).toMatch(/if \(action\.nonce === lastRecoverNonceRef\.current\) return;/);
     // 'rebuild' escalation bumps retryNonce; 'resubscribe' toggles off→on.
     expect(body).toMatch(
-      /if \(action\.mode === 'rebuild'\) \{\s*\n?\s*setRetryNonce\(\(n\) => n \+ 1\);/,
+      /if \(action\.mode === 'rebuild'\) \{\s*setRetryNonce\(\(n\) => n \+ 1\);/,
     );
     expect(body).toMatch(/pub\.setSubscribed\(false\);/);
     // Re-subscribe via the CLOSURE-captured publication, NOT videoPublicationRef.current:

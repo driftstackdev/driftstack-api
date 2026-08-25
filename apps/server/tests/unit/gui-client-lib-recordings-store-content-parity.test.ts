@@ -53,25 +53,25 @@ describe('W469.A apps/gui-client/src/lib/recordings-store.ts content parity', ()
   it("File-layout framing pinned: 'Recordings disk persistence — ndjson per recording + JSON index.' + '`$APPDATA/recordings/` (Tauri scopes the fs permission to this exact dir, see capabilities/default.json)' + 'index.json — array of RecordingHeader, fast-load metadata' + '<recording-id>.ndjson — one recording: header line + one JSON-encoded frame per subsequent line' + 'The ndjson file's first line is the header (so a quick `read first line + parse` gives you metadata without buffering the whole 100MB file). Frames are appended one-per-line below.'", () => {
     expect(body).toMatch(/\/\/ Recordings disk persistence — ndjson per recording \+ JSON index\./);
     expect(body).toMatch(
-      /\/\/ File layout under `\$APPDATA\/recordings\/` \(Tauri scopes the fs\s*\n?\s*\/\/ permission to this exact dir, see capabilities\/default\.json\):/,
+      /\/\/ File layout under `\$APPDATA\/recordings\/` \(Tauri scopes the fs\s*\/\/ permission to this exact dir, see capabilities\/default\.json\):/,
     );
     expect(body).toMatch(
-      /\/\/\s+index\.json\s+— array of RecordingHeader, fast-load metadata\s*\n?\s*\/\/\s+<recording-id>\.ndjson\s+— one recording: header line \+ one JSON-encoded\s*\n?\s*\/\/\s+frame per subsequent line/,
+      /\/\/\s+index\.json\s+— array of RecordingHeader, fast-load metadata\s*\/\/\s+<recording-id>\.ndjson\s+— one recording: header line \+ one JSON-encoded\s*\/\/\s+frame per subsequent line/,
     );
     expect(body).toMatch(
-      /\/\/ The ndjson file's first line is the header \(so a quick `read first line \+\s*\n?\s*\/\/ parse` gives you metadata without buffering the whole 100MB file\)\. Frames\s*\n?\s*\/\/ are appended one-per-line below\./,
+      /\/\/ The ndjson file's first line is the header \(so a quick `read first line \+\s*\/\/ parse` gives you metadata without buffering the whole 100MB file\)\. Frames\s*\/\/ are appended one-per-line below\./,
     );
   });
 
   it("Persistence-model framing pinned: 'write on STOP, not on every frame. Per-frame I/O at 2 fps × 100KB would burn disk for marginal crash safety; recordings are deliberate, and on app close we flush any active recordings via the provider's unmount path. If an active recording is interrupted by a crash the same way the in-memory version was, that's parity with the existing UX, just with everything-finalised-recordings now persisting.'", () => {
     expect(body).toMatch(
-      /\/\/ Persistence model: write on STOP, not on every frame\. Per-frame I\/O at\s*\n?\s*\/\/ 2 fps × 100KB would burn disk for marginal crash safety; recordings are\s*\n?\s*\/\/ deliberate, and on app close we flush any active recordings via the\s*\n?\s*\/\/ provider's unmount path\. If an active recording is interrupted by a\s*\n?\s*\/\/ crash the same way the in-memory version was, that's parity with the\s*\n?\s*\/\/ existing UX, just with everything-finalised-recordings now persisting\./,
+      /\/\/ Persistence model: write on STOP, not on every frame\. Per-frame I\/O at\s*\/\/ 2 fps × 100KB would burn disk for marginal crash safety; recordings are\s*\/\/ deliberate, and on app close we flush any active recordings via the\s*\/\/ provider's unmount path\. If an active recording is interrupted by a\s*\/\/ crash the same way the in-memory version was, that's parity with the\s*\/\/ existing UX, just with everything-finalised-recordings now persisting\./,
     );
   });
 
   it("Tauri fs imports: 7-fn block (BaseDirectory + exists + mkdir + readDir + readTextFile + remove + writeTextFile) from '@tauri-apps/plugin-fs'; type imports Recording + RecordingFrame from './recordings'", () => {
     expect(body).toMatch(
-      /import \{\s*\n?\s*BaseDirectory,\s*\n?\s*exists,\s*\n?\s*mkdir,\s*\n?\s*readDir,\s*\n?\s*readTextFile,\s*\n?\s*remove,\s*\n?\s*writeTextFile,\s*\n?\s*\} from '@tauri-apps\/plugin-fs';\s*\n?\s*import type \{ Recording, RecordingFrame \} from '\.\/recordings';/,
+      /import \{\s*BaseDirectory,\s*exists,\s*mkdir,\s*readDir,\s*readTextFile,\s*remove,\s*writeTextFile,\s*\} from '@tauri-apps\/plugin-fs';\s*import type \{ Recording, RecordingFrame \} from '\.\/recordings';/,
     );
   });
 
@@ -82,7 +82,7 @@ describe('W469.A apps/gui-client/src/lib/recordings-store.ts content parity', ()
 
   it("RecordingHeader 8-field: id + sessionId + label nullable + startedAt + endedAt nullable + totalCaptured + frameCount + totalBytes 'Total bytes across all stored frames. Lets the list view show size without loading frames.'", () => {
     expect(body).toMatch(
-      /export interface RecordingHeader \{\s*\n?\s*id: string;\s*\n?\s*sessionId: string;\s*\n?\s*label: string \| null;\s*\n?\s*startedAt: number;\s*\n?\s*endedAt: number \| null;\s*\n?\s*totalCaptured: number;\s*\n?\s*frameCount: number;\s*\n?\s*\/\*\* Total bytes across all stored frames\. Lets the list view show size without loading frames\. \*\/\s*\n?\s*totalBytes: number;\s*\n?\s*\}/,
+      /export interface RecordingHeader \{\s*id: string;\s*sessionId: string;\s*label: string \| null;\s*startedAt: number;\s*endedAt: number \| null;\s*totalCaptured: number;\s*frameCount: number;\s*\/\*\* Total bytes across all stored frames\. Lets the list view show size without loading frames\. \*\/\s*totalBytes: number;\s*\}/,
     );
   });
 
@@ -103,37 +103,37 @@ describe('W469.A apps/gui-client/src/lib/recordings-store.ts content parity', ()
 
   it("rebuildIndexFromScan: readDir + .ndjson endsWith filter + slice(0, -7) id extract + readHeader + 'Skip malformed file.' inner catch + writeIndex + 'Dir read failed — return empty.' outer catch", () => {
     expect(body).toMatch(
-      /async function rebuildIndexFromScan\(\): Promise<RecordingHeader\[\]> \{\s*\n?\s*const out: RecordingHeader\[\] = \[\];\s*\n?\s*try \{\s*\n?\s*const entries = await readDir\(RECORDINGS_DIR, \{ baseDir: BaseDirectory\.AppData \}\);\s*\n?\s*for \(const e of entries\) \{\s*\n?\s*if \(!e\.name\?\.endsWith\('\.ndjson'\)\) continue;\s*\n?\s*const id = e\.name\.slice\(0, -7\);/,
+      /async function rebuildIndexFromScan\(\): Promise<RecordingHeader\[\]> \{\s*const out: RecordingHeader\[\] = \[\];\s*try \{\s*const entries = await readDir\(RECORDINGS_DIR, \{ baseDir: BaseDirectory\.AppData \}\);\s*for \(const e of entries\) \{\s*if \(!e\.name\?\.endsWith\('\.ndjson'\)\) continue;\s*const id = e\.name\.slice\(0, -7\);/,
     );
     expect(body).toMatch(
-      /\/\/ Skip malformed file\.\s*\n?\s*\}\s*\n?\s*\}\s*\n?\s*await writeIndex\(out\);\s*\n?\s*\} catch \{\s*\n?\s*\/\/ Dir read failed — return empty\.\s*\n?\s*\}/,
+      /\/\/ Skip malformed file\.\s*\}\s*\}\s*await writeIndex\(out\);\s*\} catch \{\s*\/\/ Dir read failed — return empty\.\s*\}/,
     );
   });
 
   it("persistRecording: totalBytes reduce + 8-field RecordingHeader + lines [JSON.stringify(header), ...frames.map(JSON.stringify)] + '\\n' join + final '\\n' suffix; index dedup via .filter(h => h.id !== rec.id) + push + sort by startedAt desc", () => {
     expect(body).toMatch(
-      /const totalBytes = rec\.frames\.reduce\(\(acc, f\) => acc \+ f\.bytes, 0\);\s*\n?\s*const header: RecordingHeader = \{\s*\n?\s*id: rec\.id,/,
+      /const totalBytes = rec\.frames\.reduce\(\(acc, f\) => acc \+ f\.bytes, 0\);\s*const header: RecordingHeader = \{\s*id: rec\.id,/,
     );
     expect(body).toMatch(
-      /const lines: string\[\] = \[JSON\.stringify\(header\)\];\s*\n?\s*for \(const f of rec\.frames\) \{\s*\n?\s*lines\.push\(JSON\.stringify\(f\)\);\s*\n?\s*\}\s*\n?\s*await writeTextFile\(ndjsonPath\(rec\.id\), lines\.join\('\\n'\) \+ '\\n', \{\s*\n?\s*baseDir: BaseDirectory\.AppData,\s*\n?\s*\}\);/,
+      /const lines: string\[\] = \[JSON\.stringify\(header\)\];\s*for \(const f of rec\.frames\) \{\s*lines\.push\(JSON\.stringify\(f\)\);\s*\}\s*await writeTextFile\(ndjsonPath\(rec\.id\), lines\.join\('\\n'\) \+ '\\n', \{\s*baseDir: BaseDirectory\.AppData,\s*\}\);/,
     );
     expect(body).toMatch(
-      /const idx = await loadIndex\(\);\s*\n?\s*const next = idx\.filter\(\(h\) => h\.id !== rec\.id\);\s*\n?\s*next\.push\(header\);\s*\n?\s*next\.sort\(\(a, b\) => b\.startedAt - a\.startedAt\);\s*\n?\s*await writeIndex\(next\);/,
+      /const idx = await loadIndex\(\);\s*const next = idx\.filter\(\(h\) => h\.id !== rec\.id\);\s*next\.push\(header\);\s*next\.sort\(\(a, b\) => b\.startedAt - a\.startedAt\);\s*await writeIndex\(next\);/,
     );
   });
 
   it("loadFrames: 'lazy — invoked when the player opens' framing + raw.split('\\n').filter(length>0) + i=1 header-skip + per-line try/catch isRecordingFrame narrow + 'Skip malformed line.'", () => {
     expect(body).toMatch(
-      /\/\*\* Load frames for a recording from disk \(lazy — invoked when the player opens\)\. \*\/\s*\n?\s*export async function loadFrames\(id: string\): Promise<RecordingFrame\[\]> \{\s*\n?\s*const raw = await readTextFile\(ndjsonPath\(id\), \{ baseDir: BaseDirectory\.AppData \}\);\s*\n?\s*const lines = raw\.split\('\\n'\)\.filter\(\(l\) => l\.length > 0\);\s*\n?\s*\/\/ First line is the header — skip\.\s*\n?\s*const out: RecordingFrame\[\] = \[\];\s*\n?\s*for \(let i = 1; i < lines\.length; i\+\+\) \{\s*\n?\s*try \{\s*\n?\s*const parsed = JSON\.parse\(lines\[i\] as string\) as unknown;\s*\n?\s*if \(isRecordingFrame\(parsed\)\) out\.push\(parsed\);\s*\n?\s*\} catch \{\s*\n?\s*\/\/ Skip malformed line\.\s*\n?\s*\}\s*\n?\s*\}/,
+      /\/\*\* Load frames for a recording from disk \(lazy — invoked when the player opens\)\. \*\/\s*export async function loadFrames\(id: string\): Promise<RecordingFrame\[\]> \{\s*const raw = await readTextFile\(ndjsonPath\(id\), \{ baseDir: BaseDirectory\.AppData \}\);\s*const lines = raw\.split\('\\n'\)\.filter\(\(l\) => l\.length > 0\);\s*\/\/ First line is the header — skip\.\s*const out: RecordingFrame\[\] = \[\];\s*for \(let i = 1; i < lines\.length; i\+\+\) \{\s*try \{\s*const parsed = JSON\.parse\(lines\[i\] as string\) as unknown;\s*if \(isRecordingFrame\(parsed\)\) out\.push\(parsed\);\s*\} catch \{\s*\/\/ Skip malformed line\.\s*\}\s*\}/,
     );
   });
 
   it('deletePersisted: ndjsonExists check before remove + index filter dedup; isRecordingHeader 8-check narrow + isRecordingFrame 3-check (at number + dataUrl string + bytes number)', () => {
     expect(body).toMatch(
-      /export async function deletePersisted\(id: string\): Promise<void> \{\s*\n?\s*await ensureDir\(\);\s*\n?\s*const ndjsonExists = await exists\(ndjsonPath\(id\), \{ baseDir: BaseDirectory\.AppData \}\);\s*\n?\s*if \(ndjsonExists\) \{\s*\n?\s*await remove\(ndjsonPath\(id\), \{ baseDir: BaseDirectory\.AppData \}\);\s*\n?\s*\}\s*\n?\s*const idx = await loadIndex\(\);\s*\n?\s*const next = idx\.filter\(\(h\) => h\.id !== id\);\s*\n?\s*await writeIndex\(next\);\s*\n?\s*\}/,
+      /export async function deletePersisted\(id: string\): Promise<void> \{\s*await ensureDir\(\);\s*const ndjsonExists = await exists\(ndjsonPath\(id\), \{ baseDir: BaseDirectory\.AppData \}\);\s*if \(ndjsonExists\) \{\s*await remove\(ndjsonPath\(id\), \{ baseDir: BaseDirectory\.AppData \}\);\s*\}\s*const idx = await loadIndex\(\);\s*const next = idx\.filter\(\(h\) => h\.id !== id\);\s*await writeIndex\(next\);\s*\}/,
     );
     expect(body).toMatch(
-      /function isRecordingFrame\(v: unknown\): v is RecordingFrame \{\s*\n?\s*if \(typeof v !== 'object' \|\| v === null\) return false;\s*\n?\s*const r = v as Record<string, unknown>;\s*\n?\s*return typeof r\.at === 'number' && typeof r\.dataUrl === 'string' && typeof r\.bytes === 'number';\s*\n?\s*\}/,
+      /function isRecordingFrame\(v: unknown\): v is RecordingFrame \{\s*if \(typeof v !== 'object' \|\| v === null\) return false;\s*const r = v as Record<string, unknown>;\s*return typeof r\.at === 'number' && typeof r\.dataUrl === 'string' && typeof r\.bytes === 'number';\s*\}/,
     );
   });
 

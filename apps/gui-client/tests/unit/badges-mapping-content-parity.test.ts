@@ -140,7 +140,7 @@ describe('W384.B gui-client SessionStatusBadge content parity', () => {
   });
 
   it('busy tone dot uses animate-pulse (load-bearing UX: in-progress visual signal)', () => {
-    expect(body).toMatch(/tone === 'busy'\s*\n?\s*\?\s*'bg-status-busy animate-pulse'/);
+    expect(body).toMatch(/tone === 'busy'\s*\?\s*'bg-status-busy animate-pulse'/);
   });
 
   it('SessionStatusBadge component: role="status" + aria-label="Session status: ${label}"', () => {
@@ -188,7 +188,7 @@ describe('W384.B gui-client CryptoOrderStatusBadge content parity', () => {
 
   it('V-1056 isTerminalCryptoOrderStatus helper: true for paid, failed OR cancelled — matching isTerminalForward on the server', () => {
     expect(body).toMatch(
-      /export function isTerminalCryptoOrderStatus\(status: string\): boolean \{\s*\n?\s*return status === 'paid' \|\| status === 'failed' \|\| status === 'cancelled';\s*\n?\s*\}/,
+      /export function isTerminalCryptoOrderStatus\(status: string\): boolean \{\s*return status === 'paid' \|\| status === 'failed' \|\| status === 'cancelled';\s*\}/,
     );
     expect(
       body,

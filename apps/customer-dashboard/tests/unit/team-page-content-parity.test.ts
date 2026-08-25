@@ -66,7 +66,7 @@ describe('W365.B customer-dashboard /team page content parity', () => {
 
   it('reads accept member+admin; writes require admin (RBAC contract)', () => {
     expect(body).toMatch(
-      /Reads accept both 'member' and\s*\n?\s*\/\/\s*'admin' roles; writes require 'admin'/,
+      /Reads accept both 'member' and\s*\/\/\s*'admin' roles; writes require 'admin'/,
     );
   });
 

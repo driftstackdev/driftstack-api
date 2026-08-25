@@ -53,13 +53,13 @@ describe('W429.A packages/sdk-typescript/src/resources/email-preferences.ts cont
 
   it('Per-event opt-in/opt-out scope pinned with example opt-outable event names (signup-welcome / session-failed-first / billing-receipt). Load-bearing because these examples document the policy scope — readers should be able to look at the comment and understand which kinds of emails CAN be muted.', () => {
     expect(body).toMatch(
-      /\/\/ Per-event opt-in\/opt-out toggles for non-critical customer emails\s*\n?\s*\/\/ \(signup-welcome, session-failed-first, billing-receipt, etc\)\./,
+      /\/\/ Per-event opt-in\/opt-out toggles for non-critical customer emails\s*\/\/ \(signup-welcome, session-failed-first, billing-receipt, etc\)\./,
     );
   });
 
   it('CRITICAL: critical-emails-never-opt-outable invariant pinned per-line. The 3 critical emails (signup-verification + password-reset + billing-failure) MUST be absent from OptOutableEmailEvent enum. This is the policy-enforcement claim: "absent from the OptOutableEmailEvent enum on purpose so the API surface matches the policy." Drift to letting a critical email into the enum would let customers opt out of "your password was reset" or "your card failed" — catastrophic safety-net break. (S44 2026-07-07 founder-approved trim deleted the never-wired subscription-cancellation + support-ack templates, so the roster shrank 5→3; the deleted names must NOT reappear here as if they were live emails.)', () => {
     expect(body).toMatch(
-      /\/\/ Critical emails — signup-verification, password-reset,\s*\n?\s*\/\/ billing-failure — are never opt-outable; they're absent from the\s*\n?\s*\/\/ OptOutableEmailEvent enum on purpose so the API surface matches\s*\n?\s*\/\/ the policy\./,
+      /\/\/ Critical emails — signup-verification, password-reset,\s*\/\/ billing-failure — are never opt-outable; they're absent from the\s*\/\/ OptOutableEmailEvent enum on purpose so the API surface matches\s*\/\/ the policy\./,
     );
     // S44 negative pins — the deleted templates must not resurface.
     expect(body).not.toMatch(/subscription-cancellation/);
@@ -68,11 +68,11 @@ describe('W429.A packages/sdk-typescript/src/resources/email-preferences.ts cont
 
   it('Imports — 3 api-types shapes (multi-line braced; sorted alphabetical): ListEmailPreferencesResponse + OptOutableEmailEvent + SetEmailPreferenceRequest. The OptOutableEmailEvent import is load-bearing — without it the optIn/optOut params would fall back to `string` and the type-narrowing safety net would be lost. EmailPreference type was dropped from the imports because the PUT route returns 204 No Content (no body); the SDK return type is now `Promise<void>` matching the wire shape.', () => {
     expect(body).toMatch(
-      /import type \{\s*\n?\s*ListEmailPreferencesResponse,\s*\n?\s*OptOutableEmailEvent,\s*\n?\s*SetEmailPreferenceRequest,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import type \{\s*ListEmailPreferencesResponse,\s*OptOutableEmailEvent,\s*SetEmailPreferenceRequest,\s*\} from '@driftstack\/api-types';/,
     );
     // EmailPreference must NOT be in the import list — its return-
     // value role on set/optIn/optOut was always wire-divergent.
-    expect(body).not.toMatch(/import type \{\s*\n?\s*EmailPreference,/);
+    expect(body).not.toMatch(/import type \{\s*EmailPreference,/);
   });
 
   it("Imports — HttpClient from '../http.js' (relative path with .js extension for ESM compatibility). Drift to dropping the .js extension would break the ESM build because TypeScript needs the literal .js suffix at runtime.", () => {
@@ -92,7 +92,7 @@ describe('W429.A packages/sdk-typescript/src/resources/email-preferences.ts cont
       /\/\*\* Read all opt-out toggles for the EFFECTIVE account\. Defaults to opted-in for unset rows\. \*\//,
     );
     expect(body).toMatch(
-      /list\(\): Promise<ListEmailPreferencesResponse> \{\s*\n?\s*return this\.http\.request<ListEmailPreferencesResponse>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/account\/email-preferences',\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /list\(\): Promise<ListEmailPreferencesResponse> \{\s*return this\.http\.request<ListEmailPreferencesResponse>\(\{\s*method: 'GET',\s*path: '\/v1\/account\/email-preferences',\s*\}\);\s*\}/,
     );
   });
 
@@ -101,21 +101,21 @@ describe('W429.A packages/sdk-typescript/src/resources/email-preferences.ts cont
       /Set opt-in\/opt-out for a single email event type\. The server\s*\n?\s+\* returns `204 No Content` on success/,
     );
     expect(body).toMatch(
-      /set\(body: SetEmailPreferenceRequest\): Promise<void> \{\s*\n?\s*return this\.http\.request<void>\(\{\s*\n?\s*method: 'PUT',\s*\n?\s*path: '\/v1\/account\/email-preferences',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /set\(body: SetEmailPreferenceRequest\): Promise<void> \{\s*return this\.http\.request<void>\(\{\s*method: 'PUT',\s*path: '\/v1\/account\/email-preferences',\s*body,\s*\}\);\s*\}/,
     );
   });
 
   it("optOut convenience — delegates to set({event_type: eventType, opted_in: false}). CRITICAL TYPE-SAFETY: eventType is typed `OptOutableEmailEvent`, NOT `string`. The TS type system rejects `optOut('password-reset')` at COMPILE TIME because \"password-reset\" isn't in the OptOutableEmailEvent enum. Returns `Promise<void>` mirroring set().", () => {
     expect(body).toMatch(/\/\*\* Convenience: opt out of a single event type\. \*\//);
     expect(body).toMatch(
-      /optOut\(eventType: OptOutableEmailEvent\): Promise<void> \{\s*\n?\s*return this\.set\(\{ event_type: eventType, opted_in: false \}\);\s*\n?\s*\}/,
+      /optOut\(eventType: OptOutableEmailEvent\): Promise<void> \{\s*return this\.set\(\{ event_type: eventType, opted_in: false \}\);\s*\}/,
     );
   });
 
   it('optIn convenience — delegates to set({event_type: eventType, opted_in: true}). Mirror of optOut with opted_in:true. Same OptOutableEmailEvent type-narrowing on the parameter. Returns `Promise<void>` mirroring set().', () => {
     expect(body).toMatch(/\/\*\* Convenience: opt back in to a single event type\. \*\//);
     expect(body).toMatch(
-      /optIn\(eventType: OptOutableEmailEvent\): Promise<void> \{\s*\n?\s*return this\.set\(\{ event_type: eventType, opted_in: true \}\);\s*\n?\s*\}/,
+      /optIn\(eventType: OptOutableEmailEvent\): Promise<void> \{\s*return this\.set\(\{ event_type: eventType, opted_in: true \}\);\s*\}/,
     );
   });
 

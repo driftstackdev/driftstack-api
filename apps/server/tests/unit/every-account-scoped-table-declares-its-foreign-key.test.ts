@@ -84,7 +84,7 @@ function tables(): TableInfo[] {
     const end = k + 1 < starts.length ? starts[k + 1]!.line : lines.length;
     const body = lines.slice(start.line, end).join('\n');
     // The table's wire name follows the paren on either the same line or the next.
-    const named = /pgTable\(\s*\n?\s*'([a-z0-9_]+)'/.exec(body);
+    const named = /pgTable\(\s*'([a-z0-9_]+)'/.exec(body);
     const accountScoped = body.includes("'account_id'");
     // Look only at the account_id column's own declaration, so a `.references()`
     // on some other column (api_key_id, profile_id) cannot stand in for it.

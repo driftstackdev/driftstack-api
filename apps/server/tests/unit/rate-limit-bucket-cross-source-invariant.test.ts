@@ -58,7 +58,7 @@ describe('W869 RateLimitBucket cross-source invariant', () => {
   it("CRITICAL packages/api-types/src/common.ts TIER_RATE_LIMIT_DEFAULTS has the EXACT Record<AccountTier, Record<'global' | 'sessions:create' | 'agent_sessions:message' | 'agent_sessions:input_event', BucketLimitConfig>> shape. The 4-bucket-key shape (v2-#13 added 'agent_sessions:message' for AI chat throttle; Slice 4 added 'agent_sessions:input_event' for LK.6 manual-control stream) is the V-219 closed roster.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/common.ts'));
     expect(p).toMatch(
-      /TIER_RATE_LIMIT_DEFAULTS: Record<\s*\n?\s*AccountTier,\s*\n?\s*Record<\s*\n?\s*'global' \| 'sessions:create' \| 'agent_sessions:message' \| 'agent_sessions:input_event',\s*\n?\s*BucketLimitConfig/,
+      /TIER_RATE_LIMIT_DEFAULTS: Record<\s*AccountTier,\s*Record<\s*'global' \| 'sessions:create' \| 'agent_sessions:message' \| 'agent_sessions:input_event',\s*BucketLimitConfig/,
     );
   });
 
@@ -81,7 +81,7 @@ describe('W869 RateLimitBucket cross-source invariant', () => {
   it("CRITICAL packages/api-types/src/accounts.ts RateLimitBucketSchema declares bucket_key: z.enum(['global', 'sessions:create', 'agent_sessions:message', 'agent_sessions:input_event']). The customer-read response surface — GET /v1/account/rate-limits returns ALL FOUR enforced buckets (routes/account-rate-limits.ts BUCKET_KEYS mirrors TIER_RATE_LIMIT_DEFAULTS so the customer view never hides a limit that's actually applied), and the docs (api/account-rate-limits.md) list four. The schema MUST include agent_sessions:input_event or it rejects the real response. (The admin WRITE surface below stays the 3 override-able keys — input_event has no admin-override path.)", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
     expect(p).toMatch(
-      /bucket_key: z\.enum\(\[\s*\n?\s*'global',\s*\n?\s*'sessions:create',\s*\n?\s*'agent_sessions:message',\s*\n?\s*'agent_sessions:input_event',\s*\n?\s*\]\)/,
+      /bucket_key: z\.enum\(\[\s*'global',\s*'sessions:create',\s*'agent_sessions:message',\s*'agent_sessions:input_event',\s*\]\)/,
     );
   });
 
@@ -141,9 +141,7 @@ describe('W869 RateLimitBucket cross-source invariant', () => {
 
   it("CRITICAL no source declares forbidden bucket-key names (per-route / api / write / read / admin / heavy / light). These are common patterns that V-219 intentionally avoids — the 2-key model maps to 'all calls vs the single most-expensive op'.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/common.ts'));
-    const m = p.match(
-      /TIER_RATE_LIMIT_DEFAULTS: Record<\s*\n?\s*AccountTier,\s*\n?\s*Record<([^>]+)>/,
-    );
+    const m = p.match(/TIER_RATE_LIMIT_DEFAULTS: Record<\s*AccountTier,\s*Record<([^>]+)>/);
     expect(m, 'TIER_RATE_LIMIT_DEFAULTS type signature must match').not.toBeNull();
     const body = m![1];
     const forbidden = ['per-route', 'api', 'write', 'read', 'admin', 'heavy', 'light'];

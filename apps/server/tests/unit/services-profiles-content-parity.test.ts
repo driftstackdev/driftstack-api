@@ -46,10 +46,10 @@ describe('W407.A apps/server/src/services/profiles.ts content parity', () => {
 
   it('Tier-defining framing pinned: Manual ladder tier metric + API ladder cap + enterprise unlimited via PROFILES_PER_TIER null', () => {
     expect(body).toMatch(
-      /The Manual ladder uses profile count as the tier-defining metric\s*\n?\s*\/\/\s*\(e\.g\. team_manual = 50 profiles\); the API ladder also caps profiles\s*\n?\s*\/\/\s*to prevent unbounded growth at lower tiers\. Enterprise is unlimited\s*\n?\s*\/\/\s*\(PROFILES_PER_TIER returns null\)\./,
+      /The Manual ladder uses profile count as the tier-defining metric\s*\/\/\s*\(e\.g\. team_manual = 50 profiles\); the API ladder also caps profiles\s*\/\/\s*to prevent unbounded growth at lower tiers\. Enterprise is unlimited\s*\/\/\s*\(PROFILES_PER_TIER returns null\)\./,
     );
     expect(body).toMatch(
-      /Per-profile persistent browser state \(cookies \/ localStorage \/\s*\n?\s*\/\/\s*IndexedDB\) lives in the WebKit driver layer — none of that flows\s*\n?\s*\/\/\s*through this service\. We store only the metadata\./,
+      /Per-profile persistent browser state \(cookies \/ localStorage \/\s*\/\/\s*IndexedDB\) lives in the WebKit driver layer — none of that flows\s*\/\/\s*through this service\. We store only the metadata\./,
     );
   });
 
@@ -64,7 +64,7 @@ describe('W407.A apps/server/src/services/profiles.ts content parity', () => {
 
   it('V-225 emitAuditBestEffort: 5-action union (profile.created/deleted/restored/V-480 exported/imported)', () => {
     expect(body).toMatch(
-      /V-225 — optional customer-facing audit log\. When wired, emits\s*\n?\s*\*\s*profile\.created \/ profile\.deleted entries\./,
+      /V-225 — optional customer-facing audit log\. When wired, emits\s*\*\s*profile\.created \/ profile\.deleted entries\./,
     );
     // The union is prettier-wrapped one-per-line — assert each member (incl.
     // the L4b profile.restored) rather than a single-line chain.
@@ -78,16 +78,14 @@ describe('W407.A apps/server/src/services/profiles.ts content parity', () => {
   it("create: registry-selectable archetype validation precedes repo access; profileLimitFor tier-cap; TierLimitError with limit+current+resource:'profile'+tier; ConflictError on duplicate name; DEFAULT_ARCHETYPE = LOCKED_ARCHETYPE_ID", () => {
     expect(body).toMatch(/const DEFAULT_ARCHETYPE = LOCKED_ARCHETYPE_ID;/);
     expect(body).toMatch(
-      /async create\(args: CreateProfileArgs\): Promise<ProfileRecord> \{\s*\n?\s*const archetype = requireSelectableArchetype\(args\.archetype \?\? DEFAULT_ARCHETYPE\);\s*\n?\s*const limit = profileLimitFor\(args\.tier\);/,
+      /async create\(args: CreateProfileArgs\): Promise<ProfileRecord> \{\s*const archetype = requireSelectableArchetype\(args\.archetype \?\? DEFAULT_ARCHETYPE\);\s*const limit = profileLimitFor\(args\.tier\);/,
     );
     expect(body).toMatch(
-      /const limit = profileLimitFor\(args\.tier\);\s*\n?\s*if \(limit !== null\) \{\s*\n?\s*const current = await this\.repo\.countByAccount\(args\.accountId\);\s*\n?\s*if \(current >= limit\) \{\s*\n?\s*throw new TierLimitError\(/,
+      /const limit = profileLimitFor\(args\.tier\);\s*if \(limit !== null\) \{\s*const current = await this\.repo\.countByAccount\(args\.accountId\);\s*if \(current >= limit\) \{\s*throw new TierLimitError\(/,
     );
+    expect(body).toMatch(/\{\s*limit,\s*current,\s*resource: 'profile',\s*tier: args\.tier,\s*\},/);
     expect(body).toMatch(
-      /\{\s*\n?\s*limit,\s*\n?\s*current,\s*\n?\s*resource: 'profile',\s*\n?\s*tier: args\.tier,\s*\n?\s*\},/,
-    );
-    expect(body).toMatch(
-      /if \(existing !== null\) \{\s*\n?\s*throw new ConflictError\(`Profile name "\$\{args\.name\}" already exists in this account\.`, \{\s*\n?\s*resource: 'profile',\s*\n?\s*field: 'name',\s*\n?\s*\}\);/,
+      /if \(existing !== null\) \{\s*throw new ConflictError\(`Profile name "\$\{args\.name\}" already exists in this account\.`, \{\s*resource: 'profile',\s*field: 'name',\s*\}\);/,
     );
     expect(body).toMatch(/archetype,/);
   });
@@ -129,67 +127,67 @@ describe('W407.A apps/server/src/services/profiles.ts content parity', () => {
 
   it('update: rename conflict check excludes self by id (conflict.id !== args.id allowed)', () => {
     expect(body).toMatch(
-      /if \(conflict !== null && conflict\.id !== args\.id\) \{\s*\n?\s*throw new ConflictError\(/,
+      /if \(conflict !== null && conflict\.id !== args\.id\) \{\s*throw new ConflictError\(/,
     );
   });
 
   it('delete: idempotent no-op (if !ok, return — not throw) when repo.delete returns false; emits profile.deleted audit with name metadata only on a real delete', () => {
     expect(body).toMatch(/const ok = await this\.repo\.delete\(args\);[\s\S]*?if \(!ok\) return;/);
     expect(body).toMatch(
-      /await this\.emitAuditBestEffort\(args\.accountId, 'profile\.deleted', `profile_\$\{args\.id\}`, \{\s*\n?\s*name: before\?\.name \?\? null,\s*\n?\s*\}\);/,
+      /await this\.emitAuditBestEffort\(args\.accountId, 'profile\.deleted', `profile_\$\{args\.id\}`, \{\s*name: before\?\.name \?\? null,\s*\}\);/,
     );
   });
 
   it('V-313 clone: account-scoped source lookup (404 if cross-account); tier-cap shared with create; auto-derived name iterates; cloned_from audit metadata', () => {
     expect(body).toMatch(
-      /V-313 — clone an existing profile's metadata\. Reads the source row,\s*\n?\s*\*\s*derives a non-conflicting name \(`\$\{source\.name\} \(copy\)`, `\(copy 2\)`,\s*\n?\s*\*\s*`\(copy 3\)`, \.\.\. incrementing until unused\),/,
+      /V-313 — clone an existing profile's metadata\. Reads the source row,\s*\*\s*derives a non-conflicting name \(`\$\{source\.name\} \(copy\)`, `\(copy 2\)`,\s*\*\s*`\(copy 3\)`, \.\.\. incrementing until unused\),/,
     );
     expect(body).toMatch(
-      /Source row is found scoped to `accountId` so the cloner can't\s*\n?\s*\*\s*duplicate another account's profile by id \(404 instead\)\./,
+      /Source row is found scoped to `accountId` so the cloner can't\s*\*\s*duplicate another account's profile by id \(404 instead\)\./,
     );
     expect(body).toMatch(/\/\/ Tier cap is shared with create — same enforcement path\./);
     expect(body).toMatch(
-      /await this\.emitAuditBestEffort\(args\.accountId, 'profile\.created', `profile_\$\{row\.id\}`, \{\s*\n?\s*name: row\.name,\s*\n?\s*archetype: row\.archetype,\s*\n?\s*cloned_from: `profile_\$\{source\.id\}`,/,
+      /await this\.emitAuditBestEffort\(args\.accountId, 'profile\.created', `profile_\$\{row\.id\}`, \{\s*name: row\.name,\s*archetype: row\.archetype,\s*cloned_from: `profile_\$\{source\.id\}`,/,
     );
   });
 
   it("deriveNonConflictingCopyName: n===1 → `${source} (copy)` else `(copy N)`; caps at 99 → ConflictError 'Too many copies'", () => {
     expect(body).toMatch(
-      /V-313 — find an unused name in `\$\{source\} \(copy\)`, `\(copy 2\)`,\s*\n?\s*\*\s*`\(copy 3\)`, \.\.\. iteration\. Caps at 99 to avoid runaway loops\./,
+      /V-313 — find an unused name in `\$\{source\} \(copy\)`, `\(copy 2\)`,\s*\*\s*`\(copy 3\)`, \.\.\. iteration\. Caps at 99 to avoid runaway loops\./,
     );
     expect(body).toMatch(
-      /for \(let n = 1; n <= 99; n\+\+\) \{\s*\n?\s*const candidate = n === 1 \? `\$\{sourceName\} \(copy\)` : `\$\{sourceName\} \(copy \$\{n\}\)`;/,
+      /for \(let n = 1; n <= 99; n\+\+\) \{\s*const candidate = n === 1 \? `\$\{sourceName\} \(copy\)` : `\$\{sourceName\} \(copy \$\{n\}\)`;/,
     );
     expect(body).toMatch(
-      /throw new ConflictError\(\s*\n?\s*'Too many copies of this profile already exist\. Pick a fresh name explicitly\.',/,
+      /throw new ConflictError\(\s*'Too many copies of this profile already exist\. Pick a fresh name explicitly\.',/,
     );
   });
 
   it('V-480 exportProfile: account-scoped read; envelope versioning at route layer (not service); emits profile.exported audit', () => {
     expect(body).toMatch(
-      /V-480 — export a profile's metadata as an envelope payload \(no\s*\n?\s*\*\s*envelope-versioning here — that lives at the route layer where the\s*\n?\s*\*\s*api-types schema is the canonical shape\)\./,
+      /V-480 — export a profile's metadata as an envelope payload \(no\s*\*\s*envelope-versioning here — that lives at the route layer where the\s*\*\s*api-types schema is the canonical shape\)\./,
     );
     // This pin used to end at `archetype: row.archetype,` — freezing a payload that omitted
     // the two lineage keys the customer docs promise. It was the only thing blocking the fix;
     // the two doc pins the audit named were fine, because the DOCS were the true half.
     expect(body).toMatch(
-      /await this\.emitAuditBestEffort\(args\.accountId, 'profile\.exported', `profile_\$\{row\.id\}`, \{\s*\n?\s*name: row\.name,\s*\n?\s*archetype: row\.archetype,\s*\n?\s*source_profile_id: `prof_\$\{row\.id\}`,\s*\n?\s*source_account_id: row\.accountId,\s*\n?\s*\}\);/,
+      /await this\.emitAuditBestEffort\(args\.accountId, 'profile\.exported', `profile_\$\{row\.id\}`, \{\s*name: row\.name,\s*archetype: row\.archetype,\s*source_profile_id: `prof_\$\{row\.id\}`,\s*source_account_id: row\.accountId,\s*\}\);/,
     );
   });
 
   it('V-480 importProfile: tier-cap; ConflictError unless nameOverride supplied; source_profile_id + source_account_id + renamed=bool audit metadata', () => {
     expect(body).toMatch(
-      /V-480 — import a profile from a metadata envelope\. Mints a new\s*\n?\s*\*\s*profile \(fresh id, fresh timestamps\)/,
+      /V-480 — import a profile from a metadata envelope\. Mints a new\s*\*\s*profile \(fresh id, fresh timestamps\)/,
     );
     expect(body).toMatch(
-      /Tier-cap enforcement \+ name-conflict semantics match `create\(\)`:\s*\n?\s*\*\s*importing into an account at its tier cap raises TierLimitError;\s*\n?\s*\*\s*importing a name that already exists raises ConflictError unless\s*\n?\s*\*\s*the caller supplies `nameOverride`\./,
+      /Tier-cap enforcement \+ name-conflict semantics match `create\(\)`:\s*\*\s*importing into an account at its tier cap raises TierLimitError;\s*\*\s*importing a name that already exists raises ConflictError unless\s*\*\s*the caller supplies `nameOverride`\./,
     );
     expect(body).toMatch(/const targetName = args\.nameOverride \?\? args\.payload\.name;/);
     expect(body).toMatch(
-      /throw new ConflictError\(\s*\n?\s*`Profile name "\$\{targetName\}" already exists in this account\. Pass name_override to rename on import\.`,/,
+      /throw new ConflictError\(\s*`Profile name "\$\{targetName\}" already exists in this account\. Pass name_override to rename on import\.`,/,
     );
     expect(body).toMatch(
-      /'profile\.imported', `profile_\$\{row\.id\}`, \{[\s\S]+?source_profile_id: args\.sourceProfileId,\s*\n?\s*source_account_id: args\.sourceAccountId,\s*\n?\s*renamed: args\.nameOverride !== undefined,/,
+      /'profile\.imported', `profile_\$\{row\.id\}`, \{[\s\S]+?source_profile_id: args\.sourceProfileId,\s*source_account_id: args\.sourceAccountId,\s*renamed: args\.nameOverride !== undefined,/,
     );
   });
 
@@ -208,10 +206,10 @@ describe('W407.A apps/server/src/services/profiles.ts content parity', () => {
       /update\(args: \{ id: string; accountId: string; updates: ProfileUpdates \}\): Promise<ProfileRecord>;/,
     );
     expect(body).toMatch(
-      /\/\*\* Returns true if a row was deleted, false if not found \/ wrong account\. \*\/\s*\n?\s*delete\(args: \{ id: string; accountId: string \}\): Promise<boolean>;/,
+      /\/\*\* Returns true if a row was deleted, false if not found \/ wrong account\. \*\/\s*delete\(args: \{ id: string; accountId: string \}\): Promise<boolean>;/,
     );
     expect(body).toMatch(
-      /\/\*\* Mark `last_used_at` — fire-and-forget from sessions service\. \*\/\s*\n?\s*touch\(args: \{ id: string; accountId: string; at: Date \}\): Promise<void>;/,
+      /\/\*\* Mark `last_used_at` — fire-and-forget from sessions service\. \*\/\s*touch\(args: \{ id: string; accountId: string; at: Date \}\): Promise<void>;/,
     );
     // doc-150 item 5 — sealed-store save-back recorder (last_saved_at + size_bytes).
     expect(body).toMatch(
@@ -221,19 +219,19 @@ describe('W407.A apps/server/src/services/profiles.ts content parity', () => {
 
   it('ListProfilesArgs/ListProfilesPage: cursor pagination by created_at desc + id desc tiebreak; limit 1-100 default 50', () => {
     expect(body).toMatch(
-      /\/\*\* Cursor is the prior page's last id \(created_at desc \+ id desc tie-break\)\. Omitted = first page\. \*\/\s*\n?\s*cursor\?: string;/,
+      /\/\*\* Cursor is the prior page's last id \(created_at desc \+ id desc tie-break\)\. Omitted = first page\. \*\/\s*cursor\?: string;/,
     );
-    expect(body).toMatch(/\/\*\* Page size, 1-100\. Default 50\. \*\/\s*\n?\s*limit\?: number;/);
+    expect(body).toMatch(/\/\*\* Page size, 1-100\. Default 50\. \*\/\s*limit\?: number;/);
   });
 
   it('imports: selectable-archetype predicate + LOCKED_ARCHETYPE_ID + AccountTier + BadRequest/Conflict/NotFound/StorageQuota/TierLimit errors + profileLimitFor + computeAccountStorageState + AccountAuditService', () => {
     expect(body).toMatch(
-      /import \{\s*\n?\s*LOCKED_ARCHETYPE_ID,\s*\n?\s*isSelectableArchetypeId,\s*\n?\s*type AccountTier,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import \{\s*LOCKED_ARCHETYPE_ID,\s*isSelectableArchetypeId,\s*type AccountTier,\s*\} from '@driftstack\/api-types';/,
     );
     // doc-150 item 6 — StorageQuotaExceededError joined the errors import (now
     // multi-line) + the pure quota helper is imported for the launch gate.
     expect(body).toMatch(
-      /import \{\s*\n?\s*BadRequestError,\s*\n?\s*ConflictError,\s*\n?\s*NotFoundError,\s*\n?\s*StorageQuotaExceededError,\s*\n?\s*TierLimitError,\s*\n?\s*\} from '\.\.\/lib\/errors\.js';/,
+      /import \{\s*BadRequestError,\s*ConflictError,\s*NotFoundError,\s*StorageQuotaExceededError,\s*TierLimitError,\s*\} from '\.\.\/lib\/errors\.js';/,
     );
     expect(body).toMatch(/import \{ profileLimitFor \} from '\.\/sessions\.js';/);
     expect(body).toMatch(/computeAccountStorageState/);

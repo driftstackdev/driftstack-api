@@ -58,7 +58,7 @@ function literalAfter(source: string, anchor: string): string {
 /** `key: 'value'` pairs, tolerating prettier wrapping the value onto its own line. */
 function entries(literalBody: string): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const m of literalBody.matchAll(/(\w+):\s*\n?\s*'((?:[^'\\]|\\.)*)'/g)) {
+  for (const m of literalBody.matchAll(/(\w+):\s*'((?:[^'\\]|\\.)*)'/g)) {
     out[m[1] as string] = m[2] as string;
   }
   return out;

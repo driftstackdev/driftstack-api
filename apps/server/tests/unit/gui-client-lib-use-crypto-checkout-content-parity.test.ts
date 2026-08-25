@@ -62,43 +62,43 @@ describe('W471.B apps/gui-client/src/lib/use-crypto-checkout.ts content parity',
   it('V-534.J framing pins the outcome-unknown state and direct endpoint', () => {
     expect(body).toMatch(/\/\/ V-534\.J — useCryptoCheckout hook\./);
     expect(body).toMatch(
-      /\/\/ Mints a CryptoOrder via POST \/v1\/billing\/crypto-checkout \(V-666\.C\)\.\s*\n?\s*\/\/ Single-shot state machine — idle → loading → \(ready \| error \|\s*\n?\s*\/\/ outcome_unknown\)\./,
+      /\/\/ Mints a CryptoOrder via POST \/v1\/billing\/crypto-checkout \(V-666\.C\)\.\s*\/\/ Single-shot state machine — idle → loading → \(ready \| error \|\s*\/\/ outcome_unknown\)\./,
     );
     expect(body).toMatch(
-      /\/\/ No SDK method yet — fetches the endpoint directly using the\s*\n?\s*\/\/ baseUrl \+ apiKey from SettingsContext, mirroring useAccountCost\s*\n?\s*\/\/ \(V-534\.H\)\./,
+      /\/\/ No SDK method yet — fetches the endpoint directly using the\s*\/\/ baseUrl \+ apiKey from SettingsContext, mirroring useAccountCost\s*\/\/ \(V-534\.H\)\./,
     );
   });
 
   it('V-534.AY framing pins exact dispatched-request replay and blocks reset while unknown', () => {
     expect(body).toMatch(
-      /\/\/ V-534\.AY — auto-sends an Idempotency-Key \(V-666\.AO\)\. A dispatched\s*\n?\s*\/\/ request captures its exact key, body, endpoint, and credential\. If\s*\n?\s*\/\/ delivery succeeds but the response is lost or cannot be trusted,\s*\n?\s*\/\/ retry\(\) replays that exact request rather than minting a second\s*\n?\s*\/\/ order\. reset\(\) is deliberately unavailable while the outcome is\s*\n?\s*\/\/ unknown/,
+      /\/\/ V-534\.AY — auto-sends an Idempotency-Key \(V-666\.AO\)\. A dispatched\s*\/\/ request captures its exact key, body, endpoint, and credential\. If\s*\/\/ delivery succeeds but the response is lost or cannot be trusted,\s*\/\/ retry\(\) replays that exact request rather than minting a second\s*\/\/ order\. reset\(\) is deliberately unavailable while the outcome is\s*\/\/ unknown/,
     );
   });
 
   it('V-534.AZ framing pinned: \'exposes `replayed: boolean` on the ready state, sourced from the `Idempotent-Replayed` response header. Views can show a subtle "restored from your earlier attempt" notice when true.\'', () => {
     expect(body).toMatch(
-      /\/\/ V-534\.AZ — exposes `replayed: boolean` on the ready state, sourced\s*\n?\s*\/\/ from the `Idempotent-Replayed` response header\. Views can show a\s*\n?\s*\/\/ subtle "restored from your earlier attempt" notice when true\./,
+      /\/\/ V-534\.AZ — exposes `replayed: boolean` on the ready state, sourced\s*\/\/ from the `Idempotent-Replayed` response header\. Views can show a\s*\/\/ subtle "restored from your earlier attempt" notice when true\./,
     );
   });
 
   it("newIdempotencyKey: crypto.randomUUID preferred + 'idem-' prefix Date.now base36 + Math.random.toString(36).slice(2,12) fallback framing 'Fallback for environments without crypto.randomUUID (older test shims). Not cryptographic strength, just a unique-enough token.'", () => {
     expect(body).toMatch(
-      /function newIdempotencyKey\(\): string \{\s*\n?\s*if \(typeof crypto !== 'undefined' && typeof crypto\.randomUUID === 'function'\) \{\s*\n?\s*return crypto\.randomUUID\(\);\s*\n?\s*\}\s*\n?\s*\/\/ Fallback for environments without crypto\.randomUUID \(older test\s*\n?\s*\/\/ shims\)\. Not cryptographic strength, just a unique-enough token\.\s*\n?\s*return `idem-\$\{Date\.now\(\)\.toString\(36\)\}-\$\{Math\.random\(\)\.toString\(36\)\.slice\(2, 12\)\}`;\s*\n?\s*\}/,
+      /function newIdempotencyKey\(\): string \{\s*if \(typeof crypto !== 'undefined' && typeof crypto\.randomUUID === 'function'\) \{\s*return crypto\.randomUUID\(\);\s*\}\s*\/\/ Fallback for environments without crypto\.randomUUID \(older test\s*\/\/ shims\)\. Not cryptographic strength, just a unique-enough token\.\s*return `idem-\$\{Date\.now\(\)\.toString\(36\)\}-\$\{Math\.random\(\)\.toString\(36\)\.slice\(2, 12\)\}`;\s*\}/,
     );
   });
 
   it('CryptoCheckoutResponse matches the 10-field public envelope including status union and pay_amount', () => {
     expect(body).toMatch(
-      /export interface CryptoCheckoutResponse \{\s*\n?\s*order_id: string;\s*\n?\s*product: string;\s*\n?\s*price_cents: number;\s*\n?\s*price_currency: string;\s*\n?\s*status: 'pending' \| 'confirming' \| 'paid' \| 'failed' \| 'partial' \| 'cancelled';\s*\n?\s*provider: 'stub' \| 'nowpayments';\s*\n?\s*payment_address: string \| null;\s*\n?\s*pay_currency: string \| null;\s*\n?\s*pay_amount: number \| null;\s*\n?\s*created_at: string;/,
+      /export interface CryptoCheckoutResponse \{\s*order_id: string;\s*product: string;\s*price_cents: number;\s*price_currency: string;\s*status: 'pending' \| 'confirming' \| 'paid' \| 'failed' \| 'partial' \| 'cancelled';\s*provider: 'stub' \| 'nowpayments';\s*payment_address: string \| null;\s*pay_currency: string \| null;\s*pay_amount: number \| null;\s*created_at: string;/,
     );
     expect(body).toMatch(
-      /export interface UseCryptoCheckoutArgs \{\s*\n?\s*product: string;\s*\n?\s*price_cents: number;\s*\n?\s*price_currency: string;\s*\n?\s*\}/,
+      /export interface UseCryptoCheckoutArgs \{\s*product: string;\s*price_cents: number;\s*price_currency: string;\s*\}/,
     );
   });
 
   it('CryptoCheckoutState exposes outcome_unknown and a zero-argument retry', () => {
     expect(body).toMatch(
-      /\| \{ kind: 'error'; message: string \}\s*\n?\s*\| \{ kind: 'outcome_unknown'; message: string; retryable: boolean \};/,
+      /\| \{ kind: 'error'; message: string \}\s*\| \{ kind: 'outcome_unknown'; message: string; retryable: boolean \};/,
     );
     expect(body).toContain('retry: () => Promise<void>;');
   });

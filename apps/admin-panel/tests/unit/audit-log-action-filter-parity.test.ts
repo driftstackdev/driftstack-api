@@ -76,7 +76,7 @@ describe('W345.C admin /audit-log filter + lifecycle parity', () => {
 
   it('footnote points at the REAL extract route and promises no export format the API does not serve. `6ca61a422` replaced the static retention sentence with a description of the live cursor-paginated read; the load-bearing property is unchanged — the console must not advertise an export the route cannot serve.', () => {
     expect(page).toMatch(
-      /This console reads the live PostgreSQL audit rows newest first and paginates\s*\n?\s*by cursor\./,
+      /This console reads the live PostgreSQL audit rows newest first and paginates\s*by cursor\./,
     );
     expect(page).toMatch(/For a complete live admin-side extract, pull every page from/);
     expect(page).toMatch(/\/v1\/admin\/audit-log/);

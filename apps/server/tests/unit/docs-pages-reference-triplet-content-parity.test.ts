@@ -154,7 +154,7 @@ describe('W786 docs reference/ triplet content parity', () => {
 
     expect(p).toMatch(/Every authenticated request selects exactly one bucket key:/);
     expect(p).toMatch(
-      /\*\*`global`\*\* — every authenticated `\/v1\/\*` call that doesn't\s*\n?\s*have a dedicated bucket below\./,
+      /\*\*`global`\*\* — every authenticated `\/v1\/\*` call that doesn't\s*have a dedicated bucket below\./,
     );
     // BOTH session-creating calls draw on this bucket. routes/sessions.ts
     // registers `POST /v1/sessions` and `POST /v1/profiles/:id/launch` with
@@ -162,11 +162,11 @@ describe('W786 docs reference/ triplet content parity', () => {
     // cap customers cannot reconcile with what a profile launch actually
     // spends.
     expect(p).toMatch(
-      /\*\*`sessions:create`\*\* — the two session-creating calls,\s*\n?\s*`POST \/v1\/sessions` and `POST \/v1\/profiles\/:id\/launch`\./,
+      /\*\*`sessions:create`\*\* — the two session-creating calls,\s*`POST \/v1\/sessions` and `POST \/v1\/profiles\/:id\/launch`\./,
     );
     expect(p).not.toMatch(/\*\*`sessions:create`\*\* — `POST \/v1\/sessions` only/);
     expect(p).toMatch(
-      /\*\*`agent_sessions:message`\*\* —\s*\n?\s*`POST \/v1\/agent-sessions\/:id\/message` only/,
+      /\*\*`agent_sessions:message`\*\* —\s*`POST \/v1\/agent-sessions\/:id\/message` only/,
     );
     expect(p).toMatch(
       /Each call uses only that named bucket key: a `POST \/v1\/sessions`\s*\n?uses `sessions:create` \(never `global`\)/,
@@ -185,7 +185,7 @@ describe('W786 docs reference/ triplet content parity', () => {
     expect(p).toMatch(/owner's own tier and active overrides/);
     expect(p).toMatch(/same bucket\*\* as that account's API traffic/);
     expect(p).toMatch(
-      /A \*\*session or agent-session\*\* request made with `X-Driftstack-Account`\s*\n?\s*first consumes the actor's bucket, then consumes the \*\*same bucket key and\s*\n?\s*cost\*\* for the selected owner\./,
+      /A \*\*session or agent-session\*\* request made with `X-Driftstack-Account`\s*first consumes the actor's bucket, then consumes the \*\*same bucket key and\s*cost\*\* for the selected owner\./,
     );
     // The dual consume exists ONLY on the 35 session/agent-session routes:
     // consumeEffectiveOwnerRateLimit is imported by sessions.ts,

@@ -154,7 +154,7 @@ describe('W608.A apps/gui-client/src/lib/SettingsContext.tsx content parity', ()
 
   it('Memoised SDK client — useMemo on [apiKey, baseUrl, activeWorkspace, handleUnauthorized (stable)] specifically, not the whole settings object. A settings.theme change must not rebuild the client; a WORKSPACE switch must (the SDK effectiveAccount option is constructor-time). handleUnauthorized is a useCallback([]) so it never churns the client. Drift to [settings] would cause unnecessary client churn.', () => {
     expect(body).toMatch(
-      /const client = useMemo\(\s*\n?\s*\(\) => buildClient\(settings\.apiKey, settings\.baseUrl, activeWorkspace, handleUnauthorized\),\s*\n?\s*\[settings\.apiKey, settings\.baseUrl, activeWorkspace, handleUnauthorized\],\s*\n?\s*\);/,
+      /const client = useMemo\(\s*\(\) => buildClient\(settings\.apiKey, settings\.baseUrl, activeWorkspace, handleUnauthorized\),\s*\[settings\.apiKey, settings\.baseUrl, activeWorkspace, handleUnauthorized\],\s*\);/,
     );
   });
 

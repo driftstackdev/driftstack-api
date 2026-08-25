@@ -54,7 +54,7 @@ describe('docs/api/usage tier-table cross-source invariant', () => {
 
   it("docs/api/usage points operator at the canonical-source: 'driven by TIER_CONCURRENT_SESSION_LIMITS and PROFILES_PER_TIER in @driftstack/api-types' — pinned so the source-of-truth cross-reference stays documented (drift on the const-name would orphan the docs from the actual table)", () => {
     expect(doc).toMatch(
-      /`TIER_CONCURRENT_SESSION_LIMITS`\s*\n?\s*and `PROFILES_PER_TIER` in `@driftstack\/api-types`/,
+      /`TIER_CONCURRENT_SESSION_LIMITS`\s*and `PROFILES_PER_TIER` in `@driftstack\/api-types`/,
     );
   });
 });

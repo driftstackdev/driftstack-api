@@ -67,7 +67,7 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
       /Tokens are OPAQUE bearer strings \(no JWT — D-2026-05-10-01 decision\)\./,
     );
     expect(body).toMatch(
-      /No refresh\s*\n?\s*\/\/\s*tokens v1 — the third-party re-prompts the customer if their access\s*\n?\s*\/\/\s*token expires\./,
+      /No refresh\s*\/\/\s*tokens v1 — the third-party re-prompts the customer if their access\s*\/\/\s*token expires\./,
     );
     expect(body).toMatch(/scopes are a subset of `ApiKeyScope`\./);
   });
@@ -83,16 +83,16 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
     expect(body).toMatch(/export interface OAuthClient \{/);
     expect(body).toMatch(/client_id: string;/);
     expect(body).toMatch(
-      /\/\*\* sha256 hex of the secret — never the secret itself in the store\. \*\/\s*\n?\s*client_secret_hash: string;/,
+      /\/\*\* sha256 hex of the secret — never the secret itself in the store\. \*\/\s*client_secret_hash: string;/,
     );
     expect(body).toMatch(
-      /\/\*\* Allowed redirect URIs\. Exact-match check on \/authorize\. \*\/\s*\n?\s*redirect_uris: readonly string\[\];/,
+      /\/\*\* Allowed redirect URIs\. Exact-match check on \/authorize\. \*\/\s*redirect_uris: readonly string\[\];/,
     );
     expect(body).toMatch(/label: string;/);
     expect(body).toMatch(/account_id: string \| null;/);
     expect(body).toMatch(/created_at: number;/);
     expect(body).toMatch(
-      /\/\*\* Soft-deleted clients reject authorize, token, introspection, and revocation\. \*\/\s*\n?\s*revoked_at: number \| null;/,
+      /\/\*\* Soft-deleted clients reject authorize, token, introspection, and revocation\. \*\/\s*revoked_at: number \| null;/,
     );
   });
 
@@ -101,14 +101,14 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
     expect(body).toMatch(/code: string;/);
     expect(body).toMatch(/code_challenge: string;/);
     expect(body).toMatch(
-      /\/\*\* Once-only: set on exchange\. Second exchange returns invalid_grant\. \*\/\s*\n?\s*consumed_at: number \| null;/,
+      /\/\*\* Once-only: set on exchange\. Second exchange returns invalid_grant\. \*\/\s*consumed_at: number \| null;/,
     );
   });
 
   it('OAuthError: 6-code union (invalid_client / invalid_request / unauthorized_client / access_denied / invalid_grant / invalid_scope)', () => {
     expect(body).toMatch(/export class OAuthError extends Error \{/);
     expect(body).toMatch(
-      /public readonly code:\s*\n?\s*\| 'invalid_client'\s*\n?\s*\| 'invalid_request'\s*\n?\s*\| 'unauthorized_client'\s*\n?\s*\| 'access_denied'\s*\n?\s*\| 'invalid_grant'\s*\n?\s*\| 'invalid_scope',/,
+      /public readonly code:\s*\| 'invalid_client'\s*\| 'invalid_request'\s*\| 'unauthorized_client'\s*\| 'access_denied'\s*\| 'invalid_grant'\s*\| 'invalid_scope',/,
     );
     expect(body).toMatch(/this\.name = 'OAuthError';/);
   });
@@ -147,10 +147,10 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
 
   it('InMemoryOAuthStore: getCode self-evict on TTL expiry; getToken self-evict on expires_at', () => {
     expect(body).toMatch(
-      /if \(Date\.now\(\) - c\.created_at > CODE_TTL_SECONDS \* 1000\) \{\s*\n?\s*this\.codes\.delete\(code\);\s*\n?\s*return null;/,
+      /if \(Date\.now\(\) - c\.created_at > CODE_TTL_SECONDS \* 1000\) \{\s*this\.codes\.delete\(code\);\s*return null;/,
     );
     expect(body).toMatch(
-      /if \(Date\.now\(\) > t\.expires_at\) \{\s*\n?\s*this\.tokens\.delete\(token\);\s*\n?\s*return null;/,
+      /if \(Date\.now\(\) > t\.expires_at\) \{\s*this\.tokens\.delete\(token\);\s*return null;/,
     );
   });
 
@@ -159,7 +159,7 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
       /if \(!args\.label\.trim\(\)\) throw new OAuthError\('invalid_request', 'label required'\);/,
     );
     expect(body).toMatch(
-      /if \(args\.redirect_uris\.length === 0\) \{\s*\n?\s*throw new OAuthError\('invalid_request', 'at least one redirect_uri required'\);/,
+      /if \(args\.redirect_uris\.length === 0\) \{\s*throw new OAuthError\('invalid_request', 'at least one redirect_uri required'\);/,
     );
     expect(body).toMatch(
       /if \(uri\.length > MAX_REDIRECT_URI_LENGTH \|\| !isAllowedRedirectUri\(uri\)\) \{[\s\S]{0,260}throw new OAuthError\('invalid_request', 'redirect_uri rejected'\);/,
@@ -174,20 +174,20 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
 
   it('authorize: S256-only enforced (downgrade reject); invalid_client on revoked; exact-match redirect_uris.includes', () => {
     expect(body).toMatch(
-      /if \(args\.code_challenge_method !== 'S256'\) \{\s*\n?\s*throw new OAuthError\('invalid_request', 'only S256 PKCE is supported'\);\s*\n?\s*\}/,
+      /if \(args\.code_challenge_method !== 'S256'\) \{\s*throw new OAuthError\('invalid_request', 'only S256 PKCE is supported'\);\s*\}/,
     );
     expect(body).toMatch(
-      /if \(client === null \|\| client\.revoked_at !== null\) \{\s*\n?\s*throw new OAuthError\('invalid_client', 'unknown or revoked client_id'\);/,
+      /if \(client === null \|\| client\.revoked_at !== null\) \{\s*throw new OAuthError\('invalid_client', 'unknown or revoked client_id'\);/,
     );
     expect(body).toMatch(
-      /if \(!client\.redirect_uris\.includes\(args\.redirect_uri\)\) \{\s*\n?\s*throw new OAuthError\('invalid_request', 'redirect_uri not registered'\);/,
+      /if \(!client\.redirect_uris\.includes\(args\.redirect_uri\)\) \{\s*throw new OAuthError\('invalid_request', 'redirect_uri not registered'\);/,
     );
     expect(body).toMatch(
       /const authorization_id = `oaa_\$\{randomBytes\(16\)\.toString\('base64url'\)\}`;/,
     );
     expect(body).toMatch(/const OAUTH_ALLOWED_SCOPES: ReadonlySet<ApiKeyScope> = new Set\(\[/);
     expect(body).toMatch(
-      /if \(args\.scope\.some\(\(scope\) => !OAUTH_ALLOWED_SCOPES\.has\(scope\)\)\) \{\s*\n?\s*throw new OAuthError\('invalid_scope', 'scope is not available to OAuth clients'\);/,
+      /if \(args\.scope\.some\(\(scope\) => !OAUTH_ALLOWED_SCOPES\.has\(scope\)\)\) \{\s*throw new OAuthError\('invalid_scope', 'scope is not available to OAuth clients'\);/,
     );
   });
 
@@ -196,21 +196,21 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
       /const pending = await this\.store\.getAuthorization\(args\.authorization_id\);/,
     );
     expect(body).toMatch(
-      /if \(pending === null\) \{\s*\n?\s*throw new OAuthError\('invalid_request', 'unknown or expired authorization_id'\);/,
+      /if \(pending === null\) \{\s*throw new OAuthError\('invalid_request', 'unknown or expired authorization_id'\);/,
     );
     expect(body).toMatch(
-      /if \(this\.nowFn\(\) - pending\.created_at > CODE_TTL_SECONDS \* 1000\) \{\s*\n?\s*throw new OAuthError\('invalid_request', 'authorization expired before approval'\);/,
+      /if \(this\.nowFn\(\) - pending\.created_at > CODE_TTL_SECONDS \* 1000\) \{\s*throw new OAuthError\('invalid_request', 'authorization expired before approval'\);/,
     );
     expect(body).toMatch(/import \{ scopesSatisfy \} from '\.\.\/lib\/errors-helpers\.js';/);
     expect(body).toMatch(
-      /OAUTH_ALLOWED_SCOPES\.has\(s\) &&\s*\n?\s*\(approverScopes === undefined \|\| scopesSatisfy\(approverScopes, s\)\)/,
+      /OAUTH_ALLOWED_SCOPES\.has\(s\) &&\s*\(approverScopes === undefined \|\| scopesSatisfy\(approverScopes, s\)\)/,
     );
     expect(body).toMatch(/const code = `oag_\$\{randomBytes\(32\)\.toString\('base64url'\)\}`;/);
     expect(body).toMatch(/this\.store\.consumeAuthorizationForCode\(\{/);
     expect(body).toMatch(/if \(committed === 'unavailable'\) \{/);
     expect(body).toMatch(/if \(committed === 'client_unavailable'\) \{/);
     expect(body).toMatch(
-      /if \(committed === 'account_mismatch'\) \{\s*\n?\s*throw new OAuthError\('access_denied', 'client is not registered for this account'\);/,
+      /if \(committed === 'account_mismatch'\) \{\s*throw new OAuthError\('access_denied', 'client is not registered for this account'\);/,
     );
   });
 
@@ -222,32 +222,32 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
       /if \(code === null\) throw new OAuthError\('invalid_grant', 'code unknown or expired'\);/,
     );
     expect(body).toMatch(
-      /if \(code\.consumed_at !== null\) \{\s*\n?\s*throw new OAuthError\('invalid_grant', 'code already exchanged'\);/,
+      /if \(code\.consumed_at !== null\) \{\s*throw new OAuthError\('invalid_grant', 'code already exchanged'\);/,
     );
     expect(body).toMatch(
-      /if \(code\.client_id !== args\.client_id\) \{\s*\n?\s*throw new OAuthError\('invalid_grant', 'code issued to a different client'\);/,
+      /if \(code\.client_id !== args\.client_id\) \{\s*throw new OAuthError\('invalid_grant', 'code issued to a different client'\);/,
     );
     expect(body).toMatch(
-      /if \(code\.redirect_uri !== args\.redirect_uri\) \{\s*\n?\s*throw new OAuthError\('invalid_grant', 'redirect_uri mismatch'\);/,
+      /if \(code\.redirect_uri !== args\.redirect_uri\) \{\s*throw new OAuthError\('invalid_grant', 'redirect_uri mismatch'\);/,
     );
     expect(body).toMatch(
-      /if \(!verifyS256Challenge\(\{ verifier: args\.code_verifier, challenge: code\.code_challenge \}\)\) \{\s*\n?\s*throw new OAuthError\('invalid_grant', 'PKCE verification failed'\);/,
+      /if \(!verifyS256Challenge\(\{ verifier: args\.code_verifier, challenge: code\.code_challenge \}\)\) \{\s*throw new OAuthError\('invalid_grant', 'PKCE verification failed'\);/,
     );
     expect(body).toMatch(/this\.store\.consumeCodeForToken\(\{/);
     expect(body).toMatch(/consumed_at: now,/);
     expect(body).toMatch(/expectedClientSecretHash: presentedSecretHash,/);
     expect(body).toMatch(
-      /if \(committed === 'client_authority_changed'\) \{\s*\n?\s*throw new OAuthError\('invalid_client', 'unknown or revoked client_id'\);/,
+      /if \(committed === 'client_authority_changed'\) \{\s*throw new OAuthError\('invalid_client', 'unknown or revoked client_id'\);/,
     );
     expect(body).toMatch(/const token = `oat_\$\{randomBytes\(32\)\.toString\('base64url'\)\}`;/);
   });
 
   it('V-667.E rotateClientSecret: invalid_client on unknown OR revoked; client_id stays same', () => {
     expect(body).toMatch(
-      /V-667\.E — rotate the client_secret in place\. Returns the NEW\s*\n?\s*\*\s*plaintext \(shown ONCE — the store keeps only the hash\)\. The\s*\n?\s*\*\s*client_id stays the same so existing redirect URIs \+ customer\s*\n?\s*\*\s*consent records carry over\./,
+      /V-667\.E — rotate the client_secret in place\. Returns the NEW\s*\*\s*plaintext \(shown ONCE — the store keeps only the hash\)\. The\s*\*\s*client_id stays the same so existing redirect URIs \+ customer\s*\*\s*consent records carry over\./,
     );
     expect(body).toMatch(
-      /const rotated = await this\.store\.rotateClientSecretHash\(\s*\n?\s*client_id,\s*\n?\s*this\.secretHasher\(client_secret\),\s*\n?\s*\);\s*\n?\s*if \(!rotated\) throw new OAuthError\('invalid_client', 'unknown or revoked client_id'\);/,
+      /const rotated = await this\.store\.rotateClientSecretHash\(\s*client_id,\s*this\.secretHasher\(client_secret\),\s*\);\s*if \(!rotated\) throw new OAuthError\('invalid_client', 'unknown or revoked client_id'\);/,
     );
   });
 
@@ -266,7 +266,7 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
   it('isAllowedRedirectUri: bounded safe HTTPS or localhost HTTP without fragment/userinfo', () => {
     expect(body).toMatch(/const MAX_REDIRECT_URI_LENGTH = 2048;/);
     expect(body).toMatch(
-      /const u = new URL\(uri\);\s*\n?\s*if \(u\.username !== '' \|\| u\.password !== '' \|\| u\.hash !== ''\) return false;\s*\n?\s*if \(u\.protocol === 'https:'\) return true;/,
+      /const u = new URL\(uri\);\s*if \(u\.username !== '' \|\| u\.password !== '' \|\| u\.hash !== ''\) return false;\s*if \(u\.protocol === 'https:'\) return true;/,
     );
     expect(body).toMatch(
       /u\.protocol === 'http:' && \(u\.hostname === 'localhost' \|\| u\.hostname === '127\.0\.0\.1'\)/,
@@ -275,10 +275,10 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
 
   it('Helpers: sha256Hex (default secretHasher) + constantTimeStringEqual (length-check + timingSafeEqual)', () => {
     expect(body).toMatch(
-      /function sha256Hex\(s: string\): string \{\s*\n?\s*return createHash\('sha256'\)\.update\(s\)\.digest\('hex'\);\s*\n?\s*\}/,
+      /function sha256Hex\(s: string\): string \{\s*return createHash\('sha256'\)\.update\(s\)\.digest\('hex'\);\s*\}/,
     );
     expect(body).toMatch(
-      /function constantTimeStringEqual\(a: string, b: string\): boolean \{\s*\n?\s*if \(a\.length !== b\.length\) return false;\s*\n?\s*return timingSafeEqual\(Buffer\.from\(a\), Buffer\.from\(b\)\);\s*\n?\s*\}/,
+      /function constantTimeStringEqual\(a: string, b: string\): boolean \{\s*if \(a\.length !== b\.length\) return false;\s*return timingSafeEqual\(Buffer\.from\(a\), Buffer\.from\(b\)\);\s*\}/,
     );
   });
 

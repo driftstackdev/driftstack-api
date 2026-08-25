@@ -39,20 +39,20 @@ describe('W410.C apps/server/src/routes/_webhook-raw-body.ts content parity', ()
   it('V-666 framing pinned: shared raw-body parser; Fastify ONE-parser-per-content-type rule; URL allowlist opt-in', () => {
     expect(body).toMatch(/V-666 — shared raw-body content-type parser for webhook routes\./);
     expect(body).toMatch(
-      /Multiple webhook routes \(Stripe \+ NowPayments \+ future\) need access\s*\n?\s*\/\/\s*to the raw request body for signature verification\. Fastify only\s*\n?\s*\/\/\s*allows ONE content-type parser per content-type, so all webhook\s*\n?\s*\/\/\s*routes share a single parser that opts into raw-body stashing for a\s*\n?\s*\/\/\s*known set of URLs\./,
+      /Multiple webhook routes \(Stripe \+ NowPayments \+ future\) need access\s*\/\/\s*to the raw request body for signature verification\. Fastify only\s*\/\/\s*allows ONE content-type parser per content-type, so all webhook\s*\/\/\s*routes share a single parser that opts into raw-body stashing for a\s*\/\/\s*known set of URLs\./,
     );
   });
 
   it('Idempotent registration framing pinned: WeakSet<FastifyInstance> tracks state; first call wires parser', () => {
     expect(body).toMatch(
-      /Registration is idempotent: each route calls\s*\n?\s*\/\/\s*`registerWebhookRawBodyParser\(app\)` and only the first call actually\s*\n?\s*\/\/\s*registers the parser\. A WeakSet keyed on the FastifyInstance tracks\s*\n?\s*\/\/\s*the registration state\./,
+      /Registration is idempotent: each route calls\s*\/\/\s*`registerWebhookRawBodyParser\(app\)` and only the first call actually\s*\/\/\s*registers the parser\. A WeakSet keyed on the FastifyInstance tracks\s*\/\/\s*the registration state\./,
     );
     expect(body).toMatch(/const REGISTERED = new WeakSet<FastifyInstance>\(\);/);
   });
 
   it('Module augmentation: FastifyRequest.rawBody?: string (declare module fastify)', () => {
     expect(body).toMatch(
-      /declare module 'fastify' \{\s*\n?\s*interface FastifyRequest \{\s*\n?\s*rawBody\?: string;\s*\n?\s*\}\s*\n?\s*\}/,
+      /declare module 'fastify' \{\s*interface FastifyRequest \{\s*rawBody\?: string;\s*\}\s*\}/,
     );
   });
 
@@ -62,16 +62,16 @@ describe('W410.C apps/server/src/routes/_webhook-raw-body.ts content parity', ()
 
   it("RAW_BODY_URLS allowlist: ReadonlySet of ['/v1/webhooks/stripe', '/v1/webhooks/nowpayments']", () => {
     expect(body).toMatch(
-      /const RAW_BODY_URLS: ReadonlySet<string> = new Set\(\[\s*\n?\s*'\/v1\/webhooks\/stripe',\s*\n?\s*'\/v1\/webhooks\/nowpayments',\s*\n?\s*\]\);/,
+      /const RAW_BODY_URLS: ReadonlySet<string> = new Set\(\[\s*'\/v1\/webhooks\/stripe',\s*'\/v1\/webhooks\/nowpayments',\s*\]\);/,
     );
   });
 
   it('register function: early-return if already registered; addContentTypeParser application/json with parseAs string + bodyLimit MAX_BODY_BYTES', () => {
     expect(body).toMatch(
-      /export function registerWebhookRawBodyParser\(app: FastifyInstance\): void \{\s*\n?\s*if \(REGISTERED\.has\(app\)\) return;\s*\n?\s*REGISTERED\.add\(app\);/,
+      /export function registerWebhookRawBodyParser\(app: FastifyInstance\): void \{\s*if \(REGISTERED\.has\(app\)\) return;\s*REGISTERED\.add\(app\);/,
     );
     expect(body).toMatch(
-      /app\.addContentTypeParser\(\s*\n?\s*'application\/json',\s*\n?\s*\{ parseAs: 'string', bodyLimit: MAX_BODY_BYTES \},/,
+      /app\.addContentTypeParser\(\s*'application\/json',\s*\{ parseAs: 'string', bodyLimit: MAX_BODY_BYTES \},/,
     );
   });
 
@@ -81,19 +81,19 @@ describe('W410.C apps/server/src/routes/_webhook-raw-body.ts content parity', ()
     expect(body).toMatch(/const text = typeof body === 'string' \? body : '';/);
     expect(body).toMatch(/req\.rawBody = text;/);
     expect(body).toMatch(
-      /const parsed: unknown = text\.length === 0 \? \{\} : JSON\.parse\(text\);\s*\n?\s*done\(null, parsed\);/,
+      /const parsed: unknown = text\.length === 0 \? \{\} : JSON\.parse\(text\);\s*done\(null, parsed\);/,
     );
   });
 
   it('Non-webhook fall-through: standard JSON.parse, no raw stash; empty body → {}', () => {
     expect(body).toMatch(/\/\/ Non-webhook routes: standard parse, no raw stash\./);
     expect(body).toMatch(
-      /const parsed: unknown = typeof body === 'string' && body\.length > 0 \? JSON\.parse\(body\) : \{\};\s*\n?\s*done\(null, parsed\);/,
+      /const parsed: unknown = typeof body === 'string' && body\.length > 0 \? JSON\.parse\(body\) : \{\};\s*done\(null, parsed\);/,
     );
   });
 
   it('Error path: malformed JSON → done(invalidJsonBody(), undefined) — a 400 client error, not a 500', () => {
-    expect(body).toMatch(/\} catch \{\s*\n?\s*done\(invalidJsonBody\(\), undefined\);/);
+    expect(body).toMatch(/\} catch \{\s*done\(invalidJsonBody\(\), undefined\);/);
     expect(body).toMatch(/e\.statusCode = 400;/);
   });
 

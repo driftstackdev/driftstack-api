@@ -30,13 +30,13 @@ describe('admin-panel pages/cost content parity', () => {
 
   it("V-541.B framing pinned: 'admin cost dashboard. Static shell + progressive-enhanced inline JS that fetches /v1/admin/cost/config (rate card + tier thresholds, no usage data) on load, then lets the operator query /v1/admin/cost/accounts/:id for a per-account breakdown.' — pinned so the static-shell + 2-fetch pattern + the explicit no-usage-data-in-config caveat all stay documented (drift to merging config + usage into one fetch would couple shape changes; drift to a different anchor would orphan the V-541.B provenance)", () => {
     expect(body).toMatch(
-      /\/\/ V-541\.B — admin cost dashboard\. Static shell \+ progressive-enhanced\s*\n?\s*\/\/ inline JS that fetches \/v1\/admin\/cost\/config \(rate card \+ tier\s*\n?\s*\/\/ thresholds, no usage data\) on load, then lets the operator query\s*\n?\s*\/\/ \/v1\/admin\/cost\/accounts\/:id for a per-account breakdown\./,
+      /\/\/ V-541\.B — admin cost dashboard\. Static shell \+ progressive-enhanced\s*\/\/ inline JS that fetches \/v1\/admin\/cost\/config \(rate card \+ tier\s*\/\/ thresholds, no usage data\) on load, then lets the operator query\s*\/\/ \/v1\/admin\/cost\/accounts\/:id for a per-account breakdown\./,
     );
   });
 
   it("V-100 internal_admin scope framing pinned: 'tile values come from the same admin token the rest of the admin panel uses (V-100 internal_admin scope). 401/403 surfaces a banner, not silent failure.' — pinned so the V-100-scope-reference + the explicit 401/403-banner contract stays documented (drift to silent failure would leave operators staring at $0.00 with no signal that auth failed)", () => {
     expect(body).toMatch(
-      /\/\/ Pre-launch posture: tile values come from the same admin token the\s*\n?\s*\/\/ rest of the admin panel uses \(V-100 internal_admin scope\)\. 401\/403\s*\n?\s*\/\/ surfaces a banner, not silent failure\./,
+      /\/\/ Pre-launch posture: tile values come from the same admin token the\s*\/\/ rest of the admin panel uses \(V-100 internal_admin scope\)\. 401\/403\s*\/\/ surfaces a banner, not silent failure\./,
     );
   });
 
@@ -124,18 +124,16 @@ describe('admin-panel pages/cost content parity', () => {
 
   it('read controls and programmatic handlers require live cost authority, while CSV additionally requires a successful current top table', () => {
     expect(body).toMatch(
-      /name="account_id"\s*\n?\s*disabled\s*\n?\s*aria-disabled="true"\s*\n?\s*title="Available after live cost configuration loads\."/,
+      /name="account_id"\s*disabled\s*aria-disabled="true"\s*title="Available after live cost configuration loads\."/,
     );
-    expect(body).toMatch(
-      /data-button="export-top-csv"\s*\n?\s*disabled\s*\n?\s*aria-disabled="true"/,
-    );
+    expect(body).toMatch(/data-button="export-top-csv"\s*disabled\s*aria-disabled="true"/);
     expect(body).toContain('let costDataAvailable = false;');
     expect(body).toContain('let topAccountsAvailable = false;');
     expect(body).toContain('if (!costDataAvailable || !topResult || topAccountsLoading) return;');
     expect(body).toContain('if (!costDataAvailable || accountQueryLoading) return;');
     expect(body).toContain('if (!topAccountsAvailable) return;');
     expect(body).toMatch(
-      /loadConfig\(\)\s*\n?\s*\.then\(\(loaded\) => \{\s*\n?\s*setCostDataAuthority\(loaded, 'Available after live cost configuration loads\.'\);/,
+      /loadConfig\(\)\s*\.then\(\(loaded\) => \{\s*setCostDataAuthority\(loaded, 'Available after live cost configuration loads\.'\);/,
     );
   });
 });

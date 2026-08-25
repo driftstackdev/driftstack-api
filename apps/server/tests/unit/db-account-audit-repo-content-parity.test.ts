@@ -45,14 +45,14 @@ describe('W442.C apps/server/src/db/account-audit-repo.ts content parity', () =>
       /import type \{ AccountAuditAction, AccountAuditActorType \} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(
-      /import type \{\s*\n?\s*AccountAuditEntryRow,\s*\n?\s*AccountAuditRepo,\s*\n?\s*ListAccountAuditOpts,\s*\n?\s*ListAccountAuditPage,\s*\n?\s*RecordAccountAuditInput,\s*\n?\s*\} from '\.\.\/services\/account-audit\.js';/,
+      /import type \{\s*AccountAuditEntryRow,\s*AccountAuditRepo,\s*ListAccountAuditOpts,\s*ListAccountAuditPage,\s*RecordAccountAuditInput,\s*\} from '\.\.\/services\/account-audit\.js';/,
     );
     expect(body).toMatch(/import \{ accountAuditLog \} from '\.\/schema\.js';/);
   });
 
   it("insert(): 9-field values with null-coalesce on optional (actorAccountId/actorKeyId/targetResourceId/payload/ipAddress/userAgent) → returning(); throws 'account_audit_log insert returned no row' on empty", () => {
     expect(body).toMatch(
-      /async insert\(input: RecordAccountAuditInput\): Promise<AccountAuditEntryRow> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.insert\(accountAuditLog\)\s*\n?\s*\.values\(\{\s*\n?\s*accountId: input\.accountId,\s*\n?\s*actorType: input\.actorType,\s*\n?\s*actorAccountId: input\.actorAccountId \?\? null,\s*\n?\s*actorKeyId: input\.actorKeyId \?\? null,\s*\n?\s*action: input\.action,\s*\n?\s*targetResourceId: input\.targetResourceId \?\? null,\s*\n?\s*payload: input\.payload \?\? null,\s*\n?\s*ipAddress: input\.ipAddress \?\? null,\s*\n?\s*userAgent: input\.userAgent \?\? null,\s*\n?\s*\}\)\s*\n?\s*\.returning\(\);\s*\n?\s*if \(!row\) throw new Error\('account_audit_log insert returned no row'\);\s*\n?\s*return toRow\(row\);\s*\n?\s*\}/,
+      /async insert\(input: RecordAccountAuditInput\): Promise<AccountAuditEntryRow> \{\s*const \[row\] = await this\.database\.db\s*\.insert\(accountAuditLog\)\s*\.values\(\{\s*accountId: input\.accountId,\s*actorType: input\.actorType,\s*actorAccountId: input\.actorAccountId \?\? null,\s*actorKeyId: input\.actorKeyId \?\? null,\s*action: input\.action,\s*targetResourceId: input\.targetResourceId \?\? null,\s*payload: input\.payload \?\? null,\s*ipAddress: input\.ipAddress \?\? null,\s*userAgent: input\.userAgent \?\? null,\s*\}\)\s*\.returning\(\);\s*if \(!row\) throw new Error\('account_audit_log insert returned no row'\);\s*return toRow\(row\);\s*\}/,
     );
   });
 
@@ -73,25 +73,25 @@ describe('W442.C apps/server/src/db/account-audit-repo.ts content parity', () =>
 
   it("V-484 filter framing pinned: 'additional filters: from/to date range, actor_type, target_resource_id (exact match)'; from→gte, to→lte, actorType→eq, targetResourceId→eq", () => {
     expect(body).toMatch(
-      /\/\/ V-484 — additional filters: from\/to date range, actor_type,\s*\n?\s*\/\/ target_resource_id \(exact match\)\./,
+      /\/\/ V-484 — additional filters: from\/to date range, actor_type,\s*\/\/ target_resource_id \(exact match\)\./,
     );
     expect(body).toMatch(
-      /if \(opts\.from\) filters\.push\(gte\(accountAuditLog\.timestamp, opts\.from\)\);\s*\n?\s*if \(opts\.to\) filters\.push\(lte\(accountAuditLog\.timestamp, opts\.to\)\);\s*\n?\s*if \(opts\.actorType\) filters\.push\(eq\(accountAuditLog\.actorType, opts\.actorType\)\);\s*\n?\s*if \(opts\.targetResourceId\) \{\s*\n?\s*filters\.push\(eq\(accountAuditLog\.targetResourceId, opts\.targetResourceId\)\);\s*\n?\s*\}/,
+      /if \(opts\.from\) filters\.push\(gte\(accountAuditLog\.timestamp, opts\.from\)\);\s*if \(opts\.to\) filters\.push\(lte\(accountAuditLog\.timestamp, opts\.to\)\);\s*if \(opts\.actorType\) filters\.push\(eq\(accountAuditLog\.actorType, opts\.actorType\)\);\s*if \(opts\.targetResourceId\) \{\s*filters\.push\(eq\(accountAuditLog\.targetResourceId, opts\.targetResourceId\)\);\s*\}/,
     );
   });
 
   it('Query: select * from accountAuditLog where and(...filters) order by desc(timestamp) limit(opts.limit+1); hasMore = rows.length > opts.limit; items = slice(0, opts.limit) on hasMore else rows; nextCursor = last.timestamp.toISOString() on hasMore else null', () => {
     expect(body).toMatch(
-      /const rows = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(accountAuditLog\)\s*\n?\s*\.where\(and\(\.\.\.filters\)\)\s*\n?\s*\.orderBy\(desc\(accountAuditLog\.timestamp\), desc\(accountAuditLog\.id\)\)\s*\n?\s*\.limit\(opts\.limit \+ 1\);/,
+      /const rows = await this\.database\.db\s*\.select\(\)\s*\.from\(accountAuditLog\)\s*\.where\(and\(\.\.\.filters\)\)\s*\.orderBy\(desc\(accountAuditLog\.timestamp\), desc\(accountAuditLog\.id\)\)\s*\.limit\(opts\.limit \+ 1\);/,
     );
     expect(body).toMatch(
-      /const hasMore = rows\.length > opts\.limit;\s*\n?\s*const items = hasMore \? rows\.slice\(0, opts\.limit\) : rows;\s*\n?\s*const last = items\[items\.length - 1\];\s*\n?\s*return \{\s*\n?\s*items: items\.map\(toRow\),\s*\n?\s*nextCursor: hasMore && last \? last\.id : null,\s*\n?\s*\};/,
+      /const hasMore = rows\.length > opts\.limit;\s*const items = hasMore \? rows\.slice\(0, opts\.limit\) : rows;\s*const last = items\[items\.length - 1\];\s*return \{\s*items: items\.map\(toRow\),\s*nextCursor: hasMore && last \? last\.id : null,\s*\};/,
     );
   });
 
   it('toRow: cast actorType as AccountAuditActorType + action as AccountAuditAction; payload null-coalesce; all 11 fields', () => {
     expect(body).toMatch(
-      /function toRow\(r: typeof accountAuditLog\.\$inferSelect\): AccountAuditEntryRow \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*accountId: r\.accountId,\s*\n?\s*actorType: r\.actorType as AccountAuditActorType,\s*\n?\s*actorAccountId: r\.actorAccountId,\s*\n?\s*actorKeyId: r\.actorKeyId,\s*\n?\s*action: r\.action as AccountAuditAction,\s*\n?\s*targetResourceId: r\.targetResourceId,\s*\n?\s*payload: r\.payload \?\? null,\s*\n?\s*ipAddress: r\.ipAddress,\s*\n?\s*userAgent: r\.userAgent,\s*\n?\s*timestamp: r\.timestamp,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function toRow\(r: typeof accountAuditLog\.\$inferSelect\): AccountAuditEntryRow \{\s*return \{\s*id: r\.id,\s*accountId: r\.accountId,\s*actorType: r\.actorType as AccountAuditActorType,\s*actorAccountId: r\.actorAccountId,\s*actorKeyId: r\.actorKeyId,\s*action: r\.action as AccountAuditAction,\s*targetResourceId: r\.targetResourceId,\s*payload: r\.payload \?\? null,\s*ipAddress: r\.ipAddress,\s*userAgent: r\.userAgent,\s*timestamp: r\.timestamp,\s*\};\s*\}/,
     );
   });
 

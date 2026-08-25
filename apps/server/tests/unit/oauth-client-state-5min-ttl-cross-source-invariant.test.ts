@@ -42,7 +42,7 @@ describe('OAuth-client 5-min-TTL cross-source invariant (PKCE cookie ↔ state J
 
   it("routes/auth-oauth-client header explicitly documents the cookie-state TTL coupling: 'Cookie path is restricted to /v1/auth/oauth-client and 5-min Max-Age matches the state TTL.' — pinned so the explicit cross-reference stays documented (drift on one without the other would orphan this guarantee)", () => {
     expect(routeSrc).toMatch(
-      /Cookie path is restricted to \/v1\/auth\/oauth-client and 5-min Max-\s*\n?\s*\/\/ Age matches the state TTL\./,
+      /Cookie path is restricted to \/v1\/auth\/oauth-client and 5-min Max-\s*\/\/ Age matches the state TTL\./,
     );
   });
 

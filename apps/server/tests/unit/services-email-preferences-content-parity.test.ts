@@ -46,12 +46,12 @@ describe('W400.A apps/server/src/services/email-preferences.ts content parity', 
   it('V-204 framing pinned + opt-out cluster (lifecycle) vs bypass cluster (security + financial)', () => {
     expect(body).toMatch(/V-204 — per-account email notification preferences\./);
     expect(body).toMatch(
-      /Customers opt out of "lifecycle" emails \(signup-welcome, session-\s*\n?\s*\/\/\s*failed-first, tier-changed, billing-receipt\)\./,
+      /Customers opt out of "lifecycle" emails \(signup-welcome, session-\s*\/\/\s*failed-first, tier-changed, billing-receipt\)\./,
     );
     expect(body).not.toMatch(/trial-pack-purchased/);
     expect(body).not.toMatch(/trial-pack-expired/);
     expect(body).toMatch(
-      /Security \+ financial emails \(signup-\s*\n?\s*\/\/\s*verification, password-reset, billing-failure\) bypass this gate\s*\n?\s*\/\/\s*entirely — they always send\./,
+      /Security \+ financial emails \(signup-\s*\/\/\s*verification, password-reset, billing-failure\) bypass this gate\s*\/\/\s*entirely — they always send\./,
     );
     // S44 2026-07-07 — deleted-template names must not creep back into
     // the bypass framing as if those emails still existed.
@@ -60,13 +60,13 @@ describe('W400.A apps/server/src/services/email-preferences.ts content parity', 
 
   it('Storage-convention framing: absence-of-row = opted-in default, steady-state zero rows', () => {
     expect(body).toMatch(
-      /Storage convention: absence of a row means opted-in \(default\)\.\s*\n?\s*\/\/\s*Explicit opt-out writes a row with opted_in=false\. Steady-state\s*\n?\s*\/\/\s*is zero rows per account; only customers who flipped a preference\s*\n?\s*\/\/\s*have rows in the table\./,
+      /Storage convention: absence of a row means opted-in \(default\)\.\s*\/\/\s*Explicit opt-out writes a row with opted_in=false\. Steady-state\s*\/\/\s*is zero rows per account; only customers who flipped a preference\s*\/\/\s*have rows in the table\./,
     );
   });
 
   it('EmailPreferenceRecord: 4 fields (accountId / eventType / optedIn / updatedAt)', () => {
     expect(body).toMatch(
-      /export interface EmailPreferenceRecord \{\s*\n?\s*accountId: string;\s*\n?\s*eventType: OptOutableEmailEvent;\s*\n?\s*optedIn: boolean;\s*\n?\s*updatedAt: Date;\s*\n?\s*\}/,
+      /export interface EmailPreferenceRecord \{\s*accountId: string;\s*eventType: OptOutableEmailEvent;\s*optedIn: boolean;\s*updatedAt: Date;\s*\}/,
     );
   });
 
@@ -74,13 +74,13 @@ describe('W400.A apps/server/src/services/email-preferences.ts content parity', 
     expect(body).toMatch(/export interface EmailPreferencesRepo \{/);
     expect(body).toMatch(/list\(accountId: string\): Promise<EmailPreferenceRecord\[\]>;/);
     expect(body).toMatch(
-      /Upsert by \(accountId, eventType\)\. Setting `optedIn=true` deletes\s*\n?\s*\*\s*the row instead of writing it \(default-opted-in convention\)\./,
+      /Upsert by \(accountId, eventType\)\. Setting `optedIn=true` deletes\s*\*\s*the row instead of writing it \(default-opted-in convention\)\./,
     );
     expect(body).toMatch(
       /set\(accountId: string, eventType: OptOutableEmailEvent, optedIn: boolean\): Promise<void>;/,
     );
     expect(body).toMatch(
-      /True if the customer has explicitly opted out of `eventType`\.\s*\n?\s*\*\s*False \(default\) for absent rows or `optedIn=true` rows\./,
+      /True if the customer has explicitly opted out of `eventType`\.\s*\*\s*False \(default\) for absent rows or `optedIn=true` rows\./,
     );
     expect(body).toMatch(
       /isOptedOut\(accountId: string, eventType: OptOutableEmailEvent\): Promise<boolean>;/,
@@ -98,7 +98,7 @@ describe('W400.A apps/server/src/services/email-preferences.ts content parity', 
 
   it('V-330d list framing: effectiveAccountId → OWNER preferences; read-only allowed for member + admin (route enforces gate)', () => {
     expect(body).toMatch(
-      /V-330d — when effectiveAccountId is set, list the OWNER's\s*\n?\s*\/\/\s*preferences\. Read-only — both 'member' and 'admin' roles\s*\n?\s*\/\/\s*allowed \(gate is at the route layer; service stays neutral\)/,
+      /V-330d — when effectiveAccountId is set, list the OWNER's\s*\/\/\s*preferences\. Read-only — both 'member' and 'admin' roles\s*\/\/\s*allowed \(gate is at the route layer; service stays neutral\)/,
     );
   });
 
@@ -116,29 +116,29 @@ describe('W400.A apps/server/src/services/email-preferences.ts content parity', 
 
   it('list: absent-row default returns optedIn=true + updatedAt=new Date(0) epoch sentinel ("never customised")', () => {
     expect(body).toMatch(
-      /\/\/ Default opted-in\. updatedAt is the account creation time\s*\n?\s*\/\/\s*by convention, but we don't have that here without a join;\s*\n?\s*\/\/\s*surface a stable epoch instead so consumers can detect\s*\n?\s*\/\/\s*"never customised"\./,
+      /\/\/ Default opted-in\. updatedAt is the account creation time\s*\/\/\s*by convention, but we don't have that here without a join;\s*\/\/\s*surface a stable epoch instead so consumers can detect\s*\/\/\s*"never customised"\./,
     );
     expect(body).toMatch(
-      /return \{\s*\n?\s*accountId,\s*\n?\s*eventType,\s*\n?\s*optedIn: true,\s*\n?\s*updatedAt: new Date\(0\),\s*\n?\s*\};/,
+      /return \{\s*accountId,\s*eventType,\s*optedIn: true,\s*updatedAt: new Date\(0\),\s*\};/,
     );
   });
 
   it("set: account_owner scope; V-330d effectiveAccountId → audit lives on OWNER's log (Q2 verdict)", () => {
     expect(body).toMatch(
-      /async set\(\s*\n?\s*ctx: AccountContext,\s*\n?\s*eventType: OptOutableEmailEvent,\s*\n?\s*optedIn: boolean,\s*\n?\s*opts: \{ effectiveAccountId\?: string \} = \{\},\s*\n?\s*\): Promise<void> \{/,
+      /async set\(\s*ctx: AccountContext,\s*eventType: OptOutableEmailEvent,\s*optedIn: boolean,\s*opts: \{ effectiveAccountId\?: string \} = \{\},\s*\): Promise<void> \{/,
     );
     expect(body).toMatch(
-      /V-330d — when effectiveAccountId is set, the route layer has\s*\n?\s*\/\/\s*already enforced the 'admin' role requirement \(Q2 verdict —\s*\n?\s*\/\/\s*member role is read-only on writes\)\. Service writes to the\s*\n?\s*\/\/\s*OWNER's account; the audit footprint of the change is the\s*\n?\s*\/\/\s*owner's audit log, not the caller's\./,
+      /V-330d — when effectiveAccountId is set, the route layer has\s*\/\/\s*already enforced the 'admin' role requirement \(Q2 verdict —\s*\/\/\s*member role is read-only on writes\)\. Service writes to the\s*\/\/\s*OWNER's account; the audit footprint of the change is the\s*\/\/\s*owner's audit log, not the caller's\./,
     );
     expect(body).toMatch(/await this\.repo\.set\(accountId, eventType, optedIn\);/);
   });
 
   it('shouldSend: service-internal gate, returns !isOptedOut (default opted-in semantic)', () => {
     expect(body).toMatch(
-      /Service-internal gate: returns true when the email \*\*should send\*\*\s*\n?\s*\*\s*\(default opted-in\)\. Wire callers in EmailService send methods so\s*\n?\s*\*\s*opt-outable events check this before firing\./,
+      /Service-internal gate: returns true when the email \*\*should send\*\*\s*\*\s*\(default opted-in\)\. Wire callers in EmailService send methods so\s*\*\s*opt-outable events check this before firing\./,
     );
     expect(body).toMatch(
-      /async shouldSend\(accountId: string, eventType: OptOutableEmailEvent\): Promise<boolean> \{\s*\n?\s*const optedOut = await this\.repo\.isOptedOut\(accountId, eventType\);\s*\n?\s*return !optedOut;\s*\n?\s*\}/,
+      /async shouldSend\(accountId: string, eventType: OptOutableEmailEvent\): Promise<boolean> \{\s*const optedOut = await this\.repo\.isOptedOut\(accountId, eventType\);\s*return !optedOut;\s*\}/,
     );
   });
 

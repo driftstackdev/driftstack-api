@@ -31,18 +31,18 @@ describe('routes/account-oauth-links content parity', () => {
       /\/\/ V-667\.C-followup — customer-facing read of the OAuth links table\./,
     );
     expect(body).toMatch(
-      /\/\/\s+GET \/v1\/account\/me\/oauth-links — list the authenticated account's\s*\n?\s*\/\/\s+active sign-in-with-IDP links\./,
+      /\/\/\s+GET \/v1\/account\/me\/oauth-links — list the authenticated account's\s*\/\/\s+active sign-in-with-IDP links\./,
     );
   });
 
   it("Dashboard-consumer + DELETE-as-separate-slice framing pinned: 'Used by the customer dashboard's account/security page to show \"Linked accounts: Google (connected 2026-05-12), GitHub (revoked upstream — re-link or use password)\". DELETE / revoke from driftstack-side is a separate slice (V-667.C-followup#2).' — pinned so the dashboard-consumer + read-only-no-delete-yet contract stays documented", () => {
     expect(body).toMatch(
-      /\/\/ Used by the customer dashboard's account\/security page to show\s*\n?\s*\/\/ "Linked accounts: Google \(connected 2026-05-12\), GitHub \(revoked\s*\n?\s*\/\/ upstream — re-link or use password\)"\. DELETE \/ revoke from\s*\n?\s*\/\/ driftstack-side is a separate slice \(V-667\.C-followup#2\)\./,
+      /\/\/ Used by the customer dashboard's account\/security page to show\s*\/\/ "Linked accounts: Google \(connected 2026-05-12\), GitHub \(revoked\s*\/\/ upstream — re-link or use password\)"\. DELETE \/ revoke from\s*\/\/ driftstack-side is a separate slice \(V-667\.C-followup#2\)\./,
     );
   });
 
   it('PublicOAuthLink 6-field shape pinned: id (ol_-prefix) + provider + provider_email (nullable) + linked_at + last_login_at (nullable) + last_revoked_at (nullable). Drift to surfacing provider_avatar_url or provider_name on this endpoint would leak Verdict 3 first-link-only IDP signals; drift to dropping the nullable on email would crash on accounts that linked before email-collection was added', () => {
-    expect(body).toMatch(/interface PublicOAuthLink \{\s*\n?\s*id: string;/);
+    expect(body).toMatch(/interface PublicOAuthLink \{\s*id: string;/);
     expect(body).toMatch(/provider: string;/);
     expect(body).toMatch(/provider_email: string \| null;/);
     expect(body).toMatch(/linked_at: string;/);
@@ -52,26 +52,26 @@ describe('routes/account-oauth-links content parity', () => {
 
   it("publicLink mapper pinned: ol_<id> prefix + provider passthrough + null-safe ISO toISOString on linkedAt/lastLoginAt/lastRevokedAt. Drift to dropping the ol_ prefix would break the dashboard's id-routing pattern", () => {
     expect(body).toMatch(
-      /function publicLink\(row: OAuthLinkRow\): PublicOAuthLink \{\s*\n?\s*return \{\s*\n?\s*id: `ol_\$\{row\.id\}`,\s*\n?\s*provider: row\.provider,\s*\n?\s*provider_email: row\.providerEmail,\s*\n?\s*linked_at: row\.linkedAt\.toISOString\(\),\s*\n?\s*last_login_at: row\.lastLoginAt \? row\.lastLoginAt\.toISOString\(\) : null,\s*\n?\s*last_revoked_at: row\.lastRevokedAt \? row\.lastRevokedAt\.toISOString\(\) : null,/,
+      /function publicLink\(row: OAuthLinkRow\): PublicOAuthLink \{\s*return \{\s*id: `ol_\$\{row\.id\}`,\s*provider: row\.provider,\s*provider_email: row\.providerEmail,\s*linked_at: row\.linkedAt\.toISOString\(\),\s*last_login_at: row\.lastLoginAt \? row\.lastLoginAt\.toISOString\(\) : null,\s*last_revoked_at: row\.lastRevokedAt \? row\.lastRevokedAt\.toISOString\(\) : null,/,
     );
   });
 
   it("Verdict 3 first-link-only avoid-leak framing pinned: 'provider_avatar_url + provider_name are first-link-only IDP signals (Verdict 3) and used internally; not surfaced on this customer-facing endpoint so a future re-link change doesn't leak as a profile update.' — pinned so the don't-leak-IDP-update-as-profile-change contract stays documented", () => {
     expect(body).toMatch(
-      /\/\/ V-667\.C — provider_avatar_url \+ provider_name are first-link-\s*\n?\s*\/\/ only IDP signals \(Verdict 3\) and used internally; not surfaced\s*\n?\s*\/\/ on this customer-facing endpoint so a future re-link change\s*\n?\s*\/\/ doesn't leak as a profile update\./,
+      /\/\/ V-667\.C — provider_avatar_url \+ provider_name are first-link-\s*\/\/ only IDP signals \(Verdict 3\) and used internally; not surfaced\s*\/\/ on this customer-facing endpoint so a future re-link change\s*\/\/ doesn't leak as a profile update\./,
     );
   });
 
   it("?active_only=true filter framing pinned: 'filters Verdict-2 revoked links so the dashboard's \"Connected accounts\" UI doesn't have to filter client-side. Defaults to false (show all) so audit views see the full history.' + .filter((r) => r.lastRevokedAt === null) — pinned so the dashboard-convenience + default-shows-all-for-audit contract stays documented (drift to default-true would hide revoked-link history from audit views)", () => {
     expect(body).toMatch(
-      /\/\/ \?active_only=true filters Verdict-2 revoked links so the\s*\n?\s*\/\/ dashboard's "Connected accounts" UI doesn't have to filter\s*\n?\s*\/\/ client-side\. Defaults to false \(show all\) so audit views see\s*\n?\s*\/\/ the full history\./,
+      /\/\/ \?active_only=true filters Verdict-2 revoked links so the\s*\/\/ dashboard's "Connected accounts" UI doesn't have to filter\s*\/\/ client-side\. Defaults to false \(show all\) so audit views see\s*\/\/ the full history\./,
     );
     // V-1367 — the filter used to be read straight off request.query. A repeated query
     // key parses to an array, which never equals 'true', so the filter silently did not
     // apply and the revoked links came back with a 200. The read now goes through a
     // schema, and the pin follows it; the filter expression itself is unchanged.
     expect(body).toMatch(
-      /const query = ListOAuthLinksQuerySchema\.safeParse\(request\.query\);\s*\n?\s*if \(!query\.success\) throw new ValidationError\(query\.error\.flatten\(\)\);\s*\n?\s*const activeOnly = query\.data\.active_only === 'true';\s*\n?\s*const filtered = activeOnly \? rows\.filter\(\(r\) => r\.lastRevokedAt === null\) : rows;\s*\n?\s*return \{ data: filtered\.map\(publicLink\) \};/,
+      /const query = ListOAuthLinksQuerySchema\.safeParse\(request\.query\);\s*if \(!query\.success\) throw new ValidationError\(query\.error\.flatten\(\)\);\s*const activeOnly = query\.data\.active_only === 'true';\s*const filtered = activeOnly \? rows\.filter\(\(r\) => r\.lastRevokedAt === null\) : rows;\s*return \{ data: filtered\.map\(publicLink\) \};/,
     );
   });
 
@@ -81,7 +81,7 @@ describe('routes/account-oauth-links content parity', () => {
   // change from fixing the array. Executed both ways in the integration file.
   it('CRITICAL the active_only schema narrows the TYPE, not the accepted values — an enum here would be a customer-facing rejection change rather than the array fix', () => {
     expect(body).toMatch(
-      /const ListOAuthLinksQuerySchema = z\.object\(\{\s*\n?\s*active_only: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
+      /const ListOAuthLinksQuerySchema = z\.object\(\{\s*active_only: z\.string\(\)\.optional\(\),\s*\}\);/,
     );
     expect(body, 'an enum would change which single values are accepted').not.toMatch(
       /active_only: z\.enum\(/,
@@ -93,7 +93,7 @@ describe('routes/account-oauth-links content parity', () => {
       /\{ preHandler: \[app\.requireAuth, app\.requireScope\('read'\), app\.rateLimit\('global'\)\] \}/,
     );
     expect(body).toMatch(
-      /const ctx = request\.account;\s*\n?\s*if \(!ctx\) throw new Error\('account context missing after requireAuth'\);\s*\n?\s*const rows = await opts\.links\.listForAccount\(ctx\.account\.id\);/,
+      /const ctx = request\.account;\s*if \(!ctx\) throw new Error\('account context missing after requireAuth'\);\s*const rows = await opts\.links\.listForAccount\(ctx\.account\.id\);/,
     );
   });
 });

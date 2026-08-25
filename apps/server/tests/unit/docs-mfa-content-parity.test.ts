@@ -33,7 +33,7 @@ describe('docs api/mfa content parity', () => {
     expect(body).toMatch(/single-use recovery codes/);
     // The "Each code works exactly once" sentence spans 2 lines in
     // a markdown blockquote, so \s allows the `> ` prefix.
-    expect(body).toMatch(/Each code works\s*\n?\s*>?\s*exactly once/);
+    expect(body).toMatch(/Each code works\s*>?\s*exactly once/);
   });
 
   it("15-minute step-up window pinned: the disabling-MFA-requires-fresh-code-within-15-min contract; drift to dropping this window would either weaken the security posture (longer window) or break customers' UX (shorter window)", () => {
@@ -62,6 +62,6 @@ describe('docs api/mfa content parity', () => {
     expect(body).toMatch(/\*\*Recovery codes are shown ONCE\.\*\*/);
     // "account access requires support intervention" spans a
     // blockquote line break.
-    expect(body).toMatch(/account\s*\n?\s*>?\s*access requires support intervention/);
+    expect(body).toMatch(/account\s*>?\s*access requires support intervention/);
   });
 });

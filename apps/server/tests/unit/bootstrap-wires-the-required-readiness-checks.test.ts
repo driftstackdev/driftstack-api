@@ -92,7 +92,7 @@ describe('bootstrap wires the readiness checks /ready depends on', () => {
   it('CRITICAL R2 stays CONDITIONAL. It is checked only when configured — "R2 only checked if configured" — so asserting it is always present would encode the wrong requirement and fail every deployment that does not use R2.', () => {
     const src = source();
     expect(src, 'R2 is pushed behind a configuration test').toMatch(
-      /if \(r2 !== null\) \{\s*\n?\s*readinessChecks\.push\(r2ReadinessCheck\(r2\)\);/,
+      /if \(r2 !== null\) \{\s*readinessChecks\.push\(r2ReadinessCheck\(r2\)\);/,
     );
     expect(readinessArrayLiteral(), 'and is not in the unconditional literal').not.toContain(
       'r2ReadinessCheck',

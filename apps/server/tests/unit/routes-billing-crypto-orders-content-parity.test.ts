@@ -77,26 +77,26 @@ describe('W421.C apps/server/src/routes/billing-crypto-orders.ts content parity'
 
   it('Cross-account framing pinned: 404 not 403 (no existence leak for orders belonging to other accounts)', () => {
     expect(body).toMatch(
-      /All routes are scoped to the calling account\. Cross-account\s*\n?\s*\/\/\s*id lookups return 404 \(not 403\) — we don't leak the existence of\s*\n?\s*\/\/\s*orders that belong to other accounts\./,
+      /All routes are scoped to the calling account\. Cross-account\s*\/\/\s*id lookups return 404 \(not 403\) — we don't leak the existence of\s*\/\/\s*orders that belong to other accounts\./,
     );
   });
 
   it('V-666.AV PAY_WINDOW_MS = 60*60*1000 (1h); informational expires_at hint; admin sweep + cancel each consult own thresholds', () => {
     expect(body).toMatch(
-      /\/\/ V-666\.AV — customer-facing pay-window hint\. Pending orders carry\s*\n?\s*\/\/ an `expires_at` ISO timestamp set to `created_at \+ PAY_WINDOW_MS`\s*\n?\s*\/\/ so the UI can render a countdown without computing locally\. The\s*\n?\s*\/\/ hint is purely informational — actual expiry is enforced by the\s*\n?\s*\/\/ admin sweep \+ the customer cancel endpoint, which both consult\s*\n?\s*\/\/ their own thresholds\. Non-pending orders carry expires_at: null\./,
+      /\/\/ V-666\.AV — customer-facing pay-window hint\. Pending orders carry\s*\/\/ an `expires_at` ISO timestamp set to `created_at \+ PAY_WINDOW_MS`\s*\/\/ so the UI can render a countdown without computing locally\. The\s*\/\/ hint is purely informational — actual expiry is enforced by the\s*\/\/ admin sweep \+ the customer cancel endpoint, which both consult\s*\/\/ their own thresholds\. Non-pending orders carry expires_at: null\./,
     );
     expect(body).toMatch(/const PAY_WINDOW_MS = 60 \* 60 \* 1000;/);
     expect(body).toMatch(
-      /expires_at:\s*\n?\s*order\.status === 'pending' \? new Date\(order\.created_at \+ PAY_WINDOW_MS\)\.toISOString\(\) : null,/,
+      /expires_at:\s*order\.status === 'pending' \? new Date\(order\.created_at \+ PAY_WINDOW_MS\)\.toISOString\(\) : null,/,
     );
   });
 
   it("V-666.AW cache framing pinned: 'no-store, private' header on list + get; status flips mid-checkout never cached", () => {
     expect(body).toMatch(
-      /\/\/ V-666\.AW — order state changes constantly between mints \+ IPNs;\s*\n?\s*\/\/ shared \/ proxy caches must never serve stale state\. `private`\s*\n?\s*\/\/ additionally signals that even browser caches shouldn't share\s*\n?\s*\/\/ the response across users on the same machine\./,
+      /\/\/ V-666\.AW — order state changes constantly between mints \+ IPNs;\s*\/\/ shared \/ proxy caches must never serve stale state\. `private`\s*\/\/ additionally signals that even browser caches shouldn't share\s*\/\/ the response across users on the same machine\./,
     );
     expect(body).toMatch(
-      /\/\/ V-666\.AW — same no-store, private rationale: status flips\s*\n?\s*\/\/ mid-checkout \(pending → confirming → paid\) and we never want\s*\n?\s*\/\/ a cached pending response to mask a paid IPN\./,
+      /\/\/ V-666\.AW — same no-store, private rationale: status flips\s*\/\/ mid-checkout \(pending → confirming → paid\) and we never want\s*\/\/ a cached pending response to mask a paid IPN\./,
     );
     const matches = body.match(/void reply\.header\('cache-control', 'no-store, private'\);/g);
     expect(matches?.length).toBe(2);
@@ -104,16 +104,16 @@ describe('W421.C apps/server/src/routes/billing-crypto-orders.ts content parity'
 
   it("V-666.AU events surface framing pinned: admin 'swept' coerced to 'expired' (internal lifecycle hidden from customer)", () => {
     expect(body).toMatch(
-      /\/\/ V-666\.AU — customer-facing event timeline\. Same shape as the\s*\n?\s*\/\/ admin \/events endpoint \(V-666\.AT\) but inlined on the\s*\n?\s*\/\/ envelope so the order-detail GET is a single round trip\.\s*\n?\s*\/\/ Excludes the 'swept' source from the customer's view —\s*\n?\s*\/\/ admin sweep is an internal lifecycle event the customer\s*\n?\s*\/\/ doesn't need to see; we surface it as a regular 'expired'\s*\n?\s*\/\/ from their perspective\./,
+      /\/\/ V-666\.AU — customer-facing event timeline\. Same shape as the\s*\/\/ admin \/events endpoint \(V-666\.AT\) but inlined on the\s*\/\/ envelope so the order-detail GET is a single round trip\.\s*\/\/ Excludes the 'swept' source from the customer's view —\s*\/\/ admin sweep is an internal lifecycle event the customer\s*\/\/ doesn't need to see; we surface it as a regular 'expired'\s*\/\/ from their perspective\./,
     );
     expect(body).toMatch(
-      /events: order\.events\.map\(\(e\) => \(\{\s*\n?\s*status: e\.status,\s*\n?\s*at: new Date\(e\.at\)\.toISOString\(\),\s*\n?\s*source: e\.source === 'swept' \? 'expired' : e\.source,\s*\n?\s*\}\)\),/,
+      /events: order\.events\.map\(\(e\) => \(\{\s*status: e\.status,\s*at: new Date\(e\.at\)\.toISOString\(\),\s*source: e\.source === 'swept' \? 'expired' : e\.source,\s*\}\)\),/,
     );
   });
 
   it('V-666.BR status filter zod enum 6-tuple (pending|confirming|paid|failed|partial|cancelled); admin parity rationale', () => {
     expect(body).toMatch(
-      /\/\/ V-666\.BR — single-value status filter on the customer list\.\s*\n?\s*\/\/ Mirrors the admin endpoint so customer-side dashboards can\s*\n?\s*\/\/ narrow their history view \(e\.g\. "show only paid orders"\)\s*\n?\s*\/\/ without paging through the full result set\./,
+      /\/\/ V-666\.BR — single-value status filter on the customer list\.\s*\/\/ Mirrors the admin endpoint so customer-side dashboards can\s*\/\/ narrow their history view \(e\.g\. "show only paid orders"\)\s*\/\/ without paging through the full result set\./,
     );
     expect(body).toMatch(
       /status: z\.enum\(\['pending', 'confirming', 'paid', 'failed', 'partial', 'cancelled'\]\)\.optional\(\),/,
@@ -122,16 +122,16 @@ describe('W421.C apps/server/src/routes/billing-crypto-orders.ts content parity'
 
   it('V-666.BU cursor pagination framing pinned: opaque base64url token of {ts,id}; service encode/decode; loop until null', () => {
     expect(body).toMatch(
-      /\/\/ V-666\.BU — cursor for forward pagination\. Opaque base64url\s*\n?\s*\/\/ encoding of `\{ts, id\}`; consumers treat it as a token\. The\s*\n?\s*\/\/ service layer encodes\/decodes it\./,
+      /\/\/ V-666\.BU — cursor for forward pagination\. Opaque base64url\s*\/\/ encoding of `\{ts, id\}`; consumers treat it as a token\. The\s*\/\/ service layer encodes\/decodes it\./,
     );
     expect(body).toMatch(
-      /\/\/ V-666\.BU — cursor pagination\. The service produces a\s*\n?\s*\/\/ next_cursor when there's at least one more matching row\s*\n?\s*\/\/ beyond the returned page; null otherwise\. Consumers loop\s*\n?\s*\/\/ until they get null\./,
+      /\/\/ V-666\.BU — cursor pagination\. The service produces a\s*\/\/ next_cursor when there's at least one more matching row\s*\/\/ beyond the returned page; null otherwise\. Consumers loop\s*\/\/ until they get null\./,
     );
   });
 
   it('V-666.BX half-open date-range framing pinned: created_after inclusive + created_before exclusive; ISO 8601 datetime', () => {
     expect(body).toMatch(
-      /\/\/ V-666\.BX — half-open date-range filter on created_at\. Both\s*\n?\s*\/\/ bounds accept ISO 8601 timestamps\. created_after is inclusive,\s*\n?\s*\/\/ created_before is exclusive\./,
+      /\/\/ V-666\.BX — half-open date-range filter on created_at\. Both\s*\/\/ bounds accept ISO 8601 timestamps\. created_after is inclusive,\s*\/\/ created_before is exclusive\./,
     );
     expect(body).toMatch(/created_after: z\.string\(\)\.datetime\(\)\.optional\(\),/);
     expect(body).toMatch(/created_before: z\.string\(\)\.datetime\(\)\.optional\(\),/);
@@ -139,10 +139,10 @@ describe('W421.C apps/server/src/routes/billing-crypto-orders.ts content parity'
 
   it('V-666.BZ inverted-window guard: before <= after → 400 (silent-empty masking rationale: "swapped args, missing tz suffix"); strict > messaging', () => {
     expect(body).toMatch(
-      /\/\/ V-666\.BZ — reject obviously-wrong windows \(before <= after\)\.\s*\n?\s*\/\/ The empty result was previously silent, which masked common\s*\n?\s*\/\/ bugs \(swapped args, missing tz suffix\)\./,
+      /\/\/ V-666\.BZ — reject obviously-wrong windows \(before <= after\)\.\s*\/\/ The empty result was previously silent, which masked common\s*\/\/ bugs \(swapped args, missing tz suffix\)\./,
     );
     expect(body).toMatch(
-      /if \(\s*\n?\s*createdAfter !== undefined &&\s*\n?\s*createdBefore !== undefined &&\s*\n?\s*createdBefore <= createdAfter\s*\n?\s*\) \{\s*\n?\s*throw new BadRequestError\('created_before must be strictly greater than created_after\.'\);/,
+      /if \(\s*createdAfter !== undefined &&\s*createdBefore !== undefined &&\s*createdBefore <= createdAfter\s*\) \{\s*throw new BadRequestError\('created_before must be strictly greater than created_after\.'\);/,
     );
   });
 
@@ -158,19 +158,19 @@ describe('W421.C apps/server/src/routes/billing-crypto-orders.ts content parity'
   it('Limit zod regex: /^\\d+$/ string then Number.parseInt with 1..100 BadRequestError', () => {
     expect(body).toMatch(/limit: z\.string\(\)\.regex\(\/\^\\d\+\$\/\)\.optional\(\),/);
     expect(body).toMatch(
-      /const n = Number\.parseInt\(query\.limit, 10\);\s*\n?\s*if \(!Number\.isInteger\(n\) \|\| n < 1 \|\| n > 100\) \{\s*\n?\s*throw new BadRequestError\('limit must be an integer between 1 and 100\.'\);/,
+      /const n = Number\.parseInt\(query\.limit, 10\);\s*if \(!Number\.isInteger\(n\) \|\| n < 1 \|\| n > 100\) \{\s*throw new BadRequestError\('limit must be an integer between 1 and 100\.'\);/,
     );
   });
 
   it('UpdateNoteSchema V-666.Q: customer_note max 500 + nullable', () => {
     expect(body).toMatch(
-      /const UpdateNoteSchema = z\.object\(\{\s*\n?\s*customer_note: z\.string\(\)\.max\(500\)\.nullable\(\),\s*\n?\s*\}\);/,
+      /const UpdateNoteSchema = z\.object\(\{\s*customer_note: z\.string\(\)\.max\(500\)\.nullable\(\),\s*\}\);/,
     );
   });
 
   it('GET single + receipt routes: cross-account 404 via order.account_id !== ctx.account.id; NotFoundError with "No crypto order with id" message', () => {
     expect(body).toMatch(
-      /if \(order === null \|\| order\.account_id !== ctx\.account\.id\) \{\s*\n?\s*throw new NotFoundError\(`No crypto order with id "\$\{params\.order_id\}"\.`\);/,
+      /if \(order === null \|\| order\.account_id !== ctx\.account\.id\) \{\s*throw new NotFoundError\(`No crypto order with id "\$\{params\.order_id\}"\.`\);/,
     );
     const matches = body.match(
       /throw new NotFoundError\(`No crypto order with id "\$\{params\.order_id\}"\.`\);/g,
@@ -180,10 +180,10 @@ describe('W421.C apps/server/src/routes/billing-crypto-orders.ts content parity'
 
   it('V-666.P plain-text receipt: 7-line render (header + blank + Order/Issued/Status/Product/Amount); paid_at/payment_id conditional; trailing newline', () => {
     expect(body).toMatch(
-      /\/\/ V-666\.P — plain-text rendering of the same receipt\. Useful for\s*\n?\s*\/\/ wget \/ curl \/ cron jobs that pipe the receipt to a file without\s*\n?\s*\/\/ an extra jq step\. Identical access semantics as the JSON variant\./,
+      /\/\/ V-666\.P — plain-text rendering of the same receipt\. Useful for\s*\/\/ wget \/ curl \/ cron jobs that pipe the receipt to a file without\s*\/\/ an extra jq step\. Identical access semantics as the JSON variant\./,
     );
     expect(body).toMatch(
-      /const lines = \[\s*\n?\s*'Driftstack receipt',\s*\n?\s*'',\s*\n?\s*`Order: \$\{receipt\.order_id\}`,\s*\n?\s*`Issued: \$\{receipt\.issued_at\}`,\s*\n?\s*`Status: \$\{receipt\.status\}`,\s*\n?\s*`Product: \$\{receipt\.product\}`,\s*\n?\s*`Amount: \$\{\(receipt\.price_cents \/ 100\)\.toFixed\(2\)\} \$\{receipt\.price_currency\}`,\s*\n?\s*\];/,
+      /const lines = \[\s*'Driftstack receipt',\s*'',\s*`Order: \$\{receipt\.order_id\}`,\s*`Issued: \$\{receipt\.issued_at\}`,\s*`Status: \$\{receipt\.status\}`,\s*`Product: \$\{receipt\.product\}`,\s*`Amount: \$\{\(receipt\.price_cents \/ 100\)\.toFixed\(2\)\} \$\{receipt\.price_currency\}`,\s*\];/,
     );
     expect(body).toMatch(
       /if \(receipt\.paid_at !== null\) lines\.push\(`Paid at: \$\{receipt\.paid_at\}`\);/,
@@ -198,20 +198,20 @@ describe('W421.C apps/server/src/routes/billing-crypto-orders.ts content parity'
 
   it('V-666.U PDF receipt: buildReceiptPdfBytes; application/pdf type + content-disposition attachment filename=receipt-<order_id>.pdf', () => {
     expect(body).toMatch(
-      /\/\/ V-666\.U — PDF rendering of the receipt for archiving \/ emailing\.\s*\n?\s*\/\/ Same access semantics as the JSON \/ \.txt variants; cross-account\s*\n?\s*\/\/ requests return 404\. Content-Disposition: attachment so a browser\s*\n?\s*\/\/ GET triggers a download with a meaningful filename\./,
+      /\/\/ V-666\.U — PDF rendering of the receipt for archiving \/ emailing\.\s*\/\/ Same access semantics as the JSON \/ \.txt variants; cross-account\s*\/\/ requests return 404\. Content-Disposition: attachment so a browser\s*\/\/ GET triggers a download with a meaningful filename\./,
     );
     expect(body).toMatch(/const bytes = buildReceiptPdfBytes\(receipt\);/);
     expect(body).toMatch(
-      /return reply\s*\n?\s*\.type\('application\/pdf'\)\s*\n?\s*\.header\('content-disposition', `attachment; filename="receipt-\$\{receipt\.order_id\}\.pdf"`\)\s*\n?\s*\.send\(bytes\);/,
+      /return reply\s*\.type\('application\/pdf'\)\s*\.header\('content-disposition', `attachment; filename="receipt-\$\{receipt\.order_id\}\.pdf"`\)\s*\.send\(bytes\);/,
     );
   });
 
   it('V-666.J cancel framing pinned: customer-facing self-service abandonment of pending; once-payment-activity → 409 "crypto payments non-refundable; contact support" with resource/field detail', () => {
     expect(body).toMatch(
-      /\/\/ V-666\.J — cancel a pending order\. Customer-facing self-service\s*\n?\s*\/\/ abandonment\. Once any payment activity exists \(confirming\/partial\/\s*\n?\s*\/\/ paid\/failed\) the cancel must go through support so the customer's\s*\n?\s*\/\/ on-chain funds can be reconciled — those statuses return 409\./,
+      /\/\/ V-666\.J — cancel a pending order\. Customer-facing self-service\s*\/\/ abandonment\. Once any payment activity exists \(confirming\/partial\/\s*\/\/ paid\/failed\) the cancel must go through support so the customer's\s*\/\/ on-chain funds can be reconciled — those statuses return 409\./,
     );
     expect(body).toMatch(
-      /if \(result\.ok === 'not_cancellable'\) \{\s*\n?\s*throw new ConflictError\(\s*\n?\s*`Order is in state "\$\{result\.reason\}" and can no longer be cancelled\. Crypto payments are non-refundable; contact support if you need to discuss reconciliation\.`,\s*\n?\s*\{ resource: 'crypto_order', field: 'status' \},\s*\n?\s*\);/,
+      /if \(result\.ok === 'not_cancellable'\) \{\s*throw new ConflictError\(\s*`Order is in state "\$\{result\.reason\}" and can no longer be cancelled\. Crypto payments are non-refundable; contact support if you need to discuss reconciliation\.`,\s*\{ resource: 'crypto_order', field: 'status' \},\s*\);/,
     );
   });
 
@@ -231,7 +231,7 @@ describe('W421.C apps/server/src/routes/billing-crypto-orders.ts content parity'
 
   it('parseOrThrow helper: zod safeParse + a fixed generic BadRequestError message (no raw zod JSON leaked into the customer problem detail)', () => {
     expect(body).toMatch(
-      /function parseOrThrow<T>\(schema: z\.ZodSchema<T>, input: unknown\): T \{\s*\n?\s*const result = schema\.safeParse\(input\);/,
+      /function parseOrThrow<T>\(schema: z\.ZodSchema<T>, input: unknown\): T \{\s*const result = schema\.safeParse\(input\);/,
     );
     expect(body).toContain("throw new BadRequestError('Invalid request parameters.');");
     expect(body).not.toMatch(/BadRequestError\(result\.error\.message\)/);

@@ -25,7 +25,7 @@ describe('services/agent-executor content parity', () => {
 
   it("AI-B2 module-level framing pinned: 'intent executor. Maps a DecomposeResult plan onto calls against the existing /v1/sessions/:id/{navigate,interact,wait,capture} surface so the dashboard chat UI can run an end-to-end turn (decompose → execute → append transcript → debit tokens → repeat) without hand-wiring the dispatch.' — pinned so the AI-B2 anchor + 4-action-surface + end-to-end turn pipeline all stay documented", () => {
     expect(body).toMatch(
-      /\/\/ AI-B2 — intent executor\. Maps a DecomposeResult `plan` onto calls\s*\n?\s*\/\/ against the existing \/v1\/sessions\/:id\/\{navigate,interact,wait,\s*\n?\s*\/\/ capture\} surface so the dashboard chat UI can run an end-to-end\s*\n?\s*\/\/ turn \(decompose → execute → append transcript → debit tokens →\s*\n?\s*\/\/ repeat\) without hand-wiring the dispatch\./,
+      /\/\/ AI-B2 — intent executor\. Maps a DecomposeResult `plan` onto calls\s*\/\/ against the existing \/v1\/sessions\/:id\/\{navigate,interact,wait,\s*\/\/ capture\} surface so the dashboard chat UI can run an end-to-end\s*\/\/ turn \(decompose → execute → append transcript → debit tokens →\s*\/\/ repeat\) without hand-wiring the dispatch\./,
     );
   });
 
@@ -87,18 +87,18 @@ describe('services/agent-executor content parity', () => {
 
   it("Why-not-HTTP-fetch framing pinned: 'the agent layer runs in the same process as the routes; round-tripping through HTTP would double the latency budget + lose typed-error context. AI-B2.b dispatches against the in-process SessionsService instead.' — pinned so the same-process + double-latency-bad + lose-typed-errors rationale + AI-B2.b-uses-in-process-SessionsService dispatch contract stay documented", () => {
     expect(body).toMatch(
-      /\/\/ Why not call the HTTP routes directly via fetch: the agent layer\s*\n?\s*\/\/ runs in the same process as the routes; round-tripping through\s*\n?\s*\/\/ HTTP would double the latency budget \+ lose typed-error context\.\s*\n?\s*\/\/ AI-B2\.b dispatches against the in-process SessionsService instead\./,
+      /\/\/ Why not call the HTTP routes directly via fetch: the agent layer\s*\/\/ runs in the same process as the routes; round-tripping through\s*\/\/ HTTP would double the latency budget \+ lose typed-error context\.\s*\/\/ AI-B2\.b dispatches against the in-process SessionsService instead\./,
     );
   });
 
   it('IntentResult 3-variant discriminated union pinned: success (intent + summary + optional captureId) + failure (intent + reason) + confirmation_required (intent + category + matchedText, W443/W445). Drift to dropping a variant would force callers to wrap execute() in try/catch instead of branching on the discriminator', () => {
     expect(body).toMatch(/export type IntentResult =/);
     expect(body).toMatch(
-      /\| \{\s*\n?\s*kind: 'success';\s*\n?\s*intent: AgentIntent;\s*\n?\s*\/\*\* Free-form summary string for the transcript log\./,
+      /\| \{\s*kind: 'success';\s*intent: AgentIntent;\s*\/\*\* Free-form summary string for the transcript log\./,
     );
     expect(body).toMatch(/captureId\?: string;/);
     expect(body).toMatch(
-      /\| \{\s*\n?\s*kind: 'failure';\s*\n?\s*intent: AgentIntent;\s*\n?\s*\/\*\* Customer-facing failure reason\./,
+      /\| \{\s*kind: 'failure';\s*intent: AgentIntent;\s*\/\*\* Customer-facing failure reason\./,
     );
     expect(body).toMatch(/kind: 'confirmation_required';/);
     expect(body).toMatch(/category: ConsequentialActionCategory;/);
@@ -114,7 +114,7 @@ describe('services/agent-executor content parity', () => {
 
   it("ExecuteArgs sessionId + plan narrowing pinned: 'Refuse + clarify results are no-ops here — the caller (agent runtime) handles those before reaching the executor. The narrowing happens at the type level.' — pinned so the plan-only-narrowing (Extract<DecomposeResult, { kind: 'plan' }>) contract + caller-handles-refuse-clarify rationale stay documented", () => {
     expect(body).toMatch(
-      /\* The plan to execute\. Refuse \+ clarify results are no-ops here —\s*\n?\s*\*\s+the caller \(agent runtime\) handles those before reaching the\s*\n?\s*\*\s+executor\. The narrowing happens at the type level\. \*\//,
+      /\* The plan to execute\. Refuse \+ clarify results are no-ops here —\s*\*\s+the caller \(agent runtime\) handles those before reaching the\s*\*\s+executor\. The narrowing happens at the type level\. \*\//,
     );
     expect(body).toMatch(/plan: Extract<DecomposeResult, \{ kind: 'plan' \}>;/);
   });
@@ -125,16 +125,16 @@ describe('services/agent-executor content parity', () => {
     // implementation takes, so the sentence is asserted in two pieces rather
     // than as one span the exception splits.
     expect(body).toMatch(
-      /\* Run a plan's intents in order\. Halts on first failure \(returns\s*\n?\s*\*\s+partial results\)/,
+      /\* Run a plan's intents in order\. Halts on first failure \(returns\s*\*\s+partial results\)/,
     );
     expect(body, 'the interface contract no longer records the wait exception').toMatch(
       /control-plane executor continues past a failed `wait` \(#139\)/,
     );
     expect(body).toMatch(
-      /Never throws — failures surface as\s*\n?\s*\*\s+IntentResult discriminants instead\./,
+      /Never throws — failures surface as\s*\*\s+IntentResult discriminants instead\./,
     );
     expect(body).toMatch(
-      /\* AI-B2\.b will accept an optional cancellation signal and\s*\n?\s*\*\s+propagate it to the underlying SessionsService dispatch\./,
+      /\* AI-B2\.b will accept an optional cancellation signal and\s*\*\s+propagate it to the underlying SessionsService dispatch\./,
     );
     expect(body).toMatch(/execute\(args: ExecuteArgs\): Promise<ExecutorRunResult>;/);
   });
@@ -143,16 +143,16 @@ describe('services/agent-executor content parity', () => {
     expect(body).toMatch(/export class StubAgentExecutor implements AgentExecutor \{/);
     expect(body).toMatch(/return Promise\.resolve\(\{ results, ok: true \}\);/);
     expect(body).toMatch(
-      /\.\.\.\(intent\.kind === 'capture'\s*\n?\s*\? \{ captureId: `cap_stub_\$\{args\.sessionId\}_\$\{results\.length \+ 1\}` \}\s*\n?\s*: \{\}\),/,
+      /\.\.\.\(intent\.kind === 'capture'\s*\? \{ captureId: `cap_stub_\$\{args\.sessionId\}_\$\{results\.length \+ 1\}` \}\s*: \{\}\),/,
     );
   });
 
   it('stubSummary() switch keeps deterministic summaries and sends navigate URLs through the credential-safe diagnostic boundary', () => {
     expect(body).toMatch(
-      /function stubSummary\(intent: AgentIntent\): string \{\s*\n?\s*switch \(intent\.kind\) \{/,
+      /function stubSummary\(intent: AgentIntent\): string \{\s*switch \(intent\.kind\) \{/,
     );
     expect(body).toMatch(
-      /case 'navigate':\s*\n?\s*return safeExecutorDiagnostic\(\s*`stub navigate → \$\{intent\.url\} \(returns 200; no real fetch\)`,\s*'stub navigate completed',\s*\);/,
+      /case 'navigate':\s*return safeExecutorDiagnostic\(\s*`stub navigate → \$\{intent\.url\} \(returns 200; no real fetch\)`,\s*'stub navigate completed',\s*\);/,
     );
     expect(body).toMatch(/case 'interact':/);
     expect(body).toMatch(/if \(intent\.action === 'type'\) \{/);
@@ -160,12 +160,12 @@ describe('services/agent-executor content parity', () => {
       /return `stub type\$\{intent\.selector \? ' on ' \+ intent\.selector : ''\}`;/,
     );
     expect(body).toMatch(/case 'wait':/);
-    expect(body).toMatch(/case 'capture':\s*\n?\s*return `stub captured \$\{intent\.capture\}`;/);
+    expect(body).toMatch(/case 'capture':\s*return `stub captured \$\{intent\.capture\}`;/);
   });
 
   it("runResultToTranscriptEntry serialization helper framing pinned: 'render an ExecutorRunResult as a TranscriptEntry the agent's next turn can read. Keeps the serialization rule in one place — every consumer that wants to append executor results to a transcript must use this so the decomposer sees consistent output formatting in history.' + ✓/✗ glyph + '(plan halted on failure)' suffix ONLY on a NON-wait failure (#139: a best-effort wait failure no longer halts, so the suffix must NOT key on !ok) — pinned so the single-source-of-truth-serialization contract + the consistent-history-format-for-decomposer rationale + the glyph-encoding (✓ success / ✗ failure) survive", () => {
     expect(body).toMatch(
-      /\* Helper for the dashboard chat-UI: render an ExecutorRunResult as a\s*\n?\s*\*\s+TranscriptEntry the agent's next turn can read\. Keeps the\s*\n?\s*\*\s+serialization rule in one place — every consumer that wants to\s*\n?\s*\*\s+append executor results to a transcript must use this so the\s*\n?\s*\*\s+decomposer sees consistent output formatting in `history`\./,
+      /\* Helper for the dashboard chat-UI: render an ExecutorRunResult as a\s*\*\s+TranscriptEntry the agent's next turn can read\. Keeps the\s*\*\s+serialization rule in one place — every consumer that wants to\s*\*\s+append executor results to a transcript must use this so the\s*\*\s+decomposer sees consistent output formatting in `history`\./,
     );
     // #139 — the free-text fields (summary carries the navigate result URL,
     // reason the harness message, matchedText the matched phrase) are
@@ -208,7 +208,7 @@ describe('services/agent-executor content parity', () => {
     );
     expect(body).toMatch(/lines\.push\('\(plan halted on failure\)'\);/);
     expect(body).not.toMatch(
-      /if \(!runResult\.ok\) \{\s*\n?\s*lines\.push\('\(plan halted on failure\)'\)/,
+      /if \(!runResult\.ok\) \{\s*lines\.push\('\(plan halted on failure\)'\)/,
     );
     expect(body).toMatch(/role: 'agent',/);
   });

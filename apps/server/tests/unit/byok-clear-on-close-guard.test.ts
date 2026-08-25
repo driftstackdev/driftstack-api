@@ -34,9 +34,7 @@ describe('Q.1.c BYOK plaintext-clear-on-close (both route close paths) drift gua
 
   it("the rationale comment is pinned so the clear isn't refactored away as dead code", () => {
     expect(body).toMatch(/drop the cached BYOK/);
-    expect(body).toMatch(
-      /the decrypted key would linger in process\s*\n?\s*\/\/\s*memory until restart/,
-    );
+    expect(body).toMatch(/the decrypted key would linger in process\s*\/\/\s*memory until restart/);
   });
 
   // Symmetric guard for the SECOND clear path. The cache class doc names

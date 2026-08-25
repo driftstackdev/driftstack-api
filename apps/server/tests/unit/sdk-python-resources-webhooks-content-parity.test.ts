@@ -141,7 +141,7 @@ describe('W584.A packages/sdk-python/src/driftstack/resources/webhooks.py conten
     expect(body).toMatch(/def replay_delivery\(self, delivery_id: str\) -> WebhookDelivery:/);
     expect(body).toMatch(/Scoped to the EFFECTIVE account: the delivery must belong to an/);
     expect(body, 'the calling-account claim must not return').not.toMatch(
-      /endpoint the\s*\n?\s*calling account owns/,
+      /endpoint the\s*calling account owns/,
     );
     expect(body).toMatch(
       /data = self\._http\.request\(\s*\n\s*"POST",\s*\n\s*f"\/v1\/webhook-deliveries\/\{quote\(delivery_id, safe=''\)\}\/replay",\s*\n\s*json_body=\{\},\s*\n\s*\)/,

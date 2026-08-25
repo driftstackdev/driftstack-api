@@ -40,13 +40,13 @@ describe('W518.C apps/marketing-site/src/pages/docs/api-changelog.astro content 
 
   it("V-712 framing pinned: 'public API changelog. Customer-facing summary of meaningful API changes: new endpoints, schema additions (backward compatible), deprecations, and security-relevant changes. Companion to /docs/api-versioning (the policy) and the in-repo CHANGELOG (the engineering-detail log).' — pinned so the V-712 anchor + 4-content-categories + 2-companion (api-versioning + in-repo-CHANGELOG) commitment survives. Re-enabled by slice 170 after verifying the V-712 comment exists at api-changelog.astro:4-8", () => {
     expect(body).toMatch(
-      /\/\/ V-712 — public API changelog\. Customer-facing summary of meaningful\s*\n?\s*\/\/ API changes: new endpoints, schema additions \(backward compatible\),\s*\n?\s*\/\/ deprecations, and security-relevant changes\. Companion to\s*\n?\s*\/\/ \/docs\/api-versioning \(the policy\) and the in-repo CHANGELOG \(the\s*\n?\s*\/\/ engineering-detail log\)\./,
+      /\/\/ V-712 — public API changelog\. Customer-facing summary of meaningful\s*\/\/ API changes: new endpoints, schema additions \(backward compatible\),\s*\/\/ deprecations, and security-relevant changes\. Companion to\s*\/\/ \/docs\/api-versioning \(the policy\) and the in-repo CHANGELOG \(the\s*\/\/ engineering-detail log\)\./,
     );
   });
 
   it("'Breaking' tag framing pinned: 'This page summarises customer-facing API changes by month. Backward-compatible additions appear without ceremony; the Breaking tag flags anything that requires a caller to update before the documented sunset date.' — pinned so the by-month-grouping + Breaking-tag + sunset-before-update commitment survives (drift to dropping the Breaking-tag-must-have-sunset-date commitment would weaken the deprecation discipline)", () => {
     expect(body).toMatch(
-      /This page summarises customer-facing API changes by month\.\s*\n?\s*Backward-compatible additions appear without ceremony; the\s*\n?\s*<strong>Breaking<\/strong> tag flags anything that requires a\s*\n?\s*caller to update before the documented sunset date\./,
+      /This page summarises customer-facing API changes by month\.\s*Backward-compatible additions appear without ceremony; the\s*<strong>Breaking<\/strong> tag flags anything that requires a\s*caller to update before the documented sunset date\./,
     );
   });
 
@@ -68,7 +68,7 @@ describe('W518.C apps/marketing-site/src/pages/docs/api-changelog.astro content 
   it("2026-03 initial-release crypto-orders framing pinned: 'POST /v1/billing/crypto-checkout mints orders; the IPN webhook from NowPayments at POST /webhooks/nowpayments/ipn drives the order state machine. Customer-facing list at GET /v1/billing/crypto-orders; admin surface at GET /v1/admin/crypto-orders.' — pinned so the foundational 2026-03 release anchor (origin of the crypto-orders surface) + 4-canonical-endpoint surface survives (drift to forgetting the origin month would orphan the history)", () => {
     expect(body).toMatch(/<strong>Crypto orders — initial release\.<\/strong>/);
     expect(body).toMatch(
-      /<code>POST \/v1\/billing\/crypto-checkout<\/code> mints orders;\s*\n?\s*the IPN webhook from NowPayments at\s*\n?\s*<code>POST \/webhooks\/nowpayments\/ipn<\/code> drives the order\s*\n?\s*state machine\./,
+      /<code>POST \/v1\/billing\/crypto-checkout<\/code> mints orders;\s*the IPN webhook from NowPayments at\s*<code>POST \/webhooks\/nowpayments\/ipn<\/code> drives the order\s*state machine\./,
     );
   });
 
@@ -77,10 +77,10 @@ describe('W518.C apps/marketing-site/src/pages/docs/api-changelog.astro content 
       /<li>New endpoints \+ new optional fields ship without bumping the version\.<\/li>/,
     );
     expect(body).toMatch(
-      /<li>Removing a field or changing its type requires the 90-day\s*\n?\s*deprecation window documented in\s*\n?\s*<a href="\/docs\/api-versioning\/">\/docs\/api-versioning<\/a>, with\s*\n?\s*a <code>Deprecation<\/code> response header \(RFC 5988\) carrying\s*\n?\s*the sunset date from the moment the deprecation lands\.<\/li>/,
+      /<li>Removing a field or changing its type requires the 90-day\s*deprecation window documented in\s*<a href="\/docs\/api-versioning\/">\/docs\/api-versioning<\/a>, with\s*a <code>Deprecation<\/code> response header \(RFC 5988\) carrying\s*the sunset date from the moment the deprecation lands\.<\/li>/,
     );
     expect(body).toMatch(
-      /<li>Major-version bumps \(next is v2\) ship in lock-step with\s*\n?\s*published migration notes and at least 12 months of v1 support\.<\/li>/,
+      /<li>Major-version bumps \(next is v2\) ship in lock-step with\s*published migration notes and at least 12 months of v1 support\.<\/li>/,
     );
   });
 
@@ -90,7 +90,7 @@ describe('W518.C apps/marketing-site/src/pages/docs/api-changelog.astro content 
   // /settings (apps/customer-dashboard/src/pages/settings.astro).
   it("Subscribe 3-channel framing pinned: 'We post a summary of each month's changes to status.driftstack.dev as a non-incident announcement, and email the api-changes@ mailing list. Subscribe at app.driftstack.dev/settings.' — pinned so the 3-channel subscribe surface (status-page non-incident + api-changes@ mailing list + dashboard /settings) survives and the dead /settings/notifications link cannot return", () => {
     expect(body).toMatch(
-      /We post a summary of each month's changes to\s*\n?\s*<a href="https:\/\/status\.driftstack\.dev">status\.driftstack\.dev<\/a>\s*\n?\s*as a non-incident announcement, and email the\s*\n?\s*<code>api-changes@<\/code> mailing list\. Subscribe at\s*\n?\s*(?:<!--[\s\S]*?-->\s*)?<a href="https:\/\/app\.driftstack\.dev\/settings\/">app\.driftstack\.dev\/settings<\/a>\./,
+      /We post a summary of each month's changes to\s*<a href="https:\/\/status\.driftstack\.dev">status\.driftstack\.dev<\/a>\s*as a non-incident announcement, and email the\s*<code>api-changes@<\/code> mailing list\. Subscribe at\s*(?:<!--[\s\S]*?-->\s*)?<a href="https:\/\/app\.driftstack\.dev\/settings\/">app\.driftstack\.dev\/settings<\/a>\./,
     );
     expect(body).not.toMatch(/href="https:\/\/app\.driftstack\.dev\/settings\/notifications"/);
   });

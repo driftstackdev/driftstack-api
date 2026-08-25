@@ -115,7 +115,7 @@ describe('W360.A /docs/teams parity', () => {
     // from packages/api-types/src/accounts.ts:
     // team.member_invited / team.invite_accepted / team.member_removed.
     expect(body).toMatch(
-      /The <code>action<\/code>\s*\n?\s*filter is exact-match \(one action per request, no wildcards\)/,
+      /The <code>action<\/code>\s*filter is exact-match \(one action per request, no wildcards\)/,
     );
     expect(body).toMatch(/<code>GET \/v1\/account\/audit-log\?action=team\.member_invited<\/code>/);
     expect(body).toMatch(/<code>team\.invite_accepted<\/code>/);

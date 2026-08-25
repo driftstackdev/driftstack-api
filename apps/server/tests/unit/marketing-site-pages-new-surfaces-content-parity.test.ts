@@ -113,20 +113,20 @@ describe('W599.B /use-cases/multi-account (operators + account teams)', () => {
   });
 
   it('introduces fingerprint once, in the site-wide plain form: "what a website can measure about a visitor"', () => {
-    expect(body).toMatch(/what a website can\s*\n?\s*measure about a visitor/);
+    expect(body).toMatch(/what a website can\s*measure about a visitor/);
   });
 
   it("problem framing in the operator's words: bans cascade through the shared device", () => {
     expect(body).toMatch(/That's why bans cascade\./);
-    expect(body).toMatch(/link them by\s*\n?\s*device/);
+    expect(body).toMatch(/link them by\s*device/);
   });
 
   it('answer stays inside the approved claim register: own-physical-phone persistent profiles + 10-to-200 browser-tabs desktop app (pricing Manual card claims)', () => {
     expect(body).toMatch(/look like its own physical phone/);
     // S31 2026-07-07 (fable-truth-audit) — 'open at once' conflated stored profiles with
     // concurrent sessions (manual caps 1/3/8).
-    expect(body).toMatch(/keep 10 to 200\s*\n?\s*logged-in profiles saved and ready/);
-    expect(body).toMatch(/switch between them like browser\s*\n?\s*tabs/);
+    expect(body).toMatch(/keep 10 to 200\s*logged-in profiles saved and ready/);
+    expect(body).toMatch(/switch between them like browser\s*tabs/);
   });
 
   it('plan pointer: Manual ladder → /pricing#manual ("A person clicking → Manual." mapping)', () => {
@@ -171,7 +171,7 @@ describe('W599.B /use-cases/qa-testing (QA + engineering teams)', () => {
   });
 
   it('keeps the approved fidelity claim verbatim in spirit: the bug you reproduce is the bug your users hit', () => {
-    expect(body).toMatch(/the bug you reproduce is the bug your\s*\n?\s*users hit/);
+    expect(body).toMatch(/the bug you reproduce is the bug your\s*users hit/);
     expect(body).toMatch(/built from Apple's WebKit source/);
   });
 
@@ -198,11 +198,11 @@ describe('W599.B /use-cases/web-scraping (data teams)', () => {
 
   it('mobile-vs-desktop divergence claim stays in the approved homepage form (different content for mobile Safari; no please-use-our-app redirects)', () => {
     expect(body).toMatch(/serve mobile Safari a different site than desktop Chrome/);
-    expect(body).toMatch(/no\s*\n?\s*app-steering redirects/);
+    expect(body).toMatch(/no\s*app-steering redirects/);
   });
 
   it('population-matched framing reuses homepage §6 phrases: iPhone bucket with millions + population-stable vs 100% unique (S20b 2026-07-06 plain words, same facts)', () => {
-    expect(body).toMatch(/lands in the iPhone bucket\s*\n?\s*with millions of others/);
+    expect(body).toMatch(/lands in the iPhone bucket\s*with millions of others/);
     expect(body).toMatch(
       /session after session \(population-stable\); stealth Chromium mints a new one every session — 100% unique, itself a giveaway/,
     );
@@ -216,7 +216,7 @@ describe('W599.B /use-cases/web-scraping (data teams)', () => {
   it('AUP boundary named for scraping specifically: auth-bypassing / rate-limit-abusing collection is out (capability description, never encouragement; S20b plain words, prohibition at full strength)', () => {
     expect(body).toMatch(/href="\/legal\/aup\/"/);
     expect(body).toMatch(
-      /gets around logins\s*\n?\s*\(authentication\) or past a site's reasonable rate limits is not\s*\n?\s*allowed/,
+      /gets around logins\s*\(authentication\) or past a site's reasonable rate limits is not\s*allowed/,
     );
   });
 
@@ -248,9 +248,7 @@ describe('W599.B /how-it-works (zero-code explainer)', () => {
   });
 
   it('profile · session · proxy explainer panels use the site-wide metaphors: saved iPhone identity / browser tabs / own internet exit', () => {
-    expect(body).toMatch(
-      /saved iPhone identity<\/strong> that\s*\n?\s*keeps its logins and history/,
-    );
+    expect(body).toMatch(/saved iPhone identity<\/strong> that\s*keeps its logins and history/);
     expect(body).toMatch(/sessions running at the same time — think browser tabs/);
     expect(body).toMatch(/own internet exit<\/strong>/);
   });

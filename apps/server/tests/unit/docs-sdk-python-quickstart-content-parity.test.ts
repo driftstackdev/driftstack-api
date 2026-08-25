@@ -46,7 +46,7 @@ describe('docs sdk/python-quickstart content parity', () => {
   });
 
   it('dual sync (`Driftstack`) + async (`AsyncDriftstack`) client shape pinned: drift to silently dropping the async client would break FastAPI/asyncio integrations; drift to dropping sync would break script/Flask/Django consumers', () => {
-    expect(body).toMatch(/sync \(`Driftstack`\) and async\s*\n?\s*\(`AsyncDriftstack`\) clients/);
+    expect(body).toMatch(/sync \(`Driftstack`\) and async\s*\(`AsyncDriftstack`\) clients/);
     expect(body).toMatch(/off the same wire shape/);
   });
 
@@ -78,7 +78,7 @@ describe('docs sdk/python-quickstart content parity', () => {
   it('paid SDK and Free desktop boundary plus actionable 403 detail are pinned', () => {
     expect(body).toMatch(/Any paid Driftstack tier, including Manual/);
     expect(body).toMatch(/A `ds_live_…` customer API key/);
-    expect(body).toMatch(/restricted\s*\n?\s*`ds_test_…` device credential/);
+    expect(body).toMatch(/restricted\s*`ds_test_…` device credential/);
     expect(body).toMatch(/err\.status == 403 and "apiAccess"/);
     expect(body).toMatch(/Upgrade to resume this key unless it was revoked or expired/);
   });

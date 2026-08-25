@@ -333,15 +333,13 @@ describe('W763 docs /api/profiles content parity', () => {
   it("CRITICAL team-RBAC admin-required-for-writes framing pinned. The 'member roles cannot write on the owner\\'s account; admin members can' wording matches W757 /team page member-vs-admin contract.", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /member roles cannot write on\s*\n?\s*the owner's account; admin\s*\n?\s*members can\./,
-    );
+    expect(p).toMatch(/member roles cannot write on\s*the owner's account; admin\s*members can\./);
   });
 
   it("CRITICAL write-scope framing — profile write endpoints require the `write:profiles` scope (NOT `admin`). Matches the route-level requireScope('write:profiles') guard; drift back to 'admin scope' would mis-document the actual gate and mislead least-privilege key minting.", () => {
     const p = read(PAGE);
     expect(p).toMatch(
-      /write endpoints \(POST, PATCH, DELETE\) require the `write:profiles`\s*\n?\s*scope on the calling key \(a broad `write` key also satisfies it\)\./,
+      /write endpoints \(POST, PATCH, DELETE\) require the `write:profiles`\s*scope on the calling key \(a broad `write` key also satisfies it\)\./,
     );
   });
 
@@ -370,7 +368,7 @@ describe('W763 docs /api/profiles content parity', () => {
     // page never mentioned — a caller with a valid header and the wrong role
     // reads the 404 bullet and looks for a missing profile.
     expect(p, 'the team-admin requirement on launch is undocumented again').toMatch(
-      /requires the\s*\n?\s*admin role on that team/,
+      /requires the\s*admin role on that team/,
     );
     const route = readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes/sessions.ts'), 'utf8');
     const launchAt = route.indexOf("'/v1/profiles/:id/launch',");

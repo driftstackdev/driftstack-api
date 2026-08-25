@@ -33,7 +33,7 @@ describe('customer-dashboard auth/oauth-client/confirm-merge content parity', ()
 
   it('IDP-link-onto-existing-account semantic pinned: server links the IDP onto the existing account + returns the new account id. Drift to creating a new account instead would re-introduce the duplicate-account problem this flow was designed to prevent', () => {
     expect(body).toMatch(
-      /server links the\s*\n?\s*\/\/?\s*IDP onto the existing account \+ returns the new account id/,
+      /server links the\s*\/\/?\s*IDP onto the existing account \+ returns the new account id/,
     );
   });
 
@@ -42,9 +42,9 @@ describe('customer-dashboard auth/oauth-client/confirm-merge content parity', ()
   });
 
   it('expired/consumed/invalid error bucket pinned: the 3 failure modes treated as one to avoid leaking which-bucket-the-token-was-in. Drift to distinguishing buckets in the UI would let attackers enumerate token state', () => {
-    expect(body).toMatch(/On error \(expired \/ consumed\s*\n?\s*\/\/?\s*\/ invalid\)/);
+    expect(body).toMatch(/On error \(expired \/ consumed\s*\/\/?\s*\/ invalid\)/);
     expect(body).toMatch(
-      /surfaces a banner with a "request a new link" hint\s*\n?\s*\/\/?\s*pointing back to \/login/,
+      /surfaces a banner with a "request a new link" hint\s*\/\/?\s*pointing back to \/login/,
     );
   });
 

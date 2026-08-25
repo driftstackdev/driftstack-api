@@ -135,12 +135,10 @@ describe('W686 cross-SDK V-460/V-266 CLI 3-step activation parity', () => {
     const py = read(PY_AUTH);
 
     // sdk-typescript: "one-shot delivery\n   * of the plaintext API key. Subsequent calls 404."
-    expect(ts).toMatch(
-      /one-shot delivery\s*\n?\s*\*\s*of the plaintext API key\. Subsequent calls 404/,
-    );
+    expect(ts).toMatch(/one-shot delivery\s*\*\s*of the plaintext API key\. Subsequent calls 404/);
 
     // sdk-python: "one-shot\n        delivery; ``api_key`` + ``account_id`` in body"
-    expect(py).toMatch(/one-shot\s*\n?\s*delivery; ``api_key`` \+ ``account_id`` in body/);
+    expect(py).toMatch(/one-shot\s*delivery; ``api_key`` \+ ``account_id`` in body/);
   });
 
   it('CRITICAL polling + restart framing pinned in all 3 SDKs. The "Polled by the CLI/GUI" framing tells customers exchange is a POLL (NOT push); the "user took too long; restart the flow" wording tells customers expired means start over (NOT just retry the same exchange).', () => {
@@ -157,7 +155,7 @@ describe('W686 cross-SDK V-460/V-266 CLI 3-step activation parity', () => {
 
   it('CRITICAL "default scopes [\\"account_owner\\"]" framing pinned in sdk-typescript bind JSDoc. Drift to widening the default scopes would silently grant CLIs more privilege than the user intended (CLI customers expect minimum-privilege keys by default).', () => {
     const ts = read(TS_AUTH);
-    expect(ts).toMatch(/Default scopes are\s*\n?\s*\*\s*`\["account_owner"\]` server-side/);
+    expect(ts).toMatch(/Default scopes are\s*\*\s*`\["account_owner"\]` server-side/);
   });
 
   it("Cross-flow consistency — all 3 SDKs implement the 3-step handshake in the same ORDER (initiate → bind → exchange). The order is load-bearing because exchange depends on bind's mint-and-stage step. Drift to a different order would break the handshake.", () => {

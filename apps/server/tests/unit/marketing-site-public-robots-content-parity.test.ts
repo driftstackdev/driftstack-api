@@ -32,7 +32,7 @@ describe('W524.B apps/marketing-site/public/robots.txt content parity', () => {
   it("Canonical robots.txt URL + subdomain-isolation framing pinned: '# https://driftstack.dev/robots.txt' + 'All public pages crawlable. Subdomains (app.driftstack.dev for the customer dashboard, admin.driftstack.dev for the customer dashboard, admin.driftstack.dev for the admin panel) carry their own robots — both noindex.' — pinned so the canonical-marketing-site-robots + 2-subdomain-isolation (app + admin) + both-noindex commitment survives (drift to indexing app/admin subdomains would expose customer-only routes to search engines)", () => {
     expect(body).toMatch(/# https:\/\/driftstack\.dev\/robots\.txt/);
     expect(body).toMatch(
-      /# All public pages crawlable\. Subdomains \(app\.driftstack\.dev for the\s*\n?\s*# customer dashboard, admin\.driftstack\.dev for the admin panel\) carry\s*\n?\s*# their own robots — both noindex\./,
+      /# All public pages crawlable\. Subdomains \(app\.driftstack\.dev for the\s*# customer dashboard, admin\.driftstack\.dev for the admin panel\) carry\s*# their own robots — both noindex\./,
     );
   });
 
@@ -43,7 +43,7 @@ describe('W524.B apps/marketing-site/public/robots.txt content parity', () => {
 
   it("Crawl-delay + sub-processors comment framing pinned: 'Avoid wasting crawl budget on the trust sub-processor page when crawlers re-fetch it on every visit; it's stable content.' + 'Crawl-delay: 5' — pinned so the 5s-crawl-delay + sub-processors-stable-content commitment survives", () => {
     expect(body).toMatch(
-      /# Avoid wasting crawl budget on the trust sub-processor page when\s*\n?\s*# crawlers re-fetch it on every visit; it's stable content\./,
+      /# Avoid wasting crawl budget on the trust sub-processor page when\s*# crawlers re-fetch it on every visit; it's stable content\./,
     );
     expect(body).toMatch(/^Crawl-delay: 5$/m);
   });

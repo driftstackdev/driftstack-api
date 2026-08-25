@@ -64,7 +64,7 @@ describe('docs sdk/go-quickstart content parity', () => {
   it('paid SDK and Free desktop boundary plus actionable Forbidden detail are pinned', () => {
     expect(body).toMatch(/Any paid Driftstack tier, including Manual/);
     expect(body).toMatch(/A `ds_live_…` customer API key/);
-    expect(body).toMatch(/restricted\s*\n?\s*`ds_test_…` device credential/);
+    expect(body).toMatch(/restricted\s*`ds_test_…` device credential/);
     expect(body).toMatch(/var forbidden \*driftstack\.ForbiddenError/);
     expect(body).toMatch(/strings\.Contains\(forbidden\.Message, "apiAccess"\)/);
     expect(body).toMatch(/log\.Print\(forbidden\.Message\)/);

@@ -59,7 +59,7 @@ describe('W486.B apps/gui-client/src/components/ProfilesActionBar.tsx content pa
 
   it("count-display rule: '{visibleCount} of {total}' when the visible set is narrowed (isFiltered = visibleCount !== totalCount OR a search query OR status !== 'all' — the visibleCount check now also covers folder-/tag-only filters the search/status check missed, audit), '{n} profile(s)' otherwise (singular at total===1) — pinned so the chrome stays honest about whether the customer is looking at a filtered slice or the whole list", () => {
     expect(body).toMatch(
-      /const isFiltered =\s*\n?\s*visibleCount !== totalCount \|\| searchQuery\.trim\(\)\.length > 0 \|\| statusFilter !== 'all';/,
+      /const isFiltered =\s*visibleCount !== totalCount \|\| searchQuery\.trim\(\)\.length > 0 \|\| statusFilter !== 'all';/,
     );
     expect(body).not.toMatch(
       /const hasFilter = searchQuery\.trim\(\)\.length > 0 \|\| statusFilter !== 'all';/,

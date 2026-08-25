@@ -82,7 +82,7 @@ describe('W486.B apps/gui-client/src/main.tsx content parity', () => {
     expect(body).toMatch(/window\.addEventListener\('error',/);
     expect(body).toMatch(/window\.addEventListener\('unhandledrejection',/);
     // The render itself is guarded so a synchronous boot throw is visible.
-    expect(body).toMatch(/\} catch \(err\) \{\s*\n?\s*renderFatalError\('BOOT_EXCEPTION', err\);/);
+    expect(body).toMatch(/\} catch \(err\) \{\s*renderFatalError\('BOOT_EXCEPTION', err\);/);
     // All four codes must remain present and distinct.
     for (const code of ['WINDOW_ERROR', 'UNHANDLED_REJECTION', 'RENDER_ERROR', 'BOOT_EXCEPTION']) {
       expect(body).toContain(`'${code}'`);

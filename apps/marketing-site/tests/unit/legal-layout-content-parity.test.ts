@@ -51,7 +51,7 @@ describe('W381.A marketing-site LegalLayout.astro content parity', () => {
 
   it('description resolution: prop → frontmatter → "Driftstack legal documents." fallback', () => {
     expect(body).toMatch(
-      /const description =\s*\n?\s*Astro\.props\.description \?\?\s*\n?\s*frontmatter\?\.description \?\?\s*\n?\s*'Driftstack legal documents\.';/,
+      /const description =\s*Astro\.props\.description \?\?\s*frontmatter\?\.description \?\?\s*'Driftstack legal documents\.';/,
     );
   });
 
@@ -102,7 +102,7 @@ describe('W381.A marketing-site LegalLayout.astro content parity', () => {
   it('aria-label="Other legal documents" + "Other legal documents" heading', () => {
     expect(body).toMatch(/aria-label="Other legal documents"/);
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">\s*\n?\s*Other legal documents\s*\n?\s*<\/p>/,
+      /<p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">\s*Other legal documents\s*<\/p>/,
     );
   });
 

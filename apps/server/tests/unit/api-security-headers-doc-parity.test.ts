@@ -82,7 +82,7 @@ describe('W244.D api-security-headers doc parity', () => {
     }
     expect(doc).toMatch(/\/v1\/status\/sla<\/code> \(public JSON\)/);
     expect(doc).toMatch(/\/v1\/status\/stream<\/code> \(SSE\)/);
-    expect(doc).toMatch(/authenticated transcript and notification\s*\n?\s*streams listed above/);
+    expect(doc).toMatch(/authenticated transcript and notification\s*streams listed above/);
     expect(doc).not.toMatch(/Authenticated event streams add/);
     expect(doc).toMatch(/<code>Vary: Origin<\/code>/);
   });

@@ -38,7 +38,7 @@ describe('W534.C packages/sdk-go/doc.go content parity', () => {
 
   it("Package framing + stealth-iPhone-Safari positioning pinned: 'Package driftstack is the official Go SDK for the Driftstack API — stealth iPhone Safari automation, called from Go.' — pinned so the canonical Go-SDK package-level framing + stealth-iPhone-Safari positioning (parity with sdk-python pyproject 'stealth iPhone Safari automation' description) commitment survives", () => {
     expect(body).toMatch(
-      /\/\/ Package driftstack is the official Go SDK for the Driftstack API —\s*\n?\s*\/\/ stealth iPhone Safari automation, called from Go\./,
+      /\/\/ Package driftstack is the official Go SDK for the Driftstack API —\s*\/\/ stealth iPhone Safari automation, called from Go\./,
     );
   });
 
@@ -56,7 +56,7 @@ describe('W534.C packages/sdk-go/doc.go content parity', () => {
 
   it("V-1060 typed errors + retry + webhook-signature framing pinned, with the retry set matching IsRetryable rather than contradicting it: 'Errors are typed: every server problem-type maps to a concrete error type customers can switch on with errors.As. The retry policy is applied automatically (configurable via [WithRetry]) and honours Retry-After.' + 'Webhook signature verification is in [VerifyWebhookSignature].' — pinned so the typed-errors + errors.As-switch + retry-policy + WithRetry-configurable + Retry-After-honoured + VerifyWebhookSignature-pointer commitment survives (drift to dropping errors.As guidance would lose the canonical Go-idiom error-handling pattern; drift to silent-Retry-After-ignore would break server-side rate-limit cooperation)", () => {
     expect(body).toMatch(
-      /\/\/ Errors are typed: every server problem-type maps to a concrete error\s*\n?\s*\/\/ type customers can switch on with errors\.As\. The retry policy is\s*\n?\s*\/\/ applied automatically \(configurable via \[WithRetry\]\) and honours\s*\n?\s*\/\/ Retry-After\./,
+      /\/\/ Errors are typed: every server problem-type maps to a concrete error\s*\/\/ type customers can switch on with errors\.As\. The retry policy is\s*\/\/ applied automatically \(configurable via \[WithRetry\]\) and honours\s*\/\/ Retry-After\./,
     );
     expect(body).toMatch(/\/\/ Webhook signature verification is in \[VerifyWebhookSignature\]\./);
     // Retry-safety guidance: transport+429 retried (not 4xx/5xx bodies) + the
@@ -83,7 +83,7 @@ describe('W534.C packages/sdk-go/doc.go content parity', () => {
         'returns true for InternalError and withRetry uses it',
     ).not.toMatch(/not on 4xx or 5xx response bodies/);
     expect(body).toMatch(
-      /an automatically-retried create\s*\n?\s*\/\/ or charge can execute twice — pass an IdempotencyKey[\s\S]*?collapses the retry/,
+      /an automatically-retried create\s*\/\/ or charge can execute twice — pass an IdempotencyKey[\s\S]*?collapses the retry/,
     );
   });
 

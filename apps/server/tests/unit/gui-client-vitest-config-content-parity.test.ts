@@ -35,7 +35,7 @@ describe('W536.B apps/gui-client/vitest.config.ts content parity', () => {
   it('V-288 framing + .tsx-discriminator + root-project registration pinned — pinned so the V-288 anchor + .tsx-discriminator + .ts-stays-in-node + no-DOM-overhead-for-pure-fn commitment survives', () => {
     expect(body).toMatch(/\/\/ V-288 — Vitest project config for jsdom-needing GUI client tests\./);
     expect(body).toMatch(
-      /\/\/ Scoped to `apps\/gui-client\/tests\/\*\*\/\*\.test\.tsx` \(the \.tsx extension\s*\n?\s*\/\/ is the discriminator\)\. Pure-function `\.test\.ts` files in this dir\s*\n?\s*\/\/ continue to run in the root project's node environment — no DOM\s*\n?\s*\/\/ overhead for tests that don't need it\./,
+      /\/\/ Scoped to `apps\/gui-client\/tests\/\*\*\/\*\.test\.tsx` \(the \.tsx extension\s*\/\/ is the discriminator\)\. Pure-function `\.test\.ts` files in this dir\s*\/\/ continue to run in the root project's node environment — no DOM\s*\/\/ overhead for tests that don't need it\./,
     );
     expect(body).toMatch(/\/\/ Registered by the root `vitest\.config\.ts` project list\./);
   });
@@ -55,9 +55,9 @@ describe('W536.B apps/gui-client/vitest.config.ts content parity', () => {
 
   it("Coverage-disabled framing pinned: 'Don't measure coverage from this project — the root project's coverage report is the load-bearing one. Component-level coverage is informational; if a feature gap surfaces, write the test, don't gate on a separate threshold.' + 'coverage: { enabled: false }' — pinned so the no-coverage-in-jsdom-project (root's V-107 thresholds are the load-bearing gate, component-coverage is informational, gap → write test not threshold) commitment survives (drift to coverage.enabled:true would let CI fork into 2 conflicting coverage reports)", () => {
     expect(body).toMatch(
-      /\/\/ Don't measure coverage from this project — the root project's\s*\n?\s*\/\/ coverage report is the load-bearing one\. Component-level\s*\n?\s*\/\/ coverage is informational; if a feature gap surfaces, write the\s*\n?\s*\/\/ test, don't gate on a separate threshold\./,
+      /\/\/ Don't measure coverage from this project — the root project's\s*\/\/ coverage report is the load-bearing one\. Component-level\s*\/\/ coverage is informational; if a feature gap surfaces, write the\s*\/\/ test, don't gate on a separate threshold\./,
     );
-    expect(body).toMatch(/coverage: \{\s*\n?\s*enabled: false,\s*\n?\s*\},/);
+    expect(body).toMatch(/coverage: \{\s*enabled: false,\s*\},/);
   });
 
   it('file exists at canonical path', () => {

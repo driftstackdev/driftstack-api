@@ -92,7 +92,7 @@ describe('V-788 gui_control is restricted by scope, not by tier or deployment', 
         /customer keys never carry this[;,]/i,
       );
       expect(body, `${rel} still claims the scope is enterprise-only`).not.toMatch(
-        /only (?:keys minted for the self-hosted GUI workflow \(enterprise tier\)|enterprise self-hosted GUI\s*\n?\s*\/\/ keys do)/i,
+        /only (?:keys minted for the self-hosted GUI workflow \(enterprise tier\)|enterprise self-hosted GUI\s*\/\/ keys do)/i,
       );
       expect(body, `${rel} still claims the workflow is the only holder`).not.toMatch(
         /Self-hosted GUI workflow only/i,

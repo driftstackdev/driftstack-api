@@ -57,7 +57,7 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
 
   it('Repo-decoupled framing pinned + CACHE_TTL_SEC = 30', () => {
     expect(body).toMatch(
-      /The service is decoupled from Drizzle via an `AccountAuthRepo` interface\s*\n?\s*\/\/\s*so unit tests can use an in-memory fake\. The real implementation lives in\s*\n?\s*\/\/\s*`apps\/server\/src\/db\/auth-repo\.ts`\./,
+      /The service is decoupled from Drizzle via an `AccountAuthRepo` interface\s*\/\/\s*so unit tests can use an in-memory fake\. The real implementation lives in\s*\/\/\s*`apps\/server\/src\/db\/auth-repo\.ts`\./,
     );
     expect(body).toMatch(/const CACHE_TTL_SEC = 30;/);
   });
@@ -66,7 +66,7 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
     expect(body).toMatch(/export interface AccountRow \{/);
     expect(body).toMatch(/status: 'active' \| 'suspended' \| 'deleted';/);
     expect(body).toMatch(
-      /\/\*\* V-352 — IANA timezone name \(e\.g\. "Europe\/Amsterdam"\)\. null = UTC fallback\. \*\/\s*\n?\s*timezone: string \| null;/,
+      /\/\*\* V-352 — IANA timezone name \(e\.g\. "Europe\/Amsterdam"\)\. null = UTC fallback\. \*\/\s*timezone: string \| null;/,
     );
     expect(body).toMatch(
       /\/\*\* V-352b — R2 object key for the customer's uploaded avatar\.[\s\S]+?avatarR2Key: string \| null;/,
@@ -85,7 +85,7 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
     expect(body).toMatch(/expiresAt: Date;/);
     expect(body).toMatch(/revokedAt: Date \| null;/);
     expect(body).toMatch(
-      /\/\*\* V-353d\/e — most recent successful MFA challenge on this session,\s*\n?\s*\*\s*or null if never satisfied\. Step-up gates check\s*\n?\s*\*\s*`now - mfaSatisfiedAt < 15min`\. \*\/\s*\n?\s*mfaSatisfiedAt: Date \| null;/,
+      /\/\*\* V-353d\/e — most recent successful MFA challenge on this session,\s*\*\s*or null if never satisfied\. Step-up gates check\s*\*\s*`now - mfaSatisfiedAt < 15min`\. \*\/\s*mfaSatisfiedAt: Date \| null;/,
     );
   });
 
@@ -112,7 +112,7 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
   it('extractBearerToken: BEARER_RE regex + 2 error paths (missing header + malformed)', () => {
     expect(body).toMatch(/const BEARER_RE = \/\^Bearer\\s\+\(\\S\+\)\\s\*\$\/i;/);
     expect(body).toMatch(
-      /if \(!authorizationHeader\) \{\s*\n?\s*throw new UnauthorizedError\('Missing Authorization header\.'\);/,
+      /if \(!authorizationHeader\) \{\s*throw new UnauthorizedError\('Missing Authorization header\.'\);/,
     );
     expect(body).toMatch(
       /throw new UnauthorizedError\('Malformed Authorization header\. Expected "Bearer <key>"\.'\);/,
@@ -122,10 +122,10 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
   it('authenticate: plaintext.length < 24 → InvalidKey; cache fast path with expiresAt re-check on read', () => {
     expect(body).toMatch(/if \(plaintext\.length < 24\) throw new InvalidKeyError\(\);/);
     expect(body).toMatch(
-      /\/\/ Expiry is clock-bound, so re-check it on every cache read even when\s*\n?\s*\/\/ the backing authority has not changed\./,
+      /\/\/ Expiry is clock-bound, so re-check it on every cache read even when\s*\/\/ the backing authority has not changed\./,
     );
     expect(body).toMatch(
-      /if \(cached\.apiKey\.expiresAt !== null && cached\.apiKey\.expiresAt\.getTime\(\) <= now\.getTime\(\)\) \{\s*\n?\s*throw new ExpiredKeyError\(\);/,
+      /if \(cached\.apiKey\.expiresAt !== null && cached\.apiKey\.expiresAt\.getTime\(\) <= now\.getTime\(\)\) \{\s*throw new ExpiredKeyError\(\);/,
     );
   });
 
@@ -155,15 +155,15 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
 
   it('V-168 isApiKeyShape: ds_-prefix dispatch (API key path) else web session path', () => {
     expect(body).toMatch(
-      /V-168 — distinguish API keys from web session tokens by the `ds_`\s*\n?\s*\*\s*prefix that \{@link generateApiKey\} stamps on every key\./,
+      /V-168 — distinguish API keys from web session tokens by the `ds_`\s*\*\s*prefix that \{@link generateApiKey\} stamps on every key\./,
     );
     expect(body).toMatch(
-      /function isApiKeyShape\(plaintext: string\): boolean \{\s*\n?\s*return plaintext\.startsWith\('ds_'\);\s*\n?\s*\}/,
+      /function isApiKeyShape\(plaintext: string\): boolean \{\s*return plaintext\.startsWith\('ds_'\);\s*\}/,
     );
     // C4 — a ds_-shaped token with no matching API-key prefix falls through
     // to the web-session path instead of failing (chance ds_ session token).
     expect(body).toMatch(
-      /const viaApiKey = await slowPathApiKey\(repo, plaintext, sha, cache, now, \{\s*\n?\s*fallThroughOnPrefixMiss: true,\s*\n?\s*\}\);\s*\n?\s*if \(viaApiKey !== null\) return viaApiKey;/,
+      /const viaApiKey = await slowPathApiKey\(repo, plaintext, sha, cache, now, \{\s*fallThroughOnPrefixMiss: true,\s*\}\);\s*if \(viaApiKey !== null\) return viaApiKey;/,
     );
   });
 
@@ -172,22 +172,22 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
     // C4 — prefix miss returns null (dispatcher falls through to the web
     // session) when the caller allows it, else throws InvalidKeyError.
     expect(body).toMatch(
-      /if \(!apiKey\) \{\s*\n?[\s\S]*?if \(opts\.fallThroughOnPrefixMiss\) return null;\s*\n?\s*throw new InvalidKeyError\(\);\s*\n?\s*\}/,
+      /if \(!apiKey\) \{\s*\n?[\s\S]*?if \(opts\.fallThroughOnPrefixMiss\) return null;\s*throw new InvalidKeyError\(\);\s*\}/,
     );
     expect(body).toMatch(/const matches = await verifyApiKey\(plaintext, apiKey\.keyHash\);/);
     expect(body).toMatch(/if \(!matches\) throw new InvalidKeyError\(\);/);
     expect(body).toMatch(/if \(apiKey\.revokedAt !== null\) throw new RevokedKeyError\(\);/);
     expect(body).toMatch(
-      /if \(apiKey\.expiresAt !== null && apiKey\.expiresAt\.getTime\(\) <= now\.getTime\(\)\) \{\s*\n?\s*throw new ExpiredKeyError\(\);/,
+      /if \(apiKey\.expiresAt !== null && apiKey\.expiresAt\.getTime\(\) <= now\.getTime\(\)\) \{\s*throw new ExpiredKeyError\(\);/,
     );
     expect(body).toMatch(
       /if \(!account\) throw new InvalidKeyError\(\); \/\/ FK invariant — treat as invalid/,
     );
     expect(body).toMatch(
-      /if \(account\.status === 'suspended'\) \{\s*\n?\s*throw new ForbiddenError\('Account is suspended\.'\);/,
+      /if \(account\.status === 'suspended'\) \{\s*throw new ForbiddenError\('Account is suspended\.'\);/,
     );
     expect(body).toMatch(
-      /if \(account\.status === 'deleted'\) \{\s*\n?\s*throw new InvalidKeyError\(\);/,
+      /if \(account\.status === 'deleted'\) \{\s*throw new InvalidKeyError\(\);/,
     );
   });
 
@@ -208,7 +208,7 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
       /\/\/ Cap TTL at expiresAt so the cache entry can never outlive the key\./,
     );
     expect(body).toMatch(
-      /if \(apiKey\.expiresAt !== null\) \{\s*\n?\s*const remaining = Math\.floor\(\(apiKey\.expiresAt\.getTime\(\) - now\.getTime\(\)\) \/ 1000\);\s*\n?\s*if \(remaining < ttl\) ttl = Math\.max\(1, remaining\);/,
+      /if \(apiKey\.expiresAt !== null\) \{\s*const remaining = Math\.floor\(\(apiKey\.expiresAt\.getTime\(\) - now\.getTime\(\)\) \/ 1000\);\s*if \(remaining < ttl\) ttl = Math\.max\(1, remaining\);/,
     );
   });
 
@@ -219,19 +219,19 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
       /const baseScopes: ApiKeyRow\['scopes'\] = \['read', 'write', 'account_owner'\];/,
     );
     expect(body).toMatch(
-      /const scopes: ApiKeyRow\['scopes'\] = staffEmails\.has\(accountEmail\)\s*\n?\s*\? \[\.\.\.baseScopes, 'driftstack_internal_admin'\]\s*\n?\s*: baseScopes;/,
+      /const scopes: ApiKeyRow\['scopes'\] = staffEmails\.has\(accountEmail\)\s*\? \[\.\.\.baseScopes, 'driftstack_internal_admin'\]\s*: baseScopes;/,
     );
   });
 
   it('Web session V-174 framing: legacy admin scope removed (cross-account exposure closed), /v1/admin/* requires driftstack_internal_admin + V-135 Cloudflare-Access defense-in-depth', () => {
     expect(body).toMatch(
-      /V-174 \(shipped\) closed the prior cross-account exposure: web sessions\s*\n?\s*\*\s*no longer carry the legacy `admin` scope/,
+      /V-174 \(shipped\) closed the prior cross-account exposure: web sessions\s*\*\s*no longer carry the legacy `admin` scope/,
     );
     expect(body).toMatch(
-      /`\/v1\/admin\/\*` now requires\s*\n?\s*\*\s*`driftstack_internal_admin`, granted only to staff-allowlisted/,
+      /`\/v1\/admin\/\*` now requires\s*\*\s*`driftstack_internal_admin`, granted only to staff-allowlisted/,
     );
     expect(body).toMatch(
-      /`admin\.driftstack\.dev` remains a separate Cloudflare-Access-\s*\n?\s*\*\s*gated origin \(V-135\) as defense-in-depth\./,
+      /`admin\.driftstack\.dev` remains a separate Cloudflare-Access-\s*\*\s*gated origin \(V-135\) as defense-in-depth\./,
     );
   });
 
@@ -239,13 +239,13 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
     expect(body).toMatch(/V-174 \+ V-481 — scope check with backwards-compat aliases\./);
     expect(body).toMatch(/if \(scopes\.includes\(required\)\) return;/);
     expect(body).toMatch(
-      /\/\/ V-174 legacy customer alias\. Never satisfies the staff-only scope\.\s*\n?\s*if \(required === 'account_owner' && scopes\.includes\('admin'\)\) \{\s*\n?\s*return;/,
+      /\/\/ V-174 legacy customer alias\. Never satisfies the staff-only scope\.\s*if \(required === 'account_owner' && scopes\.includes\('admin'\)\) \{\s*return;/,
     );
     expect(body).not.toMatch(
       /required === 'account_owner' \|\| required === 'driftstack_internal_admin'/,
     );
     expect(body).toMatch(
-      /\(verb === 'read' && \(scopes\.includes\('read'\) \|\| scopes\.includes\('account_owner'\)\)\) \|\|\s*\n?\s*\(verb === 'write' && \(scopes\.includes\('write'\) \|\| scopes\.includes\('account_owner'\)\)\) \|\|\s*\n?\s*\(verb === 'admin' && \(scopes\.includes\('admin'\) \|\| scopes\.includes\('account_owner'\)\)\)/,
+      /\(verb === 'read' && \(scopes\.includes\('read'\) \|\| scopes\.includes\('account_owner'\)\)\) \|\|\s*\(verb === 'write' && \(scopes\.includes\('write'\) \|\| scopes\.includes\('account_owner'\)\)\) \|\|\s*\(verb === 'admin' && \(scopes\.includes\('admin'\) \|\| scopes\.includes\('account_owner'\)\)\)/,
     );
     expect(body).toMatch(
       /throw new ForbiddenError\(`This action requires the "\$\{required\}" scope\.`\);/,
@@ -254,26 +254,26 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
 
   it('V-326 resolveEffectiveAccount: missing-header → kind:self; bad-prefix → ForbiddenError; non-member uuid → ForbiddenError; self-uuid → kind:self', () => {
     expect(body).toMatch(
-      /export function resolveEffectiveAccount\(\s*\n?\s*ctx: AccountContext,\s*\n?\s*requestedAccountIdHeader: string \| undefined,\s*\n?\s*\): EffectiveAccount \{/,
+      /export function resolveEffectiveAccount\(\s*ctx: AccountContext,\s*requestedAccountIdHeader: string \| undefined,\s*\): EffectiveAccount \{/,
     );
     expect(body).toMatch(
-      /if \(!requestedAccountIdHeader \|\| requestedAccountIdHeader\.length === 0\) \{\s*\n?\s*return \{ kind: 'self', accountId: ctx\.account\.id \};/,
+      /if \(!requestedAccountIdHeader \|\| requestedAccountIdHeader\.length === 0\) \{\s*return \{ kind: 'self', accountId: ctx\.account\.id \};/,
     );
     expect(body).toMatch(/const PREFIX = 'acc_';/);
     expect(body).toMatch(
-      /if \(!requestedAccountIdHeader\.startsWith\(PREFIX\)\) \{\s*\n?\s*throw new ForbiddenError\(\s*\n?\s*'Invalid X-Driftstack-Account header\. Expected an account id of shape "acc_<uuid>"\.',/,
+      /if \(!requestedAccountIdHeader\.startsWith\(PREFIX\)\) \{\s*throw new ForbiddenError\(\s*'Invalid X-Driftstack-Account header\. Expected an account id of shape "acc_<uuid>"\.',/,
     );
     expect(body).toMatch(
-      /if \(requestedUuid === ctx\.account\.id\) \{\s*\n?\s*return \{ kind: 'self', accountId: ctx\.account\.id \};\s*\n?\s*\}/,
+      /if \(requestedUuid === ctx\.account\.id\) \{\s*return \{ kind: 'self', accountId: ctx\.account\.id \};\s*\}/,
     );
     expect(body).toMatch(
-      /if \(!membership\) \{\s*\n?\s*throw new ForbiddenError\('X-Driftstack-Account references an account you are not a member of\.'\);/,
+      /if \(!membership\) \{\s*throw new ForbiddenError\('X-Driftstack-Account references an account you are not a member of\.'\);/,
     );
   });
 
   it('EffectiveAccount: 2-kind union (self {accountId} | team {accountId, role, membership})', () => {
     expect(body).toMatch(
-      /export type EffectiveAccount =\s*\n?\s*\| \{ kind: 'self'; accountId: string \}\s*\n?\s*\| \{\s*\n?\s*kind: 'team';\s*\n?\s*accountId: string;\s*\n?\s*role: 'member' \| 'admin';\s*\n?\s*membership: TeamMembership;\s*\n?\s*\};/,
+      /export type EffectiveAccount =\s*\| \{ kind: 'self'; accountId: string \}\s*\| \{\s*kind: 'team';\s*accountId: string;\s*role: 'member' \| 'admin';\s*membership: TeamMembership;\s*\};/,
     );
   });
 
@@ -283,17 +283,17 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
     expect(body).toMatch(/apiKey: ApiKeyRow;/);
     expect(body).toMatch(/rateLimitOverrides: Record<string, RateLimitOverride>;/);
     expect(body).toMatch(
-      /\/\*\*[\s\S]+?V-326 — owner accounts this account is a member of, with role\.[\s\S]+?\*\/\s*\n?\s*teams: TeamMembership\[\];/,
+      /\/\*\*[\s\S]+?V-326 — owner accounts this account is a member of, with role\.[\s\S]+?\*\/\s*teams: TeamMembership\[\];/,
     );
     expect(body).toMatch(
-      /V-353e — populated when the request authenticated via a web\s*\n?\s*\*\s*session \(dashboard \/ GUI bearer\); null for API-key callers\./,
+      /V-353e — populated when the request authenticated via a web\s*\*\s*session \(dashboard \/ GUI bearer\); null for API-key callers\./,
     );
     expect(body).toMatch(/webSession: \{ id: string; mfaSatisfiedAt: Date \| null \} \| null;/);
   });
 
   it('imports: errors (5 types) + api-keys helpers + AuthCache + sha256Hex + AuthCoalescer + ApiKeyScope + AccountTier', () => {
     expect(body).toMatch(
-      /import \{\s*\n?\s*ExpiredKeyError,\s*\n?\s*ForbiddenError,\s*\n?\s*InvalidKeyError,\s*\n?\s*RevokedKeyError,\s*\n?\s*UnauthorizedError,\s*\n?\s*\} from '\.\.\/lib\/errors\.js';/,
+      /import \{\s*ExpiredKeyError,\s*ForbiddenError,\s*InvalidKeyError,\s*RevokedKeyError,\s*UnauthorizedError,\s*\} from '\.\.\/lib\/errors\.js';/,
     );
     expect(body).toMatch(
       /import \{ keyPrefixFromPlaintext, verifyApiKey \} from '\.\.\/lib\/api-keys\.js';/,

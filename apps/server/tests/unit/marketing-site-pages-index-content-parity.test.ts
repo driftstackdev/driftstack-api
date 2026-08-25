@@ -24,7 +24,7 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
   const body = read(LIB);
 
   it("W452 noob-friendly SEO description — plain-language outcome (a real iPhone browser every site sees as genuine, never a bot) + access paths, jargon stripped (no 'pixel-identical / bit-identical canvas/WebGL/audio'). Title='Driftstack'.", () => {
-    expect(body).toMatch(/<BaseLayout\s*\n?\s*title="Driftstack"/);
+    expect(body).toMatch(/<BaseLayout\s*title="Driftstack"/);
     expect(body).toMatch(
       /description="A real iPhone browser in the cloud that every website sees as a genuine iPhone — never a bot\. Automate iPhone Safari from TypeScript, Python, Go, or a desktop app\. Start free\."/,
     );
@@ -40,7 +40,7 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(/scraping, testing, and automation that has to pass as a real mobile/);
     expect(body).toMatch(/user\. Drive it from TypeScript, Python, Go, or the desktop app\./);
     // Jargon-heavy + pre-rewrite framings must not return.
-    expect(body).not.toMatch(/Canvas \+ WebGL\s*\n?\s*hashes match the millions/);
+    expect(body).not.toMatch(/Canvas \+ WebGL\s*hashes match the millions/);
     expect(body).not.toMatch(/unique-per-session leak every Chromium-stealth API surfaces/);
     expect(body).not.toMatch(/Pixel-identical iPhone Safari\. Cloud-hosted\. API, SDK, or GUI\./);
     expect(body).not.toMatch(/Other API browsers patch JavaScript at runtime/);
@@ -56,16 +56,16 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
   it('M.3 + M.6 — "One iPhone among millions." giant-headline framing (M.3 Plan Item 5 dedupe: "Indistinguishable" now appears once on the page in the hero h1 brand line; M.6 Path A: multi-archetype family — iPhone 15 Pro / 16 Pro / 17 lineup, iOS 18.7 / Safari 26.4-26.5 per founder verdict 2026-05-17) + launch-blocking-bug fidelity commitment', () => {
     expect(body).toMatch(/One iPhone among millions\./);
     // M.6 Path A: multi-archetype family + Safari 26.5 span.
-    expect(body).toMatch(/iPhone\s*\n?\s*15 Pro/);
+    expect(body).toMatch(/iPhone\s*15 Pro/);
     expect(body).toMatch(/iPhone 16 Pro/);
     expect(body).toMatch(/iPhone 17 lineup/);
-    expect(body).toMatch(/iOS 18\.7\s*\n?\s*\/ Safari 26\.4/);
+    expect(body).toMatch(/iOS 18\.7\s*\/ Safari 26\.4/);
     expect(body).toMatch(/Safari 26\.5/);
     expect(body).toMatch(/launch-blocking bug/);
     // Prior wording must NOT return — covers both M.3 (Indistinguishable
     // duplicate) and M.6 (single-archetype reference) regressions.
     expect(body).not.toMatch(
-      /<span class="bg-gradient-to-br[^>]+>\s*\n?\s*Indistinguishable from a real iPhone\./,
+      /<span class="bg-gradient-to-br[^>]+>\s*Indistinguishable from a real iPhone\./,
     );
     expect(body).not.toMatch(/Reference device: iPhone 16 Pro, iOS 18\.7, Safari 26\.4\./);
   });
@@ -75,10 +75,10 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     // S20b 2026-07-06 plain-language pass: Core Text + the pipeline are now
     // glossed inline; the same capability sentence survives with glosses.
     expect(body).toMatch(
-      /WebKit \(the browser engine\),\s*\n?\s*Core Text \(Apple's text-drawing system\)/,
+      /WebKit \(the browser engine\),\s*Core Text \(Apple's text-drawing system\)/,
     );
     expect(body).toMatch(
-      /rendering pipeline produce your fingerprint the way Apple wrote\s*\n?\s*them, in the order Apple intended\./,
+      /rendering pipeline produce your fingerprint the way Apple wrote\s*them, in the order Apple intended\./,
     );
     expect(body).toMatch(/href="\/comparison\/"/);
   });
@@ -112,8 +112,8 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
 
   it('Concurrent metering framing pinned (v2 trust band): "One metric. Concurrent sessions. That\'s it." headline + no-per-call-markup / no-per-element-fees callouts + 200-pages-on-one-session concrete example', () => {
     expect(body).toMatch(/One metric\. Concurrent sessions\. That's it\./);
-    expect(body).toMatch(/No per-call markup\. No\s*\n?\s*per-element fees\./);
-    expect(body).toMatch(/Visit 200 pages on one session for the cost of\s*\n?\s*visiting one\./);
+    expect(body).toMatch(/No per-call markup\. No\s*per-element fees\./);
+    expect(body).toMatch(/Visit 200 pages on one session for the cost of\s*visiting one\./);
   });
 
   it('EU compliance pinned (v2 trust band): "EU-hosted by default." + plain-English body ("Your account data lives on EU servers. We don\'t log what your sessions visit or do — only the operational metadata we need to bill (session duration, archetype, cap usage)") + the live/roadmap egress framing cross-links /trust/security-overview. S30 2026-07-07 (founder decision: soften): supersedes "EU-only by default." / "Your data stays in the EU." — file objects live on Cloudflare R2 default jurisdiction (EU + US replication), so only DB-resident account data is EU-guaranteed.', () => {
@@ -123,20 +123,20 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     // S20b 2026-07-06: the billing-metadata triple reads in plain words
     // (duration / archetype glossed via the glossary link / cap usage).
     expect(body).toMatch(
-      /how long a\s*\n?\s*session ran, which iPhone model \+ iOS \+ Safari combination it used/,
+      /how long a\s*session ran, which iPhone model \+ iOS \+ Safari combination it used/,
     );
     expect(body).toMatch(/how much of your concurrent cap it used/);
     expect(body).toMatch(
-      /Customer-configurable egress — attaching your own internet exit \(a\s*\n?\s*SOCKS5 proxy, OpenVPN, or WireGuard\) to each profile — is live/,
+      /Customer-configurable egress — attaching your own internet exit \(a\s*SOCKS5 proxy, OpenVPN, or WireGuard\) to each profile — is live/,
     );
     expect(body).toMatch(/href="\/trust\/security-overview\/"/);
     // Prior framings must NOT return at this slot.
     expect(body).not.toMatch(/Customer data stays in the EU\./);
     expect(body).not.toMatch(
-      /Database, object storage, and compute all run in the EU,\s*\n?\s*single-region\./,
+      /Database, object storage, and compute all run in the EU,\s*single-region\./,
     );
     expect(body).not.toMatch(/We log session metadata only/);
-    expect(body).not.toMatch(/Hetzner\s*\n?\s*Falkenstein, Neon EU, and Cloudflare R2/);
+    expect(body).not.toMatch(/Hetzner\s*Falkenstein, Neon EU, and Cloudflare R2/);
     // S30 negative pins — the absolutist residency claims must not
     // silently return (founder decision 2026-07-07: soften).
     expect(body).not.toMatch(/EU-only by default/);
@@ -193,8 +193,8 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
 
   it("Hero fleet visual pinned: 'Command a fleet of real iPhones.' + identity/history/geo triad + 'just people on phones' close + the fan-of-open-iPhones telemetry footer (S4.5 2026-07-03: the hero is now a fan of open iPhone windows matching the current GUI — '4 iPhones in your fleet / each with its own identity / all healthy'; the pre-v2 fingerprint-coherence mono line stays gone). S24 2026-07-06: the caption strip is real copy in the AA-safe tk-ready-text tone (raw ready is a fill tone, ~3.3:1 as light-mode text), and the fan itself carries data-contrast-decorative (illustration-of-a-UI, WCAG 1.4.3 incidental — the caption strip stays OUTSIDE the exempt wrapper so it is still contrast-scanned)", () => {
     expect(body).toMatch(/Command a fleet of real iPhones\./);
-    expect(body).toMatch(/its own identity,\s*\n?\s*its own history, its own corner of the world/);
-    expect(body).toMatch(/they're just people on\s*\n?\s*phones\./);
+    expect(body).toMatch(/its own identity,\s*its own history, its own corner of the world/);
+    expect(body).toMatch(/they're just people on\s*phones\./);
     expect(body).toMatch(/<b class="text-tk-ready-text">4 iPhones<\/b> in your fleet/);
     expect(body).toMatch(/all <b class="text-tk-ready-text">healthy<\/b>/);
     expect(body).toMatch(
@@ -219,10 +219,10 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(/It even moves like a person\./);
     expect(body).toMatch(/Bots move in straight lines and constant time\./);
     expect(body).toMatch(
-      /Curved touch paths, momentum flicks, natural variation in how long\s*\n?\s*each touch rests/,
+      /Curved touch paths, momentum flicks, natural variation in how long\s*each touch rests/,
     );
     expect(body).toMatch(/Per-character rhythm with natural pauses/);
-    expect(body).toMatch(/consistent motion signature across\s*\n?\s*sessions/);
+    expect(body).toMatch(/consistent motion signature across\s*sessions/);
   });
 
   it("Console section pins only current product surfaces: live Identity Wardrobe and live 'Exit anywhere. Leak nowhere.' egress", () => {

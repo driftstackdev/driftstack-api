@@ -77,7 +77,7 @@ describe('W789 admin-panel AdminLayout content parity', () => {
 
     expect(p).toMatch(/V-219\* \/ Fleet port — W2 wordmark \(DRIFTSTACK black-italic two-tone\)/);
     expect(p).toMatch(/matches the marketing-site Header brand\./);
-    expect(p).toMatch(/The "admin" pill\s*\n?\s*stays alongside as the staff-context indicator/);
+    expect(p).toMatch(/The "admin" pill\s*stays alongside as the staff-context indicator/);
     expect(p).toMatch(/stays alongside as the staff-context indicator\./);
   });
 

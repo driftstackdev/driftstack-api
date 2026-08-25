@@ -36,14 +36,14 @@ describe('W490.C admin account-detail static shell content parity', () => {
 
   it("V-191 framing pinned: 'progressive-enhancement against /v1/admin/accounts/:id + per-account audit slice + admin-action POSTs (change tier, suspend, unsuspend).' — pinned so the 3 canonical admin actions stay enumerated in the source-of-truth comment (drift to '2 actions' or adding new actions without updating this list would create comment/code mismatch)", () => {
     expect(body).toMatch(
-      /\/\/ V-191 — progressive-enhancement against \/v1\/admin\/accounts\/:id \+\s*\n?\s*\/\/ per-account audit slice \+ admin-action POSTs \(change tier, suspend,\s*\n?\s*\/\/ unsuspend\)\./,
+      /\/\/ V-191 — progressive-enhancement against \/v1\/admin\/accounts\/:id \+\s*\/\/ per-account audit slice \+ admin-action POSTs \(change tier, suspend,\s*\/\/ unsuspend\)\./,
     );
   });
 
   it('Static Pages shell framing is pinned: arbitrary account ids are served by an internal rewrite, the browser URL is preserved, and no SSR/Worker API is used', () => {
     expect(body).toMatch(/deterministic static shell/);
     expect(body).toMatch(/internally rewrites \/accounts\/<id>/);
-    expect(body).toMatch(/preserving the\s*\n?\s*\/\/ browser URL/);
+    expect(body).toMatch(/preserving the\s*\/\/ browser URL/);
     expect(body).toMatch(/without a Pages Worker or SSR adapter/);
     expect(body).not.toMatch(/export const prerender = false/);
     expect(body).not.toMatch(/Astro\.params/);
@@ -62,16 +62,16 @@ describe('W490.C admin account-detail static shell content parity', () => {
     expect(body).toMatch(/account\.status === 'active' \? '' : 'hidden',/);
     expect(body).toMatch(/account\.status === 'suspended' \? '' : 'hidden',/);
     expect(body).toMatch(
-      /if \(a\.status === 'active'\) suspendBtn\.classList\.remove\('hidden'\);\s*\n?\s*else suspendBtn\.classList\.add\('hidden'\);/,
+      /if \(a\.status === 'active'\) suspendBtn\.classList\.remove\('hidden'\);\s*else suspendBtn\.classList\.add\('hidden'\);/,
     );
     expect(body).toMatch(
-      /if \(a\.status === 'suspended'\) unsuspendBtn\.classList\.remove\('hidden'\);\s*\n?\s*else unsuspendBtn\.classList\.add\('hidden'\);/,
+      /if \(a\.status === 'suspended'\) unsuspendBtn\.classList\.remove\('hidden'\);\s*else unsuspendBtn\.classList\.add\('hidden'\);/,
     );
   });
 
   it("V-196 inline override form framing pinned: 'inline rate-limit-override form. Hidden by default; the Set-rate-limit-override button reveals it. Submit POSTs to /v1/admin/accounts/:id/quota-override; the audit row records admin id + key id + bucket + reason. Form intentionally lives on the per-account page (Decision 4 from founder review): canonical staff workflow is /accounts → detail → set, not a top-level form on /rate-limit-overrides.' — pinned so the Decision-4 workflow framing survives (drift to duplicating the form on /rate-limit-overrides would split operator muscle memory)", () => {
     expect(body).toMatch(
-      /V-196 — inline rate-limit-override form\. Hidden by default; the\s*\n?\s*Set-rate-limit-override button reveals it\. Submit POSTs to\s*\n?\s*\/v1\/admin\/accounts\/:id\/quota-override; the audit row records\s*\n?\s*admin id \+ key id \+ bucket \+ reason\. Form intentionally lives\s*\n?\s*on the per-account page \(Decision 4 from founder review\):\s*\n?\s*canonical staff workflow is \/accounts → detail → set, not a\s*\n?\s*top-level form on \/rate-limit-overrides\./,
+      /V-196 — inline rate-limit-override form\. Hidden by default; the\s*Set-rate-limit-override button reveals it\. Submit POSTs to\s*\/v1\/admin\/accounts\/:id\/quota-override; the audit row records\s*admin id \+ key id \+ bucket \+ reason\. Form intentionally lives\s*on the per-account page \(Decision 4 from founder review\):\s*canonical staff workflow is \/accounts → detail → set, not a\s*top-level form on \/rate-limit-overrides\./,
     );
   });
 
@@ -82,19 +82,19 @@ describe('W490.C admin account-detail static shell content parity', () => {
       /<option value="agent_sessions:message">Agent sessions: message<\/option>/,
     );
     expect(body).toMatch(
-      /<input\s*\n?\s*type="number"\s*\n?\s*name="capacity"\s*\n?\s*min="1"\s*\n?\s*step="1"\s*\n?\s*required/,
+      /<input\s*type="number"\s*name="capacity"\s*min="1"\s*step="1"\s*required/,
     );
     expect(body).toMatch(
-      /<input\s*\n?\s*type="number"\s*\n?\s*name="refill_per_second"\s*\n?\s*min="0\.01"\s*\n?\s*step="0\.01"\s*\n?\s*required/,
+      /<input\s*type="number"\s*name="refill_per_second"\s*min="0\.01"\s*step="0\.01"\s*required/,
     );
     expect(body).toMatch(
-      /<input\s*\n?\s*type="number"\s*\n?\s*name="duration_seconds"\s*\n?\s*min="60"\s*\n?\s*step="60"\s*\n?\s*value="1209600"/,
+      /<input\s*type="number"\s*name="duration_seconds"\s*min="60"\s*step="60"\s*value="1209600"/,
     );
   });
 
   it("Override submit validation: All fields required (bucket_key + Number.isFinite capacity + Number.isFinite refill_per_second + Number.isFinite duration_seconds + non-empty reason) → 'All fields required (reason is audited).' bail-banner — pinned so the form can't submit with NaN or empty reason (audit-log integrity)", () => {
     expect(body).toMatch(
-      /if \(\s*\n?\s*!payload\.bucket_key \|\|\s*\n?\s*!Number\.isFinite\(payload\.capacity\) \|\|\s*\n?\s*!Number\.isFinite\(payload\.refill_per_second\) \|\|\s*\n?\s*!Number\.isFinite\(payload\.duration_seconds\) \|\|\s*\n?\s*!payload\.reason\s*\n?\s*\) \{\s*\n?\s*showBanner\('All fields required \(reason is audited\)\.'\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /if \(\s*!payload\.bucket_key \|\|\s*!Number\.isFinite\(payload\.capacity\) \|\|\s*!Number\.isFinite\(payload\.refill_per_second\) \|\|\s*!Number\.isFinite\(payload\.duration_seconds\) \|\|\s*!payload\.reason\s*\) \{\s*showBanner\('All fields required \(reason is audited\)\.'\);\s*return;\s*\}/,
     );
   });
 
@@ -112,16 +112,16 @@ describe('W490.C admin account-detail static shell content parity', () => {
 
   it("Refund amount validation: const amount_cents = Number(amountStr) + !Number.isInteger(amount_cents) || amount_cents <= 0 → 'Refund amount must be a positive integer (cents).' bail-banner — pinned so non-integer or zero-cent refunds can't land in the audit log (drift to allowing floats would split the refund into fractional cents which doesn't match Stripe's billing model)", () => {
     expect(body).toMatch(
-      /const amount_cents = Number\(amountStr\);\s*\n?\s*if \(!Number\.isInteger\(amount_cents\) \|\| amount_cents <= 0\) \{\s*\n?\s*showBanner\('Refund amount must be a positive integer \(cents\)\.'\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /const amount_cents = Number\(amountStr\);\s*if \(!Number\.isInteger\(amount_cents\) \|\| amount_cents <= 0\) \{\s*showBanner\('Refund amount must be a positive integer \(cents\)\.'\);\s*return;\s*\}/,
     );
   });
 
   it("derives accountUuid from an exact two-segment /accounts/:id path and consistently applies the server's acc_ prefix", () => {
     expect(body).toMatch(
-      /\/\/ The Pages rewrite preserves the requested URL, so the live UUID is\s*\n?\s*\/\/ available here even though every detail request shares one shell\./,
+      /\/\/ The Pages rewrite preserves the requested URL, so the live UUID is\s*\/\/ available here even though every detail request shares one shell\./,
     );
     expect(body).toMatch(
-      /const pathParts = window\.location\.pathname\.split\('\/'\)\.filter\(Boolean\);\s*\n?\s*const accountUuid =\s*\n?\s*pathParts\.length === 2 && pathParts\[0\] === 'accounts' \? pathParts\[1\] \|\| '' : '';\s*\n?\s*const prefixedId = 'acc_' \+ accountUuid;/,
+      /const pathParts = window\.location\.pathname\.split\('\/'\)\.filter\(Boolean\);\s*const accountUuid =\s*pathParts\.length === 2 && pathParts\[0\] === 'accounts' \? pathParts\[1\] \|\| '' : '';\s*const prefixedId = 'acc_' \+ accountUuid;/,
     );
   });
 

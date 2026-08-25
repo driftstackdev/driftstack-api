@@ -40,17 +40,17 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
 
   it('V-174 framing pinned: create + revoke require account_owner; admin compat alias via requireScope()', () => {
     expect(body).toMatch(
-      /V-174 — both create and revoke require 'account_owner' scope on the\s*\n?\s*\/\/\s*calling key\. Pre-V-174 this was 'admin'; the new scope split carved\s*\n?\s*\/\/\s*'admin' into 'account_owner' \(customer-account control\) and\s*\n?\s*\/\/\s*'driftstack_internal_admin' \(Driftstack-staff-only\)\. The 'admin'\s*\n?\s*\/\/\s*scope retains compat-alias semantics during migration via\s*\n?\s*\/\/\s*requireScope\(\) — existing 'admin'-scoped keys keep working\./,
+      /V-174 — both create and revoke require 'account_owner' scope on the\s*\/\/\s*calling key\. Pre-V-174 this was 'admin'; the new scope split carved\s*\/\/\s*'admin' into 'account_owner' \(customer-account control\) and\s*\/\/\s*'driftstack_internal_admin' \(Driftstack-staff-only\)\. The 'admin'\s*\/\/\s*scope retains compat-alias semantics during migration via\s*\/\/\s*requireScope\(\) — existing 'admin'-scoped keys keep working\./,
     );
   });
 
   it('3 ops framing: create (plaintext returned ONCE) + list + revoke (idempotent on revoked; 404 on missing)', () => {
     expect(body).toMatch(
-      /- create: generates a new key, hashes it, stores prefix\+hash, returns\s*\n?\s*\/\/\s*plaintext ONCE in the response\. After creation the plaintext is\s*\n?\s*\/\/\s*unrecoverable\./,
+      /- create: generates a new key, hashes it, stores prefix\+hash, returns\s*\/\/\s*plaintext ONCE in the response\. After creation the plaintext is\s*\/\/\s*unrecoverable\./,
     );
     expect(body).toMatch(/- list: returns all keys for the caller's account \(no plaintext\)\./);
     expect(body).toMatch(
-      /- revoke: marks a key revoked \(idempotent — revoking a revoked key is\s*\n?\s*\/\/\s*a no-op, but revoking a non-existent key is 404\)\./,
+      /- revoke: marks a key revoked \(idempotent — revoking a revoked key is\s*\/\/\s*a no-op, but revoking a non-existent key is 404\)\./,
     );
   });
 
@@ -69,7 +69,7 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
       /findApiKey\(id: string, accountId: string\): Promise<ApiKeyRow \| null>;/,
     );
     expect(body).toMatch(
-      /\/\*\* Find an API key by id WITHOUT account scoping \(admin force-actions only\)\. \*\/\s*\n?\s*findApiKeyUnscoped\(id: string\): Promise<ApiKeyRow \| null>;/,
+      /\/\*\* Find an API key by id WITHOUT account scoping \(admin force-actions only\)\. \*\/\s*findApiKeyUnscoped\(id: string\): Promise<ApiKeyRow \| null>;/,
     );
     expect(body).toMatch(
       /revokeApiKeyAtomic\(input: RevokeApiKeyInput\): Promise<RevokeApiKeyRepoResult>;/,
@@ -82,14 +82,14 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
       /rotateApiKeyAtomic\(input: RotateApiKeyInput\): Promise<RotateApiKeyRepoResult>;/,
     );
     expect(body).toMatch(
-      /listAllApiKeys\(opts: \{\s*\n?\s*limit: number;\s*\n?\s*cursor\?: string;\s*\n?\s*accountId\?: string;\s*\n?\s*revoked\?: boolean;\s*\n?\s*\}\): Promise<\{ items: ApiKeyRow\[\]; nextCursor: string \| null \}>;/,
+      /listAllApiKeys\(opts: \{\s*limit: number;\s*cursor\?: string;\s*accountId\?: string;\s*revoked\?: boolean;\s*\}\): Promise<\{ items: ApiKeyRow\[\]; nextCursor: string \| null \}>;/,
     );
   });
 
   it('CustomerAuditEmitter: V-216 13-action union (covers email_verified/login/logout/password_changed/api_key.*/session.*/profile.*/subscription/webhook_endpoint.*)', () => {
     expect(body).toMatch(/export interface CustomerAuditEmitter \{/);
     expect(body).toMatch(
-      /action:\s*\n?\s*\| 'account\.email_verified'\s*\n?\s*\| 'account\.login'\s*\n?\s*\| 'account\.logout'\s*\n?\s*\| 'account\.password_changed'\s*\n?\s*\| 'api_key\.minted'\s*\n?\s*\| 'api_key\.revoked'\s*\n?\s*\| 'api_key\.rotated'\s*\n?\s*\| 'session\.created'\s*\n?\s*\| 'session\.destroyed'\s*\n?\s*\| 'profile\.created'\s*\n?\s*\| 'profile\.deleted'\s*\n?\s*\| 'subscription\.tier_changed'\s*\n?\s*\| 'webhook_endpoint\.created'\s*\n?\s*\| 'webhook_endpoint\.deleted';/,
+      /action:\s*\| 'account\.email_verified'\s*\| 'account\.login'\s*\| 'account\.logout'\s*\| 'account\.password_changed'\s*\| 'api_key\.minted'\s*\| 'api_key\.revoked'\s*\| 'api_key\.rotated'\s*\| 'session\.created'\s*\| 'session\.destroyed'\s*\| 'profile\.created'\s*\| 'profile\.deleted'\s*\| 'subscription\.tier_changed'\s*\| 'webhook_endpoint\.created'\s*\| 'webhook_endpoint\.deleted';/,
     );
   });
 
@@ -98,13 +98,13 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
     expect(body).toMatch(/const accountId = opts\.effectiveAccountId \?\? ctx\.account\.id;/);
     expect(body).toMatch(/const tier = opts\.effectiveTier \?\? ctx\.account\.tier;/);
     expect(body).toMatch(
-      /if \(input\.provenance !== 'cli_device'\) \{\s*\n?\s*requireTierFeature\(tier, 'apiAccess'\);\s*\n?\s*\}\s*\n?[\s\S]*?if \(this\.legalGate !== null\)/,
+      /if \(input\.provenance !== 'cli_device'\) \{\s*requireTierFeature\(tier, 'apiAccess'\);\s*\}\s*\n?[\s\S]*?if \(this\.legalGate !== null\)/,
     );
     expect(body).toMatch(
-      /if \(this\.legalGate !== null\) \{\s*\n?\s*const pending = await this\.legalGate\.required\(accountId\);\s*\n?\s*if \(pending\.length > 0\) \{\s*\n?\s*throw new LegalAcceptanceRequiredError\(/,
+      /if \(this\.legalGate !== null\) \{\s*const pending = await this\.legalGate\.required\(accountId\);\s*if \(pending\.length > 0\) \{\s*throw new LegalAcceptanceRequiredError\(/,
     );
     expect(body).toMatch(
-      /pending\.map\(\(p\) => \(\{\s*\n?\s*document_key: p\.documentKey,\s*\n?\s*current_version: p\.currentVersion,\s*\n?\s*\}\)\),/,
+      /pending\.map\(\(p\) => \(\{\s*document_key: p\.documentKey,\s*current_version: p\.currentVersion,\s*\}\)\),/,
     );
   });
 
@@ -113,7 +113,7 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
       /const ELEVATED_SCOPES: ApiKeyScope\[\] = \['admin', 'driftstack_internal_admin'\];/,
     );
     expect(body).toMatch(
-      /for \(const scope of input\.scopes\) \{\s*\n?\s*if \(ELEVATED_SCOPES\.includes\(scope\) && !hasScope\(ctx, scope\)\) \{\s*\n?\s*throw new ForbiddenError\(\s*\n?\s*`Cannot grant the "\$\{scope\}" scope: the calling key does not hold it\.`,/,
+      /for \(const scope of input\.scopes\) \{\s*if \(ELEVATED_SCOPES\.includes\(scope\) && !hasScope\(ctx, scope\)\) \{\s*throw new ForbiddenError\(\s*`Cannot grant the "\$\{scope\}" scope: the calling key does not hold it\.`,/,
     );
   });
 
@@ -133,7 +133,7 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
     expect(body).toMatch(/const keyHash = await hashApiKey\(plaintext\);/);
     expect(body).toMatch(/const keyPrefix = keyPrefixFromPlaintext\(plaintext\);/);
     expect(body).toMatch(
-      /action: 'api_key\.minted',\s*\n?\s*targetResourceId: `key_\$\{row\.id\}`,\s*\n?\s*payload: \{ name: input\.name, scopes: input\.scopes \},/,
+      /action: 'api_key\.minted',\s*targetResourceId: `key_\$\{row\.id\}`,\s*payload: \{ name: input\.name, scopes: input\.scopes \},/,
     );
   });
 
@@ -159,7 +159,7 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
 
   it('listAll: requires driftstack_internal_admin scope (cross-account admin panel)', () => {
     expect(body).toMatch(
-      /Cross-account list for the admin panel\. Requires\s*\n?\s*\*\s*`driftstack_internal_admin` scope\./,
+      /Cross-account list for the admin panel\. Requires\s*\*\s*`driftstack_internal_admin` scope\./,
     );
     expect(body).toMatch(/throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);/);
     expect(body).toMatch(/return this\.repo\.listAllApiKeys\(opts\);/);
@@ -185,7 +185,7 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
     expect(body).toContain('const { oldKey, newRow, gracePeriodEndsAt } = rotated;');
     expect(body).toMatch(/await this\.authCache\.invalidateKey\(oldKey\.id\);/);
     expect(body).toMatch(
-      /action: 'api_key\.rotated',\s*\n?\s*targetResourceId: `key_\$\{oldKey\.id\}`,\s*\n?\s*payload: \{\s*\n?\s*old_key_id: `key_\$\{oldKey\.id\}`,\s*\n?\s*new_key_id: `key_\$\{newRow\.id\}`,\s*\n?\s*grace_period_ends_at: gracePeriodEndsAt\.toISOString\(\),\s*\n?\s*\},/,
+      /action: 'api_key\.rotated',\s*targetResourceId: `key_\$\{oldKey\.id\}`,\s*payload: \{\s*old_key_id: `key_\$\{oldKey\.id\}`,\s*new_key_id: `key_\$\{newRow\.id\}`,\s*grace_period_ends_at: gracePeriodEndsAt\.toISOString\(\),\s*\},/,
     );
   });
 
@@ -198,17 +198,17 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
     expect(body).toContain('const revokedAt = key.revokedAt;');
     expect(body).toMatch(/await this\.authCache\.invalidateKey\(keyId\);/);
     expect(body).toMatch(
-      /await this\.webhooks\.enqueueEvent\(accountId, 'api_key\.revoked', \{\s*\n?\s*api_key_id: `key_\$\{keyId\}`,\s*\n?\s*name: key\.name,\s*\n?\s*revoked_at: revokedAt\.toISOString\(\),/,
+      /await this\.webhooks\.enqueueEvent\(accountId, 'api_key\.revoked', \{\s*api_key_id: `key_\$\{keyId\}`,\s*name: key\.name,\s*revoked_at: revokedAt\.toISOString\(\),/,
     );
     expect(body).toMatch(
-      /action: 'api_key\.revoked',\s*\n?\s*targetResourceId: `key_\$\{keyId\}`,\s*\n?\s*payload: \{ name: key\.name, revoked_at: revokedAt\.toISOString\(\) \},/,
+      /action: 'api_key\.revoked',\s*targetResourceId: `key_\$\{keyId\}`,\s*payload: \{ name: key\.name, revoked_at: revokedAt\.toISOString\(\) \},/,
     );
     expect(body).toContain('return true;');
   });
 
   it('Constructor: 5-arg shape (repo + 4 nullable collaborators: authCache + webhooks + legalGate + accountAudit)', () => {
     expect(body).toMatch(
-      /constructor\(\s*\n?\s*private readonly repo: ApiKeysRepo,\s*\n?\s*private readonly authCache: AuthCache \| null = null,\s*\n?\s*private readonly webhooks: RevocationWebhookEmitter \| null = null,\s*\n?\s*private readonly legalGate: LegalAcceptanceGate \| null = null,\s*\n?\s*private readonly accountAudit: CustomerAuditEmitter \| null = null,\s*\n?\s*\) \{\}/,
+      /constructor\(\s*private readonly repo: ApiKeysRepo,\s*private readonly authCache: AuthCache \| null = null,\s*private readonly webhooks: RevocationWebhookEmitter \| null = null,\s*private readonly legalGate: LegalAcceptanceGate \| null = null,\s*private readonly accountAudit: CustomerAuditEmitter \| null = null,\s*\) \{\}/,
     );
   });
 
@@ -225,7 +225,7 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
   it('RevocationWebhookEmitter: enqueueEvent with literal api_key.revoked event-type + Promise<number> return', () => {
     expect(body).toMatch(/export interface RevocationWebhookEmitter \{/);
     expect(body).toMatch(
-      /enqueueEvent: \(\s*\n?\s*accountId: string,\s*\n?\s*eventType: 'api_key\.revoked',\s*\n?\s*data: Record<string, unknown>,\s*\n?\s*\) => Promise<number>;/,
+      /enqueueEvent: \(\s*accountId: string,\s*eventType: 'api_key\.revoked',\s*data: Record<string, unknown>,\s*\) => Promise<number>;/,
     );
   });
 
@@ -259,7 +259,7 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
       /import \{ BadRequestError, ForbiddenError, LegalAcceptanceRequiredError \} from '\.\.\/lib\/errors\.js';/,
     );
     expect(body).toMatch(
-      /import \{\s*\n?\s*NotFoundError,\s*\n?\s*hasScope,\s*\n?\s*requireScope as throwIfMissingScope,\s*\n?\s*requireTierFeature,\s*\n?\s*\} from '\.\.\/lib\/errors-helpers\.js';/,
+      /import \{\s*NotFoundError,\s*hasScope,\s*requireScope as throwIfMissingScope,\s*requireTierFeature,\s*\} from '\.\.\/lib\/errors-helpers\.js';/,
     );
   });
 

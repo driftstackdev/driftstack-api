@@ -36,10 +36,10 @@ describe('W538.B apps/server/Dockerfile content parity', () => {
   it("Multi-stage + Sentry sourcemap framing pinned: '# Driftstack API server — production image.' + '# Multi-stage build. Stage 1 compiles the TypeScript workspace to dist/; stage 2 ships only the production runtime artefacts on a slim Node 22 image. No source maps in the final image (Sentry uploads them separately during the deploy job).' + '# Build context is the monorepo root. The image runs the API server (apps/server) only; the GUI client + SDKs are not part of this image.' — pinned so the multi-stage + slim-Node-22 + no-source-maps-in-final-image (Sentry uploads separately during deploy) + monorepo-root-build-context + server-only (no GUI/SDKs) commitment survives", () => {
     expect(body).toMatch(/# Driftstack API server — production image\./);
     expect(body).toMatch(
-      /# Multi-stage build\. Stage 1 compiles the TypeScript workspace to dist\/;\s*\n?\s*# stage 2 ships only the production runtime artefacts on a slim Node 22\s*\n?\s*# image\. No source maps in the final image \(Sentry uploads them\s*\n?\s*# separately during the deploy job\)\./,
+      /# Multi-stage build\. Stage 1 compiles the TypeScript workspace to dist\/;\s*# stage 2 ships only the production runtime artefacts on a slim Node 22\s*# image\. No source maps in the final image \(Sentry uploads them\s*# separately during the deploy job\)\./,
     );
     expect(body).toMatch(
-      /# Build context is the monorepo root\. The image runs the API server\s*\n?\s*# \(apps\/server\) only; the GUI client \+ SDKs are not part of this image\./,
+      /# Build context is the monorepo root\. The image runs the API server\s*# \(apps\/server\) only; the GUI client \+ SDKs are not part of this image\./,
     );
   });
 
@@ -47,10 +47,10 @@ describe('W538.B apps/server/Dockerfile content parity', () => {
     expect(body).toMatch(/FROM node:22-bookworm-slim AS builder/);
     expect(body).toMatch(/WORKDIR \/app/);
     expect(body).toMatch(
-      /RUN apt-get update && apt-get install -y --no-install-recommends \\\s*\n?\s*python3 make g\+\+ openssl ca-certificates \\/,
+      /RUN apt-get update && apt-get install -y --no-install-recommends \\\s*python3 make g\+\+ openssl ca-certificates \\/,
     );
     expect(body).toMatch(
-      /# `npm ci` would be ideal but our lockfile-vs-arborist behaviour is\s*\n?\s*# flaky in some environments \(V-041\)\. `npm install --no-audit` is the\s*\n?\s*# standing workaround; verify behaviour matches the lockfile via a\s*\n?\s*# downstream `npm ls` check in the deploy pipeline\./,
+      /# `npm ci` would be ideal but our lockfile-vs-arborist behaviour is\s*# flaky in some environments \(V-041\)\. `npm install --no-audit` is the\s*# standing workaround; verify behaviour matches the lockfile via a\s*# downstream `npm ls` check in the deploy pipeline\./,
     );
     expect(body).toMatch(/RUN npm install --no-audit --include=dev/);
   });
@@ -70,14 +70,14 @@ describe('W538.B apps/server/Dockerfile content parity', () => {
     expect(body).toMatch(/FROM node:22-bookworm-slim AS runtime/);
     expect(body).toMatch(/# Run as non-root\./);
     expect(body).toMatch(
-      /RUN groupadd --system --gid 1001 driftstack \\\s*\n?\s*&& useradd --system --uid 1001 --gid driftstack --shell \/bin\/false driftstack/,
+      /RUN groupadd --system --gid 1001 driftstack \\\s*&& useradd --system --uid 1001 --gid driftstack --shell \/bin\/false driftstack/,
     );
     expect(body).toMatch(/USER driftstack/);
   });
 
   it("V-047 legal-docs bundling framing pinned: '# Legal documents are read at server startup (V-047 LegalDocumentCatalog). Bundle them into the image so the catalog can hydrate without an external mount.' + 'COPY --chown=driftstack:driftstack docs/legal ./docs/legal' — pinned so the V-047 anchor + LegalDocumentCatalog-hydration-without-external-mount commitment survives (drift to dropping this COPY would break server startup with 'LegalDocumentCatalog: docs/legal not found')", () => {
     expect(body).toMatch(
-      /# Legal documents are read at server startup \(V-047 LegalDocumentCatalog\)\.\s*\n?\s*# Bundle them into the image so the catalog can hydrate without an\s*\n?\s*# external mount\./,
+      /# Legal documents are read at server startup \(V-047 LegalDocumentCatalog\)\.\s*# Bundle them into the image so the catalog can hydrate without an\s*# external mount\./,
     );
     expect(body).toMatch(/COPY --chown=driftstack:driftstack docs\/legal \.\/docs\/legal/);
   });
@@ -88,10 +88,10 @@ describe('W538.B apps/server/Dockerfile content parity', () => {
     expect(body).toMatch(/ENV NODE_ENV=production/);
     expect(body).toMatch(/EXPOSE 7780/);
     expect(body).toMatch(
-      /# \/health is the liveness probe \(process up, accepting connections\)\.\s*\n?\s*# \/ready is the readiness probe \(DB \+ Redis \+ R2 reachable\)\./,
+      /# \/health is the liveness probe \(process up, accepting connections\)\.\s*# \/ready is the readiness probe \(DB \+ Redis \+ R2 reachable\)\./,
     );
     expect(body).toMatch(
-      /HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \\\s*\n?\s*CMD node -e "fetch\('http:\/\/127\.0\.0\.1:' \+ \(process\.env\.PORT\|\|7780\) \+ '\/health'\)\.then\(r => process\.exit\(r\.ok\?0:1\)\)\.catch\(\(\) => process\.exit\(1\)\)"/,
+      /HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \\\s*CMD node -e "fetch\('http:\/\/127\.0\.0\.1:' \+ \(process\.env\.PORT\|\|7780\) \+ '\/health'\)\.then\(r => process\.exit\(r\.ok\?0:1\)\)\.catch\(\(\) => process\.exit\(1\)\)"/,
     );
     expect(body).toMatch(/CMD \["node", "apps\/server\/dist\/index\.js"\]/);
   });

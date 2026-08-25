@@ -58,7 +58,7 @@ describe('W371.C status-site /index page content parity', () => {
 
   it('60s safety-net polling interval pinned (covers extended SSE outages)', () => {
     expect(body).toMatch(/setInterval\(fetchAndRender, 60_000\)/);
-    expect(body).toMatch(/safety\s*\n?\s*\/\/\s*net for clients that lose the SSE connection/);
+    expect(body).toMatch(/safety\s*\/\/\s*net for clients that lose the SSE connection/);
   });
 
   it('DOT_BG + STATE_TITLE 4-state taxonomy pinned (operational / degraded / outage / unknown)', () => {

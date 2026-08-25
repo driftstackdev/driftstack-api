@@ -39,22 +39,22 @@ describe('W395.A apps/server/src/middleware/ip-rate-limit.ts content parity', ()
 
   it('V-251 + V-246-P1-004 framing pinned + distinct-from-account-keyed posture', () => {
     expect(body).toMatch(
-      /V-251 \/ V-246-P1-004 — IP-based rate limiting on unauthenticated\s*\n?\s*\/\/\s*auth endpoints\. Distinct from `app\.rateLimit\(bucketKey\)` which is\s*\n?\s*\/\/\s*account-keyed \(post-auth\)/,
+      /V-251 \/ V-246-P1-004 — IP-based rate limiting on unauthenticated\s*\/\/\s*auth endpoints\. Distinct from `app\.rateLimit\(bucketKey\)` which is\s*\/\/\s*account-keyed \(post-auth\)/,
     );
     expect(body).toMatch(
-      /The four auth-flow endpoints\s*\n?\s*\/\/\s*\(signup \/ login \/ verify-email \/ password-reset\) take requests\s*\n?\s*\/\/\s*where the customer doesn't have an account\+key yet, so account-key\s*\n?\s*\/\/\s*rate limiting is impossible/,
+      /The four auth-flow endpoints\s*\/\/\s*\(signup \/ login \/ verify-email \/ password-reset\) take requests\s*\/\/\s*where the customer doesn't have an account\+key yet, so account-key\s*\/\/\s*rate limiting is impossible/,
     );
   });
 
   it('2026-05-07 founder override pinned: P1-004 deferral OVERRIDDEN, brute-force protection launch-blocking', () => {
     expect(body).toMatch(
-      /Per founder direction 2026-05-07 \(P1-004 deferral OVERRIDDEN\):\s*\n?\s*\/\/\s*brute-force protection is launch-blocking\. Wire in basic IP gates;\s*\n?\s*\/\/\s*fancier \(CAPTCHA on threshold breach, exponential backoff per IP\)\s*\n?\s*\/\/\s*is post-launch/,
+      /Per founder direction 2026-05-07 \(P1-004 deferral OVERRIDDEN\):\s*\/\/\s*brute-force protection is launch-blocking\. Wire in basic IP gates;\s*\/\/\s*fancier \(CAPTCHA on threshold breach, exponential backoff per IP\)\s*\/\/\s*is post-launch/,
     );
   });
 
   it('shared-primitive framing: RateLimitStore reuse — memory in tests, Redis in production', () => {
     expect(body).toMatch(
-      /Implementation reuses the existing `RateLimitStore` \(token bucket\s*\n?\s*\/\/\s*with capacity \+ refillPerSecond\) — same primitive the account-keyed\s*\n?\s*\/\/\s*limiter uses, just with an IP-derived bucket key\. Memory store in\s*\n?\s*\/\/\s*tests; Redis store in production/,
+      /Implementation reuses the existing `RateLimitStore` \(token bucket\s*\/\/\s*with capacity \+ refillPerSecond\) — same primitive the account-keyed\s*\/\/\s*limiter uses, just with an IP-derived bucket key\. Memory store in\s*\/\/\s*tests; Redis store in production/,
     );
   });
 
@@ -70,7 +70,7 @@ describe('W395.A apps/server/src/middleware/ip-rate-limit.ts content parity', ()
 
   it('ipRateLimit factory: preHandler returning (req, reply) => Promise<void> (3rd optional metrics arg for the fallback counter)', () => {
     expect(body).toMatch(
-      /export function ipRateLimit\(\s*\n?\s*store: RateLimitStore,\s*\n?\s*cfg: IpRateLimitConfig,\s*\n?\s*[\s\S]*?metrics\?: MetricsRegistry,\s*\n?\s*\): \(req: FastifyRequest, reply: FastifyReply\) => Promise<void>/,
+      /export function ipRateLimit\(\s*store: RateLimitStore,\s*cfg: IpRateLimitConfig,\s*[\s\S]*?metrics\?: MetricsRegistry,\s*\): \(req: FastifyRequest, reply: FastifyReply\) => Promise<void>/,
     );
   });
 
@@ -79,14 +79,14 @@ describe('W395.A apps/server/src/middleware/ip-rate-limit.ts content parity', ()
       /When `req\.ip` is empty[\s\S]{0,240}`unresolved-client` identity[\s\S]{0,180}without letting a missing identity bypass the gate/,
     );
     expect(body).toMatch(
-      /const ip =\s*\n?\s*typeof req\.ip === 'string' && req\.ip\.trim\(\)\.length > 0 \? req\.ip : 'unresolved-client';/,
+      /const ip =\s*typeof req\.ip === 'string' && req\.ip\.trim\(\)\.length > 0 \? req\.ip : 'unresolved-client';/,
     );
     expect(body).not.toMatch(/if \(ip === null\)/);
   });
 
   it('store.consume: bucketKey = `${prefix}:${ip}`, cost=1, now=Date.now() (hoisted into consumeArgs so the same args feed the bounded fallback on a store error)', () => {
     expect(body).toMatch(
-      /const consumeArgs = \{\s*\n?\s*key: `\$\{cfg\.bucketPrefix\}:\$\{ip\}`,\s*\n?\s*capacity: cfg\.capacity,\s*\n?\s*refillPerSecond: cfg\.refillPerSecond,\s*\n?\s*cost: 1,\s*\n?\s*now: Date\.now\(\),\s*\n?\s*\};/,
+      /const consumeArgs = \{\s*key: `\$\{cfg\.bucketPrefix\}:\$\{ip\}`,\s*capacity: cfg\.capacity,\s*refillPerSecond: cfg\.refillPerSecond,\s*cost: 1,\s*now: Date\.now\(\),\s*\};/,
     );
     expect(body).toContain('result = await store.consume(consumeArgs);');
   });
@@ -107,7 +107,7 @@ describe('W395.A apps/server/src/middleware/ip-rate-limit.ts content parity', ()
 
   it('W200 framing pinned: mirrors W199 + bucket=prefix only (avoid leaking IP through response)', () => {
     expect(body).toMatch(
-      /W200 — full RateLimit-header set documented at \/docs\/rate-limits\.\s*\n?\s*\/\/\s*Mirrors the account-keyed middleware \(W199\)\. `bucket` here is the\s*\n?\s*\/\/\s*configured prefix; consumers shouldn't depend on the IP suffix\s*\n?\s*\/\/\s*being visible in the header \(we expose only the prefix to avoid\s*\n?\s*\/\/\s*leaking the resolved IP through the response\)/,
+      /W200 — full RateLimit-header set documented at \/docs\/rate-limits\.\s*\/\/\s*Mirrors the account-keyed middleware \(W199\)\. `bucket` here is the\s*\/\/\s*configured prefix; consumers shouldn't depend on the IP suffix\s*\/\/\s*being visible in the header \(we expose only the prefix to avoid\s*\/\/\s*leaking the resolved IP through the response\)/,
     );
   });
 
@@ -133,20 +133,20 @@ describe('W395.A apps/server/src/middleware/ip-rate-limit.ts content parity', ()
 
   it('Denied: retry-after header (max(1, ceil(retryAfterMs/1000))) + ip-rate-limit warn log + RateLimitedError', () => {
     expect(body).toMatch(
-      /if \(!result\.allowed\) \{\s*\n?\s*const retryAfterSec = Math\.max\(1, Math\.ceil\(result\.retryAfterMs \/ 1000\)\);\s*\n?\s*reply\.header\('retry-after', retryAfterSec\.toString\(\)\);/,
+      /if \(!result\.allowed\) \{\s*const retryAfterSec = Math\.max\(1, Math\.ceil\(result\.retryAfterMs \/ 1000\)\);\s*reply\.header\('retry-after', retryAfterSec\.toString\(\)\);/,
     );
     expect(body).toMatch(
-      /req\.log\.warn\(\s*\n?\s*\{\s*\n?\s*component: 'ip-rate-limit',\s*\n?\s*bucket_prefix: cfg\.bucketPrefix,\s*\n?\s*ip,\s*\n?\s*tokens_remaining: Math\.floor\(result\.remaining\),\s*\n?\s*retry_after_ms: result\.retryAfterMs,\s*\n?\s*\},\s*\n?\s*'ip rate-limit exceeded on auth endpoint',\s*\n?\s*\);/,
+      /req\.log\.warn\(\s*\{\s*component: 'ip-rate-limit',\s*bucket_prefix: cfg\.bucketPrefix,\s*ip,\s*tokens_remaining: Math\.floor\(result\.remaining\),\s*retry_after_ms: result\.retryAfterMs,\s*\},\s*'ip rate-limit exceeded on auth endpoint',\s*\);/,
     );
     expect(body).toMatch(
-      /throw new RateLimitedError\(\s*\n?\s*retryAfterSec,\s*\n?\s*`Too many requests from this IP\. Retry in \$\{retryAfterSec\.toString\(\)\}s\.`,\s*\n?\s*\);/,
+      /throw new RateLimitedError\(\s*retryAfterSec,\s*`Too many requests from this IP\. Retry in \$\{retryAfterSec\.toString\(\)\}s\.`,\s*\);/,
     );
   });
 
   it('AUTH_IP_LIMITS framing: founder-locked caps with rationale per endpoint', () => {
     expect(body).toMatch(/V-251 — locked rate limits per auth endpoint per founder direction\./);
     expect(body).toMatch(
-      /Sized for "legitimate customer can complete the flow without hitting\s*\n?\s*\*\s*the gate; abuser hits it within seconds":/,
+      /Sized for "legitimate customer can complete the flow without hitting\s*\*\s*the gate; abuser hits it within seconds":/,
     );
   });
 
@@ -164,7 +164,7 @@ describe('W395.A apps/server/src/middleware/ip-rate-limit.ts content parity', ()
 
   it('V-295c3 statusSubscribe rationale: tighter than signup (anonymous, no captcha, no paying account)', () => {
     expect(body).toMatch(
-      /V-295c3 — public status-page email subscribe\. Tighter than\s*\n?\s*\/\/\s*signup because we don't create a paying account, and the form is\s*\n?\s*\/\/\s*explicitly anonymous \(no captcha layer\); easier abuse vector/,
+      /V-295c3 — public status-page email subscribe\. Tighter than\s*\/\/\s*signup because we don't create a paying account, and the form is\s*\/\/\s*explicitly anonymous \(no captcha layer\); easier abuse vector/,
     );
   });
 

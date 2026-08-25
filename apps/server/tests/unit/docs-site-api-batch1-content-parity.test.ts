@@ -38,7 +38,7 @@ describe('W605 apps/docs/api batch 1 (8 modules) content parity', () => {
     // free-tier sandbox key — pinning the old "for the free tier" phrasing
     // would re-assert a sandbox surface the product does not offer.
     expect(body).toMatch(
-      /Customer API keys are <code>ds_live_…<\/code> on every\s*\n?\s*paid tier, including Manual\./,
+      /Customer API keys are <code>ds_live_…<\/code> on every\s*paid tier, including Manual\./,
     );
     expect(body).toMatch(
       /<code>ds_test_…<\/code> device credential automatically; it is not a general sandbox key\./,

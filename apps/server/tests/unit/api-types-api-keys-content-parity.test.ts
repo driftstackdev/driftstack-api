@@ -40,7 +40,7 @@ describe('W432.C packages/api-types/src/api-keys.ts content parity', () => {
       /\/\/ API key as returned in list \/ get responses \(NEVER includes plaintext\)\./,
     );
     expect(body).toMatch(
-      /export const ApiKeySchema = z\.object\(\{\s*\n?\s*id: ApiKeyIdSchema,\s*\n?\s*name: z\.string\(\),\s*\n?\s*\/\/ First chars of plaintext; useful as a display hint \("ds_live_a1b2…"\)\.\s*\n?\s*key_prefix: z\.string\(\),\s*\n?\s*scopes: z\.array\(ApiKeyScopeSchema\),\s*\n?\s*last_used_at: Iso8601Schema\.nullable\(\),\s*\n?\s*revoked_at: Iso8601Schema\.nullable\(\),\s*\n?\s*expires_at: Iso8601Schema\.nullable\(\),\s*\n?\s*created_at: Iso8601Schema,\s*\n?\s*\}\);/,
+      /export const ApiKeySchema = z\.object\(\{\s*id: ApiKeyIdSchema,\s*name: z\.string\(\),\s*\/\/ First chars of plaintext; useful as a display hint \("ds_live_a1b2…"\)\.\s*key_prefix: z\.string\(\),\s*scopes: z\.array\(ApiKeyScopeSchema\),\s*last_used_at: Iso8601Schema\.nullable\(\),\s*revoked_at: Iso8601Schema\.nullable\(\),\s*expires_at: Iso8601Schema\.nullable\(\),\s*created_at: Iso8601Schema,\s*\}\);/,
     );
     expect(body).toMatch(/export type ApiKey = z\.infer<typeof ApiKeySchema>;/);
   });
@@ -48,7 +48,7 @@ describe('W432.C packages/api-types/src/api-keys.ts content parity', () => {
   it('CreateApiKeyRequestSchema: name min 1 max 120 + bounded unique request scope schema + optional expires_at; response scope array remains tolerant', () => {
     expect(body).toMatch(/\/\/ Create-key request: name \+ scopes\./);
     expect(body).toMatch(
-      /export const CreateApiKeyRequestSchema = z\.object\(\{\s*\n?\s*name: z\.string\(\)\.min\(1\)\.max\(120\),\s*\n?\s*scopes: ApiKeyScopeListRequestSchema,\s*\n?\s*expires_at: Iso8601Schema\.optional\(\),\s*\n?\s*\}\);/,
+      /export const CreateApiKeyRequestSchema = z\.object\(\{\s*name: z\.string\(\)\.min\(1\)\.max\(120\),\s*scopes: ApiKeyScopeListRequestSchema,\s*expires_at: Iso8601Schema\.optional\(\),\s*\}\);/,
     );
     expect(body).toMatch(
       /export type CreateApiKeyRequest = z\.infer<typeof CreateApiKeyRequestSchema>;/,
@@ -57,10 +57,10 @@ describe('W432.C packages/api-types/src/api-keys.ts content parity', () => {
 
   it('CreateApiKeyResponseSchema extends ApiKeySchema with plaintext (shown ONCE at creation; not retrievable later); .describe rationale pinned', () => {
     expect(body).toMatch(
-      /\/\/ Create-key response: the persisted key MET PLUS the plaintext \(returned\s*\n?\s*\/\/ once, never again\)\./,
+      /\/\/ Create-key response: the persisted key MET PLUS the plaintext \(returned\s*\/\/ once, never again\)\./,
     );
     expect(body).toMatch(
-      /export const CreateApiKeyResponseSchema = ApiKeySchema\.extend\(\{\s*\n?\s*plaintext: z\s*\n?\s*\.string\(\)\s*\n?\s*\.describe\('The plaintext key\. Shown once at creation; not retrievable later\.'\),\s*\n?\s*\}\);/,
+      /export const CreateApiKeyResponseSchema = ApiKeySchema\.extend\(\{\s*plaintext: z\s*\.string\(\)\s*\.describe\('The plaintext key\. Shown once at creation; not retrievable later\.'\),\s*\}\);/,
     );
     expect(body).toMatch(
       /export type CreateApiKeyResponse = z\.infer<typeof CreateApiKeyResponseSchema>;/,

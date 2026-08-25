@@ -40,41 +40,41 @@ describe('W395.C apps/server/src/services/auth-coalescer.ts content parity', () 
 
   it('Module framing pinned: single-flight on auth slow path, collapses N → 1 scrypt verify', () => {
     expect(body).toMatch(
-      /Single-flight coalescer for the auth slow path\. When N concurrent\s*\n?\s*\/\/\s*requests arrive carrying the same plaintext API key and all miss the\s*\n?\s*\/\/\s*auth cache, only one runs the prefix lookup \+ scrypt verification \+\s*\n?\s*\/\/\s*account fetch; the other N−1 await the in-flight Promise and resolve\s*\n?\s*\/\/\s*with the same AccountContext/,
+      /Single-flight coalescer for the auth slow path\. When N concurrent\s*\/\/\s*requests arrive carrying the same plaintext API key and all miss the\s*\/\/\s*auth cache, only one runs the prefix lookup \+ scrypt verification \+\s*\/\/\s*account fetch; the other N−1 await the in-flight Promise and resolve\s*\/\/\s*with the same AccountContext/,
     );
   });
 
   it('V-012 / V-015 cold-start blip framing pinned + scrypt logN=15 cost note', () => {
     expect(body).toMatch(/Why this exists \(V-012 \/ V-015\):/);
     expect(body).toMatch(
-      /The auth cache \(D-020\) is keyed on `sha256\(plaintext\)`\. On a cold\s*\n?\s*\/\/\s*cache the first request for a given plaintext misses and runs scrypt\s*\n?\s*\/\/\s*\(~50–100 ms at logN=15\)/,
+      /The auth cache \(D-020\) is keyed on `sha256\(plaintext\)`\. On a cold\s*\/\/\s*cache the first request for a given plaintext misses and runs scrypt\s*\/\/\s*\(~50–100 ms at logN=15\)/,
     );
     expect(body).toMatch(
-      /This was\s*\n?\s*\/\/\s*V-012's residual cold-start blip — documented but not fixed there/,
+      /This was\s*\/\/\s*V-012's residual cold-start blip — documented but not fixed there/,
     );
   });
 
   it('Pre-warm-impossible framing pinned: sha256(plaintext) unkeyable since plaintext not stored', () => {
     expect(body).toMatch(
-      /Pre-warming the cache from the api_keys table is impossible: the\s*\n?\s*\/\/\s*cache key is sha256\(plaintext\) and plaintext is not stored anywhere\s*\n?\s*\/\/\s*the server can read\./,
+      /Pre-warming the cache from the api_keys table is impossible: the\s*\/\/\s*cache key is sha256\(plaintext\) and plaintext is not stored anywhere\s*\/\/\s*the server can read\./,
     );
     expect(body).toMatch(
-      /Single-flight coalescing is the right shape:\s*\n?\s*\/\/\s*no design change to the cache, no security-model change to D-020,\s*\n?\s*\/\/\s*collapses N concurrent cold-misses to 1 scrypt call/,
+      /Single-flight coalescing is the right shape:\s*\/\/\s*no design change to the cache, no security-model change to D-020,\s*\/\/\s*collapses N concurrent cold-misses to 1 scrypt call/,
     );
   });
 
   it('Process-local scope framing pinned + multi-process posture (shared Redis absorbs duplication)', () => {
     expect(body).toMatch(
-      /Process-local \(in-memory\) only\. Not Redis-backed\. Cross-process\s*\n?\s*\/\/\s*coalescing would require a distributed lock, which is overkill for\s*\n?\s*\/\/\s*a single-process server/,
+      /Process-local \(in-memory\) only\. Not Redis-backed\. Cross-process\s*\/\/\s*coalescing would require a distributed lock, which is overkill for\s*\/\/\s*a single-process server/,
     );
     expect(body).toMatch(
-      /If we ever scale to multi-process,\s*\n?\s*\/\/\s*each process gets its own coalescer; the shared Redis cache absorbs\s*\n?\s*\/\/\s*the across-process duplication/,
+      /If we ever scale to multi-process,\s*\/\/\s*each process gets its own coalescer; the shared Redis cache absorbs\s*\/\/\s*the across-process duplication/,
     );
   });
 
   it('Lifecycle framing pinned: .finally() removes from map on BOTH fulfilment AND rejection (test-covered)', () => {
     expect(body).toMatch(
-      /The Promise is removed from the in-flight map on settlement —\s*\n?\s*\/\/\s*both fulfilment AND rejection — so a failed slow path doesn't\s*\n?\s*\/\/\s*poison future requests\. \(Without `\.finally\(\)`, a rejected promise\s*\n?\s*\/\/\s*stays in the map; the next caller awaits the rejected promise and\s*\n?\s*\/\/\s*errors out instead of retrying\. Test covered\.\)/,
+      /The Promise is removed from the in-flight map on settlement —\s*\/\/\s*both fulfilment AND rejection — so a failed slow path doesn't\s*\/\/\s*poison future requests\. \(Without `\.finally\(\)`, a rejected promise\s*\/\/\s*stays in the map; the next caller awaits the rejected promise and\s*\/\/\s*errors out instead of retrying\. Test covered\.\)/,
     );
   });
 
@@ -104,26 +104,26 @@ describe('W395.C apps/server/src/services/auth-coalescer.ts content parity', () 
 
   it('coalesce: existing → hits++ + return existing Promise (no new slow path)', () => {
     expect(body).toMatch(
-      /Run `slowPath` if no other call for this sha is in flight; otherwise\s*\n?\s*\*\s*await the existing Promise\. Either way, resolves with the\s*\n?\s*\*\s*AccountContext from whichever call actually executed/,
+      /Run `slowPath` if no other call for this sha is in flight; otherwise\s*\*\s*await the existing Promise\. Either way, resolves with the\s*\*\s*AccountContext from whichever call actually executed/,
     );
     expect(body).toMatch(
-      /coalesce\(sha: string, slowPath: \(\) => Promise<AccountContext>\): Promise<AccountContext> \{\s*\n?\s*const existing = this\.inFlight\.get\(sha\);\s*\n?\s*if \(existing\) \{\s*\n?\s*this\.hitsCount \+= 1;/,
+      /coalesce\(sha: string, slowPath: \(\) => Promise<AccountContext>\): Promise<AccountContext> \{\s*const existing = this\.inFlight\.get\(sha\);\s*if \(existing\) \{\s*this\.hitsCount \+= 1;/,
     );
     expect(body).toMatch(
-      /this\.logger\?\.debug\(\{ shaPrefix: sha\.slice\(0, 8\) \}, 'auth coalesce hit'\);\s*\n?\s*return existing;/,
+      /this\.logger\?\.debug\(\{ shaPrefix: sha\.slice\(0, 8\) \}, 'auth coalesce hit'\);\s*return existing;/,
     );
   });
 
   it('coalesce: no existing → starts++ + slowPath().finally(delete) + set in-flight', () => {
     expect(body).toMatch(/this\.startsCount \+= 1;/);
     expect(body).toMatch(
-      /const p = slowPath\(\)\.finally\(\(\) => \{\s*\n?\s*this\.inFlight\.delete\(sha\);\s*\n?\s*\}\);\s*\n?\s*this\.inFlight\.set\(sha, p\);\s*\n?\s*return p;/,
+      /const p = slowPath\(\)\.finally\(\(\) => \{\s*this\.inFlight\.delete\(sha\);\s*\}\);\s*this\.inFlight\.set\(sha, p\);\s*return p;/,
     );
   });
 
   it('stats(): snapshot of starts / hits / inFlight.size', () => {
     expect(body).toMatch(
-      /stats\(\): CoalescerStats \{\s*\n?\s*return \{\s*\n?\s*starts: this\.startsCount,\s*\n?\s*hits: this\.hitsCount,\s*\n?\s*inFlight: this\.inFlight\.size,\s*\n?\s*\};\s*\n?\s*\}/,
+      /stats\(\): CoalescerStats \{\s*return \{\s*starts: this\.startsCount,\s*hits: this\.hitsCount,\s*inFlight: this\.inFlight\.size,\s*\};\s*\}/,
     );
   });
 

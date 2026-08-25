@@ -36,7 +36,7 @@ describe('W868 AuthPassword cross-source invariant', () => {
 
   it('CRITICAL packages/api-types/src/auth.ts AuthPasswordSchema = z.string().min(12).max(128). The 12-128 bounds are the NIST 800-63B compliant policy. The api-types Zod schema is the server-of-truth — drift would silently let server-side validation diverge.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/auth.ts'));
-    expect(p).toMatch(/export const AuthPasswordSchema = z\s*\n?\s*\.string\(\)/);
+    expect(p).toMatch(/export const AuthPasswordSchema = z\s*\.string\(\)/);
     expect(p).toMatch(/\.min\(12\)/);
     expect(p).toMatch(/\.max\(128\)/);
   });
@@ -57,7 +57,7 @@ describe('W868 AuthPassword cross-source invariant', () => {
   it("CRITICAL api-types AuthEmailSchema applies .trim().toLowerCase().email().max(254). The lowercase-normalisation is what makes case-insensitive lookups work — drift would let two 'Same' email addresses with different case coexist as separate accounts.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/auth.ts'));
     expect(p).toMatch(
-      /AuthEmailSchema = z\s*\n?\s*\.string\(\)\s*\n\s*\.trim\(\)\s*\n\s*\.toLowerCase\(\)\s*\n\s*\.email\(\)\s*\n\s*\.max\(254\)/,
+      /AuthEmailSchema = z\s*\.string\(\)\s*\n\s*\.trim\(\)\s*\n\s*\.toLowerCase\(\)\s*\n\s*\.email\(\)\s*\n\s*\.max\(254\)/,
     );
   });
 

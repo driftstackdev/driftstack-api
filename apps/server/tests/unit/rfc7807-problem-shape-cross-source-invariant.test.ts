@@ -42,8 +42,8 @@ describe('W879 RFC 7807 Problem shape cross-source invariant', () => {
 
   it('CRITICAL packages/api-types/src/problem.ts ProblemSchema declares the 5 RFC 7807 fields (type/title/status/detail/instance) + .catchall(z.unknown()). The catchall accepts extension fields without listing them.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/problem.ts'));
-    expect(p).toMatch(/export const ProblemSchema = z\s*\n?\s*\.object\(\{/);
-    expect(p).toMatch(/type: z\s*\n?\s*\.string\(\)\s*\n\s*\.url\(\)/);
+    expect(p).toMatch(/export const ProblemSchema = z\s*\.object\(\{/);
+    expect(p).toMatch(/type: z\s*\.string\(\)\s*\n\s*\.url\(\)/);
     expect(p).toMatch(/title: z\.string\(\)/);
     expect(p).toMatch(/status: z\.number\(\)\.int\(\)\.min\(100\)\.max\(599\)/);
     expect(p).toMatch(/detail: z\.string\(\)\.optional\(\)/);

@@ -40,23 +40,23 @@ describe('W396.A apps/server/src/services/cost-monitoring.ts content parity', ()
   it('V-541.B framing pinned + V-658 estimator + pluggable UsageAggregator', () => {
     expect(body).toMatch(/V-541\.B — cost-monitoring service\./);
     expect(body).toMatch(
-      /Compute-on-demand per-account cost breakdown for the V-541 admin\s*\n?\s*\/\/\s*surface\. Wraps the V-658 estimator \+ a pluggable usage aggregator/,
+      /Compute-on-demand per-account cost breakdown for the V-541 admin\s*\/\/\s*surface\. Wraps the V-658 estimator \+ a pluggable usage aggregator/,
     );
   });
 
   it('V-541.B no-persistence posture pinned (no cost_snapshots table — V-541.C job; compute-on-demand)', () => {
     expect(body).toMatch(
-      /V-541\.B posture: no persistence \(no `cost_snapshots` table yet —\s*\n?\s*\/\/\s*V-541\.C's job\)\. Every call recomputes from the underlying usage\s*\n?\s*\/\/\s*data\. Cost-of-recompute is bounded by the per-account usage row\s*\n?\s*\/\/\s*count, which is small enough that compute-on-demand is acceptable\s*\n?\s*\/\/\s*for admin-tool use \(one operator, occasional queries\)/,
+      /V-541\.B posture: no persistence \(no `cost_snapshots` table yet —\s*\/\/\s*V-541\.C's job\)\. Every call recomputes from the underlying usage\s*\/\/\s*data\. Cost-of-recompute is bounded by the per-account usage row\s*\/\/\s*count, which is small enough that compute-on-demand is acceptable\s*\/\/\s*for admin-tool use \(one operator, occasional queries\)/,
     );
   });
 
   it('UsageAggregator interface: aggregateForAccount returns Promise<UsageInputs | null> with YYYY-MM cycle', () => {
     expect(body).toMatch(/export interface UsageAggregator \{/);
     expect(body).toMatch(
-      /Aggregate usage for a single account over the requested billing\s*\n?\s*\*\s*cycle\. Returns null when the account doesn't exist or has no\s*\n?\s*\*\s*usage in the cycle/,
+      /Aggregate usage for a single account over the requested billing\s*\*\s*cycle\. Returns null when the account doesn't exist or has no\s*\*\s*usage in the cycle/,
     );
     expect(body).toMatch(
-      /aggregateForAccount\(args: \{\s*\n?\s*accountId: string;\s*\n?\s*billingCycle: string; \/\/ 'YYYY-MM'\s*\n?\s*\}\): Promise<UsageInputs \| null>;/,
+      /aggregateForAccount\(args: \{\s*accountId: string;\s*billingCycle: string; \/\/ 'YYYY-MM'\s*\}\): Promise<UsageInputs \| null>;/,
     );
   });
 
@@ -76,7 +76,7 @@ describe('W396.A apps/server/src/services/cost-monitoring.ts content parity', ()
     expect(body).toMatch(/Per-tier thresholds\. Defaults to V-658 DEFAULT_TIER_THRESHOLDS\./);
     expect(body).toMatch(/tierThresholds\?: Record<string, AlertThresholds>;/);
     expect(body).toMatch(
-      /Resolve a tier label for a given account id\. Production wires this\s*\n?\s*\*\s*to AccountAuthRepo \/ accounts table; tests pass a stub map\./,
+      /Resolve a tier label for a given account id\. Production wires this\s*\*\s*to AccountAuthRepo \/ accounts table; tests pass a stub map\./,
     );
     expect(body).toMatch(/resolveTier: \(accountId: string\) => Promise<string \| null>;/);
   });
@@ -98,10 +98,10 @@ describe('W396.A apps/server/src/services/cost-monitoring.ts content parity', ()
 
   it('resolves tier + exact thresholds before aggregation and fails closed when absent', () => {
     expect(body).toMatch(
-      /const tier = await this\.opts\.resolveTier\(args\.accountId\);\s*\n?\s*if \(tier === null\) return null;\s*\n?\s*const thresholds = \(this\.opts\.tierThresholds \?\? DEFAULT_TIER_THRESHOLDS\)\[tier\];\s*\n?\s*if \(thresholds === undefined\) \{\s*\n?\s*throw new CostThresholdConfigurationError\(tier\);/,
+      /const tier = await this\.opts\.resolveTier\(args\.accountId\);\s*if \(tier === null\) return null;\s*const thresholds = \(this\.opts\.tierThresholds \?\? DEFAULT_TIER_THRESHOLDS\)\[tier\];\s*if \(thresholds === undefined\) \{\s*throw new CostThresholdConfigurationError\(tier\);/,
     );
     expect(body).toMatch(
-      /const usage = await this\.opts\.aggregator\.aggregateForAccount\(args\);\s*\n?\s*if \(usage === null\) return null;/,
+      /const usage = await this\.opts\.aggregator\.aggregateForAccount\(args\);\s*if \(usage === null\) return null;/,
     );
     expect(body).not.toMatch(/DEFAULT_TIER_THRESHOLDS\.api_starter/);
     expect(body).not.toMatch(/softCents: 0, hardCents: 0/);
@@ -109,22 +109,22 @@ describe('W396.A apps/server/src/services/cost-monitoring.ts content parity', ()
 
   it('getAccountSummary: returns summary with breakdown=estimateCost(usage, rates, thresholds)', () => {
     expect(body).toMatch(
-      /return \{\s*\n?\s*account_id: args\.accountId,\s*\n?\s*billing_cycle: args\.billingCycle,\s*\n?\s*breakdown: estimateCost\(usage, this\.opts\.rates, thresholds\),\s*\n?\s*tier,\s*\n?\s*thresholds,\s*\n?\s*\};/,
+      /return \{\s*account_id: args\.accountId,\s*billing_cycle: args\.billingCycle,\s*breakdown: estimateCost\(usage, this\.opts\.rates, thresholds\),\s*tier,\s*thresholds,\s*\};/,
     );
   });
 
   it('V-683 getConfig: read-only rates + tierThresholds (admin tooling production-config verification)', () => {
     expect(body).toMatch(
-      /V-683 — return the rates \+ tier-threshold table currently\s*\n?\s*\*\s*wired into this service so admin tooling can verify what's in\s*\n?\s*\*\s*production\. Read-only; no usage data is accessed/,
+      /V-683 — return the rates \+ tier-threshold table currently\s*\*\s*wired into this service so admin tooling can verify what's in\s*\*\s*production\. Read-only; no usage data is accessed/,
     );
     expect(body).toMatch(
-      /getConfig\(\): \{ rates: CostRates; tierThresholds: Record<string, AlertThresholds> \} \{\s*\n?\s*return \{\s*\n?\s*rates: this\.opts\.rates,\s*\n?\s*tierThresholds: this\.opts\.tierThresholds \?\? DEFAULT_TIER_THRESHOLDS,\s*\n?\s*\};\s*\n?\s*\}/,
+      /getConfig\(\): \{ rates: CostRates; tierThresholds: Record<string, AlertThresholds> \} \{\s*return \{\s*rates: this\.opts\.rates,\s*tierThresholds: this\.opts\.tierThresholds \?\? DEFAULT_TIER_THRESHOLDS,\s*\};\s*\}/,
     );
   });
 
   it('getOverview: sort by totalCents descending ("who\'s expensive" eye)', () => {
     expect(body).toMatch(
-      /\/\/ Sort by total cost descending so the admin's "who's expensive" eye\s*\n?\s*\/\/\s*hits the top of the list first\./,
+      /\/\/ Sort by total cost descending so the admin's "who's expensive" eye\s*\/\/\s*hits the top of the list first\./,
     );
     expect(body).toMatch(
       /return \[\.\.\.results\]\.sort\(\(a, b\) => b\.breakdown\.totalCents - a\.breakdown\.totalCents\);/,
@@ -134,13 +134,13 @@ describe('W396.A apps/server/src/services/cost-monitoring.ts content parity', ()
   it('billingCycleFromDate: UTC YYYY-MM label with zero-padded month', () => {
     expect(body).toMatch(/Build a YYYY-MM billing-cycle label from a Date \(UTC\)\./);
     expect(body).toMatch(
-      /export function billingCycleFromDate\(d: Date\): string \{\s*\n?\s*const y = d\.getUTCFullYear\(\)\.toString\(\);\s*\n?\s*const m = \(d\.getUTCMonth\(\) \+ 1\)\.toString\(\)\.padStart\(2, '0'\);\s*\n?\s*return `\$\{y\}-\$\{m\}`;\s*\n?\s*\}/,
+      /export function billingCycleFromDate\(d: Date\): string \{\s*const y = d\.getUTCFullYear\(\)\.toString\(\);\s*const m = \(d\.getUTCMonth\(\) \+ 1\)\.toString\(\)\.padStart\(2, '0'\);\s*return `\$\{y\}-\$\{m\}`;\s*\}/,
     );
   });
 
   it('imports: DEFAULT_TIER_THRESHOLDS + estimateCost + 4 types from ../lib/cost-estimator.js', () => {
     expect(body).toMatch(
-      /import \{\s*\n?\s*DEFAULT_TIER_THRESHOLDS,\s*\n?\s*estimateCost,\s*\n?\s*type AlertThresholds,\s*\n?\s*type CostBreakdown,\s*\n?\s*type CostRates,\s*\n?\s*type UsageInputs,\s*\n?\s*\} from '\.\.\/lib\/cost-estimator\.js';/,
+      /import \{\s*DEFAULT_TIER_THRESHOLDS,\s*estimateCost,\s*type AlertThresholds,\s*type CostBreakdown,\s*type CostRates,\s*type UsageInputs,\s*\} from '\.\.\/lib\/cost-estimator\.js';/,
     );
   });
 

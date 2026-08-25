@@ -29,7 +29,7 @@ describe('W393.C apps/server/src/middleware/request-id.ts content parity', () =>
 
   it('framing pinned: trust inbound x-request-id else generate (Fastify genReqId), surface on response for correlation', () => {
     expect(body).toMatch(
-      /Request ID propagation: trust an inbound `x-request-id` header if present,\s*\n?\s*\/\/\s*otherwise generate one\. Fastify's built-in `genReqId` covers generation;\s*\n?\s*\/\/\s*this hook surfaces the id on the response so callers can correlate/,
+      /Request ID propagation: trust an inbound `x-request-id` header if present,\s*\/\/\s*otherwise generate one\. Fastify's built-in `genReqId` covers generation;\s*\/\/\s*this hook surfaces the id on the response so callers can correlate/,
     );
   });
 
@@ -41,7 +41,7 @@ describe('W393.C apps/server/src/middleware/request-id.ts content parity', () =>
 
   it('onSend hook: reply.header("x-request-id", request.id) + hookDone(null, payload)', () => {
     expect(body).toMatch(
-      /app\.addHook\('onSend', \(request, reply, payload, hookDone\) => \{\s*\n?\s*reply\.header\('x-request-id', request\.id\);\s*\n?\s*hookDone\(null, payload\);\s*\n?\s*\}\);/,
+      /app\.addHook\('onSend', \(request, reply, payload, hookDone\) => \{\s*reply\.header\('x-request-id', request\.id\);\s*hookDone\(null, payload\);\s*\}\);/,
     );
     expect(body).toMatch(/done\(\);/);
   });

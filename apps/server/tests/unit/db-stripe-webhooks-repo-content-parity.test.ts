@@ -39,7 +39,7 @@ describe('W446.C apps/server/src/db/stripe-webhooks-repo.ts content parity', () 
 
   it('V-080 + V-089 framing pinned: "Drizzle-backed StripeWebhooksRepo (V-080 + V-089). Idempotency ledger + subscription mirror writes + account tier / trial-pack mutations triggered by inbound Stripe events."', () => {
     expect(body).toMatch(
-      /\/\/ Drizzle-backed StripeWebhooksRepo \(V-080 \+ V-089\)\. Idempotency\s*\n?\s*\/\/ ledger \+ subscription mirror writes \+ account tier \/ trial-pack\s*\n?\s*\/\/ mutations triggered by inbound Stripe events\./,
+      /\/\/ Drizzle-backed StripeWebhooksRepo \(V-080 \+ V-089\)\. Idempotency\s*\/\/ ledger \+ subscription mirror writes \+ account tier \/ trial-pack\s*\/\/ mutations triggered by inbound Stripe events\./,
     );
   });
 
@@ -58,28 +58,28 @@ describe('W446.C apps/server/src/db/stripe-webhooks-repo.ts content parity', () 
 
   it('hasEvent: 1-field select where eventId + limit 1 → row !== undefined boolean', () => {
     expect(body).toMatch(
-      /async hasEvent\(eventId: string\): Promise<boolean> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\{ eventId: processedStripeEvents\.eventId \}\)\s*\n?\s*\.from\(processedStripeEvents\)\s*\n?\s*\.where\(eq\(processedStripeEvents\.eventId, eventId\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*return row !== undefined;\s*\n?\s*\}/,
+      /async hasEvent\(eventId: string\): Promise<boolean> \{\s*const \[row\] = await this\.database\.db\s*\.select\(\{ eventId: processedStripeEvents\.eventId \}\)\s*\.from\(processedStripeEvents\)\s*\.where\(eq\(processedStripeEvents\.eventId, eventId\)\)\s*\.limit\(1\);\s*return row !== undefined;\s*\}/,
     );
   });
 
   it('recordEvent: 5-field values (eventId + eventType + payloadHash + result + receivedAt); onConflictDoNothing target=eventId; returning {eventId} length > 0 → {inserted}', () => {
     expect(body).toMatch(
-      /\.values\(\{\s*\n?\s*eventId: args\.eventId,\s*\n?\s*eventType: args\.eventType,\s*\n?\s*payloadHash: args\.payloadHash,\s*\n?\s*result: args\.result,\s*\n?\s*receivedAt: args\.receivedAt,\s*\n?\s*\}\)\s*\n?\s*\.onConflictDoNothing\(\{ target: processedStripeEvents\.eventId \}\)\s*\n?\s*\.returning\(\{ eventId: processedStripeEvents\.eventId \}\);\s*\n?\s*return \{ inserted: result\.length > 0 \};/,
+      /\.values\(\{\s*eventId: args\.eventId,\s*eventType: args\.eventType,\s*payloadHash: args\.payloadHash,\s*result: args\.result,\s*receivedAt: args\.receivedAt,\s*\}\)\s*\.onConflictDoNothing\(\{ target: processedStripeEvents\.eventId \}\)\s*\.returning\(\{ eventId: processedStripeEvents\.eventId \}\);\s*return \{ inserted: result\.length > 0 \};/,
     );
   });
 
   it('findAccountIdFromCustomerOrRef: clientReferenceId branch first (accounts.id match); then stripeCustomerId fallback (accounts.stripeCustomerId match); both null → null', () => {
     expect(body).toMatch(
-      /if \(args\.clientReferenceId !== null\) \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\{ id: accounts\.id \}\)\s*\n?\s*\.from\(accounts\)\s*\n?\s*\.where\(eq\(accounts\.id, args\.clientReferenceId\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*if \(row !== undefined\) return row\.id;\s*\n?\s*\}\s*\n?\s*if \(args\.stripeCustomerId !== null\) \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\{ id: accounts\.id \}\)\s*\n?\s*\.from\(accounts\)\s*\n?\s*\.where\(eq\(accounts\.stripeCustomerId, args\.stripeCustomerId\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*if \(row !== undefined\) return row\.id;\s*\n?\s*\}\s*\n?\s*return null;/,
+      /if \(args\.clientReferenceId !== null\) \{\s*const \[row\] = await this\.database\.db\s*\.select\(\{ id: accounts\.id \}\)\s*\.from\(accounts\)\s*\.where\(eq\(accounts\.id, args\.clientReferenceId\)\)\s*\.limit\(1\);\s*if \(row !== undefined\) return row\.id;\s*\}\s*if \(args\.stripeCustomerId !== null\) \{\s*const \[row\] = await this\.database\.db\s*\.select\(\{ id: accounts\.id \}\)\s*\.from\(accounts\)\s*\.where\(eq\(accounts\.stripeCustomerId, args\.stripeCustomerId\)\)\s*\.limit\(1\);\s*if \(row !== undefined\) return row\.id;\s*\}\s*return null;/,
     );
   });
 
   it('upsertSubscription: 8-status enum union (incomplete|incomplete_expired|trialing|active|past_due|canceled|unpaid|paused) Stripe-mirror; onConflictDoUpdate target=stripeSubscriptionId; V-079 event-recency setWhere (updated_at <= excluded.updated_at) gates the conflict UPDATE; updates accountId+stripePriceId+tier+status+currentPeriodEnd+cancelAtPeriodEnd+canceledAt+updatedAt on conflict; .returning() surfaces the {applied} signal', () => {
     expect(body).toMatch(
-      /status:\s*\n?\s*\| 'incomplete'\s*\n?\s*\| 'incomplete_expired'\s*\n?\s*\| 'trialing'\s*\n?\s*\| 'active'\s*\n?\s*\| 'past_due'\s*\n?\s*\| 'canceled'\s*\n?\s*\| 'unpaid'\s*\n?\s*\| 'paused';/,
+      /status:\s*\| 'incomplete'\s*\| 'incomplete_expired'\s*\| 'trialing'\s*\| 'active'\s*\| 'past_due'\s*\| 'canceled'\s*\| 'unpaid'\s*\| 'paused';/,
     );
     expect(body).toMatch(
-      /\.onConflictDoUpdate\(\{\s*\n?\s*target: subscriptions\.stripeSubscriptionId,\s*\n?\s*setWhere: sql`\$\{subscriptions\.updatedAt\} <= excluded\.updated_at`,\s*\n?\s*set: \{\s*\n?\s*accountId: args\.accountId,\s*\n?\s*stripePriceId: args\.stripePriceId,\s*\n?\s*tier: args\.tier,\s*\n?\s*status: args\.status,\s*\n?\s*currentPeriodEnd: args\.currentPeriodEnd,\s*\n?\s*cancelAtPeriodEnd: args\.cancelAtPeriodEnd,\s*\n?\s*canceledAt: args\.canceledAt,\s*\n?\s*updatedAt: args\.at,\s*\n?\s*\},\s*\n?\s*\}\)\s*\n?\s*\.returning\(\{ id: subscriptions\.id \}\);\s*\n?\s*return \{ applied: result\.length > 0 \};/,
+      /\.onConflictDoUpdate\(\{\s*target: subscriptions\.stripeSubscriptionId,\s*setWhere: sql`\$\{subscriptions\.updatedAt\} <= excluded\.updated_at`,\s*set: \{\s*accountId: args\.accountId,\s*stripePriceId: args\.stripePriceId,\s*tier: args\.tier,\s*status: args\.status,\s*currentPeriodEnd: args\.currentPeriodEnd,\s*cancelAtPeriodEnd: args\.cancelAtPeriodEnd,\s*canceledAt: args\.canceledAt,\s*updatedAt: args\.at,\s*\},\s*\}\)\s*\.returning\(\{ id: subscriptions\.id \}\);\s*return \{ applied: result\.length > 0 \};/,
     );
   });
 
@@ -97,7 +97,7 @@ describe('W446.C apps/server/src/db/stripe-webhooks-repo.ts content parity', () 
 
   it("sql import unused-warn suppression rationale: 'Reference sql to keep the import live for any future raw-SQL needs.' + `void sql;`", () => {
     expect(body).toMatch(
-      /\/\/ Reference sql to keep the import live for any future raw-SQL needs\.\s*\n?\s*void sql;/,
+      /\/\/ Reference sql to keep the import live for any future raw-SQL needs\.\s*void sql;/,
     );
   });
 

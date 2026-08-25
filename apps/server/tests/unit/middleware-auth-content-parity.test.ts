@@ -39,13 +39,13 @@ describe('W394.B apps/server/src/middleware/auth.ts content parity', () => {
 
   it('Module framing pinned: validates Authorization header + attaches account + problem+json reject', () => {
     expect(body).toMatch(
-      /Auth middleware: validates the Authorization header, attaches the\s*\n?\s*\/\/\s*account context to `request\.account`, and rejects with the appropriate\s*\n?\s*\/\/\s*problem\+json error if the key is missing\/invalid\/revoked\/expired/,
+      /Auth middleware: validates the Authorization header, attaches the\s*\/\/\s*account context to `request\.account`, and rejects with the appropriate\s*\/\/\s*problem\+json error if the key is missing\/invalid\/revoked\/expired/,
     );
   });
 
   it('FastifyRequest type augmentation: account: AccountContext | null', () => {
     expect(body).toMatch(
-      /declare module 'fastify' \{\s*\n?\s*interface FastifyRequest \{\s*\n?\s*account: AccountContext \| null;\s*\n?\s*\}/,
+      /declare module 'fastify' \{\s*interface FastifyRequest \{\s*account: AccountContext \| null;\s*\}/,
     );
   });
 
@@ -57,22 +57,22 @@ describe('W394.B apps/server/src/middleware/auth.ts content parity', () => {
       /requireAuthEventSource: \(request: FastifyRequest, reply: FastifyReply\) => Promise<void>;/,
     );
     expect(body).toMatch(
-      /requireScope: \(\s*\n?\s*scope: ApiKeyScope,\s*\n?\s*\) => \(request: FastifyRequest, reply: FastifyReply\) => Promise<void>;/,
+      /requireScope: \(\s*scope: ApiKeyScope,\s*\) => \(request: FastifyRequest, reply: FastifyReply\) => Promise<void>;/,
     );
     expect(body).toMatch(
-      /requireMfaFresh: \(opts\?: \{\s*\n?\s*freshnessSeconds\?: number;\s*\n?\s*\}\) => \(request: FastifyRequest, reply: FastifyReply\) => Promise<void>;/,
+      /requireMfaFresh: \(opts\?: \{\s*freshnessSeconds\?: number;\s*\}\) => \(request: FastifyRequest, reply: FastifyReply\) => Promise<void>;/,
     );
   });
 
   it('V-353e requireMfaFresh framing pinned: 403 when never-satisfied or older than freshness window; API-key bypass; per-route override', () => {
     expect(body).toMatch(
-      /V-353e — step-up MFA gate\. Throws MfaStepUpRequiredError \(403\)\s*\n?\s*\*\s*when the calling web session's `mfa_satisfied_at` is null or\s*\n?\s*\*\s*older than the freshness window \(default 15 min per V-353a Q4\)\./,
+      /V-353e — step-up MFA gate\. Throws MfaStepUpRequiredError \(403\)\s*\*\s*when the calling web session's `mfa_satisfied_at` is null or\s*\*\s*older than the freshness window \(default 15 min per V-353a Q4\)\./,
     );
     expect(body).toMatch(
-      /No-ops when the calling account is NOT MFA-enrolled \(gate\s*\n?\s*\*\s*empty\), or when the caller is API-key-authed \(machine path,\s*\n?\s*\*\s*MFA is a human-factor concept\)/,
+      /No-ops when the calling account is NOT MFA-enrolled \(gate\s*\*\s*empty\), or when the caller is API-key-authed \(machine path,\s*\*\s*MFA is a human-factor concept\)/,
     );
     expect(body).toMatch(
-      /Configure the window per-route\s*\n?\s*\*\s*if you want shorter \(e\.g\. 5 min for billing-tier change\)/,
+      /Configure the window per-route\s*\*\s*if you want shorter \(e\.g\. 5 min for billing-tier change\)/,
     );
   });
 
@@ -95,26 +95,26 @@ describe('W394.B apps/server/src/middleware/auth.ts content parity', () => {
 
   it('requireAuth + requireAuthEventSource: authenticate, enforce current-tier and Free-device route access, then assign request.account', () => {
     expect(body).toMatch(
-      /const requireAuth = async \(request: FastifyRequest, _reply: FastifyReply\): Promise<void> => \{\s*\n?\s*try \{\s*\n?\s*const token = extractBearerToken\(request\.headers\.authorization\);\s*\n?\s*const ctx = await authenticate\(\s*\n?\s*opts\.authRepo,\s*\n?\s*token,\s*\n?\s*opts\.authCache,\s*\n?\s*new Date\(\),\s*\n?\s*opts\.authCoalescer,\s*\n?\s*opts\.staffEmails \?\? new Set\(\),\s*\n?\s*opts\.negativeAuthCache \?\? null,\s*\n?\s*opts\.oauthStore \?\? null,\s*\n?\s*\);\s*\n?\s*requireProgrammaticApiAccess\(ctx, request\);\s*\n?\s*request\.account = ctx;/,
+      /const requireAuth = async \(request: FastifyRequest, _reply: FastifyReply\): Promise<void> => \{\s*try \{\s*const token = extractBearerToken\(request\.headers\.authorization\);\s*const ctx = await authenticate\(\s*opts\.authRepo,\s*token,\s*opts\.authCache,\s*new Date\(\),\s*opts\.authCoalescer,\s*opts\.staffEmails \?\? new Set\(\),\s*opts\.negativeAuthCache \?\? null,\s*opts\.oauthStore \?\? null,\s*\);\s*requireProgrammaticApiAccess\(ctx, request\);\s*request\.account = ctx;/,
     );
     expect(body).toMatch(
-      /const requireAuthEventSource = async \(\s*\n?\s*request: FastifyRequest,\s*\n?\s*_reply: FastifyReply,\s*\n?\s*\): Promise<void> => \{[\s\S]*?const ctx = await authenticate\(\s*\n?\s*opts\.authRepo,\s*\n?\s*token,\s*\n?\s*opts\.authCache,\s*\n?\s*new Date\(\),\s*\n?\s*opts\.authCoalescer,\s*\n?\s*opts\.staffEmails \?\? new Set\(\),\s*\n?\s*opts\.negativeAuthCache \?\? null,\s*\n?\s*opts\.oauthStore \?\? null,\s*\n?\s*\);\s*\n?\s*requireProgrammaticApiAccess\(ctx, request\);\s*\n?\s*request\.account = ctx;/,
+      /const requireAuthEventSource = async \(\s*request: FastifyRequest,\s*_reply: FastifyReply,\s*\): Promise<void> => \{[\s\S]*?const ctx = await authenticate\(\s*opts\.authRepo,\s*token,\s*opts\.authCache,\s*new Date\(\),\s*opts\.authCoalescer,\s*opts\.staffEmails \?\? new Set\(\),\s*opts\.negativeAuthCache \?\? null,\s*opts\.oauthStore \?\? null,\s*\);\s*requireProgrammaticApiAccess\(ctx, request\);\s*request\.account = ctx;/,
     );
   });
 
   it('Free customer API boundary preserves web sessions, route-limits Free devices, and tier-gates ordinary credentials', () => {
     expect(body).toMatch(
-      /function requireProgrammaticApiAccess\(ctx: AccountContext, request: FastifyRequest\): void \{\s*\n?\s*if \(ctx\.webSession !== null\) return;\s*\n?\s*if \(ctx\.apiKey\.provenance === 'cli_device'\) \{\s*\n?\s*if \(\s*\n?\s*ctx\.account\.tier === 'free' &&\s*\n?\s*!isIndependentDeviceKeyDeniedRoute\(request\.method, request\.routeOptions\.url\)\s*\n?\s*\) \{\s*\n?\s*requireFreeDesktopRouteAccess\(request\.method, request\.routeOptions\.url\);\s*\n?\s*\}\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*requireTierFeature\(ctx\.account\.tier, 'apiAccess'\);\s*\n?\s*\}/,
+      /function requireProgrammaticApiAccess\(ctx: AccountContext, request: FastifyRequest\): void \{\s*if \(ctx\.webSession !== null\) return;\s*if \(ctx\.apiKey\.provenance === 'cli_device'\) \{\s*if \(\s*ctx\.account\.tier === 'free' &&\s*!isIndependentDeviceKeyDeniedRoute\(request\.method, request\.routeOptions\.url\)\s*\) \{\s*requireFreeDesktopRouteAccess\(request\.method, request\.routeOptions\.url\);\s*\}\s*return;\s*\}\s*requireTierFeature\(ctx\.account\.tier, 'apiAccess'\);\s*\}/,
     );
     expect(body.match(/requireProgrammaticApiAccess\(ctx, request\);/g)).toHaveLength(2);
     expect(body).toMatch(
-      /import \{\s*\n?\s*isIndependentDeviceKeyDeniedRoute,\s*\n?\s*requireFreeDesktopRouteAccess,\s*\n?\s*\} from '\.\/free-desktop-route-policy\.js';/,
+      /import \{\s*isIndependentDeviceKeyDeniedRoute,\s*requireFreeDesktopRouteAccess,\s*\} from '\.\/free-desktop-route-policy\.js';/,
     );
   });
 
   it('requireScope decorator: calls requireAuth if request.account null, then services/auth.requireScope(ctx, scope)', () => {
     expect(body).toMatch(
-      /app\.decorate\('requireScope', \(scope: ApiKeyScope\) => \{\s*\n?\s*return async \(request: FastifyRequest, reply: FastifyReply\): Promise<void> => \{\s*\n?\s*if \(!request\.account\) \{\s*\n?\s*await requireAuth\(request, reply\);\s*\n?\s*\}\s*\n?\s*if \(request\.account\) requireScope\(request\.account, scope\);/,
+      /app\.decorate\('requireScope', \(scope: ApiKeyScope\) => \{\s*return async \(request: FastifyRequest, reply: FastifyReply\): Promise<void> => \{\s*if \(!request\.account\) \{\s*await requireAuth\(request, reply\);\s*\}\s*if \(request\.account\) requireScope\(request\.account, scope\);/,
     );
   });
 
@@ -123,20 +123,20 @@ describe('W394.B apps/server/src/middleware/auth.ts content parity', () => {
       /const window = gateOpts\?\.freshnessSeconds \?\? DEFAULT_MFA_FRESHNESS_SECONDS;/,
     );
     expect(body).toMatch(
-      /\/\/ API-key callers \(no web session\) bypass — MFA is a human-\s*\n?\s*\/\/\s*factor gate, not a machine-to-machine concept\./,
+      /\/\/ API-key callers \(no web session\) bypass — MFA is a human-\s*\/\/\s*factor gate, not a machine-to-machine concept\./,
     );
     expect(body).toMatch(/if \(ctx\.webSession === null\) return;/);
     expect(body).toMatch(
-      /\/\/ No MfaService wired = MFA disabled in this deploy → no gate\.\s*\n?\s*if \(!opts\.mfaService\) return;/,
+      /\/\/ No MfaService wired = MFA disabled in this deploy → no gate\.\s*if \(!opts\.mfaService\) return;/,
     );
     expect(body).toMatch(/if \(!status\.enrolled\) return;/);
     expect(body).toMatch(/const sat = ctx\.webSession\.mfaSatisfiedAt;/);
     expect(body).toMatch(
-      /if \(sat === null\) \{\s*\n?\s*throw new MfaStepUpRequiredError\('never_satisfied'\);\s*\n?\s*\}/,
+      /if \(sat === null\) \{\s*throw new MfaStepUpRequiredError\('never_satisfied'\);\s*\}/,
     );
     expect(body).toMatch(/const ageSec = \(Date\.now\(\) - sat\.getTime\(\)\) \/ 1000;/);
     expect(body).toMatch(
-      /if \(ageSec > window\) \{\s*\n?\s*throw new MfaStepUpRequiredError\('expired'\);\s*\n?\s*\}/,
+      /if \(ageSec > window\) \{\s*throw new MfaStepUpRequiredError\('expired'\);\s*\}/,
     );
   });
 

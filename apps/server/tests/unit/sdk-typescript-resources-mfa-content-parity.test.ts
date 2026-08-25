@@ -59,19 +59,19 @@ describe('W427.A packages/sdk-typescript/src/resources/mfa.ts content parity', (
 
   it('Enrollment management scope pinned with 5-verb list (status / enroll / verify / disable / regenerate recovery codes) + "Uses the calling web-session bearer". CRITICAL: drift to using an API-key bearer would break the web-session-only MFA enrollment flow (API keys are NOT supposed to enroll/disable MFA on the account).', () => {
     expect(body).toMatch(
-      /\/\/ Enrollment management \(status \/ enroll \/ verify \/ disable \/ regenerate\s*\n?\s*\/\/ recovery codes\)\. Uses the calling web-session bearer;/,
+      /\/\/ Enrollment management \(status \/ enroll \/ verify \/ disable \/ regenerate\s*\/\/ recovery codes\)\. Uses the calling web-session bearer;/,
     );
   });
 
   it('CRITICAL Per-account-NOT-team-RBAC invariant pinned per-line: "the V-326e X-Driftstack-Account team-RBAC header is not honored — MFA is per-account, not per-team-context." Drift to honoring the header would let a team member with bearer-token access to the owner\'s account ENROLL MFA on the OWNER\'s account, locking the owner out. Silent auth-surface widening.', () => {
     expect(body).toMatch(
-      /the V-326e\s*\n?\s*\/\/ X-Driftstack-Account team-RBAC header is not honored — MFA is per-\s*\n?\s*\/\/ account, not per-team-context\./,
+      /the V-326e\s*\/\/ X-Driftstack-Account team-RBAC header is not honored — MFA is per-\s*\/\/ account, not per-team-context\./,
     );
   });
 
   it('Pairs-with-auth navigation breadcrumb pinned: "Pairs with `client.auth.mfaChallenge` (login MFA exchange) + `client.auth.mfaStepUp` (V-353e step-up gate)." Drift to dropping the pairing reference would lose the discoverability link that helps customers find the login-side MFA verbs after they finish enrollment.', () => {
     expect(body).toMatch(
-      /\/\/ Pairs with `client\.auth\.mfaChallenge` \(login MFA exchange\) \+\s*\n?\s*\/\/ `client\.auth\.mfaStepUp` \(V-353e step-up gate\)\./,
+      /\/\/ Pairs with `client\.auth\.mfaChallenge` \(login MFA exchange\) \+\s*\/\/ `client\.auth\.mfaStepUp` \(V-353e step-up gate\)\./,
     );
   });
 
@@ -82,31 +82,31 @@ describe('W427.A packages/sdk-typescript/src/resources/mfa.ts content parity', (
 
   it('MfaStatusResponse — 4-field shape: enrolled (bool) + enrolled_at (nullable string) + last_used_at (nullable string) + unused_recovery_codes (number). CRITICAL: unused_recovery_codes is what lets the dashboard NAG customers when they\'ve burnt through their codes and should regenerate before lockout (e.g. "You have 2 recovery codes left — generate more"). Drift to dropping the count would lose the nag-banner trigger.', () => {
     expect(body).toMatch(
-      /export interface MfaStatusResponse \{\s*\n?\s*enrolled: boolean;\s*\n?\s*enrolled_at: string \| null;\s*\n?\s*last_used_at: string \| null;\s*\n?\s*unused_recovery_codes: number;\s*\n?\s*\}/,
+      /export interface MfaStatusResponse \{\s*enrolled: boolean;\s*enrolled_at: string \| null;\s*last_used_at: string \| null;\s*unused_recovery_codes: number;\s*\}/,
     );
   });
 
   it("CRITICAL MfaEnrollResponse — TOTP parameter literal-type triplet pinned as TS LITERAL types (not just `string` / `number`): `algorithm: 'SHA1'` + `digits: 6` + `period_seconds: 30`. Drift to widening to `string` / `number` would silently accept SHA256 or 8-digit codes from server-side changes; widening would also lose the type-system enforcement that authenticator-app pairings stay stable. otpauth_uri (QR code) + secret_base32 (manual entry fallback) both pinned.", () => {
     expect(body).toMatch(
-      /export interface MfaEnrollResponse \{\s*\n?\s*\/\*\* otpauth:\/\/ URI for QR-code rendering in an authenticator app\. \*\/\s*\n?\s*otpauth_uri: string;\s*\n?\s*\/\*\* Plaintext base32-encoded TOTP secret for manual entry\. \*\/\s*\n?\s*secret_base32: string;\s*\n?\s*algorithm: 'SHA1';\s*\n?\s*digits: 6;\s*\n?\s*period_seconds: 30;\s*\n?\s*\}/,
+      /export interface MfaEnrollResponse \{\s*\/\*\* otpauth:\/\/ URI for QR-code rendering in an authenticator app\. \*\/\s*otpauth_uri: string;\s*\/\*\* Plaintext base32-encoded TOTP secret for manual entry\. \*\/\s*secret_base32: string;\s*algorithm: 'SHA1';\s*digits: 6;\s*period_seconds: 30;\s*\}/,
     );
   });
 
   it('MfaVerifyRequest — single field `code: string` with "First 6-digit TOTP code from the customer\'s authenticator app" framing. The "first" wording is load-bearing — it tells customers verify is one-shot enrollment-confirmation, NOT an ongoing login-challenge (those live on auth.mfaChallenge).', () => {
     expect(body).toMatch(
-      /export interface MfaVerifyRequest \{\s*\n?\s*\/\*\* First 6-digit TOTP code from the customer's authenticator app\. \*\/\s*\n?\s*code: string;\s*\n?\s*\}/,
+      /export interface MfaVerifyRequest \{\s*\/\*\* First 6-digit TOTP code from the customer's authenticator app\. \*\/\s*code: string;\s*\}/,
     );
   });
 
   it('CRITICAL MfaVerifyResponse — single field `recovery_codes: string[]` with "10 single-use recovery codes; shown ONCE" framing. Drift to dropping "shown ONCE" would lose the customer-facing warning. Drift to a different count than 10 would mismatch dashboard rendering. Drift to multi-use codes would invert the single-use security model. This shape is also re-used by regenerateRecoveryCodes (same wire shape).', () => {
     expect(body).toMatch(
-      /export interface MfaVerifyResponse \{\s*\n?\s*\/\*\* 10 single-use recovery codes; shown ONCE\. \*\/\s*\n?\s*recovery_codes: string\[\];\s*\n?\s*\}/,
+      /export interface MfaVerifyResponse \{\s*\/\*\* 10 single-use recovery codes; shown ONCE\. \*\/\s*recovery_codes: string\[\];\s*\}/,
     );
   });
 
   it('CRITICAL MfaDisableRequest — literal `\'disable-mfa\'` confirmation phrase as TS LITERAL type. Drift to widening to `string` would let "yes" / "ok" / typos accidentally disable MFA. Typo-safe destructive-action gate — drift to dropping the literal would invert the safety model.', () => {
     expect(body).toMatch(
-      /export interface MfaDisableRequest \{\s*\n?\s*\/\*\* Literal 'disable-mfa' confirmation phrase\. \*\/\s*\n?\s*confirm: 'disable-mfa';\s*\n?\s*\}/,
+      /export interface MfaDisableRequest \{\s*\/\*\* Literal 'disable-mfa' confirmation phrase\. \*\/\s*confirm: 'disable-mfa';\s*\}/,
     );
   });
 
@@ -118,16 +118,16 @@ describe('W427.A packages/sdk-typescript/src/resources/mfa.ts content parity', (
   it('status verb — GET /v1/account/mfa → Promise<MfaStatusResponse>. Single-line implementation. No body, no auth state — just reads enrollment state.', () => {
     expect(body).toMatch(/\/\*\* Read MFA enrollment state for the calling account\. \*\//);
     expect(body).toMatch(
-      /status\(\): Promise<MfaStatusResponse> \{\s*\n?\s*return this\.http\.request<MfaStatusResponse>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/account\/mfa',\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /status\(\): Promise<MfaStatusResponse> \{\s*return this\.http\.request<MfaStatusResponse>\(\{\s*method: 'GET',\s*path: '\/v1\/account\/mfa',\s*\}\);\s*\}/,
     );
   });
 
   it('enroll verb — POST /v1/account/mfa/enroll with EXPLICIT `body: {}` empty object. JSDoc pinned per-line: customer scans otpauth_uri → calls verify with first code → server stores secret encrypted at rest → plaintext shown ONCE here. Drift to omitting `body: {}` would silently send no body, but the server expects a JSON object; drift to including any field would force POSTed input.', () => {
     expect(body).toMatch(
-      /\*\s*Start TOTP enrollment\. Customer scans `otpauth_uri` with their\s*\n?\s*\*\s*authenticator app, then calls `verify\(\.\.\.\)` with the first\s*\n?\s*\*\s*6-digit code\. Server stores the secret encrypted at rest;\s*\n?\s*\*\s*plaintext is shown ONCE here\./,
+      /\*\s*Start TOTP enrollment\. Customer scans `otpauth_uri` with their\s*\*\s*authenticator app, then calls `verify\(\.\.\.\)` with the first\s*\*\s*6-digit code\. Server stores the secret encrypted at rest;\s*\*\s*plaintext is shown ONCE here\./,
     );
     expect(body).toMatch(
-      /enroll\(\): Promise<MfaEnrollResponse> \{\s*\n?\s*return this\.http\.request<MfaEnrollResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/account\/mfa\/enroll',\s*\n?\s*body: \{\},\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /enroll\(\): Promise<MfaEnrollResponse> \{\s*return this\.http\.request<MfaEnrollResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/account\/mfa\/enroll',\s*body: \{\},\s*\}\);\s*\}/,
     );
   });
 
@@ -136,16 +136,16 @@ describe('W427.A packages/sdk-typescript/src/resources/mfa.ts content parity', (
       /\/\*\* Confirm enrollment with the first code\. Returns 10 recovery codes\. \*\//,
     );
     expect(body).toMatch(
-      /verify\(body: MfaVerifyRequest\): Promise<MfaVerifyResponse> \{\s*\n?\s*return this\.http\.request<MfaVerifyResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/account\/mfa\/verify',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /verify\(body: MfaVerifyRequest\): Promise<MfaVerifyResponse> \{\s*return this\.http\.request<MfaVerifyResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/account\/mfa\/verify',\s*body,\s*\}\);\s*\}/,
     );
   });
 
   it('CRITICAL disable verb — DELETE /v1/account/mfa with MfaDisableRequest body. V-353e step-up gate framing pinned per-line: "Requires fresh MFA proof per V-353e step-up gate (15-minute freshness window) — call `client.auth.mfaStepUp(...)` first if the gate is stale." + "Recovery codes are invalidated." Drift to skipping the step-up check would let MFA be disabled with stale auth — a stolen session 16+ minutes old could disable MFA without re-proving. Drift to NOT invalidating recovery codes on disable would leave them valid for a future re-enroll, defeating the disable-as-reset semantic.', () => {
     expect(body).toMatch(
-      /\*\s*Disable MFA\. Requires fresh MFA proof per V-353e step-up gate\s*\n?\s*\*\s*\(15-minute freshness window\) — call `client\.auth\.mfaStepUp\(\.\.\.\)`\s*\n?\s*\*\s*first if the gate is stale\. Recovery codes are invalidated\./,
+      /\*\s*Disable MFA\. Requires fresh MFA proof per V-353e step-up gate\s*\*\s*\(15-minute freshness window\) — call `client\.auth\.mfaStepUp\(\.\.\.\)`\s*\*\s*first if the gate is stale\. Recovery codes are invalidated\./,
     );
     expect(body).toMatch(
-      /disable\(body: MfaDisableRequest\): Promise<void> \{\s*\n?\s*return this\.http\.request<void>\(\{\s*\n?\s*method: 'DELETE',\s*\n?\s*path: '\/v1\/account\/mfa',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /disable\(body: MfaDisableRequest\): Promise<void> \{\s*return this\.http\.request<void>\(\{\s*method: 'DELETE',\s*path: '\/v1\/account\/mfa',\s*body,\s*\}\);\s*\}/,
     );
   });
 
@@ -154,7 +154,7 @@ describe('W427.A packages/sdk-typescript/src/resources/mfa.ts content parity', (
       /\/\*\* Mint 10 fresh recovery codes\. Old codes invalidated; shown ONCE\. \*\//,
     );
     expect(body).toMatch(
-      /regenerateRecoveryCodes\(\): Promise<MfaVerifyResponse> \{\s*\n?\s*return this\.http\.request<MfaVerifyResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/account\/mfa\/recovery-codes\/regenerate',\s*\n?\s*body: \{\},\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /regenerateRecoveryCodes\(\): Promise<MfaVerifyResponse> \{\s*return this\.http\.request<MfaVerifyResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/account\/mfa\/recovery-codes\/regenerate',\s*body: \{\},\s*\}\);\s*\}/,
     );
   });
 

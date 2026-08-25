@@ -47,13 +47,13 @@ describe('Activation-gate disabled-stub customer-facing docs URL cross-source in
 
   it("routes/recipes header explicitly documents the slice 87+88 fix-shape: 'Same fix shape as agent-sessions / byok-anthropic / proxy disabled-stubs (slices 87 + 88): point at customer-facing docs URL, NOT the internal handoff/design doc.' — pinned so the historical-lesson rationale stays documented (drift away from this pattern would invite the original internal-jargon-in-SDK-body regression)", () => {
     expect(recipes).toMatch(
-      /Same fix shape as agent-sessions \/ byok-anthropic \/\s*\n?\s*\/\/ proxy disabled-stubs \(slices 87 \+ 88\): point at customer-facing\s*\n?\s*\/\/ docs URL, NOT the internal handoff\/design doc\./,
+      /Same fix shape as agent-sessions \/ byok-anthropic \/\s*\/\/ proxy disabled-stubs \(slices 87 \+ 88\): point at customer-facing\s*\/\/ docs URL, NOT the internal handoff\/design doc\./,
     );
   });
 
   it("routes/account-byok-anthropic header explicitly documents the slice 87 / 6efc0a34 fix-shape: 'Same fix shape as agent-sessions disabled-stub (slice 87 / 6efc0a34).' — pinned so the historical-commit-anchor cross-reference stays documented", () => {
     expect(accountByok).toMatch(
-      /Same fix shape as agent-sessions disabled-stub\s*\n?\s*\/\/ \(slice 87 \/ 6efc0a34\)\./,
+      /Same fix shape as agent-sessions disabled-stub\s*\/\/ \(slice 87 \/ 6efc0a34\)\./,
     );
   });
 

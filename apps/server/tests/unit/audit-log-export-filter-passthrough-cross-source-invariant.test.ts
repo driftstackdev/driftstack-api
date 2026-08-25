@@ -35,7 +35,7 @@ describe('audit-log filter passthrough cross-source invariant', () => {
       /\.\.\.\(parsed\.data\.actor_type !== undefined \? \{ actorType: parsed\.data\.actor_type \} : \{\}\),/,
     );
     expect(route).toMatch(
-      /\.\.\.\(parsed\.data\.target_resource_id !== undefined\s*\n?\s*\? \{ targetResourceId: parsed\.data\.target_resource_id \}\s*\n?\s*: \{\}\),/,
+      /\.\.\.\(parsed\.data\.target_resource_id !== undefined\s*\? \{ targetResourceId: parsed\.data\.target_resource_id \}\s*: \{\}\),/,
     );
   });
 });

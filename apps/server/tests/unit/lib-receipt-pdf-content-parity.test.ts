@@ -36,19 +36,19 @@ describe('W389.B apps/server/src/lib/receipt-pdf.ts content parity', () => {
   it('V-666.U framing + hand-rolled PDF 1.4 rationale pinned', () => {
     expect(body).toMatch(/V-666\.U — receipt PDF builder\./);
     expect(body).toMatch(
-      /Hand-rolled minimal PDF 1\.4 generator: header \+ 4 objects \(catalog,\s*\n?\s*\/\/\s*pages, page, font\), a single content stream with the receipt text,\s*\n?\s*\/\/\s*and a cross-reference table/,
+      /Hand-rolled minimal PDF 1\.4 generator: header \+ 4 objects \(catalog,\s*\/\/\s*pages, page, font\), a single content stream with the receipt text,\s*\/\/\s*and a cross-reference table/,
     );
   });
 
   it('"no pdfkit / puppeteer-headless" lean-image rationale pinned', () => {
     expect(body).toMatch(
-      /keeps the server\s*\n?\s*\/\/\s*image lean \(no pdfkit \/ puppeteer-headless\)/,
+      /keeps the server\s*\/\/\s*image lean \(no pdfkit \/ puppeteer-headless\)/,
     );
   });
 
   it('V-666.P text-receipt sync framing pinned', () => {
     expect(body).toMatch(
-      /The receipt body mirrors the plain-text receipt served at\s*\n?\s*\/\/\s*`\/v1\/billing\/crypto-orders\/:id\/receipt\.txt` \(V-666\.P\), so the two\s*\n?\s*\/\/\s*formats stay in sync/,
+      /The receipt body mirrors the plain-text receipt served at\s*\/\/\s*`\/v1\/billing\/crypto-orders\/:id\/receipt\.txt` \(V-666\.P\), so the two\s*\/\/\s*formats stay in sync/,
     );
   });
 
@@ -67,7 +67,7 @@ describe('W389.B apps/server/src/lib/receipt-pdf.ts content parity', () => {
 
   it('buildReceiptPdfBytes: returns Buffer (single-page A4)', () => {
     expect(body).toMatch(
-      /Build a single-page A4 PDF containing the receipt\. Returns the\s*\n?\s*\*\s*complete byte stream ready to write to a response/,
+      /Build a single-page A4 PDF containing the receipt\. Returns the\s*\*\s*complete byte stream ready to write to a response/,
     );
     expect(body).toMatch(
       /export function buildReceiptPdfBytes\(receipt: ReceiptPdfInput\): Buffer/,
@@ -154,7 +154,7 @@ describe('W389.B apps/server/src/lib/receipt-pdf.ts content parity', () => {
 
   it('escapePdfString: PDF spec §7.3.4.2 — escapes \\\\ + ( + ) + \\r + \\n', () => {
     expect(body).toMatch(
-      /Escape a string for safe inclusion inside a PDF literal string\s*\n?\s*\*\s*`\(\.\.\.\)`\. PDF spec §7\.3\.4\.2: backslash, paren-open, paren-close,\s*\n?\s*\*\s*and non-ASCII control chars need escaping/,
+      /Escape a string for safe inclusion inside a PDF literal string\s*\*\s*`\(\.\.\.\)`\. PDF spec §7\.3\.4\.2: backslash, paren-open, paren-close,\s*\*\s*and non-ASCII control chars need escaping/,
     );
     expect(body).toMatch(/export function escapePdfString\(input: string\): string \{/);
     // Use substring matches: nested regex-literal escapes for backslashes

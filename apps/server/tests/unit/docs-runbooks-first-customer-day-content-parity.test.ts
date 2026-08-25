@@ -99,7 +99,7 @@ describe('W555.C /docs/runbooks/first-customer-day.md content parity', () => {
     );
     expect(body).not.toMatch(/Trial pack credit drops below 50%/);
     expect(body).toMatch(
-      /The customer values\s*\n?\s*proactive support over incident-response support\./,
+      /The customer values\s*proactive support over incident-response support\./,
     );
   });
 

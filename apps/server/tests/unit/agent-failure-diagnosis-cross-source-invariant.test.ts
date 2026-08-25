@@ -83,24 +83,20 @@ describe('agent failure diagnosis cross-source invariant', () => {
 
   it('API types, TypeScript SDK and docs define retryable as automatic-replay safety', () => {
     for (const source of [API_TYPES, SDK_TYPES]) {
-      expect(source).toMatch(/automatic(?:ally)?\s*\n?\s*(?:\*\s+)?replay/);
+      expect(source).toMatch(/automatic(?:ally)?\s*(?:\*\s+)?replay/);
       expect(source).toMatch(/outcome (?:may be|is) unknown/);
       expect(source).toMatch(/state (?:inspection|must be inspected)/);
     }
     expect(DOCS).toContain('means automatic replay of the same step is considered safe');
     expect(DOCS).toContain('never replay automatically');
     expect(DOCS).toMatch(/does not prove that the\s+action succeeded or failed/);
-    expect(DOCS).toMatch(
-      /applies to `navigate`,\s*\n?\s*`interact`, `scroll`, and `behavioral_pause`/,
-    );
-    expect(DOCS).toMatch(
-      /Read-only\s*\n?\s*`capture` remains eligible for bounded automatic replay/,
-    );
+    expect(DOCS).toMatch(/applies to `navigate`,\s*`interact`, `scroll`, and `behavioral_pause`/);
+    expect(DOCS).toMatch(/Read-only\s*`capture` remains eligible for bounded automatic replay/);
   });
 
   it('V-1503 retryable carries its meaning in a .describe(), not only in a comment. The arm above accepts the prose anywhere in the file, so a jsdoc block satisfies it — and a jsdoc block does not survive into JSON Schema. Every customer reading the published AgentSession error_event was seeing a bare boolean named `retryable` and guessing which way it pointed, while the sentence explaining it sat two lines above in source.', () => {
     expect(API_TYPES).toMatch(
-      /retryable: z\s*\n?\s*\.boolean\(\)\s*\n?\s*\.describe\(\s*\n?\s*'True only when replaying the same step automatically is safe\. False means do not auto-replay: the request may need correcting, or the prior action may have succeeded without reporting it\.',\s*\n?\s*\),/,
+      /retryable: z\s*\.boolean\(\)\s*\.describe\(\s*'True only when replaying the same step automatically is safe\. False means do not auto-replay: the request may need correcting, or the prior action may have succeeded without reporting it\.',\s*\),/,
     );
   });
 

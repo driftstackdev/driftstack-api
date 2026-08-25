@@ -31,7 +31,7 @@ describe('customer-dashboard/pages/auth/oauth-client/callback content parity', (
   it('V-667.C module-level OAuth callback framing and PKCE-cookie contract stay documented', () => {
     expect(body).toMatch(/\/\/ V-667\.C — OAuth-client callback landing page\./);
     expect(body).toMatch(
-      /\/\/\s+signed-in-existing-link \/ created-new-account → session or mfa_required\s*\n?\s*\/\/\s+mfa_required → verify TOTP\/recovery, then continue to redirect_to\s*\n?\s*\/\/\s+collision-pending-verification → \/auth\/oauth-client\/check-email\s*\n?\s*\/\/\s+existing-link-revoked → \/login with "re-link or password" prompt/,
+      /\/\/\s+signed-in-existing-link \/ created-new-account → session or mfa_required\s*\/\/\s+mfa_required → verify TOTP\/recovery, then continue to redirect_to\s*\/\/\s+collision-pending-verification → \/auth\/oauth-client\/check-email\s*\/\/\s+existing-link-revoked → \/login with "re-link or password" prompt/,
     );
     expect(body).toMatch(
       /\/\/ PKCE verifier cookie round-trip is automatic via credentials:'include'\./,
@@ -50,7 +50,7 @@ describe('customer-dashboard/pages/auth/oauth-client/callback content parity', (
 
   it("Check-your-inbox copy pinned: 'We sent a confirmation link to the email on your existing account to verify both accounts belong to you. Click the link in that email to finish linking your <span data-merge-provider…>IDP</span> account. The link expires in <span data-merge-window…>60 minutes</span>.' — pinned so the 60-minute-default expiry text + 'finish linking your IDP' copy contract stays documented. (The previous data-merge-email span was never populated → blank gap; reworded to neutral 'the email on your existing account'.)", () => {
     expect(body).toMatch(
-      /We sent a confirmation link to the email on your existing account\s*\n?\s*to verify both accounts belong to you\. Click the link in that email to finish linking your\s*\n?\s*<span data-merge-provider class="font-mono">IDP<\/span> account\./,
+      /We sent a confirmation link to the email on your existing account\s*to verify both accounts belong to you\. Click the link in that email to finish linking your\s*<span data-merge-provider class="font-mono">IDP<\/span> account\./,
     );
     expect(body).toMatch(
       /The link expires in <span data-merge-window class="font-mono">60 minutes<\/span>\./,
@@ -59,7 +59,7 @@ describe('customer-dashboard/pages/auth/oauth-client/callback content parity', (
 
   it("fetch GET /v1/auth/oauth-client/callback + credentials:'include' + 'PKCE cookie round-trip' comment pinned. Drift to credentials:'omit' would break the PKCE cookie carrying the verifier back to the server — token exchange would fail with 'PKCE verifier cookie missing or invalid'", () => {
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/auth\/oauth-client\/callback' \+ qs, \{\s*\n?\s*method: 'GET',\s*\n?\s*credentials: 'include', \/\/ PKCE cookie round-trip\s*\n?\s*signal: controller\.signal,\s*\n?\s*\}\)/,
+      /fetch\(apiBaseUrl \+ '\/v1\/auth\/oauth-client\/callback' \+ qs, \{\s*method: 'GET',\s*credentials: 'include', \/\/ PKCE cookie round-trip\s*signal: controller\.signal,\s*\}\)/,
     );
   });
 
@@ -79,7 +79,7 @@ describe('customer-dashboard/pages/auth/oauth-client/callback content parity', (
     expect(body).toMatch(/if \(body\.outcome === 'collision-pending-verification'\) \{/);
     expect(body).toMatch(/if \(body\.outcome === 'existing-link-revoked'\) \{/);
     expect(body).toMatch(
-      /showBanner\(\s*\n?\s*'This identity-provider link was previously revoked\. Sign in with your password, or click the IDP button on the login page to re-link\.',\s*\n?\s*\);/,
+      /showBanner\(\s*'This identity-provider link was previously revoked\. Sign in with your password, or click the IDP button on the login page to re-link\.',\s*\);/,
     );
   });
 
@@ -96,13 +96,13 @@ describe('customer-dashboard/pages/auth/oauth-client/callback content parity', (
 
   it("Provider-from-query-string heuristic pinned: qs.indexOf('provider=github') >= 0 → 'GitHub' / else 'Google' for the data-merge-provider text. Drift to a different heuristic would mismatch the provider-name in the check-inbox card on edge-case query strings", () => {
     expect(body).toMatch(
-      /if \(mergeProvider && qs\.indexOf\('provider=github'\) >= 0\) \{\s*\n?\s*mergeProvider\.textContent = 'GitHub';\s*\n?\s*\} else if \(mergeProvider\) \{\s*\n?\s*mergeProvider\.textContent = 'Google';\s*\n?\s*\}/,
+      /if \(mergeProvider && qs\.indexOf\('provider=github'\) >= 0\) \{\s*mergeProvider\.textContent = 'GitHub';\s*\} else if \(mergeProvider\) \{\s*mergeProvider\.textContent = 'Google';\s*\}/,
     );
   });
 
   it('Dynamic-minutes-from-expires_at framing pinned: Math.max(1, Math.round((new Date(body.expires_at).getTime() - Date.now()) / 60000)) + mergeWindow.textContent = minutes + " minutes". Drift to dropping the Math.max(1, …) floor would let "0 minutes" surface for sub-30s windows', () => {
     expect(body).toMatch(
-      /const minutes = Math\.max\(\s*\n?\s*1,\s*\n?\s*Math\.round\(\(new Date\(body\.expires_at\)\.getTime\(\) - Date\.now\(\)\) \/ 60000\),\s*\n?\s*\);\s*\n?\s*if \(mergeWindow\) mergeWindow\.textContent = minutes \+ ' minutes';/,
+      /const minutes = Math\.max\(\s*1,\s*Math\.round\(\(new Date\(body\.expires_at\)\.getTime\(\) - Date\.now\(\)\) \/ 60000\),\s*\);\s*if \(mergeWindow\) mergeWindow\.textContent = minutes \+ ' minutes';/,
     );
   });
 });

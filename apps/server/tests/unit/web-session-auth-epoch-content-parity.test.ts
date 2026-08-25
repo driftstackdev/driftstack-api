@@ -47,7 +47,7 @@ describe('V-590 web-session credential epoch', () => {
 
   it('inherits the old session epoch on refresh and never returns a failed mint plaintext', () => {
     expect(service).toMatch(
-      /this\.issueWebSession\(\s*\n?\s*account,\s*\n?\s*args\.issuedFromIp,\s*\n?\s*args\.userAgent,\s*\n?\s*old\.authEpoch,/,
+      /this\.issueWebSession\(\s*account,\s*args\.issuedFromIp,\s*args\.userAgent,\s*old\.authEpoch,/,
     );
     expect(service).toMatch(/authEpoch: authorityEpoch,/);
     expect(service).toMatch(/if \(row === null\) throw new AuthFlowError\('invalid_auth_token'\);/);
@@ -55,9 +55,9 @@ describe('V-590 web-session credential epoch', () => {
 
   it('invalidates cached session authority even when the physical sweep reports zero rows', () => {
     expect(service).toMatch(
-      /Password change increments auth_epoch even when the physical sweep finds\s*\n?\s*\/\/ no live rows\./,
+      /Password change increments auth_epoch even when the physical sweep finds\s*\/\/ no live rows\./,
     );
-    expect(service).toMatch(/if \(this\.authCache\) \{\s*\n?\s*try \{/);
+    expect(service).toMatch(/if \(this\.authCache\) \{\s*try \{/);
     expect(service).not.toMatch(/if \(revoked > 0 && this\.authCache\)/);
   });
 

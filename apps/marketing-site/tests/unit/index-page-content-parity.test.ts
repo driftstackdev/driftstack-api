@@ -75,13 +75,13 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     expect(body).toMatch(/iPhone\s+15 Pro/);
     expect(body).toMatch(/iPhone 16 Pro/);
     expect(body).toMatch(/iPhone 17 lineup/);
-    expect(body).toMatch(/iOS 18\.7\s*\n?\s*\/ Safari 26\.4/);
+    expect(body).toMatch(/iOS 18\.7\s*\/ Safari 26\.4/);
     expect(body).toMatch(/Safari 26\.5/);
     expect(body).toMatch(/launch-blocking bug/);
     // The pre-dedupe wording must NOT return at this slot — it was
     // the load-bearing repetition Item 5 fixes.
     expect(body).not.toMatch(
-      /<span class="bg-gradient-to-br[^>]+>\s*\n?\s*Indistinguishable from a real iPhone\./,
+      /<span class="bg-gradient-to-br[^>]+>\s*Indistinguishable from a real iPhone\./,
     );
     // Pre-M.6 single-archetype framing must NOT return.
     expect(body).not.toMatch(/Reference device: iPhone 16 Pro, iOS 18\.7, Safari 26\.4\./);
@@ -102,8 +102,8 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
 
   it('metering framing pinned (v2 trust band): "One metric. Concurrent sessions. That\'s it." + no-per-call-markup + no-per-element-fees + 200-pages-on-one-session example', () => {
     expect(body).toMatch(/One metric\. Concurrent sessions\. That's it\./);
-    expect(body).toMatch(/No per-call markup\. No\s*\n?\s*per-element fees\./);
-    expect(body).toMatch(/Visit 200 pages on one session for the cost of\s*\n?\s*visiting one\./);
+    expect(body).toMatch(/No per-call markup\. No\s*per-element fees\./);
+    expect(body).toMatch(/Visit 200 pages on one session for the cost of\s*visiting one\./);
   });
 
   it('S30 2026-07-07 (founder decision: soften) EU residency softened: "EU-hosted by default." headline (supersedes M.3\'s "EU-only by default." — DB-resident data is EU-Hetzner-true, but file objects live on Cloudflare R2 default jurisdiction with EU + US replication, so the absolutist claim over-promised) + plain-English body ("Your account data lives on EU servers. We don\'t log what your sessions visit or do — only the operational metadata we need to bill") + sub-processors cross-link.', () => {
@@ -113,7 +113,7 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     // S20b 2026-07-06: the billing-metadata triple reads in plain words
     // (duration / archetype glossed via the glossary link / cap usage).
     expect(body).toMatch(
-      /how long a\s*\n?\s*session ran, which iPhone model \+ iOS \+ Safari combination it used/,
+      /how long a\s*session ran, which iPhone model \+ iOS \+ Safari combination it used/,
     );
     expect(body).toMatch(/how much of your concurrent cap it used/);
     expect(body).toMatch(/href="\/trust\/sub-processors\/"/);
@@ -131,7 +131,7 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
 
   it('egress state is current: per-profile SOCKS5 / OpenVPN / WireGuard is live, with the security cross-link and no aspirational proxy-swap copy', () => {
     expect(body).toMatch(
-      /Customer-configurable egress — attaching your own internet exit \(a\s*\n?\s*SOCKS5 proxy, OpenVPN, or WireGuard\) to each profile — is live/,
+      /Customer-configurable egress — attaching your own internet exit \(a\s*SOCKS5 proxy, OpenVPN, or WireGuard\) to each profile — is live/,
     );
     expect(body).not.toMatch(/swapping the proxy on a session that's already running/);
     expect(body).toMatch(/href="\/trust\/security-overview\/"/);
@@ -172,10 +172,10 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     // S20b 2026-07-06 plain-language pass: Core Text + the pipeline are now
     // glossed inline; the same capability sentence survives with glosses.
     expect(body).toMatch(
-      /WebKit \(the browser engine\),\s*\n?\s*Core Text \(Apple's text-drawing system\)/,
+      /WebKit \(the browser engine\),\s*Core Text \(Apple's text-drawing system\)/,
     );
     expect(body).toMatch(
-      /rendering pipeline produce your fingerprint the way Apple wrote\s*\n?\s*them, in the order Apple intended\./,
+      /rendering pipeline produce your fingerprint the way Apple wrote\s*them, in the order Apple intended\./,
     );
   });
 

@@ -123,7 +123,7 @@ describe('W945 V-047 LegalService cross-source invariant', () => {
     expect(p).toMatch(/for \(account, doc\) match the currently-published version\?"/);
     // The retracted claims, paraphrased in the negative.
     expect(p).not.toMatch(/[Pp]atch bumps are not enforced/);
-    expect(p).not.toMatch(/catalog config\s*\n?\s*\/\/\s*chooses/);
+    expect(p).not.toMatch(/catalog config\s*\/\/\s*chooses/);
     // The behaviour the wording now has to keep describing.
     expect(p).toMatch(/whole-string inequality/);
   });

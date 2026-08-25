@@ -105,7 +105,7 @@ describe('W1046 routes/admin-force-actions V-100 + D-020/D-025 cross-source inva
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-force-actions.ts'));
     expect(p).toMatch(/uuidFromPrefixedId\(request\.params\.id, 'ses'\)/);
     expect(p).toMatch(/sessionRepo\.destroySessionSerialized\(/);
-    expect(p).toMatch(/id: sessionId,\s*\n?\s*accountId: null,/);
+    expect(p).toMatch(/id: sessionId,\s*accountId: null,/);
     expect(p).toMatch(/if \(result\.kind === 'already_terminal'\) \{/);
     expect(p).toMatch(/idempotent: true/);
     expect(p).toMatch(
@@ -124,7 +124,7 @@ describe('W1046 routes/admin-force-actions V-100 + D-020/D-025 cross-source inva
   it("CRITICAL session destroy event payload — 'destroyed' event type with { force: true, by_admin: true, reason? } shape. The by_admin marker distinguishes admin force-destroys from customer-initiated destroys in event history.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-force-actions.ts'));
     expect(p).toMatch(/type: 'destroyed',/);
-    expect(p).toMatch(/force: true,\s*\n?\s*by_admin: true,/);
+    expect(p).toMatch(/force: true,\s*by_admin: true,/);
     expect(p).toMatch(/\.\.\.\(reason !== undefined \? \{ reason \} : \{\}\),/);
   });
 
@@ -144,7 +144,7 @@ describe('W1046 routes/admin-force-actions V-100 + D-020/D-025 cross-source inva
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-force-actions.ts'));
     expect(p).toMatch(/Invalidate any cached AccountContext entries for this key/);
     expect(p).toMatch(
-      /so the next auth read sees the revocation immediately\s*\n?\s*\/\/ \(D-020 cache invalidation pattern\)\./,
+      /so the next auth read sees the revocation immediately\s*\/\/ \(D-020 cache invalidation pattern\)\./,
     );
   });
 

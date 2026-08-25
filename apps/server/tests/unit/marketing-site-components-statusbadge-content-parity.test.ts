@@ -39,13 +39,13 @@ describe('W522.C apps/marketing-site/src/components/StatusBadge.astro content pa
 
   it("V-474 framing + failure-mode + 30s-cache pinned: 'public status badge. Client-side fetches /v1/status from the production API and renders an operational / degraded / major_outage indicator. Embeds anywhere on the marketing site.' + 'Failure mode: if the fetch fails (CORS, timeout, network), the badge falls back to \"status unavailable\" and links to the future status.driftstack.dev page; nothing is implied about uptime from a fetch error alone.' + 'Cached server-side for 30s by /v1/status itself; cf-edge cache likely extends that.' — pinned so the V-474 anchor + 3-state-indicator + 3-failure-mode (CORS/timeout/network) + nothing-implied-on-fetch-error + 30s-server-side-cache + cf-edge-extends commitment survives", () => {
     expect(body).toMatch(
-      /\/\/ V-474 — public status badge\. Client-side fetches \/v1\/status from\s*\n?\s*\/\/ the production API and renders an operational \/ degraded \/\s*\n?\s*\/\/ major_outage indicator\. Embeds anywhere on the marketing site\./,
+      /\/\/ V-474 — public status badge\. Client-side fetches \/v1\/status from\s*\/\/ the production API and renders an operational \/ degraded \/\s*\/\/ major_outage indicator\. Embeds anywhere on the marketing site\./,
     );
     expect(body).toMatch(
-      /\/\/ Failure mode: if the fetch fails \(CORS, timeout, network\), the\s*\n?\s*\/\/ badge falls back to "status unavailable" and links to the future\s*\n?\s*\/\/ status\.driftstack\.dev page; nothing is implied about uptime from\s*\n?\s*\/\/ a fetch error alone\./,
+      /\/\/ Failure mode: if the fetch fails \(CORS, timeout, network\), the\s*\/\/ badge falls back to "status unavailable" and links to the future\s*\/\/ status\.driftstack\.dev page; nothing is implied about uptime from\s*\/\/ a fetch error alone\./,
     );
     expect(body).toMatch(
-      /\/\/ Cached server-side for 30s by \/v1\/status itself; cf-edge cache\s*\n?\s*\/\/ likely extends that\./,
+      /\/\/ Cached server-side for 30s by \/v1\/status itself; cf-edge cache\s*\/\/ likely extends that\./,
     );
   });
 
@@ -53,7 +53,7 @@ describe('W522.C apps/marketing-site/src/components/StatusBadge.astro content pa
     expect(body).toMatch(/\/\*\* Optional className override\. Defaults to inline pill\. \*\//);
     expect(body).toMatch(/className\?: string;/);
     expect(body).toMatch(
-      /\* When true \(default\), renders the badge with a textual status\s*\n?\s*\* label\. When false, renders a tighter dot-only variant suitable\s*\n?\s*\* for header strips\./,
+      /\* When true \(default\), renders the badge with a textual status\s*\* label\. When false, renders a tighter dot-only variant suitable\s*\* for header strips\./,
     );
     expect(body).toMatch(/withLabel\?: boolean;/);
     expect(body).toMatch(/const \{ className = '', withLabel = true \} = Astro\.props;/);
@@ -91,7 +91,7 @@ describe('W522.C apps/marketing-site/src/components/StatusBadge.astro content pa
     expect(body).toMatch(/case 'major_outage':/);
     expect(body).toMatch(/dot\.classList\.add\('bg-red-500'\);/);
     expect(body).toMatch(/if \(label\) label\.textContent = 'Major outage';/);
-    expect(body).toMatch(/case 'unknown':\s*\n?\s*default:/);
+    expect(body).toMatch(/case 'unknown':\s*default:/);
     expect(body).toMatch(/dot\.classList\.add\('bg-slate-300'\);/);
     expect(body).toMatch(/if \(label\) label\.textContent = 'Status unavailable';/);
     expect(body).toMatch(/let accessibleState = 'Status unavailable';/);
@@ -106,13 +106,13 @@ describe('W522.C apps/marketing-site/src/components/StatusBadge.astro content pa
   it("Reset-color-classes-before-add framing pinned: 4-classList.remove (bg-slate-300, bg-emerald-500, bg-amber-500, bg-red-500) + '// Reset color classes.' comment — pinned so the reset-before-add pattern (prevents stale color classes from sticking) survives", () => {
     expect(body).toMatch(/\/\/ Reset color classes\./);
     expect(body).toMatch(
-      /dot\.classList\.remove\(\s*\n?\s*'bg-slate-300',\s*\n?\s*'bg-emerald-500',\s*\n?\s*'bg-amber-500',\s*\n?\s*'bg-red-500',\s*\n?\s*\);/,
+      /dot\.classList\.remove\(\s*'bg-slate-300',\s*'bg-emerald-500',\s*'bg-amber-500',\s*'bg-red-500',\s*\);/,
     );
   });
 
   it('4-second AbortController + shared fetch chain + exact-once finally cleanup + body.overall_status extraction are pinned', () => {
     expect(body).toMatch(
-      /\/\/ 4-second hard timeout — a slow status endpoint shouldn't keep\s*\n?\s*\/\/ the badge spinning forever\./,
+      /\/\/ 4-second hard timeout — a slow status endpoint shouldn't keep\s*\/\/ the badge spinning forever\./,
     );
     expect(body).toMatch(/const controller = new AbortController\(\);/);
     expect(body).toMatch(

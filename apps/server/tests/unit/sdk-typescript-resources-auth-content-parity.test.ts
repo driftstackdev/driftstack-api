@@ -52,7 +52,7 @@ describe('W425.A packages/sdk-typescript/src/resources/auth.ts content parity', 
 
   it('CRITICAL V-079 auth-gate-API-key-unused posture pinned per-line. "These endpoints don\'t require an API key (they ARE the auth gate)." + "the API key on the client is unused for these calls (the server doesn\'t validate it)." + "The resource is here for ergonomics + type safety, not for API-key-driven auth." Drift to making auth.signup() refuse without a key would break first-time signup.', () => {
     expect(body).toMatch(
-      /\/\/ Note: these endpoints don't require an API key \(they ARE the auth\s*\n?\s*\/\/ gate\)\. Customers using the auth flow do so from a browser dashboard\s*\n?\s*\/\/ against the SDK's HTTP layer; the API key on the client is unused\s*\n?\s*\/\/ for these calls \(the server doesn't validate it\)\. The resource is\s*\n?\s*\/\/ here for ergonomics \+ type safety, not for API-key-driven auth\./,
+      /\/\/ Note: these endpoints don't require an API key \(they ARE the auth\s*\/\/ gate\)\. Customers using the auth flow do so from a browser dashboard\s*\/\/ against the SDK's HTTP layer; the API key on the client is unused\s*\/\/ for these calls \(the server doesn't validate it\)\. The resource is\s*\/\/ here for ergonomics \+ type safety, not for API-key-driven auth\./,
     );
   });
 
@@ -99,106 +99,106 @@ describe('W425.A packages/sdk-typescript/src/resources/auth.ts content parity', 
 
   it('signup verb — POST /v1/auth/signup with SignupRequest body → Promise<SignupResponse>. First touch of the auth journey: empty Authorization header tolerated by server (V-079) so this verb is callable before any credentials.', () => {
     expect(body).toMatch(
-      /signup\(body: SignupRequest\): Promise<SignupResponse> \{\s*\n?\s*return this\.http\.request<SignupResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/signup',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /signup\(body: SignupRequest\): Promise<SignupResponse> \{\s*return this\.http\.request<SignupResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/auth\/signup',\s*body,\s*\}\);\s*\}/,
     );
   });
 
   it('verifyEmail verb — POST /v1/auth/verify-email. Step 2 of signup; customer clicks the verification link in their inbox; SDK exchanges the token from URL for a verified-email status. Drift to requiring a session would break the verification-link-from-email flow.', () => {
     expect(body).toMatch(
-      /verifyEmail\(body: VerifyEmailRequest\): Promise<VerifyEmailResponse> \{\s*\n?\s*return this\.http\.request<VerifyEmailResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/verify-email',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /verifyEmail\(body: VerifyEmailRequest\): Promise<VerifyEmailResponse> \{\s*return this\.http\.request<VerifyEmailResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/auth\/verify-email',\s*body,\s*\}\);\s*\}/,
     );
   });
 
   it("CRITICAL V-353d login discriminated-union JSDoc — full doc pinned per-line + in-JSDoc 5-line example pattern. The example shows `if ('mfa_required' in out && out.mfa_required) { ... } else { ... }` branching. Drift to dropping the example would lose the customer-facing guidance — without it, customers might unwrap `out.session` directly and silently break on MFA-required accounts.", () => {
     expect(body).toMatch(
-      /\*\s*V-353d — discriminated-union response\. When the account has MFA\s*\n?\s*\*\s*enrolled, the server returns `\{ mfa_required: true, challenge_token,\s*\n?\s*\*\s*challenge_expires_at \}` instead of a session\. Branch on the\s*\n?\s*\*\s*`mfa_required` literal:/,
+      /\*\s*V-353d — discriminated-union response\. When the account has MFA\s*\*\s*enrolled, the server returns `\{ mfa_required: true, challenge_token,\s*\*\s*challenge_expires_at \}` instead of a session\. Branch on the\s*\*\s*`mfa_required` literal:/,
     );
     expect(body).toMatch(
-      /\*\s*const out = await client\.auth\.login\(\{ email, password \}\);\s*\n?\s*\*\s*if \('mfa_required' in out && out\.mfa_required\) \{\s*\n?\s*\*\s*\/\/ exchange out\.challenge_token via \/v1\/auth\/mfa\/challenge\s*\n?\s*\*\s*\} else \{\s*\n?\s*\*\s*\/\/ out\.session is the real session\s*\n?\s*\*\s*\}/,
+      /\*\s*const out = await client\.auth\.login\(\{ email, password \}\);\s*\*\s*if \('mfa_required' in out && out\.mfa_required\) \{\s*\*\s*\/\/ exchange out\.challenge_token via \/v1\/auth\/mfa\/challenge\s*\*\s*\} else \{\s*\*\s*\/\/ out\.session is the real session\s*\*\s*\}/,
     );
   });
 
   it('login verb implementation — POST /v1/auth/login → Promise<LoginResponseUnion>. The Union return type forces TypeScript callers to discriminate at the type level; drift to a non-union return would let MFA-required branches slip past static checking.', () => {
     expect(body).toMatch(
-      /login\(body: LoginRequest\): Promise<LoginResponseUnion> \{\s*\n?\s*return this\.http\.request<LoginResponseUnion>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/login',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /login\(body: LoginRequest\): Promise<LoginResponseUnion> \{\s*return this\.http\.request<LoginResponseUnion>\(\{\s*method: 'POST',\s*path: '\/v1\/auth\/login',\s*body,\s*\}\);\s*\}/,
     );
   });
 
   it('Magic-link 2-step — requestMagicLink (POST /v1/auth/magic-link/request, anonymous; sends email) + consumeMagicLink (POST /v1/auth/magic-link/consume; exchange token-from-URL for session). The 2 verbs MUST stay paired — dropping consume would orphan the email links.', () => {
     expect(body).toMatch(
-      /requestMagicLink\(body: MagicLinkRequest\): Promise<MagicLinkRequestResponse> \{\s*\n?\s*return this\.http\.request<MagicLinkRequestResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/magic-link\/request',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /requestMagicLink\(body: MagicLinkRequest\): Promise<MagicLinkRequestResponse> \{\s*return this\.http\.request<MagicLinkRequestResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/auth\/magic-link\/request',\s*body,\s*\}\);\s*\}/,
     );
     expect(body).toMatch(
-      /consumeMagicLink\(body: MagicLinkConsumeRequest\): Promise<MagicLinkConsumeResponse> \{\s*\n?\s*return this\.http\.request<MagicLinkConsumeResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/magic-link\/consume',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /consumeMagicLink\(body: MagicLinkConsumeRequest\): Promise<MagicLinkConsumeResponse> \{\s*return this\.http\.request<MagicLinkConsumeResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/auth\/magic-link\/consume',\s*body,\s*\}\);\s*\}/,
     );
   });
 
   it('Password-reset 2-step — requestPasswordReset (POST /v1/auth/password-reset/request, anonymous; sends email) + confirmPasswordReset (POST /v1/auth/password-reset/confirm; exchange token + new_password for an updated credential). Mirror of magic-link 2-step but for lost-password flow.', () => {
     expect(body).toMatch(
-      /requestPasswordReset\(body: PasswordResetRequest\): Promise<PasswordResetRequestResponse> \{\s*\n?\s*return this\.http\.request<PasswordResetRequestResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/password-reset\/request',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /requestPasswordReset\(body: PasswordResetRequest\): Promise<PasswordResetRequestResponse> \{\s*return this\.http\.request<PasswordResetRequestResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/auth\/password-reset\/request',\s*body,\s*\}\);\s*\}/,
     );
     expect(body).toMatch(
-      /confirmPasswordReset\(body: PasswordResetConfirmRequest\): Promise<PasswordResetConfirmResponse> \{\s*\n?\s*return this\.http\.request<PasswordResetConfirmResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/password-reset\/confirm',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /confirmPasswordReset\(body: PasswordResetConfirmRequest\): Promise<PasswordResetConfirmResponse> \{\s*return this\.http\.request<PasswordResetConfirmResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/auth\/password-reset\/confirm',\s*body,\s*\}\);\s*\}/,
     );
   });
 
   it('Session lifecycle — refresh (POST /v1/auth/refresh; exchanges the supplied session token for a new one, revoking the old row and minting a fresh one, so a replay of the old token fails) + logout (POST /v1/auth/logout; revokes the token supplied IN THE BODY rather than the session the call authenticated with; no-ops on an unknown or already-revoked token). V-1092: this title used to describe an OAuth refresh_token-for-access_token exchange, which is not the product — RefreshSessionRequest carries the single key `token` and there is no refresh_token anywhere outside redaction denylists.', () => {
     expect(body).toMatch(
-      /refresh\(body: RefreshSessionRequest\): Promise<RefreshSessionResponse> \{\s*\n?\s*return this\.http\.request<RefreshSessionResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/refresh',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /refresh\(body: RefreshSessionRequest\): Promise<RefreshSessionResponse> \{\s*return this\.http\.request<RefreshSessionResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/auth\/refresh',\s*body,\s*\}\);\s*\}/,
     );
     expect(body).toMatch(
-      /logout\(body: LogoutRequest\): Promise<LogoutResponse> \{\s*\n?\s*return this\.http\.request<LogoutResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/logout',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /logout\(body: LogoutRequest\): Promise<LogoutResponse> \{\s*return this\.http\.request<LogoutResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/auth\/logout',\s*body,\s*\}\);\s*\}/,
     );
   });
 
   it("CRITICAL V-445 mfaChallenge JSDoc — `via: 'totp' | 'recovery'` 2-value discriminator pinned. Drift to dropping the discriminator would prevent customers from counting TOTP-vs-recovery use in MFA-strength metrics (recovery-code use signals higher account-risk than TOTP use). Drift to a 3rd value (e.g. 'webauthn') without coordinated server+client update would break the closed-set switch.", () => {
     expect(body).toMatch(
-      /\*\s*V-445 — exchange a login challenge_token \(returned on the\s*\n?\s*\*\s*MFA-required branch\) for a real session via TOTP code or recovery\s*\n?\s*\*\s*code\. Distinguished response carries `via: 'totp' \| 'recovery'`\./,
+      /\*\s*V-445 — exchange a login challenge_token \(returned on the\s*\*\s*MFA-required branch\) for a real session via TOTP code or recovery\s*\*\s*code\. Distinguished response carries `via: 'totp' \| 'recovery'`\./,
     );
   });
 
   it('mfaChallenge implementation — POST /v1/auth/mfa/challenge with MfaChallengeRequest body → Promise<MfaChallengeResponse>. Body carries the challenge_token from login + the TOTP/recovery code.', () => {
     expect(body).toMatch(
-      /mfaChallenge\(body: MfaChallengeRequest\): Promise<MfaChallengeResponse> \{\s*\n?\s*return this\.http\.request<MfaChallengeResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/mfa\/challenge',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /mfaChallenge\(body: MfaChallengeRequest\): Promise<MfaChallengeResponse> \{\s*return this\.http\.request<MfaChallengeResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/auth\/mfa\/challenge',\s*body,\s*\}\);\s*\}/,
     );
   });
 
   it('CRITICAL V-445 mfaStepUp JSDoc — 4-line invariant: "refresh `mfa_satisfied_at` on the calling web session" + V-353e 15-minute freshness window + "No new session issued; the existing session row\'s mfa timestamp advances" + "Pair with `MfaStepUpRequiredError` recovery flows". Drift to issuing a NEW session on step-up would force session-cookie rotation mid-flow — breaks the "same session identity, just freshly MFA-proved" contract.', () => {
     expect(body).toMatch(
-      /\*\s*V-445 — refresh `mfa_satisfied_at` on the calling web session\s*\n?\s*\*\s*\(V-353e step-up gate; 15-minute freshness window\)\. No new session\s*\n?\s*\*\s*issued; the existing session row's mfa timestamp advances\. Pair\s*\n?\s*\*\s*with `MfaStepUpRequiredError` recovery flows\./,
+      /\*\s*V-445 — refresh `mfa_satisfied_at` on the calling web session\s*\*\s*\(V-353e step-up gate; 15-minute freshness window\)\. No new session\s*\*\s*issued; the existing session row's mfa timestamp advances\. Pair\s*\*\s*with `MfaStepUpRequiredError` recovery flows\./,
     );
   });
 
   it('mfaStepUp implementation — POST /v1/auth/mfa/step-up with MfaStepUpRequest body → Promise<MfaStepUpResponse>. Returns success-ack only (no session change).', () => {
     expect(body).toMatch(
-      /mfaStepUp\(body: MfaStepUpRequest\): Promise<MfaStepUpResponse> \{\s*\n?\s*return this\.http\.request<MfaStepUpResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/mfa\/step-up',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /mfaStepUp\(body: MfaStepUpRequest\): Promise<MfaStepUpResponse> \{\s*return this\.http\.request<MfaStepUpResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/auth\/mfa\/step-up',\s*body,\s*\}\);\s*\}/,
     );
   });
 
   it('V-460/V-266 cliAuthorizeInitiate documents the separate device-displayed user code', () => {
     expect(body).toMatch(
-      /Returns a one-shot code, a separate user code displayed by the\s*\n?\s*\*\s*initiating device, and the browser URL\.[\s\S]*?types that code in\s*\n?\s*\*\s*the dashboard before the CLI\/GUI can receive the API key/,
+      /Returns a one-shot code, a separate user code displayed by the\s*\*\s*initiating device, and the browser URL\.[\s\S]*?types that code in\s*\*\s*the dashboard before the CLI\/GUI can receive the API key/,
     );
     expect(body).toMatch(
-      /cliAuthorizeInitiate\(body: CliAuthorizeInitiateRequest\): Promise<CliAuthorizeInitiateResponse> \{\s*\n?\s*return this\.http\.request<CliAuthorizeInitiateResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/cli-authorize\/initiate',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /cliAuthorizeInitiate\(body: CliAuthorizeInitiateRequest\): Promise<CliAuthorizeInitiateResponse> \{\s*return this\.http\.request<CliAuthorizeInitiateResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/auth\/cli-authorize\/initiate',\s*body,\s*\}\);\s*\}/,
     );
   });
 
   it('V-460/V-266 cliAuthorizeBind requires the initiating-device user_code', () => {
     expect(body).toMatch(
-      /Web-session-authenticated\. Called by the dashboard's\s*\n?\s*\*\s*\/cli\/authorize confirmation page after the user enters the initiating\s*\n?\s*\*\s*device's `user_code` and clicks Authorize:[\s\S]*?Default scopes are\s*\n?\s*\*\s*`\["account_owner"\]` server-side\./,
+      /Web-session-authenticated\. Called by the dashboard's\s*\*\s*\/cli\/authorize confirmation page after the user enters the initiating\s*\*\s*device's `user_code` and clicks Authorize:[\s\S]*?Default scopes are\s*\*\s*`\["account_owner"\]` server-side\./,
     );
     expect(body).toMatch(
-      /cliAuthorizeBind\(body: CliAuthorizeBindRequest\): Promise<CliAuthorizeBindResponse> \{\s*\n?\s*return this\.http\.request<CliAuthorizeBindResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/cli-authorize\/bind-device-code',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /cliAuthorizeBind\(body: CliAuthorizeBindRequest\): Promise<CliAuthorizeBindResponse> \{\s*return this\.http\.request<CliAuthorizeBindResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/auth\/cli-authorize\/bind-device-code',\s*body,\s*\}\);\s*\}/,
     );
   });
 
   it("CRITICAL V-460/V-266 cliAuthorizeExchange JSDoc — 3-branch discriminated union pinned per-line: (1) `{ status: 'pending' }` keep polling; (2) `{ status: 'bound', api_key, account_id }` ONE-SHOT delivery + \"Subsequent calls 404\" framing; (3) `{ status: 'expired' }` user took too long, restart. Drift to dropping the one-shot 404 framing would let CLIs re-fetch the plaintext key after binding (catastrophic key-leak).", () => {
     expect(body).toMatch(
-      /\*\s*V-460 — V-266 CLI\/GUI activation flow: exchange\.\s*\n?\s*\*\s*\n?\s*\*\s*Polled by the CLI\/GUI\. Returns one of three branches:\s*\n?\s*\*\s*- `\{ status: 'pending' \}` — keep polling\.\s*\n?\s*\*\s*- `\{ status: 'bound', api_key, account_id \}` — one-shot delivery\s*\n?\s*\*\s*of the plaintext API key\. Subsequent calls 404\.\s*\n?\s*\*\s*- `\{ status: 'expired' \}` — user took too long; restart the flow\./,
+      /\*\s*V-460 — V-266 CLI\/GUI activation flow: exchange\.\s*\*\s*\*\s*Polled by the CLI\/GUI\. Returns one of three branches:\s*\*\s*- `\{ status: 'pending' \}` — keep polling\.\s*\*\s*- `\{ status: 'bound', api_key, account_id \}` — one-shot delivery\s*\*\s*of the plaintext API key\. Subsequent calls 404\.\s*\*\s*- `\{ status: 'expired' \}` — user took too long; restart the flow\./,
     );
     expect(body).toMatch(
-      /cliAuthorizeExchange\(body: CliAuthorizeExchangeRequest\): Promise<CliAuthorizeExchangeResponse> \{\s*\n?\s*return this\.http\.request<CliAuthorizeExchangeResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/cli-authorize\/exchange',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /cliAuthorizeExchange\(body: CliAuthorizeExchangeRequest\): Promise<CliAuthorizeExchangeResponse> \{\s*return this\.http\.request<CliAuthorizeExchangeResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/auth\/cli-authorize\/exchange',\s*body,\s*\}\);\s*\}/,
     );
   });
 

@@ -45,28 +45,28 @@ describe('W397.B apps/server/src/services/mfa-challenge-store.ts content parity'
 
   it('V-353d framing + login → challenge_token → /mfa/challenge flow pinned', () => {
     expect(body).toMatch(
-      /V-353d — short-lived \("challenge_token"\) store for the MFA login\s*\n?\s*\/\/\s*hand-off\. Issued at \/v1\/auth\/login when the account has MFA\s*\n?\s*\/\/\s*enrolled; consumed at \/v1\/auth\/mfa\/challenge to exchange the token\s*\n?\s*\/\/\s*\+ 6-digit code \(or recovery code\) for the real session/,
+      /V-353d — short-lived \("challenge_token"\) store for the MFA login\s*\/\/\s*hand-off\. Issued at \/v1\/auth\/login when the account has MFA\s*\/\/\s*enrolled; consumed at \/v1\/auth\/mfa\/challenge to exchange the token\s*\/\/\s*\+ 6-digit code \(or recovery code\) for the real session/,
     );
   });
 
   it('Storage framing: Redis SET …EX 300 prod / in-memory Map tests + one-shot GETDEL', () => {
     expect(body).toMatch(
-      /Storage: Redis SET … EX 300 in production; in-memory Map in tests\.\s*\n?\s*\/\/\s*One-shot consumption via GETDEL — once the customer's challenge\s*\n?\s*\/\/\s*succeeds the token is gone/,
+      /Storage: Redis SET … EX 300 in production; in-memory Map in tests\.\s*\/\/\s*One-shot consumption via GETDEL — once the customer's challenge\s*\/\/\s*succeeds the token is gone/,
     );
     expect(body).toMatch(
-      /Failed challenges DO NOT consume the\s*\n?\s*\/\/\s*token \(caller can retry up to maxAttempts; rate-limit \+ abandon\)/,
+      /Failed challenges DO NOT consume the\s*\/\/\s*token \(caller can retry up to maxAttempts; rate-limit \+ abandon\)/,
     );
   });
 
   it('Source-IP framing: defense-in-depth, not load-bearing security (best-effort)', () => {
     expect(body).toMatch(
-      /source_ip \(defense-in-depth: if attacker steals the\s*\n?\s*\/\/\s*challenge_token from a Slack paste, their IP differs and we\s*\n?\s*\/\/\s*refuse — best-effort, not load-bearing security\)/,
+      /source_ip \(defense-in-depth: if attacker steals the\s*\/\/\s*challenge_token from a Slack paste, their IP differs and we\s*\/\/\s*refuse — best-effort, not load-bearing security\)/,
     );
   });
 
   it('Issued-user-agent framing: carried into web_session row (not challenge UA — avoids "all sessions look like curl")', () => {
     expect(body).toMatch(
-      /issued_user_agent \(carried into the eventual web_session row\s*\n?\s*\/\/\s*so the user-agent comes from the login attempt, not the\s*\n?\s*\/\/\s*challenge attempt — avoids "all sessions look like curl"\)/,
+      /issued_user_agent \(carried into the eventual web_session row\s*\/\/\s*so the user-agent comes from the login attempt, not the\s*\/\/\s*challenge attempt — avoids "all sessions look like curl"\)/,
     );
   });
 
@@ -87,13 +87,13 @@ describe('W397.B apps/server/src/services/mfa-challenge-store.ts content parity'
   it('MfaChallengeStore: payload operations plus attempt reserve/release', () => {
     expect(body).toMatch(/export interface MfaChallengeStore \{/);
     expect(body).toMatch(
-      /Atomically read \+ delete \(single-use\)\. Returns null when missing\s*\n?\s*\*\s*or already consumed\./,
+      /Atomically read \+ delete \(single-use\)\. Returns null when missing\s*\*\s*or already consumed\./,
     );
     expect(body).toMatch(/consume\(key: string\): Promise<string \| null>;/);
     expect(body).toMatch(/Store a payload for `ttlSeconds`\. Idempotent overwrite\./);
     expect(body).toMatch(/set\(key: string, value: string, ttlSeconds: number\): Promise<void>;/);
     expect(body).toMatch(
-      /Read without consuming\. Used by IP-mismatch refusal so the legit\s*\n?\s*\*\s*customer can still retry\./,
+      /Read without consuming\. Used by IP-mismatch refusal so the legit\s*\*\s*customer can still retry\./,
     );
     expect(body).toMatch(/peek\(key: string\): Promise<string \| null>;/);
     expect(body).toMatch(/incrAttempts\(key: string, ttlSeconds: number\): Promise<number>;/);
@@ -103,19 +103,19 @@ describe('W397.B apps/server/src/services/mfa-challenge-store.ts content parity'
   it('RedisMfaChallengeStore: GETDEL atomic Redis 6.2+ (Upstash + modern Hetzner-managed both run 7.x)', () => {
     expect(body).toMatch(/export class RedisMfaChallengeStore implements MfaChallengeStore \{/);
     expect(body).toMatch(
-      /\/\/ GETDEL is atomic in Redis 6\.2\+; falls back to GET \+ DEL pipeline\s*\n?\s*\/\/\s*for older Redis\. We assume 6\.2\+ \(Upstash \+ modern Hetzner-managed\s*\n?\s*\/\/\s*builds both run 7\.x\)\./,
+      /\/\/ GETDEL is atomic in Redis 6\.2\+; falls back to GET \+ DEL pipeline\s*\/\/\s*for older Redis\. We assume 6\.2\+ \(Upstash \+ modern Hetzner-managed\s*\/\/\s*builds both run 7\.x\)\./,
     );
     expect(body).toMatch(
-      /const result = await \(\s*\n?\s*this\.redis as unknown as \{\s*\n?\s*getdel: \(k: string\) => Promise<string \| null>;\s*\n?\s*\}\s*\n?\s*\)\.getdel\(key\);/,
+      /const result = await \(\s*this\.redis as unknown as \{\s*getdel: \(k: string\) => Promise<string \| null>;\s*\}\s*\)\.getdel\(key\);/,
     );
   });
 
   it('RedisMfaChallengeStore: set uses SET …EX ttlSeconds; peek = redis.get', () => {
     expect(body).toMatch(
-      /async set\(key: string, value: string, ttlSeconds: number\): Promise<void> \{\s*\n?\s*await this\.redis\.set\(key, value, 'EX', ttlSeconds\);\s*\n?\s*\}/,
+      /async set\(key: string, value: string, ttlSeconds: number\): Promise<void> \{\s*await this\.redis\.set\(key, value, 'EX', ttlSeconds\);\s*\}/,
     );
     expect(body).toMatch(
-      /async peek\(key: string\): Promise<string \| null> \{\s*\n?\s*return this\.redis\.get\(key\);\s*\n?\s*\}/,
+      /async peek\(key: string\): Promise<string \| null> \{\s*return this\.redis\.get\(key\);\s*\}/,
     );
   });
 
@@ -126,11 +126,11 @@ describe('W397.B apps/server/src/services/mfa-challenge-store.ts content parity'
     );
     // consume: always delete, then check expiry
     expect(body).toMatch(
-      /async consume\(key: string\): Promise<string \| null> \{\s*\n?\s*const entry = this\.entries\.get\(key\);\s*\n?\s*if \(!entry\) return null;\s*\n?\s*this\.entries\.delete\(key\);\s*\n?\s*if \(entry\.expiresAt <= Date\.now\(\)\) return null;\s*\n?\s*return entry\.value;\s*\n?\s*\}/,
+      /async consume\(key: string\): Promise<string \| null> \{\s*const entry = this\.entries\.get\(key\);\s*if \(!entry\) return null;\s*this\.entries\.delete\(key\);\s*if \(entry\.expiresAt <= Date\.now\(\)\) return null;\s*return entry\.value;\s*\}/,
     );
     // peek: only delete when expired
     expect(body).toMatch(
-      /async peek\(key: string\): Promise<string \| null> \{\s*\n?\s*const entry = this\.entries\.get\(key\);\s*\n?\s*if \(!entry\) return null;\s*\n?\s*if \(entry\.expiresAt <= Date\.now\(\)\) \{\s*\n?\s*this\.entries\.delete\(key\);\s*\n?\s*return null;\s*\n?\s*\}\s*\n?\s*return entry\.value;/,
+      /async peek\(key: string\): Promise<string \| null> \{\s*const entry = this\.entries\.get\(key\);\s*if \(!entry\) return null;\s*if \(entry\.expiresAt <= Date\.now\(\)\) \{\s*this\.entries\.delete\(key\);\s*return null;\s*\}\s*return entry\.value;/,
     );
   });
 
@@ -159,19 +159,19 @@ describe('W397.B apps/server/src/services/mfa-challenge-store.ts content parity'
 
   it('generateChallengeToken: randomBytes(32).toString("base64url") — 43 url-safe chars, no scrypt', () => {
     expect(body).toMatch(
-      /V-353d — generate a fresh challenge token\. The plaintext crosses the wire\s*\n?\s*\*\s*once; Redis key helpers store only its fixed-length SHA-256 identifier\./,
+      /V-353d — generate a fresh challenge token\. The plaintext crosses the wire\s*\*\s*once; Redis key helpers store only its fixed-length SHA-256 identifier\./,
     );
     expect(body).toMatch(
-      /\/\/ 32 bytes → 43 url-safe chars \(base64url, no padding\)\. Plenty of\s*\n?\s*\/\/\s*entropy for a 5-minute single-use code; doesn't need scrypt\./,
+      /\/\/ 32 bytes → 43 url-safe chars \(base64url, no padding\)\. Plenty of\s*\/\/\s*entropy for a 5-minute single-use code; doesn't need scrypt\./,
     );
     expect(body).toMatch(
-      /export function generateChallengeToken\(\): string \{[\s\S]+?return randomBytes\(32\)\.toString\('base64url'\);\s*\n?\s*\}/,
+      /export function generateChallengeToken\(\): string \{[\s\S]+?return randomBytes\(32\)\.toString\('base64url'\);\s*\}/,
     );
   });
 
   it('redisKey: prefix + SHA-256 identifier; MFA_CHALLENGE_TTL_SECONDS exported alias', () => {
     expect(body).toMatch(
-      /export function redisKey\(token: string\): string \{\s*\n?\s*return `\$\{REDIS_KEY_PREFIX\}\$\{challengeTokenDigest\(token\)\}`;\s*\n?\s*\}/,
+      /export function redisKey\(token: string\): string \{\s*return `\$\{REDIS_KEY_PREFIX\}\$\{challengeTokenDigest\(token\)\}`;\s*\}/,
     );
     expect(body).toMatch(/return createHash\('sha256'\)\.update\(token\)\.digest\('hex'\);/);
     expect(body).toMatch(/export const MFA_CHALLENGE_TTL_SECONDS = TTL_SECONDS;/);

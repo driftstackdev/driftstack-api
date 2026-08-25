@@ -42,7 +42,7 @@ describe('W886 AuthTokenSchema cross-source invariant', () => {
 
   it('CRITICAL packages/api-types/src/auth.ts AuthTokenSchema = z.string().min(32).max(256).regex(/^[A-Za-z0-9_-]+$/). The 32-256 char + URL-safe regex enforces base64url-style tokens.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/auth.ts'));
-    expect(p).toMatch(/export const AuthTokenSchema = z\s*\n?\s*\.string\(\)/);
+    expect(p).toMatch(/export const AuthTokenSchema = z\s*\.string\(\)/);
     expect(p).toMatch(/\.min\(32\)\s*\n\s*\.max\(256\)/);
     expect(p).toMatch(/\.regex\(\/\^\[A-Za-z0-9_-\]\+\$\/\)/);
   });

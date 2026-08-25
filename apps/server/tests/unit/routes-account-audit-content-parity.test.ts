@@ -42,19 +42,19 @@ describe('W417.C apps/server/src/routes/account-audit.ts content parity', () => 
   it('V-216 framing pinned: GET /v1/account/audit-log newest-first cursor-paginated + optional action filter', () => {
     expect(body).toMatch(/V-216 — customer-facing audit log read endpoint\./);
     expect(body).toMatch(
-      /GET \/v1\/account\/audit-log — list the calling account's own audit\s*\n?\s*\/\/\s*entries \(newest first, cursor-paginated, optional action filter\)\./,
+      /GET \/v1\/account\/audit-log — list the calling account's own audit\s*\/\/\s*entries \(newest first, cursor-paginated, optional action filter\)\./,
     );
   });
 
   it('V-297 framing pinned: csv|json export + GDPR Article 20 portability + 10k ceiling + ?since pagination', () => {
     expect(body).toMatch(
-      /V-297 — `GET \/v1\/account\/audit-log\/export\?format=csv\|json` exports\s*\n?\s*\/\/\s*the full audit log for the calling account as a single download\.\s*\n?\s*\/\/\s*CSV for spreadsheets \/ GDPR Article 20 portability; JSON for\s*\n?\s*\/\/\s*programmatic consumers\. Server-side ceiling: 10,000 rows per export\s*\n?\s*\/\/\s*to avoid pathological cases\. Pagination via subsequent\s*\n?\s*\/\/\s*`\?since=<timestamp>` calls if more is needed \(rare in practice\)\./,
+      /V-297 — `GET \/v1\/account\/audit-log\/export\?format=csv\|json` exports\s*\/\/\s*the full audit log for the calling account as a single download\.\s*\/\/\s*CSV for spreadsheets \/ GDPR Article 20 portability; JSON for\s*\/\/\s*programmatic consumers\. Server-side ceiling: 10,000 rows per export\s*\/\/\s*to avoid pathological cases\. Pagination via subsequent\s*\/\/\s*`\?since=<timestamp>` calls if more is needed \(rare in practice\)\./,
     );
   });
 
   it('V-330b framing pinned: X-Driftstack-Account team-member read; both member + admin roles read-only', () => {
     expect(body).toMatch(
-      /\/\/ V-330b — honor X-Driftstack-Account: a team member with a\s*\n?\s*\/\/ valid membership reads the owner's audit log\. Read-only;\s*\n?\s*\/\/ both 'member' and 'admin' roles allowed\./,
+      /\/\/ V-330b — honor X-Driftstack-Account: a team member with a\s*\/\/ valid membership reads the owner's audit log\. Read-only;\s*\/\/ both 'member' and 'admin' roles allowed\./,
     );
   });
 
@@ -77,7 +77,7 @@ describe('W417.C apps/server/src/routes/account-audit.ts content parity', () => 
 
   it('publicEntry: 10-field shape with account_id=acc_ + actor_account_id/actor_key_id nullable prefixed + ISO timestamp; payload/ip/ua conditionally scrubbed for cross-actor (team-member) views UNIONED with the per-row actor-differs check', () => {
     expect(body).toMatch(
-      /function publicEntry\(\s*\n?\s*row: AccountAuditEntryRow,\s*\n?\s*redactActorPrivacy = false,?\s*\n?\s*\): Record<string, unknown> \{/,
+      /function publicEntry\(\s*row: AccountAuditEntryRow,\s*redactActorPrivacy = false,?\s*\): Record<string, unknown> \{/,
     );
     // Union: request-level team-header redaction OR the row's own actor
     // differing from the account it belongs to (e.g. a staff support-note
@@ -86,7 +86,7 @@ describe('W417.C apps/server/src/routes/account-audit.ts content parity', () => 
       /const redact = redactActorPrivacy \|\| rowNeedsActorPrivacyRedaction\(row\);/,
     );
     expect(body).toMatch(
-      /function rowNeedsActorPrivacyRedaction\(row: AccountAuditEntryRow\): boolean \{\s*\n?\s*return row\.actorAccountId !== null && row\.actorAccountId !== row\.accountId;\s*\n?\s*\}/,
+      /function rowNeedsActorPrivacyRedaction\(row: AccountAuditEntryRow\): boolean \{\s*return row\.actorAccountId !== null && row\.actorAccountId !== row\.accountId;\s*\}/,
     );
     expect(body).toMatch(/id: row\.id,/);
     expect(body).toMatch(/account_id: `acc_\$\{row\.accountId\}`,/);
@@ -129,7 +129,7 @@ describe('W417.C apps/server/src/routes/account-audit.ts content parity', () => 
       /\.\.\.\(parsed\.data\.actor_type !== undefined \? \{ actorType: parsed\.data\.actor_type \} : \{\}\),/,
     );
     expect(body).toMatch(
-      /\.\.\.\(parsed\.data\.target_resource_id !== undefined\s*\n?\s*\? \{ targetResourceId: parsed\.data\.target_resource_id \}\s*\n?\s*: \{\}\),/,
+      /\.\.\.\(parsed\.data\.target_resource_id !== undefined\s*\? \{ targetResourceId: parsed\.data\.target_resource_id \}\s*: \{\}\),/,
     );
     expect(body).toMatch(
       /\.\.\.\(effective\.kind === 'team' \? \{ effectiveAccountId: effective\.accountId \} : \{\}\),/,
@@ -138,7 +138,7 @@ describe('W417.C apps/server/src/routes/account-audit.ts content parity', () => 
 
   it('Export: ExportQuerySchema format enum csv|json default json; EXPORT_MAX_ROWS=10_000 + EXPORT_PAGE_SIZE=200 constants', () => {
     expect(body).toMatch(
-      /const ExportQuerySchema = z\.object\(\{\s*\n?\s*format: z\.enum\(\['csv', 'json'\]\)\.default\('json'\),\s*\n?\s*\}\);/,
+      /const ExportQuerySchema = z\.object\(\{\s*format: z\.enum\(\['csv', 'json'\]\)\.default\('json'\),\s*\}\);/,
     );
     expect(body).toMatch(/const EXPORT_MAX_ROWS = 10_000;/);
     expect(body).toMatch(/const EXPORT_PAGE_SIZE = 200;/);
@@ -146,7 +146,7 @@ describe('W417.C apps/server/src/routes/account-audit.ts content parity', () => 
 
   it('Export pagination walk: while length < EXPORT_MAX_ROWS; break on nextCursor === null; truncated = length >= EXPORT_MAX_ROWS', () => {
     expect(body).toMatch(
-      /while \(all\.length < EXPORT_MAX_ROWS\) \{\s*\n?\s*const page = await accountAudit\.list\(ctx, \{\s*\n?\s*limit: EXPORT_PAGE_SIZE,\s*\n?\s*\.\.\.\(cursor !== undefined \? \{ cursor \} : \{\}\),\s*\n?\s*\.\.\.\(effective\.kind === 'team' \? \{ effectiveAccountId: effective\.accountId \} : \{\}\),\s*\n?\s*\}\);\s*\n?\s*all\.push\(\.\.\.page\.items\);\s*\n?\s*if \(page\.nextCursor === null\) break;/,
+      /while \(all\.length < EXPORT_MAX_ROWS\) \{\s*const page = await accountAudit\.list\(ctx, \{\s*limit: EXPORT_PAGE_SIZE,\s*\.\.\.\(cursor !== undefined \? \{ cursor \} : \{\}\),\s*\.\.\.\(effective\.kind === 'team' \? \{ effectiveAccountId: effective\.accountId \} : \{\}\),\s*\}\);\s*all\.push\(\.\.\.page\.items\);\s*if \(page\.nextCursor === null\) break;/,
     );
     expect(body).toMatch(/const truncated = all\.length >= EXPORT_MAX_ROWS;/);
   });
@@ -159,7 +159,7 @@ describe('W417.C apps/server/src/routes/account-audit.ts content parity', () => 
 
   it('Export CSV: 9-column header (timestamp/action/actor_type/actor_account_id/actor_key_id/target_resource_id/ip_address/user_agent/payload); CRLF row terminator; prefixed actor ids', () => {
     expect(body).toMatch(
-      /const header = \[\s*\n?\s*'timestamp',\s*\n?\s*'action',\s*\n?\s*'actor_type',\s*\n?\s*'actor_account_id',\s*\n?\s*'actor_key_id',\s*\n?\s*'target_resource_id',\s*\n?\s*'ip_address',\s*\n?\s*'user_agent',\s*\n?\s*'payload',\s*\n?\s*\];/,
+      /const header = \[\s*'timestamp',\s*'action',\s*'actor_type',\s*'actor_account_id',\s*'actor_key_id',\s*'target_resource_id',\s*'ip_address',\s*'user_agent',\s*'payload',\s*\];/,
     );
     expect(body).toMatch(/row\.actorAccountId \? `acc_\$\{row\.actorAccountId\}` : '',/);
     expect(body).toMatch(/row\.actorKeyId \? `key_\$\{row\.actorKeyId\}` : '',/);
@@ -193,7 +193,7 @@ describe('W417.C apps/server/src/routes/account-audit.ts content parity', () => 
       "account_id: `acc_${effective.kind === 'team' ? effective.accountId : ctx.account.id}`,",
     );
     expect(body).toMatch(
-      /row_count: all\.length,\s*\n?\s*truncated,\s*\n?\s*data: all\.map\(\(row\) => publicEntry\(row, redactActorPrivacy\)\),/,
+      /row_count: all\.length,\s*truncated,\s*data: all\.map\(\(row\) => publicEntry\(row, redactActorPrivacy\)\),/,
     );
     expect(body).toMatch(/\.header\('content-type', 'application\/json; charset=utf-8'\)/);
     expect(body).toMatch(

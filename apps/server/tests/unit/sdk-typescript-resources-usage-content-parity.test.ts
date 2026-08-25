@@ -53,7 +53,7 @@ describe('W429.B packages/sdk-typescript/src/resources/usage.ts content parity',
   it('current() verb — GET /v1/usage returns UsagePeriodSummary (current billing period totals + tier quotas). Single-line implementation: this.http.request<UsagePeriodSummary>({ method: GET, path: /v1/usage }). Drift to splitting into a body-prep helper would break the "minimal facade" invariant.', () => {
     expect(body).toMatch(/\/\*\* Current billing period: usage totals \+ tier quotas\. \*\//);
     expect(body).toMatch(
-      /current\(\): Promise<UsagePeriodSummary> \{\s*\n?\s*return this\.http\.request<UsagePeriodSummary>\(\{ method: 'GET', path: '\/v1\/usage' \}\);\s*\n?\s*\}/,
+      /current\(\): Promise<UsagePeriodSummary> \{\s*return this\.http\.request<UsagePeriodSummary>\(\{ method: 'GET', path: '\/v1\/usage' \}\);\s*\}/,
     );
   });
 
@@ -71,7 +71,7 @@ describe('W429.B packages/sdk-typescript/src/resources/usage.ts content parity',
 
   it('CRITICAL: series() conditional query spread — `query: opts.days !== undefined ? { days: opts.days } : {}`. The `!== undefined` check (not `?? 30` or `||`) is load-bearing: it lets the server apply its default-30 when the caller omits days, rather than client-side-defaulting which would race with future server-side default changes. Empty `{}` (not absent query key) also pinned because http.request needs the key to short-circuit query-string emission.', () => {
     expect(body).toMatch(
-      /return this\.http\.request<UsageSeriesResponse>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/usage\/series',\s*\n?\s*query: opts\.days !== undefined \? \{ days: opts\.days \} : \{\},\s*\n?\s*\}\);/,
+      /return this\.http\.request<UsageSeriesResponse>\(\{\s*method: 'GET',\s*path: '\/v1\/usage\/series',\s*query: opts\.days !== undefined \? \{ days: opts\.days \} : \{\},\s*\}\);/,
     );
   });
 

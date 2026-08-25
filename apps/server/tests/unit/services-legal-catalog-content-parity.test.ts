@@ -34,70 +34,70 @@ describe('W400.B apps/server/src/services/legal-catalog.ts content parity', () =
 
   it('Module framing pinned: boot-time loader + content-hash + LegalService consumer', () => {
     expect(body).toMatch(
-      /LegalDocumentCatalog — loads the bound legal documents at server\s*\n?\s*\/\/\s*startup, computes content hashes, and exposes the catalog to the\s*\n?\s*\/\/\s*LegalService\./,
+      /LegalDocumentCatalog — loads the bound legal documents at server\s*\/\/\s*startup, computes content hashes, and exposes the catalog to the\s*\/\/\s*LegalService\./,
     );
   });
 
   it('Header format pinned: **Version:** X · **Effective:** YYYY-MM-DD', () => {
     expect(body).toMatch(
-      /Each document's header\s*\n?\s*\/\/\s*is expected to contain a line of the form:\s*\n?\s*\/\/\s*\n?\s*\/\/\s*\*\*Version:\*\* 0\.1\.0-draft · \*\*Effective:\*\* 2026-05-03/,
+      /Each document's header\s*\/\/\s*is expected to contain a line of the form:\s*\/\/\s*\/\/\s*\*\*Version:\*\* 0\.1\.0-draft · \*\*Effective:\*\* 2026-05-03/,
     );
   });
 
   it('Fail-fast framing pinned: missing-header → throw at startup (better than silent serving without acceptance gating)', () => {
     expect(body).toMatch(
-      /If the line is missing, the loader fails fast at startup; this is\s*\n?\s*\/\/\s*preferable to silently serving documents without acceptance gating\./,
+      /If the line is missing, the loader fails fast at startup; this is\s*\/\/\s*preferable to silently serving documents without acceptance gating\./,
     );
   });
 
   it('LegalDocumentEntry: 7 fields (documentKey / title / version / effectiveDate / contentHash / sourcePath / byteSize)', () => {
     expect(body).toMatch(/export interface LegalDocumentEntry \{/);
     expect(body).toMatch(
-      /\/\*\* Stable key — 'tos' \| 'privacy' \| 'dpa' \| 'aup'\. \*\/\s*\n?\s*documentKey: string;/,
+      /\/\*\* Stable key — 'tos' \| 'privacy' \| 'dpa' \| 'aup'\. \*\/\s*documentKey: string;/,
     );
-    expect(body).toMatch(/\/\*\* Display title for client surfaces\. \*\/\s*\n?\s*title: string;/);
+    expect(body).toMatch(/\/\*\* Display title for client surfaces\. \*\/\s*title: string;/);
     expect(body).toMatch(
-      /\/\*\* SemVer-shaped version parsed from the document header\. \*\/\s*\n?\s*version: string;/,
-    );
-    expect(body).toMatch(
-      /\/\*\* Effective date \(ISO 8601 yyyy-mm-dd\) parsed from the header\. \*\/\s*\n?\s*effectiveDate: string;/,
+      /\/\*\* SemVer-shaped version parsed from the document header\. \*\/\s*version: string;/,
     );
     expect(body).toMatch(
-      /\/\*\* SHA-256 hex digest of the file content at load time, lowercase\. \*\/\s*\n?\s*contentHash: string;/,
+      /\/\*\* Effective date \(ISO 8601 yyyy-mm-dd\) parsed from the header\. \*\/\s*effectiveDate: string;/,
     );
     expect(body).toMatch(
-      /\/\*\* Repo-relative path to the source file\. \*\/\s*\n?\s*sourcePath: string;/,
+      /\/\*\* SHA-256 hex digest of the file content at load time, lowercase\. \*\/\s*contentHash: string;/,
     );
     expect(body).toMatch(
-      /\/\*\* Length in bytes \(informational, surfaces in client APIs\)\. \*\/\s*\n?\s*byteSize: number;/,
+      /\/\*\* Repo-relative path to the source file\. \*\/\s*sourcePath: string;/,
+    );
+    expect(body).toMatch(
+      /\/\*\* Length in bytes \(informational, surfaces in client APIs\)\. \*\/\s*byteSize: number;/,
     );
   });
 
   it('LegalDocumentCatalog: 2-method interface (entries / get)', () => {
     expect(body).toMatch(
-      /export interface LegalDocumentCatalog \{\s*\n?\s*entries\(\): LegalDocumentEntry\[\];\s*\n?\s*get\(documentKey: string\): LegalDocumentEntry \| undefined;\s*\n?\s*\}/,
+      /export interface LegalDocumentCatalog \{\s*entries\(\): LegalDocumentEntry\[\];\s*get\(documentKey: string\): LegalDocumentEntry \| undefined;\s*\}/,
     );
   });
 
   it('DEFAULT_SOURCES: 4 entries (tos / privacy / dpa / aup) with canonical filePath bindings', () => {
     expect(body).toMatch(/const DEFAULT_SOURCES: DocSource\[\] = \[/);
     expect(body).toMatch(
-      /\{\s*\n?\s*documentKey: 'tos',\s*\n?\s*title: 'Terms of Service',\s*\n?\s*filePath: 'docs\/legal\/terms-of-service\.md',\s*\n?\s*\},/,
+      /\{\s*documentKey: 'tos',\s*title: 'Terms of Service',\s*filePath: 'docs\/legal\/terms-of-service\.md',\s*\},/,
     );
     expect(body).toMatch(
-      /\{\s*\n?\s*documentKey: 'privacy',\s*\n?\s*title: 'Privacy Policy',\s*\n?\s*filePath: 'docs\/legal\/privacy-policy\.md',\s*\n?\s*\},/,
+      /\{\s*documentKey: 'privacy',\s*title: 'Privacy Policy',\s*filePath: 'docs\/legal\/privacy-policy\.md',\s*\},/,
     );
     expect(body).toMatch(
-      /\{\s*\n?\s*documentKey: 'dpa',\s*\n?\s*title: 'Data Processing Agreement',\s*\n?\s*filePath: 'docs\/legal\/dpa\.md',\s*\n?\s*\},/,
+      /\{\s*documentKey: 'dpa',\s*title: 'Data Processing Agreement',\s*filePath: 'docs\/legal\/dpa\.md',\s*\},/,
     );
     expect(body).toMatch(
-      /\{\s*\n?\s*documentKey: 'aup',\s*\n?\s*title: 'Acceptable Use Policy',\s*\n?\s*filePath: 'docs\/legal\/acceptable-use-policy\.md',\s*\n?\s*\},/,
+      /\{\s*documentKey: 'aup',\s*title: 'Acceptable Use Policy',\s*filePath: 'docs\/legal\/acceptable-use-policy\.md',\s*\},/,
     );
   });
 
   it('buildLegalCatalog: reads file + parses header + computes sha256 hex + Buffer.byteLength byteSize', () => {
     expect(body).toMatch(
-      /export function buildLegalCatalog\(opts: \{\s*\n?\s*repoRoot: string;\s*\n?\s*sources\?: DocSource\[\];\s*\n?\s*\}\): LegalDocumentCatalog \{/,
+      /export function buildLegalCatalog\(opts: \{\s*repoRoot: string;\s*sources\?: DocSource\[\];\s*\}\): LegalDocumentCatalog \{/,
     );
     expect(body).toMatch(/const sources = opts\.sources \?\? DEFAULT_SOURCES;/);
     expect(body).toMatch(/const fullPath = resolve\(opts\.repoRoot, src\.filePath\);/);
@@ -113,10 +113,10 @@ describe('W400.B apps/server/src/services/legal-catalog.ts content parity', () =
 
   it("buildLegalCatalogFromContent: in-memory test seam (no disk reads — tests don't need files)", () => {
     expect(body).toMatch(
-      /Build a catalog directly from in-memory document strings\. Used by\s*\n?\s*\*\s*tests so they don't need to read from disk\./,
+      /Build a catalog directly from in-memory document strings\. Used by\s*\*\s*tests so they don't need to read from disk\./,
     );
     expect(body).toMatch(
-      /export function buildLegalCatalogFromContent\(\s*\n?\s*documents: Array<\{ documentKey: string; title: string; content: string; sourcePath: string \}>,\s*\n?\s*\): LegalDocumentCatalog \{/,
+      /export function buildLegalCatalogFromContent\(\s*documents: Array<\{ documentKey: string; title: string; content: string; sourcePath: string \}>,\s*\): LegalDocumentCatalog \{/,
     );
   });
 
@@ -128,14 +128,14 @@ describe('W400.B apps/server/src/services/legal-catalog.ts content parity', () =
 
   it('parseLegalHeader: throws on missing header OR group-match mismatch (defensive type guard)', () => {
     expect(body).toMatch(
-      /function parseLegalHeader\(\s*\n?\s*content: string,\s*\n?\s*documentKey: string,\s*\n?\s*\): \{ version: string; effectiveDate: string \} \{/,
+      /function parseLegalHeader\(\s*content: string,\s*documentKey: string,\s*\): \{ version: string; effectiveDate: string \} \{/,
     );
     expect(body).toMatch(/const match = HEADER_RE\.exec\(content\);/);
     expect(body).toMatch(
-      /if \(match === null\) \{\s*\n?\s*throw new Error\(\s*\n?\s*`Legal document \$\{documentKey\} is missing the standard "\*\*Version:\*\* … · \*\*Effective:\*\* YYYY-MM-DD" header line\.`,\s*\n?\s*\);/,
+      /if \(match === null\) \{\s*throw new Error\(\s*`Legal document \$\{documentKey\} is missing the standard "\*\*Version:\*\* … · \*\*Effective:\*\* YYYY-MM-DD" header line\.`,\s*\);/,
     );
     expect(body).toMatch(
-      /if \(version === undefined \|\| effectiveDate === undefined\) \{\s*\n?\s*throw new Error\(`Legal document \$\{documentKey\} header parse mismatch\.`\);\s*\n?\s*\}/,
+      /if \(version === undefined \|\| effectiveDate === undefined\) \{\s*throw new Error\(`Legal document \$\{documentKey\} header parse mismatch\.`\);\s*\}/,
     );
   });
 

@@ -33,7 +33,7 @@ describe('BYOK Anthropic staleness-window cross-source invariant', () => {
 
   it("service comment explicitly cross-references the rotation-reminder constant: '90 days matches the ROTATION_TARGET_DAYS constant in the rotation-reminder services (v2-#10.5 / v2-#11.5) — past that point the customer has been nagged for ~30 days and the key is considered stale.' — pinned so the cross-reference + 30-day-nag-window-before-stale rationale all stay documented", () => {
     expect(serviceSrc).toMatch(
-      /90 days matches the\s*\n?\s*\*\s+ROTATION_TARGET_DAYS constant in the rotation-reminder services\s*\n?\s*\*\s+\(v2-#10\.5 \/ v2-#11\.5\) — past that point the customer has been\s*\n?\s*\*\s+nagged for ~30 days and the key is considered stale\./,
+      /90 days matches the\s*\*\s+ROTATION_TARGET_DAYS constant in the rotation-reminder services\s*\*\s+\(v2-#10\.5 \/ v2-#11\.5\) — past that point the customer has been\s*\*\s+nagged for ~30 days and the key is considered stale\./,
     );
   });
 
@@ -54,7 +54,7 @@ describe('BYOK Anthropic staleness-window cross-source invariant', () => {
 
   it('PUT-resets-set_at contract framing pinned in docs + matches the service upsert path that touches set_at on every successful PUT (cross-confirmed by db/byok-anthropic-repo.ts upsert)', () => {
     expect(docs).toMatch(
-      /Customers can refresh the staleness window by PUTting the same\s*\n?\s*key \(resets `set_at`\)/,
+      /Customers can refresh the staleness window by PUTting the same\s*key \(resets `set_at`\)/,
     );
   });
 });

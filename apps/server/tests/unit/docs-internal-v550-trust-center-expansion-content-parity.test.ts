@@ -70,7 +70,7 @@ describe('W563.A /docs/internal/v550-trust-center-expansion.md content parity', 
       /3\. \*\*Email-on-change\*\* — customers can opt into Postmark notifications/,
     );
     expect(body).toMatch(
-      /GDPR Art\.\s*\n?\s*28\(2\) 30-day notice requirement \(already documented in V-493/,
+      /GDPR Art\.\s*28\(2\) 30-day notice requirement \(already documented in V-493/,
     );
     expect(body).toMatch(/sub-processor parity audit\)\./);
     expect(body).toMatch(/### V-550\.B — incident history page/);
@@ -115,7 +115,7 @@ describe('W563.A /docs/internal/v550-trust-center-expansion.md content parity', 
     expect(body).toMatch(/silence on the certification axis\./);
     expect(body).toMatch(/## Open questions for team review/);
     expect(body).toMatch(/1\. \*\*MTTR public exposure\*\* — public 30\/90\/365-day MTTR/);
-    expect(body).toMatch(/transparency beats hidden\s*\n?\s*under-performance\./);
+    expect(body).toMatch(/transparency beats hidden\s*under-performance\./);
     expect(body).toMatch(/2\. \*\*Pen-test gating\*\* — NDA-then-download workflow/);
     expect(body).toMatch(/summary-public \+ full-NDA-gated\./);
     expect(body).toMatch(/3\. \*\*Compliance roadmap honesty\*\*/);

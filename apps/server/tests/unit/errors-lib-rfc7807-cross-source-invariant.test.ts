@@ -195,7 +195,7 @@ describe('W965 errors lib RFC 7807 cross-source invariant', () => {
       // reserved RFC 7807 member names from `ProblemSchema.shape` rather than
       // restating them, so a member added to the schema is protected with no
       // second list to keep in step.
-      /import \{\s*\n?\s*PROBLEM_TYPES,\s*\n?\s*ProblemSchema,\s*\n?\s*type Problem,\s*\n?\s*type ProblemType,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import \{\s*PROBLEM_TYPES,\s*ProblemSchema,\s*type Problem,\s*type ProblemType,\s*\} from '@driftstack\/api-types';/,
     );
   });
 

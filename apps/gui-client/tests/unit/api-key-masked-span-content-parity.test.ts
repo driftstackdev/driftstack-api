@@ -35,7 +35,7 @@ describe('W385.B gui-client ApiKeyMaskedSpan content parity', () => {
   it('V-534.R framing pinned + "right key" disambiguation use-case', () => {
     expect(body).toMatch(/V-534\.R — ApiKeyMaskedSpan presentational primitive/);
     expect(body).toMatch(
-      /Renders a Driftstack API key as `ds_live_abcd…wxyz` so views can\s*\n?\s*\/\/\s*confirm "this is the right key" without exposing the full secret/,
+      /Renders a Driftstack API key as `ds_live_abcd…wxyz` so views can\s*\/\/\s*confirm "this is the right key" without exposing the full secret/,
     );
   });
 
@@ -61,7 +61,7 @@ describe('W385.B gui-client ApiKeyMaskedSpan content parity', () => {
 
   it('short-body branch: returns prefix + body verbatim (no ellipsis when nothing to hide)', () => {
     expect(body).toMatch(
-      /if \(body\.length <= prefixChars \+ suffixChars\) \{\s*\n?\s*return `\$\{prefix\}\$\{body\}`;\s*\n?\s*\}/,
+      /if \(body\.length <= prefixChars \+ suffixChars\) \{\s*return `\$\{prefix\}\$\{body\}`;\s*\}/,
     );
   });
 

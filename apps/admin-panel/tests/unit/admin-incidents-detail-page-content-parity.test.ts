@@ -78,7 +78,7 @@ describe('W367.C admin-panel /incidents/[id] (detail) page content parity', () =
   });
 
   it('resolve-form copy pinned: "stamps resolved_at" + "green banner once propagated"', () => {
-    expect(body).toMatch(/stamps\s*\n?\s*<code>resolved_at<\/code>/);
+    expect(body).toMatch(/stamps\s*<code>resolved_at<\/code>/);
     expect(body).toMatch(/The status page will show a green banner once propagated/);
   });
 
@@ -133,7 +133,7 @@ describe('W367.C admin-panel /incidents/[id] (detail) page content parity', () =
     // live endpoints. Pin so a future "let's reuse the alert
     // pattern" softening can't slip in.
     expect(body).toMatch(
-      /V-344 — wires Post-update \+ Mark-resolved forms to the live[\s\S]*Replaces\s*\n?\s*\/\/\s*the V-295a alert-stubs/,
+      /V-344 — wires Post-update \+ Mark-resolved forms to the live[\s\S]*Replaces\s*\/\/\s*the V-295a alert-stubs/,
     );
   });
 
@@ -146,7 +146,7 @@ describe('W367.C admin-panel /incidents/[id] (detail) page content parity', () =
     expect(body).toMatch(/data-banner/);
     expect(body).toMatch(/function showBanner\(msg, isError\)/);
     // post-failure routes through showBanner(..., true) not alert.
-    expect(body).toMatch(/showBanner\(\s*\n?\s*'Post failed: '/);
+    expect(body).toMatch(/showBanner\(\s*'Post failed: '/);
     // no bare `alert(...)` statement (preceded by whitespace/`{`/`;`, i.e.
     // a call, not the word inside a comment or "alert-stubs"/"alert()").
     expect(body).not.toMatch(/(?:^|[;{}]|\)\s)\s*alert\(/m);

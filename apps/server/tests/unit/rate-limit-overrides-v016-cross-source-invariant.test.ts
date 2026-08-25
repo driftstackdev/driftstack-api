@@ -127,7 +127,7 @@ describe('W931 rate-limit-overrides V-016 centi-quantum cross-source invariant',
   it('CRITICAL set() validates finite refillPerSecond ∈ [MIN_REFILL, MAX_REFILL] with ConflictError + interpolated bounds', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/rate-limit-overrides.ts'));
     expect(p).toMatch(
-      /!Number\.isFinite\(input\.refillPerSecond\) \|\|\s*\n?\s*input\.refillPerSecond < MIN_REFILL \|\|\s*\n?\s*input\.refillPerSecond > MAX_REFILL/,
+      /!Number\.isFinite\(input\.refillPerSecond\) \|\|\s*input\.refillPerSecond < MIN_REFILL \|\|\s*input\.refillPerSecond > MAX_REFILL/,
     );
     expect(p).toMatch(
       /`refill_per_second must be between \$\{MIN_REFILL\.toString\(\)\} and \$\{MAX_REFILL\.toString\(\)\}\.`,/,

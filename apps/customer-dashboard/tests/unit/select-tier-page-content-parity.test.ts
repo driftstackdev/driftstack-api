@@ -50,7 +50,7 @@ describe('W373.C customer-dashboard /select-tier page content parity', () => {
     expect(body).toMatch(/V-184a — onboarding step 4 and the post-onboarding plan picker/);
     expect(body).toMatch(/comparison rows below are derived from the same api-types tables/);
     expect(body).toMatch(
-      /V-501 — disabled-while-pending guards on checkout buttons; copy\s*\n?\s*\/\/\s*micro-polish/,
+      /V-501 — disabled-while-pending guards on checkout buttons; copy\s*\/\/\s*micro-polish/,
     );
   });
 
@@ -100,7 +100,7 @@ describe('W373.C customer-dashboard /select-tier page content parity', () => {
 
   it('POST /v1/billing/checkout-session wired with tier + billing_period + success/cancel URLs', () => {
     expect(body).toMatch(/authedFetch\('\/v1\/billing\/checkout-session'/);
-    expect(body).toMatch(/tier,\s*\n?\s*billing_period: 'monthly'/);
+    expect(body).toMatch(/tier,\s*billing_period: 'monthly'/);
     expect(body).toMatch(/success_url: window\.location\.origin \+ '\/\?subscribed=' \+ tier/);
   });
 
@@ -198,7 +198,7 @@ describe('W373.C customer-dashboard /select-tier page content parity', () => {
 
   it('shared-engine framing accurately distinguishes operational and optional-capability differences', () => {
     expect(body).toMatch(
-      /Every tier runs the same verified browser engine and can use every\s*\n?\s*currently available archetype\. Operational limits and optional capabilities\s*\n?\s*differ — compare concurrency, profiles, storage, saved proxies, access,\s*\n?\s*and AI billing below/,
+      /Every tier runs the same verified browser engine and can use every\s*currently available archetype\. Operational limits and optional capabilities\s*differ — compare concurrency, profiles, storage, saved proxies, access,\s*and AI billing below/,
     );
     expect(body).not.toMatch(/Only concurrent caps and profile\s+counts change/);
   });
@@ -216,7 +216,7 @@ describe('W373.C customer-dashboard /select-tier page content parity', () => {
 
   it("change-plan-reuse comment pinned (page reachable from /billing 'Change plan' too)", () => {
     expect(body).toMatch(
-      /"Change plan" reuse: this same page is reachable from \/billing\s*\n?\s*\/\/\s*"Change plan" link \(post-onboarding\)/,
+      /"Change plan" reuse: this same page is reachable from \/billing\s*\/\/\s*"Change plan" link \(post-onboarding\)/,
     );
     expect(body).toMatch(/Every account starts on the/);
   });
@@ -244,6 +244,6 @@ describe('W373.C customer-dashboard /select-tier page content parity', () => {
   });
 
   it('data-action="buy-tier" buttons carry data-tier attribute (router knows which tier checkout to start)', () => {
-    expect(body).toMatch(/data-action="buy-tier"\s*\n?\s*data-tier=\{t\.id\}/);
+    expect(body).toMatch(/data-action="buy-tier"\s*data-tier=\{t\.id\}/);
   });
 });

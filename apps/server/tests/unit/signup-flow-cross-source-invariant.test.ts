@@ -54,7 +54,7 @@ describe('W900 Signup flow cross-source invariant', () => {
       /SignupResponseSchema = z\.object\(\{[\s\S]+?verification_email_expires_at: Iso8601Schema/,
     );
     expect(p).toMatch(
-      /debug_token: z\s*\n?\s*\.string\(\)\s*\n?\s*\.optional\(\)\s*\n?\s*\.describe\('Stub email mode only — the plaintext verification token'\)/,
+      /debug_token: z\s*\.string\(\)\s*\.optional\(\)\s*\.describe\('Stub email mode only — the plaintext verification token'\)/,
     );
   });
 

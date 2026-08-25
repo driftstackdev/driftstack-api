@@ -46,56 +46,56 @@ describe('W450.C packages/behavioural-simulation/src/interfaces.ts content parit
 
   it('stable pure-generator seam framing pinned', () => {
     expect(body).toMatch(
-      /\/\/ Stable behavioural-simulation interfaces\. Pure generators slot in behind\s*\n?\s*\/\/ this seam while callers keep one coherent contract\./,
+      /\/\/ Stable behavioural-simulation interfaces\. Pure generators slot in behind\s*\/\/ this seam while callers keep one coherent contract\./,
     );
   });
 
   it('imports: ScrollVelocityProfile type from ./scroll; 7 type-only from ./types (BehaviouralProfile + ElementBounds + ElementClass + KeyboardCadence + MouseTrajectory + ScrollPattern + TouchEvent)', () => {
     expect(body).toMatch(/import type \{ ScrollVelocityProfile \} from '\.\/scroll\.js';/);
     expect(body).toMatch(
-      /import type \{\s*\n?\s*BehaviouralProfile,\s*\n?\s*ElementBounds,\s*\n?\s*ElementClass,\s*\n?\s*KeyboardCadence,\s*\n?\s*MouseTrajectory,\s*\n?\s*ScrollPattern,\s*\n?\s*TouchEvent,\s*\n?\s*\} from '\.\/types\.js';/,
+      /import type \{\s*BehaviouralProfile,\s*ElementBounds,\s*ElementClass,\s*KeyboardCadence,\s*MouseTrajectory,\s*ScrollPattern,\s*TouchEvent,\s*\} from '\.\/types\.js';/,
     );
   });
 
   it('GenerateMouseTrajectoryOpts: from/to {x,y} + required profile + optional seed/samples', () => {
     expect(body).toMatch(
-      /export interface GenerateMouseTrajectoryOpts \{\s*\n?\s*\/\*\* Finite CSS-pixel start coordinate\. \*\/\s*\n?\s*from: \{ x: number; y: number \};\s*\n?\s*\/\*\* Finite CSS-pixel end coordinate\. \*\/\s*\n?\s*to: \{ x: number; y: number \};\s*\n?\s*\/\*\* Profile whose mean mouse speed determines trajectory duration\. \*\/\s*\n?\s*profile: BehaviouralProfile;/,
+      /export interface GenerateMouseTrajectoryOpts \{\s*\/\*\* Finite CSS-pixel start coordinate\. \*\/\s*from: \{ x: number; y: number \};\s*\/\*\* Finite CSS-pixel end coordinate\. \*\/\s*to: \{ x: number; y: number \};\s*\/\*\* Profile whose mean mouse speed determines trajectory duration\. \*\/\s*profile: BehaviouralProfile;/,
     );
     expect(body).toMatch(
-      /\/\*\* Optional seed override \(defaults to deterministic per-call seed\)\. \*\/\s*\n?\s*seed\?: string;/,
+      /\/\*\* Optional seed override \(defaults to deterministic per-call seed\)\. \*\/\s*seed\?: string;/,
     );
     expect(body).toMatch(
-      /\/\*\* Integer sample count in the implementation's bounded range \(default 32\)\. \*\/\s*\n?\s*samples\?: number;/,
+      /\/\*\* Integer sample count in the implementation's bounded range \(default 32\)\. \*\/\s*samples\?: number;/,
     );
   });
 
   it("GenerateKeyboardCadenceOpts: 'Profile whose meanKeyDelayMs + jitter shapes the cadence.' framing pinned; text + profile (BehaviouralProfile) + optional seed", () => {
     expect(body).toMatch(
-      /export interface GenerateKeyboardCadenceOpts \{\s*\n?\s*text: string;\s*\n?\s*\/\*\* Profile whose meanKeyDelayMs \+ jitter shapes the cadence\. \*\/\s*\n?\s*profile: BehaviouralProfile;\s*\n?\s*seed\?: string;\s*\n?\s*\}/,
+      /export interface GenerateKeyboardCadenceOpts \{\s*text: string;\s*\/\*\* Profile whose meanKeyDelayMs \+ jitter shapes the cadence\. \*\/\s*profile: BehaviouralProfile;\s*seed\?: string;\s*\}/,
     );
   });
 
   it('GenerateScrollPatternOpts: direction union (up|down|left|right) + totalDistancePx + profile + optional seed', () => {
     expect(body).toMatch(
-      /export interface GenerateScrollPatternOpts \{\s*\n?\s*direction: 'up' \| 'down' \| 'left' \| 'right';\s*\n?\s*\/\*\* Positive finite absolute distance\. \*\/\s*\n?\s*totalDistancePx: number;\s*\n?\s*profile: BehaviouralProfile;\s*\n?\s*seed\?: string;\s*\n?\s*\}/,
+      /export interface GenerateScrollPatternOpts \{\s*direction: 'up' \| 'down' \| 'left' \| 'right';\s*\/\*\* Positive finite absolute distance\. \*\/\s*totalDistancePx: number;\s*profile: BehaviouralProfile;\s*seed\?: string;\s*\}/,
     );
   });
 
   it("GenerateTouchEventOpts: elementClass + bounds CSS-px 'width + height must be > 0' framing pinned + optional seed", () => {
     expect(body).toMatch(
-      /\/\*\* DOM element class the touch targets\. \*\/\s*\n?\s*elementClass: ElementClass;\s*\n?\s*\/\*\* Element bounds at touch-start \(CSS px\)\. `width` \+ `height` must be > 0\. \*\/\s*\n?\s*bounds: ElementBounds;/,
+      /\/\*\* DOM element class the touch targets\. \*\/\s*elementClass: ElementClass;\s*\/\*\* Element bounds at touch-start \(CSS px\)\. `width` \+ `height` must be > 0\. \*\/\s*bounds: ElementBounds;/,
     );
   });
 
   it('GenerateScrollVelocityProfileOpts: direction + elementClass + optional initialVelocityPxPerSec + optional decayRate (1/s) + optional tickIntervalMs default 16 + optional seed', () => {
     expect(body).toMatch(
-      /\/\*\* Direction of the scroll\. \*\/\s*\n?\s*direction: 'up' \| 'down' \| 'left' \| 'right';\s*\n?\s*\/\*\* Element class the scroll initiates from \(informs defaults\)\. \*\/\s*\n?\s*elementClass: ElementClass;\s*\n?\s*\/\*\* Optional explicit initial velocity \(px\/s\)\. Overrides class default\. \*\/\s*\n?\s*initialVelocityPxPerSec\?: number;\s*\n?\s*\/\*\* Optional explicit decay rate \(1\/s\)\. Overrides class default\. \*\/\s*\n?\s*decayRate\?: number;\s*\n?\s*\/\*\* Optional tick interval \(ms\)\. Default 16 ms\. \*\/\s*\n?\s*tickIntervalMs\?: number;/,
+      /\/\*\* Direction of the scroll\. \*\/\s*direction: 'up' \| 'down' \| 'left' \| 'right';\s*\/\*\* Element class the scroll initiates from \(informs defaults\)\. \*\/\s*elementClass: ElementClass;\s*\/\*\* Optional explicit initial velocity \(px\/s\)\. Overrides class default\. \*\/\s*initialVelocityPxPerSec\?: number;\s*\/\*\* Optional explicit decay rate \(1\/s\)\. Overrides class default\. \*\/\s*decayRate\?: number;\s*\/\*\* Optional tick interval \(ms\)\. Default 16 ms\. \*\/\s*tickIntervalMs\?: number;/,
     );
   });
 
   it("BehaviouralSimulator framing pinned: 'Phase 3 ships the real generators (humanlike Bezier mouse paths, hand-position-aware keystroke cadence, naturalistic scroll velocity decay). Callers — drivers, recipe runner, GUI client — depend on this interface only.'", () => {
     expect(body).toMatch(
-      /\* Behavioural simulator interface\. Phase 3 ships the real generators\s*\n?\s*\*\s*\(humanlike Bezier mouse paths, hand-position-aware keystroke\s*\n?\s*\*\s*cadence, naturalistic scroll velocity decay\)\. Callers — drivers,\s*\n?\s*\*\s*recipe runner, GUI client — depend on this interface only\./,
+      /\* Behavioural simulator interface\. Phase 3 ships the real generators\s*\*\s*\(humanlike Bezier mouse paths, hand-position-aware keystroke\s*\*\s*cadence, naturalistic scroll velocity decay\)\. Callers — drivers,\s*\*\s*recipe runner, GUI client — depend on this interface only\./,
     );
   });
 
@@ -110,13 +110,13 @@ describe('W450.C packages/behavioural-simulation/src/interfaces.ts content parit
       /generateScrollPattern\(opts: GenerateScrollPatternOpts\): ScrollPattern;/,
     );
     expect(body).toMatch(
-      /\* V-530\.A — added in Wave 15\. Sub-slices C \(dwell \+ click-position\),\s*\n?\s*\*\s*D \(idle jitter \+ multi-touch sequencing\) extend the touch surface\s*\n?\s*\*\s*in later waves\.[\s\S]*?generateTouchEvent\(opts: GenerateTouchEventOpts\): TouchEvent;/,
+      /\* V-530\.A — added in Wave 15\. Sub-slices C \(dwell \+ click-position\),\s*\*\s*D \(idle jitter \+ multi-touch sequencing\) extend the touch surface\s*\*\s*in later waves\.[\s\S]*?generateTouchEvent\(opts: GenerateTouchEventOpts\): TouchEvent;/,
     );
     expect(body).toMatch(
-      /\* Produce a scroll velocity profile with exponential decay starting\s*\n?\s*\*\s*from a finger-flick initial velocity\. Distinct from the constant-tick\s*\n?\s*\*\s*`generateScrollPattern` surface — this is the realistic finger-flick\s*\n?\s*\*\s*model\. V-530\.B — added in Wave 16\.[\s\S]*?generateScrollVelocityProfile\(opts: GenerateScrollVelocityProfileOpts\): ScrollVelocityProfile;/,
+      /\* Produce a scroll velocity profile with exponential decay starting\s*\*\s*from a finger-flick initial velocity\. Distinct from the constant-tick\s*\*\s*`generateScrollPattern` surface — this is the realistic finger-flick\s*\*\s*model\. V-530\.B — added in Wave 16\.[\s\S]*?generateScrollVelocityProfile\(opts: GenerateScrollVelocityProfileOpts\): ScrollVelocityProfile;/,
     );
     expect(body).toMatch(
-      /\/\*\* Convenience: returns the simulator's loaded profile catalogue\. \*\/\s*\n?\s*listProfiles\(\): readonly BehaviouralProfile\[\];/,
+      /\/\*\* Convenience: returns the simulator's loaded profile catalogue\. \*\/\s*listProfiles\(\): readonly BehaviouralProfile\[\];/,
     );
   });
 

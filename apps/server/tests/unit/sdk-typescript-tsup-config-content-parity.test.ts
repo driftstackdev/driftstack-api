@@ -50,7 +50,7 @@ describe('W531.C packages/sdk-typescript/tsup.config.ts content parity', () => {
   it("target + external framing pinned: 'target: \"node18\"' (matches package.json engines.node>=18) + 'Don't bundle peer / runtime deps — emit imports as-is so consumers can resolve their own copies (relevant for @driftstack/api-types when this package is published).' framing comment + 'external: [\"@driftstack/api-types\"]' — pinned so the node18-target + api-types-external-not-bundled (prevents Zod-instance duplication when both SDK + api-types are direct deps in a consumer) commitment survives (drift to bundling api-types would create instanceof-mismatch bugs in consumers who also depend on @driftstack/api-types directly)", () => {
     expect(body).toMatch(/target: 'node18',/);
     expect(body).toMatch(
-      /\/\/ Don't bundle peer \/ runtime deps — emit imports as-is so consumers can\s*\n?\s*\/\/ resolve their own copies \(relevant for @driftstack\/api-types when this\s*\n?\s*\/\/ package is published\)\./,
+      /\/\/ Don't bundle peer \/ runtime deps — emit imports as-is so consumers can\s*\/\/ resolve their own copies \(relevant for @driftstack\/api-types when this\s*\/\/ package is published\)\./,
     );
     expect(body).toMatch(/external: \['@driftstack\/api-types'\],/);
   });

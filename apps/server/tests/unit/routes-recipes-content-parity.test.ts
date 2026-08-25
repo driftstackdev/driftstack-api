@@ -35,13 +35,13 @@ describe('routes/recipes content parity', () => {
 
   it('Activation-gate Wave 1119+ framing pinned: \'when both recipesRepo + agentSessionsRepo are wired in AppDeps, registerRecipesRoutes runs. When omitted, registerRecipesDisabledRoutes surfaces 503 FeatureUnavailable so SDK + dashboard get a machine-readable "not yet enabled" signal vs 404.\' — pinned so the dual-dep + 503-vs-404 + machine-readable-signal contract all stay documented', () => {
     expect(body).toMatch(
-      /\/\/ Activation gate matches the rest of Wave 1119\+: when both\s*\n?\s*\/\/ recipesRepo \+ agentSessionsRepo are wired in AppDeps,\s*\n?\s*\/\/ registerRecipesRoutes runs\. When omitted, registerRecipesDisabledRoutes\s*\n?\s*\/\/ surfaces 503 FeatureUnavailable so SDK \+ dashboard get a machine-\s*\n?\s*\/\/ readable "not yet enabled" signal vs 404\./,
+      /\/\/ Activation gate matches the rest of Wave 1119\+: when both\s*\/\/ recipesRepo \+ agentSessionsRepo are wired in AppDeps,\s*\/\/ registerRecipesRoutes runs\. When omitted, registerRecipesDisabledRoutes\s*\/\/ surfaces 503 FeatureUnavailable so SDK \+ dashboard get a machine-\s*\/\/ readable "not yet enabled" signal vs 404\./,
     );
   });
 
   it('CreateRecipeRequestSchema 3-field shape + 100-char agent_session_id cap pinned: agent_session_id min 1 max 100 (canonical agt_<36-char-uuid>=40 + in-mem fixture ~19) + label min 1 max 120 + description max 2000 optional. Drift to dropping the 100-char cap would let a customer POST a multi-MB string that bloats the 404 NotFoundError detail in the problem+json body', () => {
     expect(body).toMatch(
-      /\/\/ Cap at 100 chars — canonical `agt_<36-char-uuid>` is 40 chars,\s*\n?\s*\/\/ in-memory test fixtures use `agt_inmem_<counter>` \(~19 chars\)\.\s*\n?\s*\/\/ Without a cap, a customer could POST a multi-MB string that\s*\n?\s*\/\/ flows into the 404 NotFoundError detail and bloats the\s*\n?\s*\/\/ problem\+json body\./,
+      /\/\/ Cap at 100 chars — canonical `agt_<36-char-uuid>` is 40 chars,\s*\/\/ in-memory test fixtures use `agt_inmem_<counter>` \(~19 chars\)\.\s*\/\/ Without a cap, a customer could POST a multi-MB string that\s*\/\/ flows into the 404 NotFoundError detail and bloats the\s*\/\/ problem\+json body\./,
     );
     expect(body).toMatch(/agent_session_id: z\.string\(\)\.min\(1\)\.max\(100\),/);
     // Newline-tolerant since the chain gained a `.refine` for blank-after-trim and
@@ -52,7 +52,7 @@ describe('routes/recipes content parity', () => {
   });
 
   it("PublicRecipe 8-field shape pinned: id + account_id + agent_session_id (nullable) + label + description (nullable) + intent_count + created_at + updated_at. Drift to dropping intent_count would force the dashboard to fetch the full intent_log just to show 'N steps' UX; drift to dropping nullable on agent_session_id would crash on recipes whose source session was deleted", () => {
-    expect(body).toMatch(/interface PublicRecipe \{\s*\n?\s*id: string;/);
+    expect(body).toMatch(/interface PublicRecipe \{\s*id: string;/);
     expect(body).toMatch(/account_id: string;/);
     expect(body).toMatch(/agent_session_id: string \| null;/);
     expect(body).toMatch(/label: string;/);
@@ -70,12 +70,12 @@ describe('routes/recipes content parity', () => {
   // so nothing here can be forged by a caller.
   it("Cross-account 404 framing pinned: the caller must be able to ACCESS the session (owner, or admin member of the owner's team) — 404 not 403 so a session id on another account is not leaked", () => {
     expect(body).toMatch(
-      /\/\/ Load the source agent session to snapshot its intent_log \+\s*\n?\s*\/\/ transcript\. The caller must be able to ACCESS the session — its owner,\s*\n?\s*\/\/ or an admin member of the owner's team \(V-736; cross-account 404 instead\s*\n?\s*\/\/ of 403 — don't leak existence\)\./,
+      /\/\/ Load the source agent session to snapshot its intent_log \+\s*\/\/ transcript\. The caller must be able to ACCESS the session — its owner,\s*\/\/ or an admin member of the owner's team \(V-736; cross-account 404 instead\s*\/\/ of 403 — don't leak existence\)\./,
     );
     // The create handler names its validated payload `body` (not `parsed.data`)
     // since it now goes through parseRequestBodyReportingUnknown — same values.
     expect(body).toMatch(
-      /if \(source === null \|\| !callerCanAccessAgentSession\(ctx, source\.accountId\)\) \{\s*\n?\s*throw new NotFoundError\(`AgentSession \$\{body\.agent_session_id\} not found\.`\);/,
+      /if \(source === null \|\| !callerCanAccessAgentSession\(ctx, source\.accountId\)\) \{\s*throw new NotFoundError\(`AgentSession \$\{body\.agent_session_id\} not found\.`\);/,
     );
     // Both sites, not just the create one — the suggestion route had it too.
     expect(body.match(/!callerCanAccessAgentSession\(ctx, source\.accountId\)/g)).toHaveLength(2);
@@ -84,7 +84,7 @@ describe('routes/recipes content parity', () => {
 
   it("Q.5.c intent_log assembly framing pinned: 'assemble intent_log from the transcript's plan-executed agent turns. AgentRuntime persists each plan's structured intent array on the transcript entry's optional `intents` field (Q.5.c follow-up). flatMap produces a concatenated intent_log in turn order so replay walks them in the same sequence the customer's session originally executed.' + source.transcript.flatMap((entry) => entry.intents ?? []) — pinned so the Q.5.c anchor + turn-order-replay-fidelity contract stays documented", () => {
     expect(body).toMatch(
-      /\/\/ Q\.5\.c — assemble intent_log from the transcript's\s*\n?\s*\/\/ plan-executed agent turns\./,
+      /\/\/ Q\.5\.c — assemble intent_log from the transcript's\s*\/\/ plan-executed agent turns\./,
     );
     expect(body).toMatch(
       /const intentLog: AgentIntent\[\] = source\.transcript\.flatMap\(\(entry\) => entry\.intents \?\? \[\]\);/,
@@ -100,10 +100,10 @@ describe('routes/recipes content parity', () => {
 
   it('Disabled-stub customer-facing current-state detail and docs URL are pinned', () => {
     expect(body).toMatch(
-      /\/\/ Customer-facing detail\. Lands verbatim in the SDK's 503 problem\s*\n?\s*\/\/ body\. Same fix shape as agent-sessions \/ byok-anthropic \/\s*\n?\s*\/\/ proxy disabled-stubs \(slices 87 \+ 88\): point at customer-facing\s*\n?\s*\/\/ docs URL, NOT the internal handoff\/design doc\./,
+      /\/\/ Customer-facing detail\. Lands verbatim in the SDK's 503 problem\s*\/\/ body\. Same fix shape as agent-sessions \/ byok-anthropic \/\s*\/\/ proxy disabled-stubs \(slices 87 \+ 88\): point at customer-facing\s*\/\/ docs URL, NOT the internal handoff\/design doc\./,
     );
     expect(body).toMatch(
-      /'Recipes are unavailable on this deployment\. ' \+\s*\n?\s*'Contact the deployment operator if recipe access is expected\. See ' \+\s*\n?\s*'https:\/\/docs\.driftstack\.dev\/api\/recipes\/ for the supported API flow\.';/,
+      /'Recipes are unavailable on this deployment\. ' \+\s*'Contact the deployment operator if recipe access is expected\. See ' \+\s*'https:\/\/docs\.driftstack\.dev\/api\/recipes\/ for the supported API flow\.';/,
     );
   });
 });

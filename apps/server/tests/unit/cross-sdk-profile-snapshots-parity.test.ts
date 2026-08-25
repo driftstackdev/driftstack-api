@@ -89,7 +89,7 @@ describe('W699 cross-SDK V-312 profile-snapshots immutable point-in-time parity'
 
     // sdk-python: snake_case methods (capture/list_for_profile/list/iterate/get/restore/delete).
     expect(py).toMatch(/def capture\(self, profile_id:/);
-    expect(py).toMatch(/def list_for_profile\(\s*\n?\s*self/);
+    expect(py).toMatch(/def list_for_profile\(\s*self/);
     expect(py).toMatch(/def list\(self/);
     expect(py).toMatch(/def iterate\(self/);
     expect(py).toMatch(/def get\(self, snapshot_id:/);
@@ -126,7 +126,7 @@ describe('W699 cross-SDK V-312 profile-snapshots immutable point-in-time parity'
   it('CRITICAL "parent profile keeps evolving; the snapshot is frozen" framing pinned in sdk-go. The wording is what threads the "snapshot vs parent" mental model — drift to dropping would lose the customer-facing claim about parent-decoupling.', () => {
     const go = read(GO_SNAP);
     expect(go).toMatch(
-      /parent profile keeps evolving;\s*\n?\s*\/\/\s*the snapshot is frozen|parent profile keeps evolving; the snapshot is frozen/,
+      /parent profile keeps evolving;\s*\/\/\s*the snapshot is frozen|parent profile keeps evolving; the snapshot is frozen/,
     );
   });
 
@@ -177,13 +177,11 @@ describe('W699 cross-SDK V-312 profile-snapshots immutable point-in-time parity'
     const go = read(GO_SNAP);
 
     // sdk-typescript: "Throws TierLimitError on\n   * cap, ConflictError on name conflict"
-    expect(ts).toMatch(
-      /Throws TierLimitError on\s*\n?\s*\*?\s*cap, ConflictError on name conflict/,
-    );
+    expect(ts).toMatch(/Throws TierLimitError on\s*\*?\s*cap, ConflictError on name conflict/);
 
     // sdk-go: "Tier-cap + name-conflict are checked the same way as Profiles.Create."
     expect(go).toMatch(
-      /Tier-cap \+\s*\n?\s*\/\/\s*name-conflict are checked the same way as Profiles\.Create|Tier-cap \+ name-conflict are checked the same way as Profiles\.Create/,
+      /Tier-cap \+\s*\/\/\s*name-conflict are checked the same way as Profiles\.Create|Tier-cap \+ name-conflict are checked the same way as Profiles\.Create/,
     );
   });
 

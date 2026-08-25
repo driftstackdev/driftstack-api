@@ -206,14 +206,14 @@ describe('W966 config lib cross-source invariant', () => {
     expect(p).toMatch(/sub-processor \(Estonia EEA-internal per the V-308a legal/);
     expect(p).toMatch(/scaffolding\)\. When `ipnSecret` is unset, `cryptoOrdersService` is/);
     expect(p).toMatch(
-      /`\/v1\/billing\/crypto-\*` routes are NOT\s*\n?\s*\*\s*REGISTERED and a request gets a bare 404\./,
+      /`\/v1\/billing\/crypto-\*` routes are NOT\s*\*\s*REGISTERED and a request gets a bare 404\./,
     );
     // V-839 SENTINEL — no 501 exists in this server; the routes are absent,
     // not stubbed, and the paths use a hyphen.
     expect(p, 'there are no 501 crypto stubs').not.toMatch(/route stubs return 501/);
     expect(p).toMatch(/inactive until the account is created and the credentials are/);
     expect(p).toMatch(/SSH-written\. This lets launch-day flip the rail on without/);
-    expect(p).toMatch(/launch-day flip the rail on without\s*\n?\s*\*\s*redeploying\./);
+    expect(p).toMatch(/launch-day flip the rail on without\s*\*\s*redeploying\./);
   });
 
   // ─── V-531.B LiveKit SFU framing ─────────────────────────────

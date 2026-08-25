@@ -66,14 +66,14 @@ describe('W405.C apps/server/src/services/crypto-orders.ts content parity', () =
     expect(body).toMatch(/\| 'failed' \/\/ payment timeout \/ refund \/ expired/);
     expect(body).toMatch(/\| 'partial' \/\/ amount received < expected/);
     expect(body).toMatch(
-      /\/\/ V-666\.J — customer-initiated abandonment of a pending order before\s*\n?\s*\/\/ any payment was received\. Terminal;/,
+      /\/\/ V-666\.J — customer-initiated abandonment of a pending order before\s*\/\/ any payment was received\. Terminal;/,
     );
     expect(body).toMatch(/\| 'cancelled';/);
   });
 
   it('V-666.AT CryptoOrderEvent: append-only event log + 5-source union (create/ipn/cancel/expired/swept)', () => {
     expect(body).toMatch(
-      /V-666\.AT — append-only state-transition event\. Each entry records\s*\n?\s*\*\s*the status the order moved to \+ the source of that transition\./,
+      /V-666\.AT — append-only state-transition event\. Each entry records\s*\*\s*the status the order moved to \+ the source of that transition\./,
     );
     expect(body).toMatch(/export interface CryptoOrderEvent \{/);
     expect(body).toMatch(/source: 'create' \| 'ipn' \| 'cancel' \| 'expired' \| 'swept';/);
@@ -81,10 +81,10 @@ describe('W405.C apps/server/src/services/crypto-orders.ts content parity', () =
 
   it('V-666.Q customer_note 500-char cap framing + V-666.AA internal_note 2000-char cap framing', () => {
     expect(body).toMatch(
-      /V-666\.Q — customer-supplied free-text note for their own\s*\n?\s*\*\s*bookkeeping \(PO numbers, internal labels, etc\.\)\. Capped at 500\s*\n?\s*\*\s*chars at the route layer\./,
+      /V-666\.Q — customer-supplied free-text note for their own\s*\*\s*bookkeeping \(PO numbers, internal labels, etc\.\)\. Capped at 500\s*\*\s*chars at the route layer\./,
     );
     expect(body).toMatch(
-      /V-666\.AA — admin-only internal note attached to the order\.[\s\S]+?Capped at 2000 chars at the route layer\s*\n?\s*\*\s*— twice the customer_note budget since these are internal/,
+      /V-666\.AA — admin-only internal note attached to the order\.[\s\S]+?Capped at 2000 chars at the route layer\s*\*\s*— twice the customer_note budget since these are internal/,
     );
   });
 
@@ -92,24 +92,22 @@ describe('W405.C apps/server/src/services/crypto-orders.ts content parity', () =
     expect(body).toMatch(
       /export function mapNowpaymentsStatus\(provider: string\): CryptoOrderStatus \| null \{/,
     );
-    expect(body).toMatch(/case 'waiting':\s*\n?\s*return 'pending';/);
-    expect(body).toMatch(/case 'confirming':\s*\n?\s*case 'sending':\s*\n?\s*return 'confirming';/);
-    expect(body).toMatch(/case 'partially_paid':\s*\n?\s*return 'partial';/);
-    expect(body).toMatch(/case 'finished':\s*\n?\s*return 'paid';/);
+    expect(body).toMatch(/case 'waiting':\s*return 'pending';/);
+    expect(body).toMatch(/case 'confirming':\s*case 'sending':\s*return 'confirming';/);
+    expect(body).toMatch(/case 'partially_paid':\s*return 'partial';/);
+    expect(body).toMatch(/case 'finished':\s*return 'paid';/);
+    expect(body).toMatch(/case 'failed':\s*case 'expired':\s*case 'refunded':\s*return 'failed';/);
     expect(body).toMatch(
-      /case 'failed':\s*\n?\s*case 'expired':\s*\n?\s*case 'refunded':\s*\n?\s*return 'failed';/,
-    );
-    expect(body).toMatch(
-      /default:\s*\n?\s*return null; \/\/ unknown provider status — caller decides what to do\./,
+      /default:\s*return null; \/\/ unknown provider status — caller decides what to do\./,
     );
   });
 
   it('V-666.AM cursor codec: base64url JSON of {ts: created_at, id: order_id} + decodeCursor null on malformed', () => {
     expect(body).toMatch(
-      /V-666\.AM — opaque cursor codec used by listForAdminPage\. Encodes\s*\n?\s*\*\s*the \(created_at, order_id\) pair of the last row in the current\s*\n?\s*\*\s*page so the next call resumes immediately after it\./,
+      /V-666\.AM — opaque cursor codec used by listForAdminPage\. Encodes\s*\*\s*the \(created_at, order_id\) pair of the last row in the current\s*\*\s*page so the next call resumes immediately after it\./,
     );
     expect(body).toMatch(
-      /export function encodeCursor\(cur: CryptoOrderCursor\): string \{\s*\n?\s*const json = JSON\.stringify\(cur\);\s*\n?\s*return Buffer\.from\(json, 'utf8'\)\.toString\('base64url'\);\s*\n?\s*\}/,
+      /export function encodeCursor\(cur: CryptoOrderCursor\): string \{\s*const json = JSON\.stringify\(cur\);\s*return Buffer\.from\(json, 'utf8'\)\.toString\('base64url'\);\s*\}/,
     );
     expect(body).toMatch(
       /if \(typeof obj\.ts !== 'number' \|\| typeof obj\.id !== 'string'\) return null;/,
@@ -118,10 +116,10 @@ describe('W405.C apps/server/src/services/crypto-orders.ts content parity', () =
 
   it('V-666.AR idempotencyBodyFingerprint: sha256-hex over structured args (not raw body — whitespace doesn’t false-mismatch)', () => {
     expect(body).toMatch(
-      /V-666\.AR — body fingerprint for an idempotency-key request\. Hashed\s*\n?\s*\*\s*over the structured args \(not the raw request body\) so trivial\s*\n?\s*\*\s*differences like whitespace don't trigger a false mismatch\./,
+      /V-666\.AR — body fingerprint for an idempotency-key request\. Hashed\s*\*\s*over the structured args \(not the raw request body\) so trivial\s*\*\s*differences like whitespace don't trigger a false mismatch\./,
     );
     expect(body).toMatch(
-      /export function idempotencyBodyFingerprint\(args: \{\s*\n?\s*product: string;\s*\n?\s*price_cents: number;\s*\n?\s*price_currency: string;\s*\n?\s*\}\): string \{/,
+      /export function idempotencyBodyFingerprint\(args: \{\s*product: string;\s*price_cents: number;\s*price_currency: string;\s*\}\): string \{/,
     );
     expect(body).toMatch(
       /return nodeCreateHash\('sha256'\)\.update\(normalised\)\.digest\('hex'\);/,
@@ -131,9 +129,9 @@ describe('W405.C apps/server/src/services/crypto-orders.ts content parity', () =
   it("V-666.AO createIdempotent: per-account scope key `${accountId ?? '_anon'}:${key}` + 24h TTL prune", () => {
     expect(body).toMatch(/V-666\.AO — idempotency-key wrapper around create\(\)\./);
     expect(body).toMatch(
-      /The key is scoped per-account \(or the literal '_anon' for\s*\n?\s*\*\s*pre-signup checkouts\)/,
+      /The key is scoped per-account \(or the literal '_anon' for\s*\*\s*pre-signup checkouts\)/,
     );
-    expect(body).toMatch(/Records are pruned 24h\s*\n?\s*\*\s*after they were first stored/);
+    expect(body).toMatch(/Records are pruned 24h\s*\*\s*after they were first stored/);
     expect(body).toMatch(
       /const scopeKey = `\$\{args\.account_id \?\? '_anon'\}:\$\{args\.idempotency_key\}`;/,
     );
@@ -142,7 +140,7 @@ describe('W405.C apps/server/src/services/crypto-orders.ts content parity', () =
 
   it('V-666.AP getIdempotencyMetrics: 3-counter snapshot (replays/firstWrites/V-666.AR bodyMismatches)', () => {
     expect(body).toMatch(
-      /V-666\.AP — snapshot of the idempotency counters\. Exposed as a\s*\n?\s*\*\s*separate method \(rather than baked into getStatsForAdmin\) so\s*\n?\s*\*\s*that fast-firing metrics scrapers don't pay the full scan cost\./,
+      /V-666\.AP — snapshot of the idempotency counters\. Exposed as a\s*\*\s*separate method \(rather than baked into getStatsForAdmin\) so\s*\*\s*that fast-firing metrics scrapers don't pay the full scan cost\./,
     );
     expect(body).toMatch(
       /getIdempotencyMetrics\(\): \{ replays: number; firstWrites: number; bodyMismatches: number \}/,
@@ -151,16 +149,16 @@ describe('W405.C apps/server/src/services/crypto-orders.ts content parity', () =
 
   it("V-666.J cancelOrder: only 'pending' cancellable; confirming/partial → support handles refunds; cross-account returns null (404-style)", () => {
     expect(body).toMatch(
-      /V-666\.J — customer-initiated cancel on a pending order\. Only\s*\n?\s*\*\s*`pending` orders can be cancelled; once a payment has been seen\s*\n?\s*\*\s*\(confirming\/partial\) the cancellation must go through support/,
+      /V-666\.J — customer-initiated cancel on a pending order\. Only\s*\*\s*`pending` orders can be cancelled; once a payment has been seen\s*\*\s*\(confirming\/partial\) the cancellation must go through support/,
     );
     // #7 — cancelOrder is row-locked (withOrderLock) so a concurrent IPN can't clobber
     // it; the ownership + pending guards run against the LOCKED committed row.
     expect(body).toMatch(/return this\.opts\.repo\.withOrderLock</);
     expect(body).toMatch(
-      /if \(order\.account_id !== args\.account_id\) \{\s*\n?\s*return \{ updated: null, result: null \};/,
+      /if \(order\.account_id !== args\.account_id\) \{\s*return \{ updated: null, result: null \};/,
     );
     expect(body).toMatch(
-      /if \(order\.status !== 'pending'\) \{\s*\n?\s*return \{ updated: null, result: \{ ok: 'not_cancellable' as const, reason: order\.status \} \};/,
+      /if \(order\.status !== 'pending'\) \{\s*return \{ updated: null, result: \{ ok: 'not_cancellable' as const, reason: order\.status \} \};/,
     );
     expect(body).toMatch(
       /events: \[\.\.\.order\.events, \{ status: 'cancelled', at: now, source: 'cancel' \}\],/,
@@ -169,13 +167,13 @@ describe('W405.C apps/server/src/services/crypto-orders.ts content parity', () =
 
   it('V-666.K expireOrder: only pending eligible; pending OR new states left alone; maps to failed; emitFailedTransition source=expired', () => {
     expect(body).toMatch(
-      /V-666\.K — auto-expire a single pending order if it's older than\s*\n?\s*\*\s*`olderThanMs`\. Only `pending` orders are eligible/,
+      /V-666\.K — auto-expire a single pending order if it's older than\s*\*\s*`olderThanMs`\. Only `pending` orders are eligible/,
     );
     // #79 — expireOrder now re-checks + writes under the row lock (SELECT…FOR UPDATE)
     // so a concurrent IPN (pending→paid) can't be clobbered back to failed by an
     // unlocked read-modify-upsert; the guard reads the LOCKED committed row.
     expect(body).toMatch(
-      /await this\.opts\.repo\.withOrderLock<CryptoOrder \| null>\(\s*\n?\s*args\.order_id,/,
+      /await this\.opts\.repo\.withOrderLock<CryptoOrder \| null>\(\s*args\.order_id,/,
     );
     expect(body).toMatch(
       /if \(order\.status !== 'pending' \|\| now - order\.created_at < args\.olderThanMs\) \{/,
@@ -209,15 +207,15 @@ describe('W405.C apps/server/src/services/crypto-orders.ts content parity', () =
 
   it('applyIpnStatus: forward-only state machine via isTerminalForward; same-state no-event-append (idempotent refresh); record payment_id on no-op', () => {
     expect(body).toMatch(
-      /Idempotent: receiving the same paid IPN twice is a no-op\.\s*\n?\s*\*\s*Reverse transitions \(paid → pending\) are rejected/,
+      /Idempotent: receiving the same paid IPN twice is a no-op\.\s*\*\s*Reverse transitions \(paid → pending\) are rejected/,
     );
     expect(body).toMatch(
-      /\/\/ V-666\.AT — append an event only on an actual status change; a same-state\s*\n?\s*\/\/ refresh just bumps updated_at\./,
+      /\/\/ V-666\.AT — append an event only on an actual status change; a same-state\s*\/\/ refresh just bumps updated_at\./,
     );
     // The event append now carries the optional reconciliation amounts
     // (...reconcileFields) on an IPN transition (billing-integrity #1).
     expect(body).toMatch(
-      /const events =\s*\n?\s*order\.status === mapped\s*\n?\s*\?\s*order\.events\s*\n?\s*:\s*\[\s*\n?\s*\.\.\.order\.events,\s*\n?\s*\{ status: mapped, at: now, source: 'ipn' as const, \.\.\.reconcileFields \},\s*\n?\s*\];/,
+      /const events =\s*order\.status === mapped\s*\?\s*order\.events\s*:\s*\[\s*\.\.\.order\.events,\s*\{ status: mapped, at: now, source: 'ipn' as const, \.\.\.reconcileFields \},\s*\];/,
     );
     expect(body).toMatch(
       /\/\/ No-op transition: record the payment_id \+ crypto quote if we didn't have them yet\./,
@@ -229,7 +227,7 @@ describe('W405.C apps/server/src/services/crypto-orders.ts content parity', () =
     // routes to partial; actually_paid + the owed quote are BOTH in pay_currency
     // (never compared against the FIAT price_amount).
     expect(body).toMatch(
-      /const minAccepted = owed \* \(1 - AMOUNT_RECONCILE_TOLERANCE_FRACTION\);\s*\n?\s*if \(args\.actually_paid < minAccepted\) \{\s*\n?\s*mapped = 'partial';/,
+      /const minAccepted = owed \* \(1 - AMOUNT_RECONCILE_TOLERANCE_FRACTION\);\s*if \(args\.actually_paid < minAccepted\) \{\s*mapped = 'partial';/,
     );
     // Billing-integrity (#1) — pay_currency-mismatch guard never unlocks the tier.
     expect(body).toContain("event: 'ipn_pay_currency_mismatch',");
@@ -242,10 +240,10 @@ describe('W405.C apps/server/src/services/crypto-orders.ts content parity', () =
 
   it('recordPaymentId: binds the minted NowPayments payment_id + crypto quote at createPayment (#9/#1), one-time (no overwrite)', () => {
     expect(body).toMatch(
-      /async recordPaymentId\(args: \{\s*\n?\s*order_id: string;\s*\n?\s*payment_id: string;[\s\S]*?pay_amount\?: number;[\s\S]*?pay_currency\?: string;\s*\n?\s*\}\): Promise<CryptoOrder \| null> \{/,
+      /async recordPaymentId\(args: \{\s*order_id: string;\s*payment_id: string;[\s\S]*?pay_amount\?: number;[\s\S]*?pay_currency\?: string;\s*\}\): Promise<CryptoOrder \| null> \{/,
     );
     expect(body).toMatch(
-      /if \(order\.payment_id !== null\) \{\s*\n?\s*\/\/[\s\S]*?return \{ updated: null, result: order \};/,
+      /if \(order\.payment_id !== null\) \{\s*\/\/[\s\S]*?return \{ updated: null, result: order \};/,
     );
   });
 
@@ -257,19 +255,19 @@ describe('W405.C apps/server/src/services/crypto-orders.ts content parity', () =
       /firePaid: order\.status !== 'paid' && mapped === 'paid' && updated\.account_id !== null,/,
     );
     expect(body).toMatch(
-      /await this\.opts\.webhooks\.enqueueEvent\(outcome\.order\.account_id, 'crypto\.order\.paid', \{\s*\n?\s*order_id: outcome\.order\.order_id,\s*\n?\s*product: outcome\.order\.product,\s*\n?\s*price_cents: outcome\.order\.price_cents,\s*\n?\s*price_currency: outcome\.order\.price_currency,\s*\n?\s*payment_id: outcome\.order\.payment_id,\s*\n?\s*paid_at: paidAtIso,/,
+      /await this\.opts\.webhooks\.enqueueEvent\(outcome\.order\.account_id, 'crypto\.order\.paid', \{\s*order_id: outcome\.order\.order_id,\s*product: outcome\.order\.product,\s*price_cents: outcome\.order\.price_cents,\s*price_currency: outcome\.order\.price_currency,\s*payment_id: outcome\.order\.payment_id,\s*paid_at: paidAtIso,/,
     );
   });
 
   it('V-666.AN emitFailedTransition: 3-reason union (ipn/expired/swept); account_id null → skip; emitter undefined → skip; best-effort swallow', () => {
     expect(body).toMatch(
-      /V-666\.AN — fire crypto\.order\.failed when an order transitions\s*\n?\s*\*\s*INTO the failed state\. Shared by the three failed-transition\s*\n?\s*\*\s*paths \(applyIpnStatus, expireOrder, sweepExpiredOrders\)\./,
+      /V-666\.AN — fire crypto\.order\.failed when an order transitions\s*\*\s*INTO the failed state\. Shared by the three failed-transition\s*\*\s*paths \(applyIpnStatus, expireOrder, sweepExpiredOrders\)\./,
     );
     expect(body).toMatch(
-      /private async emitFailedTransition\(\s*\n?\s*order: CryptoOrder,\s*\n?\s*reason: 'ipn' \| 'expired' \| 'swept',\s*\n?\s*\): Promise<void> \{\s*\n?\s*if \(order\.account_id === null\) return;\s*\n?\s*if \(this\.opts\.webhooks === undefined\) return;/,
+      /private async emitFailedTransition\(\s*order: CryptoOrder,\s*reason: 'ipn' \| 'expired' \| 'swept',\s*\): Promise<void> \{\s*if \(order\.account_id === null\) return;\s*if \(this\.opts\.webhooks === undefined\) return;/,
     );
     expect(body).toMatch(
-      /await this\.opts\.webhooks\.enqueueEvent\(order\.account_id, 'crypto\.order\.failed', \{[\s\S]+?reason,\s*\n?\s*failed_at: failedAtIso,/,
+      /await this\.opts\.webhooks\.enqueueEvent\(order\.account_id, 'crypto\.order\.failed', \{[\s\S]+?reason,\s*failed_at: failedAtIso,/,
     );
   });
 
@@ -284,34 +282,34 @@ describe('W405.C apps/server/src/services/crypto-orders.ts content parity', () =
       /function isTerminalForward\(current: CryptoOrderStatus, next: CryptoOrderStatus\): boolean \{/,
     );
     expect(body).toMatch(
-      /\/\/ Same state — idempotent no-op, but caller wants the row touched\s*\n?\s*\/\/ \(updated_at refresh\)\.\s*\n?\s*if \(current === next\) return true;/,
+      /\/\/ Same state — idempotent no-op, but caller wants the row touched\s*\/\/ \(updated_at refresh\)\.\s*if \(current === next\) return true;/,
     );
     expect(body).toMatch(
-      /\/\/ Terminal statuses don't move\. V-666\.J — 'cancelled' joins\s*\n?\s*\/\/ 'paid'\/'failed' as terminal; a late IPN payment cannot revive\s*\n?\s*\/\/ an abandoned order\.\s*\n?\s*if \(current === 'paid' \|\| current === 'failed' \|\| current === 'cancelled'\) return false;/,
+      /\/\/ Terminal statuses don't move\. V-666\.J — 'cancelled' joins\s*\/\/ 'paid'\/'failed' as terminal; a late IPN payment cannot revive\s*\/\/ an abandoned order\.\s*if \(current === 'paid' \|\| current === 'failed' \|\| current === 'cancelled'\) return false;/,
     );
     expect(body).toMatch(
-      /\/\/ 'partial' is semi-terminal: only 'paid' or 'failed' overrides it\.\s*\n?\s*if \(current === 'partial'\) return next === 'paid' \|\| next === 'failed';/,
+      /\/\/ 'partial' is semi-terminal: only 'paid' or 'failed' overrides it\.\s*if \(current === 'partial'\) return next === 'paid' \|\| next === 'failed';/,
     );
   });
 
   it('listForAdminPage: cursor anchorIdx===-1 → empty page (ran off the end); page slice + nextCursor when hasMore', () => {
     expect(body).toMatch(
-      /\/\/ If we can't find the anchor row in the scan window, behave\s*\n?\s*\/\/ conservatively and return an empty page rather than guessing\./,
+      /\/\/ If we can't find the anchor row in the scan window, behave\s*\/\/ conservatively and return an empty page rather than guessing\./,
     );
     expect(body).toMatch(
-      /if \(anchorIdx === -1\) \{\s*\n?\s*return \{ orders: \[\], nextCursor: null \};\s*\n?\s*\}/,
+      /if \(anchorIdx === -1\) \{\s*return \{ orders: \[\], nextCursor: null \};\s*\}/,
     );
     expect(body).toMatch(
-      /const nextCursor =\s*\n?\s*hasMore && last !== undefined\s*\n?\s*\?\s*encodeCursor\(\{ ts: last\.created_at, id: last\.order_id \}\)\s*\n?\s*:\s*null;/,
+      /const nextCursor =\s*hasMore && last !== undefined\s*\?\s*encodeCursor\(\{ ts: last\.created_at, id: last\.order_id \}\)\s*:\s*null;/,
     );
   });
 
   it('V-666.AC getPendingAgeHistogram: 4-bucket (under_1h / h1_to_6h / h6_to_24h / over_24h); pending-only count + pendingValueCents by currency', () => {
     expect(body).toMatch(
-      /V-666\.AC — pending-orders age histogram\. For each currently-\s*\n?\s*\*\s*pending order \(status === 'pending'\), bucket by age since\s*\n?\s*\*\s*created_at\. Buckets are: under_1h \/ 1h_to_6h \/ 6h_to_24h \/\s*\n?\s*\*\s*over_24h\./,
+      /V-666\.AC — pending-orders age histogram\. For each currently-\s*\*\s*pending order \(status === 'pending'\), bucket by age since\s*\*\s*created_at\. Buckets are: under_1h \/ 1h_to_6h \/ 6h_to_24h \/\s*\*\s*over_24h\./,
     );
     expect(body).toMatch(
-      /if \(ageMs < 60 \* 60_000\) buckets\.under_1h \+= 1;\s*\n?\s*else if \(ageMs < 6 \* 60 \* 60_000\) buckets\.h1_to_6h \+= 1;\s*\n?\s*else if \(ageMs < 24 \* 60 \* 60_000\) buckets\.h6_to_24h \+= 1;\s*\n?\s*else buckets\.over_24h \+= 1;/,
+      /if \(ageMs < 60 \* 60_000\) buckets\.under_1h \+= 1;\s*else if \(ageMs < 6 \* 60 \* 60_000\) buckets\.h1_to_6h \+= 1;\s*else if \(ageMs < 24 \* 60 \* 60_000\) buckets\.h6_to_24h \+= 1;\s*else buckets\.over_24h \+= 1;/,
     );
   });
 

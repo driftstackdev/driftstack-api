@@ -114,7 +114,7 @@ describe('W366.B customer-dashboard /settings page content parity', () => {
     // pointer, or the move reads as a feature removal.
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /Security, sign-ins &amp; danger zone moved to\s*\n?\s*<a href="\/security\/" class="text-tk-accent-text underline">Privacy &amp; security<\/a>\./,
+      /Security, sign-ins &amp; danger zone moved to\s*<a href="\/security\/" class="text-tk-accent-text underline">Privacy &amp; security<\/a>\./,
     );
   });
 

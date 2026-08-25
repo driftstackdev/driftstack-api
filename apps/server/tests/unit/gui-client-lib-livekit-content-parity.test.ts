@@ -27,14 +27,14 @@ describe('gui-client/lib/livekit content parity', () => {
   it("LK.6.a module-level framing pinned: 'livekit-client smoke import + a tiny typed wrapper. Reuses the LiveKitInfo shape from the SDK (which mirrors the api-types Zod schema). The shape is the contract the /v1/agent-sessions/:id/livekit-token endpoint returns and the optional livekit field on session-create.' — pinned so the LK.6.a anchor + SDK-mirrors-api-types-Zod + LK.3 endpoint cross-reference contract all stay documented", () => {
     expect(body).toMatch(/\/\/ LK\.6\.a — livekit-client smoke import \+ a tiny typed wrapper\./);
     expect(body).toMatch(
-      /\/\/ Reuses the LiveKitInfo shape from the SDK \(which mirrors the\s*\n?\s*\/\/ api-types Zod schema\)\. The shape is the contract the\s*\n?\s*\/\/ \/v1\/agent-sessions\/:id\/livekit-token endpoint returns and the\s*\n?\s*\/\/ optional `livekit` field on session-create\./,
+      /\/\/ Reuses the LiveKitInfo shape from the SDK \(which mirrors the\s*\/\/ api-types Zod schema\)\. The shape is the contract the\s*\/\/ \/v1\/agent-sessions\/:id\/livekit-token endpoint returns and the\s*\/\/ optional `livekit` field on session-create\./,
     );
   });
 
   it("LK.6.d InputEvent 13-variant tagged union pinned: 7 mouse/key/wheel/ping + 5 touch (tap / touchStart / touchMove / touchEnd / swipe) + navigate (URL-nav over the same data channel, A3 W2668). + 'the input-event schema the Mac side decodes. Must stay in lock-step with Agent 1's Swift InputEvent enum.' — pinned so the cross-agent Swift-side enum + the touch contract (founder 2026-06-08) + the navigate command (founder 2026-06-19) all stay documented (drift would break customer manual control input). Per-variant toContain (NOT one mega-regex) to avoid the long-chain backtracking hazard.", () => {
     // Framing comment + the union declaration.
     expect(body).toMatch(
-      /\/\*\* LK\.6\.d — the input-event schema the Mac side decodes\. Must\s*\n?\s*\*\s+stay in lock-step with Agent 1's Swift `InputEvent` enum\. \*\//,
+      /\/\*\* LK\.6\.d — the input-event schema the Mac side decodes\. Must\s*\*\s+stay in lock-step with Agent 1's Swift `InputEvent` enum\. \*\//,
     );
     expect(body).toMatch(/export type InputEvent =/);
     // Each variant pinned individually (mouse/key/wheel/ping + the 5 touch + navigate).
@@ -66,13 +66,13 @@ describe('gui-client/lib/livekit content parity', () => {
 
   it('LK.6.c LivekitConnectionState 6-variant tagged union pinned: idle / connecting / connected / reconnecting / disconnected / error(message). Drift to a different state-machine shape would mismatch the badge-rendering logic in LivekitConnectionBadge.tsx', () => {
     expect(body).toMatch(
-      /export type LivekitConnectionState =\s*\n?\s*\| \{ kind: 'idle' \}\s*\n?\s*\| \{ kind: 'connecting' \}\s*\n?\s*\| \{ kind: 'connected' \}\s*\n?\s*\| \{ kind: 'reconnecting' \}\s*\n?\s*\| \{ kind: 'disconnected' \}\s*\n?\s*\| \{ kind: 'error'; message: string \};/,
+      /export type LivekitConnectionState =\s*\| \{ kind: 'idle' \}\s*\| \{ kind: 'connecting' \}\s*\| \{ kind: 'connected' \}\s*\| \{ kind: 'reconnecting' \}\s*\| \{ kind: 'disconnected' \}\s*\| \{ kind: 'error'; message: string \};/,
     );
   });
 
   it("createLivekitRoom is tuned for the INTERACTIVE simulator: adaptiveStream OFF (it gates a track on the <video> element's visibility/size, adding latency to a real-time control surface — the likeliest subscribe-side cause of the founder-reported 'very very slow streaming / huge delay') + dynacast ON (publisher-side no-op against simulcast:false, kept harmless). new Room({adaptiveStream: false, dynacast: true}). Drift back to adaptiveStream:true would re-introduce the visibility-gated latency on the live view.", () => {
     expect(body).toMatch(
-      /export function createLivekitRoom\(\): Room \{\s*\n?\s*return new Room\(\{\s*\n?\s*adaptiveStream: false,\s*\n?\s*dynacast: true,\s*\n?\s*\}\);/,
+      /export function createLivekitRoom\(\): Room \{\s*return new Room\(\{\s*adaptiveStream: false,\s*dynacast: true,\s*\}\);/,
     );
     expect(body).toMatch(/adaptiveStream pauses\/downgrades a track based/);
   });

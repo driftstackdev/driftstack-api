@@ -117,13 +117,13 @@ describe('W461.A apps/server/src/index.ts content parity', () => {
 
   it("Production-entry framing pinned: 'Production entry. Loads config, builds the dep graph via createProductionDeps, builds the Fastify app, listens, and installs SIGTERM / SIGINT handlers for graceful shutdown.'", () => {
     expect(body).toMatch(
-      /\/\/ Production entry\. Loads config, builds the dep graph via\s*\n?\s*\/\/ `createProductionDeps`, builds the Fastify app, listens, and\s*\n?\s*\/\/ installs SIGTERM \/ SIGINT handlers for graceful shutdown\./,
+      /\/\/ Production entry\. Loads config, builds the dep graph via\s*\/\/ `createProductionDeps`, builds the Fastify app, listens, and\s*\/\/ installs SIGTERM \/ SIGINT handlers for graceful shutdown\./,
     );
   });
 
   it("Fatal-bootstrap framing pinned: 'Failure to bootstrap (Postgres / Redis unreachable, config invalid) is fatal: process exits with code 1, the deploy pipeline's /health probe fails, the orchestrator does not promote the new image.'", () => {
     expect(body).toMatch(
-      /\/\/ Failure to bootstrap \(Postgres \/ Redis unreachable, config\s*\n?\s*\/\/ invalid\) is fatal: process exits with code 1, the deploy\s*\n?\s*\/\/ pipeline's \/health probe fails, the orchestrator does not\s*\n?\s*\/\/ promote the new image\./,
+      /\/\/ Failure to bootstrap \(Postgres \/ Redis unreachable, config\s*\/\/ invalid\) is fatal: process exits with code 1, the deploy\s*\/\/ pipeline's \/health probe fails, the orchestrator does not\s*\/\/ promote the new image\./,
     );
   });
 
@@ -131,23 +131,23 @@ describe('W461.A apps/server/src/index.ts content parity', () => {
     expect(body).toMatch(/import \{ loadConfig \} from '\.\/lib\/config\.js';/);
     expect(body).toMatch(/import \{ createLogger \} from '\.\/lib\/logger\.js';/);
     expect(body).toMatch(
-      /import \{\s*\n?\s*buildAppWithFatalTeardown,\s*\n?\s*createProductionDeps,\s*\n?\s*shareFirstAsyncCall,\s*\n?\s*\} from '\.\/lib\/bootstrap\.js';/,
+      /import \{\s*buildAppWithFatalTeardown,\s*createProductionDeps,\s*shareFirstAsyncCall,\s*\} from '\.\/lib\/bootstrap\.js';/,
     );
     expect(body).toMatch(/import \{ buildApp \} from '\.\/lib\/app\.js';/);
   });
 
   it("main async fn: loadConfig() → createLogger(config) → try/catch createProductionDeps with logger.fatal {component:'bootstrap', err} + 'bootstrap failed — exiting' + process.exit(1) on failure", () => {
     expect(body).toMatch(
-      /async function main\(\): Promise<void> \{\s*\n?\s*const config = loadConfig\(\);\s*\n?\s*const logger = createLogger\(config\);/,
+      /async function main\(\): Promise<void> \{\s*const config = loadConfig\(\);\s*const logger = createLogger\(config\);/,
     );
     expect(body).toMatch(
-      /let bootstrap;\s*\n?\s*try \{\s*\n?\s*bootstrap = await createProductionDeps\(config, logger\);\s*\n?\s*\} catch \(err\) \{\s*\n?\s*logger\.fatal\(\s*\n?\s*\{\s*\n?\s*component: 'bootstrap',\s*\n?\s*err:\s*\n?\s*err instanceof Error\s*\n?\s*\? \{ name: err\.name, message: err\.message, stack: err\.stack \}\s*\n?\s*: \{ value: err \},\s*\n?\s*\},\s*\n?\s*'bootstrap failed — exiting',\s*\n?\s*\);\s*\n?\s*process\.exit\(1\);\s*\n?\s*\}/,
+      /let bootstrap;\s*try \{\s*bootstrap = await createProductionDeps\(config, logger\);\s*\} catch \(err\) \{\s*logger\.fatal\(\s*\{\s*component: 'bootstrap',\s*err:\s*err instanceof Error\s*\? \{ name: err\.name, message: err\.message, stack: err\.stack \}\s*: \{ value: err \},\s*\},\s*'bootstrap failed — exiting',\s*\);\s*process\.exit\(1\);\s*\}/,
     );
   });
 
   it('V-117 Sentry framing pinned with fatal build cleanup + {deps, teardown} destructure', () => {
     expect(body).toMatch(
-      /const \{ deps, teardown \} = bootstrap;[\s\S]*?const app = await buildAppWithFatalTeardown\(\{\s*\n?\s*build: \(\) => buildApp\(deps\),\s*\n?\s*teardown,/,
+      /const \{ deps, teardown \} = bootstrap;[\s\S]*?const app = await buildAppWithFatalTeardown\(\{\s*build: \(\) => buildApp\(deps\),\s*teardown,/,
     );
     expect(body).toContain("'app build failed — exiting'");
     expect(body).toContain('if (app === null) return;');
@@ -169,15 +169,15 @@ describe('W461.A apps/server/src/index.ts content parity', () => {
     // The hardening: bound app.close() with a deadline so a never-ending SSE
     // response can't hang shutdown until SIGKILL (which would SKIP teardown).
     expect(body).toMatch(/const CLOSE_DEADLINE_MS = 10_000;/);
-    expect(body).toMatch(/await Promise\.race\(\[\s*\n?\s*app\.close\(\),/);
+    expect(body).toMatch(/await Promise\.race\(\[\s*app\.close\(\),/);
     expect(body).toMatch(/app\.close did not settle within \$\{CLOSE_DEADLINE_MS\}ms/);
     expect(body).toMatch(/\)\.unref\(\);/);
     // Warn on close failure/timeout, then ALWAYS teardown + clean exit.
     expect(body).toMatch(/'app close failed or timed out \(proceeding to teardown\)',/);
-    expect(body).toMatch(/await teardown\(\);\s*\n?\s*process\.exit\(0\);/);
+    expect(body).toMatch(/await teardown\(\);\s*process\.exit\(0\);/);
     // Regression guard: the old UNBOUNDED `await app.close();` (no race) is gone —
     // that form hung shutdown on active SSE until systemd SIGKILL, skipping teardown.
-    expect(body).not.toMatch(/try \{\s*\n?\s*await app\.close\(\);\s*\n?\s*\} catch/);
+    expect(body).not.toMatch(/try \{\s*await app\.close\(\);\s*\} catch/);
   });
 
   it('Both SIGTERM + SIGINT wired to shutdown via process.on(...) with void wrapping for fire-and-forget', () => {
@@ -187,7 +187,7 @@ describe('W461.A apps/server/src/index.ts content parity', () => {
 
   it("app.listen failure: try await app.listen({host, port}) with logger.info success path ({host, port, env}, 'driftstack-api listening') + catch logger.fatal 'app.listen failed — exiting' (full err object incl. stack+cause) + await teardown() + process.exit(1)", () => {
     expect(body).toMatch(
-      /try \{\s*\n?\s*await app\.listen\(\{ host: config\.host, port: config\.port \}\);\s*\n?\s*logger\.info\(\s*\n?\s*\{ component: 'lifecycle', host: config\.host, port: config\.port, env: config\.nodeEnv \},\s*\n?\s*'driftstack-api listening',\s*\n?\s*\);\s*\n?\s*\} catch \(err\) \{\s*\n?\s*logger\.fatal\(\s*\n?\s*\{\s*\n?\s*component: 'lifecycle',\s*\n?\s*err:\s*\n?\s*err instanceof Error\s*\n?\s*\? \{ name: err\.name, message: err\.message, stack: err\.stack, cause: err\.cause \}\s*\n?\s*: \{ value: err \},\s*\n?\s*\},\s*\n?\s*'app\.listen failed — exiting',\s*\n?\s*\);\s*\n?\s*await teardown\(\);\s*\n?\s*process\.exit\(1\);\s*\n?\s*\}/,
+      /try \{\s*await app\.listen\(\{ host: config\.host, port: config\.port \}\);\s*logger\.info\(\s*\{ component: 'lifecycle', host: config\.host, port: config\.port, env: config\.nodeEnv \},\s*'driftstack-api listening',\s*\);\s*\} catch \(err\) \{\s*logger\.fatal\(\s*\{\s*component: 'lifecycle',\s*err:\s*err instanceof Error\s*\? \{ name: err\.name, message: err\.message, stack: err\.stack, cause: err\.cause \}\s*: \{ value: err \},\s*\},\s*'app\.listen failed — exiting',\s*\);\s*await teardown\(\);\s*process\.exit\(1\);\s*\}/,
     );
   });
 

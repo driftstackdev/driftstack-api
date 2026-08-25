@@ -46,22 +46,22 @@ describe('W431.A apps/server/src/drivers/index.ts content parity', () => {
 
   it('createDriver signature: Pick<Config, driver|mockNavigateLatencyMs|mockInteractLatencyMs|playwrightBrowser|playwrightHeaded>; returns Promise<Driver>', () => {
     expect(body).toMatch(
-      /export async function createDriver\(\s*\n?\s*config: Pick<\s*\n?\s*Config,\s*\n?\s*\| 'driver'\s*\n?\s*\| 'mockNavigateLatencyMs'\s*\n?\s*\| 'mockInteractLatencyMs'\s*\n?\s*\| 'playwrightBrowser'\s*\n?\s*\| 'playwrightHeaded'\s*\n?\s*>,\s*\n?\s*\): Promise<Driver> \{/,
+      /export async function createDriver\(\s*config: Pick<\s*Config,\s*\| 'driver'\s*\| 'mockNavigateLatencyMs'\s*\| 'mockInteractLatencyMs'\s*\| 'playwrightBrowser'\s*\| 'playwrightHeaded'\s*>,\s*\): Promise<Driver> \{/,
     );
   });
 
   it('Mock branch: if config.driver === "mock" returns new MockDriver with navigateLatencyMs + interactLatencyMs from config', () => {
     expect(body).toMatch(
-      /if \(config\.driver === 'mock'\) \{\s*\n?\s*return new MockDriver\(\{\s*\n?\s*navigateLatencyMs: config\.mockNavigateLatencyMs,\s*\n?\s*interactLatencyMs: config\.mockInteractLatencyMs,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /if \(config\.driver === 'mock'\) \{\s*return new MockDriver\(\{\s*navigateLatencyMs: config\.mockNavigateLatencyMs,\s*interactLatencyMs: config\.mockInteractLatencyMs,\s*\}\);\s*\}/,
     );
   });
 
   it('V-333b Playwright branch: lazy import via await import("./playwright.js") so prod builds skip @playwright/test devDependency; browserKind + headed passed', () => {
     expect(body).toMatch(
-      /\/\/ V-333b — Playwright driver\. Dev \/ E2E only; the production\s*\n?\s*\/\/ driver is the WebKit fork \(DRIVER=webkit\), which lands when\s*\n?\s*\/\/ Agent 1's WebKit Phase 2 closes\. Loaded lazily so prod builds\s*\n?\s*\/\/ don't pull in @playwright\/test \(a devDependency\)\./,
+      /\/\/ V-333b — Playwright driver\. Dev \/ E2E only; the production\s*\/\/ driver is the WebKit fork \(DRIVER=webkit\), which lands when\s*\/\/ Agent 1's WebKit Phase 2 closes\. Loaded lazily so prod builds\s*\/\/ don't pull in @playwright\/test \(a devDependency\)\./,
     );
     expect(body).toMatch(
-      /if \(config\.driver === 'playwright'\) \{\s*\n?\s*const \{ PlaywrightDriver \} = await import\('\.\/playwright\.js'\);\s*\n?\s*return new PlaywrightDriver\(\{\s*\n?\s*browserKind: config\.playwrightBrowser,\s*\n?\s*headed: config\.playwrightHeaded,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /if \(config\.driver === 'playwright'\) \{\s*const \{ PlaywrightDriver \} = await import\('\.\/playwright\.js'\);\s*return new PlaywrightDriver\(\{\s*browserKind: config\.playwrightBrowser,\s*headed: config\.playwrightHeaded,\s*\}\);\s*\}/,
     );
   });
 

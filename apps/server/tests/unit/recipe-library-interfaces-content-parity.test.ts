@@ -56,25 +56,25 @@ describe('W455.B packages/recipe-library/src/interfaces.ts content parity', () =
 
   it("RecipeRegistry framing pinned: 'Recipe registry — read-only catalogue of available recipes.' + 'Phase 3 ships a real catalogue (filesystem-backed YAML, plus customer-defined recipes loaded at runtime). The mock implementation here ships a tiny in-memory catalogue for tests + scaffolding work.'", () => {
     expect(body).toMatch(
-      /\* Recipe registry — read-only catalogue of available recipes\.\s*\n?\s*\*\s*\n?\s*\*\s*Phase 3 ships a real catalogue \(filesystem-backed YAML, plus\s*\n?\s*\*\s*customer-defined recipes loaded at runtime\)\. The mock implementation\s*\n?\s*\*\s*here ships a tiny in-memory catalogue for tests \+ scaffolding work\./,
+      /\* Recipe registry — read-only catalogue of available recipes\.\s*\*\s*\*\s*Phase 3 ships a real catalogue \(filesystem-backed YAML, plus\s*\*\s*customer-defined recipes loaded at runtime\)\. The mock implementation\s*\*\s*here ships a tiny in-memory catalogue for tests \+ scaffolding work\./,
     );
   });
 
   it("RecipeRegistry: 3 methods (get → undefined-for-unknown framing 'Look up a recipe by id. Returns undefined for unknown ids.' + list 'every registered recipe' + listByCategory 'within one category')", () => {
     expect(body).toMatch(
-      /export interface RecipeRegistry \{\s*\n?\s*\/\*\* Look up a recipe by id\. Returns undefined for unknown ids\. \*\/\s*\n?\s*get\(recipeId: string\): Recipe \| undefined;\s*\n?\s*\/\*\* List every registered recipe\. \*\/\s*\n?\s*list\(\): readonly Recipe\[\];\s*\n?\s*\/\*\* List recipes within one category\. \*\/\s*\n?\s*listByCategory\(category: string\): readonly Recipe\[\];\s*\n?\s*\}/,
+      /export interface RecipeRegistry \{\s*\/\*\* Look up a recipe by id\. Returns undefined for unknown ids\. \*\/\s*get\(recipeId: string\): Recipe \| undefined;\s*\/\*\* List every registered recipe\. \*\/\s*list\(\): readonly Recipe\[\];\s*\/\*\* List recipes within one category\. \*\/\s*listByCategory\(category: string\): readonly Recipe\[\];\s*\}/,
     );
   });
 
   it("RecipeRunner framing pinned: 'Recipe runner — executes a Recipe against a session.' + 'Phase 3 ships the real runner (drives apps/server/src/services/sessions.ts via the Driftstack SDK, applies behavioural-simulation cadence between steps, surfaces per-step progress to GUI clients via SSE/WebSocket). The mock runner returns canned results synchronously so consumers can integrate against the interface now.'", () => {
     expect(body).toMatch(
-      /\* Recipe runner — executes a Recipe against a session\.\s*\n?\s*\*\s*\n?\s*\*\s*Phase 3 ships the real runner \(drives `apps\/server\/src\/services\/sessions\.ts`\s*\n?\s*\*\s*via the Driftstack SDK, applies behavioural-simulation cadence between\s*\n?\s*\*\s*steps, surfaces per-step progress to GUI clients via SSE\/WebSocket\)\.\s*\n?\s*\*\s*The mock runner returns canned results synchronously so consumers\s*\n?\s*\*\s*can integrate against the interface now\./,
+      /\* Recipe runner — executes a Recipe against a session\.\s*\*\s*\*\s*Phase 3 ships the real runner \(drives `apps\/server\/src\/services\/sessions\.ts`\s*\*\s*via the Driftstack SDK, applies behavioural-simulation cadence between\s*\*\s*steps, surfaces per-step progress to GUI clients via SSE\/WebSocket\)\.\s*\*\s*The mock runner returns canned results synchronously so consumers\s*\*\s*can integrate against the interface now\./,
     );
   });
 
   it("RecipeRunner.run framing pinned: 'Execute the recipe identified by recipeId against the session in ctx. Resolves with a RecipeResult reporting per-step status. Rejects only on infrastructural error (recipe not found, session unreachable). Per-step failures land inside the resolved result with status: failed.'", () => {
     expect(body).toMatch(
-      /\*\s*Execute the recipe identified by `recipeId` against the session in\s*\n?\s*\*\s*`ctx`\. Resolves with a `RecipeResult` reporting per-step status\.\s*\n?\s*\*\s*Rejects only on infrastructural error \(recipe not found, session\s*\n?\s*\*\s*unreachable\)\. Per-step failures land inside the resolved result\s*\n?\s*\*\s*with `status: 'failed'`\./,
+      /\*\s*Execute the recipe identified by `recipeId` against the session in\s*\*\s*`ctx`\. Resolves with a `RecipeResult` reporting per-step status\.\s*\*\s*Rejects only on infrastructural error \(recipe not found, session\s*\*\s*unreachable\)\. Per-step failures land inside the resolved result\s*\*\s*with `status: 'failed'`\./,
     );
     expect(body).toMatch(/run\(recipeId: string, ctx: RecipeContext\): Promise<RecipeResult>;/);
   });

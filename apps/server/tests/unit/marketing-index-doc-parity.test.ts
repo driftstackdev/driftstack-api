@@ -65,11 +65,11 @@ describe('W246.D marketing-site /index doc parity', () => {
     expect(doc).toMatch(/EU-hosted by default/);
     expect(doc).toMatch(/Your account data lives on EU servers/);
     expect(doc).toMatch(/operational metadata we need to bill/);
-    expect(doc).not.toMatch(/Hetzner\s*\n?\s*Falkenstein, Neon EU, and Cloudflare R2/);
+    expect(doc).not.toMatch(/Hetzner\s*Falkenstein, Neon EU, and Cloudflare R2/);
     // Prior infra-tier wording must NOT return.
     expect(doc).not.toMatch(/Customer data stays in the EU/);
     expect(doc).not.toMatch(
-      /Database, object storage, and compute all run in the EU,\s*\n?\s*single-region/,
+      /Database, object storage, and compute all run in the EU,\s*single-region/,
     );
     // S30 negative pins — the absolutist residency claims must not
     // silently return (founder decision 2026-07-07: soften).

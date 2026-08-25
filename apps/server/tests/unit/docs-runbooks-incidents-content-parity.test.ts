@@ -117,15 +117,13 @@ describe('W556.A /docs/runbooks/incidents.md content parity', () => {
     expect(body).toMatch(/2\. \*\*Translate impact\.\*\*/);
     expect(body).toMatch(/3\. \*\*If the upstream incident is a security incident\*\*, treat it/);
     expect(body).toMatch(/as a Driftstack security incident/);
-    expect(body).toMatch(
-      /Sub-processor breach = our breach\s*\n?\s*from the customer's perspective\./,
-    );
+    expect(body).toMatch(/Sub-processor breach = our breach\s*from the customer's perspective\./);
     expect(body).toMatch(/## 5\. CSE escalation tree \(pre-launch single-on-call\)/);
     expect(body).toMatch(/### 5\.2 P-0 channels/);
     expect(body).toMatch(/A P-0 must reach the founder within 5 minutes regardless of/);
     expect(body).toMatch(/hour\./);
     expect(body).toMatch(/### 5\.3 Failover/);
-    expect(body).toMatch(/No\s*\n?\s*second responder pre-launch — this is honestly disclosed at/);
+    expect(body).toMatch(/No\s*second responder pre-launch — this is honestly disclosed at/);
     expect(body).toMatch(/`\/trust\/incidents`/);
   });
 

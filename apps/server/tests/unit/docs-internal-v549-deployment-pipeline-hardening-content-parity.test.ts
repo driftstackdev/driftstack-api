@@ -96,12 +96,12 @@ describe('W564.A /docs/internal/v549-deployment-pipeline-hardening.md content pa
       /1\. \*\*Migration mismatch\.\*\* If the deploy added a Drizzle migration,/,
     );
     expect(body).toMatch(/never automate rollback past a migration boundary\./);
-    expect(body).toMatch(/`git diff HEAD HEAD~1 --\s*\n?\s*apps\/server\/src\/db\/migrations\/`/);
+    expect(body).toMatch(/`git diff HEAD HEAD~1 --\s*apps\/server\/src\/db\/migrations\/`/);
     expect(body).toMatch(
       /2\. \*\*Config drift\.\*\* Env vars added in the new deploy may break the/,
     );
     expect(body).toMatch(/`\.github\/workflows\/env-update\.yml`/);
-    expect(body).toMatch(/they\s*\n?\s*never co-deploy with code\./);
+    expect(body).toMatch(/they\s*never co-deploy with code\./);
     expect(body).toMatch(/3\. \*\*State write before rollback\.\*\* The broken version may have/);
     expect(body).toMatch(/the 30s health-check window means at most 30s of/);
     expect(body).toMatch(/## Open questions for team review/);
@@ -111,7 +111,7 @@ describe('W564.A /docs/internal/v549-deployment-pipeline-hardening.md content pa
     expect(body).toMatch(
       /2\. \*\*Deploy frequency cap\.\*\* Cap N deploys\/day to prevent thrashing/,
     );
-    expect(body).toMatch(/add a 5-min\s*\n?\s*debounce post-launch\./);
+    expect(body).toMatch(/add a 5-min\s*debounce post-launch\./);
     expect(body).toMatch(/3\. \*\*Deploy notification\.\*\* Slack-style notification of each/);
     expect(body).toMatch(/## Sub-slices/);
     expect(body).toMatch(/- \*\*V-549\.A\*\* — pre-deploy smoke in the workflow YAML\./);

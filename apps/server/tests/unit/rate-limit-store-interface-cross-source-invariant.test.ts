@@ -117,7 +117,7 @@ describe('W913 RateLimit store interface cross-source invariant', () => {
       /export interface SlidingWindowConsumeResult extends ConsumeResult \{[\s\S]+?resetAtMs: number;/,
     );
     expect(p).toMatch(
-      /export interface SlidingWindowRateLimitStore \{\s*\n?\s*consumeSlidingWindow\(opts: SlidingWindowConsumeOpts\): Promise<SlidingWindowConsumeResult>;/,
+      /export interface SlidingWindowRateLimitStore \{\s*consumeSlidingWindow\(opts: SlidingWindowConsumeOpts\): Promise<SlidingWindowConsumeResult>;/,
     );
   });
 

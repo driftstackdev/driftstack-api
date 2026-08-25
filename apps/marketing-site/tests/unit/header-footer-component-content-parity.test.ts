@@ -69,7 +69,7 @@ describe('W382.C marketing-site Header.astro content parity', () => {
   it('V-133 mobile-responsive framing pinned in component comment', () => {
     expect(body).toMatch(/V-133: mobile responsiveness pass/);
     expect(body).toMatch(
-      /CSS-only <details> hamburger so we don't need\s*\n?\s*\/\/\s*a client-side JS bundle/,
+      /CSS-only <details> hamburger so we don't need\s*\/\/\s*a client-side JS bundle/,
     );
   });
 
@@ -102,7 +102,7 @@ describe('W382.C marketing-site Header.astro content parity', () => {
   });
 
   it('R15 brand mark in header: /driftstack-mark.svg <img> (iPhone-D logo) + lowercase "driftstack" wordmark — replaces the prior bg-gradient-accent D-tile chip with the real SVG brand asset', () => {
-    expect(body).toMatch(/<img\s*\n?\s*src="\/driftstack-mark\.svg(\?v=\d+)?"/);
+    expect(body).toMatch(/<img\s*src="\/driftstack-mark\.svg(\?v=\d+)?"/);
     // S17 2026-07-04: STACK on the AA accent-text tone (Lighthouse flagged
     // raw accent at 2.99:1 on the dark bg).
     expect(body).toMatch(
@@ -270,15 +270,15 @@ describe('W382.C marketing-site Footer.astro content parity', () => {
   });
 
   it('R15 brand mark in footer: /driftstack-mark.svg <img> (iPhone-D logo) — replaces the prior bg-gradient-accent text-xs D chip. Footer no longer renders a separate "driftstack" wordmark element (the brand SVG carries the identity on its own at the footer scale)', () => {
-    expect(body).toMatch(/<img\s*\n?\s*src="\/driftstack-mark\.svg(\?v=\d+)?"/);
+    expect(body).toMatch(/<img\s*src="\/driftstack-mark\.svg(\?v=\d+)?"/);
   });
 
   it('Docs + Status external links carry target="_blank" + rel="noopener noreferrer"', () => {
     expect(body).toMatch(
-      /href="https:\/\/docs\.driftstack\.dev"\s*\n?\s*class="nav-link"\s*\n?\s*target="_blank"\s*\n?\s*rel="noopener noreferrer"/,
+      /href="https:\/\/docs\.driftstack\.dev"\s*class="nav-link"\s*target="_blank"\s*rel="noopener noreferrer"/,
     );
     expect(body).toMatch(
-      /href="https:\/\/status\.driftstack\.dev"\s*\n?\s*class="nav-link"\s*\n?\s*target="_blank"\s*\n?\s*rel="noopener noreferrer"/,
+      /href="https:\/\/status\.driftstack\.dev"\s*class="nav-link"\s*target="_blank"\s*rel="noopener noreferrer"/,
     );
   });
 });

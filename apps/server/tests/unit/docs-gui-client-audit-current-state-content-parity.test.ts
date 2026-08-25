@@ -165,7 +165,7 @@ describe('W573.B /docs/gui-client/audit-current-state.md content parity', () => 
       /\*\*Current \(V-866\): SHIPPED\./,
     );
     expect(body, 'and still credits the server-side half').toMatch(
-      /Server-side V-073 enforcement\s*\n?\s*is unchanged/,
+      /Server-side V-073 enforcement\s*is unchanged/,
     );
     // V-866 continued — the same §8 sentences, frozen a second time in this
     // block. The first grep found only the earlier copy; this is the fourth time

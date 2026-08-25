@@ -51,25 +51,25 @@ describe('W443.B apps/server/src/db/legal-repo.ts content parity', () => {
 
   it("recordAcceptance: 6-field values write (accountId + documentKey + version + contentHash + acceptedFromIp + acceptedUserAgent) → returning(); throws 'legal_acceptances insert returned no row' on undefined", () => {
     expect(body).toMatch(
-      /async recordAcceptance\(input: RecordAcceptanceInput\): Promise<LegalAcceptanceRecord> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.insert\(legalAcceptances\)\s*\n?\s*\.values\(\{\s*\n?\s*accountId: input\.accountId,\s*\n?\s*documentKey: input\.documentKey,\s*\n?\s*version: input\.version,\s*\n?\s*contentHash: input\.contentHash,\s*\n?\s*acceptedFromIp: input\.acceptedFromIp,\s*\n?\s*acceptedUserAgent: input\.acceptedUserAgent,\s*\n?\s*\}\)\s*\n?\s*\.returning\(\);\s*\n?\s*if \(row === undefined\) \{\s*\n?\s*throw new Error\('legal_acceptances insert returned no row'\);\s*\n?\s*\}\s*\n?\s*return mapRow\(row\);\s*\n?\s*\}/,
+      /async recordAcceptance\(input: RecordAcceptanceInput\): Promise<LegalAcceptanceRecord> \{\s*const \[row\] = await this\.database\.db\s*\.insert\(legalAcceptances\)\s*\.values\(\{\s*accountId: input\.accountId,\s*documentKey: input\.documentKey,\s*version: input\.version,\s*contentHash: input\.contentHash,\s*acceptedFromIp: input\.acceptedFromIp,\s*acceptedUserAgent: input\.acceptedUserAgent,\s*\}\)\s*\.returning\(\);\s*if \(row === undefined\) \{\s*throw new Error\('legal_acceptances insert returned no row'\);\s*\}\s*return mapRow\(row\);\s*\}/,
     );
   });
 
   it("latestAcceptancesForAccount framing pinned: 'For each (account, document_key), keep the row with the latest accepted_at. Postgres DISTINCT ON is the cleanest way; Drizzle doesn't expose it natively but raw SQL is fine.'", () => {
     expect(body).toMatch(
-      /\/\/ For each \(account, document_key\), keep the row with the latest\s*\n?\s*\/\/ accepted_at\. Postgres DISTINCT ON is the cleanest way; Drizzle\s*\n?\s*\/\/ doesn't expose it natively but raw SQL is fine\./,
+      /\/\/ For each \(account, document_key\), keep the row with the latest\s*\/\/ accepted_at\. Postgres DISTINCT ON is the cleanest way; Drizzle\s*\/\/ doesn't expose it natively but raw SQL is fine\./,
     );
   });
 
   it('Raw SQL: SELECT DISTINCT ON (document_key) <8 fields> FROM legal_acceptances WHERE account_id = ${accountId} ORDER BY document_key, accepted_at DESC, id DESC (id tiebreaker = deterministic per-doc pick)', () => {
     expect(body).toMatch(
-      /SELECT DISTINCT ON \(document_key\)\s*\n?\s*id, account_id, document_key, version, content_hash,\s*\n?\s*accepted_from_ip, accepted_user_agent, accepted_at\s*\n?\s*FROM legal_acceptances\s*\n?\s*WHERE account_id = \$\{accountId\}\s*\n?\s*ORDER BY document_key, accepted_at DESC, id DESC/,
+      /SELECT DISTINCT ON \(document_key\)\s*id, account_id, document_key, version, content_hash,\s*accepted_from_ip, accepted_user_agent, accepted_at\s*FROM legal_acceptances\s*WHERE account_id = \$\{accountId\}\s*ORDER BY document_key, accepted_at DESC, id DESC/,
     );
   });
 
   it("Dual-shape iter framing pinned: 'Drizzle's execute() returns RowList iterable but TS sometimes narrows differently per driver. Iterate `for-of` so both pg-style { rows } and array-shaped results are covered.'", () => {
     expect(body).toMatch(
-      /\/\/ Drizzle's execute\(\) returns RowList iterable but TS sometimes\s*\n?\s*\/\/ narrows differently per driver\. Iterate `for-of` so both\s*\n?\s*\/\/ pg-style \{ rows \} and array-shaped results are covered\./,
+      /\/\/ Drizzle's execute\(\) returns RowList iterable but TS sometimes\s*\/\/ narrows differently per driver\. Iterate `for-of` so both\s*\/\/ pg-style \{ rows \} and array-shaped results are covered\./,
     );
     expect(body).toMatch(
       /const iter = \(rows as unknown as \{ rows\?: unknown\[\] \}\)\.rows \?\? rows;/,
@@ -79,13 +79,13 @@ describe('W443.B apps/server/src/db/legal-repo.ts content parity', () => {
   it('Map<documentKey, LegalAcceptanceRecord> output; iterator maps raw row to {id, accountId(account_id), documentKey(document_key), version, contentHash(content_hash), acceptedFromIp(accepted_from_ip), acceptedUserAgent(accepted_user_agent), acceptedAt(new Date(accepted_at))}; out.set(mapped.documentKey, mapped)', () => {
     expect(body).toMatch(/const out = new Map<string, LegalAcceptanceRecord>\(\);/);
     expect(body).toMatch(
-      /const mapped: LegalAcceptanceRecord = \{\s*\n?\s*id: raw\.id,\s*\n?\s*accountId: raw\.account_id,\s*\n?\s*documentKey: raw\.document_key,\s*\n?\s*version: raw\.version,\s*\n?\s*contentHash: raw\.content_hash,\s*\n?\s*acceptedFromIp: raw\.accepted_from_ip,\s*\n?\s*acceptedUserAgent: raw\.accepted_user_agent,\s*\n?\s*acceptedAt: new Date\(raw\.accepted_at\),\s*\n?\s*\};\s*\n?\s*out\.set\(mapped\.documentKey, mapped\);/,
+      /const mapped: LegalAcceptanceRecord = \{\s*id: raw\.id,\s*accountId: raw\.account_id,\s*documentKey: raw\.document_key,\s*version: raw\.version,\s*contentHash: raw\.content_hash,\s*acceptedFromIp: raw\.accepted_from_ip,\s*acceptedUserAgent: raw\.accepted_user_agent,\s*acceptedAt: new Date\(raw\.accepted_at\),\s*\};\s*out\.set\(mapped\.documentKey, mapped\);/,
     );
   });
 
   it('mapRow typed-insert helper: 8-field LegalAcceptanceRecord (id + accountId + documentKey + version + contentHash + acceptedFromIp + acceptedUserAgent + acceptedAt)', () => {
     expect(body).toMatch(
-      /function mapRow\(row: typeof legalAcceptances\.\$inferSelect\): LegalAcceptanceRecord \{\s*\n?\s*return \{\s*\n?\s*id: row\.id,\s*\n?\s*accountId: row\.accountId,\s*\n?\s*documentKey: row\.documentKey,\s*\n?\s*version: row\.version,\s*\n?\s*contentHash: row\.contentHash,\s*\n?\s*acceptedFromIp: row\.acceptedFromIp,\s*\n?\s*acceptedUserAgent: row\.acceptedUserAgent,\s*\n?\s*acceptedAt: row\.acceptedAt,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function mapRow\(row: typeof legalAcceptances\.\$inferSelect\): LegalAcceptanceRecord \{\s*return \{\s*id: row\.id,\s*accountId: row\.accountId,\s*documentKey: row\.documentKey,\s*version: row\.version,\s*contentHash: row\.contentHash,\s*acceptedFromIp: row\.acceptedFromIp,\s*acceptedUserAgent: row\.acceptedUserAgent,\s*acceptedAt: row\.acceptedAt,\s*\};\s*\}/,
     );
   });
 

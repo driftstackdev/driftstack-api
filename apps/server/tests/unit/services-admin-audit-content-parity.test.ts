@@ -40,7 +40,7 @@ describe('W399.B apps/server/src/services/admin-audit.ts content parity', () => 
 
   it('V-1007 Module framing: every MUTATING /v1/admin/* endpoint writes one row before response, reads do not, three OAuth-client mutations excepted; append-only', () => {
     expect(body).toMatch(
-      /Every MUTATING \/v1\/admin\/\* endpoint writes one row here before\s*\n?\s*\/\/ returning its response, with three exceptions\. Reads do not\./,
+      /Every MUTATING \/v1\/admin\/\* endpoint writes one row here before\s*\/\/ returning its response, with three exceptions\. Reads do not\./,
     );
     // V-1007 — the retracted claim, paraphrased in the negative. "every
     // endpoint" is what an auditor would cite for staff-access traceability,
@@ -51,7 +51,7 @@ describe('W399.B apps/server/src/services/admin-audit.ts content parity', () => 
 
   it('Closed-enum framing: new admin endpoint = migration (action-filtered query index)', () => {
     expect(body).toMatch(
-      /Action vocabulary is a closed Postgres enum \(`admin_audit_action`\)\.\s*\n?\s*\/\/\s*Adding a new admin endpoint requires a migration; this is intentional —\s*\n?\s*\/\/\s*it forces deliberate vocabulary choices and gives action-filtered\s*\n?\s*\/\/\s*queries a free index hit\./,
+      /Action vocabulary is a closed Postgres enum \(`admin_audit_action`\)\.\s*\/\/\s*Adding a new admin endpoint requires a migration; this is intentional —\s*\/\/\s*it forces deliberate vocabulary choices and gives action-filtered\s*\/\/\s*queries a free index hit\./,
     );
   });
 
@@ -123,26 +123,26 @@ describe('W399.B apps/server/src/services/admin-audit.ts content parity', () => 
     expect(body).toMatch(/adminAccountId\?: string;/);
     expect(body).toMatch(/targetAccountId\?: string;/);
     expect(body).toMatch(/action\?: AdminAuditAction;/);
-    expect(body).toMatch(/\/\*\* Inclusive lower bound\. \*\/\s*\n?\s*from\?: Date;/);
-    expect(body).toMatch(/\/\*\* Exclusive upper bound\. \*\/\s*\n?\s*to\?: Date;/);
+    expect(body).toMatch(/\/\*\* Inclusive lower bound\. \*\/\s*from\?: Date;/);
+    expect(body).toMatch(/\/\*\* Exclusive upper bound\. \*\/\s*to\?: Date;/);
     expect(body).toMatch(
-      /\/\*\* V-521 — exact-match filter on the audit row's targetResourceId\. \*\/\s*\n?\s*targetResourceId\?: string;/,
+      /\/\*\* V-521 — exact-match filter on the audit row's targetResourceId\. \*\/\s*targetResourceId\?: string;/,
     );
     expect(body).toMatch(/limit: number;/);
     expect(body).toMatch(
-      /\/\*\* Pagination cursor — last seen `timestamp` ISO string\. \*\/\s*\n?\s*cursor\?: string;/,
+      /\/\*\* Pagination cursor — last seen `timestamp` ISO string\. \*\/\s*cursor\?: string;/,
     );
   });
 
   it('AdminAuditLogRepo: 2 methods (insert + list — append-only)', () => {
     expect(body).toMatch(
-      /export interface AdminAuditLogRepo \{\s*\n?\s*insert\(input: NewAdminAuditLogInput\): Promise<AdminAuditLogRow>;\s*\n?\s*list\(filters: ListAuditFilters\): Promise<ListAuditPage>;\s*\n?\s*\}/,
+      /export interface AdminAuditLogRepo \{\s*insert\(input: NewAdminAuditLogInput\): Promise<AdminAuditLogRow>;\s*list\(filters: ListAuditFilters\): Promise<ListAuditPage>;\s*\}/,
     );
   });
 
   it('record(): MUST be called by route before response; throw propagates — failure to audit fails the request (D-025) (+ Arc 7 obs.11 best-effort metrics bump labelled by audit-action prefix)', () => {
     expect(body).toMatch(
-      /Record one admin action\. Must be called by the route handler before\s*\n?\s*\*\s*returning the response\. A throw here propagates up — failure to\s*\n?\s*\*\s*audit fails the request \(D-025\)\./,
+      /Record one admin action\. Must be called by the route handler before\s*\*\s*returning the response\. A throw here propagates up — failure to\s*\*\s*audit fails the request \(D-025\)\./,
     );
     // Re-pinned when the counter gained an `outcome` dimension so a FAILED
     // staff-action audit write is counted rather than showing up only as a
@@ -161,7 +161,7 @@ describe('W399.B apps/server/src/services/admin-audit.ts content parity', () => 
 
   it('list: delegates to repo.list(filters)', () => {
     expect(body).toMatch(
-      /list\(filters: ListAuditFilters\): Promise<ListAuditPage> \{\s*\n?\s*return this\.repo\.list\(filters\);\s*\n?\s*\}/,
+      /list\(filters: ListAuditFilters\): Promise<ListAuditPage> \{\s*return this\.repo\.list\(filters\);\s*\}/,
     );
   });
 

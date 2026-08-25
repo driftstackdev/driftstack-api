@@ -40,14 +40,14 @@ describe('W393.B apps/server/src/lib/csv.ts content parity', () => {
   it('V-666.V framing pinned + admin-export consumer note', () => {
     expect(body).toMatch(/V-666\.V — minimal RFC 4180 CSV encoder for admin exports\./);
     expect(body).toMatch(
-      /Used today by the admin crypto-orders export; kept generic so other\s*\n?\s*\/\/\s*admin endpoints \(audit log dumps, etc\.\) can adopt the same helper\s*\n?\s*\/\/\s*without re-deriving the escaping rules/,
+      /Used today by the admin crypto-orders export; kept generic so other\s*\/\/\s*admin endpoints \(audit log dumps, etc\.\) can adopt the same helper\s*\/\/\s*without re-deriving the escaping rules/,
     );
   });
 
   it('RFC 4180 rules block pinned: quote-wrap on special chars + doubled-quote escape + CRLF row + null→empty', () => {
     expect(body).toMatch(/RFC 4180 rules implemented:/);
     expect(body).toMatch(
-      /- Fields containing comma, double-quote, CR, or LF are wrapped in\s*\n?\s*\/\/\s*double quotes\./,
+      /- Fields containing comma, double-quote, CR, or LF are wrapped in\s*\/\/\s*double quotes\./,
     );
     expect(body).toMatch(/- Embedded double quotes are doubled \(""? inside a quoted field\)\./);
     expect(body).toMatch(/- Each row ends with CRLF\./);
@@ -63,7 +63,7 @@ describe('W393.B apps/server/src/lib/csv.ts content parity', () => {
     expect(body).toMatch(/export function escapeCsvCell\(value: CsvCell\): string/);
     expect(body).toMatch(/if \(value === null \|\| value === undefined\) return '';/);
     expect(body).toMatch(
-      /let str =\s*\n?\s*typeof value === 'string'\s*\n?\s*\?\s*value\s*\n?\s*:\s*typeof value === 'number'\s*\n?\s*\?\s*value\.toString\(\)\s*\n?\s*:\s*value\s*\n?\s*\?\s*'true'\s*\n?\s*:\s*'false';/,
+      /let str =\s*typeof value === 'string'\s*\?\s*value\s*:\s*typeof value === 'number'\s*\?\s*value\.toString\(\)\s*:\s*value\s*\?\s*'true'\s*:\s*'false';/,
     );
   });
 
@@ -75,20 +75,20 @@ describe('W393.B apps/server/src/lib/csv.ts content parity', () => {
   it('formatCsvRow: cells.map(escape).join(","), no trailing CRLF', () => {
     expect(body).toMatch(/Join one row of cells with commas — does NOT append a trailing CRLF\./);
     expect(body).toMatch(
-      /export function formatCsvRow\(row: readonly CsvCell\[\]\): string \{\s*\n?\s*return row\.map\(escapeCsvCell\)\.join\(','\);\s*\n?\s*\}/,
+      /export function formatCsvRow\(row: readonly CsvCell\[\]\): string \{\s*return row\.map\(escapeCsvCell\)\.join\(','\);\s*\}/,
     );
   });
 
   it('buildCsv: header row + iterable rows, joined with "\\r\\n", trailing "\\r\\n"', () => {
     expect(body).toMatch(
-      /Build a complete CSV document from a header row \+ a row generator\.\s*\n?\s*\*\s*The output ends with a single trailing CRLF \(typical for spreadsheets\)/,
+      /Build a complete CSV document from a header row \+ a row generator\.\s*\*\s*The output ends with a single trailing CRLF \(typical for spreadsheets\)/,
     );
     expect(body).toMatch(
-      /export function buildCsv\(args: \{\s*\n?\s*header: readonly string\[\];\s*\n?\s*rows: Iterable<readonly CsvCell\[\]>;\s*\n?\s*\}\): string \{/,
+      /export function buildCsv\(args: \{\s*header: readonly string\[\];\s*rows: Iterable<readonly CsvCell\[\]>;\s*\}\): string \{/,
     );
     expect(body).toMatch(/const lines: string\[\] = \[formatCsvRow\(args\.header\)\];/);
     expect(body).toMatch(
-      /for \(const row of args\.rows\) \{\s*\n?\s*lines\.push\(formatCsvRow\(row\)\);\s*\n?\s*\}/,
+      /for \(const row of args\.rows\) \{\s*lines\.push\(formatCsvRow\(row\)\);\s*\}/,
     );
     expect(body).toMatch(/return lines\.join\('\\r\\n'\) \+ '\\r\\n';/);
   });

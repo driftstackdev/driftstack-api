@@ -41,7 +41,7 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
 
   it("header framing pinned: 'Drizzle-backed implementation of SessionRepo. The shape mirrors SessionsService expectations exactly; tests use an in-memory impl from `tests/integration/_helpers/in-memory-sessions-repo.ts`.'", () => {
     expect(body).toMatch(
-      /\/\/ Drizzle-backed implementation of SessionRepo\. The shape mirrors\s*\n?\s*\/\/ SessionsService expectations exactly; tests use an in-memory impl from\s*\n?\s*\/\/ `tests\/integration\/_helpers\/in-memory-sessions-repo\.ts`\./,
+      /\/\/ Drizzle-backed implementation of SessionRepo\. The shape mirrors\s*\/\/ SessionsService expectations exactly; tests use an in-memory impl from\s*\/\/ `tests\/integration\/_helpers\/in-memory-sessions-repo\.ts`\./,
     );
   });
 
@@ -63,7 +63,7 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
       /import \{ projectSessionEventMetadata \} from '\.\.\/lib\/session-event-metadata\.js';/,
     );
     expect(body).toMatch(
-      /import type \{\s*\n?\s*NewSessionInput,\s*\n?\s*SessionEventInput,\s*\n?\s*SessionListPage,\s*\n?\s*SessionRecord,\s*\n?\s*SessionRepo,\s*\n?\s*SerializedSessionDestroyInput,\s*\n?\s*SerializedSessionDestroyResult,\s*\n?\s*\} from '\.\.\/services\/sessions\.js';/,
+      /import type \{\s*NewSessionInput,\s*SessionEventInput,\s*SessionListPage,\s*SessionRecord,\s*SessionRepo,\s*SerializedSessionDestroyInput,\s*SerializedSessionDestroyResult,\s*\} from '\.\.\/services\/sessions\.js';/,
     );
     // 6.g — accounts joined in for the duration-sweep tier resolution. The agent
     // table participates in the global single-profile launch guard.
@@ -77,13 +77,13 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
 
   it("insertSession: 7-field values (accountId + apiKeyId + driverSessionId + archetype + purpose + label + metadata); returning(); throws 'insertSession returned no row'", () => {
     expect(body).toMatch(
-      /\.values\(\{\s*\n?\s*accountId: input\.accountId,\s*\n?\s*apiKeyId: input\.apiKeyId,\s*\n?\s*driverSessionId: input\.driverSessionId,\s*\n?\s*archetype: input\.archetype,\s*\n?\s*purpose: input\.purpose,\s*\n?\s*label: input\.label,\s*\n?\s*metadata: input\.metadata,\s*\n?\s*\}\)\s*\n?\s*\.returning\(\);\s*\n?\s*if \(!row\) throw new Error\('insertSession returned no row'\);/,
+      /\.values\(\{\s*accountId: input\.accountId,\s*apiKeyId: input\.apiKeyId,\s*driverSessionId: input\.driverSessionId,\s*archetype: input\.archetype,\s*purpose: input\.purpose,\s*label: input\.label,\s*metadata: input\.metadata,\s*\}\)\s*\.returning\(\);\s*if \(!row\) throw new Error\('insertSession returned no row'\);/,
     );
   });
 
   it('insertSessionIfUnderLimit: atomic count+insert in a transaction, serialised by a per-account pg_advisory_xact_lock; returns null when count >= limit (the concurrent-cap TOCTOU fix). Drift to dropping the advisory lock or the tx reopens the create-path race.', () => {
     expect(body).toMatch(
-      /async insertSessionIfUnderLimit\(\s*\n?\s*input: NewSessionInput,\s*\n?\s*limit: number,\s*\n?\s*opts: \{ profileId\?: string \} = \{\},\s*\n?\s*\): Promise<SessionRecord \| null> \{/,
+      /async insertSessionIfUnderLimit\(\s*input: NewSessionInput,\s*limit: number,\s*opts: \{ profileId\?: string \} = \{\},\s*\): Promise<SessionRecord \| null> \{/,
     );
     expect(body).toMatch(/return this\.database\.db\.transaction\(async \(tx\) => \{/);
     expect(body).toMatch(
@@ -91,7 +91,7 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
     );
     // count under the SAME tx, then conditional insert / null.
     expect(body).toMatch(
-      /\.where\(and\(eq\(sessions\.accountId, input\.accountId\), isNull\(sessions\.destroyedAt\)\)\);\s*\n?\s*if \(\(countRow\?\.count \?\? 0\) >= limit\) return null;/,
+      /\.where\(and\(eq\(sessions\.accountId, input\.accountId\), isNull\(sessions\.destroyedAt\)\)\);\s*if \(\(countRow\?\.count \?\? 0\) >= limit\) return null;/,
     );
   });
 
@@ -111,16 +111,16 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
 
   it('findSession: account-scoped via and(eq(id), eq(accountId)) + limit 1; findSessionUnscoped: id-only no account scope (admin force-actions path)', () => {
     expect(body).toMatch(
-      /async findSession\(id: string, accountId: string\): Promise<SessionRecord \| null> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(sessions\)\s*\n?\s*\.where\(and\(eq\(sessions\.id, id\), eq\(sessions\.accountId, accountId\)\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*return row \? toSessionRecord\(row\) : null;\s*\n?\s*\}/,
+      /async findSession\(id: string, accountId: string\): Promise<SessionRecord \| null> \{\s*const \[row\] = await this\.database\.db\s*\.select\(\)\s*\.from\(sessions\)\s*\.where\(and\(eq\(sessions\.id, id\), eq\(sessions\.accountId, accountId\)\)\)\s*\.limit\(1\);\s*return row \? toSessionRecord\(row\) : null;\s*\}/,
     );
     expect(body).toMatch(
-      /async findSessionUnscoped\(id: string\): Promise<SessionRecord \| null> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(sessions\)\s*\n?\s*\.where\(eq\(sessions\.id, id\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*return row \? toSessionRecord\(row\) : null;\s*\n?\s*\}/,
+      /async findSessionUnscoped\(id: string\): Promise<SessionRecord \| null> \{\s*const \[row\] = await this\.database\.db\s*\.select\(\)\s*\.from\(sessions\)\s*\.where\(eq\(sessions\.id, id\)\)\s*\.limit\(1\);\s*return row \? toSessionRecord\(row\) : null;\s*\}/,
     );
   });
 
   it('destroySessionSerialized: projects before transaction/driver; scoped SELECT FOR UPDATE elects one terminal callback winner; success update + projected event share the transaction', () => {
     expect(body).toMatch(
-      /async destroySessionSerialized\(\s*\n?\s*input: SerializedSessionDestroyInput,\s*\n?\s*destroyDriverSession: \(session: SessionRecord\) => Promise<void>,\s*\n?\s*\): Promise<SerializedSessionDestroyResult> \{/,
+      /async destroySessionSerialized\(\s*input: SerializedSessionDestroyInput,\s*destroyDriverSession: \(session: SessionRecord\) => Promise<void>,\s*\): Promise<SerializedSessionDestroyResult> \{/,
     );
     const projectionIdx = body.indexOf('const event = projectSessionEventMetadata(input.event);');
     const transactionIdx = body.indexOf(
@@ -137,7 +137,7 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
       /tx\.select\(\)\.from\(sessions\)\.where\(scope\)\.limit\(1\)\.for\('update'\)/,
     );
     expect(body).toMatch(
-      /if \(current\.status === 'destroyed' \|\| current\.status === 'errored'\) \{\s*\n?\s*return \{ kind: 'already_terminal', session: current \};/,
+      /if \(current\.status === 'destroyed' \|\| current\.status === 'errored'\) \{\s*return \{ kind: 'already_terminal', session: current \};/,
     );
     expect(body).toMatch(/await destroyDriverSession\(current\);/);
     expect(body).toMatch(
@@ -154,13 +154,13 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
 
   it('updateSessionStatus: always-bump updatedAt:new Date(); selective spread of lastStateAt + destroyedAt when present', () => {
     expect(body).toMatch(
-      /\.set\(\{\s*\n?\s*status,\s*\n?\s*updatedAt: new Date\(\),\s*\n?\s*\.\.\.\(extra\?\.lastStateAt \? \{ lastStateAt: extra\.lastStateAt \} : \{\}\),\s*\n?\s*\.\.\.\(extra\?\.destroyedAt \? \{ destroyedAt: extra\.destroyedAt \} : \{\}\),\s*\n?\s*\}\)/,
+      /\.set\(\{\s*status,\s*updatedAt: new Date\(\),\s*\.\.\.\(extra\?\.lastStateAt \? \{ lastStateAt: extra\.lastStateAt \} : \{\}\),\s*\.\.\.\(extra\?\.destroyedAt \? \{ destroyedAt: extra\.destroyedAt \} : \{\}\),\s*\}\)/,
     );
   });
 
   it('countActiveSessions: count(*)::int where and(accountId, isNull(destroyedAt)) — concurrent-cap source of truth', () => {
     expect(body).toMatch(
-      /async countActiveSessions\(accountId: string\): Promise<number> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\{ count: sql<number>`count\(\*\)::int` \}\)\s*\n?\s*\.from\(sessions\)\s*\n?\s*\.where\(and\(eq\(sessions\.accountId, accountId\), isNull\(sessions\.destroyedAt\)\)\);\s*\n?\s*return row\?\.count \?\? 0;\s*\n?\s*\}/,
+      /async countActiveSessions\(accountId: string\): Promise<number> \{\s*const \[row\] = await this\.database\.db\s*\.select\(\{ count: sql<number>`count\(\*\)::int` \}\)\s*\.from\(sessions\)\s*\.where\(and\(eq\(sessions\.accountId, accountId\), isNull\(sessions\.destroyedAt\)\)\);\s*return row\?\.count \?\? 0;\s*\}/,
     );
   });
 
@@ -175,7 +175,7 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
     expect(body).toMatch(/const out = emptySessionStatusCounts\(\);/);
     expect(body).toMatch(/for \(const row of rows\) out\[row\.status\] = row\.count;/);
     expect(body).toMatch(
-      /function emptySessionStatusCounts\(\): Record<SessionRecord\['status'\], number> \{\s*\n?\s*const out = \{\} as Record<SessionRecord\['status'\], number>;\s*\n?\s*for \(const status of SessionStatusSchema\.options\) out\[status\] = 0;\s*\n?\s*return out;\s*\n?\s*\}/,
+      /function emptySessionStatusCounts\(\): Record<SessionRecord\['status'\], number> \{\s*const out = \{\} as Record<SessionRecord\['status'\], number>;\s*for \(const status of SessionStatusSchema\.options\) out\[status\] = 0;\s*return out;\s*\}/,
     );
   });
 
@@ -210,7 +210,7 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
 
   it('toSessionRecord: 15-field SessionRecord (id + accountId + apiKeyId + driverSessionId + status + archetype + purpose + label + metadata null-coalesce + egressCapabilities null-coalesce (migration 0045) + egressCapabilityReport null-coalesce (Arc 5 EGRESS report) + 4 timestamps incl. destroyedAt)', () => {
     expect(body).toMatch(
-      /function toSessionRecord\(r: typeof sessions\.\$inferSelect\): SessionRecord \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*accountId: r\.accountId,\s*\n?\s*apiKeyId: r\.apiKeyId,\s*\n?\s*driverSessionId: r\.driverSessionId,\s*\n?\s*status: r\.status,\s*\n?\s*archetype: r\.archetype,\s*\n?\s*purpose: r\.purpose,\s*\n?\s*label: r\.label,\s*\n?\s*metadata: r\.metadata \?\? null,\s*\n?\s*egressCapabilities: r\.egressCapabilities \?\? null,\s*\n?\s*egressCapabilityReport: r\.egressCapabilityReport \?\? null,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*updatedAt: r\.updatedAt,\s*\n?\s*lastStateAt: r\.lastStateAt,\s*\n?\s*destroyedAt: r\.destroyedAt,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function toSessionRecord\(r: typeof sessions\.\$inferSelect\): SessionRecord \{\s*return \{\s*id: r\.id,\s*accountId: r\.accountId,\s*apiKeyId: r\.apiKeyId,\s*driverSessionId: r\.driverSessionId,\s*status: r\.status,\s*archetype: r\.archetype,\s*purpose: r\.purpose,\s*label: r\.label,\s*metadata: r\.metadata \?\? null,\s*egressCapabilities: r\.egressCapabilities \?\? null,\s*egressCapabilityReport: r\.egressCapabilityReport \?\? null,\s*createdAt: r\.createdAt,\s*updatedAt: r\.updatedAt,\s*lastStateAt: r\.lastStateAt,\s*destroyedAt: r\.destroyedAt,\s*\};\s*\}/,
     );
   });
 

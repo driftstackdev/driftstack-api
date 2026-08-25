@@ -80,8 +80,8 @@ describe('Arc 6 docs.byok-anthropic content parity', () => {
   });
 
   it('privacy section pins secret filtering plus the fixed no-inference, no-body server probe', () => {
-    expect(body).toMatch(/shared secret-redaction\s*\n?\s*filter/);
-    expect(body).toMatch(/fixed\s*\n?\s*Anthropic model-list endpoint/);
-    expect(body).toMatch(/does not run inference, read or proxy\s*\n?\s*the response body/);
+    expect(body).toMatch(/shared secret-redaction\s*filter/);
+    expect(body).toMatch(/fixed\s*Anthropic model-list endpoint/);
+    expect(body).toMatch(/does not run inference, read or proxy\s*the response body/);
   });
 });

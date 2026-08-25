@@ -39,40 +39,40 @@ describe('W472.C apps/gui-client/src/lib/use-webhooks-list.ts content parity', (
   it("V-534.S framing pinned: 'V-534.S — useWebhooksList hook.' + 'Wraps GET /v1/webhooks (V-225 listWithCounts). The endpoint returns the customer's webhook endpoints + per-endpoint delivery counts; this hook surfaces it through the same state-machine pattern as useSessionsList (V-534.O) and useAccountCost (V-534.H).'", () => {
     expect(body).toMatch(/\/\/ V-534\.S — useWebhooksList hook\./);
     expect(body).toMatch(
-      /\/\/ Wraps GET \/v1\/webhooks \(V-225 listWithCounts\)\. The endpoint\s*\n?\s*\/\/ returns the customer's webhook endpoints \+ per-endpoint delivery\s*\n?\s*\/\/ counts; this hook surfaces it through the same state-machine\s*\n?\s*\/\/ pattern as useSessionsList \(V-534\.O\) and useAccountCost \(V-534\.H\)\./,
+      /\/\/ Wraps GET \/v1\/webhooks \(V-225 listWithCounts\)\. The endpoint\s*\/\/ returns the customer's webhook endpoints \+ per-endpoint delivery\s*\/\/ counts; this hook surfaces it through the same state-machine\s*\/\/ pattern as useSessionsList \(V-534\.O\) and useAccountCost \(V-534\.H\)\./,
     );
   });
 
   it('WebhookCounts 3-field (delivered + failed + dlq all numbers — DLQ surfaced as distinct from failed for the V-225 listWithCounts contract)', () => {
     expect(body).toMatch(
-      /export interface WebhookCounts \{\s*\n?\s*delivered: number;\s*\n?\s*failed: number;\s*\n?\s*dlq: number;\s*\n?\s*\}/,
+      /export interface WebhookCounts \{\s*delivered: number;\s*failed: number;\s*dlq: number;\s*\}/,
     );
   });
 
   it('WebhookListItem 8-field: id + url + events string[] + description nullable + active boolean + disabledAt nullable + createdAt + counts: WebhookCounts; WebhooksListResponse: { webhooks: WebhookListItem[] }', () => {
     expect(body).toMatch(
-      /export interface WebhookListItem \{\s*\n?\s*id: string;\s*\n?\s*url: string;\s*\n?\s*events: string\[\];\s*\n?\s*description: string \| null;\s*\n?\s*active: boolean;\s*\n?\s*disabledAt: string \| null;\s*\n?\s*createdAt: string;\s*\n?\s*counts: WebhookCounts;\s*\n?\s*\}/,
+      /export interface WebhookListItem \{\s*id: string;\s*url: string;\s*events: string\[\];\s*description: string \| null;\s*active: boolean;\s*disabledAt: string \| null;\s*createdAt: string;\s*counts: WebhookCounts;\s*\}/,
     );
     expect(body).toMatch(
-      /export interface WebhooksListResponse \{\s*\n?\s*webhooks: WebhookListItem\[\];\s*\n?\s*\}/,
+      /export interface WebhooksListResponse \{\s*webhooks: WebhookListItem\[\];\s*\}/,
     );
   });
 
   it("UseWebhooksListOpts: manual? 'Disable auto-fetch on mount. Default false.' + UseWebhooksListResult { state + refetch }", () => {
     expect(body).toMatch(
-      /export interface UseWebhooksListOpts \{\s*\n?\s*\/\*\* Disable auto-fetch on mount\. Default false\. \*\/\s*\n?\s*manual\?: boolean;\s*\n?\s*\}/,
+      /export interface UseWebhooksListOpts \{\s*\/\*\* Disable auto-fetch on mount\. Default false\. \*\/\s*manual\?: boolean;\s*\}/,
     );
     expect(body).toMatch(
-      /export interface UseWebhooksListResult \{\s*\n?\s*state: WebhooksListState;\s*\n?\s*refetch: \(\) => Promise<void>;\s*\n?\s*\}/,
+      /export interface UseWebhooksListResult \{\s*state: WebhooksListState;\s*refetch: \(\) => Promise<void>;\s*\}/,
     );
   });
 
   it("Same V-534 polling state-machine: manual?-aware initial state + no-apiKey 'No API key configured.' + trailing-slash strip + URL `/v1/webhooks` exact (no params) + readApiErrorMessage + instance-of-Error catch + useEffect manual gate; useCallback deps [settings.apiKey, settings.baseUrl]", () => {
     expect(body).toMatch(
-      /const \[state, setState\] = useState<WebhooksListState>\(\s*\n?\s*opts\.manual === true \? \{ kind: 'idle' \} : \{ kind: 'loading' \},\s*\n?\s*\);/,
+      /const \[state, setState\] = useState<WebhooksListState>\(\s*opts\.manual === true \? \{ kind: 'idle' \} : \{ kind: 'loading' \},\s*\);/,
     );
     expect(body).toMatch(
-      /const res = await fetchWithDeadline\(`\$\{baseUrl\}\/v1\/webhooks`, \{\s*\n?\s*method: 'GET',\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',\s*\n?\s*\},\s*\n?\s*\}\);/,
+      /const res = await fetchWithDeadline\(`\$\{baseUrl\}\/v1\/webhooks`, \{\s*method: 'GET',\s*signal: controller\.signal,\s*headers: \{\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*accept: 'application\/json',\s*\},\s*\}\);/,
     );
     expect(body).toMatch(
       /if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'ready', data: body \}\);/,
@@ -80,7 +80,7 @@ describe('W472.C apps/gui-client/src/lib/use-webhooks-list.ts content parity', (
     expect(body).toMatch(/requestRef\.current\?\.abort\(\);/);
     expect(body).toMatch(/\}, \[settings\.apiKey, settings\.baseUrl\]\);/);
     expect(body).toMatch(
-      /useEffect\(\(\) => \{\s*\n?\s*if \(opts\.manual === true\) return;\s*\n?\s*void fetcher\(\);\s*\n?\s*\}, \[fetcher, opts\.manual\]\);/,
+      /useEffect\(\(\) => \{\s*if \(opts\.manual === true\) return;\s*void fetcher\(\);\s*\}, \[fetcher, opts\.manual\]\);/,
     );
   });
 

@@ -42,7 +42,7 @@ describe('W551.A /docs/adr/ADR-005-observability-sentry-first.md content parity'
     // second metrics destination shipped.
     expect(body).toMatch(/\*\*Status:\*\* Proposed —/);
     expect(body, 'the metrics-half retraction is gone').toMatch(
-      /METRICS half is CONTRADICTED BY THE SHIPPED\s*\n?\s*SYSTEM/,
+      /METRICS half is CONTRADICTED BY THE SHIPPED\s*SYSTEM/,
     );
     expect(body, 'the page no longer says the log half is unaffected').toMatch(
       /The structured-LOG half is unaffected/,

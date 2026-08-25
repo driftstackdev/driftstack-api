@@ -99,7 +99,7 @@ describe('W815 cross-SDK retry policy parity', () => {
   it("CRITICAL all 3 retry implementations use 'full jitter' (random uniform in [0, computed delay]). TS: 'Random jitter in [0, computed delay] (full jitter)'. Python: 'random uniform between 0 and the next exponential value'. Go: 'uniformly random in [0, InitialDelay * 2^attempt]'. Full jitter is the AWS Architecture Blog standard — drift to fixed jitter would re-synchronize concurrent retries.", () => {
     expect(read(TS)).toMatch(/\/\/\s+- Random jitter in \[0, computed delay\] \(full jitter\)/);
     expect(read(PY)).toMatch(
-      /exponential-backoff with full jitter\s*\n?\s*\(random uniform between 0\s*\n?\s*and the next exponential value\)\./,
+      /exponential-backoff with full jitter\s*\(random uniform between 0\s*and the next exponential value\)\./,
     );
     expect(read(GO)).toMatch(/sleep is uniformly random in \[0, InitialDelay \* 2\^attempt\]/);
   });

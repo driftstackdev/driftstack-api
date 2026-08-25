@@ -43,25 +43,25 @@ describe('W392.A apps/server/src/lib/stripe-api.ts content parity', () => {
 
   it('Reason 1: same reasoning as V-080 hand-rolled signature verifier (small touched surface)', () => {
     expect(body).toMatch(
-      /Same reasoning as V-080's hand-rolled signature verification:\s*\n?\s*\/\/\s*we touch a small surface area of Stripe's API \(Customers,\s*\n?\s*\/\/\s*Checkout Sessions, Billing Portal Sessions\)\. The official SDK\s*\n?\s*\/\/\s*is hundreds of types \+ dozens of resource-method paths we'll\s*\n?\s*\/\/\s*never call/,
+      /Same reasoning as V-080's hand-rolled signature verification:\s*\/\/\s*we touch a small surface area of Stripe's API \(Customers,\s*\/\/\s*Checkout Sessions, Billing Portal Sessions\)\. The official SDK\s*\/\/\s*is hundreds of types \+ dozens of resource-method paths we'll\s*\/\/\s*never call/,
     );
   });
 
   it('Reason 2: supply-chain risk framing pinned (slim dependency graph)', () => {
     expect(body).toMatch(
-      /Keeps the dependency graph slim\. Every additional npm package\s*\n?\s*\/\/\s*adds supply-chain risk \(the Stripe SDK is well-maintained, but\s*\n?\s*\/\/\s*its transitive dep tree is non-trivial\)/,
+      /Keeps the dependency graph slim\. Every additional npm package\s*\/\/\s*adds supply-chain risk \(the Stripe SDK is well-maintained, but\s*\/\/\s*its transitive dep tree is non-trivial\)/,
     );
   });
 
   it('Reason 3: test-friendly BillingProvider interface (in-memory test impl)', () => {
     expect(body).toMatch(
-      /The integration shape stays test-friendly: BillingProvider is\s*\n?\s*\/\/\s*an interface with an in-memory test implementation; the real\s*\n?\s*\/\/\s*Stripe-backed implementation is one of many possible providers/,
+      /The integration shape stays test-friendly: BillingProvider is\s*\/\/\s*an interface with an in-memory test implementation; the real\s*\/\/\s*Stripe-backed implementation is one of many possible providers/,
     );
   });
 
   it('Stripe wire framing: form-urlencoded + BasicAuth + JSON response + 4xx/5xx error envelope', () => {
     expect(body).toMatch(
-      /Stripe's API uses application\/x-www-form-urlencoded for request\s*\n?\s*\/\/\s*bodies, BasicAuth for the secret key, and returns JSON\. Errors come\s*\n?\s*\/\/\s*back as `\{ error: \{ type, message, code, \.\.\. \} \}` with a 4xx\/5xx/,
+      /Stripe's API uses application\/x-www-form-urlencoded for request\s*\/\/\s*bodies, BasicAuth for the secret key, and returns JSON\. Errors come\s*\/\/\s*back as `\{ error: \{ type, message, code, \.\.\. \} \}` with a 4xx\/5xx/,
     );
   });
 
@@ -95,7 +95,7 @@ describe('W392.A apps/server/src/lib/stripe-api.ts content parity', () => {
     expect(body).toMatch(/export interface StripeApiError extends Error \{/);
     expect(body).toMatch(/status: number;/);
     expect(body).toMatch(
-      /stripeError: \{\s*\n?\s*type: string;\s*\n?\s*code\?: string;\s*\n?\s*message\?: string;\s*\n?\s*param\?: string;\s*\n?\s*decline_code\?: string;\s*\n?\s*\[key: string\]: unknown;\s*\n?\s*\};/,
+      /stripeError: \{\s*type: string;\s*code\?: string;\s*message\?: string;\s*param\?: string;\s*decline_code\?: string;\s*\[key: string\]: unknown;\s*\};/,
     );
   });
 
@@ -112,14 +112,14 @@ describe('W392.A apps/server/src/lib/stripe-api.ts content parity', () => {
     // The optional Idempotency-Key is forwarded to post() (3rd arg) — the
     // safe-retry / no-duplicate-customer seam.
     expect(body).toMatch(
-      /this\.post<\{ id: string; email: string \}>\(\s*\n?\s*'\/v1\/customers',\s*\n?\s*body,\s*\n?\s*args\.idempotencyKey,\s*\n?\s*\)/,
+      /this\.post<\{ id: string; email: string \}>\(\s*'\/v1\/customers',\s*body,\s*args\.idempotencyKey,\s*\)/,
     );
   });
 
   it('createSubscriptionCheckoutSession: mode=subscription + ADR-002 automatic tax with Checkout-collected customer address + client_reference_id', () => {
     expect(body).toMatch(/mode: 'subscription',/);
     expect(body).toMatch(
-      /BTW reverse-charge handling \(per ADR-002\): Stripe Tax must be\s*\n?\s*\/\/\s*enabled for the account\. Automatic tax also requires a customer\s*\n?\s*\/\/\s*tax location; newly-created Driftstack customers have no stored\s*\n?\s*\/\/\s*address, so Checkout must collect and save the billing address\.\s*\n?\s*\/\/\s*Omitting customer_update\[address\] makes Stripe reject the session\s*\n?\s*\/\/\s*before the hosted page can open/,
+      /BTW reverse-charge handling \(per ADR-002\): Stripe Tax must be\s*\/\/\s*enabled for the account\. Automatic tax also requires a customer\s*\/\/\s*tax location; newly-created Driftstack customers have no stored\s*\/\/\s*address, so Checkout must collect and save the billing address\.\s*\/\/\s*Omitting customer_update\[address\] makes Stripe reject the session\s*\/\/\s*before the hosted page can open/,
     );
     expect(body).toMatch(/'automatic_tax\[enabled\]': 'true',/);
     expect(body).toMatch(/'customer_update\[address\]': 'auto',/);
@@ -131,7 +131,7 @@ describe('W392.A apps/server/src/lib/stripe-api.ts content parity', () => {
 
   it('createSubscriptionCheckoutSession: clientReferenceId correlation framing (surfaced in checkout.session.completed webhook)', () => {
     expect(body).toMatch(
-      /Create a Checkout Session in `subscription` mode for a recurring price\.\s*\n?\s*\*\s*`clientReferenceId` is the local account UUID — surfaced back to us in\s*\n?\s*\*\s*the `checkout\.session\.completed` webhook event for correlation/,
+      /Create a Checkout Session in `subscription` mode for a recurring price\.\s*\*\s*`clientReferenceId` is the local account UUID — surfaced back to us in\s*\*\s*the `checkout\.session\.completed` webhook event for correlation/,
     );
   });
 
@@ -143,7 +143,7 @@ describe('W392.A apps/server/src/lib/stripe-api.ts content parity', () => {
 
   it('createBillingPortalSession: customer + return_url → /v1/billing_portal/sessions', () => {
     expect(body).toMatch(
-      /async createBillingPortalSession\(args: \{\s*\n?\s*customerId: string;\s*\n?\s*returnUrl: string;\s*\n?\s*\}\): Promise<\{ id: string; url: string \}>/,
+      /async createBillingPortalSession\(args: \{\s*customerId: string;\s*returnUrl: string;\s*\}\): Promise<\{ id: string; url: string \}>/,
     );
     expect(body).toMatch(
       /return this\.post<\{ id: string; url: string \}>\('\/v1\/billing_portal\/sessions', body\);/,
@@ -159,7 +159,7 @@ describe('W392.A apps/server/src/lib/stripe-api.ts content parity', () => {
     expect(body).toMatch(/const timer = setTimeout\(\(\) => ac\.abort\(\), timeoutMs\);/);
     expect(body).toMatch(/'Stripe-Version': this\.config\.apiVersion \?\? DEFAULT_API_VERSION,/);
     expect(body).toMatch(/'Content-Type': 'application\/x-www-form-urlencoded',/);
-    expect(body).toMatch(/body: formBody,\s*\n?\s*redirect: 'error',\s*\n?\s*signal: ac\.signal,/);
+    expect(body).toMatch(/body: formBody,\s*redirect: 'error',\s*signal: ac\.signal,/);
     // Optional Idempotency-Key header — only sent when the caller supplies a key.
     expect(body).toMatch(
       /\.\.\.\(idempotencyKey !== undefined \? \{ 'Idempotency-Key': idempotencyKey \} : \{\}\),/,
@@ -175,7 +175,7 @@ describe('W392.A apps/server/src/lib/stripe-api.ts content parity', () => {
     expect(body).toMatch(/const stripeError = parseStripeError\(parsed\);/);
     expect(body).toMatch(/err\.name = 'StripeApiError';/);
     expect(body).toMatch(
-      /this\.config\.logger\.warn\(\s*\n?\s*\{\s*\n?\s*component: 'stripe-api',\s*\n?\s*path,\s*\n?\s*status: res\.status,\s*\n?\s*stripeErrorType: stripeError\.type,\s*\n?\s*stripeErrorCode: stripeError\.code,\s*\n?\s*\},\s*\n?\s*'Stripe API error',\s*\n?\s*\);/,
+      /this\.config\.logger\.warn\(\s*\{\s*component: 'stripe-api',\s*path,\s*status: res\.status,\s*stripeErrorType: stripeError\.type,\s*stripeErrorCode: stripeError\.code,\s*\},\s*'Stripe API error',\s*\);/,
     );
   });
 

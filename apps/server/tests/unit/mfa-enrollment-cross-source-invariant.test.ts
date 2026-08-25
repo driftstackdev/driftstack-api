@@ -106,7 +106,7 @@ describe('W887 V-353b MFA enrollment cross-source invariant', () => {
       /export type CompleteMfaEnrollmentResponse = z\.infer<typeof CompleteMfaEnrollmentResponseSchema>;/,
     );
     expect(p).toMatch(
-      /export type RegenerateMfaRecoveryCodesResponse = z\.infer<\s*\n?\s*typeof RegenerateMfaRecoveryCodesResponseSchema\s*\n?\s*>;/,
+      /export type RegenerateMfaRecoveryCodesResponse = z\.infer<\s*typeof RegenerateMfaRecoveryCodesResponseSchema\s*>;/,
     );
   });
 

@@ -105,7 +105,7 @@ describe('W719 sdk-python-crypto-orders marketing-doc parity', () => {
     expect(doc).toMatch(/<code>failed<\/code>/);
     expect(doc).toMatch(/<code>partial<\/code>/);
     expect(doc).toMatch(/<code>cancelled<\/code>/);
-    expect(doc).toMatch(/Unknown values\s*\n?\s*return a 400/);
+    expect(doc).toMatch(/Unknown values\s*return a 400/);
   });
 
   it('CRITICAL limit-clamp doc claim — 1..=100. Drift to a different bound would mismatch the server.', () => {
@@ -116,9 +116,9 @@ describe('W719 sdk-python-crypto-orders marketing-doc parity', () => {
   it('CRITICAL "prefer iterate()" pagination framing pinned. The recommended-iterate-over-list-with-cursor pattern guides customers to the helper that handles cursor handoff internally. Drift would let customers stumble on `iterate(cursor=...)` (which is wrong) or hand-roll the loop.', () => {
     const doc = read(DOC);
     expect(doc).toMatch(/Pagination — prefer <code>iterate\(\)<\/code>/);
-    expect(doc).toMatch(/Cursor handoff\s*\n?\s*is managed internally/);
+    expect(doc).toMatch(/Cursor handoff\s*is managed internally/);
     expect(doc).toMatch(
-      /<strong>do not<\/strong> pass\s*\n?\s*<code>cursor=<\/code> to <code>iterate\(\)<\/code>/,
+      /<strong>do not<\/strong> pass\s*<code>cursor=<\/code> to <code>iterate\(\)<\/code>/,
     );
   });
 
@@ -127,7 +127,7 @@ describe('W719 sdk-python-crypto-orders marketing-doc parity', () => {
     expect(doc).toMatch(/Every method on <code>client\.crypto_orders<\/code> mirrors onto/);
     expect(doc).toMatch(/<code>async def<\/code>/);
     expect(doc).toMatch(
-      /<code>iterate\(\)<\/code> returns an\s*\n?\s*<code>AsyncIterator\[dict\]<\/code>/,
+      /<code>iterate\(\)<\/code> returns an\s*<code>AsyncIterator\[dict\]<\/code>/,
     );
     expect(doc).toMatch(/<code>async for<\/code>/);
   });
@@ -209,7 +209,7 @@ describe('W719 sdk-python-crypto-orders marketing-doc parity', () => {
   it("CRITICAL explicit-cursor pattern uses `page.get('next_cursor')` (not direct attribute access). Drift to direct attribute access would error on dict-returning SDK (Python SDK returns dict[str, Any], NOT pydantic model).", () => {
     const doc = read(DOC);
     expect(doc).toMatch(/cursor = page\.get\("next_cursor"\)/);
-    expect(doc).toMatch(/if cursor is None:\s*\n?\s*break/);
+    expect(doc).toMatch(/if cursor is None:\s*break/);
   });
 
   it('Doc-parity 5-invariant cluster — W187 anchor + 7-verb roster + 6-status closed enum + sync+async parity + idempotency_key/Idempotency-Key wire mapping + crypto.order.paid/failed-now-subscribable framing + non-refundable framing.', () => {

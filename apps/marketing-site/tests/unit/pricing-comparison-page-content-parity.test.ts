@@ -81,11 +81,9 @@ describe('W375.B marketing-site /pricing/comparison page content parity', () => 
   });
 
   it('fmtAiAgent maps 3 LlmBilling values + "Not on this tier" fallback', () => {
-    expect(body).toMatch(/case 'byok_only':\s*\n?\s*return 'BYOK only';/);
-    expect(body).toMatch(/case 'byok_or_bundled':\s*\n?\s*return 'BYOK or bundled';/);
-    expect(body).toMatch(
-      /case 'byok_or_bundled_custom':\s*\n?\s*return 'BYOK or bundled \(custom\)';/,
-    );
+    expect(body).toMatch(/case 'byok_only':\s*return 'BYOK only';/);
+    expect(body).toMatch(/case 'byok_or_bundled':\s*return 'BYOK or bundled';/);
+    expect(body).toMatch(/case 'byok_or_bundled_custom':\s*return 'BYOK or bundled \(custom\)';/);
     expect(body).toMatch(/if \(!aiAgent\) return 'Not on this tier';/);
   });
 

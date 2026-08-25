@@ -44,26 +44,26 @@ describe('W401.C apps/server/src/services/profile-snapshots.ts content parity', 
 
   it('V-312 framing + Tier-2 verdict 2026-05-09 + pg_dump / commit-SHA model pinned', () => {
     expect(body).toMatch(
-      /V-312 — profile snapshots service\. Immutable point-in-time copies\s*\n?\s*\/\/\s*of profile metadata \+ state\. Per founder Tier-2 verdict 2026-05-09:\s*\n?\s*\/\/\s*pg_dump \/ GitHub-commit-SHA model — parent profile keeps evolving;\s*\n?\s*\/\/\s*the snapshot is frozen\./,
+      /V-312 — profile snapshots service\. Immutable point-in-time copies\s*\/\/\s*of profile metadata \+ state\. Per founder Tier-2 verdict 2026-05-09:\s*\/\/\s*pg_dump \/ GitHub-commit-SHA model — parent profile keeps evolving;\s*\/\/\s*the snapshot is frozen\./,
     );
   });
 
   it('5-lifecycle-method framing pinned: capture / list / get / restore / delete (only mutation)', () => {
     expect(body).toMatch(/Lifecycle:/);
     expect(body).toMatch(
-      /- capture: read source profile \(404 if missing or wrong-account\),\s*\n?\s*\/\/\s*insert snapshot row carrying parent's archetype \+ name \+ state\./,
+      /- capture: read source profile \(404 if missing or wrong-account\),\s*\/\/\s*insert snapshot row carrying parent's archetype \+ name \+ state\./,
     );
     expect(body).toMatch(/- list: per-profile or per-account\./);
     expect(body).toMatch(/- get: single by id \(account-scoped; 404 cross-account\)\./);
     expect(body).toMatch(
-      /- restore: create a NEW profile from the snapshot's captured\s*\n?\s*\/\/\s*archetype \+ a customer-supplied name\. Tier-cap shared with\s*\n?\s*\/\/\s*ProfilesService\.create \(TierLimitError 429 when exceeded/,
+      /- restore: create a NEW profile from the snapshot's captured\s*\/\/\s*archetype \+ a customer-supplied name\. Tier-cap shared with\s*\/\/\s*ProfilesService\.create \(TierLimitError 429 when exceeded/,
     );
     expect(body).toMatch(/- delete: hard-delete the snapshot row \(only mutation\)\./);
   });
 
   it('state_blob framing: v1 metadata-only; captures land empty {} for now; future driver integration populates without schema migration', () => {
     expect(body).toMatch(
-      /State-blob handling: v1 is metadata-only — browser state isn't\s*\n?\s*\/\/\s*surfaced through the customer API yet\. The state_blob jsonb column\s*\n?\s*\/\/\s*exists so a future driver integration can populate it without a\s*\n?\s*\/\/\s*schema migration\. Captures land empty \{\} for now\./,
+      /State-blob handling: v1 is metadata-only — browser state isn't\s*\/\/\s*surfaced through the customer API yet\. The state_blob jsonb column\s*\/\/\s*exists so a future driver integration can populate it without a\s*\/\/\s*schema migration\. Captures land empty \{\} for now\./,
     );
   });
 
@@ -89,34 +89,34 @@ describe('W401.C apps/server/src/services/profile-snapshots.ts content parity', 
       /findById\(args: \{ id: string; accountId: string \}\): Promise<ProfileSnapshotRecord \| null>;/,
     );
     expect(body).toMatch(
-      /\/\*\* Returns true if a row was deleted, false if not found \/ wrong account\. \*\/\s*\n?\s*delete\(args: \{ id: string; accountId: string \}\): Promise<boolean>;/,
+      /\/\*\* Returns true if a row was deleted, false if not found \/ wrong account\. \*\/\s*delete\(args: \{ id: string; accountId: string \}\): Promise<boolean>;/,
     );
   });
 
   it('capture: profilesRepo.findById account-scoped → NotFoundError if missing → insert snapshot with stateBlob={}', () => {
     expect(body).toMatch(
-      /async capture\(args: CaptureArgs\): Promise<ProfileSnapshotRecord> \{\s*\n?\s*const profile = await this\.profilesRepo\.findById\(\{\s*\n?\s*id: args\.profileId,\s*\n?\s*accountId: args\.accountId,\s*\n?\s*\}\);\s*\n?\s*if \(!profile\) throw new NotFoundError\('Profile not found\.'\);/,
+      /async capture\(args: CaptureArgs\): Promise<ProfileSnapshotRecord> \{\s*const profile = await this\.profilesRepo\.findById\(\{\s*id: args\.profileId,\s*accountId: args\.accountId,\s*\}\);\s*if \(!profile\) throw new NotFoundError\('Profile not found\.'\);/,
     );
     expect(body).toMatch(
-      /const row = await this\.snapshotsRepo\.insert\(\{[\s\S]+?accountId: args\.accountId,\s*\n?\s*parentProfileId: profile\.id,\s*\n?\s*label: args\.label,\s*\n?\s*description: args\.description \?\? null,\s*\n?\s*parentArchetype: profile\.archetype,\s*\n?\s*parentName: profile\.name,\s*\n?\s*stateBlob: \{\},/,
+      /const row = await this\.snapshotsRepo\.insert\(\{[\s\S]+?accountId: args\.accountId,\s*parentProfileId: profile\.id,\s*label: args\.label,\s*description: args\.description \?\? null,\s*parentArchetype: profile\.archetype,\s*parentName: profile\.name,\s*stateBlob: \{\},/,
     );
   });
 
   it('restore: tier-cap shared with ProfilesService.create via profileLimitFor — TierLimitError when current >= limit', () => {
     expect(body).toMatch(
-      /\/\/ Tier cap shared with ProfilesService\.create — same enforcement\.\s*\n?\s*const limit = profileLimitFor\(args\.tier\);/,
+      /\/\/ Tier cap shared with ProfilesService\.create — same enforcement\.\s*const limit = profileLimitFor\(args\.tier\);/,
     );
     expect(body).toMatch(
-      /if \(current >= limit\) \{\s*\n?\s*throw new TierLimitError\(\s*\n?\s*`Tier "\$\{args\.tier\}" permits at most \$\{limit\.toString\(\)\} profiles; you have \$\{current\.toString\(\)\}\.`,\s*\n?\s*\{ limit, current, resource: 'profile', tier: args\.tier \},\s*\n?\s*\);/,
+      /if \(current >= limit\) \{\s*throw new TierLimitError\(\s*`Tier "\$\{args\.tier\}" permits at most \$\{limit\.toString\(\)\} profiles; you have \$\{current\.toString\(\)\}\.`,\s*\{ limit, current, resource: 'profile', tier: args\.tier \},\s*\);/,
     );
   });
 
   it('restore: name-uniqueness ConflictError (same posture as create)', () => {
     expect(body).toMatch(
-      /\/\/ Name uniqueness check — restore creates a fresh row, same\s*\n?\s*\/\/\s*posture as create\./,
+      /\/\/ Name uniqueness check — restore creates a fresh row, same\s*\/\/\s*posture as create\./,
     );
     expect(body).toMatch(
-      /if \(conflict !== null\) \{\s*\n?\s*throw new ConflictError\(`Profile name "\$\{args\.name\}" already exists in this account\.`, \{\s*\n?\s*resource: 'profile',\s*\n?\s*field: 'name',\s*\n?\s*\}\);/,
+      /if \(conflict !== null\) \{\s*throw new ConflictError\(`Profile name "\$\{args\.name\}" already exists in this account\.`, \{\s*resource: 'profile',\s*field: 'name',\s*\}\);/,
     );
   });
 
@@ -132,12 +132,12 @@ describe('W401.C apps/server/src/services/profile-snapshots.ts content parity', 
       /const identity = mintProfileRowIdentity\(this\.profileMasterKey, args\.accountId\);/,
     );
     expect(body).toMatch(
-      /result = await this\.profilesRepo\.insertWithLimit\(\s*\n?\s*\{\s*\n?\s*id: identity\.id,\s*\n?\s*accountId: args\.accountId,\s*\n?\s*name: args\.name,\s*\n?\s*archetype: snapshot\.parentArchetype,\s*\n?\s*description: snapshot\.description,\s*\n?\s*wrappedDek: identity\.wrappedDek,\s*\n?\s*\},\s*\n?\s*limit,\s*\n?\s*\);/,
+      /result = await this\.profilesRepo\.insertWithLimit\(\s*\{\s*id: identity\.id,\s*accountId: args\.accountId,\s*name: args\.name,\s*archetype: snapshot\.parentArchetype,\s*description: snapshot\.description,\s*wrappedDek: identity\.wrappedDek,\s*\},\s*limit,\s*\);/,
     );
     expect(body).toMatch(/if \('limitExceeded' in result\) \{/);
     expect(body).toMatch(/const restored = result\.record;/);
     expect(body).toMatch(
-      /await this\.emitAuditBestEffort\(args\.accountId, 'profile\.created', `profile_\$\{restored\.id\}`, \{\s*\n?\s*name: restored\.name,\s*\n?\s*archetype: restored\.archetype,\s*\n?\s*restored_from_snapshot: `psnap_\$\{snapshot\.id\}`,\s*\n?\s*\}\);/,
+      /await this\.emitAuditBestEffort\(args\.accountId, 'profile\.created', `profile_\$\{restored\.id\}`, \{\s*name: restored\.name,\s*archetype: restored\.archetype,\s*restored_from_snapshot: `psnap_\$\{snapshot\.id\}`,\s*\}\);/,
     );
   });
 
@@ -147,13 +147,13 @@ describe('W401.C apps/server/src/services/profile-snapshots.ts content parity', 
 
   it('delete: NotFoundError when no row deleted (account-scoped 404)', () => {
     expect(body).toMatch(
-      /async delete\(args: \{ id: string; accountId: string \}\): Promise<void> \{\s*\n?\s*const ok = await this\.snapshotsRepo\.delete\(args\);\s*\n?\s*if \(!ok\) throw new NotFoundError\('Snapshot not found\.'\);\s*\n?\s*\}/,
+      /async delete\(args: \{ id: string; accountId: string \}\): Promise<void> \{\s*const ok = await this\.snapshotsRepo\.delete\(args\);\s*if \(!ok\) throw new NotFoundError\('Snapshot not found\.'\);\s*\}/,
     );
   });
 
   it('emitAuditBestEffort: try/catch swallows audit failure (matches account-audit fire-and-forget posture)', () => {
     expect(body).toMatch(
-      /private async emitAuditBestEffort\(\s*\n?\s*accountId: string,\s*\n?\s*action: 'profile\.created' \| 'profile\.deleted',\s*\n?\s*targetResourceId: string,\s*\n?\s*payload: Record<string, unknown>,\s*\n?\s*\): Promise<void> \{[\s\S]+?try \{[\s\S]+?await this\.accountAudit\.record\(\{[\s\S]+?\}\);[\s\S]+?\} catch \{\s*\n?\s*\/\* swallow \*\//,
+      /private async emitAuditBestEffort\(\s*accountId: string,\s*action: 'profile\.created' \| 'profile\.deleted',\s*targetResourceId: string,\s*payload: Record<string, unknown>,\s*\): Promise<void> \{[\s\S]+?try \{[\s\S]+?await this\.accountAudit\.record\(\{[\s\S]+?\}\);[\s\S]+?\} catch \{\s*\/\* swallow \*\//,
     );
   });
 

@@ -121,7 +121,7 @@ describe('W787 docs webhooks/ triplet content parity', () => {
     const p = read(EV);
 
     expect(p).toMatch(
-      /customer-facing reference for webhook events emitted by the\s*\n?\s*Driftstack control plane and the synthetic connectivity test event/,
+      /customer-facing reference for webhook events emitted by the\s*Driftstack control plane and the synthetic connectivity test event/,
     );
     expect(p).not.toMatch(/\[DECLARED\]|\[PLANNED\]|roadmap/i);
   });
@@ -249,7 +249,7 @@ describe('W787 docs webhooks/ triplet content parity', () => {
     const p = read(RPL);
 
     expect(p).toMatch(/1\. Your endpoint goes down at 10:00 — Driftstack retries each delivery/);
-    expect(p).toMatch(/~2 hours later the deliveries land in DLQ\s*\n?\s*\(`status: "dlq"`\)\./);
+    expect(p).toMatch(/~2 hours later the deliveries land in DLQ\s*\(`status: "dlq"`\)\./);
     expect(p).toMatch(/2\. You fix your endpoint at 13:00\./);
     expect(p).toMatch(
       /3\. List the DLQ deliveries:\s*\n?\s+`GET \/v1\/webhooks\/:webhookId\/deliveries\?status=dlq`/,

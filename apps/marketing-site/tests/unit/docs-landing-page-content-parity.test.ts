@@ -143,7 +143,7 @@ describe('W380.C marketing-site /docs.astro (docs landing) content parity', () =
 
   it('uses BaseLayout + Docs title + description', () => {
     expect(body).toMatch(/import BaseLayout from '\.\.\/layouts\/BaseLayout\.astro';/);
-    expect(body).toMatch(/<BaseLayout\s*\n?\s*title="Docs"/);
+    expect(body).toMatch(/<BaseLayout\s*title="Docs"/);
     expect(body).toMatch(
       /Driftstack documentation: desktop and code quickstarts, SDK guides for TypeScript \/ Python \/ Go/,
     );

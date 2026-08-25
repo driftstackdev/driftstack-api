@@ -173,10 +173,10 @@ describe('W915 V-202d ScheduledJobs dispatcher cross-source invariant', () => {
     // fence on the lock; the bounded credential-safe `message` is unchanged, which
     // is what this invariant is actually about.
     expect(p).toMatch(
-      /markFailed\(job\.id, \{\s*\n?\s*lastError: message,\s*\n?\s*at: now,\s*\n?\s*workerId: this\.workerId,\s*\n?\s*\}\)/,
+      /markFailed\(job\.id, \{\s*lastError: message,\s*at: now,\s*workerId: this\.workerId,\s*\}\)/,
     );
     expect(p).toMatch(
-      /markRetry\(job\.id, \{\s*\n?\s*lastError: message,\s*\n?\s*nextRunAt,\s*\n?\s*workerId: this\.workerId,\s*\n?\s*\}\)/,
+      /markRetry\(job\.id, \{\s*lastError: message,\s*nextRunAt,\s*workerId: this\.workerId,\s*\}\)/,
     );
   });
 

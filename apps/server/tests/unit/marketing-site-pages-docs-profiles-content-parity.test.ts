@@ -41,10 +41,10 @@ describe('W516.C apps/marketing-site/src/pages/docs/profiles.astro content parit
 
   it("V-691 + W216.A 3-source-file accuracy-pass framing pinned: 'profiles developer docs. Companion to /docs/sessions; covers the saved-profile lifecycle for customers running repeatable, identity-bound automations.' + W216.A accuracy pass pinned against publicProfile in routes/profiles.ts + ProfileSchema + CreateProfileRequestSchema + UpdateProfileRequestSchema in api-types/profiles.ts + PROFILES_PER_TIER in api-types/common.ts — pinned so the V-691 anchor + W216.A 3-source-of-truth commitment survives. Re-enabled by slice 184 after verifying both comments exist at profiles.astro:4-13", () => {
     expect(body).toMatch(
-      /\/\/ V-691 — profiles developer docs\. Companion to \/docs\/sessions;\s*\n?\s*\/\/ covers the saved-profile lifecycle for customers running\s*\n?\s*\/\/ repeatable, identity-bound automations\./,
+      /\/\/ V-691 — profiles developer docs\. Companion to \/docs\/sessions;\s*\/\/ covers the saved-profile lifecycle for customers running\s*\/\/ repeatable, identity-bound automations\./,
     );
     expect(body).toMatch(
-      /\/\/ W216\.A — accuracy pass: pinned against publicProfile in\s*\n?\s*\/\/ apps\/server\/src\/routes\/profiles\.ts, ProfileSchema \+\s*\n?\s*\/\/ CreateProfileRequestSchema \+ UpdateProfileRequestSchema in\s*\n?\s*\/\/ packages\/api-types\/src\/profiles\.ts, and PROFILES_PER_TIER in\s*\n?\s*\/\/ packages\/api-types\/src\/common\.ts\./,
+      /\/\/ W216\.A — accuracy pass: pinned against publicProfile in\s*\/\/ apps\/server\/src\/routes\/profiles\.ts, ProfileSchema \+\s*\/\/ CreateProfileRequestSchema \+ UpdateProfileRequestSchema in\s*\/\/ packages\/api-types\/src\/profiles\.ts, and PROFILES_PER_TIER in\s*\/\/ packages\/api-types\/src\/common\.ts\./,
     );
   });
 
@@ -60,16 +60,16 @@ describe('W516.C apps/marketing-site/src/pages/docs/profiles.astro content parit
 
   it("3-when-to-use framing pinned: 'Authenticated scraping.' (login carries over cookies + storage) + 'A/B-tested rendering.' (same variant per run) + 'Archetype pinning.' (lock UA/viewport/timezone/locale) + 'If your automation doesn't care about identity continuity, skip profiles and let sessions run with the account's default archetype.' — pinned so the 3-use-case + skip-profiles-if-stateless commitment survives", () => {
     expect(body).toMatch(
-      /<strong>Authenticated scraping\.<\/strong> The site requires\s*\n?\s*login; you want each session to carry over cookies \+ storage\s*\n?\s*without re-authenticating\./,
+      /<strong>Authenticated scraping\.<\/strong> The site requires\s*login; you want each session to carry over cookies \+ storage\s*without re-authenticating\./,
     );
     expect(body).toMatch(
-      /<strong>A\/B-tested rendering\.<\/strong> The site personalises\s*\n?\s*based on cookies; you want each run to see the same variant\./,
+      /<strong>A\/B-tested rendering\.<\/strong> The site personalises\s*based on cookies; you want each run to see the same variant\./,
     );
     expect(body).toMatch(
-      /<strong>Archetype pinning\.<\/strong> You want to lock the\s*\n?\s*browser fingerprint \(UA \/ viewport \/ timezone \/ locale\) to a\s*\n?\s*specific Driftstack-managed archetype slug across runs\./,
+      /<strong>Archetype pinning\.<\/strong> You want to lock the\s*browser fingerprint \(UA \/ viewport \/ timezone \/ locale\) to a\s*specific Driftstack-managed archetype slug across runs\./,
     );
     expect(body).toMatch(
-      /If your automation doesn't care about identity continuity, skip\s*\n?\s*profiles and let sessions run with the account's default\s*\n?\s*archetype\./,
+      /If your automation doesn't care about identity continuity, skip\s*profiles and let sessions run with the account's default\s*archetype\./,
     );
   });
 
@@ -80,13 +80,13 @@ describe('W516.C apps/marketing-site/src/pages/docs/profiles.astro content parit
     );
     expect(body).toMatch(/"description": "Sales-team account for east-coast scraping\."/);
     expect(body).toMatch(
-      /The response is a flat profile object — no envelope\. Profile\s*\n?\s*ids are prefixed <code>prof_<\/code>\./,
+      /The response is a flat profile object — no envelope\. Profile\s*ids are prefixed <code>prof_<\/code>\./,
     );
     expect(body).toMatch(
-      /The <code>archetype<\/code>\s*\n?\s*field is a lowercase slug \(1–120 chars\) identifying a\s*\n?\s*Driftstack-managed device profile;/,
+      /The <code>archetype<\/code>\s*field is a lowercase slug \(1–120 chars\) identifying a\s*Driftstack-managed device profile;/,
     );
     expect(body).toMatch(
-      /Browser state\s*\n?\s*\(cookies, localStorage, etc\.\) is created on first use and is\s*\n?\s*not part of the create request\./,
+      /Browser state\s*\(cookies, localStorage, etc\.\) is created on first use and is\s*not part of the create request\./,
     );
   });
 
@@ -95,24 +95,22 @@ describe('W516.C apps/marketing-site/src/pages/docs/profiles.astro content parit
     // 100 the pagination schema enforces, so the example would have 400d.
     expect(body).toMatch(/GET \/v1\/profiles\?limit=25\b/);
     expect(body).toMatch(
-      /Cursor pagination\. Default page size <strong>50<\/strong>; max\s*\n?\s*<strong>100<\/strong>\./,
+      /Cursor pagination\. Default page size <strong>50<\/strong>; max\s*<strong>100<\/strong>\./,
     );
     expect(body).toMatch(
-      /<code>name<\/code>, <code>description<\/code>, <code>folder<\/code>\s*\n?\s*and <code>tags<\/code> are patchable/,
+      /<code>name<\/code>, <code>description<\/code>, <code>folder<\/code>\s*and <code>tags<\/code> are patchable/,
     );
-    expect(body).toMatch(
-      /<code>folder: null<\/code>\s*\n?\s*files the profile back under no folder/,
-    );
+    expect(body).toMatch(/<code>folder: null<\/code>\s*files the profile back under no folder/);
     expect(body).toMatch(/an exact-set replace \(<code>\[\]<\/code> clears them\)/);
     expect(body).toMatch(
-      /To change the\s*\n?\s*archetype, clone the profile via\s*\n?\s*<code>POST \/v1\/profiles\/:id\/clone<\/code> and discard the old\s*\n?\s*one \(the archetype is set at create time and pins the device\s*\n?\s*identity for the life of the profile\)\./,
+      /To change the\s*archetype, clone the profile via\s*<code>POST \/v1\/profiles\/:id\/clone<\/code> and discard the old\s*one \(the archetype is set at create time and pins the device\s*identity for the life of the profile\)\./,
     );
   });
 
   it("DELETE /v1/profiles/:id 204 + in-flight-sessions keep running + idempotent framing pinned: 'The profile + its persisted browser state are removed. In-flight sessions that started with this profile keep running but can't be pinned to it again. Idempotent: a second DELETE on the same id returns 204.' — pinned so the 204 + state-removed + in-flight-survives-but-can't-repin + idempotent commitment survives", () => {
     expect(body).toMatch(/→ 204 No Content/);
     expect(body).toMatch(
-      /The profile \+ its persisted browser state are removed\.\s*\n?\s*In-flight sessions that started with this profile keep running\s*\n?\s*but can't be pinned to it again\. Idempotent: a second DELETE\s*\n?\s*on the same id returns 204\./,
+      /The profile \+ its persisted browser state are removed\.\s*In-flight sessions that started with this profile keep running\s*but can't be pinned to it again\. Idempotent: a second DELETE\s*on the same id returns 204\./,
     );
   });
 
@@ -126,19 +124,19 @@ describe('W516.C apps/marketing-site/src/pages/docs/profiles.astro content parit
     expect(body).toMatch(/"captured_at": "2026-05-12T12:00:00\.000Z"/);
     expect(body).toMatch(/POST \/v1\/profile-snapshots\/psnap_…\/restore/);
     expect(body).toMatch(
-      /Snapshot ids are prefixed <code>psnap_<\/code>\. The\s*\n?\s*restore endpoint lives under <code>\/v1\/profile-snapshots<\/code>,\s*\n?\s*not under <code>\/v1\/profiles\/&lt;parent&gt;\/snapshots<\/code>\.\s*\n?\s*Each restore creates a fresh profile; the snapshot itself is\s*\n?\s*immutable\./,
+      /Snapshot ids are prefixed <code>psnap_<\/code>\. The\s*restore endpoint lives under <code>\/v1\/profile-snapshots<\/code>,\s*not under <code>\/v1\/profiles\/&lt;parent&gt;\/snapshots<\/code>\.\s*Each restore creates a fresh profile; the snapshot itself is\s*immutable\./,
     );
   });
 
   it("Privacy 3-bullet framing pinned: 'Cookies + storage state are stored in encrypted form at rest in the driver layer.' + 'Profile metadata + snapshot rows are deleted on account deletion + per the documented retention policy.' + 'No identifying customer data is embedded in the profile record — the only customer-supplied fields are name and description.' — pinned so the 3-privacy-bullet + encrypted-at-rest + no-PII-in-profile-record commitment survives", () => {
     expect(body).toMatch(
-      /<li>Cookies \+ storage state are stored in encrypted form at\s*\n?\s*rest in the driver layer\.<\/li>/,
+      /<li>Cookies \+ storage state are stored in encrypted form at\s*rest in the driver layer\.<\/li>/,
     );
     expect(body).toMatch(
-      /<li>Profile metadata \+ snapshot rows are deleted on account\s*\n?\s*deletion \+ per the documented retention policy\.<\/li>/,
+      /<li>Profile metadata \+ snapshot rows are deleted on account\s*deletion \+ per the documented retention policy\.<\/li>/,
     );
     expect(body).toMatch(
-      /<li>No identifying customer data is embedded in the profile\s*\n?\s*record — the only customer-supplied fields are\s*\n?\s*<code>name<\/code> and <code>description<\/code>\.<\/li>/,
+      /<li>No identifying customer data is embedded in the profile\s*record — the only customer-supplied fields are\s*<code>name<\/code> and <code>description<\/code>\.<\/li>/,
     );
   });
 

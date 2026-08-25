@@ -33,7 +33,7 @@ describe('GUI proxy protected-storage content invariant', () => {
       /interface ProxySecretPayload \{[\s\S]*?version: 1;[\s\S]*?binding: \{[\s\S]*?host: string;[\s\S]*?port: number;[\s\S]*?password: string \| null;[\s\S]*?openvpn\?: OpenVpnConfigInput;[\s\S]*?wireguard\?: WireGuardConfigInput;[\s\S]*?\n\}/,
     );
     expect(body).toMatch(
-      /interface ProxySecretEnvelope \{\s*\n?\s*version: 2;\s*\n?\s*iv: string;\s*\n?\s*ciphertext: string;/,
+      /interface ProxySecretEnvelope \{\s*version: 2;\s*iv: string;\s*ciphertext: string;/,
     );
     expect(body).toContain("await invoke<string | null>('secret_load', { key: VAULT_KEY_NAME })");
     expect(body).toContain("await invoke('secret_save', { key: VAULT_KEY_NAME, value: stored })");

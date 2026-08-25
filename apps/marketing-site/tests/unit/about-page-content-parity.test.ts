@@ -54,13 +54,13 @@ describe('W367.A marketing-site /about page content parity', () => {
   it('EU control-plane posture is accurate: compute + database are EU-resident, uploaded files sit on Cloudflare R2 (default jurisdiction, can replicate outside the EU — S30 2026-07-07 founder decision: soften; supersedes the "object storage all in the EU" claim), and session execution + a few processors transfer to the US under SCCs + EU-US DPF (matches the real /trust/sub-processors list — Anthropic/MacStadium/LiveKit are US). No vendor names on the about-page splash; the dedicated sub-processor page carries the per-vendor breakdown.', () => {
     expect(body).toMatch(/Compute and database run in the EU\./);
     expect(body).toMatch(
-      /Uploaded files \(avatars,\s*\n?\s*for example\) sit on Cloudflare's R2 storage, which can\s*\n?\s*replicate outside the EU\./,
+      /Uploaded files \(avatars,\s*for example\) sit on Cloudflare's R2 storage, which can\s*replicate outside the EU\./,
     );
     // S30 negative pin — the blanket object-storage-in-EU claim must
     // not silently return.
     expect(body).not.toMatch(/Compute, database, and object storage all run in the EU/);
     expect(body).toMatch(
-      /Session execution and a few processors[\s\S]{0,120}transfer to the US\s*\n?\s*under Standard Contractual Clauses \+ the EU-US Data Privacy\s*\n?\s*Framework/,
+      /Session execution and a few processors[\s\S]{0,120}transfer to the US\s*under Standard Contractual Clauses \+ the EU-US Data Privacy\s*Framework/,
     );
     // Drift sentinel — the absolute "single-region / no transatlantic
     // flows" claim contradicted the real sub-processor list (US
@@ -164,9 +164,9 @@ describe('W367.A marketing-site /about page content parity', () => {
   it('R9 hero claim pinned: "One engine. One product. Engineered for fidelity." + capability-led EU-residency framing — S30 2026-07-07 (founder decision: soften): "your account data" + "(EU-resident control plane)" replace the blanket "your data" + "(EU-resident infrastructure)" since R2-held file objects replicate EU + US', () => {
     expect(body).toMatch(/One engine\. One product\. Engineered for fidelity\./);
     expect(body).toMatch(
-      /Our servers and your account data live in the EU \(EU-resident\s*\n?\s*control plane\), and the scope stays deliberately narrow/,
+      /Our servers and your account data live in the EU \(EU-resident\s*control plane\), and the scope stays deliberately narrow/,
     );
     // S30 negative pin — the blanket form must not silently return.
-    expect(body).not.toMatch(/your data live in the EU \(EU-resident\s*\n?\s*infrastructure\)/);
+    expect(body).not.toMatch(/your data live in the EU \(EU-resident\s*infrastructure\)/);
   });
 });

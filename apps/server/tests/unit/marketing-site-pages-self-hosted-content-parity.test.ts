@@ -43,35 +43,33 @@ describe('W500.B apps/marketing-site/src/pages/self-hosted.astro content parity'
 
   it('4-import set from pricing.ts: SELF_HOSTED_ARCHETYPE_UPDATES + SELF_HOSTED_SKUS + SELF_HOSTED_SOFTWARE_UPDATES + SELF_HOSTED_SOURCE_ACCESS — pinned so the SKU descriptor data stays sourced from the canonical pricing.ts (drift to hardcoding here would diverge from the marketing-site pricing page when the SKU table changes)', () => {
     expect(body).toMatch(
-      /import \{\s*\n?\s*SELF_HOSTED_ARCHETYPE_UPDATES,\s*\n?\s*SELF_HOSTED_SKUS,\s*\n?\s*SELF_HOSTED_SOFTWARE_UPDATES,\s*\n?\s*SELF_HOSTED_SOURCE_ACCESS,\s*\n?\s*\} from '\.\.\/data\/pricing\.ts';/,
+      /import \{\s*SELF_HOSTED_ARCHETYPE_UPDATES,\s*SELF_HOSTED_SKUS,\s*SELF_HOSTED_SOFTWARE_UPDATES,\s*SELF_HOSTED_SOURCE_ACCESS,\s*\} from '\.\.\/data\/pricing\.ts';/,
     );
   });
 
   it('HARDWARE_BY_SKU 3-tier map: each SKU recommends an Apple-Silicon class (Mac Mini M4 / Mac Studio M4 Max / Mac Studio Ultra | Mac Pro multi-node). Reframed 2026-05-XX to "Any Apple Silicon Mac (... recommended)" so customers know the sized-for guidance is a recommendation, not a hard requirement.', () => {
     expect(body).toMatch(
-      /const HARDWARE_BY_SKU: Record<string, string> = \{\s*\n?\s*self_hosted_solo: 'Any Apple Silicon Mac \(Mac Mini M4 16 GB recommended\)',\s*\n?\s*self_hosted_pro: 'Apple Silicon Mac sized for sustained concurrency \(Mac Studio M4 Max recommended\)',\s*\n?\s*self_hosted_enterprise: 'Multi-node Apple Silicon fleet \(Mac Studio Ultra \/ Mac Pro recommended\)',\s*\n?\s*\};/,
+      /const HARDWARE_BY_SKU: Record<string, string> = \{\s*self_hosted_solo: 'Any Apple Silicon Mac \(Mac Mini M4 16 GB recommended\)',\s*self_hosted_pro: 'Apple Silicon Mac sized for sustained concurrency \(Mac Studio M4 Max recommended\)',\s*self_hosted_enterprise: 'Multi-node Apple Silicon fleet \(Mac Studio Ultra \/ Mac Pro recommended\)',\s*\};/,
     );
   });
 
   it("fmtSupportTier 3-state map: 2026-05-19 founder verdict dropped tiered SLA ladder (theatre for a small operation). All three states route to a single 48h best-effort target; email_slack_12h + dedicated_csm_1h surfaces add 'Email + Slack Connect' framing.", () => {
-    expect(body).toMatch(/case 'email_48h':\s*\n?\s*return 'Email · 48h target';/);
+    expect(body).toMatch(/case 'email_48h':\s*return 'Email · 48h target';/);
+    expect(body).toMatch(/case 'email_slack_12h':\s*return 'Email \+ Slack Connect · 48h target';/);
     expect(body).toMatch(
-      /case 'email_slack_12h':\s*\n?\s*return 'Email \+ Slack Connect · 48h target';/,
-    );
-    expect(body).toMatch(
-      /case 'dedicated_csm_1h':\s*\n?\s*return 'Email \+ Slack Connect · 48h target';/,
+      /case 'dedicated_csm_1h':\s*return 'Email \+ Slack Connect · 48h target';/,
     );
   });
 
   it("fmtCustomArchetypeDev 3-state: none → '—' / limited → 'Limited (1/yr)' / unlimited → 'Unlimited' — pinned so the custom-archetype-dev offering stays consistent across SKUs (drift to dropping 'Limited (1/yr)' would change the Pro-tier promise; drift to changing the count would create marketing↔contract divergence)", () => {
-    expect(body).toMatch(/case 'none':\s*\n?\s*return '—';/);
-    expect(body).toMatch(/case 'limited':\s*\n?\s*return 'Limited \(1\/yr\)';/);
-    expect(body).toMatch(/case 'unlimited':\s*\n?\s*return 'Unlimited';/);
+    expect(body).toMatch(/case 'none':\s*return '—';/);
+    expect(body).toMatch(/case 'limited':\s*return 'Limited \(1\/yr\)';/);
+    expect(body).toMatch(/case 'unlimited':\s*return 'Unlimited';/);
   });
 
   it('pins current guided sales-led availability and rejects deferred-launch copy', () => {
     expect(body).toMatch(
-      /Self-hosted is available through a guided sales-led engagement\.\s*\n?\s*We qualify the workload, plan the hardware and network, onboard\s*\n?\s*the deployment, and run a joint smoke test with your team\./,
+      /Self-hosted is available through a guided sales-led engagement\.\s*We qualify the workload, plan the hardware and network, onboard\s*the deployment, and run a joint smoke test with your team\./,
     );
     expect(body).toMatch(/Available now through Contact Sales · scoped and supported directly/);
     expect(body).not.toMatch(
@@ -106,7 +104,7 @@ describe('W500.B apps/marketing-site/src/pages/self-hosted.astro content parity'
 
   it("4-step process: Contact sales (01) → Procure hardware (02) → Onboard (03) → Run (04) — pinned so the customer-facing onboarding sequence stays consistent (drift to dropping 'Procure hardware' would hide the customer-purchased model; drift to dropping 'Onboard joint smoke test' would lose the hands-on commitment that justifies the higher SKU price)", () => {
     expect(body).toMatch(
-      /Contact sales<\/h3>\s*\n?\s*<p class="mt-2 text-sm text-tk-ink-2">\s*\n?\s*Email <a href="mailto:sales@driftstack\.dev"/,
+      /Contact sales<\/h3>\s*<p class="mt-2 text-sm text-tk-ink-2">\s*Email <a href="mailto:sales@driftstack\.dev"/,
     );
     expect(body).toMatch(/Procure hardware<\/h3>/);
     expect(body).toMatch(/Onboard<\/h3>/);

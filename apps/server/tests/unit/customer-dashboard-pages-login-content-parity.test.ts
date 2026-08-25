@@ -32,22 +32,22 @@ describe('W493.A apps/customer-dashboard/src/pages/login.astro content parity', 
 
   it("V-269 framing pinned: 'Sign-in page for returning customers. Pairs with the V-184a signup flow + the V-267 cli/authorize deep-link round-trip.' + 'POSTs to /v1/auth/login (V-079) which returns a web session token. The token lands in localStorage under ds_web_session_token — identical key to signup → verify-email so cross-page reads just work.' — pinned so the cross-page token-key contract + the V-269/V-267/V-184a/V-079 lineage stays documented", () => {
     expect(body).toMatch(
-      /\/\/ V-269 — Sign-in page for returning customers\. Pairs with the V-184a\s*\n?\s*\/\/ signup flow \+ the V-267 cli\/authorize deep-link round-trip\./,
+      /\/\/ V-269 — Sign-in page for returning customers\. Pairs with the V-184a\s*\/\/ signup flow \+ the V-267 cli\/authorize deep-link round-trip\./,
     );
     expect(body).toMatch(
-      /\/\/ POSTs to \/v1\/auth\/login \(V-079\) which returns a web session token\.\s*\n?\s*\/\/ The token lands in localStorage under `ds_web_session_token` —\s*\n?\s*\/\/ identical key to signup → verify-email so cross-page reads\s*\n?\s*\/\/ "just work"/,
+      /\/\/ POSTs to \/v1\/auth\/login \(V-079\) which returns a web session token\.\s*\/\/ The token lands in localStorage under `ds_web_session_token` —\s*\/\/ identical key to signup → verify-email so cross-page reads\s*\/\/ "just work"/,
     );
   });
 
   it("?next= round-trip framing pins same-origin deep links and the canonical '/' fallback", () => {
     expect(body).toMatch(
-      /\/\/ Honors `\?next=` for deep-link round-trip from \/cli\/authorize and\s*\n?\s*\/\/ other same-origin deep-link entry points; falls back to "\/" for the typical\s*\n?\s*\/\/ "I came here from the marketing site" path\./,
+      /\/\/ Honors `\?next=` for deep-link round-trip from \/cli\/authorize and\s*\/\/ other same-origin deep-link entry points; falls back to "\/" for the typical\s*\/\/ "I came here from the marketing site" path\./,
     );
   });
 
   it('V-269 next= preservation on canonical /signup/ fallback link + open-redirect guard: ?next= is sanitized before every use', () => {
     expect(body).toMatch(
-      /\/\/ V-269 — preserve \?next= when bouncing the user to \/signup so a\s*\n?\s*\/\/ returning user who clicks "Create one" doesn't lose their deep-\s*\n?\s*\/\/ link target\./,
+      /\/\/ V-269 — preserve \?next= when bouncing the user to \/signup so a\s*\/\/ returning user who clicks "Create one" doesn't lose their deep-\s*\/\/ link target\./,
     );
     // Open-redirect guard (inline copy of src/lib/safe-next.ts, unit-tested in
     // safe-next.test.ts). Without it, /login?next=https://evil.com bounces a
@@ -57,13 +57,13 @@ describe('W493.A apps/customer-dashboard/src/pages/login.astro content parity', 
     expect(body).toMatch(/if \(u\.origin !== origin\) return '\/';/);
     expect(body).toMatch(/const next = safeNextPath\(rawNext, window\.location\.origin\);/);
     expect(body).toMatch(
-      /if \(rawNext && signupLink\) \{\s*\n?\s*signupLink\.setAttribute\('href', '\/signup\/\?next=' \+ encodeURIComponent\(next\)\);\s*\n?\s*\}/,
+      /if \(rawNext && signupLink\) \{\s*signupLink\.setAttribute\('href', '\/signup\/\?next=' \+ encodeURIComponent\(next\)\);\s*\}/,
     );
   });
 
   it("V-353d/W528 MFA-required branch pinned: the login union's mfa_required variant opens the MFA challenge step (startMfaChallenge) — W528 replaced the temporary 'UI not available yet' dead-end banner that locked MFA-enrolled customers out of the dashboard", () => {
     expect(body).toMatch(
-      /if \(body && body\.mfa_required === true\) \{\s*\n?\s*startMfaChallenge\(body\.challenge_token\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /if \(body && body\.mfa_required === true\) \{\s*startMfaChallenge\(body\.challenge_token\);\s*return;\s*\}/,
     );
     expect(body).toMatch(/data-form="mfa"/);
     expect(body).toMatch(/\/v1\/auth\/mfa\/challenge/);
@@ -73,13 +73,13 @@ describe('W493.A apps/customer-dashboard/src/pages/login.astro content parity', 
 
   it("autocomplete='current-password' on password input (NOT new-password — distinct from signup/reset) — pinned so browsers + password managers correctly auto-fill from the customer's vault on sign-in (drift to new-password would prompt the customer to CREATE a new password instead of using the existing one)", () => {
     expect(body).toMatch(
-      /<input\s*\n?\s*id="login-password"\s*\n?\s*name="password"\s*\n?\s*type="password"\s*\n?\s*required\s*\n?\s*autocomplete="current-password"/,
+      /<input\s*id="login-password"\s*name="password"\s*type="password"\s*required\s*autocomplete="current-password"/,
     );
   });
 
   it('POST /v1/auth/login contract: payload {email, password} (no name, no MFA challenge fields — the MFA path comes back in the discriminated-union response, not in the request) + content-type:application/json — pinned so the request shape stays minimal (drift to adding mfa_token in request would break the V-353d flow that decides server-side whether MFA is needed)', () => {
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/auth\/login', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*body: JSON\.stringify\(payload\),\s*\n?\s*signal: controller\.signal,\s*\n?\s*\}\)/,
+      /fetch\(apiBaseUrl \+ '\/v1\/auth\/login', \{\s*method: 'POST',\s*headers: \{ 'content-type': 'application\/json' \},\s*body: JSON\.stringify\(payload\),\s*signal: controller\.signal,\s*\}\)/,
     );
   });
 
@@ -102,7 +102,7 @@ describe('W493.A apps/customer-dashboard/src/pages/login.astro content parity', 
 
   it('maps problem+json through fixed copy while preserving stable type/status for the email-verification recovery branch', () => {
     expect(body).toMatch(
-      /const err = window\.driftstackResponseError\(r, b\);\s*\n?\s*err\.problemType = b\.type;\s*\n?\s*err\.status = r\.status;\s*\n?\s*err\.email = payload\.email;\s*\n?\s*return Promise\.reject\(err\);/,
+      /const err = window\.driftstackResponseError\(r, b\);\s*err\.problemType = b\.type;\s*err\.status = r\.status;\s*err\.email = payload\.email;\s*return Promise\.reject\(err\);/,
     );
     expect(body).not.toMatch(/new Error\(b\.detail/);
   });
@@ -110,11 +110,11 @@ describe('W493.A apps/customer-dashboard/src/pages/login.astro content parity', 
   it("Forgot-password + Create-one fallback links: 'Forgot your password?' → /forgot-password + 'No account yet? Create one' → /signup (with data-signup-link for the V-269 next= rewrite hook) — pinned so the dual escape hatches (recover password / sign up instead) stay visible on every sign-in attempt", () => {
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /<a href="\/forgot-password\/" class="text-tk-accent-text[^"]*"\s*\n?\s*>Forgot your password\?<\/a\s*\n?\s*>/,
+      /<a href="\/forgot-password\/" class="text-tk-accent-text[^"]*"\s*>Forgot your password\?<\/a\s*>/,
     );
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /No account yet\? <a\s*\n?\s*data-signup-link\s*\n?\s*href="\/signup\/"\s*\n?\s*class="text-tk-accent-text[^"]*"\s*\n?\s*>Create one<\/a/,
+      /No account yet\? <a\s*data-signup-link\s*href="\/signup\/"\s*class="text-tk-accent-text[^"]*"\s*>Create one<\/a/,
     );
   });
 

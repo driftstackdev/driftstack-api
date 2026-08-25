@@ -67,9 +67,9 @@ describe('W524.A apps/marketing-site/src/styles/base.css content parity', () => 
 
   it('code/pre/kbd mono framing pinned — Berkeley Mono first-family (licensed local installs), vendored JetBrains Mono second (what actually ships), system fallback after (F-1 also adds overflow-wrap:anywhere + word-break:break-word + pre overflow-x:auto so long strings wrap or scroll internally on iPhone Safari)', () => {
     expect(body).toMatch(
-      /code,\s*\n?\s*pre,\s*\n?\s*kbd \{\s*\n?\s*font-family: 'Berkeley Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;\s*\n?\s*font-feature-settings: normal;[\s\S]*?overflow-wrap: anywhere;\s*\n?\s*word-break: break-word;\s*\n?\s*\}/,
+      /code,\s*pre,\s*kbd \{\s*font-family: 'Berkeley Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;\s*font-feature-settings: normal;[\s\S]*?overflow-wrap: anywhere;\s*word-break: break-word;\s*\}/,
     );
-    expect(body).toMatch(/pre \{[\s\S]*?overflow-x: auto;\s*\n?\s*\}/);
+    expect(body).toMatch(/pre \{[\s\S]*?overflow-x: auto;\s*\}/);
   });
 
   it('self-hosted @font-face set pinned (Fleet v2 port 2026-07-03): Geist VF (100 900 variable) + JetBrains Mono Regular/Bold from public/fonts/, all font-display: swap; Berkeley Mono is NEVER vendored (commercial license)', () => {

@@ -44,13 +44,13 @@ describe('W471.C apps/gui-client/src/lib/use-admin-csv-export.ts content parity'
   it('V-534.AX framing pins authenticated bounded saving through the shared native/browser fallback', () => {
     expect(body).toMatch(/\/\/ V-534\.AX — admin CSV export hook\./);
     expect(body).toMatch(
-      /\/\/ Wraps GET \/v1\/admin\/crypto-orders\.csv \(V-666\.AC\)\. The endpoint requires\s*\n?\s*\/\/ `Authorization: Bearer` so a plain anchor link won't work\. The bounded\s*\n?\s*\/\/ response is saved through the shared Tauri filesystem\/browser fallback,\s*\n?\s*\/\/ which avoids WKWebView's silently swallowed synthesized downloads\./,
+      /\/\/ Wraps GET \/v1\/admin\/crypto-orders\.csv \(V-666\.AC\)\. The endpoint requires\s*\/\/ `Authorization: Bearer` so a plain anchor link won't work\. The bounded\s*\/\/ response is saved through the shared Tauri filesystem\/browser fallback,\s*\/\/ which avoids WKWebView's silently swallowed synthesized downloads\./,
     );
   });
 
   it("State-machine framing pinned: 'State machine: idle | downloading | failed. Successful downloads snap back to idle so the button is immediately usable again.'", () => {
     expect(body).toMatch(
-      /\/\/ State machine: idle \| downloading \| failed\. Successful downloads\s*\n?\s*\/\/ snap back to idle so the button is immediately usable again\./,
+      /\/\/ State machine: idle \| downloading \| failed\. Successful downloads\s*\/\/ snap back to idle so the button is immediately usable again\./,
     );
   });
 
@@ -60,29 +60,29 @@ describe('W471.C apps/gui-client/src/lib/use-admin-csv-export.ts content parity'
     expect(body).toContain("{ kind: 'downloading' }");
     expect(body).toContain("{ kind: 'failed'; message: string }");
     expect(body).toMatch(
-      /\/\*\* V-666\.BY — ISO 8601 lower bound \(inclusive\)\. \*\/\s*\n?\s*createdAfter\?: string \| null;\s*\n?\s*\/\*\* V-666\.BY — ISO 8601 upper bound \(exclusive\)\. \*\/\s*\n?\s*createdBefore\?: string \| null;/,
+      /\/\*\* V-666\.BY — ISO 8601 lower bound \(inclusive\)\. \*\/\s*createdAfter\?: string \| null;\s*\/\*\* V-666\.BY — ISO 8601 upper bound \(exclusive\)\. \*\/\s*createdBefore\?: string \| null;/,
     );
   });
 
   it("UseAdminCsvExportResult 3-method (state + download + reset); useAdminCsvExport: 5 opts ?? null defaults + no-apiKey → failed{message:'No API key configured.'}", () => {
     expect(body).toMatch(
-      /export interface UseAdminCsvExportResult \{\s*\n?\s*state: AdminCsvExportState;\s*\n?\s*download: \(\) => Promise<void>;\s*\n?\s*reset: \(\) => void;\s*\n?\s*\}/,
+      /export interface UseAdminCsvExportResult \{\s*state: AdminCsvExportState;\s*download: \(\) => Promise<void>;\s*reset: \(\) => void;\s*\}/,
     );
     expect(body).toMatch(
-      /const status = opts\.status \?\? null;\s*\n?\s*const search = opts\.search \?\? null;\s*\n?\s*const accountId = opts\.accountId \?\? null;\s*\n?\s*const createdAfter = opts\.createdAfter \?\? null;\s*\n?\s*const createdBefore = opts\.createdBefore \?\? null;/,
+      /const status = opts\.status \?\? null;\s*const search = opts\.search \?\? null;\s*const accountId = opts\.accountId \?\? null;\s*const createdAfter = opts\.createdAfter \?\? null;\s*const createdBefore = opts\.createdBefore \?\? null;/,
     );
   });
 
   it("Query-string builder: new URL + status !== null .set('status', status); search.trim().length > 0 .set('search', search.trim()); accountId .set('account_id', accountId.trim()) (snake_case server field); createdAfter .set('created_after', ...); createdBefore .set('created_before', ...)", () => {
     expect(body).toMatch(
-      /const url = new URL\(`\$\{baseUrl\}\/v1\/admin\/crypto-orders\.csv`\);\s*\n?\s*if \(status !== null\) url\.searchParams\.set\('status', status\);\s*\n?\s*if \(search !== null && search\.trim\(\)\.length > 0\) \{\s*\n?\s*url\.searchParams\.set\('search', search\.trim\(\)\);\s*\n?\s*\}\s*\n?\s*if \(accountId !== null && accountId\.trim\(\)\.length > 0\) \{\s*\n?\s*url\.searchParams\.set\('account_id', accountId\.trim\(\)\);\s*\n?\s*\}\s*\n?\s*if \(createdAfter !== null && createdAfter\.trim\(\)\.length > 0\) \{\s*\n?\s*url\.searchParams\.set\('created_after', createdAfter\.trim\(\)\);\s*\n?\s*\}\s*\n?\s*if \(createdBefore !== null && createdBefore\.trim\(\)\.length > 0\) \{\s*\n?\s*url\.searchParams\.set\('created_before', createdBefore\.trim\(\)\);\s*\n?\s*\}/,
+      /const url = new URL\(`\$\{baseUrl\}\/v1\/admin\/crypto-orders\.csv`\);\s*if \(status !== null\) url\.searchParams\.set\('status', status\);\s*if \(search !== null && search\.trim\(\)\.length > 0\) \{\s*url\.searchParams\.set\('search', search\.trim\(\)\);\s*\}\s*if \(accountId !== null && accountId\.trim\(\)\.length > 0\) \{\s*url\.searchParams\.set\('account_id', accountId\.trim\(\)\);\s*\}\s*if \(createdAfter !== null && createdAfter\.trim\(\)\.length > 0\) \{\s*url\.searchParams\.set\('created_after', createdAfter\.trim\(\)\);\s*\}\s*if \(createdBefore !== null && createdBefore\.trim\(\)\.length > 0\) \{\s*url\.searchParams\.set\('created_before', createdBefore\.trim\(\)\);\s*\}/,
     );
   });
 
   it('Download flow remains authenticated and filtered while transport is deadline-bounded and lifecycle-safe', () => {
     expect(body).toMatch(/setState\(\{ kind: 'downloading' \}\);/);
     expect(body).toMatch(
-      /const res = await fetchWithDeadline\(url\.toString\(\), \{\s*\n?\s*method: 'GET',\s*\n?\s*signal: controller\.signal,/,
+      /const res = await fetchWithDeadline\(url\.toString\(\), \{\s*method: 'GET',\s*signal: controller\.signal,/,
     );
     expect(body).toContain('authorization: `Bearer ${settings.apiKey}`');
     expect(body).toContain("accept: 'text/csv',");
@@ -104,7 +104,7 @@ describe('W471.C apps/gui-client/src/lib/use-admin-csv-export.ts content parity'
       /\}, \[settings\.apiKey, settings\.baseUrl, status, search, accountId, createdAfter, createdBefore\]\);/,
     );
     expect(body).toMatch(
-      /function buildFilename\(now: Date\): string \{\s*\n?\s*const y = now\.getUTCFullYear\(\)\.toString\(\)\.padStart\(4, '0'\);\s*\n?\s*const m = \(now\.getUTCMonth\(\) \+ 1\)\.toString\(\)\.padStart\(2, '0'\);\s*\n?\s*const d = now\.getUTCDate\(\)\.toString\(\)\.padStart\(2, '0'\);\s*\n?\s*return `crypto-orders-\$\{y\}-\$\{m\}-\$\{d\}\.csv`;\s*\n?\s*\}/,
+      /function buildFilename\(now: Date\): string \{\s*const y = now\.getUTCFullYear\(\)\.toString\(\)\.padStart\(4, '0'\);\s*const m = \(now\.getUTCMonth\(\) \+ 1\)\.toString\(\)\.padStart\(2, '0'\);\s*const d = now\.getUTCDate\(\)\.toString\(\)\.padStart\(2, '0'\);\s*return `crypto-orders-\$\{y\}-\$\{m\}-\$\{d\}\.csv`;\s*\}/,
     );
   });
 

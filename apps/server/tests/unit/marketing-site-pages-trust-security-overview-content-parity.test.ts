@@ -39,7 +39,7 @@ describe('W504.B apps/marketing-site/src/pages/trust/security-overview.astro con
 
   it("V-670 (V-550 follow-up) framing pinned: 'public security overview as an evaluator checklist. /security is the architecture deep-dive; this page is the buyer-evaluation companion — every security claim mapped to its verifiable evidence (code path, test, public doc link). The goal: a prospective customer's CISO can self-serve a security review without scheduling a call.' — pinned so the V-670 doc-comment + the /security-vs-/trust/security-overview division-of-labor + the 'CISO self-serve' goal survive (drift to dropping V-670 would orphan the engineering reason; drift to dropping the code-path mapping would force prospects back to scheduling calls). Re-enabled by slice 175 after verifying the V-670 comment exists at security-overview.astro:4-9 with the matching shape", () => {
     expect(body).toMatch(
-      /\/\/ V-670 \(V-550 follow-up\) — public security overview as an evaluator\s*\n?\s*\/\/ checklist\. \/security is the architecture deep-dive; this page is\s*\n?\s*\/\/ the buyer-evaluation companion — every security claim mapped to\s*\n?\s*\/\/ its verifiable evidence \(code path, test, public doc link\)\. The\s*\n?\s*\/\/ goal: a prospective customer's CISO can self-serve a security\s*\n?\s*\/\/ review without scheduling a call\./,
+      /\/\/ V-670 \(V-550 follow-up\) — public security overview as an evaluator\s*\/\/ checklist\. \/security is the architecture deep-dive; this page is\s*\/\/ the buyer-evaluation companion — every security claim mapped to\s*\/\/ its verifiable evidence \(code path, test, public doc link\)\. The\s*\/\/ goal: a prospective customer's CISO can self-serve a security\s*\/\/ review without scheduling a call\./,
     );
   });
 
@@ -103,7 +103,7 @@ describe('W504.B apps/marketing-site/src/pages/trust/security-overview.astro con
     expect(body).toMatch(/an OpenVPN\s+file \(\.ovpn\)/); // S20c 2026-07-06
     expect(body).toMatch(/a WireGuard file \(\.conf\)/); // S20c 2026-07-06
     expect(body).toMatch(
-      /Without an attached config, session traffic exits via\s*\n?\s*Driftstack's own EU network egress/,
+      /Without an attached config, session traffic exits via\s*Driftstack's own EU network egress/,
     );
     // S20c 2026-07-06 plain-language pass: same no-payload-logging
     // commitment, payloads spelled out plainly.
@@ -142,7 +142,7 @@ describe('W504.B apps/marketing-site/src/pages/trust/security-overview.astro con
     expect(body).toMatch(/EU control plane/);
     expect(body).not.toMatch(/EU-only data plane/);
     expect(body).toMatch(
-      /Compute \(Hetzner Nuremberg\), database \(Neon Frankfurt\),\s*\n?\s*object storage \(Cloudflare R2, EU \+ US replication\)\./,
+      /Compute \(Hetzner Nuremberg\), database \(Neon Frankfurt\),\s*object storage \(Cloudflare R2, EU \+ US replication\)\./,
     );
     // S30 negative pin — the false jurisdiction claim must not return.
     expect(body).not.toMatch(/Cloudflare R2 EU jurisdiction/);
@@ -200,11 +200,11 @@ describe('W504.B apps/marketing-site/src/pages/trust/security-overview.astro con
   // the old pin locked a stale count.
   it('cross-links the architecture deep-dive and current compliance/disclosure page', () => {
     expect(body).toMatch(
-      /<a href="\/security\/" class="text-tk-accent-text underline">architecture deep-dive at \/security<\/a>\s*\n?\s*walks the six-pillar surface in detail\./,
+      /<a href="\/security\/" class="text-tk-accent-text underline">architecture deep-dive at \/security<\/a>\s*walks the six-pillar surface in detail\./,
     );
     expect(body).not.toMatch(/five-pillar/);
     expect(body).toMatch(
-      /For current compliance\s*\n?\s*status and vulnerability reporting, see\s*\n?\s*<a href="\/trust\/compliance\/" class="text-tk-accent-text underline"\s*\n?\s*>\/trust\/compliance<\/a\s*\n?\s*>\./,
+      /For current compliance\s*status and vulnerability reporting, see\s*<a href="\/trust\/compliance\/" class="text-tk-accent-text underline"\s*>\/trust\/compliance<\/a\s*>\./,
     );
   });
 

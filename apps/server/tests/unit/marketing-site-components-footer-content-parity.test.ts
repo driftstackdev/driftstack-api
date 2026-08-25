@@ -61,7 +61,7 @@ describe('W522.B apps/marketing-site/src/components/Footer.astro content parity'
     expect(productColumn).not.toMatch(/<li><a href="\/roadmap"/);
     expect(body).toMatch(/<li><a href="\/self-hosted\/" class="nav-link">Self-hosted<\/a><\/li>/);
     expect(body).toMatch(
-      /<a\s*\n?\s*href="https:\/\/docs\.driftstack\.dev"\s*\n?\s*class="nav-link"\s*\n?\s*target="_blank"\s*\n?\s*rel="noopener noreferrer">Docs<\/a/,
+      /<a\s*href="https:\/\/docs\.driftstack\.dev"\s*class="nav-link"\s*target="_blank"\s*rel="noopener noreferrer">Docs<\/a/,
     );
     expect(body).toMatch(
       /<a href="https:\/\/app\.driftstack\.dev\/signup\/" class="nav-link">Sign up<\/a>/,
@@ -107,7 +107,7 @@ describe('W522.B apps/marketing-site/src/components/Footer.astro content parity'
       /<a href="\/trust\/sub-processors\/" class="nav-link">Sub-processors<\/a>/,
     );
     expect(body).toMatch(
-      /<a\s*\n?\s*href="https:\/\/status\.driftstack\.dev"\s*\n?\s*class="nav-link"\s*\n?\s*target="_blank"\s*\n?\s*rel="noopener noreferrer">Status<\/a/,
+      /<a\s*href="https:\/\/status\.driftstack\.dev"\s*class="nav-link"\s*target="_blank"\s*rel="noopener noreferrer">Status<\/a/,
     );
     expect(body).not.toMatch(
       /href="\/(?:pricing|comparison|self-hosted|about|faq|changelog|roadmap|legal\/privacy|legal\/terms|legal\/dpa|legal\/aup|trust|security|trust\/sub-processors)"/,

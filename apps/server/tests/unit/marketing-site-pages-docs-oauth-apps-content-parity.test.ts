@@ -41,10 +41,10 @@ describe('W517.C apps/marketing-site/src/pages/docs/oauth-apps.astro content par
 
   it('V-678 framing and the current admin-gated confidential-client posture are pinned', () => {
     expect(body).toMatch(
-      /\/\/ V-678 — developer docs page for OAuth third-party app authors\.\s*\n?\s*\/\/ Describes the V-667 family \(registration, authorize, exchange,\s*\n?\s*\/\/ introspect, revoke\) from the perspective of an integrator, NOT\s*\n?\s*\/\/ from the perspective of an internal Driftstack engineer\./,
+      /\/\/ V-678 — developer docs page for OAuth third-party app authors\.\s*\/\/ Describes the V-667 family \(registration, authorize, exchange,\s*\/\/ introspect, revoke\) from the perspective of an integrator, NOT\s*\/\/ from the perspective of an internal Driftstack engineer\./,
     );
     expect(body).toMatch(
-      /\/\/ Posture: OAuth client registration is admin-gated\. Integrators request a\s*\n?\s*\/\/ confidential client through support; the live flow requires client_secret\s*\n?\s*\/\/ plus PKCE-S256 and does not implement a public-client variant\./,
+      /\/\/ Posture: OAuth client registration is admin-gated\. Integrators request a\s*\/\/ confidential client through support; the live flow requires client_secret\s*\/\/ plus PKCE-S256 and does not implement a public-client variant\./,
     );
     expect(body).not.toMatch(/pre-launch|follow-up/i);
   });
@@ -58,10 +58,10 @@ describe('W517.C apps/marketing-site/src/pages/docs/oauth-apps.astro content par
 
   it("W214.B api_key_scope enum + NOT-exposed-to-OAuth framing pinned: 'scope set matches the api_key_scope Postgres enum' + 'account_owner, gui_control, the legacy read/write/admin aliases, and the driftstack_internal_admin scope are issued via the API-keys flow and are intentionally NOT exposed to OAuth clients.' — pinned so the W214.B api_key_scope-enum-anchor + 4-NOT-exposed-scope-categories (account_owner + gui_control + legacy aliases + driftstack_internal_admin) commitment survives (drift to exposing any of these to OAuth would create marketing↔server divergence)", () => {
     expect(body).toMatch(
-      /\/\/ W214\.B — scope set matches the `api_key_scope` Postgres enum\s*\n?\s*\/\/ \(apps\/server\/src\/db\/schema\.ts\)\./,
+      /\/\/ W214\.B — scope set matches the `api_key_scope` Postgres enum\s*\/\/ \(apps\/server\/src\/db\/schema\.ts\)\./,
     );
     expect(body).toMatch(
-      /\/\/ `account_owner`, `gui_control`, the legacy `read`\/`write`\/`admin`\s*\n?\s*\/\/ aliases, and the `driftstack_internal_admin` scope are issued via\s*\n?\s*\/\/ the API-keys flow and are intentionally NOT exposed to OAuth clients\./,
+      /\/\/ `account_owner`, `gui_control`, the legacy `read`\/`write`\/`admin`\s*\/\/ aliases, and the `driftstack_internal_admin` scope are issued via\s*\/\/ the API-keys flow and are intentionally NOT exposed to OAuth clients\./,
     );
   });
 
@@ -86,19 +86,19 @@ describe('W517.C apps/marketing-site/src/pages/docs/oauth-apps.astro content par
       /<a href="mailto:developers@driftstack\.dev">developers@driftstack\.dev<\/a>/,
     );
     expect(body).toMatch(
-      /<li>Your redirect URI\(s\) — HTTPS only in production,\s*\n?\s*<code>http:\/\/localhost:&lt;port&gt;<\/code> is accepted for development<\/li>/,
+      /<li>Your redirect URI\(s\) — HTTPS only in production,\s*<code>http:\/\/localhost:&lt;port&gt;<\/code> is accepted for development<\/li>/,
     );
     expect(body).toMatch(
-      /We turn around new client registrations within one business\s*\n?\s*day\. You get back a <code>client_id<\/code> \(prefixed\s*\n?\s*<code>oac_<\/code>\) and a <code>client_secret<\/code> \(prefixed\s*\n?\s*<code>oas_<\/code>\)\. The secret is shown to you ONCE — we only\s*\n?\s*store the hash on our side, so we cannot recover it for you\.\s*\n?\s*Treat it like a Stripe secret key\./,
+      /We turn around new client registrations within one business\s*day\. You get back a <code>client_id<\/code> \(prefixed\s*<code>oac_<\/code>\) and a <code>client_secret<\/code> \(prefixed\s*<code>oas_<\/code>\)\. The secret is shown to you ONCE — we only\s*store the hash on our side, so we cannot recover it for you\.\s*Treat it like a Stripe secret key\./,
     );
   });
 
   it("PKCE-S256 verifier framing pinned: 'Generate a high-entropy random string (RFC 7636 §4.1, 43–128 characters from [A-Za-z0-9-._~]). Compute the code_challenge as the URL-safe base64 of SHA-256(verifier). Keep the verifier in your app until step 3 — never send it to anyone except Driftstack at the token endpoint.' — pinned so the RFC-7636-§4.1 + 43-128-char-range + [A-Za-z0-9-._~]-charset + URL-safe-base64-SHA256 + never-send-verifier-except-to-token-endpoint commitment survives", () => {
     expect(body).toMatch(
-      /Generate a high-entropy random string \(RFC 7636 §4\.1, 43–128\s*\n?\s*characters from <code>\[A-Za-z0-9-\._~\]<\/code>\)\. Compute the\s*\n?\s*<code>code_challenge<\/code> as the URL-safe base64 of\s*\n?\s*<code>SHA-256\(verifier\)<\/code>\./,
+      /Generate a high-entropy random string \(RFC 7636 §4\.1, 43–128\s*characters from <code>\[A-Za-z0-9-\._~\]<\/code>\)\. Compute the\s*<code>code_challenge<\/code> as the URL-safe base64 of\s*<code>SHA-256\(verifier\)<\/code>\./,
     );
     expect(body).toMatch(
-      /Keep the verifier in your app\s*\n?\s*until step 3 — never send it to anyone except Driftstack at\s*\n?\s*the token endpoint\./,
+      /Keep the verifier in your app\s*until step 3 — never send it to anyone except Driftstack at\s*the token endpoint\./,
     );
   });
 
@@ -111,11 +111,11 @@ describe('W517.C apps/marketing-site/src/pages/docs/oauth-apps.astro content par
     expect(body).toMatch(/&code_challenge_method=S256/);
     expect(body).toMatch(/&scope=read:sessions write:sessions/);
     expect(body).toMatch(
-      /Verify <code>state<\/code> matches what you sent \(CSRF guard\) in\s*\n?\s*either case\./,
+      /Verify <code>state<\/code> matches what you sent \(CSRF guard\) in\s*either case\./,
     );
     expect(body).toMatch(/\?error=access_denied&amp;state=…/);
     expect(body).toMatch(
-      /your integration never receives or handles\s*\n?\s*the intermediate <code>authorization_id<\/code>/,
+      /your integration never receives or handles\s*the intermediate <code>authorization_id<\/code>/,
     );
     expect(body).toContain('GET /v1/oauth/authorize');
     expect(body).toContain('POST /v1/oauth/authorize/complete');
@@ -136,10 +136,10 @@ describe('W517.C apps/marketing-site/src/pages/docs/oauth-apps.astro content par
 
   it("1-hour TTL + no-refresh-tokens framing pinned: 'Tokens live for one hour. There are no refresh tokens — when the token expires, run the full authorize → exchange dance again. This is intentional: it makes consent re-confirmation a regular event rather than a forever-grant.' + scope-subset-enforcement: 'A token with read:sessions can call GET /v1/sessions but not POST /v1/sessions.' — pinned so the 1h-TTL + no-refresh-tokens + intentional-consent-re-confirmation + scope-subset-enforcement commitments survive (drift to introducing refresh tokens would invert the consent-re-confirmation posture)", () => {
     expect(body).toMatch(
-      /Tokens live for <strong>one hour<\/strong>\. There are no\s*\n?\s*refresh tokens — when the token expires, run the full\s*\n?\s*authorize → exchange dance again\. This is intentional: it\s*\n?\s*makes consent re-confirmation a regular event rather than a\s*\n?\s*forever-grant\./,
+      /Tokens live for <strong>one hour<\/strong>\. There are no\s*refresh tokens — when the token expires, run the full\s*authorize → exchange dance again\. This is intentional: it\s*makes consent re-confirmation a regular event rather than a\s*forever-grant\./,
     );
     expect(body).toMatch(
-      /A token with\s*\n?\s*<code>read:sessions<\/code> can call <code>GET \/v1\/sessions<\/code>\s*\n?\s*but not <code>POST \/v1\/sessions<\/code>\./,
+      /A token with\s*<code>read:sessions<\/code> can call <code>GET \/v1\/sessions<\/code>\s*but not <code>POST \/v1\/sessions<\/code>\./,
     );
   });
 
@@ -154,41 +154,41 @@ describe('W517.C apps/marketing-site/src/pages/docs/oauth-apps.astro content par
     expect(body).toMatch(/"client_secret": "oas_…"/);
     expect(body).toMatch(/foreign-client token returns/);
     expect(body).toMatch(
-      /Invalid or revoked client\s*\n?\s*credentials return 401 before token lookup\./,
+      /Invalid or revoked client\s*credentials return 401 before token lookup\./,
     );
     expect(body).toMatch(/<h2>Revocation \(RFC 7009\)<\/h2>/);
     expect(body).toMatch(/POST \/v1\/oauth\/revoke/);
     expect(body).toMatch(/"token_type_hint": "access_token"/);
     expect(body).toMatch(
-      /After client authentication succeeds, the endpoint returns 200\s*\n?\s*for an owned, unknown, or foreign-client token, but only a token\s*\n?\s*issued to your <code>client_id<\/code> is revoked\./,
+      /After client authentication succeeds, the endpoint returns 200\s*for an owned, unknown, or foreign-client token, but only a token\s*issued to your <code>client_id<\/code> is revoked\./,
     );
     expect(body).toMatch(/Invalid or revoked client credentials return 401\./);
   });
 
   it('5-security-expectation list pins confidential-client handling with no public-client flow', () => {
     expect(body).toMatch(
-      /<strong>Always validate <code>state<\/code><\/strong> on the\s*\n?\s*redirect back\. Without it, your callback is wide open to CSRF\./,
+      /<strong>Always validate <code>state<\/code><\/strong> on the\s*redirect back\. Without it, your callback is wide open to CSRF\./,
     );
     expect(body).toMatch(
-      /<strong>Generate a fresh PKCE verifier per authorization\s*\n?\s*flow\.<\/strong> Re-using a verifier defeats its purpose\./,
+      /<strong>Generate a fresh PKCE verifier per authorization\s*flow\.<\/strong> Re-using a verifier defeats its purpose\./,
     );
     expect(body).toMatch(
-      /<strong>HTTPS-only redirect_uri<\/strong> in production\.\s*\n?\s*Driftstack rejects HTTP redirect URIs that aren't localhost\./,
+      /<strong>HTTPS-only redirect_uri<\/strong> in production\.\s*Driftstack rejects HTTP redirect URIs that aren't localhost\./,
     );
     expect(body).toMatch(
-      /<strong>Store client_secret server-side\.<\/strong> Every supported\s*\n?\s*client is confidential and the token, introspection, and revocation\s*\n?\s*endpoints require the secret\. A browser UI must exchange through its\s*\n?\s*own trusted backend; there is no public-client flow\./,
+      /<strong>Store client_secret server-side\.<\/strong> Every supported\s*client is confidential and the token, introspection, and revocation\s*endpoints require the secret\. A browser UI must exchange through its\s*own trusted backend; there is no public-client flow\./,
     );
     expect(body).toMatch(
-      /<strong>Tokens are bearer tokens\.<\/strong> Anyone who reads\s*\n?\s*the token can act as the customer\. Treat them like passwords\./,
+      /<strong>Tokens are bearer tokens\.<\/strong> Anyone who reads\s*the token can act as the customer\. Treat them like passwords\./,
     );
   });
 
   it('account rate limits and the no-sandbox production boundary are pinned', () => {
     expect(body).toMatch(
-      /Token-issued requests count against the customer's account\s*\n?\s*rate limits, not your app's\./,
+      /Token-issued requests count against the customer's account\s*rate limits, not your app's\./,
     );
     expect(body).toMatch(
-      /Driftstack has no separate sandbox environment\. Test with a paid dev\s*\n?\s*account on the production API and use least-privilege scopes\. Read-only\s*\n?\s*scopes cannot create sessions, but the account still uses production\s*\n?\s*data, limits, and rate-limit budgets\. The Free desktop\s*\n?\s*<code>ds_test_…<\/code> credential is not an OAuth or API sandbox key\./,
+      /Driftstack has no separate sandbox environment\. Test with a paid dev\s*account on the production API and use least-privilege scopes\. Read-only\s*scopes cannot create sessions, but the account still uses production\s*data, limits, and rate-limit budgets\. The Free desktop\s*<code>ds_test_…<\/code> credential is not an OAuth or API sandbox key\./,
     );
   });
 

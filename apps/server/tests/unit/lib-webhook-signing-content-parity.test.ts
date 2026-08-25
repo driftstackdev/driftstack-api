@@ -45,7 +45,7 @@ describe('W388.C apps/server/src/lib/webhook-signing.ts content parity', () => {
 
   it('encrypted-at-rest framing keeps plaintext scoped to the delivery worker', () => {
     expect(body).toMatch(
-      /Secrets are generated at subscription-creation time and stored in a\s*\n?\s*\/\/\s*versioned AES-GCM envelope\. The delivery worker receives plaintext only\s*\n?\s*\/\/\s*after repository-boundary decryption/,
+      /Secrets are generated at subscription-creation time and stored in a\s*\/\/\s*versioned AES-GCM envelope\. The delivery worker receives plaintext only\s*\/\/\s*after repository-boundary decryption/,
     );
   });
 
@@ -65,13 +65,13 @@ describe('W388.C apps/server/src/lib/webhook-signing.ts content parity', () => {
 
   it('generateWebhookSecret: returns `whsec_<32 base32>` format', () => {
     expect(body).toMatch(
-      /export function generateWebhookSecret\(\): string \{\s*\n?\s*return `whsec_\$\{base32Encode\(randomBytes\(SECRET_BODY_BYTES\)\)\}`;\s*\n?\s*\}/,
+      /export function generateWebhookSecret\(\): string \{\s*return `whsec_\$\{base32Encode\(randomBytes\(SECRET_BODY_BYTES\)\)\}`;\s*\}/,
     );
   });
 
   it('webhookSecretPrefix: slice(0, SECRET_PREFIX_LEN) — human-displayable', () => {
     expect(body).toMatch(
-      /export function webhookSecretPrefix\(plaintext: string\): string \{\s*\n?\s*return plaintext\.slice\(0, SECRET_PREFIX_LEN\);\s*\n?\s*\}/,
+      /export function webhookSecretPrefix\(plaintext: string\): string \{\s*return plaintext\.slice\(0, SECRET_PREFIX_LEN\);\s*\}/,
     );
   });
 
@@ -84,10 +84,10 @@ describe('W388.C apps/server/src/lib/webhook-signing.ts content parity', () => {
 
   it('V-359 rotation grace framing: dual-sign with current + previous secret', () => {
     expect(body).toMatch(
-      /V-359 — when set, sign with both the current AND the previous\s*\n?\s*\*\s*secret and emit two `v1=…` entries comma-separated\. Used during\s*\n?\s*\*\s*the rotation grace period/,
+      /V-359 — when set, sign with both the current AND the previous\s*\*\s*secret and emit two `v1=…` entries comma-separated\. Used during\s*\*\s*the rotation grace period/,
     );
     expect(body).toMatch(
-      /SDK verifier iterates over every `v1=…` entry and accepts the\s*\n?\s*\*\s*first match/,
+      /SDK verifier iterates over every `v1=…` entry and accepts the\s*\*\s*first match/,
     );
   });
 
@@ -101,7 +101,7 @@ describe('W388.C apps/server/src/lib/webhook-signing.ts content parity', () => {
 
   it('V-359 dual-emit when secretPrev !== undefined && secretPrev !== ""', () => {
     expect(body).toMatch(
-      /if \(opts\.secretPrev !== undefined && opts\.secretPrev !== ''\) \{\s*\n?\s*const prev = createHmac\('sha256', opts\.secretPrev\)\.update\(signed\)\.digest\('hex'\);\s*\n?\s*parts\.push\(`v1=\$\{prev\}`\);/,
+      /if \(opts\.secretPrev !== undefined && opts\.secretPrev !== ''\) \{\s*const prev = createHmac\('sha256', opts\.secretPrev\)\.update\(signed\)\.digest\('hex'\);\s*parts\.push\(`v1=\$\{prev\}`\);/,
     );
   });
 

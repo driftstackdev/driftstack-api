@@ -49,14 +49,14 @@ describe('W403.C apps/server/src/services/auth-cache.ts content parity', () => {
 
   it('D-020 framing pinned: scrypt logN=15 V-010 cost amortisation + 30s TTL + cache key = sha256(plaintext)', () => {
     expect(body).toMatch(
-      /Auth cache — amortises scrypt verification cost across the 30-second\s*\n?\s*\/\/\s*TTL window\. Without this, every authenticated request re-runs scrypt\s*\n?\s*\/\/\s*\(logN=15, ~50–100 ms on dev hardware\), which dominated the API's p50\/p99\s*\n?\s*\/\/\s*latency under load \(V-010 finding 2\)\./,
+      /Auth cache — amortises scrypt verification cost across the 30-second\s*\/\/\s*TTL window\. Without this, every authenticated request re-runs scrypt\s*\/\/\s*\(logN=15, ~50–100 ms on dev hardware\), which dominated the API's p50\/p99\s*\/\/\s*latency under load \(V-010 finding 2\)\./,
     );
     expect(body).toMatch(/Security model \(D-020\):/);
     expect(body).toMatch(
-      /At-rest hash strength is preserved: scrypt logN=15 stays in\s*\n?\s*\/\/\s*`lib\/api-keys\.ts`\. The cache is a performance optimisation only\./,
+      /At-rest hash strength is preserved: scrypt logN=15 stays in\s*\/\/\s*`lib\/api-keys\.ts`\. The cache is a performance optimisation only\./,
     );
     expect(body).toMatch(
-      /The cache key is `sha256\(plaintext\)` — a deterministic but\s*\n?\s*\/\/\s*non-reversible mapping\./,
+      /The cache key is `sha256\(plaintext\)` — a deterministic but\s*\/\/\s*non-reversible mapping\./,
     );
     // V-886 — this froze "Customers are documented that key revocation takes
     // effect within 30s in the worst case". No customer page states any such
@@ -73,63 +73,63 @@ describe('W403.C apps/server/src/services/auth-cache.ts content parity', () => {
       /TTL is 30s\. That bounds how long an entry LIVES; it is not a/,
     );
     expect(body, 'and the version gate is named as what actually revokes').toMatch(
-      /`get\(\)` compares it on EVERY\s*\n?\s*\/\/\s*read/,
+      /`get\(\)` compares it on EVERY\s*\/\/\s*read/,
     );
   });
 
   it('expires_at re-check + graceful-degradation framing pinned: any Redis error → warn-log + no-op', () => {
     expect(body).toMatch(
-      /`expiresAt` is re-checked on every cache read \(not just on cache\s*\n?\s*\/\/\s*write\) so a key cached just before its expiry doesn't leak past the\s*\n?\s*\/\/\s*clock-bound deadline\./,
+      /`expiresAt` is re-checked on every cache read \(not just on cache\s*\/\/\s*write\) so a key cached just before its expiry doesn't leak past the\s*\/\/\s*clock-bound deadline\./,
     );
     expect(body).toMatch(
-      /Graceful degradation: any Redis error during get\/set\/invalidate is\s*\n?\s*\/\/\s*logged and treated as a no-op\. Auth still works \(slower\), service\s*\n?\s*\/\/\s*stays up\./,
+      /Graceful degradation: any Redis error during get\/set\/invalidate is\s*\/\/\s*logged and treated as a no-op\. Auth still works \(slower\), service\s*\/\/\s*stays up\./,
     );
   });
 
   it('AuthCache: cache read/write, optional generation capture, and key/account invalidation', () => {
     expect(body).toMatch(/export interface AuthCache \{/);
     expect(body).toMatch(
-      /\/\*\* Returns a cached context for this plaintext sha if one is fresh, else null\. \*\/\s*\n?\s*get\(plaintextSha256: string\): Promise<AccountContext \| null>;/,
+      /\/\*\* Returns a cached context for this plaintext sha if one is fresh, else null\. \*\/\s*get\(plaintextSha256: string\): Promise<AccountContext \| null>;/,
     );
     expect(body).toMatch(
       /captureVersions\?\(accountId: string, keyId: string\): Promise<AuthCacheVersions \| null>;/,
     );
     expect(body).toMatch(
-      /\/\*\* Cache the context; reverse-indexes by keyId for invalidation\. \*\/\s*\n?\s*set\(\s*\n?\s*plaintextSha256: string,\s*\n?\s*keyId: string,\s*\n?\s*accountId: string,\s*\n?\s*context: AccountContext,\s*\n?\s*ttlSec: number,\s*\n?\s*capturedVersions\?: AuthCacheVersions,\s*\n?\s*\): Promise<void>;/,
+      /\/\*\* Cache the context; reverse-indexes by keyId for invalidation\. \*\/\s*set\(\s*plaintextSha256: string,\s*keyId: string,\s*accountId: string,\s*context: AccountContext,\s*ttlSec: number,\s*capturedVersions\?: AuthCacheVersions,\s*\): Promise<void>;/,
     );
     expect(body).toMatch(
-      /\/\*\* Invalidate the cached entry for one specific API key \(used by revocation\)\. \*\/\s*\n?\s*invalidateKey\(keyId: string\): Promise<void>;/,
+      /\/\*\* Invalidate the cached entry for one specific API key \(used by revocation\)\. \*\/\s*invalidateKey\(keyId: string\): Promise<void>;/,
     );
     expect(body).toMatch(
-      /\/\*\* Bump the account-version counter so all cached entries for the account miss on next read\. \*\/\s*\n?\s*invalidateAccount\(accountId: string\): Promise<void>;/,
+      /\/\*\* Bump the account-version counter so all cached entries for the account miss on next read\. \*\/\s*invalidateAccount\(accountId: string\): Promise<void>;/,
     );
   });
 
   it("sha256Hex exported helper: createHash('sha256').update(plaintext).digest('hex')", () => {
     expect(body).toMatch(
-      /export function sha256Hex\(plaintext: string\): string \{\s*\n?\s*return createHash\('sha256'\)\.update\(plaintext\)\.digest\('hex'\);\s*\n?\s*\}/,
+      /export function sha256Hex\(plaintext: string\): string \{\s*return createHash\('sha256'\)\.update\(plaintext\)\.digest\('hex'\);\s*\}/,
     );
   });
 
   it('SerializedAccount: pre-V-352 timezone? + pre-V-352b avatarR2Key? + pre-V-298a slug? + pre-V-298b region? all optional (defaults to null)', () => {
     expect(body).toMatch(/interface SerializedAccount \{/);
     expect(body).toMatch(
-      /\/\*\* V-352 — optional\. Pre-V-352 cache entries lack this; deserialize defaults to null\. \*\/\s*\n?\s*timezone\?: string \| null;/,
+      /\/\*\* V-352 — optional\. Pre-V-352 cache entries lack this; deserialize defaults to null\. \*\/\s*timezone\?: string \| null;/,
     );
     expect(body).toMatch(
-      /\/\*\* V-352b — optional\. Pre-V-352b cache entries lack this; deserialize defaults to null\. \*\/\s*\n?\s*avatarR2Key\?: string \| null;/,
+      /\/\*\* V-352b — optional\. Pre-V-352b cache entries lack this; deserialize defaults to null\. \*\/\s*avatarR2Key\?: string \| null;/,
     );
     expect(body).toMatch(
-      /\/\*\* V-298a — optional\. Pre-V-298a cache entries lack this; deserialize defaults to null\. \*\/\s*\n?\s*slug\?: string \| null;/,
+      /\/\*\* V-298a — optional\. Pre-V-298a cache entries lack this; deserialize defaults to null\. \*\/\s*slug\?: string \| null;/,
     );
     expect(body).toMatch(
-      /\/\*\* V-298b — optional\. Pre-V-298b cache entries lack this; deserialize defaults to null\. \*\/\s*\n?\s*region\?: 'us' \| 'eu' \| 'apac' \| null;/,
+      /\/\*\* V-298b — optional\. Pre-V-298b cache entries lack this; deserialize defaults to null\. \*\/\s*region\?: 'us' \| 'eu' \| 'apac' \| null;/,
     );
   });
 
   it('V-326 SerializedTeamMembership: pre-V-326 absence treated as empty array (no implicit team grants)', () => {
     expect(body).toMatch(
-      /\/\/ V-326 — team membership entries serialized as plain JSON\. Older\s*\n?\s*\/\/ pre-V-326 cache entries lack this field; deserialize\(\) treats\s*\n?\s*\/\/ absence as an empty array \(safe default — no implicit team grants\)\./,
+      /\/\/ V-326 — team membership entries serialized as plain JSON\. Older\s*\/\/ pre-V-326 cache entries lack this field; deserialize\(\) treats\s*\/\/ absence as an empty array \(safe default — no implicit team grants\)\./,
     );
     expect(body).toMatch(/interface SerializedTeamMembership \{/);
     expect(body).toMatch(/membershipId: string;/);
@@ -140,7 +140,7 @@ describe('W403.C apps/server/src/services/auth-cache.ts content parity', () => {
   it('security-sensitive provenance + webSession are explicit and version-gated', () => {
     expect(body).toMatch(/provenance: string \| null;/);
     expect(body).toMatch(
-      /\/\*\* V-353e — populated when the request authed via web session\. Explicit\s*\n?\s*\*\s*null means API-key auth\. Missing is ambiguous and makes the versioned\s*\n?\s*\*\s*cache envelope invalid rather than silently bypassing MFA step-up\. \*\/\s*\n?\s*webSession: \{ id: string; mfaSatisfiedAt: string \| null \} \| null;/,
+      /\/\*\* V-353e — populated when the request authed via web session\. Explicit\s*\*\s*null means API-key auth\. Missing is ambiguous and makes the versioned\s*\*\s*cache envelope invalid rather than silently bypassing MFA step-up\. \*\/\s*webSession: \{ id: string; mfaSatisfiedAt: string \| null \} \| null;/,
     );
     expect(body).toMatch(/const AUTH_CACHE_SCHEMA_VERSION = 1;/);
     expect(body).toMatch(/schemaVersion: typeof AUTH_CACHE_SCHEMA_VERSION;/);
@@ -149,7 +149,7 @@ describe('W403.C apps/server/src/services/auth-cache.ts content parity', () => {
 
   it('V-247 CachedEntry.keyVersion framing pinned (revocation race resolution + 30s TTL drain)', () => {
     expect(body).toMatch(
-      /V-247 \/ V-246-P0-001 — per-key version counter\. Bumped on\s*\n?\s*\*\s*revocation so an in-flight slow-path `set\(\)` that captured the\s*\n?\s*\*\s*pre-revoke version produces an entry that the next `get\(\)`\s*\n?\s*\*\s*detects as stale \(currentKeyVersion !== entry\.keyVersion\)\. Closes\s*\n?\s*\*\s*the API-key revocation cache window\./,
+      /V-247 \/ V-246-P0-001 — per-key version counter\. Bumped on\s*\*\s*revocation so an in-flight slow-path `set\(\)` that captured the\s*\*\s*pre-revoke version produces an entry that the next `get\(\)`\s*\*\s*detects as stale \(currentKeyVersion !== entry\.keyVersion\)\. Closes\s*\*\s*the API-key revocation cache window\./,
     );
   });
 
@@ -168,17 +168,17 @@ describe('W403.C apps/server/src/services/auth-cache.ts content parity', () => {
 
   it('RedisAuthCache.get: entry + security schema + accountVersion + keyVersion gates; err → warn + null', () => {
     expect(body).toMatch(
-      /const raw = await this\.redis\.get\(KEY_ENTRY\(plaintextSha256\)\);\s*\n?\s*if \(!raw\) return null;/,
+      /const raw = await this\.redis\.get\(KEY_ENTRY\(plaintextSha256\)\);\s*if \(!raw\) return null;/,
     );
     expect(body).toMatch(
       /const parsed: unknown = JSON\.parse\(raw\);[\s\S]*?if \(!isCurrentCachedEntry\(parsed\)\) return null;/,
     );
     expect(body).toMatch(/if \(!Object\.hasOwn\(context, 'webSession'\)\) return false;/);
     expect(body).toMatch(
-      /const currentAccountVersion = accountVersionRaw \? Number\(accountVersionRaw\) : 0;\s*\n?\s*if \(currentAccountVersion !== entry\.accountVersion\) return null;/,
+      /const currentAccountVersion = accountVersionRaw \? Number\(accountVersionRaw\) : 0;\s*if \(currentAccountVersion !== entry\.accountVersion\) return null;/,
     );
     expect(body).toMatch(
-      /const currentKeyVersion = keyVersionRaw \? Number\(keyVersionRaw\) : 0;\s*\n?\s*if \(currentKeyVersion !== entry\.keyVersion\) return null;/,
+      /const currentKeyVersion = keyVersionRaw \? Number\(keyVersionRaw\) : 0;\s*if \(currentKeyVersion !== entry\.keyVersion\) return null;/,
     );
     expect(body).toMatch(
       /this\.logger\.warn\(\{ err: errSummary\(err\) \}, 'auth cache get failed; degrading to scrypt path'\);/,
@@ -187,35 +187,35 @@ describe('W403.C apps/server/src/services/auth-cache.ts content parity', () => {
 
   it('RedisAuthCache.set: preserves caller-captured account and key generations', () => {
     expect(body).toMatch(
-      /\/\/ V-591 — authentication supplies both generations captured before its\s*\n?\s*\/\/ authoritative DB recheck\./,
+      /\/\/ V-591 — authentication supplies both generations captured before its\s*\/\/ authoritative DB recheck\./,
     );
     expect(body).toMatch(/const \[accountVersionRaw, keyVersionRaw\] = capturedVersions/);
     expect(body).toMatch(/capturedVersions\?\.accountVersion/);
     expect(body).toMatch(/capturedVersions\?\.keyVersion/);
     expect(body).toMatch(
-      /this\.redis\.set\(KEY_ENTRY\(plaintextSha256\), JSON\.stringify\(entry\), 'PX', ttlMs\),\s*\n?\s*\/\/ Reverse-index so revocation can find the cache entry by keyId\.\s*\n?\s*this\.redis\.set\(KEY_REVERSE\(keyId\), plaintextSha256, 'PX', ttlMs\),/,
+      /this\.redis\.set\(KEY_ENTRY\(plaintextSha256\), JSON\.stringify\(entry\), 'PX', ttlMs\),\s*\/\/ Reverse-index so revocation can find the cache entry by keyId\.\s*this\.redis\.set\(KEY_REVERSE\(keyId\), plaintextSha256, 'PX', ttlMs\),/,
     );
   });
 
   it('invalidateKey: V-247 INCR-key-version FIRST (race resolution); then del REVERSE + ENTRY for fast-path eviction', () => {
     expect(body).toMatch(
-      /\/\/ V-247 — INCR the key-version counter FIRST \(atomic in Redis\); any\s*\n?\s*\/\/ in-flight `set\(\)` that captured the pre-INCR value will land an\s*\n?\s*\/\/ entry the next `get\(\)` detects as stale\./,
+      /\/\/ V-247 — INCR the key-version counter FIRST \(atomic in Redis\); any\s*\/\/ in-flight `set\(\)` that captured the pre-INCR value will land an\s*\/\/ entry the next `get\(\)` detects as stale\./,
     );
     expect(body).toMatch(
-      /const ops: Array<Promise<unknown>> = \[\s*\n?\s*this\.redis\.incr\(KEY_KEY_VERSION\(keyId\)\),\s*\n?\s*this\.redis\.del\(KEY_REVERSE\(keyId\)\),\s*\n?\s*\];/,
+      /const ops: Array<Promise<unknown>> = \[\s*this\.redis\.incr\(KEY_KEY_VERSION\(keyId\)\),\s*this\.redis\.del\(KEY_REVERSE\(keyId\)\),\s*\];/,
     );
     expect(body).toMatch(/if \(sha\) ops\.push\(this\.redis\.del\(KEY_ENTRY\(sha\)\)\);/);
   });
 
   it('invalidateAccount: redis.incr KEY_ACCOUNT_VERSION; err → warn-only no-op', () => {
     expect(body).toMatch(
-      /async invalidateAccount\(accountId: string\): Promise<void> \{\s*\n?\s*try \{\s*\n?\s*await this\.redis\.incr\(KEY_ACCOUNT_VERSION\(accountId\)\);\s*\n?\s*\} catch \(err\) \{\s*\n?\s*this\.logger\.warn\(\{ err: errSummary\(err\) \}, 'auth cache invalidateAccount failed'\);/,
+      /async invalidateAccount\(accountId: string\): Promise<void> \{\s*try \{\s*await this\.redis\.incr\(KEY_ACCOUNT_VERSION\(accountId\)\);\s*\} catch \(err\) \{\s*this\.logger\.warn\(\{ err: errSummary\(err\) \}, 'auth cache invalidateAccount failed'\);/,
     );
   });
 
   it('deserialize: display-only legacy fields keep safe defaults; security fields are direct', () => {
     expect(body).toMatch(
-      /\/\/ Older serialised entries \(pre-OT7\) may not carry the rateLimitOverrides\s*\n?\s*\/\/ field — treat absence as empty rather than throwing\.\s*\n?\s*if \(s\.rateLimitOverrides\) \{/,
+      /\/\/ Older serialised entries \(pre-OT7\) may not carry the rateLimitOverrides\s*\/\/ field — treat absence as empty rather than throwing\.\s*if \(s\.rateLimitOverrides\) \{/,
     );
     expect(body).toMatch(/timezone: s\.account\.timezone \?\? null,/);
     expect(body).toMatch(/avatarR2Key: s\.account\.avatarR2Key \?\? null,/);
@@ -223,7 +223,7 @@ describe('W403.C apps/server/src/services/auth-cache.ts content parity', () => {
     expect(body).toMatch(/region: s\.account\.region \?\? null,/);
     expect(body).toMatch(/teams: \(s\.teams \?\? \[\]\)\.map\(\(t\) => \(\{/);
     expect(body).toMatch(/provenance: s\.apiKey\.provenance,/);
-    expect(body).toMatch(/webSession: s\.webSession\s*\n?\s*\?\s*\{/);
+    expect(body).toMatch(/webSession: s\.webSession\s*\?\s*\{/);
   });
 
   it('InMemoryAuthCache: 4-map seam + V-247 invalidateKey INCR-first + size() test helper', () => {
@@ -232,19 +232,19 @@ describe('W403.C apps/server/src/services/auth-cache.ts content parity', () => {
     expect(body).toMatch(/private readonly reverse = new Map<string, string>\(\);/);
     expect(body).toMatch(/private readonly accountVersions = new Map<string, number>\(\);/);
     expect(body).toMatch(
-      /\/\/ V-247 — mirror Redis key-version counter\.\s*\n?\s*private readonly keyVersions = new Map<string, number>\(\);/,
+      /\/\/ V-247 — mirror Redis key-version counter\.\s*private readonly keyVersions = new Map<string, number>\(\);/,
     );
     expect(body).toMatch(
-      /\/\/ V-247 — INCR key-version FIRST so any in-flight set\(\) that\s*\n?\s*\/\/ captured the pre-INCR value lands a stale entry\. Then drop\s*\n?\s*\/\/ the existing entry for fast-path eviction\./,
+      /\/\/ V-247 — INCR key-version FIRST so any in-flight set\(\) that\s*\/\/ captured the pre-INCR value lands a stale entry\. Then drop\s*\/\/ the existing entry for fast-path eviction\./,
     );
     expect(body).toMatch(
-      /\/\*\* Test helper: report the entry count\. \*\/\s*\n?\s*size\(\): number \{\s*\n?\s*return this\.entries\.size;\s*\n?\s*\}/,
+      /\/\*\* Test helper: report the entry count\. \*\/\s*size\(\): number \{\s*return this\.entries\.size;\s*\}/,
     );
   });
 
   it('errSummary: Error → {name, message, stack, cause}; non-Error → {message: String(err)}', () => {
     expect(body).toMatch(
-      /function errSummary\(err: unknown\): \{\s*\n?\s*name\?: string;\s*\n?\s*message\?: string;\s*\n?\s*stack\?: string;\s*\n?\s*cause\?: unknown;\s*\n?\s*\} \{\s*\n?\s*if \(err instanceof Error\) \{\s*\n?\s*return \{ name: err\.name, message: err\.message, stack: err\.stack, cause: err\.cause \};\s*\n?\s*\}\s*\n?\s*return \{ message: String\(err\) \};\s*\n?\s*\}/,
+      /function errSummary\(err: unknown\): \{\s*name\?: string;\s*message\?: string;\s*stack\?: string;\s*cause\?: unknown;\s*\} \{\s*if \(err instanceof Error\) \{\s*return \{ name: err\.name, message: err\.message, stack: err\.stack, cause: err\.cause \};\s*\}\s*return \{ message: String\(err\) \};\s*\}/,
     );
   });
 

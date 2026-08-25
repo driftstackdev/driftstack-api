@@ -145,7 +145,7 @@ describe('W552.A /docs/launch/pre-launch-checklist.md content parity', () => {
       /`EXPECTED_TEST_FILES` \/ `EXPECTED_TEST_FILES_ALL`/,
     );
     expect(body, 'the reason the pointer replaced a number is gone').toMatch(
-      /read them rather than\s*\n?\s*a figure frozen here/,
+      /read them rather than\s*a figure frozen here/,
     );
 
     // The frozen pair must not come back. A row that quotes a file count and a

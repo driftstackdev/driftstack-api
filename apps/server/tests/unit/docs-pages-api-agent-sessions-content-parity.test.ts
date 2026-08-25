@@ -46,10 +46,10 @@ describe('docs/pages/api/agent-sessions content parity', () => {
 
   it('Agent sessions overview framing pinned (W554: intent list completed to all 6 kinds — navigate/interact/wait/capture + behavioural scroll/behavioral_pause): chat-style decompose→execute loop + NL messages + streaming-results contract stay documented', () => {
     expect(body).toMatch(
-      /An \*\*agent session\*\* layers a chat-style decompose→execute loop on\s*\n?\s*top of a regular driver-backed browser session\./,
+      /An \*\*agent session\*\* layers a chat-style decompose→execute loop on\s*top of a regular driver-backed browser session\./,
     );
     expect(body).toMatch(
-      /the server's decomposer translates that into typed\s*\n?\s*intents \(`navigate`, `interact`, `wait`, `capture`, plus the\s*\n?\s*behavioural `scroll` and `behavioral_pause`\); the runtime executes\s*\n?\s*them; results stream back in the response\./,
+      /the server's decomposer translates that into typed\s*intents \(`navigate`, `interact`, `wait`, `capture`, plus the\s*behavioural `scroll` and `behavioral_pause`\); the runtime executes\s*them; results stream back in the response\./,
     );
   });
 
@@ -69,20 +69,20 @@ describe('docs/pages/api/agent-sessions content parity', () => {
     expect(body).toMatch(/`clarify: <question>`/);
     expect(body).toMatch(/\(plan halted on failure\)/);
     // The actionable instruction, and where structure actually lives.
-    expect(body).toMatch(/Do \*\*not\*\*\s*\n?\s*`JSON\.parse` it/);
+    expect(body).toMatch(/Do \*\*not\*\*\s*`JSON\.parse` it/);
     // And the false claim must not return.
-    expect(body).not.toMatch(/serialised\s*\n?\s*`DecomposeResult` JSON for agent turns/);
+    expect(body).not.toMatch(/serialised\s*`DecomposeResult` JSON for agent turns/);
   });
 
   it('3-mode state machine framing pinned: ai (default; every message goes through decomposer + executor; closed sessions return 409) + manual (message is transcript-only pass-through; gui-client drives real actions via gui_control plane HMAC channel) + pair (interactive takeover state machine; AI drives by default; customer calls takeover to seize control then handback to return; state transitions audit-logged) — pinned so the 3-mode roster + AI-default + manual-gui_control-plane + pair-takeover-handback-state-machine + audit-logged contract all stay documented (drift on any mode would mismatch route+service+DB enum)', () => {
     expect(body).toMatch(
-      /- `ai` \(default\) — every customer message goes through the\s*\n?\s*decomposer \+ executor\. Closed sessions return 409\./,
+      /- `ai` \(default\) — every customer message goes through the\s*decomposer \+ executor\. Closed sessions return 409\./,
     );
     expect(body).toMatch(
-      /- `manual` — `message` is a transcript-only pass-through\. The\s*\n?\s*customer's gui-client drives the real actions via the\s*\n?\s*gui_control plane \(a separate per-session HMAC channel\)\./,
+      /- `manual` — `message` is a transcript-only pass-through\. The\s*customer's gui-client drives the real actions via the\s*gui_control plane \(a separate per-session HMAC channel\)\./,
     );
     expect(body).toMatch(
-      /- `pair` — interactive takeover state machine\. AI drives by\s*\n?\s*default; the customer can call `takeover` to seize control,\s*\n?\s*then `handback` to return control to AI\. State transitions are\s*\n?\s*audit-logged\./,
+      /- `pair` — interactive takeover state machine\. AI drives by\s*default; the customer can call `takeover` to seize control,\s*then `handback` to return control to AI\. State transitions are\s*audit-logged\./,
     );
   });
 
@@ -94,13 +94,13 @@ describe('docs/pages/api/agent-sessions content parity', () => {
       // itself: this shape and the ID-format note both said bare, while the
       // create-response example two blocks down said `ses_<uuid>`. account_id
       // IS bare, which is what the note is for.
-      /"id": "agt_<uuid>",\s*\n?\s*"account_id": "<uuid>",\s*\n?\s*"driftstack_session_id": "ses_<uuid> \| null",\s*\n?\s*"status": "active \| paused \| closed",/,
+      /"id": "agt_<uuid>",\s*"account_id": "<uuid>",\s*"driftstack_session_id": "ses_<uuid> \| null",\s*"status": "active \| paused \| closed",/,
     );
     expect(body).toMatch(
-      /"livekit": \{\s*\n?\s*"ws_url": "wss:\/\/mac-NNN\.driftstack\.dev:8443",\s*\n?\s*"room": "agt_<uuid>",\s*\n?\s*"token": "<HS256 JWT>",\s*\n?\s*"participant_identity": "customer-<account-uuid>",\s*\n?\s*"expires_at": "<ISO-8601>"\s*\n?\s*\}/,
+      /"livekit": \{\s*"ws_url": "wss:\/\/mac-NNN\.driftstack\.dev:8443",\s*"room": "agt_<uuid>",\s*"token": "<HS256 JWT>",\s*"participant_identity": "customer-<account-uuid>",\s*"expires_at": "<ISO-8601>"\s*\}/,
     );
     expect(body).toMatch(
-      /The `livekit` field is \*\*optional\*\* — auto-populated on the\s*\n?\s*session-create response when the deployment has at least\s*\n?\s*one Mac with registered LiveKit credentials, and absent otherwise\s*\n?\s*\(pre-LK deployment, OR no Mac has called\s*\n?\s*`POST \/v1\/mac-nodes\/register` yet\)\./,
+      /The `livekit` field is \*\*optional\*\* — auto-populated on the\s*session-create response when the deployment has at least\s*one Mac with registered LiveKit credentials, and absent otherwise\s*\(pre-LK deployment, OR no Mac has called\s*`POST \/v1\/mac-nodes\/register` yet\)\./,
     );
   });
 
@@ -129,17 +129,15 @@ describe('docs/pages/api/agent-sessions content parity', () => {
 
   it('documents the current HTTP 503 boundary and supported live-control channels without internal ownership or roadmap prose', () => {
     expect(body).toMatch(
-      /\*\*HTTP manual-input dispatch is unavailable\.\*\* Manual-mode and\s*\n?\s*pair-mode-after-takeover input-events return `503 feature-unavailable`;\s*\n?\s*the HTTP route does not forward input to the harness\./,
+      /\*\*HTTP manual-input dispatch is unavailable\.\*\* Manual-mode and\s*pair-mode-after-takeover input-events return `503 feature-unavailable`;\s*the HTTP route does not forward input to the harness\./,
     );
     expect(body).toMatch(
-      /use the desktop Simulator or publish input through\s*\n?\s*the LiveKit DataChannel documented in the/,
+      /use the desktop Simulator or publish input through\s*the LiveKit DataChannel documented in the/,
     );
     expect(body).not.toMatch(/Agent\s+[123]|until[^.]{0,120}lands/iu);
-    expect(body).toMatch(/live fleet state is\s*\n?\s*unavailable in the deployment\./);
+    expect(body).toMatch(/live fleet state is\s*unavailable in the deployment\./);
     expect(body).toMatch(/no BYOK or bundled-LLM provider is available in the deployment/);
-    expect(body).not.toMatch(
-      /control plane\s*\n?\s*is not wired|activation gate is off|key path wired/,
-    );
+    expect(body).not.toMatch(/control plane\s*is not wired|activation gate is off|key path wired/);
   });
 
   it('documents outcome-unknown action failures as non-replayable without claiming the command failed before application', () => {
@@ -147,29 +145,25 @@ describe('docs/pages/api/agent-sessions content parity', () => {
       'the browser action or pacing may have taken effect even though its result was not confirmed — inspect the current page before deciding whether to try another action',
     );
     expect(body).toMatch(/"diagnosis": \{ "category": "unknown", "retryable": false \}/);
-    expect(body).toMatch(/`retryable: true`\s*\n?\s*means automatic replay/);
-    expect(body).toMatch(/`false` means\s*\n?\s*never replay automatically/);
-    expect(body).toMatch(/does not prove that the\s*\n?\s*action succeeded or failed/);
-    expect(body).toMatch(
-      /applies to `navigate`,\s*\n?\s*`interact`, `scroll`, and `behavioral_pause`/,
-    );
-    expect(body).toMatch(
-      /Read-only\s*\n?\s*`capture` remains eligible for bounded automatic replay/,
-    );
+    expect(body).toMatch(/`retryable: true`\s*means automatic replay/);
+    expect(body).toMatch(/`false` means\s*never replay automatically/);
+    expect(body).toMatch(/does not prove that the\s*action succeeded or failed/);
+    expect(body).toMatch(/applies to `navigate`,\s*`interact`, `scroll`, and `behavioral_pause`/);
+    expect(body).toMatch(/Read-only\s*`capture` remains eligible for bounded automatic replay/);
     expect(body).not.toContain('try a broader selector or wait for it to appear');
   });
 
   it('documents exact control-lane admission, manual provider bypass, and honest partial 409 settlement', () => {
     expect(body).toMatch(/admits each request into exactly one control lane/);
-    expect(body).toMatch(/A `manual` request is\s*\n?\s*transcript-only and never consults BYOK/);
+    expect(body).toMatch(/A `manual` request is\s*transcript-only and never consults BYOK/);
     expect(body).toMatch(
-      /invalidate the admitted turn even if\s*\n?\s*the session later returns to the same visible mode/,
+      /invalidate the admitted turn even if\s*the session later returns to the same visible mode/,
     );
     expect(body).toMatch(/`409 conflict` with `ai_control_unavailable: true` and a `phase`/);
     expect(body).toMatch(
-      /starts no later provider attempt, retry, browser intent, read-back, or\s*\n?\s*transcript suffix/,
+      /starts no later provider attempt, retry, browser intent, read-back, or\s*transcript suffix/,
     );
-    expect(body).toMatch(/`tokens_consumed` and\s*\n?\s*`usage`/);
+    expect(body).toMatch(/`tokens_consumed` and\s*`usage`/);
     expect(body).toMatch(/redacted `partial_results`/);
     expect(body).toMatch(/manual transcript turn never reads or hashes the irrelevant/);
     expect(body).toMatch(/BYOK header is deliberately outside receipt identity/);
@@ -194,7 +188,7 @@ describe('docs/pages/api/agent-sessions content parity', () => {
       /event: response`? whose `data:` is JSON `\{ status, body \}`/,
     );
     expect(body, 'the errors-inside-the-frame warning is gone').toMatch(
-      /Branching on\s*\n?\s*the response status alone will read every one of those as success/,
+      /Branching on\s*the response status alone will read every one of those as success/,
     );
     expect(body, 'the heartbeat-comment note is gone').toMatch(
       /Heartbeats are SSE comments, not events/,

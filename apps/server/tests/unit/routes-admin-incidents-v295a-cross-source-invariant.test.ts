@@ -161,7 +161,7 @@ describe('W1042 routes/admin-incidents V-295a + V-281 cross-source invariant', (
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-incidents.ts'));
     // create passes its target id as a lazy thunk, so its withAudit call is
     // multi-line — match the action string with flexible leading whitespace.
-    expect(p).toMatch(/withAudit\(\s*\n?\s*request,\s*\n?\s*'incident\.created',/);
+    expect(p).toMatch(/withAudit\(\s*request,\s*'incident\.created',/);
     expect(p).toMatch(/withAudit\(request, 'incident\.updated',/);
     expect(p).toMatch(/withAudit\(request, 'incident\.resolved',/);
   });
@@ -192,7 +192,7 @@ describe('W1042 routes/admin-incidents V-295a + V-281 cross-source invariant', (
   it('CRITICAL public status-incidents path — GET /v1/status/incidents (no auth, NO requireScope preHandler). The lack of any auth gate is what lets the public status page consume this. 2026-05-20 added a defense-in-depth IP-rate-limit preHandler (statusIncidentsListGate) — still no auth, but bounded against direct-API abuse bypassing the CDN.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-incidents.ts'));
     expect(p).toMatch(
-      /app\.get\(\s*\n?\s*'\/v1\/status\/incidents',\s*\n?\s*\{ preHandler: statusIncidentsListGate \},\s*\n?\s*async \(request, reply\) => \{/,
+      /app\.get\(\s*'\/v1\/status\/incidents',\s*\{ preHandler: statusIncidentsListGate \},\s*async \(request, reply\) => \{/,
     );
     // Negative guard: no auth-related preHandler on this path.
     expect(p).not.toMatch(
@@ -216,11 +216,11 @@ describe('W1042 routes/admin-incidents V-295a + V-281 cross-source invariant', (
   it('CRITICAL response codes — 201 on create + addUpdate + resolve responses include the canonical envelope. Drift to 200 on create would break HTTP-201-meaning across the admin surface.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-incidents.ts'));
     expect(p).toMatch(
-      /return reply\.code\(201\)\.send\(\{\s*\n?\s*incident: publicIncident\(created\.incident\)/,
+      /return reply\.code\(201\)\.send\(\{\s*incident: publicIncident\(created\.incident\)/,
     );
     expect(p).toMatch(/return reply\.code\(201\)\.send\(publicIncidentUpdate\(result\)\)/);
     expect(p).toMatch(
-      /return reply\.code\(200\)\.send\(\{\s*\n?\s*incident: publicIncident\(resolved\.incident\)/,
+      /return reply\.code\(200\)\.send\(\{\s*incident: publicIncident\(resolved\.incident\)/,
     );
   });
 });

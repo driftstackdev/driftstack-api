@@ -40,7 +40,7 @@ describe('W497.B apps/customer-dashboard/src/pages/webhooks.astro content parity
     // S32 2026-07-07 (fable-frontend-audit) — the page never rendered a mock (skeletons only);
     // the doc-block now says so and the dead MOCK_WEBHOOKS was removed.
     expect(body).toMatch(
-      /\/\/ V-181 — progressive-enhancement wiring against \/v1\/webhooks,\s*\n?\s*\/\/ mirrors V-180 \/sessions pattern\. SSR renders loading skeletons for\s*\n?\s*\/\/ instant paint; the inline <script> below replaces them with live/,
+      /\/\/ V-181 — progressive-enhancement wiring against \/v1\/webhooks,\s*\/\/ mirrors V-180 \/sessions pattern\. SSR renders loading skeletons for\s*\/\/ instant paint; the inline <script> below replaces them with live/,
     );
   });
 
@@ -54,7 +54,7 @@ describe('W497.B apps/customer-dashboard/src/pages/webhooks.astro content parity
 
   it('V-475 in-page rotate-secret reveal framing pinned. Re-enabled by slice 276 after restoring the V-475 anchor on the HTML comment at webhooks.astro:211 (anchor stripped to bare-em-dash + bare-space-indentation)', () => {
     expect(body).toMatch(
-      /V-475 — rotate-secret in-page reveal\. Replaces the window\.prompt\s*\n?\s*shown in earlier slices; some browsers block prompts in\s*\n?\s*non-interactive contexts \(incognito, autofill blockers, etc\.\)\./,
+      /V-475 — rotate-secret in-page reveal\. Replaces the window\.prompt\s*shown in earlier slices; some browsers block prompts in\s*non-interactive contexts \(incognito, autofill blockers, etc\.\)\./,
     );
   });
 
@@ -80,7 +80,7 @@ describe('W497.B apps/customer-dashboard/src/pages/webhooks.astro content parity
 
   it('V-403 + V-443 delivery-log framing pinned. Re-enabled by slice 211 after verifying the per-endpoint pager Map + filter-resets-cursor framing exists verbatim at webhooks.astro:783-789', () => {
     expect(body).toMatch(
-      /\/\/ V-403 \+ V-443 — delivery-log status filter \+ cursor pagination\.\s*\n?\s*\/\/ Backend accepts \?status= \+ \?cursor= on \/v1\/webhooks\/:id\/deliveries\.\s*\n?\s*\/\/ V-443 stores a `cursor` per endpoint in a closure-scoped Map/,
+      /\/\/ V-403 \+ V-443 — delivery-log status filter \+ cursor pagination\.\s*\/\/ Backend accepts \?status= \+ \?cursor= on \/v1\/webhooks\/:id\/deliveries\.\s*\/\/ V-443 stores a `cursor` per endpoint in a closure-scoped Map/,
     );
     expect(body).toMatch(/const deliveriesPager = new Map\(\);/);
   });
@@ -91,40 +91,38 @@ describe('W497.B apps/customer-dashboard/src/pages/webhooks.astro content parity
 
   it("V-347 secret-shown-ONCE + verifyWebhookSignature helper-name framing pinned. Re-enabled by slice 211 after verifying the 'Copy this signing secret now…verifyWebhookSignature helper to authenticate incoming deliveries.' copy exists at webhooks.astro:193-196", () => {
     expect(body).toMatch(
-      /Copy this signing secret now — it won't be shown again\. Use it with the SDK's\s*\n?\s*<code class="font-mono">verifyWebhookSignature<\/code> helper to authenticate\s*\n?\s*incoming deliveries\./,
+      /Copy this signing secret now — it won't be shown again\. Use it with the SDK's\s*<code class="font-mono">verifyWebhookSignature<\/code> helper to authenticate\s*incoming deliveries\./,
     );
   });
 
   it('V-359 rotation 24h grace framing pinned. Re-enabled by slice 229 after verifying both halves still exist (confirm prompt at webhooks.astro:1253-1255 + rotation-in-flight indicator comment at webhooks.astro:659-662)', () => {
     expect(body).toMatch(
-      /'Rotate signing secret for ' \+\s*\n?\s*id \+\s*\n?\s*'\?\\n\\nThe new secret is shown ONCE\. The old secret stays active for 24h so your verifier can roll forward without dropped deliveries\.',/,
+      /'Rotate signing secret for ' \+\s*id \+\s*'\?\\n\\nThe new secret is shown ONCE\. The old secret stays active for 24h so your verifier can roll forward without dropped deliveries\.',/,
     );
     expect(body).toMatch(
-      /\/\/ V-359 — rotation-in-flight indicator\. When the endpoint is\s*\n?\s*\/\/ dual-signing, surface the grace expiry inline so customers\s*\n?\s*\/\/ know how long they have to roll the new secret across\s*\n?\s*\/\/ their verifier infra\./,
+      /\/\/ V-359 — rotation-in-flight indicator\. When the endpoint is\s*\/\/ dual-signing, surface the grace expiry inline so customers\s*\/\/ know how long they have to roll the new secret across\s*\/\/ their verifier infra\./,
     );
   });
 
   it('Webhook API contracts: POST /v1/webhooks + PATCH /v1/webhooks/:id + DELETE /v1/webhooks/:id + POST /v1/webhooks/:id/rotate-secret + POST /v1/webhooks/:id/test + GET /v1/webhooks/:id/deliveries + POST /v1/webhook-deliveries/:id/replay — pinned so the 7-endpoint webhook lifecycle contract stays correct (drift to renaming any path would break the wired UI action)', () => {
+    expect(body).toMatch(/boundedFetch\(apiBaseUrl \+ '\/v1\/webhooks', \{\s*method: 'POST',/);
     expect(body).toMatch(
-      /boundedFetch\(apiBaseUrl \+ '\/v1\/webhooks', \{\s*\n?\s*method: 'POST',/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(editingEndpointId\), \{\s*method: 'PATCH',/,
     );
     expect(body).toMatch(
-      /boundedFetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(editingEndpointId\), \{\s*\n?\s*method: 'PATCH',/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\), \{\s*method: 'DELETE',/,
     );
     expect(body).toMatch(
-      /boundedFetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\), \{\s*\n?\s*method: 'DELETE',/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\) \+ '\/rotate-secret', \{\s*method: 'POST',/,
     );
     expect(body).toMatch(
-      /boundedFetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\) \+ '\/rotate-secret', \{\s*\n?\s*method: 'POST',/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\) \+ '\/test', \{\s*method: 'POST',/,
     );
     expect(body).toMatch(
-      /boundedFetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\) \+ '\/test', \{\s*\n?\s*method: 'POST',/,
+      /apiBaseUrl \+\s*'\/v1\/webhooks\/' \+\s*encodeURIComponent\(endpointId\) \+\s*'\/deliveries\?'/,
     );
     expect(body).toMatch(
-      /apiBaseUrl \+\s*\n?\s*'\/v1\/webhooks\/' \+\s*\n?\s*encodeURIComponent\(endpointId\) \+\s*\n?\s*'\/deliveries\?'/,
-    );
-    expect(body).toMatch(
-      /boundedFetch\(apiBaseUrl \+ '\/v1\/webhook-deliveries\/' \+ encodeURIComponent\(id\) \+ '\/replay', \{\s*\n?\s*method: 'POST',/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/webhook-deliveries\/' \+ encodeURIComponent\(id\) \+ '\/replay', \{\s*method: 'POST',/,
     );
     expect(body).toMatch(/const WEBHOOK_TIMEOUT_MS = 15_000;/);
     expect(body).toMatch(/window\.driftstackFetchWithDeadline\(url, init, WEBHOOK_TIMEOUT_MS\)/);
@@ -137,14 +135,14 @@ describe('W497.B apps/customer-dashboard/src/pages/webhooks.astro content parity
 
   it("V-356 send-test framing pinned: 'wire the per-row \"Send test\" buttons. POSTs to /v1/webhooks/:id/test which enqueues a synthetic test.ping delivery on the endpoint regardless of subscription.' + 202-or-r.ok success branch — pinned so the test-delivery 'bypasses subscription filter' semantic survives (drift to requiring subscription would block test-pings on production endpoints subscribed to only quota events). Re-enabled by slice 157 after verifying both sentinels exist at webhooks.astro:1296-1298 + :1318", () => {
     expect(body).toMatch(
-      /\/\/ V-356 — wire the per-row "Send test" buttons\. POSTs to\s*\n?\s*\/\/ \/v1\/webhooks\/:id\/test which enqueues a synthetic test\.ping\s*\n?\s*\/\/ delivery on the endpoint regardless of subscription\./,
+      /\/\/ V-356 — wire the per-row "Send test" buttons\. POSTs to\s*\/\/ \/v1\/webhooks\/:id\/test which enqueues a synthetic test\.ping\s*\/\/ delivery on the endpoint regardless of subscription\./,
     );
     expect(body).toMatch(/if \(!r\.ok && r\.status !== 202\) \{/);
   });
 
   it("Retry + DLQ framing pinned: 'Failed deliveries retry 5× with exponential backoff before landing in the DLQ. DLQ entries are admin-replayable; no auto-retry past the initial attempts to avoid storm-on-recovery patterns.' — pinned so the 5× retry budget + the no-auto-retry-past-budget storm-prevention framing both survive (drift to dropping 'storm-on-recovery' would hide WHY auto-retry doesn't continue past 5 attempts)", () => {
     expect(body).toMatch(
-      /Failed deliveries retry 5× with exponential backoff before landing in\s*\n?\s*the DLQ\. DLQ entries are admin-replayable; no auto-retry past the\s*\n?\s*initial attempts to avoid storm-on-recovery patterns\./,
+      /Failed deliveries retry 5× with exponential backoff before landing in\s*the DLQ\. DLQ entries are admin-replayable; no auto-retry past the\s*initial attempts to avoid storm-on-recovery patterns\./,
     );
   });
 
@@ -155,7 +153,7 @@ describe('W497.B apps/customer-dashboard/src/pages/webhooks.astro content parity
 
   it("HTTPS-required + 10s 2xx framing pinned: 'HTTPS required. The endpoint must respond 2xx within 10s for delivery to count as successful.' — pinned so the protocol requirement + response-time budget stay explicit (drift to dropping HTTPS would let customers register HTTP endpoints that fail with cryptic 'TLS required' errors; drift to dropping 10s would leave customers wondering why their slow webhooks land in DLQ)", () => {
     expect(body).toMatch(
-      /HTTPS required\. The endpoint must respond 2xx within 10s for delivery to count\s*\n?\s*as successful\./,
+      /HTTPS required\. The endpoint must respond 2xx within 10s for delivery to count\s*as successful\./,
     );
   });
 

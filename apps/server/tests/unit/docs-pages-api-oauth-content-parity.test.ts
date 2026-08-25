@@ -26,46 +26,46 @@ describe('docs/pages/api/oauth content parity', () => {
 
   it("OAuth 2.0 overview framing pinned: 'Driftstack ships an OAuth 2.0 Authorization Server so third-party apps can act on a customer's behalf without ever holding the customer's API key. The flow is the standard Authorization Code grant with PKCE required (RFC 7636 — no exceptions, even for confidential clients); access tokens are bearer-style and short-lived (one hour); no refresh tokens are issued.' — pinned so the PKCE-mandatory-no-exceptions + 1-hour-access-tokens + NO-refresh-tokens + RFC 7636 contract all stay documented", () => {
     expect(body).toMatch(
-      /Authorization Server\*\* so third-party\s*\n?\s*apps can act on a customer's behalf without ever holding the\s*\n?\s*customer's API key\./,
+      /Authorization Server\*\* so third-party\s*apps can act on a customer's behalf without ever holding the\s*customer's API key\./,
     );
     expect(body).toMatch(
-      /standard Authorization Code grant\s*\n?\s*with \*\*PKCE required\*\* \(RFC 7636 — no exceptions, even for confidential\s*\n?\s*clients\); access tokens are bearer-style and short-lived \(one hour\);\s*\n?\s*no refresh tokens are issued\./,
+      /standard Authorization Code grant\s*with \*\*PKCE required\*\* \(RFC 7636 — no exceptions, even for confidential\s*clients\); access tokens are bearer-style and short-lived \(one hour\);\s*no refresh tokens are issued\./,
     );
   });
 
   it('Implementation notes pin PKCE, atomic codes, opaque tokens, client-bound lifecycle calls, and no refresh tokens', () => {
     expect(body).toMatch(
-      /- \*\*PKCE is mandatory\*\*, including for confidential clients\. The\s*\n?\s*`plain` challenge method is rejected — `S256` only\./,
+      /- \*\*PKCE is mandatory\*\*, including for confidential clients\. The\s*`plain` challenge method is rejected — `S256` only\./,
     );
     expect(body).toMatch(
-      /- \*\*Codes are single-use\*\* and expire 5 minutes after issue\. Race a\s*\n?\s*second `\/token` exchange with the same code → exactly one exchange\s*\n?\s*succeeds and every loser receives `invalid_grant` \(the code is\s*\n?\s*atomically consumed\)\./,
+      /- \*\*Codes are single-use\*\* and expire 5 minutes after issue\. Race a\s*second `\/token` exchange with the same code → exactly one exchange\s*succeeds and every loser receives `invalid_grant` \(the code is\s*atomically consumed\)\./,
     );
     expect(body).toMatch(
-      /- \*\*Access tokens are opaque\*\* — don't try to parse them\. They're\s*\n?\s*not JWTs; introspect via `\/v1\/oauth\/introspect` if you need the\s*\n?\s*encoded fields\. Introspection and revocation require the same\s*\n?\s*confidential-client credentials used at `\/v1\/oauth\/token` and are\s*\n?\s*bound to that client's own tokens\./,
+      /- \*\*Access tokens are opaque\*\* — don't try to parse them\. They're\s*not JWTs; introspect via `\/v1\/oauth\/introspect` if you need the\s*encoded fields\. Introspection and revocation require the same\s*confidential-client credentials used at `\/v1\/oauth\/token` and are\s*bound to that client's own tokens\./,
     );
     expect(body).toMatch(
-      /- \*\*Refresh tokens are NOT issued\.\*\* When a token expires, the\s*\n?\s*customer must re-authorize\./,
+      /- \*\*Refresh tokens are NOT issued\.\*\* When a token expires, the\s*customer must re-authorize\./,
     );
     expect(body).toMatch(
-      /- \*\*Provider state is persistent\.\*\* Client secrets, pending consent\s*\n?\s*handles, authorization codes and access tokens are stored only as\s*\n?\s*SHA-256 digests\./,
+      /- \*\*Provider state is persistent\.\*\* Client secrets, pending consent\s*handles, authorization codes and access tokens are stored only as\s*SHA-256 digests\./,
     );
   });
 
   it("Admin-gated client-registration framing pinned: 'Client registration is currently admin-gated — talk to support@driftstack.dev' + 'The client_secret is shown once and never recoverable; the server stores only its SHA-256 hash. Lost secrets require rotation via support.' + account-scoped or multi-tenant intake. Drift to dropping the SHA-256 hash-at-rest would weaken the client-secret security model", () => {
     expect(body).toMatch(
-      /Client registration is currently \*\*admin-gated\*\* — talk to\s*\n?\s*\[support@driftstack\.dev\]/,
+      /Client registration is currently \*\*admin-gated\*\* — talk to\s*\[support@driftstack\.dev\]/,
     );
     expect(body).toMatch(
-      /The `client_secret` is shown \*\*once\*\* and never recoverable; the\s*\n?\s*server stores only its SHA-256 hash\./,
+      /The `client_secret` is shown \*\*once\*\* and never recoverable; the\s*server stores only its SHA-256 hash\./,
     );
     expect(body).toMatch(
-      /- the redirect URIs you'll use \(HTTPS-only, except `localhost` for\s*\n?\s*native-app development per RFC 8252\)/,
+      /- the redirect URIs you'll use \(HTTPS-only, except `localhost` for\s*native-app development per RFC 8252\)/,
     );
     expect(body).toMatch(
-      /- whether the client is account-scoped \(one specific customer\s*\n?\s*account\) or multi-tenant \(any customer can authorize\)/,
+      /- whether the client is account-scoped \(one specific customer\s*account\) or multi-tenant \(any customer can authorize\)/,
     );
     expect(body).toMatch(
-      /a multi-tenant client has\s*\n?\s*no account binding and may be approved by any customer\./,
+      /a multi-tenant client has\s*no account binding and may be approved by any customer\./,
     );
     expect(body).not.toMatch(/marketplace/i);
   });
@@ -81,14 +81,14 @@ describe('docs/pages/api/oauth content parity', () => {
     // in docs-oauth-content-parity and now checks producers instead.
     expect(body).not.toMatch(/`unauthorized_client`/);
     expect(body).toMatch(
-      /All responses use `application\/problem\+json` per RFC 9457 \(status,\s*\n?\s*type, title, detail\)\. The `type` field is a real RFC 9457 type URI:\s*\n?\s*`https:\/\/errors\.driftstack\.dev\/bad-request` for the 400 cases and\s*\n?\s*`https:\/\/errors\.driftstack\.dev\/unauthorized` for the 401 cases\./,
+      /All responses use `application\/problem\+json` per RFC 9457 \(status,\s*type, title, detail\)\. The `type` field is a real RFC 9457 type URI:\s*`https:\/\/errors\.driftstack\.dev\/bad-request` for the 400 cases and\s*`https:\/\/errors\.driftstack\.dev\/unauthorized` for the 401 cases\./,
     );
     expect(body).toMatch(
       // V-737 — the code is now a top-level machine-readable `error` field, not
       // prose in title/detail. The old claim was not merely weak, it was FALSE:
       // oauthErrorToHttp discarded the code and the messages never contained it,
       // so an integrator told to read it from `detail` had nothing to read.
-      /returned as a top-level\s*\n?\s*\*\*`error`\*\* field on the problem document/,
+      /returned as a top-level\s*\*\*`error`\*\* field on the problem document/,
     );
     // Ban the superseded RFC 7807 / urn:driftstack:oauth: type-prefix framing —
     // the corrected doc moved to RFC 9457 + real https://errors.driftstack.dev/ type URIs.
@@ -102,17 +102,15 @@ describe('docs/pages/api/oauth content parity', () => {
     expect(body).toMatch(/"client_id": "oac_…"/);
     expect(body).toMatch(/"client_secret": "oas_…"/);
     expect(body).toMatch(
-      /Once client authentication\s*\n?\s*succeeds, the endpoint returns `200 \{\}` for an owned, unknown, or\s*\n?\s*foreign-client token; only a token issued to the authenticated client\s*\n?\s*is revoked\./,
+      /Once client authentication\s*succeeds, the endpoint returns `200 \{\}` for an owned, unknown, or\s*foreign-client token; only a token issued to the authenticated client\s*is revoked\./,
     );
-    expect(body).toMatch(
-      /Invalid or revoked client credentials\s*\n?\s*return `401` before mutation\./,
-    );
+    expect(body).toMatch(/Invalid or revoked client credentials\s*return `401` before mutation\./);
   });
 
   it('RFC 7662 introspection pins client authentication, own-token metadata, minimal inactive foreign response, and Unix exp', () => {
     expect(body).toMatch(/`POST \/v1\/oauth\/introspect` \(RFC 7662\)/);
     expect(body).toMatch(
-      /"active": true,\s*\n?\s*"client_id": "oac_…",\s*\n?\s*"account_id": "<customer-uuid>",\s*\n?\s*"scope": \["read:sessions", "write:sessions"\],\s*\n?\s*"exp": 1747852800/,
+      /"active": true,\s*"client_id": "oac_…",\s*"account_id": "<customer-uuid>",\s*"scope": \["read:sessions", "write:sessions"\],\s*"exp": 1747852800/,
     );
     expect(body).toMatch(/\{ "active": false \}/);
     expect(body).toMatch(/`exp` is Unix seconds \(per RFC 7662 §2\.2\)\./);
@@ -137,7 +135,7 @@ describe('docs/pages/api/oauth content parity', () => {
 
   it("Bearer-API-keys-AND-OAuth-tokens-share-header framing pinned: 'Bearer API keys (ds_live_…) and OAuth access tokens BOTH use the Authorization: Bearer <token> header on /v1/* requests. The server differentiates by token prefix; both surfaces respect the same scope + rate-limit + audit pipeline.' — pinned so the dual-token-shared-header + differentiate-by-prefix + same-pipeline contract all stay documented", () => {
     expect(body).toMatch(
-      /Bearer API keys \(`ds_live_…`\) and OAuth access tokens BOTH use the\s*\n?\s*> `Authorization: Bearer <token>` header on `\/v1\/\*` requests\. The\s*\n?\s*> server differentiates by token prefix; both surfaces respect the\s*\n?\s*> same scope \+ rate-limit \+ audit pipeline\./,
+      /Bearer API keys \(`ds_live_…`\) and OAuth access tokens BOTH use the\s*> `Authorization: Bearer <token>` header on `\/v1\/\*` requests\. The\s*> server differentiates by token prefix; both surfaces respect the\s*> same scope \+ rate-limit \+ audit pipeline\./,
     );
   });
 

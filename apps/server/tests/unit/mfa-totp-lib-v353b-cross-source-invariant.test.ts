@@ -166,7 +166,7 @@ describe('W964 V-353b mfa-totp lib cross-source invariant', () => {
     expect(p).toMatch(/Constant-time per-window compare/);
     // The boolean wrapper delegates to the counter-returning variant.
     expect(p).toMatch(
-      /export function verifyTotpCode\([\s\S]*?\): boolean \{\s*\n?\s*return verifyTotpCodeWithCounter\(secretBytes, code, nowSeconds\) !== null;/,
+      /export function verifyTotpCode\([\s\S]*?\): boolean \{\s*return verifyTotpCodeWithCounter\(secretBytes, code, nowSeconds\) !== null;/,
     );
   });
 

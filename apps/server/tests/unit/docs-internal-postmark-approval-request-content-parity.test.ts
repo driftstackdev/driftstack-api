@@ -59,7 +59,7 @@ describe('W563.B /docs/internal/postmark-approval-request.md content parity', ()
     expect(body).toMatch(/Transactional only — every message is triggered by a customer-initiated/);
     expect(body).toMatch(/action or a per-account lifecycle event\./);
     expect(body).toMatch(
-      /- Signup verification \(single-use link, expires in 30 minutes per\s*\n?\s*`AUTH_TOKEN_TTL_MS\.signupVerification`/,
+      /- Signup verification \(single-use link, expires in 30 minutes per\s*`AUTH_TOKEN_TTL_MS\.signupVerification`/,
     );
     expect(body, 'the ~3h TTL was wrong by an order of magnitude').not.toMatch(/expires in ~3h/);
     expect(body).toMatch(/- Password reset \(on-demand, customer-initiated\)/);
@@ -115,9 +115,7 @@ describe('W563.B /docs/internal/postmark-approval-request.md content parity', ()
     // The companion half of the same removal: support-acknowledgement was deleted in the S44
     // trim too, so the vendor list named it as a critical transactional email the product
     // cannot send. Human support replies from info@driftstack.dev are what actually happens.
-    expect(body).toMatch(
-      /Support replies are\s*\n?\s*answered by a person at info@driftstack\.dev/,
-    );
+    expect(body).toMatch(/Support replies are\s*answered by a person at info@driftstack\.dev/);
     expect(body).toMatch(
       /\*\*Domain verification status:\*\* `driftstack\.dev` DKIM \+ Return-Path/,
     );

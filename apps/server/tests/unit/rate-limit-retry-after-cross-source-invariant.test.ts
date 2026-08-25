@@ -102,7 +102,7 @@ describe('W884 RateLimit retry-after cross-source invariant', () => {
   it('CRITICAL retry_after_seconds is an RFC 7807 CATCHALL extension on the rate-limited problem — NOT a typed field in ProblemSchema. The catchall pattern lets the server add fields without ProblemSchema schema migration; clients read via type-assertion.', () => {
     const apiTypes = read(resolve(REPO_ROOT, 'packages/api-types/src/problem.ts'));
     // retry_after_seconds is NOT declared as a typed field in ProblemSchema.
-    const m = apiTypes.match(/ProblemSchema = z\s*\n?\s*\.object\(\{([\s\S]+?)\}\)/);
+    const m = apiTypes.match(/ProblemSchema = z\s*\.object\(\{([\s\S]+?)\}\)/);
     expect(m).not.toBeNull();
     const body = m![1];
     expect(body, 'retry_after_seconds must NOT be a typed field in ProblemSchema').not.toMatch(

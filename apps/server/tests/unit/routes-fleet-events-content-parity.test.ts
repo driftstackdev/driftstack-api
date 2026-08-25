@@ -32,14 +32,14 @@ describe('routes/fleet-events content parity', () => {
   it('V-820 module framing pinned: fleet-node control-plane WebSocket at wss://fleet.driftstack.dev/v1/fleet/events; flat {type,…} envelope (A3 W122)', () => {
     expect(body).toMatch(/\/\/ V-820 — `\/v1\/fleet\/events` fleet-node control-plane WebSocket\./);
     expect(body).toMatch(/wss:\/\/fleet\.driftstack\.dev\/v1\/fleet\/events/);
-    expect(body).toMatch(/A3 bus W122\s*\n?\s*\/\/ flat `\{type,…\}` envelope/);
+    expect(body).toMatch(/A3 bus W122\s*\/\/ flat `\{type,…\}` envelope/);
   });
 
   it('auth framing pinned: Ed25519 Bearer JWT + X-Driftstack-Mac-Node-Id (== JWT iss) verified at the upgrade preHandler → 401 before the socket opens (A3 W121 control-plane-owns)', () => {
     expect(body).toMatch(/A3 W121, control-plane-owns/);
     expect(body).toMatch(/X-Driftstack-Mac-Node-Id` header \(== the JWT iss\)/);
     expect(body).toMatch(
-      /authenticateFleetUpgrade\s*\n?\s*\/\/ runs as a preHandler so a bad token is rejected with 401 BEFORE the socket\s*\n?\s*\/\/ opens\./,
+      /authenticateFleetUpgrade\s*\/\/ runs as a preHandler so a bad token is rejected with 401 BEFORE the socket\s*\/\/ opens\./,
     );
   });
 
@@ -53,7 +53,7 @@ describe('routes/fleet-events content parity', () => {
   it('registerFleetEventsRoutes is async, registers the @fastify/websocket plugin before the route, defines the websocket:true GET with the auth preHandler', () => {
     expect(body).toMatch(/import websocketPlugin from '@fastify\/websocket';/);
     expect(body).toMatch(
-      /export async function registerFleetEventsRoutes\(\s*\n?\s*app: FastifyInstance,\s*\n?\s*deps: FleetEventsRoutesDeps,\s*\n?\s*\): Promise<void> \{/,
+      /export async function registerFleetEventsRoutes\(\s*app: FastifyInstance,\s*deps: FleetEventsRoutesDeps,\s*\): Promise<void> \{/,
     );
     // Registers the plugin with a maxPayload bound on inbound frames, sized to the
     // largest legit frame — the file-download reply (A3 W2856): a 64 MiB per-file
@@ -156,7 +156,7 @@ describe('routes/fleet-events content parity', () => {
 
   it('disabled variant pinned: stable 503 detail without internal infrastructure or design-doc leakage', () => {
     expect(body).toMatch(
-      /export function registerFleetEventsDisabledRoutes\(app: FastifyInstance\): void \{\s*\n?\s*const detail = 'Fleet events stream is unavailable on this deployment\.';/,
+      /export function registerFleetEventsDisabledRoutes\(app: FastifyInstance\): void \{\s*const detail = 'Fleet events stream is unavailable on this deployment\.';/,
     );
     const disabled = body.slice(
       body.lastIndexOf('export function registerFleetEventsDisabledRoutes'),

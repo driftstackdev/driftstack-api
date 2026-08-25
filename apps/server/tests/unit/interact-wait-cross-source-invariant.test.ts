@@ -102,7 +102,7 @@ describe('W875 InteractAction+WaitCondition cross-source invariant', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/sessions.ts'));
     expect(p).toMatch(/Customer-facing InteractAction is intent-only per L-001/);
     expect(p).toMatch(
-      /coordinate\s*\n?\s*\/\/ primitives \(tap_at, tap\.offset, etc\.\) live on the gui_control plane/,
+      /coordinate\s*\/\/ primitives \(tap_at, tap\.offset, etc\.\) live on the gui_control plane/,
     );
   });
 

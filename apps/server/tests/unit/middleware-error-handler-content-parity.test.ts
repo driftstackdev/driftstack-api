@@ -37,7 +37,7 @@ describe('W394.A apps/server/src/middleware/error-handler.ts content parity', ()
 
   it('RFC 7807 framing pinned ("every escaping error becomes a problem+json response")', () => {
     expect(body).toMatch(
-      /Fastify error handler — every escaping error becomes an RFC 7807\s*\n?\s*\/\/\s*problem\+json response\. The handler:/,
+      /Fastify error handler — every escaping error becomes an RFC 7807\s*\/\/\s*problem\+json response\. The handler:/,
     );
   });
 
@@ -53,7 +53,7 @@ describe('W394.A apps/server/src/middleware/error-handler.ts content parity', ()
 
   it('registerErrorHandler: setErrorHandler + setNotFoundHandler (per-route 404 also problem+json)', () => {
     expect(body).toMatch(
-      /export function registerErrorHandler\(app: FastifyInstance\): void \{\s*\n?\s*app\.setErrorHandler\(handleError\);/,
+      /export function registerErrorHandler\(app: FastifyInstance\): void \{\s*app\.setErrorHandler\(handleError\);/,
     );
     expect(body).toMatch(
       /\/\/ Replace the default 404 handler so every miss is also problem\+json\./,
@@ -85,7 +85,7 @@ describe('W394.A apps/server/src/middleware/error-handler.ts content parity', ()
 
   it('handleError: 5xx → request.log.error(err+problem), 4xx → request.log.warn(err+problem) (post-2026-05-19 scheduled-jobs-poller wrapper-bug lesson: pass through full err for Pino stdSerializers.err extraction). 2026-05-21 — 503 FeatureUnavailableError split off to warn level (intentional / activation-gate; not a real failure that should page on-call).', () => {
     expect(body).toMatch(
-      /if \(apiError\.status === 503\) \{\s*\n?\s*request\.log\.warn\(\{ err, problem: apiError\.toProblem\(\) \}, 'feature unavailable: 503'\);\s*\n?\s*\} else if \(apiError\.status >= 500\) \{\s*\n?\s*request\.log\.error\(\{ err, problem: apiError\.toProblem\(\) \}, 'request failed: 5xx'\);\s*\n?\s*\} else if \(apiError\.status >= 400\) \{/,
+      /if \(apiError\.status === 503\) \{\s*request\.log\.warn\(\{ err, problem: apiError\.toProblem\(\) \}, 'feature unavailable: 503'\);\s*\} else if \(apiError\.status >= 500\) \{\s*request\.log\.error\(\{ err, problem: apiError\.toProblem\(\) \}, 'request failed: 5xx'\);\s*\} else if \(apiError\.status >= 400\) \{/,
     );
     expect(body).toMatch(
       /request\.log\.warn\(\{ err, problem: apiError\.toProblem\(\) \}, 'request rejected: 4xx'\);/,
@@ -102,7 +102,7 @@ describe('W394.A apps/server/src/middleware/error-handler.ts content parity', ()
 
   it('normaliseError: ZodError → new ValidationError(err.flatten())', () => {
     expect(body).toMatch(
-      /if \(err instanceof ZodError\) \{\s*\n?\s*return new ValidationError\(err\.flatten\(\)\);\s*\n?\s*\}/,
+      /if \(err instanceof ZodError\) \{\s*return new ValidationError\(err\.flatten\(\)\);\s*\}/,
     );
   });
 
@@ -115,13 +115,13 @@ describe('W394.A apps/server/src/middleware/error-handler.ts content parity', ()
   // `problem-title-agrees-with-problem-type`, which drives the real handler.
   it('normaliseError: FastifyError <500 with numeric statusCode → typed ApiError, type and title paired (401→unauthorized/Unauthorized, 403→forbidden/Forbidden, else→bad-request/Bad Request)', () => {
     expect(body).toMatch(
-      /Fastify's body-parser \/ validator throws errors with a numeric statusCode\s*\n?\s*\/\/\s*and a code like 'FST_ERR_VALIDATION'\. Treat those as 400s\./,
+      /Fastify's body-parser \/ validator throws errors with a numeric statusCode\s*\/\/\s*and a code like 'FST_ERR_VALIDATION'\. Treat those as 400s\./,
     );
     expect(body).toMatch(
       /if \(typeof fastifyErr\.statusCode === 'number' && fastifyErr\.statusCode < 500\) \{/,
     );
     expect(body).toMatch(
-      /fastifyErr\.statusCode === 401\s*\n?\s*\?\s*\(\[PROBLEM_TYPES\.Unauthorized, 'Unauthorized'\] as const\)\s*\n?\s*:\s*fastifyErr\.statusCode === 403\s*\n?\s*\?\s*\(\[PROBLEM_TYPES\.Forbidden, 'Forbidden'\] as const\)\s*\n?\s*:\s*\(\[PROBLEM_TYPES\.BadRequest, 'Bad Request'\] as const\);/,
+      /fastifyErr\.statusCode === 401\s*\?\s*\(\[PROBLEM_TYPES\.Unauthorized, 'Unauthorized'\] as const\)\s*:\s*fastifyErr\.statusCode === 403\s*\?\s*\(\[PROBLEM_TYPES\.Forbidden, 'Forbidden'\] as const\)\s*:\s*\(\[PROBLEM_TYPES\.BadRequest, 'Bad Request'\] as const\);/,
     );
     expect(body).toMatch(/const \[type, title\] =/);
     expect(body).toMatch(/^\s*type,\s*$/m);
@@ -143,13 +143,13 @@ describe('W394.A apps/server/src/middleware/error-handler.ts content parity', ()
       /async function replyWithProblem\(reply: FastifyReply, problem: Problem\): Promise<FastifyReply> \{/,
     );
     expect(body).toMatch(
-      /return reply\s*\n?\s*\.code\(problem\.status\)\s*\n?\s*\.header\('content-type', 'application\/problem\+json; charset=utf-8'\)\s*\n?\s*\.send\(problem\);/,
+      /return reply\s*\.code\(problem\.status\)\s*\.header\('content-type', 'application\/problem\+json; charset=utf-8'\)\s*\.send\(problem\);/,
     );
   });
 
   it('replyWithProblem: a 401 gets a WWW-Authenticate challenge (RFC 7235 §3.1), set only when absent so a route-specific challenge is not overwritten', () => {
     expect(body).toMatch(
-      /if \(problem\.status === 401 && !reply\.hasHeader\('www-authenticate'\)\) \{\s*\n?\s*reply\.header\('www-authenticate', 'Bearer'\);\s*\n?\s*\}/,
+      /if \(problem\.status === 401 && !reply\.hasHeader\('www-authenticate'\)\) \{\s*reply\.header\('www-authenticate', 'Bearer'\);\s*\}/,
     );
   });
 

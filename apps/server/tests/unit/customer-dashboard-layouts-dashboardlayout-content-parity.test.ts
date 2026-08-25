@@ -73,7 +73,7 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
 
   it("Props interface 3-field shape: title (required) + description (optional default + Driftstack catchphrase) + withSidebar (optional default true). Drift to dropping withSidebar would force onboarding pages to render the side-nav (which requires auth that onboarding hasn't completed yet)", () => {
     expect(body).toMatch(
-      /interface Props \{\s*\n?\s*title: string;\s*\n?\s*description\?: string;\s*\n?\s*\/\*\* When true, render the side-nav\. Onboarding pages opt out\. \*\/\s*\n?\s*withSidebar\?: boolean;\s*\n?\s*\}/,
+      /interface Props \{\s*title: string;\s*description\?: string;\s*\/\*\* When true, render the side-nav\. Onboarding pages opt out\. \*\/\s*withSidebar\?: boolean;\s*\}/,
     );
     expect(body).toMatch(
       /description = 'Driftstack — manage your account, API keys, and billing\.',/,
@@ -83,7 +83,7 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
 
   it('V-331 backend URL framing pinned: \'backend API base URL surfaced to the inline "act as" picker script. Per existing pages: localStorage uses ds_web_session_token for the bearer (V-141), and we add ds_act_as_account for the optional team-owner override.\' — pinned so the V-331 act-as cross-reference + V-141 token-storage cross-reference + the dual-key contract (token + act_as) stay documented', () => {
     expect(body).toMatch(
-      /\/\/ V-331 — backend API base URL surfaced to the inline "act as" picker\s*\n?\s*\/\/ script\. Per existing pages: localStorage uses `ds_web_session_token`\s*\n?\s*\/\/ for the bearer \(V-141\), and we add `ds_act_as_account` for the\s*\n?\s*\/\/ optional team-owner override\./,
+      /\/\/ V-331 — backend API base URL surfaced to the inline "act as" picker\s*\/\/ script\. Per existing pages: localStorage uses `ds_web_session_token`\s*\/\/ for the bearer \(V-141\), and we add `ds_act_as_account` for the\s*\/\/ optional team-owner override\./,
     );
   });
 
@@ -125,10 +125,10 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
 
   it("V-219* brand-alignment framing pinned: '- Sidebar header: L2 brand mark (driftstack-mark.svg) + the W2 DRIFTSTACK black-italic two-tone wordmark, matching apps/marketing-site/src/components/Header.astro (Fleet rebrand).' + '- withSidebar={false} branch: minimal horizontal header so onboarding pages have brand presence (Gap 2 from the V-219* audit) + ambient radial-glow background so the auth surfaces feel cohesive with the marketing landing.' + '- Footer (signed-in dashboard) with legal-doc links (Gap 7).' — pinned so the V-219* cross-app brand consistency + Gap 2 + Gap 7 references all survive", () => {
     expect(body).toMatch(
-      /V-219\* — brand alignment with marketing site:\s*\n?\s*- Sidebar header: L2 brand mark \(driftstack-mark\.svg\) \+ the W2\s*\n?\s*DRIFTSTACK black-italic two-tone wordmark, matching\s*\n?\s*apps\/marketing-site\/src\/components\/Header\.astro \(Fleet rebrand\)\./,
+      /V-219\* — brand alignment with marketing site:\s*- Sidebar header: L2 brand mark \(driftstack-mark\.svg\) \+ the W2\s*DRIFTSTACK black-italic two-tone wordmark, matching\s*apps\/marketing-site\/src\/components\/Header\.astro \(Fleet rebrand\)\./,
     );
     expect(body).toMatch(
-      /- withSidebar=\{false\} branch: minimal horizontal header so onboarding\s*\n?\s*pages have brand presence \(Gap 2 from the V-219\* audit\) \+\s*\n?\s*ambient radial-glow background/,
+      /- withSidebar=\{false\} branch: minimal horizontal header so onboarding\s*pages have brand presence \(Gap 2 from the V-219\* audit\) \+\s*ambient radial-glow background/,
     );
     expect(body).toMatch(/- Footer \(signed-in dashboard\) with legal-doc links \(Gap 7\)\./);
   });
@@ -146,7 +146,7 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
 
   it("V-331 act-as picker + global helper framing pinned: 'Acting as picker. Hidden until JS confirms the user is on at least one team. Switching changes localStorage.ds_act_as_account + reloads the page so downstream fetches pick up the new X-Driftstack-Account header. Self-only customers never see this widget.' — pinned so the auto-hide-for-self-only contract + the reload-on-switch behavior stay documented (drift would either show the picker to single-user accounts OR fail to refresh downstream fetches)", () => {
     expect(body).toMatch(
-      /V-331 — "Acting as" picker\. Hidden until JS confirms the\s*\n?\s*user is on at least one team\. Switching changes\s*\n?\s*localStorage\.ds_act_as_account \+ reloads the page so\s*\n?\s*downstream fetches pick up the new X-Driftstack-Account\s*\n?\s*header\. Self-only customers never see this widget\./,
+      /V-331 — "Acting as" picker\. Hidden until JS confirms the\s*user is on at least one team\. Switching changes\s*localStorage\.ds_act_as_account \+ reloads the page so\s*downstream fetches pick up the new X-Driftstack-Account\s*header\. Self-only customers never see this widget\./,
     );
   });
 
@@ -197,19 +197,19 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
 
   it('clearBtn click handler removes ds_act_as_account from localStorage + reloads page. Drift to dropping the reload would leave downstream fetches still sending the stale x-driftstack-account header for the next page-life', () => {
     expect(body).toMatch(
-      /clearBtn\.addEventListener\('click', function \(\) \{\s*\n?\s*try \{\s*\n?\s*localStorage\.removeItem\('ds_act_as_account'\);\s*\n?\s*\} catch \(_\) \{\s*\n?\s*\/\* swallow \*\/\s*\n?\s*\}\s*\n?\s*window\.location\.reload\(\);\s*\n?\s*\}\);/,
+      /clearBtn\.addEventListener\('click', function \(\) \{\s*try \{\s*localStorage\.removeItem\('ds_act_as_account'\);\s*\} catch \(_\) \{\s*\/\* swallow \*\/\s*\}\s*window\.location\.reload\(\);\s*\}\);/,
     );
   });
 
   it('Ambient radial-glow background only renders when withSidebar={false} (auth + onboarding pages); the sidebar pages have plenty of UI chrome so the ambient glow would be visually noisy. Drift would either flood every dashboard page with glow OR leave onboarding pages bare', () => {
     expect(body).toMatch(
-      /\{!withSidebar && \(\s*\n?\s*<div aria-hidden="true" class="pointer-events-none fixed inset-0 -z-10">\s*\n?\s*<div class="absolute inset-x-0 top-0 h-\[600px\] bg-glow-radial-accent" \/>\s*\n?\s*<div class="absolute inset-x-0 bottom-0 h-\[400px\] bg-glow-radial-accent-soft" \/>\s*\n?\s*<\/div>\s*\n?\s*\)\}/,
+      /\{!withSidebar && \(\s*<div aria-hidden="true" class="pointer-events-none fixed inset-0 -z-10">\s*<div class="absolute inset-x-0 top-0 h-\[600px\] bg-glow-radial-accent" \/>\s*<div class="absolute inset-x-0 bottom-0 h-\[400px\] bg-glow-radial-accent-soft" \/>\s*<\/div>\s*\)\}/,
     );
   });
 
   it("active-link styling pinned: pathname matching → highlighted (bg-tk-accent/10 + text-tk-accent-text + shadow-inset-divider; S23 2026-07-06 — active label is TEXT, so it reads the AA-safe accent-text tone). 2026-05-21 — exact match for '/' (so Overview doesn't highlight on every nested route) + prefix match for the rest. font-medium applied on BOTH active + inactive (constant width prevents click-induced layout shift).", () => {
     expect(body).toMatch(
-      /item\.href === '\/'\s*\n?\s*\?\s*pathname === '\/'\s*\n?\s*:\s*pathname === item\.href \|\|\s*\n?\s*pathname\.startsWith\(item\.href \+ '\/'\)/,
+      /item\.href === '\/'\s*\?\s*pathname === '\/'\s*:\s*pathname === item\.href \|\|\s*pathname\.startsWith\(item\.href \+ '\/'\)/,
     );
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(/'bg-tk-accent\/10 text-tk-accent-text shadow-inset-divider'/);

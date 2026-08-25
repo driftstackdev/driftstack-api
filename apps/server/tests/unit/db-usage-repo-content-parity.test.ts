@@ -21,7 +21,7 @@
 //     server-internal agent_decomposer / agent_decomposer_bundled telemetry.
 //
 // 2026-05-20 — REWRITTEN to use DISCRETE small pins instead of one
-// 20-`\s*\n?\s*`-chain regex. The prior style was hitting catastrophic
+// 20-`\s*`-chain regex. The prior style was hitting catastrophic
 // backtracking on fail-match (post-v2-#4 source changes broke the
 // chain; the regex engine exhausted ~3 minutes of CPU per pre-push
 // before vitest cycled the worker). Memory rule "Eliminated

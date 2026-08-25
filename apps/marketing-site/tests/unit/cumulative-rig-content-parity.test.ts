@@ -53,16 +53,16 @@ describe('W384.A marketing-site src/data/capabilities.ts CUMULATIVE_RIG content 
 
   it('denominator framing: probes-with-iPhone-reference (NOT raw, NOT ref=None)', () => {
     expect(body).toMatch(
-      /probes-with-iPhone-reference denominator,\s*\n?\s*\/\/\s*not raw — raw includes ref=None pinned post-V-141 capture and is\s*\n?\s*\/\/\s*NOT the marketing-surface number/,
+      /probes-with-iPhone-reference denominator,\s*\/\/\s*not raw — raw includes ref=None pinned post-V-141 capture and is\s*\/\/\s*NOT the marketing-surface number/,
     );
   });
 
   it('update-protocol pinned (Agent 1 → founder → Agent 2 Tier-1 maintenance)', () => {
     expect(body).toMatch(
-      /Update protocol: when Agent 1 closes a cumulative-rig batch that\s*\n?\s*\/\/\s*moves the numerator or denominator/,
+      /Update protocol: when Agent 1 closes a cumulative-rig batch that\s*\/\/\s*moves the numerator or denominator/,
     );
     expect(body).toMatch(
-      /Tier 1 maintenance commit \(no founder review needed for factual\s*\n?\s*\/\/\s*technical state\)/,
+      /Tier 1 maintenance commit \(no founder review needed for factual\s*\/\/\s*technical state\)/,
     );
   });
 
@@ -133,7 +133,7 @@ describe('S18 marketing-site src/data/capabilities.ts DEVICE_SUPPORT fact regist
   it('homepage curated-subset note pinned (the proof section intentionally names the flagship subset; it is NOT bound to DEVICE_SUPPORT)', () => {
     expect(body).toMatch(/NB the homepage proof section/);
     expect(body).toMatch(
-      /intentionally names the flagship\s*\n?\s*\/\/\s*subset as curated marketing copy; it is NOT bound to this constant\./,
+      /intentionally names the flagship\s*\/\/\s*subset as curated marketing copy; it is NOT bound to this constant\./,
     );
   });
 

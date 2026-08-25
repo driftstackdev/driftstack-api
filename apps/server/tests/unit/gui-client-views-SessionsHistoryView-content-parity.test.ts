@@ -49,29 +49,29 @@ describe('W483.A apps/gui-client/src/views/SessionsHistoryView.tsx content parit
 
   it("V-334 framing pinned: 'V-334 — Sessions history view. Shows TERMINATED sessions (destroyed + errored) with their lifetime + reason. Mirrors the SessionsView state-machine (poll-on-mount, refresh button) but scoped to terminal-state sessions only.' + 'Active sessions live in SessionsView; this is the post-mortem complement.'", () => {
     expect(body).toMatch(
-      /\/\/ V-334 — Sessions history view\. Shows TERMINATED sessions\s*\n?\s*\/\/ \(destroyed \+ errored\) with their lifetime \+ status\. Mirrors the\s*\n?\s*\/\/ SessionsView state-machine \(poll-on-mount, refresh button\) but\s*\n?\s*\/\/ scoped to terminal-state sessions only\./,
+      /\/\/ V-334 — Sessions history view\. Shows TERMINATED sessions\s*\/\/ \(destroyed \+ errored\) with their lifetime \+ status\. Mirrors the\s*\/\/ SessionsView state-machine \(poll-on-mount, refresh button\) but\s*\/\/ scoped to terminal-state sessions only\./,
     );
     expect(body).toMatch(
-      /\/\/ Useful for the founder running locally to verify session lifecycle\s*\n?\s*\/\/ \+ spot patterns in failures \(which archetype keeps erroring,\s*\n?\s*\/\/ which durations are abnormal\)\. Active sessions live in\s*\n?\s*\/\/ SessionsView; this is the post-mortem complement\./,
+      /\/\/ Useful for the founder running locally to verify session lifecycle\s*\/\/ \+ spot patterns in failures \(which archetype keeps erroring,\s*\/\/ which durations are abnormal\)\. Active sessions live in\s*\/\/ SessionsView; this is the post-mortem complement\./,
     );
   });
 
   it('HistoryState 4-field (sessions: Session[] + refreshedAt: number | null + loading: boolean + error: string | null) — pinned shape so a refactor that adds new state fields without considering the existing branches breaks here first', () => {
     expect(body).toMatch(
-      /interface HistoryState \{\s*\n?\s*sessions: Session\[\];\s*\n?\s*refreshedAt: number \| null;\s*\n?\s*loading: boolean;\s*\n?\s*error: string \| null;\s*\n?\s*\}/,
+      /interface HistoryState \{\s*sessions: Session\[\];\s*refreshedAt: number \| null;\s*loading: boolean;\s*error: string \| null;\s*\}/,
     );
   });
 
   it("Terminal-only filter: page.data.filter(s.status === 'destroyed' || s.status === 'errored') — pinned so active sessions don't leak into post-mortem view; newest-first sort by endedAtMs (destroyed_at ?? last_state_at ?? created_at) so reasonless errors interleave by when they actually ended instead of sinking to the bottom at time 0", () => {
     expect(body).toMatch(
-      /const terminated = page\.data\.filter\(\s*\n?\s*\(s\) => s\.status === 'destroyed' \|\| s\.status === 'errored',\s*\n?\s*\);/,
+      /const terminated = page\.data\.filter\(\s*\(s\) => s\.status === 'destroyed' \|\| s\.status === 'errored',\s*\);/,
     );
     expect(body).toMatch(
-      /\/\/ Newest first\. Errored sessions often have no destroyed_at \(the\s*\n?\s*\/\/ box never ran a clean teardown\), so falling back to last_state_at\s*\n?\s*\/\/ then created_at keeps them interleaved by when they actually ended\s*\n?\s*\/\/ instead of dumping every reasonless error at the bottom \(time 0\)\.\s*\n?\s*terminated\.sort\(\(a, b\) => endedAtMs\(b\) - endedAtMs\(a\)\);/,
+      /\/\/ Newest first\. Errored sessions often have no destroyed_at \(the\s*\/\/ box never ran a clean teardown\), so falling back to last_state_at\s*\/\/ then created_at keeps them interleaved by when they actually ended\s*\/\/ instead of dumping every reasonless error at the bottom \(time 0\)\.\s*terminated\.sort\(\(a, b\) => endedAtMs\(b\) - endedAtMs\(a\)\);/,
     );
     // The endedAtMs helper drives that most-reliable-timestamp-first sort.
     expect(body).toMatch(
-      /function endedAtMs\(s: Session\): number \{\s*\n?\s*const iso = s\.destroyed_at \?\? s\.last_state_at \?\? s\.created_at;\s*\n?\s*const ms = new Date\(iso\)\.getTime\(\);\s*\n?\s*return Number\.isNaN\(ms\) \? 0 : ms;\s*\n?\s*\}/,
+      /function endedAtMs\(s: Session\): number \{\s*const iso = s\.destroyed_at \?\? s\.last_state_at \?\? s\.created_at;\s*const ms = new Date\(iso\)\.getTime\(\);\s*return Number\.isNaN\(ms\) \? 0 : ms;\s*\}/,
     );
   });
 
@@ -86,24 +86,24 @@ describe('W483.A apps/gui-client/src/views/SessionsHistoryView.tsx content parit
 
   it("!client early-return: 'Configure API access' section-label + 'Set up your API key in Settings to view session history.' subline — pinned so the unauthenticated user sees a useful direction instead of an empty list", () => {
     expect(body).toMatch(
-      /if \(!client\) \{\s*\n?\s*return \(\s*\n?\s*<div className="flex h-full flex-col items-center justify-center gap-2 px-8 text-center">\s*\n?\s*<span className="section-label">Configure API access<\/span>\s*\n?\s*<p className="max-w-md text-sm text-ink-secondary">\s*\n?\s*Set up your API key in Settings to view session history\.\s*\n?\s*<\/p>/,
+      /if \(!client\) \{\s*return \(\s*<div className="flex h-full flex-col items-center justify-center gap-2 px-8 text-center">\s*<span className="section-label">Configure API access<\/span>\s*<p className="max-w-md text-sm text-ink-secondary">\s*Set up your API key in Settings to view session history\.\s*<\/p>/,
     );
   });
 
   it('Render: history framing + retryable ErrorBanner + shared empty state', () => {
     expect(body).toMatch(/<h2[\s\S]*?Past sessions[\s\S]*?<\/h2>/);
     expect(body).toMatch(
-      /Ended sessions \(destroyed or errored\) with their lifetime and final status\. Active\s*\n?\s*sessions live under "Active" in the sidebar\./,
+      /Ended sessions \(destroyed or errored\) with their lifetime and final status\. Active\s*sessions live under "Active" in the sidebar\./,
     );
     expect(body).toMatch(
-      /\{state\.error !== null && \(\s*\n?\s*<ErrorBanner\s*\n?\s*message=\{state\.error\}\s*\n?\s*onRetry=\{\(\) => void refresh\(\)\}\s*\n?\s*retrying=\{state\.loading\}\s*\n?\s*onDismiss=\{\(\) => setState\(\(s\) => \(\{ \.\.\.s, error: null \}\)\)\}/,
+      /\{state\.error !== null && \(\s*<ErrorBanner\s*message=\{state\.error\}\s*onRetry=\{\(\) => void refresh\(\)\}\s*retrying=\{state\.loading\}\s*onDismiss=\{\(\) => setState\(\(s\) => \(\{ \.\.\.s, error: null \}\)\)\}/,
     );
     // W463 — empty state upgraded to the shared <EmptyState> primitive.
     expect(body).toMatch(/import \{ EmptyState \} from '\.\.\/components\/EmptyState';/);
     // Empty state shows only when there is genuinely nothing AND we are not
     // mid first-load (skeleton owns that window) — gated on hasSessions/showSkeleton.
     expect(body).toMatch(
-      /!hasSessions && !showSkeleton && state\.error === null && \(\s*\n?\s*<EmptyState/,
+      /!hasSessions && !showSkeleton && state\.error === null && \(\s*<EmptyState/,
     );
     expect(body).toMatch(/title="No past sessions yet"/);
     expect(body).toMatch(
@@ -119,11 +119,11 @@ describe('W483.A apps/gui-client/src/views/SessionsHistoryView.tsx content parit
     // row still shows *when* it ended rather than a bare em dash.
     expect(body).toMatch(/const endedIso = s\.destroyed_at \?\? s\.last_state_at;/);
     expect(body).toMatch(
-      /\{s\.archetype\} · \{fmtDuration\(s\.created_at, endedIso\)\} ·\{' '\}\s*\n?\s*\{endedIso \? \(\s*\n?\s*<RelativeTime\s*\n?\s*iso=\{endedIso\}\s*\n?\s*tooltipPrefix=\{s\.destroyed_at \? 'Ended' : 'Last state \(errored\)'\}\s*\n?\s*\/>\s*\n?\s*\) : \(\s*\n?\s*'—'\s*\n?\s*\)\}/,
+      /\{s\.archetype\} · \{fmtDuration\(s\.created_at, endedIso\)\} ·\{' '\}\s*\{endedIso \? \(\s*<RelativeTime\s*iso=\{endedIso\}\s*tooltipPrefix=\{s\.destroyed_at \? 'Ended' : 'Last state \(errored\)'\}\s*\/>\s*\) : \(\s*'—'\s*\)\}/,
     );
     // Errored sessions surface a plain-language "no reason" note.
     expect(body).toMatch(
-      /\{s\.status === 'errored' && \(\s*\n?\s*<p className="mt-0\.5 text-2xs text-ink-muted italic">\s*\n?\s*Reason not reported by the harness\s*\n?\s*<\/p>\s*\n?\s*\)\}/,
+      /\{s\.status === 'errored' && \(\s*<p className="mt-0\.5 text-2xs text-ink-muted italic">\s*Reason not reported by the harness\s*<\/p>\s*\)\}/,
     );
     // The status pill is now the shared SessionStatusBadge component.
     expect(body).toMatch(
@@ -136,7 +136,7 @@ describe('W483.A apps/gui-client/src/views/SessionsHistoryView.tsx content parit
 
   it("fmtDuration piecewise: !destroyedIso → '—' / ms < 0 → '—' (negative-time guard for clock skew) / <1000 → `${ms}ms` (raw) / <60_000 → `${Math.round(ms/100)/10}s` (1 decimal) / <3_600_000 → `${Math.round(ms/6_000)/10}m` (1 decimal) / else `${Math.round(ms/360_000)/10}h` (1 decimal)", () => {
     expect(body).toMatch(
-      /function fmtDuration\(createdIso: string, destroyedIso: string \| null\): string \{\s*\n?\s*if \(!destroyedIso\) return '—';\s*\n?\s*const ms = new Date\(destroyedIso\)\.getTime\(\) - new Date\(createdIso\)\.getTime\(\);\s*\n?\s*if \(ms < 0\) return '—';\s*\n?\s*if \(ms < 1000\) return `\$\{ms\}ms`;\s*\n?\s*if \(ms < 60_000\) return `\$\{Math\.round\(ms \/ 100\) \/ 10\}s`;\s*\n?\s*if \(ms < 3_600_000\) return `\$\{Math\.round\(ms \/ 6_000\) \/ 10\}m`;\s*\n?\s*return `\$\{Math\.round\(ms \/ 360_000\) \/ 10\}h`;\s*\n?\s*\}/,
+      /function fmtDuration\(createdIso: string, destroyedIso: string \| null\): string \{\s*if \(!destroyedIso\) return '—';\s*const ms = new Date\(destroyedIso\)\.getTime\(\) - new Date\(createdIso\)\.getTime\(\);\s*if \(ms < 0\) return '—';\s*if \(ms < 1000\) return `\$\{ms\}ms`;\s*if \(ms < 60_000\) return `\$\{Math\.round\(ms \/ 100\) \/ 10\}s`;\s*if \(ms < 3_600_000\) return `\$\{Math\.round\(ms \/ 6_000\) \/ 10\}m`;\s*return `\$\{Math\.round\(ms \/ 360_000\) \/ 10\}h`;\s*\}/,
     );
   });
 
@@ -149,11 +149,11 @@ describe('W483.A apps/gui-client/src/views/SessionsHistoryView.tsx content parit
     );
     // refreshedAt was tracked in state but never rendered before this slice.
     expect(body).toMatch(
-      /\{state\.refreshedAt !== null && \(\s*\n?\s*<p className="mt-1 text-2xs text-ink-muted">\s*\n?\s*Refreshed <span className="mono">\{formatTime\(state\.refreshedAt\)\}<\/span>/,
+      /\{state\.refreshedAt !== null && \(\s*<p className="mt-1 text-2xs text-ink-muted">\s*Refreshed <span className="mono">\{formatTime\(state\.refreshedAt\)\}<\/span>/,
     );
     // Header count next to the title (only when there are sessions).
     expect(body).toMatch(
-      /\{hasSessions && \(\s*\n?\s*<span className="text-sm font-normal text-ink-muted">\{state\.sessions\.length\}<\/span>\s*\n?\s*\)\}/,
+      /\{hasSessions && \(\s*<span className="text-sm font-normal text-ink-muted">\{state\.sessions\.length\}<\/span>\s*\)\}/,
     );
   });
 

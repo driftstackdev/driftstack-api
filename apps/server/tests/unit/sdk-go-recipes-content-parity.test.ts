@@ -27,7 +27,7 @@ describe('sdk-go recipes content parity', () => {
   it('frames recipes as an available management and suggestion resource', () => {
     expect(body).toMatch(/\/\/ RecipesResource manages saved recipes and recipe suggestions\./);
     expect(body).toMatch(
-      /\/\/ Surface: Create \+ List \+ Iterate \+ Get \+ Delete \+ Suggest\. Deployments\s*\n?\s*\/\/ without recipe storage return the typed FeatureUnavailable error\./,
+      /\/\/ Surface: Create \+ List \+ Iterate \+ Get \+ Delete \+ Suggest\. Deployments\s*\/\/ without recipe storage return the typed FeatureUnavailable error\./,
     );
   });
 
@@ -49,14 +49,14 @@ describe('sdk-go recipes content parity', () => {
 
   it('CreateRecipeRequest 3-field surface: AgentSessionID (required) + Label (required) + Description (omitempty string, not pointer — the wire shape is just absent vs. present; null-vs-absent equivalence is fine for this request body unlike the response shape where the server may emit null). Drift to making Description *string would diverge from the cross-SDK pattern', () => {
     expect(body).toMatch(
-      /type CreateRecipeRequest struct \{\s*\n?\s*AgentSessionID string `json:"agent_session_id"`\s*\n?\s*Label\s+string `json:"label"`\s*\n?\s*Description\s+string `json:"description,omitempty"`\s*\n?\s*\}/,
+      /type CreateRecipeRequest struct \{\s*AgentSessionID string `json:"agent_session_id"`\s*Label\s+string `json:"label"`\s*Description\s+string `json:"description,omitempty"`\s*\}/,
     );
   });
 
   it("V-1120 Create() ACCESS-scoped 404 framing pinned. The old comment read 'Cross-account access on AgentSessionID returns 404', the rule V-812 retracted. The Get/Delete comments below are NOT changed: those are about recipeID, which really is strictly own-account, so the same words are correct there and wrong here.", () => {
     const body = read(LIB);
     expect(body).toMatch(
-      /\/\/ AgentSessionID must be a session the caller can ACCESS: one their own\s*\n?\s*\/\/ account owns, or one owned by a team they hold admin on\./,
+      /\/\/ AgentSessionID must be a session the caller can ACCESS: one their own\s*\/\/ account owns, or one owned by a team they hold admin on\./,
     );
     expect(body, 'the anti-enumeration reason must stay').toMatch(
       /doesn't distinguish\s*\n?\/\/ missing from forbidden/,
@@ -95,7 +95,7 @@ describe('sdk-go recipes content parity', () => {
 
   it('RecipeDetail + RecipesListPage shapes and public sensitive-value omission contract pinned', () => {
     expect(body).toMatch(
-      /\/\/ RecipeDetail is the public recipe returned by Get\. It embeds the list\s*\n?\s*\/\/ metadata and adds the ordered IntentLog\. Sensitive type steps retain their\s*\n?\s*\/\/ selector and sensitive marker but omit the optional value; exact replay\s*\n?\s*\/\/ values stay encrypted server-side\./,
+      /\/\/ RecipeDetail is the public recipe returned by Get\. It embeds the list\s*\/\/ metadata and adds the ordered IntentLog\. Sensitive type steps retain their\s*\/\/ selector and sensitive marker but omit the optional value; exact replay\s*\/\/ values stay encrypted server-side\./,
     );
     expect(body).toMatch(
       /type RecipeDetail struct \{\s+Recipe\s+IntentLog\s+\[\]json\.RawMessage\s+`json:"intent_log"`/,

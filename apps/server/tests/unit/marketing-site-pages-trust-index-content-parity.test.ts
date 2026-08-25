@@ -30,7 +30,7 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
 
   it("V-477 framing pinned: 'trust center landing. Aggregates the customer-trust surfaces (security, sub-processors, legal documents, incident history) on a single page so customers evaluating the platform have one URL to bookmark.' — pinned so the V-477 doc-comment + the 'one URL to bookmark' commitment survive (drift to dropping V-477 would orphan the engineering reason; drift to dropping 'one URL' would weaken the hub-page-vs-scattered-pages positioning)", () => {
     expect(body).toMatch(
-      /\/\/ V-477 — trust center landing\. Aggregates the customer-trust\s*\n?\s*\/\/ surfaces \(security, sub-processors, legal documents, incident\s*\n?\s*\/\/ history\) on a single page so customers evaluating the platform\s*\n?\s*\/\/ have one URL to bookmark\./,
+      /\/\/ V-477 — trust center landing\. Aggregates the customer-trust\s*\/\/ surfaces \(security, sub-processors, legal documents, incident\s*\/\/ history\) on a single page so customers evaluating the platform\s*\/\/ have one URL to bookmark\./,
     );
   });
 
@@ -110,7 +110,7 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
   it("Incident history card pinned: 'Past events + post-mortems →' + 'with timestamps, customer impact, root cause, and the remediation we applied.' — pinned so the 4-attribute incident-disclosure commitment (timestamp/impact/root-cause/remediation) survives (drift to dropping 'root cause' would weaken the post-mortem-grade commitment; drift to dropping 'remediation' would leave incidents without a fix-applied signal)", () => {
     expect(body).toMatch(/Past events \+ post-mortems →/);
     expect(body).toMatch(
-      /with\s*\n?\s*timestamps, customer impact, root cause, and the remediation\s*\n?\s*we applied\./,
+      /with\s*timestamps, customer impact, root cause, and the remediation\s*we applied\./,
     );
   });
 
@@ -142,7 +142,7 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
 
   it("Data-hosted answer pinned: 'EU by default. Compute (Hetzner Nuremberg), database (Neon Frankfurt); object storage (Cloudflare R2, EU + US replication).' — S30 2026-07-07 (founder decision: soften) supersedes the prior 'EU only ... R2 EU jurisdiction' pin: R2 uses the DEFAULT jurisdiction (verified on the prod box, task #24), so the absolutist 'EU only' + false 'EU jurisdiction' had to go; the 3-sub-processor location specificity survives", () => {
     expect(body).toMatch(
-      /EU by default\. Compute \(Hetzner Nuremberg\), database \(Neon Frankfurt\);\s*\n?\s*object storage \(Cloudflare R2, EU \+ US replication\)\./,
+      /EU by default\. Compute \(Hetzner Nuremberg\), database \(Neon Frankfurt\);\s*object storage \(Cloudflare R2, EU \+ US replication\)\./,
     );
     // S30 negative pins — the absolutist claims must not silently return.
     expect(body).not.toMatch(/EU only\./);
@@ -172,9 +172,7 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
     expect(body).toMatch(
       /Standard security-questionnaire formats \(CAIQ, VSAQ\) and custom enterprise vendor questionnaires — all welcome\./,
     );
-    expect(body).toMatch(
-      /primaryHref="mailto:support@driftstack\.dev"\s*\n?\s*primaryLabel="Email us"/,
-    );
+    expect(body).toMatch(/primaryHref="mailto:support@driftstack\.dev"\s*primaryLabel="Email us"/);
     expect(body).toMatch(/we answer the remaining items in writing/);
     expect(body).not.toMatch(/within a working day/);
   });

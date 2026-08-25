@@ -225,12 +225,10 @@ describe('routes/account-notifications.ts content parity', () => {
     // Re-auth + re-authorize each tick, write on success, destroy on failure.
     expect(body).toMatch(/await app\.requireAuthEventSource\(req, reply\);/);
     expect(body).toMatch(
-      /await app\.requireAuthEventSource\(req, reply\);\s*\n?\s*if \(closed\) return;/,
+      /await app\.requireAuthEventSource\(req, reply\);\s*if \(closed\) return;/,
     );
     expect(body).toMatch(/await requireNotificationRead\(req, reply\);/);
-    expect(body).toMatch(
-      /await requireNotificationRead\(req, reply\);\s*\n?\s*if \(closed\) return;/,
-    );
+    expect(body).toMatch(/await requireNotificationRead\(req, reply\);\s*if \(closed\) return;/);
     expect(body).toMatch(/heartbeatAuthInFlight = false;/);
     expect(body).toMatch(/heartbeat\.unref\(\);/);
   });
@@ -242,7 +240,7 @@ describe('routes/account-notifications.ts content parity', () => {
     // guard can fire it concurrently with the close/error handlers.
     expect(body).toMatch(/let closed = false;/);
     expect(body).toMatch(/const cleanup = \(\): void => \{/);
-    expect(body).toMatch(/if \(closed\) return;\s*\n?\s*closed = true;/);
+    expect(body).toMatch(/if \(closed\) return;\s*closed = true;/);
     expect(body).toMatch(/clearInterval\(heartbeat\);/);
     expect(body).toMatch(/unsubscribe\(\);/);
     expect(body).toMatch(/reply\.raw\.end\(\);/);
@@ -262,7 +260,7 @@ describe('routes/account-notifications.ts content parity', () => {
 
   it('heartbeat auth failure releases owned resources before destroying the socket', () => {
     expect(body).toMatch(
-      /catch \{\s*\n?\s*if \(closed\) return;[\s\S]*?cleanup\(\);\s*\n?\s*reply\.raw\.destroy\(\);/,
+      /catch \{\s*if \(closed\) return;[\s\S]*?cleanup\(\);\s*reply\.raw\.destroy\(\);/,
     );
   });
 
@@ -277,7 +275,7 @@ describe('routes/account-notifications.ts content parity', () => {
     expect(body).toMatch(
       /At most \$\{maxStreamsPerAccount\.toString\(\)\} concurrent notification streams/,
     );
-    expect(body).not.toMatch(/\.send\(\{\s*\n?\s*error:/);
+    expect(body).not.toMatch(/\.send\(\{\s*error:/);
     expect(body).toMatch(/activeByAccount\.set\(accountId, active \+ 1\);/);
     expect(body).toMatch(/const remaining = \(activeByAccount\.get\(accountId\) \?\? 1\) - 1;/);
   });

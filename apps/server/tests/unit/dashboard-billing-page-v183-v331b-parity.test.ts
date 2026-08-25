@@ -38,7 +38,7 @@ describe('W751 dashboard /billing page V-183 + V-331b parity', () => {
     expect(p).toMatch(
       /data-action="portal"\s*\n\s*disabled\s*\n\s*aria-disabled="true"\s*\n\s*title="Live billing must load before opening Stripe\."/,
     );
-    expect(p).toMatch(/Mirrors\s*\n?\s*\/\/ V-180\/V-181\/V-182/);
+    expect(p).toMatch(/Mirrors\s*\/\/ V-180\/V-181\/V-182/);
   });
 
   it('CRITICAL Stripe-redirect-for-all-payment-changes framing pinned. The wording — "All payment changes redirect to Stripe\'s secure portal" — is the load-bearing PCI/compliance framing (dashboard never handles card data).', () => {

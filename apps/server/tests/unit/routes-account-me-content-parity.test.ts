@@ -49,22 +49,22 @@ describe('W420.C apps/server/src/routes/account-me.ts content parity', () => {
 
   it('identity GET /me keeps broad read while nested organization uses profile-scoped read/write gates', () => {
     expect(body).toMatch(
-      /'\/v1\/account\/me',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('read'\), app\.rateLimit\('global'\)\] \}/,
+      /'\/v1\/account\/me',\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('read'\), app\.rateLimit\('global'\)\] \}/,
     );
     expect(body).toMatch(
-      /'\/v1\/account\/me\/organization',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('read:profiles'\), app\.rateLimit\('global'\)\] \}/,
+      /'\/v1\/account\/me\/organization',\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('read:profiles'\), app\.rateLimit\('global'\)\] \}/,
     );
     expect(body).toMatch(
-      /'\/v1\/account\/me\/organization',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('write:profiles'\), app\.rateLimit\('global'\)\] \}/,
+      /'\/v1\/account\/me\/organization',\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('write:profiles'\), app\.rateLimit\('global'\)\] \}/,
     );
   });
 
   it('organization resolves the exact effective owner; team writes authorize admin before parsing and write only that owner', () => {
     expect(body).toMatch(
-      /const effective = resolveEffectiveAccount\(ctx, readEffectiveAccountHeader\(request\)\);\s*\n?\s*const org = await authRepo\.getOrganization\(effective\.accountId\);/,
+      /const effective = resolveEffectiveAccount\(ctx, readEffectiveAccountHeader\(request\)\);\s*const org = await authRepo\.getOrganization\(effective\.accountId\);/,
     );
     expect(body).toMatch(
-      /const effective = resolveEffectiveAccount\(ctx, readEffectiveAccountHeader\(request\)\);\s*\n?\s*if \(effective\.kind === 'team' && effective\.role !== 'admin'\)[\s\S]+?const parsed = AccountOrganizationSchema\.safeParse\(request\.body \?\? \{\}\);/,
+      /const effective = resolveEffectiveAccount\(ctx, readEffectiveAccountHeader\(request\)\);\s*if \(effective\.kind === 'team' && effective\.role !== 'admin'\)[\s\S]+?const parsed = AccountOrganizationSchema\.safeParse\(request\.body \?\? \{\}\);/,
     );
     expect(body).toContain('await authRepo.setOrganization(effective.accountId, parsed.data);');
     expect(body).not.toContain('authRepo.getOrganization(ctx.account.id)');
@@ -74,49 +74,49 @@ describe('W420.C apps/server/src/routes/account-me.ts content parity', () => {
   it('V-237 framing pinned: GET /v1/account/me identity + tier + concurrent-session usage/cap + profile usage/cap; file 128 spec mirror', () => {
     expect(body).toMatch(/V-237 — customer self-profile endpoint\./);
     expect(body).toMatch(
-      /GET \/v1\/account\/me — returns the calling account's identity \+ tier\s*\n?\s*\/\/\s*\+ concurrent-session usage\/cap \+ profile usage\/cap\. Powers the GUI\s*\n?\s*\/\/\s*client's tier-aware enforcement display \(file 128 spec mirror\) so\s*\n?\s*\/\/\s*the customer sees "X \/ Y concurrent sessions" \+ "P \/ Q profiles"\s*\n?\s*\/\/\s*before the API enforces the cap with a 429 tier-limit problem/,
+      /GET \/v1\/account\/me — returns the calling account's identity \+ tier\s*\/\/\s*\+ concurrent-session usage\/cap \+ profile usage\/cap\. Powers the GUI\s*\/\/\s*client's tier-aware enforcement display \(file 128 spec mirror\) so\s*\/\/\s*the customer sees "X \/ Y concurrent sessions" \+ "P \/ Q profiles"\s*\/\/\s*before the API enforces the cap with a 429 tier-limit problem/,
     );
     expect(body).toMatch(
-      /Distinct from `\/v1\/account\/rate-limits` \(per-bucket limit config\)\s*\n?\s*\/\/\s*and `\/v1\/account\/audit-log` \(event ledger\) — this is the dashboard\s*\n?\s*\/\/\s*header view\./,
+      /Distinct from `\/v1\/account\/rate-limits` \(per-bucket limit config\)\s*\/\/\s*and `\/v1\/account\/audit-log` \(event ledger\) — this is the dashboard\s*\/\/\s*header view\./,
     );
   });
 
   it('V-352 effective-account NOT honored: /me always self-account; team-owner edits land in V-352c with explicit semantics', () => {
     expect(body).toMatch(
-      /\/\/ Note: V-326 effective-account header is intentionally NOT honored\s*\n?\s*\/\/ — \/v1\/account\/me always operates on the caller's own account\.\s*\n?\s*\/\/ Acting on a team owner's account\.name \/ timezone would be\s*\n?\s*\/\/ surprising; if needed, lands in V-352c with explicit semantics\./,
+      /\/\/ Note: V-326 effective-account header is intentionally NOT honored\s*\/\/ — \/v1\/account\/me always operates on the caller's own account\.\s*\/\/ Acting on a team owner's account\.name \/ timezone would be\s*\/\/ surprising; if needed, lands in V-352c with explicit semantics\./,
     );
   });
 
   it('V-352b avatar TTL framing pinned: AVATAR_PRESIGN_TTL_SECONDS = 60*60 (1h rotating-secret invalidates outstanding URLs <1h rationale)', () => {
     expect(body).toMatch(
-      /\/\*\* V-352b — avatar presigned-GET TTL\. 1h is long enough that a single\s*\n?\s*\*\s*dashboard render doesn't churn signed URLs but short enough that\s*\n?\s*\*\s*rotating the bucket secret invalidates outstanding URLs in <1h\. \*\/\s*\n?\s*const AVATAR_PRESIGN_TTL_SECONDS = 60 \* 60;/,
+      /\/\*\* V-352b — avatar presigned-GET TTL\. 1h is long enough that a single\s*\*\s*dashboard render doesn't churn signed URLs but short enough that\s*\*\s*rotating the bucket secret invalidates outstanding URLs in <1h\. \*\/\s*const AVATAR_PRESIGN_TTL_SECONDS = 60 \* 60;/,
     );
   });
 
   it("profileCapFor: PROFILES_PER_TIER 'custom' → null (enterprise = no fixed cap; see contract); numeric otherwise", () => {
     expect(body).toMatch(
-      /\* Resolve the profile cap for a tier\. `PROFILES_PER_TIER` returns\s*\n?\s*\*\s*`'custom'` for enterprise \(negotiated per-customer\); we surface\s*\n?\s*\*\s*that as `null` to the customer \(read: "no fixed cap on this tier;\s*\n?\s*\*\s*see your contract"\)\. All other tiers return a numeric cap\./,
+      /\* Resolve the profile cap for a tier\. `PROFILES_PER_TIER` returns\s*\*\s*`'custom'` for enterprise \(negotiated per-customer\); we surface\s*\*\s*that as `null` to the customer \(read: "no fixed cap on this tier;\s*\*\s*see your contract"\)\. All other tiers return a numeric cap\./,
     );
     expect(body).toMatch(
-      /function profileCapFor\(tier: AccountTier\): number \| null \{\s*\n?\s*const cap = PROFILES_PER_TIER\[tier\];\s*\n?\s*return cap === 'custom' \? null : cap;/,
+      /function profileCapFor\(tier: AccountTier\): number \| null \{\s*const cap = PROFILES_PER_TIER\[tier\];\s*return cap === 'custom' \? null : cap;/,
     );
   });
 
   it('presignAvatar helper: null on no key OR no r2Public OR presign failure (warn-log + swallow — stale /me read never 500s on R2 hiccup)', () => {
     expect(body).toMatch(
-      /\/\/ V-352b — best-effort presigned GET URL for the avatar\. Returns null\s*\n?\s*\/\/ when no avatar is set, when the public R2 bucket is not configured,\s*\n?\s*\/\/ or when the presign call itself fails \(logged \+ swallowed: a stale\s*\n?\s*\/\/ \/me read should never 500 just because R2 hiccuped\)\./,
+      /\/\/ V-352b — best-effort presigned GET URL for the avatar\. Returns null\s*\/\/ when no avatar is set, when the public R2 bucket is not configured,\s*\/\/ or when the presign call itself fails \(logged \+ swallowed: a stale\s*\/\/ \/me read should never 500 just because R2 hiccuped\)\./,
     );
     expect(body).toMatch(
-      /async function presignAvatar\(key: string \| null\): Promise<string \| null> \{\s*\n?\s*if \(!key\) return null;\s*\n?\s*if \(!r2Public\) return null;[\s\S]+?app\.log\.warn\(\{ err, key \}, 'avatar presign failed'\);\s*\n?\s*return null;/,
+      /async function presignAvatar\(key: string \| null\): Promise<string \| null> \{\s*if \(!key\) return null;\s*if \(!r2Public\) return null;[\s\S]+?app\.log\.warn\(\{ err, key \}, 'avatar presign failed'\);\s*return null;/,
     );
   });
 
   it('GET /me parallel fan-out: Promise.all [countActiveSessions, countByAccount, presignAvatar, mfaService?.getStatus ?? null, oauthAvatarFallback] — 5-promise shape after the OAuth IDP avatar fallback landed', () => {
     expect(body).toMatch(
-      /\/\/ Parallel fan-out: counts \+ tier-derived caps \+ avatar presign \+ MFA\.\s*\n?\s*\/\/ Tier caps come from in-memory constants so they cost nothing\./,
+      /\/\/ Parallel fan-out: counts \+ tier-derived caps \+ avatar presign \+ MFA\.\s*\/\/ Tier caps come from in-memory constants so they cost nothing\./,
     );
     expect(body).toMatch(
-      /const \[activeSessions, profileCount, r2AvatarUrl, mfaStatus, oauthFallback\] =\s*\n?\s*await Promise\.all\(\[\s*\n?\s*sessionRepo\.countActiveSessions\(accountId\),\s*\n?\s*profilesRepo\.countByAccount\(accountId\),\s*\n?\s*presignAvatar\(ctx\.account\.avatarR2Key\),\s*\n?\s*mfaService \? mfaService\.getStatus\(accountId\) : Promise\.resolve\(null\),\s*\n?\s*ctx\.account\.avatarR2Key \? Promise\.resolve\(null\) : oauthAvatarFallback\(accountId\),\s*\n?\s*\]\);/,
+      /const \[activeSessions, profileCount, r2AvatarUrl, mfaStatus, oauthFallback\] =\s*await Promise\.all\(\[\s*sessionRepo\.countActiveSessions\(accountId\),\s*profilesRepo\.countByAccount\(accountId\),\s*presignAvatar\(ctx\.account\.avatarR2Key\),\s*mfaService \? mfaService\.getStatus\(accountId\) : Promise\.resolve\(null\),\s*ctx\.account\.avatarR2Key \? Promise\.resolve\(null\) : oauthAvatarFallback\(accountId\),\s*\]\);/,
     );
   });
 
@@ -139,45 +139,45 @@ describe('W420.C apps/server/src/routes/account-me.ts content parity', () => {
 
   it('V-326c teams shape: ctx.teams.map → { owner_account_id=acc_ + owner_email + owner_name + role + membership_id=mem_ }', () => {
     expect(body).toMatch(
-      /\/\/ V-326c — owner accounts the caller is a member of \(empty\s*\n?\s*\/\/ array when not on any team\)\. Each entry exposes the public\s*\n?\s*\/\/ owner id \+ the owner's email\/name/,
+      /\/\/ V-326c — owner accounts the caller is a member of \(empty\s*\/\/ array when not on any team\)\. Each entry exposes the public\s*\/\/ owner id \+ the owner's email\/name/,
     );
     expect(body).toMatch(
-      /teams: ctx\.teams\.map\(\(t\) => \(\{\s*\n?\s*owner_account_id: `acc_\$\{t\.ownerAccountId\}`,\s*\n?\s*owner_email: t\.ownerEmail \?\? `acc_\$\{t\.ownerAccountId\}`,\s*\n?\s*owner_name: t\.ownerName \?\? null,\s*\n?\s*role: t\.role,\s*\n?\s*membership_id: `mem_\$\{t\.membershipId\}`,\s*\n?\s*\}\)\),/,
+      /teams: ctx\.teams\.map\(\(t\) => \(\{\s*owner_account_id: `acc_\$\{t\.ownerAccountId\}`,\s*owner_email: t\.ownerEmail \?\? `acc_\$\{t\.ownerAccountId\}`,\s*owner_name: t\.ownerName \?\? null,\s*role: t\.role,\s*membership_id: `mem_\$\{t\.membershipId\}`,\s*\}\)\),/,
     );
   });
 
   it("V-298a PATCH SLUG_TAKEN → 409 ConflictError 'That slug is already taken. Pick a different one.'", () => {
     expect(body).toMatch(
-      /\/\/ V-298a — repo throws SLUG_TAKEN when the unique-constraint\s*\n?\s*\/\/ collides with another account's slug\. 409 surfaces it\./,
+      /\/\/ V-298a — repo throws SLUG_TAKEN when the unique-constraint\s*\/\/ collides with another account's slug\. 409 surfaces it\./,
     );
     expect(body).toMatch(
-      /if \(err instanceof Error && err\.message === 'SLUG_TAKEN'\) \{\s*\n?\s*throw new ConflictError\('That slug is already taken\. Pick a different one\.'\);/,
+      /if \(err instanceof Error && err\.message === 'SLUG_TAKEN'\) \{\s*throw new ConflictError\('That slug is already taken\. Pick a different one\.'\);/,
     );
   });
 
   it('PATCH /me: UpdateAccountMeRequestSchema safeParse + first-issue BadRequestError; authRepo.updateAccountBasics; NotFoundError on missing; auth-cache invalidate best-effort', () => {
     expect(body).toMatch(
-      /const parsed = UpdateAccountMeRequestSchema\.safeParse\(request\.body \?\? \{\}\);\s*\n?\s*if \(!parsed\.success\) \{\s*\n?\s*throw new BadRequestError\(parsed\.error\.issues\[0\]\?\.message \?\? 'Invalid body\.'\);/,
+      /const parsed = UpdateAccountMeRequestSchema\.safeParse\(request\.body \?\? \{\}\);\s*if \(!parsed\.success\) \{\s*throw new BadRequestError\(parsed\.error\.issues\[0\]\?\.message \?\? 'Invalid body\.'\);/,
     );
     expect(body).toMatch(
       /updated = await authRepo\.updateAccountBasics\(ctx\.account\.id, parsed\.data\);/,
     );
     expect(body).toMatch(/if \(!updated\) throw new NotFoundError\('Account not found\.'\);/);
     expect(body).toMatch(
-      /\/\/ Invalidate the cached AccountContext so the next request reads\s*\n?\s*\/\/ the freshly-updated row\. Best-effort; cache failure must never\s*\n?\s*\/\/ block the user-facing op\./,
+      /\/\/ Invalidate the cached AccountContext so the next request reads\s*\/\/ the freshly-updated row\. Best-effort; cache failure must never\s*\/\/ block the user-facing op\./,
     );
     expect(body).toMatch(
-      /if \(authCache\) \{\s*\n?\s*try \{\s*\n?\s*await authCache\.invalidateAccount\(ctx\.account\.id\);\s*\n?\s*\} catch \{\s*\n?\s*\/\* swallow \*\/\s*\n?\s*\}\s*\n?\s*\}/,
+      /if \(authCache\) \{\s*try \{\s*await authCache\.invalidateAccount\(ctx\.account\.id\);\s*\} catch \{\s*\/\* swallow \*\/\s*\}\s*\}/,
     );
   });
 
   it('V-352b avatar POST: bodyLimit 3.5 MiB (2 MiB raw → ~2.8 MiB base64 + JSON envelope rationale); r2Public null → FeatureUnavailableError', () => {
     expect(body).toMatch(
-      /\/\/ bodyLimit override: Fastify defaults to 1 MiB JSON\. A 2 MiB raw\s*\n?\s*\/\/ image becomes ~2\.8 MiB base64; we cap the route at 3\.5 MiB so a\s*\n?\s*\/\/ legitimate 2 MiB upload \+ JSON envelope fits and anything beyond\s*\n?\s*\/\/ is short-circuited as 413 by Fastify before our handler runs\./,
+      /\/\/ bodyLimit override: Fastify defaults to 1 MiB JSON\. A 2 MiB raw\s*\/\/ image becomes ~2\.8 MiB base64; we cap the route at 3\.5 MiB so a\s*\/\/ legitimate 2 MiB upload \+ JSON envelope fits and anything beyond\s*\/\/ is short-circuited as 413 by Fastify before our handler runs\./,
     );
     expect(body).toMatch(/bodyLimit: 3\.5 \* 1024 \* 1024,/);
     expect(body).toMatch(
-      /if \(!r2Public\) \{\s*\n?\s*throw new FeatureUnavailableError\('Avatar uploads are not available on this deployment\.'\);/,
+      /if \(!r2Public\) \{\s*throw new FeatureUnavailableError\('Avatar uploads are not available on this deployment\.'\);/,
     );
   });
 
@@ -186,32 +186,32 @@ describe('W420.C apps/server/src/routes/account-me.ts content parity', () => {
       /bytes = Buffer\.from\(parsed\.data\.data_base64, 'base64'\);[\s\S]+?throw new BadRequestError\('data_base64 is not valid base64\.'\);/,
     );
     expect(body).toMatch(
-      /if \(bytes\.length === 0\) \{\s*\n?\s*throw new BadRequestError\('Avatar image is empty\.'\);/,
+      /if \(bytes\.length === 0\) \{\s*throw new BadRequestError\('Avatar image is empty\.'\);/,
     );
     expect(body).toMatch(
-      /if \(bytes\.length > AVATAR_MAX_BYTES\) \{\s*\n?\s*throw new BadRequestError\(`Avatar image is too large\. Max \$\{AVATAR_MAX_BYTES\} bytes\.`\);/,
+      /if \(bytes\.length > AVATAR_MAX_BYTES\) \{\s*throw new BadRequestError\(`Avatar image is too large\. Max \$\{AVATAR_MAX_BYTES\} bytes\.`\);/,
     );
     expect(body).toMatch(
-      /app\.log\.error\(\{ err, key \}, 'avatar upload to R2 failed'\);\s*\n?\s*throw new FeatureUnavailableError\('Avatar storage is temporarily unavailable\.'\);/,
+      /app\.log\.error\(\{ err, key \}, 'avatar upload to R2 failed'\);\s*throw new FeatureUnavailableError\('Avatar storage is temporarily unavailable\.'\);/,
     );
   });
 
   it('Avatar DELETE: clear avatarR2Key pointer; 204; R2 object left for sweeper rationale ("public bucket already public-readable; stale objects no worse")', () => {
     expect(body).toMatch(
-      /\/\/ V-352b — clear the avatar pointer on the account row\. The R2\s*\n?\s*\/\/ object is intentionally left in place: a future sweeper job\s*\n?\s*\/\/ collects orphaned avatar keys \(off the hot path; avatars are\s*\n?\s*\/\/ already public-readable so leaving stale objects is no worse\s*\n?\s*\/\/ than the public bucket already is\)\. Returns 204\./,
+      /\/\/ V-352b — clear the avatar pointer on the account row\. The R2\s*\/\/ object is intentionally left in place: a future sweeper job\s*\/\/ collects orphaned avatar keys \(off the hot path; avatars are\s*\/\/ already public-readable so leaving stale objects is no worse\s*\/\/ than the public bucket already is\)\. Returns 204\./,
     );
     expect(body).toMatch(
-      /const updated = await authRepo\.updateAccountBasics\(ctx\.account\.id, \{\s*\n?\s*avatarR2Key: null,\s*\n?\s*\}\);[\s\S]+?reply\.code\(204\);\s*\n?\s*return null;/,
+      /const updated = await authRepo\.updateAccountBasics\(ctx\.account\.id, \{\s*avatarR2Key: null,\s*\}\);[\s\S]+?reply\.code\(204\);\s*return null;/,
     );
   });
 
   it('AccountMeRoutesOptions: sessionRepo + profilesRepo + authRepo + optional authCache/r2Public/mfaService with V-352/V-352b/V-353h framing', () => {
     expect(body).toMatch(/export interface AccountMeRoutesOptions \{/);
     expect(body).toMatch(
-      /\/\*\* Session count source — same repo SessionsService uses\. \*\/\s*\n?\s*sessionRepo: SessionRepo;/,
+      /\/\*\* Session count source — same repo SessionsService uses\. \*\/\s*sessionRepo: SessionRepo;/,
     );
     expect(body).toMatch(
-      /\/\*\* Profile count source — same repo ProfilesService uses\. \*\/\s*\n?\s*profilesRepo: ProfilesRepo;/,
+      /\/\*\* Profile count source — same repo ProfilesService uses\. \*\/\s*profilesRepo: ProfilesRepo;/,
     );
     expect(body).toMatch(/authRepo: AccountAuthRepo;/);
     expect(body).toMatch(/authCache\?: AuthCache \| null;/);
@@ -228,7 +228,7 @@ describe('W420.C apps/server/src/routes/account-me.ts content parity', () => {
     );
     expect(body).toMatch(/import \{ readClientIp \} from '\.\.\/lib\/client-ip\.js';/);
     expect(body).toMatch(
-      /import \{\s*\n?\s*AccountOrganizationSchema,\s*\n?\s*AccountProxyInputSchema,\s*\n?\s*AccountProxyUpdateSchema,\s*\n?\s*AVATAR_MAX_BYTES,\s*\n?\s*PROFILES_PER_TIER,\s*\n?\s*PROXIES_PER_TIER,\s*\n?\s*TIER_CONCURRENT_SESSION_LIMITS,\s*\n?\s*UpdateAccountMeRequestSchema,\s*\n?\s*UploadAvatarRequestSchema,\s*\n?\s*UuidSchema,\s*\n?\s*type AccountProxyMetadata,\s*\n?\s*type AccountTier,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import \{\s*AccountOrganizationSchema,\s*AccountProxyInputSchema,\s*AccountProxyUpdateSchema,\s*AVATAR_MAX_BYTES,\s*PROFILES_PER_TIER,\s*PROXIES_PER_TIER,\s*TIER_CONCURRENT_SESSION_LIMITS,\s*UpdateAccountMeRequestSchema,\s*UploadAvatarRequestSchema,\s*UuidSchema,\s*type AccountProxyMetadata,\s*type AccountTier,\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(
       /import \{ resolveEffectiveAccount, type AccountAuthRepo \} from '\.\.\/services\/auth\.js';/,
@@ -242,7 +242,7 @@ describe('W420.C apps/server/src/routes/account-me.ts content parity', () => {
     expect(body).toMatch(/import type \{ MfaService \} from '\.\.\/services\/mfa\.js';/);
     expect(body).toMatch(/import \{ avatarKey, type R2 \} from '\.\.\/lib\/r2\.js';/);
     expect(body).toMatch(
-      /import \{\s*\n?\s*BadRequestError,\s*\n?\s*ConflictError,\s*\n?\s*FeatureUnavailableError,\s*\n?\s*ForbiddenError,\s*\n?\s*NotFoundError,\s*\n?\s*\} from '\.\.\/lib\/errors\.js';/,
+      /import \{\s*BadRequestError,\s*ConflictError,\s*FeatureUnavailableError,\s*ForbiddenError,\s*NotFoundError,\s*\} from '\.\.\/lib\/errors\.js';/,
     );
   });
 

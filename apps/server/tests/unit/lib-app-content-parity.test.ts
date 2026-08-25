@@ -39,13 +39,13 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
   it('Framing pinned: pure factory; takes deps, returns FastifyInstance; tests use in-memory adapters; prod wires Drizzle + ioredis', () => {
     expect(body).toMatch(/\/\/ Fastify app builder\./);
     expect(body).toMatch(
-      /\/\/ Pure factory: takes its dependencies as arguments, returns a configured\s*\n?\s*\/\/ `FastifyInstance`\. Tests build the app with in-memory adapters; production\s*\n?\s*\/\/ wires the same builder to Drizzle \+ ioredis\./,
+      /\/\/ Pure factory: takes its dependencies as arguments, returns a configured\s*\/\/ `FastifyInstance`\. Tests build the app with in-memory adapters; production\s*\/\/ wires the same builder to Drizzle \+ ioredis\./,
     );
   });
 
   it('ReadinessCheck interface pinned: name + async fn + optional timeoutMs (default 1500); runWithTimeout helper races setTimeout reject', () => {
     expect(body).toMatch(
-      /export interface ReadinessCheck \{\s*\n?\s*\/\*\* Display name surfaced in the \/ready response \(e\.g\. "postgres", "redis", "r2"\)\. \*\/\s*\n?\s*name: string;\s*\n?\s*\/\*\* Async probe — throws or rejects on failure, resolves on success\. \*\/\s*\n?\s*fn: \(\) => Promise<unknown>;\s*\n?\s*\/\*\* Per-check timeout in ms\. Default 1500\. \*\/\s*\n?\s*timeoutMs\?: number;\s*\n?\s*\}/,
+      /export interface ReadinessCheck \{\s*\/\*\* Display name surfaced in the \/ready response \(e\.g\. "postgres", "redis", "r2"\)\. \*\/\s*name: string;\s*\/\*\* Async probe — throws or rejects on failure, resolves on success\. \*\/\s*fn: \(\) => Promise<unknown>;\s*\/\*\* Per-check timeout in ms\. Default 1500\. \*\/\s*timeoutMs\?: number;\s*\}/,
     );
     expect(body).toMatch(
       /async function runWithTimeout<T>\(p: Promise<T>, timeoutMs: number\): Promise<T> \{[\s\S]+?Promise\.race<T>\(\[[\s\S]+?reject\(new Error\(`timeout after \$\{timeoutMs\}ms`\)\), timeoutMs\)/,
@@ -57,28 +57,28 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
       /export async function buildApp\(deps: AppDeps\): Promise<FastifyInstance> \{/,
     );
     expect(body).toMatch(
-      /genReqId: \(req\) => \{\s*\n?\s*const inbound = req\.headers\['x-request-id'\];\s*\n?\s*if \(typeof inbound === 'string' && inbound\.length > 0 && inbound\.length <= 128\) \{\s*\n?\s*return inbound;\s*\n?\s*\}\s*\n?\s*return randomUUID\(\);\s*\n?\s*\},/,
+      /genReqId: \(req\) => \{\s*const inbound = req\.headers\['x-request-id'\];\s*if \(typeof inbound === 'string' && inbound\.length > 0 && inbound\.length <= 128\) \{\s*return inbound;\s*\}\s*return randomUUID\(\);\s*\},/,
     );
   });
 
   it('V-664 Helmet posture pinned: CSP false (JSON-only); CORP cross-origin (SDK preflights); COEP false; HSTS maxAge 63_072_000 (2y) + includeSubDomains + preload; rationale comments', () => {
     expect(body).toMatch(
-      /\/\/ V-664 — security headers\. Helmet defaults are tuned for HTML\s*\n?\s*\/\/ surfaces; for a JSON API some defaults are wrong/,
+      /\/\/ V-664 — security headers\. Helmet defaults are tuned for HTML\s*\/\/ surfaces; for a JSON API some defaults are wrong/,
     );
     expect(body).toMatch(/contentSecurityPolicy: false,/);
     expect(body).toMatch(/crossOriginResourcePolicy: \{ policy: 'cross-origin' \},/);
     expect(body).toMatch(/crossOriginEmbedderPolicy: false,/);
     expect(body).toMatch(
-      /strictTransportSecurity: \{\s*\n?\s*maxAge: 63_072_000,\s*\n?\s*includeSubDomains: true,\s*\n?\s*preload: true,\s*\n?\s*\},/,
+      /strictTransportSecurity: \{\s*maxAge: 63_072_000,\s*includeSubDomains: true,\s*preload: true,\s*\},/,
     );
   });
 
   it('V-664.B CORS posture pinned: permissive=true OR [localhost regex, ...corsAllowedOrigins]; credentials true; explicit methods + headers + exposed RateLimit set (W199); maxAge 600', () => {
     expect(body).toMatch(
-      /\/\/ V-664\.B — CORS hardening\. Pins methods, allowed headers, and\s*\n?\s*\/\/ preflight cache window explicitly/,
+      /\/\/ V-664\.B — CORS hardening\. Pins methods, allowed headers, and\s*\/\/ preflight cache window explicitly/,
     );
     expect(body).toMatch(
-      /\/\/ `credentials: true` is required by the customer dashboard's\s*\n?\s*\/\/ cookie-based session \(Article-13 auth\), NOT by the SDK \(which\s*\n?\s*\/\/ sends Authorization: Bearer \.\.\.\)/,
+      /\/\/ `credentials: true` is required by the customer dashboard's\s*\/\/ cookie-based session \(Article-13 auth\), NOT by the SDK \(which\s*\/\/ sends Authorization: Bearer \.\.\.\)/,
     );
     // W586 — the allow-list moved to lib/cors-allow.ts (single source, so the
     // SSE routes reflect the SAME origins). app.ts now delegates to it.
@@ -114,7 +114,7 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
     expect(body).toMatch(/'x-driftstack-account',/);
     // Per-line pins (not one long \s*\n chain — W561 added the IETF names and
     // extending the chain past 5 groups risks the backtracking-hang lesson).
-    expect(body).toMatch(/exposedHeaders: \[\s*\n?\s*'x-request-id',/);
+    expect(body).toMatch(/exposedHeaders: \[\s*'x-request-id',/);
     expect(body).toMatch(/'idempotent-replayed',/);
     expect(body).toMatch(/'x-ratelimit-bucket',/);
     expect(body).toMatch(/'x-ratelimit-limit',/);
@@ -129,22 +129,22 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
     // LAST entry, so this pin also holds the array's close. A header the server sends
     // but does not expose is unreadable from JS on another origin; apps/docs tells
     // integrators to log this one, and the dashboard is another origin.
-    expect(body).toMatch(/'x-driftstack-unknown-fields',\s*\n?\s*\],/);
+    expect(body).toMatch(/'x-driftstack-unknown-fields',\s*\],/);
     expect(body).toMatch(/maxAge: 600,/);
   });
 
   it('Auth + rate-limit plugins ordered correctly; limiter receives live account authority; Sentry hooks install before both (V-117 framing pinned)', () => {
     expect(body).toMatch(
-      /\/\/ V-117: install Sentry hooks BEFORE auth\/rate-limit so breadcrumbs\s*\n?\s*\/\/ capture every request — including ones that fail at the auth or\s*\n?\s*\/\/ rate-limit gate\./,
+      /\/\/ V-117: install Sentry hooks BEFORE auth\/rate-limit so breadcrumbs\s*\/\/ capture every request — including ones that fail at the auth or\s*\/\/ rate-limit gate\./,
     );
     expect(body).toMatch(
-      /if \(deps\.sentry !== undefined\) \{\s*\n?\s*wireSentryRequestBreadcrumbs\(app, deps\.sentry\);\s*\n?\s*wireSentryErrorHandler\(app, deps\.sentry\);\s*\n?\s*\}/,
+      /if \(deps\.sentry !== undefined\) \{\s*wireSentryRequestBreadcrumbs\(app, deps\.sentry\);\s*wireSentryErrorHandler\(app, deps\.sentry\);\s*\}/,
     );
     expect(body).toMatch(
-      /await app\.register\(authPlugin, \{\s*\n?\s*authRepo: deps\.authRepo,\s*\n?\s*authCache: deps\.authCache,\s*\n?\s*authCoalescer: deps\.authCoalescer,/,
+      /await app\.register\(authPlugin, \{\s*authRepo: deps\.authRepo,\s*authCache: deps\.authCache,\s*authCoalescer: deps\.authCoalescer,/,
     );
     expect(body).toMatch(
-      /await app\.register\(rateLimitPlugin, \{\s*\n?\s*store: deps\.rateLimitStore,\s*\n?\s*authRepo: deps\.authRepo,\s*\n?\s*\.\.\.\(deps\.metricsRegistry !== undefined \? \{ metrics: deps\.metricsRegistry \} : \{\}\),\s*\n?\s*\}\);/,
+      /await app\.register\(rateLimitPlugin, \{\s*store: deps\.rateLimitStore,\s*authRepo: deps\.authRepo,\s*\.\.\.\(deps\.metricsRegistry !== undefined \? \{ metrics: deps\.metricsRegistry \} : \{\}\),\s*\}\);/,
     );
     expect(body).toMatch(/registerErrorHandler\(app\);/);
   });
@@ -152,7 +152,7 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
   it('no-store onSend hook: defaults Cache-Control no-store,private on ALL of /v1 except routes that set their own Cache-Control; public status reads/stream opt in explicitly while status subscription mutations stay private. Discrete pins avoid a backtracking mega-regex.', () => {
     // Rationale block pinned (the broadening + the one route-owned-header carve-out).
     expect(body).toMatch(
-      /default Cache-Control:\s*\n?\s*\/\/ no-store, private on every caller-private \/v1 response/,
+      /default Cache-Control:\s*\/\/ no-store, private on every caller-private \/v1 response/,
     );
     expect(body).toMatch(/now the default for ALL of \/v1/);
     expect(body).toMatch(/there is intentionally no `\/v1\/status\*` prefix exemption/);
@@ -193,14 +193,14 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
     expect(body).toMatch(/if \(deps\.profileSnapshotsService !== undefined\) \{/);
     expect(body).toMatch(/if \(deps\.billingService !== undefined\) \{/);
     expect(body).toMatch(
-      /if \(\s*\n?\s*deps\.sessionRepo !== undefined &&\s*\n?\s*deps\.apiKeysRepo !== undefined &&\s*\n?\s*deps\.driver !== undefined\s*\n?\s*\) \{/,
+      /if \(\s*deps\.sessionRepo !== undefined &&\s*deps\.apiKeysRepo !== undefined &&\s*deps\.driver !== undefined\s*\) \{/,
     );
   });
 
   it('V-237 customer self-profile gate: sessionRepo + profilesRepo + authRepo + authCache + r2Public + mfaService passed to registerAccountMeRoutes (+ 2026-05-19 optional oauthLinksRepo conditional spread for the IDP-avatar fallback)', () => {
     expect(body).toMatch(/\/\/ V-237 — customer self-profile for tier-aware GUI enforcement\./);
     expect(body).toMatch(
-      /if \(deps\.sessionRepo !== undefined && deps\.profilesRepo !== undefined\) \{\s*\n?\s*registerAccountMeRoutes\(app, \{\s*\n?\s*sessionRepo: deps\.sessionRepo,\s*\n?\s*profilesRepo: deps\.profilesRepo,\s*\n?\s*authRepo: deps\.authRepo,\s*\n?\s*authCache: deps\.authCache,\s*\n?\s*r2Public: deps\.r2Public \?\? null,\s*\n?\s*mfaService: deps\.mfaService \?\? null,[\s\S]*?\}\);\s*\n?\s*\}/,
+      /if \(deps\.sessionRepo !== undefined && deps\.profilesRepo !== undefined\) \{\s*registerAccountMeRoutes\(app, \{\s*sessionRepo: deps\.sessionRepo,\s*profilesRepo: deps\.profilesRepo,\s*authRepo: deps\.authRepo,\s*authCache: deps\.authCache,\s*r2Public: deps\.r2Public \?\? null,\s*mfaService: deps\.mfaService \?\? null,[\s\S]*?\}\);\s*\}/,
     );
     expect(body).toMatch(
       /\.\.\.\(deps\.oauthLinksRepo !== undefined \? \{ oauthLinksRepo: deps\.oauthLinksRepo \} : \{\}\),/,
@@ -211,33 +211,33 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
     expect(body).toMatch(/app\.get\('\/health', \(\) => \(\{ ok: true \}\)\);/);
     expect(body).toMatch(/app\.get\('\/healthz', \(\) => \(\{ ok: true \}\)\);/);
     expect(body).toMatch(
-      /\/\/ V-195 — public version endpoint for ops tooling\. Reports server\s*\n?\s*\/\/ version \(from the deploy-owned APP_VERSION or npm in development\),\s*\n?\s*\/\/ git sha \(from GIT_SHA env at deploy time, "unknown" otherwise\), and\s*\n?\s*\/\/ process start time\./,
+      /\/\/ V-195 — public version endpoint for ops tooling\. Reports server\s*\/\/ version \(from the deploy-owned APP_VERSION or npm in development\),\s*\/\/ git sha \(from GIT_SHA env at deploy time, "unknown" otherwise\), and\s*\/\/ process start time\./,
     );
     expect(body).toMatch(
       /const buildVersion = process\.env\.APP_VERSION \?\? process\.env\.npm_package_version \?\? 'unknown';/,
     );
     expect(body).toMatch(/const gitSha = process\.env\.GIT_SHA \?\? 'unknown';/);
     expect(body).toMatch(
-      /app\.get\('\/version', \(\) => \(\{\s*\n?\s*version: buildVersion,\s*\n?\s*git_sha: gitSha,\s*\n?\s*started_at: startedAt,\s*\n?\s*node_version: process\.version,/,
+      /app\.get\('\/version', \(\) => \(\{\s*version: buildVersion,\s*git_sha: gitSha,\s*started_at: startedAt,\s*node_version: process\.version,/,
     );
     expect(body).toMatch(/driver: deps\.driverName \?\? 'mock',/);
     expect(body).toMatch(
-      /\.\.\.\(deps\.driverName === 'playwright' && deps\.playwrightBrowser !== undefined\s*\n?\s*\? \{ playwright_browser: deps\.playwrightBrowser \}\s*\n?\s*: \{\}\),/,
+      /\.\.\.\(deps\.driverName === 'playwright' && deps\.playwrightBrowser !== undefined\s*\? \{ playwright_browser: deps\.playwrightBrowser \}\s*: \{\}\),/,
     );
   });
 
   it('/ready endpoint: public no-auth; runs each readinessCheck via runWithTimeout(default 1500); 200 all-ok / 503 any-fail; returns {ready, checks[]}', () => {
     expect(body).toMatch(
-      /\/\/ Readiness endpoint — public, no auth, no rate limit\. Returns 200\s*\n?\s*\/\/ only when the dependencies the server needs to serve traffic are\s*\n?\s*\/\/ reachable\./,
+      /\/\/ Readiness endpoint — public, no auth, no rate limit\. Returns 200\s*\/\/ only when the dependencies the server needs to serve traffic are\s*\/\/ reachable\./,
     );
     expect(body).toMatch(
-      /app\.get\('\/ready', async \(_request, reply\) => \{\s*\n?\s*const checks = deps\.readinessChecks \?\? \[\];\s*\n?\s*const results = await Promise\.all\(/,
+      /app\.get\('\/ready', async \(_request, reply\) => \{\s*const checks = deps\.readinessChecks \?\? \[\];\s*const results = await Promise\.all\(/,
     );
     expect(body).toMatch(
-      /await runWithTimeout\(c\.fn\(\), c\.timeoutMs \?\? 1500\);\s*\n?\s*return \{ name: c\.name, ok: true, latency_ms: Date\.now\(\) - start \};/,
+      /await runWithTimeout\(c\.fn\(\), c\.timeoutMs \?\? 1500\);\s*return \{ name: c\.name, ok: true, latency_ms: Date\.now\(\) - start \};/,
     );
     expect(body).toMatch(
-      /return reply\.code\(allReady \? 200 : 503\)\.send\(\{\s*\n?\s*ready: allReady,\s*\n?\s*checks: results,\s*\n?\s*\}\);/,
+      /return reply\.code\(allReady \? 200 : 503\)\.send\(\{\s*ready: allReady,\s*checks: results,\s*\}\);/,
     );
     // Hardening — the /ready catch logs the raw dependency error server-side
     // (reply.log.warn) but the PUBLIC (no-auth) response is sanitized to
@@ -249,7 +249,7 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
       /return \{ name: c\.name, ok: false, latency_ms: Date\.now\(\) - start \};/,
     );
     // Regression guard: the failure-path response must NOT echo the raw error.
-    expect(body).not.toMatch(/latency_ms: Date\.now\(\) - start,\s*\n?\s*error:/);
+    expect(body).not.toMatch(/latency_ms: Date\.now\(\) - start,\s*error:/);
   });
 
   it('/v1/whoami: requireAuth + rateLimit(global); returns account_id (acc_ prefix) + api_key_id (key_ prefix) + tier + scopes; unreachable account-missing branch throws', () => {
@@ -257,7 +257,7 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
       /app\.get\('\/v1\/whoami', \{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \}, \(request\) => \{/,
     );
     expect(body).toMatch(
-      /return \{\s*\n?\s*account_id: `acc_\$\{ctx\.account\.id\}`,\s*\n?\s*api_key_id: `key_\$\{ctx\.apiKey\.id\}`,\s*\n?\s*tier: ctx\.account\.tier,\s*\n?\s*scopes: ctx\.apiKey\.scopes,\s*\n?\s*\};/,
+      /return \{\s*account_id: `acc_\$\{ctx\.account\.id\}`,\s*api_key_id: `key_\$\{ctx\.apiKey\.id\}`,\s*tier: ctx\.account\.tier,\s*scopes: ctx\.apiKey\.scopes,\s*\};/,
     );
   });
 
@@ -265,7 +265,7 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
     expect(body).toMatch(
       /const egressProxyRequired = deps\.sessionProxyRequired \?\? deps\.sessionEgressService !== undefined;/,
     );
-    expect(body).toMatch(/if \(egressProxyRequired\) \{\s*\n?\s*app\.log\.warn\(/);
+    expect(body).toMatch(/if \(egressProxyRequired\) \{\s*app\.log\.warn\(/);
     expect(body).toMatch(/Direct session creation is DISABLED/);
     expect(body).toMatch(/POST \/v1\/sessions and POST \/v1\/profiles\/:id\/launch/);
     expect(body).toMatch(/POST \/v1\/agent-sessions with an owned saved proxy_id/);

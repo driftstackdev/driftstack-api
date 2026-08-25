@@ -55,22 +55,22 @@ describe('W447.B apps/server/src/db/status-subscribers-repo.ts content parity', 
 
   it('toRow: 8-field StatusSubscriberRow (id + email + confirmTokenHash + confirmExpiresAt + confirmedAt + unsubscribeTokenHash + unsubscribedAt + createdAt)', () => {
     expect(body).toMatch(
-      /function toRow\(row: DbRow\): StatusSubscriberRow \{\s*\n?\s*return \{\s*\n?\s*id: row\.id,\s*\n?\s*email: row\.email,\s*\n?\s*confirmTokenHash: row\.confirmTokenHash,\s*\n?\s*confirmExpiresAt: row\.confirmExpiresAt,\s*\n?\s*confirmedAt: row\.confirmedAt,\s*\n?\s*unsubscribeTokenHash: row\.unsubscribeTokenHash,\s*\n?\s*unsubscribedAt: row\.unsubscribedAt,\s*\n?\s*createdAt: row\.createdAt,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function toRow\(row: DbRow\): StatusSubscriberRow \{\s*return \{\s*id: row\.id,\s*email: row\.email,\s*confirmTokenHash: row\.confirmTokenHash,\s*confirmExpiresAt: row\.confirmExpiresAt,\s*confirmedAt: row\.confirmedAt,\s*unsubscribeTokenHash: row\.unsubscribeTokenHash,\s*unsubscribedAt: row\.unsubscribedAt,\s*createdAt: row\.createdAt,\s*\};\s*\}/,
     );
   });
 
   it('upsertPending framing pins anonymous refresh to pending proof only', () => {
     expect(body).toMatch(
-      /\/\/ INSERT \.\.\. ON CONFLICT \(email\) DO UPDATE — re-subscribe refreshes only\s*\n?\s*\/\/ the pending proof\. Preserve confirmed\/unsubscribed authority until the/,
+      /\/\/ INSERT \.\.\. ON CONFLICT \(email\) DO UPDATE — re-subscribe refreshes only\s*\/\/ the pending proof\. Preserve confirmed\/unsubscribed authority until the/,
     );
   });
 
   it('upsertPending seeds a new row, while conflict SET contains only fresh confirmation fields', () => {
     expect(body).toMatch(
-      /\.values\(\{\s*\n?\s*email: input\.email,\s*\n?\s*confirmTokenHash: input\.confirmTokenHash,\s*\n?\s*confirmExpiresAt: input\.confirmExpiresAt,\s*\n?\s*confirmedAt: null,\s*\n?\s*unsubscribeTokenHash: null,\s*\n?\s*unsubscribedAt: null,\s*\n?\s*\}\)/,
+      /\.values\(\{\s*email: input\.email,\s*confirmTokenHash: input\.confirmTokenHash,\s*confirmExpiresAt: input\.confirmExpiresAt,\s*confirmedAt: null,\s*unsubscribeTokenHash: null,\s*unsubscribedAt: null,\s*\}\)/,
     );
     expect(body).toMatch(
-      /set: \{\s*\n?\s*confirmTokenHash: input\.confirmTokenHash,\s*\n?\s*confirmExpiresAt: input\.confirmExpiresAt,\s*\n?\s*\},/,
+      /set: \{\s*confirmTokenHash: input\.confirmTokenHash,\s*confirmExpiresAt: input\.confirmExpiresAt,\s*\},/,
     );
     expect(body).not.toMatch(/set: \{[^}]*confirmedAt: null/s);
     expect(body).not.toMatch(/set: \{[^}]*unsubscribeTokenHash: null/s);
@@ -82,59 +82,59 @@ describe('W447.B apps/server/src/db/status-subscribers-repo.ts content parity', 
 
   it('findByConfirmTokenHash + findByUnsubscribeTokenHash: each are limit 1 lookups on their respective token hash column', () => {
     expect(body).toMatch(
-      /async findByConfirmTokenHash\(hash: string\): Promise<StatusSubscriberRow \| null> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(statusSubscribers\)\s*\n?\s*\.where\(eq\(statusSubscribers\.confirmTokenHash, hash\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*return row \? toRow\(row\) : null;\s*\n?\s*\}/,
+      /async findByConfirmTokenHash\(hash: string\): Promise<StatusSubscriberRow \| null> \{\s*const \[row\] = await this\.database\.db\s*\.select\(\)\s*\.from\(statusSubscribers\)\s*\.where\(eq\(statusSubscribers\.confirmTokenHash, hash\)\)\s*\.limit\(1\);\s*return row \? toRow\(row\) : null;\s*\}/,
     );
     expect(body).toMatch(
-      /async findByUnsubscribeTokenHash\(hash: string\): Promise<StatusSubscriberRow \| null> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(statusSubscribers\)\s*\n?\s*\.where\(eq\(statusSubscribers\.unsubscribeTokenHash, hash\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*return row \? toRow\(row\) : null;\s*\n?\s*\}/,
+      /async findByUnsubscribeTokenHash\(hash: string\): Promise<StatusSubscriberRow \| null> \{\s*const \[row\] = await this\.database\.db\s*\.select\(\)\s*\.from\(statusSubscribers\)\s*\.where\(eq\(statusSubscribers\.unsubscribeTokenHash, hash\)\)\s*\.limit\(1\);\s*return row \? toRow\(row\) : null;\s*\}/,
     );
   });
 
   it('markConfirmed atomically consumes the expected hash and returns null to a loser', () => {
     expect(body).toMatch(
-      /\.set\(\{\s*\n?\s*confirmedAt: input\.confirmedAt,\s*\n?\s*confirmTokenHash: null,\s*\n?\s*confirmExpiresAt: null,\s*\n?\s*unsubscribeTokenHash: input\.unsubscribeTokenHash,\s*\n?\s*unsubscribedAt: null,\s*\n?\s*\}\)/,
+      /\.set\(\{\s*confirmedAt: input\.confirmedAt,\s*confirmTokenHash: null,\s*confirmExpiresAt: null,\s*unsubscribeTokenHash: input\.unsubscribeTokenHash,\s*unsubscribedAt: null,\s*\}\)/,
     );
     expect(body).toMatch(
-      /eq\(statusSubscribers\.id, input\.id\),\s*\n?\s*eq\(statusSubscribers\.confirmTokenHash, input\.expectedConfirmTokenHash\)/,
+      /eq\(statusSubscribers\.id, input\.id\),\s*eq\(statusSubscribers\.confirmTokenHash, input\.expectedConfirmTokenHash\)/,
     );
     expect(body).toMatch(/return row \? toRow\(row\) : null;/);
   });
 
   it('markUnsubscribed supports exact-hash public CAS and explicit admin id-only authority; rotation touches only its token', () => {
     expect(body).toMatch(
-      /input\.expectedUnsubscribeTokenHash === null\s*\n?\s*\? eq\(statusSubscribers\.id, input\.id\)\s*\n?\s*: and\(\s*\n?\s*eq\(statusSubscribers\.id, input\.id\),\s*\n?\s*eq\(statusSubscribers\.unsubscribeTokenHash, input\.expectedUnsubscribeTokenHash\)/,
+      /input\.expectedUnsubscribeTokenHash === null\s*\? eq\(statusSubscribers\.id, input\.id\)\s*: and\(\s*eq\(statusSubscribers\.id, input\.id\),\s*eq\(statusSubscribers\.unsubscribeTokenHash, input\.expectedUnsubscribeTokenHash\)/,
     );
     expect(body).toMatch(
-      /\.set\(\{ unsubscribedAt: input\.unsubscribedAt \}\)\s*\n?\s*\.where\(predicate\)\s*\n?\s*\.returning\(\);/,
+      /\.set\(\{ unsubscribedAt: input\.unsubscribedAt \}\)\s*\.where\(predicate\)\s*\.returning\(\);/,
     );
     expect(body).toMatch(
-      /async rotateUnsubscribeTokenHash\(input: \{ id: string; hash: string \}\): Promise<void> \{\s*\n?\s*await this\.database\.db\s*\n?\s*\.update\(statusSubscribers\)\s*\n?\s*\.set\(\{ unsubscribeTokenHash: input\.hash \}\)\s*\n?\s*\.where\(eq\(statusSubscribers\.id, input\.id\)\);\s*\n?\s*\}/,
+      /async rotateUnsubscribeTokenHash\(input: \{ id: string; hash: string \}\): Promise<void> \{\s*await this\.database\.db\s*\.update\(statusSubscribers\)\s*\.set\(\{ unsubscribeTokenHash: input\.hash \}\)\s*\.where\(eq\(statusSubscribers\.id, input\.id\)\);\s*\}/,
     );
   });
 
   it('listConfirmed: where and(isNotNull(confirmedAt), isNull(unsubscribedAt)) — active confirmed only', () => {
     expect(body).toMatch(
-      /async listConfirmed\(\): Promise<StatusSubscriberRow\[\]> \{\s*\n?\s*const rows = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(statusSubscribers\)\s*\n?\s*\.where\(\s*\n?\s*and\(isNotNull\(statusSubscribers\.confirmedAt\), isNull\(statusSubscribers\.unsubscribedAt\)\),\s*\n?\s*\);\s*\n?\s*return rows\.map\(toRow\);\s*\n?\s*\}/,
+      /async listConfirmed\(\): Promise<StatusSubscriberRow\[\]> \{\s*const rows = await this\.database\.db\s*\.select\(\)\s*\.from\(statusSubscribers\)\s*\.where\(\s*and\(isNotNull\(statusSubscribers\.confirmedAt\), isNull\(statusSubscribers\.unsubscribedAt\)\),\s*\);\s*return rows\.map\(toRow\);\s*\}/,
     );
   });
 
   it('listAll: orderBy desc(createdAt) + limit + offset for admin pagination; getById limit 1 lookup', () => {
     expect(body).toMatch(
-      /async listAll\(opts: \{ limit: number; offset: number \}\): Promise<StatusSubscriberRow\[\]> \{\s*\n?\s*const rows = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(statusSubscribers\)\s*\n?\s*\.orderBy\(desc\(statusSubscribers\.createdAt\)\)\s*\n?\s*\.limit\(opts\.limit\)\s*\n?\s*\.offset\(opts\.offset\);\s*\n?\s*return rows\.map\(toRow\);\s*\n?\s*\}/,
+      /async listAll\(opts: \{ limit: number; offset: number \}\): Promise<StatusSubscriberRow\[\]> \{\s*const rows = await this\.database\.db\s*\.select\(\)\s*\.from\(statusSubscribers\)\s*\.orderBy\(desc\(statusSubscribers\.createdAt\)\)\s*\.limit\(opts\.limit\)\s*\.offset\(opts\.offset\);\s*return rows\.map\(toRow\);\s*\}/,
     );
   });
 
   it("listPurgeCandidates: where and(lt(unsubscribedAt, cutoff), isNotNull(email)) — V-295c3-tombstone candidates have non-null email (haven't been purged yet)", () => {
     expect(body).toMatch(
-      /async listPurgeCandidates\(cutoff: Date\): Promise<StatusSubscriberRow\[\]> \{\s*\n?\s*const rows = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(statusSubscribers\)\s*\n?\s*\.where\(and\(lt\(statusSubscribers\.unsubscribedAt, cutoff\), isNotNull\(statusSubscribers\.email\)\)\);\s*\n?\s*return rows\.map\(toRow\);\s*\n?\s*\}/,
+      /async listPurgeCandidates\(cutoff: Date\): Promise<StatusSubscriberRow\[\]> \{\s*const rows = await this\.database\.db\s*\.select\(\)\s*\.from\(statusSubscribers\)\s*\.where\(and\(lt\(statusSubscribers\.unsubscribedAt, cutoff\), isNotNull\(statusSubscribers\.email\)\)\);\s*return rows\.map\(toRow\);\s*\}/,
     );
   });
 
   it("purgeEmails framing pinned: empty early-return; chunked; sets email:null + clear confirmTokenHash/confirmExpiresAt/unsubscribeTokenHash; comment 'Clear the tokens too — they're all derivative of the email.'; inArray per chunk returning {id}; sums the counts", () => {
     expect(body).toMatch(
-      /async purgeEmails\(ids: readonly string\[\]\): Promise<number> \{\s*\n?\s*if \(ids\.length === 0\) return 0;/,
+      /async purgeEmails\(ids: readonly string\[\]\): Promise<number> \{\s*if \(ids\.length === 0\) return 0;/,
     );
     expect(body).toMatch(
-      /\.set\(\{\s*\n?\s*email: null,\s*\n?\s*\/\/ Clear the tokens too — they're all derivative of the email\.\s*\n?\s*confirmTokenHash: null,\s*\n?\s*confirmExpiresAt: null,\s*\n?\s*unsubscribeTokenHash: null,\s*\n?\s*\}\)\s*\n?\s*\.where\(inArray\(statusSubscribers\.id, chunk\)\)\s*\n?\s*\.returning\(\{ id: statusSubscribers\.id \}\);/,
+      /\.set\(\{\s*email: null,\s*\/\/ Clear the tokens too — they're all derivative of the email\.\s*confirmTokenHash: null,\s*confirmExpiresAt: null,\s*unsubscribeTokenHash: null,\s*\}\)\s*\.where\(inArray\(statusSubscribers\.id, chunk\)\)\s*\.returning\(\{ id: statusSubscribers\.id \}\);/,
     );
     // The four NULLed columns are the privacy property and stay pinned above.
     // What changed is the statement count: processPurge selects every row past

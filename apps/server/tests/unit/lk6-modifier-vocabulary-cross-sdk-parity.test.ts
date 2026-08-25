@@ -41,7 +41,7 @@ describe('Slice 6 LK.6 modifier vocabulary cross-SDK parity', () => {
     const body = read(lib);
     expect(body).toMatch(/Canonical modifier vocabulary \(Slice 6 cross-SDK lock 2026-05-20\)\./);
     expect(body).toMatch(/Quartz `CGEventFlags`/);
-    expect(body).toMatch(/lk6-modifier-vocabulary-cross-surface-\s*\n?\s*\* parity\.test\.ts/);
+    expect(body).toMatch(/lk6-modifier-vocabulary-cross-surface-\s*\* parity\.test\.ts/);
     expect(body).toMatch(/DOM-standard variants/);
   });
 
@@ -62,7 +62,7 @@ describe('Slice 6 LK.6 modifier vocabulary cross-SDK parity', () => {
     const body = read(lib);
     expect(body).toMatch(/Modifier vocabulary \(Slice 6 cross-SDK lock 2026-05-20\):/);
     expect(body).toMatch(/``"cmd" \| "ctrl" \| "shift" \| "option"`` \(1:1 Quartz/);
-    expect(body).toMatch(/DOM-standard names \(``Shift \/ Control \/\s*\n?\s*Alt \/ Meta``\)/);
+    expect(body).toMatch(/DOM-standard names \(``Shift \/ Control \/\s*Alt \/ Meta``\)/);
     expect(body).toMatch(/harness decoder drops them/);
   });
 
@@ -71,9 +71,9 @@ describe('Slice 6 LK.6 modifier vocabulary cross-SDK parity', () => {
     const body = read(lib);
     expect(body).toMatch(/Modifier vocabulary \(Slice 6 cross-SDK lock 2026-05-20\): keyDown/);
     expect(body).toMatch(
-      /"cmd" \/ "ctrl"\s*\n?\s*\/\/ \/ "shift" \/ "option" \(1:1 Quartz CGEventFlags\)/,
+      /"cmd" \/ "ctrl"\s*\/\/ \/ "shift" \/ "option" \(1:1 Quartz CGEventFlags\)/,
     );
-    expect(body).toMatch(/DOM-standard\s*\n?\s*\/\/ names \(Shift \/ Control \/ Alt \/ Meta\)/);
+    expect(body).toMatch(/DOM-standard\s*\/\/ names \(Shift \/ Control \/ Alt \/ Meta\)/);
     expect(body).toMatch(/harness decoder drops them/);
   });
 
@@ -109,7 +109,7 @@ describe('Slice 6 LK.6 modifier vocabulary cross-SDK parity', () => {
     const lib = resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts');
     const body = read(lib);
     expect(body).toMatch(
-      /Slice 6\s*\n?\s*\/\/ \(2026-05-20\) — modifier vocabulary documented in description\./,
+      /Slice 6\s*\/\/ \(2026-05-20\) — modifier vocabulary documented in description\./,
     );
     expect(body).toMatch(
       /Modifier vocabulary \(keyDown \/ keyUp `modifiers` array\): use the canonical 4-name set 'cmd' \| 'ctrl' \| 'shift' \| 'option'/,
@@ -129,7 +129,7 @@ describe('Slice 6 LK.6 modifier vocabulary cross-SDK parity', () => {
       expect(body).toMatch(/canonical 4-name set/);
       expect(body).toMatch(/Quartz `CGEventFlags`/);
       expect(body).toMatch(
-        /DOM-standard names \(`Shift \/ Control \/ Alt \/ Meta`\) round-trip\s*\n?\s*through the schema unchanged but the harness decoder drops them\./,
+        /DOM-standard names \(`Shift \/ Control \/ Alt \/ Meta`\) round-trip\s*through the schema unchanged but the harness decoder drops them\./,
       );
     }
     expect(ts).toMatch(/modifiers: \['cmd', 'shift'\]/);

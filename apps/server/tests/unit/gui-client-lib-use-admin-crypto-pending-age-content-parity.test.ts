@@ -37,54 +37,54 @@ describe('W465.C apps/gui-client/src/lib/use-admin-crypto-pending-age.ts content
   it("V-534.AO framing pinned: 'V-534.AO — useAdminCryptoPendingAge hook.' + 'Wraps GET /v1/admin/crypto-orders/pending-age (V-666.AC). Admin-only — requires the `driftstack_internal_admin` scope. Returns the four age buckets + total pending value by currency.'", () => {
     expect(body).toMatch(/\/\/ V-534\.AO — useAdminCryptoPendingAge hook\./);
     expect(body).toMatch(
-      /\/\/ Wraps GET \/v1\/admin\/crypto-orders\/pending-age \(V-666\.AC\)\. Admin-only\s*\n?\s*\/\/ — requires the `driftstack_internal_admin` scope\. Returns the four\s*\n?\s*\/\/ age buckets \+ total pending value by currency\./,
+      /\/\/ Wraps GET \/v1\/admin\/crypto-orders\/pending-age \(V-666\.AC\)\. Admin-only\s*\/\/ — requires the `driftstack_internal_admin` scope\. Returns the four\s*\/\/ age buckets \+ total pending value by currency\./,
     );
   });
 
   it('AdminPendingAgeBuckets 4-field (under_1h + h1_to_6h + h6_to_24h + over_24h all numbers — names pinned exact)', () => {
     expect(body).toMatch(
-      /export interface AdminPendingAgeBuckets \{\s*\n?\s*under_1h: number;\s*\n?\s*h1_to_6h: number;\s*\n?\s*h6_to_24h: number;\s*\n?\s*over_24h: number;\s*\n?\s*\}/,
+      /export interface AdminPendingAgeBuckets \{\s*under_1h: number;\s*h1_to_6h: number;\s*h6_to_24h: number;\s*over_24h: number;\s*\}/,
     );
   });
 
   it('AdminPendingAgeData 5-field: buckets + pending_value_cents Record<string, number> (currency-keyed, NOT fixed enum) + total + truncated + scanned', () => {
     expect(body).toMatch(
-      /export interface AdminPendingAgeData \{\s*\n?\s*buckets: AdminPendingAgeBuckets;\s*\n?\s*pending_value_cents: Record<string, number>;\s*\n?\s*total: number;\s*\n?\s*truncated: boolean;\s*\n?\s*scanned: number;\s*\n?\s*\}/,
+      /export interface AdminPendingAgeData \{\s*buckets: AdminPendingAgeBuckets;\s*pending_value_cents: Record<string, number>;\s*total: number;\s*truncated: boolean;\s*scanned: number;\s*\}/,
     );
   });
 
   it('AdminPendingAgeState 4-variant union (idle | loading | ready{data} | error{message}); UseAdminCryptoPendingAgeOpts: bare manual? (no JSDoc); UseAdminCryptoPendingAgeResult { state + refetch }', () => {
     expect(body).toMatch(
-      /export type AdminPendingAgeState =\s*\n?\s*\| \{ kind: 'idle' \}\s*\n?\s*\| \{ kind: 'loading' \}\s*\n?\s*\| \{ kind: 'ready'; data: AdminPendingAgeData \}\s*\n?\s*\| \{ kind: 'error'; message: string \};/,
+      /export type AdminPendingAgeState =\s*\| \{ kind: 'idle' \}\s*\| \{ kind: 'loading' \}\s*\| \{ kind: 'ready'; data: AdminPendingAgeData \}\s*\| \{ kind: 'error'; message: string \};/,
     );
     expect(body).toMatch(
-      /export interface UseAdminCryptoPendingAgeOpts \{\s*\n?\s*manual\?: boolean;\s*\n?\s*\}/,
+      /export interface UseAdminCryptoPendingAgeOpts \{\s*manual\?: boolean;\s*\}/,
     );
     expect(body).toMatch(
-      /export interface UseAdminCryptoPendingAgeResult \{\s*\n?\s*state: AdminPendingAgeState;\s*\n?\s*refetch: \(\) => Promise<void>;\s*\n?\s*\}/,
+      /export interface UseAdminCryptoPendingAgeResult \{\s*state: AdminPendingAgeState;\s*refetch: \(\) => Promise<void>;\s*\}/,
     );
   });
 
   it("Same state-machine pattern: manual?-aware initial state + no-apiKey 'No API key configured.' + trailing-slash strip + URL `/v1/admin/crypto-orders/pending-age` exact (no query string) + Bearer + accept JSON", () => {
     expect(body).toMatch(
-      /const \[state, setState\] = useState<AdminPendingAgeState>\(\s*\n?\s*opts\.manual === true \? \{ kind: 'idle' \} : \{ kind: 'loading' \},\s*\n?\s*\);/,
+      /const \[state, setState\] = useState<AdminPendingAgeState>\(\s*opts\.manual === true \? \{ kind: 'idle' \} : \{ kind: 'loading' \},\s*\);/,
     );
     expect(body).toMatch(
-      /const res = await fetchWithDeadline\(`\$\{baseUrl\}\/v1\/admin\/crypto-orders\/pending-age`, \{\s*\n?\s*method: 'GET',\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',/,
+      /const res = await fetchWithDeadline\(`\$\{baseUrl\}\/v1\/admin\/crypto-orders\/pending-age`, \{\s*method: 'GET',\s*signal: controller\.signal,\s*headers: \{\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*accept: 'application\/json',/,
     );
   });
 
   it('Tail: HTTP/ready writes are sequence-gated, active work is dependency/unmount-aborted, and manual gate/dependencies remain exact', () => {
     expect(body).toMatch(
-      /const message = await readApiErrorMessage\(res\);\s*\n?\s*if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'error', message \}\);[\s\S]*?if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'ready', data: body \}\);/,
+      /const message = await readApiErrorMessage\(res\);\s*if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'error', message \}\);[\s\S]*?if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'ready', data: body \}\);/,
     );
     expect(body).toMatch(/if \(inFlightRef\.current\) return;/);
     expect(body).toMatch(/\}, \[settings\.apiKey, settings\.baseUrl\]\);/);
     expect(body).toMatch(
-      /useEffect\(\s*\n?\s*\(\) => \(\) => \{\s*\n?\s*sequenceRef\.current \+= 1;\s*\n?\s*requestRef\.current\?\.abort\(\);\s*\n?\s*requestRef\.current = null;\s*\n?\s*inFlightRef\.current = false;\s*\n?\s*\},\s*\n?\s*\[settings\.apiKey, settings\.baseUrl\],/,
+      /useEffect\(\s*\(\) => \(\) => \{\s*sequenceRef\.current \+= 1;\s*requestRef\.current\?\.abort\(\);\s*requestRef\.current = null;\s*inFlightRef\.current = false;\s*\},\s*\[settings\.apiKey, settings\.baseUrl\],/,
     );
     expect(body).toMatch(
-      /useEffect\(\(\) => \{\s*\n?\s*if \(opts\.manual === true\) return;\s*\n?\s*void fetcher\(\);\s*\n?\s*\}, \[fetcher, opts\.manual\]\);/,
+      /useEffect\(\(\) => \{\s*if \(opts\.manual === true\) return;\s*void fetcher\(\);\s*\}, \[fetcher, opts\.manual\]\);/,
     );
   });
 

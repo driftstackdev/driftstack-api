@@ -38,10 +38,10 @@ describe('W516.B apps/marketing-site/src/pages/docs/sessions.astro content parit
 
   it('V-690 + W215.C 4-source-file accuracy-pass framing pinned: \'Sessions API developer docs. Sibling to api-quickstart; this is the deeper "every field, every lifecycle event" reference for the /v1/sessions surface.\' + W215.C accuracy pass pinned against 4 source-of-truth files (publicSession in routes/sessions.ts + CreateSessionRequestSchema in api-types/sessions.ts + PaginationQuerySchema in api-types/common.ts + webhook_event_type in db/schema.ts) — pinned so the V-690 anchor + W215.C 4-source-of-truth commitment survives', () => {
     expect(body).toMatch(
-      /\/\/ V-690 — Sessions API developer docs\. Sibling to api-quickstart;\s*\n?\s*\/\/ this is the deeper "every field, every lifecycle event" reference\s*\n?\s*\/\/ for the \/v1\/sessions surface\./,
+      /\/\/ V-690 — Sessions API developer docs\. Sibling to api-quickstart;\s*\/\/ this is the deeper "every field, every lifecycle event" reference\s*\/\/ for the \/v1\/sessions surface\./,
     );
     expect(body).toMatch(
-      /\/\/ W215\.C — accuracy pass: pinned against publicSession in\s*\n?\s*\/\/ apps\/server\/src\/routes\/sessions\.ts, CreateSessionRequestSchema in\s*\n?\s*\/\/ packages\/api-types\/src\/sessions\.ts, PaginationQuerySchema in\s*\n?\s*\/\/ packages\/api-types\/src\/common\.ts, and webhook_event_type in\s*\n?\s*\/\/ apps\/server\/src\/db\/schema\.ts\./,
+      /\/\/ W215\.C — accuracy pass: pinned against publicSession in\s*\/\/ apps\/server\/src\/routes\/sessions\.ts, CreateSessionRequestSchema in\s*\/\/ packages\/api-types\/src\/sessions\.ts, PaginationQuerySchema in\s*\/\/ packages\/api-types\/src\/common\.ts, and webhook_event_type in\s*\/\/ apps\/server\/src\/db\/schema\.ts\./,
     );
   });
 
@@ -62,7 +62,7 @@ describe('W516.B apps/marketing-site/src/pages/docs/sessions.astro content parit
       /\{ state: 'errored', desc: 'Abnormal termination; the session cannot recover\.' \}/,
     );
     expect(body).toMatch(
-      /Transitions: <code>creating → ready → busy → destroyed<\/code>\s*\n?\s*is the happy path\. <code>errored<\/code> is terminal; the\s*\n?\s*session cannot recover\./,
+      /Transitions: <code>creating → ready → busy → destroyed<\/code>\s*is the happy path\. <code>errored<\/code> is terminal; the\s*session cannot recover\./,
     );
   });
 
@@ -92,22 +92,22 @@ describe('W516.B apps/marketing-site/src/pages/docs/sessions.astro content parit
     expect(body).toMatch(/"last_state_at": null/);
     expect(body).toMatch(/"destroyed_at": null/);
     expect(body).toMatch(
-      /The response is a flat session object — no <code>\{`\{"session": …\}`\}<\/code>\s*\n?\s*envelope\. Session ids are prefixed <code>ses_<\/code>\./,
+      /The response is a flat session object — no <code>\{`\{"session": …\}`\}<\/code>\s*envelope\. Session ids are prefixed <code>ses_<\/code>\./,
     );
   });
 
   it('pins synchronous ready creation, later polling, and terminal-only webhook semantics', () => {
     expect(body).toMatch(
-      /create call returns only after the browser driver is ready, so\s*\n?\s*an intermediate <code>creating<\/code> state is not directly\s*\n?\s*observable\. Poll <code>GET \/v1\/sessions\/:id<\/code> for later\s*\n?\s*state changes\./,
+      /create call returns only after the browser driver is ready, so\s*an intermediate <code>creating<\/code> state is not directly\s*observable\. Poll <code>GET \/v1\/sessions\/:id<\/code> for later\s*state changes\./,
     );
     expect(body).toMatch(
-      /The <code>session\.completed<\/code> and\s*\n?\s*<code>session\.failed<\/code> webhooks signal clean or errored\s*\n?\s*end-of-life, not readiness\./,
+      /The <code>session\.completed<\/code> and\s*<code>session\.failed<\/code> webhooks signal clean or errored\s*end-of-life, not readiness\./,
     );
   });
 
   it("POST /v1/sessions/:id/navigate framing pinned: 'The create call does not take a target URL. Drive the session to a URL after it reaches ready with POST /v1/sessions/<id>/navigate' + body shape { 'url': 'https://example.com', 'wait_until': 'load' } — pinned so the no-URL-on-create + 2-field-navigate-body + wait_until: 'load' commitment survives (drift to claiming create takes URL would create marketing↔SDK divergence)", () => {
     expect(body).toMatch(
-      /The create call does not take a target URL\. Drive the session\s*\n?\s*to a URL after it reaches <code>ready<\/code> with\s*\n?\s*<code>POST \/v1\/sessions\/&lt;id&gt;\/navigate<\/code>:/,
+      /The create call does not take a target URL\. Drive the session\s*to a URL after it reaches <code>ready<\/code> with\s*<code>POST \/v1\/sessions\/&lt;id&gt;\/navigate<\/code>:/,
     );
     expect(body).toMatch(/POST \/v1\/sessions\/ses_…\/navigate/);
     expect(body).toMatch(/\{ "url": "https:\/\/example\.com", "wait_until": "load" \}/);
@@ -119,7 +119,7 @@ describe('W516.B apps/marketing-site/src/pages/docs/sessions.astro content parit
     expect(body).toMatch(/"has_more": true,/);
     expect(body).toMatch(/"next_cursor": "eyJ0aWQiOi…"/);
     expect(body).toMatch(
-      /Cursor pagination\. Pass the previous response's\s*\n?\s*<code>next_cursor<\/code> as <code>\?cursor=<\/code> on the next\s*\n?\s*request\. Default page size is <strong>50<\/strong>; max\s*\n?\s*<strong>100<\/strong>\./,
+      /Cursor pagination\. Pass the previous response's\s*<code>next_cursor<\/code> as <code>\?cursor=<\/code> on the next\s*request\. Default page size is <strong>50<\/strong>; max\s*<strong>100<\/strong>\./,
     );
   });
 
@@ -130,32 +130,32 @@ describe('W516.B apps/marketing-site/src/pages/docs/sessions.astro content parit
     expect(body).toMatch(/"byte_size": 184320/);
     expect(body).toMatch(/"duration_ms": 412/);
     expect(body).toMatch(
-      /Captures return inline base64 bytes — there is no presigned\s*\n?\s*URL\. <code>kind<\/code> selects <code>screenshot<\/code>,\s*\n?\s*<code>dom_snapshot<\/code>, or <code>pdf<\/code>\./,
+      /Captures return inline base64 bytes — there is no presigned\s*URL\. <code>kind<\/code> selects <code>screenshot<\/code>,\s*<code>dom_snapshot<\/code>, or <code>pdf<\/code>\./,
     );
   });
 
   it("DELETE /v1/sessions/:id 204 + idempotent framing pinned: 'Ends the session immediately and transitions it to destroyed. Idempotent — DELETEing an already-destroyed session also returns 204.' — pinned so the 204 + idempotent-on-destroyed commitment survives (drift to returning 404 on already-destroyed would break the idempotency commitment)", () => {
     expect(body).toMatch(/→ 204 No Content/);
     expect(body).toMatch(
-      /Ends the session immediately and transitions it to\s*\n?\s*<code>destroyed<\/code>\. Idempotent — <code>DELETE<\/code>ing an\s*\n?\s*already-destroyed session also returns 204\./,
+      /Ends the session immediately and transitions it to\s*<code>destroyed<\/code>\. Idempotent — <code>DELETE<\/code>ing an\s*already-destroyed session also returns 204\./,
     );
   });
 
   it("Concurrent-limit 429 + concurrency-limit RFC 7807 problem-type framing pinned: 'Each tier caps the number of sessions you can have in the live states (creating, ready, busy) at once.' + 'Hitting the cap returns 429 Too Many Requests with the concurrency-limit RFC 7807 problem type — wait for an existing session to finish or upgrade your tier.' — pinned so the live-states-3 (creating/ready/busy) + 429 + concurrency-limit-RFC-7807 problem-type + wait-or-upgrade resolution path survives", () => {
     expect(body).toMatch(
-      /Each tier caps the number of sessions you can have in the\s*\n?\s*live states \(<code>creating<\/code>, <code>ready<\/code>,\s*\n?\s*<code>busy<\/code>\) at once\./,
+      /Each tier caps the number of sessions you can have in the\s*live states \(<code>creating<\/code>, <code>ready<\/code>,\s*<code>busy<\/code>\) at once\./,
     );
     expect(body).toMatch(
-      /Hitting the cap returns\s*\n?\s*<code>429 Too Many Requests<\/code> with the\s*\n?\s*<code>concurrency-limit<\/code> RFC 7807 problem type — wait for\s*\n?\s*an existing session to finish or upgrade your tier\./,
+      /Hitting the cap returns\s*<code>429 Too Many Requests<\/code> with the\s*<code>concurrency-limit<\/code> RFC 7807 problem type — wait for\s*an existing session to finish or upgrade your tier\./,
     );
   });
 
   it('Archetype framing pins live catalog selection, reusable profile IDs, and the server-authoritative default_archetype_id fallback', () => {
     expect(body).toMatch(
-      /<code>archetype<\/code> identifies an exact device, iOS, and\s*\n?\s*Safari combination from the live <code>GET \/v1\/archetypes<\/code>\s*\n?\s*catalog\./,
+      /<code>archetype<\/code> identifies an exact device, iOS, and\s*Safari combination from the live <code>GET \/v1\/archetypes<\/code>\s*catalog\./,
     );
     expect(body).toMatch(
-      /Profiles pin one returned id for reuse\. For a one-shot\s*\n?\s*session, omit the field and the server uses the catalog's\s*\n?\s*<code>default_archetype_id<\/code>\./,
+      /Profiles pin one returned id for reuse\. For a one-shot\s*session, omit the field and the server uses the catalog's\s*<code>default_archetype_id<\/code>\./,
     );
   });
 

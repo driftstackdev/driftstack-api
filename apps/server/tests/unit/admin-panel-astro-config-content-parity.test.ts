@@ -36,7 +36,7 @@ describe('W527.A apps/admin-panel/astro.config.mjs content parity', () => {
   it("Staff-only + admin-subdomain + DNS-security-boundary framing pinned: 'Admin panel — Driftstack-staff-only surface.' + 'Lives at admin.driftstack.dev (separate subdomain from the customer dashboard at app.driftstack.dev) so security boundary is at the DNS + TLS layer, not application logic.' + 'site: https://admin.driftstack.dev' + 'output: \"static\"' — pinned so the staff-only-surface + admin-subdomain + DNS+TLS-security-boundary (not application-logic) commitment survives (drift to a different subdomain or merging into app. would collapse the staff↔customer security isolation)", () => {
     expect(body).toMatch(/\/\/ Admin panel — Driftstack-staff-only surface\./);
     expect(body).toMatch(
-      /\/\/ Lives at admin\.driftstack\.dev \(separate subdomain from the customer\s*\n?\s*\/\/ dashboard at app\.driftstack\.dev\) so security boundary is at the DNS\s*\n?\s*\/\/ \+ TLS layer, not application logic\./,
+      /\/\/ Lives at admin\.driftstack\.dev \(separate subdomain from the customer\s*\/\/ dashboard at app\.driftstack\.dev\) so security boundary is at the DNS\s*\/\/ \+ TLS layer, not application logic\./,
     );
     expect(body).toMatch(/site: 'https:\/\/admin\.driftstack\.dev',/);
     expect(body).toMatch(/output: 'static',/);
@@ -44,13 +44,13 @@ describe('W527.A apps/admin-panel/astro.config.mjs content parity', () => {
 
   it("V-134 + V-174 staff-scope framing pinned: 'Auth: Driftstack-staff API key with `driftstack_internal_admin` scope. Routes call /v1/admin/* on the control plane; preHandler enforced V-134 + V-174.' — pinned so the driftstack_internal_admin-scope + /v1/admin/* control-plane + V-134 + V-174 preHandler-enforcement commitment survives (drift to a different scope name would orphan the staff-API-key check; drift to bypassing /v1/admin/* would route admin actions through customer endpoints)", () => {
     expect(body).toMatch(
-      /\/\/ Auth: Driftstack-staff API key with `driftstack_internal_admin`\s*\n?\s*\/\/ scope\. Routes call \/v1\/admin\/\* on the control plane; preHandler\s*\n?\s*\/\/ enforced V-134 \+ V-174\./,
+      /\/\/ Auth: Driftstack-staff API key with `driftstack_internal_admin`\s*\/\/ scope\. Routes call \/v1\/admin\/\* on the control plane; preHandler\s*\/\/ enforced V-134 \+ V-174\./,
     );
   });
 
   it('Static Cloudflare Pages framing pins URL-preserving detail-shell rewrites and forbids a Worker adapter', () => {
     expect(body).toMatch(
-      /\/\/ Cloudflare Pages serves static output directly\. Arbitrary account and\s*\n?\s*\/\/ incident ids use `_redirects` 200 rewrites to deterministic client-fetched\s*\n?\s*\/\/ shells; no Worker\/SSR adapter is required\./,
+      /\/\/ Cloudflare Pages serves static output directly\. Arbitrary account and\s*\/\/ incident ids use `_redirects` 200 rewrites to deterministic client-fetched\s*\/\/ shells; no Worker\/SSR adapter is required\./,
     );
     expect(body).not.toMatch(/@astrojs\/cloudflare|adapter:/);
     expect(body).toMatch(/compressHTML: true,/);

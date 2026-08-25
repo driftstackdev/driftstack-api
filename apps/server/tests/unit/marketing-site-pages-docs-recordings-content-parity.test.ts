@@ -16,7 +16,7 @@ describe('W507.A apps/marketing-site/src/pages/docs/recordings.astro content par
 
   it('documents the live desktop-local recording workflow', () => {
     expect(body).toMatch(/<h1>Local session recordings<\/h1>/);
-    expect(body).toMatch(/streamed frames from a live,\s*\n?\s*hands-on session for local replay/);
+    expect(body).toMatch(/streamed frames from a live,\s*hands-on session for local replay/);
     expect(body).toMatch(/Choose <strong>Record<\/strong> while the stream is connected/);
     expect(body).toMatch(/Open <strong>Recordings<\/strong> to replay or export it/);
     expect(body).toMatch(/portable JSON envelope/);
@@ -26,7 +26,7 @@ describe('W507.A apps/marketing-site/src/pages/docs/recordings.astro content par
     expect(body).toMatch(/<code>POST \/v1\/sessions\/:id\/capture<\/code>/);
     expect(body).toMatch(/screenshot, DOM snapshot, and PDF captures/);
     expect(body).toMatch(
-      /Capture bytes are\s*\n?\s*returned inline in the response for your application to store/,
+      /Capture bytes are\s*returned inline in the response for your application to store/,
     );
   });
 

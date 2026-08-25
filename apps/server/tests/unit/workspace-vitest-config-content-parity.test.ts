@@ -42,7 +42,7 @@ describe('W528.A /vitest.node.config.ts content parity', () => {
     expect(body).toMatch(/globals: false,/);
     expect(body).toMatch(/environment: 'node',/);
     expect(body).toMatch(
-      /include: \[\s*\n?\s*'apps\/\*\*\/tests\/\*\*\/\*\.test\.ts',\s*\n?\s*'packages\/\*\*\/tests\/\*\*\/\*\.test\.ts',\s*\n?\s*'scripts\/tests\/\*\*\/\*\.test\.ts',\s*\n?\s*\],/,
+      /include: \[\s*'apps\/\*\*\/tests\/\*\*\/\*\.test\.ts',\s*'packages\/\*\*\/tests\/\*\*\/\*\.test\.ts',\s*'scripts\/tests\/\*\*\/\*\.test\.ts',\s*\],/,
     );
     expect(body).toMatch(
       /exclude: \['\*\*\/node_modules\/\*\*', '\*\*\/dist\/\*\*', '\*\*\/tests\/e2e\/\*\*'\],/,
@@ -58,7 +58,7 @@ describe('W528.A /vitest.node.config.ts content parity', () => {
     );
     expect(body).toMatch(/\/\/\s+- api-types schemas — Zod runtime, no \.test\.ts imports\./);
     expect(body).toMatch(
-      /\/\/\s+- Astro apps \(marketing-site, customer-dashboard\) — typechecked\s*\n?\s*\/\/\s+by `astro check`, not under vitest scope\./,
+      /\/\/\s+- Astro apps \(marketing-site, customer-dashboard\) — typechecked\s*\/\/\s+by `astro check`, not under vitest scope\./,
     );
     expect(body).toMatch(/\/\/\s+- GUI client \(Tauri\) — not in scope\./);
     expect(body).toMatch(/\/\/\s+- Generated code \(sdk-python's _generated\/, sdk-go\)\./);
@@ -78,9 +78,7 @@ describe('W528.A /vitest.node.config.ts content parity', () => {
       /'apps\/server\/src\/db\/\*\*', \/\/ Drizzle repos — justification expired, see note/,
     );
     expect(body).not.toMatch(/Drizzle repos — e2e only/);
-    expect(body).not.toMatch(
-      /exercised by e2e\s*\n?\s*\/\/\s+against real Postgres, not by vitest/,
-    );
+    expect(body).not.toMatch(/exercised by e2e\s*\/\/\s+against real Postgres, not by vitest/);
     expect(body).toMatch(/'apps\/server\/src\/index\.ts', \/\/ bootstrap entry/);
     expect(body).toMatch(/'apps\/server\/src\/lib\/dump-openapi\.ts', \/\/ CLI tool/);
     expect(body).toMatch(/excludeAfterRemap: true,/);
@@ -88,16 +86,16 @@ describe('W528.A /vitest.node.config.ts content parity', () => {
 
   it("V-107 regression-gate threshold framing pinned: 'V-107: regression gate, not aspirational target. Thresholds are set ~5% below current baseline so a meaningful drop fails CI but small noise doesn't false-positive. Ratchet upward as coverage improves; never ratchet downward to mask a regression.' + the four enforced thresholds, which the assertions below read from vitest.config.ts rather than restate — pinned so the V-107 anchor + regression-gate-posture + ratchet-upward-only commitment survives. V-803 corrected the stale figures in this file's HEADER and left them in this TITLE; V-826 removed them here, because a number in a title is the one place nothing checks it (drift to lowering any threshold without parallel ratchet-upward would silently mask coverage regressions)", () => {
     expect(body).toMatch(
-      /\/\/ V-107: regression gate, not aspirational target\. Thresholds are\s*\n?\s*\/\/ set ~5% below current baseline so a meaningful drop fails CI but\s*\n?\s*\/\/ small noise doesn't false-positive\. Ratchet upward as coverage\s*\n?\s*\/\/ improves; never ratchet downward to mask a regression\./,
+      /\/\/ V-107: regression gate, not aspirational target\. Thresholds are\s*\/\/ set ~5% below current baseline so a meaningful drop fails CI but\s*\/\/ small noise doesn't false-positive\. Ratchet upward as coverage\s*\/\/ improves; never ratchet downward to mask a regression\./,
     );
     expect(body).toMatch(
-      /thresholds: \{\s*\n?\s*lines: 85,\s*\n?\s*statements: 83,\s*\n?\s*functions: 84,\s*\n?\s*branches: 75,\s*\n?\s*\},/,
+      /thresholds: \{\s*lines: 85,\s*statements: 83,\s*functions: 84,\s*branches: 75,\s*\},/,
     );
   });
 
   it('V-120 benchmark separation framing pinned: \'V-120: bench files run via `npm run bench`. Excluded from the standard `npm test` `include` glob above so unit tests stay fast.\' + \'benchmark: { include: ["apps/**/tests/bench/**/*.bench.ts", "packages/**/tests/bench/**/*.bench.ts"], exclude: [node_modules + dist] }\' — pinned so the V-120 anchor + bench-glob-isolation (npm run bench vs npm test) + unit-tests-stay-fast commitment survives', () => {
     expect(body).toMatch(
-      /\/\/ V-120: bench files run via `npm run bench`\. Excluded from the\s*\n?\s*\/\/ standard `npm test` `include` glob above so unit tests stay fast\./,
+      /\/\/ V-120: bench files run via `npm run bench`\. Excluded from the\s*\/\/ standard `npm test` `include` glob above so unit tests stay fast\./,
     );
     expect(body).toMatch(
       /include: \['apps\/\*\*\/tests\/bench\/\*\*\/\*\.bench\.ts', 'packages\/\*\*\/tests\/bench\/\*\*\/\*\.bench\.ts'\],/,

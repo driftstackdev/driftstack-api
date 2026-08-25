@@ -41,22 +41,22 @@ describe('W391.B apps/server/src/lib/sentry.ts content parity', () => {
 
   it('EU-region DSN framing pinned (DSN must contain `.de.` so SDK posts to ingest.de.sentry.io)', () => {
     expect(body).toMatch(
-      /EU-region DSN enforced by Zod\s*\n?\s*\/\/\s*\(docs\/deployment\/env-vars\.md validation checklist\) — DSN must\s*\n?\s*\/\/\s*contain `\.de\.` so the SDK posts to ingest\.de\.sentry\.io rather than\s*\n?\s*\/\/\s*the US default/,
+      /EU-region DSN enforced by Zod\s*\/\/\s*\(docs\/deployment\/env-vars\.md validation checklist\) — DSN must\s*\/\/\s*contain `\.de\.` so the SDK posts to ingest\.de\.sentry\.io rather than\s*\/\/\s*the US default/,
     );
   });
 
   it('Fire-and-forget framing: Sentry never on request critical path; captureException not awaited', () => {
     expect(body).toMatch(
-      /Fire-and-forget: Sentry is never on the request critical path\.\s*\n?\s*\/\/\s*`captureException` returns a Promise<void> from the SDK; we don't\s*\n?\s*\/\/\s*await it\. If Sentry is down, errors are dropped/,
+      /Fire-and-forget: Sentry is never on the request critical path\.\s*\/\/\s*`captureException` returns a Promise<void> from the SDK; we don't\s*\/\/\s*await it\. If Sentry is down, errors are dropped/,
     );
   });
 
   it('V-494 SENTRY_SENSITIVE_KEYS: lowercase-only entries + case-insensitive lookup framing', () => {
     expect(body).toMatch(
-      /V-494 — sensitive-key denylist for Sentry event scrubbing\. Keep in\s*\n?\s*\/\/\s*sync with `lib\/logger\.ts::redact\.paths`\. Match is case-insensitive\s*\n?\s*\/\/\s*on the bare key name \(no path prefix\); Sentry events have many\s*\n?\s*\/\/\s*envelope shapes \(request\.data, breadcrumbs\[\*\]\.data, extra,\s*\n?\s*\/\/\s*contexts\.\*\) so substring\/key matching is more robust than dot-paths/,
+      /V-494 — sensitive-key denylist for Sentry event scrubbing\. Keep in\s*\/\/\s*sync with `lib\/logger\.ts::redact\.paths`\. Match is case-insensitive\s*\/\/\s*on the bare key name \(no path prefix\); Sentry events have many\s*\/\/\s*envelope shapes \(request\.data, breadcrumbs\[\*\]\.data, extra,\s*\/\/\s*contexts\.\*\) so substring\/key matching is more robust than dot-paths/,
     );
     expect(body).toMatch(
-      /All entries lowercase — comparison is `key\.toLowerCase\(\)` so storing\s*\n?\s*\/\/\s*non-lowercase variants here is dead weight \(and a bug if the comparison\s*\n?\s*\/\/\s*ever drifts\)/,
+      /All entries lowercase — comparison is `key\.toLowerCase\(\)` so storing\s*\/\/\s*non-lowercase variants here is dead weight \(and a bug if the comparison\s*\/\/\s*ever drifts\)/,
     );
     expect(body).toMatch(/const SENTRY_SENSITIVE_KEYS = new Set<string>\(\[/);
   });
@@ -105,13 +105,13 @@ describe('W391.B apps/server/src/lib/sentry.ts content parity', () => {
 
   it('isSensitiveKey: SENTRY_SENSITIVE_KEYS.has(key.toLowerCase())', () => {
     expect(body).toMatch(
-      /function isSensitiveKey\(key: string\): boolean \{\s*\n?\s*return SENTRY_SENSITIVE_KEYS\.has\(key\.toLowerCase\(\)\);\s*\n?\s*\}/,
+      /function isSensitiveKey\(key: string\): boolean \{\s*return SENTRY_SENSITIVE_KEYS\.has\(key\.toLowerCase\(\)\);\s*\}/,
     );
   });
 
   it('scrubInPlace: depth-cap (8) + array branch + Object.keys walk + replaces sensitive value with "[redacted]"', () => {
     expect(body).toMatch(
-      /V-494 — recursively walk a Sentry event-shaped value and replace\s*\n?\s*\*\s*sensitive field values with `'\[redacted\]'`\. Mutates in place to\s*\n?\s*\*\s*avoid allocating a parallel object tree on every event\. Over-depth\s*\n?\s*\*\s*and cyclic subtrees are replaced with a fixed sentinel/,
+      /V-494 — recursively walk a Sentry event-shaped value and replace\s*\*\s*sensitive field values with `'\[redacted\]'`\. Mutates in place to\s*\*\s*avoid allocating a parallel object tree on every event\. Over-depth\s*\*\s*and cyclic subtrees are replaced with a fixed sentinel/,
     );
     expect(body).toMatch(
       /if \(depth >= MAX_SENTRY_SCRUB_DEPTH \|\| seen\.has\(value\)\) return REDACTED_SENTRY_STRUCTURE/,
@@ -121,7 +121,7 @@ describe('W391.B apps/server/src/lib/sentry.ts content parity', () => {
       /if \(Array\.isArray\(value\)\) \{[\s\S]*value\[index\] = scrubValue\(value\[index\], depth \+ 1, seen\);[\s\S]*return value;/,
     );
     expect(body).toMatch(
-      /if \(isSensitiveKey\(key\)\) \{\s*\n?\s*obj\[key\] = '\[redacted\]';\s*\n?\s*\} else \{\s*\n?\s*obj\[key\] = scrubValue\(obj\[key\], depth \+ 1, seen\);\s*\n?\s*\}/,
+      /if \(isSensitiveKey\(key\)\) \{\s*obj\[key\] = '\[redacted\]';\s*\} else \{\s*obj\[key\] = scrubValue\(obj\[key\], depth \+ 1, seen\);\s*\}/,
     );
     expect(body).toMatch(/scrubValue\(value, 0, new WeakSet<object>\(\)\);/);
   });
@@ -145,7 +145,7 @@ describe('W391.B apps/server/src/lib/sentry.ts content parity', () => {
 
   it('__test_scrubInPlace export: surfaced for unit-test redaction matrix (not public surface)', () => {
     expect(body).toMatch(
-      /V-494 — exposed under a `__test_\*` name so the unit test in\s*\n?\s*\/\/\s*tests\/unit\/sentry-scrub\.test\.ts can pin the redaction matrix\.\s*\n?\s*\/\/\s*Not part of the public sentry-helper surface/,
+      /V-494 — exposed under a `__test_\*` name so the unit test in\s*\/\/\s*tests\/unit\/sentry-scrub\.test\.ts can pin the redaction matrix\.\s*\/\/\s*Not part of the public sentry-helper surface/,
     );
     expect(body).toMatch(/export \{ scrubInPlace as __test_scrubInPlace \};/);
   });
@@ -171,16 +171,16 @@ describe('W391.B apps/server/src/lib/sentry.ts content parity', () => {
 
   it('initSentry null-config branch: warn-log + no-op client (isInitialized=false)', () => {
     expect(body).toMatch(
-      /if \(config === null\) \{\s*\n?\s*logger\.warn\(\s*\n?\s*\{ component: 'sentry' \},\s*\n?\s*'Sentry not configured — exception capture disabled\. Set SENTRY_DSN \+ SENTRY_ENVIRONMENT to enable\.',\s*\n?\s*\);/,
+      /if \(config === null\) \{\s*logger\.warn\(\s*\{ component: 'sentry' \},\s*'Sentry not configured — exception capture disabled\. Set SENTRY_DSN \+ SENTRY_ENVIRONMENT to enable\.',\s*\);/,
     );
     expect(body).toMatch(
-      /return \{\s*\n?\s*isInitialized: false,\s*\n?\s*captureException: \(\) => \{\},\s*\n?\s*addBreadcrumb: \(\) => \{\},\s*\n?\s*flush: \(\) => Promise\.resolve\(true\),\s*\n?\s*close: \(\) => Promise\.resolve\(true\),\s*\n?\s*\};/,
+      /return \{\s*isInitialized: false,\s*captureException: \(\) => \{\},\s*addBreadcrumb: \(\) => \{\},\s*flush: \(\) => Promise\.resolve\(true\),\s*close: \(\) => Promise\.resolve\(true\),\s*\};/,
     );
   });
 
   it('Sentry.init: dsn + environment + tracesSampleRate + beforeSend=scrubSentryEvent + beforeBreadcrumb=scrubSentryBreadcrumb', () => {
     expect(body).toMatch(
-      /Sentry\.init\(\{\s*\n?\s*dsn: config\.dsn,\s*\n?\s*environment: config\.environment,/,
+      /Sentry\.init\(\{\s*dsn: config\.dsn,\s*environment: config\.environment,/,
     );
     expect(body).toMatch(/tracesSampleRate: config\.tracesSampleRate,/);
     expect(body).toMatch(/beforeSend: scrubSentryEvent,/);
@@ -194,7 +194,7 @@ describe('W391.B apps/server/src/lib/sentry.ts content parity', () => {
 
   it('wireSentryErrorHandler: onError hook with request_id / method / url / route extras', () => {
     expect(body).toMatch(
-      /export function wireSentryErrorHandler\(app: FastifyInstance, sentry: SentryClient\): void \{\s*\n?\s*app\.addHook\('onError', \(request, _reply, error, done\) => \{\s*\n?\s*sentry\.captureException\(error, \{\s*\n?\s*request_id: request\.id,\s*\n?\s*method: request\.method,\s*\n?\s*url: redactUrlQueryTokens\(request\.url\),\s*\n?\s*route: request\.routeOptions\?\.url,\s*\n?\s*\}\);/,
+      /export function wireSentryErrorHandler\(app: FastifyInstance, sentry: SentryClient\): void \{\s*app\.addHook\('onError', \(request, _reply, error, done\) => \{\s*sentry\.captureException\(error, \{\s*request_id: request\.id,\s*method: request\.method,\s*url: redactUrlQueryTokens\(request\.url\),\s*route: request\.routeOptions\?\.url,\s*\}\);/,
     );
   });
 

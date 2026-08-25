@@ -147,7 +147,7 @@ describe('W548.B /docs/founder-action-queue.md content parity', () => {
     expect(
       body,
       'including the instruction itself, which a third pin in this block freezes',
-    ).toMatch(/Drop a\s*\n?\s*1200×630 PNG into/);
+    ).toMatch(/Drop a\s*1200×630 PNG into/);
     expect(body).toMatch(/`apps\/marketing-site\/public\/og-default\.png`\. Brand-on-image/);
     expect(body).toMatch(/treatment with the oxblood D logo \+ "Driftstack" wordmark \+ a/);
     expect(body).toMatch(/one-line tagline\./);

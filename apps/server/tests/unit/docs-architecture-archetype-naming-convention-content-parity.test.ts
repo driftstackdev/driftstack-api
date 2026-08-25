@@ -120,7 +120,7 @@ describe('W559.A /docs/architecture/archetype-naming-convention.md content parit
       /customer-selectable catalog \(GUI \/ dashboard selector\) = entries with/,
     );
     expect(body).toMatch(
-      /`ARCHETYPE_DISPLAY_LABEL` and `archetypeDisplayLabel\(id\)` are DERIVED from the\s*\n?\s*registry/,
+      /`ARCHETYPE_DISPLAY_LABEL` and `archetypeDisplayLabel\(id\)` are DERIVED from the\s*registry/,
     );
     expect(body).toMatch(
       /\*\*Changing the launch default is a status flip, not a system-wide swap\.\*\*/,

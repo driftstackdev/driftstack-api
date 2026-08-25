@@ -35,7 +35,7 @@ describe('W514.A apps/marketing-site/src/pages/docs/sdk-go.astro content parity'
 
   it("V-706 framing pinned: 'Go SDK quickstart. Third entry in the SDK quickstart trilogy (TypeScript V-703 / Python V-704). Same skeleton, Go-idiomatic examples. Pitched at backend teams running Go services that need a browser leg for scrape / E2E / generate-PDF workloads.' — pinned so the V-706 anchor + V-703/V-704 trilogy cross-ref + target-audience framing all survive (drift to dropping the trilogy anchor would orphan the doc from the sister-SDK reference)", () => {
     expect(body).toMatch(
-      /\/\/ V-706 — Go SDK quickstart\. Third entry in the SDK quickstart trilogy\s*\n?\s*\/\/ \(TypeScript V-703 \/ Python V-704\)\. Same skeleton, Go-idiomatic\s*\n?\s*\/\/ examples\. Pitched at backend teams running Go services that need a\s*\n?\s*\/\/ browser leg for scrape \/ E2E \/ generate-PDF workloads\./,
+      /\/\/ V-706 — Go SDK quickstart\. Third entry in the SDK quickstart trilogy\s*\/\/ \(TypeScript V-703 \/ Python V-704\)\. Same skeleton, Go-idiomatic\s*\/\/ examples\. Pitched at backend teams running Go services that need a\s*\/\/ browser leg for scrape \/ E2E \/ generate-PDF workloads\./,
     );
   });
 
@@ -45,21 +45,21 @@ describe('W514.A apps/marketing-site/src/pages/docs/sdk-go.astro content parity'
     );
     expect(body).toContain('The Go SDK is published as a tagged pre-1.0 module');
     expect(body).toMatch(
-      /Commit the resulting\s*\n?\s*<code>go\.mod<\/code> and <code>go\.sum<\/code> for reproducible deployments/,
+      /Commit the resulting\s*<code>go\.mod<\/code> and <code>go\.sum<\/code> for reproducible deployments/,
     );
     expect(body).not.toMatch(/@<exact-commit>|first tag pending/i);
     expect(body).toMatch(
-      /Go ≥ 1\.22 is supported\. The module has zero non-stdlib runtime\s*\n?\s*dependencies\s*\n?\s*\(it speaks raw JSON over <code>net\/http<\/code>\); no\s*\n?\s*transitive bloat\./,
+      /Go ≥ 1\.22 is supported\. The module has zero non-stdlib runtime\s*dependencies\s*\(it speaks raw JSON over <code>net\/http<\/code>\); no\s*transitive bloat\./,
     );
   });
 
   it('driftstack.New(apiKey, opts...) functional-options constructor + WithBaseURL override + no-error-on-construct + no-network-on-construct + http.Client-pooled framing pinned — pinned so the constructor + WithBaseURL functional option + New-does-not-return-an-error + no-network-on-construct + http.Client-pooled-reuse commitments survive (drift to claiming a network call at construct-time would mislead about init cost). The constructor shape was corrected to driftstack.New(os.Getenv("DRIFTSTACK_API_KEY")) with driftstack.WithBaseURL(...) functional options, matching packages/sdk-go/client.go (func New(apiKey string, opts ...Option) *Client + func WithBaseURL); the previous NewClient(Config{APIKey, BaseURL}) struct-config shape no longer exists.', () => {
     expect(body).toMatch(/client := driftstack\.New\(os\.Getenv\("DRIFTSTACK_API_KEY"\)\)/);
     expect(body).toMatch(
-      /\/\/ BaseURL defaults to https:\/\/api\.driftstack\.dev; pass\s*\n?\s*\/\/ driftstack\.WithBaseURL\(\.\.\.\) to override for staging or\s*\n?\s*\/\/ self-hosted deployments\. New does not return an error\./,
+      /\/\/ BaseURL defaults to https:\/\/api\.driftstack\.dev; pass\s*\/\/ driftstack\.WithBaseURL\(\.\.\.\) to override for staging or\s*\/\/ self-hosted deployments\. New does not return an error\./,
     );
     expect(body).toMatch(
-      /The constructor does not make any network calls\. Reuse one\s*\n?\s*client across your process — it is internally pooled via\s*\n?\s*<code>http\.Client<\/code> with sensible defaults/,
+      /The constructor does not make any network calls\. Reuse one\s*client across your process — it is internally pooled via\s*<code>http\.Client<\/code> with sensible defaults/,
     );
     // Anti-drift: the previous struct-config constructor must NOT return —
     // NewClient(Config{...}) is not the SDK's exported surface.
@@ -71,20 +71,20 @@ describe('W514.A apps/marketing-site/src/pages/docs/sdk-go.astro content parity'
       /session, err := client\.Sessions\.Create\(ctx, &driftstack\.CreateSessionRequest\{/,
     );
     expect(body).toMatch(
-      /\/\/ Omit Archetype to inherit the locked launch default\s*\n?\s*\/\/ \(iphone17_ios18_7_safari26_4\); pass a real registry slug\s*\n?\s*\/\/ to pin a specific device profile\./,
+      /\/\/ Omit Archetype to inherit the locked launch default\s*\/\/ \(iphone17_ios18_7_safari26_4\); pass a real registry slug\s*\/\/ to pin a specific device profile\./,
     );
     expect(body).toMatch(/Purpose:\s+driftstack\.PurposeProductionCustomer/);
     expect(body).toMatch(
-      /<code>SessionStatus<\/code> type with the constants\s*\n?\s*<code>SessionCreating<\/code>, <code>SessionReady<\/code>,\s*\n?\s*<code>SessionBusy<\/code>, <code>SessionDestroyed<\/code>, and\s*\n?\s*<code>SessionErrored<\/code> — switch on those for exhaustive\s*\n?\s*compile-time coverage\./,
+      /<code>SessionStatus<\/code> type with the constants\s*<code>SessionCreating<\/code>, <code>SessionReady<\/code>,\s*<code>SessionBusy<\/code>, <code>SessionDestroyed<\/code>, and\s*<code>SessionErrored<\/code> — switch on those for exhaustive\s*compile-time coverage\./,
     );
     expect(body).toMatch(
-      /The create call doesn't take a target\s*\n?\s*URL; drive the session to a URL with\s*\n?\s*<code>client\.Sessions\.Navigate\(\.\.\.\)<\/code>\./,
+      /The create call doesn't take a target\s*URL; drive the session to a URL with\s*<code>client\.Sessions\.Navigate\(\.\.\.\)<\/code>\./,
     );
   });
 
   it("5-method drive surface: Navigate + Interact + Wait + Capture + Destroy (idempotent) + 'no built-in wait-until-terminal helper' framing pinned — pinned so the 5-method drive surface + no-magic-wait-helper + idempotent-destroy survive (drift to claiming a wait-until-terminal helper exists would mislead about the SDK surface)", () => {
     expect(body).toMatch(
-      /There is no built-in <em>wait-until-terminal<\/em> helper\. Drive\s*\n?\s*the session through its lifecycle with\s*\n?\s*<code>Navigate<\/code>, <code>Interact<\/code>,\s*\n?\s*<code>Wait<\/code>, <code>Capture<\/code>, then\s*\n?\s*<code>Destroy<\/code> when you're done\./,
+      /There is no built-in <em>wait-until-terminal<\/em> helper\. Drive\s*the session through its lifecycle with\s*<code>Navigate<\/code>, <code>Interact<\/code>,\s*<code>Wait<\/code>, <code>Capture<\/code>, then\s*<code>Destroy<\/code> when you're done\./,
     );
     expect(body).toMatch(/\/\/ Idempotent\./);
   });
@@ -98,7 +98,7 @@ describe('W514.A apps/marketing-site/src/pages/docs/sdk-go.astro content parity'
     expect(body).not.toMatch(/Kind:\s+"time"/);
     expect(body).not.toMatch(/DurationMs: 1000/);
     expect(body).toMatch(
-      /For batch workloads, prefer\s*\n?\s*<a href="\/docs\/webhooks\/">webhooks<\/a> over polling\./,
+      /For batch workloads, prefer\s*<a href="\/docs\/webhooks\/">webhooks<\/a> over polling\./,
     );
     expect(body).not.toMatch(/href="\/docs\/webhooks"/);
   });
@@ -110,7 +110,7 @@ describe('W514.A apps/marketing-site/src/pages/docs/sdk-go.astro content parity'
     expect(body).toMatch(/for _, s := range page\.Data \{/);
     expect(body).toMatch(/s\.Status == driftstack\.SessionDestroyed/);
     expect(body).toMatch(
-      /\/\/ page\.NextCursor is nil when there are no more pages; otherwise\s*\n?\s*\/\/ pass \*page\.NextCursor as query\.Cursor on the next call to walk\s*\n?\s*\/\/ the full history\./,
+      /\/\/ page\.NextCursor is nil when there are no more pages; otherwise\s*\/\/ pass \*page\.NextCursor as query\.Cursor on the next call to walk\s*\/\/ the full history\./,
     );
     // Anti-drift: the previous empty-string-sentinel framing must NOT return —
     // NextCursor is a *string (nil-on-last-page), not a "" empty string.
@@ -119,7 +119,7 @@ describe('W514.A apps/marketing-site/src/pages/docs/sdk-go.astro content parity'
 
   it('Typed-errors surface pinned: ValidationError + RateLimitError + ConcurrencyLimitError + NotFoundError + errors.As recover-typed-shape + errors.Is sentinel-match + ErrRateLimit + ErrValidation + ErrConflict 409-any-subclass — pinned so the 4-named-error + errors.As/errors.Is + 3-sentinel surface (ErrRateLimit/ErrValidation/ErrConflict) survives (drift to renaming any subclass would create marketing↔SDK divergence)', () => {
     expect(body).toMatch(
-      /<code>ValidationError<\/code>, <code>RateLimitError<\/code>,\s*\n?\s*<code>ConcurrencyLimitError<\/code>,\s*\n?\s*<code>NotFoundError<\/code>, etc\./,
+      /<code>ValidationError<\/code>, <code>RateLimitError<\/code>,\s*<code>ConcurrencyLimitError<\/code>,\s*<code>NotFoundError<\/code>, etc\./,
     );
     expect(body).toMatch(/var rl \*driftstack\.RateLimitError/);
     expect(body).toMatch(/if errors\.As\(err, &rl\)/);
@@ -131,13 +131,13 @@ describe('W514.A apps/marketing-site/src/pages/docs/sdk-go.astro content parity'
 
   it('apiError 4-attribute RFC 9457 shape is pinned', () => {
     expect(body).toMatch(
-      /Every typed error embeds an <code>apiError<\/code> shape with\s*\n?\s*<code>Status<\/code>, <code>ProblemType<\/code> \(the RFC 9457\s*\n?\s*URI\), <code>Message<\/code>, and <code>Problem<\/code> \(the full\s*\n?\s*parsed problem map\)\. Read additional extension fields off\s*\n?\s*<code>err\.Problem<\/code>\./,
+      /Every typed error embeds an <code>apiError<\/code> shape with\s*<code>Status<\/code>, <code>ProblemType<\/code> \(the RFC 9457\s*URI\), <code>Message<\/code>, and <code>Problem<\/code> \(the full\s*parsed problem map\)\. Read additional extension fields off\s*<code>err\.Problem<\/code>\./,
     );
   });
 
   it('context.Context propagation is pinned without an unverified leak absolute', () => {
     expect(body).toMatch(
-      /Every method takes a <code>context\.Context<\/code> as its first\s*\n?\s*argument\. Cancellation cascades through the underlying HTTP\s*\n?\s*requests, so a parent deadline \(or an HTTP request cancellation\s*\n?\s*in a Gin \/ chi \/ standard <code>http\.Server<\/code> handler\)\s*\n?\s*cleanly aborts the underlying in-flight HTTP call\./,
+      /Every method takes a <code>context\.Context<\/code> as its first\s*argument\. Cancellation cascades through the underlying HTTP\s*requests, so a parent deadline \(or an HTTP request cancellation\s*in a Gin \/ chi \/ standard <code>http\.Server<\/code> handler\)\s*cleanly aborts the underlying in-flight HTTP call\./,
     );
     expect(body).not.toMatch(/No goroutine leaks even/);
   });
@@ -170,7 +170,7 @@ describe('W514.A apps/marketing-site/src/pages/docs/sdk-go.astro content parity'
 
   it("developers@driftstack.dev + 'within one business day' SLA pinned — pinned so the developer-channel routing + 1-business-day response commitment stays consistent across SDK pages (drift to a different SLA would create cross-page divergence)", () => {
     expect(body).toMatch(
-      /<a href="mailto:developers@driftstack\.dev">developers@driftstack\.dev<\/a>\.\s*\n?\s*We respond within one business day\./,
+      /<a href="mailto:developers@driftstack\.dev">developers@driftstack\.dev<\/a>\.\s*We respond within one business day\./,
     );
   });
 

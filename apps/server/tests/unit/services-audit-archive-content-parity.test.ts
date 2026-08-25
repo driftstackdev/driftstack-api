@@ -50,7 +50,7 @@ describe('W402.A apps/server/src/services/audit-archive.ts content parity', () =
     expect(body).toMatch(/session_events action log/);
     expect(body).toMatch(/Lines, partitioned by YYYY\/MM\/\./);
     expect(body).toMatch(
-      /ADR-006 designs a\s*\n?\s*\/\/ monthly cron to call this on the 1st at 02:00 UTC/,
+      /ADR-006 designs a\s*\/\/ monthly cron to call this on the 1st at 02:00 UTC/,
     );
     // V-1006 — the retracted wording, paraphrased in the negative: the file may
     // not assert the cron AS HAPPENING. It does not run; `tick-services-are-wired`
@@ -58,21 +58,21 @@ describe('W402.A apps/server/src/services/audit-archive.ts content parity', () =
     // empty. A present-tense claim here is what lets an engineer confirm
     // "retention runs monthly" and move on.
     expect(body).not.toMatch(/Cron \/ external scheduler invokes archiveAll/);
-    expect(body).toMatch(/it does not\s*\n?\s*\/\/ manage scheduling/);
+    expect(body).toMatch(/it does not\s*\/\/ manage scheduling/);
   });
 
   it('Failure modes per ADR §3: R2-upload-fail → DELETE skipped + deletedFromPostgres=false + next-run retry; DELETE-fail → R2 overwrite idempotently', () => {
     expect(body).toMatch(
-      /R2 upload fails → DELETE skipped; ledger row records the\s*\n?\s*\/\/\s*attempt with deletedFromPostgres=false\. Next run retries\./,
+      /R2 upload fails → DELETE skipped; ledger row records the\s*\/\/\s*attempt with deletedFromPostgres=false\. Next run retries\./,
     );
     expect(body).toMatch(
-      /DELETE fails → R2 file remains, ledger row records the upload;\s*\n?\s*\/\/\s*next run notices the existing R2 key and overwrites idempotently\./,
+      /DELETE fails → R2 file remains, ledger row records the upload;\s*\/\/\s*next run notices the existing R2 key and overwrites idempotently\./,
     );
   });
 
   it('HOT_RETENTION_MS = 90 days + ARCHIVE_RUN_ROW_CAP = 10_000 + 64 KiB legacy body cap exports', () => {
     expect(body).toMatch(
-      /\/\*\* 90 days in milliseconds — the hot-retention threshold\. \*\/\s*\n?\s*export const HOT_RETENTION_MS = 90 \* 24 \* 60 \* 60 \* 1000;/,
+      /\/\*\* 90 days in milliseconds — the hot-retention threshold\. \*\/\s*export const HOT_RETENTION_MS = 90 \* 24 \* 60 \* 60 \* 1000;/,
     );
     // Was pinned as "Default upload-batch size — keeps memory bounded on large
     // windows". Nothing reads the constant, so that sentence bounded nothing;
@@ -100,10 +100,10 @@ describe('W402.A apps/server/src/services/audit-archive.ts content parity', () =
   it('ArchiveTableRepo: 2 methods (selectArchivableRows stable-order + deleteRowsById returning count)', () => {
     expect(body).toMatch(/export interface ArchiveTableRepo \{/);
     expect(body).toMatch(
-      /SELECT rows where the table's primary timestamp column is\s*\n?\s*\*\s*strictly older than `olderThan` \(i\.e\. should be archived\)\.\s*\n?\s*\*\s*Returns rows in stable order \(timestamp asc, id asc\) so the\s*\n?\s*\*\s*JSONL output is deterministic for a given window\./,
+      /SELECT rows where the table's primary timestamp column is\s*\*\s*strictly older than `olderThan` \(i\.e\. should be archived\)\.\s*\*\s*Returns rows in stable order \(timestamp asc, id asc\) so the\s*\*\s*JSONL output is deterministic for a given window\./,
     );
     expect(body).toMatch(
-      /selectArchivableRows\(\s*\n?\s*tableName: ArchiveTableName,\s*\n?\s*olderThan: Date,\s*\n?\s*limit\?: number,\s*\n?\s*\): Promise<readonly Record<string, unknown>\[\]>;/,
+      /selectArchivableRows\(\s*tableName: ArchiveTableName,\s*olderThan: Date,\s*limit\?: number,\s*\): Promise<readonly Record<string, unknown>\[\]>;/,
     );
     expect(body).toMatch(
       /deleteRowsById\(tableName: ArchiveTableName, ids: readonly string\[\]\): Promise<number>;/,
@@ -113,19 +113,19 @@ describe('W402.A apps/server/src/services/audit-archive.ts content parity', () =
   it('ArchiveLedgerRepo: 2 methods (insertRun with 8-arg shape + markDeletedFromPostgres)', () => {
     expect(body).toMatch(/export interface ArchiveLedgerRepo \{/);
     expect(body).toMatch(
-      /\/\*\* Insert a fresh ledger row at run start \(deletedFromPostgres=false\)\. \*\/\s*\n?\s*insertRun\(args: \{[\s\S]+?tableName: ArchiveTableName;\s*\n?\s*windowStart: Date;\s*\n?\s*windowEnd: Date;\s*\n?\s*rowsArchived: number;\s*\n?\s*r2ObjectKey: string;\s*\n?\s*sha256Checksum: string;\s*\n?\s*startedAt: Date;\s*\n?\s*completedAt: Date;\s*\n?\s*\}\): Promise<string>;/,
+      /\/\*\* Insert a fresh ledger row at run start \(deletedFromPostgres=false\)\. \*\/\s*insertRun\(args: \{[\s\S]+?tableName: ArchiveTableName;\s*windowStart: Date;\s*windowEnd: Date;\s*rowsArchived: number;\s*r2ObjectKey: string;\s*sha256Checksum: string;\s*startedAt: Date;\s*completedAt: Date;\s*\}\): Promise<string>;/,
     );
     expect(body).toMatch(
-      /\/\*\* Mark the ledger row's DELETE-from-postgres step as completed\. \*\/\s*\n?\s*markDeletedFromPostgres\(runId: string\): Promise<void>;/,
+      /\/\*\* Mark the ledger row's DELETE-from-postgres step as completed\. \*\/\s*markDeletedFromPostgres\(runId: string\): Promise<void>;/,
     );
   });
 
   it('archiveObjectKey: <prefix>/<table>/YYYY/MM/<table>_YYYY-MM.jsonl.gz partition path (ADR-006 §2)', () => {
     expect(body).toMatch(
-      /Compose the R2 object key for a given table \+ window\. Shape per ADR-006 §2,\s*\n?\s*\*\s*plus a content discriminator:\s*\n?\s*\*\s*<prefix>\/<table_name>\/YYYY\/MM\/<table_name>_YYYY-MM_<sha12>\.jsonl\.gz/,
+      /Compose the R2 object key for a given table \+ window\. Shape per ADR-006 §2,\s*\*\s*plus a content discriminator:\s*\*\s*<prefix>\/<table_name>\/YYYY\/MM\/<table_name>_YYYY-MM_<sha12>\.jsonl\.gz/,
     );
     expect(body).toMatch(
-      /export function archiveObjectKey\(\s*\n?\s*prefix: string,\s*\n?\s*tableName: ArchiveTableName,\s*\n?\s*windowStart: Date,\s*\n?\s*checksum\?: string,\s*\n?\s*\): string \{/,
+      /export function archiveObjectKey\(\s*prefix: string,\s*tableName: ArchiveTableName,\s*windowStart: Date,\s*checksum\?: string,\s*\): string \{/,
     );
     expect(body).toMatch(/const yyyy = windowStart\.getUTCFullYear\(\)\.toString\(\);/);
     expect(body).toMatch(
@@ -153,10 +153,10 @@ describe('W402.A apps/server/src/services/audit-archive.ts content parity', () =
 
   it('rowsToJsonl: newline-delimited JSON; empty input → empty string (no trailing newline)', () => {
     expect(body).toMatch(
-      /Serialise a batch of rows to newline-delimited JSON\. Empty input\s*\n?\s*\*\s*returns an empty string \(no trailing newline\)\./,
+      /Serialise a batch of rows to newline-delimited JSON\. Empty input\s*\*\s*returns an empty string \(no trailing newline\)\./,
     );
     expect(body).toMatch(
-      /export function rowsToJsonl\(rows: readonly Record<string, unknown>\[\]\): string \{\s*\n?\s*return rows\.map\(\(r\) => JSON\.stringify\(r\)\)\.join\('\\n'\);\s*\n?\s*\}/,
+      /export function rowsToJsonl\(rows: readonly Record<string, unknown>\[\]\): string \{\s*return rows\.map\(\(r\) => JSON\.stringify\(r\)\)\.join\('\\n'\);\s*\}/,
     );
   });
 
@@ -172,7 +172,7 @@ describe('W402.A apps/server/src/services/audit-archive.ts content parity', () =
       /const sha256Checksum = createHash\('sha256'\)\.update\(compressed\)\.digest\('hex'\);/,
     );
     expect(body).toMatch(
-      /await this\.r2\.putObject\(\{\s*\n?\s*key: r2ObjectKey,\s*\n?\s*body: compressed,\s*\n?\s*contentType: 'application\/x-ndjson\+gzip',\s*\n?\s*\}\);/,
+      /await this\.r2\.putObject\(\{\s*key: r2ObjectKey,\s*body: compressed,\s*contentType: 'application\/x-ndjson\+gzip',\s*\}\);/,
     );
   });
 
@@ -191,23 +191,23 @@ describe('W402.A apps/server/src/services/audit-archive.ts content parity', () =
 
   it('archiveTable: conditional DELETE — markDeletedFromPostgres only when deleted-count matches archived count; empty window marks deleted=true', () => {
     expect(body).toMatch(
-      /if \(archivable\.length > 0\) \{\s*\n?\s*const ids = archivable\.map\(\(r\) => extractId\(r\)\);\s*\n?\s*const deleted = await this\.rows\.deleteRowsById\(tableName, ids\);\s*\n?\s*if \(deleted === archivable\.length\) \{\s*\n?\s*await this\.ledger\.markDeletedFromPostgres\(runId\);\s*\n?\s*deletedFromPostgres = true;/,
+      /if \(archivable\.length > 0\) \{\s*const ids = archivable\.map\(\(r\) => extractId\(r\)\);\s*const deleted = await this\.rows\.deleteRowsById\(tableName, ids\);\s*if \(deleted === archivable\.length\) \{\s*await this\.ledger\.markDeletedFromPostgres\(runId\);\s*deletedFromPostgres = true;/,
     );
     expect(body).toMatch(
-      /\/\/ Empty window: mark deleted=true so the ledger reflects the\s*\n?\s*\/\/ no-op accurately \(no rows to delete = nothing pending\)\.\s*\n?\s*await this\.ledger\.markDeletedFromPostgres\(runId\);\s*\n?\s*deletedFromPostgres = true;/,
+      /\/\/ Empty window: mark deleted=true so the ledger reflects the\s*\/\/ no-op accurately \(no rows to delete = nothing pending\)\.\s*await this\.ledger\.markDeletedFromPostgres\(runId\);\s*deletedFromPostgres = true;/,
     );
   });
 
   it('archiveAll: sequential per-table; one failure does not abort others (try/catch isolates each table; failures recorded in the errors[] breakdown)', () => {
     expect(body).toMatch(
-      /Archive all five tables in sequence\. Each table\s*\n?\s*\*\s*archives independently — a failure on one does not abort the\s*\n?\s*\*\s*others\. Returns a per-table breakdown\./,
+      /Archive all five tables in sequence\. Each table\s*\*\s*archives independently — a failure on one does not abort the\s*\*\s*others\. Returns a per-table breakdown\./,
     );
     // The independence is implemented: each table's archiveTable is wrapped
     // in try/catch; a thrown table is recorded in errors[] and the loop
     // continues. (Previously the loop had no try/catch — one failure
     // aborted all remaining tables, contradicting the docstring.)
     expect(body).toMatch(
-      /for \(const \{ tableName \} of AUDIT_TABLES\) \{\s*\n?\s*try \{\s*\n?\s*const result = await this\.archiveTable\(tableName\);\s*\n?\s*results\.push\(result\);\s*\n?\s*\} catch \(err\) \{/,
+      /for \(const \{ tableName \} of AUDIT_TABLES\) \{\s*try \{\s*const result = await this\.archiveTable\(tableName\);\s*results\.push\(result\);\s*\} catch \(err\) \{/,
     );
     expect(body).toMatch(
       /errors\.push\(\{ tableName, error: err instanceof Error \? err\.message : String\(err\) \}\);/,
@@ -217,7 +217,7 @@ describe('W402.A apps/server/src/services/audit-archive.ts content parity', () =
 
   it('ArchiveAllResult carries an errors[] breakdown (ArchiveTableError: tableName + error) alongside results', () => {
     expect(body).toMatch(
-      /export interface ArchiveTableError \{\s*\n?\s*tableName: ArchiveTableName;\s*\n?\s*error: string;\s*\n?\s*\}/,
+      /export interface ArchiveTableError \{\s*tableName: ArchiveTableName;\s*error: string;\s*\}/,
     );
     expect(body).toMatch(/errors: readonly ArchiveTableError\[\];/);
   });
@@ -228,11 +228,11 @@ describe('W402.A apps/server/src/services/audit-archive.ts content parity', () =
     expect(body).toMatch(/ledger: ArchiveLedgerRepo;/);
     expect(body).toMatch(/rows: ArchiveTableRepo;/);
     expect(body).toMatch(
-      /Optional override for R2 archive prefix\. Default 'audit-archive'\.\s*\n?\s*\*\s*Lets ops point staging vs production at different prefixes within\s*\n?\s*\*\s*the same bucket\./,
+      /Optional override for R2 archive prefix\. Default 'audit-archive'\.\s*\*\s*Lets ops point staging vs production at different prefixes within\s*\*\s*the same bucket\./,
     );
     expect(body).toMatch(/r2Prefix\?: string;/);
     expect(body).toMatch(
-      /\/\*\* Test seam — defaults to Date\.now\(\)\. \*\/\s*\n?\s*now\?: \(\) => Date;/,
+      /\/\*\* Test seam — defaults to Date\.now\(\)\. \*\/\s*now\?: \(\) => Date;/,
     );
     expect(body).toMatch(/this\.r2Prefix = deps\.r2Prefix \?\? 'audit-archive';/);
   });
@@ -248,7 +248,7 @@ describe('W402.A apps/server/src/services/audit-archive.ts content parity', () =
     expect(body).toMatch(/if \(v instanceof Date\) return v;/);
     expect(body).toMatch(/if \(typeof v === 'string'\) return new Date\(v\);/);
     expect(body).toMatch(
-      /\/\*\* Extract the row's primary key\. All audit tables use a uuid 'id' column\. \*\/\s*\n?\s*function extractId\(row: Record<string, unknown>\): string \{/,
+      /\/\*\* Extract the row's primary key\. All audit tables use a uuid 'id' column\. \*\/\s*function extractId\(row: Record<string, unknown>\): string \{/,
     );
     expect(body).toMatch(/throw new Error\('audit-archive: row missing string id'\);/);
   });

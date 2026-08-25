@@ -72,7 +72,7 @@ describe('W420.B apps/server/src/routes/admin-incidents.ts content parity', () =
       /POST\s+\/v1\/admin\/incidents\/:id\/resolve\s+— mark resolved with final update/,
     );
     expect(body).toMatch(
-      /Each mutation writes an admin_audit_log row in the same request\s*\n?\s*\/\/\s*\(V-281 dual-write pattern\)\. Audit row's targetResourceId stores\s*\n?\s*\/\/\s*`inc_<uuid>` for cross-account audit-log filtering\./,
+      /Each mutation writes an admin_audit_log row in the same request\s*\/\/\s*\(V-281 dual-write pattern\)\. Audit row's targetResourceId stores\s*\/\/\s*`inc_<uuid>` for cross-account audit-log filtering\./,
     );
   });
 
@@ -90,7 +90,7 @@ describe('W420.B apps/server/src/routes/admin-incidents.ts content parity', () =
 
   it('publicIncidentUpdate: incu_<uuid> + incident_id=inc_<uuid> + message + status + posted_at ISO', () => {
     expect(body).toMatch(
-      /function publicIncidentUpdate\(row: IncidentUpdateRow\): IncidentUpdate \{\s*\n?\s*return \{\s*\n?\s*id: `incu_\$\{row\.id\}`,\s*\n?\s*incident_id: `inc_\$\{row\.incidentId\}`,\s*\n?\s*message: row\.message,\s*\n?\s*status: row\.status,\s*\n?\s*posted_at: row\.postedAt\.toISOString\(\),/,
+      /function publicIncidentUpdate\(row: IncidentUpdateRow\): IncidentUpdate \{\s*return \{\s*id: `incu_\$\{row\.id\}`,\s*incident_id: `inc_\$\{row\.incidentId\}`,\s*message: row\.message,\s*status: row\.status,\s*posted_at: row\.postedAt\.toISOString\(\),/,
     );
   });
 
@@ -109,12 +109,12 @@ describe('W420.B apps/server/src/routes/admin-incidents.ts content parity', () =
     // The target id is resolved at record time so the create route can
     // log the real inc_<uuid> (known only after perform()).
     expect(body).toMatch(
-      /const resolveTargetResourceId = \(\): string =>\s*\n?\s*typeof targetResourceId === 'function' \? targetResourceId\(\) : targetResourceId;/,
+      /const resolveTargetResourceId = \(\): string =>\s*typeof targetResourceId === 'function' \? targetResourceId\(\) : targetResourceId;/,
     );
     expect(body).toMatch(/targetResourceId: resolveTargetResourceId\(\),/);
     expect(body).toMatch(/targetAccountId: null,/);
     expect(body).toMatch(
-      /const code =\s*\n?\s*err instanceof Error && err\.name \? err\.name\.toLowerCase\(\)\.replace\(\/error\$\/, ''\) : 'unknown';/,
+      /const code =\s*err instanceof Error && err\.name \? err\.name\.toLowerCase\(\)\.replace\(\/error\$\/, ''\) : 'unknown';/,
     );
   });
 
@@ -133,7 +133,7 @@ describe('W420.B apps/server/src/routes/admin-incidents.ts content parity', () =
 
   it('POST create reply 201: { incident: publicIncident(created.incident), updates: [publicIncidentUpdate(created.update)] }', () => {
     expect(body).toMatch(
-      /return reply\.code\(201\)\.send\(\{\s*\n?\s*incident: publicIncident\(created\.incident\),\s*\n?\s*updates: \[publicIncidentUpdate\(created\.update\)\],\s*\n?\s*\}\);/,
+      /return reply\.code\(201\)\.send\(\{\s*incident: publicIncident\(created\.incident\),\s*updates: \[publicIncidentUpdate\(created\.update\)\],\s*\}\);/,
     );
   });
 
@@ -143,7 +143,7 @@ describe('W420.B apps/server/src/routes/admin-incidents.ts content parity', () =
 
   it('GET list applies state before limit and returns exact aggregate + composite cursor metadata', () => {
     expect(body).toMatch(
-      /app\.get\(\s*\n?\s*'\/v1\/admin\/incidents',\s*\n?\s*\{ preHandler: \[app\.requireScope\('driftstack_internal_admin'\)\] \},/,
+      /app\.get\(\s*'\/v1\/admin\/incidents',\s*\{ preHandler: \[app\.requireScope\('driftstack_internal_admin'\)\] \},/,
     );
     expect(body).toContain("const scope = parsed.data.scope ?? 'all';");
     expect(body).toContain("const state = parsed.data.state ?? 'all';");
@@ -160,51 +160,51 @@ describe('W420.B apps/server/src/routes/admin-incidents.ts content parity', () =
 
   it("GET detail: uuidFromPrefixedId('inc'); incidentsService.get; reply { incident, updates }", () => {
     expect(body).toMatch(
-      /app\.get<\{ Params: \{ id: string \} \}>\(\s*\n?\s*'\/v1\/admin\/incidents\/:id',\s*\n?\s*\{ preHandler: \[app\.requireScope\('driftstack_internal_admin'\)\] \},/,
+      /app\.get<\{ Params: \{ id: string \} \}>\(\s*'\/v1\/admin\/incidents\/:id',\s*\{ preHandler: \[app\.requireScope\('driftstack_internal_admin'\)\] \},/,
     );
     expect(body).toMatch(/const id = uuidFromPrefixedId\(request\.params\.id, 'inc'\);/);
     expect(body).toMatch(
-      /return \{\s*\n?\s*incident: publicIncident\(result\.incident\),\s*\n?\s*updates: result\.updates\.map\(publicIncidentUpdate\),\s*\n?\s*\};/,
+      /return \{\s*incident: publicIncident\(result\.incident\),\s*updates: result\.updates\.map\(publicIncidentUpdate\),\s*\};/,
     );
   });
 
   it("POST append-update: action='incident.updated'; incidentsService.addUpdate with postedByAdminId/KeyId; reply 201 publicIncidentUpdate", () => {
     expect(body).toMatch(
-      /app\.post<\{ Params: \{ id: string \} \}>\(\s*\n?\s*'\/v1\/admin\/incidents\/:id\/updates',/,
+      /app\.post<\{ Params: \{ id: string \} \}>\(\s*'\/v1\/admin\/incidents\/:id\/updates',/,
     );
     expect(body).toMatch(
-      /await withAudit\(request, 'incident\.updated', `inc_\$\{id\}`, parsed\.data, async \(\) => \{\s*\n?\s*result = await incidentsService\.addUpdate\(\{\s*\n?\s*incidentId: id,\s*\n?\s*message: parsed\.data\.message,\s*\n?\s*status: parsed\.data\.status,\s*\n?\s*postedByAdminId: ctx\.account\.id,\s*\n?\s*postedByAdminKeyId: ctx\.apiKey\.id,/,
+      /await withAudit\(request, 'incident\.updated', `inc_\$\{id\}`, parsed\.data, async \(\) => \{\s*result = await incidentsService\.addUpdate\(\{\s*incidentId: id,\s*message: parsed\.data\.message,\s*status: parsed\.data\.status,\s*postedByAdminId: ctx\.account\.id,\s*postedByAdminKeyId: ctx\.apiKey\.id,/,
     );
   });
 
   it("POST resolve: action='incident.resolved'; incidentsService.resolve; reply 200 { incident, update }", () => {
     expect(body).toMatch(
-      /app\.post<\{ Params: \{ id: string \} \}>\(\s*\n?\s*'\/v1\/admin\/incidents\/:id\/resolve',/,
+      /app\.post<\{ Params: \{ id: string \} \}>\(\s*'\/v1\/admin\/incidents\/:id\/resolve',/,
     );
     expect(body).toMatch(
-      /await withAudit\(request, 'incident\.resolved', `inc_\$\{id\}`, parsed\.data, async \(\) => \{\s*\n?\s*result = await incidentsService\.resolve\(\{\s*\n?\s*incidentId: id,\s*\n?\s*message: parsed\.data\.message,\s*\n?\s*postedByAdminId: ctx\.account\.id,\s*\n?\s*postedByAdminKeyId: ctx\.apiKey\.id,/,
+      /await withAudit\(request, 'incident\.resolved', `inc_\$\{id\}`, parsed\.data, async \(\) => \{\s*result = await incidentsService\.resolve\(\{\s*incidentId: id,\s*message: parsed\.data\.message,\s*postedByAdminId: ctx\.account\.id,\s*postedByAdminKeyId: ctx\.apiKey\.id,/,
     );
     expect(body).toMatch(
-      /return reply\.code\(200\)\.send\(\{\s*\n?\s*incident: publicIncident\(resolved\.incident\),\s*\n?\s*update: publicIncidentUpdate\(resolved\.update\),\s*\n?\s*\}\);/,
+      /return reply\.code\(200\)\.send\(\{\s*incident: publicIncident\(resolved\.incident\),\s*update: publicIncidentUpdate\(resolved\.update\),\s*\}\);/,
     );
   });
 
   it('V-545.A PUBLIC GET /v1/status/incidents/:id surfaces public-only incidents with their full update timeline — registered + delegates to incidentsService.get(id, {publicOnly:true}) + maps via publicIncidentUpdate + Cache-Control 30s + IP-rate-limit gate (2026-05-20 defense-in-depth)', () => {
     expect(body).toMatch(/V-545\.A — status-page incident-detail view\./);
     expect(body).toMatch(
-      /app\.get<\{ Params: \{ id: string \} \}>\(\s*\n?\s*'\/v1\/status\/incidents\/:id',\s*\n?\s*\{ preHandler: statusIncidentDetailGate \},\s*\n?\s*async \(request, reply\) => \{\s*\n?\s*const id = uuidFromPrefixedId\(request\.params\.id, 'inc'\);\s*\n?\s*const result = await incidentsService\.get\(id, \{ publicOnly: true \}\);\s*\n?\s*reply\.header\('cache-control', 'public, max-age=30'\);/,
+      /app\.get<\{ Params: \{ id: string \} \}>\(\s*'\/v1\/status\/incidents\/:id',\s*\{ preHandler: statusIncidentDetailGate \},\s*async \(request, reply\) => \{\s*const id = uuidFromPrefixedId\(request\.params\.id, 'inc'\);\s*const result = await incidentsService\.get\(id, \{ publicOnly: true \}\);\s*reply\.header\('cache-control', 'public, max-age=30'\);/,
     );
     expect(body).toMatch(
-      /return \{\s*\n?\s*incident: publicIncident\(result\.incident\),\s*\n?\s*updates: result\.updates\.map\(publicIncidentUpdate\),\s*\n?\s*\};/,
+      /return \{\s*incident: publicIncident\(result\.incident\),\s*updates: result\.updates\.map\(publicIncidentUpdate\),\s*\};/,
     );
   });
 
   it('PUBLIC GET uses all-time open truth plus selectable bounded resolved history', () => {
     expect(body).toMatch(
-      /\/\/ The status page consumes this; no auth required, only public=true rows\s*\n?\s*\/\/ surfaced\. Open incidents are all-time; resolved history defaults to 30d\./,
+      /\/\/ The status page consumes this; no auth required, only public=true rows\s*\/\/ surfaced\. Open incidents are all-time; resolved history defaults to 30d\./,
     );
     expect(body).toMatch(
-      /app\.get\(\s*\n?\s*'\/v1\/status\/incidents',\s*\n?\s*\{ preHandler: statusIncidentsListGate \},\s*\n?\s*async \(request, reply\) => \{\s*\n?\s*const parsed = ListIncidentsQuerySchema\.safeParse\(\{\s*\n?\s*\.\.\.\(request\.query \?\? \{\}\),\s*\n?\s*scope: 'public',\s*\n?\s*\}\);/,
+      /app\.get\(\s*'\/v1\/status\/incidents',\s*\{ preHandler: statusIncidentsListGate \},\s*async \(request, reply\) => \{\s*const parsed = ListIncidentsQuerySchema\.safeParse\(\{\s*\.\.\.\(request\.query \?\? \{\}\),\s*scope: 'public',\s*\}\);/,
     );
     expect(body).toMatch(/parsed\.data\.window === '90d' \? 90 : 30/);
     expect(body).toContain('const feed = await incidentsService.publicFeed({');
@@ -215,7 +215,7 @@ describe('W420.B apps/server/src/routes/admin-incidents.ts content parity', () =
 
   it('Schemas from @driftstack/api-types: AddIncidentUpdate + CreateIncident + ListIncidents + ResolveIncident + Incident/IncidentUpdate types', () => {
     expect(body).toMatch(
-      /import \{\s*\n?\s*AddIncidentUpdateRequestSchema,\s*\n?\s*CreateIncidentRequestSchema,\s*\n?\s*ListIncidentsQuerySchema,\s*\n?\s*ResolveIncidentRequestSchema,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import \{\s*AddIncidentUpdateRequestSchema,\s*CreateIncidentRequestSchema,\s*ListIncidentsQuerySchema,\s*ResolveIncidentRequestSchema,\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(
       /import type \{ Incident, IncidentUpdate \} from '@driftstack\/api-types';/,

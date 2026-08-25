@@ -46,10 +46,10 @@ describe('W412.B apps/server/src/routes/status-stream.ts content parity', () => 
   it('V-295e framing pinned: GET /v1/status/stream SSE + GET /v1/status/sla rolling 30d uptime', () => {
     expect(body).toMatch(/V-295e — public status streaming \+ SLA endpoints\./);
     expect(body).toMatch(
-      /GET \/v1\/status\/stream — Server-Sent Events\. Clients connect with\s*\n?\s*\/\/\s*`EventSource\(url\)` and receive every public incident\.created \/\s*\n?\s*\/\/\s*incident\.resolved event in real time\. Heartbeat every 30s keeps\s*\n?\s*\/\/\s*the connection alive through proxies\./,
+      /GET \/v1\/status\/stream — Server-Sent Events\. Clients connect with\s*\/\/\s*`EventSource\(url\)` and receive every public incident\.created \/\s*\/\/\s*incident\.resolved event in real time\. Heartbeat every 30s keeps\s*\/\/\s*the connection alive through proxies\./,
     );
     expect(body).toMatch(
-      /GET \/v1\/status\/sla — rolling 30-day uptime per probe target,\s*\n?\s*\/\/\s*computed from the V-295b system_health_probes table\./,
+      /GET \/v1\/status\/sla — rolling 30-day uptime per probe target,\s*\/\/\s*computed from the V-295b system_health_probes table\./,
     );
   });
 
@@ -80,7 +80,7 @@ describe('W412.B apps/server/src/routes/status-stream.ts content parity', () => 
 
   it('Heartbeat default 30_000ms with proxy-timeout rationale (Cloudflare 60s)', () => {
     expect(body).toMatch(
-      /\/\*\*\s*\n?\s*\*\s*Heartbeat interval in ms\. Defaults to 30s — well below typical\s*\n?\s*\*\s*proxy idle-timeouts \(60s on Cloudflare, longer elsewhere\)\.\s*\n?\s*\*\//,
+      /\/\*\*\s*\*\s*Heartbeat interval in ms\. Defaults to 30s — well below typical\s*\*\s*proxy idle-timeouts \(60s on Cloudflare, longer elsewhere\)\.\s*\*\//,
     );
     expect(body).toMatch(/const heartbeatMs = opts\.heartbeatMs \?\? 30_000;/);
   });
@@ -92,7 +92,7 @@ describe('W412.B apps/server/src/routes/status-stream.ts content parity', () => 
   it('SSE response headers: text/event-stream utf-8 + no-cache,no-transform + keep-alive + x-accel-buffering:no + W586 CORS spread', () => {
     expect(body).toMatch(/reply\.raw\.writeHead\(200, \{/);
     expect(body).toMatch(
-      /'content-type': 'text\/event-stream; charset=utf-8',\s*\n?\s*'cache-control': 'no-cache, no-transform',\s*\n?\s*connection: 'keep-alive',\s*\n?\s*'x-accel-buffering': 'no',\s*\/\/\s*disable nginx-style buffering/,
+      /'content-type': 'text\/event-stream; charset=utf-8',\s*'cache-control': 'no-cache, no-transform',\s*connection: 'keep-alive',\s*'x-accel-buffering': 'no',\s*\/\/\s*disable nginx-style buffering/,
     );
     // W586 — hijacked SSE reply must reflect ACAO itself (bypasses cors hook).
     expect(body).toMatch(/\.\.\.sseCorsHeaders\(request\.headers\.origin, opts\.cors \?\? \{\}\)/);
@@ -100,20 +100,20 @@ describe('W412.B apps/server/src/routes/status-stream.ts content parity', () => 
 
   it("Initial flush: ': stream open' comment to flush headers on some proxies", () => {
     expect(body).toMatch(
-      /\/\/ Initial comment to flush headers immediately on some proxies\.\s*\n?\s*reply\.raw\.write\(': stream open\\n\\n'\);/,
+      /\/\/ Initial comment to flush headers immediately on some proxies\.\s*reply\.raw\.write\(': stream open\\n\\n'\);/,
     );
   });
 
   it('Event framing: send() emits `event: <name>` + `data: <json>` + blank-line terminator', () => {
     expect(body).toMatch(
-      /const send = \(event: IncidentEvent\): void => \{\s*\n?\s*if \(closed\) return;\s*\n?\s*const data = JSON\.stringify\(event\);\s*\n?\s*\/\/ SSE framing: `event:` \(named\) \+ `data:` \+ blank-line terminator\.\s*\n?\s*reply\.raw\.write\(`event: \$\{event\.event\}\\n`\);\s*\n?\s*reply\.raw\.write\(`data: \$\{data\}\\n\\n`\);\s*\n?\s*closeIfBackpressured\(\);/,
+      /const send = \(event: IncidentEvent\): void => \{\s*if \(closed\) return;\s*const data = JSON\.stringify\(event\);\s*\/\/ SSE framing: `event:` \(named\) \+ `data:` \+ blank-line terminator\.\s*reply\.raw\.write\(`event: \$\{event\.event\}\\n`\);\s*reply\.raw\.write\(`data: \$\{data\}\\n\\n`\);\s*closeIfBackpressured\(\);/,
     );
   });
 
   it('Heartbeat: setInterval emits SSE comment `: heartbeat <iso>` + .unref() (no event-loop pin)', () => {
     expect(body).toMatch(/unsubscribe = bus\.subscribe\(send\);/);
     expect(body).toMatch(
-      /heartbeat = setInterval\(\(\) => \{\s*\n?\s*if \(closed\) return;\s*\n?\s*\/\/ SSE comment lines \(start with `:`\) are heartbeats — no data\.\s*\n?\s*reply\.raw\.write\(`: heartbeat \$\{new Date\(\)\.toISOString\(\)\}\\n\\n`\);\s*\n?\s*closeIfBackpressured\(\);\s*\n?\s*\}, heartbeatMs\);\s*\n?\s*heartbeat\.unref\(\);/,
+      /heartbeat = setInterval\(\(\) => \{\s*if \(closed\) return;\s*\/\/ SSE comment lines \(start with `:`\) are heartbeats — no data\.\s*reply\.raw\.write\(`: heartbeat \$\{new Date\(\)\.toISOString\(\)\}\\n\\n`\);\s*closeIfBackpressured\(\);\s*\}, heartbeatMs\);\s*heartbeat\.unref\(\);/,
     );
   });
 
@@ -125,14 +125,14 @@ describe('W412.B apps/server/src/routes/status-stream.ts content parity', () => 
     expect(body).toContain("from '../lib/sse-backpressure.js'");
     expect(body).not.toMatch(/const MAX_SSE_BUFFER_BYTES = /);
     expect(body).toMatch(
-      /const closeIfBackpressured = \(\): void => \{\s*\n?\s*if \(reply\.raw\.writableLength > MAX_SSE_BUFFER_BYTES\) cleanup\(\);\s*\n?\s*\};/,
+      /const closeIfBackpressured = \(\): void => \{\s*if \(reply\.raw\.writableLength > MAX_SSE_BUFFER_BYTES\) cleanup\(\);\s*\};/,
     );
     expect(body.match(/closeIfBackpressured\(\);/g)).toHaveLength(2);
   });
 
   it('Cleanup: exactly-once clearInterval + unsubscribe + releaseConn + reply.raw.end() on close/error', () => {
     expect(body).toMatch(
-      /const cleanup = \(\): void => \{[\s\S]*?if \(closed\) return;\s*\n?\s*closed = true;\s*\n?\s*if \(heartbeat !== undefined\) clearInterval\(heartbeat\);\s*\n?\s*unsubscribe\(\);\s*\n?\s*releaseConn\(\);\s*\n?\s*reply\.raw\.end\(\);\s*\n?\s*\};/,
+      /const cleanup = \(\): void => \{[\s\S]*?if \(closed\) return;\s*closed = true;\s*if \(heartbeat !== undefined\) clearInterval\(heartbeat\);\s*unsubscribe\(\);\s*releaseConn\(\);\s*reply\.raw\.end\(\);\s*\};/,
     );
     expect(body).toMatch(/request\.raw\.on\('close', cleanup\);/);
     expect(body).toMatch(/request\.raw\.on\('error', cleanup\);/);
@@ -140,7 +140,7 @@ describe('W412.B apps/server/src/routes/status-stream.ts content parity', () => 
 
   it('reply.hijack() at end so Fastify does not auto-complete response', () => {
     expect(body).toMatch(
-      /\/\/ Keep Fastify from completing the response — we'll end manually\.\s*\n?\s*reply\.hijack\(\);/,
+      /\/\/ Keep Fastify from completing the response — we'll end manually\.\s*reply\.hijack\(\);/,
     );
   });
 

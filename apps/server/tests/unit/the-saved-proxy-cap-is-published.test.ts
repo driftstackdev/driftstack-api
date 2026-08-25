@@ -88,7 +88,7 @@ describe('V-1065 the saved proxy cap is published', () => {
     // status code the server stopped sending.
     const route = readFileSync(ROUTE, 'utf8');
     expect(route, 'the route no longer throws BadRequestError for the proxy cap').toMatch(
-      /throw new BadRequestError\(\s*\n?\s*`Proxy limit reached/,
+      /throw new BadRequestError\(\s*`Proxy limit reached/,
     );
   });
 

@@ -32,7 +32,7 @@ describe('W553.A /docs/operations/admin-scope-mitigation.md content parity', () 
     );
     expect(body).toMatch(/`account_owner` controls only the caller's own customer account\./);
     expect(body).toMatch(/satisfies `account_owner` plus customer `admin:\*` checks/);
-    expect(body).toMatch(/It never satisfies\s*\n?\s*`driftstack_internal_admin`\./);
+    expect(body).toMatch(/It never satisfies\s*`driftstack_internal_admin`\./);
     expect(body).toMatch(
       /Cloudflare Access on `admin\.driftstack\.dev` remains required defense in/,
     );
@@ -51,7 +51,7 @@ describe('W553.A /docs/operations/admin-scope-mitigation.md content parity', () 
     expect(body).toMatch(/legacy `admin` still satisfies `account_owner`/);
     expect(body).toMatch(/cannot satisfy `driftstack_internal_admin`/);
     expect(body).toMatch(/receives `403` from a real/);
-    expect(body).toMatch(/Explicit `driftstack_internal_admin`\s*\n?\s*continues to pass/);
+    expect(body).toMatch(/Explicit `driftstack_internal_admin`\s*continues to pass/);
   });
 
   it('keeps Cloudflare Access as a separate identity perimeter', () => {

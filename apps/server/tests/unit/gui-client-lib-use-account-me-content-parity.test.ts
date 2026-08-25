@@ -47,7 +47,7 @@ describe('W465.A apps/gui-client/src/lib/use-account-me.ts content parity', () =
   it("V-534.Q framing pinned: 'V-534.Q — useAccountMe hook.' + 'Wraps GET /v1/account/me into a state-machine hook so views can pull account info without re-implementing fetch + state every time. SettingsAccountCard (V-534.L) currently rolls its own equivalent; this hook is the shared version views should migrate to (the card stays as-is — refactoring it under the hook is a follow-up).'", () => {
     expect(body).toMatch(/\/\/ V-534\.Q — useAccountMe hook\./);
     expect(body).toMatch(
-      /\/\/ Wraps GET \/v1\/account\/me into a state-machine hook so views can\s*\n?\s*\/\/ pull account info without re-implementing fetch \+ state every\s*\n?\s*\/\/ time\. SettingsAccountCard \(V-534\.L\) currently rolls its own\s*\n?\s*\/\/ equivalent; this hook is the shared version views should migrate\s*\n?\s*\/\/ to \(the card stays as-is — refactoring it under the hook is a\s*\n?\s*\/\/ follow-up\)\./,
+      /\/\/ Wraps GET \/v1\/account\/me into a state-machine hook so views can\s*\/\/ pull account info without re-implementing fetch \+ state every\s*\/\/ time\. SettingsAccountCard \(V-534\.L\) currently rolls its own\s*\/\/ equivalent; this hook is the shared version views should migrate\s*\/\/ to \(the card stays as-is — refactoring it under the hook is a\s*\/\/ follow-up\)\./,
     );
   });
 
@@ -60,50 +60,50 @@ describe('W465.A apps/gui-client/src/lib/use-account-me.ts content parity', () =
 
   it('AccountMeData: nested account object (id + email + tier all strings); AccountMeState 4-variant union (idle | loading | ready{data} | error{message})', () => {
     expect(body).toMatch(
-      /export interface AccountMeData \{\s*\n?\s*account: \{\s*\n?\s*id: string;\s*\n?\s*email: string;\s*\n?\s*tier: string;\s*\n?\s*\};\s*\n?\s*\}/,
+      /export interface AccountMeData \{\s*account: \{\s*id: string;\s*email: string;\s*tier: string;\s*\};\s*\}/,
     );
     expect(body).toMatch(
-      /export type AccountMeState =\s*\n?\s*\| \{ kind: 'idle' \}\s*\n?\s*\| \{ kind: 'loading' \}\s*\n?\s*\| \{ kind: 'ready'; data: AccountMeData \}\s*\n?\s*\| \{ kind: 'error'; message: string \};/,
+      /export type AccountMeState =\s*\| \{ kind: 'idle' \}\s*\| \{ kind: 'loading' \}\s*\| \{ kind: 'ready'; data: AccountMeData \}\s*\| \{ kind: 'error'; message: string \};/,
     );
   });
 
   it("UseAccountMeOpts manual? 'Disable auto-fetch on mount. Default false.' + UseAccountMeResult: { state + refetch: () => Promise<void> }", () => {
     expect(body).toMatch(
-      /export interface UseAccountMeOpts \{\s*\n?\s*\/\*\* Disable auto-fetch on mount\. Default false\. \*\/\s*\n?\s*manual\?: boolean;\s*\n?\s*\}/,
+      /export interface UseAccountMeOpts \{\s*\/\*\* Disable auto-fetch on mount\. Default false\. \*\/\s*manual\?: boolean;\s*\}/,
     );
     expect(body).toMatch(
-      /export interface UseAccountMeResult \{\s*\n?\s*state: AccountMeState;\s*\n?\s*refetch: \(\) => Promise<void>;\s*\n?\s*\}/,
+      /export interface UseAccountMeResult \{\s*state: AccountMeState;\s*refetch: \(\) => Promise<void>;\s*\}/,
     );
   });
 
   it("Initial state ternary: opts.manual === true → {kind:'idle'} else {kind:'loading'}", () => {
     expect(body).toMatch(
-      /const \[state, setState\] = useState<AccountMeState>\(\s*\n?\s*opts\.manual === true \? \{ kind: 'idle' \} : \{ kind: 'loading' \},\s*\n?\s*\);/,
+      /const \[state, setState\] = useState<AccountMeState>\(\s*opts\.manual === true \? \{ kind: 'idle' \} : \{ kind: 'loading' \},\s*\);/,
     );
   });
 
   it('Fetcher is single-flight and deadline-bounded; no-apiKey → error; trailing-slash strip; Bearer auth + JSON Accept; live-sequence HTTP/ready state', () => {
     expect(body).toMatch(
-      /const fetcher = useCallback\(async \(\): Promise<void> => \{\s*\n?\s*if \(inFlightRef\.current\) return;/,
+      /const fetcher = useCallback\(async \(\): Promise<void> => \{\s*if \(inFlightRef\.current\) return;/,
     );
     expect(body).toMatch(
-      /if \(!settings\.apiKey\) \{\s*\n?\s*setState\(\{ kind: 'error', message: 'No API key configured\.' \}\);\s*\n?\s*return;/,
+      /if \(!settings\.apiKey\) \{\s*setState\(\{ kind: 'error', message: 'No API key configured\.' \}\);\s*return;/,
     );
     expect(body).toMatch(/const baseUrl = settings\.baseUrl\.replace\(\/\\\/\+\$\/, ''\);/);
     expect(body).toMatch(
-      /const res = await fetchWithDeadline\(`\$\{baseUrl\}\/v1\/account\/me`, \{\s*\n?\s*method: 'GET',\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',/,
+      /const res = await fetchWithDeadline\(`\$\{baseUrl\}\/v1\/account\/me`, \{\s*method: 'GET',\s*signal: controller\.signal,\s*headers: \{\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*accept: 'application\/json',/,
     );
     expect(body).toMatch(
-      /const message = await readApiErrorMessage\(res\);\s*\n?\s*if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'error', message \}\);[\s\S]*?if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'ready', data: body \}\);/,
+      /const message = await readApiErrorMessage\(res\);\s*if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'error', message \}\);[\s\S]*?if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'ready', data: body \}\);/,
     );
   });
 
   it('dependency/unmount cleanup aborts and invalidates active work; manual opt-out and no-arg refetch contract remain', () => {
     expect(body).toMatch(
-      /useEffect\(\s*\n?\s*\(\) => \(\) => \{\s*\n?\s*sequenceRef\.current \+= 1;\s*\n?\s*requestRef\.current\?\.abort\(\);\s*\n?\s*requestRef\.current = null;\s*\n?\s*inFlightRef\.current = false;\s*\n?\s*\},\s*\n?\s*\[settings\.apiKey, settings\.baseUrl\],/,
+      /useEffect\(\s*\(\) => \(\) => \{\s*sequenceRef\.current \+= 1;\s*requestRef\.current\?\.abort\(\);\s*requestRef\.current = null;\s*inFlightRef\.current = false;\s*\},\s*\[settings\.apiKey, settings\.baseUrl\],/,
     );
     expect(body).toMatch(
-      /useEffect\(\(\) => \{\s*\n?\s*if \(opts\.manual === true\) return;\s*\n?\s*void fetcher\(\);\s*\n?\s*\}, \[fetcher, opts\.manual\]\);\s*\n?\s*return \{ state, refetch: fetcher \};/,
+      /useEffect\(\(\) => \{\s*if \(opts\.manual === true\) return;\s*void fetcher\(\);\s*\}, \[fetcher, opts\.manual\]\);\s*return \{ state, refetch: fetcher \};/,
     );
   });
 

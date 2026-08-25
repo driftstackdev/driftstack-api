@@ -62,7 +62,7 @@ describe('W266.A /docs/oauth-apps ↔ live OAuth surface parity', () => {
     expect(page).toMatch(/GET https:\/\/app\.driftstack\.dev\/oauth\/authorize\//);
     expect(page).toMatch(/provider-internal steps/);
     expect(page).toMatch(
-      /never receives or handles\s*\n?\s*the intermediate <code>authorization_id<\/code>/,
+      /never receives or handles\s*the intermediate <code>authorization_id<\/code>/,
     );
   });
 

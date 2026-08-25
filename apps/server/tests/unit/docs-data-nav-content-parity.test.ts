@@ -106,46 +106,42 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
 
   it("V-254 framing pinned: 'V-254 — central doc-site navigation. Single source of truth for the sidebar; pages reference this so adding a topic = one edit here.'", () => {
     expect(body).toMatch(
-      /\/\/ V-254 — central doc-site navigation\. Single source of truth for the\s*\n?\s*\/\/ sidebar; pages reference this so adding a topic = one edit here\./,
+      /\/\/ V-254 — central doc-site navigation\. Single source of truth for the\s*\/\/ sidebar; pages reference this so adding a topic = one edit here\./,
     );
   });
 
   it('Heritage framings pinned: categories-order intentional + V-256 expansion; S22.2 full-tree framing pinned (50 routes, prior 28-entry nav orphaned 6 reference + 4 sdk + 12 api pages, labels plain-words, slugs FROZEN)', () => {
     expect(body).toMatch(
-      /\/\/ Categories order intentional: Quickstart at the top so a new\s*\n?\s*\/\/ customer's first click lands on a "I just got my key, what now"\s*\n?\s*\/\/ page; Reference \+ Architecture at the bottom for spec-level depth\./,
+      /\/\/ Categories order intentional: Quickstart at the top so a new\s*\/\/ customer's first click lands on a "I just got my key, what now"\s*\/\/ page; Reference \+ Architecture at the bottom for spec-level depth\./,
     );
     expect(body).toMatch(/\/\/ V-256 expanded: Quickstart section \+ per-topic Guides entries\./);
     expect(body).toMatch(/S22\.2 \(2026-07-06, Stoplight relayout\) — FULL-TREE expansion/);
-    expect(body).toMatch(
-      /every\s*\n?\s*\/\/ one of the 50 routes under src\/pages now has a nav entry/,
-    );
+    expect(body).toMatch(/every\s*\/\/ one of the 50 routes under src\/pages now has a nav entry/);
     expect(body).toMatch(/page slugs are FROZEN/);
   });
 
   it('DocNavItem interface (S22.4 — method chip LIVE, was "(reserved)/UNUSED in S22.2"): href + label + OPTIONAL method + OPTIONAL children (DocNavChild[] anchor sub-nodes; anchors not pages — breadcrumbs/prev-next walk top-level only) + DocNavChild 3-field + DocNavSection 2-field', () => {
-    expect(body).toMatch(
-      /export interface DocNavItem \{\s*\n?\s*href: string;\s*\n?\s*label: string;/,
-    );
+    expect(body).toMatch(/export interface DocNavItem \{\s*href: string;\s*label: string;/);
     expect(body).toMatch(/S22\.4 — HTTP method chip \(GET\/POST\/PUT\/PATCH\/DELETE\)/);
     expect(body).toMatch(/method\?: 'GET' \| 'POST' \| 'PUT' \| 'PATCH' \| 'DELETE';/);
     expect(body).not.toMatch(/UNUSED in S22\.2/);
     expect(body).toMatch(/S22\.4 — per-endpoint anchor sub-nodes/);
     expect(body).toMatch(/only while the parent is the ACTIVE page/);
     expect(body).toMatch(
-      /breadcrumbs \+ prev\/next keep walking top-level items only\. \*\/\s*\n?\s*children\?: DocNavChild\[\];/,
+      /breadcrumbs \+ prev\/next keep walking top-level items only\. \*\/\s*children\?: DocNavChild\[\];/,
     );
     expect(body).toMatch(
-      /export interface DocNavChild \{\s*\n?\s*href: string;\s*\n?\s*label: string;\s*\n?\s*method\?: DocNavItem\['method'\];\s*\n?\s*\}/,
+      /export interface DocNavChild \{\s*href: string;\s*label: string;\s*method\?: DocNavItem\['method'\];\s*\}/,
     );
     expect(body).toMatch(
-      /export interface DocNavSection \{\s*\n?\s*label: string;\s*\n?\s*items: DocNavItem\[\];\s*\n?\s*\}/,
+      /export interface DocNavSection \{\s*label: string;\s*items: DocNavItem\[\];\s*\}/,
     );
     // The S22.4 header framing (extraction rules + lockstep integrity
     // suite pointer) is pinned so the regeneration contract survives.
     expect(body).toMatch(/S22\.4 \(2026-07-06, Stoplight reference furniture\) — per-endpoint/);
     expect(body).toMatch(/docs-nav-endpoint-children-integrity/);
     expect(body).toMatch(
-      /children render only for\s*\n?\s*\/\/ the ACTIVE resource page \(Stoplight behavior\)/,
+      /children render only for\s*\/\/ the ACTIVE resource page \(Stoplight behavior\)/,
     );
   });
 
@@ -164,19 +160,19 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
 
   it("Overview + Get started blocks pinned: '/' Introduction first item; quickstart + quickstart-curl (S29) + license-activation", () => {
     expect(body).toMatch(
-      /\{\s*\n?\s*label: 'Overview',\s*\n?\s*items: \[\{ href: '\/', label: 'Introduction' \}\],\s*\n?\s*\},\s*\n?\s*\{\s*\n?\s*label: 'Get started',\s*\n?\s*items: \[\s*\n?\s*\{ href: '\/quickstart\/', label: 'Quickstart' \},\s*\n?\s*\{ href: '\/quickstart-curl\/', label: 'Quickstart \(curl\)' \},\s*\n?\s*\{ href: '\/license-activation\/', label: 'License activation \(GUI client\)' \},\s*\n?\s*\],\s*\n?\s*\},/,
+      /\{\s*label: 'Overview',\s*items: \[\{ href: '\/', label: 'Introduction' \}\],\s*\},\s*\{\s*label: 'Get started',\s*items: \[\s*\{ href: '\/quickstart\/', label: 'Quickstart' \},\s*\{ href: '\/quickstart-curl\/', label: 'Quickstart \(curl\)' \},\s*\{ href: '\/license-activation\/', label: 'License activation \(GUI client\)' \},\s*\],\s*\},/,
     );
   });
 
   it('Guides section: 11 entries (S29 added concurrency + the two migration guides + sentry; S37 added paying-with-crypto + crypto-troubleshooting); team-rbac label is the plain-words "Teams & access control" (page slug/title untouched)', () => {
     expect(body).toMatch(
-      /\{\s*\n?\s*label: 'Guides',\s*\n?\s*items: \[\s*\n?\s*\{ href: '\/guides\/', label: 'Guides overview' \},\s*\n?\s*\{ href: '\/guides\/profile-management\/', label: 'Profile management' \},\s*\n?\s*\{ href: '\/guides\/session-lifecycle\/', label: 'Session lifecycle' \},\s*\n?\s*\{ href: '\/guides\/concurrency\/', label: 'Concurrency & backpressure' \},\s*\n?\s*\{ href: '\/guides\/team-rbac\/', label: 'Teams & access control' \},\s*\n?\s*\{ href: '\/guides\/live-video\/', label: 'Live video' \},\s*\n?\s*\{ href: '\/guides\/migrate-from-puppeteer\/', label: 'Migrating from Puppeteer \/ Playwright' \},\s*\n?\s*\{ href: '\/guides\/migrate-from-browserless\/', label: 'Migrating from Browserless' \},\s*\n?\s*\{ href: '\/guides\/sentry\/', label: 'Sentry integration' \},\s*\n?\s*\{ href: '\/guides\/paying-with-crypto\/', label: 'Paying with crypto' \},\s*\n?\s*\{ href: '\/guides\/crypto-troubleshooting\/', label: 'Crypto payment troubleshooting' \},\s*\n?\s*\],\s*\n?\s*\},/,
+      /\{\s*label: 'Guides',\s*items: \[\s*\{ href: '\/guides\/', label: 'Guides overview' \},\s*\{ href: '\/guides\/profile-management\/', label: 'Profile management' \},\s*\{ href: '\/guides\/session-lifecycle\/', label: 'Session lifecycle' \},\s*\{ href: '\/guides\/concurrency\/', label: 'Concurrency & backpressure' \},\s*\{ href: '\/guides\/team-rbac\/', label: 'Teams & access control' \},\s*\{ href: '\/guides\/live-video\/', label: 'Live video' \},\s*\{ href: '\/guides\/migrate-from-puppeteer\/', label: 'Migrating from Puppeteer \/ Playwright' \},\s*\{ href: '\/guides\/migrate-from-browserless\/', label: 'Migrating from Browserless' \},\s*\{ href: '\/guides\/sentry\/', label: 'Sentry integration' \},\s*\{ href: '\/guides\/paying-with-crypto\/', label: 'Paying with crypto' \},\s*\{ href: '\/guides\/crypto-troubleshooting\/', label: 'Crypto payment troubleshooting' \},\s*\],\s*\},/,
     );
   });
 
   it('SDKs section: 7 entries — overview + installation + the 3 language quickstarts (previously orphaned) + error-handling (previously orphaned) + versioning', () => {
     expect(body).toMatch(
-      /\{\s*\n?\s*label: 'SDKs',\s*\n?\s*items: \[\s*\n?\s*\{ href: '\/sdk\/', label: 'SDK overview' \},\s*\n?\s*\{ href: '\/sdk\/installation\/', label: 'Installation' \},\s*\n?\s*\{ href: '\/sdk\/typescript-quickstart\/', label: 'TypeScript quickstart' \},\s*\n?\s*\{ href: '\/sdk\/python-quickstart\/', label: 'Python quickstart' \},\s*\n?\s*\{ href: '\/sdk\/go-quickstart\/', label: 'Go quickstart' \},\s*\n?\s*\{ href: '\/sdk\/error-handling\/', label: 'Error handling' \},\s*\n?\s*\{ href: '\/sdk\/versioning\/', label: 'Versioning policy' \},\s*\n?\s*\],\s*\n?\s*\},/,
+      /\{\s*label: 'SDKs',\s*items: \[\s*\{ href: '\/sdk\/', label: 'SDK overview' \},\s*\{ href: '\/sdk\/installation\/', label: 'Installation' \},\s*\{ href: '\/sdk\/typescript-quickstart\/', label: 'TypeScript quickstart' \},\s*\{ href: '\/sdk\/python-quickstart\/', label: 'Python quickstart' \},\s*\{ href: '\/sdk\/go-quickstart\/', label: 'Go quickstart' \},\s*\{ href: '\/sdk\/error-handling\/', label: 'Error handling' \},\s*\{ href: '\/sdk\/versioning\/', label: 'Versioning policy' \},\s*\],\s*\},/,
     );
   });
 
@@ -276,17 +272,17 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
 
   it('operational estimate child uses the canonical current heading anchor', () => {
     expect(body).toMatch(
-      /href: '\/api\/cost-monitoring\/#read-the-estimate',\s*\n?\s*label: 'Read the estimate',\s*\n?\s*method: 'GET'/,
+      /href: '\/api\/cost-monitoring\/#read-the-estimate',\s*label: 'Read the estimate',\s*method: 'GET'/,
     );
     expect(body).not.toContain('/api/cost-monitoring/#read-your-cost');
   });
 
   it('S22.4 children shape spot-checks: sessions carries its 12 endpoint anchors in page order (full census + md lockstep live in the apps/docs docs-nav-endpoint-children-integrity suite)', () => {
     expect(body).toMatch(
-      /href: '\/api\/sessions\/',\s*\n?\s*label: 'Sessions',\s*\n?\s*children: \[\s*\n?\s*\{ href: '\/api\/sessions\/#create', label: 'Create', method: 'POST' \},\s*\n?\s*\{ href: '\/api\/sessions\/#list', label: 'List', method: 'GET' \},/,
+      /href: '\/api\/sessions\/',\s*label: 'Sessions',\s*children: \[\s*\{ href: '\/api\/sessions\/#create', label: 'Create', method: 'POST' \},\s*\{ href: '\/api\/sessions\/#list', label: 'List', method: 'GET' \},/,
     );
     expect(body).toMatch(
-      /\{ href: '\/api\/sessions\/#login', label: 'Login', method: 'POST' \},\s*\n?\s*\{ href: '\/api\/sessions\/#destroy', label: 'Destroy', method: 'DELETE' \},\s*\n?\s*\],/,
+      /\{ href: '\/api\/sessions\/#login', label: 'Login', method: 'POST' \},\s*\{ href: '\/api\/sessions\/#destroy', label: 'Destroy', method: 'DELETE' \},\s*\],/,
     );
     // S27 (2026-07-07) — status.md's heading-embedded method format was
     // normalized to declaration lines, so the anchor is the clean slug
@@ -298,19 +294,19 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
 
   it('Webhooks section: 4 entries (endpoints + events + crypto-events + replay); S27 — endpoints + replay carry children (webhooks extraction sweep); events + the S37 crypto-events page are catalogs with none', () => {
     expect(body).toMatch(
-      /\{\s*\n?\s*label: 'Webhooks',\s*\n?\s*items: \[\s*\n?\s*\{\s*\n?\s*href: '\/webhooks\/endpoints\/',\s*\n?\s*label: 'Endpoints \(CRUD \+ rotate \+ test\)',\s*\n?\s*children: \[/,
+      /\{\s*label: 'Webhooks',\s*items: \[\s*\{\s*href: '\/webhooks\/endpoints\/',\s*label: 'Endpoints \(CRUD \+ rotate \+ test\)',\s*children: \[/,
     );
     expect(body).toMatch(
-      /\{ href: '\/webhooks\/events\/', label: 'Event catalog' \},\s*\n?\s*\{ href: '\/webhooks\/crypto-events\/', label: 'Crypto order events' \},/,
+      /\{ href: '\/webhooks\/events\/', label: 'Event catalog' \},\s*\{ href: '\/webhooks\/crypto-events\/', label: 'Crypto order events' \},/,
     );
     expect(body).toMatch(
-      /\{\s*\n?\s*href: '\/webhooks\/replay\/',\s*\n?\s*label: 'Replay deliveries',\s*\n?\s*children: \[\s*\n?\s*\{\s*\n?\s*href: '\/webhooks\/replay\/#replay-a-delivery',\s*\n?\s*label: 'Replay a delivery',\s*\n?\s*method: 'POST',/,
+      /\{\s*href: '\/webhooks\/replay\/',\s*label: 'Replay deliveries',\s*children: \[\s*\{\s*href: '\/webhooks\/replay\/#replay-a-delivery',\s*label: 'Replay a delivery',\s*method: 'POST',/,
     );
   });
 
   it('Platform reference section (S22.2 un-orphaned the 6 /reference/* pages; S37 added emails + data-residency): errors → rate-limits → pagination → idempotency → scopes → metrics → emails → data-residency', () => {
     expect(body).toMatch(
-      /\{\s*\n?\s*label: 'Platform reference',\s*\n?\s*items: \[\s*\n?\s*\{ href: '\/reference\/errors\/', label: 'Errors' \},\s*\n?\s*\{ href: '\/reference\/rate-limits\/', label: 'Rate limits' \},\s*\n?\s*\{ href: '\/reference\/pagination\/', label: 'Pagination' \},\s*\n?\s*\{ href: '\/reference\/idempotency\/', label: 'Idempotency keys' \},\s*\n?\s*\{ href: '\/reference\/scopes\/', label: 'API key scopes' \},\s*\n?\s*\{ href: '\/reference\/metrics\/', label: 'Prometheus metrics' \},\s*\n?\s*\{ href: '\/reference\/emails\/', label: 'Emails Driftstack sends' \},\s*\n?\s*\{ href: '\/reference\/data-residency\/', label: 'Data residency' \},\s*\n?\s*\],\s*\n?\s*\},/,
+      /\{\s*label: 'Platform reference',\s*items: \[\s*\{ href: '\/reference\/errors\/', label: 'Errors' \},\s*\{ href: '\/reference\/rate-limits\/', label: 'Rate limits' \},\s*\{ href: '\/reference\/pagination\/', label: 'Pagination' \},\s*\{ href: '\/reference\/idempotency\/', label: 'Idempotency keys' \},\s*\{ href: '\/reference\/scopes\/', label: 'API key scopes' \},\s*\{ href: '\/reference\/metrics\/', label: 'Prometheus metrics' \},\s*\{ href: '\/reference\/emails\/', label: 'Emails Driftstack sends' \},\s*\{ href: '\/reference\/data-residency\/', label: 'Data residency' \},\s*\],\s*\},/,
     );
   });
 

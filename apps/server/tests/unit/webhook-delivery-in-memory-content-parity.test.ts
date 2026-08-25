@@ -73,22 +73,22 @@ describe('W454.B packages/webhook-delivery/src/in-memory.ts content parity', () 
       /\/\/ V-164 — first real implementation of @driftstack\/webhook-delivery\./,
     );
     expect(body).toMatch(
-      /\/\/ Distinct from V-144's mock \(which short-circuits every enqueue to\s*\n?\s*\/\/ `delivered`\): this implementation actually exercises the retry\s*\n?\s*\/\/ curve, the state machine \(pending → in_flight → delivered \| dlq\),\s*\n?\s*\/\/ signature signing, and DLQ promotion\. Storage is in-memory\s*\n?\s*\/\/ \(Map-backed\) — sufficient for unit tests, GUI-client integration\s*\n?\s*\/\/ tests, and small self-hosted single-process workloads\./,
+      /\/\/ Distinct from V-144's mock \(which short-circuits every enqueue to\s*\/\/ `delivered`\): this implementation actually exercises the retry\s*\/\/ curve, the state machine \(pending → in_flight → delivered \| dlq\),\s*\/\/ signature signing, and DLQ promotion\. Storage is in-memory\s*\/\/ \(Map-backed\) — sufficient for unit tests, GUI-client integration\s*\/\/ tests, and small self-hosted single-process workloads\./,
     );
   });
 
   it("Out-of-scope framing pinned: 'Persistence across process restarts (Postgres-backed impl drops in behind the same interface — see V-144 V-log Next).' + 'SELECT...FOR UPDATE SKIP LOCKED concurrency (single-process).' + 'Cross-region replication.'", () => {
     expect(body).toMatch(
-      /\/\/\s*- Persistence across process restarts \(Postgres-backed impl\s*\n?\s*\/\/\s*drops in behind the same interface — see V-144 V-log Next\)\.\s*\n?\s*\/\/\s*- SELECT\.\.\.FOR UPDATE SKIP LOCKED concurrency \(single-process\)\.\s*\n?\s*\/\/\s*- Cross-region replication\./,
+      /\/\/\s*- Persistence across process restarts \(Postgres-backed impl\s*\/\/\s*drops in behind the same interface — see V-144 V-log Next\)\.\s*\/\/\s*- SELECT\.\.\.FOR UPDATE SKIP LOCKED concurrency \(single-process\)\.\s*\/\/\s*- Cross-region replication\./,
     );
   });
 
   it("Backoff curve framing pinned: 'Backoff curve mirrors apps/server/src/services/webhook-worker.ts: 1min / 5min / 15min / 30min / 60min between attempts. Max 5 retries (6 attempts total including initial); 6th failure → DLQ.' + BACKOFF_MS_BY_ATTEMPT exact values", () => {
     expect(body).toMatch(
-      /\/\/ Backoff curve mirrors apps\/server\/src\/services\/webhook-worker\.ts:\s*\n?\s*\/\/ 1min \/ 5min \/ 15min \/ 30min \/ 60min between attempts\. Max 5\s*\n?\s*\/\/ retries \(6 attempts total including initial\); 6th failure → DLQ\./,
+      /\/\/ Backoff curve mirrors apps\/server\/src\/services\/webhook-worker\.ts:\s*\/\/ 1min \/ 5min \/ 15min \/ 30min \/ 60min between attempts\. Max 5\s*\/\/ retries \(6 attempts total including initial\); 6th failure → DLQ\./,
     );
     expect(body).toMatch(
-      /export const BACKOFF_MS_BY_ATTEMPT: Record<number, number> = \{\s*\n?\s*1: 60_000,\s*\n?\s*2: 5 \* 60_000,\s*\n?\s*3: 15 \* 60_000,\s*\n?\s*4: 30 \* 60_000,\s*\n?\s*5: 60 \* 60_000,\s*\n?\s*\};/,
+      /export const BACKOFF_MS_BY_ATTEMPT: Record<number, number> = \{\s*1: 60_000,\s*2: 5 \* 60_000,\s*3: 15 \* 60_000,\s*4: 30 \* 60_000,\s*5: 60 \* 60_000,\s*\};/,
     );
     expect(body).toMatch(/export const DEFAULT_TIMEOUT_MS = 10_000;/);
     expect(body).toMatch(/export const DEFAULT_MAX_ATTEMPTS = 6;/);
@@ -112,56 +112,56 @@ describe('W454.B packages/webhook-delivery/src/in-memory.ts content parity', () 
       /export interface ProcessTickResult \{[\s\S]*?pulled: number;[\s\S]*?delivered: number;[\s\S]*?retried: number;[\s\S]*?dlqed: number;/,
     );
     expect(body).toMatch(
-      /\* Shared state between InMemoryWebhookDeliveryService \+ InMemoryDlqManager\.\s*\n?\s*\*\s*The two services hold the same maps so that DLQ promotion in delivery\s*\n?\s*\*\s*is visible to the DLQ admin surface, and replay\(\) \/ requeue\(\) can\s*\n?\s*\*\s*round-trip between them\./,
+      /\* Shared state between InMemoryWebhookDeliveryService \+ InMemoryDlqManager\.\s*\*\s*The two services hold the same maps so that DLQ promotion in delivery\s*\*\s*is visible to the DLQ admin surface, and replay\(\) \/ requeue\(\) can\s*\*\s*round-trip between them\./,
     );
   });
 
   it('createInMemoryWebhookDelivery: store init (queue/dlq/idCounter) + fetch/now resolution from deps + returns {deliveries + dlq + processTick: (opts) => worker.processTick(opts)}', () => {
     expect(body).toMatch(
-      /export function createInMemoryWebhookDelivery\([\s\S]*?const store: SharedDeliveryStore = \{\s*\n?\s*queue: new Map\(\),\s*\n?\s*dlq: new Map\(\),\s*\n?\s*idCounter: \{ value: 0 \},\s*\n?\s*\};/,
+      /export function createInMemoryWebhookDelivery\([\s\S]*?const store: SharedDeliveryStore = \{\s*queue: new Map\(\),\s*dlq: new Map\(\),\s*idCounter: \{ value: 0 \},\s*\};/,
     );
     expect(body).toMatch(/const fetchFn = deps\.fetch \?\? globalThis\.fetch\.bind\(globalThis\);/);
     expect(body).toMatch(/const now = deps\.now \?\? \(\(\) => Date\.now\(\)\);/);
     expect(body).toMatch(
-      /return \{\s*\n?\s*deliveries,\s*\n?\s*dlq,\s*\n?\s*processTick: \(opts\) => worker\.processTick\(opts\),\s*\n?\s*\};/,
+      /return \{\s*deliveries,\s*dlq,\s*processTick: \(opts\) => worker\.processTick\(opts\),\s*\};/,
     );
   });
 
   it("nextId: `wdl_${padStart(8, '0')}` format; enqueue: 8-field DeliveryRecord (status:'pending', attempts:[], nextAttemptAtMs:now, createdAtMs:now, completedAtMs:null)", () => {
     expect(body).toMatch(
-      /function nextId\(store: SharedDeliveryStore\): string \{\s*\n?\s*store\.idCounter\.value \+= 1;\s*\n?\s*return `wdl_\$\{store\.idCounter\.value\.toString\(\)\.padStart\(8, '0'\)\}`;\s*\n?\s*\}/,
+      /function nextId\(store: SharedDeliveryStore\): string \{\s*store\.idCounter\.value \+= 1;\s*return `wdl_\$\{store\.idCounter\.value\.toString\(\)\.padStart\(8, '0'\)\}`;\s*\}/,
     );
     expect(body).toMatch(
-      /const record: DeliveryRecord = \{\s*\n?\s*id,\s*\n?\s*endpointId: opts\.endpoint\.id,\s*\n?\s*payload: opts\.payload,\s*\n?\s*status: 'pending',\s*\n?\s*attempts: \[\],\s*\n?\s*nextAttemptAtMs: now,\s*\n?\s*createdAtMs: now,\s*\n?\s*completedAtMs: null,\s*\n?\s*\};/,
+      /const record: DeliveryRecord = \{\s*id,\s*endpointId: opts\.endpoint\.id,\s*payload: opts\.payload,\s*status: 'pending',\s*attempts: \[\],\s*nextAttemptAtMs: now,\s*createdAtMs: now,\s*completedAtMs: null,\s*\};/,
     );
   });
 
   it('Service.list: limit cap min(opts.limit ?? 50, 200); cursor skip via findIndex + slice(idx+1); newest-first sort by createdAtMs with id-localeCompare tiebreak; nextCursor when entries.length > limit', () => {
     expect(body).toMatch(/const limit = Math\.min\(opts\.limit \?\? 50, 200\);/);
     expect(body).toMatch(
-      /entries\.sort\(\(a, b\) => \{\s*\n?\s*if \(a\.record\.createdAtMs !== b\.record\.createdAtMs\) \{\s*\n?\s*return b\.record\.createdAtMs - a\.record\.createdAtMs;\s*\n?\s*\}\s*\n?\s*return a\.record\.id\.localeCompare\(b\.record\.id\);\s*\n?\s*\}\);/,
+      /entries\.sort\(\(a, b\) => \{\s*if \(a\.record\.createdAtMs !== b\.record\.createdAtMs\) \{\s*return b\.record\.createdAtMs - a\.record\.createdAtMs;\s*\}\s*return a\.record\.id\.localeCompare\(b\.record\.id\);\s*\}\);/,
     );
     expect(body).toMatch(
-      /if \(opts\.cursor !== undefined\) \{\s*\n?\s*const idx = entries\.findIndex\(\(e\) => e\.record\.id === opts\.cursor\);\s*\n?\s*if \(idx >= 0\) entries = entries\.slice\(idx \+ 1\);\s*\n?\s*\}/,
+      /if \(opts\.cursor !== undefined\) \{\s*const idx = entries\.findIndex\(\(e\) => e\.record\.id === opts\.cursor\);\s*if \(idx >= 0\) entries = entries\.slice\(idx \+ 1\);\s*\}/,
     );
   });
 
   it('InMemoryDlqManager.list: limit cap 200; sort desc by enteredDlqAtMs; cursor by deliveryId; requeue delegates to replayShared; discard: dlq.delete + Promise.resolve()', () => {
     expect(body).toMatch(/entries\.sort\(\(a, b\) => b\.enteredDlqAtMs - a\.enteredDlqAtMs\);/);
     expect(body).toMatch(
-      /requeue\(opts: RequeueDlqOpts\): Promise<DeliveryRecord> \{\s*\n?\s*return Promise\.resolve\(replayShared\(this\.store, this\.getEndpoint, this\.now, opts\.deliveryId\)\);\s*\n?\s*\}/,
+      /requeue\(opts: RequeueDlqOpts\): Promise<DeliveryRecord> \{\s*return Promise\.resolve\(replayShared\(this\.store, this\.getEndpoint, this\.now, opts\.deliveryId\)\);\s*\}/,
     );
     expect(body).toMatch(
-      /discard\(deliveryId: string\): Promise<void> \{\s*\n?\s*this\.store\.dlq\.delete\(deliveryId\);\s*\n?\s*return Promise\.resolve\(\);\s*\n?\s*\}/,
+      /discard\(deliveryId: string\): Promise<void> \{\s*this\.store\.dlq\.delete\(deliveryId\);\s*return Promise\.resolve\(\);\s*\}/,
     );
   });
 
   it("replayShared framing pinned: 'Re-arms an active queue record OR re-enqueues a DLQ entry, preserving the attempt history for postmortem.' + active-queue branch preserves attempts + nextAttemptAtMs:now() + completedAtMs:null; dlq branch reads endpoint or throws + re-inserts into queue + deletes from dlq", () => {
     expect(body).toMatch(
-      /\* Shared replay path used by both WebhookDeliveryService\.replay and\s*\n?\s*\*\s*DlqManager\.requeue\. Re-arms an active queue record OR re-enqueues\s*\n?\s*\*\s*a DLQ entry, preserving the attempt history for postmortem\./,
+      /\* Shared replay path used by both WebhookDeliveryService\.replay and\s*\*\s*DlqManager\.requeue\. Re-arms an active queue record OR re-enqueues\s*\*\s*a DLQ entry, preserving the attempt history for postmortem\./,
     );
     expect(body).toMatch(
-      /const replayed: DeliveryRecord = \{\s*\n?\s*\.\.\.entry\.record,\s*\n?\s*status: 'pending',\s*\n?\s*attempts: entry\.record\.attempts,\s*\n?\s*nextAttemptAtMs: now\(\),\s*\n?\s*completedAtMs: null,\s*\n?\s*\};/,
+      /const replayed: DeliveryRecord = \{\s*\.\.\.entry\.record,\s*status: 'pending',\s*attempts: entry\.record\.attempts,\s*nextAttemptAtMs: now\(\),\s*completedAtMs: null,\s*\};/,
     );
     expect(body).toMatch(
       /throw new Error\(`replay: endpoint \$\{dlqEntry\.endpointId\} not found`\);/,
@@ -172,10 +172,10 @@ describe('W454.B packages/webhook-delivery/src/in-memory.ts content parity', () 
 
   it("DeliveryWorker.processTick framing pinned: 'Lease pattern: claimed records get leasedUntilMs = now + leaseMs. If the worker crashes mid-delivery, the lease expires and the record is reclaimed by the next tick.' + batchSize default 25 + leaseDurationMs default 30_000", () => {
     expect(body).toMatch(
-      /\* Lease pattern: claimed records get `leasedUntilMs = now \+ leaseMs`\.\s*\n?\s*\*\s*If the worker crashes mid-delivery, the lease expires and the\s*\n?\s*\*\s*record is reclaimed by the next tick\./,
+      /\* Lease pattern: claimed records get `leasedUntilMs = now \+ leaseMs`\.\s*\*\s*If the worker crashes mid-delivery, the lease expires and the\s*\*\s*record is reclaimed by the next tick\./,
     );
     expect(body).toMatch(
-      /const batchSize = opts\.batchSize \?\? 25;\s*\n?\s*const leaseDurationMs = opts\.leaseDurationMs \?\? 30_000;/,
+      /const batchSize = opts\.batchSize \?\? 25;\s*const leaseDurationMs = opts\.leaseDurationMs \?\? 30_000;/,
     );
     // V-173.R — the due set is now (due-pending OR stuck-in_flight-with-expired-lease)
     // so a crashed worker's in_flight row is reclaimed. Discrete pins.
@@ -188,13 +188,13 @@ describe('W454.B packages/webhook-delivery/src/in-memory.ts content parity', () 
     expect(body).toMatch(/e\.leasedUntilMs !== null/);
     expect(body).toMatch(/return pendingDue \|\| stuckInFlight;/);
     expect(body).toMatch(
-      /entry\.leasedUntilMs = now \+ leaseDurationMs;\s*\n?\s*entry\.record = \{ \.\.\.entry\.record, status: 'in_flight' \};/,
+      /entry\.leasedUntilMs = now \+ leaseDurationMs;\s*entry\.record = \{ \.\.\.entry\.record, status: 'in_flight' \};/,
     );
   });
 
   it("deliver: missing endpoint → transport_error attempt + immediate dlq (recordAttempt with toDlq=true); 2xx → outcome:'success'; non-2xx → outcome:'http_error' + errorMessage `HTTP ${status}`; timeout via AbortError/TimeoutError → outcome:'timeout'; max-attempts check `attemptNumber >= maxAttempts` → dlq", () => {
     expect(body).toMatch(
-      /errorMessage: 'endpoint not found at delivery time',[\s\S]*?this\.recordAttempt\(entry, attempt, true\);\s*\n?\s*return 'dlqed';/,
+      /errorMessage: 'endpoint not found at delivery time',[\s\S]*?this\.recordAttempt\(entry, attempt, true\);\s*return 'dlqed';/,
     );
     expect(body).toMatch(/outcome: response\.ok \? 'success' : 'http_error',/);
     expect(body).toMatch(
@@ -204,7 +204,7 @@ describe('W454.B packages/webhook-delivery/src/in-memory.ts content parity', () 
       /const isTimeout = error\.name === 'AbortError' \|\| error\.name === 'TimeoutError';/,
     );
     expect(body).toMatch(
-      /if \(attempt\.outcome === 'success'\) \{\s*\n?\s*this\.recordAttempt\(entry, attempt, false\);\s*\n?\s*return 'delivered';\s*\n?\s*\}\s*\n?\s*if \(attemptNumber >= maxAttempts\) \{\s*\n?\s*this\.recordAttempt\(entry, attempt, true\);\s*\n?\s*return 'dlqed';\s*\n?\s*\}/,
+      /if \(attempt\.outcome === 'success'\) \{\s*this\.recordAttempt\(entry, attempt, false\);\s*return 'delivered';\s*\}\s*if \(attemptNumber >= maxAttempts\) \{\s*this\.recordAttempt\(entry, attempt, true\);\s*return 'dlqed';\s*\}/,
     );
   });
 
@@ -228,27 +228,27 @@ describe('W454.B packages/webhook-delivery/src/in-memory.ts content parity', () 
 
   it("recordAttempt: success → status:'delivered' + nextAttemptAtMs:null + completedAtMs:now + leasedUntilMs:null; toDlq → DlqEntry with totalAttempts/attempts/enteredDlqAtMs/reason + dlq.set + queue.delete; retry → status:'pending' + nextAttemptAtMs = now + backoff (fallback 60min)", () => {
     expect(body).toMatch(
-      /if \(attempt\.outcome === 'success'\) \{\s*\n?\s*entry\.record = \{\s*\n?\s*\.\.\.entry\.record,\s*\n?\s*status: 'delivered',\s*\n?\s*attempts: newAttempts,\s*\n?\s*nextAttemptAtMs: null,\s*\n?\s*completedAtMs: now,\s*\n?\s*\};\s*\n?\s*entry\.leasedUntilMs = null;/,
+      /if \(attempt\.outcome === 'success'\) \{\s*entry\.record = \{\s*\.\.\.entry\.record,\s*status: 'delivered',\s*attempts: newAttempts,\s*nextAttemptAtMs: null,\s*completedAtMs: now,\s*\};\s*entry\.leasedUntilMs = null;/,
     );
     expect(body).toMatch(
-      /const dlqEntry: DlqEntry = \{\s*\n?\s*deliveryId: entry\.record\.id,[\s\S]*?totalAttempts: newAttempts\.length,\s*\n?\s*attempts: newAttempts,\s*\n?\s*enteredDlqAtMs: now,\s*\n?\s*reason: dlqReasonFromAttempts\(newAttempts\),\s*\n?\s*\};[\s\S]*?this\.store\.dlq\.set\(entry\.record\.id, dlqEntry\);[\s\S]*?this\.store\.queue\.delete\(entry\.record\.id\);/,
+      /const dlqEntry: DlqEntry = \{\s*deliveryId: entry\.record\.id,[\s\S]*?totalAttempts: newAttempts\.length,\s*attempts: newAttempts,\s*enteredDlqAtMs: now,\s*reason: dlqReasonFromAttempts\(newAttempts\),\s*\};[\s\S]*?this\.store\.dlq\.set\(entry\.record\.id, dlqEntry\);[\s\S]*?this\.store\.queue\.delete\(entry\.record\.id\);/,
     );
     expect(body).toMatch(
       /const backoffMs = BACKOFF_MS_BY_ATTEMPT\[attempt\.attempt\] \?\? 60 \* 60_000;/,
     );
     expect(body).toMatch(
-      /entry\.record = \{\s*\n?\s*\.\.\.entry\.record,\s*\n?\s*status: nextStatus,\s*\n?\s*attempts: newAttempts,\s*\n?\s*nextAttemptAtMs: now \+ backoffMs,\s*\n?\s*completedAtMs: null,\s*\n?\s*\};/,
+      /entry\.record = \{\s*\.\.\.entry\.record,\s*status: nextStatus,\s*attempts: newAttempts,\s*nextAttemptAtMs: now \+ backoffMs,\s*completedAtMs: null,\s*\};/,
     );
   });
 
   it('fetchWithTimeout: AbortController with setTimeout for timeout; 3 x-driftstack-* headers (event-id + event-type + signature) + content-type application/json + body: payload.body; finally clearTimeout', () => {
     expect(body).toMatch(
-      /const controller = new AbortController\(\);\s*\n?\s*const timer = setTimeout\(\(\) => controller\.abort\(\), timeoutMs\);/,
+      /const controller = new AbortController\(\);\s*const timer = setTimeout\(\(\) => controller\.abort\(\), timeoutMs\);/,
     );
     expect(body).toMatch(
-      /headers: \{\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*'x-driftstack-event-id': payload\.eventId,\s*\n?\s*'x-driftstack-event-type': payload\.eventType,\s*\n?\s*'x-driftstack-signature': signature,\s*\n?\s*\},/,
+      /headers: \{\s*'content-type': 'application\/json',\s*'x-driftstack-event-id': payload\.eventId,\s*'x-driftstack-event-type': payload\.eventType,\s*'x-driftstack-signature': signature,\s*\},/,
     );
-    expect(body).toMatch(/finally \{\s*\n?\s*clearTimeout\(timer\);\s*\n?\s*\}/);
+    expect(body).toMatch(/finally \{\s*clearTimeout\(timer\);\s*\}/);
     // SSRF hardening — the outbound fetch must NOT follow redirects (a 3xx to
     // an internal target would bypass the create-time https-only check).
     expect(body).toMatch(/redirect: 'error',/);
@@ -258,7 +258,7 @@ describe('W454.B packages/webhook-delivery/src/in-memory.ts content parity', () 
     expect(body).toMatch(/const RESPONSE_READ_MAX_BYTES = 64 \* 1024;/);
     expect(body).toMatch(/const RESPONSE_EXCERPT_MAX_CHARS = 200;/);
     expect(body).toMatch(
-      /if \(response\.ok\) \{\s*\n?\s*await response\.body\?\.cancel\(\)\.catch\(\(\) => undefined\);/,
+      /if \(response\.ok\) \{\s*await response\.body\?\.cancel\(\)\.catch\(\(\) => undefined\);/,
     );
     expect(body).toMatch(/excerpt: await readResponseExcerpt\(response\),/);
     expect(body).toMatch(/const reader = response\.body\.getReader\(\);/);
@@ -273,7 +273,7 @@ describe('W454.B packages/webhook-delivery/src/in-memory.ts content parity', () 
     // #7 — sentAtSec defaults to emittedAtSec but the worker passes the current
     // send time so each retry is re-stamped + re-signed (SDK tolerance window).
     expect(body).toMatch(
-      /export function signPayload\(\s*\n?\s*secret: string,\s*\n?\s*payload: DeliveryPayload,\s*\n?\s*sentAtSec: number = payload\.emittedAtSec,\s*\n?\s*\): string \{/,
+      /export function signPayload\(\s*secret: string,\s*payload: DeliveryPayload,\s*sentAtSec: number = payload\.emittedAtSec,\s*\): string \{/,
     );
     expect(body).toMatch(/const data = `\$\{sentAtSec\.toString\(\)\}\.\$\{payload\.body\}`;/);
     expect(body).toMatch(
@@ -289,7 +289,7 @@ describe('W454.B packages/webhook-delivery/src/in-memory.ts content parity', () 
 
   it("dlqReasonFromAttempts: `${count}× ${outcome}: ${errorMessage ?? '(no message)'}` format", () => {
     expect(body).toMatch(
-      /function dlqReasonFromAttempts\(attempts: readonly DeliveryAttempt\[\]\): string \{\s*\n?\s*const last = attempts\[attempts\.length - 1\]!;\s*\n?\s*return `\$\{attempts\.length\.toString\(\)\}× \$\{last\.outcome\}: \$\{last\.errorMessage \?\? '\(no message\)'\}`;\s*\n?\s*\}/,
+      /function dlqReasonFromAttempts\(attempts: readonly DeliveryAttempt\[\]\): string \{\s*const last = attempts\[attempts\.length - 1\]!;\s*return `\$\{attempts\.length\.toString\(\)\}× \$\{last\.outcome\}: \$\{last\.errorMessage \?\? '\(no message\)'\}`;\s*\}/,
     );
   });
 

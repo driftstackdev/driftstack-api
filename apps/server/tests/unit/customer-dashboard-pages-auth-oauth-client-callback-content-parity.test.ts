@@ -28,7 +28,7 @@ describe('customer-dashboard auth/oauth-client/callback content parity', () => {
   it('V-667.C doc-comment framing pinned: OAuth-client callback landing page. Pairs with the GET /v1/auth/oauth-client/callback server endpoint. Drift would orphan the frontend-backend pairing', () => {
     expect(body).toMatch(/\/\/ V-667\.C — OAuth-client callback landing page/);
     expect(body).toMatch(
-      /POSTs the same query params back to \/v1\/auth\/oauth-client\s*\n?\s*\/\/?\s*\/callback/,
+      /POSTs the same query params back to \/v1\/auth\/oauth-client\s*\/\/?\s*\/callback/,
     );
   });
 

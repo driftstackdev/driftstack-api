@@ -38,7 +38,7 @@ describe('W537.A apps/status-site/astro.config.mjs content parity', () => {
     expect(body).toMatch(/\/\/ @ts-check/);
     expect(body).toMatch(/\/\/ V-295c — public service status page\./);
     expect(body).toMatch(
-      /\/\/ Static Astro output served from Cloudflare Pages at status\.driftstack\.dev\.\s*\n?\s*\/\/ At runtime the page fetches `https:\/\/api\.driftstack\.dev\/v1\/status\/incidents`\s*\n?\s*\/\/ and renders\. No build-time fetch — keeps the build hermetic and decoupled\s*\n?\s*\/\/ from the API's availability\./,
+      /\/\/ Static Astro output served from Cloudflare Pages at status\.driftstack\.dev\.\s*\/\/ At runtime the page fetches `https:\/\/api\.driftstack\.dev\/v1\/status\/incidents`\s*\/\/ and renders\. No build-time fetch — keeps the build hermetic and decoupled\s*\/\/ from the API's availability\./,
     );
     expect(body).toMatch(/site: 'https:\/\/status\.driftstack\.dev',/);
     expect(body).toMatch(/output: 'static',/);

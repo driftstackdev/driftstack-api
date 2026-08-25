@@ -155,8 +155,7 @@ describe('OpenAPI discloses the scope every customer-facing route enforces', () 
       if (path!.startsWith('/v1/admin')) continue;
       const block = operationFor(documented, key.split(' ')[0]!, path!);
       if (block === undefined) continue;
-      const summary =
-        /summary:\s*\n?\s*('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")/.exec(block)?.[1] ?? '';
+      const summary = /summary:\s*('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")/.exec(block)?.[1] ?? '';
       const named = [...summary.matchAll(granular)].map((m) => m[0].replaceAll('`', ''));
       const wrong = named.filter((n) => !scopes.includes(n));
       if (wrong.length > 0) {

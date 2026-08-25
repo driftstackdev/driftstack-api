@@ -216,7 +216,7 @@ describe('W383 agent-session transcript SSE backpressure guard content parity', 
 
   it('cleanup is idempotent (guard + close + error can all invoke it without double-end/unsubscribe)', () => {
     expect(body).toMatch(/let closed = false;/);
-    expect(body).toMatch(/if \(closed\) return;\s*\n?\s*closed = true;/);
+    expect(body).toMatch(/if \(closed\) return;\s*closed = true;/);
     expect(body).toMatch(/if \(heartbeat !== undefined\) clearInterval\(heartbeat\);/);
     expect(body).toMatch(/unsubscribe\(\);/);
     expect(body).toMatch(/reply\.raw\.end\(\);/);
@@ -230,7 +230,7 @@ describe('W383 agent-session transcript SSE backpressure guard content parity', 
   it('requires the granular session-read scope after EventSource authentication', () => {
     expect(body).toMatch(/const requireTranscriptRead = app\.requireScope\('read:sessions'\);/);
     expect(body).toMatch(
-      /app\.requireAuthEventSource,\s*\n?\s*requireTranscriptRead,\s*\n?\s*app\.rateLimit\('global'\)/,
+      /app\.requireAuthEventSource,\s*requireTranscriptRead,\s*app\.rateLimit\('global'\)/,
     );
     expect(body).toMatch(
       /await app\.requireAuthEventSource\(req, reply\);[\s\S]*?await requireTranscriptRead\(req, reply\);/,

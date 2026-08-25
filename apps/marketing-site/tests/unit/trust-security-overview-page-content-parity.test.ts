@@ -115,7 +115,7 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
 
   it('customer-configurable egress SHIPPED (✓ emerald) per planning 133 Phase 1. 2026-05-22 — flipped from amber ○ "(roadmap)" to emerald ✓ "(per profile)" after the SocksProxyBackend impl + bootstrap wire landed.', () => {
     expect(body).toMatch(
-      /<span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100[^>]*>✓<\/span>\s*\n?\s*<div>\s*\n?\s*<p class="font-medium text-tk-ink">Customer-configurable egress \(per profile\)<\/p>/,
+      /<span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100[^>]*>✓<\/span>\s*<div>\s*<p class="font-medium text-tk-ink">Customer-configurable egress \(per profile\)<\/p>/,
     );
     expect(body).toMatch(/a SOCKS5 proxy with full\s+UDP\/WebRTC\/QUIC tunnelling/); // S20c 2026-07-06: plain gloss added around the tunnelling list
     expect(body).toMatch(/an OpenVPN\s+file \(\.ovpn\)/); // S20c 2026-07-06
@@ -199,7 +199,7 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
   it('V-670 CISO-self-serve framing pinned in page comment', () => {
     expect(body).toMatch(/V-670 \(V-550 follow-up\) — public security overview as an evaluator/);
     expect(body).toMatch(
-      /a prospective customer's CISO can self-serve a security\s*\n?\s*\/\/\s*review without scheduling a call/,
+      /a prospective customer's CISO can self-serve a security\s*\/\/\s*review without scheduling a call/,
     );
   });
 

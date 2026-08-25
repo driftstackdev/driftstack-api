@@ -68,7 +68,7 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     expect(handler).toContain('Saved on this Mac, but couldn’t sync the note to your account.');
     expect(handler).toContain('Couldn’t save the note on this Mac.');
     expect(handler).not.toMatch(
-      /client\.profiles\s*\n?\s*\.update\(id,[\s\S]{0,120}?catch\(\(\) => undefined\)/,
+      /client\.profiles\s*\.update\(id,[\s\S]{0,120}?catch\(\(\) => undefined\)/,
     );
   });
 
@@ -162,10 +162,10 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
 
   it('states the shipped protected-local and encrypted owner-account proxy sync boundary honestly', () => {
     expect(body).toMatch(
-      /Proxy credentials are\s*\n?\s*protected locally and synced encrypted to your account when used for a session\./,
+      /Proxy credentials are\s*protected locally and synced encrypted to your account when used for a session\./,
     );
     expect(body).toMatch(
-      /Protected locally in this app · synced encrypted to your account when used for\s*\n?\s*a session\./,
+      /Protected locally in this app · synced encrypted to your account when used for\s*a session\./,
     );
     expect(body).not.toMatch(/never uploaded to the control plane|credentials never go/i);
   });
@@ -173,7 +173,7 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
   it("Framing pinned: 'Profiles view — list profiles, create new, delete.' + V-136 Tier 3 draft framing ('Persistent identity slots that survive across sessions. Each profile carries its own cookies + localStorage; the driver attaches them to a session when the session is created against a profile.')", () => {
     expect(body).toMatch(/\/\/ Profiles view — list profiles, create new, delete\./);
     expect(body).toMatch(
-      /\/\/ V-136 \(Tier 3 draft\)\. Persistent identity slots that survive across\s*\n?\s*\/\/ sessions\. Each profile carries its own cookies \+ localStorage; the\s*\n?\s*\/\/ driver attaches them to a session when the session is created against\s*\n?\s*\/\/ a profile\./,
+      /\/\/ V-136 \(Tier 3 draft\)\. Persistent identity slots that survive across\s*\/\/ sessions\. Each profile carries its own cookies \+ localStorage; the\s*\/\/ driver attaches them to a session when the session is created against\s*\/\/ a profile\./,
     );
   });
 
@@ -191,7 +191,7 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
       /const SELECTABLE_STATUSES = new Set<ArchetypeStatus>\(\['launch', 'available'\]\);/,
     );
     expect(body).toMatch(
-      /const KNOWN_ARCHETYPES: ReadonlyArray<\{ id: string; label: string \}> = ARCHETYPE_REGISTRY\.filter\(\s*\n?\s*\(a\) => SELECTABLE_STATUSES\.has\(a\.status\),\s*\n?\s*\)\.map\(\(a\) => \(\{ id: a\.id, label: a\.displayLabel \}\)\);/,
+      /const KNOWN_ARCHETYPES: ReadonlyArray<\{ id: string; label: string \}> = ARCHETYPE_REGISTRY\.filter\(\s*\(a\) => SELECTABLE_STATUSES\.has\(a\.status\),\s*\)\.map\(\(a\) => \(\{ id: a\.id, label: a\.displayLabel \}\)\);/,
     );
     // reference/planned MUST NOT be selectable (the 100%-verified rule).
     expect(body).not.toMatch(/SELECTABLE_STATUSES[\s\S]{0,80}?'planned'/);
@@ -200,23 +200,23 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
 
   it("V-239 cap-gate framing pinned ('gate the New profile button at the tier cap (skip when profile_cap === null which means enterprise / no fixed cap).') + atProfileCap = profileCap !== null && profileCount !== null && profileCount >= profileCap — pinned so a null profile_cap (enterprise) doesn't accidentally gate the button", () => {
     expect(body).toMatch(
-      /\/\/ V-239 — gate the New profile button at the tier cap \(skip when\s*\n?\s*\/\/ profile_cap === null which means enterprise \/ no fixed cap\)\./,
+      /\/\/ V-239 — gate the New profile button at the tier cap \(skip when\s*\/\/ profile_cap === null which means enterprise \/ no fixed cap\)\./,
     );
     expect(body).toMatch(
-      /const profileCap = accountMe\?\.profile_cap \?\? null;\s*\n?\s*const profileCount = accountMe\?\.profile_count \?\? null;\s*\n?\s*const atProfileCap = profileCap !== null && profileCount !== null && profileCount >= profileCap;/,
+      /const profileCap = accountMe\?\.profile_cap \?\? null;\s*const profileCount = accountMe\?\.profile_count \?\? null;\s*const atProfileCap = profileCap !== null && profileCount !== null && profileCount >= profileCap;/,
     );
   });
 
   it('2026-05-20 — refreshAccountMe still fires after handleDelete success + after CreateProfileModal onCreated (V-239 cap-gate invariant) but the deleteBinding + refresh(false) calls were inserted ahead of refreshAccountMe in handleDelete per the antidetect-browser restructure', () => {
     expect(body).toMatch(
-      /await client\.profiles\.delete\(id\);\s*\n?\s*\/\/ Drop the local binding so stale \{currentSessionId, defaultProxyId\}\s*\n?\s*\/\/ entries don't accumulate as customers churn through profiles\.\s*\n?\s*await deleteBinding\(id\);\s*\n?\s*await refresh\(false\);\s*\n?\s*await refreshAccountMe\(\);/,
+      /await client\.profiles\.delete\(id\);\s*\/\/ Drop the local binding so stale \{currentSessionId, defaultProxyId\}\s*\/\/ entries don't accumulate as customers churn through profiles\.\s*await deleteBinding\(id\);\s*await refresh\(false\);\s*await refreshAccountMe\(\);/,
     );
     expect(body).toMatch(/void refreshAccountMe\(\);/);
   });
 
   it('2026-05-20 — auto-poll lifecycle: useEffect runs refresh(true) initially (showLoading hint) + setInterval refresh(false) at REFRESH_MS (no flicker on background ticks); cleanup clears the interval and invalidates late publications; client.profiles.iterate({ limit: 50 }) still caps per-poll in-memory accumulation', () => {
     expect(body).toMatch(
-      /useEffect\(\(\) => \{\s*\n?\s*void refresh\(true\);[\s\S]*?const id = window\.setInterval\(\(\) => \{[\s\S]*?void refresh\(false\);\s*\n?\s*\}, REFRESH_MS\);[\s\S]*?return \(\) => \{\s*window\.clearInterval\(id\);[\s\S]*?refreshGenerationRef\.current \+= 1;\s*\};\s*\}, \[refresh\]\);/,
+      /useEffect\(\(\) => \{\s*void refresh\(true\);[\s\S]*?const id = window\.setInterval\(\(\) => \{[\s\S]*?void refresh\(false\);\s*\}, REFRESH_MS\);[\s\S]*?return \(\) => \{\s*window\.clearInterval\(id\);[\s\S]*?refreshGenerationRef\.current \+= 1;\s*\};\s*\}, \[refresh\]\);/,
     );
     expect(body).toMatch(
       /for await \(const profile of client\.profiles\.iterate\(\{ limit: 50 \}\)\)/,
@@ -225,18 +225,18 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
 
   it('CreateProfileModal: all close paths use the submission-safe dirty-draft guard; modal keeps dialog semantics', () => {
     expect(body).toMatch(
-      /const requestClose = useCallback\(\(\): void => \{\s*\n?\s*if \(submitting \|\| confirmOpenRef\.current\) return;[\s\S]*?if \(!dirty\) \{\s*\n?\s*onClose\(\);/,
+      /const requestClose = useCallback\(\(\): void => \{\s*if \(submitting \|\| confirmOpenRef\.current\) return;[\s\S]*?if \(!dirty\) \{\s*onClose\(\);/,
     );
     expect(body).toMatch(/useFocusTrap\(true, dialogRef, requestClose\);/);
     expect(body).toMatch(/if \(e\.target === e\.currentTarget\) requestClose\(\);/);
     expect(body).toMatch(
-      /role="dialog"\s*\n?\s*aria-modal="true"\s*\n?\s*aria-labelledby="create-profile-title"/,
+      /role="dialog"\s*aria-modal="true"\s*aria-labelledby="create-profile-title"/,
     );
   });
 
   it('Form: name input maxLength=120 minLength=1 required + description textarea maxLength=500 rows=2 — pinned so server schema bounds (1-120 name / 500-max description) stay enforced client-side', () => {
-    expect(body).toMatch(/maxLength=\{120\}\s*\n?\s*minLength=\{1\}\s*\n?\s*required/);
-    expect(body).toMatch(/maxLength=\{500\}\s*\n?\s*rows=\{2\}/);
+    expect(body).toMatch(/maxLength=\{120\}\s*minLength=\{1\}\s*required/);
+    expect(body).toMatch(/maxLength=\{500\}\s*rows=\{2\}/);
   });
 
   it("Device picker (2026-06-25 redesign): the device-card grid is replaced by the searchable/chip-filtered <DevicePicker>; the modal still OWNS selection (selectedId={archetype} onSelect={setArchetype}) and feeds the whole registry as PICKER_DEVICES with `selectable` flagged by the SAME SELECTABLE_STATUSES gate, so reference/planned entries render as muted non-selectable rows and randomize lands only on the filtered+selectable set — pinned so a regression can't drop the picker back to a status==='launch' single-device gate", () => {
@@ -263,7 +263,7 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
 
   it("Empty no-profiles framing pinned: 'A profile is a persistent identity — cookies, localStorage, IndexedDB — reused across sessions. Bind a session to a profile to keep login state, returning-visitor signals, and stealth fingerprints stable between runs.' — pinned so customer understands what they're creating", () => {
     expect(body).toMatch(
-      /A profile is a persistent identity — cookies, localStorage, IndexedDB — reused across\s*\n?\s*sessions\. Bind a session to a profile to keep login state, returning-visitor signals,\s*\n?\s*and stealth fingerprints stable between runs\./,
+      /A profile is a persistent identity — cookies, localStorage, IndexedDB — reused across\s*sessions\. Bind a session to a profile to keep login state, returning-visitor signals,\s*and stealth fingerprints stable between runs\./,
     );
     expect(body).toMatch(/Sessions without a profile start ephemeral — fresh state every run\./);
   });
@@ -283,7 +283,7 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
   it('friendlyError preserves the Tauri-WebKit diagnosticFetchError preflight, strips its raw native suffix, and delegates every non-network error to the shared humanizeError helper with an actionable fallback', () => {
     expect(body).toContain("import { humanizeError } from '../lib/humanize-error';");
     expect(body).toMatch(
-      /function friendlyError\(\s*\n?\s*err: unknown,\s*\n?\s*baseUrl\?: string,\s*\n?\s*fallback = "Couldn't complete this profile action\. Try again\.",\s*\n?\s*\): string \{[\s\S]*?if \(baseUrl !== undefined\) \{\s*\n?\s*const diag = diagnosticFetchError\(err, baseUrl\);\s*\n?\s*if \(diag !== null\) \{\s*\n?\s*return `Couldn't reach \$\{baseUrl\}\. Check the URL, connection, firewall, or VPN, then try again\.`;\s*\n?\s*\}\s*\n?\s*\}\s*\n?\s*return humanizeError\(err, fallback\);\s*\n?\s*\}/,
+      /function friendlyError\(\s*err: unknown,\s*baseUrl\?: string,\s*fallback = "Couldn't complete this profile action\. Try again\.",\s*\): string \{[\s\S]*?if \(baseUrl !== undefined\) \{\s*const diag = diagnosticFetchError\(err, baseUrl\);\s*if \(diag !== null\) \{\s*return `Couldn't reach \$\{baseUrl\}\. Check the URL, connection, firewall, or VPN, then try again\.`;\s*\}\s*\}\s*return humanizeError\(err, fallback\);\s*\}/,
     );
     expect(body).not.toMatch(/return `\$\{err\.title\} \(\$\{err\.kind\}\):/);
   });
@@ -327,11 +327,11 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     // is a thin O(1) accessor reading `map.get(id) ?? null`. Both the index
     // builder (where the KIND-resolution now lives) and the accessor are pinned.
     expect(body).toMatch(
-      /const boundSessionByProfileId = useMemo<\s*\n?\s*Map<string, \{ id: string; kind: 'agent' \| 'driver' \}>\s*\n?\s*>\(\(\) => \{/,
+      /const boundSessionByProfileId = useMemo<\s*Map<string, \{ id: string; kind: 'agent' \| 'driver' \}>\s*>\(\(\) => \{/,
     );
     expect(body).toMatch(/\}, \[bindings, activeSessions, agentSessions, agentSessionsLoaded\]\);/);
     expect(body).toMatch(
-      /function boundSession\(profileId: string\): \{ id: string; kind: 'agent' \| 'driver' \} \| null \{\s*\n?\s*return boundSessionByProfileId\.get\(profileId\) \?\? null;\s*\n?\s*\}/,
+      /function boundSession\(profileId: string\): \{ id: string; kind: 'agent' \| 'driver' \} \| null \{\s*return boundSessionByProfileId\.get\(profileId\) \?\? null;\s*\}/,
     );
     // agt_ resolves to agent kind, but the binding now SELF-HEALS (founder
     // 2026-06-18 "always says open session even on long-expired/failed"): once
@@ -346,7 +346,7 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     // body's `return { id, kind }` / `return null`. Trust-the-binding before the
     // first successful list fetch is preserved.
     expect(body).toMatch(
-      /if \(!agentSessionsLoaded\) \{\s*\n?\s*out\.set\(binding\.profileId, \{ id: sid, kind: 'agent' \}\);\s*\n?\s*continue;\s*\n?\s*\}/,
+      /if \(!agentSessionsLoaded\) \{\s*out\.set\(binding\.profileId, \{ id: sid, kind: 'agent' \}\);\s*continue;\s*\}/,
     );
     expect(body).toContain("if (live === undefined || live.status === 'closed') continue;");
     // LIVENESS re-base (W2679, founder 2026-06-18): an active-but-DEAD session
@@ -363,7 +363,7 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     // to `out.set(...)` = running, per the W2679 contract above.
     expect(body).toContain('if (live.liveness !== undefined && !live.liveness.fresh) continue;');
     expect(body).toMatch(
-      /if \(live\.liveness !== undefined && !live\.liveness\.fresh\) continue;\s*\n?\s*out\.set\(binding\.profileId, \{ id: sid, kind: 'agent' \}\);\s*\n?\s*continue;/,
+      /if \(live\.liveness !== undefined && !live\.liveness\.fresh\) continue;\s*out\.set\(binding\.profileId, \{ id: sid, kind: 'agent' \}\);\s*continue;/,
     );
     // The dead page-state probe heuristic must be fully removed.
     expect(body).not.toMatch(/SESSION_LIVENESS_GRACE_MS/);
@@ -390,14 +390,14 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     // an O(1) `has(sid)` check — semantically identical to the old per-call
     // `activeSessions.some((s) => s.id === sid && !terminal)` scan.
     expect(body).toMatch(
-      /const liveDriverIds = new Set<string>\(\);\s*\n?\s*for \(const s of activeSessions\) \{\s*\n?\s*if \(s\.status !== 'destroyed' && s\.status !== 'errored'\) liveDriverIds\.add\(s\.id\);\s*\n?\s*\}/,
+      /const liveDriverIds = new Set<string>\(\);\s*for \(const s of activeSessions\) \{\s*if \(s\.status !== 'destroyed' && s\.status !== 'errored'\) liveDriverIds\.add\(s\.id\);\s*\}/,
     );
     expect(body).toMatch(
       /if \(liveDriverIds\.has\(sid\)\) out\.set\(binding\.profileId, \{ id: sid, kind: 'driver' \}\);/,
     );
     // handleStop closes by kind (the actual fix for "destroy keeps running").
     expect(body).toMatch(
-      /if \(bound\.kind === 'agent'\) \{\s*\n?\s*await client\.agentSessions\.close\(bound\.id\);\s*\n?\s*\} else \{\s*\n?\s*await client\.sessions\.destroy\(bound\.id\);\s*\n?\s*\}/,
+      /if \(bound\.kind === 'agent'\) \{\s*await client\.agentSessions\.close\(bound\.id\);\s*\} else \{\s*await client\.sessions\.destroy\(bound\.id\);\s*\}/,
     );
     // running flag (per-row) + the status filter both route through boundSession
     // as the single source of truth, so badge / filter / live-count agree and an
@@ -441,7 +441,7 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
 
   it('W638 reopenStream stale-binding self-heal: a 403/404 from livekitToken (closed/gone agent session that boundSession optimistically showed as running) clears the profile binding + refreshes so it self-heals to idle instead of re-offering a Live-view that 403s', () => {
     expect(body).toMatch(
-      /if \(err instanceof DriftstackError && \(err\.status === 403 \|\| err\.status === 404\)\) \{\s*\n?\s*await clearProfileSession\(profileId\)\.catch\(\(\) => undefined\);\s*\n?\s*await refresh\(false\);\s*\n?\s*\}/,
+      /if \(err instanceof DriftstackError && \(err\.status === 403 \|\| err\.status === 404\)\) \{\s*await clearProfileSession\(profileId\)\.catch\(\(\) => undefined\);\s*await refresh\(false\);\s*\}/,
     );
   });
 

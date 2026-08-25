@@ -125,7 +125,7 @@ describe('W891 plaintext-once secrets cross-source invariant', () => {
   it("CRITICAL CreateApiKeyResponseSchema = ApiKeySchema.extend({ plaintext: ... }) — plaintext ONLY appears in create response. The describe 'Shown once at creation; not retrievable later' pins the one-shot contract.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/api-keys.ts'));
     expect(p).toMatch(
-      /CreateApiKeyResponseSchema = ApiKeySchema\.extend\(\{\s*\n\s*plaintext: z\s*\n?\s*\.string\(\)\s*\n?\s*\.describe\('The plaintext key\. Shown once at creation; not retrievable later\.'\)/,
+      /CreateApiKeyResponseSchema = ApiKeySchema\.extend\(\{\s*\n\s*plaintext: z\s*\.string\(\)\s*\.describe\('The plaintext key\. Shown once at creation; not retrievable later\.'\)/,
     );
   });
 

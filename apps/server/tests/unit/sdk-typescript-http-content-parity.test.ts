@@ -54,7 +54,7 @@ describe('W423.B packages/sdk-typescript/src/http.ts content parity', () => {
   it('file exists at canonical path + module framing pinned (thin fetch wrapper + Authorization injection + RFC 7807 problem parse + retry policy on every call)', () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(
-      /\/\/ HTTP layer — thin wrapper over the global `fetch`\. Injects the\s*\n?\s*\/\/ Authorization header, parses RFC 7807 problem responses into typed\s*\n?\s*\/\/ `DriftstackError` subclasses, and applies the retry policy from\s*\n?\s*\/\/ `\.\/retry\.ts` to every call\./,
+      /\/\/ HTTP layer — thin wrapper over the global `fetch`\. Injects the\s*\/\/ Authorization header, parses RFC 7807 problem responses into typed\s*\/\/ `DriftstackError` subclasses, and applies the retry policy from\s*\/\/ `\.\/retry\.ts` to every call\./,
     );
   });
 
@@ -79,13 +79,13 @@ describe('W423.B packages/sdk-typescript/src/http.ts content parity', () => {
 
   it('CRITICAL RequestOptions method union — 5-verb closed set (GET/POST/DELETE/PUT/PATCH). Drift to widening (HEAD/OPTIONS/TRACE/CONNECT) would let unintended verbs leak into the SDK surface. Drift to `string` type would lose static-checking on verbs.', () => {
     expect(body).toMatch(
-      /export interface RequestOptions \{\s*\n?\s*method: 'GET' \| 'POST' \| 'DELETE' \| 'PUT' \| 'PATCH';\s*\n?\s*path: string;\s*\n?\s*query\?: Record<string, string \| number \| undefined>;\s*\n?\s*body\?: unknown;/,
+      /export interface RequestOptions \{\s*method: 'GET' \| 'POST' \| 'DELETE' \| 'PUT' \| 'PATCH';\s*path: string;\s*query\?: Record<string, string \| number \| undefined>;\s*body\?: unknown;/,
     );
   });
 
   it('RequestOptions headers JSDoc — pinned per-line: 3 default headers (authorization + user-agent + content-type) + "callers can override but should avoid touching `authorization`". The avoid-authorization advisory is load-bearing — drift to dropping would let customers override the Bearer header (breaking auth).', () => {
     expect(body).toMatch(
-      /\/\*\*\s*\n?\s*\*\s*Extra request headers\. Merged on top of the defaults \(authorization,\s*\n?\s*\*\s*user-agent, content-type\); callers can override but should avoid\s*\n?\s*\*\s*touching `authorization`\.\s*\n?\s*\*\/\s*\n?\s*headers\?: Record<string, string>;/,
+      /\/\*\*\s*\*\s*Extra request headers\. Merged on top of the defaults \(authorization,\s*\*\s*user-agent, content-type\); callers can override but should avoid\s*\*\s*touching `authorization`\.\s*\*\/\s*headers\?: Record<string, string>;/,
     );
   });
 
@@ -95,7 +95,7 @@ describe('W423.B packages/sdk-typescript/src/http.ts content parity', () => {
 
   it('HttpClient class declaration + private-readonly config constructor field. async request<T> generic method signature. Drift to non-generic would force callers to type-assert the response.', () => {
     expect(body).toMatch(
-      /export class HttpClient \{\s*\n?\s*constructor\(private readonly config: HttpClientConfig\) \{\}/,
+      /export class HttpClient \{\s*constructor\(private readonly config: HttpClientConfig\) \{\}/,
     );
     expect(body).toMatch(/async request<T>\(opts: RequestOptions\): Promise<T> \{/);
   });
@@ -112,7 +112,7 @@ describe('W423.B packages/sdk-typescript/src/http.ts content parity', () => {
 
   it('CRITICAL withRetry-wrapped per-attempt body — opens with AbortController + setTimeout. Drift to creating the controller OUTSIDE withRetry would share ONE timer across retries (cumulative deadline). Drift to dropping the timer would let stuck requests block forever. Drift to using AbortSignal.timeout() (which requires Node 17+) would break older environments.', () => {
     expect(body).toMatch(
-      /return withRetry\(async \(\) => \{\s*\n?\s*const controller = new AbortController\(\);\s*\n?\s*const timer = setTimeout\(\(\) => controller\.abort\(\), timeoutMs\);/,
+      /return withRetry\(async \(\) => \{\s*const controller = new AbortController\(\);\s*const timer = setTimeout\(\(\) => controller\.abort\(\), timeoutMs\);/,
     );
   });
 
@@ -141,13 +141,13 @@ describe('W423.B packages/sdk-typescript/src/http.ts content parity', () => {
 
   it('CRITICAL fetch error catch — wraps native fetch failure as `TransportError(transportMessage(err), 0, err)`. status=0 because no HTTP response received; cause=err preserves the original Error for debug. Drift to swallowing the error would lose the stack trace; drift to re-throwing raw would break the typed-error contract.', () => {
     expect(body).toMatch(
-      /let res: Response;\s*\n?\s*try \{\s*\n?\s*res = await fetchImpl\(url, init\);\s*\n?\s*\} catch \(err\) \{\s*\n?\s*throw new TransportError\(transportMessage\(err\), 0, err\);\s*\n?\s*\}/,
+      /let res: Response;\s*try \{\s*res = await fetchImpl\(url, init\);\s*\} catch \(err\) \{\s*throw new TransportError\(transportMessage\(err\), 0, err\);\s*\}/,
     );
   });
 
   it('CRITICAL 2xx response handling — 3-branch parse: (1) status===204 cancels any body and returns undefined (No Content); (2) bounded text.length===0 → undefined (empty body); (3) JSON.parse(text) with TransportError fallback. Drift to dropping branch 1 would retain an unread response stream or crash on DELETE responses. Drift to dropping branch 2 would crash on POST 200 with no body.', () => {
     expect(body).toMatch(
-      /if \(res\.ok\) \{\s*\n?\s*if \(res\.status === 204\) \{\s*\n?\s*await res\.body\?\.cancel\(\)\.catch\(\(\) => undefined\);\s*\n?\s*return undefined as T;\s*\n?\s*\}\s*\n?\s*const text = await readBoundedResponseText\(res\);\s*\n?\s*if \(text\.length === 0\) return undefined as T;\s*\n?\s*try \{\s*\n?\s*return JSON\.parse\(text\) as T;\s*\n?\s*\} catch \(err\) \{\s*\n?\s*throw new TransportError\('failed to parse JSON response body', res\.status, err\);\s*\n?\s*\}\s*\n?\s*\}/,
+      /if \(res\.ok\) \{\s*if \(res\.status === 204\) \{\s*await res\.body\?\.cancel\(\)\.catch\(\(\) => undefined\);\s*return undefined as T;\s*\}\s*const text = await readBoundedResponseText\(res\);\s*if \(text\.length === 0\) return undefined as T;\s*try \{\s*return JSON\.parse\(text\) as T;\s*\} catch \(err\) \{\s*throw new TransportError\('failed to parse JSON response body', res\.status, err\);\s*\}\s*\}/,
     );
   });
 
@@ -166,30 +166,30 @@ describe('W423.B packages/sdk-typescript/src/http.ts content parity', () => {
 
   it('Non-2xx parse rationale comment pinned — "Non-2xx — try to parse problem+json. If the body isn\'t a problem doc, surface as TransportError with status." Drift to silently dropping non-Problem bodies would lose the failure context (customer sees a 500 with no body would just get a generic transport error without the status).', () => {
     expect(body).toMatch(
-      /\/\/ Non-2xx — try to parse problem\+json\. If the body isn't a problem\s*\n?\s*\/\/ doc, surface as TransportError with status\./,
+      /\/\/ Non-2xx — try to parse problem\+json\. If the body isn't a problem\s*\/\/ doc, surface as TransportError with status\./,
     );
   });
 
   it('CRITICAL Non-2xx body JSON.parse — wraps a try-catch around `JSON.parse(text) as Problem`. On parse failure throws TransportError with template-literal message including the status. Drift to dropping the try-catch would let a non-JSON 500 response crash with SyntaxError instead of TransportError.', () => {
     expect(body).toMatch(
-      /try \{\s*\n?\s*problem = JSON\.parse\(text\) as Problem;\s*\n?\s*\} catch \{\s*\n?\s*throw new TransportError\(\s*\n?\s*`non-2xx response \(\$\{res\.status\.toString\(\)\}\) with non-JSON body`,\s*\n?\s*res\.status,\s*\n?\s*\);\s*\n?\s*\}/,
+      /try \{\s*problem = JSON\.parse\(text\) as Problem;\s*\} catch \{\s*throw new TransportError\(\s*`non-2xx response \(\$\{res\.status\.toString\(\)\}\) with non-JSON body`,\s*res\.status,\s*\);\s*\}/,
     );
   });
 
   it('CRITICAL isProblem narrowing — guards against malformed JSON that parses but lacks Problem fields. `if (!isProblem(problem)) throw TransportError(...)` then `throw errorFromProblem(problem, res.headers.get("retry-after"))`. The retry-after header passthrough is load-bearing — RateLimitError uses it as a fallback when the body lacks retry_after_seconds.', () => {
     expect(body).toMatch(
-      /if \(!isProblem\(problem\)\) \{\s*\n?\s*throw new TransportError\(\s*\n?\s*`non-2xx response \(\$\{res\.status\.toString\(\)\}\) but body is not a Problem`,\s*\n?\s*res\.status,\s*\n?\s*\);\s*\n?\s*\}\s*\n?\s*throw errorFromProblem\(problem, res\.headers\.get\('retry-after'\)\);/,
+      /if \(!isProblem\(problem\)\) \{\s*throw new TransportError\(\s*`non-2xx response \(\$\{res\.status\.toString\(\)\}\) but body is not a Problem`,\s*res\.status,\s*\);\s*\}\s*throw errorFromProblem\(problem, res\.headers\.get\('retry-after'\)\);/,
     );
   });
 
   it('CRITICAL finally clearTimeout — `} finally { clearTimeout(timer); }` runs on both success AND error paths. Drift to clearing only on success would leave a dangling timer that fires AFTER the request returned an error. Drift to clearing only on error would let the success path leak.', () => {
-    expect(body).toMatch(/\} finally \{\s*\n?\s*clearTimeout\(timer\);\s*\n?\s*\}/);
+    expect(body).toMatch(/\} finally \{\s*clearTimeout\(timer\);\s*\}/);
   });
 
   it("Per-request retry override + retry-SAFETY gate — `const baseRetry = opts.retry ?? this.config.retry` (CRITICAL `??` not `||`, so a deliberately-empty retry config `{}` doesn't fall through to the config retry); then the audit-2026-06-23 gate `isRetrySafe(opts.method, opts.headers) ? baseRetry : { ...baseRetry, maxAttempts: 0 }` forces a SINGLE attempt for a non-idempotent keyless POST (no double-submit on a transient 5xx); the resolved retryConfig is passed as withRetry's 2nd arg. Drift to dropping the gate would let a transient failure double-submit a create; drift to `||` would override per-call disable-retry intent.", () => {
     expect(body).toMatch(/const baseRetry = opts\.retry \?\? this\.config\.retry;/);
     expect(body).toMatch(
-      /const retryConfig: RetryConfig \| undefined = isRetrySafe\(opts\.method, opts\.headers\)\s*\n?\s*\? baseRetry\s*\n?\s*: \{ \.\.\.baseRetry, maxAttempts: 0 \};/,
+      /const retryConfig: RetryConfig \| undefined = isRetrySafe\(opts\.method, opts\.headers\)\s*\? baseRetry\s*: \{ \.\.\.baseRetry, maxAttempts: 0 \};/,
     );
     expect(body).toMatch(/\}, retryConfig\);/);
   });
@@ -207,13 +207,13 @@ describe('W423.B packages/sdk-typescript/src/http.ts content parity', () => {
 
   it('CRITICAL isProblem type-guard — `typeof x !== "object" || x === null` early-return + `typeof r.type === "string" && typeof r.title === "string" && typeof r.status === "number"`. Exact 3-field RFC 7807 minimum (type/title/status). Drift to requiring `detail` or `instance` would falsely reject legitimate Problems that omit them.', () => {
     expect(body).toMatch(
-      /function isProblem\(x: unknown\): x is Problem \{\s*\n?\s*if \(typeof x !== 'object' \|\| x === null\) return false;\s*\n?\s*const r = x as Record<string, unknown>;\s*\n?\s*return typeof r\.type === 'string' && typeof r\.title === 'string' && typeof r\.status === 'number';\s*\n?\s*\}/,
+      /function isProblem\(x: unknown\): x is Problem \{\s*if \(typeof x !== 'object' \|\| x === null\) return false;\s*const r = x as Record<string, unknown>;\s*return typeof r\.type === 'string' && typeof r\.title === 'string' && typeof r\.status === 'number';\s*\}/,
     );
   });
 
   it('CRITICAL transportMessage — 3-branch translation: (1) Error with name="AbortError" → "request timed out" (CRITICAL: the AbortController.abort() from the setTimeout produces this); (2) other Error → err.message (preserve original); (3) non-Error throws → "network failure". Drift to dropping the AbortError branch would surface a confusing "The operation was aborted." message instead of the user-friendly "request timed out".', () => {
     expect(body).toMatch(
-      /function transportMessage\(err: unknown\): string \{\s*\n?\s*if \(err instanceof Error\) \{\s*\n?\s*if \(err\.name === 'AbortError'\) return 'request timed out';\s*\n?\s*return err\.message;\s*\n?\s*\}\s*\n?\s*return 'network failure';\s*\n?\s*\}/,
+      /function transportMessage\(err: unknown\): string \{\s*if \(err instanceof Error\) \{\s*if \(err\.name === 'AbortError'\) return 'request timed out';\s*return err\.message;\s*\}\s*return 'network failure';\s*\}/,
     );
   });
 

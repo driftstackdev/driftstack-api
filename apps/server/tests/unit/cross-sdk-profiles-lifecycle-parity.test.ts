@@ -133,15 +133,13 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
     const py = read(PY_PROFILES);
 
     // sdk-typescript: "Tier-cap +\n   * name-conflict checked the same as create"
-    expect(ts).toMatch(/Tier-cap \+\s*\n?\s*\*?\s*name-conflict checked the same as create/);
+    expect(ts).toMatch(/Tier-cap \+\s*\*?\s*name-conflict checked the same as create/);
 
     // sdk-go: single-line.
-    expect(go).toMatch(
-      /Tier-cap \+ name-conflict are checked\s*\n?\s*\/\/\s*the same way as Create/,
-    );
+    expect(go).toMatch(/Tier-cap \+ name-conflict are checked\s*\/\/\s*the same way as Create/);
 
     // sdk-python: single line.
-    expect(py).toMatch(/Tier-cap \+ name-conflict\s*\n?\s*checked the same as ``create``/);
+    expect(py).toMatch(/Tier-cap \+ name-conflict\s*checked the same as ``create``/);
   });
 
   it('CRITICAL V-313 auto-derive "(copy)" / "(copy 2)" name pinned in all 3 SDKs. The auto-derive happens server-side when body.name is OMITTED; the SDK does NOT compute it. Drift to client-side computation would let two parallel clone() calls collide on name.', () => {
@@ -162,7 +160,7 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
     const py = read(PY_PROFILES);
 
     expect(ts).toMatch(/Idempotent/);
-    expect(go).toMatch(/Idempotent — calling on a missing id is\s*\n?\s*\/\/\s*not an error/);
+    expect(go).toMatch(/Idempotent — calling on a missing id is\s*\/\/\s*not an error/);
     // sdk-python doesn't currently mention "Idempotent" — narrow assertion.
     // Skip Python for this one (relies on TS+Go framing being load-bearing).
     void py;
@@ -260,8 +258,8 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
     // fields (size_bytes / bytes_reclaimed on ok; reason on unavailable/error).
     expect(ts).toMatch(/TrimProfileResponse/);
     expect(go).toMatch(/type TrimProfileResponse struct/);
-    expect(ts).toMatch(/fresh profile or no connected\s*\n?\s*\*\s*storage-capable node/);
-    expect(go).toMatch(/fresh profile or no connected\s*\n?\s*\/\/\s*storage-capable node/);
+    expect(ts).toMatch(/fresh profile or no connected\s*\*\s*storage-capable node/);
+    expect(go).toMatch(/fresh profile or no connected\s*\/\/\s*storage-capable node/);
     expect(ts).not.toMatch(/storage trim not wired/);
     expect(go).not.toMatch(/storage trim not wired/);
     expect(go).toMatch(/SizeBytes\s+int64\s+`json:"size_bytes,omitempty"`/);

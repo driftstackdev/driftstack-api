@@ -77,7 +77,7 @@ describe('W1012 db/status-subscribers-repo V-295c3 cross-source invariant', () =
     expect(p).toMatch(/confirmTokenHash: input\.confirmTokenHash,/);
     expect(p).toMatch(/confirmExpiresAt: input\.confirmExpiresAt,/);
     expect(p).toMatch(
-      /set: \{\s*\n?\s*confirmTokenHash: input\.confirmTokenHash,\s*\n?\s*confirmExpiresAt: input\.confirmExpiresAt,\s*\n?\s*\},/,
+      /set: \{\s*confirmTokenHash: input\.confirmTokenHash,\s*confirmExpiresAt: input\.confirmExpiresAt,\s*\},/,
     );
     expect(p).not.toMatch(/set: \{[^}]*confirmedAt: null/s);
     expect(p).not.toMatch(/set: \{[^}]*unsubscribeTokenHash: null/s);

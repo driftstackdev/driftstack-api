@@ -33,7 +33,7 @@ describe('W538.A /docker-compose.yml content parity', () => {
   it("Header + server-on-host framing pinned: '# Driftstack API — local dev infra.' + '# Postgres 17 + Redis 7. Server itself runs on host (npm run dev) so it can' + '# attach a debugger and reload via tsx watch.' — pinned so the local-dev-infra-only + Postgres-17 + Redis-7 + server-stays-on-host (for debugger + tsx-watch reload) commitment survives (drift to dockerising the server too would break the canonical dev workflow that relies on host-side tsx watch)", () => {
     expect(body).toMatch(/# Driftstack API — local dev infra\./);
     expect(body).toMatch(
-      /# Postgres 17 \+ Redis 7\. Server itself runs on host \(npm run dev\) so it can\s*\n?\s*# attach a debugger and reload via tsx watch\./,
+      /# Postgres 17 \+ Redis 7\. Server itself runs on host \(npm run dev\) so it can\s*# attach a debugger and reload via tsx watch\./,
     );
   });
 
@@ -66,7 +66,7 @@ describe('W538.A /docker-compose.yml content parity', () => {
   });
 
   it("Named volumes framing pinned: 'volumes: postgres_data + redis_data' (top-level declaration enables docker compose to manage volume lifecycle separately from container restart) — pinned so the 2-named-volume commitment survives (drift to anonymous volumes would lose Postgres data on container recreation)", () => {
-    expect(body).toMatch(/^volumes:\s*\n?\s*postgres_data:\s*\n?\s*redis_data:/m);
+    expect(body).toMatch(/^volumes:\s*postgres_data:\s*redis_data:/m);
   });
 
   it('file exists at canonical path', () => {

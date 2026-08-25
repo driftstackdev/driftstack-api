@@ -42,7 +42,7 @@ describe('OpenAPI shadow ↔ billing-crypto-orders.ts route caps', () => {
 
   it('shadow defines BillingCryptoOrderIdOpenApi as min(1).max(100) (matches route GetParams.order_id)', () => {
     expect(openapi).toMatch(
-      /BillingCryptoOrderIdOpenApi[\s\S]{0,200}z\s*\n?\s*\.string\(\)\s*\n?\s*\.min\(1\)\s*\n?\s*\.max\(100\)/,
+      /BillingCryptoOrderIdOpenApi[\s\S]{0,200}z\s*\.string\(\)\s*\.min\(1\)\s*\.max\(100\)/,
     );
   });
 
@@ -55,9 +55,7 @@ describe('OpenAPI shadow ↔ billing-crypto-orders.ts route caps', () => {
       openapi.indexOf("path: '/v1/billing/crypto-orders/{order_id}',"),
     );
     expect(listSlice.length).toBeGreaterThan(100);
-    expect(listSlice).toMatch(
-      /cursor:\s*z\s*\n?\s*\.string\(\)\s*\n?\s*\.min\(1\)\s*\n?\s*\.max\(512\)/,
-    );
+    expect(listSlice).toMatch(/cursor:\s*z\s*\.string\(\)\s*\.min\(1\)\s*\.max\(512\)/);
   });
 
   it('shadow uses BillingCryptoOrderIdOpenApi for ALL 6 order_id-by-path endpoints (no unbounded z.string() shape leaks back)', () => {

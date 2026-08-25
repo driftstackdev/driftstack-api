@@ -141,7 +141,7 @@ describe('W1051 routes/profiles V-081 + V-313 + V-480 + V-326e4 cross-source inv
   it("CRITICAL nested 'profile' object in export — {name, archetype, description}. The 3-field nested object is the metadata-only contract; drift to flat-spreading those fields would break export-import round-trip parity.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/profiles.ts'));
     expect(p).toMatch(
-      /profile: \{\s*\n?\s*name: row\.name,\s*\n?\s*archetype: row\.archetype,\s*\n?\s*description: row\.description,\s*\n?\s*\},/,
+      /profile: \{\s*name: row\.name,\s*archetype: row\.archetype,\s*description: row\.description,\s*\},/,
     );
   });
 

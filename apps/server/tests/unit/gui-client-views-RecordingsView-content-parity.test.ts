@@ -52,7 +52,7 @@ describe('W481.B apps/gui-client/src/views/RecordingsView.tsx content parity', (
 
   it('RecordingsViewProps {onOpen: (recordingId: string) => void} + useRecordings destructure {recordings + deleteRecording + loading}; list sort newest-first; selection falls back to newest', () => {
     expect(body).toMatch(
-      /export interface RecordingsViewProps \{\s*\n?\s*onOpen: \(recordingId: string\) => void;\s*\n?\s*\}/,
+      /export interface RecordingsViewProps \{\s*onOpen: \(recordingId: string\) => void;\s*\}/,
     );
     // The destructure + the newest-first sort are both pinned, but no longer
     // required to be line-adjacent (a copy-session-id handler now sits between
@@ -73,10 +73,10 @@ describe('W481.B apps/gui-client/src/views/RecordingsView.tsx content parity', (
 
   it("Persistence copy pinned to REALITY (the disk-persistence phase shipped — recordings-store.ts ndjson + loadIndex): header 'persist on this machine (app data); frames load on demand' + empty-state '...they persist on this machine and survive an app restart'. The original 'lands in a follow-up phase' copy became false and was corrected in the gallery port; the Console restyle folded the empty-state persistence note into the EmptyState description sentence (same 'survive an app restart' promise).", () => {
     expect(body).toMatch(
-      /Recordings persist on this machine \(app data\); frames load on demand when you open\s*\n?\s*one\./,
+      /Recordings persist on this machine \(app data\); frames load on demand when you open\s*one\./,
     );
     expect(body).toMatch(/they persist on this machine and survive an app restart\./);
-    expect(body).not.toMatch(/Persistence to disk lands in a\s*\n?\s*follow-up\s*\n?\s*phase/);
+    expect(body).not.toMatch(/Persistence to disk lands in a\s*follow-up\s*phase/);
   });
 
   it("Live guard survives the gallery port: endedAt === null → 'live' badge with text-status-busy (card meta + rail Duration) + hero '{liveCount} live' pill; rail Delete disabled when live OR while a delete is in flight (deletingId guard, audit wiq542bfj — a fast double-click otherwise deleted a 2nd recording) OR while the confirm is armed for this recording; the delete confirmation is now a dedicated full-width confirm bar ('Confirm delete?' + Delete + Cancel) rendered BELOW the action row (the button no longer relabels) — pinned so operator can't delete a still-capturing recording (Tauri process couldn't release the buffer)", () => {
@@ -88,12 +88,12 @@ describe('W481.B apps/gui-client/src/views/RecordingsView.tsx content parity', (
     // Delete is disabled while live, while a delete is in flight, OR while the
     // confirm bar is armed for this recording.
     expect(body).toMatch(
-      /disabled=\{\s*\n?\s*selected\.endedAt === null \|\|\s*\n?\s*deletingId !== null \|\|\s*\n?\s*confirmingDeleteId === selected\.id\s*\n?\s*\}/,
+      /disabled=\{\s*selected\.endedAt === null \|\|\s*deletingId !== null \|\|\s*confirmingDeleteId === selected\.id\s*\}/,
     );
     // The title is a simple 2-way ternary (the click-again-to-confirm tooltip
     // moved out to the dedicated confirm bar below the action row).
     expect(body).toMatch(
-      /title=\{\s*\n?\s*selected\.endedAt === null\s*\n?\s*\? 'Stop recording before deleting'\s*\n?\s*: 'This permanently deletes the recording'\s*\n?\s*\}/,
+      /title=\{\s*selected\.endedAt === null\s*\? 'Stop recording before deleting'\s*: 'This permanently deletes the recording'\s*\}/,
     );
     // Dedicated full-width confirm bar rendered BELOW the Open/Export/Delete row.
     expect(body).toMatch(/\{confirmingDeleteId === selected\.id && deletingId === null \? \(/);
@@ -135,11 +135,11 @@ describe('W481.B apps/gui-client/src/views/RecordingsView.tsx content parity', (
     expect(body).toMatch(/import \{ Skeleton \} from '\.\.\/components\/Skeleton';/);
     expect(body).toMatch(/import \{ EmptyState \} from '\.\.\/components\/EmptyState';/);
     expect(body).toMatch(
-      /function Empty\(\{ loading \}: \{ loading: boolean \}\): JSX\.Element \{\s*\n?\s*if \(loading\) \{\s*\n?\s*return <GallerySkeleton \/>;/,
+      /function Empty\(\{ loading \}: \{ loading: boolean \}\): JSX\.Element \{\s*if \(loading\) \{\s*return <GallerySkeleton \/>;/,
     );
     expect(body).toMatch(/title="No recordings yet"/);
     expect(body).toMatch(
-      /Recordings capture every frame of a live session for replay \+ audit\. Open a live session,\s*\n?\s*hit Record, and frames stream into memory while the session runs — they persist on this\s*\n?\s*machine and survive an app restart\./,
+      /Recordings capture every frame of a live session for replay \+ audit\. Open a live session,\s*hit Record, and frames stream into memory while the session runs — they persist on this\s*machine and survive an app restart\./,
     );
   });
 

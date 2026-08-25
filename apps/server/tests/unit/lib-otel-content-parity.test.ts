@@ -40,13 +40,13 @@ describe('W391.C apps/server/src/lib/otel.ts content parity', () => {
       /V-147 — OpenTelemetry traces optional path scaffold \(interface-only\)\./,
     );
     expect(body).toMatch(
-      /Per founder direction: scaffold ONLY \(no actual OTel wiring\)\.\s*\n?\s*\/\/\s*Instrumentation surface \(request ID propagation, span creation\s*\n?\s*\/\/\s*hooks, exporter config\) lands as TODO comments \+ interface\s*\n?\s*\/\/\s*skeleton/,
+      /Per founder direction: scaffold ONLY \(no actual OTel wiring\)\.\s*\/\/\s*Instrumentation surface \(request ID propagation, span creation\s*\/\/\s*hooks, exporter config\) lands as TODO comments \+ interface\s*\/\/\s*skeleton/,
     );
   });
 
   it('"NO new dependency" Tier 2 line framing pinned', () => {
     expect(body).toMatch(
-      /NO new dependency added — `@opentelemetry\/api` would be a runtime\s*\n?\s*\/\/\s*dep change that crosses the Tier 2 line\. The interface here uses\s*\n?\s*\/\/\s*plain TypeScript only/,
+      /NO new dependency added — `@opentelemetry\/api` would be a runtime\s*\/\/\s*dep change that crosses the Tier 2 line\. The interface here uses\s*\/\/\s*plain TypeScript only/,
     );
   });
 
@@ -66,7 +66,7 @@ describe('W391.C apps/server/src/lib/otel.ts content parity', () => {
   it('Tracer interface: startSpan with optional attributes opts + must-be-ended framing', () => {
     expect(body).toMatch(/export interface Tracer \{/);
     expect(body).toMatch(
-      /The span MUST be ended via `span\.end\(\)`; otherwise\s*\n?\s*\*\s*the duration is lost \+ exporters report incomplete data/,
+      /The span MUST be ended via `span\.end\(\)`; otherwise\s*\*\s*the duration is lost \+ exporters report incomplete data/,
     );
     expect(body).toMatch(
       /startSpan\(name: string, opts\?: \{ attributes\?: Record<string, SpanAttributeValue> \}\): Span;/,
@@ -85,30 +85,26 @@ describe('W391.C apps/server/src/lib/otel.ts content parity', () => {
   it('NoopSpan: 3 no-op methods (setAttribute / recordException / end)', () => {
     expect(body).toMatch(/class NoopSpan implements Span \{/);
     expect(body).toMatch(
-      /setAttribute\(_key: string, _value: SpanAttributeValue\): void \{\s*\n?\s*\/\/ no-op\s*\n?\s*\}/,
+      /setAttribute\(_key: string, _value: SpanAttributeValue\): void \{\s*\/\/ no-op\s*\}/,
     );
     expect(body).toMatch(
-      /recordException\(_error: Error \| \{ message: string \}\): void \{\s*\n?\s*\/\/ no-op\s*\n?\s*\}/,
+      /recordException\(_error: Error \| \{ message: string \}\): void \{\s*\/\/ no-op\s*\}/,
     );
-    expect(body).toMatch(/end\(\): void \{\s*\n?\s*\/\/ no-op\s*\n?\s*\}/);
+    expect(body).toMatch(/end\(\): void \{\s*\/\/ no-op\s*\}/);
   });
 
   it('NoopTracer: startSpan returns new NoopSpan', () => {
     expect(body).toMatch(/class NoopTracer implements Tracer \{/);
     expect(body).toMatch(
-      /startSpan\(_name: string, _opts\?: \{ attributes\?: Record<string, SpanAttributeValue> \}\): Span \{\s*\n?\s*return new NoopSpan\(\);\s*\n?\s*\}/,
+      /startSpan\(_name: string, _opts\?: \{ attributes\?: Record<string, SpanAttributeValue> \}\): Span \{\s*return new NoopSpan\(\);\s*\}/,
     );
   });
 
   it('NoopOtelService: single shared NoopTracer + shutdown returns Promise.resolve()', () => {
     expect(body).toMatch(/export class NoopOtelService implements OtelService \{/);
     expect(body).toMatch(/private readonly tracer = new NoopTracer\(\);/);
-    expect(body).toMatch(
-      /getTracer\(_name: string\): Tracer \{\s*\n?\s*return this\.tracer;\s*\n?\s*\}/,
-    );
-    expect(body).toMatch(
-      /shutdown\(\): Promise<void> \{\s*\n?\s*return Promise\.resolve\(\);\s*\n?\s*\}/,
-    );
+    expect(body).toMatch(/getTracer\(_name: string\): Tracer \{\s*return this\.tracer;\s*\}/);
+    expect(body).toMatch(/shutdown\(\): Promise<void> \{\s*return Promise\.resolve\(\);\s*\}/);
   });
 
   it('createOtelService: default returns NoopOtelService + TODO(post-launch) for OTEL_EXPORTER_OTLP_ENDPOINT branch', () => {
@@ -116,30 +112,30 @@ describe('W391.C apps/server/src/lib/otel.ts content parity', () => {
       /Default export for boot — returns a no-op until founder activates wiring\./,
     );
     expect(body).toMatch(
-      /export function createOtelService\(\): OtelService \{\s*\n?\s*\/\/ TODO\(post-launch\): branch on `OTEL_EXPORTER_OTLP_ENDPOINT` env\s*\n?\s*\/\/\s*var presence to construct a real SDK-backed OtelService when\s*\n?\s*\/\/\s*configured, falling back to NoopOtelService when not\.\s*\n?\s*return new NoopOtelService\(\);\s*\n?\s*\}/,
+      /export function createOtelService\(\): OtelService \{\s*\/\/ TODO\(post-launch\): branch on `OTEL_EXPORTER_OTLP_ENDPOINT` env\s*\/\/\s*var presence to construct a real SDK-backed OtelService when\s*\/\/\s*configured, falling back to NoopOtelService when not\.\s*return new NoopOtelService\(\);\s*\}/,
     );
   });
 
   it('Activation procedure: 4-step (deps add → SDK-backed impl → OTLP endpoint env → bootstrap integration)', () => {
     expect(body).toMatch(/Activation procedure \(when founder approves\):/);
     expect(body).toMatch(
-      /1\. Add `@opentelemetry\/api` \+ `@opentelemetry\/sdk-node` \+\s*\n?\s*\*\s*`@opentelemetry\/exporter-trace-otlp-http` runtime deps\s*\n?\s*\*\s*\(Tier 2 — requires founder approval\)\./,
+      /1\. Add `@opentelemetry\/api` \+ `@opentelemetry\/sdk-node` \+\s*\*\s*`@opentelemetry\/exporter-trace-otlp-http` runtime deps\s*\*\s*\(Tier 2 — requires founder approval\)\./,
     );
     expect(body).toMatch(/2\. Replace this no-op with a SDK-backed implementation\./);
     expect(body).toMatch(
-      /3\. Wire OTLP HTTP endpoint via `OTEL_EXPORTER_OTLP_ENDPOINT`\s*\n?\s*\*\s*env var \(signal-grade upstream — Tempo, Jaeger, Honeycomb,\s*\n?\s*\*\s*etc\., all accept OTLP\)\./,
+      /3\. Wire OTLP HTTP endpoint via `OTEL_EXPORTER_OTLP_ENDPOINT`\s*\*\s*env var \(signal-grade upstream — Tempo, Jaeger, Honeycomb,\s*\*\s*etc\., all accept OTLP\)\./,
     );
     expect(body).toMatch(
-      /4\. Add `bootstrap\.ts` integration: construct OtelService, pass\s*\n?\s*\*\s*to AppDeps, instrument the request lifecycle in app\.ts\./,
+      /4\. Add `bootstrap\.ts` integration: construct OtelService, pass\s*\*\s*to AppDeps, instrument the request lifecycle in app\.ts\./,
     );
   });
 
   it('Request-ID propagation note: request-id middleware UUID becomes the trace id when OTel wires up', () => {
     expect(body).toMatch(
-      /`apps\/server\/src\/middleware\/request-id\.ts` already generates a\s*\n?\s*\/\/\s*per-request UUID \+ propagates it via the `x-request-id` header\.\s*\n?\s*\/\/\s*When OTel wires up, that request id becomes the trace id \(or\s*\n?\s*\/\/\s*derivative\) so logs \+ traces correlate/,
+      /`apps\/server\/src\/middleware\/request-id\.ts` already generates a\s*\/\/\s*per-request UUID \+ propagates it via the `x-request-id` header\.\s*\/\/\s*When OTel wires up, that request id becomes the trace id \(or\s*\/\/\s*derivative\) so logs \+ traces correlate/,
     );
     expect(body).toMatch(
-      /Sentry\s*\n?\s*\/\/\s*captureException calls include it as `extra\.request_id`\s*\n?\s*\/\/\s*\(`apps\/server\/src\/lib\/sentry\.ts:wireSentryErrorHandler`\)/,
+      /Sentry\s*\/\/\s*captureException calls include it as `extra\.request_id`\s*\/\/\s*\(`apps\/server\/src\/lib\/sentry\.ts:wireSentryErrorHandler`\)/,
     );
   });
 

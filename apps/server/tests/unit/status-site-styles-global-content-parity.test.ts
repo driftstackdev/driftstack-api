@@ -29,7 +29,7 @@ describe('status-site styles/global content parity', () => {
     expect(body).toMatch(/Fleet rework \(2026-06-12\) — status-site synced with marketing-site \+/);
     expect(body).toMatch(/customer-dashboard: light\+violet default/);
     expect(body).toMatch(
-      /Customers\s*\n?\s*checking status during an incident see the same brand surface as\s*\n?\s*driftstack\.dev\./,
+      /Customers\s*checking status during an incident see the same brand surface as\s*driftstack\.dev\./,
     );
     expect(body).toMatch(/color-scheme: light;/);
     expect(body).toMatch(/\[data-mode='dark'\] \{\s*\n\s*color-scheme: dark;/);
@@ -50,7 +50,7 @@ describe('status-site styles/global content parity', () => {
     expect(body).toMatch(/overflow-wrap: anywhere;/);
     expect(body).toMatch(/word-break: break-word;/);
     expect(body).toMatch(
-      /pre \{\s*\n?\s*\/\* F-1 — code blocks scroll internally rather than pushing page\. \*\/\s*\n?\s*overflow-x: auto;\s*\n?\s*\}|pre \{\s*\n?\s*overflow-x: auto;\s*\n?\s*\}/,
+      /pre \{\s*\/\* F-1 — code blocks scroll internally rather than pushing page\. \*\/\s*overflow-x: auto;\s*\}|pre \{\s*overflow-x: auto;\s*\}/,
     );
   });
 });

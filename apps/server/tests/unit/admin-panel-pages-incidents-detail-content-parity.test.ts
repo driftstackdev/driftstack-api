@@ -27,7 +27,7 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
-// `\s*\n?\s*` is AMBIGUOUS: `\s` already matches `\n`, so each group offers the
+// `\s*` is AMBIGUOUS: `\s` already matches `\n`, so each group offers the
 // engine many ways to split one whitespace run, and chaining seven of them made
 // this single assertion backtrack for ~1.9s against a file every sibling
 // assertion scans in under 1ms. Under suite load it blew the 10s timeout and
@@ -48,14 +48,14 @@ describe('W490.A apps/admin-panel/src/pages/incidents/[id].astro content parity'
   it("V-344 framing pinned: 'apiBaseUrl exposed to inline script for live form wiring.' + 'wires Post-update + Mark-resolved forms to the live /v1/admin/incidents/:id/{updates,resolve} endpoints. Replaces the V-295a alert-stubs.' — pinned so the V-295a-replacement evolution stays explicit + the URL-suffix split (updates vs resolve) is documented", () => {
     expect(body).toMatch(/\/\/ V-344 — apiBaseUrl exposed to inline script for live form wiring\./);
     expect(body).toMatch(
-      /\/\/ V-344 — wires Post-update \+ Mark-resolved forms to the live\s*\n?\s*\/\/ \/v1\/admin\/incidents\/:id\/\{updates,resolve\} endpoints\. Replaces\s*\n?\s*\/\/ the V-295a alert-stubs\./,
+      /\/\/ V-344 — wires Post-update \+ Mark-resolved forms to the live\s*\/\/ \/v1\/admin\/incidents\/:id\/\{updates,resolve\} endpoints\. Replaces\s*\/\/ the V-295a alert-stubs\./,
     );
   });
 
   it('Static Pages shell serves arbitrary incident ids via a URL-preserving internal rewrite without SSR', () => {
     expect(body).toMatch(/deterministic static shell/);
-    expect(body).toMatch(/internally rewrites\s*\n?\s*\/\/ \/incidents\/<id>/);
-    expect(body).toMatch(/without\s*\n?\s*\/\/ a Pages Worker or SSR adapter/);
+    expect(body).toMatch(/internally rewrites\s*\/\/ \/incidents\/<id>/);
+    expect(body).toMatch(/without\s*\/\/ a Pages Worker or SSR adapter/);
     expect(body).not.toMatch(/export const prerender = false;/);
     expect(body).not.toMatch(/export function getStaticPaths\(\)/);
     expect(body).not.toMatch(/Astro\.redirect\('\/incidents'\)/);
@@ -65,10 +65,10 @@ describe('W490.A apps/admin-panel/src/pages/incidents/[id].astro content parity'
 
   it("SEVERITY_BADGE 3-tone (minor amber-50 / major orange-50 / outage red-50) + STATUS_BADGE 4-tone (investigating amber-50 / identified blue-50 / monitoring indigo-50 / resolved emerald-50) — pinned so the dual badge taxonomies stay distinct (severity = how bad, status = where in the lifecycle) and don't collide in tone (drift to using emerald for both 'resolved status' AND 'minor severity' would confuse operators)", () => {
     expect(body).toMatch(
-      /const SEVERITY_BADGE: Record<string, string> = \{\s*\n?\s*minor: 'bg-amber-50 text-amber-700',\s*\n?\s*major: 'bg-orange-50 text-orange-700',\s*\n?\s*outage: 'bg-red-50 text-red-700',\s*\n?\s*\};/,
+      /const SEVERITY_BADGE: Record<string, string> = \{\s*minor: 'bg-amber-50 text-amber-700',\s*major: 'bg-orange-50 text-orange-700',\s*outage: 'bg-red-50 text-red-700',\s*\};/,
     );
     expect(body).toMatch(
-      /const STATUS_BADGE: Record<string, string> = \{\s*\n?\s*investigating: 'bg-amber-50 text-amber-700',\s*\n?\s*identified: 'bg-blue-50 text-blue-700',\s*\n?\s*monitoring: 'bg-indigo-50 text-indigo-700',\s*\n?\s*resolved: 'bg-emerald-50 text-emerald-700',\s*\n?\s*\};/,
+      /const STATUS_BADGE: Record<string, string> = \{\s*investigating: 'bg-amber-50 text-amber-700',\s*identified: 'bg-blue-50 text-blue-700',\s*monitoring: 'bg-indigo-50 text-indigo-700',\s*resolved: 'bg-emerald-50 text-emerald-700',\s*\};/,
     );
   });
 
@@ -93,14 +93,12 @@ describe('W490.A apps/admin-panel/src/pages/incidents/[id].astro content parity'
     expect(body).toMatch(/<option value="investigating">Investigating<\/option>/);
     expect(body).toMatch(/<option value="identified">Identified<\/option>/);
     expect(body).toMatch(/<option value="monitoring" selected>Monitoring<\/option>/);
-    expect(body).toMatch(
-      /<textarea\s*\n?\s*id="update-message"\s*\n?\s*name="message"\s*\n?\s*rows="3"\s*\n?\s*required/,
-    );
+    expect(body).toMatch(/<textarea\s*id="update-message"\s*name="message"\s*rows="3"\s*required/);
   });
 
   it('Resolve form framing pinned: \'Posts a final timeline entry with status "resolved" and stamps resolved_at. The status page will show a green banner once propagated.\' — pinned so operators know clicking Resolve does two things atomically: timeline entry + resolved_at stamp (drift to softer framing might suggest the stamp happens later via a cron job)', () => {
     expect(body).toMatch(
-      /Posts a final timeline entry with status “resolved” and stamps\s*\n?\s*<code>resolved_at<\/code>\. The status page will show a green banner once propagated\./,
+      /Posts a final timeline entry with status “resolved” and stamps\s*<code>resolved_at<\/code>\. The status page will show a green banner once propagated\./,
     );
   });
 
@@ -122,7 +120,7 @@ describe('W490.A apps/admin-panel/src/pages/incidents/[id].astro content parity'
   it('Private-incident badge is hidden from the static placeholder and toggled from live incident.public so operators can distinguish internal incidents', () => {
     expect(body).toMatch(/data-field="private-badge"/);
     expect(body).toMatch(/incident\.public \? 'hidden' : ''/);
-    expect(body).toMatch(/>\s*\n?\s*private\s*\n?\s*<\/span>/);
+    expect(body).toMatch(/>\s*private\s*<\/span>/);
     // The inline script toggles the private badge from the live data.
     expect(body).toMatch(
       /const privBadge = document\.querySelector\('\[data-field="private-badge"\]'\);/,

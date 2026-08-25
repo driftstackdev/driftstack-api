@@ -44,13 +44,13 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
   it("Framing pinned: 'App shell — outer chrome + view routing.' + 'GUI1 landed the static shell; GUI2 wires the SettingsProvider and adds two real views (Sessions, Settings). The routing model is state-based, not URL-based — no need for react-router in a single-window desktop app, and Tauri's window doesn't have a real history stack to integrate with.'", () => {
     expect(body).toMatch(/\/\/ App shell — outer chrome \+ view routing\./);
     expect(body).toMatch(
-      /\/\/ GUI1 landed the static shell; GUI2 wires the SettingsProvider and\s*\n?\s*\/\/ adds two real views \(Sessions, Settings\)\. The routing model is\s*\n?\s*\/\/ state-based, not URL-based — no need for react-router in a\s*\n?\s*\/\/ single-window desktop app, and Tauri's window doesn't have a real\s*\n?\s*\/\/ history stack to integrate with\./,
+      /\/\/ GUI1 landed the static shell; GUI2 wires the SettingsProvider and\s*\/\/ adds two real views \(Sessions, Settings\)\. The routing model is\s*\/\/ state-based, not URL-based — no need for react-router in a\s*\/\/ single-window desktop app, and Tauri's window doesn't have a real\s*\/\/ history stack to integrate with\./,
     );
   });
 
   it("View 14-variant union: home / ai / recipes / sessions / sessions-history / profiles / recordings / recording-player{recordingId} / proxies / connectivity / fleet / team / billing / settings — pinned so the kind-tag taxonomy doesn't drift (e.g. a removed variant + a switch fall-through silently routes to the wrong view). 'ai' added by S7; 'recipes'/'logs' by the P3 feature-views slice; 'home' (Command Center) by the 5→10 G4 slice; 'team' by the Teams-management slice (2026-06-16); 'logs' removed when the client-buffer nav surface was retired (2026-06-19); 'billing' added when the customer billing/crypto-checkout cluster was wired into nav (revenue path, 2026-06-19); 'live-session' removed when the legacy in-app polling session viewer was retired — the floating Simulator window is the only live-session UI now (2026-06-26); the speculative profile Marketplace preview was removed before backend work (2026-07-12).", () => {
     expect(body).toMatch(
-      /type View =\s*\n?\s*\| \{ kind: 'home' \}\s*\n?\s*\| \{ kind: 'ai'; profileId\?: string \}\s*\n?\s*\| \{ kind: 'recipes' \}\s*\n?\s*\| \{ kind: 'sessions' \}\s*\n?\s*\| \{ kind: 'sessions-history' \}\s*\n?\s*\| \{ kind: 'profiles'; profileId\?: string \}\s*\n?\s*\| \{ kind: 'recordings' \}\s*\n?\s*\| \{ kind: 'recording-player'; recordingId: string \}\s*\n?\s*\| \{ kind: 'proxies' \}\s*\n?\s*\| \{ kind: 'connectivity' \}\s*\n?\s*\| \{ kind: 'fleet' \}\s*\n?\s*\| \{ kind: 'team' \}\s*\n?\s*\| \{ kind: 'billing' \}\s*\n?\s*\| \{ kind: 'settings' \};/,
+      /type View =\s*\| \{ kind: 'home' \}\s*\| \{ kind: 'ai'; profileId\?: string \}\s*\| \{ kind: 'recipes' \}\s*\| \{ kind: 'sessions' \}\s*\| \{ kind: 'sessions-history' \}\s*\| \{ kind: 'profiles'; profileId\?: string \}\s*\| \{ kind: 'recordings' \}\s*\| \{ kind: 'recording-player'; recordingId: string \}\s*\| \{ kind: 'proxies' \}\s*\| \{ kind: 'connectivity' \}\s*\| \{ kind: 'fleet' \}\s*\| \{ kind: 'team' \}\s*\| \{ kind: 'billing' \}\s*\| \{ kind: 'settings' \};/,
     );
     expect(body).not.toMatch(/marketplace/i);
     expect(body).not.toMatch(/\| \{ kind: 'logs' \}/);
@@ -70,20 +70,20 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     // SettingsProvider, wraps all the way down to Shell) still holds; the regex
     // now tolerates that extra layer between RecordingsProvider and Shell.
     expect(body).toMatch(
-      /<SettingsProvider>\s*\n?\s*<RecordingsProvider>\s*\n?[\s\S]{0,400}?<Shell \/>\s*\n?[\s\S]{0,200}?<\/RecordingsProvider>\s*\n?\s*<\/SettingsProvider>/,
+      /<SettingsProvider>\s*<RecordingsProvider>\s*\n?[\s\S]{0,400}?<Shell \/>\s*\n?[\s\S]{0,200}?<\/RecordingsProvider>\s*<\/SettingsProvider>/,
     );
   });
 
   it("V-263 hook-order framing pinned: 'Cmd+, shortcut. MUST live above any conditional returns below; React hooks order is positional, so registering the effect after an early-return pulls the hooks count out of sync between the wizard render (early return) and the post-wizard render (full shell), which unmounts the entire tree and shows a black screen.' — pinned so the useEffect placement above the loading + wizard early-returns doesn't get reordered (the black-screen incident framing must survive)", () => {
     expect(body).toMatch(
-      /\/\/ V-263 — Cmd\+, shortcut\. MUST live above any conditional returns\s*\n?\s*\/\/ below; React hooks order is positional, so registering the effect\s*\n?\s*\/\/ after an early-return pulls the hooks count out of sync between\s*\n?\s*\/\/ the wizard render \(early return\) and the post-wizard render \(full\s*\n?\s*\/\/ shell\), which unmounts the entire tree and shows a black screen\./,
+      /\/\/ V-263 — Cmd\+, shortcut\. MUST live above any conditional returns\s*\/\/ below; React hooks order is positional, so registering the effect\s*\/\/ after an early-return pulls the hooks count out of sync between\s*\/\/ the wizard render \(early return\) and the post-wizard render \(full\s*\/\/ shell\), which unmounts the entire tree and shows a black screen\./,
     );
     expect(body).toMatch(
       // 2026-05-20 7291ee25 — Cmd+Shift+L sign-out shortcut added alongside
       // the existing Cmd+, settings shortcut; the early-return after
       // setView() became load-bearing so the next handler check doesn't
       // also fire. Pin the explicit return.
-      /if \(e\.metaKey && e\.key === ','\) \{\s*\n?\s*e\.preventDefault\(\);\s*\n?\s*setView\(\{ kind: 'settings' \}\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /if \(e\.metaKey && e\.key === ','\) \{\s*e\.preventDefault\(\);\s*setView\(\{ kind: 'settings' \}\);\s*return;\s*\}/,
     );
   });
 
@@ -96,19 +96,19 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     // BOTH flags so the fix can't silently regress.
     expect(body).toMatch(/\/\/ V-244 — first-run gate\. Show the wizard when there's no key/);
     expect(body).toMatch(
-      /if \(\(settings\.apiKey === null \|\| wizardActive\) && !wizardDismissed\) \{\s*\n?\s*return \(\s*\n?\s*<FirstRunWizard\s*\n?\s*onComplete=\{\(\) => \{\s*\n?\s*setWizardActive\(false\);\s*\n?\s*setWizardDismissed\(true\);\s*\n?\s*\}\}\s*\n?\s*\/>\s*\n?\s*\);\s*\n?\s*\}/,
+      /if \(\(settings\.apiKey === null \|\| wizardActive\) && !wizardDismissed\) \{\s*return \(\s*<FirstRunWizard\s*onComplete=\{\(\) => \{\s*setWizardActive\(false\);\s*setWizardDismissed\(true\);\s*\}\}\s*\/>\s*\);\s*\}/,
     );
     expect(body).toMatch(
-      /\/\/ V-244 — track wizard state\. Customer with no apiKey on boot\s*\n?\s*\/\/ sees the wizard; once apiKey is set \(via wizard or any other\s*\n?\s*\/\/ path\) the regular shell takes over\. `wizardDismissed` lets the\s*\n?\s*\/\/ customer skip the wizard mid-flow without leaving them stuck on\s*\n?\s*\/\/ it forever; once true, they get the normal shell \+ can still\s*\n?\s*\/\/ configure via Settings\./,
+      /\/\/ V-244 — track wizard state\. Customer with no apiKey on boot\s*\/\/ sees the wizard; once apiKey is set \(via wizard or any other\s*\/\/ path\) the regular shell takes over\. `wizardDismissed` lets the\s*\/\/ customer skip the wizard mid-flow without leaving them stuck on\s*\/\/ it forever; once true, they get the normal shell \+ can still\s*\/\/ configure via Settings\./,
     );
   });
 
   it("V-240 deploymentLabel hostname match: 'driftstack.dev' or endsWith '.driftstack.dev' → 'cloud' else 'self-hosted'; malformed URL try/catch → 'self-hosted' fallback (safer assumption since cloud customers wouldn't typo their base URL) — pinned so the titlebar mode indicator stays consistent with the V-244 wizard's cloud/self-hosted radio", () => {
     expect(body).toMatch(
-      /function deploymentLabel\(baseUrl: string\): 'cloud' \| 'self-hosted' \{\s*\n?\s*try \{\s*\n?\s*const host = new URL\(baseUrl\)\.hostname;\s*\n?\s*if \(host === 'driftstack\.dev' \|\| host\.endsWith\('\.driftstack\.dev'\)\) \{\s*\n?\s*return 'cloud';\s*\n?\s*\}\s*\n?\s*return 'self-hosted';\s*\n?\s*\} catch \{/,
+      /function deploymentLabel\(baseUrl: string\): 'cloud' \| 'self-hosted' \{\s*try \{\s*const host = new URL\(baseUrl\)\.hostname;\s*if \(host === 'driftstack\.dev' \|\| host\.endsWith\('\.driftstack\.dev'\)\) \{\s*return 'cloud';\s*\}\s*return 'self-hosted';\s*\} catch \{/,
     );
     expect(body).toMatch(
-      /\/\/ Malformed URL — default to self-hosted \(the safer assumption\s*\n?\s*\/\/ since cloud customers wouldn't typo their base URL\)\./,
+      /\/\/ Malformed URL — default to self-hosted \(the safer assumption\s*\/\/ since cloud customers wouldn't typo their base URL\)\./,
     );
   });
 
@@ -123,22 +123,22 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     expect(body).toMatch(
       /import \{ Sidebar, type SidebarViewKind \} from '\.\/components\/Sidebar';/,
     );
-    expect(body).toMatch(/<Sidebar\s*\n?\s*current=\{sidebarSectionFor\(scopedView\)\}/);
+    expect(body).toMatch(/<Sidebar\s*current=\{sidebarSectionFor\(scopedView\)\}/);
     expect(body).toMatch(
-      /export function sidebarSectionFor\(view: View\): SidebarViewKind \{\s*\n?\s*switch \(view\.kind\) \{\s*\n?\s*case 'recording-player':\s*\n?\s*return 'recordings';/,
+      /export function sidebarSectionFor\(view: View\): SidebarViewKind \{\s*switch \(view\.kind\) \{\s*case 'recording-player':\s*return 'recordings';/,
     );
     // 'sessions' (the live SessionsView, which has no sidebar item of its own)
     // folds onto the Session-log item so the nav keeps an active highlight.
-    expect(body).toMatch(/case 'sessions':\s*\n?\s*return 'sessions-history';/);
-    expect(body).not.toMatch(/<Sidebar\s*\n?\s*current=\{view\.kind as SidebarViewKind\}/);
-    expect(body).not.toMatch(/case 'live-session':\s*\n?\s*return 'sessions';/);
+    expect(body).toMatch(/case 'sessions':\s*return 'sessions-history';/);
+    expect(body).not.toMatch(/<Sidebar\s*current=\{view\.kind as SidebarViewKind\}/);
+    expect(body).not.toMatch(/case 'live-session':\s*return 'sessions';/);
   });
 
   it("loading branch: while settings load, show a calm spinner rather than flashing the wizard — pinned so customers don't see a flash-of-wizard before settings hydrate (which would happen if apiKey===null is evaluated against the pre-hydration default state); Loading… section-label rendered in a centered surface-base wrapper", () => {
     expect(body).toMatch(
       /\/\/ While settings load, show a calm spinner[\s\S]{0,260}?if \(loading\) \{/,
     );
-    expect(body).toMatch(/role="status"\s*\n?\s*aria-label="Loading"/);
+    expect(body).toMatch(/role="status"\s*aria-label="Loading"/);
     expect(body).toMatch(/<span className="section-label text-ink-muted">Loading…<\/span>/);
   });
 
@@ -163,10 +163,10 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
 
   it("Billing route points OUT to the web dashboard: BillingMovedView is lazy-loaded, the 'billing' case returns it, and the nav-billing palette action still exists (2026-08-23 — the in-app billing hub was removed; two surfaces owning billing let one account read a different answer depending on where the customer looked, and duplicated the payment path)", () => {
     expect(body).toMatch(
-      /const BillingMovedView = lazy\(async \(\) => \(\{\s*\n?\s*default: \(await import\('\.\/views\/BillingMovedView'\)\)\.BillingMovedView,\s*\n?\s*\}\)\);/,
+      /const BillingMovedView = lazy\(async \(\) => \(\{\s*default: \(await import\('\.\/views\/BillingMovedView'\)\)\.BillingMovedView,\s*\}\)\);/,
     );
     expect(body).not.toMatch(/import \{ BillingMovedView \} from '\.\/views\/BillingMovedView';/);
-    expect(body).toMatch(/case 'billing':\s*\n?\s*return <BillingMovedView \/>;/);
+    expect(body).toMatch(/case 'billing':\s*return <BillingMovedView \/>;/);
     // The destination stays in the palette — a customer hunting for billing
     // that is simply absent is the other failure mode.
     expect(body).toMatch(/id: 'nav-billing'/);

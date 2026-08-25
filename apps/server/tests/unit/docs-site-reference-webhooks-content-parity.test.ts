@@ -56,16 +56,16 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     // S36 2026-07-07 (fable-truth-audit): global is only drained by calls
     // WITHOUT a dedicated bucket — each call consumes exactly one bucket.
     expect(body).toMatch(
-      /- \*\*`global`\*\* — every authenticated `\/v1\/\*` call that doesn't\s*\n?\s*have a dedicated bucket below\./,
+      /- \*\*`global`\*\* — every authenticated `\/v1\/\*` call that doesn't\s*have a dedicated bucket below\./,
     );
     // Both session-creating calls draw on this bucket — routes/sessions.ts
     // registers POST /v1/sessions AND POST /v1/profiles/:id/launch with
     // app.rateLimit('sessions:create').
     expect(body).toMatch(
-      /- \*\*`sessions:create`\*\* — the two session-creating calls,\s*\n?\s*`POST \/v1\/sessions` and `POST \/v1\/profiles\/:id\/launch`\./,
+      /- \*\*`sessions:create`\*\* — the two session-creating calls,\s*`POST \/v1\/sessions` and `POST \/v1\/profiles\/:id\/launch`\./,
     );
     expect(body).toMatch(
-      /- \*\*`agent_sessions:message`\*\* —\s*\n?\s*`POST \/v1\/agent-sessions\/:id\/message` only/,
+      /- \*\*`agent_sessions:message`\*\* —\s*`POST \/v1\/agent-sessions\/:id\/message` only/,
     );
     // "uses" rather than "drains", because a team request drains that one key
     // TWICE — once for the acting member, once for the selected owner.
@@ -174,7 +174,7 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     expect(body).toMatch(/Request body: `\{\}` \(empty\)\./);
     expect(body).toMatch(/"status": "pending",/);
     expect(body).toMatch(/"attempts": 0,/);
-    expect(body).toMatch(/~2 hours later the deliveries land in DLQ\s*\n?\s*\(`status: "dlq"`\)\./);
+    expect(body).toMatch(/~2 hours later the deliveries land in DLQ\s*\(`status: "dlq"`\)\./);
     expect(body).toMatch(/`GET \/v1\/webhooks\/:webhookId\/deliveries\?status=dlq`/);
     expect(existsSync(RP)).toBe(true);
   });

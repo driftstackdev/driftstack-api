@@ -26,13 +26,13 @@ describe('lib/gui-control-key-encryption content parity', () => {
   it('Arc 2 sub-slice 8.4 module framing pins the versioned envelope, canonical AAD purpose/account/session binding, and the 24h MFA-key pattern', () => {
     expect(body).toMatch(/\/\/ Arc 2 sub-slice 8\.4 \(v2-#8 AI chat \+ manual side-by-side\)\./);
     expect(body).toMatch(
-      /\/\/ Encryption for the auto-minted gui_control_key\. AES-256-GCM uses a\s*\n?\s*\/\/ versioned `\[magic \| IV \| tag \| ciphertext\]` envelope and canonical\s*\n?\s*\/\/ additional authenticated data \(AAD\) that binds the ciphertext to its\s*\n?\s*\/\/ purpose, owning account, and one agent-session\. Re-uses\s*\n?\s*\/\/ MFA_ENCRYPTION_KEY per Q2=C \(24h-TTL, MFA-key pattern\)\./,
+      /\/\/ Encryption for the auto-minted gui_control_key\. AES-256-GCM uses a\s*\/\/ versioned `\[magic \| IV \| tag \| ciphertext\]` envelope and canonical\s*\/\/ additional authenticated data \(AAD\) that binds the ciphertext to its\s*\/\/ purpose, owning account, and one agent-session\. Re-uses\s*\/\/ MFA_ENCRYPTION_KEY per Q2=C \(24h-TTL, MFA-key pattern\)\./,
     );
   });
 
   it("gck_-prefix + log-recognition framing pinned: 'The plaintext format is gck_<32 base32 chars> — a 20-byte random body prefixed with gck_ so logs / Sentry breadcrumbs can recognise it without leaking. The customer's gui-client uses this as a bearer token for the manual-control plane (sub-slice 8.4 route surfaces it). NOT an API key; scoped to a single agent-session and its 24h TTL.' — pinned so the gck_-recognition + bearer-not-API-key + scoped-to-single-agent-session + 24h-TTL contract all stay documented", () => {
     expect(body).toMatch(
-      /\/\/ The plaintext format is `gck_<32 base32 chars>` — a 20-byte\s*\n?\s*\/\/ random body prefixed with `gck_` so logs \/ Sentry breadcrumbs can\s*\n?\s*\/\/ recognise it without leaking\. The customer's gui-client uses this\s*\n?\s*\/\/ as a bearer token for the manual-control plane \(sub-slice 8\.4\s*\n?\s*\/\/ route surfaces it\)\. NOT an API key; scoped to a single\s*\n?\s*\/\/ agent-session and its 24h TTL\./,
+      /\/\/ The plaintext format is `gck_<32 base32 chars>` — a 20-byte\s*\/\/ random body prefixed with `gck_` so logs \/ Sentry breadcrumbs can\s*\/\/ recognise it without leaking\. The customer's gui-client uses this\s*\/\/ as a bearer token for the manual-control plane \(sub-slice 8\.4\s*\/\/ route surfaces it\)\. NOT an API key; scoped to a single\s*\/\/ agent-session and its 24h TTL\./,
     );
   });
 
@@ -51,28 +51,28 @@ describe('lib/gui-control-key-encryption content parity', () => {
 
   it("GuiControlKeyPlaintext brand-type framing pinned: 'string & { readonly __brand: gui-control-key-plaintext }'. + 'Compile-time taint marker so the gui-control-key plaintext can't be assigned to a raw string without an explicit cast — matches the BYOK taint pattern.' — pinned so the brand-pattern + BYOK-taint-pattern-cross-reference + cast-required-for-leak contract all stay documented", () => {
     expect(body).toMatch(
-      /\/\*\* Compile-time taint marker so the gui-control-key plaintext can't\s*\n?\s*\*\s+be assigned to a raw `string` without an explicit cast — matches\s*\n?\s*\*\s+the BYOK taint pattern\. \*\/\s*\n?\s*export type GuiControlKeyPlaintext = string & \{\s*\n?\s*readonly __brand: 'gui-control-key-plaintext';\s*\n?\s*\};/,
+      /\/\*\* Compile-time taint marker so the gui-control-key plaintext can't\s*\*\s+be assigned to a raw `string` without an explicit cast — matches\s*\*\s+the BYOK taint pattern\. \*\/\s*export type GuiControlKeyPlaintext = string & \{\s*readonly __brand: 'gui-control-key-plaintext';\s*\};/,
     );
   });
 
   it("base32Encode 5-bit-at-a-time loop pinned: 'value = (value << 8) | byte; bits += 8; while (bits >= 5) { out += BASE32_ALPHABET[(value >>> (bits - 5)) & 0x1f]; bits -= 5; }'. + tail-byte handling for bits > 0 leftover. Drift to a different bit-grouping would mint keys with non-standard base32 encoding", () => {
     expect(body).toMatch(
-      /function base32Encode\(buf: Buffer\): string \{\s*\n?\s*let bits = 0;\s*\n?\s*let value = 0;\s*\n?\s*let out = '';\s*\n?\s*for \(const byte of buf\) \{\s*\n?\s*value = \(value << 8\) \| byte;\s*\n?\s*bits \+= 8;\s*\n?\s*while \(bits >= 5\) \{\s*\n?\s*out \+= BASE32_ALPHABET\[\(value >>> \(bits - 5\)\) & 0x1f\];\s*\n?\s*bits -= 5;/,
+      /function base32Encode\(buf: Buffer\): string \{\s*let bits = 0;\s*let value = 0;\s*let out = '';\s*for \(const byte of buf\) \{\s*value = \(value << 8\) \| byte;\s*bits \+= 8;\s*while \(bits >= 5\) \{\s*out \+= BASE32_ALPHABET\[\(value >>> \(bits - 5\)\) & 0x1f\];\s*bits -= 5;/,
     );
     expect(body).toMatch(
-      /if \(bits > 0\) \{\s*\n?\s*out \+= BASE32_ALPHABET\[\(value << \(5 - bits\)\) & 0x1f\];\s*\n?\s*\}/,
+      /if \(bits > 0\) \{\s*out \+= BASE32_ALPHABET\[\(value << \(5 - bits\)\) & 0x1f\];\s*\}/,
     );
   });
 
   it("generateGuiControlKey 'gck_<32 base32 chars>' format pinned: gck_ prefix + base32Encode(randomBytes(PLAINTEXT_BODY_BYTES)) where 20 bytes × 8 / 5 = 32 base32 chars. Drift to a shorter body would shrink the per-key entropy below 100-bit threshold; drift to a different prefix would break log-recognition framing", () => {
     expect(body).toMatch(
-      /export function generateGuiControlKey\(\): GuiControlKeyPlaintext \{\s*\n?\s*return `gck_\$\{base32Encode\(randomBytes\(PLAINTEXT_BODY_BYTES\)\)\}` as GuiControlKeyPlaintext;\s*\n?\s*\}/,
+      /export function generateGuiControlKey\(\): GuiControlKeyPlaintext \{\s*return `gck_\$\{base32Encode\(randomBytes\(PLAINTEXT_BODY_BYTES\)\)\}` as GuiControlKeyPlaintext;\s*\}/,
     );
   });
 
   it('encrypt/decrypt require immutable context, authenticate canonical purpose/account/session AAD, and reject non-v2 envelopes', () => {
     expect(body).toMatch(
-      /export function encryptGuiControlKey\(\s*\n?\s*plaintext: string,\s*\n?\s*keyBase64: string,\s*\n?\s*context: GuiControlKeyEncryptionContext,\s*\n?\s*\): Buffer \{/,
+      /export function encryptGuiControlKey\(\s*plaintext: string,\s*keyBase64: string,\s*context: GuiControlKeyEncryptionContext,\s*\): Buffer \{/,
     );
     expect(body).toMatch(/cipher\.setAAD\(buildAdditionalAuthenticatedData\(context\)\);/);
     expect(body).toMatch(

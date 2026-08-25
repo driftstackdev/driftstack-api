@@ -45,7 +45,7 @@ describe('W471.A apps/gui-client/src/lib/use-admin-crypto-stats.ts content parit
   it("V-534.AI framing pinned: 'V-534.AI — useAdminCryptoStats hook.' + 'Wraps GET /v1/admin/crypto-orders/stats (V-666.N + V-666.W). Admin-only — requires the `driftstack_internal_admin` scope.'", () => {
     expect(body).toMatch(/\/\/ V-534\.AI — useAdminCryptoStats hook\./);
     expect(body).toMatch(
-      /\/\/ Wraps GET \/v1\/admin\/crypto-orders\/stats \(V-666\.N \+ V-666\.W\)\. Admin-\s*\n?\s*\/\/ only — requires the `driftstack_internal_admin` scope\./,
+      /\/\/ Wraps GET \/v1\/admin\/crypto-orders\/stats \(V-666\.N \+ V-666\.W\)\. Admin-\s*\/\/ only — requires the `driftstack_internal_admin` scope\./,
     );
   });
 
@@ -63,26 +63,26 @@ describe('W471.A apps/gui-client/src/lib/use-admin-crypto-stats.ts content parit
 
   it("AdminCryptoStatsData 8-field: total + by_status Record<AdminCryptoStatsStatus, number> + paid_revenue_cents Record<string, number> + avg_time_to_paid_ms nullable + paid_sample + paid_revenue_by_product optional (V-666.AE 'paid revenue keyed by product → currency → cents.') + paid_count_by_product optional (V-666.AE 'paid-order count keyed by product.') + truncated + scanned", () => {
     expect(body).toMatch(
-      /export interface AdminCryptoStatsData \{\s*\n?\s*total: number;\s*\n?\s*by_status: Record<AdminCryptoStatsStatus, number>;\s*\n?\s*paid_revenue_cents: Record<string, number>;\s*\n?\s*avg_time_to_paid_ms: number \| null;\s*\n?\s*paid_sample: number;\s*\n?\s*\/\*\* V-666\.AE — paid revenue keyed by product → currency → cents\. \*\/\s*\n?\s*paid_revenue_by_product\?: Record<string, Record<string, number>>;\s*\n?\s*\/\*\* V-666\.AE — paid-order count keyed by product\. \*\/\s*\n?\s*paid_count_by_product\?: Record<string, number>;\s*\n?\s*truncated: boolean;\s*\n?\s*scanned: number;\s*\n?\s*\}/,
+      /export interface AdminCryptoStatsData \{\s*total: number;\s*by_status: Record<AdminCryptoStatsStatus, number>;\s*paid_revenue_cents: Record<string, number>;\s*avg_time_to_paid_ms: number \| null;\s*paid_sample: number;\s*\/\*\* V-666\.AE — paid revenue keyed by product → currency → cents\. \*\/\s*paid_revenue_by_product\?: Record<string, Record<string, number>>;\s*\/\*\* V-666\.AE — paid-order count keyed by product\. \*\/\s*paid_count_by_product\?: Record<string, number>;\s*truncated: boolean;\s*scanned: number;\s*\}/,
     );
   });
 
   it('State machine retains manual behavior and exact endpoint while reads are deadline-bounded, single-flight, sequence-gated, and lifecycle-aborted', () => {
     expect(body).toMatch(
-      /export type AdminCryptoStatsState =\s*\n?\s*\| \{ kind: 'idle' \}\s*\n?\s*\| \{ kind: 'loading' \}\s*\n?\s*\| \{ kind: 'ready'; data: AdminCryptoStatsData \}\s*\n?\s*\| \{ kind: 'error'; message: string \};/,
+      /export type AdminCryptoStatsState =\s*\| \{ kind: 'idle' \}\s*\| \{ kind: 'loading' \}\s*\| \{ kind: 'ready'; data: AdminCryptoStatsData \}\s*\| \{ kind: 'error'; message: string \};/,
     );
     expect(body).toMatch(
-      /const res = await fetchWithDeadline\(`\$\{baseUrl\}\/v1\/admin\/crypto-orders\/stats`, \{\s*\n?\s*method: 'GET',\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',/,
+      /const res = await fetchWithDeadline\(`\$\{baseUrl\}\/v1\/admin\/crypto-orders\/stats`, \{\s*method: 'GET',\s*signal: controller\.signal,\s*headers: \{\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*accept: 'application\/json',/,
     );
     expect(body).toMatch(/if \(inFlightRef\.current\) return;/);
     expect(body).toMatch(
       /if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'ready', data: body \}\);/,
     );
     expect(body).toMatch(
-      /useEffect\(\s*\n?\s*\(\) => \(\) => \{\s*\n?\s*sequenceRef\.current \+= 1;\s*\n?\s*requestRef\.current\?\.abort\(\);\s*\n?\s*requestRef\.current = null;\s*\n?\s*inFlightRef\.current = false;\s*\n?\s*\},\s*\n?\s*\[settings\.apiKey, settings\.baseUrl\],/,
+      /useEffect\(\s*\(\) => \(\) => \{\s*sequenceRef\.current \+= 1;\s*requestRef\.current\?\.abort\(\);\s*requestRef\.current = null;\s*inFlightRef\.current = false;\s*\},\s*\[settings\.apiKey, settings\.baseUrl\],/,
     );
     expect(body).toMatch(
-      /useEffect\(\(\) => \{\s*\n?\s*if \(opts\.manual === true\) return;\s*\n?\s*void fetcher\(\);\s*\n?\s*\}, \[fetcher, opts\.manual\]\);/,
+      /useEffect\(\(\) => \{\s*if \(opts\.manual === true\) return;\s*void fetcher\(\);\s*\}, \[fetcher, opts\.manual\]\);/,
     );
   });
 

@@ -37,7 +37,7 @@ describe('W461.C apps/gui-client/src/lib/client.ts content parity', () => {
   it("V-029 SDK-B framing pinned: 'Driftstack SDK client.' + '@driftstack/sdk@0.1.1 ships an isomorphic webhook helper (Web Crypto API instead of node:crypto, see V-029 SDK-B), the browser bundle resolves cleanly and we use the published SDK directly. The hand-written fetch wrapper that GUI2 used as a workaround is gone.'", () => {
     expect(body).toMatch(/\/\/ Driftstack SDK client\./);
     expect(body).toMatch(
-      /\/\/ Now that @driftstack\/sdk@0\.1\.1 ships an isomorphic webhook helper\s*\n?\s*\/\/ \(Web Crypto API instead of node:crypto, see V-029 SDK-B\), the\s*\n?\s*\/\/ browser bundle resolves cleanly and we use the published SDK\s*\n?\s*\/\/ directly\. The hand-written fetch wrapper that GUI2 used as a\s*\n?\s*\/\/ workaround is gone\./,
+      /\/\/ Now that @driftstack\/sdk@0\.1\.1 ships an isomorphic webhook helper\s*\/\/ \(Web Crypto API instead of node:crypto, see V-029 SDK-B\), the\s*\/\/ browser bundle resolves cleanly and we use the published SDK\s*\/\/ directly\. The hand-written fetch wrapper that GUI2 used as a\s*\/\/ workaround is gone\./,
     );
   });
 

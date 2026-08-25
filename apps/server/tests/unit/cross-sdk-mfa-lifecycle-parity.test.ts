@@ -83,12 +83,12 @@ describe('W700 cross-SDK V-353b/V-353e/V-326e MFA lifecycle parity', () => {
     expect(ts).toMatch(
       /X-Driftstack-Account team-RBAC header is not honored|X-Driftstack-Account header[\s\S]{0,40}not honored/,
     );
-    expect(ts).toMatch(/per-account|per-\s*\n?\s*\/\/\s*account/);
+    expect(ts).toMatch(/per-account|per-\s*\/\/\s*account/);
 
     // sdk-go: "MFA enrollment is\n// per-account, never per-team-context — these endpoints don't honor\n// the X-Driftstack-Account header"
     expect(go).toMatch(/per-account/);
     expect(go).toMatch(
-      /don't honor\s*\n?\s*\/\/\s*the X-Driftstack-Account header|don't honor the X-Driftstack-Account/,
+      /don't honor\s*\/\/\s*the X-Driftstack-Account header|don't honor the X-Driftstack-Account/,
     );
   });
 
@@ -230,7 +230,7 @@ describe('W700 cross-SDK V-353b/V-353e/V-326e MFA lifecycle parity', () => {
     expect(ts).toMatch(/Old codes invalidated/);
 
     expect(go).toMatch(/Recovery codes are invalidated/);
-    expect(go).toMatch(/old codes\s*\n?\s*\/\/\s*invalidated|old codes invalidated/);
+    expect(go).toMatch(/old codes\s*\/\/\s*invalidated|old codes invalidated/);
   });
 
   it('CRITICAL MfaStatusResponse 4-field shape pinned in TS + Go — enrolled + enrolled_at + last_used_at + unused_recovery_codes. The 4 fields are what the dashboard renders to tell customers their MFA state. Drift to dropping ANY would break the dashboard MFA card.', () => {

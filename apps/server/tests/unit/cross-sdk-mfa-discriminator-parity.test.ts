@@ -67,9 +67,7 @@ describe('W688 cross-SDK V-445 mfaChallenge + V-353d login discriminator parity'
     expect(ts).toMatch(/V-353d — discriminated-union response/);
 
     // The mfa_required: true branch with challenge_token + challenge_expires_at fields.
-    expect(ts).toMatch(
-      /\{ mfa_required: true, challenge_token,\s*\n?\s*\*\s*challenge_expires_at \}/,
-    );
+    expect(ts).toMatch(/\{ mfa_required: true, challenge_token,\s*\*\s*challenge_expires_at \}/);
   });
 
   it('CRITICAL V-353d in-JSDoc example pinned in sdk-typescript — 5-line branching pattern customers should follow. Drift to dropping the example would lose customer-facing guidance for handling the MFA-required branch.', () => {
@@ -119,7 +117,7 @@ describe('W688 cross-SDK V-445 mfaChallenge + V-353d login discriminator parity'
   it("CRITICAL V-353d challenge_token + challenge_expires_at fields pinned in sdk-typescript LoginResponseUnion. Drift to dropping challenge_expires_at would force customers to retry challenge tokens forever (server-side enforces a window but client wouldn't know).", () => {
     const ts = read(TS_AUTH);
 
-    expect(ts).toMatch(/challenge_token,\s*\n?\s*\*\s*challenge_expires_at/);
+    expect(ts).toMatch(/challenge_token,\s*\*\s*challenge_expires_at/);
   });
 
   it('LoginResponseUnion type pinned in sdk-typescript imports. The Union return type forces TypeScript callers to discriminate at the type level; drift to non-union return would let MFA-required branches slip past static checking.', () => {

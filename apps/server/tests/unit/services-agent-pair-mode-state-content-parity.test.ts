@@ -32,13 +32,13 @@ describe('services/agent-pair-mode-state content parity', () => {
   it("Arc 2 sub-slice 8.7 module-level framing pinned: 'Pure pair-mode state machine. Lives separate from AgentSessionsRepo so transitions can be tested without an actor boundary. The route layer (sub-slice 8.9) wraps these helpers with a Redis lock (sub-slice 8.8) and persists results via AgentSessionsRepo.setPairModeState.' — pinned so the pure-state-machine + separation-from-repo + Redis-lock cross-reference all stay documented", () => {
     expect(body).toMatch(/\/\/ Arc 2 sub-slice 8\.7 \(v2-#8 AI chat \+ manual side-by-side\)\./);
     expect(body).toMatch(
-      /\/\/ Pure pair-mode state machine\. Lives separate from AgentSessionsRepo\s*\n?\s*\/\/ so transitions can be tested without an actor boundary\. The route\s*\n?\s*\/\/ layer \(sub-slice 8\.9\) wraps these helpers with a Redis lock\s*\n?\s*\/\/ \(sub-slice 8\.8\) and persists results via\s*\n?\s*\/\/ AgentSessionsRepo\.setPairModeState\./,
+      /\/\/ Pure pair-mode state machine\. Lives separate from AgentSessionsRepo\s*\/\/ so transitions can be tested without an actor boundary\. The route\s*\/\/ layer \(sub-slice 8\.9\) wraps these helpers with a Redis lock\s*\/\/ \(sub-slice 8\.8\) and persists results via\s*\/\/ AgentSessionsRepo\.setPairModeState\./,
     );
   });
 
   it('Transition table framing pinned: founder verdict 2026-05-18 implicit queue spec + Wave 2.A 8.11 mid-runTurn queue path. All 7 transitions documented as a Unicode arrow table. Drift would orphan readers from the state-flow diagram', () => {
     expect(body).toMatch(
-      /\/\/ States \+ transitions \(founder verdict 2026-05-18 implicit in the\s*\n?\s*\/\/ queue spec; Wave 2\.A 8\.11 adds the mid-runTurn queue path\):/,
+      /\/\/ States \+ transitions \(founder verdict 2026-05-18 implicit in the\s*\/\/ queue spec; Wave 2\.A 8\.11 adds the mid-runTurn queue path\):/,
     );
     expect(body).toMatch(/\/\/ {3}ai-driving {9}── takeover-request {10}─→ {2}takeover-pending/);
     expect(body).toMatch(
@@ -57,7 +57,7 @@ describe('services/agent-pair-mode-state content parity', () => {
 
   it("Cancellation-paths framing pinned: 'Cancellation paths return to the prior state if the request was declined; explicit takeover-decline / handback-cancel transitions handle the rollback. Any other transition throws PairModeStateInvalidTransitionError (sub-slice 8.10 surfaces it as a typed SDK error).' — pinned so the rollback-on-decline contract + the 8.10 SDK-error cross-reference survive", () => {
     expect(body).toMatch(
-      /\/\/ Cancellation paths return to the prior state if the request was\s*\n?\s*\/\/ declined; explicit `takeover-decline` \/ `handback-cancel` transitions\s*\n?\s*\/\/ handle the rollback\. Any other transition throws\s*\n?\s*\/\/ PairModeStateInvalidTransitionError \(sub-slice 8\.10 surfaces it\s*\n?\s*\/\/ as a typed SDK error\)\./,
+      /\/\/ Cancellation paths return to the prior state if the request was\s*\/\/ declined; explicit `takeover-decline` \/ `handback-cancel` transitions\s*\/\/ handle the rollback\. Any other transition throws\s*\/\/ PairModeStateInvalidTransitionError \(sub-slice 8\.10 surfaces it\s*\/\/ as a typed SDK error\)\./,
     );
   });
 
@@ -94,7 +94,7 @@ describe('services/agent-pair-mode-state content parity', () => {
   it("PairModeStateInvalidTransitionError class pinned: from + transition kind + message format 'Invalid pair-mode transition: <transition> not allowed from <from>'. Drift to a different message would break the SDK's typed-error parsing (the error is mapped to a 409 with this specific text in the body)", () => {
     expect(body).toMatch(/export class PairModeStateInvalidTransitionError extends Error \{/);
     expect(body).toMatch(
-      /constructor\(\s*\n?\s*public readonly from: PairModeState\['kind'\],\s*\n?\s*public readonly transition: PairModeTransition\['kind'\],\s*\n?\s*\)/,
+      /constructor\(\s*public readonly from: PairModeState\['kind'\],\s*public readonly transition: PairModeTransition\['kind'\],\s*\)/,
     );
     expect(body).toMatch(
       /super\(`Invalid pair-mode transition: \$\{transition\} not allowed from \$\{from\}`\);/,
@@ -103,22 +103,22 @@ describe('services/agent-pair-mode-state content parity', () => {
 
   it("initialPairModeState() returns { kind: 'ai-driving' } pinned. Drift to a different initial state would silently change the semantics of newly-created agent sessions (the dashboard SSE consumer + the runtime both assume ai-driving as the create-time discriminator)", () => {
     expect(body).toMatch(
-      /export function initialPairModeState\(\): PairModeState \{\s*\n?\s*return \{ kind: 'ai-driving' \};\s*\n?\s*\}/,
+      /export function initialPairModeState\(\): PairModeState \{\s*return \{ kind: 'ai-driving' \};\s*\}/,
     );
   });
 
   it("Wave 2.A 8.11 takeover-queued framing pinned: 'intermediate state when a takeover request lands while AgentRuntime.runTurn is mid-flight (decompose still resolving). The state machine holds the request here until the runtime fires decompose-settled, at which point the queued request flows through to takeover-pending. SSE subscribers see this discriminator so the dashboard can render takeover queued — waiting for the current AI turn to finish.' — pinned so the queue-during-decompose semantics + the SSE-discriminator-rendered-by-dashboard contract stay documented", () => {
     expect(body).toMatch(
-      /Arc 4 Wave 2\.A sub-slice 8\.11 \(v2-#8\) — intermediate state when a\s*\n?\s*\*\s+takeover request lands while AgentRuntime\.runTurn is mid-flight/,
+      /Arc 4 Wave 2\.A sub-slice 8\.11 \(v2-#8\) — intermediate state when a\s*\*\s+takeover request lands while AgentRuntime\.runTurn is mid-flight/,
     );
     expect(body).toMatch(
-      /SSE\s*\n?\s*\*\s+subscribers see this discriminator so the dashboard can render\s*\n?\s*\*\s+"takeover queued — waiting for the current AI turn to finish"\./,
+      /SSE\s*\*\s+subscribers see this discriminator so the dashboard can render\s*\*\s+"takeover queued — waiting for the current AI turn to finish"\./,
     );
   });
 
   it("Wave 2.A 8.13 heartbeat-timeout auto-handback framing pinned: 'auto-handback to ai-driving after 30s of no client heartbeat. The state-machine accepts this transition from any non-ai-driving state so the timer service can fire it without inspecting the current state first. Idempotent on ai-driving (silent no-op).' — pinned so the 30s-timeout + accept-from-any-state + idempotent-on-ai-driving contract survives", () => {
     expect(body).toMatch(
-      /Arc 4 Wave 2\.A sub-slice 8\.13 \(v2-#8\) — auto-handback to ai-driving\s*\n?\s*\*\s+after 30s of no client heartbeat\. The state-machine accepts this\s*\n?\s*\*\s+transition from any non-ai-driving state so the timer service can\s*\n?\s*\*\s+fire it without inspecting the current state first\. Idempotent on\s*\n?\s*\*\s+ai-driving \(silent no-op\)\./,
+      /Arc 4 Wave 2\.A sub-slice 8\.13 \(v2-#8\) — auto-handback to ai-driving\s*\*\s+after 30s of no client heartbeat\. The state-machine accepts this\s*\*\s+transition from any non-ai-driving state so the timer service can\s*\*\s+fire it without inspecting the current state first\. Idempotent on\s*\*\s+ai-driving \(silent no-op\)\./,
     );
   });
 
@@ -133,13 +133,13 @@ describe('services/agent-pair-mode-state content parity', () => {
 
   it("decompose-settled idempotent silent-no-op from non-queued states pinned: ai-driving + takeover-pending + human-driving + handback-pending all silently return current state on decompose-settled. Drift to throwing would force the runtime to inspect state before firing — which it deliberately doesn't (the runtime fires unconditionally per the 8.11 comment)", () => {
     expect(body).toMatch(
-      /\/\/ 'decompose-settled' is a silent no-op from ai-driving — the\s*\n?\s*\/\/ runtime always fires it on decompose completion regardless of\s*\n?\s*\/\/ whether a queue exists, so accepting it here keeps the wire\s*\n?\s*\/\/ contract simple/,
+      /\/\/ 'decompose-settled' is a silent no-op from ai-driving — the\s*\/\/ runtime always fires it on decompose completion regardless of\s*\/\/ whether a queue exists, so accepting it here keeps the wire\s*\/\/ contract simple/,
     );
   });
 
   it('handback-cancel restores the preserved controller; unknown/requestedAt remain legacy-state fallbacks only', () => {
     expect(body).toMatch(
-      /\/\/ New states preserve the exact controller identity \+ original takeover\s*\n?\s*\/\/ time\. The fallbacks apply only to persisted pre-fix transient states\./,
+      /\/\/ New states preserve the exact controller identity \+ original takeover\s*\/\/ time\. The fallbacks apply only to persisted pre-fix transient states\./,
     );
     expect(body).toContain("clientId: state.clientId ?? 'unknown'");
     expect(body).toContain('sinceAt: state.sinceAt ?? state.requestedAt');

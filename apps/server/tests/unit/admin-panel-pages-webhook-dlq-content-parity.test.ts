@@ -35,34 +35,34 @@ describe('W488.C apps/admin-panel/src/pages/webhook-dlq.astro content parity', (
 
   it('V-189 framing pins an inert SSG shell and the deferred live enrichment contract', () => {
     expect(body).toMatch(
-      /\/\/ V-189 — progressive-enhancement against \/v1\/admin\/webhook-dlq\. SSG\s*\n?\s*\/\/ renders an inert unavailable shell; an inline <script> fetches the live\s*\n?\s*\/\/ list, replaces the body, and wires Requeue \(POST/,
+      /\/\/ V-189 — progressive-enhancement against \/v1\/admin\/webhook-dlq\. SSG\s*\/\/ renders an inert unavailable shell; an inline <script> fetches the live\s*\/\/ list, replaces the body, and wires Requeue \(POST/,
     );
   });
 
   it('ships no sample delivery, count, mutation control, or green live claim before authority', () => {
     expect(body).not.toContain('MOCK_DLQ');
     expect(body).toContain('Live DLQ entries are unavailable until loaded.');
-    expect(body).toMatch(/data-live-dot\s*\n?\s*class="[^"]*bg-amber-500"/);
+    expect(body).toMatch(/data-live-dot\s*class="[^"]*bg-amber-500"/);
     expect(body).toContain('<span data-live-status>Waiting for live data</span>');
-    expect(body).toMatch(/data-live-refresh\s*\n?\s*disabled\s*\n?\s*aria-disabled="true"/);
-    expect(body).not.toMatch(/data-action="(?:requeue|discard)"\s*\n?\s*data-id=\{entry\.id\}/);
+    expect(body).toMatch(/data-live-refresh\s*disabled\s*aria-disabled="true"/);
+    expect(body).not.toMatch(/data-action="(?:requeue|discard)"\s*data-id=\{entry\.id\}/);
   });
 
   it("Retry-budget framing pinned: 'Deliveries that exhausted the retry budget (5×). Manual intervention only — auto-retry past the initial attempts is intentionally absent to avoid storm-on-recovery patterns.' — pinned so the storm-on-recovery anti-pattern documentation survives (operators reading this page understand WHY auto-retry isn't reintroduced even when DLQ looks 'just stuck')", () => {
     expect(body).toMatch(
-      /Deliveries that exhausted the retry budget \(5×\)\. Manual intervention\s*\n?\s*only — auto-retry past the initial attempts is intentionally absent\s*\n?\s*to avoid storm-on-recovery patterns\./,
+      /Deliveries that exhausted the retry budget \(5×\)\. Manual intervention\s*only — auto-retry past the initial attempts is intentionally absent\s*to avoid storm-on-recovery patterns\./,
     );
   });
 
   it("Requeue contract framing pinned: 'Requeue fires POST /v1/admin/webhook-dlq/:id/requeue — delivery resets to attempt=1 + retry budget refreshes. Audit row records admin id + delivery id + reason. Discard hard-deletes the entry; payload is unrecoverable.' — pinned so the destructive-action contract (audit + payload-unrecoverable) stays explicit on the page operators do requeue/discard from", () => {
     expect(body).toMatch(
-      /Requeue fires <code class="font-mono">POST \/v1\/admin\/webhook-dlq\/:id\/requeue<\/code> —\s*\n?\s*delivery resets to attempt=1 \+ retry budget refreshes\. Audit row records\s*\n?\s*admin id \+ delivery id \+ reason\. Discard hard-deletes the entry; payload\s*\n?\s*is unrecoverable\./,
+      /Requeue fires <code class="font-mono">POST \/v1\/admin\/webhook-dlq\/:id\/requeue<\/code> —\s*delivery resets to attempt=1 \+ retry budget refreshes\. Audit row records\s*admin id \+ delivery id \+ reason\. Discard hard-deletes the entry; payload\s*is unrecoverable\./,
     );
   });
 
   it('Requeue bounded fetch: POST /v1/admin/webhook-dlq/{encodeURIComponent(id)}/requeue + Bearer/JSON/cookie auth + empty {} body', () => {
     expect(body).toMatch(
-      /boundedFetch\(apiBaseUrl \+ '\/v1\/admin\/webhook-dlq\/' \+ encodeURIComponent\(id\) \+ '\/requeue', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{\s*\n?\s*authorization: 'Bearer ' \+ token,\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\},\s*\n?\s*credentials: 'include',\s*\n?\s*body: '\{\}',\s*\n?\s*\}\)/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/admin\/webhook-dlq\/' \+ encodeURIComponent\(id\) \+ '\/requeue', \{\s*method: 'POST',\s*headers: \{\s*authorization: 'Bearer ' \+ token,\s*'content-type': 'application\/json',\s*\},\s*credentials: 'include',\s*body: '\{\}',\s*\}\)/,
     );
     expect(body).toMatch(/const DLQ_TIMEOUT_MS = 15_000;/);
   });
@@ -75,7 +75,7 @@ describe('W488.C apps/admin-panel/src/pages/webhook-dlq.astro content parity', (
 
   it("ageStr 4-tier helper: null/empty → '—' / <60min → 'Nm ago' / <48hr → 'Nh ago' / else 'Nd ago' (Math.floor on each tier boundary) — pinned so the age-display stays human-readable (drift to 'X minutes' would overflow the badge slot; drift to dropping the days tier would render '72h ago' for 3-day-old entries instead of '3d ago')", () => {
     expect(body).toMatch(
-      /function ageStr\(createdAt\) \{\s*\n?\s*if \(!createdAt\) return '—';\s*\n?\s*const ms = Date\.now\(\) - new Date\(createdAt\)\.getTime\(\);\s*\n?\s*if \(ms < 0\) return '—';\s*\n?\s*const min = Math\.floor\(ms \/ 60000\);\s*\n?\s*if \(min < 60\) return min \+ 'm ago';\s*\n?\s*const hr = Math\.floor\(min \/ 60\);\s*\n?\s*if \(hr < 48\) return hr \+ 'h ago';\s*\n?\s*const days = Math\.floor\(hr \/ 24\);\s*\n?\s*return days \+ 'd ago';\s*\n?\s*\}/,
+      /function ageStr\(createdAt\) \{\s*if \(!createdAt\) return '—';\s*const ms = Date\.now\(\) - new Date\(createdAt\)\.getTime\(\);\s*if \(ms < 0\) return '—';\s*const min = Math\.floor\(ms \/ 60000\);\s*if \(min < 60\) return min \+ 'm ago';\s*const hr = Math\.floor\(min \/ 60\);\s*if \(hr < 48\) return hr \+ 'h ago';\s*const days = Math\.floor\(hr \/ 24\);\s*return days \+ 'd ago';\s*\}/,
     );
   });
 
@@ -83,7 +83,7 @@ describe('W488.C apps/admin-panel/src/pages/webhook-dlq.astro content parity', (
     expect(body).toMatch(/<div class="hidden" data-region="empty">/);
     expect(body).toMatch(/DLQ empty/);
     expect(body).toMatch(
-      /No deliveries have exhausted the retry budget\. Healthy posture —\s*\n?\s*customer endpoints are reachable \+ responding\./,
+      /No deliveries have exhausted the retry budget\. Healthy posture —\s*customer endpoints are reachable \+ responding\./,
     );
   });
 
@@ -172,14 +172,14 @@ describe('W488.C apps/admin-panel/src/pages/webhook-dlq.astro content parity', (
       /<span class="rounded-full bg-red-100 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-red-800">/,
     );
     expect(body).toMatch(
-      /<div class="mt-4 rounded border border-red-200 bg-tk-surface px-3 py-2">\s*\n?\s*<p class="font-mono text-xs text-red-900">/,
+      /<div class="mt-4 rounded border border-red-200 bg-tk-surface px-3 py-2">\s*<p class="font-mono text-xs text-red-900">/,
     );
   });
 
   it("Banner state taxonomy: no-token / 403 forbidden / fetch-error on load + 'Requeueing N…' / 'Requeued N. Refreshing list…' / 'Couldn't requeue N (msg).' on action — pinned so the 6-state banner vocabulary stays consistent with the rest of the admin pages (drift to a different forbidden message would inconsistently brand the cross-page admin-scope error)", () => {
     expect(body).toMatch(/showBanner\('Sign in with a staff admin account to see live data\.'\);/);
     expect(body).toMatch(
-      /showBanner\(\s*\n?\s*'Access denied — admin scope required\. You are signed in as a customer account\.',\s*\n?\s*\);/,
+      /showBanner\(\s*'Access denied — admin scope required\. You are signed in as a customer account\.',\s*\);/,
     );
     expect(body).toMatch(/showBanner\('Requeueing ' \+ id \+ '…'\);/);
     expect(body).toMatch(/showBanner\('Requeued ' \+ id \+ '\. Refreshing list…'\);/);

@@ -46,7 +46,7 @@ describe('W470.B apps/gui-client/src/lib/use-cancel-order.ts content parity', ()
   it("V-534.Y framing pinned: 'V-534.Y — useCancelOrder hook.' + 'Action hook (not a fetch-on-mount hook) that wraps POST /v1/billing/crypto-orders/:id/cancel (V-666.J). Returns a state machine: idle → submitting → succeeded | failed. Caller invokes `cancel(orderId)` to fire the request. `reset()` returns to idle so the same hook instance can be reused across multiple orders.'", () => {
     expect(body).toMatch(/\/\/ V-534\.Y — useCancelOrder hook\./);
     expect(body).toMatch(
-      /\/\/ Action hook \(not a fetch-on-mount hook\) that wraps\s*\n?\s*\/\/ POST \/v1\/billing\/crypto-orders\/:id\/cancel \(V-666\.J\)\. Returns a state\s*\n?\s*\/\/ machine: idle → submitting → succeeded \| failed\. Caller invokes\s*\n?\s*\/\/ `cancel\(orderId\)` to fire the request\. `reset\(\)` returns to idle so\s*\n?\s*\/\/ the same hook instance can be reused across multiple orders\./,
+      /\/\/ Action hook \(not a fetch-on-mount hook\) that wraps\s*\/\/ POST \/v1\/billing\/crypto-orders\/:id\/cancel \(V-666\.J\)\. Returns a state\s*\/\/ machine: idle → submitting → succeeded \| failed\. Caller invokes\s*\/\/ `cancel\(orderId\)` to fire the request\. `reset\(\)` returns to idle so\s*\/\/ the same hook instance can be reused across multiple orders\./,
     );
   });
 
@@ -60,13 +60,13 @@ describe('W470.B apps/gui-client/src/lib/use-cancel-order.ts content parity', ()
 
   it("CancelOrderState 4-variant union: idle | submitting{orderId} | succeeded{order: CryptoOrderData} | failed{orderId + status + message} — orderId preserved through submitting/failed for UI 'which order failed' reference", () => {
     expect(body).toMatch(
-      /export type CancelOrderState =\s*\n?\s*\| \{ kind: 'idle' \}\s*\n?\s*\| \{ kind: 'submitting'; orderId: string \}\s*\n?\s*\| \{ kind: 'succeeded'; order: CryptoOrderData \}\s*\n?\s*\| \{ kind: 'failed'; orderId: string; status: number; message: string \};/,
+      /export type CancelOrderState =\s*\| \{ kind: 'idle' \}\s*\| \{ kind: 'submitting'; orderId: string \}\s*\| \{ kind: 'succeeded'; order: CryptoOrderData \}\s*\| \{ kind: 'failed'; orderId: string; status: number; message: string \};/,
     );
   });
 
   it('UseCancelOrderResult: 3-method (state + cancel(orderId): Promise<void> + reset(): void) — cancel is action, reset is sync', () => {
     expect(body).toMatch(
-      /export interface UseCancelOrderResult \{\s*\n?\s*state: CancelOrderState;\s*\n?\s*cancel: \(orderId: string\) => Promise<void>;\s*\n?\s*reset: \(\) => void;\s*\n?\s*\}/,
+      /export interface UseCancelOrderResult \{\s*state: CancelOrderState;\s*cancel: \(orderId: string\) => Promise<void>;\s*reset: \(\) => void;\s*\}/,
     );
   });
 
@@ -75,7 +75,7 @@ describe('W470.B apps/gui-client/src/lib/use-cancel-order.ts content parity', ()
       /const \[state, setState\] = useState<CancelOrderState>\(\{ kind: 'idle' \}\);/,
     );
     expect(body).toMatch(
-      /if \(!settings\.apiKey\) \{\s*\n?\s*setState\(\{\s*\n?\s*kind: 'failed',\s*\n?\s*orderId,\s*\n?\s*status: 0,\s*\n?\s*message: 'No API key configured\.',\s*\n?\s*\}\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /if \(!settings\.apiKey\) \{\s*setState\(\{\s*kind: 'failed',\s*orderId,\s*status: 0,\s*message: 'No API key configured\.',\s*\}\);\s*return;\s*\}/,
     );
   });
 
@@ -98,7 +98,7 @@ describe('W470.B apps/gui-client/src/lib/use-cancel-order.ts content parity', ()
   });
 
   it('keeps cancel dependencies and makes reset/unmount abort and invalidate active work', () => {
-    expect(body).toMatch(/\[settings\.apiKey, settings\.baseUrl\],\s*\n?\s*\);/);
+    expect(body).toMatch(/\[settings\.apiKey, settings\.baseUrl\],\s*\);/);
     expect(body).toMatch(/if \(inFlightRef\.current\) return;/);
     expect(body).toMatch(
       /const reset = useCallback\(\(\): void => \{[\s\S]*?requestRef\.current\?\.abort\(\);[\s\S]*?setState\(\{ kind: 'idle' \}\);/,

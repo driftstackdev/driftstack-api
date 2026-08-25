@@ -64,7 +64,7 @@ describe('Slice 1-2 — profile_id + POST /v1/profiles/:id/launch cross-source i
     const body = read(lib);
     expect(body).toMatch(/body\.profile_id !== undefined/);
     expect(body).toMatch(
-      /\.touch\(\{ id: profileId, accountId: ownerAccountId, at: new Date\(\) \}\)\s*\n?\s*\.catch\(\(\) => undefined\)/,
+      /\.touch\(\{ id: profileId, accountId: ownerAccountId, at: new Date\(\) \}\)\s*\.catch\(\(\) => undefined\)/,
     );
   });
 
@@ -95,7 +95,7 @@ describe('Slice 1-2 — profile_id + POST /v1/profiles/:id/launch cross-source i
     const lib = resolve(REPO_ROOT, 'packages/sdk-typescript/src/resources/profiles.ts');
     const body = read(lib);
     expect(body).toMatch(
-      /launch\(\s*\n?\s*id: string,\s*\n?\s*body: \{ label\?: string \} = \{\}\s*,?\s*\n?\s*\): Promise<Session>/,
+      /launch\(\s*id: string,\s*body: \{ label\?: string \} = \{\}\s*,?\s*\): Promise<Session>/,
     );
     expect(body).toMatch(/path: `\/v1\/profiles\/\$\{encodeURIComponent\(id\)\}\/launch`,/);
     expect(body).not.toMatch(/proxy\?: unknown/);
@@ -109,7 +109,7 @@ describe('Slice 1-2 — profile_id + POST /v1/profiles/:id/launch cross-source i
       /def launch\(self, profile_id: str, body: dict\[str, Any\] \| None = None\) -> dict\[str, Any\]:/,
     );
     expect(body).toMatch(
-      /async def launch\(\s*\n?\s*self, profile_id: str, body: dict\[str, Any\] \| None = None\s*\n?\s*\) -> dict\[str, Any\]:/,
+      /async def launch\(\s*self, profile_id: str, body: dict\[str, Any\] \| None = None\s*\) -> dict\[str, Any\]:/,
     );
     expect(body).toMatch(/f"\/v1\/profiles\/\{quote\(profile_id, safe=''\)\}\/launch"/);
     expect(body).not.toMatch(/accepts optional ``proxy`` \+ ``label`` overrides/);
@@ -121,7 +121,7 @@ describe('Slice 1-2 — profile_id + POST /v1/profiles/:id/launch cross-source i
     expect(body).toMatch(/type LaunchProfileRequest struct \{[\s\S]*?Label string/);
     expect(body).not.toMatch(/Proxy any/);
     expect(body).toMatch(
-      /func \(r \*ProfilesResource\) Launch\(\s*\n?\s*ctx context\.Context,\s*\n?\s*profileID string,\s*\n?\s*body \*LaunchProfileRequest,\s*\n?\s*\) \(\*Session, error\)/,
+      /func \(r \*ProfilesResource\) Launch\(\s*ctx context\.Context,\s*profileID string,\s*body \*LaunchProfileRequest,\s*\) \(\*Session, error\)/,
     );
     expect(body).toMatch(/"\/v1\/profiles\/" \+ url\.PathEscape\(profileID\) \+ "\/launch"/);
   });

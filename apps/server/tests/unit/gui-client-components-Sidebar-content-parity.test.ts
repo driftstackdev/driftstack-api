@@ -43,7 +43,7 @@ describe('W486.S apps/gui-client/src/components/Sidebar.tsx content parity', () 
 
   it("SidebarViewKind 13-variant union exported: home / ai / recipes / profiles / proxies / sessions-history / recordings / sessions / connectivity / fleet / team / billing / settings — pinned so App.tsx + future callers stay tied to the canonical nav-key taxonomy (live-session + recording-player are not in this union — they are routed-to, not navigated-to). 'ai' added by S7; 'recipes'/'logs' by the P3 feature-views slice; 'home' (Command Center) by the 5→10 G4 slice; 'team' by the Teams-management slice (2026-06-16); 'logs' removed when the client-buffer nav surface was retired (2026-06-19); 'billing' added when the customer billing/crypto-checkout cluster was wired into nav (revenue path, 2026-06-19); the speculative Marketplace preview was removed before backend work (2026-07-12).", () => {
     expect(body).toMatch(
-      /export type SidebarViewKind =\s*\n?\s*\| 'home'\s*\n?\s*\| 'ai'\s*\n?\s*\| 'recipes'\s*\n?\s*\| 'profiles'\s*\n?\s*\| 'proxies'\s*\n?\s*\| 'sessions-history'\s*\n?\s*\| 'recordings'\s*\n?\s*\| 'sessions'\s*\n?\s*\| 'connectivity'\s*\n?\s*\| 'fleet'\s*\n?\s*\| 'team'\s*\n?\s*\| 'billing'\s*\n?\s*\| 'settings';/,
+      /export type SidebarViewKind =\s*\| 'home'\s*\| 'ai'\s*\| 'recipes'\s*\| 'profiles'\s*\| 'proxies'\s*\| 'sessions-history'\s*\| 'recordings'\s*\| 'sessions'\s*\| 'connectivity'\s*\| 'fleet'\s*\| 'team'\s*\| 'billing'\s*\| 'settings';/,
     );
     expect(body).not.toMatch(/marketplace/i);
     expect(body).not.toMatch(/\| 'logs'/);
@@ -62,7 +62,7 @@ describe('W486.S apps/gui-client/src/components/Sidebar.tsx content parity', () 
 
   it('Cluster section cloud-gate: !isCloudBaseUrl(settings.baseUrl) — pinned so a cloud-hosted customer never sees the Mac-mini-fleet ops surface (the same binary serves both deploy targets; this is a render-only gate, not auth)', () => {
     expect(body).toMatch(
-      /\{!isCloudBaseUrl\(settings\.baseUrl\) && \(\s*\n?\s*<SidebarSection label="Cluster">/,
+      /\{!isCloudBaseUrl\(settings\.baseUrl\) && \(\s*<SidebarSection label="Cluster">/,
     );
   });
 

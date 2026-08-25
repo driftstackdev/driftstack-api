@@ -42,13 +42,13 @@ describe('W480.C apps/gui-client/src/views/CryptoOrdersDailyBreakdownView.tsx co
   it("V-534.AH framing pinned: 'V-534.AH — admin daily-breakdown view for crypto orders.' + 'Companion to V-534.AG admin list. Renders the (date, status, count) rows returned by /v1/admin/crypto-orders/daily as a pivoted table (rows = dates, columns = statuses). Days with no orders are omitted by the server; we keep that posture client-side and skip the zero-fill — caller can widen `days` if they want a denser view.'", () => {
     expect(body).toMatch(/\/\/ V-534\.AH — admin daily-breakdown view for crypto orders\./);
     expect(body).toMatch(
-      /\/\/ Companion to V-534\.AG admin list\. Renders the \(date, status, count\)\s*\n?\s*\/\/ rows returned by \/v1\/admin\/crypto-orders\/daily as a pivoted table\s*\n?\s*\/\/ \(rows = dates, columns = statuses\)\. Days with no orders are\s*\n?\s*\/\/ omitted by the server; we keep that posture client-side and skip\s*\n?\s*\/\/ the zero-fill — caller can widen `days` if they want a denser view\./,
+      /\/\/ Companion to V-534\.AG admin list\. Renders the \(date, status, count\)\s*\/\/ rows returned by \/v1\/admin\/crypto-orders\/daily as a pivoted table\s*\/\/ \(rows = dates, columns = statuses\)\. Days with no orders are\s*\/\/ omitted by the server; we keep that posture client-side and skip\s*\/\/ the zero-fill — caller can widen `days` if they want a denser view\./,
     );
   });
 
   it("STATUS_COLUMNS 6-status array pinned: ['pending', 'confirming', 'paid', 'failed', 'partial', 'cancelled'] — pinned so the pivot table doesn't lose a status column (admin would undercount e.g. revenue at-risk in 'partial' state)", () => {
     expect(body).toMatch(
-      /const STATUS_COLUMNS: AdminDailyStatus\[\] = \[\s*\n?\s*'pending',\s*\n?\s*'confirming',\s*\n?\s*'paid',\s*\n?\s*'failed',\s*\n?\s*'partial',\s*\n?\s*'cancelled',\s*\n?\s*\];/,
+      /const STATUS_COLUMNS: AdminDailyStatus\[\] = \[\s*'pending',\s*'confirming',\s*'paid',\s*'failed',\s*'partial',\s*'cancelled',\s*\];/,
     );
   });
 
@@ -62,13 +62,13 @@ describe('W480.C apps/gui-client/src/views/CryptoOrdersDailyBreakdownView.tsx co
 
   it("PivotRow interface + pivot() helper: Map<string, PivotRow> bucketing initialized with all 6 statuses zeroed + row.counts[r.status] += r.count + row.total += r.count + sort newest-first comparator (a.date < b.date ? 1 : -1) — pinned so admin sees today's data first, not yesterday's", () => {
     expect(body).toMatch(
-      /interface PivotRow \{\s*\n?\s*date: string;\s*\n?\s*counts: Record<AdminDailyStatus, number>;\s*\n?\s*total: number;\s*\n?\s*\}/,
+      /interface PivotRow \{\s*date: string;\s*counts: Record<AdminDailyStatus, number>;\s*total: number;\s*\}/,
     );
     expect(body).toMatch(
-      /function pivot\(rows: AdminDailyRow\[\]\): PivotRow\[\] \{\s*\n?\s*const byDate = new Map<string, PivotRow>\(\);\s*\n?\s*for \(const r of rows\) \{\s*\n?\s*let row = byDate\.get\(r\.date\);\s*\n?\s*if \(!row\) \{\s*\n?\s*row = \{\s*\n?\s*date: r\.date,\s*\n?\s*counts: \{\s*\n?\s*pending: 0,\s*\n?\s*confirming: 0,\s*\n?\s*paid: 0,\s*\n?\s*failed: 0,\s*\n?\s*partial: 0,\s*\n?\s*cancelled: 0,\s*\n?\s*\},\s*\n?\s*total: 0,\s*\n?\s*\};\s*\n?\s*byDate\.set\(r\.date, row\);\s*\n?\s*\}\s*\n?\s*row\.counts\[r\.status\] \+= r\.count;\s*\n?\s*row\.total \+= r\.count;\s*\n?\s*\}/,
+      /function pivot\(rows: AdminDailyRow\[\]\): PivotRow\[\] \{\s*const byDate = new Map<string, PivotRow>\(\);\s*for \(const r of rows\) \{\s*let row = byDate\.get\(r\.date\);\s*if \(!row\) \{\s*row = \{\s*date: r\.date,\s*counts: \{\s*pending: 0,\s*confirming: 0,\s*paid: 0,\s*failed: 0,\s*partial: 0,\s*cancelled: 0,\s*\},\s*total: 0,\s*\};\s*byDate\.set\(r\.date, row\);\s*\}\s*row\.counts\[r\.status\] \+= r\.count;\s*row\.total \+= r\.count;\s*\}/,
     );
     expect(body).toMatch(
-      /\/\/ Newest day first\.\s*\n?\s*return Array\.from\(byDate\.values\(\)\)\.sort\(\(a, b\) => \(a\.date < b\.date \? 1 : -1\)\);/,
+      /\/\/ Newest day first\.\s*return Array\.from\(byDate\.values\(\)\)\.sort\(\(a, b\) => \(a\.date < b\.date \? 1 : -1\)\);/,
     );
   });
 
@@ -80,22 +80,22 @@ describe('W480.C apps/gui-client/src/views/CryptoOrdersDailyBreakdownView.tsx co
       /const pivoted = useMemo\(\(\) => \(state\.kind === 'ready' \? pivot\(state\.data\.rows\) : \[\]\), \[state\]\);/,
     );
     expect(body).toMatch(
-      /\{state\.kind === 'error' && \(\s*\n?\s*<ErrorBanner message=\{state\.message\} onDismiss=\{\(\) => void refetch\(\)\} \/>\s*\n?\s*\)\}/,
+      /\{state\.kind === 'error' && \(\s*<ErrorBanner message=\{state\.message\} onDismiss=\{\(\) => void refetch\(\)\} \/>\s*\)\}/,
     );
     expect(body).toMatch(
-      /\{state\.kind === 'ready' && state\.data\.truncated && \(\s*\n?\s*<p className="text-xs text-status-warning">\s*\n?\s*Window was truncated server-side\. Some older days may be missing — widen the analytics\s*\n?\s*pipeline if this becomes routine\.\s*\n?\s*<\/p>\s*\n?\s*\)\}/,
+      /\{state\.kind === 'ready' && state\.data\.truncated && \(\s*<p className="text-xs text-status-warning">\s*Window was truncated server-side\. Some older days may be missing — widen the analytics\s*pipeline if this becomes routine\.\s*<\/p>\s*\)\}/,
     );
     expect(body).toMatch(
-      /\{state\.kind === 'ready' && pivoted\.length === 0 && \(\s*\n?\s*<div className="rounded-md border border-surface-divider bg-surface-inset p-6 text-center text-sm text-ink-secondary">\s*\n?\s*No orders in the selected window\.\s*\n?\s*<\/div>\s*\n?\s*\)\}/,
+      /\{state\.kind === 'ready' && pivoted\.length === 0 && \(\s*<div className="rounded-md border border-surface-divider bg-surface-inset p-6 text-center text-sm text-ink-secondary">\s*No orders in the selected window\.\s*<\/div>\s*\)\}/,
     );
   });
 
   it("Pivoted table: <thead> with Date + STATUS_COLUMNS.map column headers (capitalize) + Total; <tbody>: per-row date font-mono text-xs + STATUS_COLUMNS.map cells with '—' em-dash for 0 counts + total font-semibold — pinned so a 0-count cell renders the em-dash placeholder, not a literal '0' which clutters the at-a-glance read", () => {
     expect(body).toMatch(
-      /<thead className="text-left text-ink-secondary">\s*\n?\s*<tr>\s*\n?\s*<th className="py-2 pr-4 font-medium">Date<\/th>\s*\n?\s*\{STATUS_COLUMNS\.map\(\(s\) => \(\s*\n?\s*<th key=\{s\} className="py-2 pr-4 font-medium capitalize">\s*\n?\s*\{s\}\s*\n?\s*<\/th>\s*\n?\s*\)\)\}\s*\n?\s*<th className="py-2 pr-4 font-medium">Total<\/th>\s*\n?\s*<\/tr>\s*\n?\s*<\/thead>/,
+      /<thead className="text-left text-ink-secondary">\s*<tr>\s*<th className="py-2 pr-4 font-medium">Date<\/th>\s*\{STATUS_COLUMNS\.map\(\(s\) => \(\s*<th key=\{s\} className="py-2 pr-4 font-medium capitalize">\s*\{s\}\s*<\/th>\s*\)\)\}\s*<th className="py-2 pr-4 font-medium">Total<\/th>\s*<\/tr>\s*<\/thead>/,
     );
     expect(body).toMatch(
-      /\{pivoted\.map\(\(row\) => \(\s*\n?\s*<tr key=\{row\.date\} className="border-t border-surface-divider">\s*\n?\s*<td className="py-2 pr-4 font-mono text-xs">\{row\.date\}<\/td>\s*\n?\s*\{STATUS_COLUMNS\.map\(\(s\) => \(\s*\n?\s*<td key=\{s\} className="py-2 pr-4 text-ink-secondary">\s*\n?\s*\{row\.counts\[s\] === 0 \? '—' : row\.counts\[s\]\}\s*\n?\s*<\/td>\s*\n?\s*\)\)\}\s*\n?\s*<td className="py-2 pr-4 font-semibold">\{row\.total\}<\/td>/,
+      /\{pivoted\.map\(\(row\) => \(\s*<tr key=\{row\.date\} className="border-t border-surface-divider">\s*<td className="py-2 pr-4 font-mono text-xs">\{row\.date\}<\/td>\s*\{STATUS_COLUMNS\.map\(\(s\) => \(\s*<td key=\{s\} className="py-2 pr-4 text-ink-secondary">\s*\{row\.counts\[s\] === 0 \? '—' : row\.counts\[s\]\}\s*<\/td>\s*\)\)\}\s*<td className="py-2 pr-4 font-semibold">\{row\.total\}<\/td>/,
     );
   });
 

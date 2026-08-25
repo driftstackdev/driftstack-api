@@ -44,7 +44,7 @@ describe('W871 Webhook policy cross-source invariant', () => {
   it('CRITICAL packages/api-types/src/webhooks.ts CreateWebhookRequestSchema url field enforces https:// with the same message, as a PUBLISHABLE regex rather than a refine (V-1498 — a refine never reached the OpenAPI document). The https-only rule is what prevents customers from pointing webhooks at http:// (leaking secrets) or non-URL strings (refusing delivery).', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
     expect(p).toMatch(
-      /CreateWebhookRequestSchema = z\.object\(\{[\s\S]+?url: z\s*\n?\s*\.string\(\)\s*\n?\s*\.url\(\)\s*\n?\s*\.regex\(\/\^https:\\\/\\\/\/, \{ message: 'Webhook URL must use https:\/\/' \}\),/,
+      /CreateWebhookRequestSchema = z\.object\(\{[\s\S]+?url: z\s*\.string\(\)\s*\.url\(\)\s*\.regex\(\/\^https:\\\/\\\/\/, \{ message: 'Webhook URL must use https:\/\/' \}\),/,
     );
   });
 
@@ -80,7 +80,7 @@ describe('W871 Webhook policy cross-source invariant', () => {
   it("CRITICAL packages/api-types/src/webhooks.ts UpdateWebhookRequestSchema mirrors Create constraints — https-regex + Subscribable.min(1).max(10) + description.max(200). The dual-validation is what makes 'edit endpoint' UX behave identically to 'create endpoint'.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
     expect(p).toMatch(
-      /UpdateWebhookRequestSchema = z\s*\n?\s*\.object\(\{[\s\S]+?\.regex\(\/\^https:\\\/\\\/\/, \{ message: 'Webhook URL must use https:\/\/' \}\)/,
+      /UpdateWebhookRequestSchema = z\s*\.object\(\{[\s\S]+?\.regex\(\/\^https:\\\/\\\/\/, \{ message: 'Webhook URL must use https:\/\/' \}\)/,
     );
     expect(p).toMatch(
       /UpdateWebhookRequestSchema[\s\S]+?events: z\.array\(SubscribableWebhookEventTypeSchema\)\.min\(1\)\.max\(10\)/,
@@ -114,7 +114,7 @@ describe('W871 Webhook policy cross-source invariant', () => {
 
   it("CRITICAL WebhookEndpointSchema has prev_secret_prefix + rotation_grace_expires_at fields, both nullable. The 'null when no rotation in flight' framing matches the V-359 24h dual-signing model — when grace expires, prev_secret_prefix should be cleared.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
-    expect(p).toMatch(/prev_secret_prefix: z\s*\n?\s*\.string\(\)\s*\n?\s*\.nullable\(\)/);
+    expect(p).toMatch(/prev_secret_prefix: z\s*\.string\(\)\s*\.nullable\(\)/);
     expect(p).toMatch(/rotation_grace_expires_at: Iso8601Schema\.nullable\(\)/);
     expect(p).toMatch(/V-359 — populated only during the 24h rotation grace period/);
   });
@@ -124,7 +124,7 @@ describe('W871 Webhook policy cross-source invariant', () => {
   it("CRITICAL apps/customer-dashboard/src/pages/webhooks.astro form helper text pins 'HTTPS required. The endpoint must respond 2xx within 10s for delivery to count as successful.' The 2-sentence framing communicates both the protocol constraint + the success criterion.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/webhooks.astro'));
     expect(p).toMatch(/HTTPS required\./);
-    expect(p).toMatch(/respond 2xx within 10s for delivery to count\s*\n?\s*as successful/);
+    expect(p).toMatch(/respond 2xx within 10s for delivery to count\s*as successful/);
   });
 
   it("CRITICAL apps/customer-dashboard/src/pages/webhooks.astro 'New endpoint' + 'Edit endpoint' form url inputs have type=\"url\" + required + placeholder='https://...'. The HTML5 type=url + required attrs match server-side validation expectations.", () => {

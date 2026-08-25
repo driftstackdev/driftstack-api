@@ -51,7 +51,7 @@ describe('W482.B apps/gui-client/src/views/RecordingPlayerView.tsx content parit
   it("Framing pinned: 'Recording playback — timeline scrubber + play/pause.' + 'Plays back the in-memory frame buffer at the same wall-clock cadence they were captured (advances the cursor by real time, picks the frame whose `at` is the closest <= cursor). At 2 fps the playback looks like ~2 fps; if the underlying capture was bursty the playback honours that.'", () => {
     expect(body).toMatch(/\/\/ Recording playback — timeline scrubber \+ play\/pause\./);
     expect(body).toMatch(
-      /\/\/ Plays back the in-memory frame buffer at the same wall-clock cadence\s*\n?\s*\/\/ they were captured \(advances the cursor by real time, picks the\s*\n?\s*\/\/ frame whose `at` is the closest <= cursor\)\. At 2 fps the playback\s*\n?\s*\/\/ looks like ~2 fps; if the underlying capture was bursty the\s*\n?\s*\/\/ playback honours that\./,
+      /\/\/ Plays back the in-memory frame buffer at the same wall-clock cadence\s*\/\/ they were captured \(advances the cursor by real time, picks the\s*\/\/ frame whose `at` is the closest <= cursor\)\. At 2 fps the playback\s*\/\/ looks like ~2 fps; if the underlying capture was bursty the\s*\/\/ playback honours that\./,
     );
   });
 
@@ -63,28 +63,28 @@ describe('W482.B apps/gui-client/src/views/RecordingPlayerView.tsx content parit
 
   it('playStateRef wall-clock anchor: useRef<{wallStart: number; cursorBase: number} | null>(null) — pinned so the playback loop measures elapsed time from a fixed wall-clock anchor instead of accumulating TICK_MS increments (avoids drift if the JS event loop is busy)', () => {
     expect(body).toMatch(
-      /\/\/ Wall-clock anchor for the playback loop: \{ wallStart, cursorBase \}\s*\n?\s*const playStateRef = useRef<\{ wallStart: number; cursorBase: number \} \| null>\(null\);/,
+      /\/\/ Wall-clock anchor for the playback loop: \{ wallStart, cursorBase \}\s*const playStateRef = useRef<\{ wallStart: number; cursorBase: number \} \| null>\(null\);/,
     );
   });
 
   it('startTick: stopTick + anchor playStateRef = {wallStart: Date.now(), cursorBase: cursorMs} + setInterval TICK_MS measuring elapsed = Date.now() - wallStart then next = cursorBase + elapsed; end-detection next >= totalMs → setCursorMs(totalMs) + setPlaying(false) + stopTick — pinned so playback halts at the actual recording end, not at TICK_MS-aligned ticks before/after', () => {
     expect(body).toMatch(
-      /const startTick = useCallback\(\(\): void => \{\s*\n?\s*stopTick\(\);\s*\n?\s*playStateRef\.current = \{ wallStart: Date\.now\(\), cursorBase: cursorMs \};\s*\n?\s*tickRef\.current = window\.setInterval\(\(\) => \{\s*\n?\s*const ps = playStateRef\.current;\s*\n?\s*if \(ps === null\) return;\s*\n?\s*const elapsed = Date\.now\(\) - ps\.wallStart;\s*\n?\s*const next = ps\.cursorBase \+ elapsed;\s*\n?\s*if \(next >= totalMs\) \{\s*\n?\s*setCursorMs\(totalMs\);\s*\n?\s*setPlaying\(false\);\s*\n?\s*stopTick\(\);\s*\n?\s*\} else \{\s*\n?\s*setCursorMs\(next\);\s*\n?\s*\}\s*\n?\s*\}, TICK_MS\);\s*\n?\s*\}, \[cursorMs, stopTick, totalMs\]\);/,
+      /const startTick = useCallback\(\(\): void => \{\s*stopTick\(\);\s*playStateRef\.current = \{ wallStart: Date\.now\(\), cursorBase: cursorMs \};\s*tickRef\.current = window\.setInterval\(\(\) => \{\s*const ps = playStateRef\.current;\s*if \(ps === null\) return;\s*const elapsed = Date\.now\(\) - ps\.wallStart;\s*const next = ps\.cursorBase \+ elapsed;\s*if \(next >= totalMs\) \{\s*setCursorMs\(totalMs\);\s*setPlaying\(false\);\s*stopTick\(\);\s*\} else \{\s*setCursorMs\(next\);\s*\}\s*\}, TICK_MS\);\s*\}, \[cursorMs, stopTick, totalMs\]\);/,
     );
   });
 
   it("Frame selection: useMemo currentFrame; null when recording === null or frames.length === 0; otherwise target = effectiveStart + cursorMs (ring-buffer-trimmed basis, audit #12 — first SURVIVING frame, not recording.startedAt) + linear scan picking the latest f.at <= target (early break on first f.at > target — pinned so we don't traverse the whole frame list after finding the right one); deps include effectiveStart", () => {
     expect(body).toMatch(
-      /const currentFrame = useMemo\(\(\) => \{\s*\n?\s*if \(recording === null \|\| recording\.frames\.length === 0\) return null;\s*\n?\s*const target = effectiveStart \+ cursorMs;\s*\n?\s*let chosen = recording\.frames\[0\] \?\? null;\s*\n?\s*for \(const f of recording\.frames\) \{\s*\n?\s*if \(f\.at <= target\) chosen = f;\s*\n?\s*else break;\s*\n?\s*\}\s*\n?\s*return chosen;\s*\n?\s*\}, \[recording, cursorMs, effectiveStart\]\);/,
+      /const currentFrame = useMemo\(\(\) => \{\s*if \(recording === null \|\| recording\.frames\.length === 0\) return null;\s*const target = effectiveStart \+ cursorMs;\s*let chosen = recording\.frames\[0\] \?\? null;\s*for \(const f of recording\.frames\) \{\s*if \(f\.at <= target\) chosen = f;\s*else break;\s*\}\s*return chosen;\s*\}, \[recording, cursorMs, effectiveStart\]\);/,
     );
   });
 
   it("togglePlay end-restart + handleScrub re-anchor: cursorMs >= totalMs → reset cursorMs to 0 + re-anchor playStateRef before flipping playing — pinned so 'Replay' button restarts from 0 instead of doing nothing because cursor is already at totalMs; handleScrub re-anchors playStateRef while playing so the next tick measures from the new cursor", () => {
     expect(body).toMatch(
-      /function togglePlay\(\): void \{\s*\n?\s*if \(cursorMs >= totalMs\) \{\s*\n?\s*\/\/ Restart from the beginning if we're at the end\.\s*\n?\s*setCursorMs\(0\);\s*\n?\s*playStateRef\.current = \{ wallStart: Date\.now\(\), cursorBase: 0 \};\s*\n?\s*\}\s*\n?\s*setPlaying\(\(p\) => !p\);\s*\n?\s*\}/,
+      /function togglePlay\(\): void \{\s*if \(cursorMs >= totalMs\) \{\s*\/\/ Restart from the beginning if we're at the end\.\s*setCursorMs\(0\);\s*playStateRef\.current = \{ wallStart: Date\.now\(\), cursorBase: 0 \};\s*\}\s*setPlaying\(\(p\) => !p\);\s*\}/,
     );
     expect(body).toMatch(
-      /function handleScrub\(e: React\.ChangeEvent<HTMLInputElement>\): void \{\s*\n?\s*const next = Number\(e\.target\.value\);\s*\n?\s*setCursorMs\(next\);\s*\n?\s*if \(playing\) \{\s*\n?\s*\/\/ Re-anchor the playback loop so the next tick measures from\s*\n?\s*\/\/ the new cursor\.\s*\n?\s*playStateRef\.current = \{ wallStart: Date\.now\(\), cursorBase: next \};\s*\n?\s*\}\s*\n?\s*\}/,
+      /function handleScrub\(e: React\.ChangeEvent<HTMLInputElement>\): void \{\s*const next = Number\(e\.target\.value\);\s*setCursorMs\(next\);\s*if \(playing\) \{\s*\/\/ Re-anchor the playback loop so the next tick measures from\s*\/\/ the new cursor\.\s*playStateRef\.current = \{ wallStart: Date\.now\(\), cursorBase: next \};\s*\}\s*\}/,
     );
   });
 
@@ -135,10 +135,10 @@ describe('W482.B apps/gui-client/src/views/RecordingPlayerView.tsx content parit
     );
     expect(bypassMutation).not.toMatch(/setHydrateError\(\s*humanizeError\(/);
     expect(body).toMatch(
-      /if \(recording === null\) return;\s*\n?\s*if \(!recording\.hydrated \|\| recording\.frames\.length > 0\) return;\s*\n?\s*loadFrames\(\);/,
+      /if \(recording === null\) return;\s*if \(!recording\.hydrated \|\| recording\.frames\.length > 0\) return;\s*loadFrames\(\);/,
     );
     expect(body).toMatch(
-      /if \(recording === null\) \{\s*\n?\s*return \(\s*\n?\s*<div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center">\s*\n?\s*<span className="section-label">Recording not found<\/span>\s*\n?\s*<p className="text-sm text-ink-secondary">It may have been deleted or the app restarted\.<\/p>/,
+      /if \(recording === null\) \{\s*return \(\s*<div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center">\s*<span className="section-label">Recording not found<\/span>\s*<p className="text-sm text-ink-secondary">It may have been deleted or the app restarted\.<\/p>/,
     );
   });
 
@@ -146,27 +146,27 @@ describe('W482.B apps/gui-client/src/views/RecordingPlayerView.tsx content parit
     expect(body).toMatch(/← Recordings/);
     expect(body).toMatch(/\{playing \? 'Pause' : cursorMs >= totalMs \? 'Replay' : 'Play'\}/);
     expect(body).toMatch(
-      /<input\s*\n?\s*type="range"\s*\n?\s*min=\{0\}\s*\n?\s*max=\{Math\.max\(totalMs, 1\)\}\s*\n?\s*value=\{Math\.min\(cursorMs, totalMs\)\}\s*\n?\s*step=\{TICK_MS\}\s*\n?\s*onChange=\{handleScrub\}/,
+      /<input\s*type="range"\s*min=\{0\}\s*max=\{Math\.max\(totalMs, 1\)\}\s*value=\{Math\.min\(cursorMs, totalMs\)\}\s*step=\{TICK_MS\}\s*onChange=\{handleScrub\}/,
     );
   });
 
   it("Frame display branch: hydrating → 'Loading frames…' / hydrateError !== null → 'Couldn't load frames' error state + message + 'Try again' (onClick=loadFrames) / currentFrame === null → 'No frames captured' / else the frame itself is a click-to-play <button onClick={togglePlay}> wrapping <img src={currentFrame.dataUrl}> with a center play/pause glyph + a hover-revealed 'Space to play' hint — pinned so a read FAILURE reads distinctly from a genuinely empty recording (with a retry) and the frame doubles as the play/pause hit target like a video player", () => {
     expect(body).toMatch(
-      /\{hydrating \? \(\s*\n?\s*<span className="section-label text-ink-muted">Loading frames…<\/span>\s*\n?\s*\) : hydrateError !== null \? \(/,
+      /\{hydrating \? \(\s*<span className="section-label text-ink-muted">Loading frames…<\/span>\s*\) : hydrateError !== null \? \(/,
     );
     expect(body).toMatch(
       /<span className="section-label text-status-error">Couldn't load frames<\/span>/,
     );
     expect(body).toMatch(
-      /<button type="button" className="btn-secondary" onClick=\{loadFrames\}>\s*\n?\s*Try again\s*\n?\s*<\/button>/,
+      /<button type="button" className="btn-secondary" onClick=\{loadFrames\}>\s*Try again\s*<\/button>/,
     );
     // Empty-recording branch stays distinct from a hydrate failure.
     expect(body).toMatch(
-      /\) : currentFrame === null \? \(\s*\n?\s*<span className="section-label text-ink-muted">No frames captured<\/span>\s*\n?\s*\) : \(/,
+      /\) : currentFrame === null \? \(\s*<span className="section-label text-ink-muted">No frames captured<\/span>\s*\) : \(/,
     );
     // The frame is now a play/pause button wrapping the img.
     expect(body).toMatch(
-      /<button\s*\n?\s*type="button"\s*\n?\s*onClick=\{togglePlay\}\s*\n?\s*aria-label=\{playing \? 'Pause playback' : 'Play recording'\}[\s\S]*?<img\s*\n?\s*src=\{currentFrame\.dataUrl\}/,
+      /<button\s*type="button"\s*onClick=\{togglePlay\}\s*aria-label=\{playing \? 'Pause playback' : 'Play recording'\}[\s\S]*?<img\s*src=\{currentFrame\.dataUrl\}/,
     );
     // …with an honest hover-revealed keyboard hint for each state.
     expect(body).toContain("{playing ? 'Space to pause' : 'Space to play'}");

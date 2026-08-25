@@ -81,7 +81,7 @@ describe('LiveKit 24h-TTL cross-source invariant', () => {
 
   it("docs/guides/live-video.md references 24-hour TTL in both 'For pre-existing sessions, or to re-mint after the 24-hour token TTL expires' AND 'Tokens are 24-hour HS256 JWTs signed with a per-Mac secret.' — pinned so the customer-facing TTL claim stays in sync with the route constant", () => {
     expect(liveVideoDocs).toMatch(
-      /For pre-existing sessions, or to re-mint after the 24-hour token\s*\n?\s*TTL expires:/,
+      /For pre-existing sessions, or to re-mint after the 24-hour token\s*TTL expires:/,
     );
     expect(liveVideoDocs).toMatch(/Tokens are 24-hour HS256 JWTs signed with a per-Mac secret\./);
   });
@@ -94,7 +94,7 @@ describe('LiveKit 24h-TTL cross-source invariant', () => {
 
   it("routes/agent-sessions-livekit-token JSDoc explicitly cross-references the gui_control_key TTL match: '24h matches gui_control_key + the agent-session lifecycle' + 'LiveKit's max is 6h, but the SFU re-checks at handshake only, so post-handshake long-lived connections survive the token expiry' — pinned so the gui_control_key-symmetry + LiveKit-6h-cap-only-at-handshake rationale all stay documented", () => {
     expect(lkRouteSrc).toMatch(
-      /Token TTL — 24h matches gui_control_key \+ the agent-session\s*\n?\s*\*\s+lifecycle\. LiveKit's max is 6h, but the SFU re-checks at\s*\n?\s*\*\s+handshake only/,
+      /Token TTL — 24h matches gui_control_key \+ the agent-session\s*\*\s+lifecycle\. LiveKit's max is 6h, but the SFU re-checks at\s*\*\s+handshake only/,
     );
   });
 
@@ -136,6 +136,6 @@ describe('LiveKit 24h-TTL cross-source invariant', () => {
 
   it("the rationale this file leans on is still written where it claims: the exported constant's JSDoc names LiveKit's 6h maximum and the handshake-only re-check. If that comment goes, the arm above is asserting a rule nobody records.", () => {
     expect(lkRouteSrc).toMatch(/LiveKit's max is 6h/);
-    expect(lkRouteSrc).toMatch(/re-checks at\s*\n?\s*\*\s*handshake only/);
+    expect(lkRouteSrc).toMatch(/re-checks at\s*\*\s*handshake only/);
   });
 });

@@ -94,7 +94,7 @@ describe('W714 server-side request-id + V-251 IP rate-limit middleware parity', 
 
     // Implementation matches.
     expect(src).toMatch(
-      /const ip =\s*\n?\s*typeof req\.ip === 'string' && req\.ip\.trim\(\)\.length > 0 \? req\.ip : 'unresolved-client';/,
+      /const ip =\s*typeof req\.ip === 'string' && req\.ip\.trim\(\)\.length > 0 \? req\.ip : 'unresolved-client';/,
     );
   });
 
@@ -102,7 +102,7 @@ describe('W714 server-side request-id + V-251 IP rate-limit middleware parity', 
     const src = read(IP_RATE_LIMIT);
 
     expect(src).toMatch(
-      /const consumeArgs = \{\s*\n?\s*key: `\$\{cfg\.bucketPrefix\}:\$\{ip\}`,\s*\n?\s*capacity: cfg\.capacity,\s*\n?\s*refillPerSecond: cfg\.refillPerSecond,\s*\n?\s*cost: 1,\s*\n?\s*now: Date\.now\(\),\s*\n?\s*\}/,
+      /const consumeArgs = \{\s*key: `\$\{cfg\.bucketPrefix\}:\$\{ip\}`,\s*capacity: cfg\.capacity,\s*refillPerSecond: cfg\.refillPerSecond,\s*cost: 1,\s*now: Date\.now\(\),\s*\}/,
     );
     expect(src).toContain('result = await store.consume(consumeArgs);');
   });
@@ -148,7 +148,7 @@ describe('W714 server-side request-id + V-251 IP rate-limit middleware parity', 
   it('CRITICAL RateLimitedError thrown with 2-arg shape — retryAfterSec + detail. Mirrors the W713 account-keyed limiter behavior; drift to dropping the retry-after seconds arg would lose the Retry-After-header propagation chain.', () => {
     const src = read(IP_RATE_LIMIT);
     expect(src).toMatch(
-      /throw new RateLimitedError\(\s*\n?\s*retryAfterSec,\s*\n?\s*`Too many requests from this IP\. Retry in \$\{retryAfterSec\.toString\(\)\}s\.`/,
+      /throw new RateLimitedError\(\s*retryAfterSec,\s*`Too many requests from this IP\. Retry in \$\{retryAfterSec\.toString\(\)\}s\.`/,
     );
   });
 

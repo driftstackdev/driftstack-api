@@ -27,7 +27,7 @@ describe('lib/livekit-token content parity', () => {
   it("V-531.B module-level framing pinned: 'LiveKit access-token minting. LiveKit's WS handshake requires a short-lived HS256 JWT signed with the project's API secret. The token carries the room name + role claims (publisher vs subscriber) so the SFU can enforce per-token authorization without an out-of-band session lookup. LiveKit's public spec is at: https://docs.livekit.io/realtime/concepts/authentication/' — pinned so the V-531.B anchor + HS256 + room+role-claim contract + per-token-auth-no-session-lookup + LiveKit spec URL all stay documented", () => {
     expect(body).toMatch(/\/\/ V-531\.B — LiveKit access-token minting\./);
     expect(body).toMatch(
-      /\/\/ LiveKit's WS handshake requires a short-lived HS256 JWT signed with\s*\n?\s*\/\/ the project's API secret\. The token carries the room name \+ role\s*\n?\s*\/\/ claims \(publisher vs subscriber\) so the SFU can enforce per-token\s*\n?\s*\/\/ authorization without an out-of-band session lookup\./,
+      /\/\/ LiveKit's WS handshake requires a short-lived HS256 JWT signed with\s*\/\/ the project's API secret\. The token carries the room name \+ role\s*\/\/ claims \(publisher vs subscriber\) so the SFU can enforce per-token\s*\/\/ authorization without an out-of-band session lookup\./,
     );
     expect(body).toMatch(
       /\/\/ {3}https:\/\/docs\.livekit\.io\/realtime\/concepts\/authentication\//,
@@ -36,29 +36,27 @@ describe('lib/livekit-token content parity', () => {
 
   it("Why-not-livekit-server-sdk framing pinned: 'We sign the token in-process rather than pulling livekit-server-sdk because the JWT format is stable + small enough that a 30-LOC implementation against node:crypto is preferable to the dep + its transitive footprint. LiveKit's spec calls for a strictly-typed video grant claim; the VideoGrant interface here mirrors the SDK's surface so a future swap is a drop-in.' — pinned so the in-process + 30-LOC + transitive-dep-avoidance + drop-in-swap contract all stay documented (drift to pulling the SDK would add bundle weight + dependency surface for a stable JWT format)", () => {
     expect(body).toMatch(
-      /\/\/ We sign the token in-process rather than pulling `livekit-server-sdk`\s*\n?\s*\/\/ because the JWT format is stable \+ small enough that a 30-LOC\s*\n?\s*\/\/ implementation against `node:crypto` is preferable to the dep \+ its\s*\n?\s*\/\/ transitive footprint\. LiveKit's spec calls for a strictly-typed\s*\n?\s*\/\/ `video` grant claim; the `VideoGrant` interface here mirrors the\s*\n?\s*\/\/ SDK's surface so a future swap is a drop-in\./,
+      /\/\/ We sign the token in-process rather than pulling `livekit-server-sdk`\s*\/\/ because the JWT format is stable \+ small enough that a 30-LOC\s*\/\/ implementation against `node:crypto` is preferable to the dep \+ its\s*\/\/ transitive footprint\. LiveKit's spec calls for a strictly-typed\s*\/\/ `video` grant claim; the `VideoGrant` interface here mirrors the\s*\/\/ SDK's surface so a future swap is a drop-in\./,
     );
   });
 
   it("Wire-ready posture framing pinned: 'wire-ready. Until the operator sets LIVEKIT_API_KEY + LIVEKIT_API_SECRET + LIVEKIT_WS_URL (via config.livekit), the /v1/sessions/:id/livekit-token route at app.ts stays unregistered.' — pinned so the 3-env-var trigger + activation-gate-stays-unregistered contract stay documented", () => {
     expect(body).toMatch(
-      /\/\/ Posture: wire-ready\. Until the operator sets `LIVEKIT_API_KEY` \+\s*\n?\s*\/\/ `LIVEKIT_API_SECRET` \+ `LIVEKIT_WS_URL` \(via `config\.livekit`\), the\s*\n?\s*\/\/ \/v1\/sessions\/:id\/livekit-token route at app\.ts stays unregistered\./,
+      /\/\/ Posture: wire-ready\. Until the operator sets `LIVEKIT_API_KEY` \+\s*\/\/ `LIVEKIT_API_SECRET` \+ `LIVEKIT_WS_URL` \(via `config\.livekit`\), the\s*\/\/ \/v1\/sessions\/:id\/livekit-token route at app\.ts stays unregistered\./,
     );
   });
 
   it("VideoGrant 4-field shape pinned: room + roomJoin (always true) + canPublish + canSubscribe. + 'Always true for our use.' on roomJoin. Drift to roomJoin being optional would let tokens be minted without join permission (which would render the token useless for the WS handshake)", () => {
     expect(body).toMatch(/export interface VideoGrant \{/);
+    expect(body).toMatch(/\/\*\* Room name the token grants access to\. \*\/\s*room: string;/);
     expect(body).toMatch(
-      /\/\*\* Room name the token grants access to\. \*\/\s*\n?\s*room: string;/,
+      /\/\*\* Allow the holder to join the room\. Always true for our use\. \*\/\s*roomJoin: true;/,
     );
     expect(body).toMatch(
-      /\/\*\* Allow the holder to join the room\. Always true for our use\. \*\/\s*\n?\s*roomJoin: true;/,
+      /\/\*\* Whether the holder can publish tracks \(Mac-mini-side publishers\)\. \*\/\s*canPublish: boolean;/,
     );
     expect(body).toMatch(
-      /\/\*\* Whether the holder can publish tracks \(Mac-mini-side publishers\)\. \*\/\s*\n?\s*canPublish: boolean;/,
-    );
-    expect(body).toMatch(
-      /\/\*\* Whether the holder can subscribe to tracks \(dashboard viewers\)\. \*\/\s*\n?\s*canSubscribe: boolean;/,
+      /\/\*\* Whether the holder can subscribe to tracks \(dashboard viewers\)\. \*\/\s*canSubscribe: boolean;/,
     );
   });
 
@@ -69,25 +67,25 @@ describe('lib/livekit-token content parity', () => {
     expect(body).toMatch(/identity: string;/);
     expect(body).toMatch(/video: VideoGrant;/);
     expect(body).toMatch(
-      /\/\*\* TTL in seconds\. Default 600 \(10 min\)\. LiveKit's max is 6h\. \*\/\s*\n?\s*ttlSeconds\?: number;/,
+      /\/\*\* TTL in seconds\. Default 600 \(10 min\)\. LiveKit's max is 6h\. \*\/\s*ttlSeconds\?: number;/,
     );
     expect(body).toMatch(
-      /\/\*\* Override the "now" epoch \(test seam\)\. Defaults to Date\.now\(\)\. \*\/\s*\n?\s*nowMs\?: number;/,
+      /\/\*\* Override the "now" epoch \(test seam\)\. Defaults to Date\.now\(\)\. \*\/\s*nowMs\?: number;/,
     );
     expect(body).toMatch(
-      /\/\*\* Override JTI generation \(test seam\)\. Defaults to a random hex\. \*\/\s*\n?\s*jti\?: string;/,
+      /\/\*\* Override JTI generation \(test seam\)\. Defaults to a random hex\. \*\/\s*jti\?: string;/,
     );
   });
 
   it("mintLivekitToken empty-args TypeError + return-shape framing pinned: 'empty apiKey / apiSecret / identity → TypeError. Caller should prefer not registering the route when config.livekit is unset, not call this and catch.' + return value '<base64url(header)>.<base64url(payload)>.<base64url(sig)>' triplet. Drift to throwing on undefined-instead-of-empty would mask config errors; drift to silently returning empty would mint invalid JWTs that LiveKit would reject late", () => {
     expect(body).toMatch(
-      /\*\s+- empty apiKey \/ apiSecret \/ identity → `TypeError`\. Caller should\s*\n?\s*\*\s+prefer not registering the route when `config\.livekit` is\s*\n?\s*\*\s+unset, not call this and catch\./,
+      /\*\s+- empty apiKey \/ apiSecret \/ identity → `TypeError`\. Caller should\s*\*\s+prefer not registering the route when `config\.livekit` is\s*\*\s+unset, not call this and catch\./,
     );
     expect(body).toMatch(
-      /\*\s+Returns the compact `<base64url\(header\)>\.<base64url\(payload\)>\.<base64url\(sig\)>`\s*\n?\s*\*\s+triplet ready to hand to a LiveKit client \(`new Room\(\)`\/connect\(\)\)\./,
+      /\*\s+Returns the compact `<base64url\(header\)>\.<base64url\(payload\)>\.<base64url\(sig\)>`\s*\*\s+triplet ready to hand to a LiveKit client \(`new Room\(\)`\/connect\(\)\)\./,
     );
     expect(body).toMatch(
-      /if \(!opts\.apiKey \|\| !opts\.apiSecret \|\| !opts\.identity\) \{\s*\n?\s*throw new TypeError\('apiKey \+ apiSecret \+ identity are required'\);\s*\n?\s*\}/,
+      /if \(!opts\.apiKey \|\| !opts\.apiSecret \|\| !opts\.identity\) \{\s*throw new TypeError\('apiKey \+ apiSecret \+ identity are required'\);\s*\}/,
     );
   });
 
@@ -98,10 +96,10 @@ describe('lib/livekit-token content parity', () => {
 
   it("LiveKit-reference-SDK field-order framing pinned: 'Field order matches the LiveKit reference SDK so debug-tooling round-trips byte-identical when comparing tokens.' + 6-field payload: exp + iss (apiKey) + nbf (now) + sub (identity) + jti + video. Drift to a different field order would diverge from the SDK's byte-identity contract + break diff-tooling that compares tokens across implementations", () => {
     expect(body).toMatch(
-      /\/\/ Field order matches the LiveKit reference SDK so debug-tooling\s*\n?\s*\/\/ round-trips byte-identical when comparing tokens\./,
+      /\/\/ Field order matches the LiveKit reference SDK so debug-tooling\s*\/\/ round-trips byte-identical when comparing tokens\./,
     );
     expect(body).toMatch(
-      /const payload = \{\s*\n?\s*exp,\s*\n?\s*iss: opts\.apiKey,\s*\n?\s*nbf: now,\s*\n?\s*sub: opts\.identity,\s*\n?\s*jti: opts\.jti \?\? randomJti\(\),\s*\n?\s*video: opts\.video,\s*\n?\s*\};/,
+      /const payload = \{\s*exp,\s*iss: opts\.apiKey,\s*nbf: now,\s*sub: opts\.identity,\s*jti: opts\.jti \?\? randomJti\(\),\s*video: opts\.video,\s*\};/,
     );
   });
 
@@ -114,13 +112,13 @@ describe('lib/livekit-token content parity', () => {
 
   it('toBase64Url replace-chain pinned: + → - + / → _ + strip trailing = padding (RFC 7515 §3 base64url). Drift to a different encoding would make the JWT invalid per the spec', () => {
     expect(body).toMatch(
-      /function toBase64Url\(buf: Buffer\): string \{\s*\n?\s*return buf\.toString\('base64'\)\.replace\(\/\\\+\/g, '-'\)\.replace\(\/\\\/\/g, '_'\)\.replace\(\/=\+\$\/, ''\);\s*\n?\s*\}/,
+      /function toBase64Url\(buf: Buffer\): string \{\s*return buf\.toString\('base64'\)\.replace\(\/\\\+\/g, '-'\)\.replace\(\/\\\/\/g, '_'\)\.replace\(\/=\+\$\/, ''\);\s*\}/,
     );
   });
 
   it("randomJti 16-byte-hex framing pinned: 'Enough entropy for in-flight tokens; we don't reuse jtis server-side.' + 16-byte → 32-hex-char output. Drift to fewer bytes would shrink the in-flight collision window; drift to expecting server-side jti reuse would couple this lib to a nonce-cache it doesn't have", () => {
     expect(body).toMatch(
-      /function randomJti\(\): string \{\s*\n?\s*\/\/ 16 random bytes → 32 hex chars\. Enough entropy for in-flight\s*\n?\s*\/\/ tokens; we don't reuse jtis server-side\./,
+      /function randomJti\(\): string \{\s*\/\/ 16 random bytes → 32 hex chars\. Enough entropy for in-flight\s*\/\/ tokens; we don't reuse jtis server-side\./,
     );
     expect(body).toMatch(/const bytes = new Uint8Array\(16\);/);
     expect(body).toMatch(
@@ -130,7 +128,7 @@ describe('lib/livekit-token content parity', () => {
 
   it('randomJti webcrypto-preferred + Math.random fallback pinned: feature-detect crypto.getRandomValues, fall back to Math.random for environments without webcrypto. Drift to dropping the fallback would crash in older Node environments that lack webcrypto', () => {
     expect(body).toMatch(
-      /if \(typeof crypto !== 'undefined' && typeof crypto\.getRandomValues === 'function'\) \{\s*\n?\s*crypto\.getRandomValues\(bytes\);\s*\n?\s*\} else \{\s*\n?\s*for \(let i = 0; i < bytes\.length; i\+\+\) bytes\[i\] = Math\.floor\(Math\.random\(\) \* 256\);\s*\n?\s*\}/,
+      /if \(typeof crypto !== 'undefined' && typeof crypto\.getRandomValues === 'function'\) \{\s*crypto\.getRandomValues\(bytes\);\s*\} else \{\s*for \(let i = 0; i < bytes\.length; i\+\+\) bytes\[i\] = Math\.floor\(Math\.random\(\) \* 256\);\s*\}/,
     );
   });
 });

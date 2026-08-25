@@ -41,7 +41,7 @@ describe('W735 customer-dashboard verify-email.astro page parity', () => {
 
     expect(p).toMatch(/Issue 3 wave 1085\+ — when the user clicks the link in the verify/);
     expect(p).toMatch(/email, the token is already in `\?token=…`/);
-    expect(p).toMatch(/Auto-submit\s*\n?\s*\/\/ immediately and HIDE the form/);
+    expect(p).toMatch(/Auto-submit\s*\/\/ immediately and HIDE the form/);
 
     // Implementation matches the framing.
     expect(p).toMatch(/const params = new URLSearchParams\(window\.location\.search\)/);

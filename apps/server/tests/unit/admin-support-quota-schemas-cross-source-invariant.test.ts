@@ -122,7 +122,7 @@ describe('W892 V-281 admin schemas cross-source invariant', () => {
       /SetQuotaOverrideRequestSchema[\s\S]+?refill_per_second: z\.number\(\)\.min\(0\.01\)\.max\(100_000\)/,
     );
     expect(p).toMatch(
-      /SetQuotaOverrideRequestSchema[\s\S]+?duration_seconds: z\s*\n?\s*\.number\(\)\s*\n\s*\.int\(\)\s*\n\s*\.min\(1\)\s*\n\s*\.max\(86_400 \* 30\)/,
+      /SetQuotaOverrideRequestSchema[\s\S]+?duration_seconds: z\s*\.number\(\)\s*\n\s*\.int\(\)\s*\n\s*\.min\(1\)\s*\n\s*\.max\(86_400 \* 30\)/,
     );
   });
 

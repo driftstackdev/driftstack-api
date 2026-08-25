@@ -37,7 +37,7 @@ describe('W421.A apps/server/src/routes/openapi.ts content parity', () => {
 
   it("Scalar register: routePrefix '/docs' + url '/openapi.json' + theme 'default' + hideClientButton true", () => {
     expect(body).toMatch(
-      /await app\.register\(scalarApiReference, \{\s*\n?\s*routePrefix: '\/docs',\s*\n?\s*configuration: \{\s*\n?\s*url: '\/openapi\.json',\s*\n?\s*theme: 'default',\s*\n?\s*hideClientButton: true,\s*\n?\s*\},\s*\n?\s*\}\);/,
+      /await app\.register\(scalarApiReference, \{\s*routePrefix: '\/docs',\s*configuration: \{\s*url: '\/openapi\.json',\s*theme: 'default',\s*hideClientButton: true,\s*\},\s*\}\);/,
     );
   });
 

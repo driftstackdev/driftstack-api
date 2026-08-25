@@ -79,7 +79,7 @@ describe('W1033 routes/status V-176 cross-source invariant', () => {
     expect(p).toMatch(/timer = setTimeout\(\(\) => reject\(new Error\('timeout'\)\), timeoutMs\);/);
     // The race's losing timer must be cancelled, matching the /ready twin
     // (runWithTimeout in lib/app.ts). Without it each request leaks a timer.
-    expect(p).toMatch(/\} finally \{\s*\n?\s*if \(timer !== undefined\) clearTimeout\(timer\);/);
+    expect(p).toMatch(/\} finally \{\s*if \(timer !== undefined\) clearTimeout\(timer\);/);
     expect(p).toMatch(/status: 'operational',/);
     expect(p).toMatch(/status: 'degraded',/);
   });

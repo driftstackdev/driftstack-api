@@ -28,19 +28,19 @@ describe('db/recipes-repo content parity', () => {
 
   it("AI-B4 module-level framing pinned: 'Drizzle implementation of RecipesRepo (migration 0044). Production wires this; tests/dev use InMemoryRecipesRepo from services/recipes.ts.' — pinned so the AI-B4 anchor + migration-0044 + production-vs-test-impl split contract all stay documented", () => {
     expect(body).toMatch(
-      /\/\/ AI-B4 — Drizzle implementation of RecipesRepo \(migration 0044\)\.\s*\n?\s*\/\/ Production wires this; tests\/dev use InMemoryRecipesRepo from\s*\n?\s*\/\/ services\/recipes\.ts\./,
+      /\/\/ AI-B4 — Drizzle implementation of RecipesRepo \(migration 0044\)\.\s*\/\/ Production wires this; tests\/dev use InMemoryRecipesRepo from\s*\/\/ services\/recipes\.ts\./,
     );
   });
 
   it('documents encrypted JSONB payloads and bounded compare-and-set legacy conversion', () => {
     expect(body).toMatch(
-      /\/\/\s+- text PK `rec_<uuid>` minted at create\.\s*\n?\s*\/\/\s+- jsonb intent_log \+ transcript_snapshot store versioned AES-GCM envelopes\.\s*\n?\s*\/\/\s+Legacy plaintext arrays and context-free v1 envelopes are readable only\s*\n?\s*\/\/\s+by a bounded compare-and-set bootstrap upgrader\./,
+      /\/\/\s+- text PK `rec_<uuid>` minted at create\.\s*\/\/\s+- jsonb intent_log \+ transcript_snapshot store versioned AES-GCM envelopes\.\s*\/\/\s+Legacy plaintext arrays and context-free v1 envelopes are readable only\s*\/\/\s+by a bounded compare-and-set bootstrap upgrader\./,
     );
     expect(body).toMatch(
-      /\/\/\s+- Label trim \+ length \+ description length validation lives in\s*\n?\s*\/\/\s+the service-layer `validateLabelAndDescription`; the DB CHECK\s*\n?\s*\/\/\s+constraint is the belt-and-suspenders backstop for that\./,
+      /\/\/\s+- Label trim \+ length \+ description length validation lives in\s*\/\/\s+the service-layer `validateLabelAndDescription`; the DB CHECK\s*\/\/\s+constraint is the belt-and-suspenders backstop for that\./,
     );
     expect(body).toMatch(
-      /\/\/\s+- No update\/delete surface in v1\.0 — write-only per the\s*\n?\s*\/\/\s+orchestrator handoff #3 Q\.5\./,
+      /\/\/\s+- No update\/delete surface in v1\.0 — write-only per the\s*\/\/\s+orchestrator handoff #3 Q\.5\./,
     );
   });
 
@@ -82,10 +82,10 @@ describe('db/recipes-repo content parity', () => {
 
   it("validateLabelAndDescription 1-120-char-label-after-trim + 2000-char-description-cap framing pinned: trimmedLabel.length < 1 || > 120 → 'Recipe label must be 1-120 characters after trim' + description.length > 2000 → 'Recipe description must be <= 2000 characters' + empty-string description coerces to null. Drift to dropping the trim would let whitespace-only labels through; drift to allowing > 2000-char descriptions would bloat the jsonb column", () => {
     expect(body).toMatch(
-      /const trimmedLabel = label\.trim\(\);\s*\n?\s*if \(trimmedLabel\.length < 1 \|\| trimmedLabel\.length > 120\) \{\s*\n?\s*throw new Error\('Recipe label must be 1-120 characters after trim'\);/,
+      /const trimmedLabel = label\.trim\(\);\s*if \(trimmedLabel\.length < 1 \|\| trimmedLabel\.length > 120\) \{\s*throw new Error\('Recipe label must be 1-120 characters after trim'\);/,
     );
     expect(body).toMatch(
-      /if \(description !== undefined && description\.length > 2000\) \{\s*\n?\s*throw new Error\('Recipe description must be <= 2000 characters'\);/,
+      /if \(description !== undefined && description\.length > 2000\) \{\s*throw new Error\('Recipe description must be <= 2000 characters'\);/,
     );
     expect(body).toMatch(
       /description: description === undefined \|\| description === '' \? null : description,/,
@@ -97,13 +97,13 @@ describe('db/recipes-repo content parity', () => {
     expect(body).toMatch(/const id = `rec_\$\{randomUUID\(\)\}`;/);
     expect(body).toMatch(/\.returning\(\);/);
     expect(body).toMatch(
-      /const row = inserted\[0\];\s*\n?\s*if \(!row\) \{\s*\n?\s*throw new Error\('Recipe insert returned no rows'\);\s*\n?\s*\}/,
+      /const row = inserted\[0\];\s*if \(!row\) \{\s*throw new Error\('Recipe insert returned no rows'\);\s*\}/,
     );
   });
 
   it("Insert-once createdAt === updatedAt framing pinned: const now = this.clock() + createdAt: now + updatedAt: now (same value at create time). Drift to differing createdAt vs updatedAt at insert would create an artificial 'was-edited' signal in the audit log", () => {
     expect(body).toMatch(
-      /const now = this\.clock\(\);\s*\n?\s*const inserted = await this\.database\.db\s*\n?\s*\.insert\(recipes\)\s*\n?\s*\.values\(\{[\s\S]*?createdAt: now,\s*\n?\s*updatedAt: now,/,
+      /const now = this\.clock\(\);\s*const inserted = await this\.database\.db\s*\.insert\(recipes\)\s*\.values\(\{[\s\S]*?createdAt: now,\s*updatedAt: now,/,
     );
   });
 });

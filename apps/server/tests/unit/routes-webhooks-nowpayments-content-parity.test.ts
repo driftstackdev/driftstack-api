@@ -39,25 +39,25 @@ describe('W412.A apps/server/src/routes/webhooks-nowpayments.ts content parity',
     expect(body).toMatch(/V-666 — NowPayments IPN webhook route \(V-487 follow-through\)\./);
     expect(body).toMatch(/POST \/v1\/webhooks\/nowpayments/);
     expect(body).toMatch(
-      /Public, no auth — `x-nowpayments-sig` header IS the auth\. The route\s*\n?\s*\/\/\s*captures the raw request body via the shared webhook raw-body parser\s*\n?\s*\/\/\s*\(see `_webhook-raw-body\.ts`\) and verifies the HMAC-SHA512 signature\s*\n?\s*\/\/\s*against the IPN secret from the NowPayments dashboard\./,
+      /Public, no auth — `x-nowpayments-sig` header IS the auth\. The route\s*\/\/\s*captures the raw request body via the shared webhook raw-body parser\s*\/\/\s*\(see `_webhook-raw-body\.ts`\) and verifies the HMAC-SHA512 signature\s*\/\/\s*against the IPN secret from the NowPayments dashboard\./,
     );
     expect(body).toMatch(/registerWebhookRawBodyParser\(app\);/);
   });
 
   it('Wire-ready posture pinned: registration gated on NOWPAYMENTS_IPN_SECRET in lib/app.ts; pre-V-487 logs + acks only', () => {
     expect(body).toMatch(
-      /Posture: wire-ready\. Until the founder lands a merchant account \+\s*\n?\s*\/\/\s*`NOWPAYMENTS_IPN_SECRET`, the route stays unregistered \(the wiring in\s*\n?\s*\/\/\s*`lib\/app\.ts` is gated on `deps\.nowpaymentsIpnSecret`\)\. When enabled,\s*\n?\s*\/\/\s*the route verifies the signature and logs the event; the actual\s*\n?\s*\/\/\s*order-status-update flow \(V-487\) lands when the customer-side\s*\n?\s*\/\/\s*checkout pages at `\/checkout\/crypto` go live\./,
+      /Posture: wire-ready\. Until the founder lands a merchant account \+\s*\/\/\s*`NOWPAYMENTS_IPN_SECRET`, the route stays unregistered \(the wiring in\s*\/\/\s*`lib\/app\.ts` is gated on `deps\.nowpaymentsIpnSecret`\)\. When enabled,\s*\/\/\s*the route verifies the signature and logs the event; the actual\s*\/\/\s*order-status-update flow \(V-487\) lands when the customer-side\s*\/\/\s*checkout pages at `\/checkout\/crypto` go live\./,
     );
   });
 
   it('Deps: ipnSecret + logger + optional ordersService with V-666.B JSDoc framing', () => {
     expect(body).toMatch(/export interface RegisterNowpaymentsWebhookRoutesDeps \{/);
     expect(body).toMatch(
-      /\/\*\* IPN secret from the NowPayments merchant dashboard\. \*\/\s*\n?\s*ipnSecret: string;/,
+      /\/\*\* IPN secret from the NowPayments merchant dashboard\. \*\/\s*ipnSecret: string;/,
     );
     expect(body).toMatch(/logger: Logger;/);
     expect(body).toMatch(
-      /V-666\.B — when provided, the route forwards verified IPN updates\s*\n?\s*\*\s*into the crypto-orders state machine\. When omitted, the route\s*\n?\s*\*\s*logs \+ acks only \(W44 V-666 wire-ready posture\)\./,
+      /V-666\.B — when provided, the route forwards verified IPN updates\s*\*\s*into the crypto-orders state machine\. When omitted, the route\s*\*\s*logs \+ acks only \(W44 V-666 wire-ready posture\)\./,
     );
     expect(body).toMatch(/ordersService\?: CryptoOrdersService;/);
   });
@@ -78,40 +78,40 @@ describe('W412.A apps/server/src/routes/webhooks-nowpayments.ts content parity',
   it('Missing x-nowpayments-sig → 401 UnauthorizedError (+ bumpOutcome metric)', () => {
     expect(body).toMatch(/const sigHeader = req\.headers\['x-nowpayments-sig'\];/);
     expect(body).toMatch(
-      /if \(typeof sigHeader !== 'string' \|\| sigHeader\.length === 0\) \{\s*\n?\s*bumpOutcome\('signature_missing'\);\s*\n?\s*throw new UnauthorizedError\('x-nowpayments-sig header missing\.'\);/,
+      /if \(typeof sigHeader !== 'string' \|\| sigHeader\.length === 0\) \{\s*bumpOutcome\('signature_missing'\);\s*throw new UnauthorizedError\('x-nowpayments-sig header missing\.'\);/,
     );
   });
 
   it('Empty rawBody → 400 BadRequestError "Empty request body." (+ bumpOutcome metric)', () => {
     expect(body).toMatch(/const rawBody = req\.rawBody;/);
     expect(body).toMatch(
-      /if \(typeof rawBody !== 'string' \|\| rawBody\.length === 0\) \{\s*\n?\s*bumpOutcome\('empty_body'\);\s*\n?\s*throw new BadRequestError\('Empty request body\.'\);/,
+      /if \(typeof rawBody !== 'string' \|\| rawBody\.length === 0\) \{\s*bumpOutcome\('empty_body'\);\s*throw new BadRequestError\('Empty request body\.'\);/,
     );
   });
 
   it('verifyNowpaymentsSignature: body+secret+signature; on !verified bumpOutcome + warn-log + opaque 401 "Invalid NowPayments signature."', () => {
     expect(body).toMatch(
-      /const verified = verifyNowpaymentsSignature\(\{\s*\n?\s*body: rawBody,\s*\n?\s*secret: deps\.ipnSecret,\s*\n?\s*signature: sigHeader,\s*\n?\s*\}\);/,
+      /const verified = verifyNowpaymentsSignature\(\{\s*body: rawBody,\s*secret: deps\.ipnSecret,\s*signature: sigHeader,\s*\}\);/,
     );
     expect(body).toMatch(
-      /if \(!verified\) \{\s*\n?\s*bumpOutcome\('signature_invalid'\);\s*\n?\s*deps\.logger\.warn\(\s*\n?\s*\{ component: 'nowpayments-webhooks' \},\s*\n?\s*'NowPayments IPN signature verification failed',\s*\n?\s*\);\s*\n?\s*throw new UnauthorizedError\('Invalid NowPayments signature\.'\);/,
+      /if \(!verified\) \{\s*bumpOutcome\('signature_invalid'\);\s*deps\.logger\.warn\(\s*\{ component: 'nowpayments-webhooks' \},\s*'NowPayments IPN signature verification failed',\s*\);\s*throw new UnauthorizedError\('Invalid NowPayments signature\.'\);/,
     );
   });
 
   it('Payload shape guard: payment_id number|string + payment_status string → 400 otherwise (+ bumpOutcome metric)', () => {
     expect(body).toMatch(/const payload = req\.body as NowpaymentsIpnPayload;/);
     expect(body).toMatch(
-      /if \(\s*\n?\s*payload === null \|\|\s*\n?\s*typeof payload !== 'object' \|\|\s*\n?\s*\(typeof payload\.payment_id !== 'number' && typeof payload\.payment_id !== 'string'\) \|\|\s*\n?\s*typeof payload\.payment_status !== 'string'\s*\n?\s*\) \{\s*\n?\s*bumpOutcome\('malformed_event'\);\s*\n?\s*throw new BadRequestError\('NowPayments IPN is missing required fields\.'\);/,
+      /if \(\s*payload === null \|\|\s*typeof payload !== 'object' \|\|\s*\(typeof payload\.payment_id !== 'number' && typeof payload\.payment_id !== 'string'\) \|\|\s*typeof payload\.payment_status !== 'string'\s*\) \{\s*bumpOutcome\('malformed_event'\);\s*throw new BadRequestError\('NowPayments IPN is missing required fields\.'\);/,
     );
   });
 
   it('V-666.B forward: ordersService.applyIpnStatus when ordersService AND payload.order_id string; updated.status ?? null; orderState defaults null', () => {
     expect(body).toMatch(
-      /\/\/ V-666\.B — forward verified IPN into the order-status state\s*\n?\s*\/\/ machine\. When ordersService is omitted \(W44 wire-ready posture\)\s*\n?\s*\/\/ the route still acks 200 \+ logs\./,
+      /\/\/ V-666\.B — forward verified IPN into the order-status state\s*\/\/ machine\. When ordersService is omitted \(W44 wire-ready posture\)\s*\/\/ the route still acks 200 \+ logs\./,
     );
     expect(body).toMatch(/let orderState: string \| null = null;/);
     expect(body).toMatch(
-      /if \(deps\.ordersService !== undefined && typeof payload\.order_id === 'string'\) \{\s*\n?\s*const updated = await deps\.ordersService\.applyIpnStatus\(\{\s*\n?\s*order_id: payload\.order_id,\s*\n?\s*payment_id: String\(payload\.payment_id\),\s*\n?\s*provider_status: payload\.payment_status,/,
+      /if \(deps\.ordersService !== undefined && typeof payload\.order_id === 'string'\) \{\s*const updated = await deps\.ordersService\.applyIpnStatus\(\{\s*order_id: payload\.order_id,\s*payment_id: String\(payload\.payment_id\),\s*provider_status: payload\.payment_status,/,
     );
     expect(body).toContain('orderState = updated?.status ?? null;');
     // Billing-integrity (#8) — the amount fields are forwarded for reconciliation.

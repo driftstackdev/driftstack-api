@@ -48,19 +48,19 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
   it('V-266 framing pins hashed Redis identifiers and encrypted bound values', () => {
     expect(body).toMatch(/V-266 — Browser-OAuth-style activation flow for the CLI \/ GUI client\./);
     expect(body).toMatch(
-      /State storage: pure Redis with a 5-minute TTL on every code\. Keys use\s*\n?\s*\/\/\s*`cli-auth:code:<sha256\(code\)>`, keeping the live wire credential out of\s*\n?\s*\/\/\s*Redis key scans\/slowlogs\. The JSON value carries state, status, and the\s*\n?\s*\/\/\s*\(post-bind\) encrypted API key \+ accountId the GUI pulls on its next poll\./,
+      /State storage: pure Redis with a 5-minute TTL on every code\. Keys use\s*\/\/\s*`cli-auth:code:<sha256\(code\)>`, keeping the live wire credential out of\s*\/\/\s*Redis key scans\/slowlogs\. The JSON value carries state, status, and the\s*\/\/\s*\(post-bind\) encrypted API key \+ accountId the GUI pulls on its next poll\./,
     );
   });
 
   it('One-shot exchange semantics + pending-TTL-expiry → expired (Redis evicted)', () => {
     expect(body).toMatch(
-      /One-shot semantics: `exchange` deletes the key on successful\s*\n?\s*\/\/\s*retrieval, so a second call returns `expired`\. A code that's still\s*\n?\s*\/\/\s*`pending` after TTL expiry naturally returns `expired` because\s*\n?\s*\/\/\s*Redis evicted it\./,
+      /One-shot semantics: `exchange` deletes the key on successful\s*\/\/\s*retrieval, so a second call returns `expired`\. A code that's still\s*\/\/\s*`pending` after TTL expiry naturally returns `expired` because\s*\/\/\s*Redis evicted it\./,
     );
   });
 
   it('Browser URL framing pinned: built from dashboardOrigin (dev/staging/production all wire correctly)', () => {
     expect(body).toMatch(
-      /Public-facing browser URL: built from the configured\s*\n?\s*\/\/\s*`dashboardOrigin` \(e\.g\. `https:\/\/app\.driftstack\.dev`\) so dev \/\s*\n?\s*\/\/\s*staging \/ production all wire correctly\./,
+      /Public-facing browser URL: built from the configured\s*\/\/\s*`dashboardOrigin` \(e\.g\. `https:\/\/app\.driftstack\.dev`\) so dev \/\s*\/\/\s*staging \/ production all wire correctly\./,
     );
   });
 
@@ -106,7 +106,7 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
       /private readonly entries = new Map<string, \{ value: string; expiresAt: number \}>\(\);/,
     );
     expect(body).toMatch(
-      /if \(entry\.expiresAt <= Date\.now\(\)\) \{\s*\n?\s*this\.entries\.delete\(key\);\s*\n?\s*return null;/,
+      /if \(entry\.expiresAt <= Date\.now\(\)\) \{\s*this\.entries\.delete\(key\);\s*return null;/,
     );
     expect(body).toMatch(
       /this\.entries\.set\(key, \{ value, expiresAt: Date\.now\(\) \+ ttlSeconds \* 1000 \}\);/,
@@ -115,20 +115,20 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
     // C2 — atomic getDel: read, delete, then TTL-check (no await between
     // read and delete, so concurrent callers can't both see a value).
     expect(body).toMatch(
-      /const entry = this\.entries\.get\(key\);\s*\n?\s*if \(!entry\) return null;\s*\n?\s*this\.entries\.delete\(key\);/,
+      /const entry = this\.entries\.get\(key\);\s*if \(!entry\) return null;\s*this\.entries\.delete\(key\);/,
     );
   });
 
   it('CliCodeStatus + runtime-validated StoredCode discriminated union keep pending plaintext-free and bound encrypted-only', () => {
     expect(body).toMatch(/export type CliCodeStatus = 'pending' \| 'bound';/);
     expect(body).toMatch(
-      /interface StoredCodeBase \{\s*\n?\s*state: string;[\s\S]*?user_code_hash: string;\s*\n?\s*client_label: string \| null;\s*\n?\s*created_at: number;/,
+      /interface StoredCodeBase \{\s*state: string;[\s\S]*?user_code_hash: string;\s*client_label: string \| null;\s*created_at: number;/,
     );
     expect(body).toMatch(
-      /interface StoredPendingCode extends StoredCodeBase \{\s*\n?\s*status: 'pending';\s*\n?\s*secret_blob: null;\s*\n?\s*encrypted: false;\s*\n?\s*account_id: null;/,
+      /interface StoredPendingCode extends StoredCodeBase \{\s*status: 'pending';\s*secret_blob: null;\s*encrypted: false;\s*account_id: null;/,
     );
     expect(body).toMatch(
-      /interface StoredBoundCode extends StoredCodeBase \{[\s\S]+?status: 'bound';[\s\S]+?secret_blob: string;[\s\S]+?encrypted: true;\s*\n?\s*account_id: string;/,
+      /interface StoredBoundCode extends StoredCodeBase \{[\s\S]+?status: 'bound';[\s\S]+?secret_blob: string;[\s\S]+?encrypted: true;\s*account_id: string;/,
     );
     expect(body).toMatch(/type StoredCode = StoredPendingCode \| StoredBoundCode;/);
     expect(body).toMatch(
@@ -139,15 +139,15 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
   it('CliAuthorizeError: 6-code union includes the device verification mismatch', () => {
     expect(body).toMatch(/export class CliAuthorizeError extends Error \{/);
     expect(body).toMatch(
-      /public readonly code:\s*\n?\s*\| 'invalid_code'\s*\n?\s*\| 'state_mismatch'\s*\n?\s*\| 'user_code_mismatch'\s*\n?\s*\| 'already_bound'\s*\n?\s*\| 'not_found'\s*\n?\s*\| 'expired',/,
+      /public readonly code:\s*\| 'invalid_code'\s*\| 'state_mismatch'\s*\| 'user_code_mismatch'\s*\| 'already_bound'\s*\| 'not_found'\s*\| 'expired',/,
     );
     expect(body).toMatch(/this\.name = 'CliAuthorizeError';/);
   });
 
   it('Constructor: store/redis exclusive-or; required encryption key; origin/path normalization', () => {
-    expect(body).toMatch(/if \(opts\.store !== undefined\) \{\s*\n?\s*this\.store = opts\.store;/);
+    expect(body).toMatch(/if \(opts\.store !== undefined\) \{\s*this\.store = opts\.store;/);
     expect(body).toMatch(
-      /\} else if \(opts\.redis !== undefined\) \{\s*\n?\s*this\.store = new RedisStore\(opts\.redis\);/,
+      /\} else if \(opts\.redis !== undefined\) \{\s*this\.store = new RedisStore\(opts\.redis\);/,
     );
     expect(body).toMatch(
       /throw new Error\('CliAuthorizeService: either `store` or `redis` must be provided\.'\);/,
@@ -176,19 +176,19 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
 
   it('bind: not_found → state_mismatch → already_bound → TTL reset on success (covers user-took-4:30-to-click latency)', () => {
     expect(body).toMatch(
-      /if \(raw === null\) \{\s*\n?\s*throw new CliAuthorizeError\('not_found', 'Authorization code not found or expired\.'\);/,
+      /if \(raw === null\) \{\s*throw new CliAuthorizeError\('not_found', 'Authorization code not found or expired\.'\);/,
     );
     expect(body).toMatch(
-      /const stored = parseStoredCode\(raw\);\s*\n?\s*if \(stored === null\) \{\s*\n?\s*[\s\S]+?await this\.store\.del\(key\);\s*\n?\s*throw new CliAuthorizeError\('invalid_code', 'Authorization code state is invalid\.'\);/,
+      /const stored = parseStoredCode\(raw\);\s*if \(stored === null\) \{\s*[\s\S]+?await this\.store\.del\(key\);\s*throw new CliAuthorizeError\('invalid_code', 'Authorization code state is invalid\.'\);/,
     );
     expect(body).toMatch(
-      /if \(!constantTimeStringEqual\(stored\.state, input\.state\)\) \{\s*\n?\s*throw new CliAuthorizeError\('state_mismatch', 'State parameter does not match\.'\);/,
+      /if \(!constantTimeStringEqual\(stored\.state, input\.state\)\) \{\s*throw new CliAuthorizeError\('state_mismatch', 'State parameter does not match\.'\);/,
     );
     expect(body).toMatch(
-      /if \(stored\.status === 'bound'\) \{\s*\n?\s*throw new CliAuthorizeError\(\s*\n?\s*'already_bound',\s*\n?\s*'Authorization code has already been bound to an account\.',\s*\n?\s*\);/,
+      /if \(stored\.status === 'bound'\) \{\s*throw new CliAuthorizeError\(\s*'already_bound',\s*'Authorization code has already been bound to an account\.',\s*\);/,
     );
     expect(body).toMatch(
-      /\/\/ Reset the TTL from bind time so the GUI has the full post-bind\s*\n?\s*\/\/ window to poll exchange even if the user took ~4:30 to log in and\s*\n?\s*\/\/ click Authorize\. The post-bind window \(D1\) is deliberately shorter\s*\n?\s*\/\/ than the pre-bind one — the client is now actively polling\./,
+      /\/\/ Reset the TTL from bind time so the GUI has the full post-bind\s*\/\/ window to poll exchange even if the user took ~4:30 to log in and\s*\/\/ click Authorize\. The post-bind window \(D1\) is deliberately shorter\s*\/\/ than the pre-bind one — the client is now actively polling\./,
     );
     expect(body).toMatch(/const didBind = await this\.store\.compareAndSetEx\(/);
     expect(body).toMatch(/if \(!didBind\) \{/);
@@ -215,36 +215,36 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
 
   it('exchange: raw=null → expired; pending short-circuit; bound uses atomic getDel claim + D1 decrypt (no leak, no double-deliver)', () => {
     expect(body).toMatch(
-      /if \(raw === null\) \{\s*\n?\s*\/\/ Either never existed OR Redis evicted on TTL — treat both as\s*\n?\s*\/\/ expired from the CLI \/ GUI's perspective\.\s*\n?\s*return \{ status: 'expired' \};/,
+      /if \(raw === null\) \{\s*\/\/ Either never existed OR Redis evicted on TTL — treat both as\s*\/\/ expired from the CLI \/ GUI's perspective\.\s*return \{ status: 'expired' \};/,
     );
     expect(body).toMatch(
-      /if \(stored\.status === 'pending'\) \{\s*\n?\s*return \{ status: 'pending' \};\s*\n?\s*\}/,
+      /if \(stored\.status === 'pending'\) \{\s*return \{ status: 'pending' \};\s*\}/,
     );
     // C2 — atomic getDel claim replaced the non-atomic store.del: exactly
     // one concurrent bound poll wins; the loser sees null → expired.
     expect(body).toMatch(/const claimedRaw = await this\.store\.getDel\(key\);/);
-    expect(body).toMatch(/if \(claimedRaw === null\) \{\s*\n?\s*return \{ status: 'expired' \};/);
+    expect(body).toMatch(/if \(claimedRaw === null\) \{\s*return \{ status: 'expired' \};/);
     // Claimed bytes are immutable and must still parse as encrypted bound state;
     // decrypt the at-rest blob only at delivery; decrypt failure → expired.
     expect(body).toMatch(/const claimed = parseStoredCode\(claimedRaw\);/);
     expect(body).toMatch(
-      /if \(claimedRaw !== raw \|\| claimed\?\.status !== 'bound'\) \{\s*\n?\s*throw new CliAuthorizeError\('invalid_code', 'Authorization code state is invalid\.'\);/,
+      /if \(claimedRaw !== raw \|\| claimed\?\.status !== 'bound'\) \{\s*throw new CliAuthorizeError\('invalid_code', 'Authorization code state is invalid\.'\);/,
     );
     expect(body).toMatch(/apiKey = decryptPlatformSecret\(/);
     expect(body).toMatch(
-      /return \{\s*\n?\s*status: 'bound',\s*\n?\s*api_key: apiKey,\s*\n?\s*account_id: claimed\.account_id,\s*\n?\s*\};/,
+      /return \{\s*status: 'bound',\s*api_key: apiKey,\s*account_id: claimed\.account_id,\s*\};/,
     );
   });
 
   it('constantTimeStringEqual compares UTF-8 buffer lengths before timingSafeEqual', () => {
     expect(body).toMatch(
-      /function constantTimeStringEqual\(a: string, b: string\): boolean \{\s*\n?\s*const aBytes = Buffer\.from\(a\);\s*\n?\s*const bBytes = Buffer\.from\(b\);\s*\n?\s*if \(aBytes\.length !== bBytes\.length\) return false;\s*\n?\s*return timingSafeEqual\(aBytes, bBytes\);\s*\n?\s*\}/,
+      /function constantTimeStringEqual\(a: string, b: string\): boolean \{\s*const aBytes = Buffer\.from\(a\);\s*const bBytes = Buffer\.from\(b\);\s*if \(aBytes\.length !== bBytes\.length\) return false;\s*return timingSafeEqual\(aBytes, bBytes\);\s*\}/,
     );
   });
 
   it('ExchangeResult 3-state union: pending | bound (api_key+account_id) | expired', () => {
     expect(body).toMatch(
-      /export type ExchangeResult =\s*\n?\s*\| \{ status: 'pending' \}\s*\n?\s*\| \{ status: 'bound'; api_key: string; account_id: string \}\s*\n?\s*\| \{ status: 'expired' \};/,
+      /export type ExchangeResult =\s*\| \{ status: 'pending' \}\s*\| \{ status: 'bound'; api_key: string; account_id: string \}\s*\| \{ status: 'expired' \};/,
     );
   });
 

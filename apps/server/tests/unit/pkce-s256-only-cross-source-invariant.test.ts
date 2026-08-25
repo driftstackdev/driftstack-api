@@ -34,7 +34,7 @@ describe('PKCE S256-only cross-source invariant', () => {
 
   it("lib/oauth-pkce computeS256Challenge implementation pinned: 'challenge = base64url(sha256(verifier))' formula + computeS256Challenge function — pinned so the S256-challenge derivation stays in sync with RFC 7636 §4.2", () => {
     expect(pkce).toMatch(
-      /\*\s+Compute the S256 challenge for a given verifier:\s*\n?\s*\*\s+challenge = base64url\(sha256\(verifier\)\)/,
+      /\*\s+Compute the S256 challenge for a given verifier:\s*\*\s+challenge = base64url\(sha256\(verifier\)\)/,
     );
     expect(pkce).toMatch(/export function computeS256Challenge\(verifier: string\): string \{/);
   });
@@ -44,12 +44,12 @@ describe('PKCE S256-only cross-source invariant', () => {
   });
 
   it("docs/api/oauth.md explicitly forbids 'plain' challenge method: 'The plain challenge method is rejected — S256 only.' — pinned so the customer-facing S256-only contract stays documented (drift to silently allowing plain would be a security regression)", () => {
-    expect(docs).toMatch(/The\s*\n?\s*`plain` challenge method is rejected — `S256` only\./);
+    expect(docs).toMatch(/The\s*`plain` challenge method is rejected — `S256` only\./);
   });
 
   it("docs/api/oauth.md commits to RFC 7636 + 'PKCE required (RFC 7636 — no exceptions, even for confidential clients)' — pinned so the no-exceptions-for-confidential-clients commitment stays documented", () => {
     expect(docs).toMatch(
-      /\*\*PKCE required\*\* \(RFC 7636 — no exceptions, even for confidential\s*\n?\s*clients\)/,
+      /\*\*PKCE required\*\* \(RFC 7636 — no exceptions, even for confidential\s*clients\)/,
     );
   });
 });

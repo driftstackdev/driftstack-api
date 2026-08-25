@@ -48,7 +48,7 @@ describe('W445.C apps/server/src/db/scheduled-jobs-repo.ts content parity', () =
     );
     expect(body).toMatch(/import \{ scheduledJobs \} from '\.\/schema\.js';/);
     expect(body).toMatch(
-      /import type \{\s*\n?\s*EnqueueScheduledJobInput,\s*\n?\s*ScheduledJobRow,\s*\n?\s*ScheduledJobsRepo,\s*\n?\s*\} from '\.\.\/services\/scheduled-jobs\.js';/,
+      /import type \{\s*EnqueueScheduledJobInput,\s*ScheduledJobRow,\s*ScheduledJobsRepo,\s*\} from '\.\.\/services\/scheduled-jobs\.js';/,
     );
   });
 
@@ -62,14 +62,14 @@ describe('W445.C apps/server/src/db/scheduled-jobs-repo.ts content parity', () =
       /await tx\.execute\(sql`SELECT pg_advisory_xact_lock\(hashtextextended\(\$\{dedupLockTuple\}, 0\)\)`\);/,
     );
     expect(body).toMatch(
-      /input\.accountId === null\s*\n?\s*\? isNull\(scheduledJobs\.accountId\)\s*\n?\s*: eq\(scheduledJobs\.accountId, input\.accountId\),\s*\n?\s*eq\(scheduledJobs\.jobType, input\.jobType\),\s*\n?\s*isNull\(scheduledJobs\.completedAt\),\s*\n?\s*isNull\(scheduledJobs\.failedAt\),/,
+      /input\.accountId === null\s*\? isNull\(scheduledJobs\.accountId\)\s*: eq\(scheduledJobs\.accountId, input\.accountId\),\s*eq\(scheduledJobs\.jobType, input\.jobType\),\s*isNull\(scheduledJobs\.completedAt\),\s*isNull\(scheduledJobs\.failedAt\),/,
     );
     expect(body).toMatch(/if \(existing\.length > 0\) return \{ enqueued: false \};/);
     expect(body).toMatch(
-      /input\.dedupAfterRunAt === undefined\s*\n?\s*\? undefined\s*\n?\s*: gt\(scheduledJobs\.runAt, input\.dedupAfterRunAt\),/,
+      /input\.dedupAfterRunAt === undefined\s*\? undefined\s*: gt\(scheduledJobs\.runAt, input\.dedupAfterRunAt\),/,
     );
     expect(body).toMatch(
-      /await tx\.insert\(scheduledJobs\)\.values\(\{\s*\n?\s*jobType: input\.jobType,\s*\n?\s*accountId: input\.accountId,\s*\n?\s*payload: input\.payload,\s*\n?\s*runAt: input\.runAt,\s*\n?\s*\}\);\s*\n?\s*return \{ enqueued: true \};/,
+      /await tx\.insert\(scheduledJobs\)\.values\(\{\s*jobType: input\.jobType,\s*accountId: input\.accountId,\s*payload: input\.payload,\s*runAt: input\.runAt,\s*\}\);\s*return \{ enqueued: true \};/,
     );
     const transaction = body.split('const dedupLockTuple')[1] ?? '';
     expect(transaction.indexOf('await tx.execute')).toBeLessThan(
@@ -82,25 +82,25 @@ describe('W445.C apps/server/src/db/scheduled-jobs-repo.ts content parity', () =
 
   it('null-accountId dedup incident comment pinned: the prod 2026-05-20 incident is documented in-source so the bug regression-tests against re-introducing the `accountId !== null` short-circuit', () => {
     expect(body).toMatch(
-      /Caught in prod 2026-05-20: 13 pending auth_tokens\.sweep rows\s*\n?\s*\/\/ accumulated across service restarts because of a missed NULL branch\./,
+      /Caught in prod 2026-05-20: 13 pending auth_tokens\.sweep rows\s*\/\/ accumulated across service restarts because of a missed NULL branch\./,
     );
   });
 
   it("claimDue atomic framing pinned: 'Atomic claim via CTE + UPDATE ... FROM ... RETURNING. The inner SELECT picks unfinished, due rows with FOR UPDATE SKIP LOCKED so concurrent workers never claim the same row. The outer UPDATE sets locked_by + locked_at + increments attempts, then RETURNING gives us back the claimed rows.'", () => {
     expect(body).toMatch(
-      /\/\/ Atomic claim via CTE \+ UPDATE \.\.\. FROM \.\.\. RETURNING\. The inner\s*\n?\s*\/\/ SELECT picks unfinished, due rows with FOR UPDATE SKIP LOCKED so\s*\n?\s*\/\/ concurrent workers never claim the same row\. The outer UPDATE\s*\n?\s*\/\/ sets locked_by \+ locked_at \+ increments attempts, then RETURNING\s*\n?\s*\/\/ gives us back the claimed rows\./,
+      /\/\/ Atomic claim via CTE \+ UPDATE \.\.\. FROM \.\.\. RETURNING\. The inner\s*\/\/ SELECT picks unfinished, due rows with FOR UPDATE SKIP LOCKED so\s*\/\/ concurrent workers never claim the same row\. The outer UPDATE\s*\/\/ sets locked_by \+ locked_at \+ increments attempts, then RETURNING\s*\/\/ gives us back the claimed rows\./,
     );
   });
 
   it('claimDue raw SQL: WITH due AS (SELECT id FROM scheduled_jobs WHERE run_at <= now AND completed_at IS NULL AND failed_at IS NULL AND (locked_by IS NULL OR locked_at < now - 5min) ORDER BY run_at ASC LIMIT batchSize FOR UPDATE SKIP LOCKED) UPDATE ... SET locked_by, locked_at, attempts++, updated_at RETURNING 7 columns', () => {
     expect(body).toMatch(
-      /WITH due AS \(\s*\n?\s*SELECT id\s*\n?\s*FROM scheduled_jobs\s*\n?\s*WHERE run_at <= \$\{nowIso\}\s*\n?\s*AND completed_at IS NULL\s*\n?\s*AND failed_at IS NULL\s*\n?\s*AND \(locked_by IS NULL OR locked_at < \$\{lockStaleAtIso\}\)\s*\n?\s*ORDER BY run_at ASC\s*\n?\s*LIMIT \$\{opts\.batchSize\}\s*\n?\s*FOR UPDATE SKIP LOCKED\s*\n?\s*\)\s*\n?\s*UPDATE scheduled_jobs sj\s*\n?\s*SET locked_by\s*= \$\{opts\.workerId\},\s*\n?\s*locked_at\s*= \$\{nowIso\},\s*\n?\s*attempts\s+= sj\.attempts \+ 1,\s*\n?\s*updated_at\s+= \$\{nowIso\}\s*\n?\s*FROM due\s*\n?\s*WHERE sj\.id = due\.id\s*\n?\s*RETURNING sj\.id, sj\.job_type, sj\.account_id, sj\.payload, sj\.run_at,\s*\n?\s*sj\.attempts, sj\.max_attempts;/,
+      /WITH due AS \(\s*SELECT id\s*FROM scheduled_jobs\s*WHERE run_at <= \$\{nowIso\}\s*AND completed_at IS NULL\s*AND failed_at IS NULL\s*AND \(locked_by IS NULL OR locked_at < \$\{lockStaleAtIso\}\)\s*ORDER BY run_at ASC\s*LIMIT \$\{opts\.batchSize\}\s*FOR UPDATE SKIP LOCKED\s*\)\s*UPDATE scheduled_jobs sj\s*SET locked_by\s*= \$\{opts\.workerId\},\s*locked_at\s*= \$\{nowIso\},\s*attempts\s+= sj\.attempts \+ 1,\s*updated_at\s+= \$\{nowIso\}\s*FROM due\s*WHERE sj\.id = due\.id\s*RETURNING sj\.id, sj\.job_type, sj\.account_id, sj\.payload, sj\.run_at,\s*sj\.attempts, sj\.max_attempts;/,
     );
   });
 
   it('claimDue dual-shape row iter normalizes the raw timestamp and maps the ScheduledJobRow shape', () => {
     expect(body).toMatch(
-      /\/\/ postgres-js returns rows as a typed array\.\s*\n?\s*const rows = \(result as unknown as \{ rows\?: unknown\[\] \}\)\.rows \?\? \(result as unknown\[\]\);/,
+      /\/\/ postgres-js returns rows as a typed array\.\s*const rows = \(result as unknown as \{ rows\?: unknown\[\] \}\)\.rows \?\? \(result as unknown\[\]\);/,
     );
     expect(body).toMatch(/function parseClaimedRunAt\(value: unknown\): Date \{/);
     expect(body).toMatch(/value instanceof Date \? value : typeof value === 'string'/);
@@ -140,10 +140,10 @@ describe('W445.C apps/server/src/db/scheduled-jobs-repo.ts content parity', () =
       (body.match(/\.returning\(\{ id: scheduledJobs\.id \}\)/g) ?? []).length,
     ).toBeGreaterThanOrEqual(3);
     expect(body).toMatch(
-      /\.set\(\{\s*\n?\s*runAt: opts\.nextRunAt,\s*\n?\s*lastError: opts\.lastError,\s*\n?\s*lockedBy: null,\s*\n?\s*lockedAt: null,\s*\n?\s*updatedAt: new Date\(\),\s*\n?\s*\}\)/,
+      /\.set\(\{\s*runAt: opts\.nextRunAt,\s*lastError: opts\.lastError,\s*lockedBy: null,\s*lockedAt: null,\s*updatedAt: new Date\(\),\s*\}\)/,
     );
     expect(body).toMatch(
-      /\.set\(\{\s*\n?\s*failedAt: opts\.at,\s*\n?\s*lastError: opts\.lastError,\s*\n?\s*lockedBy: null,\s*\n?\s*lockedAt: null,\s*\n?\s*updatedAt: opts\.at,\s*\n?\s*\}\)/,
+      /\.set\(\{\s*failedAt: opts\.at,\s*lastError: opts\.lastError,\s*lockedBy: null,\s*lockedAt: null,\s*updatedAt: opts\.at,\s*\}\)/,
     );
   });
 

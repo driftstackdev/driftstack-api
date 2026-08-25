@@ -81,7 +81,7 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
 
   it('CLI authorization is activation-gated on MFA_ENCRYPTION_KEY so Redis never receives plaintext API keys', () => {
     expect(body).toMatch(
-      /const cliAuthorizeService = config\.mfaEncryptionKey\s*\n?\s*\? new CliAuthorizeService\(\{/,
+      /const cliAuthorizeService = config\.mfaEncryptionKey\s*\? new CliAuthorizeService\(\{/,
     );
     expect(body).toMatch(/secretEncryptionKeyBase64: config\.mfaEncryptionKey,/);
     expect(body).toMatch(
@@ -154,42 +154,42 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
   it('header framing pinned: pure-factory; pass-in deps NOT lazy; every external connection (Postgres pool, Redis, R2, Sentry, Postmark) opened HERE so SIGTERM handler closes them deterministically', () => {
     expect(body).toMatch(/\/\/ Production bootstrap\./);
     expect(body).toMatch(
-      /\/\/ Constructs the full AppDeps graph from config \+ a logger, returning\s*\n?\s*\/\/ the deps \+ a teardown function for graceful shutdown\. The shape is\s*\n?\s*\/\/ pure-factory: pass-in dependencies are not constructed lazily, and\s*\n?\s*\/\/ every external connection \(Postgres pool, Redis client, R2 client,\s*\n?\s*\/\/ Sentry, Postmark\) is opened here, so the SIGTERM handler can close\s*\n?\s*\/\/ them deterministically\./,
+      /\/\/ Constructs the full AppDeps graph from config \+ a logger, returning\s*\/\/ the deps \+ a teardown function for graceful shutdown\. The shape is\s*\/\/ pure-factory: pass-in dependencies are not constructed lazily, and\s*\/\/ every external connection \(Postgres pool, Redis client, R2 client,\s*\/\/ Sentry, Postmark\) is opened here, so the SIGTERM handler can close\s*\/\/ them deterministically\./,
     );
   });
 
   it('Failure semantics framing pinned: Postgres connection failure → throw (deploy /health fails → orchestrator does not promote); Redis fail → throw (auth-cache + rate-limit-store load-bearing); R2/Postmark/Sentry init fail → log warn → degraded mode no-op (NOT request critical path); readinessChecks per /ready hit (Health checks decoupled)', () => {
     expect(body).toMatch(
-      /\/\/ Failure semantics:\s*\n?\s*\/\/\s*- Postgres connection failure at boot → throw\. The deploy\s*\n?\s*\/\/\s*pipeline's \/health probe will fail; orchestrator will not\s*\n?\s*\/\/\s*promote\.\s*\n?\s*\/\/\s*- Redis connection failure at boot → throw \(same reasoning;\s*\n?\s*\/\/\s*auth-cache \+ rate-limit-store are load-bearing\)\.\s*\n?\s*\/\/\s*- R2 \/ Postmark \/ Sentry init failure at boot → log warn; the\s*\n?\s*\/\/\s*service starts in degraded mode \(those features no-op\)\. These\s*\n?\s*\/\/\s*are not on the request critical path\.\s*\n?\s*\/\/\s*- readinessChecks fire every \/ready hit\. \/ready 503 on any\s*\n?\s*\/\/\s*reachable-but-failing dep\. Health checks are decoupled\./,
+      /\/\/ Failure semantics:\s*\/\/\s*- Postgres connection failure at boot → throw\. The deploy\s*\/\/\s*pipeline's \/health probe will fail; orchestrator will not\s*\/\/\s*promote\.\s*\/\/\s*- Redis connection failure at boot → throw \(same reasoning;\s*\/\/\s*auth-cache \+ rate-limit-store are load-bearing\)\.\s*\/\/\s*- R2 \/ Postmark \/ Sentry init failure at boot → log warn; the\s*\/\/\s*service starts in degraded mode \(those features no-op\)\. These\s*\/\/\s*are not on the request critical path\.\s*\/\/\s*- readinessChecks fire every \/ready hit\. \/ready 503 on any\s*\/\/\s*reachable-but-failing dep\. Health checks are decoupled\./,
     );
   });
 
   it('BootstrapResult: deps + handles (db/redis/r2/email/sentry) for SIGTERM ordered close + idempotent teardown rationale', () => {
     expect(body).toMatch(
-      /export interface BootstrapResult \{\s*\n?\s*deps: AppDeps;\s*\n?\s*\/\*\* Live handles — exposed so SIGTERM can close them in order\. \*\/\s*\n?\s*handles: \{\s*\n?\s*db: Database;\s*\n?\s*redis: Redis;\s*\n?\s*r2: R2 \| null;\s*\n?\s*email: EmailService;\s*\n?\s*sentry: SentryClient;\s*\n?\s*\};\s*\n?\s*\/\*\* Close everything in the right order; idempotent\. \*\/\s*\n?\s*teardown: \(\) => Promise<void>;\s*\n?\s*\}/,
+      /export interface BootstrapResult \{\s*deps: AppDeps;\s*\/\*\* Live handles — exposed so SIGTERM can close them in order\. \*\/\s*handles: \{\s*db: Database;\s*redis: Redis;\s*r2: R2 \| null;\s*email: EmailService;\s*sentry: SentryClient;\s*\};\s*\/\*\* Close everything in the right order; idempotent\. \*\/\s*teardown: \(\) => Promise<void>;\s*\}/,
     );
   });
 
   it('Sentry first rationale + Postgres SELECT 1 fail-fast probe + Redis lazyConnect:false maxRetries 3 + PING; explicit logger.info on each connect', () => {
     expect(body).toMatch(
-      /\/\/ Sentry first — so any later init exceptions surface there too\.\s*\n?\s*const sentry = initSentry\(\{ config: config\.sentry, logger \}\);/,
+      /\/\/ Sentry first — so any later init exceptions surface there too\.\s*const sentry = initSentry\(\{ config: config\.sentry, logger \}\);/,
     );
     expect(body).toMatch(
-      /\/\/ Postgres pool\. Fail-fast probe `SELECT 1` so a misconfigured\s*\n?\s*\/\/ DATABASE_URL surfaces at boot, not on the first request\./,
+      /\/\/ Postgres pool\. Fail-fast probe `SELECT 1` so a misconfigured\s*\/\/ DATABASE_URL surfaces at boot, not on the first request\./,
     );
     expect(body).toMatch(/await dbHandle\.client`SELECT 1`;/);
     expect(body).toMatch(
-      /\/\/ Redis \(single client for both auth cache \+ rate limit store —\s*\n?\s*\/\/ they share the same connection but use distinct key prefixes\)\.\s*\n?\s*\/\/ PING at boot for the same fail-fast posture as Postgres\./,
+      /\/\/ Redis \(single client for both auth cache \+ rate limit store —\s*\/\/ they share the same connection but use distinct key prefixes\)\.\s*\/\/ PING at boot for the same fail-fast posture as Postgres\./,
     );
     expect(body).toMatch(
-      /const redis = new Redis\(config\.redisUrl, \{\s*\n?\s*lazyConnect: false,\s*\n?\s*maxRetriesPerRequest: 3,\s*\n?\s*\}\);/,
+      /const redis = new Redis\(config\.redisUrl, \{\s*lazyConnect: false,\s*maxRetriesPerRequest: 3,\s*\}\);/,
     );
     expect(body).toMatch(/await redis\.ping\(\);/);
   });
 
   it("R2/Postmark optional + warn-when-unconfigured framing: 'R2 not configured — recordings durability + presigned URLs disabled. Set R2_* env vars to enable.'", () => {
     expect(body).toMatch(
-      /\/\/ R2 — optional\. Null if env not configured \(logged below\)\.\s*\n?\s*const r2 = config\.r2 !== null \? createR2Client\(config\.r2\) : null;/,
+      /\/\/ R2 — optional\. Null if env not configured \(logged below\)\.\s*const r2 = config\.r2 !== null \? createR2Client\(config\.r2\) : null;/,
     );
     expect(body).toMatch(
       /'R2 not configured — recordings durability \+ presigned URLs disabled\. Set R2_\* env vars to enable\.',/,
@@ -202,25 +202,25 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     // marker; the actual createEmailService() call now happens after
     // the metrics registry block with the metrics dep wired in.
     expect(body).toMatch(
-      /\/\/ Postmark email — optional\. No-op if not configured\. Constructed\s*\n?\s*\/\/ lazily AFTER the metrics registry below/,
+      /\/\/ Postmark email — optional\. No-op if not configured\. Constructed\s*\/\/ lazily AFTER the metrics registry below/,
     );
     expect(body).toMatch(
-      /const email: EmailService = createEmailService\(\{\s*\n?\s*config: config\.postmark,\s*\n?\s*logger,\s*\n?\s*\.\.\.\(metricsRegistry !== undefined \? \{ metrics: metricsRegistry \} : \{\}\),\s*\n?\s*accountEmailDeliveryTracker: createDrizzleAccountEmailDeliveryTracker\(dbHandle\),\s*\n?\s*sentry,\s*\n?\s*\}\);/,
+      /const email: EmailService = createEmailService\(\{\s*config: config\.postmark,\s*logger,\s*\.\.\.\(metricsRegistry !== undefined \? \{ metrics: metricsRegistry \} : \{\}\),\s*accountEmailDeliveryTracker: createDrizzleAccountEmailDeliveryTracker\(dbHandle\),\s*sentry,\s*\}\);/,
     );
   });
 
   it('V-216 framing pinned: accountAudit constructed early so emit-on-event services downstream (webhooks, sessions, api-keys, profiles) can wire it; V-204 emailPreferences constructed early because V-202c lifecycle consumes it for opt-out checks', () => {
     expect(body).toMatch(
-      /\/\/ V-216 — customer-facing audit log; constructed early so all\s*\n?\s*\/\/ emit-on-event services downstream \(webhooks, sessions, api-keys,\s*\n?\s*\/\/ profiles\) can wire it\./,
+      /\/\/ V-216 — customer-facing audit log; constructed early so all\s*\/\/ emit-on-event services downstream \(webhooks, sessions, api-keys,\s*\/\/ profiles\) can wire it\./,
     );
     expect(body).toMatch(
-      /\/\/ V-204 — email notification preferences\. Constructed early because\s*\n?\s*\/\/ V-202c lifecycle service consumes it for opt-out checks\./,
+      /\/\/ V-204 — email notification preferences\. Constructed early because\s*\/\/ V-202c lifecycle service consumes it for opt-out checks\./,
     );
   });
 
   it('V-202c/V-202b lifecycle framing pinned: paired audit-emit + email-send for events with both surfaces (session.failed.first / subscription.tier_changed); V-202b moved V-226 tier-change audit emit from StripeWebhooksService into lifecycle.handleTierChanged (founder verdict 2026-05-05) — pair behind ONE call. (trial_pack_purchased removed with the dead trial_pack lifecycle.)', () => {
     expect(body).toMatch(
-      /\/\/ V-202c \/ V-202b — account lifecycle dispatcher \(paired audit emit \+\s*\n?\s*\/\/ email send for events that have both surfaces\)\. Wires\s*\n?\s*\/\/ `session\.failed\.first`, `subscription\.tier_changed`\. V-202b moved the V-226\s*\n?\s*\/\/ tier-change audit emit from StripeWebhooksService into\s*\n?\s*\/\/ lifecycle\.handleTierChanged so the audit \+ email pair lives behind\s*\n?\s*\/\/ one call \(founder verdict 2026-05-05\)\./,
+      /\/\/ V-202c \/ V-202b — account lifecycle dispatcher \(paired audit emit \+\s*\/\/ email send for events that have both surfaces\)\. Wires\s*\/\/ `session\.failed\.first`, `subscription\.tier_changed`\. V-202b moved the V-226\s*\/\/ tier-change audit emit from StripeWebhooksService into\s*\/\/ lifecycle\.handleTierChanged so the audit \+ email pair lives behind\s*\/\/ one call \(founder verdict 2026-05-05\)\./,
     );
     expect(body).not.toMatch(/`subscription\.trial_pack_purchased`/);
     expect(body).toMatch(/accountAuditService, \/\/ V-202b — required for tier_changed audit emit/);
@@ -228,18 +228,16 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
 
   it('V-202d scheduled-jobs framing pinned: generic dispatcher; trial_pack.expired handler removed 2026-05-27; dispatcher remains for auth_tokens.sweep + cost.recompute_nightly; V-747 workerId is unique PER PROCESS (pid@host-random) because the settle fence keys on it — pid alone is PID 1 in a container, so it collided across replicas and was stable across restarts', () => {
     expect(body).toMatch(
-      /\/\/ V-202d — generic scheduled-jobs dispatcher\. The trial_pack\.expired\s*\n?\s*\/\/ handler was removed 2026-05-27 with the trial_pack retirement; the\s*\n?\s*\/\/ dispatcher remains for the other registered cron-shaped jobs\s*\n?\s*\/\/ \(auth_tokens\.sweep, cost\.recompute_nightly\) via `register\(\.\.\.\)`\./,
+      /\/\/ V-202d — generic scheduled-jobs dispatcher\. The trial_pack\.expired\s*\/\/ handler was removed 2026-05-27 with the trial_pack retirement; the\s*\/\/ dispatcher remains for the other registered cron-shaped jobs\s*\/\/ \(auth_tokens\.sweep, cost\.recompute_nightly\) via `register\(\.\.\.\)`\./,
     );
     // V-747 — this pinned "`<process-pid>@<host>` is sufficient ... multi-replica
     // safety still works because SELECT FOR UPDATE SKIP LOCKED ... not the
     // workerId". Two problems: the code never had the `@<host>` part the comment
     // described, and the SKIP-LOCKED argument only covers the CLAIM — the settle
     // fence added in V-747 keys on locked_by, so uniqueness became load-bearing.
-    expect(body).toMatch(
-      /SKIP LOCKED is what guarantees\s*\n?\s*\/\/ mutual exclusion at CLAIM time/,
-    );
+    expect(body).toMatch(/SKIP LOCKED is what guarantees\s*\/\/ mutual exclusion at CLAIM time/);
     expect(body).toMatch(/must therefore be unique per PROCESS/);
-    expect(body).toMatch(/a\s*\n?\s*\/\/\s*containerised app is usually PID 1/);
+    expect(body).toMatch(/a\s*\/\/\s*containerised app is usually PID 1/);
     expect(body).toMatch(
       /workerId: `pid-\$\{process\.pid\.toString\(\)\}@\$\{hostname\(\)\}-\$\{randomUUID\(\)\.slice\(0, 8\)\}`/,
     );
@@ -249,19 +247,19 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
 
   it('V-225 wiring framing pinned for both webhooks (created/deleted) and profiles (created/deleted); V-049 legalService gate on ApiKeysService; V-216 accountAudit wired for api-keys customer-facing audit emit', () => {
     expect(body).toMatch(
-      /\/\/ Webhooks first so sessions \+ api-keys can wire it\.\s*\n?\s*\/\/ V-225 — accountAudit wired for webhook_endpoint\.\{created,deleted\}\./,
+      /\/\/ Webhooks first so sessions \+ api-keys can wire it\.\s*\/\/ V-225 — accountAudit wired for webhook_endpoint\.\{created,deleted\}\./,
     );
     expect(body).toMatch(
-      /\/\/ V-081: Profiles service\.\s*\n?\s*\/\/ V-225 — accountAudit wired for profile\.\{created,deleted\}\./,
+      /\/\/ V-081: Profiles service\.\s*\/\/ V-225 — accountAudit wired for profile\.\{created,deleted\}\./,
     );
     expect(body).toMatch(
-      /\/\/ ApiKeysService needs legalService \(V-049 issuance gate\)\.\s*\n?\s*\/\/ V-216: also wires accountAuditService for customer-facing audit emit\./,
+      /\/\/ ApiKeysService needs legalService \(V-049 issuance gate\)\.\s*\/\/ V-216: also wires accountAuditService for customer-facing audit emit\./,
     );
   });
 
   it("V-353b MFA gate framing pinned: active ONLY when MFA_ENCRYPTION_KEY configured (32 random bytes base64); when unset, /v1/account/mfa/* routes simply don't register (avoids registering routes that would write to a table we can't decrypt back from); explicit generate-key recipe in warn message", () => {
     expect(body).toMatch(
-      /\/\/ V-353b — MFA service\. Active only when MFA_ENCRYPTION_KEY is\s*\n?\s*\/\/ configured \(32 random bytes, base64-encoded\)\. When unset, the\s*\n?\s*\/\/ \/v1\/account\/mfa\/\* routes simply don't register and customers\s*\n?\s*\/\/ can't enroll\. Generate the key with:\s*\n?\s*\/\/\s*node -e "console\.log\(require\('crypto'\)\.randomBytes\(32\)\.toString\('base64'\)\)"\s*\n?\s*\/\/ and set as MFA_ENCRYPTION_KEY in deploy env\./,
+      /\/\/ V-353b — MFA service\. Active only when MFA_ENCRYPTION_KEY is\s*\/\/ configured \(32 random bytes, base64-encoded\)\. When unset, the\s*\/\/ \/v1\/account\/mfa\/\* routes simply don't register and customers\s*\/\/ can't enroll\. Generate the key with:\s*\/\/\s*node -e "console\.log\(require\('crypto'\)\.randomBytes\(32\)\.toString\('base64'\)\)"\s*\/\/ and set as MFA_ENCRYPTION_KEY in deploy env\./,
     );
     expect(body).toMatch(
       /'MFA_ENCRYPTION_KEY not set — \/v1\/account\/mfa\/\* routes disabled\. ' \+/,
@@ -330,13 +328,13 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
 
   it('V-295c2 status-snapshot framing pinned: separate public-readable R2 bucket (recordings bucket intentionally NOT used — recordings contain Customer Data and must remain private); fall-back when live API fetch fails; active ONLY when R2_BUCKET_PUBLIC configured', () => {
     expect(body).toMatch(
-      /\/\/ V-295c2 — public status snapshot writer\. Writes the same data the\s*\n?\s*\/\/ public \/v1\/status\/incidents endpoint surfaces to a SEPARATE\s*\n?\s*\/\/ public-readable R2 bucket so the status site can fall back to the\s*\n?\s*\/\/ snapshot when the live API fetch fails\. The recordings bucket is\s*\n?\s*\/\/ intentionally NOT used — recordings contain Customer Data and must\s*\n?\s*\/\/ remain private\. Active only when R2_BUCKET_PUBLIC is configured\./,
+      /\/\/ V-295c2 — public status snapshot writer\. Writes the same data the\s*\/\/ public \/v1\/status\/incidents endpoint surfaces to a SEPARATE\s*\/\/ public-readable R2 bucket so the status site can fall back to the\s*\/\/ snapshot when the live API fetch fails\. The recordings bucket is\s*\/\/ intentionally NOT used — recordings contain Customer Data and must\s*\/\/ remain private\. Active only when R2_BUCKET_PUBLIC is configured\./,
     );
   });
 
   it('V-295c3-tombstone framing pinned: Privacy §3.10 90d post-unsubscribe email zero-out, now a durable daily job chain. TWO claims were retracted here and both are held down per-occurrence. V-783: the comment asserted the purge writes admin_audit_log with a null adminAccountId and that the repo accepts null for system actions — both false, the column is NOT NULL with an FK, so no such write has ever happened or could. V-784: it also said the first tick fires 24h after boot and called that acceptable, which was true of the setInterval and was exactly the bug — a process restarting more often than daily never reached the first tick, so the §3.10 sweep did not run at all.', () => {
     expect(body).toMatch(
-      /\/\/ V-295c3-tombstone — status-subscriber email purge\. Privacy §3\.10 promises\s*\n?\s*\/\/ 90d post-unsubscribe email zero-out\./,
+      /\/\/ V-295c3-tombstone — status-subscriber email purge\. Privacy §3\.10 promises\s*\/\/ 90d post-unsubscribe email zero-out\./,
     );
     expect(body).toMatch(/jobType: STATUS_SUBSCRIBER_PURGE_JOB_TYPE,/);
 
@@ -360,11 +358,11 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
 
   it('V-232 poller framing pinned: 60s cadence (V-173 webhook-worker convention; minute-level latency tolerance); founder-approved on V-202d ack 2026-05-06; setInterval wraps try/catch as defense-in-depth — unexpected throw must NEVER kill the interval, or background work silently stops; .unref() so app close cleanly on SIGINT without waiting next tick', () => {
     expect(body).toMatch(
-      /\/\/ V-232 — background poller startup\. Both processTick methods own\s*\n?\s*\/\/ their own claim\/dispatch\/retry semantics; the bootstrap layer just\s*\n?\s*\/\/ calls them on a 60s timer\. 60s cadence is the V-173 webhook-worker\s*\n?\s*\/\/ convention; trial-pack expiry and validation-harness scheduling\s*\n?\s*\/\/ both have minute-level latency tolerance, so this matches\./,
+      /\/\/ V-232 — background poller startup\. Both processTick methods own\s*\/\/ their own claim\/dispatch\/retry semantics; the bootstrap layer just\s*\/\/ calls them on a 60s timer\. 60s cadence is the V-173 webhook-worker\s*\/\/ convention; trial-pack expiry and validation-harness scheduling\s*\/\/ both have minute-level latency tolerance, so this matches\./,
     );
     expect(body).toMatch(/\/\/ Founder-approved cadence on V-202d ack \(2026-05-06\)\./);
     expect(body).toMatch(
-      /\/\/ Errors inside the tick are caught \+ logged warn-level by the\s*\n?\s*\/\/ services themselves; the setInterval handler still wraps in a\s*\n?\s*\/\/ try\/catch as a defense-in-depth: an unexpected throw must NEVER\s*\n?\s*\/\/ kill the interval, or background work silently stops\./,
+      /\/\/ Errors inside the tick are caught \+ logged warn-level by the\s*\/\/ services themselves; the setInterval handler still wraps in a\s*\/\/ try\/catch as a defense-in-depth: an unexpected throw must NEVER\s*\/\/ kill the interval, or background work silently stops\./,
     );
     expect(body).toMatch(/const POLLER_INTERVAL_MS = 60_000;/);
     expect(body).toMatch(/scheduledJobsTimer\.unref\(\);/);
@@ -398,7 +396,7 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     // life of the process — no error, no metric, no log. A reset that lives
     // anywhere but a `finally` is one thrown exception away from that, and the
     // catch above it does not cover a throw from the catch itself.
-    expect(body).toMatch(/\} finally \{\s*\n?\s*webhookDeliveryRunning = false;/);
+    expect(body).toMatch(/\} finally \{\s*webhookDeliveryRunning = false;/);
     // The latch itself: without the early return, ticks overlap and a slow drain
     // stacks on the next interval.
     expect(body).toMatch(/if \(webhookDeliveryRunning\) return;/);
@@ -446,26 +444,26 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
 
   it("V-541.H framing pinned: real UsageAggregator over V-073 usage_records ledger; fills sessionMinutes from real data; other dimensions (storage/egress/email/llm) zero placeholders until per-account meters land (V-541.I/J/K follow-ups); CostMonitoring resolveTier reads from billingRepo.getAccount.tier — same source billingService uses → can't drift", () => {
     expect(body).toMatch(
-      /\/\/ V-541\.H — real UsageAggregator over the V-073 usage_records\s*\n?\s*\/\/ ledger\. Fills `sessionMinutes` from real data; other dimensions\s*\n?\s*\/\/ \(storage, egress, email, llm\) are zero placeholders until their\s*\n?\s*\/\/ per-account meters land \(V-541\.I\/J\/K follow-ups\)\./,
+      /\/\/ V-541\.H — real UsageAggregator over the V-073 usage_records\s*\/\/ ledger\. Fills `sessionMinutes` from real data; other dimensions\s*\/\/ \(storage, egress, email, llm\) are zero placeholders until their\s*\/\/ per-account meters land \(V-541\.I\/J\/K follow-ups\)\./,
     );
     expect(body).toMatch(
-      /resolveTier: async \(accountId\) => \{\s*\n?\s*const acc = await new DrizzleBillingRepo\(dbHandle\)\.getAccount\(accountId\);\s*\n?\s*return acc\?\.tier \?\? null;\s*\n?\s*\},/,
+      /resolveTier: async \(accountId\) => \{\s*const acc = await new DrizzleBillingRepo\(dbHandle\)\.getAccount\(accountId\);\s*return acc\?\.tier \?\? null;\s*\},/,
     );
   });
 
   it('Teardown framing pinned: one shared first-call promise; no new poller ticks after cleanup starts; the three independent closes run CONCURRENTLY via allSettled (sentry flush+close 2s, a deadline-bounded redis.quit, dbHandle.close) so their budgets no longer add and one hung client cannot starve the others', () => {
     expect(body).toMatch(
-      /\/\/ V-232 — stop pollers BEFORE other teardown so no new tick is admitted\s*\n?\s*\/\/ while Redis\/Postgres close\. clearInterval cannot cancel a tick that\s*\n?\s*\/\/ already started;/,
+      /\/\/ V-232 — stop pollers BEFORE other teardown so no new tick is admitted\s*\/\/ while Redis\/Postgres close\. clearInterval cannot cancel a tick that\s*\/\/ already started;/,
     );
     expect(body).toMatch(
-      /const teardown = shareFirstAsyncCall\(async \(\) => \{\s*\n?\s*logger\.info\(\{ component: 'bootstrap' \}, 'tearing down'\);/,
+      /const teardown = shareFirstAsyncCall\(async \(\) => \{\s*logger\.info\(\{ component: 'bootstrap' \}, 'tearing down'\);/,
     );
     expect(body).toContain('owner ??= Promise.resolve().then(() => operation(...args));');
     // Sentry's own two calls stay sequential with each other inside one arm;
     // it is the three ARMS that are concurrent. The budget arithmetic in
     // shutdown-budget-fits-systemd-stop-window depends on exactly that shape.
     expect(body).toMatch(
-      /await Promise\.allSettled\(\[\s*\n?\s*\(async \(\) => \{\s*\n?\s*await sentry\.flush\(2000\);\s*\n?\s*await sentry\.close\(2000\);\s*\n?\s*\}\)\(\),/,
+      /await Promise\.allSettled\(\[\s*\(async \(\) => \{\s*await sentry\.flush\(2000\);\s*await sentry\.close\(2000\);\s*\}\)\(\),/,
     );
     expect(body).toContain('withTeardownDeadline(REDIS_QUIT_DEADLINE_MS, () => redis.quit()),');
     expect(body).toContain('export const REDIS_QUIT_DEADLINE_MS = 2_000;');
@@ -473,16 +471,16 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
 
   it('v2-#17 rotation-reminder daily sweeps framing pinned: pure-sweep nags (no auto-rotation); default-on; DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS opts out via envFlag (true/1/yes/on). V-784 replaced the two 24h setInterval timers with durable job chains, so the interval constant, the .unref()s and the teardown clearIntervals this used to pin are gone and are asserted absent instead — a reintroduced timer would mean a reminder that never fires on a sub-daily deploy cadence.', () => {
     expect(body).toMatch(
-      /\/\/ v2-#17 — daily rotation-reminder sweeps for webhook signing secrets\s*\n?\s*\/\/ \(v2-#10\/#10\.5\/#10\.6\) and BYOK Anthropic API keys \(v2-#11\/#11\.5\/#11\.6\)\.\s*\n?\s*\/\/ Both reminder services are pure-sweep nags \(no auto-rotation\); the\s*\n?\s*\/\/ services skip rows that don't need a reminder yet, so the per-tick\s*\n?\s*\/\/ burst is bounded by perTickLimit \(default 50\)\. Default-on for\s*\n?\s*\/\/ production; the operator can flip\s*\n?\s*\/\/ DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS=1 to suppress when a\s*\n?\s*\/\/ customer-quiet account wants to silence the nag/,
+      /\/\/ v2-#17 — daily rotation-reminder sweeps for webhook signing secrets\s*\/\/ \(v2-#10\/#10\.5\/#10\.6\) and BYOK Anthropic API keys \(v2-#11\/#11\.5\/#11\.6\)\.\s*\/\/ Both reminder services are pure-sweep nags \(no auto-rotation\); the\s*\/\/ services skip rows that don't need a reminder yet, so the per-tick\s*\/\/ burst is bounded by perTickLimit \(default 50\)\. Default-on for\s*\/\/ production; the operator can flip\s*\/\/ DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS=1 to suppress when a\s*\/\/ customer-quiet account wants to silence the nag/,
     );
     expect(body).toMatch(
       /envFlag\(\s*process\.env\.DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS,?\s*\)/,
     );
     expect(body).toMatch(
-      /new WebhookRotationReminderService\(\s*\n?\s*new DrizzleWebhookRotationReminderRepo\(dbHandle, \{[\s\S]*?secretEncryptionKeyBase64: config\.mfaEncryptionKey[\s\S]*?\}\),/,
+      /new WebhookRotationReminderService\(\s*new DrizzleWebhookRotationReminderRepo\(dbHandle, \{[\s\S]*?secretEncryptionKeyBase64: config\.mfaEncryptionKey[\s\S]*?\}\),/,
     );
     expect(body).toMatch(
-      /new ByokAnthropicRotationReminderService\(\s*\n?\s*new DrizzleByokAnthropicRotationReminderRepo\(dbHandle\),/,
+      /new ByokAnthropicRotationReminderService\(\s*new DrizzleByokAnthropicRotationReminderRepo\(dbHandle\),/,
     );
     // V-784 — both reminders are now durable chains, armed at boot alongside
     // the other eleven. Asserted as the wiring call plus the per-occurrence
@@ -548,7 +546,7 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
 
   it("2026-05-20 accountAuditService takes the notificationEventBus as its 3rd constructor arg so high-severity actions (api_key.revoked, byok_anthropic.key_set, team.member_removed, account.mfa_disabled, account.password_changed) republish onto the panel stream — pinned so a refactor can't silently drop the third arg and break the audit→panel feed", () => {
     expect(body).toMatch(
-      /const accountAuditService = new AccountAuditService\(\s*\n?\s*accountAuditRepo,\s*\n?\s*metricsRegistry,\s*\n?\s*notificationEventBus,\s*\n?\s*\);/,
+      /const accountAuditService = new AccountAuditService\(\s*accountAuditRepo,\s*metricsRegistry,\s*notificationEventBus,\s*\);/,
     );
   });
 
@@ -558,7 +556,7 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
 
   it("6.g session-duration auto-destroy sweep wired in bootstrap: SessionDurationSweeperService(repo+sessions) + registerSessionDurationSweepJob + enqueueNextSessionDurationSweep on app start. Pinned so a refactor can't silently drop the wire-up and let free-tier sessions pin fleet slots forever.", () => {
     expect(body).toMatch(
-      /import \{\s*\n?\s*SessionDurationSweeperService,\s*\n?\s*enqueueNextSessionDurationSweep,\s*\n?\s*registerSessionDurationSweepJob,\s*\n?\s*\} from '\.\.\/services\/session-duration-sweeper\.js';/,
+      /import \{\s*SessionDurationSweeperService,\s*enqueueNextSessionDurationSweep,\s*registerSessionDurationSweepJob,\s*\} from '\.\.\/services\/session-duration-sweeper\.js';/,
     );
     expect(body).toMatch(/const sessionDurationSweeper = new SessionDurationSweeperService\(\{/);
     expect(body).toMatch(/repo: sessionsRepo,/);
@@ -666,7 +664,7 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     // parameter is optional — so dropping this argument leaves every unit test
     // for that reporting green while production goes silent again.
     expect(body).toMatch(
-      /const accountsAdminService = new AccountsAdminService\(\s*\n?\s*accountsAdminRepo,[\s\S]*?webhooksService,[\s\S]*?\n\s*logger,/,
+      /const accountsAdminService = new AccountsAdminService\(\s*accountsAdminRepo,[\s\S]*?webhooksService,[\s\S]*?\n\s*logger,/,
     );
     // V-758 — the suspension lifecycle now also needs a billing pauser, or the AUP's
     // "billing pauses" promise silently becomes untrue again. Resolved lazily because

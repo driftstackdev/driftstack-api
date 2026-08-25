@@ -36,13 +36,13 @@ describe('W489.B apps/admin-panel/src/pages/sessions.astro content parity', () =
 
   it('V-192 framing pins an inert SSG shell replaced only after authenticated live loading', () => {
     expect(body).toMatch(
-      /\/\/ V-192 — progressive-enhancement against \/v1\/admin\/sessions \(new in\s*\n?\s*\/\/ V-192\)\. SSG renders an inert shell; an inline <script> reads\s*\n?\s*\/\/ ds_web_session_token from localStorage, fetches with bearer auth, and\s*\n?\s*\/\/ replaces the table\./,
+      /\/\/ V-192 — progressive-enhancement against \/v1\/admin\/sessions \(new in\s*\/\/ V-192\)\. SSG renders an inert shell; an inline <script> reads\s*\/\/ ds_web_session_token from localStorage, fetches with bearer auth, and\s*\/\/ replaces the table\./,
     );
   });
 
   it('page-purpose framing pins force-destroy-only staff authority and local-only customer recordings', () => {
     expect(body).toMatch(
-      /Inspect and filter live and recent customer sessions across all accounts\.\s*\n?\s*Force-destroy is the only mutation surfaced here and the only staff mutation\s*\n?\s*available\. Session replay is not available in admin, and customer desktop\s*\n?\s*recordings stay on their device and never enter the admin API\./,
+      /Inspect and filter live and recent customer sessions across all accounts\.\s*Force-destroy is the only mutation surfaced here and the only staff mutation\s*available\. Session replay is not available in admin, and customer desktop\s*recordings stay on their device and never enter the admin API\./,
     );
     expect(body).not.toContain('replay, view recording');
     expect(body).not.toMatch(/replay.*per-account detail surface/i);
@@ -50,7 +50,7 @@ describe('W489.B apps/admin-panel/src/pages/sessions.astro content parity', () =
 
   it('STATUS_BADGE 5-tone remains in the authoritative live-row renderer only', () => {
     expect(body).toMatch(
-      /const STATUS_BADGE = \{\s*\n?\s*creating: 'bg-amber-50 text-amber-700',\s*\n?\s*ready: 'bg-emerald-50 text-emerald-700',\s*\n?\s*busy: 'bg-blue-50 text-blue-700',\s*\n?\s*destroyed: 'bg-tk-hover text-tk-ink-2',\s*\n?\s*errored: 'bg-red-50 text-red-700',\s*\n?\s*\};/,
+      /const STATUS_BADGE = \{\s*creating: 'bg-amber-50 text-amber-700',\s*ready: 'bg-emerald-50 text-emerald-700',\s*busy: 'bg-blue-50 text-blue-700',\s*destroyed: 'bg-tk-hover text-tk-ink-2',\s*errored: 'bg-red-50 text-red-700',\s*\};/,
     );
     expect(body).not.toContain('const STATUS_BADGE: Record<string, string>');
   });
@@ -58,10 +58,10 @@ describe('W489.B apps/admin-panel/src/pages/sessions.astro content parity', () =
   it('ships no sample session identity, count, destructive control, or green live claim', () => {
     expect(body).not.toContain('MOCK_SESSIONS');
     expect(body).toContain('Live sessions are unavailable until loaded.');
-    expect(body).toMatch(/data-live-dot\s*\n?\s*class="[^"]*bg-amber-500"/);
+    expect(body).toMatch(/data-live-dot\s*class="[^"]*bg-amber-500"/);
     expect(body).toContain('<span data-live-status>Waiting for live data</span>');
-    expect(body).toMatch(/data-live-refresh\s*\n?\s*disabled\s*\n?\s*aria-disabled="true"/);
-    expect(body).not.toMatch(/data-action="destroy"\s*\n?\s*data-id=\{session\.id\}/);
+    expect(body).toMatch(/data-live-refresh\s*disabled\s*aria-disabled="true"/);
+    expect(body).not.toMatch(/data-action="destroy"\s*data-id=\{session\.id\}/);
     expect(body).not.toMatch(/Showing \{MOCK_SESSIONS\.length\} sessions/);
   });
 
@@ -76,22 +76,22 @@ describe('W489.B apps/admin-panel/src/pages/sessions.astro content parity', () =
 
   it("Force-destroy is emitted only by live rowHtml and stays hidden when status === 'destroyed'", () => {
     expect(body).toMatch(
-      /const destroyBtn =\s*\n?\s*s\.status !== 'destroyed'\s*\n?\s*\? '<button type="button" data-action="destroy" data-id="' \+/,
+      /const destroyBtn =\s*s\.status !== 'destroyed'\s*\? '<button type="button" data-action="destroy" data-id="' \+/,
     );
   });
 
   it('POST /v1/admin/sessions/{encodeURIComponent(id)}/destroy stays confirmed, bounded, latched, and audited — pinned so an optional trimmed reason reaches the audit row without allowing an accidental or duplicate force-destroy', () => {
     expect(body).toMatch(
-      /const confirmed = await window\.driftstackConfirm\(\s*\n?\s*'Force-destroy session ' \+ id \+ "\? This ends the customer's live browser session immediately\.",/,
+      /const confirmed = await window\.driftstackConfirm\(\s*'Force-destroy session ' \+ id \+ "\? This ends the customer's live browser session immediately\.",/,
     );
     expect(body).toMatch(
       /await window\.driftstackPrompt\('Reason for force-destroying ' \+ id \+ ' \(optional\):', \{/,
     );
     expect(body).toMatch(
-      /const body = \{\};\s*\n?\s*if \(reason\.trim\(\)\) body\.reason = reason\.trim\(\);/,
+      /const body = \{\};\s*if \(reason\.trim\(\)\) body\.reason = reason\.trim\(\);/,
     );
     expect(body).toMatch(
-      /const response = await boundedFetch\(\s*\n?\s*apiBaseUrl \+ '\/v1\/admin\/sessions\/' \+ encodeURIComponent\(id\) \+ '\/destroy',\s*\n?\s*\{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{\s*\n?\s*authorization: 'Bearer ' \+ token,\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\},\s*\n?\s*credentials: 'include',\s*\n?\s*body: JSON\.stringify\(body\),\s*\n?\s*\},\s*\n?\s*\);/,
+      /const response = await boundedFetch\(\s*apiBaseUrl \+ '\/v1\/admin\/sessions\/' \+ encodeURIComponent\(id\) \+ '\/destroy',\s*\{\s*method: 'POST',\s*headers: \{\s*authorization: 'Bearer ' \+ token,\s*'content-type': 'application\/json',\s*\},\s*credentials: 'include',\s*body: JSON\.stringify\(body\),\s*\},\s*\);/,
     );
     expect(body).toMatch(/const SESSION_TIMEOUT_MS = 15_000;/);
     expect(body).toMatch(/destroysInFlight\.size > 0/);
@@ -177,7 +177,7 @@ describe('W489.B apps/admin-panel/src/pages/sessions.astro content parity', () =
 
   it('footnote reports deduped loaded-window truth with singular/plural grammar and pagination state', () => {
     expect(body).toMatch(
-      /footnote\.textContent =\s*\n?\s*'Showing ' \+\s*\n?\s*rows\.length \+\s*\n?\s*' session' \+\s*\n?\s*\(rows\.length === 1 \? '' : 's'\) \+\s*\n?\s*' in the loaded window' \+/,
+      /footnote\.textContent =\s*'Showing ' \+\s*rows\.length \+\s*' session' \+\s*\(rows\.length === 1 \? '' : 's'\) \+\s*' in the loaded window' \+/,
     );
     expect(body).toContain(
       'Force-destroy fires POST /v1/admin/sessions/:id/destroy with audit log.',
@@ -221,7 +221,7 @@ describe('W489.B apps/admin-panel/src/pages/sessions.astro content parity', () =
       "localStorage.getItem('ds_web_session_token')",
     );
     expect(body).toMatch(
-      /if \(document\.readyState === 'loading'\) \{\s*\n?\s*document\.addEventListener\('DOMContentLoaded', start\);\s*\n?\s*\} else \{\s*\n?\s*start\(\);/,
+      /if \(document\.readyState === 'loading'\) \{\s*document\.addEventListener\('DOMContentLoaded', start\);\s*\} else \{\s*start\(\);/,
     );
   });
 

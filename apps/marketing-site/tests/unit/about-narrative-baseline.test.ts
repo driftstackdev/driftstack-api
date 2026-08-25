@@ -35,7 +35,7 @@ describe('W334.B /about narrative baseline', () => {
     expect(body).toMatch(/Compute and database run in the EU/);
     expect(body).not.toMatch(/Compute, database, and object storage all run in the EU/);
     expect(body).toMatch(
-      /transfer to the US\s*\n?\s*under Standard Contractual Clauses \+ the EU-US Data Privacy/,
+      /transfer to the US\s*under Standard Contractual Clauses \+ the EU-US Data Privacy/,
     );
     expect(body).not.toMatch(/Single-region — no silent transatlantic data/);
     expect(body).toMatch(/href="\/trust\/sub-processors\/"/);

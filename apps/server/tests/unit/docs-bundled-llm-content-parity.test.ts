@@ -51,11 +51,9 @@ describe('Arc 6 docs.bundled-llm content parity', () => {
     // an included-service accounting value (a budget, not an itemized Stripe
     // line), so the amount, the per-turn unit and the model/token independence
     // are pinned rather than one exact phrasing of the sentence.
-    expect(body).toMatch(
-      /flat \*\*\$0\.10\s*\n?\s*included-service accounting value per agent turn\*\*/,
-    );
-    expect(body).toMatch(/independent of model choice\s*\n?\s*and token count/);
-    expect(body).toMatch(/Enterprise can\s*\n?\s*use a contracted custom budget/);
+    expect(body).toMatch(/flat \*\*\$0\.10\s*included-service accounting value per agent turn\*\*/);
+    expect(body).toMatch(/independent of model choice\s*and token count/);
+    expect(body).toMatch(/Enterprise can\s*use a contracted custom budget/);
     expect(body).toMatch(/bundled_flat_per_turn/);
     expect(body).not.toMatch(/Cost-per-turn varies with the underlying model/);
   });

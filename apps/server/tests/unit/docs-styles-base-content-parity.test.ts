@@ -206,7 +206,7 @@ describe('docs styles/base content parity', () => {
     expect(body).toMatch(/--tw-prose-th-borders: var\(--border\);/);
     expect(body).toMatch(/--code-bg: #16171c;/);
     expect(body).toMatch(/--code-bg: #0c0c11;/);
-    expect(body).toMatch(/fenced code stays a DARK terminal in\s*\n?\s*BOTH modes/);
+    expect(body).toMatch(/fenced code stays a DARK terminal in\s*BOTH modes/);
   });
 
   it('S22.2 (2026-07-06, Stoplight relayout) — blockquote info-callout pinned: raised surface + rounded right edge + normal weight at the prose level (accent-2 left rule comes from the --tw-prose-quote-borders hook), and the typography plugin auto quote marks removed — ZERO .md edits, every markdown `>` note renders as a callout', () => {

@@ -68,7 +68,7 @@ describe('W693 cross-SDK V-666 crypto-orders parity', () => {
     const py = read(PY_CRYPTO);
 
     expect(ts).toMatch(
-      /Crypto\s*\n?\s*\/\/ payments are non-refundable|Crypto payments are non-refundable/,
+      /Crypto\s*\/\/ payments are non-refundable|Crypto payments are non-refundable/,
     );
     expect(go).toMatch(/Crypto payments are non-refundable/);
     expect(py).toMatch(/Crypto payments are non-refundable/);

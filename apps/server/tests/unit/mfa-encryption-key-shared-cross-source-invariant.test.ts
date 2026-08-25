@@ -101,19 +101,19 @@ describe('MFA_ENCRYPTION_KEY shared 4-class cross-source invariant', () => {
 
   it("byok-anthropic-encryption explicitly cross-references mfa-totp: 'The same key is used by mfa-totp.ts; rotating MFA_ENCRYPTION_KEY simultaneously rotates both surfaces' ciphertexts.' — pinned so the rotation-rotates-multiple-surfaces guarantee stays documented (drift here is the load-bearing operator-facing rotation-runbook contract)", () => {
     expect(byok).toMatch(
-      /The same key is\s*\n?\s*\/\/ used by `mfa-totp\.ts`; rotating MFA_ENCRYPTION_KEY simultaneously\s*\n?\s*\/\/ rotates both surfaces' ciphertexts\./,
+      /The same key is\s*\/\/ used by `mfa-totp\.ts`; rotating MFA_ENCRYPTION_KEY simultaneously\s*\/\/ rotates both surfaces' ciphertexts\./,
     );
   });
 
   it("livekit-secret-encryption explicitly cross-references the single-trust-boundary contract: 'single host-resident MFA_ENCRYPTION_KEY. The reused key is fine (single trust boundary; rotating MFA_ENCRYPTION_KEY rotates all' — pinned so the cross-reference + single-trust-boundary + rotate-all rationale stays documented", () => {
     expect(lk).toMatch(
-      /single host-resident MFA_ENCRYPTION_KEY\. The reused key is fine\s*\n?\s*\/\/ \(single trust boundary; rotating MFA_ENCRYPTION_KEY rotates all/,
+      /single host-resident MFA_ENCRYPTION_KEY\. The reused key is fine\s*\/\/ \(single trust boundary; rotating MFA_ENCRYPTION_KEY rotates all/,
     );
   });
 
   it('gui-control-key-encryption pins the versioned envelope, context-bound AAD, and shared host-key contract', () => {
     expect(gck).toMatch(
-      /AES-256-GCM uses a\s*\n?\s*\/\/ versioned `\[magic \| IV \| tag \| ciphertext\]` envelope and canonical\s*\n?\s*\/\/ additional authenticated data \(AAD\) that binds the ciphertext to its\s*\n?\s*\/\/ purpose, owning account, and one agent-session\. Re-uses\s*\n?\s*\/\/ MFA_ENCRYPTION_KEY per Q2=C \(24h-TTL, MFA-key pattern\)\./,
+      /AES-256-GCM uses a\s*\/\/ versioned `\[magic \| IV \| tag \| ciphertext\]` envelope and canonical\s*\/\/ additional authenticated data \(AAD\) that binds the ciphertext to its\s*\/\/ purpose, owning account, and one agent-session\. Re-uses\s*\/\/ MFA_ENCRYPTION_KEY per Q2=C \(24h-TTL, MFA-key pattern\)\./,
     );
   });
 

@@ -51,13 +51,13 @@ describe('W462.C apps/marketing-site/src/data/capabilities.ts content parity', (
   it("Cumulative-rig framing pinned: 'Cumulative-rig snapshot for marketing-surface display.' + Source 'parent driftstack repo /docs/progress/phase-2.md cumulative-rig snapshot (probes-with-iPhone-reference denominator, not raw — raw includes ref=None pinned post-V-141 capture and is NOT the marketing-surface number).'", () => {
     expect(body).toMatch(/\/\/ Cumulative-rig snapshot for marketing-surface display\./);
     expect(body).toMatch(
-      /\/\/ Source: parent driftstack repo `\/docs\/progress\/phase-2\.md`\s*\n?\s*\/\/ cumulative-rig snapshot \(probes-with-iPhone-reference denominator,\s*\n?\s*\/\/ not raw — raw includes ref=None pinned post-V-141 capture and is\s*\n?\s*\/\/ NOT the marketing-surface number\)\./,
+      /\/\/ Source: parent driftstack repo `\/docs\/progress\/phase-2\.md`\s*\/\/ cumulative-rig snapshot \(probes-with-iPhone-reference denominator,\s*\/\/ not raw — raw includes ref=None pinned post-V-141 capture and is\s*\/\/ NOT the marketing-surface number\)\./,
     );
   });
 
   it("Update-protocol framing pinned: 'when Agent 1 closes a cumulative-rig batch that moves the numerator or denominator, founder relays the new values to Agent 2 in next interaction; Agent 2 lands the update as a Tier 1 maintenance commit (no founder review needed for factual technical state).'", () => {
     expect(body).toMatch(
-      /\/\/ Update protocol: when Agent 1 closes a cumulative-rig batch that\s*\n?\s*\/\/ moves the numerator or denominator, founder relays the new values\s*\n?\s*\/\/ to Agent 2 in next interaction; Agent 2 lands the update as a\s*\n?\s*\/\/ Tier 1 maintenance commit \(no founder review needed for factual\s*\n?\s*\/\/ technical state\)\./,
+      /\/\/ Update protocol: when Agent 1 closes a cumulative-rig batch that\s*\/\/ moves the numerator or denominator, founder relays the new values\s*\/\/ to Agent 2 in next interaction; Agent 2 lands the update as a\s*\/\/ Tier 1 maintenance commit \(no founder review needed for factual\s*\/\/ technical state\)\./,
     );
   });
 
@@ -67,32 +67,32 @@ describe('W462.C apps/marketing-site/src/data/capabilities.ts content parity', (
 
   it("CUMULATIVE_RIG export: `as const` literal-type lock + 5 fields pinned (surfacesMatched 1252 + surfacesMeasured 1253 + matchRatePercentage 99.9 + archetypeReference 'iPhone 16 Pro / iOS 18.7 / Safari 26.4' + lastUpdated '2026-05-03')", () => {
     expect(body).toMatch(
-      /export const CUMULATIVE_RIG = \{\s*\n?\s*\/\*\* Surfaces matching the iPhone reference fingerprint exactly\. \*\/\s*\n?\s*surfacesMatched: 1252,\s*\n?\s*\/\*\* Surfaces measured against the iPhone reference \(excludes ref=None\)\. \*\/\s*\n?\s*surfacesMeasured: 1253,\s*\n?\s*\/\*\* Pre-rounded percentage for marketing-headline display\. \*\/\s*\n?\s*matchRatePercentage: 99\.9,\s*\n?\s*\/\*\* Reference archetype the cumulative rig measures against\. \*\/\s*\n?\s*archetypeReference: 'iPhone 16 Pro \/ iOS 18\.7 \/ Safari 26\.4',\s*\n?\s*\/\*\* ISO-8601 date of the last numerator\/denominator update\. \*\/\s*\n?\s*lastUpdated: '2026-05-03',\s*\n?\s*\} as const;/,
+      /export const CUMULATIVE_RIG = \{\s*\/\*\* Surfaces matching the iPhone reference fingerprint exactly\. \*\/\s*surfacesMatched: 1252,\s*\/\*\* Surfaces measured against the iPhone reference \(excludes ref=None\)\. \*\/\s*surfacesMeasured: 1253,\s*\/\*\* Pre-rounded percentage for marketing-headline display\. \*\/\s*matchRatePercentage: 99\.9,\s*\/\*\* Reference archetype the cumulative rig measures against\. \*\/\s*archetypeReference: 'iPhone 16 Pro \/ iOS 18\.7 \/ Safari 26\.4',\s*\/\*\* ISO-8601 date of the last numerator\/denominator update\. \*\/\s*lastUpdated: '2026-05-03',\s*\} as const;/,
     );
   });
 
   it("S18 DEVICE_SUPPORT derivation-source comment pinned: 'Derivation source: packages/api-types/src/common.ts ARCHETYPE_REGISTRY — the customer-selectable catalog' + 'Values re-derived from the registry on 2026-07-04.' + the update-only-by-re-reading-the-registry rule", () => {
     expect(body).toMatch(/\/\/ Derivation source: packages\/api-types\/src\/common\.ts/);
     expect(body).toMatch(
-      /\/\/ ARCHETYPE_REGISTRY — the customer-selectable catalog \(entries with\s*\n?\s*\/\/ status 'launch' \| 'available'/,
+      /\/\/ ARCHETYPE_REGISTRY — the customer-selectable catalog \(entries with\s*\/\/ status 'launch' \| 'available'/,
     );
     expect(body).toMatch(/Values re-derived from the registry on 2026-07-04\./);
     expect(body).toMatch(
-      /Update them ONLY\s*\n?\s*\/\/ by re-reading ARCHETYPE_REGISTRY — never by editing prose first/,
+      /Update them ONLY\s*\/\/ by re-reading ARCHETYPE_REGISTRY — never by editing prose first/,
     );
   });
 
   it('S18 homepage curated-subset note pinned: the proof section intentionally names the flagship subset (iPhone 15 Pro / 16 Pro / 17 lineup) as curated marketing copy — NOT bound to DEVICE_SUPPORT; full-catalog claims (e.g. /roadmap) bind here', () => {
     expect(body).toMatch(/\/\/ NB the homepage proof section/);
     expect(body).toMatch(
-      /intentionally names the flagship\s*\n?\s*\/\/ subset as curated marketing copy; it is NOT bound to this constant\./,
+      /intentionally names the flagship\s*\/\/ subset as curated marketing copy; it is NOT bound to this constant\./,
     );
     expect(body).toMatch(/Full-catalog claims \(e\.g\. \/roadmap\) bind here\./);
   });
 
   it("S18 DEVICE_SUPPORT export: `as const` literal with 5 fields pinned (archetypeCount 81 + deviceFamilies 'iPhone 13 → 17 Pro Max' + iosVersions '18.6 / 18.7' + safariVersions '18.6–26.5' + derivedOn '2026-07-04')", () => {
     expect(body).toMatch(
-      /export const DEVICE_SUPPORT = \{\s*\n?\s*\/\*\* Customer-selectable archetypes \(registry status 'launch' \| 'available'\)\. \*\/\s*\n?\s*archetypeCount: 81,\s*\n?\s*\/\*\* Device-model span of the catalog \(19 iPhone models between the endpoints\)\. \*\/\s*\n?\s*deviceFamilies: 'iPhone 13 → 17 Pro Max',\s*\n?\s*\/\*\* iOS versions present in the catalog\. \*\/\s*\n?\s*iosVersions: '18\.6 \/ 18\.7',\s*\n?\s*\/\*\* Safari version span present in the catalog \(18\.6, 26\.0, 26\.3, 26\.4, 26\.5\)\. \*\/\s*\n?\s*safariVersions: '18\.6–26\.5',\s*\n?\s*\/\*\* ISO-8601 date the values above were last re-derived from the registry\. \*\/\s*\n?\s*derivedOn: '2026-07-04',\s*\n?\s*\} as const;/,
+      /export const DEVICE_SUPPORT = \{\s*\/\*\* Customer-selectable archetypes \(registry status 'launch' \| 'available'\)\. \*\/\s*archetypeCount: 81,\s*\/\*\* Device-model span of the catalog \(19 iPhone models between the endpoints\)\. \*\/\s*deviceFamilies: 'iPhone 13 → 17 Pro Max',\s*\/\*\* iOS versions present in the catalog\. \*\/\s*iosVersions: '18\.6 \/ 18\.7',\s*\/\*\* Safari version span present in the catalog \(18\.6, 26\.0, 26\.3, 26\.4, 26\.5\)\. \*\/\s*safariVersions: '18\.6–26\.5',\s*\/\*\* ISO-8601 date the values above were last re-derived from the registry\. \*\/\s*derivedOn: '2026-07-04',\s*\} as const;/,
     );
   });
 

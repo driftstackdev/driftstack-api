@@ -70,7 +70,7 @@ describe('W687 cross-SDK V-462/V-297 GDPR audit-log export parity', () => {
     expect(ts).toMatch(/GDPR Article 20 data-portability/);
 
     // sdk-go: "GDPR Article 20 portability"
-    expect(go).toMatch(/GDPR Article\s*\n?\s*\/\/\s*20 portability|GDPR Article 20 portability/);
+    expect(go).toMatch(/GDPR Article\s*\/\/\s*20 portability|GDPR Article 20 portability/);
 
     // sdk-python: "GDPR Article 20 portability"
     expect(py).toMatch(/GDPR Article 20 portability/);
@@ -89,7 +89,7 @@ describe('W687 cross-SDK V-462/V-297 GDPR audit-log export parity', () => {
     expect(go).toMatch(/10,000 rows/);
 
     // sdk-python: "up to\n        10,000 rows"
-    expect(py).toMatch(/up to\s*\n?\s*10,000 rows/);
+    expect(py).toMatch(/up to\s*10,000 rows/);
   });
 
   it('CRITICAL truncated boolean flag pinned in all 3 SDKs. The `truncated` field is what tells compliance auditors when an export is PARTIAL — drift to dropping would mean auditors can\'t distinguish "this is the full audit log" from "this is the last 10k of a larger log".', () => {
@@ -113,11 +113,11 @@ describe('W687 cross-SDK V-462/V-297 GDPR audit-log export parity', () => {
     const py = read(PY_AUDIT);
 
     // sdk-typescript: "CSV download in a browser is not\n   * surfaced here — hit `/v1/account/audit-log/export?format=csv`"
-    expect(ts).toMatch(/CSV download in a browser is not\s*\n?\s*\*\s*surfaced here/);
+    expect(ts).toMatch(/CSV download in a browser is not\s*\*\s*surfaced here/);
     expect(ts).toMatch(/\/v1\/account\/audit-log\/export\?format=csv/);
 
     // sdk-go: "CSV branch is not\n// surfaced through the SDK"
-    expect(go).toMatch(/CSV branch is not\s*\n?\s*\/\/\s*surfaced through the SDK/);
+    expect(go).toMatch(/CSV branch is not\s*\/\/\s*surfaced through the SDK/);
 
     // sdk-python: "CSV branch is not exposed here"
     expect(py).toMatch(/CSV branch is not exposed here/);
@@ -173,9 +173,7 @@ describe('W687 cross-SDK V-462/V-297 GDPR audit-log export parity', () => {
     for (const [name, body] of Object.entries(sdks)) {
       expect(body, `${name} V-462`).toMatch(/V-462/);
       expect(body, `${name} V-297`).toMatch(/V-297/);
-      expect(body, `${name} GDPR Article 20`).toMatch(
-        /GDPR Article 20|GDPR Article\s*\n?\s*\/\/\s*20/,
-      );
+      expect(body, `${name} GDPR Article 20`).toMatch(/GDPR Article 20|GDPR Article\s*\/\/\s*20/);
       expect(body, `${name} 10,000 rows`).toMatch(/10,000 rows|10,000-row/);
       expect(body, `${name} truncated`).toMatch(/truncated|Truncated/);
       // CSV-out-of-band can span multiple comment lines, so allow `[\s\S]` cross-line match.

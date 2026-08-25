@@ -42,13 +42,13 @@ describe('plaintext brand-type cross-source invariant', () => {
 
   it("byok-anthropic JSDoc explicitly documents 'visibly unsafe in code review' rationale: 'Internal call sites must `as` an explicit cast to assign to a raw string — meant to make log/error/audit paths visibly unsafe in code review.' — pinned so the code-reviewer-catches-the-cast rationale stays documented (drift to dropping the brand would let plaintext flow into logs without TypeScript catching it)", () => {
     expect(byok).toMatch(
-      /Internal call sites must `as` an explicit cast to assign to a raw\s*\n?\s*\*\s+`string` — meant to make log\/error\/audit paths visibly unsafe in\s*\n?\s*\*\s+code review\./,
+      /Internal call sites must `as` an explicit cast to assign to a raw\s*\*\s+`string` — meant to make log\/error\/audit paths visibly unsafe in\s*\*\s+code review\./,
     );
   });
 
   it("gui-control-key-encryption explicitly cross-references the BYOK taint pattern: 'Compile-time taint marker so the gui-control-key plaintext can't be assigned to a raw string without an explicit cast — matches the BYOK taint pattern.' — pinned so the matches-BYOK-pattern reference stays documented", () => {
     expect(gck).toMatch(
-      /Compile-time taint marker so the gui-control-key plaintext can't\s*\n?\s*\*\s+be assigned to a raw `string` without an explicit cast — matches\s*\n?\s*\*\s+the BYOK taint pattern\./,
+      /Compile-time taint marker so the gui-control-key plaintext can't\s*\*\s+be assigned to a raw `string` without an explicit cast — matches\s*\*\s+the BYOK taint pattern\./,
     );
   });
 });

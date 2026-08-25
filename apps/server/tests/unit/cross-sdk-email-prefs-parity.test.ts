@@ -107,7 +107,7 @@ describe('W694 cross-SDK V-204 email-preferences critical-emails parity', () => 
     const py = read(PY_EMAIL_PREFS);
 
     // sdk-typescript: "absent from the\n// OptOutableEmailEvent enum on purpose"
-    expect(ts).toMatch(/absent from the\s*\n?\s*\/\/\s*OptOutableEmailEvent enum on purpose/);
+    expect(ts).toMatch(/absent from the\s*\/\/\s*OptOutableEmailEvent enum on purpose/);
 
     // sdk-python: "aren't in the OptOutableEmailEvent enum on purpose"
     expect(py).toMatch(/aren't in the OptOutableEmailEvent enum on purpose/);

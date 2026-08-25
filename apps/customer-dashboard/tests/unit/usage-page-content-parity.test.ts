@@ -87,9 +87,7 @@ describe('W363.B customer-dashboard /usage page content parity', () => {
   it("V-014/V-015 caveat pinned (usage_records writers aren't wired → zeros)", () => {
     expect(body).toMatch(/usage_records writers aren't wired \(V-014\/V-015 amendment\)/);
     expect(body).toMatch(/\/v1\/usage \+ \/v1\/usage\/series return zeros for everyone/);
-    expect(body).toMatch(
-      /The\s*\n?\s*\/\/\s*fetch path is real; the data is empty until writers land/,
-    );
+    expect(body).toMatch(/The\s*\/\/\s*fetch path is real; the data is empty until writers land/);
   });
 
   it('V-331b act-as-headers integration pinned (team-scoped reads)', () => {

@@ -40,7 +40,7 @@ describe('W371.B customer-dashboard /verify-email page content parity', () => {
     expect(body).toMatch(/Issue 3 wave 1085\+|V-184a\.B/);
     expect(body).toMatch(/const linkToken = params\.get\('token'\);/);
     expect(body).toMatch(
-      /if \(linkToken && linkToken\.length > 0\) \{\s*\n?\s*submitToken\(linkToken\);/,
+      /if \(linkToken && linkToken\.length > 0\) \{\s*submitToken\(linkToken\);/,
     );
     // showFallback() reveals the manual code-paste form on failure or no-token.
     expect(body).toMatch(/function showFallback\(\)/);
@@ -122,10 +122,10 @@ describe('W371.B customer-dashboard /verify-email page content parity', () => {
 
   it('resend anti-double-click: 60s disable post-success (per-IP 3/min cap protection)', () => {
     expect(body).toMatch(
-      /Re-enable after 60s so accidental double-clicks don't\s*\n?\s*\/\/\s*burn through the per-IP 3\/min cap on the server side/,
+      /Re-enable after 60s so accidental double-clicks don't\s*\/\/\s*burn through the per-IP 3\/min cap on the server side/,
     );
     expect(body).toMatch(
-      /window\.setTimeout\(\(\) => \{\s*\n?\s*resendInFlight = false;\s*\n?\s*resendBtn\.disabled = false;\s*\n?\s*\}, 60_000\);/,
+      /window\.setTimeout\(\(\) => \{\s*resendInFlight = false;\s*resendBtn\.disabled = false;\s*\}, 60_000\);/,
     );
   });
 
@@ -141,9 +141,7 @@ describe('W371.B customer-dashboard /verify-email page content parity', () => {
   });
 
   it('/signup "restart signup" cross-link present', () => {
-    expect(body).toMatch(
-      /<a\s*\n?\s*href="\/signup\/"\s*\n?\s*class="[^"]+"\s*>\s*restart signup\s*<\/a\s*>/,
-    );
+    expect(body).toMatch(/<a\s*href="\/signup\/"\s*class="[^"]+"\s*>\s*restart signup\s*<\/a\s*>/);
     expect(body).toMatch(/Token expired or never arrived\?/);
   });
 

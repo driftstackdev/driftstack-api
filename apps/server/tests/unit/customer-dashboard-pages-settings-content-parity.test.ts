@@ -36,7 +36,7 @@ describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity
 
   it("V-217 framing pinned: 'progressive-enhancement live wiring against: /v1/account/email-preferences (V-204) — list + PUT per-event toggles' — pinned so the remaining live-wire scope + the V-204 provenance survive (the V-216/V-079 wires moved to security.astro with the 2026-07-03 split)", () => {
     expect(body).toMatch(
-      /\/\/ V-217 — progressive-enhancement live wiring against:\s*\n?\s*\/\/ {3}- \/v1\/account\/email-preferences \(V-204\) — list \+ PUT per-event toggles/,
+      /\/\/ V-217 — progressive-enhancement live wiring against:\s*\/\/ {3}- \/v1\/account\/email-preferences \(V-204\) — list \+ PUT per-event toggles/,
     );
   });
 
@@ -59,17 +59,15 @@ describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity
     // TEMPLATES map in opt-outable-email-event-cross-source-invariant.test.ts, so a name
     // outliving its template fails there rather than being frozen here.
     expect(body).toMatch(
-      /Security \+ financial emails \(signup verification, password reset,\s*\n?\s*billing failure, support replies\) always go out\. Below are the\s*\n?\s*optional lifecycle emails — toggle off any you don't want\./,
+      /Security \+ financial emails \(signup verification, password reset,\s*billing failure, support replies\) always go out\. Below are the\s*optional lifecycle emails — toggle off any you don't want\./,
     );
     expect(body).toMatch(/Cancelling a subscription sends no email of its own\./);
   });
 
   it("V-352 + V-298a + V-298b profile form contract: PATCH /v1/account/me { name, timezone, slug?, region? } with null-on-empty + IANA timezone hint — pinned so the 4-field profile mutation contract stays consistent (drift to dropping null-on-empty would force customers to keep filling fields they've cleared; drift to dropping region would orphan the V-298b data-residency preference UI)", () => {
+    expect(body).toMatch(/boundedFetch\(apiBaseUrl \+ '\/v1\/account\/me', \{\s*method: 'PATCH',/);
     expect(body).toMatch(
-      /boundedFetch\(apiBaseUrl \+ '\/v1\/account\/me', \{\s*\n?\s*method: 'PATCH',/,
-    );
-    expect(body).toMatch(
-      /name: name\.length > 0 \? name : null,\s*\n?\s*timezone: tz\.length > 0 \? tz : null,/,
+      /name: name\.length > 0 \? name : null,\s*timezone: tz\.length > 0 \? tz : null,/,
     );
     expect(body).toMatch(/body\.slug = slug\.length > 0 \? slug : null;/);
     expect(body).toMatch(/body\.region = region\.length > 0 \? region : null;/);
@@ -99,10 +97,10 @@ describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity
     expect(body).toMatch(/if \(file\.size > 2 \* 1024 \* 1024\) \{/);
     expect(body).toMatch(/if \(!\/\^image\\\/\(png\|jpeg\|webp\)\$\/\.test\(file\.type\)\) \{/);
     expect(body).toMatch(
-      /boundedFetch\(apiBaseUrl \+ '\/v1\/account\/me\/avatar', \{\s*\n?\s*method: 'POST',/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/account\/me\/avatar', \{\s*method: 'POST',/,
     );
     expect(body).toMatch(
-      /boundedFetch\(apiBaseUrl \+ '\/v1\/account\/me\/avatar', \{\s*\n?\s*method: 'DELETE',/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/account\/me\/avatar', \{\s*method: 'DELETE',/,
     );
     expect(body).toMatch(/data-field="avatar-source"/);
     expect(body).toMatch(/avatarRemoveBtn\.hidden = source !== 'user'/);
@@ -111,14 +109,14 @@ describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity
 
   it("V-331b act-as header in authedFetch — pinned so the team-scoped flow propagates to settings reads/writes (drift would let team managers accidentally modify their OWN email prefs when trying to manage a team-mate's account)", () => {
     expect(body).toMatch(
-      /\/\/ V-331b — act-as header for team-scoped requests\.\s*\n?\s*\.\.\.\(typeof window\.driftstackActAsHeaders === 'function'\s*\n?\s*\? window\.driftstackActAsHeaders\(\)\s*\n?\s*: \{\}\),/,
+      /\/\/ V-331b — act-as header for team-scoped requests\.\s*\.\.\.\(typeof window\.driftstackActAsHeaders === 'function'\s*\? window\.driftstackActAsHeaders\(\)\s*: \{\}\),/,
     );
   });
 
   it('moved-to-/security header cross-link pinned with canonical /security/ href — customers hunting the old surfaces get the pointer instead of reading the split as a feature removal', () => {
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /Security, sign-ins &amp; danger zone moved to\s*\n?\s*<a href="\/security\/" class="text-tk-accent-text underline">Privacy &amp; security<\/a>\./,
+      /Security, sign-ins &amp; danger zone moved to\s*<a href="\/security\/" class="text-tk-accent-text underline">Privacy &amp; security<\/a>\./,
     );
   });
 
@@ -129,7 +127,7 @@ describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity
   it('BYOK card and API share the metadata-only has_key/set_at/last_used_at response contract', () => {
     const route = read(BYOK_ROUTE);
     expect(route).toMatch(
-      /return \{\s*\n?\s*has_key: meta\.hasKey,\s*\n?\s*set_at: meta\.setAt \? meta\.setAt\.toISOString\(\) : null,\s*\n?\s*last_used_at: meta\.lastUsedAt \? meta\.lastUsedAt\.toISOString\(\) : null,\s*\n?\s*\};/,
+      /return \{\s*has_key: meta\.hasKey,\s*set_at: meta\.setAt \? meta\.setAt\.toISOString\(\) : null,\s*last_used_at: meta\.lastUsedAt \? meta\.lastUsedAt\.toISOString\(\) : null,\s*\};/,
     );
     expect(body).toMatch(/body\.has_key !== true/);
     expect(body).toMatch(/body\.set_at/);

@@ -295,7 +295,7 @@ describe('W582 task-refusal contract mirror', () => {
 
     it('normalize order pinned: truncate → strip → NFKC → lowercase → ws-collapse', () => {
       expect(src).toMatch(
-        /\.replace\(DANGEROUS_UNICODE, ''\)\s*\n?\s*\.normalize\('NFKC'\)\s*\n?\s*\.toLowerCase\(\)\s*\n?\s*\.replace\(\/\\s\+\/g, ' '\)\s*\n?\s*\.trim\(\)/,
+        /\.replace\(DANGEROUS_UNICODE, ''\)\s*\.normalize\('NFKC'\)\s*\.toLowerCase\(\)\s*\.replace\(\/\\s\+\/g, ' '\)\s*\.trim\(\)/,
       );
       expect(src).toMatch(/MAX_SCREEN_CHARS = 8192/);
     });

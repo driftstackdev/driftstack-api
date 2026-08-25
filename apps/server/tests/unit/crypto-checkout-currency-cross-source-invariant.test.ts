@@ -46,7 +46,7 @@ describe('W902 CryptoCheckout currency + price-cents cross-source invariant', ()
   it("CRITICAL price_currency uses length(3) + regex /^[A-Z]{3}$/ + error message 'price_currency must be a 3-letter uppercase ISO code'. The 3-letter ISO 4217 regex is what NowPayments accepts.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/crypto-orders.ts'));
     expect(p).toMatch(
-      /price_currency: z\s*\n?\s*\.string\(\)\s*\n\s*\.length\(3\)\s*\n\s*\.regex\(\/\^\[A-Z\]\{3\}\$\/, 'price_currency must be a 3-letter uppercase ISO code'\)/,
+      /price_currency: z\s*\.string\(\)\s*\n\s*\.length\(3\)\s*\n\s*\.regex\(\/\^\[A-Z\]\{3\}\$\/, 'price_currency must be a 3-letter uppercase ISO code'\)/,
     );
   });
 
@@ -81,7 +81,7 @@ describe('W902 CryptoCheckout currency + price-cents cross-source invariant', ()
   it("CRITICAL product field describe pins 'SKU; one of the self-serve paid tier ids (free and enterprise are not purchasable).' The describe is what reaches SDK consumers through the OpenAPI document, so it has to name BOTH exclusions — V-924: the previous text named only the free tier while the route refuses enterprise as well, so a customer reading the spec could send it and get a 400 the description did not predict.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/crypto-orders.ts'));
     expect(p).toMatch(
-      /\.describe\(\s*\n?\s*'SKU; one of the self-serve paid tier ids \(free and enterprise are not purchasable\)\.',?\s*\n?\s*\)/,
+      /\.describe\(\s*'SKU; one of the self-serve paid tier ids \(free and enterprise are not purchasable\)\.',?\s*\)/,
     );
     // Per-occurrence negative. Paraphrased above rather than quoted so this
     // assertion cannot be satisfied by the sentence that retracts it.

@@ -520,7 +520,7 @@ describe('V-927 a published bound matches the route', () => {
    */
   const ID_PREFIX_CALL = /uuidFromPrefixedId\(\s*re(?:q|quest)\.params\.\w+\s*,\s*'([a-z]+)'/;
   const PROFILE_ID_CALL = /uuidFromProfileId\(\s*re(?:q|quest)\.params\.\w+/;
-  const REGISTRATION = /app\.(get|post|put|patch|delete)[^(]*\(\s*\n?\s*'([^']+)'/g;
+  const REGISTRATION = /app\.(get|post|put|patch|delete)[^(]*\(\s*'([^']+)'/g;
   const ID_REGEX_DECL =
     /const (?:PUBLIC_ID_RE|PROFILE_ID_RE|AGENT_SESSION_ID_RE) = (\/\^[^\n;]+\/i?);/;
   // A file whose regex pins a LITERAL prefix (`/^sub_(…)/`, `/^agt_(…)/`) needs no

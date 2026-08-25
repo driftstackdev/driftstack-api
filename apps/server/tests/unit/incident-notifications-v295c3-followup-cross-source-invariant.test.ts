@@ -146,7 +146,7 @@ describe('W933 V-295c3-followup incident-notifications cross-source invariant', 
   it("CRITICAL time field source — 'created' → incident.startedAt; 'resolved' → incident.resolvedAt ?? new Date(); 'updated' → update.postedAt (V-545.B Phase 2). The 3-branch + new-Date-fallback handles the resolved-at-null edge case.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/incident-notifications.ts'));
     expect(p).toMatch(
-      /const time =\s*\n?\s*kind === 'created'\s*\n?\s*\? incident\.startedAt\s*\n?\s*: kind === 'resolved'\s*\n?\s*\? \(incident\.resolvedAt \?\? new Date\(\)\)\s*\n?\s*: update\.postedAt;/,
+      /const time =\s*kind === 'created'\s*\? incident\.startedAt\s*: kind === 'resolved'\s*\? \(incident\.resolvedAt \?\? new Date\(\)\)\s*: update\.postedAt;/,
     );
   });
 

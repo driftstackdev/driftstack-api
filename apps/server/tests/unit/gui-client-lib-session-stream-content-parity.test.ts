@@ -54,83 +54,83 @@ describe('W468.A apps/gui-client/src/lib/session-stream.ts content parity', () =
   it("V-534.E framing pinned: 'V-534.E — session stream source abstraction.' + 'LiveSessionView (apps/gui-client/src/views/LiveSessionView.tsx) currently embeds the polling-capture loop inline. V-534.E extracts that loop into a reusable, testable stream-source: caller hands in a `fetchFrame()` function, the module manages the interval, pause state, fps measurement, error reporting, and listener fan-out.'", () => {
     expect(body).toMatch(/\/\/ V-534\.E — session stream source abstraction\./);
     expect(body).toMatch(
-      /\/\/ LiveSessionView \(apps\/gui-client\/src\/views\/LiveSessionView\.tsx\) currently\s*\n?\s*\/\/ embeds the polling-capture loop inline\. V-534\.E extracts that loop into\s*\n?\s*\/\/ a reusable, testable stream-source: caller hands in a `fetchFrame\(\)`\s*\n?\s*\/\/ function, the module manages the interval, pause state, fps measurement,\s*\n?\s*\/\/ error reporting, and listener fan-out\./,
+      /\/\/ LiveSessionView \(apps\/gui-client\/src\/views\/LiveSessionView\.tsx\) currently\s*\/\/ embeds the polling-capture loop inline\. V-534\.E extracts that loop into\s*\/\/ a reusable, testable stream-source: caller hands in a `fetchFrame\(\)`\s*\/\/ function, the module manages the interval, pause state, fps measurement,\s*\/\/ error reporting, and listener fan-out\./,
     );
   });
 
   it("Two-impl framing pinned: 'createPollingFrameStream(fetchFrame, opts) — the polling source LiveSessionView uses today. Drops in unchanged onto the existing polling architecture.' + 'createSseFrameStream(...) and createWebRtcFrameStream(...) placeholders — defer to a future slice. The polling impl is the reference contract.' + 'Pure TypeScript — no React hook.'", () => {
     expect(body).toMatch(
-      /\/\/\s+- `createPollingFrameStream\(fetchFrame, opts\)` — the polling source\s*\n?\s*\/\/\s+LiveSessionView uses today\. Drops in unchanged onto the existing\s*\n?\s*\/\/\s+polling architecture\./,
+      /\/\/\s+- `createPollingFrameStream\(fetchFrame, opts\)` — the polling source\s*\/\/\s+LiveSessionView uses today\. Drops in unchanged onto the existing\s*\/\/\s+polling architecture\./,
     );
     expect(body).toMatch(
-      /\/\/\s+- `createSseFrameStream\(\.\.\.\)` and `createWebRtcFrameStream\(\.\.\.\)`\s*\n?\s*\/\/\s+placeholders — defer to a future slice\. The polling impl is the\s*\n?\s*\/\/\s+reference contract\./,
+      /\/\/\s+- `createSseFrameStream\(\.\.\.\)` and `createWebRtcFrameStream\(\.\.\.\)`\s*\/\/\s+placeholders — defer to a future slice\. The polling impl is the\s*\/\/\s+reference contract\./,
     );
     expect(body).toMatch(
-      /\/\/ Pure TypeScript — no React hook\. The hook wrapper lands when\s*\n?\s*\/\/ LiveSessionView migrates onto this module\./,
+      /\/\/ Pure TypeScript — no React hook\. The hook wrapper lands when\s*\/\/ LiveSessionView migrates onto this module\./,
     );
   });
 
   it("Frame 4-field interface: pngBase64 'Base64-encoded PNG bytes, no data: prefix.' + bytes + capturedAt + durationMs", () => {
     expect(body).toMatch(
-      /export interface Frame \{\s*\n?\s*\/\*\* Base64-encoded PNG bytes, no data: prefix\. \*\/\s*\n?\s*pngBase64: string;\s*\n?\s*bytes: number;\s*\n?\s*capturedAt: number;\s*\n?\s*durationMs: number;\s*\n?\s*\}/,
+      /export interface Frame \{\s*\/\*\* Base64-encoded PNG bytes, no data: prefix\. \*\/\s*pngBase64: string;\s*bytes: number;\s*capturedAt: number;\s*durationMs: number;\s*\}/,
     );
   });
 
   it('FrameStreamEvent 4-variant union: frame{frame,fpsActual} + error{error:unknown} + paused + resumed', () => {
     expect(body).toMatch(
-      /export type FrameStreamEvent =\s*\n?\s*\| \{ kind: 'frame'; frame: Frame; fpsActual: number \}\s*\n?\s*\| \{ kind: 'error'; error: unknown \}\s*\n?\s*\| \{ kind: 'paused' \}\s*\n?\s*\| \{ kind: 'resumed' \};/,
+      /export type FrameStreamEvent =\s*\| \{ kind: 'frame'; frame: Frame; fpsActual: number \}\s*\| \{ kind: 'error'; error: unknown \}\s*\| \{ kind: 'paused' \}\s*\| \{ kind: 'resumed' \};/,
     );
   });
 
   it("FrameStream 6-method interface: subscribe (returns unsubscribe) + pause 'Frames buffer at the source side; we don't queue them.' + resume 'Triggers an immediate frame fetch.' + isPaused + getFpsActual '4-frame moving average' + stop", () => {
     expect(body).toMatch(
-      /\/\*\* Subscribe to stream events; returns an unsubscribe fn\. \*\/\s*\n?\s*subscribe\(listener: FrameStreamListener\): \(\) => void;\s*\n?\s*\/\*\* Pause polling\. Frames buffer at the source side; we don't queue them\. \*\/\s*\n?\s*pause\(\): void;\s*\n?\s*\/\*\* Resume polling\. Triggers an immediate frame fetch\. \*\/\s*\n?\s*resume\(\): void;\s*\n?\s*\/\*\* Current paused state\. \*\/\s*\n?\s*isPaused\(\): boolean;\s*\n?\s*\/\*\* Latest computed fps \(4-frame moving average\)\. \*\/\s*\n?\s*getFpsActual\(\): number;\s*\n?\s*\/\*\* Tear down — no more frames, listeners cleared\. \*\/\s*\n?\s*stop\(\): void;/,
+      /\/\*\* Subscribe to stream events; returns an unsubscribe fn\. \*\/\s*subscribe\(listener: FrameStreamListener\): \(\) => void;\s*\/\*\* Pause polling\. Frames buffer at the source side; we don't queue them\. \*\/\s*pause\(\): void;\s*\/\*\* Resume polling\. Triggers an immediate frame fetch\. \*\/\s*resume\(\): void;\s*\/\*\* Current paused state\. \*\/\s*isPaused\(\): boolean;\s*\/\*\* Latest computed fps \(4-frame moving average\)\. \*\/\s*getFpsActual\(\): number;\s*\/\*\* Tear down — no more frames, listeners cleared\. \*\/\s*stop\(\): void;/,
     );
   });
 
   it('PollingFrameStreamOpts: intervalMs default 500 + initialPaused default false', () => {
     expect(body).toMatch(
-      /export interface PollingFrameStreamOpts \{\s*\n?\s*\/\*\* How often to request a frame \(ms\)\. Default 500\. \*\/\s*\n?\s*intervalMs\?: number;\s*\n?\s*\/\*\* Initial paused state\. Default false\. \*\/\s*\n?\s*initialPaused\?: boolean;\s*\n?\s*\}/,
+      /export interface PollingFrameStreamOpts \{\s*\/\*\* How often to request a frame \(ms\)\. Default 500\. \*\/\s*intervalMs\?: number;\s*\/\*\* Initial paused state\. Default false\. \*\/\s*initialPaused\?: boolean;\s*\}/,
     );
   });
 
   it("computeFps: returns 0 for timestamps.length < 2; first/last undefined fall-through → 0; dt <= 0 → 0; formula `((n-1)/dt * 1000 * 10) / 10` for 1-decimal rounding + framing '(n-1) intervals across (n) timestamps → frame rate = (n-1) / dt seconds.'", () => {
     expect(body).toMatch(
-      /export function computeFps\(timestamps: readonly number\[\]\): number \{\s*\n?\s*if \(timestamps\.length < 2\) return 0;\s*\n?\s*const first = timestamps\[0\];\s*\n?\s*const last = timestamps\[timestamps\.length - 1\];\s*\n?\s*if \(first === undefined \|\| last === undefined\) return 0;\s*\n?\s*const dt = last - first;\s*\n?\s*if \(dt <= 0\) return 0;\s*\n?\s*\/\/ \(n-1\) intervals across \(n\) timestamps → frame rate = \(n-1\) \/ dt seconds\.\s*\n?\s*return Math\.round\(\(\(timestamps\.length - 1\) \/ dt\) \* 1000 \* 10\) \/ 10;\s*\n?\s*\}/,
+      /export function computeFps\(timestamps: readonly number\[\]\): number \{\s*if \(timestamps\.length < 2\) return 0;\s*const first = timestamps\[0\];\s*const last = timestamps\[timestamps\.length - 1\];\s*if \(first === undefined \|\| last === undefined\) return 0;\s*const dt = last - first;\s*if \(dt <= 0\) return 0;\s*\/\/ \(n-1\) intervals across \(n\) timestamps → frame rate = \(n-1\) \/ dt seconds\.\s*return Math\.round\(\(\(timestamps\.length - 1\) \/ dt\) \* 1000 \* 10\) \/ 10;\s*\}/,
     );
   });
 
   it('createPollingFrameStream: intervalMs default 500 + 4-frame moving window (frameTimestamps.length > 4 → shift) + fpsActual recompute on every frame + fetchInFlight overlap-skip', () => {
     expect(body).toMatch(/const intervalMs = opts\.intervalMs \?\? 500;/);
     expect(body).toMatch(
-      /frameTimestamps\.push\(frame\.capturedAt\);\s*\n?\s*while \(frameTimestamps\.length > 4\) frameTimestamps\.shift\(\);\s*\n?\s*fpsActual = computeFps\(frameTimestamps\);\s*\n?\s*emit\(\{ kind: 'frame', frame, fpsActual \}\);/,
+      /frameTimestamps\.push\(frame\.capturedAt\);\s*while \(frameTimestamps\.length > 4\) frameTimestamps\.shift\(\);\s*fpsActual = computeFps\(frameTimestamps\);\s*emit\(\{ kind: 'frame', frame, fpsActual \}\);/,
     );
     expect(body).toMatch(
-      /if \(fetchInFlight\) \{\s*\n?\s*\/\/ Skip overlapping fetches — slow capture endpoint shouldn't queue\s*\n?\s*\/\/ up frames\. Just schedule the next tick\.\s*\n?\s*schedule\(\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /if \(fetchInFlight\) \{\s*\/\/ Skip overlapping fetches — slow capture endpoint shouldn't queue\s*\/\/ up frames\. Just schedule the next tick\.\s*schedule\(\);\s*return;\s*\}/,
     );
   });
 
   it('tick: stopped + paused early returns; try fetchFrame + stopped-after-fetch guard; catch !stopped → emit error; finally fetchInFlight = false + schedule(); schedule: stopped + paused guard + clear-existing-handle-before-rearm (single-timer invariant) + setTimeout(intervalMs)', () => {
     expect(body).toMatch(
-      /async function tick\(\): Promise<void> \{\s*\n?\s*if \(stopped \|\| paused\) return;/,
+      /async function tick\(\): Promise<void> \{\s*if \(stopped \|\| paused\) return;/,
     );
     expect(body).toMatch(
-      /\} catch \(err\) \{\s*\n?\s*if \(!stopped\) emit\(\{ kind: 'error', error: err \}\);\s*\n?\s*\} finally \{\s*\n?\s*fetchInFlight = false;\s*\n?\s*schedule\(\);\s*\n?\s*\}/,
+      /\} catch \(err\) \{\s*if \(!stopped\) emit\(\{ kind: 'error', error: err \}\);\s*\} finally \{\s*fetchInFlight = false;\s*schedule\(\);\s*\}/,
     );
     expect(body).toMatch(
-      /function schedule\(\): void \{\s*\n?\s*if \(stopped \|\| paused\) return;[\s\S]*?if \(handle !== null\) clearTimeout\(handle\);\s*\n?\s*handle = setTimeout\(\(\) => \{\s*\n?\s*void tick\(\);\s*\n?\s*\}, intervalMs\);\s*\n?\s*\}/,
+      /function schedule\(\): void \{\s*if \(stopped \|\| paused\) return;[\s\S]*?if \(handle !== null\) clearTimeout\(handle\);\s*handle = setTimeout\(\(\) => \{\s*void tick\(\);\s*\}, intervalMs\);\s*\}/,
     );
   });
 
   it("pause: idempotent (if paused return) + clearTimeout + emit 'paused'; resume: idempotent (if !paused || stopped return) + emit 'resumed' + void tick(); stop: stopped=true + clearTimeout + listeners.clear()", () => {
     expect(body).toMatch(
-      /pause\(\) \{\s*\n?\s*if \(paused\) return;\s*\n?\s*paused = true;\s*\n?\s*if \(handle !== null\) \{\s*\n?\s*clearTimeout\(handle\);\s*\n?\s*handle = null;\s*\n?\s*\}\s*\n?\s*emit\(\{ kind: 'paused' \}\);\s*\n?\s*\},/,
+      /pause\(\) \{\s*if \(paused\) return;\s*paused = true;\s*if \(handle !== null\) \{\s*clearTimeout\(handle\);\s*handle = null;\s*\}\s*emit\(\{ kind: 'paused' \}\);\s*\},/,
     );
     expect(body).toMatch(
-      /resume\(\) \{\s*\n?\s*if \(!paused \|\| stopped\) return;\s*\n?\s*paused = false;\s*\n?\s*emit\(\{ kind: 'resumed' \}\);\s*\n?\s*void tick\(\);\s*\n?\s*\},/,
+      /resume\(\) \{\s*if \(!paused \|\| stopped\) return;\s*paused = false;\s*emit\(\{ kind: 'resumed' \}\);\s*void tick\(\);\s*\},/,
     );
     expect(body).toMatch(
-      /stop\(\) \{\s*\n?\s*stopped = true;\s*\n?\s*if \(handle !== null\) \{\s*\n?\s*clearTimeout\(handle\);\s*\n?\s*handle = null;\s*\n?\s*\}\s*\n?\s*listeners\.clear\(\);\s*\n?\s*\},/,
+      /stop\(\) \{\s*stopped = true;\s*if \(handle !== null\) \{\s*clearTimeout\(handle\);\s*handle = null;\s*\}\s*listeners\.clear\(\);\s*\},/,
     );
   });
 

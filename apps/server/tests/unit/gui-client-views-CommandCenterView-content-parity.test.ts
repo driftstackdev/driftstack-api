@@ -65,7 +65,7 @@ describe('apps/gui-client/src/views/CommandCenterView.tsx content parity', () =>
 
   it('RecentProfile shape mirrors the SDK profiles.list() row (id / name / last_used_at)', () => {
     expect(body).toMatch(
-      /export interface RecentProfile \{\s*\n?\s*id: string;\s*\n?\s*name: string;\s*\n?\s*last_used_at: string \| null;\s*\n?\s*\}/,
+      /export interface RecentProfile \{\s*id: string;\s*name: string;\s*last_used_at: string \| null;\s*\}/,
     );
   });
 
@@ -83,7 +83,7 @@ describe('apps/gui-client/src/views/CommandCenterView.tsx content parity', () =>
 
   it('profileMonogram: first non-space char uppercased, blank → "?"', () => {
     expect(body).toMatch(
-      /export function profileMonogram\(name: string\): string \{\s*\n?\s*const ch = name\.trim\(\)\.charAt\(0\);\s*\n?\s*return ch === '' \? '\?' : ch\.toUpperCase\(\);/,
+      /export function profileMonogram\(name: string\): string \{\s*const ch = name\.trim\(\)\.charAt\(0\);\s*return ch === '' \? '\?' : ch\.toUpperCase\(\);/,
     );
   });
 
@@ -94,16 +94,16 @@ describe('apps/gui-client/src/views/CommandCenterView.tsx content parity', () =>
     expect(body).toContain('const RECENT_PROFILES_CACHE_MAX_SCOPES = 16;');
     expect(body).toContain('const recentProfilesScope = activeWorkspace ?? accountMe?.id ?? null;');
     expect(body).toMatch(
-      /cached !== null\s*\n?\s*\? \{ kind: 'ready', profiles: cached, freshness: 'refreshing' \}\s*\n?\s*: \{ kind: 'loading' \}/,
+      /cached !== null\s*\? \{ kind: 'ready', profiles: cached, freshness: 'refreshing' \}\s*: \{ kind: 'loading' \}/,
     );
     expect(body).toMatch(/setRecentProfiles\(\{ kind: 'ready', profiles, freshness: 'fresh' \}\)/);
     expect(body).toMatch(
-      /cached !== null\s*\n?\s*\? \{ kind: 'ready', profiles: cached, freshness: 'stale' \}\s*\n?\s*: \{ kind: 'error' \}/,
+      /cached !== null\s*\? \{ kind: 'ready', profiles: cached, freshness: 'stale' \}\s*: \{ kind: 'error' \}/,
     );
     expect(body).toContain("? 'Refreshing recent profiles…'");
     expect(body).toContain(": 'Couldn’t refresh — showing your recent profiles.'");
     expect(body).toMatch(
-      /sortRecentProfiles\(\s*\n?\s*page\.data\.map\(\(p\) => \(\{ id: p\.id, name: p\.name, last_used_at: p\.last_used_at \}\)\),\s*\n?\s*RECENT_PROFILES_LIMIT,\s*\n?\s*\)/,
+      /sortRecentProfiles\(\s*page\.data\.map\(\(p\) => \(\{ id: p\.id, name: p\.name, last_used_at: p\.last_used_at \}\)\),\s*RECENT_PROFILES_LIMIT,\s*\)/,
     );
   });
 

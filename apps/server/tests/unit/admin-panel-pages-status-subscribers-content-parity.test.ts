@@ -21,16 +21,16 @@ describe('W487.B apps/admin-panel/src/pages/status-subscribers.astro content par
   it('exists at the canonical path with V-312/V-295c3/V-281 framing', () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(
-      /\/\/ V-312 — admin view of status-page email subscribers \(V-295c3 \+\s*\n?\s*\/\/ V-295c3-tombstone\)\. Read \/v1\/admin\/status-subscribers; expose a\s*\n?\s*\/\/ force-unsubscribe button per row\. Audit log dual-write happens\s*\n?\s*\/\/ server-side \(V-281 pattern\)\./,
+      /\/\/ V-312 — admin view of status-page email subscribers \(V-295c3 \+\s*\/\/ V-295c3-tombstone\)\. Read \/v1\/admin\/status-subscribers; expose a\s*\/\/ force-unsubscribe button per row\. Audit log dual-write happens\s*\/\/ server-side \(V-281 pattern\)\./,
     );
     expect(body).toMatch(
-      /Email addresses subscribed to status\.driftstack\.dev incident notifications\. Confirmed\s*\n?\s*subscribers receive emails when public incidents are posted or resolved\. A forced\s*\n?\s*unsubscribe is also written to the admin audit log\./,
+      /Email addresses subscribed to status\.driftstack\.dev incident notifications\. Confirmed\s*subscribers receive emails when public incidents are posted or resolved\. A forced\s*unsubscribe is also written to the admin audit log\./,
     );
   });
 
   it('starts paging controls inert and exposes explicit Previous/Next controls', () => {
-    expect(body).toMatch(/data-page-previous\s*\n?\s*disabled\s*\n?\s*aria-disabled="true"/);
-    expect(body).toMatch(/data-page-next\s*\n?\s*disabled\s*\n?\s*aria-disabled="true"/);
+    expect(body).toMatch(/data-page-previous\s*disabled\s*aria-disabled="true"/);
+    expect(body).toMatch(/data-page-next\s*disabled\s*aria-disabled="true"/);
     expect(body).toContain('aria-label="Subscriber pages"');
     expect(body).toContain('Page unavailable');
   });
@@ -41,7 +41,7 @@ describe('W487.B apps/admin-panel/src/pages/status-subscribers.astro content par
     expect(body).toContain('let requestedOffset = 0;');
     expect(body).toContain('let renderedOffset = 0;');
     expect(body).toMatch(
-      /apiBaseUrl \+\s*\n?\s*'\/v1\/admin\/status-subscribers\?limit=' \+\s*\n?\s*PAGE_FETCH_LIMIT \+\s*\n?\s*'&offset=' \+\s*\n?\s*targetOffset/,
+      /apiBaseUrl \+\s*'\/v1\/admin\/status-subscribers\?limit=' \+\s*PAGE_FETCH_LIMIT \+\s*'&offset=' \+\s*targetOffset/,
     );
     expect(body).toContain('const nextSubscribers = fetchedRows.slice(0, PAGE_SIZE);');
     expect(body).toContain('const nextHasNext = fetchedRows.length > PAGE_SIZE;');
@@ -141,7 +141,7 @@ describe('W487.B apps/admin-panel/src/pages/status-subscribers.astro content par
 
   it('latches accepted force-subscribe before decoding and blocks malformed/invalid 201 replay', () => {
     expect(body).toMatch(
-      /acceptedStatusCommitted = true;\s*\n?\s*const body = await response\.json\(\)\.catch\(\(\) => null\)/,
+      /acceptedStatusCommitted = true;\s*const body = await response\.json\(\)\.catch\(\(\) => null\)/,
     );
     expect(body).toContain('function validForceSubscribeResult(body)');
     expect(body).toContain('addCommitDetailsUnavailable = true;');
@@ -151,11 +151,9 @@ describe('W487.B apps/admin-panel/src/pages/status-subscribers.astro content par
 
   it('reconciles ambiguous add outcomes on offset zero and treats only active email presence as positive', () => {
     expect(body).toContain('responseError.httpStatus = response.status;');
-    expect(body).toMatch(/addOutcomeUnknown = true;\s*\n?\s*requestedOffset = 0;/);
+    expect(body).toMatch(/addOutcomeUnknown = true;\s*requestedOffset = 0;/);
     expect(body).toContain('reconciliation.offset === 0');
-    expect(body).toMatch(
-      /typeof subscriber\.email === 'string' &&\s*\n?\s*!subscriber\.unsubscribed_at/,
-    );
+    expect(body).toMatch(/typeof subscriber\.email === 'string' &&\s*!subscriber\.unsubscribed_at/);
     expect(body).toContain('absence from that page is not evidence that the add failed');
   });
 
@@ -184,7 +182,7 @@ describe('W487.B apps/admin-panel/src/pages/status-subscribers.astro content par
     expect(body).toMatch(/if \(sub\.confirmed_at\)/);
     expect(body).toContain('>pending</span>');
     expect(body).toMatch(
-      /\.replace\(\/\[&<>"'\]\/g, function \(c\) \{\s*\n?\s*if \(c === '&'\) return '&amp;';\s*\n?\s*if \(c === '<'\) return '&lt;';\s*\n?\s*if \(c === '>'\) return '&gt;';\s*\n?\s*if \(c === '"'\) return '&quot;';\s*\n?\s*return '&#39;'/,
+      /\.replace\(\/\[&<>"'\]\/g, function \(c\) \{\s*if \(c === '&'\) return '&amp;';\s*if \(c === '<'\) return '&lt;';\s*if \(c === '>'\) return '&gt;';\s*if \(c === '"'\) return '&quot;';\s*return '&#39;'/,
     );
   });
 
@@ -199,7 +197,7 @@ describe('W487.B apps/admin-panel/src/pages/status-subscribers.astro content par
 
   it('defers the first read until the AdminLayout SSO bridge turn', () => {
     expect(body).toMatch(
-      /if \(document\.readyState === 'loading'\) \{\s*\n?\s*document\.addEventListener\('DOMContentLoaded', start, \{ once: true \}\);\s*\n?\s*\} else \{\s*\n?\s*start\(\)/,
+      /if \(document\.readyState === 'loading'\) \{\s*document\.addEventListener\('DOMContentLoaded', start, \{ once: true \}\);\s*\} else \{\s*start\(\)/,
     );
   });
 });

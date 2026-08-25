@@ -44,13 +44,13 @@ describe('W465.B apps/gui-client/src/lib/use-account-cost.ts content parity', ()
   it("V-534.H framing pinned: 'V-534.H — useAccountCost hook.' + 'Fetches the customer-facing GET /v1/account/cost route landed in V-541.D. The SDK doesn't yet expose `client.account.cost()` (V-541.E follow-up); until it does, this hook calls the endpoint directly using the baseUrl + apiKey already in SettingsContext.'", () => {
     expect(body).toMatch(/\/\/ V-534\.H — useAccountCost hook\./);
     expect(body).toMatch(
-      /\/\/ Fetches the customer-facing GET \/v1\/account\/cost route landed in\s*\n?\s*\/\/ V-541\.D\. The SDK doesn't yet expose `client\.account\.cost\(\)`\s*\n?\s*\/\/ \(V-541\.E follow-up\); until it does, this hook calls the endpoint\s*\n?\s*\/\/ directly using the baseUrl \+ apiKey already in SettingsContext\./,
+      /\/\/ Fetches the customer-facing GET \/v1\/account\/cost route landed in\s*\/\/ V-541\.D\. The SDK doesn't yet expose `client\.account\.cost\(\)`\s*\/\/ \(V-541\.E follow-up\); until it does, this hook calls the endpoint\s*\/\/ directly using the baseUrl \+ apiKey already in SettingsContext\./,
     );
   });
 
   it("State-machine framing pinned: 'State machine: idle → loading → (ready | error). Caller can re-fetch via refetch().'", () => {
     expect(body).toMatch(
-      /\/\/ State machine: idle → loading → \(ready \| error\)\. Caller can\s*\n?\s*\/\/ re-fetch via refetch\(\)\./,
+      /\/\/ State machine: idle → loading → \(ready \| error\)\. Caller can\s*\/\/ re-fetch via refetch\(\)\./,
     );
   });
 
@@ -64,16 +64,16 @@ describe('W465.B apps/gui-client/src/lib/use-account-cost.ts content parity', ()
 
   it('AccountCostResponse 4-field (account_id + billing_cycle + tier + breakdown CostBreakdownInput); AccountCostState 4-variant union (idle | loading | ready{data} | error{message})', () => {
     expect(body).toMatch(
-      /export interface AccountCostResponse \{\s*\n?\s*account_id: string;\s*\n?\s*billing_cycle: string;\s*\n?\s*tier: string;\s*\n?\s*breakdown: CostBreakdownInput;\s*\n?\s*\}/,
+      /export interface AccountCostResponse \{\s*account_id: string;\s*billing_cycle: string;\s*tier: string;\s*breakdown: CostBreakdownInput;\s*\}/,
     );
     expect(body).toMatch(
-      /export type AccountCostState =\s*\n?\s*\| \{ kind: 'idle' \}\s*\n?\s*\| \{ kind: 'loading' \}\s*\n?\s*\| \{ kind: 'ready'; data: AccountCostResponse \}\s*\n?\s*\| \{ kind: 'error'; message: string \};/,
+      /export type AccountCostState =\s*\| \{ kind: 'idle' \}\s*\| \{ kind: 'loading' \}\s*\| \{ kind: 'ready'; data: AccountCostResponse \}\s*\| \{ kind: 'error'; message: string \};/,
     );
   });
 
   it("UseAccountCostOpts: billingCycle? 'YYYY-MM. Omit to fetch the current month.' + manual? 'Disable auto-fetch on mount. Default false.'", () => {
     expect(body).toMatch(
-      /export interface UseAccountCostOpts \{\s*\n?\s*\/\*\* YYYY-MM\. Omit to fetch the current month\. \*\/\s*\n?\s*billingCycle\?: string;\s*\n?\s*\/\*\* Disable auto-fetch on mount\. Default false\. \*\/\s*\n?\s*manual\?: boolean;\s*\n?\s*\}/,
+      /export interface UseAccountCostOpts \{\s*\/\*\* YYYY-MM\. Omit to fetch the current month\. \*\/\s*billingCycle\?: string;\s*\/\*\* Disable auto-fetch on mount\. Default false\. \*\/\s*manual\?: boolean;\s*\}/,
     );
   });
 
@@ -82,13 +82,13 @@ describe('W465.B apps/gui-client/src/lib/use-account-cost.ts content parity', ()
       /const qs = opts\.billingCycle \? `\?billing_cycle=\$\{encodeURIComponent\(opts\.billingCycle\)\}` : '';/,
     );
     expect(body).toMatch(
-      /const res = await fetchWithDeadline\(`\$\{baseUrl\}\/v1\/account\/cost\$\{qs\}`, \{\s*\n?\s*method: 'GET',\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',\s*\n?\s*\},\s*\n?\s*\}\);/,
+      /const res = await fetchWithDeadline\(`\$\{baseUrl\}\/v1\/account\/cost\$\{qs\}`, \{\s*method: 'GET',\s*signal: controller\.signal,\s*headers: \{\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*accept: 'application\/json',\s*\},\s*\}\);/,
     );
   });
 
   it('Same state-machine pattern as V-534.Q: no-apiKey error + manual?-aware initial state + !res.ok readApiErrorMessage + instance-of-Error catch + useEffect manual gate; useCallback deps [settings.apiKey, settings.baseUrl, opts.billingCycle]', () => {
     expect(body).toMatch(
-      /if \(!settings\.apiKey\) \{\s*\n?\s*requestRef\.current = null;\s*\n?\s*setState\(\{ kind: 'error', message: 'No API key configured\.' \}\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /if \(!settings\.apiKey\) \{\s*requestRef\.current = null;\s*setState\(\{ kind: 'error', message: 'No API key configured\.' \}\);\s*return;\s*\}/,
     );
     expect(body).toMatch(
       /if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'ready', data: body \}\);/,
@@ -96,7 +96,7 @@ describe('W465.B apps/gui-client/src/lib/use-account-cost.ts content parity', ()
     expect(body).toMatch(/requestRef\.current\?\.abort\(\);/);
     expect(body).toMatch(/\}, \[settings\.apiKey, settings\.baseUrl, opts\.billingCycle\]\);/);
     expect(body).toMatch(
-      /useEffect\(\(\) => \{\s*\n?\s*if \(opts\.manual === true\) return;\s*\n?\s*void fetcher\(\);\s*\n?\s*\}, \[fetcher, opts\.manual\]\);/,
+      /useEffect\(\(\) => \{\s*if \(opts\.manual === true\) return;\s*void fetcher\(\);\s*\}, \[fetcher, opts\.manual\]\);/,
     );
   });
 

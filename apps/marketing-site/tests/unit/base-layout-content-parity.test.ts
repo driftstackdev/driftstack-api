@@ -64,13 +64,13 @@ describe('W382.B marketing-site BaseLayout.astro content parity', () => {
 
   it('V-255 noindex framing pinned (draft / pre-counsel-review pages)', () => {
     expect(body).toMatch(
-      /V-255 — set true on draft \/ pre-counsel-review pages so search\s*\n?\s*\*\s*engines don't index them as binding/,
+      /V-255 — set true on draft \/ pre-counsel-review pages so search\s*\*\s*engines don't index them as binding/,
     );
   });
 
   it('default description (S15 2026-07-03): the fleet register — "Real iPhone Safari in the cloud — to every website, they\'re just people on phones." (replaces the retired on-demand/premium-fidelity tagline)', () => {
     expect(body).toMatch(
-      /description =\s*\n?\s*"Real iPhone Safari in the cloud — to every website, they're just people on phones\. Drive them by hand, by code, or by AI\. Start free\.",/,
+      /description =\s*"Real iPhone Safari in the cloud — to every website, they're just people on phones\. Drive them by hand, by code, or by AI\. Start free\.",/,
     );
   });
 

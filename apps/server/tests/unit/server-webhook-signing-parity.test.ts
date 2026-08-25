@@ -71,7 +71,7 @@ describe('W716 server-side webhook-signing canonical-format parity', () => {
 
   it('CRITICAL encrypted secret storage framing keeps delivery-worker plaintext boundary explicit', () => {
     const src = read(SIGNING);
-    expect(src).toMatch(/stored in a\s*\n?\s*\/\/ versioned AES-GCM envelope/);
+    expect(src).toMatch(/stored in a\s*\/\/ versioned AES-GCM envelope/);
     expect(src).toMatch(/delivery worker receives plaintext only/);
     expect(src).toMatch(/repository-boundary decryption/);
   });
@@ -93,7 +93,7 @@ describe('W716 server-side webhook-signing canonical-format parity', () => {
     const src = read(SIGNING);
     expect(src).toMatch(/SECRET_PREFIX_LEN = 12/);
     expect(src).toMatch(
-      /export function webhookSecretPrefix\(plaintext: string\): string \{\s*\n?\s*return plaintext\.slice\(0, SECRET_PREFIX_LEN\);/,
+      /export function webhookSecretPrefix\(plaintext: string\): string \{\s*return plaintext\.slice\(0, SECRET_PREFIX_LEN\);/,
     );
   });
 
@@ -101,13 +101,13 @@ describe('W716 server-side webhook-signing canonical-format parity', () => {
     const src = read(SIGNING);
 
     expect(src).toMatch(
-      /V-359 — when set, sign with both the current AND the previous\s*\n?\s*\*\s*secret and emit two `v1=…` entries comma-separated/,
+      /V-359 — when set, sign with both the current AND the previous\s*\*\s*secret and emit two `v1=…` entries comma-separated/,
     );
     expect(src).toMatch(
-      /Used during\s*\n?\s*\*\s*the rotation grace period so the customer's verifier accepts/,
+      /Used during\s*\*\s*the rotation grace period so the customer's verifier accepts/,
     );
     expect(src).toMatch(
-      /The\s*\n?\s*\*\s*SDK verifier iterates over every `v1=…` entry and accepts the\s*\n?\s*\*\s*first match/,
+      /The\s*\*\s*SDK verifier iterates over every `v1=…` entry and accepts the\s*\*\s*first match/,
     );
   });
 
@@ -116,7 +116,7 @@ describe('W716 server-side webhook-signing canonical-format parity', () => {
 
     expect(src).toMatch(/const parts = \[`t=\$\{t\.toString\(\)\}`, `v1=\$\{curr\}`\]/);
     expect(src).toMatch(
-      /if \(opts\.secretPrev !== undefined && opts\.secretPrev !== ''\) \{\s*\n?\s*const prev = createHmac\('sha256', opts\.secretPrev\)\.update\(signed\)\.digest\('hex'\);\s*\n?\s*parts\.push\(`v1=\$\{prev\}`\)/,
+      /if \(opts\.secretPrev !== undefined && opts\.secretPrev !== ''\) \{\s*const prev = createHmac\('sha256', opts\.secretPrev\)\.update\(signed\)\.digest\('hex'\);\s*parts\.push\(`v1=\$\{prev\}`\)/,
     );
   });
 
@@ -147,14 +147,14 @@ describe('W716 server-side webhook-signing canonical-format parity', () => {
 
     // Tail-byte handling (left-shift to align).
     expect(src).toMatch(
-      /if \(bits > 0\) \{\s*\n?\s*out \+= BASE32_ALPHABET\[\(value << \(5 - bits\)\) & 0x1f\]/,
+      /if \(bits > 0\) \{\s*out \+= BASE32_ALPHABET\[\(value << \(5 - bits\)\) & 0x1f\]/,
     );
   });
 
   it('CRITICAL SignWebhookPayloadOpts 3-field shape pinned — body + secret + secretPrev? + timestampSec?. The optional secretPrev gates V-359 dual-sign; drift to making it required would force every callsite to pass empty string.', () => {
     const src = read(SIGNING);
     expect(src).toMatch(
-      /export interface SignWebhookPayloadOpts \{\s*\n?\s*body: string;\s*\n?\s*secret: string;/,
+      /export interface SignWebhookPayloadOpts \{\s*body: string;\s*secret: string;/,
     );
     expect(src).toMatch(/secretPrev\?: string;/);
     expect(src).toMatch(/timestampSec\?: number;/);

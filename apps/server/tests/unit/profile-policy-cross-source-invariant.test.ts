@@ -54,7 +54,7 @@ describe('W876 Profile policy cross-source invariant', () => {
   it('CRITICAL packages/api-types/src/profiles.ts ProfileNameSchema = z.string().trim().min(1).max(120).regex(...). The 1-120 char + trim + regex enforce printable + bounded names.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/profiles.ts'));
     expect(p).toMatch(
-      /export const ProfileNameSchema = z\s*\n?\s*\.string\(\)\s*\n\s*\.trim\(\)\s*\n\s*\.min\(1\)\s*\n\s*\.max\(120\)/,
+      /export const ProfileNameSchema = z\s*\.string\(\)\s*\n\s*\.trim\(\)\s*\n\s*\.min\(1\)\s*\n\s*\.max\(120\)/,
     );
   });
 
@@ -125,7 +125,7 @@ describe('W876 Profile policy cross-source invariant', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/profiles.ts'));
     expect(p).toMatch(/V-313 — POST \/v1\/profiles\/:id\/clone request body/);
     expect(p).toMatch(
-      /server auto-derives a non-\s*\n?\s*\/\/ conflicting `\$\{source\} \(copy\)` \/ `\(copy 2\)`/,
+      /server auto-derives a non-\s*\/\/ conflicting `\$\{source\} \(copy\)` \/ `\(copy 2\)`/,
     );
   });
 

@@ -47,12 +47,10 @@ describe('W376.C marketing-site /pricing/crypto page content parity', () => {
 
   it('V-674 + V-666 family posture framing pins the verified live production flow', () => {
     expect(body).toMatch(/V-674 — crypto-payments pricing page/);
-    expect(body).toMatch(/V-666 \/\s*\n?\s*\/\/\s*V-666\.B \/ V-666\.C/);
+    expect(body).toMatch(/V-666 \/\s*\/\/\s*V-666\.B \/ V-666\.C/);
     expect(body).toMatch(/production checkout is live/);
-    expect(body).toMatch(
-      /API mints the\s*\n?\s*\/\/\s*NowPayments order and one-time payment address/,
-    );
-    expect(body).toMatch(/signed IPN\s*\n?\s*\/\/\s*settles it and activates the purchased tier/);
+    expect(body).toMatch(/API mints the\s*\/\/\s*NowPayments order and one-time payment address/);
+    expect(body).toMatch(/signed IPN\s*\/\/\s*settles it and activates the purchased tier/);
     expect(body).not.toMatch(/stubbed|follow-up wires|future state/i);
   });
 

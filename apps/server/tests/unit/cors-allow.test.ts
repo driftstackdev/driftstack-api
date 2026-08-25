@@ -111,9 +111,7 @@ describe('W586 single-source parity with lib/app.ts', () => {
       /origin: deps\.permissiveCors === true \? true : corsOriginMatchers\(deps\)/,
     );
     // The old inlined regexes must be gone from app.ts (single source now).
-    expect(body).not.toMatch(
-      /origin:\s*\n?\s*deps\.permissiveCors === true\s*\n?\s*\? true\s*\n?\s*: \[/,
-    );
+    expect(body).not.toMatch(/origin:\s*deps\.permissiveCors === true\s*\? true\s*: \[/);
   });
 
   it('CRITICAL every hijacked writeHead feeds CORS into it — DERIVED from the source, not a named list. A hijacked reply bypasses @fastify/cors and hijackedReplyHeaders is an allow-list that excludes ACAO, so a route that forgets sseCorsHeaders returns 200 with no ACAO and the browser rejects it at the FETCH layer: TypeError: Load failed, no status, nothing to inspect.', () => {

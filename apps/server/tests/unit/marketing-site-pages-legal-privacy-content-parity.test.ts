@@ -43,11 +43,9 @@ describe('W506.A apps/marketing-site/src/pages/legal/privacy.md content parity',
       /\*\*Driftstack B\.V\.\*\*, a private limited company organised under the laws of the Netherlands, established in Amsterdam\./,
     );
     expect(body).toMatch(
-      /This Privacy Policy describes Driftstack's processing as a\s*\n?\s*\*\*Controller\*\* \(account, billing, support correspondence, marketing\s*\n?\s*site analytics where applicable\)\./,
+      /This Privacy Policy describes Driftstack's processing as a\s*\*\*Controller\*\* \(account, billing, support correspondence, marketing\s*site analytics where applicable\)\./,
     );
-    expect(body).toMatch(
-      /Driftstack's processing as a\s*\n?\s*\*\*Processor\*\* on Customer's behalf/,
-    );
+    expect(body).toMatch(/Driftstack's processing as a\s*\*\*Processor\*\* on Customer's behalf/);
   });
 
   it('11-category data-collection taxonomy includes account through opt-in live-session media', () => {
@@ -73,43 +71,41 @@ describe('W506.A apps/marketing-site/src/pages/legal/privacy.md content parity',
   });
 
   it('Article 6 GDPR legal-basis citations pinned: 6(1)(b) performance-of-contract + 6(1)(c) compliance-with-legal-obligation Article 32 + 6(1)(f) legitimate-interest — pinned so the 3-legal-basis anchoring stays explicit (drift to dropping Article 32 GDPR anchor on Authentication would orphan the security-of-processing legal basis; drift to dropping 6(1)(b) on Account would weaken the contract-performance basis)', () => {
-    expect(body).toMatch(/Article 6\(1\)\(b\) — performance of the\s*\n?\s*contract with Customer/);
+    expect(body).toMatch(/Article 6\(1\)\(b\) — performance of the\s*contract with Customer/);
     expect(body).toMatch(
-      /Article 6\(1\)\(c\) — compliance with legal obligation under Article 32\s*\n?\s*GDPR \(security of processing\)\./,
+      /Article 6\(1\)\(c\) — compliance with legal obligation under Article 32\s*GDPR \(security of processing\)\./,
     );
     expect(body).toMatch(/Article 6\(1\)\(f\) —/);
   });
 
   it("MFA specifics: 'TOTP secret encrypted at rest with AES-256-GCM (only the encrypted ciphertext is stored; the plaintext exists only in memory during signature verification), 10 single-use recovery codes stored as scrypt-hashed values' — pinned so the AES-256-GCM cipher + 10-recovery-code + scrypt-hash-mirror commitments survive (drift to dropping AES-256-GCM specificity would weaken the at-rest-encryption disclosure; drift to dropping '10 single-use' would obscure recovery-code mechanics)", () => {
     expect(body).toMatch(
-      /a TOTP secret encrypted at rest with\s*\n?\s*AES-256-GCM \(only the encrypted ciphertext is stored; the plaintext\s*\n?\s*exists only in memory during signature verification\), 10 single-use\s*\n?\s*recovery codes stored as scrypt-hashed values/,
+      /a TOTP secret encrypted at rest with\s*AES-256-GCM \(only the encrypted ciphertext is stored; the plaintext\s*exists only in memory during signature verification\), 10 single-use\s*recovery codes stored as scrypt-hashed values/,
     );
   });
 
   it('Crypto billing disclosure pins stored order/provider fields and excludes wallet/transaction identifiers', () => {
-    expect(body).toMatch(
-      /internal order id, selected tier, fiat price, NowPayments\s*\n?\s*payment id/,
-    );
+    expect(body).toMatch(/internal order id, selected tier, fiat price, NowPayments\s*payment id/);
     expect(body).toMatch(/signed provider notifications/);
     expect(body).toMatch(
-      /does not persist a Customer wallet address or blockchain\s*\n?\s*transaction hash/,
+      /does not persist a Customer wallet address or blockchain\s*transaction hash/,
     );
   });
 
   it('desktop recordings stay local, API Captures return inline, and legacy cloud-retention claims are absent', () => {
     expect(body).toMatch(
-      /recording workflow does \*\*not\*\* upload recording files or frames\s*\n?\s*to Driftstack's API, control plane, or Cloudflare R2/,
+      /recording workflow does \*\*not\*\* upload recording files or frames\s*to Driftstack's API, control plane, or Cloudflare R2/,
     );
-    expect(body).toMatch(/Driftstack has\s*\n?\s*no API recording endpoint/);
+    expect(body).toMatch(/Driftstack has\s*no API recording endpoint/);
     expect(body).toMatch(/`POST \/v1\/sessions\/:id\/capture`/);
-    expect(body).toMatch(/Capture endpoint does not retain\s*\n?\s*the artifact/);
-    expect(body).toMatch(/Live-session\s*\n?\s*media is ephemeral/);
-    expect(body).toMatch(/encrypted in transit on each\s*\n?\s*WebRTC connection using DTLS-SRTP/);
+    expect(body).toMatch(/Capture endpoint does not retain\s*the artifact/);
+    expect(body).toMatch(/Live-session\s*media is ephemeral/);
+    expect(body).toMatch(/encrypted in transit on each\s*WebRTC connection using DTLS-SRTP/);
     expect(body).toMatch(
-      /LiveKit receives, processes, and\s*\n?\s*forwards the media as a Sub-processor/,
+      /LiveKit receives, processes, and\s*forwards the media as a Sub-processor/,
     );
     expect(body).toMatch(
-      /does not currently\s*\n?\s*provide application-level end-to-end encryption through the SFU/,
+      /does not currently\s*provide application-level end-to-end encryption through the SFU/,
     );
     expect(body).not.toMatch(/Customer-controlled\. Default 30 days/);
     expect(body).not.toMatch(/1–365 days/);
@@ -119,10 +115,10 @@ describe('W506.A apps/marketing-site/src/pages/legal/privacy.md content parity',
   });
 
   it('Status and live-session sections disclose lifecycle, consent, retention, and cryptography', () => {
-    expect(body).toMatch(/does \*\*not\*\* expose\s*\n?\s*Customer Data/);
-    expect(body).toMatch(/retained for 30 days for\s*\n?\s*diagnostic purposes/);
+    expect(body).toMatch(/does \*\*not\*\* expose\s*Customer Data/);
+    expect(body).toMatch(/retained for 30 days for\s*diagnostic purposes/);
     expect(body).toMatch(/double-opt-in flow/);
-    expect(body).toMatch(/purged from that row 90\s*\n?\s*days after unsubscribe/);
+    expect(body).toMatch(/purged from that row 90\s*days after unsubscribe/);
     expect(body).toMatch(/live-session media is \*\*not stored\*\*/);
     expect(body).toMatch(/DTLS-SRTP/);
   });
@@ -130,25 +126,25 @@ describe('W506.A apps/marketing-site/src/pages/legal/privacy.md content parity',
   it("Section 5 'do not collect' 4-no commitment: no-sale + no-behavioural-advertising-beyond-operation + no-Customer-Connected-cross-Customer-combination + no-ML-training-without-consent — pinned so the 4-promise-of-restraint commitment survives (drift to dropping 'no ML training' would let bundled-LLM data slip into training; drift to dropping 'no sale' would weaken the most-frequently-asked privacy commitment)", () => {
     expect(body).toMatch(/Sell Personal Data to third parties\./);
     expect(body).toMatch(
-      /Use Customer's Personal Data for behavioural advertising or\s*\n?\s*profiling beyond what is necessary to operate the Service\./,
+      /Use Customer's Personal Data for behavioural advertising or\s*profiling beyond what is necessary to operate the Service\./,
     );
     expect(body).toMatch(
-      /Combine Customer-Connected Service data with Driftstack-internal\s*\n?\s*profiles or cross-Customer aggregates\./,
+      /Combine Customer-Connected Service data with Driftstack-internal\s*profiles or cross-Customer aggregates\./,
     );
     expect(body).toMatch(
-      /Use Customer Data \(including Session content, Workflows,\s*\n?\s*live-session media, or Capture content\) to train machine-learning\s*\n?\s*models, including the bundled-LLM AI agent feature, without\s*\n?\s*Customer's separate explicit consent\./,
+      /Use Customer Data \(including Session content, Workflows,\s*live-session media, or Capture content\) to train machine-learning\s*models, including the bundled-LLM AI agent feature, without\s*Customer's separate explicit consent\./,
     );
   });
 
   it('International transfers 3-mechanism: EU-US DPF + 2021 SCCs (Implementing Decision 2021/914) + Article 49 derogations (exceptional only) — pinned so the 3-transfer-mechanism stack survives (drift to relying on Article 49 routinely would create GDPR-compliance risk; drift to dropping the 2021/914 anchor would weaken the SCC version-pinning)', () => {
     expect(body).toMatch(
-      /The \*\*EU-US Data Privacy Framework \(DPF\)\*\* for Sub-processors\s*\n?\s*that are self-certified under the DPF/,
+      /The \*\*EU-US Data Privacy Framework \(DPF\)\*\* for Sub-processors\s*that are self-certified under the DPF/,
     );
     expect(body).toMatch(
-      /The \*\*2021 Standard Contractual Clauses\*\* \(Commission\s*\n?\s*Implementing Decision \(EU\) 2021\/914\)/,
+      /The \*\*2021 Standard Contractual Clauses\*\* \(Commission\s*Implementing Decision \(EU\) 2021\/914\)/,
     );
     expect(body).toMatch(
-      /\*\*Article 49 GDPR derogations\*\* only in genuinely exceptional\s*\n?\s*cases/,
+      /\*\*Article 49 GDPR derogations\*\* only in genuinely exceptional\s*cases/,
     );
   });
 
@@ -179,20 +175,20 @@ describe('W506.A apps/marketing-site/src/pages/legal/privacy.md content parity',
     );
     expect(body).toMatch(/\*\*NowPayments OÜ\*\* \(Estonia, EU\) — _conditional_/);
     expect(body).toMatch(/\*\*LiveKit\*\* \(US, regional endpoints\) — _conditional_/);
-    expect(body).toMatch(/notice and\s*\n?\s*objection mechanism in Section 3\.4 of the DPA/);
+    expect(body).toMatch(/notice and\s*objection mechanism in Section 3\.4 of the DPA/);
     expect(body).toMatch(/\[`\/trust\/sub-processors`\]\(\/trust\/sub-processors\/\)/);
     expect(body).not.toMatch(/marketing site goes live|Section 5 of the DPA/i);
   });
 
   it('Customer-Connected Services 4-list NOT-Sub-processors: HTTP/SOCKS5 proxies + Captcha solvers + Email IMAP/Gmail-OAuth + SMS verification — pinned so the 4-service NOT-Sub-processor delineation survives (drift to merging any into Sub-processor list would create marketing↔DPA-Annex-3 divergence and would shift contractual responsibility incorrectly)', () => {
     expect(body).toMatch(
-      /\*\*HTTP \/ SOCKS5 proxy providers\*\* \(e\.g\. Bright Data, Smartproxy,\s*\n?\s*Customer's own infrastructure\)\./,
+      /\*\*HTTP \/ SOCKS5 proxy providers\*\* \(e\.g\. Bright Data, Smartproxy,\s*Customer's own infrastructure\)\./,
     );
     expect(body).toMatch(
-      /\*\*Captcha-solving services\*\* \(e\.g\. 2Captcha, CapSolver,\s*\n?\s*AntiCaptcha\)\./,
+      /\*\*Captcha-solving services\*\* \(e\.g\. 2Captcha, CapSolver,\s*AntiCaptcha\)\./,
     );
     expect(body).toMatch(
-      /\*\*Email services\*\* Customer accesses by IMAP, Gmail OAuth, or\s*\n?\s*equivalent\./,
+      /\*\*Email services\*\* Customer accesses by IMAP, Gmail OAuth, or\s*equivalent\./,
     );
     expect(body).toMatch(/\*\*SMS-verification services\*\* \(e\.g\. TextVerified, Twilio\)\./);
   });
@@ -204,16 +200,16 @@ describe('W506.A apps/marketing-site/src/pages/legal/privacy.md content parity',
       /90 days operational; aggregated counters \(no PII\) retained indefinitely/,
     );
     expect(body).toMatch(/3 years post-resolution\./);
-    expect(body).toMatch(/Marketing-site access logs\s*\n?\s*\|\s*\n?\s*30 days\./);
+    expect(body).toMatch(/Marketing-site access logs\s*\|\s*30 days\./);
     expect(body).toMatch(
-      /Desktop-local recordings\s*\n?\s*\|\s*\n?\s*Not uploaded to or retained by Driftstack/,
+      /Desktop-local recordings\s*\|\s*Not uploaded to or retained by Driftstack/,
     );
-    expect(body).toMatch(/API Capture artifacts\s*\n?\s*\|\s*\n?\s*Returned inline to Customer/);
-    expect(body).toMatch(/Live-session media\s*\n?\s*\|\s*\n?\s*Not stored by Driftstack/);
+    expect(body).toMatch(/API Capture artifacts\s*\|\s*Returned inline to Customer/);
+    expect(body).toMatch(/Live-session media\s*\|\s*Not stored by Driftstack/);
     expect(body).toMatch(/Profile metadata \+ Profile Snapshots/);
     expect(body).toMatch(/persist until Customer deletes them/);
     expect(body).toMatch(/within 30 days of Customer Account termination/);
-    expect(body).not.toMatch(/Session Recordings\s*\n?\s*\|/);
+    expect(body).not.toMatch(/Session Recordings\s*\|/);
   });
 
   it('Article 15-22 Data Subject rights pinned: access (15) + rectification (16) + erasure (17) + restriction (18) + portability (20) + objection (21) + automated-decision-making (22) — pinned so the 7-Article-rights enumeration stays complete (drift to dropping the Article-numbers would weaken the GDPR-anchored specificity; drift to dropping Article 22 would obscure the no-automated-decision-making posture)', () => {
@@ -224,7 +220,7 @@ describe('W506.A apps/marketing-site/src/pages/legal/privacy.md content parity',
     expect(body).toMatch(/\*\*Right to data portability\*\* \(Article 20\)/);
     expect(body).toMatch(/\*\*Right to object\*\* \(Article 21\)/);
     expect(body).toMatch(
-      /\*\*Rights related to automated individual decision-making,\s*\n?\s*including profiling\*\* \(Article 22\)/,
+      /\*\*Rights related to automated individual decision-making,\s*including profiling\*\* \(Article 22\)/,
     );
   });
 
@@ -233,37 +229,37 @@ describe('W506.A apps/marketing-site/src/pages/legal/privacy.md content parity',
       /Driftstack responds within one \(1\) month of receipt of the request, extendable by two \(2\) further months for complex or numerous requests with notice to the Data Subject \(Article 12\(3\) GDPR\)\./,
     );
     expect(body).toMatch(
-      /\*\*Autoriteit Persoonsgegevens\*\* \(Dutch DPA\), Postbus 93374, 2509\s*\n?\s*AJ Den Haag, the Netherlands/,
+      /\*\*Autoriteit Persoonsgegevens\*\* \(Dutch DPA\), Postbus 93374, 2509\s*AJ Den Haag, the Netherlands/,
     );
   });
 
   it('DPO threshold-based 3-condition policy: 1M monthly sessions OR 5k unique subjects regular-and-systematic-monitoring OR AP guidance — pinned so the 3-trigger DPO threshold survives (drift to softening any threshold would weaken the documented policy that justifies no-DPO-today; drift to dropping the AP-guidance trigger would close off responsive escalation)', () => {
     expect(body).toMatch(
-      /Total monthly active sessions across the Service exceed 1\s*\n?\s*million; \*\*or\*\*/,
+      /Total monthly active sessions across the Service exceed 1\s*million; \*\*or\*\*/,
     );
     expect(body).toMatch(
-      /Any single Customer's monthly Sessions involve regular and\s*\n?\s*systematic monitoring of more than 5,000 unique Data Subjects;\s*\n?\s*\*\*or\*\*/,
+      /Any single Customer's monthly Sessions involve regular and\s*systematic monitoring of more than 5,000 unique Data Subjects;\s*\*\*or\*\*/,
     );
     expect(body).toMatch(
-      /The Autoriteit Persoonsgegevens issues guidance applying the\s*\n?\s*Article 37\(1\)\(b\) threshold to similar services\./,
+      /The Autoriteit Persoonsgegevens issues guidance applying the\s*Article 37\(1\)\(b\) threshold to similar services\./,
     );
   });
 
   it('Breach notification 3-tier: 72h to supervisor (Article 33(1)) + 48h-target to Customer (DPA §7) + Data Subject notification (Article 34 high-risk) — pinned so the 3-tier breach-notification cascade survives (drift to softening the 72h supervisor window would breach GDPR; drift to dropping the 48h Customer-target would weaken the DPA support commitment)', () => {
     expect(body).toMatch(
-      /Driftstack\s*\n?\s*notifies the Autoriteit Persoonsgegevens \(or the lead\s*\n?\s*supervisory authority if different\) within 72 hours of becoming\s*\n?\s*aware of the breach/,
+      /Driftstack\s*notifies the Autoriteit Persoonsgegevens \(or the lead\s*supervisory authority if different\) within 72 hours of becoming\s*aware of the breach/,
     );
     expect(body).toMatch(
-      /Driftstack notifies Customer without undue delay \(target: within\s*\n?\s*48 hours of becoming aware\)/,
+      /Driftstack notifies Customer without undue delay \(target: within\s*48 hours of becoming aware\)/,
     );
     expect(body).toMatch(
-      /Driftstack communicates the breach to\s*\n?\s*affected Data Subjects without undue delay/,
+      /Driftstack communicates the breach to\s*affected Data Subjects without undue delay/,
     );
   });
 
   it("Children-under-16 framing pinned: 'The Service is not directed to and is not intended for use by children. Driftstack does not knowingly collect Personal Data of children under 16' — pinned so the children-protection commitment survives (drift to dropping the under-16 threshold would weaken the protective commitment; drift to softening 'not directed to' would muddy the B2B-only positioning)", () => {
     expect(body).toMatch(
-      /The Service is not directed to and is not intended for use by\s*\n?\s*children\. Driftstack does not knowingly collect Personal Data of\s*\n?\s*children under 16/,
+      /The Service is not directed to and is not intended for use by\s*children\. Driftstack does not knowingly collect Personal Data of\s*children under 16/,
     );
   });
 

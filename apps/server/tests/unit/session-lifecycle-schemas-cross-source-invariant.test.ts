@@ -32,7 +32,7 @@ describe('W895 Session lifecycle schemas cross-source invariant', () => {
   it("CRITICAL packages/api-types/src/sessions.ts ArchetypeSchema = z.string().regex(/^[a-z0-9_]+$/, ...).min(3).max(60). The 3-60 char + lowercase-alphanumeric-underscore regex enforces archetype-slug shape (e.g. 'iphone16pro_ios18_7_safari26_4').", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/sessions.ts'));
     expect(p).toMatch(
-      /export const ArchetypeSchema = z\s*\n?\s*\.string\(\)\s*\n\s*\.regex\(\/\^\[a-z0-9_\]\+\$\/, \{ message: 'archetype slug is lowercase alphanumeric \+ underscores' \}\)\s*\n\s*\.min\(3\)\s*\n\s*\.max\(60\)/,
+      /export const ArchetypeSchema = z\s*\.string\(\)\s*\n\s*\.regex\(\/\^\[a-z0-9_\]\+\$\/, \{ message: 'archetype slug is lowercase alphanumeric \+ underscores' \}\)\s*\n\s*\.min\(3\)\s*\n\s*\.max\(60\)/,
     );
   });
 

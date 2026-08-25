@@ -40,7 +40,7 @@ describe('W414.C apps/server/src/routes/admin-api-keys.ts content parity', () =>
 
   it('Framing pinned: GET /v1/admin/api-keys read-only no-audit + revoke at POST /v1/admin/api-keys/:id/revoke in admin-force-actions', () => {
     expect(body).toMatch(
-      /Admin-only cross-account API key list — GET \/v1\/admin\/api-keys\.\s*\n?\s*\/\/\s*Read-only; no audit row written for the read\. Revoke action lives\s*\n?\s*\/\/\s*in admin-force-actions\.ts \(POST \/v1\/admin\/api-keys\/:id\/revoke\)\./,
+      /Admin-only cross-account API key list — GET \/v1\/admin\/api-keys\.\s*\/\/\s*Read-only; no audit row written for the read\. Revoke action lives\s*\/\/\s*in admin-force-actions\.ts \(POST \/v1\/admin\/api-keys\/:id\/revoke\)\./,
     );
   });
 
@@ -52,13 +52,13 @@ describe('W414.C apps/server/src/routes/admin-api-keys.ts content parity', () =>
 
   it('uuidFromPrefixedId: regex + expectedPrefix startsWith check; BadRequestError with "<prefix>_<uuid>" hint', () => {
     expect(body).toMatch(
-      /function uuidFromPrefixedId\(value: string, expectedPrefix: string\): string \{\s*\n?\s*const match = PUBLIC_ID_RE\.exec\(value\);\s*\n?\s*if \(!match \|\| !match\[1\] \|\| !value\.startsWith\(`\$\{expectedPrefix\}_`\)\) \{\s*\n?\s*throw new BadRequestError\(`Invalid id format\. Expected "\$\{expectedPrefix\}_<uuid>"\.`\);\s*\n?\s*\}\s*\n?\s*return match\[1\];/,
+      /function uuidFromPrefixedId\(value: string, expectedPrefix: string\): string \{\s*const match = PUBLIC_ID_RE\.exec\(value\);\s*if \(!match \|\| !match\[1\] \|\| !value\.startsWith\(`\$\{expectedPrefix\}_`\)\) \{\s*throw new BadRequestError\(`Invalid id format\. Expected "\$\{expectedPrefix\}_<uuid>"\.`\);\s*\}\s*return match\[1\];/,
     );
   });
 
   it('ListAdminApiKeysQuerySchema: limit coerce int 1..100 default 50 + cursor (string 1-512) + account_id (string 1-100) + revoked enum true|false (Slice 146 defensive caps across admin-cost/admin-usage/admin-crypto-orders/admin-api-keys).', () => {
     expect(body).toMatch(
-      /const ListAdminApiKeysQuerySchema = z\.object\(\{\s*\n?\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),[\s\S]*?cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),\s*\n?\s*account_id: z\.string\(\)\.min\(1\)\.max\(100\)\.optional\(\),\s*\n?\s*revoked: z\.enum\(\['true', 'false'\]\)\.optional\(\),\s*\n?\s*\}\);/,
+      /const ListAdminApiKeysQuerySchema = z\.object\(\{\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),[\s\S]*?cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),\s*account_id: z\.string\(\)\.min\(1\)\.max\(100\)\.optional\(\),\s*revoked: z\.enum\(\['true', 'false'\]\)\.optional\(\),\s*\}\);/,
     );
   });
 
@@ -86,25 +86,25 @@ describe('W414.C apps/server/src/routes/admin-api-keys.ts content parity', () =>
 
   it('account_id resolution: 36-char raw uuid pass-through OR uuidFromPrefixedId(value, "acc")', () => {
     expect(body).toMatch(
-      /const accountUuid =\s*\n?\s*parsed\.data\.account_id !== undefined\s*\n?\s*\? parsed\.data\.account_id\.length === 36\s*\n?\s*\? parsed\.data\.account_id\s*\n?\s*: uuidFromPrefixedId\(parsed\.data\.account_id, 'acc'\)\s*\n?\s*: undefined;/,
+      /const accountUuid =\s*parsed\.data\.account_id !== undefined\s*\? parsed\.data\.account_id\.length === 36\s*\? parsed\.data\.account_id\s*: uuidFromPrefixedId\(parsed\.data\.account_id, 'acc'\)\s*: undefined;/,
     );
   });
 
   it("Revoked filter coerce: 'true'|'false' string → boolean; undefined → undefined", () => {
     expect(body).toMatch(
-      /const revoked =\s*\n?\s*parsed\.data\.revoked === undefined \? undefined : parsed\.data\.revoked === 'true';/,
+      /const revoked =\s*parsed\.data\.revoked === undefined \? undefined : parsed\.data\.revoked === 'true';/,
     );
   });
 
   it('Service dispatch: apiKeysService.listAll with spread-conditional cursor + accountId + revoked args', () => {
     expect(body).toMatch(
-      /const page = await apiKeysService\.listAll\(ctx, \{\s*\n?\s*limit: parsed\.data\.limit,\s*\n?\s*\.\.\.\(parsed\.data\.cursor !== undefined \? \{ cursor: parsed\.data\.cursor \} : \{\}\),\s*\n?\s*\.\.\.\(accountUuid !== undefined \? \{ accountId: accountUuid \} : \{\}\),\s*\n?\s*\.\.\.\(revoked !== undefined \? \{ revoked \} : \{\}\),\s*\n?\s*\}\);/,
+      /const page = await apiKeysService\.listAll\(ctx, \{\s*limit: parsed\.data\.limit,\s*\.\.\.\(parsed\.data\.cursor !== undefined \? \{ cursor: parsed\.data\.cursor \} : \{\}\),\s*\.\.\.\(accountUuid !== undefined \? \{ accountId: accountUuid \} : \{\}\),\s*\.\.\.\(revoked !== undefined \? \{ revoked \} : \{\}\),\s*\}\);/,
     );
   });
 
   it('Reply shape: { data: page.items.map(publicAdminApiKey), next_cursor: page.nextCursor }', () => {
     expect(body).toMatch(
-      /return \{\s*\n?\s*data: page\.items\.map\(publicAdminApiKey\),\s*\n?\s*next_cursor: page\.nextCursor,\s*\n?\s*\};/,
+      /return \{\s*data: page\.items\.map\(publicAdminApiKey\),\s*next_cursor: page\.nextCursor,\s*\};/,
     );
   });
 

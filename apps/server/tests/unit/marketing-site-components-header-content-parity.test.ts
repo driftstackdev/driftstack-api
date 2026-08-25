@@ -36,7 +36,7 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
 
   it("V-133 framing pinned: 'mobile responsiveness pass. On mobile (<md), the 4-item nav + CTA + logo overflowed in a single row. Now: logo + CTA stay visible at all widths; nav links hide on mobile and reveal via CSS-only <details> hamburger so we don't need a client-side JS bundle for a pure-static marketing site.' — pinned so the V-133 anchor + CSS-only-no-JS-bundle commitment + pure-static-marketing-site posture survives", () => {
     expect(body).toMatch(
-      /\/\/ V-133: mobile responsiveness pass\.\s*\n?\s*\/\/ On mobile \(<md\), the 4-item nav \+ CTA \+ logo overflowed in a single\s*\n?\s*\/\/ row\. Now: logo \+ CTA stay visible at all widths; nav links hide on\s*\n?\s*\/\/ mobile and reveal via CSS-only <details> hamburger so we don't need\s*\n?\s*\/\/ a client-side JS bundle for a pure-static marketing site\./,
+      /\/\/ V-133: mobile responsiveness pass\.\s*\/\/ On mobile \(<md\), the 4-item nav \+ CTA \+ logo overflowed in a single\s*\/\/ row\. Now: logo \+ CTA stay visible at all widths; nav links hide on\s*\/\/ mobile and reveal via CSS-only <details> hamburger so we don't need\s*\/\/ a client-side JS bundle for a pure-static marketing site\./,
     );
   });
 
@@ -86,8 +86,8 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
     expect(body).toMatch(
       /<a\s+href="\/"\s+class="group flex items-center gap-2\.5 font-mono text-xl font-semibold text-tk-ink"/,
     );
-    expect(body).toMatch(/<img\s*\n?\s*src="\/driftstack-mark\.svg(\?v=\d+)?"/);
-    expect(body).toMatch(/width="32"\s*\n?\s*height="32"/);
+    expect(body).toMatch(/<img\s*src="\/driftstack-mark\.svg(\?v=\d+)?"/);
+    expect(body).toMatch(/width="32"\s*height="32"/);
     // S17 2026-07-04 (Lighthouse a11y): the mark img is decorative (alt="" —
     // the wordmark beside it carries the name; alt="Driftstack" was flagged
     // redundant), and STACK renders in the AA accent-text tone (raw accent

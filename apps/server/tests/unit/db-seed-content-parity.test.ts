@@ -35,10 +35,10 @@ describe('W449.A apps/server/src/db/seed.ts content parity', () => {
 
   it("header framing pinned: 'Seed dev data: one test account + one read/write API key.' + idempotency + plaintext-once-rationale", () => {
     expect(body).toMatch(
-      /\/\/ Seed dev data: one test account \+ one read\/write API key\.\s*\n?\s*\/\/ Idempotent: re-running does not duplicate\. Safe to run on a fresh DB\./,
+      /\/\/ Seed dev data: one test account \+ one read\/write API key\.\s*\/\/ Idempotent: re-running does not duplicate\. Safe to run on a fresh DB\./,
     );
     expect(body).toMatch(
-      /\/\/ The seed prints the plaintext API key on first creation so a developer\s*\n?\s*\/\/ can paste it into a curl command\. On re-run, the key is already hashed\s*\n?\s*\/\/ in the DB and cannot be recovered — re-running prints the prefix only\./,
+      /\/\/ The seed prints the plaintext API key on first creation so a developer\s*\/\/ can paste it into a curl command\. On re-run, the key is already hashed\s*\/\/ in the DB and cannot be recovered — re-running prints the prefix only\./,
     );
   });
 
@@ -59,14 +59,14 @@ describe('W449.A apps/server/src/db/seed.ts content parity', () => {
 
   it("account lookup branch: select where email=SEED_EMAIL + limit 1; reuses existingAccount.id; logs 'seed account exists' on reuse", () => {
     expect(body).toMatch(
-      /const \[existingAccount\] = await db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(accounts\)\s*\n?\s*\.where\(eq\(accounts\.email, SEED_EMAIL\)\)\s*\n?\s*\.limit\(1\);/,
+      /const \[existingAccount\] = await db\s*\.select\(\)\s*\.from\(accounts\)\s*\.where\(eq\(accounts\.email, SEED_EMAIL\)\)\s*\.limit\(1\);/,
     );
     expect(body).toMatch(/msg: 'seed account exists', email: SEED_EMAIL, accountId/);
   });
 
   it("account create branch: 4-field values (email + name 'Local Dev' + tier 'api_builder' + status 'active'); throws 'failed to create seed account' on no-row; logs 'seed account created'", () => {
     expect(body).toMatch(
-      /\.values\(\{\s*\n?\s*email: SEED_EMAIL,\s*\n?\s*name: 'Local Dev',\s*\n?\s*tier: 'api_builder',\s*\n?\s*status: 'active',\s*\n?\s*\}\)\s*\n?\s*\.returning\(\{ id: accounts\.id \}\);/,
+      /\.values\(\{\s*email: SEED_EMAIL,\s*name: 'Local Dev',\s*tier: 'api_builder',\s*status: 'active',\s*\}\)\s*\.returning\(\{ id: accounts\.id \}\);/,
     );
     expect(body).toMatch(/if \(!created\) throw new Error\('failed to create seed account'\);/);
     expect(body).toMatch(/msg: 'seed account created', email: SEED_EMAIL, accountId/);
@@ -74,10 +74,10 @@ describe('W449.A apps/server/src/db/seed.ts content parity', () => {
 
   it("api key lookup: select by accountId + limit 1; existingKey branch logs 'seed api key exists (plaintext unrecoverable)' + early return", () => {
     expect(body).toMatch(
-      /const \[existingKey\] = await db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(apiKeys\)\s*\n?\s*\.where\(eq\(apiKeys\.accountId, accountId\)\)\s*\n?\s*\.limit\(1\);/,
+      /const \[existingKey\] = await db\s*\.select\(\)\s*\.from\(apiKeys\)\s*\.where\(eq\(apiKeys\.accountId, accountId\)\)\s*\.limit\(1\);/,
     );
     expect(body).toMatch(
-      /msg: 'seed api key exists \(plaintext unrecoverable\)',\s*\n?\s*keyPrefix: existingKey\.keyPrefix,\s*\n?\s*keyId: existingKey\.id,/,
+      /msg: 'seed api key exists \(plaintext unrecoverable\)',\s*keyPrefix: existingKey\.keyPrefix,\s*keyId: existingKey\.id,/,
     );
   });
 
@@ -86,17 +86,17 @@ describe('W449.A apps/server/src/db/seed.ts content parity', () => {
     expect(body).toMatch(/const keyHash = await hashApiKey\(plaintext\);/);
     expect(body).toMatch(/const keyPrefix = keyPrefixFromPlaintext\(plaintext\);/);
     expect(body).toMatch(
-      /\.values\(\{\s*\n?\s*accountId,\s*\n?\s*name: SEED_KEY_NAME,\s*\n?\s*keyPrefix,\s*\n?\s*keyHash,\s*\n?\s*scopes: \['read', 'write', 'admin'\],\s*\n?\s*\}\)\s*\n?\s*\.returning\(\{ id: apiKeys\.id \}\);/,
+      /\.values\(\{\s*accountId,\s*name: SEED_KEY_NAME,\s*keyPrefix,\s*keyHash,\s*scopes: \['read', 'write', 'admin'\],\s*\}\)\s*\.returning\(\{ id: apiKeys\.id \}\);/,
     );
     expect(body).toMatch(/if \(!inserted\) throw new Error\('failed to create seed api key'\);/);
     expect(body).toMatch(
-      /msg: 'seed api key created — copy this NOW; not recoverable later',\s*\n?\s*keyId: inserted\.id,\s*\n?\s*plaintext,/,
+      /msg: 'seed api key created — copy this NOW; not recoverable later',\s*keyId: inserted\.id,\s*plaintext,/,
     );
   });
 
   it('main() top-level catch: console.error(err) + process.exit(1) on rejection', () => {
     expect(body).toMatch(
-      /main\(\)\.catch\(\(err: unknown\) => \{\s*\n?\s*console\.error\(err\);\s*\n?\s*process\.exit\(1\);\s*\n?\s*\}\);/,
+      /main\(\)\.catch\(\(err: unknown\) => \{\s*console\.error\(err\);\s*process\.exit\(1\);\s*\}\);/,
     );
   });
 

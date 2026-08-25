@@ -186,7 +186,7 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
     expect(body).toMatch(/`Quote`, `CreateCheckout`/);
     expect(body).toMatch(/V-666\.AO header/);
     expect(body).toMatch(
-      /Crypto payments\s*\n?\s*are non-refundable; cancellation only works while pending\./,
+      /Crypto payments\s*are non-refundable; cancellation only works while pending\./,
     );
     expect(body).toMatch(
       /\*\*`client\.Webhooks\.SendTest\(ctx, webhookID\)`\*\* \(V-463 \/ V-356\)/,
@@ -217,7 +217,7 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
     expect(body).toMatch(/synthetic `test\.ping` delivery/);
     expect(body).toMatch(/\*\*`client\.webhooks\.update\(id, body\)`\*\* \(V-464 \/ V-351\)/);
     expect(body).toMatch(/\*\*`client\.auditLog\.export\(\)`\*\* \(V-462 \/ V-297\)/);
-    expect(body).toMatch(/GDPR\s*\n?\s*Article 20 data-portability requests/);
+    expect(body).toMatch(/GDPR\s*Article 20 data-portability requests/);
     expect(body).toMatch(/[Uu]p to 10,000 rows per call/);
     expect(body).toMatch(/\*\*CLI\/GUI activation flow\*\* \(V-460 \/ V-266\)/);
     expect(body).toMatch(/`client\.auth`: `cliAuthorizeInitiate`, `cliAuthorizeBind`/);
@@ -242,7 +242,7 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
     expect(body).toMatch(
       /`get\(order_id\)`, `update_note\(order_id, body\)`, `cancel\(order_id\)`/,
     );
-    expect(body).toMatch(/Crypto payments are\s*\n?\s*non-refundable/);
+    expect(body).toMatch(/Crypto payments are\s*non-refundable/);
     expect(body).toMatch(/\*\*`client\.webhooks\.send_test\(webhook_id\)`\*\* \+ async mirror/);
     expect(body).toMatch(/\(V-463 \/ V-356\)/);
     expect(body).toMatch(/\*\*`client\.webhooks\.update\(webhook_id, body\)`\*\* \+ async mirror/);

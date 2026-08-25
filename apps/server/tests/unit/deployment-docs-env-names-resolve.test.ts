@@ -114,7 +114,7 @@ describe('deployment docs name env vars the server actually reads (V-755)', () =
 // `>`, so a `<[^>]*>` class stops early and the route is MISSED — which made this guard
 // flag /v1/auth/oauth/google/callback, a route that genuinely exists (registered in a
 // `for (const provider of ['google','github'])` loop over a template literal).
-const ROUTE_ANY = /app\.(?:get|post|patch|put|delete)[\s\S]{0,160}?\(\s*\n?\s*(['`])([^'`]+)\1/g;
+const ROUTE_ANY = /app\.(?:get|post|patch|put|delete)[\s\S]{0,160}?\(\s*(['`])([^'`]+)\1/g;
 
 /** Fastify writes :id, docs write :id or {id}; compare with params erased. */
 function normalizePath(p: string): string {

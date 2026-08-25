@@ -25,10 +25,10 @@ describe('sdk-typescript resources/recipes content parity', () => {
 
   it('frames recipes around reusable saved workflows without roadmap language', () => {
     expect(body).toMatch(
-      /\/\/ Recipe library\. Snapshots a finished agent session's intent log and\s*\n?\s*\/\/ transcript so the customer can reuse the saved workflow without paying\s*\n?\s*\/\/ for another AI decomposition\./,
+      /\/\/ Recipe library\. Snapshots a finished agent session's intent log and\s*\/\/ transcript so the customer can reuse the saved workflow without paying\s*\/\/ for another AI decomposition\./,
     );
     expect(body).toMatch(
-      /\/\/ Surface: create \+ list \+ iterate \+ get \+ delete \+ suggest\. Deployments\s*\n?\s*\/\/ without recipe storage return FeatureUnavailableError\./,
+      /\/\/ Surface: create \+ list \+ iterate \+ get \+ delete \+ suggest\. Deployments\s*\/\/ without recipe storage return FeatureUnavailableError\./,
     );
   });
 
@@ -52,13 +52,13 @@ describe('sdk-typescript resources/recipes content parity', () => {
 
   it("agent_session_id NULLABLE-on-cleanup framing pinned: 'NULLABLE — the recipe survives agent-session cleanup; the underlying foreign key is ON DELETE SET NULL server-side.' — pinned so the FK ON-DELETE-SET-NULL contract stays documented (drift to NOT NULL would either break the cleanup cascade OR cause recipes to evaporate when their source session is purged)", () => {
     expect(body).toMatch(
-      /\*\s+NULLABLE — the recipe survives agent-session cleanup; the\s*\n?\s*\*\s+underlying foreign key is ON DELETE SET NULL server-side\./,
+      /\*\s+NULLABLE — the recipe survives agent-session cleanup; the\s*\*\s+underlying foreign key is ON DELETE SET NULL server-side\./,
     );
   });
 
   it("intent_count assembly-rationale framing pinned: 'Length of the recipe's stored intent log (server-assembled by flatMapping the source agent-session's transcript).' — pinned so the server-side-flatMap contract + the cross-turn intent concatenation rationale stay documented (drift to a different counting strategy would diverge from server's actual value)", () => {
     expect(body).toMatch(
-      /Length of the recipe's stored intent log \(server-assembled\s*\n?\s*\*\s+by flatMapping the source agent-session's transcript\)\./,
+      /Length of the recipe's stored intent log \(server-assembled\s*\*\s+by flatMapping the source agent-session's transcript\)\./,
     );
   });
 
@@ -73,7 +73,7 @@ describe('sdk-typescript resources/recipes content parity', () => {
   it("V-1120 ACCESS-scoped 404 framing pinned: the source session must be one you can ACCESS — your own account's, or a team's you hold admin on — and anything else 404s rather than 403s. The old text said the session must belong to the caller's account, which is the rule V-812 retracted: the route gates on callerCanAccessAgentSession, so a team admin snapshotting the owner's session gets a 201.", () => {
     const body = read(LIB);
     expect(body).toMatch(
-      /Must be a session you can\s*\n?\s*\*\s+ACCESS: one your own account owns, or one owned by a team you hold/,
+      /Must be a session you can\s*\*\s+ACCESS: one your own account owns, or one owned by a team you hold/,
     );
     expect(body, 'the anti-enumeration reason must stay').toMatch(
       /doesn't distinguish missing from forbidden/,
@@ -85,10 +85,10 @@ describe('sdk-typescript resources/recipes content parity', () => {
 
   it("RecipesResource create() flatMap-rationale framing pinned: 'server assembles intent_log by flatMapping the source agent-session's transcript — each plan-executed turn's structured intent array is concatenated in turn order. A recipe captured from a 3-turn session that ran 2 + 4 + 1 intents produces a 7-intent intent_log. Clarify / refuse turns contribute zero intents.' — pinned so the worked example (3-turn → 7-intent) + the clarify/refuse-contribute-zero contract stay documented (drift would diverge from server's actual flatMap behavior)", () => {
     expect(body).toMatch(
-      /The server assembles intent_log by flatMapping the source\s*\n?\s*\*\s+agent-session's transcript — each plan-executed turn's\s*\n?\s*\*\s+structured intent array is concatenated in turn order\./,
+      /The server assembles intent_log by flatMapping the source\s*\*\s+agent-session's transcript — each plan-executed turn's\s*\*\s+structured intent array is concatenated in turn order\./,
     );
     expect(body).toMatch(
-      /A\s*\n?\s*\*\s+recipe captured from a 3-turn session that ran 2 \+ 4 \+ 1\s*\n?\s*\*\s+intents produces a 7-intent intent_log\. Clarify \/ refuse\s*\n?\s*\*\s+turns contribute zero intents\./,
+      /A\s*\*\s+recipe captured from a 3-turn session that ran 2 \+ 4 \+ 1\s*\*\s+intents produces a 7-intent intent_log\. Clarify \/ refuse\s*\*\s+turns contribute zero intents\./,
     );
   });
 
@@ -104,13 +104,13 @@ describe('sdk-typescript resources/recipes content parity', () => {
 
   it('RecipeDetail + RecipesListPage shapes and public sensitive-value omission contract pinned', () => {
     expect(body).toMatch(
-      /The public recipe returned by get\(\) — adds the ordered intent_log to the\s*\n?\s*\*\s+list metadata\. Sensitive type steps retain `sensitive:true` and their\s*\n?\s*\*\s+selector but omit the optional value\./,
+      /The public recipe returned by get\(\) — adds the ordered intent_log to the\s*\*\s+list metadata\. Sensitive type steps retain `sensitive:true` and their\s*\*\s+selector but omit the optional value\./,
     );
     expect(body).toMatch(
-      /export interface RecipeDetail extends Recipe \{\s*\n?\s*intent_log: AgentIntent\[\];/,
+      /export interface RecipeDetail extends Recipe \{\s*intent_log: AgentIntent\[\];/,
     );
     expect(body).toMatch(
-      /export interface RecipesListPage \{\s*\n?\s*data: Recipe\[\];\s*\n?\s*has_more: boolean;\s*\n?\s*next_cursor: string \| null;/,
+      /export interface RecipesListPage \{\s*data: Recipe\[\];\s*has_more: boolean;\s*next_cursor: string \| null;/,
     );
   });
 

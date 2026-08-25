@@ -32,27 +32,27 @@ describe('W494.B apps/customer-dashboard/src/pages/index.astro content parity', 
 
   it("V-316 framing pinned: 'wires the dashboard home page to live data. Replaces the V-099 mock-data scaffolding. Reads: GET /v1/account/me (account + concurrent caps + profile count) + GET /v1/api-keys + GET /v1/sessions + GET /v1/billing. Each call is independent; failures in one section don't blank the rest. Render is client-side so the dashboard server stays static (Astro's hybrid mode is intentionally avoided here).' — pinned so the independent-fetch + static-server framing survives (drift to a unified Promise.all would couple failures across sections)", () => {
     expect(body).toMatch(
-      /\/\/ V-316 — wires the dashboard home page to live data\. Replaces the\s*\n?\s*\/\/ V-099 mock-data scaffolding\. Reads:\s*\n?\s*\/\/ {3}- GET \/v1\/account\/me \(account \+ concurrent caps \+ profile count\)\s*\n?\s*\/\/ {3}- GET \/v1\/api-keys\s*\n?\s*\/\/ {3}- GET \/v1\/sessions\s*\n?\s*\/\/ {3}- GET \/v1\/billing/,
+      /\/\/ V-316 — wires the dashboard home page to live data\. Replaces the\s*\/\/ V-099 mock-data scaffolding\. Reads:\s*\/\/ {3}- GET \/v1\/account\/me \(account \+ concurrent caps \+ profile count\)\s*\/\/ {3}- GET \/v1\/api-keys\s*\/\/ {3}- GET \/v1\/sessions\s*\/\/ {3}- GET \/v1\/billing/,
     );
     expect(body).toMatch(
-      /\/\/ Each call is independent; failures in one section don't blank the\s*\n?\s*\/\/ rest\. Render is client-side so the dashboard server stays static\s*\n?\s*\/\/ \(Astro's hybrid mode is intentionally avoided here\)\./,
+      /\/\/ Each call is independent; failures in one section don't blank the\s*\/\/ rest\. Render is client-side so the dashboard server stays static\s*\/\/ \(Astro's hybrid mode is intentionally avoided here\)\./,
     );
   });
 
   it("V-331 act-as header propagation: 'pick up the X-Driftstack-Account header from the shared helper installed by DashboardLayout. Self-scope returns {} so the request behaves identically when not acting as.' + headers spread with ...actAs — pinned so the team-scoped 'act as another account' flow propagates to every dashboard fetch (drift would silently show the operator's own account data when they're trying to view a team-mate's)", () => {
     expect(body).toMatch(
-      /\/\/ V-331 — pick up the X-Driftstack-Account header from the\s*\n?\s*\/\/ shared helper installed by DashboardLayout\. Self-scope returns\s*\n?\s*\/\/ \{\} so the request behaves identically when not "acting as"\./,
+      /\/\/ V-331 — pick up the X-Driftstack-Account header from the\s*\/\/ shared helper installed by DashboardLayout\. Self-scope returns\s*\/\/ \{\} so the request behaves identically when not "acting as"\./,
     );
     expect(body).toMatch(
-      /const actAs =\s*\n?\s*typeof window\.driftstackActAsHeaders === 'function'\s*\n?\s*\? window\.driftstackActAsHeaders\(\)\s*\n?\s*: \{\};\s*\n?\s*const headers = \{\s*\n?\s*Authorization: 'Bearer ' \+ token,\s*\n?\s*accept: 'application\/json',\s*\n?\s*\.\.\.actAs,\s*\n?\s*\};/,
+      /const actAs =\s*typeof window\.driftstackActAsHeaders === 'function'\s*\? window\.driftstackActAsHeaders\(\)\s*: \{\};\s*const headers = \{\s*Authorization: 'Bearer ' \+ token,\s*accept: 'application\/json',\s*\.\.\.actAs,\s*\};/,
     );
   });
 
   it("4-tile metric grid (Fleet v2, founder-locked 2026-07-02): 'Active sessions' (active / cap + meter — per ADR-004 the concurrent cap is the ONLY meter) + 'Profiles' (count / cap + meter) + 'Session hours' (cycle total, NO cap) + 'Plan' (tier + status). The API-keys count moved into the Mint-API-key quick action. Pinned so the at-a-glance metrics answer: am I at concurrent cap? am I at profile cap? how much have I used? what am I on?", () => {
-    expect(body).toMatch(/Active sessions\s*\n?\s*<\/p>/);
-    expect(body).toMatch(/Profiles\s*\n?\s*<\/p>/);
-    expect(body).toMatch(/Session hours\s*\n?\s*<\/p>/);
-    expect(body).toMatch(/Plan\s*\n?\s*<\/p>/);
+    expect(body).toMatch(/Active sessions\s*<\/p>/);
+    expect(body).toMatch(/Profiles\s*<\/p>/);
+    expect(body).toMatch(/Session hours\s*<\/p>/);
+    expect(body).toMatch(/Plan\s*<\/p>/);
     expect(body).toMatch(/data-stat-concurrent>—<\/span>/);
     expect(body).toMatch(/data-stat-concurrent-cap>—<\/span>/);
     expect(body).toMatch(/data-stat-concurrent-meter/);
@@ -68,13 +68,13 @@ describe('W494.B apps/customer-dashboard/src/pages/index.astro content parity', 
 
   it("Active sessions filter: status !== 'destroyed' && status !== 'errored' + slice(0, 5) — pinned so the dashboard shows only currently-running sessions (drift to including destroyed/errored would clutter the home view with terminal-state rows) and the 5-row limit prevents the section from dominating the page for high-volume accounts", () => {
     expect(body).toMatch(
-      /const active = all\.filter\(function \(s\) \{\s*\n?\s*return s\.status !== 'destroyed' && s\.status !== 'errored';\s*\n?\s*\}\);/,
+      /const active = all\.filter\(function \(s\) \{\s*return s\.status !== 'destroyed' && s\.status !== 'errored';\s*\}\);/,
     );
-    expect(body).toMatch(/active\s*\n?\s*\.slice\(0, 5\)/);
+    expect(body).toMatch(/active\s*\.slice\(0, 5\)/);
   });
 
   it("Subscription 2-state render: sub present → card.remove('hidden') + 'tier · status' line + 'Period ends {date}' / sub absent → empty.remove('hidden') — pinned so the two states stay mutually-exclusive in display (drift to showing both subscription + no-sub would surface contradictory UI). The retired trial-pack credit card was removed alongside the trial tier.", () => {
-    expect(body).toMatch(/if \(sub\) \{\s*\n?\s*if \(card\) card\.classList\.remove\('hidden'\);/);
+    expect(body).toMatch(/if \(sub\) \{\s*if \(card\) card\.classList\.remove\('hidden'\);/);
     expect(body).toMatch(
       /if \(line\) line\.textContent = tierLabel\(sub\.tier\) \+ ' · ' \+ String\(sub\.status\);/,
     );
@@ -95,23 +95,23 @@ describe('W494.B apps/customer-dashboard/src/pages/index.astro content parity', 
 
   it("API-keys filter: keys.filter(k => !k.revoked_at).length — pinned so the dashboard counts only ACTIVE keys (drift to total-count would mislead customers who've revoked old keys into thinking they have more keys than they actually do)", () => {
     expect(body).toMatch(
-      /const active = keys\.filter\(function \(k\) \{\s*\n?\s*return !k\.revoked_at;\s*\n?\s*\}\)\.length;/,
+      /const active = keys\.filter\(function \(k\) \{\s*return !k\.revoked_at;\s*\}\)\.length;/,
     );
   });
 
   it("Independent-error handling: /v1/api-keys catch leaves dash unchanged (silent fallback) + /v1/sessions catch surfaces 'Could not load sessions.' in the empty slot + /v1/billing catch surfaces 'Could not load billing.' in the empty subscription slot — pinned so each section's failure stays localized (drift to a global error banner would hide which specific endpoint failed)", () => {
     expect(body).toMatch(/\/\* leave dash \*\//);
     expect(body).toMatch(
-      /empty\.textContent = 'Could not load sessions\.';\s*\n?\s*empty\.classList\.remove\('hidden'\);/,
+      /empty\.textContent = 'Could not load sessions\.';\s*empty\.classList\.remove\('hidden'\);/,
     );
     expect(body).toMatch(
-      /empty\.textContent = 'Could not load billing\.';\s*\n?\s*empty\.classList\.remove\('hidden'\);/,
+      /empty\.textContent = 'Could not load billing\.';\s*empty\.classList\.remove\('hidden'\);/,
     );
   });
 
   it('No-token guard: canonical /login/?next=<encoded current path> preserves the deep link through login and keeps unauthed visitors away from the SSG placeholder UI', () => {
     expect(body).toMatch(
-      /if \(!token\) \{\s*\n?\s*\/\/ 2026-05-19 — dashboard hard-redirects to \/login when there's\s*\n?\s*\/\/ no session token,[\s\S]*?const next = encodeURIComponent\(window\.location\.pathname \+ window\.location\.search\);\s*\n?\s*window\.location\.replace\('\/login\/\?next=' \+ next\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /if \(!token\) \{\s*\/\/ 2026-05-19 — dashboard hard-redirects to \/login when there's\s*\/\/ no session token,[\s\S]*?const next = encodeURIComponent\(window\.location\.pathname \+ window\.location\.search\);\s*window\.location\.replace\('\/login\/\?next=' \+ next\);\s*return;\s*\}/,
     );
     expect(body).not.toContain('/login?return_to=');
   });

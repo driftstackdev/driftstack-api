@@ -54,7 +54,7 @@ describe('W529.C /eslint.config.js content parity', () => {
 
   it("Astro-app 5-app + V-anchor framing pinned: 'Marketing site is an Astro project — it uses Astro's own type-check pipeline (`astro check` via the workspace's `typecheck` script). Excluding it from the root ESLint type-aware run avoids the parser claiming Astro/Tailwind config files aren't in the TS project.' + apps/marketing-site/** + apps/customer-dashboard/** (V-099) + apps/admin-panel/** (V-135) + apps/docs/** (V-250) + apps/status-site/** (V-295c) — pinned so the Astro-projects-use-astro-check + 5-Astro-app ignore (with each app's V-anchor commentary) commitment survives", () => {
     expect(body).toMatch(
-      /\/\/ Marketing site is an Astro project — it uses Astro's own\s*\n?\s*\/\/ type-check pipeline \(`astro check` via the workspace's\s*\n?\s*\/\/ `typecheck` script\)\. Excluding it from the root ESLint\s*\n?\s*\/\/ type-aware run avoids the parser claiming Astro\/Tailwind\s*\n?\s*\/\/ config files aren't in the TS project\./,
+      /\/\/ Marketing site is an Astro project — it uses Astro's own\s*\/\/ type-check pipeline \(`astro check` via the workspace's\s*\/\/ `typecheck` script\)\. Excluding it from the root ESLint\s*\/\/ type-aware run avoids the parser claiming Astro\/Tailwind\s*\/\/ config files aren't in the TS project\./,
     );
     expect(body).toMatch(/'apps\/marketing-site\/\*\*',/);
     expect(body).toMatch(/\/\/ Customer dashboard — same Astro-project pattern \(V-099\)\./);
@@ -69,7 +69,7 @@ describe('W529.C /eslint.config.js content parity', () => {
 
   it("scripts/** V-165 ignore framing pinned: 'Standalone Node scripts (V-165) — not part of any TS project, not type-checked by tsconfig.eslint.json. Linting these would require a separate parser config; the scripts are short + .mjs ESM-only so the cost outweighs the value.' + 'scripts/**' ignore — pinned so the V-165 anchor + scripts-as-standalone-mjs + cost-outweighs-value rationale commitment survives", () => {
     expect(body).toMatch(
-      /\/\/ Standalone Node scripts \(V-165\) — not part of any TS project,\s*\n?\s*\/\/ not type-checked by tsconfig\.eslint\.json\. Linting these would\s*\n?\s*\/\/ require a separate parser config; the scripts are short \+\s*\n?\s*\/\/ \.mjs ESM-only so the cost outweighs the value\./,
+      /\/\/ Standalone Node scripts \(V-165\) — not part of any TS project,\s*\/\/ not type-checked by tsconfig\.eslint\.json\. Linting these would\s*\/\/ require a separate parser config; the scripts are short \+\s*\/\/ \.mjs ESM-only so the cost outweighs the value\./,
     );
     expect(body).toMatch(/'scripts\/\*\*',/);
   });
@@ -80,7 +80,7 @@ describe('W529.C /eslint.config.js content parity', () => {
     expect(body).toMatch(/project: '\.\/tsconfig\.eslint\.json',/);
     expect(body).toMatch(/tsconfigRootDir: import\.meta\.dirname,/);
     expect(body).toMatch(
-      /'@typescript-eslint\/no-unused-vars': \[\s*\n?\s*'error',\s*\n?\s*\{ argsIgnorePattern: '\^_', varsIgnorePattern: '\^_' \},\s*\n?\s*\],/,
+      /'@typescript-eslint\/no-unused-vars': \[\s*'error',\s*\{ argsIgnorePattern: '\^_', varsIgnorePattern: '\^_' \},\s*\],/,
     );
     expect(body).toMatch(/'@typescript-eslint\/consistent-type-imports': 'error',/);
     expect(body).toMatch(/'@typescript-eslint\/no-floating-promises': 'error',/);
@@ -93,7 +93,7 @@ describe('W529.C /eslint.config.js content parity', () => {
     expect(body).toMatch(/'@typescript-eslint\/no-explicit-any': 'off',/);
     expect(body).toMatch(/'@typescript-eslint\/no-unsafe-assignment': 'off',/);
     expect(body).toMatch(
-      /files: \[\s*\n?\s*'\*\.config\.js',\s*\n?\s*'\*\.config\.ts',\s*\n?\s*'eslint\.config\.js',\s*\n?\s*'vitest\.config\.ts',\s*\n?\s*'drizzle\.config\.ts',\s*\n?\s*\],/,
+      /files: \[\s*'\*\.config\.js',\s*'\*\.config\.ts',\s*'eslint\.config\.js',\s*'vitest\.config\.ts',\s*'drizzle\.config\.ts',\s*\],/,
     );
     expect(body).toMatch(/'no-console': 'off',/);
   });

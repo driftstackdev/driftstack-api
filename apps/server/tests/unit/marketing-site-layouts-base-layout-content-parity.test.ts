@@ -35,7 +35,7 @@ describe('W523.A apps/marketing-site/src/layouts/BaseLayout.astro content parity
 
   it("V-255 noindex framing + default-indexable pinned: 'V-255 — set true on draft / pre-counsel-review pages so search engines don't index them as binding. Defaults to indexable.' + 'noindex?: boolean;' + default destructure 'noindex = false' + 'noindex ? \"noindex,nofollow\" : \"index,follow\"' robots meta — pinned so the V-255 anchor + draft-page noindex commitment + default-indexable + 4-value robots-meta survives", () => {
     expect(body).toMatch(
-      /\* V-255 — set true on draft \/ pre-counsel-review pages so search\s*\n?\s*\* engines don't index them as binding\. Defaults to indexable\./,
+      /\* V-255 — set true on draft \/ pre-counsel-review pages so search\s*\* engines don't index them as binding\. Defaults to indexable\./,
     );
     expect(body).toMatch(/noindex\?: boolean;/);
     expect(body).toMatch(/noindex = false,/);
@@ -46,11 +46,11 @@ describe('W523.A apps/marketing-site/src/layouts/BaseLayout.astro content parity
 
   it("ogImage per-page-override framing + /og-default.png fallback pinned: 'Optional per-page social-card image (absolute URL or `/`-rooted path). Defaults to the site-wide `/og-default.png` when not supplied. Pages that want a custom card pass it explicitly.' + 'ogImage?: string;' + 'Resolve OG image to an absolute URL so social crawlers can fetch it without the path-resolution headaches some platforms have with relative paths. Defaults to /og-default.png at the site root — Cloudflare Pages serves anything in apps/marketing-site/public/ at the root when build runs.' + 'const ogImageUrl = new URL(ogImage ?? \"/og-default.png\", Astro.site).toString();' — pinned so the per-page-override + /og-default.png-fallback + absolute-resolution + Cloudflare-Pages-public-mount commitment survives", () => {
     expect(body).toMatch(
-      /\* Optional per-page social-card image \(absolute URL or `\/`-rooted\s*\n?\s*\* path\)\. Defaults to the site-wide `\/og-default\.png` when not\s*\n?\s*\* supplied\. Pages that want a custom card pass it explicitly\./,
+      /\* Optional per-page social-card image \(absolute URL or `\/`-rooted\s*\* path\)\. Defaults to the site-wide `\/og-default\.png` when not\s*\* supplied\. Pages that want a custom card pass it explicitly\./,
     );
     expect(body).toMatch(/ogImage\?: string;/);
     expect(body).toMatch(
-      /\/\/ Resolve OG image to an absolute URL so social crawlers can fetch it\s*\n?\s*\/\/ without the path-resolution headaches some platforms have with\s*\n?\s*\/\/ relative paths\. Defaults to \/og-default\.png at the site root —\s*\n?\s*\/\/ Cloudflare Pages serves anything in apps\/marketing-site\/public\/\s*\n?\s*\/\/ at the root when build runs\./,
+      /\/\/ Resolve OG image to an absolute URL so social crawlers can fetch it\s*\/\/ without the path-resolution headaches some platforms have with\s*\/\/ relative paths\. Defaults to \/og-default\.png at the site root —\s*\/\/ Cloudflare Pages serves anything in apps\/marketing-site\/public\/\s*\/\/ at the root when build runs\./,
     );
     expect(body).toMatch(
       /const ogImageBase = new URL\(ogImage \?\? '\/og-default\.png', Astro\.site\)\.toString\(\);/,
@@ -69,7 +69,7 @@ describe('W523.A apps/marketing-site/src/layouts/BaseLayout.astro content parity
     // "on demand / premium fidelity" tagline onto the fleet register
     // (mirrors the hero paragraph + the OG card subline).
     expect(body).toMatch(
-      /description =\s*\n?\s*"Real iPhone Safari in the cloud — to every website, they're just people on phones\. Drive them by hand, by code, or by AI\. Start free\.",/,
+      /description =\s*"Real iPhone Safari in the cloud — to every website, they're just people on phones\. Drive them by hand, by code, or by AI\. Start free\.",/,
     );
     expect(body).toMatch(
       /const fullTitle = title\.includes\('Driftstack'\) \? title : `\$\{title\} · Driftstack`;/,

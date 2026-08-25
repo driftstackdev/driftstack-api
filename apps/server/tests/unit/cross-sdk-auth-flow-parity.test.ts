@@ -244,7 +244,7 @@ describe('W703 cross-SDK V-079 auth-flow primitives parity', () => {
 
   it('CRITICAL V-460/V-266 CLI bind default scopes pinned in sdk-typescript: `["account_owner"]`. The default-account_owner scope on the minted key is what gives CLI sessions full access (matching what the user would have in a dashboard); drift to a narrower default would silently break CLI flows.', () => {
     const ts = read(TS_AUTH);
-    expect(ts).toMatch(/Default scopes are\s*\n?\s*\*?\s*`\["account_owner"\]` server-side/);
+    expect(ts).toMatch(/Default scopes are\s*\*?\s*`\["account_owner"\]` server-side/);
   });
 
   it('CRITICAL refresh-extended-expiry framing on refresh pinned in sdk-go. The "exchanges an existing session token for a new one + extended expiry" claim is what tells dashboards refresh extends — not resets — the session. Drift to dropping would mislead callers.', () => {

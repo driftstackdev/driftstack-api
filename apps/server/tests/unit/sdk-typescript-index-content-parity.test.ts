@@ -58,7 +58,7 @@ describe('W424.A packages/sdk-typescript/src/index.ts content parity', () => {
   it('Per-resource list-page type re-exports (sessions / api-keys / webhooks / profiles / profile-snapshots)', () => {
     expect(body).toMatch(/export type \{ SessionsListPage \} from '\.\/resources\/sessions\.js';/);
     expect(body).toMatch(
-      /export type \{\s*\n?\s*ApiKeyList,\s*\n?\s*RotateApiKeyOptions,\s*\n?\s*RotateApiKeyResponse,\s*\n?\s*\} from '\.\/resources\/api-keys\.js';/,
+      /export type \{\s*ApiKeyList,\s*RotateApiKeyOptions,\s*RotateApiKeyResponse,\s*\} from '\.\/resources\/api-keys\.js';/,
     );
     expect(body).toMatch(
       /export type \{ WebhookEndpointList, WebhookDeliveryListPage \} from '\.\/resources\/webhooks\.js';/,
@@ -75,28 +75,28 @@ describe('W424.A packages/sdk-typescript/src/index.ts content parity', () => {
 
   it('Account types re-export (AccountSelfProfile / WebSessionEntry / ListWebSessionsResponse / UploadAvatarResponse / RateLimitBucket / GetAccountRateLimitsResponse / BundledLlmSettings / BundledLlmStatus / UpdateBundledLlmSettingsRequest / ByokAnthropicKeyMetadata / SetByokAnthropicKeyResponse / TestByokAnthropicKeyResult)', () => {
     expect(body).toMatch(
-      /export type \{\s*\n?\s*AccountSelfProfile,\s*\n?\s*WebSessionEntry,\s*\n?\s*ListWebSessionsResponse,\s*\n?\s*UploadAvatarResponse,\s*\n?\s*RateLimitBucket,\s*\n?\s*GetAccountRateLimitsResponse,\s*\n?\s*BundledLlmSettings,\s*\n?\s*BundledLlmStatus,\s*\n?\s*UpdateBundledLlmSettingsRequest,\s*\n?\s*ByokAnthropicKeyMetadata,\s*\n?\s*SetByokAnthropicKeyResponse,\s*\n?\s*TestByokAnthropicKeyResult,\s*\n?\s*\} from '\.\/resources\/account\.js';/,
+      /export type \{\s*AccountSelfProfile,\s*WebSessionEntry,\s*ListWebSessionsResponse,\s*UploadAvatarResponse,\s*RateLimitBucket,\s*GetAccountRateLimitsResponse,\s*BundledLlmSettings,\s*BundledLlmStatus,\s*UpdateBundledLlmSettingsRequest,\s*ByokAnthropicKeyMetadata,\s*SetByokAnthropicKeyResponse,\s*TestByokAnthropicKeyResult,\s*\} from '\.\/resources\/account\.js';/,
     );
   });
 
   it('MFA + audit-log + legal type re-exports', () => {
     expect(body).toMatch(
-      /export type \{\s*\n?\s*MfaStatusResponse,\s*\n?\s*MfaEnrollResponse,\s*\n?\s*MfaVerifyRequest,\s*\n?\s*MfaVerifyResponse,\s*\n?\s*MfaDisableRequest,\s*\n?\s*\} from '\.\/resources\/mfa\.js';/,
+      /export type \{\s*MfaStatusResponse,\s*MfaEnrollResponse,\s*MfaVerifyRequest,\s*MfaVerifyResponse,\s*MfaDisableRequest,\s*\} from '\.\/resources\/mfa\.js';/,
     );
     expect(body).toMatch(
-      /export type \{\s*\n?\s*AuditLogEntry,\s*\n?\s*AuditLogListPage,\s*\n?\s*AuditLogQuery,\s*\n?\s*AuditLogExportResponse,\s*\n?\s*\} from '\.\/resources\/audit-log\.js';/,
+      /export type \{\s*AuditLogEntry,\s*AuditLogListPage,\s*AuditLogQuery,\s*AuditLogExportResponse,\s*\} from '\.\/resources\/audit-log\.js';/,
     );
     expect(body).toMatch(
-      /export type \{\s*\n?\s*LegalDocumentEntry,\s*\n?\s*LegalRequiredEntry,\s*\n?\s*AcceptLegalDocumentRequest,\s*\n?\s*AcceptLegalDocumentResponse,\s*\n?\s*\} from '\.\/resources\/legal\.js';/,
+      /export type \{\s*LegalDocumentEntry,\s*LegalRequiredEntry,\s*AcceptLegalDocumentRequest,\s*AcceptLegalDocumentResponse,\s*\} from '\.\/resources\/legal\.js';/,
     );
     // Team types re-export (added in the slice that closed the
     // TS SDK type-surface gap for client.team.* method params + return types).
     expect(body).toMatch(
-      /export type \{\s*\n?\s*TeamRole,\s*\n?\s*TeamMember,\s*\n?\s*TeamInvite,\s*\n?\s*TeamOwner,\s*\n?\s*TeamMembersList,\s*\n?\s*TeamInvitesList,\s*\n?\s*TeamOwnersList,\s*\n?\s*AcceptInviteResponse,\s*\n?\s*InviteOptions,\s*\n?\s*\} from '\.\/resources\/team\.js';/,
+      /export type \{\s*TeamRole,\s*TeamMember,\s*TeamInvite,\s*TeamOwner,\s*TeamMembersList,\s*TeamInvitesList,\s*TeamOwnersList,\s*AcceptInviteResponse,\s*InviteOptions,\s*\} from '\.\/resources\/team\.js';/,
     );
     // Crypto-orders parameter-type re-exports.
     expect(body).toMatch(
-      /export type \{\s*\n?\s*CreateCryptoCheckoutOptions,\s*\n?\s*ListCryptoOrdersOptions,\s*\n?\s*\} from '\.\/resources\/crypto-orders\.js';/,
+      /export type \{\s*CreateCryptoCheckoutOptions,\s*ListCryptoOrdersOptions,\s*\} from '\.\/resources\/crypto-orders\.js';/,
     );
   });
 
@@ -144,7 +144,7 @@ describe('W424.A packages/sdk-typescript/src/index.ts content parity', () => {
 
   it('api-types re-export framing pinned (so consumers do not need a second @driftstack/api-types dependency)', () => {
     expect(body).toMatch(
-      /\/\/ Re-export the public Zod schemas \+ types so SDK consumers don't need a\s*\n?\s*\/\/ second @driftstack\/api-types dependency\./,
+      /\/\/ Re-export the public Zod schemas \+ types so SDK consumers don't need a\s*\/\/ second @driftstack\/api-types dependency\./,
     );
     expect(body).toMatch(/\} from '@driftstack\/api-types';/);
   });

@@ -133,7 +133,7 @@ describe('W701 cross-SDK V-296 api-keys lifecycle parity', () => {
 
     // sdk-python: "Plaintext is in the response"
     expect(py).toMatch(/Plaintext is in the response/);
-    expect(py).toMatch(/cannot be\s*\n?\s*retrieved later/);
+    expect(py).toMatch(/cannot be\s*retrieved later/);
   });
 
   it('CRITICAL "plaintext is never included" framing on list pinned per-SDK. The list endpoint never includes plaintext — drift to including would silently widen the customer\'s key-leak attack surface (anyone with read scope could enumerate plaintexts).', () => {
@@ -142,7 +142,7 @@ describe('W701 cross-SDK V-296 api-keys lifecycle parity', () => {
     const py = read(PY_KEYS);
 
     expect(ts).toMatch(/Plaintext is never included/);
-    expect(go).toMatch(/Plaintext is never\s*\n?\s*\/\/\s*included/);
+    expect(go).toMatch(/Plaintext is never\s*\/\/\s*included/);
     expect(py).toMatch(/Plaintext never included/);
   });
 
@@ -196,10 +196,10 @@ describe('W701 cross-SDK V-296 api-keys lifecycle parity', () => {
     const py = read(PY_KEYS);
 
     // sdk-typescript: "Requires the\n   * `account_owner` scope on the calling key"
-    expect(ts).toMatch(/Requires the\s*\n?\s*\*?\s*`account_owner` scope on the calling key/);
+    expect(ts).toMatch(/Requires the\s*\*?\s*`account_owner` scope on the calling key/);
 
     // sdk-go: "Requires the account_owner scope\n// on the calling key"
-    expect(go).toMatch(/Requires the account_owner scope\s*\n?\s*\/\/\s*on the calling key/);
+    expect(go).toMatch(/Requires the account_owner scope\s*\/\/\s*on the calling key/);
 
     // sdk-python: "Requires the ``account_owner`` scope on the calling key"
     expect(py).toMatch(/Requires the ``account_owner`` scope on the calling key/);
@@ -212,16 +212,16 @@ describe('W701 cross-SDK V-296 api-keys lifecycle parity', () => {
 
     // sdk-typescript: "auto-revokes at the\n   * grace boundary via the existing expires_at-driven auth gate"
     expect(ts).toMatch(
-      /auto-revokes at the\s*\n?\s*\*?\s*grace boundary via the existing expires_at-driven auth gate/,
+      /auto-revokes at the\s*\*?\s*grace boundary via the existing expires_at-driven auth gate/,
     );
 
     // sdk-go: "auto-revokes at\n// the grace boundary via the existing expires_at-driven auth gate"
     expect(go).toMatch(
-      /auto-revokes at\s*\n?\s*\/\/\s*the grace boundary via the existing expires_at-driven auth gate/,
+      /auto-revokes at\s*\/\/\s*the grace boundary via the existing expires_at-driven auth gate/,
     );
 
     // sdk-python: "the old key auto-revokes at\n        the grace boundary"
-    expect(py).toMatch(/auto-revokes at\s*\n?\s*the grace boundary/);
+    expect(py).toMatch(/auto-revokes at\s*the grace boundary/);
   });
 
   it('Cross-SDK V-296 5-invariant cluster — V-296 anchor + 4-verb surface + 3 wire-paths + plaintext-ONCE-on-create-rotate + 24h-grace-rotate framing. Drift on any would fragment the cross-language api-keys contract.', () => {

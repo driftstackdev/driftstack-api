@@ -165,7 +165,7 @@ describe('W1053 routes/admin-accounts D-025 + V-281 cross-source invariant', () 
 
   it("CRITICAL AdminAuditAction taxonomy — at minimum 'account.tier_changed' + 'account.suspended' + 'account.unsuspended'. The 3-action canonical mutation set anchored by the header comment.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-accounts.ts'));
-    expect(p).toMatch(/withAudit\(\s*\n?\s*request,\s*\n?\s*'account\.tier_changed',/);
+    expect(p).toMatch(/withAudit\(\s*request,\s*'account\.tier_changed',/);
     expect(p).toMatch(/'account\.suspended',/);
     expect(p).toMatch(/'account\.unsuspended',/);
   });

@@ -49,7 +49,7 @@ describe('W590.A packages/sdk-go/api_keys.go content parity', () => {
       /\/\/ Create generates an API key\. Plaintext is in the response — store it/,
     );
     expect(body).toMatch(
-      /\/\/ now, it cannot be retrieved later\. Requires the account_owner scope\s*\n?\s*\/\/\s*on the calling key\./,
+      /\/\/ now, it cannot be retrieved later\. Requires the account_owner scope\s*\/\/\s*on the calling key\./,
     );
     expect(body).toMatch(
       /func \(r \*APIKeysResource\) Create\(ctx context\.Context, body \*CreateAPIKeyRequest\) \(\*CreateAPIKeyResponse, error\)/,

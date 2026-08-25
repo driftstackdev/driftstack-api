@@ -93,19 +93,19 @@ describe('services/webhook-secret-force-rotation content parity', () => {
       /\/\/ Arc 3 sub-slice 28\.2 \(v2-#28 webhook secret server-initiated force-rotation\)\./,
     );
     expect(body).toMatch(
-      /\/\/ Daily sweep that auto-rotates webhook signing secrets past the\s*\n?\s*\/\/ 91-day age threshold \(Q1=B\)\. For each rotated endpoint:/,
+      /\/\/ Daily sweep that auto-rotates webhook signing secrets past the\s*\/\/ 91-day age threshold \(Q1=B\)\. For each rotated endpoint:/,
     );
     expect(body).toMatch(
-      /\/\/ {3}1\. Mint fresh secret via WebhooksRepo\.forceRotateSecret \(sub-\s*\n?\s*\/\/ {6}slice 28\.1 columns get stamped — graceWindowEndsAt = now \+ 7d\s*\n?\s*\/\/ {6}per Q2=B; forceRotatedAt = now so this sweep skips it next\s*\n?\s*\/\/ {6}cycle\)\./,
+      /\/\/ {3}1\. Mint fresh secret via WebhooksRepo\.forceRotateSecret \(sub-\s*\/\/ {6}slice 28\.1 columns get stamped — graceWindowEndsAt = now \+ 7d\s*\/\/ {6}per Q2=B; forceRotatedAt = now so this sweep skips it next\s*\/\/ {6}cycle\)\./,
     );
     expect(body).toMatch(
-      /\/\/ {3}2\. Email the customer the new secret prefix \+ 7-day grace\s*\n?\s*\/\/ {6}deadline \(sub-slice 28\.4 template wiring lands separately;\s*\n?\s*\/\/ {6}this slice fires the existing rotation-reminder email shape\s*\n?\s*\/\/ {6}for now\)\./,
+      /\/\/ {3}2\. Email the customer the new secret prefix \+ 7-day grace\s*\/\/ {6}deadline \(sub-slice 28\.4 template wiring lands separately;\s*\/\/ {6}this slice fires the existing rotation-reminder email shape\s*\/\/ {6}for now\)\./,
     );
   });
 
   it("7-day grace cross-slice integration framing pinned: 'The 7-day grace window is honoured by the v2-#20 worker via secret_prev / secret_prev_expires_at; v2-#29's cleanup nulls secret_prev past the grace deadline. Validation against incoming HMACs (sub-slice 28.3) reads graceWindowEndsAt as the cutoff.' — pinned so the v2-#20 dual-signing + v2-#29 cleanup + 28.3 HMAC-validation cross-references all stay documented (drift would silently break the dual-signing handoff)", () => {
     expect(body).toMatch(
-      /\/\/ The 7-day grace window is honoured by the v2-#20 worker via\s*\n?\s*\/\/ secret_prev \/ secret_prev_expires_at; v2-#29's cleanup nulls\s*\n?\s*\/\/ secret_prev past the grace deadline\. Validation against incoming\s*\n?\s*\/\/ HMACs \(sub-slice 28\.3\) reads graceWindowEndsAt as the cutoff\./,
+      /\/\/ The 7-day grace window is honoured by the v2-#20 worker via\s*\/\/ secret_prev \/ secret_prev_expires_at; v2-#29's cleanup nulls\s*\/\/ secret_prev past the grace deadline\. Validation against incoming\s*\/\/ HMACs \(sub-slice 28\.3\) reads graceWindowEndsAt as the cutoff\./,
     );
   });
 
@@ -117,7 +117,7 @@ describe('services/webhook-secret-force-rotation content parity', () => {
 
   it("v2-#36 dashboardUrl framing pinned: 'customer-facing dashboard origin. The reminder email links into the dashboard rotation-management view.' — pinned so the rotation-management-view cross-link contract stays documented", () => {
     expect(body).toMatch(
-      /\/\*\* v2-#36 — customer-facing dashboard origin\. The reminder email\s*\n?\s*\*\s+links into the dashboard rotation-management view\. \*\//,
+      /\/\*\* v2-#36 — customer-facing dashboard origin\. The reminder email\s*\*\s+links into the dashboard rotation-management view\. \*\//,
     );
     expect(body).toMatch(/dashboardUrl: string;/);
   });
@@ -128,25 +128,25 @@ describe('services/webhook-secret-force-rotation content parity', () => {
 
   it('tickOnce 5-step force-rotation pipeline pinned: 1. findEndpointsNeedingForceRotation 2. for each: generateWebhookSecret + webhookSecretPrefix + graceWindowEndsAt computation 3. repo.forceRotateSecret (returns null if endpoint disappeared/disabled — skip email) 4. attempt sendWebhookSecretForceRotated email 5. log warning on no-accountEmail. Drift to skipping the null-return branch would crash on disappeared rows; drift to skipping forceRotateSecret on null-email would leave eligible rows in the sweep set forever', () => {
     expect(body).toMatch(
-      /const newSecret = generateWebhookSecret\(\);\s*\n?\s*const newPrefix = webhookSecretPrefix\(newSecret\);\s*\n?\s*const graceWindowEndsAt = new Date\(now\.getTime\(\) \+ GRACE_WINDOW_DAYS \* MS_PER_DAY\);/,
+      /const newSecret = generateWebhookSecret\(\);\s*const newPrefix = webhookSecretPrefix\(newSecret\);\s*const graceWindowEndsAt = new Date\(now\.getTime\(\) \+ GRACE_WINDOW_DAYS \* MS_PER_DAY\);/,
     );
     expect(body).toMatch(
-      /const updated: WebhookEndpointRow \| null = await this\.repo\.forceRotateSecret\(\{\s*\n?\s*id: ep\.id,\s*\n?\s*newSecret,\s*\n?\s*newPrefix,\s*\n?\s*graceWindowEndsAt,\s*\n?\s*now,\s*\n?\s*\}\);/,
+      /const updated: WebhookEndpointRow \| null = await this\.repo\.forceRotateSecret\(\{\s*id: ep\.id,\s*newSecret,\s*newPrefix,\s*graceWindowEndsAt,\s*now,\s*\}\);/,
     );
     expect(body).toMatch(
-      /if \(updated === null\) \{\s*\n?\s*this\.logger\.warn\(\s*\n?\s*\{ endpointId: ep\.id, accountId: ep\.accountId \},\s*\n?\s*'force-rotation update returned no row \(endpoint disappeared \/ disabled\); skipping email',\s*\n?\s*\);\s*\n?\s*continue;\s*\n?\s*\}/,
+      /if \(updated === null\) \{\s*this\.logger\.warn\(\s*\{ endpointId: ep\.id, accountId: ep\.accountId \},\s*'force-rotation update returned no row \(endpoint disappeared \/ disabled\); skipping email',\s*\);\s*continue;\s*\}/,
     );
   });
 
   it('Arc 3 sub-slice 28.4 dedicated-template framing pinned: \'dedicated template distinguishes the force-rotation event from the 60-day reminder. Customer sees "we auto-rotated for security" framing instead of "rotate at your convenience".\' — pinned so the dedicated-template + tone-distinction (security-event vs. convenience-nudge) contract stays documented', () => {
     expect(body).toMatch(
-      /\/\/ Arc 3 sub-slice 28\.4 \(v2-#28\) — dedicated template\s*\n?\s*\/\/ distinguishes the force-rotation event from the 60-day\s*\n?\s*\/\/ reminder\. Customer sees "we auto-rotated for security"\s*\n?\s*\/\/ framing instead of "rotate at your convenience"\./,
+      /\/\/ Arc 3 sub-slice 28\.4 \(v2-#28\) — dedicated template\s*\/\/ distinguishes the force-rotation event from the 60-day\s*\/\/ reminder\. Customer sees "we auto-rotated for security"\s*\/\/ framing instead of "rotate at your convenience"\./,
     );
   });
 
   it('sendWebhookSecretForceRotated 5-field call shape pinned: to + endpointUrl + newSecretPrefix + graceWindowEndsAt + dashboardUrl. Drift to dropping graceWindowEndsAt would leave customers without a deadline anchor for their verifier rollover; drift to dropping newSecretPrefix would force customers to log into the dashboard just to identify which key rotated', () => {
     expect(body).toMatch(
-      /await this\.email\.sendWebhookSecretForceRotated\(\{\s*\n?\s*to: ep\.accountEmail,\s*\n?\s*endpointUrl: ep\.url,\s*\n?\s*newSecretPrefix: newPrefix,\s*\n?\s*graceWindowEndsAt,\s*\n?\s*dashboardUrl: this\.dashboardUrl,\s*\n?\s*\}\);/,
+      /await this\.email\.sendWebhookSecretForceRotated\(\{\s*to: ep\.accountEmail,\s*endpointUrl: ep\.url,\s*newSecretPrefix: newPrefix,\s*graceWindowEndsAt,\s*dashboardUrl: this\.dashboardUrl,\s*\}\);/,
     );
   });
 

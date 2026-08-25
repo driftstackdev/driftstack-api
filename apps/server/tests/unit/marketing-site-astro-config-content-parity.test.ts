@@ -36,7 +36,7 @@ describe('W525.A apps/marketing-site/astro.config.mjs content parity', () => {
 
   it("Static-output framing pinned: 'Static site (Astro's default output) — Cloudflare Pages serves the `dist/` directory directly. No SSR, no Workers, no edge functions. Forms post to a separate API endpoint when forms land (Workstream C admin panel handles inbound form submissions).' + 'site: https://driftstack.dev' + 'output: \"static\"' — pinned so the pure-static + no-SSR + no-Workers + no-edge-functions + driftstack.dev-canonical-site commitment survives (drift to SSR/output:'server' would invite client-side JS bundle into a pure-static marketing site)", () => {
     expect(body).toMatch(
-      /\/\/ Static site \(Astro's default output\) — Cloudflare Pages serves the\s*\n?\s*\/\/ `dist\/` directory directly\. No SSR, no Workers, no edge functions\.\s*\n?\s*\/\/ Forms post to a separate API endpoint when forms land \(Workstream C\s*\n?\s*\/\/ admin panel handles inbound form submissions\)\./,
+      /\/\/ Static site \(Astro's default output\) — Cloudflare Pages serves the\s*\/\/ `dist\/` directory directly\. No SSR, no Workers, no edge functions\.\s*\/\/ Forms post to a separate API endpoint when forms land \(Workstream C\s*\/\/ admin panel handles inbound form submissions\)\./,
     );
     expect(body).toMatch(/site: 'https:\/\/driftstack\.dev',/);
     expect(body).toMatch(/output: 'static',/);
@@ -45,10 +45,10 @@ describe('W525.A apps/marketing-site/astro.config.mjs content parity', () => {
   it("V-106 sitemap framing pinned: 'V-106: @astrojs/sitemap auto-generates `dist/sitemap-index.xml` + `dist/sitemap-0.xml` from every `.astro` page in `src/pages/` (excludes 404.astro automatically). The companion `public/robots.txt` points crawlers at the sitemap.' + sitemap import + 'filter: (page) => !page.includes(\"/404\")' — pinned so the V-106 anchor + sitemap-index.xml + sitemap-0.xml + 404-filter + robots.txt-companion commitment survives", () => {
     expect(body).toMatch(/import sitemap from '@astrojs\/sitemap';/);
     expect(body).toMatch(
-      /\/\/ V-106: @astrojs\/sitemap auto-generates `dist\/sitemap-index\.xml` \+\s*\n?\s*\/\/ `dist\/sitemap-0\.xml` from every `\.astro` page in `src\/pages\/` \(excludes\s*\n?\s*\/\/ 404\.astro automatically\)\. The companion `public\/robots\.txt` points\s*\n?\s*\/\/ crawlers at the sitemap\./,
+      /\/\/ V-106: @astrojs\/sitemap auto-generates `dist\/sitemap-index\.xml` \+\s*\/\/ `dist\/sitemap-0\.xml` from every `\.astro` page in `src\/pages\/` \(excludes\s*\/\/ 404\.astro automatically\)\. The companion `public\/robots\.txt` points\s*\/\/ crawlers at the sitemap\./,
     );
     expect(body).toMatch(
-      /\/\/ 404 and noindex utility routes \(e\.g\. \/newtab\) don't belong\s*\n?\s*\/\/ in the sitemap\./,
+      /\/\/ 404 and noindex utility routes \(e\.g\. \/newtab\) don't belong\s*\/\/ in the sitemap\./,
     );
     expect(body).toMatch(
       /filter: \(page\) => !page\.includes\('\/404'\) && !page\.includes\('\/newtab'\),/,
@@ -58,7 +58,7 @@ describe('W525.A apps/marketing-site/astro.config.mjs content parity', () => {
   it("V-469 Sentry integration framing pinned: 'V-469 — @sentry/astro integration. Activates when PUBLIC_SENTRY_DSN_MARKETING is set at build time; skips entirely when unset.' + 'const SENTRY_DSN = process.env.PUBLIC_SENTRY_DSN_MARKETING ?? \"\";' + 'const SENTRY_RELEASE = process.env.SENTRY_RELEASE ?? process.env.GIT_SHA ?? \"unknown\";' + 'const SENTRY_AUTH_TOKEN = process.env.SENTRY_AUTH_TOKEN ?? \"\";' — pinned so the V-469 anchor + build-time-DSN-opt-in + 3-level-release-fallback (SENTRY_RELEASE → GIT_SHA → 'unknown') + auth-token-from-env commitment survives", () => {
     expect(body).toMatch(/import sentry from '@sentry\/astro';/);
     expect(body).toMatch(
-      /\/\/ V-469 — @sentry\/astro integration\. Activates when\s*\n?\s*\/\/ PUBLIC_SENTRY_DSN_MARKETING is set at build time; skips entirely\s*\n?\s*\/\/ when unset\./,
+      /\/\/ V-469 — @sentry\/astro integration\. Activates when\s*\/\/ PUBLIC_SENTRY_DSN_MARKETING is set at build time; skips entirely\s*\/\/ when unset\./,
     );
     expect(body).toMatch(/const SENTRY_DSN = process\.env\.PUBLIC_SENTRY_DSN_MARKETING \?\? '';/);
     expect(body).toMatch(/const SENTRY_AUTH_TOKEN = process\.env\.SENTRY_AUTH_TOKEN \?\? '';/);

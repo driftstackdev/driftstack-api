@@ -60,16 +60,16 @@ describe('W406.B apps/server/src/services/stripe-webhooks.ts content parity', ()
 
   it('V-089 framing pinned: processed_stripe_events ledger + duplicate short-circuit + 3-day re-delivery window', () => {
     expect(body).toMatch(
-      /Idempotency — `processed_stripe_events` records each handled\s*\n?\s*\/\/\s*`event\.id`\. Duplicates short-circuit at 200 OK without re-running\s*\n?\s*\/\/\s*the handler\. Stripe re-delivers within 3 days; the table is the\s*\n?\s*\/\/\s*durable record of "we've already seen this\."/,
+      /Idempotency — `processed_stripe_events` records each handled\s*\/\/\s*`event\.id`\. Duplicates short-circuit at 200 OK without re-running\s*\/\/\s*the handler\. Stripe re-delivers within 3 days; the table is the\s*\/\/\s*durable record of "we've already seen this\."/,
     );
     expect(body).toMatch(
-      /Signature verification is the route's job \(it has the raw body\); this\s*\n?\s*\/\/\s*service receives a verified, parsed event\./,
+      /Signature verification is the route's job \(it has the raw body\); this\s*\/\/\s*service receives a verified, parsed event\./,
     );
   });
 
   it('STATUS_VALUES: 8-literal Stripe subscription status enum (incomplete|incomplete_expired|trialing|active|past_due|canceled|unpaid|paused)', () => {
     expect(body).toMatch(
-      /const STATUS_VALUES = \[\s*\n?\s*'incomplete',\s*\n?\s*'incomplete_expired',\s*\n?\s*'trialing',\s*\n?\s*'active',\s*\n?\s*'past_due',\s*\n?\s*'canceled',\s*\n?\s*'unpaid',\s*\n?\s*'paused',\s*\n?\s*\] as const;/,
+      /const STATUS_VALUES = \[\s*'incomplete',\s*'incomplete_expired',\s*'trialing',\s*'active',\s*'past_due',\s*'canceled',\s*'unpaid',\s*'paused',\s*\] as const;/,
     );
   });
 
@@ -81,13 +81,13 @@ describe('W406.B apps/server/src/services/stripe-webhooks.ts content parity', ()
 
   it("handle(): hasEvent short-circuit → 'duplicate'; concurrent-duplicate-race resolved via recordEvent.inserted flag", () => {
     expect(body).toMatch(
-      /if \(await this\.repo\.hasEvent\(event\.id\)\) \{[\s\S]+?'duplicate Stripe event — short-circuit',\s*\n?\s*\);\s*\n?\s*return 'duplicate';/,
+      /if \(await this\.repo\.hasEvent\(event\.id\)\) \{[\s\S]+?'duplicate Stripe event — short-circuit',\s*\);\s*return 'duplicate';/,
     );
     expect(body).toMatch(
-      /\/\/ Race: a concurrent delivery could insert the same row between our\s*\n?\s*\/\/ hasEvent check above and this insert\. recordEvent's `inserted` flag\s*\n?\s*\/\/ resolves the race — if false, the other delivery handled it first\./,
+      /\/\/ Race: a concurrent delivery could insert the same row between our\s*\/\/ hasEvent check above and this insert\. recordEvent's `inserted` flag\s*\/\/ resolves the race — if false, the other delivery handled it first\./,
     );
     expect(body).toMatch(
-      /if \(!inserted\) \{[\s\S]+?'concurrent duplicate — other delivery won the race',\s*\n?\s*\);\s*\n?\s*return 'duplicate';/,
+      /if \(!inserted\) \{[\s\S]+?'concurrent duplicate — other delivery won the race',\s*\);\s*return 'duplicate';/,
     );
   });
 
@@ -103,13 +103,13 @@ describe('W406.B apps/server/src/services/stripe-webhooks.ts content parity', ()
 
   it('V-202b handleSubscriptionUpsert: tier change only on active|trialing; lifecycle dispatch when wired', () => {
     expect(body).toMatch(
-      /case 'customer\.subscription\.created':\s*\n?\s*case 'customer\.subscription\.updated':\s*\n?\s*return await this\.handleSubscriptionUpsert\(event\);/,
+      /case 'customer\.subscription\.created':\s*case 'customer\.subscription\.updated':\s*return await this\.handleSubscriptionUpsert\(event\);/,
     );
     expect(body).toMatch(
-      /\/\/ Tier change only when the subscription is in an active-paying\s*\n?\s*\/\/ state\. Trialing counts as active for our purposes \(the customer\s*\n?\s*\/\/ gets the tier; Stripe handles the dunning\)\.\s*\n?\s*if \(tier !== undefined && \(status === 'active' \|\| status === 'trialing'\)\) \{/,
+      /\/\/ Tier change only when the subscription is in an active-paying\s*\/\/ state\. Trialing counts as active for our purposes \(the customer\s*\/\/ gets the tier; Stripe handles the dunning\)\.\s*if \(tier !== undefined && \(status === 'active' \|\| status === 'trialing'\)\) \{/,
     );
     expect(body).toMatch(
-      /\/\/ V-202b — lifecycle dispatcher fans this out into audit emit \+\s*\n?\s*\/\/ tier-changed email at one call site\./,
+      /\/\/ V-202b — lifecycle dispatcher fans this out into audit emit \+\s*\/\/ tier-changed email at one call site\./,
     );
     // Fable last-hours audit 2026-07-07 (C4) — the active/trialing branch sets
     // the account to its BEST active/trialing tier (rank-aware reconcile), not
@@ -120,7 +120,7 @@ describe('W406.B apps/server/src/services/stripe-webhooks.ts content parity', ()
       /const \{ previousTier, appliedTier \} = await this\.repo\.setAccountTierToBestActive\(\{/,
     );
     expect(body).toMatch(
-      /if \(this\.accountLifecycle !== null && appliedTier !== null && previousTier !== appliedTier\) \{\s*\n?\s*await this\.accountLifecycle\.emit\(accountId, \{\s*\n?\s*kind: 'subscription\.tier_changed',\s*\n?\s*fromTier: previousTier,\s*\n?\s*toTier: appliedTier,/,
+      /if \(this\.accountLifecycle !== null && appliedTier !== null && previousTier !== appliedTier\) \{\s*await this\.accountLifecycle\.emit\(accountId, \{\s*kind: 'subscription\.tier_changed',\s*fromTier: previousTier,\s*toTier: appliedTier,/,
     );
   });
 
@@ -131,75 +131,75 @@ describe('W406.B apps/server/src/services/stripe-webhooks.ts content parity', ()
     // account's remaining active subs, so the emit carries the APPLIED tier.
     expect(body).toMatch(/downgradeAccountTierToBestRemaining\(\{/);
     expect(body).toMatch(
-      /kind: 'subscription\.tier_changed',\s*\n?\s*fromTier: previousTier,\s*\n?\s*toTier: appliedTier,/,
+      /kind: 'subscription\.tier_changed',\s*fromTier: previousTier,\s*toTier: appliedTier,/,
     );
   });
 
   it('V-327 handleInvoiceUpcoming: decode amount+currency+customer → dispatch subscription.renewal_reminder lifecycle; bails silently on missing/unknown', () => {
     expect(body).toMatch(
-      /V-327 — `invoice\.upcoming` handler\. Decodes the invoice, resolves\s*\n?\s*\*\s*the customer to a local account, and dispatches the renewal_\s*\n?\s*\*\s*reminder lifecycle event\./,
+      /V-327 — `invoice\.upcoming` handler\. Decodes the invoice, resolves\s*\*\s*the customer to a local account, and dispatches the renewal_\s*\*\s*reminder lifecycle event\./,
     );
     expect(body).toMatch(/'invoice\.upcoming missing required fields; skipping renewal reminder',/);
     expect(body).toMatch(
-      /kind: 'subscription\.renewal_reminder',\s*\n?\s*amountCents: amountDue,\s*\n?\s*currency,\s*\n?\s*renewalDate: renewalUnix,\s*\n?\s*stripeEventId: event\.id,\s*\n?\s*stripeInvoiceId,/,
+      /kind: 'subscription\.renewal_reminder',\s*amountCents: amountDue,\s*currency,\s*renewalDate: renewalUnix,\s*stripeEventId: event\.id,\s*stripeInvoiceId,/,
     );
   });
 
   it('V-082 handleCheckoutCompleted: subscription mode informational; non-subscription modes no-op (trial_pack payment-mode retired 2026-05-27)', () => {
     expect(body).toMatch(
-      /\/\/ The one-time trial_pack \(payment-mode checkout\) was retired\s*\n?\s*\/\/ 2026-05-27 in favour of the perpetual free tier; all checkouts are\s*\n?\s*\/\/ now subscriptions\./,
+      /\/\/ The one-time trial_pack \(payment-mode checkout\) was retired\s*\/\/ 2026-05-27 in favour of the perpetual free tier; all checkouts are\s*\/\/ now subscriptions\./,
     );
     expect(body).toMatch(/checkout subscription completed \(informational\)/);
   });
 
   it('S44 2026-07-07 invoice wire-in (TD-001 revival, supersedes the V-202b log-only decision): invoice.payment_succeeded → handleInvoicePaymentSucceeded → billing.payment_succeeded lifecycle event (billing-receipt email, V-204 opt-out-aware, zero-amount skipped); invoice.payment_failed → handleInvoicePaymentFailed → billing.payment_failed (billing-failure email, never opt-outable, nullable next_payment_attempt); invoice.finalized stays informational/log-only', () => {
     expect(body).toMatch(
-      /\/\/ S44 2026-07-07 \(founder-approved\) — Driftstack-branded\s*\n?\s*\/\/ billing receipt, the TD-001 revival\./,
+      /\/\/ S44 2026-07-07 \(founder-approved\) — Driftstack-branded\s*\/\/ billing receipt, the TD-001 revival\./,
     );
     expect(body).toMatch(
-      /case 'invoice\.payment_succeeded':[\s\S]+?await this\.handleInvoicePaymentSucceeded\(event\);\s*\n?\s*return 'handled';/,
+      /case 'invoice\.payment_succeeded':[\s\S]+?await this\.handleInvoicePaymentSucceeded\(event\);\s*return 'handled';/,
     );
     expect(body).toMatch(
-      /case 'invoice\.payment_failed':[\s\S]+?await this\.handleInvoicePaymentFailed\(event\);\s*\n?\s*return 'handled';/,
+      /case 'invoice\.payment_failed':[\s\S]+?await this\.handleInvoicePaymentFailed\(event\);\s*return 'handled';/,
     );
     expect(body).toMatch(
-      /case 'invoice\.finalized':[\s\S]+?this\.logEvent\(event, 'invoice'\);\s*\n?\s*return 'handled';/,
+      /case 'invoice\.finalized':[\s\S]+?this\.logEvent\(event, 'invoice'\);\s*return 'handled';/,
     );
     // Receipt dispatch shape — the lifecycle event carries the decoded
     // invoice fields; opt-out lives in AccountLifecycleService.
     expect(body).toMatch(
-      /kind: 'billing\.payment_succeeded',\s*\n?\s*amountCents: amountPaid,\s*\n?\s*currency,\s*\n?\s*periodStart,\s*\n?\s*periodEnd,\s*\n?\s*hostedInvoiceUrl,\s*\n?\s*stripeEventId: event\.id,\s*\n?\s*stripeInvoiceId,/,
+      /kind: 'billing\.payment_succeeded',\s*amountCents: amountPaid,\s*currency,\s*periodStart,\s*periodEnd,\s*hostedInvoiceUrl,\s*stripeEventId: event\.id,\s*stripeInvoiceId,/,
     );
     expect(body).toMatch(
-      /kind: 'billing\.payment_failed',\s*\n?\s*amountCents: amountDue,\s*\n?\s*currency,\s*\n?\s*retryAt,\s*\n?\s*stripeEventId: event\.id,\s*\n?\s*stripeInvoiceId,/,
+      /kind: 'billing\.payment_failed',\s*amountCents: amountDue,\s*currency,\s*retryAt,\s*stripeEventId: event\.id,\s*stripeInvoiceId,/,
     );
     // Zero-amount receipts are noise — pinned skip.
     expect(body).toMatch(
-      /if \(amountPaid === 0\) \{\s*\n?\s*this\.logEvent\(event, 'invoice\.payment_succeeded \(zero-amount — no receipt\)'\);\s*\n?\s*return;/,
+      /if \(amountPaid === 0\) \{\s*this\.logEvent\(event, 'invoice\.payment_succeeded \(zero-amount — no receipt\)'\);\s*return;/,
     );
   });
 
   it('setAccountTier: returns previousTier so callers detect real change (V-226 audit emit only fires on previousTier !== new tier)', () => {
     expect(body).toMatch(
-      /Returns the previous tier so callers can detect a real change\s*\n?\s*\*\s*\(V-226 audit emit only fires when previousTier !== new tier\)\./,
+      /Returns the previous tier so callers can detect a real change\s*\*\s*\(V-226 audit emit only fires when previousTier !== new tier\)\./,
     );
     expect(body).toMatch(
-      /setAccountTier\(args: \{\s*\n?\s*accountId: string;\s*\n?\s*tier: AccountTier;\s*\n?\s*at: Date;\s*\n?\s*\}\): Promise<\{ previousTier: AccountTier \| null \}>;/,
+      /setAccountTier\(args: \{\s*accountId: string;\s*tier: AccountTier;\s*at: Date;\s*\}\): Promise<\{ previousTier: AccountTier \| null \}>;/,
     );
   });
 
   it('readSubscriptionPriceId helper: extracts subscription.items.data[0].price.id; null on missing/non-array', () => {
     expect(body).toMatch(
-      /Subscription price id lives at `subscription\.items\.data\[0\]\.price\.id`\s*\n?\s*\*\s*in the Stripe object\./,
+      /Subscription price id lives at `subscription\.items\.data\[0\]\.price\.id`\s*\*\s*in the Stripe object\./,
     );
     expect(body).toMatch(
-      /function readSubscriptionPriceId\(sub: Record<string, unknown>\): string \| null \{\s*\n?\s*const items = sub\.items as \{ data\?: unknown \} \| undefined;\s*\n?\s*if \(!items \|\| !Array\.isArray\(items\.data\) \|\| items\.data\.length === 0\) return null;/,
+      /function readSubscriptionPriceId\(sub: Record<string, unknown>\): string \| null \{\s*const items = sub\.items as \{ data\?: unknown \} \| undefined;\s*if \(!items \|\| !Array\.isArray\(items\.data\) \|\| items\.data\.length === 0\) return null;/,
     );
   });
 
   it("stripeStatusToLocal: unknown status defaults to 'incomplete' (defensive — accept any string but normalize)", () => {
     expect(body).toMatch(
-      /function stripeStatusToLocal\(s: string\): LocalStatus \{\s*\n?\s*return \(STATUS_VALUES as readonly string\[\]\)\.includes\(s\) \? \(s as LocalStatus\) : 'incomplete';\s*\n?\s*\}/,
+      /function stripeStatusToLocal\(s: string\): LocalStatus \{\s*return \(STATUS_VALUES as readonly string\[\]\)\.includes\(s\) \? \(s as LocalStatus\) : 'incomplete';\s*\}/,
     );
   });
 

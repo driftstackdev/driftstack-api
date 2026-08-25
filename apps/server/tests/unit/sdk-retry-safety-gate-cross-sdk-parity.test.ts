@@ -141,6 +141,6 @@ describe('the SDK retry-safety gate agrees across all three languages', () => {
       readFileSync(TS_HTTP, 'utf8'),
       'TypeScript no longer forces a single attempt for an ineligible request — it overrides the ' +
         'caller policy rather than short-circuiting, so the override is the load-bearing part',
-    ).toMatch(/isRetrySafe\(opts\.method, opts\.headers\)\s*\n?\s*\?[\s\S]{0,80}maxAttempts: 0/);
+    ).toMatch(/isRetrySafe\(opts\.method, opts\.headers\)\s*\?[\s\S]{0,80}maxAttempts: 0/);
   });
 });

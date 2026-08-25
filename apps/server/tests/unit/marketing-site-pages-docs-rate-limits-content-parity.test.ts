@@ -43,10 +43,10 @@ describe('W517.A apps/marketing-site/src/pages/docs/rate-limits.astro content pa
 
   it("V-685 + W198 source-of-truth framing pinned: the doc-comment anchor and the statement that the rendered values mirror the live TIER_RATE_LIMIT_DEFAULTS table. V-813 REMOVED this case's third clause, which quoted a sentence claiming the enforced set was smaller than it was — that clause was pinned prose asserting a count, and the sentinel below forbids either stale phrasing returning.", () => {
     expect(body).toMatch(
-      /\/\/ V-685 — rate-limits developer docs\. Companion to \/docs\/webhooks \+\s*\n?\s*\/\/ https:\/\/docs\.driftstack\.dev\/quickstart-curl\/; describes the bucket model, the headers\s*\n?\s*\/\/ returned on every response, what to do when 429ed, and how to\s*\n?\s*\/\/ request an override\./,
+      /\/\/ V-685 — rate-limits developer docs\. Companion to \/docs\/webhooks \+\s*\/\/ https:\/\/docs\.driftstack\.dev\/quickstart-curl\/; describes the bucket model, the headers\s*\/\/ returned on every response, what to do when 429ed, and how to\s*\/\/ request an override\./,
     );
     expect(body).toMatch(
-      /\/\/ W198 — values mirror the live `TIER_RATE_LIMIT_DEFAULTS` table in\s*\n?\s*\/\/ `packages\/api-types\/src\/common\.ts`\./,
+      /\/\/ W198 — values mirror the live `TIER_RATE_LIMIT_DEFAULTS` table in\s*\/\/ `packages\/api-types\/src\/common\.ts`\./,
     );
     // The rationale for each isolated bucket, which is worth pinning —
     // unlike the count, which is not.
@@ -96,14 +96,14 @@ describe('W517.A apps/marketing-site/src/pages/docs/rate-limits.astro content pa
 
   it("Per-account-not-per-key + tier-comparison cross-link pinned. V-753 REPLACED the Free-equals-Solo-Manual clause: EVERY one of free's buckets is SMALLER (V-813 dropped the numeral — 'every' is the stronger claim and does not need updating when a bucket is added), so the page now states free's own numbers and this pin forbids the old claim returning (a second pin in marketing-site/tests carries the cross-source check against TIER_RATE_LIMIT_DEFAULTS.free)", () => {
     expect(body).toMatch(
-      /Buckets are <strong>per account<\/strong>, not per API key\. If\s*\n?\s*you mint 10 keys to spread your load, you're still hitting\s*\n?\s*the same buckets — the limit is on the account\./,
+      /Buckets are <strong>per account<\/strong>, not per API key\. If\s*you mint 10 keys to spread your load, you're still hitting\s*the same buckets — the limit is on the account\./,
     );
     expect(body).toMatch(
-      /Higher tiers \(API Scale, Enterprise\) get larger buckets — see\s*\n?\s*the <a href="\/pricing\/comparison\/">tier comparison<\/a> for the\s*\n?\s*full matrix\./,
+      /Higher tiers \(API Scale, Enterprise\) get larger buckets — see\s*the <a href="\/pricing\/comparison\/">tier comparison<\/a> for the\s*full matrix\./,
     );
     // V-753 — free is smaller on all four buckets; the old sentence sent free readers
     // to the Solo column and they were 429'd at half the documented global capacity.
-    expect(body).toMatch(/Free has its own, smaller buckets on every\s*\n?\s*limit/);
+    expect(body).toMatch(/Free has its own, smaller buckets on every\s*limit/);
     expect(body).not.toMatch(/Free uses the same bucket sizes as Solo/);
     expect(body).not.toContain('href="/pricing/comparison"');
     expect(body.replace('href="/pricing/comparison/"', 'href="/pricing/comparison"')).toContain(
@@ -125,13 +125,13 @@ describe('W517.A apps/marketing-site/src/pages/docs/rate-limits.astro content pa
       /<td><code>X-RateLimit-Bucket<\/code><\/td><td>The bucket name \(e\.g\. <code>sessions:create<\/code>\)\.<\/td>/,
     );
     expect(body).toMatch(
-      /Track <code>X-RateLimit-Remaining<\/code> against a low-water\s*\n?\s*mark in your client; if it drops below, say, 20% of the limit,\s*\n?\s*slow your request rate proactively rather than waiting for the\s*\n?\s*429\./,
+      /Track <code>X-RateLimit-Remaining<\/code> against a low-water\s*mark in your client; if it drops below, say, 20% of the limit,\s*slow your request rate proactively rather than waiting for the\s*429\./,
     );
   });
 
   it("429 RFC 7807 + 'rate-limited' type URI + retry_after_seconds extension framing pinned: 'The body follows RFC 7807 (application/problem+json) — flat keys, no error envelope.' + sample 429 with type 'https://errors.driftstack.dev/rate-limited' + 4-header surface (Retry-After/Bucket/Limit/Remaining/Reset) + retry_after_seconds extension — pinned so the RFC-7807 + flat-no-envelope + canonical-type-URI + retry_after_seconds-extension survives (drift to wrapping in 'error' envelope would create marketing↔problem+json divergence)", () => {
     expect(body).toMatch(
-      /The body follows RFC 7807 \(<code>application\/problem\+json<\/code>\) —\s*\n?\s*flat keys, no <code>error<\/code> envelope\./,
+      /The body follows RFC 7807 \(<code>application\/problem\+json<\/code>\) —\s*flat keys, no <code>error<\/code> envelope\./,
     );
     expect(body).toMatch(/HTTP\/1\.1 429 Too Many Requests/);
     expect(body).toMatch(/Retry-After: 12/);
@@ -147,25 +147,25 @@ describe('W517.A apps/marketing-site/src/pages/docs/rate-limits.astro content pa
     expect(body).toMatch(/<li>Wait at least <code>Retry-After<\/code> seconds\.<\/li>/);
     expect(body).toMatch(/<li>Resume with reduced concurrency; gradually ramp back up\.<\/li>/);
     expect(body).toMatch(
-      /<strong>Do not<\/strong> retry-loop without backoff\. We log\s*\n?\s*sustained 429s as abuse and may rate-limit further or\s*\n?\s*temporarily disable your key\./,
+      /<strong>Do not<\/strong> retry-loop without backoff\. We log\s*sustained 429s as abuse and may rate-limit further or\s*temporarily disable your key\./,
     );
   });
 
   it("2-problem-type-URI dispatch framing pinned: 'concurrency-limit' problem-type for concurrency-cap-429 vs 'rate-limited' problem-type for bucket-429 + 'Dispatch on the type URI, not the status code.' + TIER_CONCURRENT_SESSION_LIMITS anchor + /docs/concurrency cross-ref — pinned so the 2-distinct-problem-type + dispatch-on-type-not-status + TIER_CONCURRENT_SESSION_LIMITS source-of-truth commitment survives", () => {
     expect(body).toMatch(
-      /The caps\s*\n?\s*mirror <code>TIER_CONCURRENT_SESSION_LIMITS<\/code> exactly;\s*\n?\s*see <a href="https:\/\/docs\.driftstack\.dev\/guides\/concurrency\/">\/docs\/concurrency<\/a> for the\s*\n?\s*authoritative table \+ backoff guidance\./,
+      /The caps\s*mirror <code>TIER_CONCURRENT_SESSION_LIMITS<\/code> exactly;\s*see <a href="https:\/\/docs\.driftstack\.dev\/guides\/concurrency\/">\/docs\/concurrency<\/a> for the\s*authoritative table \+ backoff guidance\./,
     );
     expect(body).toMatch(
-      /<code>https:\/\/errors\.driftstack\.dev\/concurrency-limit<\/code>\s*\n?\s*problem-type — distinct from rate-limit 429s, which use the\s*\n?\s*<code>https:\/\/errors\.driftstack\.dev\/rate-limited<\/code> type\.\s*\n?\s*Dispatch on the <code>type<\/code> URI, not the status code\./,
+      /<code>https:\/\/errors\.driftstack\.dev\/concurrency-limit<\/code>\s*problem-type — distinct from rate-limit 429s, which use the\s*<code>https:\/\/errors\.driftstack\.dev\/rate-limited<\/code> type\.\s*Dispatch on the <code>type<\/code> URI, not the status code\./,
     );
   });
 
   it("5×/48h override + support@driftstack.dev + dashboard Settings → Rate limits framing pinned: 'For one-off events (load tests, customer-facing demos), email support@driftstack.dev describing the bucket(s) + multiplier + duration you need. We generally approve up to 5× for up to 48h on the spot for paid tiers.' + 'Overrides are visible in your dashboard under Settings → Rate limits. They expire automatically at the configured time.' — pinned so the 5×-48h-on-the-spot-paid-tiers commitment + Settings→Rate-limits-dashboard-surface survives", () => {
     expect(body).toMatch(
-      /For one-off events \(load tests, customer-facing demos\), email\s*\n?\s*<a href="mailto:support@driftstack\.dev">support@driftstack\.dev<\/a>\s*\n?\s*describing the bucket\(s\) \+ multiplier \+ duration you need\. We\s*\n?\s*generally approve up to 5× for up to 48h on the spot for paid\s*\n?\s*tiers\./,
+      /For one-off events \(load tests, customer-facing demos\), email\s*<a href="mailto:support@driftstack\.dev">support@driftstack\.dev<\/a>\s*describing the bucket\(s\) \+ multiplier \+ duration you need\. We\s*generally approve up to 5× for up to 48h on the spot for paid\s*tiers\./,
     );
     expect(body).toMatch(
-      /Overrides are visible in your dashboard under\s*\n?\s*<strong>Settings → Rate limits<\/strong>\. They expire\s*\n?\s*automatically at the configured time\./,
+      /Overrides are visible in your dashboard under\s*<strong>Settings → Rate limits<\/strong>\. They expire\s*automatically at the configured time\./,
     );
   });
 
@@ -174,13 +174,13 @@ describe('W517.A apps/marketing-site/src/pages/docs/rate-limits.astro content pa
       /<a href="https:\/\/github\.com\/driftstackdev\/driftstack-api\/blob\/main\/docs\/runbooks\/self-hosted-mac-local\.md">self-hosted mac local<\/a>/,
     );
     expect(body).toMatch(
-      /runbook\) runs the same rate-limit code path against a local\s*\n?\s*Redis\. Use it to exercise your 429 handling without consuming\s*\n?\s*real production budget\./,
+      /runbook\) runs the same rate-limit code path against a local\s*Redis\. Use it to exercise your 429 handling without consuming\s*real production budget\./,
     );
   });
 
   it("developers@driftstack.dev support framing pinned: 'Sustained 429s that you didn't expect, or a need to discuss a production-impacting limit: developers@driftstack.dev.' — pinned so the developer-channel routing for unexpected-429 + production-impacting-limit conversations survives", () => {
     expect(body).toMatch(
-      /Sustained 429s that you didn't expect, or a need to discuss a\s*\n?\s*production-impacting limit:\s*\n?\s*<a href="mailto:developers@driftstack\.dev">developers@driftstack\.dev<\/a>\./,
+      /Sustained 429s that you didn't expect, or a need to discuss a\s*production-impacting limit:\s*<a href="mailto:developers@driftstack\.dev">developers@driftstack\.dev<\/a>\./,
     );
   });
 

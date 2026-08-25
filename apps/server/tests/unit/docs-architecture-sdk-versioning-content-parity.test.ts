@@ -44,12 +44,12 @@ describe('W558.B /docs/architecture/sdk-versioning.md content parity', () => {
     // file's pinning section gave a `driftstack>=…` requirement line that does
     // not resolve. Both now say the distribution and note the import name.
     expect(body).toMatch(
-      /\*\*Applies to:\*\* `@driftstack\/sdk` \(TypeScript\), `driftstack-sdk`\s*\n?\s*\(Python — the PyPI distribution; the import name is `driftstack`\),/,
+      /\*\*Applies to:\*\* `@driftstack\/sdk` \(TypeScript\), `driftstack-sdk`\s*\(Python — the PyPI distribution; the import name is `driftstack`\),/,
     );
     expect(body).toMatch(/`github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go` \(Go\)\./);
     expect(body).toMatch(/The three SDKs follow the same versioning \+ deprecation policy\./);
     expect(body).toMatch(
-      /Each\s*\n?\s*maintains its own CHANGELOG\.md tracking concrete additions \/ removals/,
+      /Each\s*maintains its own CHANGELOG\.md tracking concrete additions \/ removals/,
     );
   });
 
@@ -70,9 +70,7 @@ describe('W558.B /docs/architecture/sdk-versioning.md content parity', () => {
   it("Pre-1.0 + 1.0.0-3-condition framing pinned: '## Pre-1.0 stability' + 'All three SDKs are currently pre-1.0 (`0.x.y`).' + 'Pre-1.0 SemVer relaxes the breaking-change rule for MINOR bumps' + 'We DO NOT take advantage of this — pre-1.0 breaks bump the MINOR version' + 'The bar is the same as post-1.0;' + '`1.0.0` ships when:' + 'Driftstack has its first paying customer.' + 'The SDK has been in production use at that customer for ≥ 30 days' + 'Founder explicitly approves the 1.0 cut.' — pinned so the pre-1.0-no-relaxation + same-bar-as-post-1.0 + 3-1.0-ship-condition (paying-customer + 30-days-prod + founder-approve) commitment survives", () => {
     expect(body).toMatch(/## Pre-1\.0 stability/);
     expect(body).toMatch(/All three SDKs are currently pre-1\.0 \(`0\.x\.y`\)\./);
-    expect(body).toMatch(
-      /Pre-1\.0 SemVer\s*\n?\s*relaxes the breaking-change rule for MINOR bumps/,
-    );
+    expect(body).toMatch(/Pre-1\.0 SemVer\s*relaxes the breaking-change rule for MINOR bumps/);
     expect(body).toMatch(/We DO NOT take advantage of this — pre-1\.0/);
     expect(body).toMatch(/breaks bump the MINOR version/);
     expect(body).toMatch(/The bar is the same as post-1\.0;/);

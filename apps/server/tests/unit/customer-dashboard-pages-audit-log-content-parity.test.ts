@@ -57,7 +57,7 @@ describe('W496.B apps/customer-dashboard/src/pages/audit-log.astro content parit
 
   it("V-354 FILTER_OPTIONS rationale framing pinned. Re-enabled by slice 213 after verifying the 'no composite filter' rationale exists verbatim at audit-log.astro:49-55", () => {
     expect(body).toMatch(
-      /\/\/ V-354 — preset filters\. Each maps to a single AccountAuditAction\s*\n?\s*\/\/ the backend already accepts on `\?action=`\. The "security" group\s*\n?\s*\/\/ mirrors V-303 catalog intent — login \/ password \/ API-key lifecycle\s*\n?\s*\/\/ — but since the backend takes one action at a time and not a list,/,
+      /\/\/ V-354 — preset filters\. Each maps to a single AccountAuditAction\s*\/\/ the backend already accepts on `\?action=`\. The "security" group\s*\/\/ mirrors V-303 catalog intent — login \/ password \/ API-key lifecycle\s*\/\/ — but since the backend takes one action at a time and not a list,/,
     );
   });
 
@@ -67,7 +67,7 @@ describe('W496.B apps/customer-dashboard/src/pages/audit-log.astro content parit
 
   it('V-484 extra-filters framing pinned. Re-enabled by slice 228 after restoring the V-484 anchor + "(existing V-354)" cross-reference on the HTML comment at audit-log.astro:133-138', () => {
     expect(body).toMatch(
-      /V-484 — extended filter row\. Action filter \(existing V-354\)\s*\n?\s*stays at the top; from\/to date range \+ actor type \+ target id\s*\n?\s*land in a collapsible "More filters" panel below to keep the\s*\n?\s*common case \(action-only filtering\) one click\./,
+      /V-484 — extended filter row\. Action filter \(existing V-354\)\s*stays at the top; from\/to date range \+ actor type \+ target id\s*land in a collapsible "More filters" panel below to keep the\s*common case \(action-only filtering\) one click\./,
     );
   });
 
@@ -80,7 +80,7 @@ describe('W496.B apps/customer-dashboard/src/pages/audit-log.astro content parit
 
   it('V-399 payloadHint framing + 6-case switch pinned. Re-enabled by slice 213 after verifying V-399 framing + each case exists at audit-log.astro:307-315', () => {
     expect(body).toMatch(
-      /\/\/ V-399 — render the payload context inline for actions where\s*\n?\s*\/\/ a payload tag carries customer-meaningful info\. Falls back\s*\n?\s*\/\/ silently when the payload doesn't carry a known tag\./,
+      /\/\/ V-399 — render the payload context inline for actions where\s*\/\/ a payload tag carries customer-meaningful info\. Falls back\s*\/\/ silently when the payload doesn't carry a known tag\./,
     );
     expect(body).toMatch(/case 'account\.login':/);
     expect(body).toMatch(/case 'account\.recovery_code_used':/);
@@ -118,13 +118,13 @@ describe('W496.B apps/customer-dashboard/src/pages/audit-log.astro content parit
 
   it("Export auth-via-header rationale: 'Direct fetch + blob download — keeps the auth header out of the URL (a window.location.assign would leak the bearer in browser history if any redirect chain were involved).' — pinned so the security rationale for the blob-download approach stays explicit (drift to URL-based download would leak Bearer tokens into browser history)", () => {
     expect(body).toMatch(
-      /\/\/ Direct fetch \+ blob download — keeps the auth header out of\s*\n?\s*\/\/ the URL \(a window\.location\.assign would leak the bearer in\s*\n?\s*\/\/ browser history if any redirect chain were involved\)\./,
+      /\/\/ Direct fetch \+ blob download — keeps the auth header out of\s*\/\/ the URL \(a window\.location\.assign would leak the bearer in\s*\/\/ browser history if any redirect chain were involved\)\./,
     );
   });
 
   it('Export contract: GET /v1/account/audit-log/export?format=<csv|json> + content-disposition filename parsing + URL.createObjectURL + a.download + URL.revokeObjectURL cleanup — pinned so the export download UX stays correct (drift to dropping revokeObjectURL would leak memory on bulk exports; drift to ignoring content-disposition would lose the server-provided filename)', () => {
     expect(body).toMatch(
-      /boundedFetch\(\s*\n?\s*apiBaseUrl \+ '\/v1\/account\/audit-log\/export\?format=' \+ encodeURIComponent\(format\),/,
+      /boundedFetch\(\s*apiBaseUrl \+ '\/v1\/account\/audit-log\/export\?format=' \+ encodeURIComponent\(format\),/,
     );
     expect(body).toMatch(/throw window\.driftstackResponseError\(r, b\);/);
     expect(body).toMatch(/fixed-copy boundary so remote diagnostics never reach the/);
@@ -134,13 +134,13 @@ describe('W496.B apps/customer-dashboard/src/pages/audit-log.astro content parit
 
   it('V-484 localToIso local→UTC coercion framing pinned. Re-enabled by slice 213 after verifying the comment exists at audit-log.astro:482-485', () => {
     expect(body).toMatch(
-      /\/\/ <input type="datetime-local"> emits "YYYY-MM-DDTHH:MM" in\s*\n?\s*\/\/ local time; coerce to UTC ISO so the server compares like-\s*\n?\s*\/\/ for-like\./,
+      /\/\/ <input type="datetime-local"> emits "YYYY-MM-DDTHH:MM" in\s*\/\/ local time; coerce to UTC ISO so the server compares like-\s*\/\/ for-like\./,
     );
   });
 
   it("Export cap + privacy@driftstack.dev framing pinned: 'Exports cap at 10,000 rows per file. Older entries remain accessible via the read endpoint (GET /v1/account/audit-log) with cursor pagination. Account, billing, and authentication data export on request via privacy@driftstack.dev.' — pinned so the 10k cap + the privacy-email-for-other-data-types reference stay (drift to dropping privacy@ contact would orphan customers who want non-audit data exports)", () => {
     expect(body).toMatch(/Exports cap at 10,000 rows per file\. Older entries remain accessible/);
-    expect(body).toMatch(/>privacy@driftstack\.dev<\/code\s*\n?\s*>/);
+    expect(body).toMatch(/>privacy@driftstack\.dev<\/code\s*>/);
   });
 
   it("No-token guard: 'Sign in to view audit log.' inline <li> + loadMore hidden — pinned so unauthenticated visitors see a clear sign-in prompt embedded in the list (drift to a banner-only approach would leave the static 'Loading audit log…' placeholder stuck forever)", () => {

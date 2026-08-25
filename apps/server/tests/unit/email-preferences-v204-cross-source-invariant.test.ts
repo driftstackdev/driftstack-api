@@ -84,7 +84,7 @@ describe('W929 V-204 email-preferences cross-source invariant', () => {
     expect(p).toMatch(/verification, password-reset, billing-failure\) bypass this gate/);
     expect(p).toMatch(/entirely — they always send/);
     expect(p).toMatch(
-      /S44 2026-07-07 trimmed the never-\s*\n?\s*\/\/\s*wired subscription-cancellation \+ support-ack templates/,
+      /S44 2026-07-07 trimmed the never-\s*\/\/\s*wired subscription-cancellation \+ support-ack templates/,
     );
   });
 

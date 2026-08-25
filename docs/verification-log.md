@@ -19347,3 +19347,57 @@ orphaned type, and registering a new `MUTATION_PROBE_JOB_TYPE` in a service with
 **Boundary.** This derives registrations from `services/*.ts` and seeds from the `enqueueNext…` helpers
 `bootstrap.ts` awaits. A registration made anywhere else, or a seed enqueued inline without a helper, is
 outside what it reads.
+
+## V-1630 — W-11: 20,733 latent suite-killers, and the proof that removing them changed nothing
+
+A2 named the file that had been eating a worker for 27 minutes:
+`gui-client-components-SettingsAccountCard-content-parity`. The mechanism is `\s*\n?\s*` — and since
+`\n` is itself `\s`, that is **exactly `\s*`**, written in a form that lets any whitespace run be split
+across three parts in many ways. A match that SUCCEEDS finds a path immediately; a match that FAILS must
+try every decomposition, and the cost is exponential in the number of chained groups.
+
+**Reproduced independently, and my first attempt failed to reproduce it** — my literals did not match, so
+the engine rejected at the first token and never entered the ambiguous region. With literals that match
+deeply and failure at the end:
+
+    groups      \s*\n?\s*        \s*
+      4            0.4ms         0.0ms
+      6           33.3ms         0.0ms
+      8         2630.4ms         0.1ms
+     10       221154.4ms         0.3ms      <- 3.7 minutes
+
+**~80× per two groups.** Real assertions chain fifteen and more. That is 100% CPU with RSS flat to the
+byte, because a backtracking regex allocates nothing — which is why every memory-based signal either of us
+tried was blind to it.
+
+**And the guard was pinning the bug.** It asserted the nested `{ account: { … } }` shape that never existed
+on the wire and that took the Settings tab down. It passed for exactly as long as the defect was present;
+when the source was corrected the pattern stopped matching, and instead of reporting the drift **it hung**.
+Silent while wrong, fatal when right.
+
+**The class: 799 files, 20,733 occurrences**, overwhelmingly content-parity guards. Every one is a latent
+suite-killer that triggers the moment its pinned content legitimately changes — precisely when it is most
+needed. Swept in one commit.
+
+**Verification, in five layers, because a rewritten guard that matches nothing goes GREEN.**
+
+1. **Identity, analytically.** `/^\s*\n?\s*$/` and `/^\s*$/` differ on no input constructible. An
+   identity substitution cannot broaden a guard, which is the risk that mattered.
+2. **Clerical, exhaustively.** `HEAD + substitution == working tree` byte-for-byte for all 799 — every
+   file reconstructed from `git show`, not sampled.
+3. **Post-format, semantically.** Prettier reflows, so re-verified: normalising whitespace AND trailing
+   commas, all 799 match again. The commas are real and benign — a shorter regex fits on one line, so the
+   trailing comma a multi-line argument needed is dropped.
+4. **Behaviourally, on real content.** 500 unique rewritten literals × 154 source files = **77,000
+   (pattern, text) comparisons, zero disagreements** between old and new. This is what closes the
+   `.not.toMatch` case: 1,359 such assertions live in 424 of the rewritten files, and a broken pattern
+   passes them vacuously — but `A.test(x) === B.test(x)` covers both polarities at once.
+5. **The suite.** Zero failures attributable to the sweep, reproduced on a verified-quiescent tree.
+
+⚠️ **Three of my own verification passes were wrong before one was right.** A `git diff -U0` pairing
+reported 6,906 lines "differing in some other way" — it zipped deletions against additions across
+misaligned hunks. A regex-literal extractor flagged 67 files — it was matching the text BETWEEN two
+literals as though it were one. And the equivalence harness first reported nothing at all, because I
+redirected stdout into the same file `json.dump` was writing. Each would have read as a finding.
+
+**The suite is also 8× faster: 1965s → 250s.** One file was eating twenty-seven minutes of every run.

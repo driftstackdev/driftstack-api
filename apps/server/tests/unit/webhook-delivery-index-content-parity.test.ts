@@ -43,13 +43,13 @@ describe('W450.A packages/webhook-delivery/src/index.ts content parity', () => {
 
   it('7 type-only re-exports from ./types.js (DeliveryAttempt + DeliveryConfig + DeliveryEndpoint + DeliveryPayload + DeliveryRecord + DeliveryStatus + DlqEntry)', () => {
     expect(body).toMatch(
-      /export type \{\s*\n?\s*DeliveryAttempt,\s*\n?\s*DeliveryConfig,\s*\n?\s*DeliveryEndpoint,\s*\n?\s*DeliveryPayload,\s*\n?\s*DeliveryRecord,\s*\n?\s*DeliveryStatus,\s*\n?\s*DlqEntry,\s*\n?\s*\} from '\.\/types\.js';/,
+      /export type \{\s*DeliveryAttempt,\s*DeliveryConfig,\s*DeliveryEndpoint,\s*DeliveryPayload,\s*DeliveryRecord,\s*DeliveryStatus,\s*DlqEntry,\s*\} from '\.\/types\.js';/,
     );
   });
 
   it('7 interface re-exports from ./interfaces.js (DeliveryQueue + DlqManager + EnqueueDeliveryOpts + ListDeliveriesOpts + ListDeliveriesPage + RequeueDlqOpts + WebhookDeliveryService)', () => {
     expect(body).toMatch(
-      /export type \{\s*\n?\s*DeliveryQueue,\s*\n?\s*DlqManager,\s*\n?\s*EnqueueDeliveryOpts,\s*\n?\s*ListDeliveriesOpts,\s*\n?\s*ListDeliveriesPage,\s*\n?\s*RequeueDlqOpts,\s*\n?\s*WebhookDeliveryService,\s*\n?\s*\} from '\.\/interfaces\.js';/,
+      /export type \{\s*DeliveryQueue,\s*DlqManager,\s*EnqueueDeliveryOpts,\s*ListDeliveriesOpts,\s*ListDeliveriesPage,\s*RequeueDlqOpts,\s*WebhookDeliveryService,\s*\} from '\.\/interfaces\.js';/,
     );
   });
 

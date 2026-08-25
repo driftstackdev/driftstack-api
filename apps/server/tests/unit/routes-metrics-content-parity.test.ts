@@ -31,19 +31,19 @@ describe('routes/metrics content parity', () => {
       /\/\/ Arc 4 Wave 2\.B sub-slice 8\.18 \(v2-#8\) — GET \/metrics Prometheus scrape\./,
     );
     expect(body).toMatch(
-      /\/\/ Scraped by VictoriaMetrics \/ Prometheus \/ Grafana Agent\. The content\s*\n?\s*\/\/ type is `text\/plain; version=0\.0\.4` per the exposition-format spec;\s*\n?\s*\/\/ scrapers reject anything else\./,
+      /\/\/ Scraped by VictoriaMetrics \/ Prometheus \/ Grafana Agent\. The content\s*\/\/ type is `text\/plain; version=0\.0\.4` per the exposition-format spec;\s*\/\/ scrapers reject anything else\./,
     );
   });
 
   it("METRICS_SCRAPE_TOKEN bearer-auth framing pinned: 'bearer-token gated by METRICS_SCRAPE_TOKEN env var. The route is exposed publicly (so external scrapers can reach it without needing an internal-only path), but the token prevents unauthenticated readers from harvesting internal counters. The deploy bridge writes the token to /opt/driftstack/api/.env; the value is rotated on the same cadence as other internal credentials.' — pinned so the public-exposure + bearer-gates-harvesting + deploy-bridge-writes-env + cadence-rotation contract all stay documented", () => {
     expect(body).toMatch(
-      /\/\/ Auth: bearer-token gated by METRICS_SCRAPE_TOKEN env var\. The route\s*\n?\s*\/\/ is exposed publicly \(so external scrapers can reach it without\s*\n?\s*\/\/ needing an internal-only path\), but the token prevents unauthenticated\s*\n?\s*\/\/ readers from harvesting internal counters\. The deploy bridge writes\s*\n?\s*\/\/ the token to \/opt\/driftstack\/api\/\.env; the value is rotated on the\s*\n?\s*\/\/ same cadence as other internal credentials\./,
+      /\/\/ Auth: bearer-token gated by METRICS_SCRAPE_TOKEN env var\. The route\s*\/\/ is exposed publicly \(so external scrapers can reach it without\s*\/\/ needing an internal-only path\), but the token prevents unauthenticated\s*\/\/ readers from harvesting internal counters\. The deploy bridge writes\s*\/\/ the token to \/opt\/driftstack\/api\/\.env; the value is rotated on the\s*\/\/ same cadence as other internal credentials\./,
     );
   });
 
   it("503-on-missing-config framing pinned: 'If METRICS_SCRAPE_TOKEN is unset, the route returns 503 — surfaces a missing-config bug early rather than silently exposing internals.' — pinned so the fail-closed-on-missing-config + surface-misconfig-early contract stays documented (drift to fail-open would let an unset env var silently expose counters)", () => {
     expect(body).toMatch(
-      /\/\/ If METRICS_SCRAPE_TOKEN is unset, the route returns 503 — surfaces a\s*\n?\s*\/\/ missing-config bug early rather than silently exposing internals\./,
+      /\/\/ If METRICS_SCRAPE_TOKEN is unset, the route returns 503 — surfaces a\s*\/\/ missing-config bug early rather than silently exposing internals\./,
     );
   });
 
@@ -79,7 +79,7 @@ describe('routes/metrics content parity', () => {
 
   it("exposition-format content-type pinned: 'text/plain; version=0.0.4; charset=utf-8'. Drift to dropping the `version=0.0.4` parameter would make some scrapers reject the response (Prometheus checks the version parameter for protocol-version negotiation)", () => {
     expect(body).toMatch(
-      /reply\.header\('content-type', 'text\/plain; version=0\.0\.4; charset=utf-8'\);\s*\n?\s*return deps\.registry\.render\(\);/,
+      /reply\.header\('content-type', 'text\/plain; version=0\.0\.4; charset=utf-8'\);\s*return deps\.registry\.render\(\);/,
     );
   });
 });

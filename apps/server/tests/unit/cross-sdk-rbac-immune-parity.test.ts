@@ -77,7 +77,7 @@ describe('W685 cross-SDK X-Driftstack-Account RBAC-immune parity', () => {
     expect(ts).toMatch(/X-Driftstack-Account team-RBAC header is not honored/);
 
     // sdk-go: "these endpoints don't honor\n// the X-Driftstack-Account header."
-    expect(go).toMatch(/don't honor\s*\n?\s*\/\/ the X-Driftstack-Account header/);
+    expect(go).toMatch(/don't honor\s*\/\/ the X-Driftstack-Account header/);
   });
 
   it('CRITICAL "per-account" framing pinned on MFA in all 3 SDKs. The "MFA is per-account, never per-team-context" wording (or equivalent) is what tells customers MFA enrollment is RESOURCE-LEVEL, not CONTEXT-LEVEL. Drift to "per-team" would invert the contract.', () => {
@@ -85,10 +85,10 @@ describe('W685 cross-SDK X-Driftstack-Account RBAC-immune parity', () => {
     const go = read(GO_MFA);
 
     // sdk-typescript: "MFA is per-\n// account, not per-team-context"
-    expect(ts).toMatch(/MFA is per-\s*\n?\s*\/\/ account, not per-team-context/);
+    expect(ts).toMatch(/MFA is per-\s*\/\/ account, not per-team-context/);
 
     // sdk-go: "MFA enrollment is\n// per-account, never per-team-context"
-    expect(go).toMatch(/MFA enrollment is\s*\n?\s*\/\/ per-account, never per-team-context/);
+    expect(go).toMatch(/MFA enrollment is\s*\/\/ per-account, never per-team-context/);
   });
 
   it('CRITICAL "always returns the caller\'s own account" framing pinned on /v1/account/me in sdk-go + sdk-python. This is the customer-facing claim that the team-context header has NO effect on /me. Drift to dropping would let customers assume team-RBAC works on /me when it doesn\'t.', () => {

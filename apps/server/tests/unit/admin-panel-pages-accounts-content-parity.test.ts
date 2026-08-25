@@ -33,13 +33,13 @@ describe('W488.B apps/admin-panel/src/pages/accounts.astro content parity', () =
 
   it('V-187 framing pins an inert unavailable SSG shell that is replaced only with live rows', () => {
     expect(body).toMatch(
-      /\/\/ V-187 — progressive-enhancement against \/v1\/admin\/accounts\. SSG\s*\n?\s*\/\/ renders an inert unavailable shell; an inline <script> reads\s*\n?\s*\/\/ ds_web_session_token from localStorage and replaces it with live rows/,
+      /\/\/ V-187 — progressive-enhancement against \/v1\/admin\/accounts\. SSG\s*\/\/ renders an inert unavailable shell; an inline <script> reads\s*\/\/ ds_web_session_token from localStorage and replaces it with live rows/,
     );
   });
 
   it('STATUS_BADGE 3-tone remains in the authoritative live-row renderer only', () => {
     expect(body).toMatch(
-      /const STATUS_BADGE = \{\s*\n?\s*active: 'bg-emerald-50 text-emerald-700',\s*\n?\s*suspended: 'bg-amber-50 text-amber-700',\s*\n?\s*deleted: 'bg-tk-hover text-tk-ink-2',\s*\n?\s*\};/,
+      /const STATUS_BADGE = \{\s*active: 'bg-emerald-50 text-emerald-700',\s*suspended: 'bg-amber-50 text-amber-700',\s*deleted: 'bg-tk-hover text-tk-ink-2',\s*\};/,
     );
     expect(body).not.toContain('const STATUS_BADGE: Record<string, string>');
   });
@@ -47,9 +47,9 @@ describe('W488.B apps/admin-panel/src/pages/accounts.astro content parity', () =
   it('ships no sample customer identity, account link, count, or green live claim before a successful read', () => {
     expect(body).not.toContain('MOCK_ACCOUNTS');
     expect(body).toContain('Live accounts are unavailable until loaded.');
-    expect(body).toMatch(/data-live-dot\s*\n?\s*class="[^"]*bg-amber-500"/);
+    expect(body).toMatch(/data-live-dot\s*class="[^"]*bg-amber-500"/);
     expect(body).toContain('<span data-live-status>Waiting for live data</span>');
-    expect(body).toMatch(/data-live-refresh\s*\n?\s*disabled\s*\n?\s*aria-disabled="true"/);
+    expect(body).toMatch(/data-live-refresh\s*disabled\s*aria-disabled="true"/);
     expect(body).not.toMatch(/href=\{`\/accounts\/\$\{account\.id\}`\}/);
     expect(body).not.toMatch(/Showing \{[^}]+\} of \{[^}]+\} accounts/);
   });
@@ -71,14 +71,14 @@ describe('W488.B apps/admin-panel/src/pages/accounts.astro content parity', () =
     expect(body).toMatch(/<option value="suspended">Suspended<\/option>/);
     expect(body).toMatch(/<option value="deleted">Deleted<\/option>/);
     expect(body).toMatch(
-      /if \(searchEl && searchEl\.value\.trim\(\)\)\s*\n?\s*params\.set\('email_contains', searchEl\.value\.trim\(\)\);/,
+      /if \(searchEl && searchEl\.value\.trim\(\)\)\s*params\.set\('email_contains', searchEl\.value\.trim\(\)\);/,
     );
   });
 
   it("Account row /accounts/{id} link: encodeURIComponent on stripped (acc_ prefix removed via .replace(/^acc_/, '')) — pinned so the per-account-detail href doesn't break on UUIDs with reserved URL chars + the route stays consistent with the underlying admin-routes that expect the raw UUID without prefix", () => {
     expect(body).toMatch(/const stripped = a\.id\.replace\(\/\^acc_\/, ''\);/);
     expect(body).toMatch(
-      /'<a href="\/accounts\/' \+\s*\n?\s*encodeURIComponent\(stripped\) \+\s*\n?\s*'" class="text-sm text-tk-accent hover:underline">Open<\/a>'/,
+      /'<a href="\/accounts\/' \+\s*encodeURIComponent\(stripped\) \+\s*'" class="text-sm text-tk-accent hover:underline">Open<\/a>'/,
     );
   });
 
@@ -137,14 +137,14 @@ describe('W488.B apps/admin-panel/src/pages/accounts.astro content parity', () =
       /const nameLine = a\.name \? escapeHtml\(a\.name\) : escapeHtml\(a\.email\);/,
     );
     expect(body).toMatch(
-      /const subEmail = a\.name\s*\n?\s*\? '<p class="mt-0\.5 text-xs text-tk-ink-3">' \+ escapeHtml\(a\.email\) \+ '<\/p>'\s*\n?\s*: '';/,
+      /const subEmail = a\.name\s*\? '<p class="mt-0\.5 text-xs text-tk-ink-3">' \+ escapeHtml\(a\.email\) \+ '<\/p>'\s*: '';/,
     );
     expect(body).toContain('escapeHtml(a.id)');
   });
 
   it('live fmtIso retains its defensive display fallback after strict wire parsing', () => {
     expect(body).toMatch(
-      /function fmtIso\(iso\) \{\s*\n?\s*if \(!iso\) return '—';\s*\n?\s*return new Date\(iso\)\.toISOString\(\)\.slice\(0, 10\);\s*\n?\s*\}/,
+      /function fmtIso\(iso\) \{\s*if \(!iso\) return '—';\s*return new Date\(iso\)\.toISOString\(\)\.slice\(0, 10\);\s*\}/,
     );
   });
 
@@ -156,10 +156,10 @@ describe('W488.B apps/admin-panel/src/pages/accounts.astro content parity', () =
     expect(body).toContain(
       "renderAccountsUnavailable('Could not load accounts. Resolve the error above and retry.')",
     );
-    expect(body).toMatch(/return \{ loaded: true, repeatedCursor \};\s*\n?\s*\}\)\s*\n?\s*\.catch/);
-    expect(body).toMatch(/return emptyLoadResult\(\);\s*\n?\s*\}\)\s*\n?\s*\.finally/);
+    expect(body).toMatch(/return \{ loaded: true, repeatedCursor \};\s*\}\)\s*\.catch/);
+    expect(body).toMatch(/return emptyLoadResult\(\);\s*\}\)\s*\.finally/);
     expect(body).toMatch(
-      /if \(result\.loaded\) \{\s*\n?\s*lastFetch = Date\.now\(\);\s*\n?\s*if \(liveAge\) liveAge\.textContent = 'just now';\s*\n?\s*setLiveState\('ready'\);/,
+      /if \(result\.loaded\) \{\s*lastFetch = Date\.now\(\);\s*if \(liveAge\) liveAge\.textContent = 'just now';\s*setLiveState\('ready'\);/,
     );
     expect(body).toMatch(/if \(owner !== liveOwner\) return result;/);
   });

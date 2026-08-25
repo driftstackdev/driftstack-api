@@ -112,7 +112,7 @@ describe('W708 cross-SDK AccountAuditAction closed-enum roster parity', () => {
   it('CRITICAL V-480 profile.exported + profile.imported framing pinned — "envelope" + "source profile id + source account id" + "file-flow lineage". Drift to dropping would lose the customer-facing claim about cross-account audit trail.', () => {
     const src = read(ACCOUNTS_SCHEMA);
     expect(src).toMatch(/V-480[\s\S]{0,300}profile import\/export/);
-    expect(src).toMatch(/Both carry the source profile id \+\s*\n?\s*\/\/\s*source account id/);
+    expect(src).toMatch(/Both carry the source profile id \+\s*\/\/\s*source account id/);
     expect(src).toMatch(/file-flow lineage post-hoc/);
   });
 
@@ -144,7 +144,7 @@ describe('W708 cross-SDK AccountAuditAction closed-enum roster parity', () => {
   it('CRITICAL V-353b recovery_code_used framing — "each time a code is consumed (login or step-up path)". The wording threads recovery-code-single-use through audit; drift to dropping would lose the security-monitoring signal.', () => {
     const src = read(ACCOUNTS_SCHEMA);
     expect(src).toMatch(
-      /recovery_code_used fires\s*\n?\s*\/\/\s*each time a code is consumed \(login or step-up path\)/,
+      /recovery_code_used fires\s*\/\/\s*each time a code is consumed \(login or step-up path\)/,
     );
   });
 

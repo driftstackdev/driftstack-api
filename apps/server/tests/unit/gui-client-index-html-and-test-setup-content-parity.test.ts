@@ -63,7 +63,7 @@ describe('W791 gui-client index.html + tests/setup.ts content parity', () => {
     expect(p).not.toMatch(/\son[a-z]+\s*=/i);
     expect(p).toMatch(/<button id="ds-fatal-reload"/);
     expect(p).toMatch(
-      /reloadButton\.addEventListener\('click', function \(\) \{\s*\n?\s*location\.reload\(\);/,
+      /reloadButton\.addEventListener\('click', function \(\) \{\s*location\.reload\(\);/,
     );
   });
 

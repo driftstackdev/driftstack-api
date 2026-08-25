@@ -46,19 +46,19 @@ describe('W456.A packages/recapture-automation/src/index.ts content parity', () 
 
   it('8 core type re-exports from ./types.js (FingerprintComparison + FingerprintComparisonOutcome + IosArchetypeVersion + IosVersionTransition + RecaptureRun + RecaptureStatus + RecaptureTrigger + TriggerRecaptureOpts)', () => {
     expect(body).toMatch(
-      /export type \{\s*\n?\s*FingerprintComparison,\s*\n?\s*FingerprintComparisonOutcome,\s*\n?\s*IosArchetypeVersion,\s*\n?\s*IosVersionTransition,\s*\n?\s*RecaptureRun,\s*\n?\s*RecaptureStatus,\s*\n?\s*RecaptureTrigger,\s*\n?\s*TriggerRecaptureOpts,\s*\n?\s*\} from '\.\/types\.js';/,
+      /export type \{\s*FingerprintComparison,\s*FingerprintComparisonOutcome,\s*IosArchetypeVersion,\s*IosVersionTransition,\s*RecaptureRun,\s*RecaptureStatus,\s*RecaptureTrigger,\s*TriggerRecaptureOpts,\s*\} from '\.\/types\.js';/,
     );
   });
 
   it('4 core interface re-exports from ./interfaces.js (IosVersionWatcher + ListRunsOpts + ListRunsPage + RecaptureService)', () => {
     expect(body).toMatch(
-      /export type \{\s*\n?\s*IosVersionWatcher,\s*\n?\s*ListRunsOpts,\s*\n?\s*ListRunsPage,\s*\n?\s*RecaptureService,\s*\n?\s*\} from '\.\/interfaces\.js';/,
+      /export type \{\s*IosVersionWatcher,\s*ListRunsOpts,\s*ListRunsPage,\s*RecaptureService,\s*\} from '\.\/interfaces\.js';/,
     );
   });
 
   it('Mock value+type exports from ./mock.js: 2 value (MockIosVersionWatcher + MockRecaptureService) + 2 type (MockIosVersionWatcherDeps + MockRecaptureServiceDeps)', () => {
     expect(body).toMatch(
-      /export \{\s*\n?\s*MockIosVersionWatcher,\s*\n?\s*MockRecaptureService,\s*\n?\s*type MockIosVersionWatcherDeps,\s*\n?\s*type MockRecaptureServiceDeps,\s*\n?\s*\} from '\.\/mock\.js';/,
+      /export \{\s*MockIosVersionWatcher,\s*MockRecaptureService,\s*type MockIosVersionWatcherDeps,\s*type MockRecaptureServiceDeps,\s*\} from '\.\/mock\.js';/,
     );
   });
 
@@ -68,14 +68,14 @@ describe('W456.A packages/recapture-automation/src/index.ts content parity', () 
       /export type \{ CaptureMatrixSpec, ComparisonSummary \} from '\.\/matrix\.js';/,
     );
     expect(body).toMatch(
-      /export \{\s*\n?\s*dedupComparisons,\s*\n?\s*expandCaptureMatrix,\s*\n?\s*groupComparisonsByCategory,\s*\n?\s*summarizeComparisons,\s*\n?\s*\} from '\.\/matrix\.js';/,
+      /export \{\s*dedupComparisons,\s*expandCaptureMatrix,\s*groupComparisonsByCategory,\s*summarizeComparisons,\s*\} from '\.\/matrix\.js';/,
     );
   });
 
   it("V-533.B framing pinned 'atlas builder' + 5 type re-exports (ArchetypeVersionSnapshot + Atlas + BuildAtlasOpts + SurfaceStability + VersionTransitionImpact) + 2 value exports (buildAtlas + classifyOutcomes)", () => {
     expect(body).toMatch(/\/\/ V-533\.B — atlas builder\./);
     expect(body).toMatch(
-      /export type \{\s*\n?\s*ArchetypeVersionSnapshot,\s*\n?\s*Atlas,\s*\n?\s*BuildAtlasOpts,\s*\n?\s*SurfaceStability,\s*\n?\s*VersionTransitionImpact,\s*\n?\s*\} from '\.\/atlas\.js';/,
+      /export type \{\s*ArchetypeVersionSnapshot,\s*Atlas,\s*BuildAtlasOpts,\s*SurfaceStability,\s*VersionTransitionImpact,\s*\} from '\.\/atlas\.js';/,
     );
     expect(body).toMatch(/export \{ buildAtlas, classifyOutcomes \} from '\.\/atlas\.js';/);
   });
@@ -83,7 +83,7 @@ describe('W456.A packages/recapture-automation/src/index.ts content parity', () 
   it("V-533.C framing pinned 'recapture scheduler' + 5 type re-exports (ArchetypeRunHistory + SchedulePriority + ScheduleEntry + ScheduleRecaptureBatchOpts + ScheduleRecaptureBatchResult) + scheduleRecaptureBatch value export", () => {
     expect(body).toMatch(/\/\/ V-533\.C — recapture scheduler\./);
     expect(body).toMatch(
-      /export type \{\s*\n?\s*ArchetypeRunHistory,\s*\n?\s*SchedulePriority,\s*\n?\s*ScheduleEntry,\s*\n?\s*ScheduleRecaptureBatchOpts,\s*\n?\s*ScheduleRecaptureBatchResult,\s*\n?\s*\} from '\.\/scheduler\.js';/,
+      /export type \{\s*ArchetypeRunHistory,\s*SchedulePriority,\s*ScheduleEntry,\s*ScheduleRecaptureBatchOpts,\s*ScheduleRecaptureBatchResult,\s*\} from '\.\/scheduler\.js';/,
     );
     expect(body).toMatch(/export \{ scheduleRecaptureBatch \} from '\.\/scheduler\.js';/);
   });

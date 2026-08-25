@@ -48,7 +48,7 @@ describe('W428.C packages/sdk-typescript/src/resources/billing.ts content parity
 
   it('Imports — 4 api-types shapes (multi-line braced) + HttpClient. CRITICAL: 4-shape sorted-alphabetical import block (CreateCheckoutSessionRequest → CreateCheckoutSessionResponse → CreatePortalSessionResponse → GetBillingStateResponse; StartTrialPack* removed 2026-05-27). Drift to hand-rolled types in this file would diverge from @driftstack/api-types Zod single-source-of-truth.', () => {
     expect(body).toMatch(
-      /import type \{\s*\n?\s*CreateCheckoutSessionRequest,\s*\n?\s*CreateCheckoutSessionResponse,\s*\n?\s*CreatePortalSessionResponse,\s*\n?\s*GetBillingStateResponse,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import type \{\s*CreateCheckoutSessionRequest,\s*CreateCheckoutSessionResponse,\s*CreatePortalSessionResponse,\s*GetBillingStateResponse,\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(/import type \{ HttpClient \} from '\.\.\/http\.js';/);
   });
@@ -60,19 +60,19 @@ describe('W428.C packages/sdk-typescript/src/resources/billing.ts content parity
 
   it('getState — GET /v1/billing returns the current-account subscription mirror + trial-pack state. Stripe-of-record snapshot the dashboard uses to render plan / usage state without round-tripping to Stripe on every render.', () => {
     expect(body).toMatch(
-      /getState\(\): Promise<GetBillingStateResponse> \{\s*\n?\s*return this\.http\.request<GetBillingStateResponse>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/billing',\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /getState\(\): Promise<GetBillingStateResponse> \{\s*return this\.http\.request<GetBillingStateResponse>\(\{\s*method: 'GET',\s*path: '\/v1\/billing',\s*\}\);\s*\}/,
     );
   });
 
   it('createCheckoutSession — POST /v1/billing/checkout-session returns a Stripe Checkout URL for a tier subscription. Customer-redirect-required: the response carries a URL the customer browser navigates to; the SDK does NOT perform the charge inline. CreateCheckoutSessionRequest body type pinned (drift to `any` would lose static checking on the tier + billing_period fields).', () => {
     expect(body).toMatch(
-      /createCheckoutSession\(\s*\n?\s*body: CreateCheckoutSessionRequest,\s*\n?\s*\): Promise<CreateCheckoutSessionResponse> \{\s*\n?\s*return this\.http\.request<CreateCheckoutSessionResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/billing\/checkout-session',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /createCheckoutSession\(\s*body: CreateCheckoutSessionRequest,\s*\): Promise<CreateCheckoutSessionResponse> \{\s*return this\.http\.request<CreateCheckoutSessionResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/billing\/checkout-session',\s*body,\s*\}\);\s*\}/,
     );
   });
 
   it("createPortalSession — POST /v1/billing/portal-session with NO body parameter at all. Account identity comes from the bearer token, never a body field, so customers can never request a portal URL for someone else's account. Drift to accepting a body parameter (even an optional one) would silently widen the auth surface.", () => {
     expect(body).toMatch(
-      /createPortalSession\(\): Promise<CreatePortalSessionResponse> \{\s*\n?\s*return this\.http\.request<CreatePortalSessionResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/billing\/portal-session',\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /createPortalSession\(\): Promise<CreatePortalSessionResponse> \{\s*return this\.http\.request<CreatePortalSessionResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/billing\/portal-session',\s*\}\);\s*\}/,
     );
   });
 

@@ -128,7 +128,7 @@ describe('W949 webhooks service cross-source invariant', () => {
   it('CRITICAL WebhookEndpointRow.secret is plaintext only in the in-process repository result and encrypted at rest', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/webhooks.ts'));
     expect(p).toMatch(
-      /\/\*\* Plaintext only in the in-process repository result; encrypted at rest\. \*\/\s*\n?\s*secret: string;/,
+      /\/\*\* Plaintext only in the in-process repository result; encrypted at rest\. \*\/\s*secret: string;/,
     );
   });
 

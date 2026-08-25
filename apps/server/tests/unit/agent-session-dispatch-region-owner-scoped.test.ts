@@ -59,7 +59,7 @@ describe('V-736 agent-session dispatch region is owner-scoped', () => {
     expect(body).toMatch(
       /const region = isOwnerCaller \? \(ctx\?\.account\.region \?\? null\) : null;/,
     );
-    expect(body).toMatch(/a\s*\n?\s*\/\/ team admin's region is NOT the owner's/);
+    expect(body).toMatch(/a\s*\/\/ team admin's region is NOT the owner's/);
   });
 
   it('EVERY region the create route hands to a LiveKit mint is owner-scoped too, not just the dispatch selector', () => {

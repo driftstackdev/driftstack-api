@@ -39,14 +39,14 @@ describe('W498.C apps/marketing-site/src/pages/docs.astro content parity', () =>
   it("BaseLayout title='Docs' + description covering quickstart / SDK references for TypeScript-Python-Go / API reference / self-hosted setup / recipe library — pinned so the SEO description covers ALL the doc surface customers might search for (drift to dropping any would hurt search ranking for that doc category)", () => {
     expect(body).toMatch(/import BaseLayout from '\.\.\/layouts\/BaseLayout\.astro';/);
     expect(body).toMatch(
-      /<BaseLayout\s*\n?\s*title="Docs"\s*\n?\s*description="Driftstack documentation: desktop and code quickstarts, SDK guides for TypeScript \/ Python \/ Go, API reference, self-hosted setup, recipe library\."/,
+      /<BaseLayout\s*title="Docs"\s*description="Driftstack documentation: desktop and code quickstarts, SDK guides for TypeScript \/ Python \/ Go, API reference, self-hosted setup, recipe library\."/,
     );
   });
 
   it("Hero framing: 'Everything you need to drive a session.' + 'Driftstack is small enough to read end-to-end — start with the quickstart and follow the link trail.' — pinned so the small-surface 'read end-to-end' positioning survives (drift to a chatty/feature-rich framing would imply a sprawling doc set, which contradicts the actual end-to-end-readable scope)", () => {
     expect(body).toMatch(/Everything you need to drive a session\./);
     expect(body).toMatch(
-      /Driftstack\s*\n?\s*is small enough to read end-to-end — start with the quickstart\s*\n?\s*and follow the link trail\./,
+      /Driftstack\s*is small enough to read end-to-end — start with the quickstart\s*and follow the link trail\./,
     );
   });
 
@@ -67,8 +67,8 @@ describe('W498.C apps/marketing-site/src/pages/docs.astro content parity', () =>
   it('Quickstart card pins Free browser-first desktop activation and paid customer-key code access', () => {
     expect(body).toMatch(/Free desktop or paid code →/);
     expect(body).toMatch(/On Free, sign in through the desktop app's browser flow/);
-    expect(body).toMatch(/stores\s*\n?\s*a restricted device credential automatically/);
-    expect(body).toMatch(/Code quickstarts use\s*\n?\s*a paid tier and a customer API key/);
+    expect(body).toMatch(/stores\s*a restricted device credential automatically/);
+    expect(body).toMatch(/Code quickstarts use\s*a paid tier and a customer API key/);
     expect(body).not.toMatch(/paste an API key, drive/);
   });
 
@@ -83,17 +83,17 @@ describe('W498.C apps/marketing-site/src/pages/docs.astro content parity', () =>
   it('SDKs card pins all three published pre-1.0 registries and reproducible installs', () => {
     expect(body).toMatch(/TypeScript · Python · Go →/);
     expect(body).toMatch(
-      /TypeScript, Python, and Go are published as pre-1\.0 packages on\s*\n?\s*npm, PyPI, and the Go module proxy/,
+      /TypeScript, Python, and Go are published as pre-1\.0 packages on\s*npm, PyPI, and the Go module proxy/,
     );
     expect(body).toMatch(
-      /use your package-manager lockfile\s*\n?\s*or constraints for reproducible deployments/,
+      /use your package-manager lockfile\s*or constraints for reproducible deployments/,
     );
-    expect(body).not.toMatch(/alpha source\s*\n?\s*distributions|first registry tag|tag pending/i);
+    expect(body).not.toMatch(/alpha source\s*distributions|first registry tag|tag pending/i);
   });
 
   it('Webhooks card pins the canonical eight-event roster and HMAC-SHA256 verification', () => {
     expect(body).toMatch(
-      /All eight subscribable event types — session\.completed, session\.failed,\s*\n?\s*api_key\.revoked,\s*\n?\s*session\.egress_capability_changed, crypto\.order\.paid,\s*\n?\s*crypto\.order\.failed, session\.challenge_detected,\s*\n?\s*session\.profile_save_failed — with payload shapes\s*\n?\s*and HMAC-SHA256 verification examples\./,
+      /All eight subscribable event types — session\.completed, session\.failed,\s*api_key\.revoked,\s*session\.egress_capability_changed, crypto\.order\.paid,\s*crypto\.order\.failed, session\.challenge_detected,\s*session\.profile_save_failed — with payload shapes\s*and HMAC-SHA256 verification examples\./,
     );
     expect(body).not.toMatch(/quota\.warning_80pct|quota\.exceeded/);
   });
@@ -101,7 +101,7 @@ describe('W498.C apps/marketing-site/src/pages/docs.astro content parity', () =>
   it("Self-hosted card framing: 'Deploy on your own hardware →' + 'SKU comparison, hardware specs, onboarding flow. For sustained high-concurrency operations or full data sovereignty.' — pinned so the self-hosted positioning (sustained high-concurrency OR full data sovereignty) stays explicit (drift to dropping data sovereignty would hide a key compliance-driven self-host motivator; drift to dropping SKU comparison would orphan customers from the hardware-choice doc)", () => {
     expect(body).toMatch(/Deploy on your own hardware →/);
     expect(body).toMatch(
-      /SKU comparison, hardware specs, onboarding flow\. For\s*\n?\s*sustained high-concurrency operations or full data\s*\n?\s*sovereignty\./,
+      /SKU comparison, hardware specs, onboarding flow\. For\s*sustained high-concurrency operations or full data\s*sovereignty\./,
     );
   });
 
@@ -114,7 +114,7 @@ describe('W498.C apps/marketing-site/src/pages/docs.astro content parity', () =>
     expect(body).toMatch(/Doc not landing\?/);
     // Fleet v2 (2026-07-03): link re-pinned to the AA-safe accent-text tone.
     expect(body).toMatch(
-      /<a\s*\n?\s*href="mailto:support@driftstack\.dev"\s*\n?\s*class="text-tk-accent-text underline">support@driftstack\.dev<\/a> with the URL you expected to find\. We answer in writing,\s*\n?\s*usually same business day\./,
+      /<a\s*href="mailto:support@driftstack\.dev"\s*class="text-tk-accent-text underline">support@driftstack\.dev<\/a> with the URL you expected to find\. We answer in writing,\s*usually same business day\./,
     );
     expect(body).toMatch(
       /<a href="https:\/\/github\.com\/driftstackdev" class="btn-secondary">GitHub →<\/a>/,

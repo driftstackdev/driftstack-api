@@ -41,23 +41,23 @@ describe('W398.B apps/server/src/services/incident-notifications.ts content pari
   it('V-295c3-followup framing + 4-step fan-out pinned', () => {
     expect(body).toMatch(/V-295c3-followup — incident-notification fan-out\./);
     expect(body).toMatch(
-      /Wraps StatusSubscribersService \+ EmailService and exposes\s*\n?\s*\/\/\s*`notifyCreated` \/ `notifyResolved` methods that the IncidentsService\s*\n?\s*\/\/\s*lifecycle hooks invoke\. Each method:/,
+      /Wraps StatusSubscribersService \+ EmailService and exposes\s*\/\/\s*`notifyCreated` \/ `notifyResolved` methods that the IncidentsService\s*\/\/\s*lifecycle hooks invoke\. Each method:/,
     );
     expect(body).toMatch(/1\. Snapshots the confirmed-subscriber list at notify-time\./);
     expect(body).toMatch(
-      /2\. For each subscriber, rotates the unsubscribe token \(so the\s*\n?\s*\/\/\s*one-click unsub link in this specific email works exactly\s*\n?\s*\/\/\s*once per recipient\)/,
+      /2\. For each subscriber, rotates the unsubscribe token \(so the\s*\/\/\s*one-click unsub link in this specific email works exactly\s*\/\/\s*once per recipient\)/,
     );
     expect(body).toMatch(
-      /3\. Sends the appropriate template \('created' or 'resolved'\) with\s*\n?\s*\/\/\s*a fresh personal unsubscribe URL\./,
+      /3\. Sends the appropriate template \('created' or 'resolved'\) with\s*\/\/\s*a fresh personal unsubscribe URL\./,
     );
     expect(body).toMatch(
-      /4\. Logs the fan-out count \+ per-recipient errors\. Each send is\s*\n?\s*\/\/\s*fire-and-forget; one bad address can't poison the batch\./,
+      /4\. Logs the fan-out count \+ per-recipient errors\. Each send is\s*\/\/\s*fire-and-forget; one bad address can't poison the batch\./,
     );
   });
 
   it('Serial-dispatch framing pinned: small list at launch; V-202d scheduled-jobs swap for scale', () => {
     expect(body).toMatch(
-      /Dispatch is serial\. The subscriber list is small at launch; when\s*\n?\s*\/\/\s*scale becomes a concern, swap to the V-202d scheduled-jobs pattern\s*\n?\s*\/\/\s*with per-subscriber jobs\./,
+      /Dispatch is serial\. The subscriber list is small at launch; when\s*\/\/\s*scale becomes a concern, swap to the V-202d scheduled-jobs pattern\s*\/\/\s*with per-subscriber jobs\./,
     );
   });
 
@@ -70,19 +70,19 @@ describe('W398.B apps/server/src/services/incident-notifications.ts content pari
   it('Constructor: 4 required deps + optional V-545.B Phase 2 throttle repo; baseUrl trailing-slash strip', () => {
     expect(body).toMatch(/private readonly baseUrl: string;/);
     expect(body).toMatch(
-      /constructor\(\s*\n?\s*private readonly subscribers: StatusSubscribersService,\s*\n?\s*private readonly email: EmailService,\s*\n?\s*private readonly logger: Logger,\s*\n?\s*config: IncidentNotificationsConfig,\s*\n?\s*\/\*\*[\s\S]+?\*\/\s*\n?\s*private readonly throttle\?: IncidentUpdateNotificationsRepo,\s*\n?\s*\) \{\s*\n?\s*this\.baseUrl = config\.statusPageBaseUrl\.replace\(\/\\\/\+\$\/, ''\);\s*\n?\s*\}/,
+      /constructor\(\s*private readonly subscribers: StatusSubscribersService,\s*private readonly email: EmailService,\s*private readonly logger: Logger,\s*config: IncidentNotificationsConfig,\s*\/\*\*[\s\S]+?\*\/\s*private readonly throttle\?: IncidentUpdateNotificationsRepo,\s*\) \{\s*this\.baseUrl = config\.statusPageBaseUrl\.replace\(\/\\\/\+\$\/, ''\);\s*\}/,
     );
   });
 
   it('notifyCreated / notifyResolved / notifyUpdated (V-545.B Phase 2): delegate to fanOut', () => {
     expect(body).toMatch(
-      /async notifyCreated\(incident: IncidentRow, initialUpdate: IncidentUpdateRow\): Promise<void> \{\s*\n?\s*await this\.fanOut\(incident, initialUpdate, 'created'\);\s*\n?\s*\}/,
+      /async notifyCreated\(incident: IncidentRow, initialUpdate: IncidentUpdateRow\): Promise<void> \{\s*await this\.fanOut\(incident, initialUpdate, 'created'\);\s*\}/,
     );
     expect(body).toMatch(
-      /async notifyResolved\(incident: IncidentRow, finalUpdate: IncidentUpdateRow\): Promise<void> \{\s*\n?\s*await this\.fanOut\(incident, finalUpdate, 'resolved'\);\s*\n?\s*\}/,
+      /async notifyResolved\(incident: IncidentRow, finalUpdate: IncidentUpdateRow\): Promise<void> \{\s*await this\.fanOut\(incident, finalUpdate, 'resolved'\);\s*\}/,
     );
     expect(body).toMatch(
-      /async notifyUpdated\(incident: IncidentRow, update: IncidentUpdateRow\): Promise<void> \{\s*\n?\s*if \(!this\.throttle\) return;\s*\n?\s*await this\.fanOut\(incident, update, 'updated', this\.throttle\);\s*\n?\s*\}/,
+      /async notifyUpdated\(incident: IncidentRow, update: IncidentUpdateRow\): Promise<void> \{\s*if \(!this\.throttle\) return;\s*await this\.fanOut\(incident, update, 'updated', this\.throttle\);\s*\}/,
     );
   });
 
@@ -93,13 +93,13 @@ describe('W398.B apps/server/src/services/incident-notifications.ts content pari
 
   it('Time-pick: created→startedAt; resolved→resolvedAt ?? new Date() fallback; updated→update.postedAt (V-545.B Phase 2)', () => {
     expect(body).toMatch(
-      /const time =\s*\n?\s*kind === 'created'\s*\n?\s*\? incident\.startedAt\s*\n?\s*: kind === 'resolved'\s*\n?\s*\? \(incident\.resolvedAt \?\? new Date\(\)\)\s*\n?\s*: update\.postedAt;/,
+      /const time =\s*kind === 'created'\s*\? incident\.startedAt\s*: kind === 'resolved'\s*\? \(incident\.resolvedAt \?\? new Date\(\)\)\s*: update\.postedAt;/,
     );
   });
 
   it('V-295c3-tombstone guard: listConfirmed returns email IS NOT NULL by invariant; type-narrow check anyway', () => {
     expect(body).toMatch(
-      /\/\/ V-295c3-tombstone — listConfirmed only returns rows where\s*\n?\s*\/\/\s*unsubscribed_at IS NULL, so email IS NOT NULL by invariant\s*\n?\s*\/\/\s*\(purge only fires post-unsubscribe\)\. Guard for type-narrowing\./,
+      /\/\/ V-295c3-tombstone — listConfirmed only returns rows where\s*\/\/\s*unsubscribed_at IS NULL, so email IS NOT NULL by invariant\s*\/\/\s*\(purge only fires post-unsubscribe\)\. Guard for type-narrowing\./,
     );
     expect(body).toMatch(/if \(sub\.email === null\) continue;/);
   });
@@ -109,10 +109,10 @@ describe('W398.B apps/server/src/services/incident-notifications.ts content pari
       /const unsubPlaintext = await this\.subscribers\.rotateUnsubscribeToken\(sub\.id\);/,
     );
     expect(body).toMatch(
-      /const unsubscribeLink = `\$\{this\.baseUrl\}\/subscribe\/unsubscribe\/\?token=\$\{encodeURIComponent\(\s*\n?\s*unsubPlaintext,\s*\n?\s*\)\}`;/,
+      /const unsubscribeLink = `\$\{this\.baseUrl\}\/subscribe\/unsubscribe\/\?token=\$\{encodeURIComponent\(\s*unsubPlaintext,\s*\)\}`;/,
     );
     expect(body).toMatch(
-      /await this\.email\.sendStatusIncidentNotification\(\{\s*\n?\s*to: sub\.email,\s*\n?\s*kind,\s*\n?\s*title: incident\.title,\s*\n?\s*severity: incident\.severity,\s*\n?\s*status: incident\.status,\s*\n?\s*message: update\.message,\s*\n?\s*incidentTime: time,\s*\n?\s*statusPageUrl: this\.baseUrl,\s*\n?\s*unsubscribeLink,\s*\n?\s*\}\);/,
+      /await this\.email\.sendStatusIncidentNotification\(\{\s*to: sub\.email,\s*kind,\s*title: incident\.title,\s*severity: incident\.severity,\s*status: incident\.status,\s*message: update\.message,\s*incidentTime: time,\s*statusPageUrl: this\.baseUrl,\s*unsubscribeLink,\s*\}\);/,
     );
   });
 
@@ -120,13 +120,13 @@ describe('W398.B apps/server/src/services/incident-notifications.ts content pari
     expect(body).toMatch(/} catch \(err\) \{/);
     expect(body).toMatch(/failed \+= 1;/);
     expect(body).toMatch(
-      /this\.logger\.warn\(\s*\n?\s*\{\s*\n?\s*component: 'incident-notifications',\s*\n?\s*email: maskEmail\(sub\.email\),\s*\n?\s*kind,\s*\n?\s*err:\s*\n?\s*err instanceof Error\s*\n?\s*\? \{ name: err\.name, message: err\.message, stack: err\.stack, cause: err\.cause \}\s*\n?\s*: \{ value: err \},\s*\n?\s*\},\s*\n?\s*'incident notification email failed',\s*\n?\s*\);/,
+      /this\.logger\.warn\(\s*\{\s*component: 'incident-notifications',\s*email: maskEmail\(sub\.email\),\s*kind,\s*err:\s*err instanceof Error\s*\? \{ name: err\.name, message: err\.message, stack: err\.stack, cause: err\.cause \}\s*: \{ value: err \},\s*\},\s*'incident notification email failed',\s*\);/,
     );
   });
 
   it('Post-fanout: info log with ok / failed / throttled counts + incidentId (V-545.B Phase 2)', () => {
     expect(body).toMatch(
-      /this\.logger\.info\(\s*\n?\s*\{ component: 'incident-notifications', kind, incidentId: incident\.id, ok, failed, throttled \},\s*\n?\s*'fan-out complete',\s*\n?\s*\);/,
+      /this\.logger\.info\(\s*\{ component: 'incident-notifications', kind, incidentId: incident\.id, ok, failed, throttled \},\s*'fan-out complete',\s*\);/,
     );
   });
 

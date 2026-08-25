@@ -47,13 +47,13 @@ describe('W452.A packages/behavioural-simulation/src/types.ts content parity', (
 
   it('stable domain shapes + private pure-generator seam framing pinned', () => {
     expect(body).toMatch(
-      /\/\/ Behavioural-simulation domain types\. Consumers \(drivers, GUI client and\s*\n?\s*\/\/ recipe runner\) depend on these stable shapes while the private package's\s*\n?\s*\/\/ pure deterministic generators evolve behind BehaviouralSimulator\./,
+      /\/\/ Behavioural-simulation domain types\. Consumers \(drivers, GUI client and\s*\/\/ recipe runner\) depend on these stable shapes while the private package's\s*\/\/ pure deterministic generators evolve behind BehaviouralSimulator\./,
     );
   });
 
   it("MouseTrajectory: 5-field (from/to {x,y} + points samples + durationMs + seed) + 'Sampled cubic-Bézier mouse path' framing", () => {
     expect(body).toMatch(
-      /\/\*\* Sampled cubic-Bézier mouse path between two screen points\. \*\/\s*\n?\s*export interface MouseTrajectory \{\s*\n?\s*\/\*\* Start screen coordinate\. \*\/\s*\n?\s*from: \{ x: number; y: number \};\s*\n?\s*\/\*\* End screen coordinate\. \*\/\s*\n?\s*to: \{ x: number; y: number \};\s*\n?\s*\/\*\* Sampled path including both endpoints\. Length = `samples \+ 1`\. \*\/\s*\n?\s*points: Array<\{ x: number; y: number; tMs: number \}>;[\s\S]*?durationMs: number;[\s\S]*?seed: string;/,
+      /\/\*\* Sampled cubic-Bézier mouse path between two screen points\. \*\/\s*export interface MouseTrajectory \{\s*\/\*\* Start screen coordinate\. \*\/\s*from: \{ x: number; y: number \};\s*\/\*\* End screen coordinate\. \*\/\s*to: \{ x: number; y: number \};\s*\/\*\* Sampled path including both endpoints\. Length = `samples \+ 1`\. \*\/\s*points: Array<\{ x: number; y: number; tMs: number \}>;[\s\S]*?durationMs: number;[\s\S]*?seed: string;/,
     );
   });
 
@@ -62,16 +62,16 @@ describe('W452.A packages/behavioural-simulation/src/types.ts content parity', (
       /export interface KeyboardCadence \{[\s\S]*?text: string;[\s\S]*?\/\*\* Per-keystroke delay in ms; `delaysMs\[i\]` is the delay BEFORE keystroke[\s\S]*?delaysMs: number\[\];[\s\S]*?durationMs: number;[\s\S]*?seed: string;/,
     );
     expect(body).toMatch(
-      /Length is\s*\n?\s*\*\s*the Unicode grapheme count, not the UTF-16 code-unit count\./,
+      /Length is\s*\*\s*the Unicode grapheme count, not the UTF-16 code-unit count\./,
     );
     expect(body).toMatch(
-      /\/\*\* Scroll-by-scroll velocity profile\. Distinct from mouse — wheel\/touch deltas\. \*\/\s*\n?\s*export interface ScrollPattern \{[\s\S]*?direction: 'up' \| 'down' \| 'left' \| 'right';[\s\S]*?totalDistancePx: number;[\s\S]*?ticks: Array<\{ deltaPx: number; tMs: number \}>;/,
+      /\/\*\* Scroll-by-scroll velocity profile\. Distinct from mouse — wheel\/touch deltas\. \*\/\s*export interface ScrollPattern \{[\s\S]*?direction: 'up' \| 'down' \| 'left' \| 'right';[\s\S]*?totalDistancePx: number;[\s\S]*?ticks: Array<\{ deltaPx: number; tMs: number \}>;/,
     );
   });
 
   it("ElementClass framing pinned: 'V-530.A — per-element-class distributions. Sub-slices B (scroll velocity), C (dwell + click-position), D (idle jitter + multi-touch) ship later.' + 7-value union (button|link|input|image|video|scroll-container|generic)", () => {
     expect(body).toMatch(
-      /\* V-530\.A — per-element-class distributions\. Sub-slices B \(scroll velocity\),\s*\n?\s*\*\s*C \(dwell \+ click-position\), D \(idle jitter \+ multi-touch\) ship later\./,
+      /\* V-530\.A — per-element-class distributions\. Sub-slices B \(scroll velocity\),\s*\*\s*C \(dwell \+ click-position\), D \(idle jitter \+ multi-touch\) ship later\./,
     );
     // Prettier 3.8.3 reformatted this union onto leading-pipe lines. The first
     // re-pin used a repeated-alternation regex and was WEAKER than what it
@@ -88,46 +88,46 @@ describe('W452.A packages/behavioural-simulation/src/types.ts content parity', (
 
   it("ElementBounds: 4-field (x + y + width + height) with 'Must be > 0' invariant on BOTH width AND height", () => {
     expect(body).toMatch(
-      /export interface ElementBounds \{[\s\S]*?x: number;[\s\S]*?y: number;[\s\S]*?\/\*\* Width \(CSS px\)\. Must be > 0\. \*\/\s*\n?\s*width: number;[\s\S]*?\/\*\* Height \(CSS px\)\. Must be > 0\. \*\/\s*\n?\s*height: number;/,
+      /export interface ElementBounds \{[\s\S]*?x: number;[\s\S]*?y: number;[\s\S]*?\/\*\* Width \(CSS px\)\. Must be > 0\. \*\/\s*width: number;[\s\S]*?\/\*\* Height \(CSS px\)\. Must be > 0\. \*\/\s*height: number;/,
     );
   });
 
   it("TouchSample: 4-field (x + y + tMs + pressure with '0..1 (0 = no force info; 1 = max)' framing)", () => {
     expect(body).toMatch(
-      /export interface TouchSample \{[\s\S]*?x: number;[\s\S]*?y: number;[\s\S]*?tMs: number;[\s\S]*?\/\*\* Pressure 0\.\.1 \(0 = no force info; 1 = max\)\. \*\/\s*\n?\s*pressure: number;/,
+      /export interface TouchSample \{[\s\S]*?x: number;[\s\S]*?y: number;[\s\S]*?tMs: number;[\s\S]*?\/\*\* Pressure 0\.\.1 \(0 = no force info; 1 = max\)\. \*\/\s*pressure: number;/,
     );
   });
 
   it("TouchEvent: 7-field (elementClass + bounds + start + end + samples readonly + durationMs computed as samples[last].tMs - samples[0].tMs + seed) + 'Touch-end coordinate (typically within ±2px of start for taps)' framing pinned", () => {
     expect(body).toMatch(
-      /\/\*\* Touch-end coordinate \(typically within ±2px of start for taps\)\. \*\/\s*\n?\s*end: \{ x: number; y: number \};/,
+      /\/\*\* Touch-end coordinate \(typically within ±2px of start for taps\)\. \*\/\s*end: \{ x: number; y: number \};/,
     );
     expect(body).toMatch(
-      /\/\*\* Pointer samples from start → end, monotonically increasing in `tMs`\. \*\/\s*\n?\s*samples: readonly TouchSample\[\];\s*\n?\s*\/\*\* Total wall-clock duration in ms \(samples\[last\]\.tMs - samples\[0\]\.tMs\)\. \*\/\s*\n?\s*durationMs: number;/,
+      /\/\*\* Pointer samples from start → end, monotonically increasing in `tMs`\. \*\/\s*samples: readonly TouchSample\[\];\s*\/\*\* Total wall-clock duration in ms \(samples\[last\]\.tMs - samples\[0\]\.tMs\)\. \*\/\s*durationMs: number;/,
     );
   });
 
   it("TouchDistribution framing pinned: 'Means are class-typical; the generator adds bounded jitter around them using a seeded PRNG so outputs are deterministic given a seed.' + 7 fields incl. 'Triangular distribution' on dwellJitterMs and centerBias '0.5 = centre' framing", () => {
     expect(body).toMatch(
-      /\* Means are class-typical; the generator adds bounded jitter around them\s*\n?\s*\*\s*using a seeded PRNG so outputs are deterministic given a seed\./,
+      /\* Means are class-typical; the generator adds bounded jitter around them\s*\*\s*using a seeded PRNG so outputs are deterministic given a seed\./,
     );
     expect(body).toMatch(
-      /\/\*\* ± jitter \(ms\) around `meanDwellMs`\. Triangular distribution\. \*\/\s*\n?\s*dwellJitterMs: number;/,
+      /\/\*\* ± jitter \(ms\) around `meanDwellMs`\. Triangular distribution\. \*\/\s*dwellJitterMs: number;/,
     );
     expect(body).toMatch(
-      /\/\*\* Position bias as fractions of element bounds \(0\.\.1; 0\.5 = centre\)\. \*\/\s*\n?\s*centerBias: \{ x: number; y: number \};/,
+      /\/\*\* Position bias as fractions of element bounds \(0\.\.1; 0\.5 = centre\)\. \*\/\s*centerBias: \{ x: number; y: number \};/,
     );
     expect(body).toMatch(
-      /\/\*\* Mean pressure 0\.\.1; jitter ± 0\.1 around mean\. \*\/\s*\n?\s*meanPressure: number;/,
+      /\/\*\* Mean pressure 0\.\.1; jitter ± 0\.1 around mean\. \*\/\s*meanPressure: number;/,
     );
   });
 
   it("BehaviouralProfile framing pinned: 'Top-level behavioural profile — bundles cadence preferences for a synthetic persona. Real generators sample these once at session-start and apply them to every interaction within the session for coherence.' + 6-field (id + meanKeyDelayMs + meanMouseSpeedPxPerMs + meanScrollPxPerTick + pauseProbability + meanPauseMs)", () => {
     expect(body).toMatch(
-      /\* Top-level behavioural profile — bundles cadence preferences for a\s*\n?\s*\*\s*synthetic persona\. Real generators sample these once at session-start\s*\n?\s*\*\s*and apply them to every interaction within the session for coherence\./,
+      /\* Top-level behavioural profile — bundles cadence preferences for a\s*\*\s*synthetic persona\. Real generators sample these once at session-start\s*\*\s*and apply them to every interaction within the session for coherence\./,
     );
     expect(body).toMatch(
-      /export interface BehaviouralProfile \{[\s\S]*?readonly id: string;[\s\S]*?readonly meanKeyDelayMs: number;[\s\S]*?readonly meanMouseSpeedPxPerMs: number;[\s\S]*?readonly meanScrollPxPerTick: number;[\s\S]*?\/\*\* Probability the persona pauses between actions \(0\.\.1\)\. \*\/\s*\n?\s*readonly pauseProbability: number;[\s\S]*?readonly meanPauseMs: number;/,
+      /export interface BehaviouralProfile \{[\s\S]*?readonly id: string;[\s\S]*?readonly meanKeyDelayMs: number;[\s\S]*?readonly meanMouseSpeedPxPerMs: number;[\s\S]*?readonly meanScrollPxPerTick: number;[\s\S]*?\/\*\* Probability the persona pauses between actions \(0\.\.1\)\. \*\/\s*readonly pauseProbability: number;[\s\S]*?readonly meanPauseMs: number;/,
     );
   });
 

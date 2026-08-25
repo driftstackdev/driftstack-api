@@ -68,12 +68,10 @@ describe('Arc 6 docs.idempotency — apps/docs/src/pages/reference/idempotency.m
   });
 
   it('documents endpoint-specific lifetime: permanent resource-backed creates, durable session-owned turn receipts, and provider-managed Stripe checkout', () => {
-    expect(body).toMatch(/permanent unique\s*\n?\s*index on the orders table/);
+    expect(body).toMatch(/permanent unique\s*index on the orders table/);
     expect(body).toMatch(/session row and replay for as long as the row exists\./);
     expect(body).toMatch(/Agent-message.*durable table/i);
-    expect(body).toMatch(
-      /Stripe checkout-session.*follow Stripe's\s*\n?\s*provider-side retention/i,
-    );
+    expect(body).toMatch(/Stripe checkout-session.*follow Stripe's\s*provider-side retention/i);
   });
 
   it('documents the empty-string-treated-as-absent rule', () => {
@@ -100,9 +98,7 @@ describe('Arc 6 docs.idempotency — apps/docs/src/pages/reference/idempotency.m
   });
 
   it('documents the fail-closed durable agent-turn receipt and disconnect ambiguity', () => {
-    expect(body).toMatch(
-      /browser work deliberately continues after an SSE viewer\s*\n?\s*disconnects/,
-    );
+    expect(body).toMatch(/browser work deliberately continues after an SSE viewer\s*disconnects/);
     expect(body).toMatch(/idempotency_status: "in_progress"/);
     expect(body).toMatch(/application-encrypt the terminal response/);
   });
@@ -147,7 +143,7 @@ describe('Arc 6 docs.idempotency — apps/docs/src/pages/reference/idempotency.m
       /An \*\*empty or whitespace-only\*\* header is treated as \*\*absent\*\*, not/,
     );
     expect(body, 'including that no error is returned').toMatch(
-      /without idempotency\s*\n?\s*protection and without an error/,
+      /without idempotency\s*protection and without an error/,
     );
   });
 
@@ -171,9 +167,7 @@ describe('Arc 6 docs.idempotency — apps/docs/src/pages/reference/idempotency.m
     expect(
       route,
       'the message route no longer refuses a valid key when the receipt store is absent',
-    ).toMatch(
-      /if \(agentTurnReceipts === undefined\) \{\s*\n?\s*throw new FeatureUnavailableError\(/,
-    );
+    ).toMatch(/if \(agentTurnReceipts === undefined\) \{\s*throw new FeatureUnavailableError\(/);
     expect(route, 'an absent key no longer runs the turn without a receipt').toMatch(
       /if \(idempotency\.kind === 'absent'\)/,
     );

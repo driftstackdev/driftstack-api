@@ -106,7 +106,7 @@ describe('Slice 4 — InputEvent cross-surface parity', () => {
   it('sdk-typescript sendInputEvent method exists with InputEvent + optional clientId opts (Slice 5 takeover-trigger needs client_id)', () => {
     const body = read(SDK_TS);
     expect(body).toMatch(
-      /sendInputEvent\(\s*\n?\s*id: string,\s*\n?\s*event: InputEvent,\s*\n?\s*opts\?: \{ clientId\?: string \},\s*\n?\s*\): Promise<SendInputEventResponse>/,
+      /sendInputEvent\(\s*id: string,\s*event: InputEvent,\s*opts\?: \{ clientId\?: string \},\s*\): Promise<SendInputEventResponse>/,
     );
   });
 

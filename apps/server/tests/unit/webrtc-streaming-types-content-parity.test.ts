@@ -48,58 +48,58 @@ describe('W456.C packages/webrtc-streaming/src/types.ts content parity', () => {
   it("V-149 framing pinned: 'V-149 — WebRTC streaming types.' + 'Streaming is out of scope for v1 — may land inside the GUI workstream if scope allows, otherwise polling-based screenshots ship first. V-149 lands the seam so future work can drop in behind a stable interface.'", () => {
     expect(body).toMatch(/\/\/ V-149 — WebRTC streaming types\./);
     expect(body).toMatch(
-      /\/\/ Streaming is out of scope for v1 — may land inside the GUI workstream\s*\n?\s*\/\/ if scope allows, otherwise polling-based screenshots ship first\.\s*\n?\s*\/\/ V-149 lands the seam so future work can drop in behind a stable\s*\n?\s*\/\/ interface\./,
+      /\/\/ Streaming is out of scope for v1 — may land inside the GUI workstream\s*\/\/ if scope allows, otherwise polling-based screenshots ship first\.\s*\/\/ V-149 lands the seam so future work can drop in behind a stable\s*\/\/ interface\./,
     );
   });
 
   it("Use-case framing pinned: 'live-view a session running on a Driftstack-controlled browser. Screenshots-on-demand work today (apps/server/src/routes/sessions.ts → /v1/sessions/:id/capture). WebRTC unlocks streaming — continuous frames at 30+ fps, low latency, no per-frame HTTP cost.'", () => {
     expect(body).toMatch(
-      /\/\/ Use case: live-view a session running on a Driftstack-controlled\s*\n?\s*\/\/ browser\. Screenshots-on-demand work today \(apps\/server\/src\/routes\/\s*\n?\s*\/\/ sessions\.ts → \/v1\/sessions\/:id\/capture\)\. WebRTC unlocks streaming —\s*\n?\s*\/\/ continuous frames at 30\+ fps, low latency, no per-frame HTTP cost\./,
+      /\/\/ Use case: live-view a session running on a Driftstack-controlled\s*\/\/ browser\. Screenshots-on-demand work today \(apps\/server\/src\/routes\/\s*\/\/ sessions\.ts → \/v1\/sessions\/:id\/capture\)\. WebRTC unlocks streaming —\s*\/\/ continuous frames at 30\+ fps, low latency, no per-frame HTTP cost\./,
     );
   });
 
   it("StreamId = string 'Stable across re-attaches' framing pinned", () => {
     expect(body).toMatch(
-      /\/\*\* Public stream identifier\. Stable across re-attaches\. \*\/\s*\n?\s*export type StreamId = string;/,
+      /\/\*\* Public stream identifier\. Stable across re-attaches\. \*\/\s*export type StreamId = string;/,
     );
   });
 
   it("SdpPayload: 2-field (type 'offer'|'answer' + sdp string) framing 'SDP offer/answer payload, opaque to consumers.'", () => {
     expect(body).toMatch(
-      /\/\*\* SDP offer\/answer payload, opaque to consumers\. \*\/\s*\n?\s*export interface SdpPayload \{\s*\n?\s*type: 'offer' \| 'answer';\s*\n?\s*sdp: string;\s*\n?\s*\}/,
+      /\/\*\* SDP offer\/answer payload, opaque to consumers\. \*\/\s*export interface SdpPayload \{\s*type: 'offer' \| 'answer';\s*sdp: string;\s*\}/,
     );
   });
 
   it("IceCandidate: 3-field (candidate + sdpMLineIndex 'Media-section index' nullable + sdpMid 'Media-section ID' nullable); 'exchanged during connection establishment' framing pinned", () => {
     expect(body).toMatch(
-      /\/\*\* ICE candidate — exchanged during connection establishment\. \*\/\s*\n?\s*export interface IceCandidate \{\s*\n?\s*candidate: string;\s*\n?\s*\/\*\* Media-section index\. \*\/\s*\n?\s*sdpMLineIndex: number \| null;\s*\n?\s*\/\*\* Media-section ID\. \*\/\s*\n?\s*sdpMid: string \| null;\s*\n?\s*\}/,
+      /\/\*\* ICE candidate — exchanged during connection establishment\. \*\/\s*export interface IceCandidate \{\s*candidate: string;\s*\/\*\* Media-section index\. \*\/\s*sdpMLineIndex: number \| null;\s*\/\*\* Media-section ID\. \*\/\s*sdpMid: string \| null;\s*\}/,
     );
   });
 
   it("StreamConfig: 4-field (targetFps 'Implementations may degrade under bandwidth pressure' + targetBitrateKbps + audio 'Mostly false for browser sessions' + iceServers); IceServer: urls string|readonly string[] + optional username + credential", () => {
     expect(body).toMatch(
-      /export interface StreamConfig \{\s*\n?\s*\/\*\* Target frame rate\. Implementations may degrade under bandwidth pressure\. \*\/\s*\n?\s*targetFps: number;[\s\S]*?targetBitrateKbps: number;[\s\S]*?\/\*\* Audio capture in addition to video\? Mostly false for browser sessions\. \*\/\s*\n?\s*audio: boolean;[\s\S]*?\/\*\* ICE servers \(STUN \/ TURN\) for NAT traversal\. \*\/\s*\n?\s*iceServers: readonly IceServer\[\];/,
+      /export interface StreamConfig \{\s*\/\*\* Target frame rate\. Implementations may degrade under bandwidth pressure\. \*\/\s*targetFps: number;[\s\S]*?targetBitrateKbps: number;[\s\S]*?\/\*\* Audio capture in addition to video\? Mostly false for browser sessions\. \*\/\s*audio: boolean;[\s\S]*?\/\*\* ICE servers \(STUN \/ TURN\) for NAT traversal\. \*\/\s*iceServers: readonly IceServer\[\];/,
     );
     expect(body).toMatch(
-      /export interface IceServer \{\s*\n?\s*urls: string \| readonly string\[\];\s*\n?\s*username\?: string;\s*\n?\s*credential\?: string;\s*\n?\s*\}/,
+      /export interface IceServer \{\s*urls: string \| readonly string\[\];\s*username\?: string;\s*credential\?: string;\s*\}/,
     );
   });
 
   it("StreamState: 5-value union with per-state inline comments (connecting 'signaling exchange in progress' + connected 'peer connection established + media flowing' + reconnecting 'transient failure, attempting recovery' + closed 'stream ended cleanly' + failed 'stream ended with an error')", () => {
     expect(body).toMatch(
-      /export type StreamState =\s*\n?\s*\| 'connecting' \/\/ signaling exchange in progress\s*\n?\s*\| 'connected' \/\/ peer connection established \+ media flowing\s*\n?\s*\| 'reconnecting' \/\/ transient failure, attempting recovery\s*\n?\s*\| 'closed' \/\/ stream ended cleanly\s*\n?\s*\| 'failed'; \/\/ stream ended with an error/,
+      /export type StreamState =\s*\| 'connecting' \/\/ signaling exchange in progress\s*\| 'connected' \/\/ peer connection established \+ media flowing\s*\| 'reconnecting' \/\/ transient failure, attempting recovery\s*\| 'closed' \/\/ stream ended cleanly\s*\| 'failed'; \/\/ stream ended with an error/,
     );
   });
 
   it("StreamStats: 8-field (streamId + state + ageMs + framesSent 'Frames sent in the last sample window' + fpsAvg + bitrateKbpsAvg + rttMs nullable 'peer connection RTT' + packetLossFraction '0..1')", () => {
     expect(body).toMatch(
-      /export interface StreamStats \{[\s\S]*?streamId: StreamId;[\s\S]*?state: StreamState;[\s\S]*?ageMs: number;[\s\S]*?\/\*\* Frames sent in the last sample window\. \*\/\s*\n?\s*framesSent: number;[\s\S]*?fpsAvg: number;[\s\S]*?bitrateKbpsAvg: number;[\s\S]*?\/\*\* Round-trip time in ms \(peer connection RTT\)\. \*\/\s*\n?\s*rttMs: number \| null;[\s\S]*?\/\*\* Packet loss fraction \(0\.\.1\)\. \*\/\s*\n?\s*packetLossFraction: number;/,
+      /export interface StreamStats \{[\s\S]*?streamId: StreamId;[\s\S]*?state: StreamState;[\s\S]*?ageMs: number;[\s\S]*?\/\*\* Frames sent in the last sample window\. \*\/\s*framesSent: number;[\s\S]*?fpsAvg: number;[\s\S]*?bitrateKbpsAvg: number;[\s\S]*?\/\*\* Round-trip time in ms \(peer connection RTT\)\. \*\/\s*rttMs: number \| null;[\s\S]*?\/\*\* Packet loss fraction \(0\.\.1\)\. \*\/\s*packetLossFraction: number;/,
     );
   });
 
   it("StreamEvent: 4-kind discriminated union (state_changed {state + at} + stats_sample {stats} + ice_candidate {candidate} + error {message + recoverable boolean}); 'Event emitted by a stream during its lifecycle.' framing pinned", () => {
     expect(body).toMatch(
-      /\/\*\* Event emitted by a stream during its lifecycle\. \*\/\s*\n?\s*export type StreamEvent =\s*\n?\s*\| \{ kind: 'state_changed'; state: StreamState; at: number \}\s*\n?\s*\| \{ kind: 'stats_sample'; stats: StreamStats \}\s*\n?\s*\| \{ kind: 'ice_candidate'; candidate: IceCandidate \}\s*\n?\s*\| \{ kind: 'error'; message: string; recoverable: boolean \};/,
+      /\/\*\* Event emitted by a stream during its lifecycle\. \*\/\s*export type StreamEvent =\s*\| \{ kind: 'state_changed'; state: StreamState; at: number \}\s*\| \{ kind: 'stats_sample'; stats: StreamStats \}\s*\| \{ kind: 'ice_candidate'; candidate: IceCandidate \}\s*\| \{ kind: 'error'; message: string; recoverable: boolean \};/,
     );
   });
 

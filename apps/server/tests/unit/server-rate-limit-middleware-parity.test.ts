@@ -48,7 +48,7 @@ describe('W713 server-side rate-limit middleware parity', () => {
 
     expect(src).toMatch(/declare module 'fastify' \{/);
     expect(src).toMatch(
-      /rateLimit: \(\s*\n?\s*bucketKey: string,\s*\n?\s*cost\?: number,\s*\n?\s*\) => \(request: FastifyRequest, reply: FastifyReply\) => Promise<void>/,
+      /rateLimit: \(\s*bucketKey: string,\s*cost\?: number,\s*\) => \(request: FastifyRequest, reply: FastifyReply\) => Promise<void>/,
     );
   });
 
@@ -103,14 +103,14 @@ describe('W713 server-side rate-limit middleware parity', () => {
     // limiter-list — "bucket will" ends one line, "be back at
     // capacity" starts the next.
     expect(src).toMatch(
-      /`reset` is unix seconds at which the bucket will\s*\n?\s*\/\/\s*be back at capacity/,
+      /`reset` is unix seconds at which the bucket will\s*\/\/\s*be back at capacity/,
     );
   });
 
   it('CRITICAL secondsToFull computation pinned — `Math.ceil(tokensNeededForFull / result.refillPerSecond)` ONLY when tokensNeededForFull > 0 AND refillPerSecond > 0. Drift to dropping the refillPerSecond > 0 guard would divide by zero on a bucket with no refill.', () => {
     const src = read(RATE_LIMIT_MIDDLEWARE);
     expect(src).toMatch(
-      /tokensNeededForFull > 0 && result\.refillPerSecond > 0\s*\n?\s*\?\s*Math\.ceil\(tokensNeededForFull \/ result\.refillPerSecond\)\s*\n?\s*: 0/,
+      /tokensNeededForFull > 0 && result\.refillPerSecond > 0\s*\?\s*Math\.ceil\(tokensNeededForFull \/ result\.refillPerSecond\)\s*: 0/,
     );
   });
 
@@ -133,7 +133,7 @@ describe('W713 server-side rate-limit middleware parity', () => {
     const src = read(RATE_LIMIT_MIDDLEWARE);
 
     expect(src).toMatch(/Allowed → debug level/);
-    expect(src).toMatch(/avoid noise at default\s*\n?\s*\/\/\s*info-level production logs/);
+    expect(src).toMatch(/avoid noise at default\s*\/\/\s*info-level production logs/);
     expect(src).toMatch(/Exceeded → warn level/);
 
     // Implementation matches the framing.
@@ -171,14 +171,14 @@ describe('W713 server-side rate-limit middleware parity', () => {
   it('CRITICAL `bucket` framing pinned — the roster must name ALL enforced buckets. V-754: this pin\'s own title warned that "drift to a 4th bucket without updating the roster would surface as unknown bucket-keys to clients", and that is precisely what happened — agent_sessions:input_event became a live preHandler gate AND is published by GET /v1/account/rate-limits while this roster still said three. Pinning the 3-name text froze the stale list instead of catching the drift, so the assertion now requires the 4th name too.', () => {
     const src = read(RATE_LIMIT_MIDDLEWARE);
     expect(src).toMatch(
-      /`bucket` lets clients distinguish which\s*\n?\s*\/\/\s*limiter fired \(`global` \/ `sessions:create` \/\s*\n?\s*\/\/\s*`agent_sessions:message` \/ `agent_sessions:input_event` today/,
+      /`bucket` lets clients distinguish which\s*\/\/\s*limiter fired \(`global` \/ `sessions:create` \/\s*\/\/\s*`agent_sessions:message` \/ `agent_sessions:input_event` today/,
     );
   });
 
   it('CRITICAL plugin signature pinned with `done: (err?: Error) => void` callback. The Fastify-plugin sync callback shape is what lets registration complete synchronously; drift to async-only would force route registration to await across the plugin tree.', () => {
     const src = read(RATE_LIMIT_MIDDLEWARE);
     expect(src).toMatch(
-      /function rateLimitPlugin\(\s*\n?\s*app: FastifyInstance,\s*\n?\s*opts: RateLimitPluginOptions,\s*\n?\s*done: \(err\?: Error\) => void,\s*\n?\s*\): void/,
+      /function rateLimitPlugin\(\s*app: FastifyInstance,\s*opts: RateLimitPluginOptions,\s*done: \(err\?: Error\) => void,\s*\): void/,
     );
     expect(src).toMatch(/^\s*done\(\);/m);
   });

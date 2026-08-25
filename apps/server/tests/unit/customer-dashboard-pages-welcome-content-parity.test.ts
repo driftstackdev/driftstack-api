@@ -25,7 +25,7 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
 
   it("Brand intro (W501 noob-friendly + honesty pass): plain 'iPhone Safari browser running in the cloud — every website it visits sees a genuine iPhone, not a bot.' Dropped the 'WebKit engine' jargon for the new-user welcome screen; keeps the honesty-pass posture (NO 'real iPhone Safari' binary claim — says 'an iPhone Safari browser', matching first-session.astro).", () => {
     expect(body).toMatch(
-      /Driftstack gives you an iPhone Safari browser running in the\s*\n?\s*cloud — every website it visits sees a genuine iPhone, not a bot\./,
+      /Driftstack gives you an iPhone Safari browser running in the\s*cloud — every website it visits sees a genuine iPhone, not a bot\./,
     );
     // Honesty pass: must NOT claim to run the Safari binary ("real iPhone Safari").
     expect(body).not.toMatch(/real iPhone Safari/);
@@ -38,10 +38,10 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
       /<span class="font-mono text-sm text-tk-accent-text">\$0 · no card<\/span>/,
     );
     expect(body).toMatch(
-      /Your account is already on the free plan: 1 profile, 1 concurrent\s*\n?\s*session of up to 20 minutes\. No subscription, no expiry/,
+      /Your account is already on the free plan: 1 profile, 1 concurrent\s*session of up to 20 minutes\. No subscription, no expiry/,
     );
     expect(body).toMatch(
-      /<a href="\/" class="btn-primary inline-flex">\s*\n?\s*Go to your dashboard\s*\n?\s*<\/a>/,
+      /<a href="\/" class="btn-primary inline-flex">\s*Go to your dashboard\s*<\/a>/,
     );
   });
 
@@ -50,7 +50,7 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
       /<span class="font-mono text-sm text-tk-ink-3">\$79–\$1,499 \/ mo<\/span>/,
     );
     expect(body).toMatch(
-      /Upgrade to a paid plan for more concurrency, more profiles, customer API\s*\n?\s*keys, and SDK automation — Personal for hand-\s*\n?\s*driven sessions, all the way up to API Scale for high-volume\s*\n?\s*automation\. Cancel anytime\./,
+      /Upgrade to a paid plan for more concurrency, more profiles, customer API\s*keys, and SDK automation — Personal for hand-\s*driven sessions, all the way up to API Scale for high-volume\s*automation\. Cancel anytime\./,
     );
     expect(body).toMatch(
       /<a href="\/select-tier\/" class="btn-secondary mt-4 inline-flex">View tiers<\/a>/,
@@ -61,20 +61,18 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
     expect(body).toMatch(/aria-label="What happens next"/);
     // Step 1 — start-free-or-pick-paid + Stripe redirect + "we never see them" reassurance.
     expect(body).toMatch(
-      /Start free with no card — or pick a paid tier and we'll send you\s*\n?\s*to Stripe to confirm payment\./,
+      /Start free with no card — or pick a paid tier and we'll send you\s*to Stripe to confirm payment\./,
     );
-    expect(body).toMatch(
-      /Your card details stay between you\s*\n?\s*and Stripe — we never see them\./,
-    );
+    expect(body).toMatch(/Your card details stay between you\s*and Stripe — we never see them\./);
     // Step 2 — the app is a PUBLIC cross-platform download; browser sign-in then
     // provisions the restricted app credential. Not OS-code-signed.
     expect(body).toMatch(
-      /Download the desktop app for macOS, Windows or Linux, then choose\s*\n?\s*browser sign-in\. Driftstack provisions a restricted device\s*\n?\s*credential for the app; that's where Free customers launch and drive\s*\n?\s*iPhone Safari sessions\. The builds are not OS-code-signed yet, so\s*\n?\s*macOS Gatekeeper or Windows SmartScreen warns on first launch\./,
+      /Download the desktop app for macOS, Windows or Linux, then choose\s*browser sign-in\. Driftstack provisions a restricted device\s*credential for the app; that's where Free customers launch and drive\s*iPhone Safari sessions\. The builds are not OS-code-signed yet, so\s*macOS Gatekeeper or Windows SmartScreen warns on first launch\./,
     );
     expect(body).toContain('https://github.com/driftstackdev/driftstack-api/releases/latest');
     // Step 3 — customer keys/SDK automation require a paid API tier.
     expect(body).toMatch(
-      /On an API-enabled paid tier, create a customer API key for SDK\s*\n?\s*automation\. Customer keys can be revoked or rotated any time;\s*\n?\s*Free desktop sign-in does not require one\./,
+      /On an API-enabled paid tier, create a customer API key for SDK\s*automation\. Customer keys can be revoked or rotated any time;\s*Free desktop sign-in does not require one\./,
     );
     expect(body).toMatch(/restricted device credential for the\s+app, not a customer API key/);
     expect(body).not.toMatch(/API key[^.]*connect the desktop app/i);
@@ -92,7 +90,7 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
     expect(body).toMatch(/Already know what you want\?/);
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /<a\s*\n?\s*href="\/"\s*\n?\s*class="text-tk-accent-text[^"]*"\s*\n?\s*>\s*Skip to dashboard\s*<\/a>/,
+      /<a\s*href="\/"\s*class="text-tk-accent-text[^"]*"\s*>\s*Skip to dashboard\s*<\/a>/,
     );
   });
 

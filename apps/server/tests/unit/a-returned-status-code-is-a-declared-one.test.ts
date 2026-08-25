@@ -414,7 +414,7 @@ describe('a returned status code is a declared one', () => {
     };
 
     expect(method('create'), 'create still refuses at the endpoint cap').toMatch(
-      /throw new ConflictError\(\s*\n?\s*`Account already has/,
+      /throw new ConflictError\(\s*`Account already has/,
     );
     expect(method('update'), 'update still refuses a disabled endpoint').toContain(
       "throw new ConflictError('Cannot update a disabled endpoint.",

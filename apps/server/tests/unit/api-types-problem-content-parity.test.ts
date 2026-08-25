@@ -39,7 +39,7 @@ describe('W432.B packages/api-types/src/problem.ts content parity', () => {
 
   it('Framing pinned: RFC 7807 problem details; every error response is one of these; type is stable URI; clients switch on it; detail human-readable', () => {
     expect(body).toMatch(
-      /\/\/ RFC 7807 problem details\. Every error response from the API is one of these\.\s*\n?\s*\/\/ `type` is a stable URI; clients switch on it\. `detail` is human-readable\./,
+      /\/\/ RFC 7807 problem details\. Every error response from the API is one of these\.\s*\/\/ `type` is a stable URI; clients switch on it\. `detail` is human-readable\./,
     );
   });
 
@@ -49,14 +49,14 @@ describe('W432.B packages/api-types/src/problem.ts content parity', () => {
 
   it('ProblemSchema: type URL + title + status int 100..599 + optional detail/instance + .catchall(unknown) for extensions; .describe describes "RFC 7807 problem details"', () => {
     expect(body).toMatch(
-      /export const ProblemSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*type: z\s*\n?\s*\.string\(\)\s*\n?\s*\.url\(\)\s*\n?\s*\.describe\('Stable URI identifying the problem class\. Clients switch on this\.'\),\s*\n?\s*title: z\.string\(\),\s*\n?\s*status: z\.number\(\)\.int\(\)\.min\(100\)\.max\(599\),\s*\n?\s*detail: z\.string\(\)\.optional\(\),\s*\n?\s*instance: z\.string\(\)\.optional\(\),\s*\n?\s*\}\)\s*\n?\s*\.catchall\(z\.unknown\(\)\)\s*\n?\s*\.describe\('RFC 7807 problem details'\);/,
+      /export const ProblemSchema = z\s*\.object\(\{\s*type: z\s*\.string\(\)\s*\.url\(\)\s*\.describe\('Stable URI identifying the problem class\. Clients switch on this\.'\),\s*title: z\.string\(\),\s*status: z\.number\(\)\.int\(\)\.min\(100\)\.max\(599\),\s*detail: z\.string\(\)\.optional\(\),\s*instance: z\.string\(\)\.optional\(\),\s*\}\)\s*\.catchall\(z\.unknown\(\)\)\s*\.describe\('RFC 7807 problem details'\);/,
     );
     expect(body).toMatch(/export type Problem = z\.infer<typeof ProblemSchema>;/);
   });
 
   it('PROBLEM_TYPES const-asserted dictionary; immutability rationale pinned (keep URIs forever; adding fine; renaming/removing breaks consumers)', () => {
     expect(body).toMatch(
-      /\/\/ Stable problem types — keep these URIs forever\. Adding new ones is fine;\s*\n?\s*\/\/ renaming or removing breaks consumers\./,
+      /\/\/ Stable problem types — keep these URIs forever\. Adding new ones is fine;\s*\/\/ renaming or removing breaks consumers\./,
     );
     expect(body).toMatch(/export const PROBLEM_TYPES = \{/);
     expect(body).toMatch(/\} as const;/);
@@ -84,10 +84,10 @@ describe('W432.B packages/api-types/src/problem.ts content parity', () => {
   it('V-079 auth-flow cluster comment pinned + V-352b FeatureUnavailable rationale + V-353e MfaStepUpRequired flow rationale', () => {
     expect(body).toMatch(/\/\/ Auth-flow problem types \(V-079\)\./);
     expect(body).toMatch(
-      /\/\/ V-352b — feature explicitly disabled at deploy-time \(e\.g\. avatar\s*\n?\s*\/\/ upload requires the public R2 bucket; in environments where it\s*\n?\s*\/\/ isn't configured the endpoint returns 503 instead of a misleading\s*\n?\s*\/\/ 404 \/ 500\)\./,
+      /\/\/ V-352b — feature explicitly disabled at deploy-time \(e\.g\. avatar\s*\/\/ upload requires the public R2 bucket; in environments where it\s*\/\/ isn't configured the endpoint returns 503 instead of a misleading\s*\/\/ 404 \/ 500\)\./,
     );
     expect(body).toMatch(
-      /\/\/ V-353e — step-up MFA challenge required before this op runs\.\s*\n?\s*\/\/ Returned as 403 with `requires_mfa_step_up: true` extension\. Client\s*\n?\s*\/\/ collects a fresh 6-digit code, posts to \/v1\/auth\/mfa\/step-up, then\s*\n?\s*\/\/ retries the original request\./,
+      /\/\/ V-353e — step-up MFA challenge required before this op runs\.\s*\/\/ Returned as 403 with `requires_mfa_step_up: true` extension\. Client\s*\/\/ collects a fresh 6-digit code, posts to \/v1\/auth\/mfa\/step-up, then\s*\/\/ retries the original request\./,
     );
   });
 

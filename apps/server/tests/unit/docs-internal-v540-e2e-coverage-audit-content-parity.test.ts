@@ -130,7 +130,7 @@ describe('W566.A /docs/internal/v540-e2e-coverage-audit.md content parity', () =
     );
     expect(body).toMatch(/Total addition: ~3 specs \+ ~10-15 tests across them\./);
     expect(body).toMatch(
-      /Test suite would grow\s*\n?\s*from 1402 \(post-V-530\.C\) to ~1415-1417 at V-540\.B closure\./,
+      /Test suite would grow\s*from 1402 \(post-V-530\.C\) to ~1415-1417 at V-540\.B closure\./,
     );
     expect(body).toMatch(/## Coverage methodology note/);
   });

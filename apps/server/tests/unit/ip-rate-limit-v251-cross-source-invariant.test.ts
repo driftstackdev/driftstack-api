@@ -146,7 +146,7 @@ describe('W982 ip-rate-limit V-251 cross-source invariant', () => {
   it('CRITICAL unresolved-IP guard uses trimmed non-empty req.ip or the shared sentinel and has no early-return bypass.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/middleware/ip-rate-limit.ts'));
     expect(p).toMatch(
-      /const ip =\s*\n?\s*typeof req\.ip === 'string' && req\.ip\.trim\(\)\.length > 0 \? req\.ip : 'unresolved-client';/,
+      /const ip =\s*typeof req\.ip === 'string' && req\.ip\.trim\(\)\.length > 0 \? req\.ip : 'unresolved-client';/,
     );
     expect(p).not.toMatch(/if \(ip === null\)/);
   });

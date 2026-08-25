@@ -24,12 +24,12 @@ describe('status-site pages/incident content parity', () => {
 
   it('V-545.A doc-comment framing pinned: public incident-detail view reads ?id=inc_<uuid> from URL. Drift to a different query-param shape would break shareable incident links + the customers who bookmark them', () => {
     expect(body).toMatch(/\/\/ V-545\.A — public incident-detail view\./);
-    expect(body).toMatch(/Reads `\?id=inc_<uuid>` from\s*\n?\s*\/\/?\s*the URL on the client/);
+    expect(body).toMatch(/Reads `\?id=inc_<uuid>` from\s*\/\/?\s*the URL on the client/);
   });
 
   it("no-auth + no-cookie posture pinned: 'the endpoint is no-auth so the fetch happens directly from the browser; the page itself sets no cookies and does not log visitors'. Drift to introducing auth or cookies would break the public-status-page-without-tracking promise that mirrors index.astro", () => {
     expect(body).toMatch(/endpoint is no-auth/);
-    expect(body).toMatch(/page itself sets no\s*\n?\s*\/\/?\s*cookies and does not log visitors/);
+    expect(body).toMatch(/page itself sets no\s*\/\/?\s*cookies and does not log visitors/);
     expect(body).toMatch(/same posture as index\.astro/);
   });
 

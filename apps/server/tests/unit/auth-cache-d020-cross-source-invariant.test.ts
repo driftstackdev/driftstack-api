@@ -122,7 +122,7 @@ describe('W924 D-020 auth-cache cross-source invariant', () => {
     );
     expect(p, 'and the worst-case window with it').not.toMatch(/within 30s in the worst case/);
     expect(p, 'the TTL is framed as an entry lifetime').toMatch(
-      /it is not a\s*\n?\s*\/\/\s*revocation budget/,
+      /it is not a\s*\/\/\s*revocation budget/,
     );
     expect(p, 'and the failure mode is named as closed, not stale').toMatch(
       /degrades to the authoritative scrypt path/,

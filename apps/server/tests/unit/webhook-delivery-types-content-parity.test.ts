@@ -47,25 +47,25 @@ describe('W451.A packages/webhook-delivery/src/types.ts content parity', () => {
   it("V-144 framing pinned: 'Webhook delivery system types — V-144 stub.' + 'INTERNAL delivery mechanics' distinction from @driftstack/api-types public-facing wire types", () => {
     expect(body).toMatch(/\/\/ Webhook delivery system types — V-144 stub\./);
     expect(body).toMatch(
-      /\/\/ Distinct from `@driftstack\/api-types` `WebhookEndpoint` \/\s*\n?\s*\/\/ `WebhookDelivery` shapes \(which are the public-facing wire types\s*\n?\s*\/\/ that customers see in `\/v1\/webhooks\/\*` responses\)\. This package\s*\n?\s*\/\/ models the INTERNAL delivery mechanics — queue, retry curve, DLQ\s*\n?\s*\/\/ management, signature payload — that the production system uses\s*\n?\s*\/\/ to actually push events out\./,
+      /\/\/ Distinct from `@driftstack\/api-types` `WebhookEndpoint` \/\s*\/\/ `WebhookDelivery` shapes \(which are the public-facing wire types\s*\/\/ that customers see in `\/v1\/webhooks\/\*` responses\)\. This package\s*\/\/ models the INTERNAL delivery mechanics — queue, retry curve, DLQ\s*\/\/ management, signature payload — that the production system uses\s*\/\/ to actually push events out\./,
     );
   });
 
   it('seam rationale framing pinned: \'V-144 lands the seam so a future "more sophisticated delivery system" (multi-region, batching, ordering guarantees, etc.) can drop in behind the same interface without touching the call sites.\'', () => {
     expect(body).toMatch(
-      /\/\/ V-144 lands the seam so a future "more sophisticated delivery\s*\n?\s*\/\/ system" \(multi-region, batching, ordering guarantees, etc\.\) can\s*\n?\s*\/\/ drop in behind the same interface without touching the call sites\./,
+      /\/\/ V-144 lands the seam so a future "more sophisticated delivery\s*\/\/ system" \(multi-region, batching, ordering guarantees, etc\.\) can\s*\/\/ drop in behind the same interface without touching the call sites\./,
     );
   });
 
   it("DeliveryEndpoint: 7 fields (id stable + accountId + url + eventTypes + signingSecret + active + optional config); 'https:// only; http:// rejected at registration time' guard pinned", () => {
     expect(body).toMatch(
-      /export interface DeliveryEndpoint \{[\s\S]*?id: string;[\s\S]*?accountId: string;[\s\S]*?\/\*\* Target URL\. https:\/\/ only; http:\/\/ rejected at registration time\. \*\/\s*\n?\s*url: string;[\s\S]*?eventTypes: readonly string\[\];[\s\S]*?signingSecret: string;[\s\S]*?active: boolean;[\s\S]*?config\?: DeliveryConfig;/,
+      /export interface DeliveryEndpoint \{[\s\S]*?id: string;[\s\S]*?accountId: string;[\s\S]*?\/\*\* Target URL\. https:\/\/ only; http:\/\/ rejected at registration time\. \*\/\s*url: string;[\s\S]*?eventTypes: readonly string\[\];[\s\S]*?signingSecret: string;[\s\S]*?active: boolean;[\s\S]*?config\?: DeliveryConfig;/,
     );
   });
 
   it('DeliveryConfig: 2 optional fields pinned — timeoutMs default 10_000, maxAttempts default 6 (initial + 5 retries; backoff is the fixed BACKOFF_MS_BY_ATTEMPT table, not configurable). The dead backoffBaseMs field was removed 2026-05-29.', () => {
     expect(body).toMatch(
-      /\/\*\* Per-attempt HTTP timeout in ms\. Default 10_000\. \*\/\s*\n?\s*timeoutMs\?: number;/,
+      /\/\*\* Per-attempt HTTP timeout in ms\. Default 10_000\. \*\/\s*timeoutMs\?: number;/,
     );
     expect(body).toMatch(/Max attempts before DLQ\. Default 6 \(the initial delivery \+ 5/);
     expect(body).toMatch(/retries; see DEFAULT_MAX_ATTEMPTS\)\./);
@@ -76,37 +76,37 @@ describe('W451.A packages/webhook-delivery/src/types.ts content parity', () => {
 
   it("DeliveryPayload: 4 fields (eventId + eventType + emittedAtSec + body); 'UNIX timestamp seconds when the event was emitted (NOT when delivery is attempted)' caveat pinned", () => {
     expect(body).toMatch(
-      /export interface DeliveryPayload \{[\s\S]*?\/\*\* Stable event id for dedupe across retries\. \*\/\s*\n?\s*eventId: string;[\s\S]*?eventType: string;[\s\S]*?\/\*\* UNIX timestamp seconds when the event was emitted \(NOT when delivery is attempted\)\. \*\/\s*\n?\s*emittedAtSec: number;[\s\S]*?\/\*\* Serialized payload — the customer receives this body verbatim\. \*\/\s*\n?\s*body: string;/,
+      /export interface DeliveryPayload \{[\s\S]*?\/\*\* Stable event id for dedupe across retries\. \*\/\s*eventId: string;[\s\S]*?eventType: string;[\s\S]*?\/\*\* UNIX timestamp seconds when the event was emitted \(NOT when delivery is attempted\)\. \*\/\s*emittedAtSec: number;[\s\S]*?\/\*\* Serialized payload — the customer receives this body verbatim\. \*\/\s*body: string;/,
     );
   });
 
   it("DeliveryAttempt: 7 fields incl. 4-state outcome union ('success'|'http_error'|'transport_error'|'timeout'); 'transport_error = couldn't reach endpoint at all' framing pinned", () => {
     expect(body).toMatch(
-      /export interface DeliveryAttempt \{[\s\S]*?attempt: number;[\s\S]*?completedAtMs: number;[\s\S]*?responseStatus: number \| null;[\s\S]*?responseExcerpt: string \| null;[\s\S]*?durationMs: number;[\s\S]*?\/\*\* Surface-level outcome\. `'transport_error'` = couldn't reach endpoint at all\. \*\/\s*\n?\s*outcome: 'success' \| 'http_error' \| 'transport_error' \| 'timeout';[\s\S]*?errorMessage: string \| null;/,
+      /export interface DeliveryAttempt \{[\s\S]*?attempt: number;[\s\S]*?completedAtMs: number;[\s\S]*?responseStatus: number \| null;[\s\S]*?responseExcerpt: string \| null;[\s\S]*?durationMs: number;[\s\S]*?\/\*\* Surface-level outcome\. `'transport_error'` = couldn't reach endpoint at all\. \*\/\s*outcome: 'success' \| 'http_error' \| 'transport_error' \| 'timeout';[\s\S]*?errorMessage: string \| null;/,
     );
   });
 
   it("DeliveryStatus: 5-state union ('pending'|'in_flight'|'delivered'|'failed'|'dlq') framing pinned 'Queued delivery state machine.'", () => {
     expect(body).toMatch(
-      /\/\*\* Queued delivery state machine\. \*\/\s*\n?\s*export type DeliveryStatus = 'pending' \| 'in_flight' \| 'delivered' \| 'failed' \| 'dlq';/,
+      /\/\*\* Queued delivery state machine\. \*\/\s*export type DeliveryStatus = 'pending' \| 'in_flight' \| 'delivered' \| 'failed' \| 'dlq';/,
     );
   });
 
   it("DeliveryRecord: 8 fields (id + endpointId + payload + status + attempts + nextAttemptAtMs nullability with 'null when status === delivered/failed/dlq' framing + createdAtMs + completedAtMs nullable)", () => {
     expect(body).toMatch(
-      /export interface DeliveryRecord \{\s*\n?\s*id: string;\s*\n?\s*endpointId: string;\s*\n?\s*payload: DeliveryPayload;\s*\n?\s*status: DeliveryStatus;\s*\n?\s*attempts: readonly DeliveryAttempt\[\];[\s\S]*?\/\*\* When the next attempt fires\. null when status === 'delivered' \/ 'failed' \/ 'dlq'\. \*\/\s*\n?\s*nextAttemptAtMs: number \| null;[\s\S]*?createdAtMs: number;[\s\S]*?completedAtMs: number \| null;/,
+      /export interface DeliveryRecord \{\s*id: string;\s*endpointId: string;\s*payload: DeliveryPayload;\s*status: DeliveryStatus;\s*attempts: readonly DeliveryAttempt\[\];[\s\S]*?\/\*\* When the next attempt fires\. null when status === 'delivered' \/ 'failed' \/ 'dlq'\. \*\/\s*nextAttemptAtMs: number \| null;[\s\S]*?createdAtMs: number;[\s\S]*?completedAtMs: number \| null;/,
     );
   });
 
   it("DlqEntry: 8 fields; 'Same id as the originating DeliveryRecord. DLQ + active queue share the id space.' rationale pinned; reason example '5× transport_error: ECONNREFUSED' pinned", () => {
     expect(body).toMatch(
-      /\/\*\* Same id as the originating DeliveryRecord\. DLQ \+ active queue share the id space\. \*\/\s*\n?\s*deliveryId: string;/,
+      /\/\*\* Same id as the originating DeliveryRecord\. DLQ \+ active queue share the id space\. \*\/\s*deliveryId: string;/,
     );
     expect(body).toMatch(
-      /\/\*\* Free-text reason for DLQ\. Concise: e\.g\. `'5× transport_error: ECONNREFUSED'`\. \*\/\s*\n?\s*reason: string;/,
+      /\/\*\* Free-text reason for DLQ\. Concise: e\.g\. `'5× transport_error: ECONNREFUSED'`\. \*\/\s*reason: string;/,
     );
     expect(body).toMatch(
-      /export interface DlqEntry \{[\s\S]*?deliveryId: string;\s*\n?\s*endpointId: string;\s*\n?\s*accountId: string;\s*\n?\s*payload: DeliveryPayload;[\s\S]*?totalAttempts: number;[\s\S]*?attempts: readonly DeliveryAttempt\[\];[\s\S]*?enteredDlqAtMs: number;[\s\S]*?reason: string;/,
+      /export interface DlqEntry \{[\s\S]*?deliveryId: string;\s*endpointId: string;\s*accountId: string;\s*payload: DeliveryPayload;[\s\S]*?totalAttempts: number;[\s\S]*?attempts: readonly DeliveryAttempt\[\];[\s\S]*?enteredDlqAtMs: number;[\s\S]*?reason: string;/,
     );
   });
 

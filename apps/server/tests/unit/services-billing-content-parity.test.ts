@@ -47,24 +47,24 @@ describe('W407.C apps/server/src/services/billing.ts content parity', () => {
   it('V-082 framing pinned: 2-write (checkout / portal) + 1-read (getBillingState); trial-pack op retired 2026-05-27', () => {
     expect(body).toMatch(/Billing service \(V-082\)\./);
     expect(body).toMatch(
-      /1\. Checkout-session — start a paid-tier subscription\. Rejects with\s*\n?\s*\/\/\s*a 409 \(ConflictError\) when the account already has an active or\s*\n?\s*\/\/\s*trialing subscription\./,
+      /1\. Checkout-session — start a paid-tier subscription\. Rejects with\s*\/\/\s*a 409 \(ConflictError\) when the account already has an active or\s*\/\/\s*trialing subscription\./,
     );
     // The double-subscribe guard rationale: Stripe Checkout does NOT
     // dedupe an existing subscription for us — this is the misconception
     // the old comment encoded (and the actual double-billing bug it
     // caused before the guard landed).
     expect(body).toMatch(
-      /Stripe Checkout in `subscription` mode\s*\n?\s*\/\/\s*does NOT dedupe this on its own/,
+      /Stripe Checkout in `subscription` mode\s*\/\/\s*does NOT dedupe this on its own/,
     );
     expect(body).not.toMatch(
-      /Stripe handles the\s*\n?\s*\/\/\s*"user already has a sub" path inside Checkout/,
+      /Stripe handles the\s*\/\/\s*"user already has a sub" path inside Checkout/,
     );
     expect(body).toMatch(
-      /2\. Customer portal — open Stripe Customer Portal for self-service\s*\n?\s*\/\/\s*plan change \/ payment-method update \/ cancellation\./,
+      /2\. Customer portal — open Stripe Customer Portal for self-service\s*\/\/\s*plan change \/ payment-method update \/ cancellation\./,
     );
     expect(body).not.toMatch(/Trial-pack/);
     expect(body).toMatch(
-      /Stripe API access is gated behind `BillingProvider` so tests run\s*\n?\s*\/\/\s*against an in-memory provider without touching real Stripe\./,
+      /Stripe API access is gated behind `BillingProvider` so tests run\s*\/\/\s*against an in-memory provider without touching real Stripe\./,
     );
   });
 
@@ -82,12 +82,12 @@ describe('W407.C apps/server/src/services/billing.ts content parity', () => {
     // its status — that IS the bug.
     expect(body).not.toMatch(/existingSubscription = await this\.repo\.findCurrentSubscription/);
     expect(body).toMatch(
-      /resource: 'subscription',\s*\n?\s*existing_tier: existingSubscription\.tier,\s*\n?\s*existing_status: existingSubscription\.status,/,
+      /resource: 'subscription',\s*existing_tier: existingSubscription\.tier,\s*existing_status: existingSubscription\.status,/,
     );
     // past_due / canceled / etc are intentionally NOT blocked — only
     // active/trialing (currently-billed) subscriptions trigger the guard.
     expect(body).toMatch(
-      /past_due \/ canceled \/ incomplete subscriptions are NOT\s*\n?\s*\/\/\s*blocked here: those aren't currently being billed/,
+      /past_due \/ canceled \/ incomplete subscriptions are NOT\s*\/\/\s*blocked here: those aren't currently being billed/,
     );
   });
 
@@ -97,7 +97,7 @@ describe('W407.C apps/server/src/services/billing.ts content parity', () => {
       /ensureCustomer\(args: \{ accountId: string; email: string; name: string \| null \}\): Promise<string>;/,
     );
     expect(body).toMatch(
-      /createSubscriptionCheckout\(args: \{\s*\n?\s*customerId: string;\s*\n?\s*priceId: string;\s*\n?\s*successUrl: string;\s*\n?\s*cancelUrl: string;\s*\n?\s*accountId: string;\s*\n?\s*idempotencyKey\?: string;\s*\n?\s*\}\): Promise<\{ url: string; sessionId: string \}>;/,
+      /createSubscriptionCheckout\(args: \{\s*customerId: string;\s*priceId: string;\s*successUrl: string;\s*cancelUrl: string;\s*accountId: string;\s*idempotencyKey\?: string;\s*\}\): Promise<\{ url: string; sessionId: string \}>;/,
     );
     expect(body).toMatch(
       /createPortalSession\(args: \{ customerId: string; returnUrl: string \}\): Promise<\{ url: string \}>;/,
@@ -119,16 +119,16 @@ describe('W407.C apps/server/src/services/billing.ts content parity', () => {
 
   it('SubscriptionMirror.status: 8-literal Stripe enum (incomplete|incomplete_expired|trialing|active|past_due|canceled|unpaid|paused)', () => {
     expect(body).toMatch(
-      /status:\s*\n?\s*\| 'incomplete'\s*\n?\s*\| 'incomplete_expired'\s*\n?\s*\| 'trialing'\s*\n?\s*\| 'active'\s*\n?\s*\| 'past_due'\s*\n?\s*\| 'canceled'\s*\n?\s*\| 'unpaid'\s*\n?\s*\| 'paused';/,
+      /status:\s*\| 'incomplete'\s*\| 'incomplete_expired'\s*\| 'trialing'\s*\| 'active'\s*\| 'past_due'\s*\| 'canceled'\s*\| 'unpaid'\s*\| 'paused';/,
     );
   });
 
   it('createCheckoutSession: NotFoundError on missing account; BadRequestError on tier not in tierPrices (contact sales for enterprise); billingPeriod selects monthly|annual', () => {
     expect(body).toMatch(
-      /const account = await this\.repo\.getAccount\(args\.accountId\);\s*\n?\s*if \(account === null\) throw new NotFoundError\('Account not found\.'\);/,
+      /const account = await this\.repo\.getAccount\(args\.accountId\);\s*if \(account === null\) throw new NotFoundError\('Account not found\.'\);/,
     );
     expect(body).toMatch(
-      /if \(prices === undefined\) \{\s*\n?\s*throw new BadRequestError\(\s*\n?\s*`Tier "\$\{args\.tier\}" is not self-serve via Checkout\. Contact sales for enterprise\.`,/,
+      /if \(prices === undefined\) \{\s*throw new BadRequestError\(\s*`Tier "\$\{args\.tier\}" is not self-serve via Checkout\. Contact sales for enterprise\.`,/,
     );
     expect(body).toMatch(
       /const priceId = args\.billingPeriod === 'monthly' \? prices\.monthly : prices\.annual;/,
@@ -137,23 +137,23 @@ describe('W407.C apps/server/src/services/billing.ts content parity', () => {
 
   it("createPortalSession: ConflictError when stripeCustomerId null (must complete checkout first); resource:'stripe_customer' metadata", () => {
     expect(body).toMatch(
-      /if \(account\.stripeCustomerId === null\) \{\s*\n?\s*throw new ConflictError\(\s*\n?\s*'Account has no Stripe customer record yet\. Complete a checkout flow first\.',\s*\n?\s*\{ resource: 'stripe_customer' \},/,
+      /if \(account\.stripeCustomerId === null\) \{\s*throw new ConflictError\(\s*'Account has no Stripe customer record yet\. Complete a checkout flow first\.',\s*\{ resource: 'stripe_customer' \},/,
     );
     expect(body).toMatch(
-      /return this\.provider\.createPortalSession\(\{\s*\n?\s*customerId: account\.stripeCustomerId,\s*\n?\s*returnUrl: this\.config\.portalReturnUrl,/,
+      /return this\.provider\.createPortalSession\(\{\s*customerId: account\.stripeCustomerId,\s*returnUrl: this\.config\.portalReturnUrl,/,
     );
   });
 
   it('getBillingState returns subscription only (trial-pack state removed 2026-05-27)', () => {
     expect(body).toMatch(
-      /async getBillingState\(accountId: string\): Promise<\{\s*\n?\s*subscription: SubscriptionMirror \| null;\s*\n?\s*\}> \{/,
+      /async getBillingState\(accountId: string\): Promise<\{\s*subscription: SubscriptionMirror \| null;\s*\}> \{/,
     );
     expect(body).not.toMatch(/trialPack/);
   });
 
   it('ensureCustomerId helper: lazy provisions via provider.ensureCustomer + repo.setStripeCustomerId (no-op if already set)', () => {
     expect(body).toMatch(
-      /private async ensureCustomerId\(account: BillingAccountSnapshot\): Promise<string> \{\s*\n?\s*if \(account\.stripeCustomerId !== null\) return account\.stripeCustomerId;\s*\n?\s*const customerId = await this\.provider\.ensureCustomer\(\{\s*\n?\s*accountId: account\.id,\s*\n?\s*email: account\.email,\s*\n?\s*name: account\.name,\s*\n?\s*\}\);\s*\n?\s*await this\.repo\.setStripeCustomerId\(\{ accountId: account\.id, customerId \}\);/,
+      /private async ensureCustomerId\(account: BillingAccountSnapshot\): Promise<string> \{\s*if \(account\.stripeCustomerId !== null\) return account\.stripeCustomerId;\s*const customerId = await this\.provider\.ensureCustomer\(\{\s*accountId: account\.id,\s*email: account\.email,\s*name: account\.name,\s*\}\);\s*await this\.repo\.setStripeCustomerId\(\{ accountId: account\.id, customerId \}\);/,
     );
   });
 
@@ -191,12 +191,12 @@ describe('W407.C apps/server/src/services/billing.ts content parity', () => {
 
   it('TierPriceMap + TierPrices: monthly + annual partial-record per tier; BillingServiceConfig URL shape (trialPackPriceId removed 2026-05-27)', () => {
     expect(body).toMatch(
-      /export interface TierPrices \{\s*\n?\s*monthly: string;\s*\n?\s*annual: string;\s*\n?\s*\}/,
+      /export interface TierPrices \{\s*monthly: string;\s*annual: string;\s*\}/,
     );
     expect(body).toMatch(/export type TierPriceMap = Partial<Record<AccountTier, TierPrices>>;/);
     expect(body).toMatch(/export interface BillingServiceConfig \{/);
     expect(body).toMatch(
-      /\/\*\* Map of self-serve paid tier to monthly \+ annual Stripe price ids\. \*\/\s*\n?\s*tierPrices: TierPriceMap;/,
+      /\/\*\* Map of self-serve paid tier to monthly \+ annual Stripe price ids\. \*\/\s*tierPrices: TierPriceMap;/,
     );
     expect(body).not.toMatch(/trialPackPriceId/);
     expect(body).toMatch(/defaultSuccessUrl: string;/);

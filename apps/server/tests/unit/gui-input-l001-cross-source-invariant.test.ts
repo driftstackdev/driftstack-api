@@ -70,12 +70,12 @@ describe('W983 gui-input L-001 schemas cross-source invariant', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/schemas/gui-input.ts'));
     expect(p).toMatch(/Endpoint: POST \/v1\/sessions\/:id\/gui-input\./);
     expect(p).toMatch(
-      /Auth: requires the `gui_control` scope\. No broad scope satisfies it, so\s*\n?\s*\/\/ a key only carries it when the mint request asks for it explicitly\./,
+      /Auth: requires the `gui_control` scope\. No broad scope satisfies it, so\s*\/\/ a key only carries it when the mint request asks for it explicitly\./,
     );
     expect(p).toMatch(/V-788 — the second half of this sentence used to read/);
     // Per-occurrence negatives on the retracted half.
     expect(p, 'the enterprise-only claim must not return').not.toMatch(
-      /only keys minted for the self-hosted GUI\s*\n?\s*\/\/ workflow \(enterprise tier\) get it\./,
+      /only keys minted for the self-hosted GUI\s*\/\/ workflow \(enterprise tier\) get it\./,
     );
   });
 

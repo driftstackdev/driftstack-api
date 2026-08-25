@@ -46,7 +46,7 @@ describe('LK.6.d modifier-vocabulary cross-surface parity', () => {
     // like mods.push('Cmd') would now fail at compile time, not runtime.
     expect(body).toMatch(/import \{ type CanonicalModifier \} from '@driftstack\/sdk';/);
     expect(body).toMatch(
-      /readonly CanonicalModifier\[\] \| undefined \{\s*\n?\s*const mods: CanonicalModifier\[\] = \[\];/,
+      /readonly CanonicalModifier\[\] \| undefined \{\s*const mods: CanonicalModifier\[\] = \[\];/,
     );
   });
 });

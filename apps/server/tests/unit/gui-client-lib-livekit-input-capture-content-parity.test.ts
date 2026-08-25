@@ -27,38 +27,36 @@ describe('gui-client/lib/livekit-input-capture content parity', () => {
 
   it("LK.6.d module-level framing pinned (touch translation, W198/W1249): input capture translating the user's mouse/trackpad gestures into iPhone-COHERENT TOUCH InputEvents shipped over the LiveKit DataChannel to Agent-1's W3C touch injector — pinned so the LK.6.d anchor + the why-touch-not-mouse coherence contract (a real iPhone never fires mouse events) stays documented", () => {
     expect(body).toMatch(
-      /\/\/ LK\.6\.d — input capture on the simulator's video element\. Translates the\s*\n?\s*\/\/ user's mouse\/trackpad gestures into iPhone-COHERENT TOUCH InputEvents and\s*\n?\s*\/\/ ships them over the LiveKit DataChannel to Agent-1's Mac-side W3C touch\s*\n?\s*\/\/ injector \(WebDriverManualTouchInjector → genuine pointerType:touch events\)\./,
+      /\/\/ LK\.6\.d — input capture on the simulator's video element\. Translates the\s*\/\/ user's mouse\/trackpad gestures into iPhone-COHERENT TOUCH InputEvents and\s*\/\/ ships them over the LiveKit DataChannel to Agent-1's Mac-side W3C touch\s*\/\/ injector \(WebDriverManualTouchInjector → genuine pointerType:touch events\)\./,
     );
     // The coherence rationale: mouse events are a detectable iPhone tell.
     expect(body).toMatch(/a real iPhone NEVER fires mouse/);
   });
 
   it("Coordinate-translation framing pinned (#7 letterbox-aware): the <video> uses object-contain + FILLS its container, so the bounding rect is NOT the visible video region — map against the contained sub-rect + return null for clicks in the bars; convert the in-region pointer via the naturalWidth / displayedWidth ratio. Pinned so the letterbox-aware contract stays documented (the prior 'rect IS the visible region' assumption mis-mapped clicks on aspect-mismatched streams).", () => {
-    expect(body).toMatch(
-      /the element's bounding rect is NOT\s*\n?\s*\/\/\s+the visible video region\./,
-    );
-    expect(body).toMatch(/touches in the bars are off-surface\s*\n?\s*\/\/\s+and return null\./);
-    expect(body).toMatch(/`naturalWidth \/\s*\n?\s*\/\/\s+displayedWidth` ratio\./);
+    expect(body).toMatch(/the element's bounding rect is NOT\s*\/\/\s+the visible video region\./);
+    expect(body).toMatch(/touches in the bars are off-surface\s*\/\/\s+and return null\./);
+    expect(body).toMatch(/`naturalWidth \/\s*\/\/\s+displayedWidth` ratio\./);
   });
 
   it('Reliability framing pins reliable gesture boundaries plus first/final move anchors while keeping intermediate high-rate moves lossy', () => {
     expect(body).toMatch(
-      /\/\/\s+- touchStart\/touchEnd, key down\/up, swipe: reliable=true \(must arrive\s*\n?\s*\/\/\s+in order; a missed start\/end breaks the gesture\)\./,
+      /\/\/\s+- touchStart\/touchEnd, key down\/up, swipe: reliable=true \(must arrive\s*\/\/\s+in order; a missed start\/end breaks the gesture\)\./,
     );
     expect(body).toMatch(
-      /\/\/\s+- the first committed touchMove and the final pre-end touchMove are\s*\n?\s*\/\/\s+reliable lifecycle anchors\./,
+      /\/\/\s+- the first committed touchMove and the final pre-end touchMove are\s*\/\/\s+reliable lifecycle anchors\./,
     );
     expect(body).toMatch(
-      /\/\/\s+- intermediate touchMoves remain reliable=false \(lossy ok — a dropped move\s*\n?\s*\/\/\s+jitters then recovers; making the high-rate stream reliable congests it\)\./,
+      /\/\/\s+- intermediate touchMoves remain reliable=false \(lossy ok — a dropped move\s*\/\/\s+jitters then recovers; making the high-rate stream reliable congests it\)\./,
     );
   });
 
   it("Pointer-capture framing pinned: 'when the press (mousedown) fires the capture pointer-captures the video element so subsequent move/release land even when the cursor leaves the element bounds (matches remote-desktop UX expectation).' + setPointerCapture(pointerId) inside try/catch with 'Browser may refuse pointer-capture — non-fatal.' — pinned so the remote-desktop-UX + non-fatal-refuse contract all stay documented", () => {
     expect(body).toMatch(
-      /\/\/ Pointer-capture: when the press \(mousedown\) fires the capture pointer-\s*\n?\s*\/\/ captures the video element so subsequent move\/release land even when the\s*\n?\s*\/\/ cursor leaves the element bounds \(matches remote-desktop UX expectation\)\./,
+      /\/\/ Pointer-capture: when the press \(mousedown\) fires the capture pointer-\s*\/\/ captures the video element so subsequent move\/release land even when the\s*\/\/ cursor leaves the element bounds \(matches remote-desktop UX expectation\)\./,
     );
     expect(body).toMatch(
-      /try \{\s*\n?\s*if \('setPointerCapture' in video && 'pointerId' in e\) \{\s*\n?\s*\(video as any\)\.setPointerCapture\(\(e as any\)\.pointerId\);\s*\n?\s*\}\s*\n?\s*\} catch \{\s*\n?\s*\/\/ Browser may refuse pointer-capture — non-fatal\./,
+      /try \{\s*if \('setPointerCapture' in video && 'pointerId' in e\) \{\s*\(video as any\)\.setPointerCapture\(\(e as any\)\.pointerId\);\s*\}\s*\} catch \{\s*\/\/ Browser may refuse pointer-capture — non-fatal\./,
     );
   });
 
@@ -66,22 +64,22 @@ describe('gui-client/lib/livekit-input-capture content parity', () => {
     expect(body).toMatch(/const elementAspect = rect\.width \/ rect\.height;/);
     expect(body).toMatch(/const videoAspect = nw \/ nh;/);
     expect(body).toMatch(
-      /if \(!Number\.isFinite\(px\) \|\| !Number\.isFinite\(py\) \|\| px < 0 \|\| px > dispW \|\| py < 0 \|\| py > dispH\)\s*\n?\s*return null;/,
+      /if \(!Number\.isFinite\(px\) \|\| !Number\.isFinite\(py\) \|\| px < 0 \|\| px > dispW \|\| py < 0 \|\| py > dispH\)\s*return null;/,
     );
     expect(body).toMatch(
-      /const x = \(px \/ dispW\) \* nw;\s*\n?\s*const y = \(py \/ dispH\) \* nh;\s*\n?\s*return \{ x: Math\.round\(x\), y: Math\.round\(y\) \};/,
+      /const x = \(px \/ dispW\) \* nw;\s*const y = \(py \/ dispH\) \* nh;\s*return \{ x: Math\.round\(x\), y: Math\.round\(y\) \};/,
     );
   });
 
   it('2026-05-20 — modifiersFromEvent roster swapped from DOM-standard Shift/Control/Alt/Meta to Mac-native cmd/ctrl/shift/option (1:1 with kCGEventFlagMask* on the harness side; eliminates the harness-side Meta→Command remap on every key press). Order swapped to metaKey/ctrlKey/shiftKey/altKey so cmd surfaces first in the canonical label sequence.', () => {
     expect(body).toMatch(
-      /if \(event\.metaKey\) mods\.push\('cmd'\);\s*\n?\s*if \(event\.ctrlKey\) mods\.push\('ctrl'\);\s*\n?\s*if \(event\.shiftKey\) mods\.push\('shift'\);\s*\n?\s*if \(event\.altKey\) mods\.push\('option'\);\s*\n?\s*return mods\.length > 0 \? mods : undefined;/,
+      /if \(event\.metaKey\) mods\.push\('cmd'\);\s*if \(event\.ctrlKey\) mods\.push\('ctrl'\);\s*if \(event\.shiftKey\) mods\.push\('shift'\);\s*if \(event\.altKey\) mods\.push\('option'\);\s*return mods\.length > 0 \? mods : undefined;/,
     );
   });
 
   it("Keyboard-on-window-not-video framing pinned: 'Keyboard events go on window so capture works even when the <video> isn't directly focused. Side-effect: the customer can type into the remote browser without first clicking on the video. Trade-off: pressing a key with the panel mounted forwards it everywhere — acceptable because the panel is the only LK consumer in v1.0.' — pinned so the v1.0-trade-off + only-LK-consumer-assumption contract stays documented", () => {
     expect(body).toMatch(
-      /\/\/ Keyboard events go on window so capture works even when the\s*\n?\s*\/\/ <video> isn't directly focused\. Side-effect: the customer can\s*\n?\s*\/\/ type into the remote browser without first clicking on the\s*\n?\s*\/\/ video\. Trade-off: pressing a key with the panel mounted\s*\n?\s*\/\/ forwards it everywhere — acceptable because the panel is the\s*\n?\s*\/\/ only LK consumer in v1\.0\./,
+      /\/\/ Keyboard events go on window so capture works even when the\s*\/\/ <video> isn't directly focused\. Side-effect: the customer can\s*\/\/ type into the remote browser without first clicking on the\s*\/\/ video\. Trade-off: pressing a key with the panel mounted\s*\/\/ forwards it everywhere — acceptable because the panel is the\s*\/\/ only LK consumer in v1\.0\./,
     );
   });
 

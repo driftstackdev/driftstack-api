@@ -41,19 +41,19 @@ describe('W433.A packages/api-types/src/usage.ts content parity', () => {
 
   it('UsageRecordTypeSchema enum: 6 billable record types pinned (session_minute / navigate / interact / wait / state_capture / screenshot_capture) in exact order', () => {
     expect(body).toMatch(
-      /export const UsageRecordTypeSchema = z\.enum\(\[\s*\n?\s*'session_minute',\s*\n?\s*'navigate',\s*\n?\s*'interact',\s*\n?\s*'wait',\s*\n?\s*'state_capture',\s*\n?\s*'screenshot_capture',\s*\n?\s*\]\);/,
+      /export const UsageRecordTypeSchema = z\.enum\(\[\s*'session_minute',\s*'navigate',\s*'interact',\s*'wait',\s*'state_capture',\s*'screenshot_capture',\s*\]\);/,
     );
   });
 
   it('UsageRecordSchema: type + non-negative int quantity + recorded_at Iso8601', () => {
     expect(body).toMatch(
-      /export const UsageRecordSchema = z\.object\(\{\s*\n?\s*type: UsageRecordTypeSchema,\s*\n?\s*quantity: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*recorded_at: Iso8601Schema,\s*\n?\s*\}\);/,
+      /export const UsageRecordSchema = z\.object\(\{\s*type: UsageRecordTypeSchema,\s*quantity: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*recorded_at: Iso8601Schema,\s*\}\);/,
     );
   });
 
   it('UsagePeriodSummary: period_start/end + tier + per-type totals + quotas (null=unmetered) records', () => {
     expect(body).toMatch(
-      /export const UsagePeriodSummarySchema = z\.object\(\{\s*\n?\s*period_start: Iso8601Schema,\s*\n?\s*period_end: Iso8601Schema,\s*\n?\s*tier: AccountTierSchema,\s*\n?\s*\/\/ Per-record-type tally for the current period\.\s*\n?\s*totals: z\.record\(UsageRecordTypeSchema, z\.number\(\)\.int\(\)\.nonnegative\(\)\),\s*\n?\s*\/\/ Tier quotas \(max permitted in period\); null = unmetered for that record\.\s*\n?\s*quotas: z\.record\(UsageRecordTypeSchema, z\.number\(\)\.int\(\)\.nonnegative\(\)\.nullable\(\)\),\s*\n?\s*\}\);/,
+      /export const UsagePeriodSummarySchema = z\.object\(\{\s*period_start: Iso8601Schema,\s*period_end: Iso8601Schema,\s*tier: AccountTierSchema,\s*\/\/ Per-record-type tally for the current period\.\s*totals: z\.record\(UsageRecordTypeSchema, z\.number\(\)\.int\(\)\.nonnegative\(\)\),\s*\/\/ Tier quotas \(max permitted in period\); null = unmetered for that record\.\s*quotas: z\.record\(UsageRecordTypeSchema, z\.number\(\)\.int\(\)\.nonnegative\(\)\.nullable\(\)\),\s*\}\);/,
     );
     expect(body).toMatch(
       /export type UsagePeriodSummary = z\.infer<typeof UsagePeriodSummarySchema>;/,
@@ -62,25 +62,25 @@ describe('W433.A packages/api-types/src/usage.ts content parity', () => {
 
   it('V-170 daily-bucketed usage series framing: customer-dashboard sparklines + admin-panel account-detail charts; contiguous days incl. zero-usage; to_date exclusive / from_date inclusive', () => {
     expect(body).toMatch(
-      /\*\s*V-170 — daily-bucketed usage series\. Used by customer-dashboard\s*\n?\s*\*\s*\/usage sparklines \+ admin-panel account-detail charts\. Returns one\s*\n?\s*\*\s*bucket per UTC day in `\[from_date, to_date\)`, contiguous \(days with\s*\n?\s*\*\s*zero usage are included as empty `totals: \{\}`\)\. `to_date` is\s*\n?\s*\*\s*exclusive \(typically today's UTC midnight\); `from_date` is inclusive\./,
+      /\*\s*V-170 — daily-bucketed usage series\. Used by customer-dashboard\s*\*\s*\/usage sparklines \+ admin-panel account-detail charts\. Returns one\s*\*\s*bucket per UTC day in `\[from_date, to_date\)`, contiguous \(days with\s*\*\s*zero usage are included as empty `totals: \{\}`\)\. `to_date` is\s*\*\s*exclusive \(typically today's UTC midnight\); `from_date` is inclusive\./,
     );
   });
 
   it('UsageDailyBucket: date YYYY-MM-DD regex + totals record', () => {
     expect(body).toMatch(
-      /export const UsageDailyBucketSchema = z\.object\(\{\s*\n?\s*\/\*\* UTC date in `YYYY-MM-DD`\. \*\/\s*\n?\s*date: z\.string\(\)\.regex\(\/\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$\/\),\s*\n?\s*totals: z\.record\(UsageRecordTypeSchema, z\.number\(\)\.int\(\)\.nonnegative\(\)\),\s*\n?\s*\}\);/,
+      /export const UsageDailyBucketSchema = z\.object\(\{\s*\/\*\* UTC date in `YYYY-MM-DD`\. \*\/\s*date: z\.string\(\)\.regex\(\/\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$\/\),\s*totals: z\.record\(UsageRecordTypeSchema, z\.number\(\)\.int\(\)\.nonnegative\(\)\),\s*\}\);/,
     );
   });
 
   it('UsageSeriesQuery: days coerced int 1..90 optional; comment "default 30, max 90"', () => {
     expect(body).toMatch(
-      /export const UsageSeriesQuerySchema = z\.object\(\{\s*\n?\s*\/\*\* Number of trailing days to return; default 30, max 90\. \*\/\s*\n?\s*days: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(90\)\.optional\(\),\s*\n?\s*\}\);/,
+      /export const UsageSeriesQuerySchema = z\.object\(\{\s*\/\*\* Number of trailing days to return; default 30, max 90\. \*\/\s*days: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(90\)\.optional\(\),\s*\}\);/,
     );
   });
 
   it('UsageSeriesResponse: from_date YYYY-MM-DD regex + to_date YYYY-MM-DD regex + buckets array of UsageDailyBucket', () => {
     expect(body).toMatch(
-      /export const UsageSeriesResponseSchema = z\.object\(\{\s*\n?\s*from_date: z\.string\(\)\.regex\(\/\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$\/\),\s*\n?\s*to_date: z\.string\(\)\.regex\(\/\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$\/\),\s*\n?\s*buckets: z\.array\(UsageDailyBucketSchema\),\s*\n?\s*\}\);/,
+      /export const UsageSeriesResponseSchema = z\.object\(\{\s*from_date: z\.string\(\)\.regex\(\/\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$\/\),\s*to_date: z\.string\(\)\.regex\(\/\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$\/\),\s*buckets: z\.array\(UsageDailyBucketSchema\),\s*\}\);/,
     );
     expect(body).toMatch(/export type UsageDailyBucket = z\.infer<typeof UsageDailyBucketSchema>;/);
     expect(body).toMatch(/export type UsageSeriesQuery = z\.infer<typeof UsageSeriesQuerySchema>;/);

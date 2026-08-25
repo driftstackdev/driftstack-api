@@ -49,7 +49,7 @@ describe('W423.C packages/sdk-typescript/src/client.ts content parity', () => {
   it('file exists at canonical path + module header pinned (single entry point + composes resources + HTTP layer + resource accessors example)', () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(
-      /\/\/ Driftstack client — single entry point\. Composes the resources and the\s*\n?\s*\/\/ HTTP layer\. Customers instantiate one of these and use the resource\s*\n?\s*\/\/ accessors \(`client\.sessions`, `client\.apiKeys`, `client\.usage`\)\./,
+      /\/\/ Driftstack client — single entry point\. Composes the resources and the\s*\/\/ HTTP layer\. Customers instantiate one of these and use the resource\s*\/\/ accessors \(`client\.sessions`, `client\.apiKeys`, `client\.usage`\)\./,
     );
   });
 
@@ -117,25 +117,25 @@ describe('W423.C packages/sdk-typescript/src/client.ts content parity', () => {
 
   it('V-cluster JSDoc framings — 7 resource fields carry inline V-anchors: V-312 profileSnapshots + V-666 cryptoOrders + V-353b mfa pairs-with-auth.mfaChallenge/mfaStepUp + V-216 auditLog + V-204 emailPreferences + V-049 legal + V-298c team (auth-integration is V-298d). Drift to dropping any V-anchor would lose the changelog provenance for that resource.', () => {
     expect(body).toMatch(
-      /\/\*\* V-312 — immutable point-in-time profile snapshots\. \*\/\s*\n?\s*readonly profileSnapshots: ProfileSnapshotsResource;/,
+      /\/\*\* V-312 — immutable point-in-time profile snapshots\. \*\/\s*readonly profileSnapshots: ProfileSnapshotsResource;/,
     );
     expect(body).toMatch(
-      /\/\*\* V-666 — crypto-payment orders \(customer surface\)\. \*\/\s*\n?\s*readonly cryptoOrders: CryptoOrdersResource;/,
+      /\/\*\* V-666 — crypto-payment orders \(customer surface\)\. \*\/\s*readonly cryptoOrders: CryptoOrdersResource;/,
     );
     expect(body).toMatch(
-      /\/\*\* V-353b — MFA enrollment management\. Pairs with `auth\.mfaChallenge` \+ `auth\.mfaStepUp`\. \*\/\s*\n?\s*readonly mfa: MfaResource;/,
+      /\/\*\* V-353b — MFA enrollment management\. Pairs with `auth\.mfaChallenge` \+ `auth\.mfaStepUp`\. \*\/\s*readonly mfa: MfaResource;/,
     );
     expect(body).toMatch(
-      /\/\*\* V-216 — append-only customer audit log read \+ iterate\. \*\/\s*\n?\s*readonly auditLog: AuditLogResource;/,
+      /\/\*\* V-216 — append-only customer audit log read \+ iterate\. \*\/\s*readonly auditLog: AuditLogResource;/,
     );
     expect(body).toMatch(
-      /\/\*\* V-204 — non-critical email opt-in\/opt-out preferences\. \*\/\s*\n?\s*readonly emailPreferences: EmailPreferencesResource;/,
+      /\/\*\* V-204 — non-critical email opt-in\/opt-out preferences\. \*\/\s*readonly emailPreferences: EmailPreferencesResource;/,
     );
     expect(body).toMatch(
-      /\/\*\* V-049 — legal-document acceptance machinery\. \*\/\s*\n?\s*readonly legal: LegalResource;/,
+      /\/\*\* V-049 — legal-document acceptance machinery\. \*\/\s*readonly legal: LegalResource;/,
     );
     expect(body).toMatch(
-      /\/\*\* V-298c — Team RBAC\. Act on an owner's account via X-Driftstack-Account\. \*\/\s*\n?\s*readonly team: TeamResource;/,
+      /\/\*\* V-298c — Team RBAC\. Act on an owner's account via X-Driftstack-Account\. \*\/\s*readonly team: TeamResource;/,
     );
     expect(body, 'the retracted pending-integration anchor is back').not.toMatch(/V-298d/);
   });
@@ -146,13 +146,13 @@ describe('W423.C packages/sdk-typescript/src/client.ts content parity', () => {
 
   it('CRITICAL apiKey TypeError guard — `if (!opts.apiKey || typeof opts.apiKey !== \'string\')` early-throw with descriptive message "Driftstack: apiKey is required and must be a string". Drift to a generic Error would lose the "Driftstack:" prefix that lets customers grep their logs; drift to silent-pass would let customers debug "why is auth failing" instead of seeing the TypeError at construction.', () => {
     expect(body).toMatch(
-      /constructor\(opts: DriftstackOptions\) \{\s*\n?\s*if \(!opts\.apiKey \|\| typeof opts\.apiKey !== 'string'\) \{\s*\n?\s*throw new TypeError\('Driftstack: apiKey is required and must be a string'\);\s*\n?\s*\}/,
+      /constructor\(opts: DriftstackOptions\) \{\s*if \(!opts\.apiKey \|\| typeof opts\.apiKey !== 'string'\) \{\s*throw new TypeError\('Driftstack: apiKey is required and must be a string'\);\s*\}/,
     );
   });
 
   it("CRITICAL baseUrl trailing-slash normalization — `(opts.baseUrl ?? DEFAULT_BASE_URL).replace(/\\/+$/, '')`. The `\\/+$` regex matches ONE OR MORE trailing slashes (the `+` quantifier) so `https://api.driftstack.dev//` becomes `https://api.driftstack.dev`. Drift to single-slash strip would let double-slashes through; drift to dropping the `$` anchor would mangle the scheme (`https://` would lose its slashes).", () => {
     expect(body).toMatch(
-      /const httpConfig: HttpClientConfig = \{\s*\n?\s*apiKey: opts\.apiKey,\s*\n?\s*baseUrl: \(opts\.baseUrl \?\? DEFAULT_BASE_URL\)\.replace\(\/\\\/\+\$\/, ''\),/,
+      /const httpConfig: HttpClientConfig = \{\s*apiKey: opts\.apiKey,\s*baseUrl: \(opts\.baseUrl \?\? DEFAULT_BASE_URL\)\.replace\(\/\\\/\+\$\/, ''\),/,
     );
   });
 

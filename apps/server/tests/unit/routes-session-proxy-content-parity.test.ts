@@ -75,13 +75,13 @@ describe('routes/session-proxy content parity', () => {
       /\/\/ EG-API-1\.2 — POST \/v1\/sessions\/\{id\}\/proxy \+ GET \/v1\/sessions\/\{id\}\/proxy\./,
     );
     expect(body).toMatch(
-      /\/\/\s+- POST \/v1\/sessions\/\{id\}\/proxy — set proxy config for a session\s*\n?\s*\/\/\s+- GET\s+\/v1\/sessions\/\{id\}\/proxy — fetch current session's proxy config/,
+      /\/\/\s+- POST \/v1\/sessions\/\{id\}\/proxy — set proxy config for a session\s*\/\/\s+- GET\s+\/v1\/sessions\/\{id\}\/proxy — fetch current session's proxy config/,
     );
   });
 
   it('Activation-gate framing pinned — the 3 backend types, the 503-vs-404 split, and the machine-readable-signal contract. V-823 added the correction that follows it: BOTH registrars are stubs today, so the gate describes a distinction the code does not yet make', () => {
     expect(body).toMatch(
-      /\/\/ Activation gate: routes register only when `sessionEgressService` is\s*\n?\s*\/\/ wired in AppDeps \(i\.e\., a concrete SOCKS5\/OpenVPN\/WireGuard backend\s*\n?\s*\/\/ is configured\)\. Otherwise `registerSessionProxyDisabledRoutes`\s*\n?\s*\/\/ registers 503 FeatureUnavailable stubs so the customer dashboard \+\s*\n?\s*\/\/ SDK clients get a machine-readable signal instead of bare 404\./,
+      /\/\/ Activation gate: routes register only when `sessionEgressService` is\s*\/\/ wired in AppDeps \(i\.e\., a concrete SOCKS5\/OpenVPN\/WireGuard backend\s*\/\/ is configured\)\. Otherwise `registerSessionProxyDisabledRoutes`\s*\/\/ registers 503 FeatureUnavailable stubs so the customer dashboard \+\s*\/\/ SDK clients get a machine-readable signal instead of bare 404\./,
     );
   });
 
@@ -105,7 +105,7 @@ describe('routes/session-proxy content parity', () => {
 
   it("Cross-agent contract body-shape framing pinned: '@driftstack/api-types/egress (EG-API-1.1)' + 3-field body shape (session_id matching URL :id + proxy + optional egress_safeguard defaulting safeguards-on). Drift to dropping the session_id-matches-URL check would let a body carry a different id than the URL and create an audit-log mismatch", () => {
     expect(body).toMatch(
-      /\/\/ The route consumes the cross-agent contract schema from\s*\n?\s*\/\/ `@driftstack\/api-types\/egress` \(EG-API-1\.1\)\. Body shape:/,
+      /\/\/ The route consumes the cross-agent contract schema from\s*\/\/ `@driftstack\/api-types\/egress` \(EG-API-1\.1\)\. Body shape:/,
     );
     expect(body).toMatch(/\/\/\s+"session_id": "ses_xxx",\s+\/\/ must match URL :id/);
     expect(body).toMatch(
@@ -115,25 +115,25 @@ describe('routes/session-proxy content parity', () => {
 
   it("V-1005 CRITICAL the 4-layer secret protection is pinned as a REQUIREMENT for the unwired service edge, not as a description of what runs. The block used to say the service layer 'is responsible for' tmpfs, an AES-256-GCM envelope, hashing for the audit log and zeroing — and none of the four exists in services/proxy-backends/. That reads to an implementer as already done, which is how a pinned security claim outlives its implementation. The do-not-echo-body contract stays pinned on its own merits: nothing reaches a backend today, but a ValidationError quoting the body would put a SOCKS5 password or WireGuard private key into a client response and its log aggregators.", () => {
     expect(body).toMatch(
-      /\/\/ SECURITY: proxy configs carry customer secrets \(SOCKS5 password,\s*\n?\s*\/\/ OpenVPN \.ovpn including embedded private keys, WireGuard private\s*\n?\s*\/\/ key\)\. When the service edge is wired, the service layer MUST provide:\s*\n?\s*\/\/\s+- Storing on tmpfs only for the session lifetime\s*\n?\s*\/\/\s+- AES-256-GCM at-rest envelope\s*\n?\s*\/\/\s+- Hashing the config for the audit log \(never raw\)\s*\n?\s*\/\/\s+- Zeroing on session-end/,
+      /\/\/ SECURITY: proxy configs carry customer secrets \(SOCKS5 password,\s*\/\/ OpenVPN \.ovpn including embedded private keys, WireGuard private\s*\/\/ key\)\. When the service edge is wired, the service layer MUST provide:\s*\/\/\s+- Storing on tmpfs only for the session lifetime\s*\/\/\s+- AES-256-GCM at-rest envelope\s*\/\/\s+- Hashing the config for the audit log \(never raw\)\s*\/\/\s+- Zeroing on session-end/,
     );
     // The retracted wording, paraphrased in the negative so it cannot return:
     // the block must not present those four as something the service layer
     // already does, nor claim this route dispatches anywhere.
     expect(body).not.toMatch(/The service layer is responsible for:/);
-    expect(body).not.toMatch(/dispatches to the\s*\n?\s*\/\/ service/);
+    expect(body).not.toMatch(/dispatches to the\s*\/\/ service/);
     expect(body).toMatch(/Do NOT echo body fields in error responses/);
   });
 
   it("Body-session_id-must-match-URL-id BadRequestError framing pinned: 'Body session_id must match the URL :id (cross-cutting body/URL mismatch).' + parsed.data.session_id !== id branch. Drift to dropping this check would let body+URL diverge and create audit-log mismatches between the URL'd session id and the proxy applied", () => {
     expect(body).toMatch(
-      /if \(parsed\.data\.session_id !== id\) \{\s*\n?\s*throw new BadRequestError\(\s*\n?\s*'Body session_id must match the URL :id \(cross-cutting body\/URL mismatch\)\.',\s*\n?\s*\);/,
+      /if \(parsed\.data\.session_id !== id\) \{\s*throw new BadRequestError\(\s*'Body session_id must match the URL :id \(cross-cutting body\/URL mismatch\)\.',\s*\);/,
     );
   });
 
   it('POST FeatureUnavailable detail states current availability and default-egress impact without internal identifiers', () => {
     expect(body).toMatch(
-      /'Customer-configurable egress \(SOCKS5 \/ OpenVPN \/ WireGuard\) is unavailable on this deployment\. ' \+\s*\n?\s*"Sessions continue through Driftstack's default egress\."/,
+      /'Customer-configurable egress \(SOCKS5 \/ OpenVPN \/ WireGuard\) is unavailable on this deployment\. ' \+\s*"Sessions continue through Driftstack's default egress\."/,
     );
     const detailStart = body.indexOf('throw new FeatureUnavailableError');
     expect(detailStart).toBeGreaterThan(-1);
@@ -145,20 +145,20 @@ describe('routes/session-proxy content parity', () => {
 
   it('GET 404-no-proxy-config framing pinned — config_hash-only, never-raw-config, and the reason for the 404. V-823 corrected that reason: it blamed an unwired backend, and one is wired; nothing can have a proxy applied because POST never reaches the service', () => {
     expect(body).toMatch(
-      /\/\/ EG-API-1\.6 backs this with a real read from session-egress\s*\n?\s*\/\/ state \(config_hash \+ type \+ safeguard flags only — never raw\s*\n?\s*\/\/ config\)\. For now the route surfaces 404 because no session can\s*\n?\s*\/\/ have a proxy applied: POST above never reaches the backend, so\s*\n?\s*\/\/ nothing ever writes the state this would read/,
+      /\/\/ EG-API-1\.6 backs this with a real read from session-egress\s*\/\/ state \(config_hash \+ type \+ safeguard flags only — never raw\s*\/\/ config\)\. For now the route surfaces 404 because no session can\s*\/\/ have a proxy applied: POST above never reaches the backend, so\s*\/\/ nothing ever writes the state this would read/,
     );
     expect(body).toMatch(/throw new NotFoundError\('No proxy config for this session\.'\);/);
   });
 
   it('Disabled-stub customer-facing detail stays current-state-only', () => {
     expect(body).toMatch(
-      /const detail =\s*\n?\s*'Customer-configurable egress \(SOCKS5 \/ OpenVPN \/ WireGuard\) is unavailable on this deployment\. ' \+\s*\n?\s*"Sessions continue through Driftstack's default egress\.";/,
+      /const detail =\s*'Customer-configurable egress \(SOCKS5 \/ OpenVPN \/ WireGuard\) is unavailable on this deployment\. ' \+\s*"Sessions continue through Driftstack's default egress\.";/,
     );
   });
 
   it("Schema re-export framing pinned: 'Re-export the ProxyConfigSchema for testability — consumers that want to validate a proxy body without the SessionEgressConfig envelope can use this directly. Marked here rather than in egress.ts because the schema's location is API-package, not route-package.' + export { ProxyConfigSchema } — pinned so the route-package-re-export-for-testability + schema-lives-in-api-package contract stays documented", () => {
     expect(body).toMatch(
-      /\/\/ Re-export the ProxyConfigSchema for testability — consumers that\s*\n?\s*\/\/ want to validate a proxy body without the SessionEgressConfig\s*\n?\s*\/\/ envelope can use this directly\. Marked here rather than in egress\.ts\s*\n?\s*\/\/ because the schema's location is API-package, not route-package\./,
+      /\/\/ Re-export the ProxyConfigSchema for testability — consumers that\s*\/\/ want to validate a proxy body without the SessionEgressConfig\s*\/\/ envelope can use this directly\. Marked here rather than in egress\.ts\s*\/\/ because the schema's location is API-package, not route-package\./,
     );
     expect(body).toMatch(/export \{ ProxyConfigSchema \};/);
   });
