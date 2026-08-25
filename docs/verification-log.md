@@ -20547,3 +20547,30 @@ header — not by failing a real Postmark call and watching what recovers.
 **Nine end-to-end audits, one defect.** The dual-write shape has now been walked across payments, entitlement
 grants, webhooks and email; every window it found was either self-healing, reconciled, or a documented
 at-most-once choice.
+
+## V-1659 — I nearly accused a guard of a blind spot with a regex narrower than its identifier
+
+Twenty-six entries were appended to this file today, and twelve tests read it — including
+`a-verification-log-number-resolves-to-one-finding` and `no-formatted-markdown-outgrows-the-format-hook`.
+**Checking that my own commits had not broken a guard I did not know read my file** is how this started, and
+it is a check worth naming: a docs-only commit is not automatically safe in a repo with content-parity
+gates.
+
+All four pass — 17 tests, no breakage. ⛔ **But my own static check reported FOUR duplicate V-numbers** —
+`V-1274`, `V-1488`, `V-1501`, `V-1506` — while the guard whose entire purpose is "a number resolves to ONE
+finding" sat green. **That is a guard accusing itself of a blind spot, and I was one message from reporting
+it.**
+
+**The guard was right.** They are `V-1274`, `V-1274b`, `V-1274c` — suffixed continuations. My regex was
+`^## (V-\d+)`, which captures the digits and **silently drops the letter**, so three distinct headings
+collapsed into one identifier. With `^## (V-\d+[a-z]*)`: **416 headings, 416 distinct, zero duplicates.**
+
+⭐ **Fourth instrument fault of this exact class today, and the cheapest to have avoided.** A resource name
+is not a path; a mock's body is not its use; a method's parameter brace is not its body brace; **and
+`V-\d+` is not the identifier format.** Every one was a boundary drawn narrower than the thing it was drawn
+around.
+
+⭐ **What caught it was the disagreement, not a failing test.** The guard passing while my count said it
+should fail is the same signal as A2's "the number did not move" — **two instruments disagreeing is
+information, and the right first assumption is that mine is the broken one.** It was, four times out of
+four.
