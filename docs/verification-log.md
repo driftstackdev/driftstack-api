@@ -18937,8 +18937,21 @@ Recorded in `docs/internal/OPEN-ITEMS.md`.
 
 Ninety-five operation summaries in `lib/openapi.ts` state which scopes a caller needs, in prose —
 "(requires `write:profiles`, broad `write`, or `account_owner`)". One hundred and sixty-one routes enforce
-a scope with `requireScope(...)`. **Nothing compares them**, and a mismatch is not a cosmetic one: a
-customer reads the summary, mints a key carrying exactly the scope it names, and is refused.
+a scope with `requireScope(...)`. A mismatch is not cosmetic: a customer reads the summary, mints a key
+carrying exactly the scope it names, and is refused.
+
+⚠️ **This entry originally said "Nothing compares them". That is FALSE and it was committed.**
+`openapi-scope-disclosure-invariant` (A2, 2026-07-31) compares them, and more thoroughly than the arm I
+proposed: one CRITICAL arm asserts every customer-facing scope-enforcing route names that scope in its
+operation — deriving the expectation from `app.requireScope(...)` in the route source "so the docs can
+never define their own truth" — and a second asserts an operation may not name a DIFFERENT granular scope
+than the one enforced. `/v1/admin/*` is excluded, with its reason stated.
+
+**How I missed a file named `openapi-scope-disclosure-invariant`**: I ran the prior-art grep, that filename
+was in its output, and I did not open it. I have a standing rule that says never dismiss a prior-art hit by
+filename — three duplicate audits came from skipping exactly that step — and this is the fourth.
+
+The measurement below still stands on its own, and one refinement survives.
 
 Ninety-four operations are comparable by method and path. **None is disjoint, and none over-promises.**
 The prose is accurate everywhere it appears.
@@ -18964,7 +18977,13 @@ correct, and the seventy were my reading `requireScope('X')` as "accepts only X"
 zero defects — the same ratio as this session's other instrument faults, and caught the same way, by
 looking at the output instead of reporting the count.
 
-**Owed rather than done:** the arm to add is "every scope a summary names is one `requireScope` would
-accept, under the V-174/V-481 hierarchy", over the ninety-four. It is preventive — there is nothing to fix
-today — and it could not be validated in this batch because a peer suite held the runner. Recorded in
-`docs/internal/OPEN-ITEMS.md`.
+**The one refinement the existing guard does not cover, measured: also zero.** Its contradiction arm
+matches only GRANULAR scopes — `/`(read|write|admin):(sessions|profiles|webhooks|api-keys|billing|audit)`/`
+— so a summary naming a BROAD scope that does not satisfy the enforced one would pass it. Under the real
+satisfaction rules that is possible: `admin` does not satisfy `read:sessions`, only `read` and
+`account_owner` do. Checking every named scope against a faithful port of `requireScope`: **0 of 94**. So
+the residual is preventive against a case that has never occurred, guarded on its other side by the arm
+that requires the enforced scope to be named at all.
+
+**W-9 is withdrawn, not deferred.** There is no gap worth an arm here, and proposing one was my
+duplicating an existing guard I had already been shown.
