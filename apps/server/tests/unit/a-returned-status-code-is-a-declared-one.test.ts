@@ -470,4 +470,49 @@ describe('a returned status code is a declared one', () => {
         'cannot model a 410 the contract omits',
     ).toEqual([]);
   });
+
+  it('V-1543 CRITICAL purge and transfer declare the 409 their live-session guard raises, closing the V-1541 candidate list. Both call assertNoActiveSession, which refuses while an agent session still holds the profile; bootstrap passes agentSessionsRepo into that slot specifically so the guard is not inert, and its comment records that a null there fails open. Transfer adds two more: a recipient name collision and a concurrent transfer-or-delete. NOT pinned here, and deliberately: GET /v1/profile-snapshots was flagged by the same tracer and is false — only the per-profile route passes parentProfileId, so only that route can 404, and it already declares one. Method-level propagation cannot see which argument a caller supplies.', () => {
+    const profiles = readFileSync(
+      resolve(REPO_ROOT, 'apps/server/src/services/profiles.ts'),
+      'utf8',
+    );
+    expect(profiles, 'purge still consults the live-session guard').toMatch(
+      /async purge\([\s\S]{0,400}?assertNoActiveSession\(/,
+    );
+    expect(profiles, 'the guard still refuses with a conflict').toMatch(
+      /assertNoActiveSession[\s\S]{0,600}?throw new ConflictError/,
+    );
+    expect(profiles, 'transfer still refuses a recipient name collision').toContain(
+      'Recipient account already has a profile named',
+    );
+
+    // The guard is only live because bootstrap supplies the repo; a null there
+    // fails open, and the 409 this arm pins would stop being reachable.
+    // Comment LINES are dropped first. Two drafts failed here and both are worth
+    // the comment: matching the raw source left `// agentSessionsRepo,` — the
+    // literal shape of the fail-open this asserts against — satisfying the match,
+    // and a regex comment-stripper mis-paired on a block comment and deleted the
+    // constructor call outright, so the arm failed against correct source. Dropping
+    // whole comment lines does neither.
+    const bootstrap = readFileSync(resolve(REPO_ROOT, 'apps/server/src/lib/bootstrap.ts'), 'utf8')
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('//'))
+      .join('\n');
+    expect(bootstrap, 'ProfilesService is still constructed with the agent-sessions repo').toMatch(
+      /new ProfilesService\([\s\S]{0,1400}?agentSessionsRepo/,
+    );
+
+    const missing = ['DELETE /v1/profiles/{id}/purge', 'POST /v1/profiles/{id}/transfer']
+      .filter((operation) => {
+        const codes = declared.get(operation);
+        expect(codes, `${operation} is still published`).not.toBeUndefined();
+        return codes !== undefined && !codes.has('409');
+      })
+      .sort();
+    expect(
+      missing,
+      'these profile operations refuse with 409 while a session holds the profile, and a generated ' +
+        'client cannot model a refusal the contract omits',
+    ).toEqual([]);
+  });
 });

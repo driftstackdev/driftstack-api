@@ -53460,6 +53460,16 @@
               }
             }
           },
+          "409": {
+            "description": "The profile has a live session in progress, so nothing was purged. Stop the session and retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "headers": {
@@ -54207,6 +54217,16 @@
           },
           "404": {
             "description": "Profile not found, or recipient account does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The transfer did not happen and the profile stayed where it was. Either the recipient account already has a profile with this name, a concurrent request already transferred or deleted it, or a live session still holds it.",
             "content": {
               "application/problem+json": {
                 "schema": {

@@ -7662,6 +7662,11 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: { params: z.object({ id: prefixedIdParam('prof', 'profile') }) },
     responses: {
+      409: {
+        description:
+          'The profile has a live session in progress, so nothing was purged. Stop the session and retry.',
+        content: problemContent,
+      },
       204: { description: 'Trashed profile permanently deleted.' },
       404: {
         description: 'No trashed profile with that id (or owned by another account).',
@@ -7755,6 +7760,11 @@ function buildRegistry(): OpenAPIRegistry {
       },
     },
     responses: {
+      409: {
+        description:
+          'The transfer did not happen and the profile stayed where it was. Either the recipient account already has a profile with this name, a concurrent request already transferred or deleted it, or a live session still holds it.',
+        content: problemContent,
+      },
       200: {
         description: 'Profile transferred; a fresh profile is minted in the recipient account.',
         content: { 'application/json': { schema: TransferProfileResponseOpenApi } },

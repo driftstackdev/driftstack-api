@@ -15754,3 +15754,51 @@ evidence actually carried a conclusion matters more here than the conclusion.
 `POST /v1/profiles/{id}/transfer` 409, `POST /v1/agent-sessions` 409, `GET /v1/profile-snapshots` 404, plus
 the 409 on the two session-create paths whose source I did not locate within this batch. Left as measured,
 not as exempt.
+
+## V-1543 — the candidate list closed: two more real, one false, and a guard that could not see its own fail-open
+
+The last four of V-1541's ten, traced to their enclosing methods rather than guessed.
+
+**Two real, both customer-addressable, both now declared:**
+
+```
+DELETE /v1/profiles/{id}/purge      409  a live agent session still holds the profile
+POST   /v1/profiles/{id}/transfer   409  recipient name collision, concurrent transfer-or-delete,
+                                         or a live session still holds it
+```
+
+Both run through `assertNoActiveSession`, and its reachability turns on a dependency — the method
+early-returns when `agentSessions` is null. It is wired: bootstrap passes `agentSessionsRepo` into that
+slot, and the comment beside it records why in terms that settle the question, that a null there leaves the
+guard "wired but INERT (fail-open)" and would let a bound profile be hard-deleted. So the 409 is live, and
+a customer purging a profile with a session running got a refusal their generated client had no model for.
+
+**One false, and instructively so.** `GET /v1/profile-snapshots` was flagged for 404. Only the per-profile
+route passes `parentProfileId` into `snapshots.list`, and only that argument reaches the
+`findById` → `NotFoundError` branch; the flat list never supplies it. `GET /v1/profiles/{id}/snapshots`
+already declares 404. Method-level propagation cannot see which argument a caller supplies — the same
+path-insensitivity as `mapAuthFlowError`, now confirmed twice.
+
+### The arm could not detect the thing it was written to detect
+
+The bootstrap wiring is load-bearing, so the arm pins it. Proving that pin took three attempts and both
+failures are the point:
+
+1. Matching the raw source. The mutation is `// agentSessionsRepo,` — commenting the argument out — and
+   the commented line still contains the identifier, so the match stayed satisfied and the arm stayed
+   **green against the exact fail-open it exists to catch**.
+2. Stripping comments with a regex. `/\*[\s\S]*?\*/` mis-paired on something in `bootstrap.ts` and deleted
+   the region containing `new ProfilesService(` outright — the constructor call vanished, and the arm
+   failed against perfectly correct source. Measured rather than inferred: occurrences of
+   `new ProfilesService(` went from 1 to 0.
+3. Dropping whole comment lines. Passes on correct source, reds when the argument is commented out.
+
+Both failures are the same fault in opposite directions — a text scan that cannot distinguish code from a
+comment, first too permissive and then too destructive. This is the sixth tooling bug in this arc, and the
+first where the broken version would have shipped looking green; the only reason it did not is that the
+mutation was run before the commit rather than after.
+
+**V-1541's list is now closed**: two fixed here, two fixed in V-1542, four disproved as billing defensive
+checks, one disproved as path-insensitivity, and twelve that were already disproved in V-1535 and
+faithfully reproduced. The remaining `POST /v1/agent-sessions` 409 traces to no throw in its own service
+and is left measured rather than guessed at.
