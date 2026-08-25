@@ -18004,3 +18004,45 @@ This batch also corrected a collision: a peer's `493855898` took V-1593 first, a
 it. Mine is renumbered to V-1595 along with its three citations, leaving the peer's citation in
 `scripts/tests/verify-suite.test.ts` resolving to the entry it was written against. The log is
 append-only, so the later entry is the one that moves.
+
+## V-1596 — the error contract holds, and two of my own measurements said otherwise first
+
+The input surface is covered in all three places an id arrives, so this batch turned to what comes back
+out. Two false starts are worth recording before the result, because both were my measurement rather than
+the code.
+
+**First false start: "all 1114 error responses have no schema."** They all have one. The scan looked up
+`content['application/json']` and RFC 7807 responses are `application/problem+json`, so every lookup
+missed and reported an absence. The document declares `Problem` — `type`, `title`, `status`, `detail`,
+`instance` — and refs it 1113 times.
+
+**Second: "the server emits no problem type URLs."** `grep -rhoE "errors\.driftstack\.dev/[a-z-]+"` over
+the source returned zero, while the same URLs had been visible in responses all session. They are
+constructed rather than written literally. Third time this session that one spelling of a thing has been
+mistaken for the thing, and the first two were in the same half-hour.
+
+**The result, once measured properly.** Errors from five different layers — a route shape check, a repo
+lookup that misses, the auth preHandler, a zod schema, and Fastify's own not-found handler — all answer
+`application/problem+json` carrying exactly the five declared members. The contract holds on the wire, not
+just in the generated document.
+
+**One undeclared extension, and it is legal.** Validation failures add `issues` with the field-level
+detail. RFC 7807 permits extension members and `Problem` sets `additionalProperties: {}`, so nothing is
+broken — but no schema names it, while `AgentMessageConflictProblem` shows this document declares its
+extensions when it means to. Declaring it properly means regenerating the published spec and moving the
+SDK and docs parity pins with it, which is not a change to make at the end of a long session with a
+concurrent writer in the tree. It is allowlisted in the new spec instead, so it stays visible and a SECOND
+undeclared member has to be added deliberately rather than arriving unnoticed.
+
+**Why this is worth a guard rather than a note.** `docs/decisions.md` records the TypeScript SDK carrying
+"17 typed error classes mirroring the server's RFC 7807 problem-types", and those classes dispatch on
+`type`. An error that loses that member is not a typed error to any of them, and nothing in the suite
+would have said so.
+
+Three arms, each mutation-proven against the real serializer in `middleware/error-handler.ts`: switching
+the content type to `application/json` reds the first, dropping `instance` reds the second with the arm
+that names the SDKs, and adding a `debug_hint` member reds the third. Restored byte-identical. The cases
+are deliberately drawn from five layers rather than swept from one, because a sweep of one kind would
+prove only that one layer is consistent with itself.
+
+Full suite 3076 files / 30996 tests, green; e2e 229 over 40 spec files; `verify-suite` OK.
