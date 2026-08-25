@@ -20609,3 +20609,48 @@ previous one misses** — which is the most complete failure-mode coverage I hav
 reconcile headers — **not by killing a control-plane process mid-operation and observing what recovers.**
 
 **Ten audits, one defect.**
+
+## V-1661 — looking for a guard on the MECHANISM can miss a guard on the OUTCOME
+
+V-1657 established that Stripe self-heals partly because `dispatch()` runs BEFORE `recordEvent()`: a
+transient failure re-throws, no ledger row is written, and the redelivery re-drives the grant. Claiming the
+event first — which reads as sensible concurrency hygiene — would suppress the redelivery permanently.
+
+**So I went looking for what pins that ordering, and concluded it was unpinned. That conclusion was
+wrong, and the way it was wrong is the finding.**
+
+Three guards were checked and each genuinely does not pin it:
+
+- `stripe-dispatch-has-no-additive-write` **states the ordering in its title** — "dispatch() runs BEFORE the
+  idempotency insert, so a concurrent delivery executes every handler twice" — and its body scans the
+  dispatch-path files for additive writes. **The ordering is its PREMISE, never its assertion.** ⭐ Which is
+  correct design, not a defect: it guards the COST of the ordering, which is the part that rots.
+- `services-stripe-webhooks-content-parity` pins the `hasEvent` short-circuit, the `if (!inserted)` block,
+  and the race comment verbatim. ⚠️ **The comment gives no incidental protection**: "a concurrent delivery
+  could insert the same row between our hasEvent check above and this insert" stays true if the order flips.
+- `stripe-webhooks-v089-adr003-cross-source-invariant` pins the two-responsibility framing, not the sequence.
+
+⛔ **And then the guard turned up somewhere I was not looking.**
+`integration/stripe-webhooks-mutations.test.ts`:
+
+    it('a transient error during handling → 500 + NO ledger row, and a Stripe re-delivery then heals')
+
+**That is the property, tested end to end against a real Postgres, and it never mentions the ordering at
+all.** It asserts the consequence the ordering exists to produce. Claiming the event before dispatch would
+leave a ledger row on the throwing path and fail it.
+
+⭐ **The lesson is the inverse of V-1647.** There, an arm's TITLE claimed a relationship its body did not
+test. Here, a guard tests a property its title never names — and I missed it because I searched for the
+mechanism (`recordEvent`, `dispatch`, "before") rather than for the outcome ("no ledger row", "re-delivery
+heals"). **A grep shaped like the implementation cannot find a test written in terms of behaviour**, and
+behaviour is how the better tests are written. Fifth time today that opening prior art changed a conclusion.
+
+⚠️ Applied to my own work in the same pass: `a-derived-identity-must-be-persisted-before-it-is-used`
+(V-1654) is a MECHANISM guard — it pins the await and the order. Checked whether a behavioural guard already
+covered that outcome; **it does not**, so the guard is not redundant. But recorded as a known limit: an
+integration arm asserting the customer id is persisted before the checkout URL is returned would be
+stronger than pinning two statements' order.
+
+⚠️ Boundary: the three negatives and the positive were established by READING the four files. A mutation
+probe moving `recordEvent` above `dispatch` is queued to confirm the integration arm actually fires;
+this entry records what reading established, not what the probe returned.
