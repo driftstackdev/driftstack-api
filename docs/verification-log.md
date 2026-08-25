@@ -17157,3 +17157,59 @@ V-1541 built for status codes, and this batch did not run it. The claim here is 
 opened: the seam is thin, the column types make most of it harmless by construction, and the one family
 that is not harmless — uuid columns fed from customer input — is the family V-1565 fixed and V-1566/V-1568
 enumerated at exactly two delegation points.
+
+## V-1578 — a second route in V-1565's class, recorded as by-design without the argument that makes it safe
+
+V-1577 named what it had not done: run the cross-file trace against every uuid column. Running it found a
+second live instance of the defect V-1565 fixed.
+
+**The chain, resolved through the type checker and confirmed against a real database:**
+
+```
+GET /v1/admin/usage/accounts/:id
+  params.id            z.string().min(1).max(100)   — length bounds, no shape
+  getAccount(ctx, id)  no conversion
+  repo.findById(id)    eq(accounts.id, id)
+  accounts.id          uuid('id')
+```
+
+Postgres was asked directly, rather than reasoned about: `acc_does_not_exist`, `not-a-uuid` and
+thirty-six dashes each return **22P02 invalid input syntax for type uuid**. So this route answers **500**
+in production for a malformed id — and for its own documented `acc_<uuid>` format, which never reaches the
+column unstripped anywhere on this path.
+
+**Its own test asserts 404 for exactly that input.** `admin-usage.test.ts` sends
+`/v1/admin/usage/accounts/acc_does_not_exist` and expects 404, and passes — through `buildTestApp`'s
+in-memory repo, where a garbage id is simply a miss. This is the V-1576 seam producing a concrete false
+negative: the test is green, the production behaviour is a 500.
+
+**Its sibling gets it right.** `admin-accounts.ts` converts with
+`uuidFromPrefixedId(request.params.id, 'acc')` and answers 400. Two admin routes on the same resource
+disagree about a malformed id: 400 in one, 500 in the other, 404 in the second one's test.
+
+### The roster entry is the interesting part
+
+`a-published-bound-matches-the-route` records this under `UNCONSTRAINED_BY_DESIGN`, and reading the
+neighbours shows what is wrong with it:
+
+```
+GET /v1/agent-sessions/{id}          'sessions.get(id) is a plain equality query —
+                                      a malformed id is a miss, answered 404'      <- an ARGUMENT
+GET /v1/admin/usage/accounts/{id}    'passed straight to getAccount'               <- a DESCRIPTION
+GET /v1/admin/cost/accounts/{id}     'bareAccountId only strips an acc_ prefix
+                                      when present; it validates nothing'          <- a DESCRIPTION
+```
+
+The agent-session entries are safe and say why, and V-1577 verified the reason: those ids are a
+`text('id')` column, so a malformed value really is a miss. **The two accounts entries state what the code
+does and never claim it is harmless** — and their column is `uuid`, where a malformed value is a cast
+error. One roster, one heading, two situations that differ by column type.
+
+**Not fixed here, and the reason is the roster, not the difficulty.** The change itself is one helper call.
+But this is a recorded by-design entry across four pin files, and overturning it means deciding whether a
+malformed admin id is 400 (matching the sibling) or 404 (matching this route's test) — a contract choice on
+a live admin surface, made properly rather than at the end of a batch. `GET /v1/admin/cost/accounts/{id}`
+needs the same decision and the same fix.
+
+What is settled and recorded: the chain, the empirical 22P02, the disagreeing sibling, the false-negative
+test, and the distinction the roster is missing.
