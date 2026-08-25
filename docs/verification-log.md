@@ -18318,3 +18318,39 @@ too, which is that assertion working rather than a side effect. The same edit in
 
 The two outstanding failures are unchanged and still not this work: `ProxiesView.tsx` was rewritten by
 `4056443ab` without its content-parity pins moving. This batch touched one test file and no source.
+
+## V-1603 — the endpoint detail page reported no deliveries while the list showed them
+
+Continuing the V-1602 sweep. Two more single-file guards checked and cleared first:
+`every-lifecycle-email-is-send-once` scopes itself to the lifecycle service and the four other tick-driven
+senders each carry their own claim — `markReminderSent` after the send, deliberately marked even on
+failure — so its scope is right. `unimplemented-response-fields-are-disclosed` is genuinely about one
+field despite a generic title.
+
+**But that title names a class, and the class had another member.** Sweeping for response fields a handler
+assigns a constant while the schema publishes them: `GET /v1/webhooks/{id}` and `PATCH /v1/webhooks/{id}`
+both call `publicEndpoint(row)` with no counts argument, so `delivery_counts` fell to the function's
+`{ delivered: 0, failed: 0, dlq: 0 }` default. `GET /v1/webhooks` passes real counts. All three publish
+the same field from the same schema, so a customer reading the list saw an endpoint's delivery history and
+the same endpoint opened on its own reported nothing delivered, nothing failed and nothing in the DLQ.
+
+Unlike the field that guard documents, this one is computable — `deliveryCountsByEndpoint` already exists
+and the list route already calls it — so making the contract honest by describing the limitation would
+have been the wrong remedy. `getWithCounts` mirrors `listWithCounts` exactly, including the scope gate and
+the effective-account redirection, so a team member reading an owner's endpoint gets the owner's counts
+rather than an empty map.
+
+**The first version of the test proved nothing, and the mutation is what said so.** It created an endpoint
+and compared the list against the detail view — both zero, because a fresh endpoint has no deliveries. With
+the fix reverted it still passed. Seeding a delivered row first is what makes the comparison able to fail:
+list reads `delivered: 1`, the zero default reads `0`, and reverting either route now reds it.
+
+**Two process faults, both caught by the checks that exist for them.** A Python edit opened the file for
+write twice and the second read hit the truncated copy — the `it(` count went 40 → 0 and vitest reported
+"no tests" rather than a failure, which is exactly the shape rule 5 names. And the scan that found this
+missed its own known case first: it required the field name to END in `count`/`total`, and
+`refused_count_this_month` ends in `month`. Demanding the control pass before reading the output is what
+turned a silent zero-result sweep into a 27-row one.
+
+Full suite green apart from the two `ProxiesView` content-parity failures, unchanged from three batches
+ago and still `4056443ab`'s rewrite outrunning its pins.

@@ -14,6 +14,71 @@ const auth = (fixture: TestAppFixture): { authorization: string } => ({
 });
 
 describe('POST /v1/webhooks', () => {
+  // V-1603 — the list route passed real counts and these two passed none, so
+  // `publicEndpoint`'s zero default answered instead. A customer reading the list
+  // saw an endpoint's delivery history and the same endpoint opened on its own
+  // reported nothing delivered, nothing failed, nothing in the DLQ. The counts are
+  // published on all three responses by the same schema.
+  it('reports the same delivery counts as the list route for the same endpoint', async () => {
+    fx = await buildTestApp({ scopes: ['read', 'write', 'account_owner'] });
+    const created = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks',
+      headers: auth(fx),
+      payload: { url: 'https://example.test/hook', events: ['session.completed'] },
+    });
+    expect(created.statusCode, 'an endpoint to read counts for').toBe(201);
+    const id = created.json<{ id: string }>().id;
+
+    // The counts must be NON-ZERO or this proves nothing: a fresh endpoint reads
+    // 0/0/0 from the list too, so comparing it against the zero default the
+    // routes used to return is comparing zeros to zeros. Measured the hard way —
+    // the first version of this test passed with the fix reverted.
+    await fx.webhooksRepo.enqueueDelivery({
+      webhookId: id.replace(/^whk_/, ''),
+      eventId: '11111111-2222-3333-4444-555555555555',
+      eventType: 'session.completed',
+      payload: { id: 'evt-1', type: 'session.completed', data: {} },
+    });
+    const seeded = fx.webhooksRepo.getAllDeliveries();
+    const row = seeded[seeded.length - 1];
+    if (!row) throw new Error('seeded delivery not found');
+    await fx.webhooksRepo.claim({ batchSize: 64, now: new Date() });
+    await fx.webhooksRepo.recordDelivered(row.id, { responseStatus: 200, at: new Date() });
+
+    const list = await fx.app.inject({ method: 'GET', url: '/v1/webhooks', headers: auth(fx) });
+    const listed = list
+      .json<{ data: Array<{ id: string; delivery_counts: unknown }> }>()
+      .data.find((e) => e.id === id);
+    expect(listed, 'the endpoint appears in the list').toBeDefined();
+    expect(
+      listed?.delivery_counts,
+      'the fixture is non-zero, so the comparisons below can fail',
+    ).not.toEqual({ delivered: 0, failed: 0, dlq: 0 });
+
+    const one = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/webhooks/${id}`,
+      headers: auth(fx),
+    });
+    expect(one.statusCode).toBe(200);
+    expect(
+      one.json<{ delivery_counts: unknown }>().delivery_counts,
+      'the detail view agrees with the list about the same endpoint',
+    ).toEqual(listed?.delivery_counts);
+
+    const patched = await fx.app.inject({
+      method: 'PATCH',
+      url: `/v1/webhooks/${id}`,
+      headers: auth(fx),
+      payload: { events: ['session.completed', 'session.failed'] },
+    });
+    expect(patched.statusCode).toBe(200);
+    expect(
+      patched.json<{ delivery_counts: unknown }>().delivery_counts,
+      'and so does the response to an update',
+    ).toEqual(listed?.delivery_counts);
+  });
   it('CRITICAL a mistyped events key is reported rather than silently defaulted', async () => {
     // `events` is the field that decides which deliveries ever arrive. Mistype
     // it and zod strips it, the endpoint is created against whatever the schema

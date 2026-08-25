@@ -186,12 +186,15 @@ export function registerWebhookRoutes(app: FastifyInstance, opts: WebhookRoutesO
       if (!ctx) throw new Error('account context missing after requireAuth');
       const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
       const id = uuidFromPrefixedId(request.params.id, 'whk');
-      const row = await service.get(
+      // V-1603 — the counts are published on this response too, and passing no
+      // second argument here returned the zero default while the list route
+      // returned real numbers for the same endpoint.
+      const { endpoint, counts } = await service.getWithCounts(
         ctx,
         id,
         effective.kind === 'team' ? { effectiveAccountId: effective.accountId } : {},
       );
-      return publicEndpoint(row);
+      return publicEndpoint(endpoint, counts);
     },
   );
 
@@ -244,7 +247,14 @@ export function registerWebhookRoutes(app: FastifyInstance, opts: WebhookRoutesO
         parsed.data,
         eff !== undefined ? { effectiveAccountId: eff } : {},
       );
-      return publicEndpoint(row);
+      // V-1603 — same publication, same omission: an update answered with zeroed
+      // counts while the list showed the endpoint's real delivery history.
+      const { counts } = await service.getWithCounts(
+        ctx,
+        id,
+        eff !== undefined ? { effectiveAccountId: eff } : {},
+      );
+      return publicEndpoint(row, counts);
     },
   );
 

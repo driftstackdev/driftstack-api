@@ -452,6 +452,34 @@ export class WebhooksService {
    * (delivered / failed / dlq). Customer dashboard /webhooks page
    * consumes this via /v1/webhooks; no separate endpoint needed.
    */
+  /**
+   * V-1603 — one endpoint plus its delivery counts.
+   *
+   * `GET /v1/webhooks/{id}` and `PATCH /v1/webhooks/{id}` publish
+   * `delivery_counts` in the same schema the list route does, and both returned
+   * the zero default of `publicEndpoint` because neither passed a counts
+   * argument. A customer reading the list saw real numbers and the same endpoint
+   * opened on its own reported nothing delivered, nothing failed and nothing in
+   * the DLQ.
+   *
+   * Scoped exactly as `listWithCounts` is: the scope gate first, then the
+   * effective-account redirection, so a team member reading an owner's endpoint
+   * gets the owner's counts rather than their own empty map.
+   */
+  async getWithCounts(
+    ctx: AccountContext,
+    id: string,
+    opts: { effectiveAccountId?: string } = {},
+  ): Promise<{ endpoint: WebhookEndpointRow; counts: EndpointDeliveryCounts }> {
+    const endpoint = await this.get(ctx, id, opts);
+    const accountId = opts.effectiveAccountId ?? ctx.account.id;
+    const countsMap = await this.repo.deliveryCountsByEndpoint(accountId);
+    return {
+      endpoint,
+      counts: countsMap.get(endpoint.id) ?? { delivered: 0, failed: 0, dlq: 0 },
+    };
+  }
+
   async listWithCounts(
     ctx: AccountContext,
     opts: { effectiveAccountId?: string } = {},
