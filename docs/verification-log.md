@@ -19547,3 +19547,42 @@ Mutation-proved against real subjects, each restored byte-identical: reintroduci
 fails the guard. Two of those proofs initially reported PASS because my shell quoting appended `\\s+`
 rather than `\s+`; the guard was right and the harness was wrong, which is why the mutation writes the
 bytes directly now and asserts the token is present as written before reading the result.
+
+## V-1635 — I asked my own three placeholders for their reasons; two did not have one
+
+W-8 left a map of three routes the docs teach and the published document omits, each valued
+`REASON OWED` — a marker meaning nobody had supplied a justification. This entry supplies them.
+
+**One was a decision, and its reason was already written down** — just not where the guard looked.
+`POST /v1/oauth/authorize/complete` is described in `src/lib/openapi.ts` as "dashboard-internal … requires
+an interactive web session and rejects API keys", and in `routes/oauth.ts` as "omitted (already
+requireAuth-gated)". Its four siblings — `/oauth/authorize`, `/token`, `/introspect`, `/revoke` — are all
+published. Publishing this one would advertise an operation no API key can call.
+
+⭐ **The other two placeholders were wrong, in the specific way a plausible guess is wrong.**
+
+`GET /v1/status/stream` carried "server-sent events, which OpenAPI models poorly". That reads like a
+reason. **The document refutes it:** it publishes three `text/event-stream` operations already
+(`/account/me/notifications`, `/agent-sessions/{id}/transcript`, `POST /agent-sessions/{id}/message`). Nor
+is anonymity the discriminator — `/v1/status/sla` and `/v1/status/incidents` live in the same file, share
+the same public unauthenticated posture, and are both published. No reason survives; it is a gap.
+
+`GET /v1/whoami` carried "an ordinary authenticated GET, no evident reason". The mechanism turns out to be
+mechanical rather than chosen: `app.ts` registers it inline as a "quick smoke test for auth" **with no
+`schema:`**, and the published document is generated from declared schemas. Absence of a schema is the
+whole cause. Meanwhile `reference/scopes.md` teaches it to customers under "Checking what your key actually
+has", with a documented response body — so a reader is told to call an operation absent from the reference
+and from all three SDKs.
+
+⛔ **The lesson is about the placeholder, not the routes.** `REASON OWED` was written as bookkeeping, on
+the assumption the reasons existed and were merely unrecorded. Two of three did not exist, and the guesses
+I would have written instead — SSE is awkward, it's just a smoke-test route — are exactly the plausible
+sentences that would have closed the item and hidden the gap. An exemption list is only as honest as its
+weakest value, and the way to find out which value is weak is to try to refute it against the artifact.
+
+Both gaps are now labelled GAP rather than blessed, and left open deliberately: publishing either **adds to
+the customer contract**, and adding a response schema to a live route changes fastify's serialization. That
+is the owner's call and needs a test run behind it, not a drive-by edit. The header comment was rewritten in
+the same edit — correcting the entries had left it describing a marker no entry still carried.
+
+Full suite green afterwards: 3090 passed | 115 skipped (3205 files), 31102 tests.

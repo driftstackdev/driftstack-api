@@ -81,24 +81,44 @@ const codeLines = (file: string): string =>
  * that document, and so are the Python models — so an endpoint in this state is
  * taught on the docs site and absent from the reference and every client library.
  *
- * ⚠️ Each value is the reason the route is unpublished, and REASON OWED means
- * exactly that: nobody has supplied one. This map exists to stop a FOURTH
- * appearing silently, not to bless these three. An exemption list whose entries
- * carry no justification is how a real gap hides among deliberate ones, which is
- * why the debt is written into the value rather than left implicit.
+ * ⚠️ Each value is the reason the route is unpublished. All three were first
+ * written as REASON OWED — a placeholder saying nobody had supplied one — and
+ * V-1635 went and asked. The answers are the argument for writing the debt into
+ * the value rather than leaving it implicit: only ONE of the three was a
+ * decision, and the other two placeholders were WRONG in the specific way a
+ * plausible guess is wrong. "SSE, which OpenAPI models poorly" reads as a
+ * reason and is refuted by the document itself, which publishes three
+ * text/event-stream operations. So this map does two jobs: it stops a FOURTH
+ * appearing silently, and it keeps two known gaps legible as gaps instead of
+ * letting them pass as considered exclusions. It blesses one entry, not three.
  */
 const DOCUMENTED_BUT_UNPUBLISHED = new Map<string, string>([
   [
+    'POST /v1/oauth/authorize/complete',
+    'Deliberate, and the reason was already recorded in source — openapi.ts ("dashboard-internal ' +
+      '/authorize/complete endpoint, which requires an interactive web session and rejects API keys") ' +
+      'and routes/oauth.ts ("/authorize/complete is omitted (already requireAuth-gated)"). Its four ' +
+      'siblings /oauth/authorize, /token, /introspect and /revoke are all published; this one is not, ' +
+      'because publishing it would advertise an operation no API key can call.',
+  ],
+  [
     'GET /v1/status/stream',
-    'REASON OWED (OPEN-ITEMS W-8) — server-sent events, which OpenAPI models poorly. Plausible, unrecorded.',
+    'GAP, not a decision. The reason first written here — "SSE, which OpenAPI models poorly" — is ' +
+      'false: the spec publishes three text/event-stream operations already ' +
+      '(/account/me/notifications, /agent-sessions/{id}/transcript, POST /agent-sessions/{id}/message), ' +
+      "and this route's two same-file siblings /v1/status/sla and /v1/status/incidents share its " +
+      'public, unauthenticated posture and ARE published. Neither SSE nor anonymity is the ' +
+      'discriminator. Tracked as OPEN-ITEMS W-8; publishing it adds to the contract, so it is the ' +
+      "owner's call, not this guard's.",
   ],
   [
     'GET /v1/whoami',
-    'REASON OWED (OPEN-ITEMS W-8) — an ordinary authenticated GET. No evident reason not to publish it; taught at reference/scopes.md.',
-  ],
-  [
-    'POST /v1/oauth/authorize/complete',
-    'REASON OWED (OPEN-ITEMS W-8) — a step in the browser OAuth flow rather than an API call. Plausible, unrecorded.',
+    'GAP, not a decision. app.ts registers it inline as a "quick smoke test for auth" with no schema, ' +
+      'and the published document is generated from declared schemas — so the absence is mechanical, ' +
+      'not chosen. It is taught to customers at reference/scopes.md with a documented response body, ' +
+      'which means a reader is told to call an operation absent from all three SDKs. Tracked as ' +
+      'OPEN-ITEMS W-8; adding a response schema to a live route changes serialization, so it needs a ' +
+      'test run behind it rather than a drive-by edit.',
   ],
 ]);
 
