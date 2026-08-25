@@ -16365,3 +16365,45 @@ import to `packages/api-types` reds naming that workspace — so the check works
 one it was written for.
 
 `EXPECTED_TEST_FILES` 3016→3017 and `_ALL` 3178→3179, one file, mine.
+
+## V-1557 — closing the blind spot V-1556 wrote into its own header
+
+V-1556 shipped a guard that named what it could not see: `.astro`, `.svelte` and `.vue`, because the
+TypeScript compiler cannot read them. Leaving that is the failure this arc keeps finding in other people's
+work, and it had a two-batch shelf life at most.
+
+**An Astro frontmatter fence is TypeScript.** So is a `<script>` block. Both are extracted and handed to
+the SAME parser the guard already uses, rather than to a second scanner that could disagree with the first.
+
+**Measured before extending, and the number is why the extension is honest rather than theatrical:** 136
+template files carry 269 frontmatter import lines, of which **five** are bare specifiers — Astro pages
+import relative layouts and data almost exclusively — and none of the five is undeclared. Cross-checked
+with an independent crude count so a low number was not mistaken for a broken extractor, which is the
+reading that would have ended this batch early.
+
+The non-vacuity arm now asserts the template half separately (>100 files, >200 specifiers), because a
+template extractor that silently matched nothing would look exactly like a clean surface.
+
+Proved twice, and the second time mattered: an undeclared `zod` in `pricing.astro`'s frontmatter reds with
+"marketing-site imports zod", and breaking the frontmatter regex reds the non-vacuity arm.
+
+### Two process faults, both caught, both worth the record
+
+**The helpers landed before the arms read them.** After adding `templateFiles` and `templateCode` the suite
+passed — because nothing called them. That is "adding a field without a reader": a green run that proves
+only that new code compiles. Caught by asking what the arms actually scanned.
+
+**The snapshot predated the fix, again.** Restoring the guard after the mutation wiped the whole batch's
+edits, exactly as in V-1534. Caught by grepping the restored file for `templateFiles` and getting 0, then
+re-applying and re-proving the mutation against the restored version — because a proof run against a file
+later overwritten is not a proof of what shipped.
+
+### The mutation broke a guard I had to satisfy properly
+
+Editing `pricing.astro` and restoring it byte-identical still moved its mtime, and
+`dist-reading-suites-have-fresh-artifacts` compares mtimes, not content — so the full gate went red with
+"marketing-site: built ... but source changed ... — REBUILD, do not repin assertions onto stale markup".
+`cmp` reporting byte-identical is not the same as leaving no trace.
+
+Rebuilt the app as the guard instructs rather than back-dating the file, which would have made the guard
+green by editing the evidence it reads. 68 pages, and the gate is clean.

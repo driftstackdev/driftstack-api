@@ -17,10 +17,17 @@
 // needs to import something it does not declare, that is a decision worth making
 // visible in a diff rather than absorbing into a list.
 //
-// Scope is stated rather than implied: TypeScript sources under each workspace's
-// `src/`. `.astro`, `.svelte` and `.vue` files are NOT parsed — the compiler
-// cannot read them — so an undeclared import inside a template is invisible here.
-// Named so the next person does not read this as covering every file.
+// Scope, stated rather than implied. V-1556 covered TypeScript under each
+// workspace's `src/` and named `.astro`/`.svelte`/`.vue` as a blind spot.
+// V-1557 closes it: an Astro frontmatter fence and a `<script>` block are
+// TypeScript, so they are extracted and handed to the same parser. Measured
+// across 136 template files: 269 frontmatter import lines, of which only five
+// are bare specifiers — Astro pages import relative layouts and data almost
+// exclusively — and none of the five is undeclared.
+//
+// What remains outside: expressions in template MARKUP, and any file type not
+// listed below. An import cannot live in markup, so the first is a boundary
+// rather than a gap.
 
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -79,11 +86,36 @@ function tsFiles(dir: string, out: string[] = []): string[] {
   return out;
 }
 
+function templateFiles(dir: string, out: string[] = []): string[] {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name !== 'node_modules' && entry.name !== 'dist') templateFiles(p, out);
+    } else if (/\.(astro|svelte|vue)$/.test(entry.name)) {
+      out.push(p);
+    }
+  }
+  return out;
+}
+
+/**
+ * The TypeScript inside a template file: an Astro frontmatter fence, or the
+ * `<script>` blocks of a Svelte/Vue component. Handed to the same parser as
+ * ordinary source, so one code path decides what an import is.
+ */
+function templateCode(file: string, source: string): string[] {
+  if (file.endsWith('.astro')) {
+    const fence = /^---\r?\n([\s\S]*?)\r?\n---/.exec(source);
+    return fence?.[1] !== undefined ? [fence[1]] : [];
+  }
+  return [...source.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1] ?? '');
+}
+
 /** Every module specifier in one file, read from the AST rather than by regex. */
-function importSpecifiers(file: string): string[] {
-  const source = readFileSync(file, 'utf8');
+function importSpecifiers(file: string, code?: string): string[] {
+  const source = code ?? readFileSync(file, 'utf8');
   const sf = ts.createSourceFile(
-    file,
+    file.endsWith('.ts') || file.endsWith('.tsx') ? file : `${file}.ts`,
     source,
     ts.ScriptTarget.Latest,
     true,
@@ -135,6 +167,21 @@ describe('a workspace declares what its TypeScript source imports', () => {
 
     const specifiers = files.flatMap((f) => importSpecifiers(f));
     expect(specifiers.length, 'module specifiers parsed out of them').toBeGreaterThan(1000);
+
+    // The template half has to be shown alive too: it is the blind spot V-1556
+    // named, and a zero there would look identical to a clean result.
+    const templates = workspaces()
+      .map((w) => join(w, 'src'))
+      .filter((d) => existsSync(d))
+      .flatMap((d) => templateFiles(d));
+    expect(templates.length, 'template files found under the workspaces').toBeGreaterThan(100);
+    const templateSpecs = templates.flatMap((f) =>
+      templateCode(f, readFileSync(f, 'utf8')).flatMap((code) => importSpecifiers(f, code)),
+    );
+    expect(
+      templateSpecs.length,
+      'module specifiers parsed out of template frontmatter and script blocks',
+    ).toBeGreaterThan(200);
     expect(
       specifiers.some((s) => s.startsWith('.')),
       'relative specifiers are seen, so the parse is reading real imports',
@@ -155,9 +202,29 @@ describe('a workspace declares what its TypeScript source imports', () => {
       );
       const src = join(w, 'src');
       if (!existsSync(src)) continue;
-      for (const file of tsFiles(src)) {
-        for (const spec of importSpecifiers(file)) {
-          if (spec.startsWith('.') || spec.startsWith('node:')) continue;
+      const scanned: ReadonlyArray<readonly [string, readonly string[]]> = [
+        ...tsFiles(src).map((f) => [f, importSpecifiers(f)] as const),
+        ...templateFiles(src).map(
+          (f) =>
+            [
+              f,
+              templateCode(f, readFileSync(f, 'utf8')).flatMap((code) => importSpecifiers(f, code)),
+            ] as const,
+        ),
+      ];
+      for (const [file, specs] of scanned) {
+        for (const spec of specs) {
+          // `astro:*` are framework virtual modules; `~` and a leading `/` are
+          // path aliases, not packages.
+          if (
+            spec.startsWith('.') ||
+            spec.startsWith('node:') ||
+            spec.startsWith('astro:') ||
+            spec.startsWith('~') ||
+            spec.startsWith('/')
+          ) {
+            continue;
+          }
           const name = spec.startsWith('@')
             ? spec.split('/').slice(0, 2).join('/')
             : (spec.split('/')[0] ?? spec);
