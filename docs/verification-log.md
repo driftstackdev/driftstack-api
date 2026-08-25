@@ -20510,3 +20510,40 @@ around them — not by killing a process mid-window and observing recovery.
 
 **Eight end-to-end audits now, one defect (V-1649), and every follow-on thread already guarded.** That
 remains evidence about the codebase rather than about the search.
+
+## V-1658 — at-most-once email is a choice, and one header sentence does not know it
+
+Ninth audit, continuing the dual-write shape onto side effects: **which effects fire outside the
+transaction that decided them, with no way back?** Webhooks are durable (delivery table plus worker). Email
+is the interesting case.
+
+**`services/email.ts` states the posture in its header, and it is deliberate:** _"All sends are
+fire-and-forget: errors are logged at warn-level but never thrown to the caller, because email is never on a
+request critical path."_ Correct — failing a Stripe webhook because Postmark blipped would cost far more
+than a missing message.
+
+**Chasing the sharpest instance — the billing receipt, a one-shot email tied to
+`invoice.payment_succeeded` — the ordering turns out to be explicit:**
+
+    // C6 — claim before the send (after opt-out + account checks).
+    const won = await this.repo.claimBillingEmail({ … });
+    if (!won) return;
+
+⭐ **Claim-then-send is AT-MOST-ONCE by construction, and it is the right way round for a receipt.** Two
+receipts read as a double charge; zero receipts read as a support ticket. The claim also resolves the
+concurrency case where two deliveries would each send one. **A deliberate trade, named at the site.**
+
+⚠️ **The nit, and it is only a sentence.** The header continues: _"affected users get the email on the next
+attempt or out-of-band."_ For the C6-claimed lifecycle emails there IS no next attempt — the claim row
+survives the failed send, so only "out-of-band" applies. The sentence is true of the resendable ones
+(signup verification, password reset — the user can ask again) and not of the claimed ones. Left as is
+rather than edited: it is a general statement in a general header, and rewriting it risks the
+correcting-a-comment-leaves-the-acting-line-lying trap in reverse. Recorded so the next reader does not
+infer a retry that does not exist.
+
+⚠️ Boundary: established by reading `handlePaymentSucceeded`, `claimBillingEmail`'s call site and the email
+header — not by failing a real Postmark call and watching what recovers.
+
+**Nine end-to-end audits, one defect.** The dual-write shape has now been walked across payments, entitlement
+grants, webhooks and email; every window it found was either self-healing, reconciled, or a documented
+at-most-once choice.
