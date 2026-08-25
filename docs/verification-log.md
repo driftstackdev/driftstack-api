@@ -20687,3 +20687,52 @@ reading stands.
 read — otherwise "many things failed" reads as confirmation when it is noise. And **a prediction naming the
 specific file is what made the second run interpretable**: "one failure, in `stripe-webhooks-mutations`" is
 a claim that could have been wrong, where "several things failed" could not.
+
+## V-1663 — sixteen frame types, three identity mechanisms, and no case using none
+
+Eleventh audit, applying the question that found V-1649 to the surface it had not reached: **the fleet/node
+WSS boundary.** A daemon reports session state over a socket; the identity question is whether node A can
+report for node B.
+
+**What made this worth doing: the consumer code reads `frame.macNodeId` — the node id from the PAYLOAD.**
+`bootstrap.ts` calls `recordHeartbeat(frame.macNodeId, …)`, reconciles orphans with
+`macNodeId: frame.macNodeId`, and sends `sessionEnd` via `registry.get(frame.macNodeId)`. Read alone, that
+is a node asserting its own identity and being believed.
+
+**It is checked, once, at the frame router, and the comment names the threat:**
+
+    case 'heartbeat':
+      // SECURITY: cross-check the frame's self-reported macNodeId against this
+      // connection's JWT-authenticated nodeId — a mismatch (bug or spoof) must
+      // NOT touch another node's liveness/telemetry, so drop it.
+      if (frame.macNodeId === this.nodeId) { this.onHeartbeat?.(frame); }
+
+So by the time any consumer sees the field it IS the authenticated identity.
+
+⭐ **The completeness check is the part worth keeping. Sixteen frame cases, three mechanisms, and every case
+uses exactly one:**
+
+- **1 validates** the self-reported id against the connection (`heartbeat`).
+- **7 pass `this.nodeId`** to the consumer instead of letting it read the frame — `sessionStatus`,
+  `profileSaved`, `challengeDetected`, `pageState`, `profileSaveFailed`, `capabilityReport`, `errorEvent`.
+  `errorEvent`'s comment goes further: the consumer "atomically verifies this authenticated node is still
+  the persisted session owner".
+- **8 are request/reply correlator results** — `cookiesResult`, `setCookiesResult`, `intentResult`,
+  `navigateHistoryResult`, `uploadResult`, `downloadsList`, `downloadData`, `trimResult`. Verified rather
+  than taken from the comment: the correlator's `pending` map is **per-instance, so per-connection**, and
+  each pending entry stores the `sessionId` it was issued for "so onResultFrame can drop a result frame
+  whose sessionId disagrees (cross-session spoof guard)". **Two layers, not one.**
+
+**No case does none of the three**, which is the property I actually wanted and could only get by
+enumerating the switch.
+
+⚠️ One observation of the V-1649 class, offered as a preference rather than a defect: `heartbeat`
+**validates then trusts the frame field**, while seven siblings **pass the authenticated id**. Both are
+correct today. The second is structurally safer — a consumer handed `this.nodeId` cannot accidentally read
+the payload's, whereas the heartbeat consumers' safety depends on a check in a different file. Left alone;
+the check is explicit, commented, and adjacent to the threat it names.
+
+⚠️ Boundary: established by reading the router switch, one correlator implementation, and the bootstrap
+wiring — **not by connecting a second node and attempting to spoof the first.**
+
+**Eleven audits, one defect.**
