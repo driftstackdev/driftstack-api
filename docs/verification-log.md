@@ -16031,3 +16031,42 @@ passes forever.
 
 **A sibling with a near-identical name is not prior art you can skip; it is the most likely place the
 answer already is.** Three files here differ by word order alone.
+
+## V-1549 — the duplicated-roster class, swept: 51 pairs, one worth checking, sound
+
+V-1548 cost a batch to a list duplicated across two files. That is a checkable class, so it got measured
+rather than left as a lesson.
+
+**219 literal rosters** of three or more string entries across the suite; **51 cross-file pairs** share at
+least three entries with 60%+ overlap. Almost all are coincidence rather than duplication: `HTTP_METHODS`
+in three files is the same five verbs because there are only five; `APP_ROOTS` names the same three app
+directories for unrelated scans; `PUBLIC_ROUTES` and `PUBLICLY_CACHEABLE` overlap because a public route
+tends to be cacheable, but they encode different properties and must be free to diverge. Overlap is not
+duplication — only two rosters encoding ONE claim have to move together.
+
+By that test the sharpest pair is the largest, and it is the one with security consequences: 30-odd
+unauthenticated routes recorded once in `every-v1-route-is-gated-or-listed-public` as `PUBLIC_ROUTES` and
+once in `openapi-spec-validity-invariant` as `OPERATIONS_WITHOUT_OPENAPI_SECURITY`. **They are not equal —
+34 against 30 — which is what made them worth reading rather than pinning.**
+
+Every difference is explained, and each was checked in source:
+
+- `GET /v1/status/incidents/:id` against `/v1/status/incidents/{id}` — the same route in Fastify and
+  OpenAPI notation.
+- `GET /health`, `GET /version` — outside `/v1/`, so outside the first guard's stated scope.
+- `/v1/status/stream`, `/v1/webhooks/nowpayments`, `/v1/webhooks/stripe`, `/v1/auth/oauth-client/callback`
+  — not published in the document at all, so they cannot appear in a list of published operations without
+  security.
+- `GET /v1/fleet/events` is the one that looked wrong: published declaring TWO security schemes while sitting
+  in a list of routes with no auth gate. It authenticates — a `preHandler` calling
+  `authenticateFleetUpgrade`, so a bad token throws `UnauthorizedError` before the socket opens. The
+  guard's entry already says exactly that, and says why it is listed rather than detected: the options
+  slice stops at the first async arrow, which for this route IS the preHandler.
+
+So the two rosters differ for four sound reasons and agree everywhere it matters. **No code change**, and
+pinning them equal would be wrong — it would force a route outside `/v1/` and an unpublished route into
+lists that have no business holding them.
+
+The useful residue is the discriminator, since the sweep's raw output was 51 pairs and its real content was
+one: **two rosters need pinning only when they encode the same claim, not when their contents happen to
+intersect.** The admin-audit pair failed that test and is pinned; this pair passes it and is not.
