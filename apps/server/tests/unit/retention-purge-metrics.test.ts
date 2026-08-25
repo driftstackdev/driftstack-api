@@ -76,6 +76,7 @@ describe('the retention purge reports what it did, and what it never ran', () =>
       'byok/skipped=1',
       'profiles/skipped=1',
       'proxy_secrets/skipped=1',
+      'recipes/skipped=1',
       'snapshots/skipped=1',
       'turn_receipts/skipped=1',
     ]);

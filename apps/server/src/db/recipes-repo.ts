@@ -289,3 +289,47 @@ export class DrizzleRecipesRepo implements RecipesRepo {
     return deleted.length > 0;
   }
 }
+
+/**
+ * V-1607 — erase the recipes of accounts terminated before `cutoff` (GDPR
+ * Art. 17). Mirrors `purgeAgentSessionsForTerminatedAccountsBefore` exactly,
+ * including its per-tick bound and its `RETURNING id` count.
+ *
+ * ⛔ This gap HID, which is why it lasted. The account-deletion sweeper already
+ * hard-deletes `agent_sessions`, and that arm's own docstring names `transcript`
+ * as the customer's agent conversation — so erasure looked complete. But
+ * `recipes.agent_session_id` is `ON DELETE SET NULL` *specifically so a recipe
+ * survives agent-session cleanup* (schema.ts:2467-2469). Deleting the sessions
+ * therefore left the recipes behind with their `intent_log` and
+ * `transcript_snapshot` intact — and those hold the same `AgentIntentSchema`
+ * navigate members, whose `url` is `z.string()`, unconstrained: full URLs with
+ * path and query. The deliberate survival is correct for a LIVE account and
+ * exactly wrong for a terminated one.
+ *
+ * Hard delete rather than emptying the jsonb, matching the sibling arms: the
+ * account is terminated, so there is no one the recipe can still serve, and
+ * nothing billing-related references this table (unlike `sessions`, whose
+ * `usage_records` force the anonymise-instead-of-delete approach §9 authorises).
+ *
+ * The only other delete over this table is the customer-initiated
+ * `deleteById` — nothing purged it on any schedule.
+ */
+export async function purgeRecipesForTerminatedAccountsBefore(
+  database: Database,
+  cutoff: Date,
+  maxPerTick = 500,
+): Promise<number> {
+  const rows = await database.client<Array<{ id: string }>>`
+    DELETE FROM recipes
+    WHERE id IN (
+      SELECT r.id
+      FROM recipes r
+      JOIN accounts a ON a.id = r.account_id
+      WHERE a.status = 'deleted'
+        AND a.deleted_at IS NOT NULL
+        AND a.deleted_at < ${cutoff.toISOString()}::timestamptz
+      LIMIT ${maxPerTick}
+    )
+    RETURNING id`;
+  return rows.length;
+}

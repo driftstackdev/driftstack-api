@@ -134,6 +134,25 @@ export interface TerminatedAccountAgentSessionPurgeRepo {
   purgeForTerminatedAccountsBefore(cutoff: Date, maxPerTick?: number): Promise<number>;
 }
 
+/**
+ * The recipe half, and the one the arm above HIDES.
+ *
+ * Deleting agent sessions looks like it finishes the job — that arm's docstring
+ * names `transcript` as the customer's agent conversation. It does not.
+ * `recipes.agent_session_id` is `ON DELETE SET NULL` *specifically so a recipe
+ * survives agent-session cleanup* (schema.ts:2467-2469), so the sessions go and
+ * the recipes stay, holding `intent_log` + `transcript_snapshot` — the same
+ * AgentIntentSchema navigate members whose `url` is unconstrained `z.string()`,
+ * full URLs with path and query.
+ *
+ * That survival is correct for a live account and exactly wrong for a
+ * terminated one, which is why this needs its own arm rather than a cascade.
+ */
+export interface TerminatedAccountRecipePurgeRepo {
+  /** Hard-delete recipes of accounts terminated before `cutoff`; returns the count. */
+  purgeForTerminatedAccountsBefore(cutoff: Date, maxPerTick?: number): Promise<number>;
+}
+
 export interface AccountDeletionPurgeSweeperDeps {
   readonly repo: AccountDeletionPurgeRepo;
   /**
@@ -179,6 +198,12 @@ export interface AccountDeletionPurgeSweeperDeps {
    */
   readonly agentSessions?: TerminatedAccountAgentSessionPurgeRepo;
   /**
+   * Recipes carry the same full URLs as the agent sessions they came from, and
+   * deliberately outlive them. Absent means the arm is skipped — and the
+   * `skipped` counter is what makes that visible rather than silent.
+   */
+  readonly recipes?: TerminatedAccountRecipePurgeRepo;
+  /**
    * Sealed-blob store for purged profiles. When wired, each purged profile's
    * `profiles/<id>.sealed` object is best-effort deleted so the encrypted bytes
    * do not outlive the row they belong to — the erasure promise is about the
@@ -204,6 +229,8 @@ export interface AccountDeletionPurgeResult {
   readonly profilesPurged: number;
   /** Profile snapshots hard-deleted for terminated accounts this tick. */
   readonly snapshotsPurged: number;
+  /** Recipes hard-deleted for terminated accounts this tick. */
+  readonly recipesPurged: number;
   /** Agent-turn receipts hard-deleted for terminated accounts this tick. */
   readonly turnReceiptsPurged: number;
   /** Agent sessions hard-deleted for terminated accounts this tick. */
@@ -366,10 +393,32 @@ export class AccountDeletionPurgeSweeperService {
       }
     }
 
+    // Ordered AFTER the agent-session arm deliberately. It does NOT depend on it
+    // — recipes are selected by ACCOUNT, so they drain whether or not sessions
+    // ran — but running second keeps the reading order the same as the causal
+    // one: sessions go, recipes would otherwise remain.
+    let recipesPurged = 0;
+    if (this.deps.recipes === undefined) {
+      count('recipes', 'skipped');
+    }
+    if (this.deps.recipes !== undefined) {
+      try {
+        recipesPurged = await this.deps.recipes.purgeForTerminatedAccountsBefore(cutoff);
+        count('recipes', 'purged');
+      } catch (err) {
+        count('recipes', 'failed');
+        this.deps.logger?.error?.(
+          { component: 'account-deletion-purge', err },
+          'failed to purge terminated-account recipes (will retry next sweep)',
+        );
+      }
+    }
+
     return {
       purged,
       proxySecretsPurged,
       profilesPurged,
+      recipesPurged,
       snapshotsPurged,
       turnReceiptsPurged,
       agentSessionsPurged,

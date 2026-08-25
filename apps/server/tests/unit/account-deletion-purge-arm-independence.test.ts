@@ -289,6 +289,10 @@ describe('no purge arm can be disabled by another arm being unavailable', () => 
       snapshotsPurged: 0,
       turnReceiptsPurged: 0,
       agentSessionsPurged: 0,
+      // V-1607 — recipes deliberately survive agent-session cleanup
+      // (`agent_session_id` ON DELETE SET NULL), so purging sessions does NOT
+      // reach them and they need their own arm and their own count.
+      recipesPurged: 0,
     });
   });
 

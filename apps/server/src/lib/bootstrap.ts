@@ -111,7 +111,7 @@ import {
   WEBHOOK_SECRET_PREV_CLEANUP_JOB_TYPE,
 } from '../services/daily-maintenance-jobs.js';
 import { SocksProxyBackend } from '../services/proxy-backends/socks5.js';
-import { DrizzleRecipesRepo } from '../db/recipes-repo.js';
+import { DrizzleRecipesRepo, purgeRecipesForTerminatedAccountsBefore } from '../db/recipes-repo.js';
 import {
   DrizzleAgentSessionsRepo,
   purgeAgentSessionsForTerminatedAccountsBefore,
@@ -1873,6 +1873,17 @@ export async function createProductionDeps(
     agentSessions: {
       purgeForTerminatedAccountsBefore: (cutoff, maxPerTick) =>
         purgeAgentSessionsForTerminatedAccountsBefore(dbHandle, cutoff, maxPerTick),
+    },
+    // V-1607 — the arm the one above HIDES. `recipes.agent_session_id` is
+    // ON DELETE SET NULL so a recipe deliberately survives agent-session
+    // cleanup; purging the sessions therefore leaves `intent_log` +
+    // `transcript_snapshot` behind, holding full customer URLs (path and query)
+    // for a terminated account. Correct survival for a live account, exactly
+    // wrong for a deleted one. Key-free like the two arms above — a DELETE
+    // decrypts nothing.
+    recipes: {
+      purgeForTerminatedAccountsBefore: (cutoff, maxPerTick) =>
+        purgeRecipesForTerminatedAccountsBefore(dbHandle, cutoff, maxPerTick),
     },
     // Drops each purged profile's sealed blob; a blob outliving its row is
     // the customer's data outliving the erasure we committed to.
