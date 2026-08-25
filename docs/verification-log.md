@@ -15850,3 +15850,51 @@ guard is not proven by looking correct.
 
 **V-1541's list is now fully closed** — every one of its 24 candidates is either fixed with a negative or
 disproved with a reason.
+
+## V-1545 — the class swept (clean elsewhere), and a false-green of my own closed at HEAD
+
+The seventh tooling bug was a guard blind to a commented-out line. That is a class, so it got measured
+before it got fixed.
+
+**The suite is clean.** 1088 raw-source `toContain` assertions checked against the files their guards
+actually read, asking which are satisfied ONLY by a comment. Thirty-three are — and on inspection every one
+is deliberate: content-parity guards whose stated job is freezing comment prose, including a literal that
+begins `//` and a `PRODUCTION CALLERS MUST INJECT AN SSRF-GUARDED FETCH` warning worth pinning. Filtering
+to CODE-shaped literals — a throw, a call, an arrow — leaves two, and both are usage examples inside doc
+comments. **Zero live false-greens of this class in anyone else's guard.**
+
+**Mine was the exception, and it was still there.** `a-returned-status-code-is-a-declared-one` had grown
+three different answers to one question across ten arms: two arms dropped whole comment lines, one cut at
+`//`, and nine reads took raw source. The raw ones include the V-1540 arm that asserts
+`throw new BundledLlmConsentRequiredError` is still present — the exact shape that fails.
+
+Proved by A/B rather than argued, running both versions against identical mutated source in the directory
+where their relative paths resolve (a lesson from V-1536, where a probe at the repo root silently never
+ran):
+
+```
+comment out `throw new BundledLlmConsentRequiredError();`
+  guard at HEAD (raw source)   10 passed      <- false green, committed
+  guard after this change      1 failed       <- names BundledLlmConsentRequiredError
+```
+
+So this is not a tidy-up. A pin committed three batches ago did not hold, and nothing would have said so.
+
+**One helper now, `codeOf`, cutting from `//` to end of line.** That handles all three failure modes seen:
+raw source misses a commented-out line; a block-comment regex mis-pairs and deletes real code (V-1543,
+which removed a whole constructor call and failed against correct source); dropping whole comment lines
+misses a mutation that leaves live code and the commented original on ONE line (V-1544). Fourteen call
+sites use it. Three raw reads remain and each is right to be raw — the JSON spec, the AST parser's input,
+and the helper itself.
+
+Its limitation is stated in the helper rather than left to be discovered: cutting at `//` also truncates a
+`https://` inside a string literal. Nothing here asserts on a URL, and the next person to add an arm that
+does now finds that written down.
+
+### What the arc says about proof
+
+Seven tooling bugs, and the tally is the argument: **every one surfaced by running a mutation, none by
+re-reading an assertion.** Two were in the mutation rather than the guard, one made a control silently not
+execute, and one — this one — had already shipped looking green. The practice that caught all of them is
+cheap and unreasonably effective: write the violation, watch what happens, and disbelieve any green that
+was not earned in front of you.

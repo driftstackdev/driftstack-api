@@ -170,6 +170,30 @@ function scanAll(): Scan {
   return { sites, unresolvedHandlers };
 }
 
+/**
+ * A source file with trailing comments cut away, for arms that assert a call or a
+ * throw is still PRESENT.
+ *
+ * V-1545 — three arms in this file grew three different answers to the same
+ * question, and two of them were wrong in ways only a mutation showed. Asserting
+ * against raw source left an arm green when the code it pins was commented out —
+ * the mutation that proves such a pin is literally "comment it out", so the pin
+ * and its proof cancelled. Stripping comments with a block-comment regex went the
+ * other way and deleted a whole constructor call, failing against correct source.
+ * Dropping whole comment lines is not enough either: the mutation can leave live
+ * code and the commented-out original on ONE line.
+ *
+ * Cutting at `//` handles all three. It also truncates a `https://` inside a string
+ * literal, which is harmless here because nothing in this file asserts on a URL —
+ * stated rather than left as a surprise for whoever adds the arm that does.
+ */
+function codeOf(file: string): string {
+  return readFileSync(file, 'utf8')
+    .split('\n')
+    .map((line) => (line.includes('//') ? line.slice(0, line.indexOf('//')) : line))
+    .join('\n');
+}
+
 describe('a returned status code is a declared one', () => {
   const declared = declaredCodes();
   const { sites, unresolvedHandlers } = scanAll();
@@ -213,7 +237,7 @@ describe('a returned status code is a declared one', () => {
   });
 
   it("V-1534 CRITICAL POST /v1/agent-sessions/{id}/message declares 402, which it reaches by THROWING rather than by reply.code(). That is the blind spot of the arms above and it is stated here rather than left implicit: they scan literal codes inside a resolved handler, and these two throws sit two call frames below it in executeAgentMessage, so nothing above sees them. The document declared no 402 on any operation while the budget error's own comment read: Status 402 Payment Required so SDK consumers can branch on the status code AND the typed problem-type URI. A file-level version of this check was written and discarded — status-stream.ts throws 503 from an UNPUBLISHED operation and would have been judged against the declared set of a published sibling in the same file, so file granularity manufactures failures that are not real.", () => {
-    const errorsSource = readFileSync(resolve(REPO_ROOT, 'apps/server/src/lib/errors.ts'), 'utf8');
+    const errorsSource = codeOf(resolve(REPO_ROOT, 'apps/server/src/lib/errors.ts'));
     const statusOfClass = (name: string): string | undefined => {
       const match = new RegExp(`export class ${name} extends ApiError \\{`).exec(errorsSource);
       if (match === null) return undefined;
@@ -234,7 +258,7 @@ describe('a returned status code is a declared one', () => {
       expect(statusOfClass(name), `${name} still carries the status this arm pins`).toBe('402');
     }
 
-    const route = readFileSync(resolve(ROUTES_DIR, 'agent-sessions.ts'), 'utf8');
+    const route = codeOf(resolve(ROUTES_DIR, 'agent-sessions.ts'));
     for (const name of ['BundledLlmBudgetExhaustedError', 'BundledLlmConsentRequiredError']) {
       expect(route, `${name} is still thrown by the agent-sessions routes`).toContain(
         `throw new ${name}`,
@@ -251,7 +275,7 @@ describe('a returned status code is a declared one', () => {
   });
 
   it("V-1535 CRITICAL three more THROWN codes are declared, each traced to its operation through the call graph rather than by proximity. A shared error mapper makes proximity useless here: propagating every code in auth.ts's mapAuthFlowError to each of its callers accuses seven auth routes of a 409 only signup can raise, and signup already declares it. Each entry below was traced, then checked in source, and is pinned three ways - the class still carries the status, the route file still throws it, and the operation still declares it - so retyping the error or removing the declaration both fail here.", () => {
-    const errorsSource = readFileSync(resolve(REPO_ROOT, 'apps/server/src/lib/errors.ts'), 'utf8');
+    const errorsSource = codeOf(resolve(REPO_ROOT, 'apps/server/src/lib/errors.ts'));
     const statusOfClass = (name: string): string | undefined => {
       const match = new RegExp(`export class ${name} extends ApiError \\{`).exec(errorsSource);
       if (match === null) return undefined;
@@ -304,7 +328,7 @@ describe('a returned status code is a declared one', () => {
         `${entry.errorClass} still carries the status this arm pins`,
       ).toBe(entry.code);
       expect(
-        readFileSync(resolve(ROUTES_DIR, entry.routeFile), 'utf8'),
+        codeOf(resolve(ROUTES_DIR, entry.routeFile)),
         `${entry.errorClass} is still thrown in ${entry.routeFile}`,
       ).toContain(`throw new ${entry.errorClass}`);
       const codes = declared.get(entry.operation);
@@ -317,10 +341,7 @@ describe('a returned status code is a declared one', () => {
   });
 
   it('V-1540 CRITICAL the two routes that MINT an api key declare the 409 their SERVICE raises. Every arm above reads apps/server/src/routes, which is a blind spot with a name: ApiKeysService.create gates on legalGate.required and throws LegalAcceptanceRequiredError, and no route file contains that throw, so the route-scoped tracer that found the last three codes could not see this one. Both minting paths reach that one service method — POST /v1/api-keys and POST /v1/auth/cli-authorize/bind-device-code — and neither declared 409. Rotation does NOT gate, so it is deliberately absent from this list.', () => {
-    const service = readFileSync(
-      resolve(REPO_ROOT, 'apps/server/src/services/api-keys.ts'),
-      'utf8',
-    );
+    const service = codeOf(resolve(REPO_ROOT, 'apps/server/src/services/api-keys.ts'));
     // The gate and the throw both still live in create(), and the throw is still
     // the only one of its kind in the tree — if either moves, the pins below are
     // asserting a code nothing raises.
@@ -329,7 +350,7 @@ describe('a returned status code is a declared one', () => {
       'throw new LegalAcceptanceRequiredError',
     );
 
-    const errorsSource = readFileSync(resolve(REPO_ROOT, 'apps/server/src/lib/errors.ts'), 'utf8');
+    const errorsSource = codeOf(resolve(REPO_ROOT, 'apps/server/src/lib/errors.ts'));
     const match = /export class LegalAcceptanceRequiredError extends ApiError \{/.exec(
       errorsSource,
     );
@@ -362,10 +383,7 @@ describe('a returned status code is a declared one', () => {
   });
 
   it('V-1541 CRITICAL the two webhook write routes declare the 409 WebhooksService raises. Found by resolving call targets through the TypeScript checker rather than by name, which is the general form V-1540 named and did not attempt: create refuses when the account is at MAX_ENDPOINTS_PER_ACCOUNT active endpoints or `events` arrives empty, update refuses a disabled endpoint or an empty `events`. Both live in services and no route file contains either throw. Pins the chain, not the conclusion — if the service stops refusing, this fails rather than continuing to assert a code nothing raises.', () => {
-    const service = readFileSync(
-      resolve(REPO_ROOT, 'apps/server/src/services/webhooks.ts'),
-      'utf8',
-    );
+    const service = codeOf(resolve(REPO_ROOT, 'apps/server/src/services/webhooks.ts'));
     const method = (name: string): string => {
       const at = service.indexOf(`async ${name}(`);
       expect(at, `WebhooksService.${name} still exists`).toBeGreaterThan(-1);
@@ -417,10 +435,7 @@ describe('a returned status code is a declared one', () => {
   });
 
   it("V-1542 CRITICAL both session-create paths declare the 410 SessionsService.create raises. It fires when the reservation is terminalized DURING dispatch — the service's own log event is post_dispatch_activation_lost_cleanup_failed — so a terminal driver failure mid-dispatch reaches it with no customer action at all. POST /v1/sessions and POST /v1/profiles/{id}/launch both call that one method and neither declared 410. Distinguish this from the four billing 404s the same tracer flagged and this file deliberately does NOT pin: those come from `getAccount(accountId) === null` on an id requireAuth already resolved, so reaching one means the caller's own account vanished mid-request. That is an internal inconsistency, not a contract branch, and declaring it would advertise a 404 no caller can act on.", () => {
-    const service = readFileSync(
-      resolve(REPO_ROOT, 'apps/server/src/services/sessions.ts'),
-      'utf8',
-    );
+    const service = codeOf(resolve(REPO_ROOT, 'apps/server/src/services/sessions.ts'));
     const at = service.indexOf('async create(');
     expect(at, 'SessionsService.create still exists').toBeGreaterThan(-1);
     let paren = service.indexOf('(', at);
@@ -447,7 +462,7 @@ describe('a returned status code is a declared one', () => {
       'create() still refuses a reservation terminalized during dispatch',
     ).toContain('throw new SessionDestroyedError()');
 
-    const errorsSource = readFileSync(resolve(REPO_ROOT, 'apps/server/src/lib/errors.ts'), 'utf8');
+    const errorsSource = codeOf(resolve(REPO_ROOT, 'apps/server/src/lib/errors.ts'));
     const cls = /export class SessionDestroyedError extends ApiError \{([\s\S]*?)\n\}/.exec(
       errorsSource,
     );
@@ -472,10 +487,7 @@ describe('a returned status code is a declared one', () => {
   });
 
   it('V-1543 CRITICAL purge and transfer declare the 409 their live-session guard raises, closing the V-1541 candidate list. Both call assertNoActiveSession, which refuses while an agent session still holds the profile; bootstrap passes agentSessionsRepo into that slot specifically so the guard is not inert, and its comment records that a null there fails open. Transfer adds two more: a recipient name collision and a concurrent transfer-or-delete. NOT pinned here, and deliberately: GET /v1/profile-snapshots was flagged by the same tracer and is false — only the per-profile route passes parentProfileId, so only that route can 404, and it already declares one. Method-level propagation cannot see which argument a caller supplies.', () => {
-    const profiles = readFileSync(
-      resolve(REPO_ROOT, 'apps/server/src/services/profiles.ts'),
-      'utf8',
-    );
+    const profiles = codeOf(resolve(REPO_ROOT, 'apps/server/src/services/profiles.ts'));
     expect(profiles, 'purge still consults the live-session guard').toMatch(
       /async purge\([\s\S]{0,400}?assertNoActiveSession\(/,
     );
@@ -494,10 +506,7 @@ describe('a returned status code is a declared one', () => {
     // and a regex comment-stripper mis-paired on a block comment and deleted the
     // constructor call outright, so the arm failed against correct source. Dropping
     // whole comment lines does neither.
-    const bootstrap = readFileSync(resolve(REPO_ROOT, 'apps/server/src/lib/bootstrap.ts'), 'utf8')
-      .split('\n')
-      .filter((line) => !line.trim().startsWith('//'))
-      .join('\n');
+    const bootstrap = codeOf(resolve(REPO_ROOT, 'apps/server/src/lib/bootstrap.ts'));
     expect(bootstrap, 'ProfilesService is still constructed with the agent-sessions repo').toMatch(
       /new ProfilesService\([\s\S]{0,1400}?agentSessionsRepo/,
     );
@@ -521,10 +530,7 @@ describe('a returned status code is a declared one', () => {
     // `.toContain` on raw source is not enough, and this arm proved it again: the
     // mutation that shows the pin works is "comment the throw out", and against raw
     // source the arm stayed GREEN while the gate no longer refused anything.
-    const profiles = readFileSync(
-      resolve(REPO_ROOT, 'apps/server/src/services/profiles.ts'),
-      'utf8',
-    )
+    const profiles = codeOf(resolve(REPO_ROOT, 'apps/server/src/services/profiles.ts'))
       .split('\n')
       .map((line) => (line.includes('//') ? line.slice(0, line.indexOf('//')) : line))
       .join('\n');
@@ -554,11 +560,7 @@ describe('a returned status code is a declared one', () => {
     );
 
     // Comment LINES dropped, not comments — V-1543 records why both alternatives fail.
-    const callers = (file: string): string =>
-      readFileSync(resolve(ROUTES_DIR, file), 'utf8')
-        .split('\n')
-        .filter((line) => !line.trim().startsWith('//'))
-        .join('\n');
+    const callers = (file: string): string => codeOf(resolve(ROUTES_DIR, file));
     expect(callers('sessions.ts'), 'the session paths still run the gate').toContain(
       'assertWithinStorageQuotaForLaunch',
     );
