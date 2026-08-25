@@ -17303,3 +17303,56 @@ result that is indistinguishable from a check which never ran.
 Each of the three call sites was reverted independently and reds its own arm; restored, the file is
 byte-identical. Full suite 3073 files / 30953 tests; integration 393 files / 3798 tests against a
 disposable migrated Postgres, dropped afterwards.
+
+## V-1581 — the seam that let V-1580 exist, and a sweep that stands in it
+
+V-1580 fixed three call sites. The question this entry answers is why nothing caught them, because that
+is the part that generalises.
+
+**Both halves of the suite were green over the defect.** Route tests wire `buildTestApp` and its 47
+in-memory repos, where an id is a JS Map key and a malformed one is simply absent — so 404 is the natural
+assertion and it passes. Database tests exercise repos directly and never enter a route, so no path
+parameter is involved. Measured rather than assumed: **not one database-gated integration file injects
+HTTP.** The bug lived exactly between the two, which is why a route that returned 500 in production
+carried a test asserting 404 for the same input.
+
+**A static scan was the wrong instrument and said so three times.** Looking for route params that reach a
+uuid column without validation, the scan was wrong on its first three runs — it missed converters written
+as `uuidFromPrefixedId(request.params.id, …)` because the regex demanded `(` immediately before `params`;
+it counted `parsedParams.success` as a param for want of a left word boundary; and it read
+`const params = Schema.safeParse(request.params)` as unvalidated when that is the correct pattern. Each
+correction _reduced_ the finding count. That is the session's recurring fault in its purest form — one
+spelling of a mechanism mistaken for the mechanism — and the tell was that the tool kept discovering the
+codebase was fine.
+
+The static answer, once the controls passed, was that the remaining unconverted params reach `text`
+columns (`crypto_orders.order_id`, `oauth_clients.client_id`, `recipes.id`, `agent_sessions.id`), which
+matches the repository's own rule: prefixed public ids are `text` and a raw pass is safe; internal keys
+are `uuid` and must be converted. So V-1580's three sites were the whole set.
+
+**The behavioural instrument settles it and keeps settling it.** The new e2e spec enumerates its targets
+from `openapi.json` — generated from the routes rather than maintained beside them — takes every
+single-parameter GET, and asks for each one with `not-a-uuid`. 32 routes; a malformed id may answer 400,
+404, 401/403 or 422, and may not answer 5xx. It would have caught V-1580 on the day it landed, and it
+covers the routes nobody has thought about yet.
+
+**Nine of the 32 are gated and the spec says so.** They answer 503 `feature-unavailable` — AI chat,
+recipes and customer egress are off unless an operator activates them — which is a deliberate typed
+refusal before any parameter is read. The exemption is keyed on the declared problem type, not on the
+status, so a route that genuinely breaks cannot inherit it by returning a bare 503. Those nine are
+therefore NOT swept, the count is printed on every run, and an assertion fails if the gated share ever
+grows past half the roster. A guard covering two thirds of its roster silently is worse than one that
+names the third it misses.
+
+Proven the only way that counts: with V-1580's usage fix reverted, the sweep reds with
+`500 /v1/admin/usage/accounts/{id}` and the internal-error body; with the cost fix reverted instead, the
+same for `/v1/admin/cost/accounts/{id}`. Both restored byte-identical to HEAD.
+
+**The count edit found a fourth copy.** Adding a spec moved Playwright 222/36 → 223/37, and the
+blind-spot suite immediately failed twice: the figure lives in two files by design, and my first pass
+corrected the prose while leaving the string an operator actually reads. That is the V-1094 fault the
+guard was written for, reproduced by the person editing it. Both files now agree, and the lead figure is
+the current one with the history kept underneath rather than the reverse.
+
+Full suite 3073 files / 30953 tests; e2e 223 passed against a disposable migrated Postgres, dropped
+afterwards; `verify-suite` OK.

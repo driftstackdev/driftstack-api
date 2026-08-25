@@ -64,10 +64,19 @@ export const EXPECTED_TEST_FILES_ALL = 3179;
 /**
  * The CI jobs this gate does NOT run, with how to run each locally.
  *
- * Measured 2026-08-18, RE-RUN 2026-08-19, and the Playwright figure RE-MEASURED
- * 2026-08-19 after V-1038..V-1046 added seven specs: 222 Playwright tests
- * over 36 spec files, 365 passing Python tests, and Go tests from an uncached
- * run. The Python figure read 362 until the re-run.
+ * Current figures, RE-MEASURED 2026-08-25 by running the suite:
+ * 223 Playwright tests over 37 spec files, 365 passing Python tests, and Go
+ * tests from an uncached run.
+ *
+ * V-1581 — the Playwright pair moved 222/36 -> 223/37, the added spec being the
+ * malformed-id sweep over the id-taking GET surface. Recorded here rather than
+ * beside the older note because the count above is the one an operator reads,
+ * and a figure that is only corrected in its footnote is the exact fault the
+ * blind-spot suite pins two files apart.
+ *
+ * Before that: measured 2026-08-18, RE-RUN 2026-08-19, and the Playwright figure
+ * re-measured 2026-08-19 after V-1038..V-1046 added seven specs. The Python
+ * figure read 362 until that re-run.
  *
  * V-1572 — RE-MEASURED 2026-08-24 by actually running the two jobs, which this
  * file had never been used to do. Both pass: `go vet` and `go test` clean,
@@ -94,7 +103,8 @@ export const EXPECTED_TEST_FILES_ALL = 3179;
  * needed browsers and a live server. It needs neither: the config declares no
  * webServer and no browser project, and each spec boots the app in-process via
  * `tests/e2e/helpers/server.ts`. Given a migrated throwaway database and a spare
- * Redis index the whole suite runs in about 45 seconds, all 222 green.
+ * Redis index the whole suite runs in about 45 seconds — 222 green when this was
+ * written, 223 as of V-1581.
  *
  * V-992 — this used to add that those 29 spec files were the only tests touching
  * `apps/server/src/db/**` against a real Postgres, and therefore that this gate
@@ -131,7 +141,7 @@ export const EXPECTED_TEST_FILES_ALL = 3179;
 export const NOT_COVERED_BY_THIS_GATE = [
   {
     job: 'e2e',
-    what: '222 Playwright tests — the only ones hitting real Postgres + Redis',
+    what: '223 Playwright tests — the only ones hitting real Postgres + Redis',
     local: 'DATABASE_URL=<disposable db> REDIS_URL=<unused index> node scripts/e2e-local.mjs',
   },
   {

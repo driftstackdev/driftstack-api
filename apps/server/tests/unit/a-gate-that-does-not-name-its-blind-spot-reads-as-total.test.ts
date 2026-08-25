@@ -12,13 +12,14 @@
 // repo that says "verified at the CI bar" is citing this gate, so a claim about
 // the whole pipeline gets made from a run covering a fifth of it. Measured
 // 2026-08-18, re-run 2026-08-19, and the Playwright figure re-measured after
-// V-1038..V-1046 added seven specs — all green and none of it by this gate: 222
-// Playwright tests over 36 spec files, 365 passing Python tests (4 skipped, each
+// V-1038..V-1046 added seven specs, then V-1581 added the malformed-id sweep —
+// all green and none of it by this gate:
+// 223 Playwright tests over 37 spec files, 365 passing Python tests (4 skipped, each
 // wanting a live server), and 236 Go tests. V-1036 executed the Go and Python
 // suites rather than citing them and said Playwright could only be enumerated.
 // V-1037 ran it: no browsers and no external server are involved, because the
 // config declares neither a webServer nor a browser project and every spec starts
-// the app in-process. All 222 pass against a throwaway database.
+// the app in-process. All 223 pass against a throwaway database.
 //
 // V-1079 — that figure read 199 until re-measured. It was exact when written and
 // made wrong by the specs added after it, and it cannot be derived: the
