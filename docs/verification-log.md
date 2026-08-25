@@ -20779,3 +20779,38 @@ reporting a gap, ask what the failure would LOOK like and search for that instea
 booting with the variables unset.**
 
 **Twelve audits, one defect.**
+
+## V-1665 — re-checking a known past defect class: staff bulk ops on customer-gated methods
+
+Thirteenth audit, and the first chosen by APPLYING V-1664's rule rather than recording it: **ask what the
+failure would look like, then search for that.** The failure: _a staff action that gates on the ACTOR's
+identity instead of the TARGET's_ — an admin operation reusing a customer-facing method whose scoping is
+"my account", so the bulk op silently touches the wrong rows or spares the right ones. It is a class this
+repo has been bitten by before, and past classes are worth re-checking because they regress.
+
+**It is closed, and closed in three distinct places rather than one:**
+
+⭐ **1. A separate admin method exists precisely because the customer one carries an exclusion.**
+`DeleteWebSessionReclaimer.revokeAllWebSessionsForAccount(accountId, now)` documents the trap in its own
+doc: _"Bulk-revokes every dashboard web session for the account (**no exclusion — contrast with the customer
+'sign out everywhere else' flow, which keeps the calling session alive**)."_ Reusing the customer method
+here would have left the deleted account's own session alive through a GDPR erasure.
+
+**2. Authorization and target are separate parameters, and used separately.**
+`revokeAllForAccount(ctx, accountId)` gates the CALLER with
+`throwIfMissingScope(ctx, 'driftstack_internal_admin')`, then selects the TARGET with
+`listApiKeys(accountId)` and `revokeChecked(ctx, key.id, accountId)` — which passes `accountId` down into
+`revokeApiKeyAtomic`. **The ctx never selects rows; the accountId never authorizes.** Traced to the atomic
+revoke rather than stopping at the signature.
+
+⭐ **3. A completeness catch I would not have thought of.** `revokeAllMintedByAccount(ctx, minterAccountId)`
+exists with the note _"V-727 — keys this account minted on OTHER accounts, which the by-account reclaim
+above cannot see."_ A by-target sweep cannot find keys this account created elsewhere. Somebody enumerated
+the directions rather than the tables.
+
+⚠️ Boundary: established by reading the admin service's interfaces and following one revoke to
+`revokeApiKeyAtomic` — **not by running a bulk op against a seeded pair of accounts.**
+
+**Thirteen audits, one defect.** The rule from V-1664 picked the target this time, and it picked a good one:
+searching for the _appearance_ of a failure led to a class with real history, where searching for a
+mechanism would have led to whichever method name I happened to guess.
