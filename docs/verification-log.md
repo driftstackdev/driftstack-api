@@ -19316,3 +19316,34 @@ bypasses it"; it does not.
 **Boundary.** This is the removal path only — gate, ownership predicate, and which repo method the service
 selects. It is not an audit of invite acceptance, role changes, or the auth-cache invalidation that follows
 a removal.
+
+## V-1629 — the chain survives a throwing tick; nothing checked that it starts
+
+`every-job-chain-rearms-on-a-throwing-tick` proves a recurring sweep re-arms on the path where its work
+threw. It cannot see a chain that never ran. A job type whose handler is registered but whose first run is
+never enqueued has **no pending row**, so the poller never calls it, nothing throws, and the sweep simply
+does not happen.
+
+That is the failure `tick-services-are-wired-invariant` exists for — its own header records the case: "the
+fourteenth is complete, has DB columns, has an email template, has its own tests, and is wired nowhere, so
+it has never run in production and nothing said so". But that file scans for `tickOnce(...)` services, and
+these chains use `scheduledJobs.register(...)` with a separate seed `enqueue`. **Different shape, same
+failure, no coverage** — `oauth-retention-production-wiring` hand-asserts one job's wiring, and nothing
+derives the set.
+
+Measured before writing anything: **13 job types registered, 13 seeded, and the diff is empty on both
+sides** — checked as sets rather than counts, with every `enqueueNext…` helper resolved to the `jobType` it
+actually enqueues rather than trusting its name. So there is nothing to fix today; the arm exists so the
+fourteenth cannot arrive unseeded.
+
+Both directions assert. A registered type nothing seeds fails; a seeded type nothing registers fails too —
+that second one is a row the poller picks up and drops. Vacuity floors sit on both readers, because an
+empty difference is this arm's healthy state and can never itself be the alarm.
+
+Two mutations, both against the **real subject** rather than the guard's own list, each restored
+byte-identical: deleting bootstrap's `await enqueueNextCryptoOrderExpirySweep(...)` fails naming the
+orphaned type, and registering a new `MUTATION_PROBE_JOB_TYPE` in a service with no seed fails naming it.
+
+**Boundary.** This derives registrations from `services/*.ts` and seeds from the `enqueueNext…` helpers
+`bootstrap.ts` awaits. A registration made anywhere else, or a seed enqueued inline without a helper, is
+outside what it reads.

@@ -87,6 +87,53 @@ function registerHelpers(): Helper[] {
   return out;
 }
 
+/**
+ * V-1629 — the chain must also START, which is a different property.
+ *
+ * The arms below prove a chain SURVIVES a throwing tick. They cannot see a
+ * chain that never ran: a job type whose handler is registered but whose first
+ * run is never enqueued has no pending row, so the poller never calls it and
+ * nothing errors. That is the shape `tick-services-are-wired-invariant` was
+ * written for — "the fourteenth is complete, has DB columns, has an email
+ * template, has its own tests, and is wired nowhere" — but that file scans for
+ * `tickOnce(...)` services, and these chains use `scheduledJobs.register(...)`
+ * plus a seed `enqueue`. Different shape, same failure, no coverage.
+ */
+function registeredJobTypes(): Set<string> {
+  const out = new Set<string>();
+  for (const f of readdirSync(SERVICES).filter((n) => n.endsWith('.ts'))) {
+    const src = readFileSync(resolve(SERVICES, f), 'utf8');
+    for (const m of src.matchAll(/scheduledJobs\.register\(\s*([A-Z_][A-Z0-9_]*)/g))
+      out.add(m[1] ?? '');
+  }
+  return out;
+}
+
+/** jobType each `enqueueNext…` helper enqueues, from the helper's own source. */
+function helperJobTypes(): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const f of readdirSync(SERVICES).filter((n) => n.endsWith('.ts'))) {
+    const src = readFileSync(resolve(SERVICES, f), 'utf8');
+    for (const m of src.matchAll(
+      /export async function (enqueue\w+)\([\s\S]{0,900}?jobType:\s*([A-Z_][A-Z0-9_]*)/g,
+    ))
+      out.set(m[1] ?? '', m[2] ?? '');
+  }
+  return out;
+}
+
+/** Job types bootstrap actually seeds, via the helpers it awaits. */
+function seededJobTypes(): Set<string> {
+  const boot = readFileSync(resolve(HERE, '..', '..', 'src', 'lib', 'bootstrap.ts'), 'utf8');
+  const byName = helperJobTypes();
+  const out = new Set<string>();
+  for (const m of boot.matchAll(/await (enqueue\w+)\(/g)) {
+    const t = byName.get(m[1] ?? '');
+    if (t !== undefined) out.add(t);
+  }
+  return out;
+}
+
 describe('a recurring sweep re-arms even when its tick throws', () => {
   const helpers = registerHelpers();
 
@@ -137,6 +184,26 @@ describe('a recurring sweep re-arms even when its tick throws', () => {
       'this sweep enqueues its successor only inside `try`, so the first tick that throws is the ' +
         'last one that ever runs: the chain is dead until a process restart, silently, with no ' +
         'error at the moment it matters. Re-arm after the catch, or again inside it',
+    ).toEqual([]);
+  });
+
+  it('V-1629 CRITICAL every registered job type is also SEEDED at bootstrap, so the chain starts as well as survives. A handler registered with no first run enqueued has no pending row, the poller never calls it, and nothing errors — the sweep simply never runs, which is exactly how a completed feature sat wired-nowhere before. Both sets are derived: registrations from services/*.ts, seeds from the enqueueNext helpers bootstrap awaits, resolved to the jobType each helper actually enqueues rather than to its name.', () => {
+    const registered = registeredJobTypes();
+    const seeded = seededJobTypes();
+
+    // Vacuity on both readers: two empty sets are equal, and this arm's healthy
+    // result is an empty difference, so emptiness can never be the alarm.
+    expect(registered.size, 'job-type registrations found in services/').toBeGreaterThanOrEqual(10);
+    expect(seeded.size, 'seed helpers resolved from bootstrap').toBeGreaterThanOrEqual(10);
+
+    expect(
+      [...registered].filter((t) => !seeded.has(t)).sort(),
+      'these job types have a registered handler but nothing enqueues a first run, so the chain never starts:',
+    ).toEqual([]);
+
+    expect(
+      [...seeded].filter((t) => !registered.has(t)).sort(),
+      'bootstrap seeds these job types but no service registers a handler for them, so the row is picked up and dropped:',
     ).toEqual([]);
   });
 });
