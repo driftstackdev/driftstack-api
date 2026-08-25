@@ -61,10 +61,23 @@ describe('#187 resend-verification parity', () => {
     expect(routes).toContain('service.resendSignupVerification');
   });
 
-  it('AUTH_IP_LIMITS.resendVerification matches password-reset cap (3/min)', () => {
-    expect(limits).toMatch(
-      /resendVerification:\s*\{\s*capacity:\s*3,\s*refillPerSecond:\s*3\s*\/\s*60\s*\}/,
-    );
+  it('AUTH_IP_LIMITS.resendVerification matches password-reset cap — BOTH entries are read, not one compared to a literal', () => {
+    // V-1648 — this arm used to assert `resendVerification: { capacity: 3 }`
+    // against a hardcoded 3 and never look at password-reset at all. The title
+    // claimed a relationship between two entries while the body read one, so
+    // moving the password-reset cap to 5/min would have left it green with its
+    // stated invariant broken. A comparison claim has to open both sides.
+    const capacityOf = (key: string): number => {
+      const m = new RegExp(`${key}: \\{ capacity: (\\d+),`).exec(limits);
+      expect(m, `AUTH_IP_LIMITS.${key} is declared in ip-rate-limit.ts`).not.toBeNull();
+      return Number(m?.[1]);
+    };
+    const resend = capacityOf('resendVerification');
+    const passwordReset = capacityOf('passwordResetRequest');
+    expect(resend, 'resend-verification shares the password-reset IP cap').toBe(passwordReset);
+    // The shared value is still pinned, so a matched pair drifting together fails.
+    expect(resend, 'the shared cap is 3/min').toBe(3);
+    expect(limits).toMatch(/resendVerification: \{ capacity: 3, refillPerSecond: 3 \/ 60 \}/);
   });
 
   it('verify-email page exposes a Resend button wired to the endpoint', () => {

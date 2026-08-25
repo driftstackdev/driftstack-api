@@ -20076,3 +20076,49 @@ sitting inside an arm titled "for every tier".
 two artefacts while its body reads only one. It is invisible to every check we run — it passes, it is not
 vacuous, its assertion is true — and the only thing wrong is that it does not test what the suite's own
 index says it tests.
+
+## V-1648 — hunting the class V-1647 named, and a measurement I am not publishing
+
+V-1647 named a defect class: **a test whose title asserts a relationship between two artefacts while its
+body reads only one.** It passes, it is not vacuous, its assertion is true, and the only thing wrong is
+that it does not test what the suite's index says it tests. This went looking for more.
+
+**The detector, and why its number is not in this entry.** For every `it(...)`, extract the UPPER_SNAKE
+identifiers named in the TITLE and check whether each appears in the arm's BODY.
+
+    all arms naming an identifier absent from their body        231
+    narrowed to titles asserting a comparison (===/matches/…)    33
+    credible                                                     no
+
+⛔ **231 was uninterpretable and 33 is still mostly false.** Two failure modes, both mine:
+
+1. **A title may name an identifier as CONTEXT, not as a claim.** "the two webhook write routes declare the
+   409 `WebhooksService` raises" mentions `MAX_ENDPOINTS_PER_ACCOUNT` to explain where the 409 comes from.
+   Nothing is being compared. Narrowing to comparison verbs cut 231 to 33 and did not fix this.
+2. ⭐ **The body scope is the ARM, so an identifier reached through a HELPER reads as absent.** Two of the
+   33 hits are `v485`'s own arms — the ones I had just repaired in V-1647 to read both records — flagged
+   because they reach `TIER_FEATURES` via the `tierRow()` helper rather than naming it inline. **This is the
+   identical block-scoping error I had made an hour earlier in W-13**, where route-block detection reported
+   three `byok` routes as bare because their audit call sat in a helper above the registrations. I made the
+   same mistake twice in one afternoon, in two different instruments, having already written up the first.
+
+**So the number is recorded as a FAILED MEASUREMENT rather than a finding**, which is the same call A2 made
+on 119-of-125 and the right one. ⚠️ A detector whose false-positive set includes the code I fixed to satisfy
+it is not measuring the property.
+
+⭐ **But the class is real, and one instance is confirmed and fixed.**
+`resend-verification-parity` had:
+
+    it('AUTH_IP_LIMITS.resendVerification matches password-reset cap (3/min)', …)
+      expect(limits).toMatch(/resendVerification:\s*\{\s*capacity:\s*3, …/)
+
+The title claims a relationship between two entries. The body reads one of them and compares it to a
+hardcoded `3`. **Moving `passwordResetRequest` to 5/min would have left it green with its stated invariant
+broken.** It now reads both capacities out of `ip-rate-limit.ts` and asserts they are equal, keeping the
+pinned value as well so a matched pair drifting TOGETHER still fails.
+
+Mutation-proved on the side the old arm could not see: `passwordResetRequest` 3 → 5, `resendVerification`
+untouched, now fails with `expected 3 to be 5`. Restored byte-identical.
+
+**A comparison claim has to open both sides.** That is the whole rule, and it is worth more than the
+enumeration I could not make credible.
