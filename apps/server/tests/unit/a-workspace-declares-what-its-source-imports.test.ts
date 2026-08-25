@@ -1,0 +1,178 @@
+// V-1556 — a package imported but not declared works until the hoist moves.
+//
+// `apps/server/src/services/durable-webhook-delivery.ts` imported runtime symbols
+// from `@driftstack/webhook-delivery`, and `lib/openapi.ts` imported a type from
+// `openapi3-ts`. Neither was in `apps/server/package.json`. Both resolved anyway,
+// because the workspace root links its own packages into `node_modules/@driftstack`
+// and `openapi3-ts` is hoisted there by another dependency.
+//
+// That is a real dependency on an accident of layout. A hoist change, a version
+// bump that moves `openapi3-ts` under its parent, or building the server on its
+// own breaks an import that no manifest ever asked for — and the failure lands at
+// runtime for the value import, not at install time.
+//
+// Both are now declared, so this check carries NO allowance list. That is the
+// point: an exemption roster here would immediately become the thing nobody
+// re-reads, which is the failure this file's own arc kept finding. If a workspace
+// needs to import something it does not declare, that is a decision worth making
+// visible in a diff rather than absorbing into a list.
+//
+// Scope is stated rather than implied: TypeScript sources under each workspace's
+// `src/`. `.astro`, `.svelte` and `.vue` files are NOT parsed — the compiler
+// cannot read them — so an undeclared import inside a template is invisible here.
+// Named so the next person does not read this as covering every file.
+
+import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+
+/** Node builtins that need no declaration. `node:`-prefixed specifiers are skipped separately. */
+const BUILTINS = new Set([
+  'fs',
+  'path',
+  'url',
+  'crypto',
+  'http',
+  'https',
+  'os',
+  'util',
+  'stream',
+  'events',
+  'zlib',
+  'buffer',
+  'child_process',
+  'worker_threads',
+  'assert',
+  'timers',
+  'dns',
+  'net',
+  'tls',
+  'querystring',
+  'string_decoder',
+  'readline',
+  'perf_hooks',
+  'async_hooks',
+  'module',
+  'process',
+  'vm',
+  'v8',
+  'constants',
+  'tty',
+  'cluster',
+  'diagnostics_channel',
+]);
+
+function tsFiles(dir: string, out: string[] = []): string[] {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name !== 'node_modules' && entry.name !== 'dist') tsFiles(p, out);
+    } else if (/\.(ts|tsx|mts|cts)$/.test(entry.name)) {
+      out.push(p);
+    }
+  }
+  return out;
+}
+
+/** Every module specifier in one file, read from the AST rather than by regex. */
+function importSpecifiers(file: string): string[] {
+  const source = readFileSync(file, 'utf8');
+  const sf = ts.createSourceFile(
+    file,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+  const out: string[] = [];
+  const visit = (n: ts.Node): void => {
+    if (
+      (ts.isImportDeclaration(n) || ts.isExportDeclaration(n)) &&
+      n.moduleSpecifier !== undefined &&
+      ts.isStringLiteral(n.moduleSpecifier)
+    ) {
+      out.push(n.moduleSpecifier.text);
+    }
+    if (ts.isCallExpression(n)) {
+      const first = n.arguments[0];
+      const isRequire = ts.isIdentifier(n.expression) && n.expression.text === 'require';
+      const isDynamic = n.expression.kind === ts.SyntaxKind.ImportKeyword;
+      if ((isRequire || isDynamic) && first !== undefined && ts.isStringLiteral(first)) {
+        out.push(first.text);
+      }
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  return out;
+}
+
+function workspaces(): string[] {
+  const out: string[] = [];
+  for (const root of ['apps', 'packages']) {
+    const dir = resolve(REPO_ROOT, root);
+    if (!existsSync(dir)) continue;
+    for (const name of readdirSync(dir)) {
+      const w = join(dir, name);
+      if (statSync(w).isDirectory() && existsSync(join(w, 'package.json'))) out.push(w);
+    }
+  }
+  return out;
+}
+
+describe('a workspace declares what its TypeScript source imports', () => {
+  it('CRITICAL the scan actually parsed source. Every assertion below reports an absence, and a walk that found no files would satisfy all of them without reading anything.', () => {
+    const files = workspaces()
+      .map((w) => join(w, 'src'))
+      .filter((d) => existsSync(d))
+      .flatMap((d) => tsFiles(d));
+    expect(files.length, 'TypeScript sources found under the workspaces').toBeGreaterThan(400);
+
+    const specifiers = files.flatMap((f) => importSpecifiers(f));
+    expect(specifiers.length, 'module specifiers parsed out of them').toBeGreaterThan(1000);
+    expect(
+      specifiers.some((s) => s.startsWith('.')),
+      'relative specifiers are seen, so the parse is reading real imports',
+    ).toBe(true);
+  });
+
+  it('CRITICAL no workspace imports a package it does not declare. An undeclared import resolves through the root hoist and the workspace link, so it works on this checkout and breaks when the layout moves — at runtime for a value import, which is what durable-webhook-delivery.ts had. There is deliberately no allowance list: needing one is a decision that belongs in a diff.', () => {
+    const offenders: string[] = [];
+    for (const w of workspaces()) {
+      const pkg = JSON.parse(readFileSync(join(w, 'package.json'), 'utf8')) as Record<
+        string,
+        Record<string, string> | undefined
+      >;
+      const declared = new Set(
+        ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'].flatMap(
+          (k) => Object.keys(pkg[k] ?? {}),
+        ),
+      );
+      const src = join(w, 'src');
+      if (!existsSync(src)) continue;
+      for (const file of tsFiles(src)) {
+        for (const spec of importSpecifiers(file)) {
+          if (spec.startsWith('.') || spec.startsWith('node:')) continue;
+          const name = spec.startsWith('@')
+            ? spec.split('/').slice(0, 2).join('/')
+            : (spec.split('/')[0] ?? spec);
+          if (BUILTINS.has(name)) continue;
+          if (!declared.has(name)) {
+            offenders.push(
+              `${w.slice(REPO_ROOT.length + 1)} imports ${name} (${file.slice(REPO_ROOT.length + 1)})`,
+            );
+          }
+        }
+      }
+    }
+    expect(
+      [...new Set(offenders)].sort(),
+      'these workspaces import a package their package.json never asked for',
+    ).toEqual([]);
+  });
+});

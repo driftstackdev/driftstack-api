@@ -16321,3 +16321,47 @@ V-1554 called this axis unfinished and deleted its analyser rather than report u
 the right call on the evidence available, and it also means the recorded reason for stopping was wrong.
 Both are now on the record: the twelve were real outputs of a working tool, they are all placeholders, and
 the misdiagnosis was an Ajv-version assumption inherited from the same split V-1551 documented.
+
+## V-1556 — two packages the server imports and never declared, one of them at runtime
+
+The two-Ajv split has now caused two separate misdiagnoses (V-1550, V-1554), and the underlying hazard is
+general: code that depends on where a package happens to be installed rather than on a manifest. That is
+checkable across every workspace.
+
+**Measured with the AST, after a regex attempt produced nonsense.** The first scan matched the word `from`
+anywhere and reported "packages" like `, label:` and multi-line code fragments — prose and template
+literals inside strings. Replaced with a TypeScript AST walk over import, export, `require()` and dynamic
+`import()`. **618 source files, and exactly two undeclared imports, both in `apps/server`:**
+
+```
+@driftstack/webhook-delivery   services/durable-webhook-delivery.ts   VALUE import, runtime
+openapi3-ts                    lib/openapi.ts                          type-only
+```
+
+Both resolved anyway, and for different accidental reasons: the workspace root links its own packages into
+`node_modules/@driftstack`, and `openapi3-ts` is hoisted there by another dependency. `apps/server` declares
+`@driftstack/api-types` and simply never gained the sibling entry.
+
+**The first is the one that matters.** It imports runtime symbols on the durable webhook-delivery path, so
+a hoist change, a standalone build of the server, or a layout shift breaks it **at runtime**, not at install
+time. The type-only one breaks `tsc` instead — real, but louder and earlier.
+
+Both are now declared, mirroring the existing `@driftstack/api-types: "*"` style and pinning
+`openapi3-ts: ^4.5.0` to the 4.5.0 that is installed. `pnpm-lock.yaml` is untracked in this repo, so there
+is no committed lockfile to desync. Typecheck stays clean and the full suite is green.
+
+**The guard carries no allowance list, deliberately.** Both offenders were fixed rather than recorded, so
+the invariant is exactly "no workspace imports a package it does not declare". An exemption roster here
+would become the thing nobody re-reads — the failure mode this arc has found in a filename-keyed roster
+(V-1547), a duplicated list (V-1548) and a commit message (V-1533). If a workspace genuinely needs an
+undeclared import, that belongs in a diff.
+
+Its scope is stated in the header rather than implied: TypeScript under each workspace's `src/`. `.astro`,
+`.svelte` and `.vue` are not parsed, because the compiler cannot read them, so an undeclared import inside
+a template is invisible. Naming that is the difference between a guard and a guard that reads as total.
+
+Proved both ways: removing the `@driftstack/webhook-delivery` entry reds naming it, and adding a `fastify`
+import to `packages/api-types` reds naming that workspace — so the check works on a package other than the
+one it was written for.
+
+`EXPECTED_TEST_FILES` 3016→3017 and `_ALL` 3178→3179, one file, mine.
