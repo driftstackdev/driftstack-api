@@ -294,4 +294,64 @@ describe('a workspace declares what its TypeScript source imports', () => {
         'something else keeps hoisting it',
     ).toEqual([]);
   });
+
+  it("V-1559 CRITICAL a workspace's TESTS declare what they import, counting the root manifest as well as their own. Tests run under the ROOT vitest, so `vitest` is correctly undeclared everywhere and this arm must not say otherwise — the rule is own-manifest OR root, the same distinction V-1558 drew for config files applied to the directory tests live in. Nine imports satisfied neither: jsdom in five apps, github-slugger in apps/docs, and @driftstack/api-types in three, all resolving only because something hoisted them. This fails in CI rather than for a customer, which is the loud direction, but it fails on a day nothing about the test changed.", () => {
+    const rootPkg = JSON.parse(readFileSync(resolve(REPO_ROOT, 'package.json'), 'utf8')) as Record<
+      string,
+      Record<string, string> | undefined
+    >;
+    const declaredIn = (pkg: Record<string, Record<string, string> | undefined>): Set<string> =>
+      new Set(
+        ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'].flatMap(
+          (k) => Object.keys(pkg[k] ?? {}),
+        ),
+      );
+    const rootDeclared = declaredIn(rootPkg);
+
+    let files = 0;
+    let specifiers = 0;
+    const offenders: string[] = [];
+    for (const w of workspaces()) {
+      const own = declaredIn(
+        JSON.parse(readFileSync(join(w, 'package.json'), 'utf8')) as Record<
+          string,
+          Record<string, string> | undefined
+        >,
+      );
+      for (const dir of ['tests', 'test', '__tests__']) {
+        const d = join(w, dir);
+        if (!existsSync(d)) continue;
+        for (const file of tsFiles(d)) {
+          files += 1;
+          for (const spec of importSpecifiers(file)) {
+            if (
+              spec.startsWith('.') ||
+              spec.startsWith('node:') ||
+              spec.startsWith('~') ||
+              spec.startsWith('/')
+            ) {
+              continue;
+            }
+            specifiers += 1;
+            const name = spec.startsWith('@')
+              ? spec.split('/').slice(0, 2).join('/')
+              : (spec.split('/')[0] ?? spec);
+            if (BUILTINS.has(name)) continue;
+            if (!own.has(name) && !rootDeclared.has(name)) {
+              offenders.push(`${w.slice(REPO_ROOT.length + 1)} :: ${name}`);
+            }
+          }
+        }
+      }
+    }
+
+    // Measured at 3266 files and 4277 specifiers. Floors, not pins: adding or
+    // deleting tests must not fail this, but a walk that stopped finding them must.
+    expect(files, 'test files walked').toBeGreaterThan(2000);
+    expect(specifiers, 'bare-specifier imports parsed out of them').toBeGreaterThan(2000);
+    expect(
+      [...new Set(offenders)].sort(),
+      'these tests import a package neither their workspace nor the root declares',
+    ).toEqual([]);
+  });
 });

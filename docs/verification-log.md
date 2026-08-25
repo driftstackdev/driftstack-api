@@ -16445,3 +16445,47 @@ correct code on its first run. Corrected to a bound that is a non-vacuity check 
 or removing a script must not fail it, but a parser that stopped reading them must — and the reasoning is
 in the code beside the number, since a bare `>4` is exactly the kind of unexplained constant V-1536 found
 truncating a scan.
+
+## V-1559 — nine phantom imports in test code, and the rule that keeps `vitest` out of the report
+
+The dependency-integrity arc covered workspace `src/` (V-1556), template frontmatter (V-1557) and
+configs/scripts (V-1558). Test directories were the last uncovered surface, and they are the largest:
+**3266 files carrying 4277 bare-specifier imports.**
+
+**Nine satisfied neither their own manifest nor the root's**, all resolving purely because something else
+hoists them:
+
+```
+jsdom                    admin-panel, customer-dashboard, docs, marketing-site, status-site   25.0.1
+github-slugger           docs                                                                  2.0.0
+@driftstack/api-types    docs, marketing-site, status-site                                    workspace
+```
+
+The last one is the sharpest: three apps' tests import our OWN workspace package without declaring it, and
+it works only because the root links `@driftstack/*` into `node_modules`. All nine are now declared at the
+versions already installed, so nothing new is fetched — the change names what is there.
+
+This is the loud direction of the failure: a test breaking stops CI rather than a customer. It still fails
+on a day nothing about the test changed, which is what makes it worth naming.
+
+### The rule matters more than the nine
+
+Tests run under the ROOT vitest, so `vitest` is correctly undeclared in every workspace. A naive
+"a workspace declares what it imports" check would report it in dozens of files and be switched off within
+a week. The arm therefore uses own-manifest OR root — the same distinction V-1558 drew for config
+files, applied to the directory tests live in — and that rule is load-bearing rather than decorative:
+narrowing it to own-manifest-only immediately reports `:: vitest`, which is the second mutation run here.
+Proving the exemption is doing work is as important as proving the check catches a real miss.
+
+Floors are stated as floors: >2000 files and >2000 specifiers against measured 3266 and 4277, with the
+reasoning beside them, so adding or deleting tests cannot fail the arm but a walk that stopped finding
+them must.
+
+### A snapshot fault, third occurrence, now with a fix
+
+Restoring the guard after the mutation wiped the batch's new arm — the snapshot predated it, as in V-1534
+and V-1557. Caught in seconds this time by grepping the restored file for `V-1559` and getting 0.
+
+The pattern is stable enough to name: **a snapshot taken to enable a mutation is not a snapshot of the work
+in progress.** The two need separate names, and the cheap check after any restore is to grep for the
+identifier of the thing being built, not to trust that a restore only undid the mutation.

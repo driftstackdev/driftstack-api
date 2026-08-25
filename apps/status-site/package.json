@@ -15,5 +15,9 @@
     "astro": "7.1.6",
     "tailwindcss": "^4.3.0",
     "typescript": "^5.7.0"
+  },
+  "devDependencies": {
+    "@driftstack/api-types": "*",
+    "jsdom": "^25.0.1"
   }
 }
