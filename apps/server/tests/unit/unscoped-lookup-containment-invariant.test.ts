@@ -58,8 +58,17 @@ describe('account-unscoped lookups stay out of customer reach', () => {
   });
 
   it('CRITICAL no route handler calls an account-unscoped lookup. The scoped sibling (findSession(id, accountId) / findApiKey(id, accountId)) is the customer path; reaching for the unscoped one by autocomplete would serve one account the other account’s resource, and every existing guard would stay green because they assert the method EXISTS, not that it stays unreachable.', () => {
+    // V-1561 — this arm reports an ABSENCE, and the previous arm cannot cover it:
+    // that one walks SRC, this one walks ROUTES_DIR separately. Retargeting
+    // ROUTES_DIR at an existing directory containing no `.ts` (measured with
+    // `src/db/migrations`) left all three arms GREEN while nothing was scanned.
+    // A missing directory throws and is loud; a directory that simply yields
+    // nothing is silent, which is the case that matters.
+    const routeFiles = tsFilesUnder(ROUTES_DIR);
+    expect(routeFiles.length, 'route files walked for unscoped-lookup calls').toBeGreaterThan(20);
+
     const offenders: string[] = [];
-    for (const file of tsFilesUnder(ROUTES_DIR)) {
+    for (const file of routeFiles) {
       const src = readFileSync(file, 'utf8');
       for (const m of src.matchAll(UNSCOPED_METHOD_RE)) {
         const line = src.slice(0, m.index).split('\n').length;

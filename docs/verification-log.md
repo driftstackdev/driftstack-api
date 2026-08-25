@@ -16526,3 +16526,42 @@ roster in V-1547 and the duplicated set in V-1548. The check is worth running; i
 **It also verified the last three batches.** None of the fourteen declarations added in V-1556, V-1558 and
 V-1559 appears as unused, so each names something genuinely imported rather than padding a manifest to
 satisfy a check I wrote.
+
+## V-1561 — the isolation guard that passed when it scanned nothing
+
+Seven silently-inert instruments of my own this session made the shape worth looking for in the suite's
+guards: **a check that reports an absence, with nothing proving it looked at anything.**
+
+**Measured, and narrowed twice, because the first two cuts were wrong.** 389 guards derive a list and assert
+it empty — far too broad, since most are behavioural tests where emptiness is the expected result of a
+fixture. Restricting to guards that WALK the filesystem gives 197, of which 13 have no `toBeGreaterThan`
+floor. That was still wrong: `route-auth-coverage-invariant` appeared on it while carrying
+`expect(routes).toHaveLength(288)` — an exact count, which is a STRONGER control than a floor — plus
+synthetic-fixture tests proving its detector fires. Counting exact-count pins, `.not.toHaveLength(0)`, and
+fixture-driven detector tests as the controls they are leaves **six**.
+
+**One is a real, high-stakes gap.** `unscoped-lookup-containment-invariant` guards the cross-account
+isolation boundary: `findSessionUnscoped` and `findApiKeyUnscoped` skip the account predicate, and the arm
+asserts no route handler calls either. Its first arm is protected — it walks `SRC` and asserts the
+discovered set EQUALS a non-empty expected list, so a broken walk reds there. **The isolation arm walks
+`ROUTES_DIR` separately and had no such protection.**
+
+Demonstrated rather than argued, and the first attempt disproved itself: pointing `ROUTES_DIR` at a
+MISSING directory fails loudly, because the walker throws. The dangerous case is a directory that exists
+and yields nothing — retargeted at `src/db/migrations`, which holds `.sql` and no `.ts`, **all three arms
+passed while the isolation check scanned zero files.**
+
+Fixed by asserting the walk found route files before trusting its emptiness, with the measured scenario
+written beside it so the number is not a bare constant. Proved both ways: the blind walk that used to pass
+now reds naming the count, and a planted `findSessionUnscoped` call in a route still reds naming the
+method — so the fix did not buy safety by weakening the thing being guarded.
+
+**Five candidates remain unexamined**, and they are listed rather than implied:
+`a-customer-doc-may-not-cite-a-file-that-does-not-exist`, `a-published-route-that-can-never-succeed-is-listed`,
+`boolean-env-flags-share-one-truthiness-rule`, `services-webhook-secret-force-rotation-content-parity`,
+`the-team-owner-pair-cannot-be-split`. Each needs the same treatment this one got — a demonstration that a
+blind walk is silent — before anything is claimed about it.
+
+**Process deviation, disclosed.** The offender-planting mutation edited `routes/legal.ts`, and I restored it
+with git rather than from a scratchpad snapshot. Verified clean afterwards: `git diff` on that file is
+empty and its first lines are unchanged.
