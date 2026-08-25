@@ -19233,3 +19233,38 @@ one of the thirty-nine corresponds to a schema the routes actually use.
 That matters for W-10 because it removes a whole branch: there is nothing to DELETE, only shapes to tag.
 The fix is one pattern applied thirty-nine times — `Schema.openapi('Name')` with the route handed the
 tagged object — and its blast radius is exactly the operations that currently inline those shapes.
+
+## V-1627 — sixteen commits verified, and the "hang" is one file, named by killing its worker
+
+**Full `npx vitest run` on a quiescent tree: 3085 files passed, 115 skipped (3201), 31,060 tests passed,
+815 skipped, zero failures.** That is every commit from V-1617 through V-1626 verified together, including
+the four guard arms added this session and the two `openapi.ts` edits.
+
+Getting a trustworthy number took three attempts, and the failures are worth more than the green.
+
+**Attempt one was binned rather than reported.** A2 rebuilt `marketing-site/dist/` and wrote five source
+files 20–28 seconds after my run started. Forty-eight test files execute pages out of that dist, so the
+result would have described a tree that never existed in one state. **A caveated green is the shape that
+gets quoted later without the caveat**, so it went in the bin. Their generalisation is the durable one: a
+launch guard that checks for other _processes_ does not protect the tree from a _writer_, and a build takes
+exclusive use of the tree just as completely as a second suite does.
+
+**Attempt two reproduced the stall with nothing else running**, which is what made it diagnosable: one
+worker at 99.4% CPU with RSS flat to the byte, for 26 minutes 52 seconds, while the log sat unchanged.
+
+**Then killing ONLY that worker — leaving the parent alive — printed the summary within twelve seconds,
+and the arithmetic named the shape of the problem.** 3085 passed + 115 skipped + 1 errored = 3201. **The
+entire suite had finished except a single file.** So it is not a pool worker idling with nothing to
+schedule, and not a teardown artifact: the parent was waiting on one real unit of work that never
+returned. And it is intermittent — the same invocation completed in 176 seconds earlier the same hour, so
+whichever file it is does not hang every time.
+
+⚠️ **Boundary, because the count is not the name.** The error line reads `Worker exited unexpectedly` with
+no filename, and the default reporter never prints a passing file — so this establishes that exactly one
+file was outstanding, not which. The cheap next step is `--reporter=verbose`, where the straggler is the
+one that never appears, diffed against `vitest list`. That is one run rather than another hypothesis, and
+it belongs to whoever next needs a gate anyway.
+
+**A correction to my own framing.** I used "flat RSS + long elapsed = stall" to tell A2 their run was
+broken. The symptom reading was right and the scope was not: in both of our cases the suite had
+essentially finished, and a stalled worker is not a stalled suite — which is the title M-7 already carries.
