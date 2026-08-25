@@ -1579,16 +1579,29 @@ export function ProfilesView({
    * does. The label meets the customer where they are; the sentence tells them
    * the truth about what goes.
    *
-   * ⛔ W3120 follow-up — the body used to add "nothing else stores a history",
-   * and that was FALSE. The control plane records page URLs and titles per
-   * navigate (`sessions.ts` payload `{url, final_url}`) and per state capture
-   * (`{url, title}`) into `session_events`, joined to the profile through
-   * `sessions.profileId`. Nothing on the profile path clears them, so no scope
-   * of this op touches them — and the V-1591 archive uploads them to R2 before
-   * deleting, so they outlive the 90-day window in archive form. The copy now
-   * scopes its claim to the profile and names the server-side log rather than
-   * denying it exists. Widening `history` to purge session_events is a real
-   * decision about an operational log, not a copy fix.
+   * ⛔ W3120 follow-up — this sentence has now been WRONG TWICE, in opposite
+   * directions, and the third version is deliberately shaped so it cannot rot
+   * again. It first said "nothing else stores a history" (false). The correction
+   * then named `session_events` and "page URLs … for up to 90 days", which was
+   * also false: that table is MINIMIZED — `session-event-metadata.ts` routes the
+   * navigated payload through `httpOrigin()`, so it holds ORIGINS, not pages,
+   * and `state_captured` keeps only `{source, kind, byte_size}`.
+   *
+   * The store that does hold full URLs is `agent_sessions.transcript` (jsonb):
+   * plan `intents` are AgentIntentSchema members and navigate is
+   * `{ kind: 'navigate', url: z.string() }` — unconstrained, path and query
+   * included — keyed by `agent_sessions.profile_id`. `recipes.intent_log` and
+   * `recipes.transcript_snapshot` carry the same intents and deliberately
+   * SURVIVE agent-session cleanup. The 90-day bound is V-1591's session_events
+   * archive and does not govern any of those.
+   *
+   * ⭐ So the copy no longer enumerates stores or windows AT ALL. Naming them
+   * ties customer-facing text to a data model that moves independently of it,
+   * and two consecutive attempts to name them correctly both shipped something
+   * untrue. The claim is now bounded to what this button does — clears the
+   * profile's tabs, does not clear the server-side record — which stays true
+   * however the retention story changes. Whether `history` SHOULD purge those
+   * server-side rows is a decision about operational logs, not a copy fix.
    */
   const CLEAR_COPY: Record<
     TrimProfileScope,
@@ -1612,14 +1625,14 @@ export function ProfilesView({
       verb: 'history',
       confirmLabel: 'Clear history',
       question: (name) =>
-        `Clear browsing history for "${name}"? This forgets the remembered open tabs — the only record of visited pages held in the profile itself. Page URLs and titles are also recorded in your account's session log for up to 90 days; this does not clear those. Logins and cached files are kept.`,
+        `Clear browsing history for "${name}"? This forgets the remembered open tabs — the only record of visited pages held in the profile itself. It does NOT clear the server-side record of session activity, which your account keeps separately. Logins and cached files are kept.`,
       done: 'Cleared browsing history',
     },
     all: {
       verb: 'data',
       confirmLabel: 'Clear everything',
       question: (name) =>
-        `Clear ALL browsing data for "${name}"? Cookies, site data, cached files and remembered tabs all go, and the profile is signed out everywhere. Your account's session log keeps page URLs and titles for up to 90 days and is not affected. The profile itself and its fingerprint are kept, so it stays the same device to every site.`,
+        `Clear ALL browsing data for "${name}"? Cookies, site data, cached files and remembered tabs all go, and the profile is signed out everywhere. The server-side record of session activity your account keeps is NOT affected. The profile itself and its fingerprint are kept, so it stays the same device to every site.`,
       done: 'Cleared all browsing data',
     },
   };

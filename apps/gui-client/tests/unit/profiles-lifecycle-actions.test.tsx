@@ -319,13 +319,16 @@ describe('ProfilesView profile-lifecycle actions', () => {
       const body = await screen.findByText(
         /only record of visited pages held in the profile itself/,
       );
-      // ⛔ The retracted claim must not come back. It used to read "nothing else
-      // stores a history", which was false: the control plane records page URLs
-      // and titles into session_events per navigate and per state capture,
-      // joined to the profile, and no scope of this op clears them.
+      // ⛔ Two retracted claims, both of which shipped. First "nothing else
+      // stores a history" (false — agent_sessions.transcript holds full URLs
+      // keyed by profile). Then "page URLs … for up to 90 days" (also false —
+      // session_events is minimized to ORIGINS, and the 90-day bound governs
+      // only that table, not the transcript or recipes).
       expect(body.textContent).not.toMatch(/nothing else stores a history/i);
-      // The server-side log is NAMED rather than denied.
-      expect(body.textContent).toMatch(/session log for up to 90 days/i);
+      expect(body.textContent).not.toMatch(/90 days/i);
+      // ⭐ The durable shape: the claim is bounded to what the BUTTON does and
+      // names no store and no window, so it cannot rot as retention changes.
+      expect(body.textContent).toMatch(/does NOT clear the server-side record/i);
     });
 
     it('every clear scope is reachable from the card menu', async () => {
