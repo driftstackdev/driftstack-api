@@ -1824,6 +1824,35 @@ function BrowserBar({
           aria-label="Address bar"
           className="min-w-0 flex-1 bg-transparent text-[12px] leading-none text-white/90 placeholder:text-white/35 focus:outline-none disabled:opacity-50"
         />
+        {/* Go — a real submit button, and the reason Enter is now dependable.
+            This form had NO submit button, so it relied on implicit submission,
+            which the spec only guarantees for a form with exactly one
+            implicit-submission-blocking field and which WebKit and WebView2
+            have never agreed on. An explicit type="submit" makes Enter submit
+            by spec in every engine, and gives the affordance a visible target
+            for anyone who does not expect a bare text field to navigate. */}
+        <button
+          type="submit"
+          data-component="simulator-address-bar-go"
+          aria-label="Go"
+          title={canNavigate ? 'Go' : 'Connecting…'}
+          disabled={!canNavigate || draft.trim() === ''}
+          className="shrink-0 rounded p-1 text-white/45 transition hover:bg-white/10 hover:text-white/90 disabled:opacity-30"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            width="13"
+            height="13"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M5 12h13M13 6l6 6-6 6" />
+          </svg>
+        </button>
         <button
           type="button"
           aria-label={copyFailed ? "Couldn't copy" : copied ? 'Copied' : 'Copy URL'}

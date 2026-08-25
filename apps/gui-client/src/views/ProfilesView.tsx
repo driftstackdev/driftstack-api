@@ -779,6 +779,33 @@ export function ProfilesView({
       return false;
     }
   });
+  // Reported: the boxes stacked above the grid push the profile cards below the
+  // fold, so seeing a profile means scrolling past furniture you have already
+  // read. The privacy banner could always be dismissed; the storage meter and
+  // the workspace strip could not. Both are ambient context rather than
+  // actions, so both are collapsible — and the hero is NOT, because it carries
+  // Import and New profile and hiding those would trade one complaint for a
+  // worse one.
+  //
+  // Persisted per install, like the privacy banner, so it stays shut.
+  const [chromeCollapsed, setChromeCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('ds_profiles_chrome_collapsed') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggleChrome = (): void => {
+    setChromeCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('ds_profiles_chrome_collapsed', next ? '1' : '0');
+      } catch {
+        /* storage unavailable — collapse stays session-only */
+      }
+      return next;
+    });
+  };
   const [statusFilter, setStatusFilter] = useState<ProfileStatusFilter>('all');
   // 2026-06-20 — UNIFIED sort: `sortBy` + `sortDir` are the SINGLE source of
   // truth for BOTH the grid and the list-view (table). Previously the table kept
@@ -3194,7 +3221,7 @@ export function ProfilesView({
           warn + an over-cap state. Hidden when there are no profiles; the cap
           leg stays collapsed until the live tier is known. Enterprise is
           soft-only — its over-cap state reads as a warning, not a stop. */}
-      {state.profiles.length > 0 && (
+      {state.profiles.length > 0 && !chromeCollapsed && (
         <div
           data-component="storage-meter"
           className="flex flex-col gap-1.5 rounded-md border border-surface-divider bg-surface-raised px-3 py-2"
@@ -3253,7 +3280,7 @@ export function ProfilesView({
           real memberships so the demo's team surface stops being
           invisible. Sits below the stat strip (not inside the bordered
           grid) so the metrics read as a clean console strip. */}
-      {state.profiles.length > 0 && (
+      {state.profiles.length > 0 && !chromeCollapsed && (
         <div
           data-component="workspace-strip"
           className="flex flex-wrap items-center gap-2 rounded-md border border-surface-divider bg-surface-raised px-3 py-2 text-xs"
@@ -3338,6 +3365,32 @@ export function ProfilesView({
         data-component="profiles-hero"
         className="flex flex-wrap items-start gap-4 border-b border-surface-divider pb-3"
       >
+        {/* Lives in the hero, which is never collapsed, so the control that
+            brings the boxes back is not hidden by the collapse itself. */}
+        <button
+          type="button"
+          data-component="profiles-chrome-toggle"
+          aria-expanded={!chromeCollapsed}
+          aria-label={chromeCollapsed ? 'Show storage and workspace' : 'Hide storage and workspace'}
+          title={chromeCollapsed ? 'Show storage and workspace' : 'Hide storage and workspace'}
+          onClick={toggleChrome}
+          className="mt-1 shrink-0 rounded p-1 text-ink-muted transition hover:bg-surface-hover hover:text-ink-primary"
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            className={chromeCollapsed ? '' : 'rotate-180'}
+          >
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </button>
         <div className="min-w-0">
           <h2 className="text-[19px] font-semibold tracking-tight text-ink-primary">{greeting}</h2>
           <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-secondary">
