@@ -579,6 +579,11 @@ function buildRegistry(): OpenAPIRegistry {
       },
     },
     responses: {
+      409: {
+        description:
+          'The account is over its stored-profile byte cap for its tier, so nothing was launched. The problem body carries `used_bytes`, `cap_bytes` and `tier`; delete profiles or move to a tier with a larger cap and retry.',
+        content: problemContent,
+      },
       410: {
         description:
           'The session was terminalized while it was being created, so no usable session exists. Nothing was left running and no session id is returned; create a fresh session.',
@@ -4677,6 +4682,11 @@ function buildRegistry(): OpenAPIRegistry {
       },
     },
     responses: {
+      409: {
+        description:
+          'The account is over its stored-profile byte cap for its tier, so nothing was launched. The problem body carries `used_bytes`, `cap_bytes` and `tier`; delete profiles or move to a tier with a larger cap and retry.',
+        content: problemContent,
+      },
       422: {
         // V-1535 — reachable and previously undeclared. The pre-launch proxy
         // probe throws ProxyValidationFailedError when a stored egress proxy
@@ -7495,6 +7505,11 @@ function buildRegistry(): OpenAPIRegistry {
       body: { content: { 'application/json': { schema: LaunchProfileRequestOpenApi } } },
     },
     responses: {
+      409: {
+        description:
+          'The account is over its stored-profile byte cap for its tier, so nothing was launched. The problem body carries `used_bytes`, `cap_bytes` and `tier`; delete profiles or move to a tier with a larger cap and retry.',
+        content: problemContent,
+      },
       410: {
         description:
           'The session was terminalized while it was being created, so no usable session exists. Nothing was left running and no session id is returned; create a fresh session.',

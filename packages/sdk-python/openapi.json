@@ -5926,6 +5926,16 @@
               }
             }
           },
+          "409": {
+            "description": "The account is over its stored-profile byte cap for its tier, so nothing was launched. The problem body carries `used_bytes`, `cap_bytes` and `tier`; delete profiles or move to a tier with a larger cap and retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "410": {
             "description": "The session was terminalized while it was being created, so no usable session exists. Nothing was left running and no session id is returned; create a fresh session.",
             "content": {
@@ -34259,6 +34269,16 @@
               }
             }
           },
+          "409": {
+            "description": "The account is over its stored-profile byte cap for its tier, so nothing was launched. The problem body carries `used_bytes`, `cap_bytes` and `tier`; delete profiles or move to a tier with a larger cap and retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
             "description": "The egress proxy attached to this request could not be used: its stored configuration failed to decrypt, or it failed the reachability probe run before dispatch. No agent session was created and nothing was dispatched. Re-add the proxy and retry.",
             "content": {
@@ -52579,6 +52599,16 @@
           },
           "404": {
             "description": "Profile not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The account is over its stored-profile byte cap for its tier, so nothing was launched. The problem body carries `used_bytes`, `cap_bytes` and `tier`; delete profiles or move to a tier with a larger cap and retry.",
             "content": {
               "application/problem+json": {
                 "schema": {

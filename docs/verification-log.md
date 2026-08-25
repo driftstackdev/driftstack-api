@@ -15802,3 +15802,51 @@ mutation was run before the commit rather than after.
 checks, one disproved as path-insensitivity, and twelve that were already disproved in V-1535 and
 faithfully reproduced. The remaining `POST /v1/agent-sessions` 409 traces to no throw in its own service
 and is left measured rather than guessed at.
+
+## V-1544 — one omission across the three most-used writes, and the same guard bug twice in two batches
+
+The last candidate, `POST /v1/agent-sessions` 409, traced to no throw in its own service — so this batch
+walked the call graph to it instead of guessing.
+
+**The chain, resolved through the type checker and shortest-path from the route:**
+
+```
+ROUTE POST /v1/agent-sessions
+  profiles.ts:assertWithinStorageQuotaForLaunch
+    -> StorageQuotaExceededError @profiles.ts:537
+```
+
+**And it was never one route.** The gate has two call sites: directly on the agent-session path, and inside
+`resolveProfileBinding` in `routes/sessions.ts`, which both `POST /v1/sessions` (line 276) and
+`POST /v1/profiles/{id}/launch` (line 371) call — the source itself notes "the storage gate inside
+resolveProfileBinding always runs". So one undeclared refusal spanned the three most-used writes on the
+surface. It is unconditional: no optional dependency short-circuits it, unlike the proxy 503 and the legal
+gate, both checked and both different.
+
+A customer over their tier's stored-profile cap gets 409 with `used_bytes`, `cap_bytes` and `tier` — enough
+to act on — and no generated client had a branch for it. Now declared on all three, with the recovery
+stated.
+
+### The same fault, one batch after documenting it
+
+V-1543 ended by recording that a text scan cannot distinguish code from a comment, having hit it twice.
+This batch's arm hit it a third time: the mutation that proves the pin is "comment the throw out", and
+against raw source `.toContain('throw new StorageQuotaExceededError')` still matched the commented line.
+**The arm passed while the gate refused nothing.**
+
+Two further mistakes on the way to fixing it, both worth the record:
+
+- My first patch asserted against text prettier had since reformatted across three lines. The `assert`
+  fired, the edit did not apply, and the re-run reported the mutation still green — which reads exactly
+  like a fix that did not work rather than a patch that never landed. Only the traceback in the output
+  distinguished them.
+- The correction cuts from `//` to end of line rather than dropping whole comment lines, because here the
+  mutation puts live code and the commented-out throw on the SAME line. V-1543's line-dropping approach
+  would not have caught it.
+
+That is the seventh tooling bug in this arc and the second of exactly this kind. The pattern is now
+unambiguous: **every one was found by running the mutation, and none by reading the assertion back.** A
+guard is not proven by looking correct.
+
+**V-1541's list is now fully closed** — every one of its 24 candidates is either fixed with a negative or
+disproved with a reason.

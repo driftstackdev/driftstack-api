@@ -515,4 +515,72 @@ describe('a returned status code is a declared one', () => {
         'client cannot model a refusal the contract omits',
     ).toEqual([]);
   });
+
+  it("V-1544 CRITICAL all three launch paths declare the storage-quota 409, which closes the candidate list. assertWithinStorageQuotaForLaunch throws StorageQuotaExceededError once an account's stored profile bytes pass its tier cap. It is unconditional — no optional dependency short-circuits it — and it is reached from resolveProfileBinding on both session paths and directly on the agent-session path, which is why one omission spanned three of the surface's most-used writes. The chain was found by resolving call targets through the type checker and walking shortest-path to the throw; reading the agent-sessions service alone showed nothing, because the throw is two modules away.", () => {
+    // Trailing comments are cut before matching. V-1543 established why a
+    // `.toContain` on raw source is not enough, and this arm proved it again: the
+    // mutation that shows the pin works is "comment the throw out", and against raw
+    // source the arm stayed GREEN while the gate no longer refused anything.
+    const profiles = readFileSync(
+      resolve(REPO_ROOT, 'apps/server/src/services/profiles.ts'),
+      'utf8',
+    )
+      .split('\n')
+      .map((line) => (line.includes('//') ? line.slice(0, line.indexOf('//')) : line))
+      .join('\n');
+    const at = profiles.indexOf('async assertWithinStorageQuotaForLaunch(');
+    expect(at, 'the storage gate still exists').toBeGreaterThan(-1);
+    let paren = profiles.indexOf('(', at);
+    let pdepth = 0;
+    for (; paren < profiles.length; paren += 1) {
+      if (profiles[paren] === '(') pdepth += 1;
+      else if (profiles[paren] === ')') {
+        pdepth -= 1;
+        if (pdepth === 0) break;
+      }
+    }
+    const open = profiles.indexOf('{', paren);
+    let depth = 0;
+    let end = open;
+    for (; end < profiles.length; end += 1) {
+      if (profiles[end] === '{') depth += 1;
+      else if (profiles[end] === '}') {
+        depth -= 1;
+        if (depth === 0) break;
+      }
+    }
+    expect(profiles.slice(open, end), 'the gate still refuses over the hard cap').toContain(
+      'throw new StorageQuotaExceededError',
+    );
+
+    // Comment LINES dropped, not comments — V-1543 records why both alternatives fail.
+    const callers = (file: string): string =>
+      readFileSync(resolve(ROUTES_DIR, file), 'utf8')
+        .split('\n')
+        .filter((line) => !line.trim().startsWith('//'))
+        .join('\n');
+    expect(callers('sessions.ts'), 'the session paths still run the gate').toContain(
+      'assertWithinStorageQuotaForLaunch',
+    );
+    expect(callers('agent-sessions.ts'), 'the agent-session path still runs the gate').toContain(
+      'assertWithinStorageQuotaForLaunch',
+    );
+
+    const missing = [
+      'POST /v1/sessions',
+      'POST /v1/profiles/{id}/launch',
+      'POST /v1/agent-sessions',
+    ]
+      .filter((operation) => {
+        const codes = declared.get(operation);
+        expect(codes, `${operation} is still published`).not.toBeUndefined();
+        return codes !== undefined && !codes.has('409');
+      })
+      .sort();
+    expect(
+      missing,
+      'these launch paths refuse with 409 when the account is over its stored-profile cap, and a ' +
+        'generated client cannot model a refusal the contract omits',
+    ).toEqual([]);
+  });
 });
