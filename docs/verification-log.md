@@ -19586,3 +19586,55 @@ is the owner's call and needs a test run behind it, not a drive-by edit. The hea
 the same edit — correcting the entries had left it describing a marker no entry still carried.
 
 Full suite green afterwards: 3090 passed | 115 skipped (3205 files), 31102 tests.
+
+## V-1636 — the 31 fixtures: six causes, no silent mis-test, and one production cast that lies
+
+W-12 left 257 type errors across 76 previously-unchecked gui test files, of which ~31 were "a fixture
+missing a required property" — the class that produced the `can_route` find, where a hand-written
+`ProxyTestResult` omitted a field `isProxyUsable` reads and the "healthy proxy" case silently exercised the
+UNHEALTHY path. A2 flagged those 31 as the highest-value slice on the hypothesis that some fraction were
+tests exercising the opposite path while reporting green. This is that scoping.
+
+**First, 31 errors are SIX root causes**, which the raw count hides: `icon`×11, `currentVersion`×8,
+`LiveKitInfo`×6, `owner_email`/`owner_name`×3, `adopt`/`adopting`×2, `nextCursor`×1.
+
+⭐ **The hypothesis does not survive. None of the 31 is a `can_route`.** The discriminator is whether the
+missing field is READ by the code under test, and it decides all six:
+
+- `adopting` gates a divider behind `restoredHistoryCount > 0`; both mocks set that to `0`, so the
+  conjunct is already false and `!chat.adopting` decides nothing.
+- `icon` — `ProfilesTable` declares `icon?` and guards `r.icon ?`. Here the TYPE is wrong, not the fixture:
+  `ProfileMeta` requires what its only consumer treats as optional.
+- `owner_email` / `owner_name` — no read anywhere in `src`.
+- `currentVersion` — ⚠️ **a finding I withdrew.** The chain is real: `updater.test.ts:36` makes `check`
+  reject, reaches `checkManifestOnly`, calls `deps.currentVersion()` as `undefined`, and the TypeError is
+  swallowed by `catch { return null }` into exactly the `null` the assertion wants. I nearly reported the
+  manifest fallback as unexercised. **It is covered** — `macos-is-told-about-updates-it-cannot-install`
+  supplies `currentVersion`, stubs fetch, and has seven arms. What survives is thinner and worth keeping:
+  that test passes under three separate mechanisms and cannot distinguish them.
+- `nextCursor` — ⛔ **the naive fix is the wrong fix.** `SAMPLE` is an HTTP _response body_
+  (`json: () => Promise.resolve(SAMPLE)`) annotated with the hook's _internal_ type. The wire shape is
+  `next_cursor?`, snake-case and optional; the hook converts with `body.next_cursor ?? null`. Adding a
+  camelCase `nextCursor` satisfies tsc and makes the fixture lie in a new way. The annotation is the defect.
+
+⛔ **The sixth is a defect in production code, and it is the payoff for W-12.** `SimulatorWindow.tsx:643`
+builds the panel's session info as `{ ws_url, token, room_name } as unknown as LiveKitInfo`, above a comment
+reading "the only fields the panel/connect read" and "Cast is safe — the panel reads ws_url/token only".
+
+Three things are wrong at once. **`room_name` is a field of nothing** — `LiveKitInfo` is
+`{ws_url, room, token, participant_identity, expires_at}`, and `room_name` appears nowhere in the SDK or the
+server routes. **The comment justifying the cast is false**: `AgentSessionPanel.tsx:363` reads `info.room`
+as the identity key for the session-timing reset, `if (sessionTimingRef.current.identity !== info.room)`.
+With `room` undefined that compares `undefined !== undefined` — false forever — so the reset branch is dead
+on this path. And **the six fixtures omit the same three fields**, so the tests encode the same false belief
+the cast does and could never have contradicted it.
+
+⚠️ **Bounded honestly: latent, not user-visible.** `info` is parsed from the URL once per simulator window
+and never changes, so the reset it disables had nothing to reset; the `AgentChatView` mount passes a real
+SDK object and works correctly. The defect is the cast and the comment, not a wrong duration in front of a
+customer. Reported to A2 rather than fixed here — every one of the six lives under `apps/gui-client/**`.
+
+⭐ **The transferable part is about `as unknown as`.** A cast is a claim about a type, and this one carried
+its own justification in a comment — which is the form that gets believed. The comment was checkable and
+false the moment someone read line 363. **An `as unknown as` with a reason attached deserves more scrutiny
+than one without, not less**, because the reason is what stops the next reader from looking.
