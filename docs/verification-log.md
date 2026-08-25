@@ -16743,3 +16743,35 @@ was delegated away from the schema is the one place it was wrong**, and there is
 Pinned as an exact set rather than a floor, so both directions fail: a third bare field reds naming it (a
 new delegation whose delegate nobody has written), and an existing one gaining its own constraint reds too,
 because then the recorded list has stopped being true. Proved both ways.
+
+## V-1567 — re-running the scan whose blind spot I had already published
+
+V-1566 concluded "numeric and date input: clean" and, in the same entry, recorded that the scanner behind
+it matched `req.query.X` and missed the parsed `query.X` form. **A conclusion published alongside its own
+disqualifying limitation is not a conclusion**, so this batch re-ran it properly.
+
+The corrected scan covers both spellings plus `parsed.data.X`. Across 60 route files it reports **six**
+conversions of request-derived values, where the first scan reported zero:
+
+```
+admin-audit-log.ts:91,92     new Date(query.from) / (query.to)
+admin-incidents.ts:231,277   new Date(parsed.data.started_at)
+admin-incidents.ts:309       new Date(parsed.data.since)
+admin.ts:116                 new Date(body.expires_at)
+```
+
+**All six are safe, and each was traced to its schema rather than assumed.** `from`/`to` and `since` are
+`Iso8601Schema`; `started_at` is `Iso8601Schema` in both the create and update shapes; `expires_at` is
+`Iso8601Schema.optional()` on `CreateApiKeyRequestSchema`. My "guarded" window simply did not reach the
+`safeParse` a few lines above, which is why they surfaced at all.
+
+**One definition was carrying the whole conclusion, so it got checked too.** Every one of those fields
+resolves to `Iso8601Schema`, used **75 times** across ten api-types modules. If that were a renamed
+`z.string()`, every date field on the surface would be unconstrained and this entry would be wrong. It is
+`z.string().datetime({ offset: true })` with a 1970 floor — and it is already pinned, by
+`api-types-common-content-parity`, which asserts the offset flag, the floor and the describe text.
+
+**No code changed and no guard added.** Prior art was checked before writing anything, which is the V-1548
+correction applied as routine rather than as a lesson. The result V-1566 claimed is now supported by a scan
+that can see the code it was claiming about — which is the entire content of this batch, and worth a
+number: the blind version found 0 of 6.
