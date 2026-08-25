@@ -20574,3 +20574,38 @@ around.
 should fail is the same signal as A2's "the number did not move" — **two instruments disagreeing is
 information, and the right first assumption is that mine is the broken one.** It was, four times out of
 four.
+
+## V-1660 — what reaps a session stuck in `busy`, and why not releasing it is the safe choice
+
+Tenth audit, and the first on the CORE PRODUCT path rather than the money and auth paths: the session
+operation lifecycle. **The question: `claimSessionOperation` CASes `ready -> busy`; what happens if the
+process dies before either outcome?**
+
+**The two live paths are correct.** `try { fn(session) }` on failure runs `failSessionOperation` (→
+`errored`, driver session destroyed) and rethrows; on success `settleSessionOperation` CASes back to
+`ready`. That settle is tight — id AND accountId AND **driverSessionId** AND `status='busy'` AND
+`destroyedAt IS NULL` — so a settle from a stale driver session cannot win.
+
+**A process death between claim and either outcome leaves the row `busy`, and nothing automatically returns
+it to `ready`.** ⭐ **That is the safe choice, not an omission.** The control plane does not know whether the
+operation completed on the worker; auto-releasing to `ready` would let a second operation race a possibly
+still-running first one. **Stuck-`busy` fails closed: it refuses new operations rather than risking
+concurrent driver commands.** `updateSessionStatus` enforces it — a `busy` row is excluded entirely, and
+only settle, fail, or a serialized destroy may move it.
+
+**Recovery is destroy, and destroy handles it:** `destroySessionSerialized` locks the row and short-circuits
+only on `destroyed`/`errored`, so `busy` is destroyable. The cost until then is one concurrency slot, since
+`countActiveSessions` counts by `destroyedAt IS NULL`.
+
+⭐ **And the "who reaps a genuinely orphaned session" question has FOUR layers, each covering a case the
+previous one misses** — which is the most complete failure-mode coverage I have read in this repo:
+
+1. `agent-session-terminal-close` — worker reports a session ENDED → CP closes the row.
+2. `cp-daemon-reconcile` — worker reports ACTIVE what the CP holds TERMINAL → CP re-issues `sessionEnd`, because CP→daemon frames are best-effort and a `sessionEnd` sent while the link is down is simply gone.
+3. `node-boot-reconcile` — a per-process `bootId` on the heartbeat distinguishes a daemon RESTART from a reconnect. ⛔ **This leg exists because the first two miss a real case**: a daemon that crashes and respawns fast reconnects INSIDE the disconnect grace, cancelling `worker-disconnect-reaper`, so its prior in-memory sessions linger CP-active — billed, holding a slot, phantom in the GUI.
+4. A 12h `orphan_reap` as the final backstop.
+
+⚠️ Boundary: established by reading the claim/settle/fail flow, `destroySessionSerialized`, and the four
+reconcile headers — **not by killing a control-plane process mid-operation and observing what recovers.**
+
+**Ten audits, one defect.**
