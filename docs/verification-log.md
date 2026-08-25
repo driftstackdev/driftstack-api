@@ -16565,3 +16565,39 @@ blind walk is silent — before anything is claimed about it.
 **Process deviation, disclosed.** The offender-planting mutation edited `routes/legal.ts`, and I restored it
 with git rather than from a scratchpad snapshot. Verified clean afterwards: `git diff` on that file is
 empty and its first lines are unchanged.
+
+## V-1562 — the five candidates finished: three protected, two blind
+
+V-1561 listed five guards as unexamined rather than implying anything about them. Finishing them is the
+whole point of having listed them, and the split is 3 / 2.
+
+**Three were already protected, by a control my detector could not see.** Retargeting each walk at a real
+directory holding none of its file type made all three FAIL:
+`a-published-route-that-can-never-succeed-is-listed` (2 arms red),
+`the-team-owner-pair-cannot-be-split` (3 red), and
+`a-customer-doc-may-not-cite-a-file-that-does-not-exist` (1 red). None carries a `toBeGreaterThan` floor;
+each has sibling arms asserting POSITIVE content, which fail first when the walk goes blind — the same
+shape as `route-auth-coverage-invariant`'s exact `toHaveLength(288)`. **Non-vacuity has at least four
+forms, and a heuristic looking for one of them mostly finds false positives** — this sweep produced 389,
+then 197, then 13, then 6, and the true answer is 2.
+
+**Two were genuinely blind, and both scan the entire server source for an absence:**
+
+- `boolean-env-flags-share-one-truthiness-rule` — asserts no file compares an env var to a truthy literal
+  directly, bypassing the shared parser. Walk retargeted at `src/db/migrations`: **4 passed**, nothing read.
+- `services-webhook-secret-force-rotation-content-parity` — asserts nothing constructs the force-rotation
+  service outside its sanctioned site. Same retarget: **13 passed**, nothing read.
+
+Both now count the files they actually read and refuse an empty answer, against a measured 340 `.ts` files
+under `apps/server/src`. The first throws with the directory and count in the message, because its scan
+sits in a helper shared by four arms and a thrown error names the cause once rather than four times.
+
+Proved in three directions. Each blind walk now reds — the first naming "the walk is blind, so an empty
+result means nothing", the second naming the scanned count. And a planted
+`process.env.SOME_FLAG === 'true'` still reds, so the fix did not buy safety by loosening the detector.
+
+**The offender probe was wrong first, and the guard was right.** Planting that comparison in
+`lib/config.ts` did NOT red — because config.ts is where the rule is DEFINED and is exempt by design, as
+its own constant says. Re-planted in `lib/errors.ts` it reds naming the flag. A mutation that fails to red
+is a claim about the mutation until the mutation is checked, which is the V-1531 lesson arriving again from
+a different direction.

@@ -47,6 +47,10 @@ const HELPER_FILE = resolve(SERVER_SRC, 'lib', 'config.ts');
 /** Source lines that compare an env variable to a truthy literal directly. */
 function bareComparisons(): string[] {
   const found: string[] = [];
+  // V-1562 — this reports an ABSENCE, so the count is part of the answer.
+  // Retargeting the walk at `src/db/migrations` (real directory, no `.ts`) left
+  // all four arms GREEN while nothing was read. Measured at 340 files.
+  let scanned = 0;
   const walk = (dir: string): void => {
     for (const entry of readdirSync(dir)) {
       const full = resolve(dir, entry);
@@ -55,6 +59,7 @@ function bareComparisons(): string[] {
         continue;
       }
       if (!entry.endsWith('.ts')) continue;
+      scanned += 1;
       const lines = readFileSync(full, 'utf8').split('\n');
       lines.forEach((line, i) => {
         // Comments describe the rule; they are not the rule.
@@ -70,6 +75,12 @@ function bareComparisons(): string[] {
     }
   };
   walk(SERVER_SRC);
+  if (scanned < 100) {
+    throw new Error(
+      `bareComparisons scanned only ${scanned.toString()} files under ${SERVER_SRC} — the walk is ` +
+        'blind, so an empty result means nothing',
+    );
+  }
   return found.sort();
 }
 

@@ -51,6 +51,10 @@ describe('services/webhook-secret-force-rotation content parity', () => {
     // a name-only scan would either flag those or have to be weakened to nothing.
     const SRC = resolve(REPO_ROOT, 'apps/server/src');
     const offenders: string[] = [];
+    // V-1562 — this arm reports an ABSENCE. Retargeting SRC at `src/db/migrations`
+    // (real directory, no `.ts`) left all thirteen arms GREEN while nothing was
+    // read, so the file count is asserted below. Measured at 340.
+    let scanned = 0;
     const walk = (dir: string): void => {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
         const full = resolve(dir, entry.name);
@@ -59,6 +63,7 @@ describe('services/webhook-secret-force-rotation content parity', () => {
           continue;
         }
         if (!entry.name.endsWith('.ts') || full === LIB) continue;
+        scanned += 1;
         const body = read(full);
         if (
           /new WebhookSecretForceRotationService\s*\(/.test(body) ||
@@ -69,6 +74,7 @@ describe('services/webhook-secret-force-rotation content parity', () => {
       }
     };
     walk(SRC);
+    expect(scanned, 'server source files scanned for stray constructions').toBeGreaterThan(100);
     expect(
       offenders,
       'the dormant force-rotation service is constructed or imported in production source. Its ' +
