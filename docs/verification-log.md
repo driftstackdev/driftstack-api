@@ -20892,3 +20892,42 @@ unmutated first, every time:
 
 **Three consecutive runs where "1 failed" looked identical and meant three different things.** Had I read
 only the mutations, all three would have looked like the guard working.
+
+## V-1668 — a guard caught my own new test, and my regex was biased against large numbers
+
+Extending V-1667's batch-mutation method from repo clamps to **request-schema `.max()` bounds**. Three
+results; two are about my instrument and one is about a guard finding me.
+
+**1. Request-schema bounds are well covered — the opposite of the clamp result.** Neutralising 92 of them
+in one run: **52 files, 89 tests failed.** There is a dedicated
+`admin-routes-list-query-defensive-caps-cross-source-invariant`, and a
+`published-request-schema-is-not-looser-than-enforced`. I predicted red after finding a single pinning
+test, and red it was. **The clamp gap was specific, not symptomatic.**
+
+⛔ **2. My enumeration regex was `\.max\((\d+)\)`, which cannot match `.max(1_000_000)`.** Five bounds
+were silently skipped, and they are **exactly the money ones**: a pricing ceiling, an LLM budget cap, a
+crypto price cap, and two agent-session limits.
+
+⭐ **That is a SYSTEMATIC bias, not a random miss.** The `1_000_000` convention exists _for_ large numbers,
+so a `\d+` regex is biased against precisely the highest-value bounds. Every instrument fault today has
+been "narrower than the question"; **this one is narrower in a direction that correlates with importance.**
+Mutated separately: 9 files, 10 tests — all five are covered.
+
+⛔ **3. A guard caught MY new test, for the exact vacuity it exists to prevent.** The BASELINE of that run
+came back `1 failed`, uncontended at 196s — a real red, and mine:
+
+    an-integration-test-cannot-pass-without-its-database
+    "these bail out when the service is missing and never assert it was present, so with the
+     describe running and the service down they report PASSED"
+    → ["atlas-priority-events-end-to-end.test.ts"]
+
+V-1667's clamp arm opens `if (!client || !repo) return;` while that file's presence arm asserted only
+`app`. **So with the database down, a brand-new clamp test would have reported PASSED having asserted
+nothing** — the `115 skipped` shape, in a test I wrote an hour after recording that lesson. Fixed by
+extending the presence arm to `client` and `repo`; guard 4/4 and the file 12/12 afterwards.
+
+⭐ **What caught it is the part worth keeping: not my mutation and not my review, but a guard someone else
+wrote, running as the BASELINE of an unrelated experiment.** I would never have run it deliberately — I did
+not know it existed. **That is the argument for baseline-first as a habit rather than a rule about
+mutations: the baseline runs everything, including the guard that has an opinion about the file you just
+added.**

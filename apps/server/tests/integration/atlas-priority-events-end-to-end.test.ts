@@ -106,6 +106,12 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         app,
         `could not build against ${DB_URL} — no arm below exercised anything`,
       ).not.toBeNull();
+      // V-1668 — the clamp arm below bails on `!client || !repo`, not on
+      // `!app`, so asserting `app` alone left it able to report PASSED with the
+      // database down. `an-integration-test-cannot-pass-without-its-database`
+      // caught exactly that, on the arm I had just added.
+      expect(client, `no client against ${DB_URL} — the clamp arm asserted nothing`).not.toBeNull();
+      expect(repo, `no repo against ${DB_URL} — the clamp arm asserted nothing`).not.toBeNull();
     });
 
     it("CRITICAL listRecent clamps limit into [1, 1000]. This clamp had NO coverage of any kind: neutralising it left the ENTIRE suite green — 3212 files, 31,944 tests — while the four sibling page-clamps each failed between one and four files under the same treatment. The route in front carries a Zod .min(1).max(1000), so this is defence-in-depth: a caller reaching the repo directly would pull the customer's whole event table.", async () => {
