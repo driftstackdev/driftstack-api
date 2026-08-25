@@ -16971,3 +16971,41 @@ that.
 
 `EXPECTED_TEST_FILES` and `_ALL` are untouched: this batch corrected prose, not pins, and the nine-file
 `_ALL` drift V-1571 recorded is still someone else's to close. The gate re-run after the edit is green.
+
+## V-1573 — running the 115 suites the gate collects and never executes
+
+V-1571 bounded "gate green" to one CI job of five; V-1572 covered the Python and Go SDK jobs. What remained
+was the largest hole: **115 test files the gate collects and never runs**, because they gate on
+`DATABASE_URL`. Every route change this session — thirteen status codes, a UUID validator, two webhook
+refusals — had been verified statically and never against a database.
+
+**All of it passes.** Against a local Postgres 16.14 and Redis:
+
+```
+apps/server/tests/integration    393 files passed / 3796 tests passed    exit 0
+```
+
+**The first run failed 94 files, and the cause was mine, not the code's.** Every failure was
+`relation "public.accounts" does not exist` and siblings. The `ensureIsolatedDatabase` helper creates and
+migrates a database PER TEST FILE, but files that use the base `DATABASE_URL` directly need that database
+migrated, and I had pointed at a freshly created empty one. `npm run db:migrate` applied 114 migrations, 52
+tables, and the same command that reported 94 failures reported none. **A red run is a claim about the
+environment until the environment is checked** — reporting those 94 as findings would have been the
+session's worst false positive.
+
+**One concrete gap surfaced, on my own work.** `apps/server/tests/integration` holds 15 webhook files, 23
+session, 14 agent-session, 6 profile and 5 api-key files — and **zero for admin-audit-log**. The
+500-instead-of-400 defect V-1565 fixed there is covered only by the unit-level shape guard added alongside
+it. Nothing drives `GET /v1/admin/audit-log?admin_id=<garbage>` and observes a 400. That is a real coverage
+gap, named rather than filed as a finding, because writing that test needs an admin fixture and this batch
+has already established what happens when a test is written without verifying it reaches the branch.
+
+**Cleanup, stated because it touched a shared machine.** One database was created (`ds_verify_…`) and
+dropped. The `driftstack_iso_*` databases were left alone: the helper creates them only when absent and
+reuses them, so they are its lifecycle and possibly a peer's, not mine to remove. Redis index 14 was
+flushed after the run — it held 38 `zz-test-rl:` rate-limit keys the suite left behind, which is the index
+the e2e runner documents as unused.
+
+**Still unrun: the Playwright e2e job** — 222 specs, the other half of the "real Postgres + Redis" claim.
+`scripts/e2e-local.mjs` exists to run it without Docker, and its own header records why that matters:
+three `rate-limit.spec.ts` specs "were able to rot unnoticed until someone ran them."
