@@ -16280,3 +16280,44 @@ before any result from it is believed.
 that never applied, V-1550's swallowed throw, and V-1551's excluded tsconfig). Every one produced a
 plausible number. The only reason none of them shipped is that each was asked to prove itself on a case
 whose answer was already known.
+
+## V-1555 — finishing the docs-examples measurement, and correcting why V-1554 abandoned it
+
+V-1554 stopped with 12 unverified results and concluded the analyser's `$ref` resolution was wrong. **That
+conclusion was itself wrong, and the cause ties back to V-1551.**
+
+**Built with controls first this time.** Before extracting anything, five schema lookups with known answers
+were run against schemas read straight from the document: a valid login body passes, one missing
+`password` fails, one with a short password fails, a valid api-key mint passes, one missing `scopes` fails.
+5/5. The resolver was never broken.
+
+**What was broken was the error reporting.** V-1554 read `e.instancePath`, which is the **Ajv 8** property.
+This analysis ran from the repo root, where V-1551 established `node_modules/ajv` is **6.15.0** — and Ajv 6
+reports `e.dataPath`. Every error therefore printed `(root)`, which read as "the schema is being applied at
+the wrong level" when it was simply an undefined field name. The same two-Ajv split that made
+`createSpecAjv` skip formats also made a working analyser look broken, one batch later, in a different
+tool. **A root cause found once will resurface wherever the same assumption is made.**
+
+**The completed measurement.** 61 request-position blocks extracted from 24 API pages, 56 matched to a
+published request schema by exact path with ambiguous shapes refused rather than guessed, and 12 fail their
+endpoint's schema. Every one is a documentation placeholder, checked individually:
+
+```
+"password": "<password>"                      shorter than the 12-char minimum
+"token": "<from the login response>"          shorter than the 32-char minimum, wrong charset
+"data_base64" / "content_hash" / "profile_id" placeholder text where a pattern is required
+"mode" / "model"                              placeholder where an enum is required
+"envelope": { "version": 1, "...": "..." }    explicit elision; the prose says "paste the file"
+```
+
+**No defect, and no guard added.** A guard here would have to encode "a placeholder is acceptable", and
+every one of these 12 is a placeholder — so the check would be a list of allowances rather than an
+invariant, which is the shape this arc keeps finding fails silently. The measurement is the deliverable:
+the docs examples are correct where they claim to be literal, and abbreviated where they say they are.
+
+### The instrument tally, closed honestly
+
+V-1554 called this axis unfinished and deleted its analyser rather than report unverified numbers. That was
+the right call on the evidence available, and it also means the recorded reason for stopping was wrong.
+Both are now on the record: the twelve were real outputs of a working tool, they are all placeholders, and
+the misdiagnosis was an Ajv-version assumption inherited from the same split V-1551 documented.
