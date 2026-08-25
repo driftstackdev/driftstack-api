@@ -18611,3 +18611,46 @@ to contain 'scopes'`. The concurrency and bad-value mutations fail their own arm
 byte-identical from a snapshot.
 
 No pin bumped: three arms extended, none added.
+
+## V-1614 — the published trim body and the body the route parses were never compared
+
+`the-document-is-neither-looser-nor-stricter` is the file for this, and it did not cover this operation.
+Its three older arms are hand-written for two routes; its fourth is a sweep, and the sweep reads exactly
+one thing — whether a body whose schema has required fields is itself marked required. That cannot see a
+FIELD present on one side and absent on the other, which is the whole of what V-1609 fixed.
+
+The new arm compares the two directly, in both directions, and derives each side rather than restating it:
+the field set of `TrimScopeBodySchema` against the published `properties`, the enum against
+`TRIM_PROFILE_SCOPES`, `requestBody.required` against the route accepting a body-less call, and
+`additionalProperties: false` against the route refusing an unknown key. Vacuity is asserted first for this
+file's own stated reason — two empty key lists compare equal, so an unread schema and an unparsed document
+would agree having compared nothing.
+
+Three mutations, each with the file proven changed before the result was read. Deleting `scope` from the
+document fails with the published body declaring nothing; adding a `dryRun` field to the route alone fails
+naming it; flipping `additionalProperties` to `true` fails on the unknown-key arm. The first two are the
+two directions of the same defect — a value the SDKs cannot send, and a value they send that the route
+refuses.
+
+**The first draft's diagnostic named the wrong fault.** The vacuity check asserted the route's field list
+equalled `['scope']`, so the route-side mutation tripped THAT rather than the comparison, and reported "the
+route schema was read and has fields" about a schema that had been read perfectly well. Vacuity now checks
+non-emptiness and the comparison carries the message. A guard that fails for the right reason with the
+wrong sentence sends the next reader to the wrong file.
+
+**A retraction, and a caution against the fix.** The trim-scope audit reported that the marketing site
+contradicts the destructive scopes by promising a profile retains its stored logins and browsing state.
+Read in full, both sentences — one on the homepage, one in the glossary — qualify that promise as holding
+across runs, which is a claim about persistence between sessions and is unaffected by a customer
+explicitly asking the API to erase something. Neither is wrong, and no guard freezes either: the phrase
+appears in no `.ts` file in the repo, so the reported five parity guards are not there either. Recorded
+because the next reader to notice the same two pages should not "fix" copy that is accurate.
+
+**And an interaction between two of this repo's own instruments, which will recur.** Restoring a mutated
+file byte-identically from a snapshot still moves its mtime. `dist-reading-suites-have-fresh-artifacts`
+keys on mtime rather than content, so mutation-proving anything under `apps/docs/src` leaves the docs
+artifact reading as stale even though the file is character-for-character what it was. It cost a red in the
+full run here. Rebuild the app after mutation-proving one of its sources; the check is right and the
+restore is right.
+
+No pin bumped: one arm added to an existing file.

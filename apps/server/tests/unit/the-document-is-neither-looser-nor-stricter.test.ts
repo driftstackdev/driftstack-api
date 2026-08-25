@@ -28,6 +28,8 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { AccountIdSchema, CreateIncidentRequestSchema } from '@driftstack/api-types';
+import { TrimScopeBodySchema } from '../../src/routes/profiles.js';
+import { TRIM_PROFILE_SCOPES } from '../../src/schemas/harness-control-protocol.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -36,7 +38,8 @@ const PROFILES_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/profiles.ts');
 
 interface Schemaish {
   required?: string[];
-  properties?: Record<string, { pattern?: string }>;
+  properties?: Record<string, { pattern?: string; enum?: string[] }>;
+  additionalProperties?: boolean;
   $ref?: string;
 }
 interface SpecShape {
@@ -158,5 +161,44 @@ describe('V-930 the document is neither looser nor stricter than the route', () 
       'these operations require fields in the body but do not require the body, so a generated ' +
         'client treats it as omissible on an endpoint that answers 400 without it',
     ).toEqual([]);
+  });
+
+  it('V-1614 CRITICAL the trim body the document publishes is the body the route parses. The sweep above reads only whether a body is marked required; it cannot see a FIELD present on one side and absent on the other, and this operation is where that matters most — the body selects which data a destructive call destroys, the route validates it with `.strict()`, and the Python and Go SDKs can send only what the document declares. Compared against the schema itself rather than a restated shape, in both directions.', () => {
+    const doc = spec();
+    const requestBody = doc.paths['/v1/profiles/{id}/trim']?.['post']?.requestBody;
+    expect(requestBody, 'the trim operation publishes a JSON request body').toBeDefined();
+    const published = body('/v1/profiles/{id}/trim', 'post');
+
+    // Vacuity first, for this file's own reason: two empty key lists are equal,
+    // so an unread schema and an unparsed document would agree having compared
+    // nothing. Both sides must be non-empty before any comparison below counts.
+    const routeFields = Object.keys(TrimScopeBodySchema.shape).sort();
+    expect(routeFields.length, 'the route schema was read and has fields').toBeGreaterThan(0);
+    expect(
+      Object.keys(published.properties ?? {}).sort(),
+      'the published body declares exactly the fields the route parses — a field on one side ' +
+        'only is either a value the SDKs cannot send, or one they send and the route refuses',
+    ).toEqual(routeFields);
+
+    // The accepted values, from the one constant both sides derive from (V-1612).
+    expect(published.properties?.['scope']?.enum).toEqual([...TRIM_PROFILE_SCOPES]);
+
+    // Neither side requires the field, and the body itself is omissible — the
+    // no-body call is the documented cache-only clear, so a document marking it
+    // required would refuse the call every existing caller makes.
+    expect(published.required ?? []).toEqual([]);
+    expect(requestBody?.required).toBe(false);
+    expect(
+      TrimScopeBodySchema.safeParse({}).success,
+      'the route accepts the body-less call the document says is valid',
+    ).toBe(true);
+
+    // And both refuse an unknown key. This is the property that makes a typo a
+    // 400 instead of a silent clear of the default scope, and it is expressible
+    // in the document only as additionalProperties:false — a generated client
+    // that permits extra fields would let a caller believe a typo'd key was sent.
+    expect(published.additionalProperties, 'the document refuses an unknown key').toBe(false);
+    expect(TrimScopeBodySchema.safeParse({ scopes: 'cookies' }).success).toBe(false);
+    expect(TrimScopeBodySchema.safeParse({ scope: 'everything' }).success).toBe(false);
   });
 });
