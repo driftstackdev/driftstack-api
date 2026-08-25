@@ -579,6 +579,11 @@ function buildRegistry(): OpenAPIRegistry {
       },
     },
     responses: {
+      410: {
+        description:
+          'The session was terminalized while it was being created, so no usable session exists. Nothing was left running and no session id is returned; create a fresh session.',
+        content: problemContent,
+      },
       404: {
         // V-1535 — reachable and previously undeclared. The profile resolver
         // answers NotFoundError for a `profile_id` that does not exist or belongs
@@ -7490,6 +7495,11 @@ function buildRegistry(): OpenAPIRegistry {
       body: { content: { 'application/json': { schema: LaunchProfileRequestOpenApi } } },
     },
     responses: {
+      410: {
+        description:
+          'The session was terminalized while it was being created, so no usable session exists. Nothing was left running and no session id is returned; create a fresh session.',
+        content: problemContent,
+      },
       201: {
         description: 'Session created from the profile.',
         content: { 'application/json': { schema: CreateSessionResponseSchema } },

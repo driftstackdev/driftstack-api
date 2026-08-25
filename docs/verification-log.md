@@ -15713,3 +15713,44 @@ type object, so the assertion ran against a destructured signature and failed on
 touched. Fixed by matching the parameter list's parentheses first. Caught because a fresh assertion failed
 against known-good source — which is the cheap version of the count-versus-intent check the last four bugs
 needed.
+
+## V-1542 — six of the ten resolved: two real 410s, four 404s that must NOT be declared
+
+V-1541 left ten measured-but-unverified candidates. Verifying them is the whole point of having recorded
+them, so this batch took two clusters and reached opposite conclusions — which is the useful part.
+
+**The four billing 404s are defensive checks, not contract branches, and declaring them would be a
+mistake.** All four trace to one line repeated three times in `services/billing.ts`:
+`const account = await this.repo.getAccount(accountId); if (account === null) throw new NotFoundError`.
+The routes pass `ctx.account.id` (portal) and `effective.accountId` (billing state) — ids `requireAuth`
+and the team-scope validation have already resolved. Reaching that throw means the caller's own account
+vanished between authentication and the next query. That is an internal inconsistency, in the same
+category as the 500 this suite excludes by convention, and publishing it would tell customers a read of
+their own billing can answer "account not found" — a branch no client can act on. **Not declared, on
+purpose**, and the reason is now in the guard so the next tracer run does not re-raise it as a finding.
+
+**The two session-create 410s are real.** `SessionsService.create` throws `SessionDestroyedError` at
+line 615 when the reservation is terminalized DURING dispatch. Its own log event is
+`post_dispatch_activation_lost_cleanup_failed` — "session reservation was terminalized during dispatch" —
+so a terminal driver failure mid-dispatch reaches it with no customer action at all. That is the
+distinction from the billing case: one needs the caller to delete their own account mid-request, the other
+happens on its own.
+
+Both `POST /v1/sessions` (calls at lines 288/297) and `POST /v1/profiles/{id}/launch` (380/388) reach that
+one method, and neither declared 410. A customer whose create is terminalized got a status their generated
+client has no model for, on the most-used write on the surface. Now declared on both, saying plainly that
+nothing was left running and no session id is returned.
+
+Pinned as a chain — `create` must still raise it, the class must still carry 410, both operations must
+still declare it — and proved three ways, including replacing the throw so a refusal that moves cannot
+leave two pins asserting a code nothing raises.
+
+**Recorded honestly:** the second removal's console grep matched the arm's own title rather than the
+assertion payload, so the claim that it named `launch` rests on the arm's construction — it filters
+exactly the two listed operations and reports those lacking 410 — not on output I read. Stating which
+evidence actually carried a conclusion matters more here than the conclusion.
+
+**Four candidates remain unverified**: `DELETE /v1/profiles/{id}/purge` 409,
+`POST /v1/profiles/{id}/transfer` 409, `POST /v1/agent-sessions` 409, `GET /v1/profile-snapshots` 404, plus
+the 409 on the two session-create paths whose source I did not locate within this batch. Left as measured,
+not as exempt.

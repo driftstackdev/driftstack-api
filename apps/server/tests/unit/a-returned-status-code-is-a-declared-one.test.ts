@@ -415,4 +415,59 @@ describe('a returned status code is a declared one', () => {
         'model a refusal the contract omits',
     ).toEqual([]);
   });
+
+  it("V-1542 CRITICAL both session-create paths declare the 410 SessionsService.create raises. It fires when the reservation is terminalized DURING dispatch — the service's own log event is post_dispatch_activation_lost_cleanup_failed — so a terminal driver failure mid-dispatch reaches it with no customer action at all. POST /v1/sessions and POST /v1/profiles/{id}/launch both call that one method and neither declared 410. Distinguish this from the four billing 404s the same tracer flagged and this file deliberately does NOT pin: those come from `getAccount(accountId) === null` on an id requireAuth already resolved, so reaching one means the caller's own account vanished mid-request. That is an internal inconsistency, not a contract branch, and declaring it would advertise a 404 no caller can act on.", () => {
+    const service = readFileSync(
+      resolve(REPO_ROOT, 'apps/server/src/services/sessions.ts'),
+      'utf8',
+    );
+    const at = service.indexOf('async create(');
+    expect(at, 'SessionsService.create still exists').toBeGreaterThan(-1);
+    let paren = service.indexOf('(', at);
+    let pdepth = 0;
+    for (; paren < service.length; paren += 1) {
+      if (service[paren] === '(') pdepth += 1;
+      else if (service[paren] === ')') {
+        pdepth -= 1;
+        if (pdepth === 0) break;
+      }
+    }
+    const open = service.indexOf('{', paren);
+    let depth = 0;
+    let end = open;
+    for (; end < service.length; end += 1) {
+      if (service[end] === '{') depth += 1;
+      else if (service[end] === '}') {
+        depth -= 1;
+        if (depth === 0) break;
+      }
+    }
+    expect(
+      service.slice(open, end),
+      'create() still refuses a reservation terminalized during dispatch',
+    ).toContain('throw new SessionDestroyedError()');
+
+    const errorsSource = readFileSync(resolve(REPO_ROOT, 'apps/server/src/lib/errors.ts'), 'utf8');
+    const cls = /export class SessionDestroyedError extends ApiError \{([\s\S]*?)\n\}/.exec(
+      errorsSource,
+    );
+    expect(cls, 'SessionDestroyedError still exists').not.toBeNull();
+    expect(
+      /status:\s*(\d{3})/.exec(cls?.[1] ?? '')?.[1],
+      'SessionDestroyedError still carries the status this arm pins',
+    ).toBe('410');
+
+    const missing = ['POST /v1/sessions', 'POST /v1/profiles/{id}/launch']
+      .filter((operation) => {
+        const codes = declared.get(operation);
+        expect(codes, `${operation} is still published`).not.toBeUndefined();
+        return codes !== undefined && !codes.has('410');
+      })
+      .sort();
+    expect(
+      missing,
+      'these routes create a session that can be terminalized mid-dispatch, and a generated client ' +
+        'cannot model a 410 the contract omits',
+    ).toEqual([]);
+  });
 });

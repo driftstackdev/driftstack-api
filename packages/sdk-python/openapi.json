@@ -5926,6 +5926,16 @@
               }
             }
           },
+          "410": {
+            "description": "The session was terminalized while it was being created, so no usable session exists. Nothing was left running and no session id is returned; create a fresh session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "headers": {
@@ -52569,6 +52579,16 @@
           },
           "404": {
             "description": "Profile not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The session was terminalized while it was being created, so no usable session exists. Nothing was left running and no session id is returned; create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
