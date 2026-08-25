@@ -95,10 +95,12 @@ describe('a recurring sweep re-arms even when its tick throws', () => {
     // convention empties the population and every check below passes vacuously.
     // 12 → 13 with registerCryptoOrderExpirySweepJob (the abandoned-pending-
     // order sweep, which had no scheduler at all until 2026-08-23).
+    // 13 → 14 with registerSessionEventsArchiveJob (V-1591 — the 90-day
+    // session_events archive, which had never run at all).
     expect(
       helpers.map((h) => h.name).sort(),
       'the register*Job scan came back short — the checks below cover only what it found',
-    ).toHaveLength(13);
+    ).toHaveLength(14);
   });
 
   it('the detector detects — it must flag the broken shape and clear both working ones', () => {

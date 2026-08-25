@@ -109,6 +109,7 @@ describe('a dead job chain is reported as 0, not as an absent series', () => {
     expect([...EXPECTED_RECURRING_JOB_TYPES].sort()).toEqual([
       'account_deletion.purge',
       'agent_session.orphan_reap',
+      'audit.session_events_archive',
       'auth_tokens.sweep',
       'byok_anthropic.rotation_reminder',
       'cost.recompute_nightly',

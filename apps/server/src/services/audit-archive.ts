@@ -51,24 +51,28 @@ const gzipAsync = promisify(gzipCb);
 export const HOT_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 
 /**
- * Intended upload-batch size. DECLARED WITHOUT A READER — no code path
- * references this constant.
+ * Rows a single archive RUN may take. V-1591 — this constant now has a reader:
+ * `session-events-archive-job` passes it as `archiveTable`'s `rowCap`, which
+ * reaches `selectArchivableRows` as a LIMIT, so the scheduled path can no longer
+ * load an entire backlog into memory. The reader is in the JOB rather than here
+ * because `archiveTable` takes the cap as an argument — it does not reach for
+ * this constant itself, and a caller archiving by hand may pass nothing.
  *
- * It used to say "keeps memory bounded on large windows", and two tests pinned
- * that sentence. It was never true: `archiveTable` calls `selectArchivableRows`
- * with no bound and holds the entire result set, then a projected copy, then one
- * JSONL string, then a gzip buffer. There is no ceiling anywhere in that path,
- * and the only reason it has not been felt is that this service has never been
- * scheduled — so its first run would be against the whole backlog.
+ * It spent a long time declared-without-a-reader, and the notice that replaced
+ * its original claim was right about the cost of wiring it: an unbounded read
+ * holds the whole result set, then a projected copy, then one JSONL string,
+ * then a gzip buffer. It was wrong about the only available fix. The notice
+ * assumed the read had to become a keyset walk emitting N R2 objects per
+ * window — which the ledger's single `r2ObjectKey` genuinely cannot model.
  *
- * Kept rather than deleted because it records the intended design, and wiring it
- * is a real change: the read has to become a keyset walk, and one R2 object per
- * window becomes N, which the ledger's single `r2ObjectKey` does not model.
- * `the batch size has a reader, or it says it has none` below fails if this
- * constant gains a reader while the notice remains, and fails if the notice goes
- * while the constant still has none.
+ * Capping the RUN instead of the WINDOW needs neither. Every read is already
+ * ordered oldest-first on (timestamp, id), so a capped run takes a
+ * deterministic prefix and writes exactly ONE object, which is what the ledger
+ * already models. A backlog drains over successive runs rather than one, and
+ * `capped` on the result says a backlog remains — the same shape the crypto
+ * order sweeper uses.
  */
-export const DEFAULT_BATCH_SIZE = 10_000;
+export const ARCHIVE_RUN_ROW_CAP = 10_000;
 
 /** Maximum legacy durable webhook body inspected during archive projection. */
 export const MAX_ARCHIVED_WEBHOOK_BODY_BYTES = 64 * 1024;
@@ -106,6 +110,7 @@ export interface ArchiveTableRepo {
   selectArchivableRows(
     tableName: ArchiveTableName,
     olderThan: Date,
+    limit?: number,
   ): Promise<readonly Record<string, unknown>[]>;
   /**
    * DELETE rows by id from the named table. Returns the deletion
@@ -150,6 +155,11 @@ export interface ArchiveTableResult {
   r2ObjectKey: string;
   sha256Checksum: string;
   deletedFromPostgres: boolean;
+  /**
+   * The run hit its row cap, so archivable rows remain in the window and the
+   * next run continues from where this one stopped. False for an uncapped run.
+   */
+  capped: boolean;
 }
 
 /**
@@ -175,18 +185,37 @@ export interface ArchiveAllResult {
 }
 
 /**
- * Compose the R2 object key for a given table + window. Stable shape
- * per ADR-006 §2:
- *   <prefix>/<table_name>/YYYY/MM/<table_name>_YYYY-MM.jsonl.gz
+ * Compose the R2 object key for a given table + window. Shape per ADR-006 §2,
+ * plus a content discriminator:
+ *   <prefix>/<table_name>/YYYY/MM/<table_name>_YYYY-MM_<sha12>.jsonl.gz
+ *
+ * ⛔ V-1591 — the discriminator is load-bearing, not decoration. The key used
+ * to be granular only to YYYY/MM, which held while the design was ONE unbounded
+ * run per month. Under a capped run draining a backlog it does not: two runs
+ * whose oldest row falls in the same calendar month compute the SAME key, so
+ * the second `putObject` overwrites the first — after the first run's rows were
+ * already deleted from Postgres. That is silent, unrecoverable data loss, and
+ * it is the failure this key shape now makes impossible.
+ *
+ * Content-addressing is the right discriminator rather than a counter or a
+ * timestamp, because it also PRESERVES the idempotency ADR §3 asks for: a
+ * retry that re-archives byte-identical rows lands on the same key and
+ * overwrites harmlessly, which is the documented recovery path for a run that
+ * uploaded but failed to DELETE.
+ *
+ * `checksum` is optional so existing callers keep the documented monthly shape;
+ * the scheduled path always supplies it.
  */
 export function archiveObjectKey(
   prefix: string,
   tableName: ArchiveTableName,
   windowStart: Date,
+  checksum?: string,
 ): string {
   const yyyy = windowStart.getUTCFullYear().toString();
   const mm = (windowStart.getUTCMonth() + 1).toString().padStart(2, '0');
-  return `${prefix}/${tableName}/${yyyy}/${mm}/${tableName}_${yyyy}-${mm}.jsonl.gz`;
+  const suffix = checksum === undefined ? '' : `_${checksum.slice(0, 12)}`;
+  return `${prefix}/${tableName}/${yyyy}/${mm}/${tableName}_${yyyy}-${mm}${suffix}.jsonl.gz`;
 }
 
 /**
@@ -233,11 +262,48 @@ export class AuditArchiveService {
    * Idempotent: re-running with the same `now` re-uploads the same
    * R2 key (overwrites) and re-attempts the DELETE.
    */
-  async archiveTable(tableName: ArchiveTableName): Promise<ArchiveTableResult> {
+  async archiveTable(
+    tableName: ArchiveTableName,
+    opts: { rowCap?: number } = {},
+  ): Promise<ArchiveTableResult> {
     const startedAt = this.now();
     const olderThan = new Date(startedAt.getTime() - HOT_RETENTION_MS);
 
-    const archivable = await this.rows.selectArchivableRows(tableName, olderThan);
+    // V-1591 — a capped run reads cap+1 rows to learn whether a backlog
+    // remains, then archives only `cap` of them. Asking for one extra row is
+    // how `capped` is decided WITHOUT a second COUNT query over the same
+    // window, and the extra row is discarded rather than archived.
+    const rowCap = opts.rowCap !== undefined && opts.rowCap > 0 ? opts.rowCap : null;
+    const fetched = await this.rows.selectArchivableRows(
+      tableName,
+      olderThan,
+      ...(rowCap === null ? [] : [rowCap + 1]),
+    );
+    const capped = rowCap !== null && fetched.length > rowCap;
+    const archivable = capped ? fetched.slice(0, rowCap) : fetched;
+
+    // ⛔ V-1591 — a scheduled run with nothing to do writes NOTHING. The ledger
+    // insert below is unconditional by design, so that a no-op sweep is still
+    // recorded; at ADR-006's monthly cadence that is 12 rows a year. This sweep
+    // runs hourly and its steady state IS the empty window, so the same
+    // behaviour would add ~8,760 rows a year to a table nothing prunes — trading
+    // unbounded growth in session_events for unbounded growth in the ledger that
+    // records bounding it.
+    //
+    // Only the capped path short-circuits. An uncapped call is manual and rare,
+    // and a human-triggered run that found nothing is worth the record.
+    if (rowCap !== null && archivable.length === 0) {
+      return {
+        tableName,
+        rowsArchived: 0,
+        // No object was written, so there is no key to name. The scheduled
+        // caller only logs a key when rowsArchived > 0 or capped is set.
+        r2ObjectKey: '',
+        sha256Checksum: '',
+        deletedFromPostgres: true,
+        capped: false,
+      };
+    }
 
     const uploadRows = projectRowsForArchive(tableName, archivable);
     const jsonl = rowsToJsonl(uploadRows);
@@ -246,7 +312,25 @@ export class AuditArchiveService {
 
     const windowStart =
       archivable.length > 0 ? extractTimestamp(archivable[0]!, tableName) : olderThan;
-    const r2ObjectKey = archiveObjectKey(this.r2Prefix, tableName, windowStart);
+    // ⛔ V-1591 — a CAPPED run did not reach `olderThan`, and the ledger must not
+    // claim it did. The ledger is the audit trail for a deletion: recording the
+    // full window when only a prefix was archived sends anyone reconstructing
+    // "which object holds row X" to an object that does not contain it, and
+    // makes a still-hot row look already-archived. The true end of a capped run
+    // is its LAST archived row.
+    const windowEnd =
+      capped && archivable.length > 0
+        ? extractTimestamp(archivable[archivable.length - 1]!, tableName)
+        : olderThan;
+    const r2ObjectKey = archiveObjectKey(
+      this.r2Prefix,
+      tableName,
+      windowStart,
+      // Only the capped (scheduled) path can produce two runs inside one
+      // month, so only it needs the discriminator. An uncapped call keeps
+      // the exact key ADR-006 documents.
+      ...(rowCap === null ? [] : [sha256Checksum]),
+    );
 
     await this.r2.putObject({
       key: r2ObjectKey,
@@ -259,7 +343,7 @@ export class AuditArchiveService {
     const runId = await this.ledger.insertRun({
       tableName,
       windowStart,
-      windowEnd: olderThan,
+      windowEnd,
       rowsArchived: archivable.length,
       r2ObjectKey,
       sha256Checksum,
@@ -288,6 +372,7 @@ export class AuditArchiveService {
       r2ObjectKey,
       sha256Checksum,
       deletedFromPostgres,
+      capped,
     };
   }
 

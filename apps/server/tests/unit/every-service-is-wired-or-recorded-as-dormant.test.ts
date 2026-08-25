@@ -1,9 +1,14 @@
-// A service that is built but never wired is invisible, and this repo has one.
+// A service that is built but never wired is invisible, and this repo had one.
 //
-// AuditArchiveService bounds five tables on a 90-day window and has never run.
+// AuditArchiveService bounded five tables on a 90-day window and had never run.
 // Nothing caught that, and nothing could have: job-chain-liveness reports a dead
 // chain as 0 only for chains on its roster, so a sweep that was never registered
 // emits no series at all. Absence of wiring is absence of evidence.
+//
+// V-1591 — it is wired now, for session_events only, and has left the list
+// below. The other four tables it can archive are legal/financial records and
+// remain deliberately unscheduled; that narrower state is recorded in
+// `audit-archive-is-not-scheduled-and-that-is-recorded`.
 //
 // So this enumerates it. Every exported Service/Sweeper/Worker/Reaper is either
 // reachable from the wiring roots, or listed below with the reason it is not.
@@ -33,11 +38,6 @@ const SRC = resolve(HERE, '..', '..', 'src');
  * exemption cannot sit here reading like a decision someone made.
  */
 const RECORDED_DORMANT = new Map<string, string>([
-  [
-    'AuditArchiveService',
-    'never scheduled; see audit-archive-is-not-scheduled-and-that-is-recorded — session_events ' +
-      'grows without bound because this is the only thing that would prune it',
-  ],
   [
     'DurableWebhookDeliveryService',
     'V-173 forward path. Its own header: webhooks.ts is "production today", migration deferred ' +

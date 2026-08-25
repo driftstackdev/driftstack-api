@@ -41,23 +41,6 @@ const NOT_WIRED_PENDING_DECISION: Record<string, string> = {
     'them does not. Turning it on rotates live customer secrets and breaks any ' +
     'integration that does not update inside the grace window, so it is an outward-facing ' +
     'call rather than a wiring fix.',
-  AuditArchiveService:
-    'ADR-006 90-day archiver. Sweeps rows older than 90 days out of five tables ' +
-    '(admin_audit_log, processed_stripe_events, legal_acceptances, webhook_deliveries ' +
-    'and the high-volume session_events action log) into R2 as gzipped JSON Lines, ' +
-    'then DELETEs them. Complete and tested, and audit_archive_runs exists with ZERO ' +
-    'rows — it has never run, so those tables have no retention bound and the ' +
-    'privacy-policy line about session metadata being 90-day operational has no ' +
-    'mechanism behind it. Turning it on deletes production rows after an R2 upload, ' +
-    'which is a data-movement decision rather than a wiring fix. V-1049 — and the ' +
-    'decision cuts BOTH ways: the policy also tells data subjects, under GDPR ' +
-    'Article 20, that the audit-log export carries their full audit history with ' +
-    'older entries available via paginated read. No read path unions the archive ' +
-    '(only the archiver own repo, the schema and the migrations reference it), so ' +
-    'wiring this as it stands moves rows past 90 days into R2 where nothing serves ' +
-    'them. Unwired breaks the retention line; wired breaks the portability line ' +
-    'unless the read path learns to union the archive first. The arm below pins that ' +
-    'dependency.',
   DurableWebhookDeliveryService:
     'The V-173 FORWARD path for webhook delivery. Its own header describes replacing ' +
     'the live service as "a separate future V-NNN once V-173 has soak time", so being ' +
@@ -163,10 +146,12 @@ describe('every tick-driven service is wired, or recorded as deliberately not', 
     expect(stale, 'entries for services that no longer expose a tickOnce:').toEqual([]);
   });
 
-  it('records the current split, so the THREE unwired services are a visible number rather than a thing someone has to go looking for', () => {
+  it('records the current split, so the TWO unwired services are a visible number rather than a thing someone has to go looking for', () => {
+    // V-1591 — was THREE. AuditArchiveService is wired now (for session_events
+    // only; the four audit-shaped tables it can also archive stay unscheduled,
+    // recorded in `four-of-five-audit-tables-are-still-not-archived`).
     const unwired = services.filter((s) => !wiredInApplication(s.name, s.file)).map((s) => s.name);
     expect(unwired.sort()).toEqual([
-      'AuditArchiveService',
       'DurableWebhookDeliveryService',
       'WebhookSecretForceRotationService',
     ]);
@@ -197,32 +182,73 @@ describe('every tick-driven service is wired, or recorded as deliberately not', 
 
   it('CRITICAL if the audit archiver is ever wired, the audit READ path must union the archive. The privacy policy tells data subjects their audit-log export carries their FULL history and that older entries remain available via paginated read (GDPR Article 20). The archiver DELETEs rows past 90 days after uploading them to R2, and today nothing outside the archiver reads that archive — so turning it on silently makes the portability statement false. This is not a reason to leave it off; it is a reason for the two changes to land together.', () => {
     const readRel = (rel: string): string => readFileSync(resolve(SRC, rel), 'utf8');
-    const bootstrap = readRel('lib/bootstrap.ts');
-    const app = readRel('lib/app.ts');
-    const wired =
-      /new AuditArchiveService\(/.test(bootstrap) || /new AuditArchiveService\(/.test(app);
+
+    // V-1591 — the trigger is WHICH TABLE is archived, not whether the service
+    // is constructed. Those were the same question while the only option was
+    // archiveAll() over all five tables; they stopped being the same when
+    // session_events alone was scheduled.
+    //
+    // The distinction is the whole point of the arm rather than a technicality.
+    // What makes the portability statement false is DELETING rows the export
+    // still promises to serve. The export reads `account_audit_log` and nothing
+    // else, and `session_events` is insert-only — sessions-repo writes it and no
+    // read path anywhere selects from it. Archiving it therefore cannot affect
+    // the Article 20 promise; archiving an audit-shaped table still can, and
+    // that half is unchanged below.
+    //
+    // Detection matches the scheduled call shape, archiveTable('<table>'), and
+    // treats a call to archiveAll() as archiving EVERYTHING — one such call
+    // would otherwise slip past a per-table scan.
+    const wiringSources = ['lib/bootstrap.ts', 'lib/app.ts'].map((rel) => readRel(rel)).join('\n');
+    const jobSources = readdirSync(SERVICES)
+      .filter((f) => f.endsWith('.ts'))
+      .map((f) => readFileSync(resolve(SERVICES, f), 'utf8'))
+      .join('\n');
+    const allSources = `${wiringSources}\n${jobSources}`;
+
+    /** Tables whose deletion the audit export promise depends on. */
+    const AUDIT_SHAPED = [
+      'admin_audit_log',
+      'processed_stripe_events',
+      'legal_acceptances',
+      'webhook_deliveries',
+    ];
+    const sweepsEverything = /\.archiveAll\s*\(/.test(allSources);
+    const archivedAuditShaped = AUDIT_SHAPED.filter((t) =>
+      new RegExp(`archiveTable\\(\\s*'${t}'`).test(allSources),
+    );
+    const promiseAtRisk = sweepsEverything || archivedAuditShaped.length > 0;
 
     const readPaths = ['db/account-audit-repo.ts', 'services/account-audit.ts']
       .map((rel) => readRel(rel))
       .join('\n');
     const unionsArchive = /auditArchive|audit_archive/.test(readPaths);
 
-    if (!wired) {
+    if (!promiseAtRisk) {
       // The state this file records. Asserted rather than assumed, so the branch
-      // below cannot be skipped by the service quietly appearing.
+      // below cannot be skipped by an audit-shaped table quietly appearing.
       expect(
         unionsArchive,
         'the audit read path now references the archive — good, and the entry above plus this arm ' +
           'should be rewritten to match',
+      ).toBe(false);
+      // ⛔ The premise the narrowing rests on. If the export ever starts reading
+      // session_events, archiving it DOES delete rows the export serves, and
+      // this arm must go back to being triggered by the wiring alone.
+      expect(
+        /sessionEvents|session_events/.test(readPaths),
+        'the audit export now reads session_events, which IS archived and deleted past 90 days — ' +
+          'the narrowing above is no longer sound and this arm must trigger on the wiring again',
       ).toBe(false);
       return;
     }
 
     expect(
       unionsArchive,
-      'AuditArchiveService is wired but no audit read path unions the archive, so entries older ' +
-        'than 90 days are deleted from Postgres and served by nothing — the privacy policy still ' +
-        'promises the export carries the full audit history',
+      `an audit-shaped table is archived (${sweepsEverything ? 'archiveAll()' : archivedAuditShaped.join(', ')}) ` +
+        'but no audit read path unions the archive, so entries older than 90 days are deleted ' +
+        'from Postgres and served by nothing — the privacy policy still promises the export ' +
+        'carries the full audit history',
     ).toBe(true);
   });
 

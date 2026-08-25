@@ -59,6 +59,13 @@ const DECLARED: Record<string, string> = {
   'DrizzleAgentTurnReceiptsRepo.options':
     'Clock injection seam. The default () => new Date() IS the production ' +
     'behaviour; the encryption key, which is not optional, is passed.',
+  'AuditArchiveService.r2Prefix':
+    "Test seam; the default 'audit-archive' IS the production prefix, and ADR-006 §2 pins it as " +
+    'part of the R2 key shape — passing it from bootstrap would create a second place for that ' +
+    'contract to drift.',
+  'AuditArchiveService.now':
+    'Test seam; defaults to the real clock. The service is stateless about time by design so a ' +
+    'caller can exercise archive windows deterministically.',
   'StripeApiClient.timeoutMs': 'Test seam; the default is the production timeout.',
   'StripeApiClient.baseUrl': 'Test seam; the default is the real Stripe API base.',
   'StripeApiClient.fetchImpl': 'Test seam; defaults to the platform fetch.',

@@ -72,7 +72,7 @@ describe('W448.A apps/server/src/db/audit-archive-repo.ts content parity', () =>
 
   it('selectArchivableRows: admin_audit_log → lt(timestamp) + orderBy(asc(timestamp), asc(id))', () => {
     expect(body).toMatch(
-      /case 'admin_audit_log': \{\s*\n?\s*const rows = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(adminAuditLog\)\s*\n?\s*\.where\(lt\(adminAuditLog\.timestamp, olderThan\)\)\s*\n?\s*\.orderBy\(asc\(adminAuditLog\.timestamp\), asc\(adminAuditLog\.id\)\);\s*\n?\s*return rows;\s*\n?\s*\}/,
+      /case 'admin_audit_log': \{\s*\n?\s*const query = this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(adminAuditLog\)\s*\n?\s*\.where\(lt\(adminAuditLog\.timestamp, olderThan\)\)\s*\n?\s*\.orderBy\(asc\(adminAuditLog\.timestamp\), asc\(adminAuditLog\.id\)\);\s*\n?\s*const rows = await \(cap === null \? query : query\.limit\(cap\)\);\s*\n?\s*return rows;\s*\n?\s*\}/,
     );
   });
 
@@ -83,6 +83,21 @@ describe('W448.A apps/server/src/db/audit-archive-repo.ts content parity', () =>
     expect(body).toMatch(/return rows\.map\(\(r\) => \(\{ \.\.\.r, id: r\.eventId \}\)\);/);
     expect(body).toMatch(
       /\.where\(lt\(processedStripeEvents\.receivedAt, olderThan\)\)\s*\n?\s*\.orderBy\(asc\(processedStripeEvents\.receivedAt\), asc\(processedStripeEvents\.eventId\)\);/,
+    );
+  });
+
+  it('V-1591 CRITICAL every table branch applies the row cap — a branch that forgets it is an unbounded read on the scheduled path', () => {
+    const fn = body.slice(
+      body.indexOf('async selectArchivableRows('),
+      body.indexOf('async deleteRowsById('),
+    );
+    const applied = fn.match(/cap === null \? query : query\.limit\(cap\)/g) ?? [];
+    expect(
+      applied.length,
+      'one branch per archivable table must apply the cap; a missing one reads the whole window',
+    ).toBe(5);
+    expect(fn, 'the cap must be derived from the optional limit argument').toMatch(
+      /const cap = limit !== undefined && limit > 0 \? limit : null;/,
     );
   });
 

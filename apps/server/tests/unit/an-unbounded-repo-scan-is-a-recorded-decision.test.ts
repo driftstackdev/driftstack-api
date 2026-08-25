@@ -31,7 +31,12 @@
 //                                         oversized list is still this.
 //   cost-nightly       listAllAccountIds  every active account, per nightly
 //                                         tick. Grows with the business.
-//   audit-archive      selectArchivableRows  every row older than the cutoff,
+//   audit-archive      selectArchivableRows  BOUNDED as of V-1591. Takes an
+//                                         optional row cap; the scheduled
+//                                         session_events sweep always passes
+//                                         ARCHIVE_RUN_ROW_CAP, so the read is
+//                                         a LIMITed prefix. An uncapped call
+//                                         (manual/admin) is still unbounded.
 //                                         across the five tables in AUDIT_TABLES.
 //                                         The service
 //                                         defines DEFAULT_BATCH_SIZE = 10_000
@@ -85,10 +90,6 @@ const UNBOUNDED_SCANS = new Map<string, string>([
   [
     'agent-sessions-repo.ts:listActivePairModeSessionIds',
     'capacity — only sessions that are live right now, bounded by fleet concurrency',
-  ],
-  [
-    'audit-archive-repo.ts:selectArchivableRows',
-    'CUSTOMERS — every audit row past the cutoff. DEFAULT_BATCH_SIZE bounds the upload, not this read, and the service has never run so its first run is its largest',
   ],
   [
     'cost-nightly-accounts-provider.ts:listAllAccountIds',
@@ -226,13 +227,15 @@ describe('an unbounded repo scan is a recorded decision', () => {
     expect(stale, 'recorded scan(s) that no longer match:').toEqual([]);
   });
 
-  it('CRITICAL the four customer-growth scans are still exactly these four. The operator-bounded majority is the boring part; this list is the one that decides whether the set is getting worse. A fifth arriving is the signal, and it would otherwise be one entry in a roster of a dozen.', () => {
+  it('CRITICAL the three customer-growth scans are still exactly these three. The operator-bounded majority is the boring part; this list is the one that decides whether the set is getting worse. A fourth arriving is the signal, and it would otherwise be one entry in a roster of a dozen.', () => {
     const byCustomers = [...UNBOUNDED_SCANS.entries()]
       .filter(([, why]) => why.startsWith('CUSTOMERS'))
       .map(([k]) => k)
       .sort();
+    // V-1591 — was FOUR. audit-archive-repo.ts:selectArchivableRows left the
+    // list by gaining an optional row cap that the scheduled sweep always
+    // passes, so its read is a LIMITed prefix rather than the whole window.
     expect(byCustomers, 'scans whose size is customer activity:').toEqual([
-      'audit-archive-repo.ts:selectArchivableRows',
       'cost-nightly-accounts-provider.ts:listAllAccountIds',
       'status-subscribers-repo.ts:listConfirmed',
       'status-subscribers-repo.ts:listPurgeCandidates',

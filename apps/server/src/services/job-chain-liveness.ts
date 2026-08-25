@@ -31,6 +31,7 @@ import { METRIC_NAMES, type MetricsRegistry } from './metrics-registry.js';
 export const EXPECTED_RECURRING_JOB_TYPES: readonly string[] = [
   'account_deletion.purge',
   'agent_session.orphan_reap',
+  'audit.session_events_archive',
   'auth_tokens.sweep',
   'byok_anthropic.rotation_reminder',
   'cost.recompute_nightly',

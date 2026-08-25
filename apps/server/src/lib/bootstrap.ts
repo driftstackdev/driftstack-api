@@ -217,6 +217,12 @@ import {
   registerCryptoOrderExpirySweepJob,
   enqueueNextCryptoOrderExpirySweep,
 } from '../services/crypto-order-expiry-sweep-job.js';
+import { AuditArchiveService } from '../services/audit-archive.js';
+import { DrizzleArchiveTableRepo, DrizzleArchiveLedgerRepo } from '../db/audit-archive-repo.js';
+import {
+  registerSessionEventsArchiveJob,
+  enqueueNextSessionEventsArchive,
+} from '../services/session-events-archive-job.js';
 import { CryptoTierActivationService } from '../services/crypto-tier-activation.js';
 import { DrizzleCryptoOrdersRepo } from '../db/crypto-orders-repo.js';
 import {
@@ -1741,6 +1747,38 @@ export async function createProductionDeps(
     logger, // chain survival: a swallowed tick failure is logged, then re-armed
   });
   await enqueueNextCryptoOrderExpirySweep({ scheduledJobs: scheduledJobsService });
+
+  // V-1591 — bound session_events on the 90-day window (archive to R2, then
+  // delete). AuditArchiveService has existed since V-163 and had never run:
+  // `audit_archive_runs` was empty, so the privacy policy's "session metadata 90
+  // days operational" line had no enforcer and the table grew for the lifetime
+  // of the deployment.
+  //
+  // ⛔ ONLY session_events is scheduled. The service can archive four other
+  // tables — admin_audit_log, processed_stripe_events, legal_acceptances,
+  // webhook_deliveries — and those stay unscheduled deliberately: they are legal
+  // and financial records that grow slowly, and DELETING them is a decision with
+  // consequences well past disk usage. session_events is an internal action log
+  // and is the only one of the five with genuinely unbounded growth.
+  //
+  // Registered UNCONDITIONALLY (the `service` is null when R2 is unconfigured,
+  // and the tick reports that). Gating the registration on R2 would let an unset
+  // env var silently switch off a published retention promise — see
+  // `retention-sweeps-are-unconditional-invariant`.
+  const auditArchiveService =
+    r2 === null
+      ? null
+      : new AuditArchiveService({
+          r2,
+          rows: new DrizzleArchiveTableRepo(dbHandle),
+          ledger: new DrizzleArchiveLedgerRepo(dbHandle),
+        });
+  registerSessionEventsArchiveJob({
+    scheduledJobs: scheduledJobsService,
+    service: auditArchiveService,
+    logger, // chain survival: a swallowed tick failure is logged, then re-armed
+  });
+  await enqueueNextSessionEventsArchive({ scheduledJobs: scheduledJobsService });
 
   // V-759 — privacy-policy §9 retention enforcement. ANONYMISES rather than deletes:
   // usage_records cascades from sessions and §9 requires billing data be kept 7 years, and

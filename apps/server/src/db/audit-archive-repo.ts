@@ -16,9 +16,11 @@
 // Each archiveTable() call:
 //   1. selectArchivableRows() — SELECT rows older than 90 days from
 //      this repo, sha256 + gzip + R2 upload happens in service code.
-//      ⚠️ UNBOUNDED: no limit, and the caller holds the whole result
-//      set plus a projected copy, a JSONL string and a gzip buffer.
-//      See DEFAULT_BATCH_SIZE in services/audit-archive.ts.
+//      Takes an OPTIONAL row cap (V-1591). Omitted, the read is
+//      unbounded and the caller holds the whole result set plus a
+//      projected copy, a JSONL string and a gzip buffer — which is why
+//      the scheduled path always passes one. See ARCHIVE_RUN_ROW_CAP in
+//      services/audit-archive.ts.
 //   2. insertRun() — record in audit_archive_runs ledger.
 //   3. deleteRowsById() — DELETE archived rows from Postgres.
 //   4. markDeletedFromPostgres() — flip the ledger row's flag.
@@ -46,49 +48,61 @@ export class DrizzleArchiveTableRepo implements ArchiveTableRepo {
   async selectArchivableRows(
     tableName: ArchiveTableName,
     olderThan: Date,
+    limit?: number,
   ): Promise<readonly Record<string, unknown>[]> {
+    // V-1591 — the read is bounded at the CALLER's request. Every branch below
+    // already orders oldest-first on (timestamp, id), so a limit takes a
+    // deterministic prefix of the window: the rows a capped run archives are
+    // exactly the rows the next run would have started with. Passing no limit
+    // preserves the previous unbounded behaviour for the manual/admin path.
+    const cap = limit !== undefined && limit > 0 ? limit : null;
     switch (tableName) {
       case 'admin_audit_log': {
-        const rows = await this.database.db
+        const query = this.database.db
           .select()
           .from(adminAuditLog)
           .where(lt(adminAuditLog.timestamp, olderThan))
           .orderBy(asc(adminAuditLog.timestamp), asc(adminAuditLog.id));
+        const rows = await (cap === null ? query : query.limit(cap));
         return rows;
       }
       case 'processed_stripe_events': {
         // processed_stripe_events.PK is event_id (no separate id col).
         // AuditArchiveService.extractId() reads row.id — project
         // event_id → id so the row shape matches the other tables.
-        const rows = await this.database.db
+        const query = this.database.db
           .select()
           .from(processedStripeEvents)
           .where(lt(processedStripeEvents.receivedAt, olderThan))
           .orderBy(asc(processedStripeEvents.receivedAt), asc(processedStripeEvents.eventId));
+        const rows = await (cap === null ? query : query.limit(cap));
         return rows.map((r) => ({ ...r, id: r.eventId }));
       }
       case 'legal_acceptances': {
-        const rows = await this.database.db
+        const query = this.database.db
           .select()
           .from(legalAcceptances)
           .where(lt(legalAcceptances.acceptedAt, olderThan))
           .orderBy(asc(legalAcceptances.acceptedAt), asc(legalAcceptances.id));
+        const rows = await (cap === null ? query : query.limit(cap));
         return rows;
       }
       case 'webhook_deliveries': {
-        const rows = await this.database.db
+        const query = this.database.db
           .select()
           .from(webhookDeliveries)
           .where(lt(webhookDeliveries.createdAt, olderThan))
           .orderBy(asc(webhookDeliveries.createdAt), asc(webhookDeliveries.id));
+        const rows = await (cap === null ? query : query.limit(cap));
         return rows;
       }
       case 'session_events': {
-        const rows = await this.database.db
+        const query = this.database.db
           .select()
           .from(sessionEvents)
           .where(lt(sessionEvents.createdAt, olderThan))
           .orderBy(asc(sessionEvents.createdAt), asc(sessionEvents.id));
+        const rows = await (cap === null ? query : query.limit(cap));
         return rows;
       }
     }

@@ -12,7 +12,7 @@
 //
 //   HOT_RETENTION_MS = 90 * 24 * 60 * 60 * 1000 (= 90 days).
 //
-//   DEFAULT_BATCH_SIZE = 10_000, declared without a reader. This
+//   ARCHIVE_RUN_ROW_CAP = 10_000, the per-run row cap (V-1591). This
 //   header used to repeat the constant's own claim that it "keeps
 //   memory bounded on large windows"; no code path reads it, so the
 //   arm below pins the value and the absence together.
@@ -49,13 +49,13 @@
 //
 // stays in lockstep across apps/server/src/services/audit-archive.ts.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   HOT_RETENTION_MS,
-  DEFAULT_BATCH_SIZE,
+  ARCHIVE_RUN_ROW_CAP,
   AUDIT_TABLES,
   archiveObjectKey,
   rowsToJsonl,
@@ -66,6 +66,16 @@ const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
+}
+
+/** Every .ts file under `dir`, recursively. */
+function walkTs(dir: string, out: string[] = []): string[] {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const full = resolve(dir, e.name);
+    if (e.isDirectory()) walkTs(full, out);
+    else if (e.name.endsWith('.ts')) out.push(full);
+  }
+  return out;
 }
 
 describe('W932 V-163 audit-archive cross-source invariant', () => {
@@ -101,23 +111,38 @@ describe('W932 V-163 audit-archive cross-source invariant', () => {
     expect(HOT_RETENTION_MS).toBe(7_776_000_000);
   });
 
-  // ─── DEFAULT_BATCH_SIZE = 10_000 ─────────────────────────────
+  // ─── ARCHIVE_RUN_ROW_CAP = 10_000 ────────────────────────────
 
-  it('CRITICAL DEFAULT_BATCH_SIZE = 10_000, and it is DECLARED WITHOUT A READER. This pin used to assert the sentence "keeps memory bounded on large windows" and this description used to call it "the memory ceiling per sweep tick". Neither was true: archiveTable reads every archivable row with no bound and holds the result set, a projected copy, a JSONL string and a gzip buffer. Two pins froze a claim the code never made — so the pin now records the value AND the fact that nothing reads it.', () => {
+  it('CRITICAL ARCHIVE_RUN_ROW_CAP = 10_000, and it HAS a reader. It spent a long time as DEFAULT_BATCH_SIZE, declared without one: archiveTable read every archivable row with no bound and held the result set, a projected copy, a JSONL string and a gzip buffer. Two pins froze a memory-ceiling claim the code never made. V-1591 gave it a reader (archiveTable passes it as a row cap) and scheduled the sweep, so the notice is gone and its absence is now the thing pinned.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/audit-archive.ts'));
-    expect(p).toMatch(/DECLARED WITHOUT A READER/);
-    expect(p).toMatch(/export const DEFAULT_BATCH_SIZE = 10_000;/);
-    expect(DEFAULT_BATCH_SIZE).toBe(10_000);
+    expect(p).not.toMatch(/DECLARED WITHOUT A READER/);
+    expect(p).toMatch(/export const ARCHIVE_RUN_ROW_CAP = 10_000;/);
+    expect(ARCHIVE_RUN_ROW_CAP).toBe(10_000);
+    // The old name is gone rather than aliased. webhook-worker.ts has an
+    // UNRELATED DEFAULT_BATCH_SIZE = 25, and two live meanings for one
+    // identifier is worse than a rename.
+    expect(p).not.toMatch(/DEFAULT_BATCH_SIZE/);
   });
 
   it('CRITICAL the batch size has a reader, or it says it has none. Two states are honest — a constant with a reader, or a constant that admits it has none. The state to fail is the third: no reader and no notice, which is what shipped and what two pins then froze in place. Wiring it must therefore delete the notice, and deleting the notice must wire it.', () => {
     const src = read(resolve(REPO_ROOT, 'apps/server/src/services/audit-archive.ts'));
-    // References OUTSIDE the declaration itself and outside its doc comment.
-    const readers = src
-      .split('\n')
-      .filter((l) => l.includes('DEFAULT_BATCH_SIZE'))
-      .filter((l) => !/^\s*(\*|\/\/)/.test(l))
-      .filter((l) => !/export const DEFAULT_BATCH_SIZE/.test(l));
+    // V-1591 — the scan is REPO-WIDE, and that is a correction. It used to read
+    // only audit-archive.ts, which asks "does this file use its own constant"
+    // rather than "does anything read it". An EXPORTED constant's reader
+    // legitimately lives elsewhere: `archiveTable` takes the cap as an argument,
+    // and the scheduled job is what supplies ARCHIVE_RUN_ROW_CAP. Scanning one
+    // file reported a wired, actively-used constant as having no reader.
+    const readers = walkTs(resolve(REPO_ROOT, 'apps/server/src'))
+      .flatMap((f) =>
+        read(f)
+          .split('\n')
+          .map((l) => ({ f, l })),
+      )
+      .filter(({ l }) => l.includes('ARCHIVE_RUN_ROW_CAP'))
+      .filter(({ l }) => !/^\s*(\*|\/\/)/.test(l))
+      .filter(({ l }) => !/export const ARCHIVE_RUN_ROW_CAP/.test(l))
+      // The import that carries it to its reader is not itself a use.
+      .filter(({ l }) => !/^\s*import\s/.test(l) && !/from '/.test(l));
     const admitsNoReader = /DECLARED WITHOUT A READER/.test(src);
     // EXCLUSIVE, not `||`. The first version of this arm was an OR, which the
     // description above already contradicted — it says wiring the constant must
@@ -127,8 +152,8 @@ describe('W932 V-163 audit-archive cross-source invariant', () => {
     expect(
       readers.length > 0 !== admitsNoReader,
       readers.length > 0
-        ? 'DEFAULT_BATCH_SIZE now has a reader, so remove the DECLARED WITHOUT A READER notice and say what it bounds'
-        : 'DEFAULT_BATCH_SIZE has no reader and no notice — that is a memory bound that exists only in a comment',
+        ? 'ARCHIVE_RUN_ROW_CAP now has a reader, so remove the DECLARED WITHOUT A READER notice and say what it bounds'
+        : 'ARCHIVE_RUN_ROW_CAP has no reader and no notice — that is a memory bound that exists only in a comment',
     ).toBe(true);
   });
 
@@ -185,11 +210,13 @@ describe('W932 V-163 audit-archive cross-source invariant', () => {
 
   // ─── archiveObjectKey ADR-006 §2 shape ───────────────────────
 
-  it("CRITICAL archiveObjectKey JSDoc pins ADR-006 §2 shape — '<prefix>/<table_name>/YYYY/MM/<table_name>_YYYY-MM.jsonl.gz'. The stable-key shape is the R2 partition contract.", () => {
+  it("CRITICAL archiveObjectKey JSDoc pins the ADR-006 §2 shape plus the V-1591 content discriminator — '<prefix>/<table_name>/YYYY/MM/<table_name>_YYYY-MM_<sha12>.jsonl.gz'. The stable-key shape is the R2 partition contract.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/audit-archive.ts'));
-    expect(p).toMatch(/Compose the R2 object key for a given table \+ window\. Stable shape/);
-    expect(p).toMatch(/per ADR-006 §2:/);
-    expect(p).toMatch(/<prefix>\/<table_name>\/YYYY\/MM\/<table_name>_YYYY-MM\.jsonl\.gz/);
+    expect(p).toMatch(
+      /Compose the R2 object key for a given table \+ window\. Shape per ADR-006 §2,/,
+    );
+    expect(p).toMatch(/plus a content discriminator:/);
+    expect(p).toMatch(/<prefix>\/<table_name>\/YYYY\/MM\/<table_name>_YYYY-MM_<sha12>\.jsonl\.gz/);
   });
 
   it('CRITICAL archiveObjectKey runtime — prefix + table + YYYY/MM partitioning + table_YYYY-MM.jsonl.gz filename. Verified with 2026-05.', () => {

@@ -42,6 +42,7 @@ const RECURRING_CONSUMERS = [
   'daily-maintenance-jobs.ts',
   'retention-scrub-sweeper.ts',
   'crypto-order-expiry-sweep-job.ts',
+  'session-events-archive-job.ts',
 ] as const;
 
 describe('recurring scheduled-job successor dedup invariant', () => {

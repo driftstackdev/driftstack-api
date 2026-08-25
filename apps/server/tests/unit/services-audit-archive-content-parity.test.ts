@@ -10,12 +10,13 @@
 //   • Failure modes: R2 upload fails → DELETE skipped + ledger row
 //     deletedFromPostgres=false → next-run retry; DELETE fails → R2
 //     remains, ledger records upload, next run overwrites idempotently.
-//   • HOT_RETENTION_MS = 90 days; DEFAULT_BATCH_SIZE = 10_000.
+//   • HOT_RETENTION_MS = 90 days; ARCHIVE_RUN_ROW_CAP = 10_000 (V-1591:
+//     renamed from DEFAULT_BATCH_SIZE when it gained a reader).
 //   • AUDIT_TABLES: 5 entries with per-table timestampColumn binding
 //     (admin_audit_log/timestamp, processed_stripe_events/received_at,
 //     legal_acceptances/accepted_at, webhook_deliveries/created_at,
 //     session_events/created_at).
-//   • archiveObjectKey: <prefix>/<table>/YYYY/MM/<table>_YYYY-MM.jsonl.gz
+//   • archiveObjectKey: <prefix>/<table>/YYYY/MM/<table>_YYYY-MM[_<sha12>].jsonl.gz
 //     (ADR-006 §2).
 //   • rowsToJsonl: empty input → empty string (no trailing newline).
 //   • archiveTable: select → gzip → sha256-hex → R2.putObject (content-
@@ -69,15 +70,18 @@ describe('W402.A apps/server/src/services/audit-archive.ts content parity', () =
     );
   });
 
-  it('HOT_RETENTION_MS = 90 days + DEFAULT_BATCH_SIZE = 10_000 + 64 KiB legacy body cap exports', () => {
+  it('HOT_RETENTION_MS = 90 days + ARCHIVE_RUN_ROW_CAP = 10_000 + 64 KiB legacy body cap exports', () => {
     expect(body).toMatch(
       /\/\*\* 90 days in milliseconds — the hot-retention threshold\. \*\/\s*\n?\s*export const HOT_RETENTION_MS = 90 \* 24 \* 60 \* 60 \* 1000;/,
     );
     // Was pinned as "Default upload-batch size — keeps memory bounded on large
     // windows". Nothing reads the constant, so that sentence bounded nothing;
     // pinning the VALUE and the no-reader notice is the claim that is true.
-    expect(body).toMatch(/DECLARED WITHOUT A READER/);
-    expect(body).toMatch(/export const DEFAULT_BATCH_SIZE = 10_000;/);
+    // V-1591 — the constant gained a READER (archiveTable passes it as a row
+    // cap), so the 'DECLARED WITHOUT A READER' notice is gone by design. The
+    // pin now asserts the opposite: a reader exists and the notice does not.
+    expect(body).not.toMatch(/DECLARED WITHOUT A READER/);
+    expect(body).toMatch(/export const ARCHIVE_RUN_ROW_CAP = 10_000;/);
     expect(body).toMatch(/export const MAX_ARCHIVED_WEBHOOK_BODY_BYTES = 64 \* 1024;/);
   });
 
@@ -99,7 +103,7 @@ describe('W402.A apps/server/src/services/audit-archive.ts content parity', () =
       /SELECT rows where the table's primary timestamp column is\s*\n?\s*\*\s*strictly older than `olderThan` \(i\.e\. should be archived\)\.\s*\n?\s*\*\s*Returns rows in stable order \(timestamp asc, id asc\) so the\s*\n?\s*\*\s*JSONL output is deterministic for a given window\./,
     );
     expect(body).toMatch(
-      /selectArchivableRows\(\s*\n?\s*tableName: ArchiveTableName,\s*\n?\s*olderThan: Date,\s*\n?\s*\): Promise<readonly Record<string, unknown>\[\]>;/,
+      /selectArchivableRows\(\s*\n?\s*tableName: ArchiveTableName,\s*\n?\s*olderThan: Date,\s*\n?\s*limit\?: number,\s*\n?\s*\): Promise<readonly Record<string, unknown>\[\]>;/,
     );
     expect(body).toMatch(
       /deleteRowsById\(tableName: ArchiveTableName, ids: readonly string\[\]\): Promise<number>;/,
@@ -118,18 +122,33 @@ describe('W402.A apps/server/src/services/audit-archive.ts content parity', () =
 
   it('archiveObjectKey: <prefix>/<table>/YYYY/MM/<table>_YYYY-MM.jsonl.gz partition path (ADR-006 §2)', () => {
     expect(body).toMatch(
-      /Compose the R2 object key for a given table \+ window\. Stable shape\s*\n?\s*\*\s*per ADR-006 §2:\s*\n?\s*\*\s*<prefix>\/<table_name>\/YYYY\/MM\/<table_name>_YYYY-MM\.jsonl\.gz/,
+      /Compose the R2 object key for a given table \+ window\. Shape per ADR-006 §2,\s*\n?\s*\*\s*plus a content discriminator:\s*\n?\s*\*\s*<prefix>\/<table_name>\/YYYY\/MM\/<table_name>_YYYY-MM_<sha12>\.jsonl\.gz/,
     );
     expect(body).toMatch(
-      /export function archiveObjectKey\(\s*\n?\s*prefix: string,\s*\n?\s*tableName: ArchiveTableName,\s*\n?\s*windowStart: Date,\s*\n?\s*\): string \{/,
+      /export function archiveObjectKey\(\s*\n?\s*prefix: string,\s*\n?\s*tableName: ArchiveTableName,\s*\n?\s*windowStart: Date,\s*\n?\s*checksum\?: string,\s*\n?\s*\): string \{/,
     );
     expect(body).toMatch(/const yyyy = windowStart\.getUTCFullYear\(\)\.toString\(\);/);
     expect(body).toMatch(
       /const mm = \(windowStart\.getUTCMonth\(\) \+ 1\)\.toString\(\)\.padStart\(2, '0'\);/,
     );
     expect(body).toMatch(
-      /return `\$\{prefix\}\/\$\{tableName\}\/\$\{yyyy\}\/\$\{mm\}\/\$\{tableName\}_\$\{yyyy\}-\$\{mm\}\.jsonl\.gz`;/,
+      /const suffix = checksum === undefined \? '' : `_\$\{checksum\.slice\(0, 12\)\}`;/,
     );
+    expect(body).toMatch(
+      /return `\$\{prefix\}\/\$\{tableName\}\/\$\{yyyy\}\/\$\{mm\}\/\$\{tableName\}_\$\{yyyy\}-\$\{mm\}\$\{suffix\}\.jsonl\.gz`;/,
+    );
+  });
+
+  it('V-1591 CRITICAL the capped path passes the checksum into the key. Without it two runs draining one month compute the SAME key and the second upload overwrites the first — after the first run already DELETED its rows from postgres.', () => {
+    const fn = body.slice(body.indexOf('async archiveTable('), body.indexOf('async archiveAll('));
+    expect(fn, 'archiveTable must discriminate the key whenever a row cap is in play').toMatch(
+      /\.\.\.\(rowCap === null \? \[\] : \[sha256Checksum\]\),/,
+    );
+    // The checksum must be computed BEFORE the key, or there is nothing to pass.
+    expect(
+      fn.indexOf('const sha256Checksum'),
+      'checksum is computed after the key is composed',
+    ).toBeLessThan(fn.indexOf('const r2ObjectKey'));
   });
 
   it('rowsToJsonl: newline-delimited JSON; empty input → empty string (no trailing newline)', () => {
@@ -145,9 +164,7 @@ describe('W402.A apps/server/src/services/audit-archive.ts content parity', () =
     expect(body).toMatch(
       /const olderThan = new Date\(startedAt\.getTime\(\) - HOT_RETENTION_MS\);/,
     );
-    expect(body).toMatch(
-      /const archivable = await this\.rows\.selectArchivableRows\(tableName, olderThan\);/,
-    );
+    expect(body).toMatch(/const fetched = await this\.rows\.selectArchivableRows\(/);
     expect(body).toMatch(/const uploadRows = projectRowsForArchive\(tableName, archivable\);/);
     expect(body).toMatch(/const jsonl = rowsToJsonl\(uploadRows\);/);
     expect(body).toMatch(/const compressed = await gzipAsync\(Buffer\.from\(jsonl, 'utf-8'\)\);/);
