@@ -169,22 +169,28 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
     expect(body).toMatch(/: mode === 'add'\s*\n?\s*\? 'Add proxy'\s*\n?\s*: 'Save changes'/);
   });
 
-  it("ProxyCard (Console restyle of the old 5-col ProxyTable): per-card host:port endpoint + username shown only when set (no leak when blank) + createdAt via <RelativeTime iso=p.createdAt tooltipPrefix=\"Added\"> + Edit + Remove buttons (Remove disabled while that card is busy with a 'Removing…' label, gated through the card's `busy` prop = busyId===p.id at the call site); password never rendered anywhere — pinned so credentials don't leak into the UI", () => {
-    // Endpoint host:port still formatted per card.
+  it("ProxyRow (the W3121 sortable grid, replacing the card deck): per-row host:port endpoint + username shown only when set (no leak when blank) + createdAt via <RelativeTime iso=p.createdAt tooltipPrefix=\"Added\"> + Edit + Remove (Remove disabled while that row is busy with a 'Removing…' label, gated through `busy` = busyId===p.id at the call site); password never rendered anywhere — pinned so credentials don't leak into the UI", () => {
+    // The page moved from a three-column card deck to a sortable grid, so the
+    // MARKUP moved with it (span → div, new classNames). Every property this arm
+    // was written to protect is unchanged and re-pinned below against the row;
+    // the only assertion dropped is the exact card-era element shape, which was
+    // never the point.
+    //
+    // Endpoint host:port still formatted per row.
     expect(body).toMatch(/\{p\.host\}:\{p\.port\}/);
-    // Auth: the username is surfaced only when present (the em-dash table
-    // fallback is gone — a card with no auth simply omits the username),
-    // so credentials are never invented and the password is never shown.
+    // Auth: the username is surfaced only when present — a proxy with no auth
+    // simply omits it, so credentials are never invented.
     expect(body).toMatch(/p\.username !== null && p\.username\.length > 0 &&/);
-    expect(body).toMatch(/<span className="mono truncate">\{p\.username\}<\/span>/);
+    expect(body).toMatch(/\{p\.username\}/);
     expect(body).toMatch(/<RelativeTime iso=\{p\.createdAt\} tooltipPrefix="Added" \/>/);
-    // Remove gating moved onto the card's `busy` prop (busy === busyId===p.id
-    // at the ProxyList call site).
+    // Remove gating rides the row's `busy` prop (busy === busyId===p.id at the
+    // ProxyTable call site).
     expect(body).toMatch(/busy=\{busyId === p\.id\}/);
     expect(body).toMatch(
       /onClick=\{onRemove\}\s*\n?\s*disabled=\{busy\}\s*\n?\s*>\s*\n?\s*\{busy \? 'Removing…' : 'Remove'\}/,
     );
-    // The password must never be rendered into the card markup.
+    // ⛔ The password must never be rendered into the markup. Unchanged, and the
+    // reason this arm exists at all.
     expect(body).not.toMatch(/\{p\.password\}/);
   });
 

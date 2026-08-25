@@ -100,13 +100,14 @@ async function buildHarness(deps: {
   return app;
 }
 
-function trim(app: FastifyInstance, id = PROFILE_ID) {
+function trim(app: FastifyInstance, id = PROFILE_ID, payload: Record<string, unknown> = {}) {
   return app.inject({
     method: 'POST',
     url: `/v1/profiles/${id}/trim`,
     headers: { authorization: 'Bearer ds_live_test', 'content-type': 'application/json' },
-    // The trim route takes no body, but Fastify 400s an empty-body JSON POST — send {}.
-    payload: {},
+    // The body is optional (W3120 added `scope`), but Fastify 400s an empty-body
+    // JSON POST — send {} when the caller has nothing to say.
+    payload,
   });
 }
 
@@ -156,6 +157,77 @@ describe('POST /v1/profiles/:id/trim', () => {
   afterEach(async () => {
     if (app) await app.close();
     app = undefined;
+  });
+
+  // ── W3120 (doc-150 §8.4): the clear scope ────────────────────────────────
+
+  /** A harness whose node echoes a successful trimResult, returning the sent frames. */
+  async function scopeHarness(): Promise<{
+    app: FastifyInstance;
+    sentTrim: Array<Record<string, unknown>>;
+  }> {
+    const { service } = fakeService({ ownedProfileUuid: PROFILE_UUID, dek: DEK });
+    const registry = new FleetControlRegistry();
+    const { sentTrim } = registerEchoNode(registry, 'node-scope', ({ profileId }) => ({
+      profileId,
+      ok: true,
+      newSizeBytes: 512,
+      bytesReclaimed: 128,
+    }));
+    const built = await buildHarness({
+      service,
+      fleetControlRegistry: registry,
+      r2: fakeR2({ blobExists: true }),
+    });
+    return { app: built, sentTrim };
+  }
+
+  it('CRITICAL no scope in the body means NO scope on the wire. An emitted default would change the frame every existing caller sends, and an older node decodes an unknown key as a hard failure rather than ignoring it.', async () => {
+    const h = await scopeHarness();
+    app = h.app;
+    const res = await trim(app);
+    expect(res.statusCode).toBe(200);
+    await waitFor(() => h.sentTrim.length === 1, 'trimProfile relayed');
+    expect(
+      Object.hasOwn(h.sentTrim[0]!, 'scope'),
+      'a scope key rode a request that asked for none',
+    ).toBe(false);
+  });
+
+  it('CRITICAL a named scope reaches the node verbatim — otherwise the customer clears their cache while the UI says cookies', async () => {
+    const h = await scopeHarness();
+    app = h.app;
+    const res = await trim(app, PROFILE_ID, { scope: 'cookies' });
+    expect(res.statusCode).toBe(200);
+    await waitFor(() => h.sentTrim.length === 1, 'trimProfile relayed');
+    expect(h.sentTrim[0]!.scope).toBe('cookies');
+  });
+
+  it('CRITICAL an invalid scope is refused and NOTHING is relayed. Falling back to the default on a destructive op means asking to clear cookies and having the cache cleared instead.', async () => {
+    const h = await scopeHarness();
+    app = h.app;
+    const res = await trim(app, PROFILE_ID, { scope: 'everything' });
+    expect(res.statusCode).toBe(400);
+    expect(h.sentTrim.length, 'a rejected scope still reached the node').toBe(0);
+  });
+
+  it('an unknown body key is refused rather than silently ignored, so a typo cannot clear the wrong thing', async () => {
+    const h = await scopeHarness();
+    app = h.app;
+    const res = await trim(app, PROFILE_ID, { scopes: 'cookies' });
+    expect(res.statusCode).toBe(400);
+    expect(h.sentTrim.length).toBe(0);
+  });
+
+  it('every scope the wire schema accepts is reachable through the route', async () => {
+    for (const scope of ['cache', 'cookies', 'history', 'all']) {
+      const h = await scopeHarness();
+      const res = await trim(h.app, PROFILE_ID, { scope });
+      expect(res.statusCode, `scope ${scope} was refused`).toBe(200);
+      await waitFor(() => h.sentTrim.length === 1, `trimProfile relayed for ${scope}`);
+      expect(h.sentTrim[0]!.scope).toBe(scope);
+      await h.app.close();
+    }
   });
 
   it('unknown/foreign profile id → 404 (never confirms another account’s profile)', async () => {

@@ -1182,15 +1182,25 @@ function ProxyRow({
         <span aria-hidden="true" className="mr-1.5">
           {exitCountry !== null ? flagEmoji(exitCountry) : '\ud83c\udf0d'}
         </span>
-        <span
-          className={
-            exitIp !== undefined
-              ? 'mono text-[11px] text-ink-secondary'
-              : 'italic text-[10.5px] text-ink-muted'
-          }
-        >
-          {exitIp ?? 'run Test for exit IP'}
-        </span>
+        {/* ⚠️ V-857 — THREE states, not two. `undefined` = never probed;
+            `null` = probed and the echo round-trip did not complete through this
+            proxy; an ip = a real measured exit. Collapsing null into undefined
+            tells a customer who just ran a test to "run Test", sending them round
+            the same loop. The null wording names the PROBE outcome and never our
+            release schedule — pointing at a release tells them to wait instead of
+            to look. */}
+        {exitIp !== undefined ? (
+          <span className="mono text-[11px] text-ink-secondary">{exitIp}</span>
+        ) : exit === null ? (
+          <span
+            className="text-[10.5px] text-ink-muted"
+            title="The proxy connected and authenticated, but no traffic completed a round trip through it."
+          >
+            exit geo unavailable — the probe did not complete
+          </span>
+        ) : (
+          <span className="italic text-[10.5px] text-ink-muted">run Test for exit IP</span>
+        )}
       </td>
 
       <td className="whitespace-nowrap px-3 py-2 text-right">

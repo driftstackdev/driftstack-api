@@ -1678,9 +1678,18 @@ export const TrimProfileRequestSchema = z
     sealed_blob: z.string().min(1).optional(),
     sealed_blob_url: z.string().min(1).optional(),
     sealed_blob_put_url: z.string().min(1),
+    // W3120 (doc-150 §8.4) — WHAT to clear. OPTIONAL, and absent means 'cache',
+    // which is exactly what the op did before this field existed. That keeps an
+    // old node (which ignores it) and an old CP (which omits it) both correct.
+    // The node ALSO narrows an unrecognised value to 'cache', so the enum here is
+    // a validation nicety rather than the safety property.
+    scope: z.enum(['cache', 'cookies', 'history', 'all']).optional(),
   })
   .strict();
 export type TrimProfileRequest = z.infer<typeof TrimProfileRequestSchema>;
+/** The scopes {@link TrimProfileRequestSchema} accepts, for route + GUI reuse. */
+export const TRIM_PROFILE_SCOPES = ['cache', 'cookies', 'history', 'all'] as const;
+export type TrimProfileScope = (typeof TRIM_PROFILE_SCOPES)[number];
 
 // node→CP RESULT: echoes `requestId` + `profileId`. SUCCESS → `ok:true` +
 // `newSizeBytes` (the re-sealed trimmed byte count, which A2 persists as the new

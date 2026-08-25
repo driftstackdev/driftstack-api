@@ -100,7 +100,12 @@ export interface ProfilePhoneCardProps {
   /** doc-150 §8 — "Clear cache, keep logins". Trims the profile's re-fetchable
    *  caches while keeping logins/storage/tabs. Omitted → the action isn't
    *  offered. Disabled while busy (a launch/clone/trim in flight). */
-  onTrim?: () => void;
+  /**
+   * Clear a scope of this profile's stored data. Typed with a local union rather
+   * than the SDK's TrimProfileScope so this presentational component keeps no
+   * dependency on the API client.
+   */
+  onTrim?: (scope: 'cache' | 'cookies' | 'history' | 'all') => void;
   onDelete?: () => void;
 }
 
@@ -674,21 +679,71 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                 title spells out exactly what's kept so the customer knows
                 nothing identity-bearing is dropped. Disabled while busy. */}
             {p.onTrim ? (
-              <MenuRow
-                glyph="🧹"
-                caption="Trim"
-                label={`Trim ${p.name}`}
-                title={
-                  p.anyBusy && !p.busy
-                    ? 'Another profile is busy — wait for it to finish'
-                    : 'Clear cache, keep logins'
-                }
-                disabled={p.busy || p.anyBusy}
-                onClick={() => {
-                  setActionsOpen(false);
-                  p.onTrim?.();
-                }}
-              />
+              <>
+                <MenuRow
+                  glyph="🧹"
+                  caption="Clear cache"
+                  label={`Clear cache for ${p.name}`}
+                  title={
+                    p.anyBusy && !p.busy
+                      ? 'Another profile is busy — wait for it to finish'
+                      : 'Free re-fetchable files. Logins, site data and tabs are kept'
+                  }
+                  disabled={p.busy || p.anyBusy}
+                  onClick={() => {
+                    setActionsOpen(false);
+                    p.onTrim?.('cache');
+                  }}
+                />
+                {/* W3120 (doc-150 §8.4). These three DESTROY state the customer
+                    cannot get back, unlike a cache clear which simply refetches,
+                    so each title says plainly what goes before the confirm does. */}
+                <MenuRow
+                  glyph="🍪"
+                  caption="Clear cookies"
+                  label={`Clear cookies for ${p.name}`}
+                  title={
+                    p.anyBusy && !p.busy
+                      ? 'Another profile is busy — wait for it to finish'
+                      : 'Signs this profile out everywhere. Cached files and tabs are kept'
+                  }
+                  disabled={p.busy || p.anyBusy}
+                  onClick={() => {
+                    setActionsOpen(false);
+                    p.onTrim?.('cookies');
+                  }}
+                />
+                <MenuRow
+                  glyph="🕘"
+                  caption="Clear history"
+                  label={`Clear history for ${p.name}`}
+                  title={
+                    p.anyBusy && !p.busy
+                      ? 'Another profile is busy — wait for it to finish'
+                      : 'Forgets the remembered tabs — the only page record a profile keeps'
+                  }
+                  disabled={p.busy || p.anyBusy}
+                  onClick={() => {
+                    setActionsOpen(false);
+                    p.onTrim?.('history');
+                  }}
+                />
+                <MenuRow
+                  glyph="🧨"
+                  caption="Clear everything"
+                  label={`Clear all browsing data for ${p.name}`}
+                  title={
+                    p.anyBusy && !p.busy
+                      ? 'Another profile is busy — wait for it to finish'
+                      : 'Cookies, site data, cache and tabs. The profile and its fingerprint stay'
+                  }
+                  disabled={p.busy || p.anyBusy}
+                  onClick={() => {
+                    setActionsOpen(false);
+                    p.onTrim?.('all');
+                  }}
+                />
+              </>
             ) : null}
             {p.onDelete ? (
               <>

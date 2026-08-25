@@ -54,6 +54,12 @@ export interface TransferProfileResponse {
  *  - `timeout`     → the session node did not respond in time. Safe to retry.
  *  - `error`       → the node reported a failure; the stored blob is untouched.
  */
+/**
+ * What {@link Profiles.trim} clears. Absent = `cache`, which is what the op did
+ * before scopes existed, so an older server receives an unchanged request.
+ */
+export type TrimProfileScope = 'cache' | 'cookies' | 'history' | 'all';
+
 export type TrimProfileResponse =
   | { status: 'ok'; size_bytes: number; bytes_reclaimed: number }
   | { status: 'unavailable'; reason: string }
@@ -235,18 +241,35 @@ export class ProfilesResource {
   }
 
   /**
-   * doc-150 §8 — "Clear cache, keep logins". Reclaims a profile's re-fetchable
-   * caches (HTTP/media/DOMCache/service-workers) WITHOUT touching logins,
-   * localStorage, IndexedDB or open tabs — the headline reclaim action when an
-   * account is over its storage cap. The server always responds 200 with a
+   * doc-150 §8 — "Clear cache, keep logins", now with a `scope` selecting WHAT
+   * goes. The phrase is kept verbatim because the Go and Python SDKs carry it too
+   * and a cross-SDK parity guard pins all three to the same words; it still
+   * describes the DEFAULT exactly.
+   *
+   *
+   *   `cache`    (default) re-fetchable caches only — HTTP/media/DOMCache/service
+   *              workers. Logins, site data and open tabs are KEPT. This is the
+   *              headline reclaim action when an account is over its storage cap,
+   *              and it is what an omitted `scope` does.
+   *   `cookies`  cookies + localStorage + per-origin site data. Logs the profile
+   *              out. Caches and tabs are kept.
+   *   `history`  the remembered open-tab set — the only URL trace a profile
+   *              persists. There is no browsing-history store to clear.
+   *   `all`      everything above.
+   *
+   * No scope ever touches the profile's fingerprint salts, so clearing data never
+   * changes the identity the profile presents to a site. The server always responds 200 with a
    * DISCRIMINATED body; branch on `status` (see `TrimProfileResponse`), not the
    * HTTP code. On `ok` the profile's `size_bytes` is updated server-side, so a
    * subsequent list reflects the smaller size.
    */
-  trim(id: string): Promise<TrimProfileResponse> {
+  trim(id: string, body?: { scope?: TrimProfileScope }): Promise<TrimProfileResponse> {
     return this.http.request<TrimProfileResponse>({
       method: 'POST',
       path: `/v1/profiles/${encodeURIComponent(id)}/trim`,
+      // Omitted entirely when no scope is named, so an older server that does not
+      // know the field is sent exactly the request it has always received.
+      ...(body?.scope !== undefined ? { body: { scope: body.scope } } : {}),
     });
   }
 }

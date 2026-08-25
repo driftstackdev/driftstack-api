@@ -24,6 +24,19 @@ import {
   UpdateProfileRequestSchema,
 } from '@driftstack/api-types';
 import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
+import { TRIM_PROFILE_SCOPES } from '../schemas/harness-control-protocol.js';
+
+/**
+ * The optional body of POST /v1/profiles/:id/trim.
+ *
+ * `.strict()` so a typo'd key is a 422 rather than silently clearing the default
+ * scope — on an op that DELETES a customer's cookies, "I sent scopes and it
+ * cleared the cache instead" must not be a quiet outcome.
+ */
+export const TrimScopeBodySchema = z
+  .object({ scope: z.enum(TRIM_PROFILE_SCOPES).optional() })
+  .strict();
 import type { ProfileRecord, ProfilesService } from '../services/profiles.js';
 import type { AgentSessionsRepo } from '../services/agent-sessions.js';
 import { BadRequestError, ForbiddenError, NotFoundError, ValidationError } from '../lib/errors.js';
@@ -555,6 +568,21 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
     async (req) => {
       const ctx = requireCtx(req);
       const id = uuidFromProfileId(req.params.id);
+      // W3120 (doc-150 §8.4) — WHAT to clear. Absent = 'cache', the behaviour this
+      // route had before the field existed, so every existing caller is unchanged.
+      // A malformed body is a 422 rather than a silent fallback: guessing on a
+      // DESTRUCTIVE op is how a customer asking for one thing gets another.
+      const scopeParsed = TrimScopeBodySchema.safeParse(req.body ?? {});
+      if (!scopeParsed.success) {
+        throw new BadRequestError(
+          `Invalid scope. Expected one of: ${TRIM_PROFILE_SCOPES.join(', ')}.`,
+        );
+      }
+      // Left UNDEFINED when absent rather than defaulted to 'cache'. The node
+      // already treats a missing scope as cache, so emitting the default would
+      // add a key to every frame an existing caller sends — and the harness's
+      // Codable decode is strict about keys it does not know.
+      const scope = scopeParsed.data.scope;
       // Owner-check exactly like the other mutating routes: the trim scopes to the
       // OWNER account (self → caller; admin-on-team → owner), and `service.get`
       // 404s an unknown/foreign id so we never confirm another account's profile.
@@ -574,8 +602,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
       if (agentSessions !== undefined && (await agentSessions.countActiveForProfile(id)) > 0) {
         return {
           status: 'unavailable' as const,
-          reason:
-            'profile is currently in use — stop its running session before clearing the cache',
+          reason: 'profile is currently in use — stop its running session before clearing its data',
         };
       }
 
@@ -649,6 +676,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
           dek: dekBase64,
           sealedBlobURL: block.sealedBlobUrl,
           sealedBlobPutURL: block.sealedBlobPutUrl,
+          ...(scope !== undefined ? { scope } : {}),
         });
         if (outcome.status === 'ok') {
           // Persist the new (smaller) sealed size so the storage meter + launch quota

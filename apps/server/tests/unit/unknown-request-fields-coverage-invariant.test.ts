@@ -47,6 +47,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { LaunchProfileRequestSchema, ResumeSessionRequestSchema } from '@driftstack/api-types';
 import { transportReportBodySchema } from '../../src/routes/agent-sessions-transport-report.js';
+import { TrimScopeBodySchema } from '../../src/routes/profiles.js';
 
 const ROUTES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../src/routes');
 
@@ -100,6 +101,13 @@ const EXEMPT_SCHEMAS: ReadonlyArray<readonly [string, unknown]> = [
   // strength of a six-line grep window; this schema's `.strict()` sits on line
   // eleven of its declaration, so the window missed it and the claim was wrong.
   ['transportReportBodySchema', transportReportBodySchema],
+  // W3120 — the profile-clear scope. `.strict()` for a reason stronger than
+  // tidiness: this body selects WHICH data a destructive op destroys, so a
+  // mistyped key must be a 400 rather than a silent fall back to the default.
+  // A reporter after the parse could never have anything to report, and a 200
+  // that says "I ignored `scopes` and cleared your cache instead" is a worse
+  // answer than a refusal on an op that deletes cookies.
+  ['TrimScopeBodySchema', TrimScopeBodySchema],
 ];
 const EXEMPT_SCHEMA_NAMES = EXEMPT_SCHEMAS.map(([name]) => name);
 

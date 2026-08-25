@@ -52,7 +52,11 @@ const profilesImport = vi.fn<(body: unknown) => Promise<unknown>>(() =>
 );
 // doc-150 §8 — POST /v1/profiles/:id/trim. Default to the `ok` shape so the
 // success-notice path is exercised; individual tests override the resolution.
-const profilesTrim = vi.fn<(id: string) => Promise<unknown>>(() =>
+// W3120 — the double must forward EVERY argument. It used to take only `id`, so
+// once trim gained a scope the mock silently dropped it and an assertion about
+// which scope was sent could never fail. A double that cannot see an argument
+// cannot test it.
+const profilesTrim = vi.fn<(id: string, body?: { scope?: string }) => Promise<unknown>>(() =>
   Promise.resolve({ status: 'ok', size_bytes: 1024, bytes_reclaimed: 2_097_152 }),
 );
 const refreshAccountMe = vi.fn(() => Promise.resolve());
@@ -90,7 +94,8 @@ const stableClient = {
     update: (id: string, body: unknown) => profilesUpdate(id, body),
     clone: (id: string) => profilesClone(id),
     import: (body: unknown) => profilesImport(body),
-    trim: (id: string) => profilesTrim(id),
+    trim: (id: string, body?: { scope?: string }) =>
+      body === undefined ? profilesTrim(id) : profilesTrim(id, body),
   },
   sessions: { list: () => Promise.resolve({ data: [] }) },
   agentSessions: { list: () => Promise.resolve({ data: [] }) },
@@ -222,7 +227,7 @@ describe('ProfilesView profile-lifecycle actions', () => {
 
   // doc-150 items 5/6 + §8 — storage parity with the customer dashboard:
   // per-profile size, an account-wide storage meter, and a per-profile Trim
-  // ("Clear cache, keep logins") action.
+  // (the "Clear cache" / W3120 scoped-clear) action.
   describe('Storage + Trim', () => {
     it('renders the account-wide storage meter ("X of Y used" vs the tier cap)', async () => {
       const { container } = render(<ProfilesView onGoToSettings={vi.fn()} />);
@@ -244,10 +249,12 @@ describe('ProfilesView profile-lifecycle actions', () => {
       expect(sized.textContent).toBe('3.0 MiB');
     });
 
-    it('exposes a Trim action labelled "Clear cache, keep logins" in the card menu', async () => {
+    it('exposes a Clear cache action in the card menu, saying what it keeps', async () => {
       await openCardMenu();
-      const trim = await screen.findByRole('button', { name: 'Trim Demo' });
-      expect(trim.getAttribute('title')).toBe('Clear cache, keep logins');
+      const trim = await screen.findByRole('button', { name: 'Clear cache for Demo' });
+      expect(trim.getAttribute('title')).toBe(
+        'Free re-fetchable files. Logins, site data and tabs are kept',
+      );
     });
 
     it('on confirm, calls profiles.trim and shows the freed-bytes notice (status ok)', async () => {
@@ -263,11 +270,65 @@ describe('ProfilesView profile-lifecycle actions', () => {
         </ConfirmProvider>,
       );
       fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
-      fireEvent.click(await screen.findByRole('button', { name: 'Trim Demo' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Clear cache for Demo' }));
       // The confirm dialog's primary action is "Clear cache".
       fireEvent.click(await screen.findByRole('button', { name: 'Clear cache' }));
       await waitFor(() => expect(profilesTrim).toHaveBeenCalledWith('prof_1'));
       expect(await screen.findByText(/freed 2\.0 MiB/)).toBeTruthy();
+    });
+
+    it('CRITICAL clearing cookies sends the cookies scope and warns that it signs the profile out', async () => {
+      profilesTrim.mockResolvedValueOnce({ status: 'ok', size_bytes: 1024, bytes_reclaimed: 0 });
+      render(
+        <ConfirmProvider>
+          <ProfilesView onGoToSettings={vi.fn()} />
+        </ConfirmProvider>,
+      );
+      fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Clear cookies for Demo' }));
+      // The confirmation must say what is actually lost BEFORE it happens.
+      expect(await screen.findByText(/SIGNS THE PROFILE OUT everywhere/)).toBeTruthy();
+      fireEvent.click(await screen.findByRole('button', { name: 'Clear cookies' }));
+      await waitFor(() =>
+        expect(profilesTrim).toHaveBeenCalledWith('prof_1', { scope: 'cookies' }),
+      );
+    });
+
+    it('CRITICAL a cookies clear reporting 0 bytes does NOT say "freed 0 B" — it freed identity, not disk', async () => {
+      profilesTrim.mockResolvedValueOnce({ status: 'ok', size_bytes: 1024, bytes_reclaimed: 0 });
+      render(
+        <ConfirmProvider>
+          <ProfilesView onGoToSettings={vi.fn()} />
+        </ConfirmProvider>,
+      );
+      fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Clear cookies for Demo' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Clear cookies' }));
+      const notice = await screen.findByText(/Cleared cookies and site data/);
+      expect(notice.textContent).not.toMatch(/freed/);
+    });
+
+    it('the history action is honest that a profile keeps no browsing history, only remembered tabs', async () => {
+      render(
+        <ConfirmProvider>
+          <ProfilesView onGoToSettings={vi.fn()} />
+        </ConfirmProvider>,
+      );
+      fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Clear history for Demo' }));
+      expect(await screen.findByText(/only record of visited pages a profile keeps/)).toBeTruthy();
+    });
+
+    it('every clear scope is reachable from the card menu', async () => {
+      await openCardMenu();
+      for (const name of [
+        'Clear cache for Demo',
+        'Clear cookies for Demo',
+        'Clear history for Demo',
+        'Clear all browsing data for Demo',
+      ]) {
+        expect(await screen.findByRole('button', { name }), name).toBeTruthy();
+      }
     });
 
     it('surfaces an informative (non-error) notice when there is nothing to trim (status unavailable)', async () => {
@@ -281,7 +342,7 @@ describe('ProfilesView profile-lifecycle actions', () => {
         </ConfirmProvider>,
       );
       fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
-      fireEvent.click(await screen.findByRole('button', { name: 'Trim Demo' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Clear cache for Demo' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Clear cache' }));
       await waitFor(() => expect(profilesTrim).toHaveBeenCalledWith('prof_1'));
       expect(await screen.findByText(/no saved state to trim yet/)).toBeTruthy();

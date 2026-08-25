@@ -187,7 +187,9 @@ describe('ProfilePhoneCard', () => {
     );
     fireEvent.click(screen.getByLabelText('More actions'));
     const del = screen.getByLabelText(/^Delete /);
-    const trim = screen.getByLabelText(/^Trim /);
+    // W3120 renamed the action: "Trim" was jargon, "Clear cache" is what a
+    // customer looks for. The disabled-while-busy property is unchanged.
+    const trim = screen.getByLabelText(/^Clear cache for /);
     const dup = screen.getByLabelText(/^Duplicate /);
     expect((del as HTMLButtonElement).disabled).toBe(true);
     expect((trim as HTMLButtonElement).disabled).toBe(true);

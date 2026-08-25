@@ -12,7 +12,11 @@ export type {
   RotateApiKeyResponse,
 } from './resources/api-keys.js';
 export type { WebhookEndpointList, WebhookDeliveryListPage } from './resources/webhooks.js';
-export type { ProfilesListPage, TrimProfileResponse } from './resources/profiles.js';
+export type {
+  ProfilesListPage,
+  TrimProfileResponse,
+  TrimProfileScope,
+} from './resources/profiles.js';
 export type { ProfileSnapshotsListPage } from './resources/profile-snapshots.js';
 export type {
   AccountSelfProfile,

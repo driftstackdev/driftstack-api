@@ -332,7 +332,14 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     // CP→node envelope convention). sealed_blob_put_url REQUIRED, one of
     // sealed_blob/sealed_blob_url supplies the input.
     expect(body).toMatch(
-      /export const TrimProfileRequestSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*type: z\.literal\('trimProfile'\),\s*\n?\s*requestId: z\.string\(\)\.min\(1\),\s*\n?\s*profile_id: z\.string\(\)\.min\(1\),\s*\n?\s*dek: z\.string\(\)\.min\(1\),\s*\n?\s*sealed_blob: z\.string\(\)\.min\(1\)\.optional\(\),\s*\n?\s*sealed_blob_url: z\.string\(\)\.min\(1\)\.optional\(\),\s*\n?\s*sealed_blob_put_url: z\.string\(\)\.min\(1\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\);/,
+      /export const TrimProfileRequestSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*type: z\.literal\('trimProfile'\),\s*\n?\s*requestId: z\.string\(\)\.min\(1\),\s*\n?\s*profile_id: z\.string\(\)\.min\(1\),\s*\n?\s*dek: z\.string\(\)\.min\(1\),\s*\n?\s*sealed_blob: z\.string\(\)\.min\(1\)\.optional\(\),\s*\n?\s*sealed_blob_url: z\.string\(\)\.min\(1\)\.optional\(\),\s*\n?\s*sealed_blob_put_url: z\.string\(\)\.min\(1\),/,
+    );
+    // W3120 — the scope rides as an OPTIONAL enum. Pinned separately from the
+    // block above so its optionality is visible as its own assertion: absent
+    // means 'cache', which is what the op did before the field existed, and
+    // that is the property an older node depends on.
+    expect(body).toMatch(
+      /scope: z\.enum\(\['cache', 'cookies', 'history', 'all'\]\)\.optional\(\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\);/,
     );
     // node→CP RESULT — ok?/newSizeBytes?/bytesReclaimed?/error?, lenient like cookiesResult.
     expect(body).toContain('export const TrimProfileResultSchema = z.object({');

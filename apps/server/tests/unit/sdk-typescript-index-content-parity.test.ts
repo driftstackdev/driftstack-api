@@ -64,7 +64,9 @@ describe('W424.A packages/sdk-typescript/src/index.ts content parity', () => {
       /export type \{ WebhookEndpointList, WebhookDeliveryListPage \} from '\.\/resources\/webhooks\.js';/,
     );
     expect(body).toMatch(
-      /export type \{ ProfilesListPage, TrimProfileResponse \} from '\.\/resources\/profiles\.js';/,
+      // W3120 added TrimProfileScope. Tolerant of prettier collapsing or
+      // expanding the brace list, which is formatting rather than surface.
+      /export type \{\s*ProfilesListPage,\s*TrimProfileResponse,\s*TrimProfileScope,?\s*\} from '\.\/resources\/profiles\.js';/,
     );
     expect(body).toMatch(
       /export type \{ ProfileSnapshotsListPage \} from '\.\/resources\/profile-snapshots\.js';/,

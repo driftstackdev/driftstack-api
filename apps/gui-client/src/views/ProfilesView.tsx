@@ -80,6 +80,7 @@ import {
   type ArchetypeStatus,
   type CreateAgentSessionRequest,
   type UpdateProfileRequest,
+  type TrimProfileScope,
 } from '@driftstack/sdk';
 import { openSimulatorWindow } from '../lib/open-simulator';
 import { mintGuiControlKey } from '../lib/agent-session-control';
@@ -1569,40 +1570,94 @@ export function ProfilesView({
   // surface the freed bytes + refresh so the per-profile size + account meter
   // pick up the smaller size_bytes immediately. Single-flight on busyId mirrors
   // handleDelete/handleClone so a trim can't race an in-flight launch.
-  async function handleTrim(id: string): Promise<void> {
+  /**
+   * W3120 (doc-150 §8.4) — copy for each clear scope, in the customer's words.
+   *
+   * ⚠️ `history` says "open tabs", not "history", in the BODY while the action is
+   * still called "Clear history": a profile persists no browsing history, so a
+   * confirmation promising to clear one would be a lie about what the button
+   * does. The label meets the customer where they are; the sentence tells them
+   * the truth about what goes.
+   */
+  const CLEAR_COPY: Record<
+    TrimProfileScope,
+    { verb: string; confirmLabel: string; question: (name: string) => string; done: string }
+  > = {
+    cache: {
+      verb: 'cache',
+      confirmLabel: 'Clear cache',
+      question: (name) =>
+        `Clear cached website data for "${name}"? This frees re-fetchable caches (images, scripts, service workers) to reclaim storage. Your logins, saved site data and open tabs are KEPT — they reload from the network on the next visit, just like clearing a browser cache.`,
+      done: 'Cleared cache',
+    },
+    cookies: {
+      verb: 'cookies',
+      confirmLabel: 'Clear cookies',
+      question: (name) =>
+        `Clear cookies and site data for "${name}"? This SIGNS THE PROFILE OUT everywhere — cookies, localStorage and per-origin site data all go. Cached files and open tabs are kept, and the profile's fingerprint is unchanged.`,
+      done: 'Cleared cookies and site data',
+    },
+    history: {
+      verb: 'history',
+      confirmLabel: 'Clear history',
+      question: (name) =>
+        `Clear browsing history for "${name}"? This forgets the remembered open tabs, which is the only record of visited pages a profile keeps — nothing else stores a history. Logins and cached files are kept.`,
+      done: 'Cleared browsing history',
+    },
+    all: {
+      verb: 'data',
+      confirmLabel: 'Clear everything',
+      question: (name) =>
+        `Clear ALL browsing data for "${name}"? Cookies, site data, cached files and remembered tabs all go, and the profile is signed out everywhere. The profile itself and its fingerprint are kept, so it stays the same device to every site.`,
+      done: 'Cleared all browsing data',
+    },
+  };
+
+  async function handleTrim(id: string, scope: TrimProfileScope = 'cache'): Promise<void> {
     if (!client || busyId !== null) return;
     const name = state.profiles.find((p) => p.id === id)?.name ?? 'this profile';
-    const ok = await confirm(
-      `Clear cached website data for "${name}"? This frees re-fetchable caches (images, scripts, service workers) to reclaim storage. Your logins, saved site data and open tabs are KEPT — they reload from the network on the next visit, just like clearing a browser cache.`,
-      { confirmLabel: 'Clear cache' },
-    );
+    // Indexed off a union key, so this is total by construction; the assertion
+    // is only here because noUncheckedIndexedAccess cannot see that.
+    const copy = CLEAR_COPY[scope];
+    const ok = await confirm(copy.question(name), {
+      confirmLabel: copy.confirmLabel,
+      // Everything except a cache clear DESTROYS identity the customer cannot get
+      // back, so those carry the danger tone. A cache clear is recoverable by
+      // simply revisiting the page.
+      ...(scope === 'cache' ? {} : { tone: 'danger' as const }),
+    });
     if (!ok) return;
     setBusyId(id);
     try {
-      const result = await client.profiles.trim(id);
+      // The default path calls trim(id) with ONE argument — not trim(id, undefined)
+      // — so the existing call is unchanged in every sense, and an older server
+      // receives exactly the request it has always received.
+      const result =
+        scope === 'cache'
+          ? await client.profiles.trim(id)
+          : await client.profiles.trim(id, { scope });
       if (result.status === 'ok') {
-        setState((s) => ({
-          ...s,
-          notice: `Cleared cache for "${name}" — freed ${fmtBytes(result.bytes_reclaimed)}.`,
-        }));
+        // Only a cache/all clear frees opaque bytes; cookies and tabs free
+        // identity, not disk. Reporting "freed 0 B" for those reads as a no-op,
+        // so the reclaimed figure is only mentioned when there is one.
+        const freed =
+          result.bytes_reclaimed > 0 ? ` — freed ${fmtBytes(result.bytes_reclaimed)}` : '';
+        setState((s) => ({ ...s, notice: `${copy.done} for "${name}"${freed}.` }));
         await refresh(false);
       } else if (result.status === 'error') {
         setState((s) => ({
           ...s,
-          error: `Couldn't clear cache for "${name}": ${result.reason}.`,
+          error: `Couldn't clear ${copy.verb} for "${name}": ${result.reason}.`,
         }));
       } else if (result.status === 'timeout') {
         setState((s) => ({
           ...s,
-          error: `Clearing cache for "${name}" timed out — the session node didn't respond. Try again shortly.`,
+          error: `Clearing ${copy.verb} for "${name}" timed out — the session node didn't respond. Try again shortly.`,
         }));
       } else {
         // unavailable — informative, not an error: a fresh profile with no saved
         // state has nothing to clear.
-        setState((s) => ({
-          ...s,
-          notice: `Nothing to clear for "${name}": ${result.reason}.`,
-        }));
+        setState((s) => ({ ...s, notice: `Nothing to clear for "${name}": ${result.reason}.` }));
       }
     } catch (err) {
       setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
@@ -4119,7 +4174,7 @@ export function ProfilesView({
                           onExport={
                             IMPORT_EXPORT_ENABLED ? () => void handleExport(profile.id) : undefined
                           }
-                          onTrim={() => void handleTrim(profile.id)}
+                          onTrim={(scope) => void handleTrim(profile.id, scope)}
                           onDelete={() => void handleDelete(profile.id)}
                         />
                       </div>

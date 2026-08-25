@@ -486,6 +486,7 @@ export function serializeTrimProfile(args: {
   sealedBlob?: string;
   sealedBlobURL?: string;
   sealedBlobPutURL: string;
+  scope?: 'cache' | 'cookies' | 'history' | 'all';
 }): TrimProfileRequest {
   return TrimProfileRequestSchema.parse({
     type: 'trimProfile',
@@ -495,6 +496,10 @@ export function serializeTrimProfile(args: {
     ...(args.sealedBlob !== undefined ? { sealed_blob: args.sealedBlob } : {}),
     ...(args.sealedBlobURL !== undefined ? { sealed_blob_url: args.sealedBlobURL } : {}),
     sealed_blob_put_url: args.sealedBlobPutURL,
+    // Omitted rather than defaulted to 'cache': an absent field is what an older
+    // node expects, and emitting the default would change the frame for every
+    // existing caller to say the same thing.
+    ...(args.scope !== undefined ? { scope: args.scope } : {}),
   });
 }
 

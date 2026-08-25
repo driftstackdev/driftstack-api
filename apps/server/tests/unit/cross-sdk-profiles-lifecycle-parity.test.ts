@@ -237,7 +237,10 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
     const py = read(PY_PROFILES);
 
     // Verb present per language-canonical naming.
-    expect(ts).toMatch(/trim\(id: string\)/);
+    // W3120 — the TS signature gained an optional scope body. Pinned open-ended
+    // so the VERB is still required in all three SDKs (which is what this arm is
+    // for) without freezing a parameter list that is expected to grow.
+    expect(ts).toMatch(/trim\(id: string/);
     expect(go).toMatch(/func \(r \*ProfilesResource\) Trim\(/);
     expect(py).toMatch(/def trim\(self, profile_id: str\)/);
     expect(py).toMatch(/async def trim\(self, profile_id: str\)/);

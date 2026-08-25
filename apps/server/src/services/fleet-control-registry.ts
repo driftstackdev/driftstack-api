@@ -253,6 +253,7 @@ export class FleetControlConnection {
       sealedBlob?: string;
       sealedBlobURL?: string;
       sealedBlobPutURL: string;
+      scope?: 'cache' | 'cookies' | 'history' | 'all';
     },
     timeoutMs?: number,
   ): Promise<TrimProfileOutcome> {
