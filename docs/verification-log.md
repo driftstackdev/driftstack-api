@@ -18392,3 +18392,48 @@ Six failures are outstanding and none is this work. A peer has a large change in
 `sdk-typescript-index-content-parity`, `unknown-request-fields-coverage-invariant`, plus the two
 `ProxiesView` pins outstanding since `4056443ab`. Attributed via `git status`; this batch added one test
 file and touched no source, and both files it did touch pass.
+
+## V-1605 — the rate-limit budget is sent on every response and declared on none of them
+
+The response-header surface, checked end to end against what the server actually sends. Three claims, two
+clean and one gap that is a decision rather than a defect.
+
+**`x-request-id` — declared on 879 responses and honest.** An `onSend` hook sets it, the plugin is
+registered at `app.ts:926` (checked, because an imported-but-uncalled registrar is a phantom this session
+has already nearly filed once), and a live probe found it on a 200, a 404 and a 401.
+
+**`Retry-After` — refusal-only, correctly.** Absent from every success response, which is what its own
+description in `openapi.ts` says.
+
+**The seven policy headers are the gap.** `ratelimit-limit`, `ratelimit-remaining`, `ratelimit-reset` and
+the four `x-ratelimit-*` are emitted on ORDINARY SUCCESS responses — verified against `/v1/webhooks`,
+`/v1/admin/accounts` and the public `/v1/egress/echo`, all seven present on each. They are declared on
+**429 responses alone**, 226 of them, and on no 2xx anywhere in the document.
+
+So a client is handed its remaining budget on every call and cannot learn from the specification that the
+field is there. That is the shape V-1597 fixed for `Retry-After`, pointing the other way: proactive pacing
+rather than reactive backoff, and useful on exactly the calls that are succeeding.
+
+**Not declared here, and the distinction from V-1597 is the reason.** That batch aligned thirteen
+responses with two hundred and thirteen siblings already declaring the header — an inconsistency inside
+the document, with the answer already written next to it. This would add seven headers to all 232 success
+responses with no sibling precedent, changing the response typing of every generated SDK. Publishing is a
+product commitment; `a-route-in-neither-the-spec-nor-the-docs-is-a-decision` declines the same kind of
+call in its own header, and for the same reason. Recording that the decision has not been made is the part
+that is mine.
+
+**Emission is not at risk while it waits.** All seven headers are asserted by between eighteen and
+twenty-eight test files each, so the behaviour is pinned even though the contract is silent. That is why
+this batch adds a note at the source rather than a new guard: the property is covered, the DOCUMENT is
+what is incomplete, and the next reader should not have to re-measure to find that out. The published
+`openapi.json` is byte-unchanged — verified by regenerating and diffing, since a comment in the builder
+must not move the artefact.
+
+### Concurrency
+
+Seven failures outstanding, none this work: a peer's in-flight profiles and harness-control change
+(`cross-sdk-profiles-lifecycle-parity`, `schemas-harness-control-protocol-content-parity`,
+`sdk-typescript-index-content-parity`, `unknown-request-fields-coverage-invariant`), the two `ProxiesView`
+pins from `4056443ab`, and `a-workspace-declares-what-its-source-imports` reporting hoisted `jsdom`,
+`github-slugger` and `@driftstack/api-types` — an install-state condition in workspaces this batch does
+not touch. The three openapi pins nearest this change pass.

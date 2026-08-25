@@ -329,7 +329,29 @@ function buildRegistry(): OpenAPIRegistry {
 
   // Headers a 429 can carry. The server has always sent these; the spec never
   // declared them, so a generated client could not see the one signal the
-  // response exists to give. `Retry-After` in particular is set specifically so
+  // response exists to give.
+  //
+  // V-1605 — MEASURED, and the scope of that sentence is worth writing down
+  // because the next reader will otherwise re-derive it. These seven policy
+  // headers are not 429-only on the wire: an `onSend` path emits all seven on
+  // ordinary SUCCESS responses too, verified against `/v1/webhooks`,
+  // `/v1/admin/accounts` and the public `/v1/egress/echo` — every one carried
+  // `ratelimit-limit`, `ratelimit-remaining`, `ratelimit-reset` and the four
+  // `x-ratelimit-*`. Only `Retry-After` is genuinely refusal-only, which is what
+  // its own description below says.
+  //
+  // They are DECLARED on 429 alone. So a client is handed its remaining budget on
+  // every call and cannot learn from the document that the field exists — which
+  // is the same shape as the thirteen 429s V-1597 fixed, one status over, and
+  // pointing the other way: proactive pacing rather than reactive backoff.
+  //
+  // NOT declared on 2xx here, deliberately. V-1597 aligned thirteen responses
+  // with two hundred and thirteen siblings that already declared the header; this
+  // would add seven headers to all 232 success responses with no sibling
+  // precedent, which is a decision about what the API publishes rather than a
+  // drift correction — and it changes the response typing of every generated SDK.
+  // Emission is not at risk meanwhile: all seven are asserted by between eighteen
+  // and twenty-eight test files. `Retry-After` in particular is set specifically so
   // an SDK can schedule the next attempt without parsing the problem body — and
   // without it declared, a typed client falls back to a hard-coded default.
   //
