@@ -69,8 +69,19 @@ describe('GUI settings protected API-key storage invariant', () => {
       /if \(persisted && \('apiKey' in persisted \|\| 'apiKeys' in persisted\)\) \{/,
     );
     expect(body).toMatch(/Purge BOTH historical plaintext shapes/);
+    // ⛔ V-1611 — this pin used to REQUIRE the list without `autoUpdate`, which
+    // froze a real defect in place. The purge rewrites the WHOLE settings object,
+    // so an omitted field is dropped: a customer who enabled auto-update and then
+    // hit the one-time plaintext migration silently reverted to the default,
+    // invisibly until relaunch.
+    //
+    // ⚠️ Two pins over this same file disagreed and nothing compared them. The
+    // save-path arm below already REQUIRED `autoUpdate: s.autoUpdate`, on the
+    // stated reasoning that a new persisted field must be reviewed for secrecy
+    // before it lands. Both were locally satisfied, so neither could see that
+    // they described different truths about the same object.
     expect(body).toMatch(
-      /getStore\(\)\.set\(SETTINGS_KEY, \{\s*baseUrl,\s*themeMode,\s*themeAccent,\s*telemetryOptIn,\s*startUrl,?\s*\}\);/,
+      /getStore\(\)\.set\(SETTINGS_KEY, \{\s*baseUrl,\s*themeMode,\s*themeAccent,\s*telemetryOptIn,\s*startUrl,[\s\S]*?autoUpdate,?\s*\}\);/,
     );
   });
 

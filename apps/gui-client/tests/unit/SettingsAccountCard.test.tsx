@@ -20,9 +20,13 @@ vi.mock('../../src/lib/toasts', () => ({
 
 const { SettingsAccountCard } = await import('../../src/components/SettingsAccountCard');
 
-const ACCOUNT = {
-  account: { id: 'acc_test123', email: 'user@example.com', tier: 'solo_manual' },
-};
+// ⛔ V-1611 — this fixture used to be `{ account: { id, ... } }`, which the
+// server has never sent. It agreed with the component's wrong assumption instead
+// of with the route, so the suite stayed green while the Settings tab crashed in
+// production on the SUCCESS path. The FLAT shape below is what
+// `GET /v1/account/me` actually returns; a cross-source guard now pins that so a
+// fixture cannot be the only description of the contract again.
+const ACCOUNT = { id: 'acc_test123', email: 'user@example.com', tier: 'solo_manual' };
 
 beforeEach(() => {
   useSettingsMock.mockReturnValue({

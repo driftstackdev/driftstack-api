@@ -438,6 +438,35 @@ export function SettingsView(): JSX.Element {
     }
   }
 
+  // ⛔ V-1611 — these MUST stay above the `loading` early-return below.
+  //
+  // `useBrowserSignIn` calls useState/useRef/useEffect internally. With it
+  // BELOW the early return, a mount during the boot window — `loading` starts
+  // true and flips false while children render — takes the short path on the
+  // first render and the long path on the second, so React sees a different
+  // number of hooks and throws "Rendered more hooks than during the previous
+  // render". That lands in the same error boundary as the crash this commit
+  // fixes, from a different cause, and only on a timing window.
+  const isFirstRun = settings.apiKey === null;
+
+  // V-274 — inline browser sign-in (re-uses V-268 plumbing). Lets the
+  // customer re-authorize without restarting the app post-Sign-out.
+  const browserSignIn = useBrowserSignIn({
+    baseUrl: draftUrl.trim().replace(/\/+$/, '') || settings.baseUrl,
+    onSuccess: async (issuedKey, _accountId) => {
+      await update(
+        {
+          apiKey: issuedKey,
+          baseUrl: draftUrl.trim().replace(/\/+$/, '') || settings.baseUrl,
+          telemetryOptIn: draftTelemetry,
+        },
+        { reportPersistenceFailure: true },
+      );
+      setDraftKey(issuedKey);
+      setSavedAt(Date.now());
+    },
+  });
+
   if (loading) {
     return (
       <div
@@ -464,26 +493,6 @@ export function SettingsView(): JSX.Element {
       </div>
     );
   }
-
-  const isFirstRun = settings.apiKey === null;
-
-  // V-274 — inline browser sign-in (re-uses V-268 plumbing). Lets the
-  // customer re-authorize without restarting the app post-Sign-out.
-  const browserSignIn = useBrowserSignIn({
-    baseUrl: draftUrl.trim().replace(/\/+$/, '') || settings.baseUrl,
-    onSuccess: async (issuedKey, _accountId) => {
-      await update(
-        {
-          apiKey: issuedKey,
-          baseUrl: draftUrl.trim().replace(/\/+$/, '') || settings.baseUrl,
-          telemetryOptIn: draftTelemetry,
-        },
-        { reportPersistenceFailure: true },
-      );
-      setDraftKey(issuedKey);
-      setSavedAt(Date.now());
-    },
-  });
 
   // Copy the REAL API key (not the 12+4 masked display) so a customer can
   // paste it into a script / CI secret without re-minting. Clipboard writes

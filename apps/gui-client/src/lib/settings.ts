@@ -327,6 +327,12 @@ export async function loadSettings(): Promise<DriftstackSettings> {
       themeAccent,
       telemetryOptIn,
       startUrl,
+      // V-1611 — `autoUpdate` was omitted here, so a customer who had turned it
+      // on and then happened to hit the one-time plaintext migration silently
+      // reverted to the default. The purge rewrites the WHOLE settings object,
+      // so every persisted field has to be listed or it is dropped. The return
+      // below carries it, which is why the loss was invisible until relaunch.
+      autoUpdate,
     });
     await getStore().save();
   }

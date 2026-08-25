@@ -5207,6 +5207,23 @@ export function registerAgentSessionsRoutes(
         'cache-control': 'no-cache, no-store, no-transform',
         connection: 'keep-alive',
         'x-accel-buffering': 'no',
+        // ⛔ V-1611 — WITHOUT THIS THE ROUTE IS UNUSABLE FROM THE GUI, and it
+        // fails in the least diagnosable way there is.
+        //
+        // A hijacked reply bypasses @fastify/cors entirely, and
+        // `hijackedReplyHeaders` is a deliberate ALLOW-LIST of seven rate-limit
+        // names that excludes ACAO — each SSE route is expected to answer the
+        // origin question itself. This one did not. The preflight OPTIONS
+        // succeeded (a normal reply, so the plugin answered it) and then the
+        // POST came back 200 text/event-stream with no ACAO, which WebKit
+        // rejects at the FETCH layer: `TypeError: Load failed`, no status code,
+        // nothing in the response to inspect. Session create worked (normal
+        // reply) and LiveKit worked (a WebSocket needs no ACAO), so every
+        // adjacent signal said the network was fine.
+        //
+        // Reflect only the exact allowed origin and vary caches by Origin; a
+        // disallowed origin gets no ACAO and is blocked by the browser.
+        ...sseCorsHeaders(req.headers.origin, deps.cors ?? {}),
       });
       reply.raw.write(': stream open\n\n');
 

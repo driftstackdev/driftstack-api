@@ -4,7 +4,7 @@
 // config in lib/app.ts (single source — corsOriginMatchers) so the streamed
 // 200 carries the SAME Access-Control-Allow-Origin the normal replies do.
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -116,18 +116,51 @@ describe('W586 single-source parity with lib/app.ts', () => {
     );
   });
 
-  it('both SSE routes feed the CORS config into their hijacked writeHead', () => {
-    const notif = readFileSync(
-      resolve(HERE, '..', '..', 'src', 'routes', 'account-notifications.ts'),
-      'utf8',
-    );
-    const status = readFileSync(
-      resolve(HERE, '..', '..', 'src', 'routes', 'status-stream.ts'),
-      'utf8',
-    );
-    expect(notif).toMatch(/\.\.\.sseCorsHeaders\(req\.headers\.origin, opts\.cors \?\? \{\}\)/);
-    expect(status).toMatch(
-      /\.\.\.sseCorsHeaders\(request\.headers\.origin, opts\.cors \?\? \{\}\)/,
-    );
+  it('CRITICAL every hijacked writeHead feeds CORS into it — DERIVED from the source, not a named list. A hijacked reply bypasses @fastify/cors and hijackedReplyHeaders is an allow-list that excludes ACAO, so a route that forgets sseCorsHeaders returns 200 with no ACAO and the browser rejects it at the FETCH layer: TypeError: Load failed, no status, nothing to inspect.', () => {
+    // ⛔ V-1611 — this arm used to be titled "both SSE routes" and read exactly
+    // two files by name. There were FOUR hijack sites. The message route was
+    // the one it did not name, and it shipped with no ACAO, which made AI
+    // browser automation unusable from the GUI: every message failed with a
+    // fetch-layer error while session-create (a normal reply) and LiveKit (a
+    // WebSocket, no ACAO required) both worked, so every adjacent signal said
+    // the network was healthy.
+    //
+    // A guard whose scan is narrower than its own claim is the recurring shape
+    // here — see M-1 in docs/internal/OPEN-ITEMS.md. So the population is now
+    // DERIVED by walking the route sources for `reply.raw.writeHead` /
+    // `raw.writeHead`, and a fifth hijack route cannot be added uncovered.
+    const routesDir = resolve(HERE, '..', '..', 'src', 'routes');
+    const files = readdirSync(routesDir).filter((f) => f.endsWith('.ts'));
+
+    const hijackers: string[] = [];
+    const missing: string[] = [];
+    for (const file of files) {
+      const src = readFileSync(resolve(routesDir, file), 'utf8');
+      // Count the hijack sites in this file, then require an sseCorsHeaders
+      // spread for each one. Two hijacks in one file (agent-sessions.ts has the
+      // transcript stream AND the message stream) must BOTH be covered, which
+      // is precisely the case a per-file boolean would have missed.
+      const writes = [...src.matchAll(/raw\.writeHead\(/g)].length;
+      if (writes === 0) continue;
+      hijackers.push(`${file}:${String(writes)}`);
+      const covered = [...src.matchAll(/\.\.\.sseCorsHeaders\(/g)].length;
+      if (covered < writes) {
+        missing.push(`${file} — ${String(writes)} hijack(s), ${String(covered)} sseCorsHeaders`);
+      }
+    }
+
+    // The scan found a real population, so a green means checked rather than
+    // "the regex matched nothing".
+    expect(
+      hijackers.length,
+      'no hijacked writeHead was found at all — this arm would pass over an empty set',
+    ).toBeGreaterThanOrEqual(3);
+
+    expect(
+      missing,
+      'these routes hijack the reply without reflecting CORS. A hijacked reply bypasses ' +
+        '@fastify/cors, so the browser gets 200 with no Access-Control-Allow-Origin and fails ' +
+        'the fetch with no inspectable status:',
+    ).toEqual([]);
   });
 });

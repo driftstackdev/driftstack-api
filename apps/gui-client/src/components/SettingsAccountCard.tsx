@@ -19,18 +19,32 @@ import { useSettings } from '../lib/SettingsContext';
 import { humanizeError } from '../lib/humanize-error';
 import { useToasts } from '../lib/toasts';
 
+/**
+ * The FLAT shape `GET /v1/account/me` actually returns
+ * (`apps/server/src/routes/account-me.ts` — `return { id, email, name, tier, ... }`).
+ *
+ * ⛔ V-1611 — this used to declare a NESTED `{ account: { id, email, tier } }`,
+ * which the route has never sent. `body.account` was therefore `undefined` and
+ * the first `state.account.id` in the render threw, taking the whole Settings
+ * tab down behind the error boundary. It failed on the SUCCESS path, which is
+ * why every error path looked healthy.
+ *
+ * It survived because the FIXTURES agreed with the bug rather than with the
+ * server — `tests/unit/SettingsAccountCard.test.tsx` and `SettingsView.test.tsx`
+ * both built `{ account: {...} }`, so the suite was green while production
+ * crashed. `SettingsContext.refreshAccountMe` reads the flat shape and is the
+ * canonical reader; this card was the only consumer that disagreed.
+ */
 interface AccountMeResponse {
-  account: {
-    id: string;
-    email: string;
-    tier: string;
-  };
+  id: string;
+  email: string;
+  tier: string;
 }
 
 type CardState =
   | { kind: 'loading' }
   | { kind: 'error'; message: string }
-  | { kind: 'ready'; account: AccountMeResponse['account'] };
+  | { kind: 'ready'; account: AccountMeResponse };
 
 /**
  * Resolve the dashboard URL for the configured baseUrl. The mapping
@@ -105,7 +119,7 @@ export function SettingsAccountCard(): JSX.Element | null {
         }
         const body = await readBoundedApiJson<AccountMeResponse>(res);
         if (controller.signal.aborted) return;
-        setState({ kind: 'ready', account: body.account });
+        setState({ kind: 'ready', account: body });
       } catch (err) {
         if (controller.signal.aborted) return;
         setState({

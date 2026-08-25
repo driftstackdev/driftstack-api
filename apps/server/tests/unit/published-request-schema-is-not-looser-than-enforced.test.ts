@@ -37,25 +37,73 @@
 // two different chains in the same file is a different question — which
 // endpoint's copy is authoritative — and guessing would manufacture findings.
 //
+// V-1611 — 22 → 23, and the cause is NOT what two agents each first attributed
+// it to. The real one is `fce8b90dc` (2026-08-19), *"six unbounded cursors and a
+// clone name"*, and the field is `cursor`. Established by replicating this
+// parser in a throwaway script, validating the replica against this file's real
+// number at HEAD, then running it per-revision out of git: the count was already
+// 23 before either agent's work today, and of the 125 commits touching
+// `openapi.ts` or `routes/` since the floor was written, exactly one moved it.
+//
+// ⭐ THE MECHANISM IS THE INVERSE OF THE INTUITION, and is the reason this note
+// is long. Before that commit the parser saw SEVEN `cursor: z.…` lines carrying
+// TWO distinct chains, so `chains.size !== 1` and `cursor` was rejected as
+// ambiguous. The fix replaced six of them with
+// `cursor: PaginationQuerySchema.shape.cursor` — which does not begin with `z.`
+// and is therefore INVISIBLE to FIELD_LINE. One visible chain was left, `cursor`
+// became unambiguous, and coverage ROSE.
+//
+// So DEDUPLICATING declarations increased what this guard can compare, because
+// the parser measures unambiguity rather than presence. It cuts the other way
+// too: derive the LAST visible declaration of a field and it drops out of
+// comparison entirely — silently, because the assertion below is a FLOOR.
+//
+// ⚠️ THAT INVERSE IS NOT HYPOTHETICAL — it nearly happened the same day this note
+// was written. `9c2e4c165` replaced
+// `content_type: z.enum(['image/png', 'image/jpeg', 'image/webp']),` with
+// `content_type: AvatarContentTypeSchema,`. The first is a single-line `z.`
+// chain and is exactly what FIELD_LINE reads; the second does not begin with
+// `z.` and is invisible to it. The derivation was correct and worth doing — it
+// removed a restated literal — but it deleted a declaration from this parser's
+// view as a side effect nobody was looking for.
+//
+// It cost nothing ONLY because that field is response-side and this guard's
+// population is request fields. The identical edit on a request body would have
+// dropped a field out of comparison with no test failing anywhere.
+//
+// ⭐ So: after deriving a value that appears in `openapi.ts`, re-measure the
+// compared count across the commit. Derivation is precisely a change in text
+// SHAPE, and this parser reads text.
+//
+// ⚠️ A `>=` floor detects shrinkage and is blind to its own staleness. This one
+// drifted for 631 commits and six days with nothing failing, and nothing could
+// have. It surfaced only because a peer measured the real number by hand.
+//
+// ⛔ Both agents first attributed this by ELIMINATION — each ruling out their own
+// change and inferring the other's — and both were wrong, within an hour of
+// separately writing down the rule that a search proves something only about its
+// own scope. Enumeration settled it; inference did not.
+//
 // COVERAGE, measured rather than assumed, and lower than it first looked. Of 43
 // published request field names, 34 have a same-named declaration in a route
-// file, but only 22 are unambiguous on BOTH sides and therefore actually
+// file, but only 23 are unambiguous on BOTH sides and therefore actually
 // compared — roughly half. The first floor written here said 34 and failed,
 // which is the useful kind of failure: name-matching and comparability are
 // different questions, and the gap between them was invisible until asserted.
 //
-//   22  compared
+//   23  compared
 //    9  no route-side declaration this parser can see — four are structural
 //       wrappers (`params`, `query`, `schema`, `event`, which are
 //       `z.object({...})` containers rather than fields) and five are written
 //       across several lines or declared elsewhere (`initial_url`, `value`)
-//    4  the document declares the name with more than one chain
-//       (`days`, `limit`, `cursor`, `description`)
+//    3  the document declares the name with more than one chain
+//       (`days`, `limit`, `description`) — `cursor` LEFT this bucket at
+//       `fce8b90dc` and is now in `compared`, which is what moved the count
 //    8  a route declares the name with more than one chain (`email`,
 //       `account_id`, `client_id`, `format`, `status`, `mode`, `mime`,
 //       `payment_id`)
 //
-// The ambiguous twelve are not a parser weakness so much as a real question this
+// The ambiguous eleven are not a parser weakness so much as a real question this
 // file declines to guess at: the same field name means different things on
 // different endpoints, and picking one chain to compare would manufacture
 // findings. Both numbers are floored, because a comparison that quietly covers
@@ -228,7 +276,7 @@ describe('the published request schema is not looser than the enforced one', () 
     ).toBeGreaterThan(requestOnly.length);
   });
 
-  it('CRITICAL the comparison still covers the request surface it did. MEASURED at 22 of 43 published request field names actually compared — the rest have no visible route-side declaration or are declared with more than one chain, which this file will not guess between. Reformatting a one-line chain silently shrinks what is checked, and a comparison covering less reads exactly like a comparison finding nothing.', () => {
+  it('CRITICAL the comparison still covers the request surface it did. MEASURED at 23 of 43 published request field names actually compared — the rest have no visible route-side declaration or are declared with more than one chain, which this file will not guess between. Reformatting a one-line chain silently shrinks what is checked, and a comparison covering less reads exactly like a comparison finding nothing.', () => {
     const pairs = comparablePairs();
     const publishedRequestNames = new Set(
       [...publishedFields()]
@@ -239,7 +287,7 @@ describe('the published request schema is not looser than the enforced one', () 
     expect(
       pairs.length,
       'published request fields with an unambiguous enforced counterpart',
-    ).toBeGreaterThanOrEqual(22);
+    ).toBeGreaterThanOrEqual(23);
     expect(
       publishedRequestNames.size,
       'published request field names in total',
