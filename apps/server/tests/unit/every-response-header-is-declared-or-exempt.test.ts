@@ -19,6 +19,24 @@
 // EXEMPTIONS carry their reason here rather than being silently skipped, because a
 // list of names with no justification is how a real gap hides among deliberate
 // ones.
+//
+// ⚠️ V-1617 — THE BOUNDARY OF THE CLAIM, stated because it is narrower than the
+// sentence at the top and a reader will otherwise assume otherwise. "Declared in
+// the published document" is checked as declared ANYWHERE in it, not declared on
+// the responses that actually carry the header. Those are different properties,
+// and the gap between them is currently occupied: the seven rate-limit policy
+// headers ride on ordinary SUCCESS responses (the global `onRequest` gate at
+// `lib/app.ts:961` emits all seven before its allow/deny branch) and are declared
+// on 429 responses alone. This file passes, because they are declared somewhere.
+//
+// That is deliberate, not an oversight — `lib/openapi.ts` records the decision at
+// the 429 header block: declaring seven headers across all 232 success responses
+// changes the response typing of every generated SDK, which is a decision about
+// what the API publishes rather than a drift correction. Written here so the
+// decision stays visible from the guard as well as from the builder, because a
+// deferral recorded in only one of the two files is a deferral that gets
+// rediscovered as a bug. **Tightening this arm to per-status would not find a
+// defect; it would force that decision.**
 
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';

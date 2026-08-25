@@ -334,12 +334,25 @@ function buildRegistry(): OpenAPIRegistry {
   //
   // V-1605 — MEASURED, and the scope of that sentence is worth writing down
   // because the next reader will otherwise re-derive it. These seven policy
-  // headers are not 429-only on the wire: an `onSend` path emits all seven on
-  // ordinary SUCCESS responses too, verified against `/v1/webhooks`,
+  // headers are not 429-only on the wire: they ride on ordinary SUCCESS
+  // responses too, verified against `/v1/webhooks`,
   // `/v1/admin/accounts` and the public `/v1/egress/echo` — every one carried
   // `ratelimit-limit`, `ratelimit-remaining`, `ratelimit-reset` and the four
   // `x-ratelimit-*`. Only `Retry-After` is genuinely refusal-only, which is what
   // its own description below says.
+  //
+  // V-1617 — the MECHANISM, corrected. V-1605 called it "an `onSend` path"; there
+  // is no `onSend` hook in either rate-limit middleware. Two preHandlers emit
+  // these, and it matters which, because their reach differs:
+  //   - `app.decorate('rateLimit', …)` (middleware/rate-limit.ts:313) is a
+  //     PER-ROUTE factory, so it reaches only routes naming it in `preHandler`.
+  //   - `ipRateLimit` (middleware/ip-rate-limit.ts:63) is installed GLOBALLY at
+  //     `lib/app.ts:961` via `app.addHook('onRequest', globalIpGate)`, and emits
+  //     all seven at :131-139 BEFORE its allow/deny branch — which is why every
+  //     response carries them, not just rate-limited routes.
+  // The global gate is nullable (`globalIpRateLimit: null` disables it, which the
+  // high-volume test harnesses do), so "every response" is a statement about
+  // production configuration, not about every test app.
   //
   // They are DECLARED on 429 alone. So a client is handed its remaining budget on
   // every call and cannot learn from the document that the field exists — which
@@ -351,8 +364,17 @@ function buildRegistry(): OpenAPIRegistry {
   // would add seven headers to all 232 success responses with no sibling
   // precedent, which is a decision about what the API publishes rather than a
   // drift correction — and it changes the response typing of every generated SDK.
-  // Emission is not at risk meanwhile: all seven are asserted by between eighteen
-  // and twenty-eight test files. `Retry-After` in particular is set specifically so
+  // Emission is not at risk meanwhile — but V-1605 overstated the evidence and
+  // V-1617 replaces it with the enumerated set. It said "asserted by between
+  // eighteen and twenty-eight test files"; that was a count of files MENTIONING
+  // the header names, and 24 of them are content-parity and cross-source-invariant
+  // guards matching the names in SOURCE TEXT. Three read a header off an actual
+  // response: `integration/rate-limit-headers.test.ts` (all seven on a success
+  // response, plus the `x-` set and `retry-after` on a 429), `integration/auth.test.ts`
+  // and `e2e/auth-cache-authority.spec.ts`. The conclusion survives — the wire
+  // behaviour IS pinned — but by three files, not twenty-eight, which is what a
+  // reader deciding whether one of them is redundant needs to know.
+  // `Retry-After` in particular is set specifically so
   // an SDK can schedule the next attempt without parsing the problem body — and
   // without it declared, a typed client falls back to a hard-coded default.
   //

@@ -18380,7 +18380,10 @@ call in its own header, and for the same reason. Recording that the decision has
 that is mine.
 
 **Emission is not at risk while it waits.** All seven headers are asserted by between eighteen and
-twenty-eight test files each, so the behaviour is pinned even though the contract is silent. That is why
+twenty-eight test files each, so the behaviour is pinned even though the contract is silent.
+⚠️ **That sentence is wrong and V-1617 replaces it** — the count was of files MENTIONING the header
+names, most of them content-parity guards matching source text. Three read a header off a response. The
+conclusion survives; the evidence did not. That is why
 this batch adds a note at the source rather than a new guard: the property is covered, the DOCUMENT is
 what is incomplete, and the next reader should not have to re-measure to find that out. The published
 `openapi.json` is byte-unchanged — verified by regenerating and diffing, since a comment in the builder
@@ -18774,3 +18777,46 @@ rather than its source, or read two of the three files carrying it. Neither was 
 sweep for bare duplication will produce the same thirty-four sets and the same low yield; the question
 worth asking of a duplicated vocabulary in this repo is not whether a guard exists but whether it opens
 every file, and whether what it pins is the source or a restatement of it.
+
+## V-1617 — two claims of my own, one about a mechanism and one about a count, both wrong
+
+V-1605 left the seven rate-limit policy headers declared on 429 responses alone while the server sends
+them on ordinary successes, and deliberately did not close that: declaring seven headers across 232
+success responses changes the response typing of every generated SDK, which is a decision about what the
+API publishes rather than a drift correction. **That deferral stands.** This entry corrects the two
+supporting claims it rested on, because both were mine and both were measurements rather than code.
+
+**"An `onSend` path emits all seven."** There is no `onSend` hook in either rate-limit middleware. Two
+preHandlers emit these headers and the difference in reach is the whole point:
+`app.decorate('rateLimit', …)` (`middleware/rate-limit.ts:313`) is a per-route factory reaching only
+routes that name it, while `ipRateLimit` (`middleware/ip-rate-limit.ts:63`) is installed globally at
+`lib/app.ts:961` as `app.addHook('onRequest', globalIpGate)` and emits all seven at `:131-139` **before**
+its allow/deny branch. That is why every response carries them. The observed behaviour was right; the
+named mechanism was invented, and a reader reasoning from "onSend" would look in the wrong file.
+
+The correction also carries a scope the original lacked: the global gate is nullable, and the high-volume
+test harnesses pass `globalIpRateLimit: null` to disable it. So "every response carries them" is a
+statement about production configuration, not about every app the suite builds.
+
+**"Asserted by between eighteen and twenty-eight test files each."** That was a count of files MENTIONING
+the header names. Twenty-four do; twenty-one of those are content-parity and cross-source-invariant guards
+matching the names in SOURCE TEXT, which pins the string and not the behaviour. **Three read a header off
+an actual response** — `integration/rate-limit-headers.test.ts`, which asserts all seven on a success and
+the `x-` set plus `retry-after` on a 429, `integration/auth.test.ts`, and
+`e2e/auth-cache-authority.spec.ts`. The conclusion holds: the wire behaviour is pinned. But it is pinned
+by three files, and a reader who believed twenty-eight might delete one as redundant.
+
+I have a standing rule to enumerate a set rather than report its size, and V-1605 reported a size. The
+size was of the wrong set, and nothing about the number looked wrong.
+
+**And the guard built to catch this class cannot see it.** `every-response-header-is-declared-or-exempt`
+opens "every response header the server sends is either declared in the published document or on an
+exemption list with a reason" — and checks `declared` as **anywhere in the document**, not on the
+responses that carry the header. Those are different properties. The seven policy headers satisfy it via
+their 429 declarations while being undeclared on the 232 successes that also carry them, so the gap sits
+exactly in the space between the guard's sentence and its scan. Recorded in that file's header rather than
+fixed, because tightening the arm to per-status would not find a defect — **it would force the deferred
+decision**, and that is not a guard's job to do by accident.
+
+`openapi.json` byte-identical, verified by regenerating and diffing: a comment correction must not move
+the artefact.
