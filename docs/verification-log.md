@@ -21008,3 +21008,41 @@ artifact while probing, and would not have noticed if I had not gone looking for
 
 **So the finding stands on reading, not on a coverage measurement**: the chain is established from the
 config, the CI job, and the compensating guard's own stated scope.
+
+## V-1671 — the blind region surveyed: one gap, not a pattern
+
+V-1670 established that `apps/server/src/db/` is measured by neither gate and that its compensating guard
+works at class granularity. **The obvious inference is that the region is full of holes. It is not, and
+saying so matters more than the finding that started it** — an overstated item nine would be a worse
+outcome than an unaddressed one.
+
+**Four classes of defensive construct, batch-mutated in the blind region and elsewhere:**
+
+| class                                       | population | result                                        |
+| ------------------------------------------- | ---------- | --------------------------------------------- |
+| repo page clamps                            | 5          | ⛔ **1 uncovered** (atlas) — closed in V-1667 |
+| account-scoping predicates in UPDATE WHEREs | 20         | 18 files / 24 tests react                     |
+| swallowing `catch { … return }`             | 33 of 49   | 34 files / 44 tests react                     |
+| request-schema `.max()` bounds              | 97         | 52 files / 89 tests react                     |
+
+⭐ **The account-scoping result is the strongest and the one I most expected to find a hole in.** Dropping
+the `accountId` predicate from all twenty account-scoped UPDATEs fails a guard literally named
+`db-repo-account-ownership-boundary`, plus `db-profiles-repo-tenant-scope-drizzle`,
+`db-sessions-repo-tenant-scope-drizzle`, web-session revoke, and four repo-contract tests. **The region's
+ownership boundary is verified by dedicated tests that exist precisely because coverage does not reach
+there.**
+
+**So the honest shape of the finding: the coverage exclusion is a LATENT risk, not an active hole.** The
+compensating mechanisms — integration tests, repo-contract tests, ownership-boundary guards, content-parity
+pins — cover the region well. The atlas clamp slipped through for the specific structural reason in V-1670:
+it is a defensive LINE inside a class the guard only checks is CONSTRUCTED. **One gap of that shape was
+found; three other classes came back covered.**
+
+⚠️ **Recorded because it changes what the owner should expect.** Item nine buys visibility and closes a
+class of future gap; it does not uncover a backlog. Anyone lifting the exclusion expecting to find
+neglected code will find the opposite, which is worth knowing before rather than after.
+
+⚠️ Boundary, and the same one twice: two of these batches (catches, account predicates) left `TS6133`
+unused-variable errors in the mutated tree — helpers and parameters orphaned by the mutation. That is
+`noUnusedLocals` only and vitest transpiles without typechecking, so the behavioural signal stands, **but
+neither batch is a clean instrument and no number here is claimed beyond the direction it points.**
