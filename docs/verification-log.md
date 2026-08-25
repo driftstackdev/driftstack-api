@@ -19764,3 +19764,36 @@ question was almost always about use.
 ⚠️ Left for the owner of that workspace, with one decision attached: the already-typed fetch mocks
 disagree with each other — ten use `(url: string, init?: RequestInit)`, others `(_input: RequestInfo | URL,
 _init?: RequestInit)`. Matching whatever is adjacent would bake the inconsistency in at 88 sites.
+
+## V-1640 — re-checking the reasons that were NOT owed, and one of them holds
+
+V-1635 and V-1637 asked twenty `REASON OWED` placeholders for their justifications and found that the most
+plausible sentence available — "server-sent events, which the SDK/document models poorly" — was false in
+both maps. ⛔ **That is a reason to re-check the entries that already HAD reasons**, since they were written
+by the same hand under the same assumptions and nothing had tested them either.
+
+Two of them make structurally the same claim the SSE excuse did:
+`/v1/billing/crypto-orders/{id}/receipt.pdf` and `.txt` are exempted because "the SDK's typed-response
+shape models JSON only."
+
+**It is true, and now proven rather than asserted.** `packages/sdk-typescript/src/http.ts` never calls
+`res.json()` at all — every response path reads the body as text and does `JSON.parse(text) as T`
+(three sites), and there is no `blob()`, `arrayBuffer()` or `responseType` branch anywhere in its 454
+lines. A PDF byte stream throws; so does plain text that is not JSON.
+
+⭐ **The contrast is the point, and it is not about plausibility.** Both reasons sound equally reasonable.
+"The SDK models JSON only" is TRUE because the machinery genuinely does not exist; "OpenAPI models SSE
+poorly" was FALSE because it did — `requestEventStream` sits in the same file, already used by
+`POST /v1/agent-sessions/{id}/message`. **The two sentences are indistinguishable by reading; they are
+separated only by whether anyone opened the file.** That is the whole argument for checking the reasons
+that already look answered, and it is why the entries now cite the mechanism instead of asserting the
+conclusion.
+
+⚠️ The remaining pre-existing exemptions were spot-checked and hold: `/health` and `/version` are infra
+probes; the four `/v1/oauth/*` entries are protocol endpoints a third-party client drives with its own
+credentials, consistent with what V-1635 verified about `/authorize/complete`; the seven `/v1/status/*`
+entries take no `requireAuth` at all, so no API key is involved — consistent with the same file's public
+posture that V-1635 established while refuting the SSE claim about its sibling.
+
+An exemption list is only as honest as its weakest value. This one now has no value that was written
+without opening the thing it describes.

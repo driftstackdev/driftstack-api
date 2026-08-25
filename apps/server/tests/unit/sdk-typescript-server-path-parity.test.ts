@@ -196,11 +196,11 @@ const SDK_ABSENT = new Map<string, string>([
   ],
   [
     '/v1/billing/crypto-orders/:p/receipt.pdf',
-    'returns application/pdf; the SDK’s typed-response shape models JSON only',
+    'returns application/pdf, and the SDK cannot express that. VERIFIED rather than assumed (V-1640): http.ts never calls res.json() — every path reads the body as text and does JSON.parse(text) as T, with no blob/arrayBuffer branch anywhere, so a PDF byte stream throws. Contrast the SSE excuse this map used to carry, which was false because the machinery DID exist',
   ],
   [
     '/v1/billing/crypto-orders/:p/receipt.txt',
-    'returns text/plain; the SDK’s typed-response shape models JSON only',
+    'returns text/plain, and the SDK cannot express that. Same proof as the .pdf sibling (V-1640): every response path is JSON.parse(text), so a plain-text body throws just as a PDF does',
   ],
   [
     '/v1/egress/echo',
