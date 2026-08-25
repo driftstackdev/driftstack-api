@@ -17213,3 +17213,44 @@ needs the same decision and the same fix.
 
 What is settled and recorded: the chain, the empirical 22P02, the disagreeing sibling, the false-negative
 test, and the distinction the roster is missing.
+
+## V-1579 — scoping the fix V-1578 deferred: it is at the call site, not the normalizer
+
+V-1578 recorded two admin routes returning 500 for a malformed account id and deferred the fix on a
+contract question. Re-read, that question is narrower than it looked, and the obvious implementation is
+wrong. Both are worth settling before anyone edits code.
+
+**The contract question is nearly closed.** Both readings agree the 500 must go, and
+`admin-accounts.ts` already answers **400** for exactly this shape on the same resource via
+`uuidFromPrefixedId`. Matching it is consistency, not a new contract. What changes is one assertion:
+`admin-usage.test.ts` currently expects 404 for `acc_does_not_exist` — a number produced by an in-memory
+repo where a garbage id is a miss, not by a decision.
+
+**The obvious fix is the wrong one, and two tests say so.** `admin-cost` exports `bareAccountId`, and it is
+tempting to make it reject what it cannot normalise. It must not: `admin-cost-bare-account-id.test.ts`
+pins it as a pure stripper and asserts pass-through for values that are NOT uuids —
+
+```
+bareAccountId('acc_acc_<uuid>')  ->  'acc_<uuid>'      still not a uuid
+bareAccountId('ses_<uuid>')      ->  'ses_<uuid>'      still not a uuid
+```
+
+Those arms are correct: stripping and validating are different jobs, and the tests pin the one this
+function does. **The missing check belongs at the call site**, after normalisation — `admin-cost.ts:66`
+passes `bareAccountId(params.id)` straight into the service, and that result is what must be a uuid.
+
+**So the change is two call sites, not a shared helper and not the normalizer:**
+
+```
+admin-cost.ts:66     accountId: bareAccountId(params.id)     -> validate the RESULT is a uuid
+admin-usage.ts:41    getAccount(req.account!, params.id)     -> accept acc_<uuid> or a bare uuid
+```
+
+**And the pins are lighter than V-1578 feared.** Of the four files touching admin-usage, two pin a COMMENT
+about scope enforcement rather than any validation, and the third pins `account_id` on LIST queries, not
+this route's `Params.id`. What genuinely moves is the 404 assertion and the two
+`UNCONSTRAINED_BY_DESIGN` roster entries, which stop being true once the ids are constrained.
+
+**Not applied here, deliberately.** The analysis is the part that needed care and it is done; what remains
+is mechanical and touches a live admin surface, and this session has repeatedly documented what a rushed
+edit at the end of a batch costs. Recorded so the next pass is an edit rather than an investigation.
