@@ -20309,3 +20309,43 @@ than accepted.** The account comes from the key's row, the session's row, the lo
 the one place a caller-supplied object could carry an identity field into a write. **"Where does this
 identity come from?" found a real bug in one path and confirmed four others in an afternoon**, which is a
 better yield than any token sweep I ran today.
+
+## V-1653 — a dead branch that would prefer the less-derived identity
+
+Sixth end-to-end audit, following the thread that found V-1649: **where does this identity come from?**
+Target was inbound Stripe webhooks, because that is the remaining surface where an identity arrives in an
+external payload rather than from an authenticated caller.
+
+**Clean, and the chain is worth stating because it is what makes it clean.** `ensureCustomerId` creates the
+Stripe customer and **awaits `setStripeCustomerId` BEFORE returning**, so `accounts.stripe_customer_id` is
+persisted before the Checkout Session exists. Every webhook that arrives later therefore resolves the
+account through a column we wrote. All five call sites of `findAccountIdFromCustomerOrRef` pass
+`stripeCustomerId` and an explicit `clientReferenceId: null`. `handleCheckoutCompleted` is informational and
+writes nothing; the tier grant happens on `customer.subscription.created`.
+
+⚠️ **The observation, which is latent rather than live.** `findAccountIdFromCustomerOrRef` has TWO branches,
+and it tries them in this order:
+
+1. `clientReferenceId` → `where(accounts.id = clientReferenceId)` — an id that has **round-tripped through
+   Stripe**, validated here only by the row existing.
+2. `stripeCustomerId` → `where(accounts.stripeCustomerId = …)` — a column we wrote ourselves.
+
+**Branch 1 is unreachable today**: no caller passes a non-null `clientReferenceId`, traced across all five.
+We do SEND `client_reference_id` (`stripe-billing-provider.ts` sets it to the account id, and it is genuinely
+useful in the Stripe dashboard for a human) — **we simply never read it back**, because by the time any
+event arrives the derived route always works.
+
+⛔ **So it is redundancy, not a gap. But the branch ORDER is a trap for whoever wires it up.** If a future
+caller ever supplies a `clientReferenceId`, it takes precedence over the derived `stripeCustomerId`, and the
+two are never cross-checked against each other. ⭐ **The sibling payment path already knows better**: the
+crypto IPN handler refuses and raises a mismatch alarm when the IPN's `payment_id` disagrees with the stored
+one, and its comment says exactly why — the admin apply-ipn path takes an operator-supplied id, so the guard
+exists to stop "a fat-fingered or malicious operator from attaching the wrong payment".
+
+**Left in place rather than removed.** The branch is documented, harmless while unreachable, and deleting a
+capability nobody asked me to delete is outside what this audit was for. Recorded so that whoever reaches
+for it knows the derived source should win, or the two should be cross-checked the way the crypto path
+cross-checks its own.
+
+⚠️ Boundary: reachability established by tracing all five call sites in `stripe-webhooks.ts` and grepping
+every `clientReferenceId` reference in `apps/server/src` — not by instrumenting a running system.
