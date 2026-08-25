@@ -23,6 +23,7 @@ import type { Logger } from '../lib/logger.js';
 import {
   TrimProfileResultSchema,
   type TrimProfileRequest,
+  type TrimProfileScope,
 } from '../schemas/harness-control-protocol.js';
 
 /** The connection's socket send adapts to this (JSON-stringify → ws.send). */
@@ -39,7 +40,19 @@ export const TRIM_PROFILE_REQUEST_TIMEOUT_MS = 60_000;
 
 /** Uniform outcome — never rejects, so the route maps each case to a status. */
 export type TrimProfileOutcome =
-  | { status: 'ok'; newSizeBytes: number; bytesReclaimed: number }
+  | {
+      status: 'ok';
+      newSizeBytes: number;
+      bytesReclaimed: number;
+      /**
+       * W3122 — the scope the node reported applying, or `undefined` from a node
+       * predating the field. The route MUST compare this against what it asked
+       * for: an old node accepts an unknown `scope`, ignores it, runs a cache
+       * trim and replies ok, so without this an `ok` is not evidence the
+       * requested op happened.
+       */
+      appliedScope?: TrimProfileScope;
+    }
   | { status: 'error'; message: string }
   | { status: 'timeout' };
 
@@ -88,7 +101,7 @@ export class TrimProfileRequestCorrelator {
   onResultFrame(frame: unknown): void {
     const parsed = TrimProfileResultSchema.safeParse(frame);
     if (!parsed.success) return; // not a trimResult — caller routes other types
-    const { requestId, profileId, ok, newSizeBytes, bytesReclaimed, error } = parsed.data;
+    const { requestId, profileId, ok, newSizeBytes, bytesReclaimed, error, scope } = parsed.data;
     // Cross-account spoof guard (audit M1 extended to the correlated reply path):
     // one FleetControlConnection is per-NODE and a node serves many accounts'
     // profiles. Settling by requestId ALONE would let a misrouted/echoed result
@@ -127,6 +140,9 @@ export class TrimProfileRequestCorrelator {
       status: 'ok',
       newSizeBytes,
       bytesReclaimed: bytesReclaimed ?? 0,
+      // Passed through UNJUDGED. Whether an absent echo is acceptable depends on
+      // whether the caller asked for a scope at all, which only the route knows.
+      ...(scope !== undefined ? { appliedScope: scope } : {}),
     });
   }
 

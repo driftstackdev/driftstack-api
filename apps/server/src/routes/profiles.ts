@@ -701,6 +701,42 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
           sealedBlobPutURL: block.sealedBlobPutUrl,
           ...(scope !== undefined ? { scope } : {}),
         });
+        // ⛔ W3122 — an `ok` from the node is NOT evidence the requested scope ran.
+        // A synthesized Codable decoder ignores keys outside `CodingKeys`, which
+        // is exactly what makes an ADDITIVE field safe to land on either side
+        // first. `scope` is not additive: it CHANGES WHAT THE OP DOES. So a node
+        // predating the field accepts `scope: 'cookies'`, silently drops it, runs
+        // a cache trim, and replies ok — and the customer is told they were
+        // signed out everywhere while their cookies are untouched. A silent false
+        // success on a destructive op, and `pickAnyConnected()` is version-blind,
+        // so which node answers is arbitrary.
+        //
+        // The echo closes it. A node that HAS the field always echoes it, the
+        // default included, so an ABSENT echo means "old node" unambiguously.
+        // Only checked when a scope was actually asked for: a caller that sent
+        // none wanted the cache trim an old node performs, and failing that would
+        // break every existing caller against every node.
+        if (outcome.status === 'ok' && scope !== undefined && outcome.appliedScope !== scope) {
+          req.log.warn(
+            {
+              component: 'profile-trim',
+              profileId: id,
+              requested: scope,
+              applied: outcome.appliedScope ?? 'none',
+            },
+            'fleet node did not apply the requested trim scope — reporting failure rather than a false success',
+          );
+          return {
+            status: 'error' as const,
+            // Honest about BOTH halves: the requested op did not happen, and the
+            // node did do something — it re-sealed the blob after a cache trim,
+            // so telling the customer "nothing happened" would be its own lie.
+            reason:
+              outcome.appliedScope === undefined
+                ? 'the fleet node that handled this is too old to clear anything beyond the cache. It cleared cached files instead; cookies, site data and tabs are unchanged. Retry once the fleet is updated'
+                : `the fleet node cleared "${outcome.appliedScope}" instead of "${scope}". Nothing else was changed`,
+          };
+        }
         if (outcome.status === 'ok') {
           // Persist the new (smaller) sealed size so the storage meter + launch quota
           // gate reflect the reclaimed bytes immediately. Only on a confirmed ok.

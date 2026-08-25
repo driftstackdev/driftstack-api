@@ -203,6 +203,95 @@ describe('POST /v1/profiles/:id/trim', () => {
     expect(h.sentTrim[0]!.scope).toBe('cookies');
   });
 
+  it('CRITICAL an `ok` from a node that IGNORED the scope is reported as a FAILURE, not a success. An old node accepts an unknown key, drops it, runs a cache trim and replies ok — without the echo the customer is told they were signed out everywhere while their cookies are untouched.', async () => {
+    const { service } = fakeService({ ownedProfileUuid: PROFILE_UUID, dek: DEK });
+    const registry = new FleetControlRegistry();
+    // A node predating the field: no `scope` in the reply.
+    registerEchoNode(registry, 'node-old', ({ profileId }) => ({
+      profileId,
+      ok: true,
+      newSizeBytes: 512,
+      bytesReclaimed: 128,
+    }));
+    app = await buildHarness({
+      service,
+      fleetControlRegistry: registry,
+      r2: fakeR2({ blobExists: true }),
+    });
+
+    const res = await trim(app, PROFILE_ID, { scope: 'cookies' });
+    const body = res.json<TrimBody>();
+    expect(res.statusCode).toBe(200);
+    expect(body.status, 'a node that ignored the scope was reported as success').toBe('error');
+    expect(body.reason).toMatch(/too old/i);
+    // And it says what DID happen — the blob was re-sealed after a cache trim, so
+    // claiming nothing happened would be its own lie.
+    expect(body.reason).toMatch(/cached files/i);
+  });
+
+  it('CRITICAL a node applying a DIFFERENT scope than asked is also a failure, not just an absent echo', async () => {
+    const { service } = fakeService({ ownedProfileUuid: PROFILE_UUID, dek: DEK });
+    const registry = new FleetControlRegistry();
+    registerEchoNode(registry, 'node-wrong', ({ profileId }) => ({
+      profileId,
+      ok: true,
+      newSizeBytes: 512,
+      bytesReclaimed: 128,
+      scope: 'cache',
+    }));
+    app = await buildHarness({
+      service,
+      fleetControlRegistry: registry,
+      r2: fakeR2({ blobExists: true }),
+    });
+
+    const body = (await trim(app, PROFILE_ID, { scope: 'all' })).json<TrimBody>();
+    expect(body.status).toBe('error');
+    expect(body.reason).toMatch(/cleared "cache" instead of "all"/);
+  });
+
+  it('CRITICAL a caller that asked for NO scope still succeeds against an old node — it wanted the cache trim that node performs', async () => {
+    // The check must not break every existing caller against every node: absent
+    // request + absent echo is the pre-W3120 world and is correct.
+    const { service } = fakeService({ ownedProfileUuid: PROFILE_UUID, dek: DEK });
+    const registry = new FleetControlRegistry();
+    registerEchoNode(registry, 'node-old2', ({ profileId }) => ({
+      profileId,
+      ok: true,
+      newSizeBytes: 512,
+      bytesReclaimed: 128,
+    }));
+    app = await buildHarness({
+      service,
+      fleetControlRegistry: registry,
+      r2: fakeR2({ blobExists: true }),
+    });
+
+    const body = (await trim(app)).json<TrimBody>();
+    expect(body.status, 'an existing caller was broken against an unchanged node').toBe('ok');
+    expect(body.bytes_reclaimed).toBe(128);
+  });
+
+  it('a node that echoes the scope it was asked for succeeds normally', async () => {
+    const { service } = fakeService({ ownedProfileUuid: PROFILE_UUID, dek: DEK });
+    const registry = new FleetControlRegistry();
+    registerEchoNode(registry, 'node-new', ({ profileId }) => ({
+      profileId,
+      ok: true,
+      newSizeBytes: 512,
+      bytesReclaimed: 0,
+      scope: 'cookies',
+    }));
+    app = await buildHarness({
+      service,
+      fleetControlRegistry: registry,
+      r2: fakeR2({ blobExists: true }),
+    });
+
+    const body = (await trim(app, PROFILE_ID, { scope: 'cookies' })).json<TrimBody>();
+    expect(body.status).toBe('ok');
+  });
+
   it('CRITICAL an invalid scope is refused and NOTHING is relayed. Falling back to the default on a destructive op means asking to clear cookies and having the cache cleared instead.', async () => {
     const h = await scopeHarness();
     app = h.app;

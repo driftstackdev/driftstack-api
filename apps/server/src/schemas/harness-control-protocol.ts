@@ -1718,6 +1718,13 @@ export const TrimProfileResultSchema = z.object({
   newSizeBytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
   bytesReclaimed: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
   error: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).optional(),
+  // W3122 — the scope the node ACTUALLY applied. Absent means a node predating
+  // the field, which is the ONLY way the CP can tell that a `cookies` request
+  // was silently served as a cache trim: a synthesized Codable decoder ignores
+  // unknown keys, so such a node accepts the scope, drops it, and replies ok.
+  // Tolerance is what makes an ADDITIVE field safe; `scope` changes what the op
+  // DOES, so the same tolerance is what makes it dangerous without this echo.
+  scope: z.enum(TRIM_PROFILE_SCOPES).optional(),
 });
 export type TrimProfileResult = z.infer<typeof TrimProfileResultSchema>;
 
