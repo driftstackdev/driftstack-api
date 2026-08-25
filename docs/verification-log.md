@@ -20433,3 +20433,40 @@ then 406**. None is published. What survives is the read: `ifBlocks` is `if`-onl
 suspicious, which is why that arm found eleven real cases, whereas looping over a literal or an
 independently-counted collection is ordinary correct code. **The blind spot is real; the fix is not a wider
 regex.**
+
+## V-1656 — the 32 Rust tests are not orphaned, and two other blind spots that were not there
+
+Three checks aimed at "what does the green number NOT cover", after seven end-to-end audits kept landing in
+existing prior art. ⭐ **All three came back negative, and the negatives are the useful part** — each was a
+gap I believed in, and two of them came from my own working notes.
+
+**1. Test files collected by nothing.** 3210 `.test.ts`/`.test.tsx` files on disk (excluding
+`node_modules` and `dist`) against 3209 collected by the last full gate. **The difference is exactly one:
+the guard committed after that gate ran.** No orphaned test file.
+
+⛔ **2. "32 Rust tests under `src-tauri` are collected by no vitest project" — true, and misleading, and it
+was my own note.** They are indeed invisible to vitest. **They are also run**:
+`.github/workflows/gui-build-check.yml` runs `cargo test --all-targets` unconditionally within its job.
+⚠️ With the boundary stated: that workflow is **path-filtered** to `apps/gui-client/**`,
+`packages/sdk-typescript/**` and the workflow file, so the Rust tests run on changes that touch the desktop
+client — which is when they can break — and not on a server-only change. **That is a reasonable design, not
+a gap, and my note read as "unrun" because it described the mechanism I had checked rather than the question
+I cared about.**
+
+**3. `accountAudit?.record(...)` being an OPTIONAL dep.** An unwired optional dependency is a feature that
+exists only in tests — the audit call becomes a silent no-op and nothing fails. Already covered, and
+thoroughly: `bootstrap-unwired-optional-deps-are-declared` carries an `AUDIT_WIRED` table naming every
+service that accepts a fail-open audit recorder, plus a detector positive control, a scan-reached arm, a
+staleness arm, and an over-reporting arm. It is a better guard than the one I would have written.
+
+⭐ **The pattern across today's second half is worth stating plainly: seven end-to-end audits produced one
+defect, and every follow-on thread landed in prior art that already covered it.** That is evidence about the
+codebase rather than about the search — the areas reachable from `apps/server` are densely guarded, and the
+guards are built the way the ledger keeps asking for: positive controls, staleness arms, and stated
+boundaries.
+
+⚠️ And a note on method, since it cost time: I ranked services by "test mentions per kLOC" to choose the
+next audit target, and it put `crypto-tier-activation` at the bottom — 386 lines, one mention. **It has a
+dedicated `crypto-tier-activation.test.ts` and three more.** The proxy matched filename stems, and
+`crypto-order-paid-tier-activation.test.ts` does not contain the stem `crypto-tier-activation`. **Third
+proxy metric to mislead me today; I have stopped using them to choose targets.**
