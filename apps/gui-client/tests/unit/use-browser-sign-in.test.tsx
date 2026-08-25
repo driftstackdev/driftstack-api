@@ -29,18 +29,23 @@ vi.mock('@tauri-apps/plugin-deep-link', () => ({
 const { useBrowserSignIn } = await import('../../src/lib/browser-sign-in');
 const { open: mockOpenInBrowser } = await import('@tauri-apps/plugin-shell');
 
-interface FetchResponseShape {
-  ok: boolean;
-  status: number;
-  json: () => Promise<unknown>;
-}
-
-function makeResponse(body: unknown, status = 200): FetchResponseShape {
-  return {
-    ok: status >= 200 && status < 300,
+// A REAL Response, not a three-field stand-in.
+//
+// ⛔ The stub declared `{ok, status, json}` and was cast into a `fetch` mock, so
+// TypeScript rejected it 26 times — a Response has far more surface than three
+// fields. Widening the cast would have silenced that while keeping a double
+// that can drift from the real object silently.
+//
+// Safe here, checked rather than assumed: the subject reads only `res.ok` and
+// `res.status` (browser-sign-in.ts), no call site passes a bodyless status such
+// as 204 or 304 — the statuses in this file are 200, 400 and 429 — and nothing
+// in this file reads `.json()`. So the real constructor covers every field the
+// stub did and every field it did not.
+function makeResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
     status,
-    json: () => Promise.resolve(body),
-  };
+    headers: { 'content-type': 'application/json' },
+  });
 }
 
 const initiateBody = {
@@ -228,16 +233,24 @@ describe('useBrowserSignIn — error paths', () => {
         new Error('securityd denied /Users/customer/Library/Keychains token=issued-secret'),
       )
       .mockResolvedValueOnce(undefined);
-    const bound = makeResponse({
-      status: 'bound',
-      api_key: 'ds_live_issued_key',
-      account_id: 'acc_4b51130b-4621-4d14-affe-89470fe6a297',
-    });
+    // ⛔ A FACTORY, not a shared instance. This used to be one `const bound`
+    // queued twice, which worked only because the old stub's `json` was a
+    // closure that could be called repeatedly. A real Response body is
+    // SINGLE-USE: the second consumer gets "Body is unusable" and the flow
+    // never reaches its success state. Calling it twice is also the more
+    // faithful double — a real fetch never hands back the same Response
+    // instance for two requests.
+    const bound = (): Response =>
+      makeResponse({
+        status: 'bound',
+        api_key: 'ds_live_issued_key',
+        account_id: 'acc_4b51130b-4621-4d14-affe-89470fe6a297',
+      });
     fetchSpy
       .mockResolvedValueOnce(makeResponse(initiateBody))
-      .mockResolvedValueOnce(bound)
+      .mockResolvedValueOnce(bound())
       .mockResolvedValueOnce(makeResponse(initiateBody))
-      .mockResolvedValueOnce(bound);
+      .mockResolvedValueOnce(bound());
 
     const { result } = renderHook(() => useBrowserSignIn(defaultOpts(onSuccess)));
     act(() => result.current.start());
@@ -308,9 +321,9 @@ describe('useBrowserSignIn — error paths', () => {
       // Forcing through a typed branch avoids the @ts-eslint
       // `no-base-to-string` lint complaint about Request → '[object Object]'.
       const u = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
-      if (u.includes('/initiate')) return Promise.resolve(makeResponse(initiateBody) as Response);
+      if (u.includes('/initiate')) return Promise.resolve(makeResponse(initiateBody));
       // Every poll returns pending — only the timeout will move us forward.
-      return Promise.resolve(makeResponse({ status: 'pending' }) as Response);
+      return Promise.resolve(makeResponse({ status: 'pending' }));
     });
 
     const { result } = renderHook(() => useBrowserSignIn(defaultOpts()));
@@ -586,14 +599,14 @@ describe('useBrowserSignIn — cleanup paths', () => {
     // The settledRef guard makes any in-flight exchange a no-op once the
     // flow has stopped.
     const onSuccess = vi.fn(() => Promise.resolve());
-    let resolveExchange: ((r: FetchResponseShape) => void) | undefined;
-    const pendingExchange = new Promise<FetchResponseShape>((res) => {
+    let resolveExchange: ((r: Response) => void) | undefined;
+    const pendingExchange = new Promise<Response>((res) => {
       resolveExchange = res;
     });
 
     fetchSpy.mockImplementation((url: RequestInfo | URL) => {
       const u = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
-      if (u.includes('/initiate')) return Promise.resolve(makeResponse(initiateBody) as Response);
+      if (u.includes('/initiate')) return Promise.resolve(makeResponse(initiateBody));
       // Every exchange poll hangs until we resolve it post-cancel.
       return pendingExchange;
     });
