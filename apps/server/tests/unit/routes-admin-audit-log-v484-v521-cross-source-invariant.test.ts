@@ -10,7 +10,7 @@
 //   PUBLIC_ID_RE — same regex as admin-api-keys (prefix_uuid format).
 //
 //   maybeUuidFromInput — 'Accept either a raw UUID or a prefixed id;
-//   return the UUID'. Branch: 36-char + /^[0-9a-f-]{36}$/i → raw;
+//   return the UUID'. Branch: strict dashed-UUID shape → raw (V-1565);
 //   else PUBLIC_ID_RE match else BadRequestError.
 //
 //   throwIfMissingScope(ctx, 'driftstack_internal_admin') belt-and-
@@ -61,7 +61,11 @@ describe('W1027 routes/admin-audit-log V-484 + V-521 cross-source invariant', ()
     );
     expect(p).toMatch(/if \(value === undefined\) return undefined;/);
     expect(p).toMatch(
-      /if \(value\.length === 36 && \/\^\[0-9a-f-\]\{36\}\$\/i\.test\(value\)\) return value;/,
+      // V-1565 — was a hex-or-dash class of length 36, which is not a UUID shape:
+      // it admitted dash-less hex and an all-dash string, and both reached a
+      // Postgres uuid column as a query filter, answering 500 instead of 400.
+      // Now the strict dashed shape already declared in this route for the cursor.
+      /if \(CURSOR_UUID_RE\.test\(value\)\) return value;/,
     );
     expect(p).toMatch(
       /throw new BadRequestError\(`Invalid id "\$\{value\}"\. Expected a UUID or prefixed id\.`\);/,

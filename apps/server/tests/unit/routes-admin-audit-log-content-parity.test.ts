@@ -12,7 +12,7 @@
 //   • Query schema from @driftstack/api-types
 //     (ListAuditLogQuerySchema + ListAuditLogQueryInput types).
 //   • maybeUuidFromInput: accept raw UUID OR prefixed id; case-
-//     insensitive 36-char regex check; BadRequestError on neither.
+//     strict dashed-UUID check (V-1565); BadRequestError on neither.
 //   • publicEntry: id pass-through + admin_account_id=acc_ +
 //     admin_key_id=key_ + target_account_id nullable acc_ +
 //     target_resource_id pass-through + ISO timestamp.
@@ -63,7 +63,14 @@ describe('W415.B apps/server/src/routes/admin-audit-log.ts content parity', () =
 
   it('maybeUuidFromInput: accept 36-char raw uuid (regex test) OR prefixed id via PUBLIC_ID_RE; BadRequestError with value-quoted hint', () => {
     expect(body).toMatch(
-      /\/\*\* Accept either a raw UUID or a prefixed id; return the UUID\. \*\/\s*\n?\s*function maybeUuidFromInput\(value: string \| undefined\): string \| undefined \{\s*\n?\s*if \(value === undefined\) return undefined;\s*\n?\s*if \(value\.length === 36 && \/\^\[0-9a-f-\]\{36\}\$\/i\.test\(value\)\) return value;\s*\n?\s*const match = PUBLIC_ID_RE\.exec\(value\);\s*\n?\s*if \(!match \|\| !match\[1\]\) \{\s*\n?\s*throw new BadRequestError\(`Invalid id "\$\{value\}"\. Expected a UUID or prefixed id\.`\);/,
+      // V-1565 — the raw-UUID branch was a hex-or-dash class of length 36, which
+      // admitted 36 hex digits with no dashes and 36 dashes, then handed them to
+      // a Postgres uuid column as an `admin_id` / `target_id` filter: a 500 where
+      // the boundary owes a 400. It now reuses CURSOR_UUID_RE, the strict dashed
+      // shape this file already declares for the cursor and for the same reason.
+      // The doc comment moved to a block explaining that, so the pin anchors on
+      // the branch rather than on the one-line comment above it.
+      /function maybeUuidFromInput\(value: string \| undefined\): string \| undefined \{\s*\n?\s*if \(value === undefined\) return undefined;\s*\n?\s*if \(CURSOR_UUID_RE\.test\(value\)\) return value;\s*\n?\s*const match = PUBLIC_ID_RE\.exec\(value\);\s*\n?\s*if \(!match \|\| !match\[1\]\) \{\s*\n?\s*throw new BadRequestError\(`Invalid id "\$\{value\}"\. Expected a UUID or prefixed id\.`\);/,
     );
   });
 

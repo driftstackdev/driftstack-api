@@ -16668,3 +16668,46 @@ are out of order".
 
 That is the shape worth noticing. A status-code guard checks WHICH codes exist; this checks which one a
 customer gets, and those are different properties of the same three lines.
+
+## V-1565 — a query filter that turned a malformed id into a 500, in the file that fixed the same bug six lines above
+
+V-1564 found that WHICH refusal a customer gets is a different property from which codes exist. Looking
+for other places where that choice is recorded as deliberate turned up four comments in the whole server
+source, and one of them names a live defect rather than a settled decision.
+
+`routes/admin-audit-log.ts` validates `admin_id` and `target_id` through `maybeUuidFromInput`, whose
+raw-UUID branch used a hex-or-dash character class of length 36. That is not a UUID shape: it admits 36 hex
+digits with no dashes, and it admits a string of 36 dashes. Both were returned as a "UUID" and land in
+`eq(adminAuditLog.adminAccountId, ...)` against a Postgres **uuid** column — so
+`GET /v1/admin/audit-log?admin_id=------------------------------------` reached PG as an invalid uuid cast
+and answered **500 where the boundary owes 400**.
+
+**The same file already fixed this, six lines above.** `CURSOR_UUID_RE` is the strict dashed shape, added
+with a comment saying a tampered cursor "would hit PG as an invalid uuid cast (500). Validate at the
+boundary so a bad cursor is a clean 400." The cursor got it; the filters did not. `routes/sessions.ts`,
+`routes/profile-snapshots.ts` and `routes/account-web-sessions.ts` each carry their own comment recording
+the same fix in their own copy — four independent fixes of one class, and the fifth site missed.
+
+Fixed by reusing `CURSOR_UUID_RE` rather than adding a fifth spelling.
+
+**Guarded as a shape, not a filename.** The new arm scans every route file for the hex-or-dash class, so
+the next copy fails here rather than in a stack trace. Proved twice: restoring the loose branch reds naming
+`admin-audit-log.ts`, and planting the pattern in `routes/legal.ts` reds naming that file — the check works
+on a route it was not written for.
+
+### Three faults of my own, all caught before the commit
+
+**My explanation triggered my own guard.** The first fix put the old pattern in a `/** */` block; `codeOf`
+strips `//` lines but not block comments, so the guard flagged the file I had just repaired. The literal is
+now described rather than quoted, and the comment says why — the alternative was loosening a guard to
+accommodate a comment.
+
+**Two content-parity pins froze the defect.** `routes-admin-audit-log-content-parity` and the V-484/V-521
+cross-source invariant both pinned the loose branch verbatim, so correcting the bug turned the suite red.
+Updated in the same commit with the reasoning in each pin: retraction PARAPHRASED in the headers, the new
+branch QUOTED in the assertions.
+
+**One pin froze a sentence I had moved.** A separate assertion pins the one-line
+`/** Accept either a raw UUID or a prefixed id; return the UUID. */`. Rather than rewrite that pin, the
+sentence was restored and my note moved above it as `//` lines — the pinned contract is the doc comment,
+and it should not churn because an explanation needed somewhere to live.

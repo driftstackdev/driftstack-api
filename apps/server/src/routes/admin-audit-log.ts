@@ -18,10 +18,20 @@ const PUBLIC_ID_RE = /^[a-z]{3}_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}
 // (500). Validate at the boundary so a bad cursor is a clean 400.
 const CURSOR_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// V-1565 — the raw-UUID branch was a hex-or-dash character class of length 36
+// rather than the dashed UUID shape, so 36 hex digits with no dashes, and an
+// all-dash string, both passed as a "UUID". `admin_id` and `target_id` land in
+// `eq(adminAuditLog.adminAccountId, ...)` against a Postgres uuid column, so a
+// malformed filter reached PG as an invalid uuid cast and answered 500 where the
+// boundary owes a 400 — the same defect this file already fixed for the CURSOR
+// six lines above, and that sessions.ts, profile-snapshots.ts and
+// account-web-sessions.ts each fixed in their own copy. Reuses CURSOR_UUID_RE
+// rather than adding a fourth spelling. (The old pattern is described, not
+// quoted: a guard scans these files for that literal.)
 /** Accept either a raw UUID or a prefixed id; return the UUID. */
 function maybeUuidFromInput(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
-  if (value.length === 36 && /^[0-9a-f-]{36}$/i.test(value)) return value;
+  if (CURSOR_UUID_RE.test(value)) return value;
   const match = PUBLIC_ID_RE.exec(value);
   if (!match || !match[1]) {
     throw new BadRequestError(`Invalid id "${value}". Expected a UUID or prefixed id.`);

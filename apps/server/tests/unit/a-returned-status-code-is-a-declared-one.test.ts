@@ -610,4 +610,26 @@ describe('a returned status code is a declared one', () => {
       'the keyless-turn refusals are out of order — a customer would be told to fix the wrong thing',
     ).toEqual([tier, consent, generic].slice().sort((a, b) => a - b));
   });
+
+  it('V-1565 CRITICAL no route validates a customer-supplied id with a hex-or-dash character class before handing it to a Postgres uuid column. `/^[0-9a-f-]{36}$/` accepts 36 hex digits with no dashes, and accepts 36 dashes, so a filter that looks validated reaches PG as an invalid uuid cast and answers 500 where the boundary owes a 400. Three route files carry a comment saying they fixed exactly this; admin-audit-log.ts fixed it for its CURSOR and left the same class in the arm that validates `admin_id` and `target_id`. Checked as a shape rather than a filename, so the fourth copy fails here instead of being found by the next person who reads a stack trace.', () => {
+    const LOOSE = /\[0-9a-fA-F-\]\{36\}|\[0-9a-f-\]\{36\}/;
+    const offenders: string[] = [];
+    let scanned = 0;
+    for (const entry of readdirSync(ROUTES_DIR)) {
+      if (!entry.endsWith('.ts')) continue;
+      scanned += 1;
+      const code = codeOf(resolve(ROUTES_DIR, entry));
+      const lines = code.split('\n');
+      lines.forEach((line, i) => {
+        if (LOOSE.test(line)) offenders.push(`${entry}:${(i + 1).toString()}`);
+      });
+    }
+    // Comment lines are already cut by codeOf, so a route file DESCRIBING the old
+    // pattern in prose does not count — three of them do exactly that.
+    expect(scanned, 'route files scanned for the loose id shape').toBeGreaterThan(20);
+    expect(
+      offenders.sort(),
+      'these lines accept a non-UUID as a UUID and hand it to a uuid column, turning a 400 into a 500',
+    ).toEqual([]);
+  });
 });
