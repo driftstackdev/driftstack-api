@@ -19469,3 +19469,44 @@ missing required property in an object literal. The repo-level `typecheck` scrip
 Not fixed here: adding a `tsconfig.test.json` per workspace would surface a backlog across roughly 250
 previously-unchecked files in gui-client alone, which is its own item with its own gate rather than a
 rider on anything. Recorded for whoever takes it.
+
+## V-1633 — the sweep removed 20,733 sites and nothing stopped the 20,734th
+
+V-1630 swept the ambiguous-whitespace construct out of 799 guards; V-1631 fixed the three the first pass
+missed. **Neither made the result durable.** Nothing in the repo prevented the construct returning, and the
+cost of one returning is a worker pinned at 100% CPU for 27 minutes while every other file finishes.
+
+The guard is a **post-condition**: no test file may contain a redundant ambiguous-whitespace construct.
+That framing is the lesson of V-1631 applied deliberately — it references nothing about how any change was
+made, so unlike `HEAD + substitution == tree` it cannot agree with an incomplete pass.
+
+**It found a real site on its first run, which the sweep never targeted.**
+`docs-api-byok-anthropic-content-parity` carried `\s*\s*` — the same redundancy in a different spelling,
+untouched by a sweep keyed to `\s*\n?\s*`. That is A2's D-7 hazard from the other side: I had swept a
+_token_ when the defect is a _shape_, and the shape has more than one spelling. The guard now covers three:
+the swept form, the doubled form, and `(\s|\n)*`.
+
+**Two design choices worth recording, both forced by the guard flagging itself.**
+
+Its patterns are **assembled from fragments** (`WS + '\n?' + WS`) rather than written out, so the file does
+not contain the constructs it forbids. The alternative was a name-keyed self-exemption, which is worse for
+the reason this repo keeps rediscovering: an exemption keyed by filename keeps passing on the day someone
+adds a real one to that file.
+
+And it strips comments before scanning, because the header quotes the forbidden pattern while explaining
+it. A construct written in prose is inert; a scanner that cannot tell prose from code either flags itself
+or needs the exemption I had just rejected.
+
+Mutation-proved against the **real subject** rather than the detector's own list: reintroducing either form
+into `api-types-common-content-parity` fails the guard, and the victim restores byte-identical.
+
+⚠️ **Getting here took five failed edits, and the pattern in them is worth more than the guard.** Three
+python patches asserted against text prettier had already reformatted and aborted without writing — twice
+leaving the file referencing a constant the aborted half was supposed to define. I was patching a file I
+had stopped reading. **The fix was to read the current bytes and make one edit against what is actually
+there**, which is the same discipline as verifying a claim against source rather than against the last
+thing I believed about it.
+
+The ratchets move to 3029/3204. That count includes a peer's uncommitted +1 for their own new test file,
+which this commit necessarily carries because the two bumps live in one line each; recorded here rather
+than left to be discovered in the blame.

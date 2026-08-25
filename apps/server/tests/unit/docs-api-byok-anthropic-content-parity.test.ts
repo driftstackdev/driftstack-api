@@ -65,7 +65,7 @@ describe('docs/api/byok-anthropic content parity', () => {
 
   it('90-day staleness, 60-day reminder, and PUT refresh behavior stay documented', () => {
     expect(body).toMatch(
-      /## TTL \+ rotation reminders\s*\s*Stored keys carry an implicit 90-day staleness window\. After 60\s*days the customer receives a one-time Postmark reminder email\s*\(`sendByokAnthropicKeyRotationReminder`\)\. After 90 days the\s*`BYOKAnthropicService\.getPlaintext\(\{ now \}\)` call returns null/,
+      /## TTL \+ rotation reminders\s*Stored keys carry an implicit 90-day staleness window\. After 60\s*days the customer receives a one-time Postmark reminder email\s*\(`sendByokAnthropicKeyRotationReminder`\)\. After 90 days the\s*`BYOKAnthropicService\.getPlaintext\(\{ now \}\)` call returns null/,
     );
     expect(body).toMatch(
       /Customers can refresh the staleness window by PUTting the same\s*key \(resets `set_at`\)/,
