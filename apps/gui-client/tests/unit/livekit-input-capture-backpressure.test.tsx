@@ -14,7 +14,9 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { act, render } from '@testing-library/react';
 
-const sendInputEvent = vi.fn(() => Promise.resolve());
+const sendInputEvent = vi.fn((_room: Room, _event: InputEvent, _opts?: { reliable?: boolean }) =>
+  Promise.resolve(),
+);
 // The hook reads RoomEvent.DCBufferStatusChanged; our Room stub's `.on` ignores the event
 // name (it just captures the callback), so RoomEvent only needs to be DEFINED. Provide the
 // real event string for faithfulness while stubbing the network send.
@@ -107,7 +109,7 @@ function scroll(video: HTMLElement): void {
   vi.advanceTimersByTime(400); // > WHEEL_IDLE_MS (320) → gesture closes
 }
 function emitted(): InputEvent[] {
-  return sendInputEvent.mock.calls.map((c) => c[1] as InputEvent);
+  return sendInputEvent.mock.calls.map((c) => c[1]);
 }
 function fireMouse(el: EventTarget, type: string, x: number, y: number, ts: number): void {
   const ev = new MouseEvent(type, { clientX: x, clientY: y, button: 0, bubbles: true });

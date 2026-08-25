@@ -15,7 +15,9 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render } from '@testing-library/react';
 
-const sendInputEvent = vi.fn(() => Promise.resolve());
+const sendInputEvent = vi.fn((_room: Room, _event: InputEvent, _opts?: { reliable?: boolean }) =>
+  Promise.resolve(),
+);
 vi.mock('../../src/lib/livekit', () => ({
   sendInputEvent,
 }));
@@ -55,15 +57,15 @@ function mountCapture(): HTMLVideoElement {
 }
 
 function emittedTypes(): string[] {
-  return sendInputEvent.mock.calls.map((c) => (c[1] as InputEvent).type);
+  return sendInputEvent.mock.calls.map((c) => c[1].type);
 }
 function eventsOfType(type: string): InputEvent[] {
-  return sendInputEvent.mock.calls.map((c) => c[1] as InputEvent).filter((e) => e.type === type);
+  return sendInputEvent.mock.calls.map((c) => c[1]).filter((e) => e.type === type);
 }
 function emittedWithReliability(): { event: InputEvent; reliable: boolean }[] {
   return sendInputEvent.mock.calls.map((c) => ({
-    event: c[1] as InputEvent,
-    reliable: (c[2] as { reliable?: boolean } | undefined)?.reliable ?? true,
+    event: c[1],
+    reliable: c[2]?.reliable ?? true,
   }));
 }
 

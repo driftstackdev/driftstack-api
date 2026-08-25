@@ -10,7 +10,9 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render } from '@testing-library/react';
 
-const sendInputEvent = vi.fn(() => Promise.resolve());
+const sendInputEvent = vi.fn((_room: Room, _event: InputEvent, _opts?: { reliable?: boolean }) =>
+  Promise.resolve(),
+);
 vi.mock('../../src/lib/livekit', () => ({ sendInputEvent }));
 
 const { useInputCapture } = await import('../../src/lib/livekit-input-capture');

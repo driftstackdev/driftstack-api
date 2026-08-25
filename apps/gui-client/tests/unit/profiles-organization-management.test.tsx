@@ -147,7 +147,14 @@ vi.mock('../../src/lib/tags-store', () => ({
 }));
 
 const fetchOrganization = vi.fn(() => Promise.reject(new Error('offline')));
-const saveOrganization = vi.fn(() => Promise.resolve());
+const saveOrganization = vi.fn(
+  (
+    _baseUrl: string,
+    _apiKey: string,
+    _org: AccountOrganization,
+    _effectiveAccount?: string | null,
+  ) => Promise.resolve(),
+);
 vi.mock('../../src/lib/account-organization', () => ({
   // Reject the pull so the local cache (loaded above) is what the rail shows.
   fetchOrganization: (...a: unknown[]) => fetchOrganization(...(a as [])),

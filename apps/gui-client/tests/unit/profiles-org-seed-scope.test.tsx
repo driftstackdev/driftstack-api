@@ -114,7 +114,14 @@ vi.mock('../../src/lib/tags-store', () => ({
 // fetchOrganization RESOLVES EMPTY (the seed path under test); saveOrganization
 // is a spy so we can assert when the local taxonomy is (or isn't) pushed.
 const fetchOrganization = vi.fn(() => Promise.resolve({ folders: [], tags: [] }));
-const saveOrganization = vi.fn(() => Promise.resolve());
+const saveOrganization = vi.fn(
+  (
+    _baseUrl: string,
+    _apiKey: string,
+    _org: AccountOrganization,
+    _effectiveAccount?: string | null,
+  ) => Promise.resolve(),
+);
 vi.mock('../../src/lib/account-organization', () => ({
   fetchOrganization: (...a: unknown[]) => fetchOrganization(...(a as [])),
   saveOrganization: (...a: unknown[]) => saveOrganization(...(a as [])),
