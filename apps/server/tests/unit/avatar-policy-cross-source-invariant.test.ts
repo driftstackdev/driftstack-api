@@ -12,11 +12,24 @@
 //   - packages/api-types/src/accounts.ts (Zod canonical source).
 //   - apps/customer-dashboard/src/pages/settings.astro
 //     (file-input accept attr: 'image/png,image/jpeg,image/webp').
+//   - apps/server/src/lib/openapi.ts (the PUBLISHED response schema).
+//
+// V-1615 added that third surface. It had been restating the three
+// values inline while the header above listed two, which is the
+// failure this whole series exists to catch: the guard's scan was
+// narrower than the claim in its own first paragraph, so a fourth
+// copy sat one import away from the constant and nothing read it.
 //
 // Drift would silently break:
 //   * Customer uploading a content-type the server rejects
 //     (silent file-picker mismatch).
 //   * Server accepting an oversized file (2 MiB → DoS risk).
+//   * A generated client refusing a legitimate RESPONSE. The route
+//     echoes back the type the request schema accepted
+//     (routes/account-me.ts:921 returns parsed.data.content_type),
+//     so a fourth allowed type is uploaded, stored and returned in a
+//     reply the document says cannot contain it — and the Python and
+//     Go SDKs are generated from that document.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -84,6 +97,26 @@ describe('W873 Avatar policy cross-source invariant', () => {
   it('CRITICAL apps/customer-dashboard/src/pages/settings.astro avatar file-input has accept="image/png,image/jpeg,image/webp" — matches AVATAR_ALLOWED_CONTENT_TYPES exactly. Drift would let the file picker show types the server rejects (or vice versa).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/settings.astro'));
     expect(p).toMatch(/accept="image\/png,image\/jpeg,image\/webp"/);
+  });
+
+  // ─── The published response derives rather than restates ─────
+
+  it('V-1615 CRITICAL apps/server/src/lib/openapi.ts publishes UploadAvatarResponse.content_type as AvatarContentTypeSchema. It was a fourth inline copy of the three values, one import away from the constant, on the surface the SDKs are generated from. The request side of this operation already derives; the response side is the half a reader is least likely to check, because a wrong response enum breaks nothing until a fourth type is allowed and then breaks deserialisation for every generated client at once.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts'));
+    // Scoped to the avatar block, not the file. A negative swept over the whole
+    // of openapi.ts would fail the day an unrelated operation legitimately
+    // declares its own content-type enum — a check broader than its claim, which
+    // is the fault this arm was added to fix one line up.
+    const block =
+      /const UploadAvatarResponseOpenApi = z[\s\S]{0,400}?\.openapi\('UploadAvatarResponse'\)/.exec(
+        p,
+      )?.[0];
+    expect(block, 'the avatar response schema was found in the document builder').toBeDefined();
+    expect(block!).toMatch(/content_type: AvatarContentTypeSchema,/);
+    expect(
+      block!,
+      'the response schema restates the content types instead of deriving them',
+    ).not.toMatch(/z\.enum\(\[/);
   });
 
   // ─── 3-content-type cardinality ──────────────────────────────

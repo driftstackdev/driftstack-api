@@ -18654,3 +18654,49 @@ full run here. Rebuild the app after mutation-proving one of its sources; the ch
 restore is right.
 
 No pin bumped: one arm added to an existing file.
+
+## V-1615 — the same defect as V-1612, found by looking for it rather than by tripping over it
+
+V-1612 was found by accident: a docs table tripped a guard, and the constant underneath turned out to be
+written twice. That is a bad way to find a class of defect, so the class was swept for directly — every
+`export const X = [...] as const` in `apps/server/src`, `packages/api-types/src` and the server tests,
+against every inline `z.enum([...])` literal, reporting where a literal's value set equals an exported
+constant's. Twelve constants, 185 inline enums, six matches across two constants.
+
+The first is `AVATAR_ALLOWED_CONTENT_TYPES`, and it is V-1609's defect with the sides swapped. The REQUEST
+half is exemplary — `AvatarContentTypeSchema = z.enum(AVATAR_ALLOWED_CONTENT_TYPES)`, and
+`UploadAvatarRequestSchema.content_type` is that schema. The RESPONSE half, in `lib/openapi.ts`, restated
+the three values inline.
+
+**The drift is one-sided and the response half is the half nobody checks.** `routes/account-me.ts:921`
+returns `parsed.data.content_type` — the response echoes back exactly what the request schema accepted. So
+a fourth allowed type is accepted on upload, written to R2, and returned in a reply the published document
+declares cannot contain it. The Python and Go SDKs are generated from that document, so the failure is not
+a validation warning; it is every generated client failing to deserialise a legitimate response, at once,
+on a change that looked like it only touched the request side.
+
+**And there was already a guard for this, whose scan was narrower than its own first paragraph.**
+`avatar-policy-cross-source-invariant` opens by naming what the policy "stays in lockstep across", and
+lists two surfaces: the api-types canonical and the dashboard's file-picker `accept` attribute. The
+published document is a third, one import away from the constant, and no arm read it. That is the fault
+this guard series exists to catch, in the guard series itself — the second time today a check's stated
+claim was wider than the files it opened.
+
+`content_type` derives now, the header names three surfaces and the failure mode the third one carries,
+and an arm pins it. Contract-neutral, checked rather than reasoned: api-types rebuilt, spec re-dumped, and
+`openapi.json` compares byte-identical.
+
+**The arm's negative was written too wide and narrowed before landing.** `not.toMatch(/content_type:
+z.enum\(\[/)` over the whole of `openapi.ts` would fail the day an unrelated operation legitimately declares
+its own content-type enum — a check broader than its claim, one line below a comment about exactly that.
+It is scoped to the avatar block now, and the block's presence is asserted before the negative runs, since
+a negative against a block that failed to match is satisfied by nothing.
+
+**A restore direction worth stating, because it silently undid this fix.** The mutation snapshot was taken
+BEFORE the fix rather than after, so restoring it reverted the change rather than the mutation, and the
+suite went green on the unfixed file. The proof itself was sound — the arm did fail on the inline copy —
+but the artifact under test was gone by the time it passed again. A mutation baseline is the fixed file,
+not the file you started from; `git diff --quiet` on the mutated path afterwards catches it in one line.
+This is the third instrument fault today, after the null mutation and the tier-row parser.
+
+No pin bumped: one arm added to an existing file.

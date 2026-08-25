@@ -162,6 +162,7 @@ import {
   AccountOrganizationSchema,
   AccountAuditActionSchema,
   AccountAuditEntrySchema,
+  AvatarContentTypeSchema,
 } from '@driftstack/api-types';
 import { PROFILE_ID_INPUT_RE } from './profile-id.js';
 import { TIER_MONTHLY_PRICE_CENTS } from './cost-defaults.js';
@@ -1822,10 +1823,19 @@ function buildRegistry(): OpenAPIRegistry {
   });
 
   // V-387 — avatar upload + clear.
+  //
+  // V-1615 — `content_type` is AvatarContentTypeSchema, not a fourth spelling of
+  // the same three values. The route echoes back the type the REQUEST schema
+  // accepted (routes/account-me.ts:921 returns `parsed.data.content_type`), and
+  // that schema derives from AVATAR_ALLOWED_CONTENT_TYPES. A hand-copied list
+  // here could only ever be right by coincidence, and the drift is one-sided in
+  // the worst direction: a fourth allowed type is accepted on upload, stored,
+  // and echoed in a response this document says cannot contain it — so the
+  // generated Python and Go clients fail to deserialise a legitimate reply.
   const UploadAvatarResponseOpenApi = z
     .object({
       avatar_url: z.string().nullable(),
-      content_type: z.enum(['image/png', 'image/jpeg', 'image/webp']),
+      content_type: AvatarContentTypeSchema,
       bytes: z.number().int().nonnegative(),
     })
     .openapi('UploadAvatarResponse');
