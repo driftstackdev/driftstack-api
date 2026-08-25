@@ -16203,3 +16203,41 @@ default rather than by a wiring decision, and a default cannot be forgotten at a
 **No code change in either sweep.** Three consecutive batches have now ended that way, which is itself the
 finding: the contract and guard surface reachable by deriving work from the repo is in good order, and the
 remaining known work is the part that needs a human — the numbered actions, which are still unrecoverable.
+
+## V-1553 — the billed-dimension rename: consistent today, and the alarming reading was wrong
+
+The `session_minute` → `browser_hour` rename is one of the eight deferrals with no home in the decision
+register, and the one with billing exposure: a billed dimension whose stored name and customer-facing
+meter were described as different things.
+
+**Three readings, each narrower than the last, and only the third survives contact with the source.**
+
+The comment in `services/usage.ts` says the customer-facing meter is browser-hours via
+`floor(session_minute_total / 60)`. Grepped: that division exists **only in that comment**. No conversion
+ships. First reading — "the API reports minutes while billing charges hours" — would be a serious units
+mismatch.
+
+Then the marketing site turned out to say "browser-hours" on the pricing page, which looked like
+confirmation. It is the opposite: those lines are a CRITIQUE of the browser-hour model —
+"Browser-hours metering breaks for manual users — an account manager running 3 persistent profiles 8 hours
+a day generates 720 browser-hours/month". The pages argue against metering that way rather than claiming
+Driftstack does. Reading the two matches instead of counting them is what separated those.
+
+Finally the customer documentation, which is where a customer would actually look:
+`apps/docs/src/pages/api/usage.md` publishes the response with `totals.session_minute` and states
+`totals.session_minute` is "wall-clock minutes a session was ...". The unit is named, in minutes, on the
+page that documents the endpoint returning it.
+
+**So nothing is inconsistent.** Storage, API and documentation all speak minutes; no conversion exists
+because none is claimed to; and the rename is genuine future work tied to Stripe Meter integration rather
+than a discrepancy shipping today. Not registered as a decision, because there is no open question — only
+scheduled work with no customer-visible consequence in the meantime.
+
+### The batch this closes
+
+Four consecutive batches have now ended without a code change, across dependency splits, an SSRF
+invariant, and this. That is not a failure of the sweeps — each measured a real class and each came back
+clean — but it is the signal worth stating plainly: **the surface reachable by deriving work from the
+repository has been worked out.** What remains needs inputs only a human has, and has been listed
+unchanged for many batches: the numbered actions from the two missing files, six open decisions, and the
+OAuth-client audit gap that needs an enum migration.
