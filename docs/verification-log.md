@@ -18753,3 +18753,24 @@ file with four fewer tests still reports green. And the mutation snapshots were 
 the server's schema into the SDK. Snapshot by path, splice by anchor, and count the tests.
 
 No pin bumped: one arm added to an existing file.
+
+**Two further instruments, both retired by verification rather than by acting.** Comparing every published
+enum against every source value set turns up overlapping-but-unequal pairs, which is the drift signature —
+and also what two unrelated fields look like when they share a vocabulary, so the specificity is poor.
+Narrowing to pairs that share a FIELD NAME is better and still coarse, because `status`, `action`, `kind`,
+`scope` and `severity` each name several different concepts here.
+
+One candidate survived both filters with a matching name and a matching domain: the published `source` on
+crypto-order events is four values on the customer endpoint and five on the admin one, the extra being the
+internal sweep variant. It is not a defect. api-types states the split as a decision, records that the
+internal value is translated before customer serialization, and the admin schema says in its own comment
+that it carries the internal variant. **The translation is real** — `routes/billing-crypto-orders.ts:86`
+performs it — and it is guarded: the parity file pins the framing, a cross-source invariant names the
+route, and an integration test exercises it.
+
+**So the class is substantially closed, and that is the result.** Both real findings this session —
+V-1612 and V-1615 — were the narrower fault: a guard that existed and pinned a COPY of the value list
+rather than its source, or read two of the three files carrying it. Neither was absent coverage. A future
+sweep for bare duplication will produce the same thirty-four sets and the same low yield; the question
+worth asking of a duplicated vocabulary in this repo is not whether a guard exists but whether it opens
+every file, and whether what it pins is the source or a restatement of it.
