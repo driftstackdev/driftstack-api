@@ -19147,3 +19147,13 @@ note mentions `agent_sessions:input_event` while describing the V-1091 incident 
 from the numbered roster still passed. **The mutation found it; reasoning had not.** It is scoped to the
 numbered roster lines now, and the third mutation — growing `BUCKET_KEYS` to five — proves the arm tracks
 the roster rather than a literal.
+
+**Bounded afterwards: no other guard needs this arm.** Sweeping every guard with a numbered roster in its
+header against the `as const` roster it enforces returned six mismatches and **all six were my counter, not
+the guards.** `webhook-event-type` says "9-value roster" and lists nine across seven numbered lines because
+one line reads "6–7. crypto.order.paid / crypto.order.failed"; `api-key-scope` says "19-value (6 broad + 13
+granular)" and has a separate `GRANULAR_SCOPES`; `prefixed-id-roster` has eight entries and I counted the
+twenty-four quoted strings inside them; two more have prose headers with no roster claim at all. These
+headers are carefully maintained, use range notation, and split their rosters across several constants —
+none of which a line-counter reads. **W869's header was a one-off, not an instance of a class**, so the arm
+is pinned where it belongs and nowhere else.
