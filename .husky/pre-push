@@ -87,6 +87,12 @@ else
   echo "→ gui-client cargo fmt SKIPPED (no cargo on PATH)"
 fi
 
+# W-12 — the test files that no tsconfig used to cover. Runs HERE and not in
+# the vitest suite: it spawns a full compiler, and doing that inside the runner
+# pushed a neighbouring guard past its timeout and doubled suite duration.
+echo "→ test-file typecheck backlog (W-12)"
+node scripts/typecheck-test-backlog.mjs
+
 echo "→ tests"
 npm test
 

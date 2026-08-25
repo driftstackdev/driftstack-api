@@ -1,0 +1,21 @@
+{
+  // W-12 — the tests were typechecked by NOTHING. `tsconfig.json` is
+  // `include: ["src", "vite.config.ts"]` and the `typecheck` script is a bare
+  // `tsc --noEmit`, so every "tsc clean" reported while writing a test in this
+  // workspace was true of `src` and silent about the test file.
+  //
+  // Found the hard way: a hand-written `ProxyTestResult` fixture omitted the
+  // required `can_route`, `isProxyUsable` is `reachable && auth_ok &&
+  // can_route`, and the "healthy proxy" case silently exercised the UNHEALTHY
+  // path. Two failing arms were the only signal.
+  //
+  // Mirrors apps/server/tsconfig.test.json, which is the one workspace that
+  // already did this.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["vite/client", "node", "vitest/globals"],
+    "noUncheckedIndexedAccess": false
+  },
+  "include": ["src", "tests", "vite.config.ts", "vitest.config.ts"],
+  "exclude": ["node_modules", "dist", "src-tauri"]
+}
