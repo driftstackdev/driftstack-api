@@ -2339,7 +2339,7 @@ function buildRegistry(): OpenAPIRegistry {
         description:
           'Per-IP rate limit exceeded. These endpoints are gated by `ipRateLimit` rather than the account-keyed limiter, so the refusal is reachable without authenticating at all. V-1488b — the gate has always been there; the document never mentioned it.',
         content: problemContent,
-        headers: requestIdHeader,
+        headers: { ...rateLimitHeaders, ...requestIdHeader },
       },
       200: {
         description:
@@ -2378,7 +2378,7 @@ function buildRegistry(): OpenAPIRegistry {
         description:
           'Per-IP rate limit exceeded. These endpoints are gated by `ipRateLimit` rather than the account-keyed limiter, so the refusal is reachable without authenticating at all. V-1488b — the gate has always been there; the document never mentioned it.',
         content: problemContent,
-        headers: requestIdHeader,
+        headers: { ...rateLimitHeaders, ...requestIdHeader },
       },
       200: {
         description: 'Merge confirmed; IDP identity now linked to the existing account.',
@@ -2476,7 +2476,7 @@ function buildRegistry(): OpenAPIRegistry {
         description:
           'Per-IP rate limit exceeded. These endpoints are gated by `ipRateLimit` rather than the account-keyed limiter, so the refusal is reachable without authenticating at all. V-1488b — the gate has always been there; the document never mentioned it.',
         content: problemContent,
-        headers: requestIdHeader,
+        headers: { ...rateLimitHeaders, ...requestIdHeader },
       },
       200: {
         description:
@@ -2503,7 +2503,7 @@ function buildRegistry(): OpenAPIRegistry {
         description:
           'Per-IP rate limit exceeded. These endpoints are gated by `ipRateLimit` rather than the account-keyed limiter, so the refusal is reachable without authenticating at all. V-1488b — the gate has always been there; the document never mentioned it.',
         content: problemContent,
-        headers: requestIdHeader,
+        headers: { ...rateLimitHeaders, ...requestIdHeader },
       },
       200: {
         description: 'Access token (1-hour TTL; no refresh tokens issued).',
@@ -2532,7 +2532,7 @@ function buildRegistry(): OpenAPIRegistry {
         description:
           'Per-IP rate limit exceeded. These endpoints are gated by `ipRateLimit` rather than the account-keyed limiter, so the refusal is reachable without authenticating at all. V-1488b — the gate has always been there; the document never mentioned it.',
         content: problemContent,
-        headers: requestIdHeader,
+        headers: { ...rateLimitHeaders, ...requestIdHeader },
       },
       200: {
         description:
@@ -2564,7 +2564,7 @@ function buildRegistry(): OpenAPIRegistry {
         description:
           'Per-IP rate limit exceeded. These endpoints are gated by `ipRateLimit` rather than the account-keyed limiter, so the refusal is reachable without authenticating at all. V-1488b — the gate has always been there; the document never mentioned it.',
         content: problemContent,
-        headers: requestIdHeader,
+        headers: { ...rateLimitHeaders, ...requestIdHeader },
       },
       200: {
         description:
@@ -5590,7 +5590,7 @@ function buildRegistry(): OpenAPIRegistry {
       429: {
         description: "Account rate limit exceeded — the route carries `app.rateLimit('global')`.",
         content: problemContent,
-        headers: requestIdHeader,
+        headers: { ...rateLimitHeaders, ...requestIdHeader },
       },
       200: {
         description:
@@ -6887,7 +6887,11 @@ function buildRegistry(): OpenAPIRegistry {
           },
         },
       },
-      429: { description: 'Rate limit hit.', content: problemContent },
+      429: {
+        description: 'Rate limit hit.',
+        content: problemContent,
+        headers: { ...rateLimitHeaders, ...requestIdHeader },
+      },
     },
   });
   registerRoute(r, {
@@ -6917,7 +6921,11 @@ function buildRegistry(): OpenAPIRegistry {
       // optional bookkeeping: an undocumented reachable status is the exact
       // defect this file has been closing, and adding the limit without the
       // contract entry would have introduced a fresh one.
-      429: { description: 'Rate limit hit.', content: problemContent },
+      429: {
+        description: 'Rate limit hit.',
+        content: problemContent,
+        headers: { ...rateLimitHeaders, ...requestIdHeader },
+      },
     },
   });
   registerRoute(r, {
@@ -6971,6 +6979,7 @@ function buildRegistry(): OpenAPIRegistry {
       429: {
         description: 'Per-IP direct-request budget exceeded.',
         content: problemContent,
+        headers: { ...rateLimitHeaders, ...requestIdHeader },
       },
     },
   });
@@ -6996,7 +7005,11 @@ function buildRegistry(): OpenAPIRegistry {
       // (`BadRequestError('Invalid email address.')`) — documenting it leaks
       // nothing, and leaving it out told clients this endpoint cannot fail.
       400: { description: 'Malformed email address.', content: problemContent },
-      429: { description: 'Rate limit hit.', content: problemContent },
+      429: {
+        description: 'Rate limit hit.',
+        content: problemContent,
+        headers: { ...rateLimitHeaders, ...requestIdHeader },
+      },
     },
   });
   registerRoute(r, {
@@ -7024,7 +7037,11 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'Confirmation link is invalid or has already been used.',
         content: problemContent,
       },
-      429: { description: 'Rate limit hit.', content: problemContent },
+      429: {
+        description: 'Rate limit hit.',
+        content: problemContent,
+        headers: { ...rateLimitHeaders, ...requestIdHeader },
+      },
     },
   });
   registerRoute(r, {
@@ -7044,7 +7061,11 @@ function buildRegistry(): OpenAPIRegistry {
       },
       400: { description: 'Token missing or malformed.', content: problemContent },
       404: { description: 'Unsubscribe link is invalid.', content: problemContent },
-      429: { description: 'Rate limit hit.', content: problemContent },
+      429: {
+        description: 'Rate limit hit.',
+        content: problemContent,
+        headers: { ...rateLimitHeaders, ...requestIdHeader },
+      },
     },
   });
 

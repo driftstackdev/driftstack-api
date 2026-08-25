@@ -33,8 +33,13 @@ const PROBLEM_MEMBERS = ['type', 'title', 'status', 'detail', 'instance'] as con
  * Kept as a roster rather than an "anything goes" rule: the point of the arm
  * below is that a new one is a decision someone makes here, not a surprise a
  * client discovers.
+ *
+ * V-1597 — `retry_after_seconds` was missing from this list when it was written,
+ * and the spec passed anyway because none of its cases produced a 429. A roster
+ * whose population never reaches half the emitting paths is a roster that has not
+ * been tested, so a rate-limit case is included below.
  */
-const DECLARED_EXTENSIONS = new Set<string>(['issues']);
+const DECLARED_EXTENSIONS = new Set<string>(['issues', 'retry_after_seconds']);
 
 let server: TestServer;
 
@@ -71,6 +76,22 @@ test('every error response is problem+json carrying the members Problem declares
     { url: '/v1/nope-not-a-route', headers: auth, why: 'no such route' },
     { url: '/v1/admin/audit-log?limit=-1', headers: auth, why: 'out-of-range bound' },
   ];
+
+  // V-1597 — a rate-limit refusal, reached by exhausting the smallest public
+  // bucket on the surface (`/v1/egress/echo`, 12 per IP). It is the only error on
+  // this list that carries a second extension member, and until it was added the
+  // allowlist above had never been exercised against anything but validation.
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    const probe = await request.get(`${server.baseUrl}/v1/egress/echo`);
+    if (probe.status() === 429) {
+      cases.push({ url: '/v1/egress/echo', headers: {}, why: 'rate-limit refusal' });
+      break;
+    }
+  }
+  expect(
+    cases.some((c) => c.why === 'rate-limit refusal'),
+    'the rate-limit bucket was actually exhausted, so that path is covered',
+  ).toBe(true);
 
   const wrongType: string[] = [];
   const missingMembers: string[] = [];

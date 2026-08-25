@@ -18046,3 +18046,48 @@ are deliberately drawn from five layers rather than swept from one, because a sw
 prove only that one layer is consistent with itself.
 
 Full suite 3076 files / 30996 tests, green; e2e 229 over 40 spec files; `verify-suite` OK.
+
+## V-1597 — thirteen 429s that never mentioned the one header the response exists to give
+
+`docs/decisions.md` records the TypeScript SDK carrying a retry policy that honours `Retry-After`, which
+makes that header a contract with a named consumer rather than a nicety. The document declares 226 error
+responses with status 429. Thirteen of them did not declare the header.
+
+**The server sends it; the document did not say so.** Proven by exhausting the smallest public bucket on
+the surface — `/v1/egress/echo` at 12 per IP — rather than by reading the limiter:
+
+```
+request 12 -> 429
+  retry-after: 5
+  content-type: application/problem+json; charset=utf-8
+  body: {"retry_after_seconds":5,"type":".../rate-limited", ...}
+```
+
+All thirteen sit behind `ipRateLimit` or `app.rateLimit`, both of which set the header. So a generated
+client reading the spec could not see the one signal those responses exist to give, and would fall back to
+a hard-coded backoff on exactly the endpoints most likely to be called in bursts.
+
+**This gap was found and closed before, for the other 213.** The `rateLimitHeaders` comment in
+`openapi.ts` says it outright: "The server has always sent these; the spec never declared them, so a
+generated client could not see the one signal the response exists to give." The shared error-response
+object carries them; these thirteen declare their 429 inline and never picked it up. Three different
+inline spellings among them, which is why the edit was driven off the measured route list rather than a
+text pattern — a first pass keyed on a three-line window found twelve of the thirteen, and the one it
+missed was the only one whose path used `{id}` rather than `:id`.
+
+All 226 now declare it. The regenerated spec is **763 insertions and zero deletions** — additive, which is
+why none of the 92 test files that read `openapi.json` moved.
+
+**And the guard written one batch ago had the same shape of hole.** V-1596 allowlisted `issues` as the one
+undeclared extension member. `retry_after_seconds` is a second, and that spec passed anyway because none
+of its eight cases produced a 429 — a roster tested against one of the two paths that populate it. A
+rate-limit case is now included, reached by exhausting the bucket rather than assumed, and narrowing the
+allowlist reds it on that member. The lesson is the one this log keeps recording in a new costume: an
+allowlist is only as good as the population it was measured against.
+
+Two of my own leftovers caught by other people's guards rather than by me: a probe spec left in
+`tests/e2e` moved the file count and the blind-spot suite named it, and a mutation restore from a snapshot
+that predated this batch stripped both changes — caught by asserting the identifier was absent before
+re-applying, which is the check this session added after the same trap three times.
+
+Full suite 3076 files / 30996 tests, green; e2e 229 over 40 spec files; `verify-suite` OK.
