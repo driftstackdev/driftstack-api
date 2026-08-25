@@ -20931,3 +20931,40 @@ wrote, running as the BASELINE of an unrelated experiment.** I would never have 
 not know it existed. **That is the argument for baseline-first as a habit rather than a rule about
 mutations: the baseline runs everything, including the guard that has an opinion about the file you just
 added.**
+
+## V-1669 — the coverage gate cannot see the directory my one real gap was in
+
+Two results. The second explains the first finding of the day.
+
+**1. Error paths are broadly covered.** Rethrowing every swallowing `catch { … return … }` failed **34
+files, 44 tests**. So the `catch`-swallows-and-returns class is exercised, unlike the repo clamp class.
+⚠️ Two honesty notes: my regex body was `[^{}]{0,120}`, so it matched **33 of the 49** — catches with nested
+braces were skipped; and the mutated tree raised **three `TS6133` unused-variable errors** (helpers left
+dangling once their only caller stopped swallowing), so the run is partly confounded in the V-1662 sense.
+It is `noUnusedLocals` only and vitest transpiles without typechecking, so the behavioural signal stands —
+but the batch is not a clean instrument and I am not claiming a number from it beyond "broadly covered".
+
+⭐ **2. And then the coverage config answered the question I had actually been circling all evening.**
+`vitest.config.ts` **excludes `apps/server/src/db/` from the coverage gate**, and its own comment says the
+justification "has expired": the V-086 audit recorded those repos as "exercised by e2e against real
+Postgres, not by vitest", and **135 integration files now import from `src/db/` and run under vitest
+whenever `DATABASE_URL` is set.** 54 source files sit outside the gate on a reason that stopped being true.
+
+⛔ **Every one of the five page clamps lives in `src/db/`.** The clamp with no coverage of any kind
+(V-1667, `atlas-priority-events-repo`) was in the one directory the coverage gate cannot see. **That is the
+causal story for the day's only real gap**: not that nobody cared, but that the instrument which would have
+noticed had been pointed away.
+
+⭐ **And it is already measured, by someone else, sitting on a decision.** V-1002 lifted the exclusion under
+CI's own conditions and reports lines 92.29 / statements 90.74 / functions 90.94 / branches 81.74 against
+thresholds 85/83/84/75 — **every threshold still passes, with 6.7 points of headroom on the tightest.**
+Including `src/db` costs at most 1.30 points (branches) and IMPROVES functions by 0.14. The note ends:
+_"The blocker was the number, and the number says removing this line is free — but changing what CI enforces
+is still a decision somebody makes, not one a measurement makes for them."_
+
+**Added to the decision memo as a ninth item.** It is the cheapest of the nine — the measurement is done,
+the headroom is known, and the only missing input is somebody deciding that CI should enforce it.
+
+⚠️ Boundary: the 92.29/90.74/90.94/81.74 figures are quoted from V-1002's note, **not re-measured here** —
+re-running coverage with the exclusion lifted would cost a full instrumented suite run and would not change
+what the decision needs.
