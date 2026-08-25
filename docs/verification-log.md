@@ -19638,3 +19638,56 @@ customer. Reported to A2 rather than fixed here — every one of the six lives u
 its own justification in a comment — which is the form that gets believed. The comment was checkable and
 false the moment someone read line 363. **An `as unknown as` with a reason attached deserves more scrutiny
 than one without, not less**, because the reason is what stops the next reader from looking.
+
+## V-1637 — seventeen placeholders, three answers, and the most plausible reason was false again
+
+W-7 left seventeen `SDK_ABSENT` entries reading `REASON OWED` — a marker meaning nobody had supplied a
+justification for a published customer endpoint that no SDK reaches. V-1635 did the same exercise for the
+three unpublished-route placeholders in the sibling guard. This does the seventeen.
+
+**They are not seventeen answers. They are three.**
+
+⛔ **One was not a gap, and my own exemption listed it wrongly.** `/v1/account/mfa/disable` looked absent
+because `mfa.ts` has no method naming that path. It has `disable()`, which posts to the _sibling_:
+`account-mfa.ts` registers `POST /v1/account/mfa/disable` as an alias of `DELETE /v1/account/mfa` with the
+comment "Same gate, same handler", both sharing `disableHandler` and an identical preHandler chain, and the
+SDK covers the DELETE. ⭐ **The first census matched SDK RESOURCE NAMES instead of paths** — a scoped
+instrument answering a broader question, the same class as running a test project with a `--root` that
+covers half of it.
+
+So the re-census was path-based across all three SDKs, **with a positive control, because a clean census is
+not evidence.** The control found five known-present routes at plausible counts in TS, Python and Go; the
+sixth zero was my own bad guess (proxies live at `/v1/account/me/proxies`), not a hole in the instrument. An
+earlier version of the same sweep had stripped the `/v1/agent-sessions/:id` prefix and matched `/files` as a
+bare substring, reporting 24 Python hits that were nothing of the kind — the corrected full-path form
+reports zero, which is the number that survives a control.
+
+**Thirteen are first-party console surface.** Consumed directly over raw HTTP by `apps/gui-client`
+(cookies 6 call sites, cookies/set 3, downloads 3, downloads/content 1, files 2, history 2, page-state 2,
+account/cost 4, account/me/organization 2, egress/echo 1, notifications via `EventSource`) or by
+`apps/customer-dashboard` (oauth-links 2, resend-verification 2). ⚠️ **Written into the map as an
+explanation and explicitly not a justification:** it says why no method was ever written; it does not excuse
+a published, documented endpoint having none. That remains the owner's call, as the earlier entry concluded.
+
+⛔ **Three are the real gaps: `/v1/agent-sessions/:id/transcript`, `/v1/account/me/billing-portal`,
+`/v1/fleet/events`.** Published, documented, and consumed by nothing in this repository — not the desktop
+client, not the dashboard, not the admin panel. They exist purely as customer surface and no SDK reaches
+them.
+
+⭐ **The transferable finding is about the placeholder, and it is now the second time it has paid.** The most
+PLAUSIBLE available sentence was false. Two of the seventeen stream, so "the SDK's typed-response shape
+models JSON only" would have retired them both — and it is refuted by the SDK itself, which has
+`requestEventStream` in `http.ts` and already uses it for `POST /v1/agent-sessions/{id}/message`. The
+sibling guard reached for the same excuse an hour earlier about `/v1/status/stream` and was refuted the same
+way, by the document publishing three `text/event-stream` operations. **Twenty placeholders across two
+guards, and the single most reasonable-sounding explanation was wrong in both.**
+
+A list of names without justification is how a real gap hides among deliberate ones. A list of names with
+INVENTED justification is worse: it also stops anyone from looking again.
+
+⚠️ Two instrument faults of my own, recorded because both nearly shipped. The substitution first emitted
+Python `repr()` output into TypeScript, which switches to double quotes for any string containing an
+apostrophe and produced four unterminated literals — caught by `tsc -p tsconfig.test.json`, restored
+byte-identical from a snapshot, and redone with a real TS-literal encoder. And `echo "rc=$?"` after piping
+`tsc` into `head` reports `head`'s status, not the compiler's; the errors were read from the output rather
+than the exit code, which is the only reason it did not read as clean.

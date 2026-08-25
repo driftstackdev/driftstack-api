@@ -101,74 +101,98 @@ function publishedCustomerPaths(): Set<string> {
  * substrings anywhere in each SDK and reported Python 70 / Go 71; it was counting
  * paths that appear only in comments and docstrings.)
  *
- * ⚠️ A reason of REASON OWED means nobody has supplied one. The evidence-backed
- * entries state what was actually checked (a gate that is not `requireAuth`, a
- * non-JSON response body); the rest say plainly that they are undecided. This map
- * exists so a THIRTY-FIFTH cannot appear in silence, not to bless the thirty-four.
+ * ⚠️ Every entry states what was actually CHECKED. Seventeen of them once read
+ * REASON OWED — a placeholder meaning nobody had supplied a justification — and
+ * V-1637 went and asked. They did not come back as seventeen answers; they came
+ * back as three:
+ *
+ *   - ONE was not a gap. `/v1/account/mfa/disable` is a POST alias of
+ *     `DELETE /v1/account/mfa` — same gate, same handler — and the SDK covers the
+ *     sibling as `mfa.disable()`. It was listed because the first census matched
+ *     SDK RESOURCE NAMES rather than paths, which is a scoped instrument
+ *     answering a broader question.
+ *   - THIRTEEN are first-party console surface, called directly over raw HTTP by
+ *     the desktop client or the dashboard. ⚠️ That is an EXPLANATION, not a
+ *     justification: it says why no method was written and does not excuse a
+ *     published, documented endpoint having none.
+ *   - THREE have no consumer anywhere in this repo — `transcript`,
+ *     `billing-portal`, `fleet/events`. Those are the real gaps.
+ *
+ * ⛔ And the reason a placeholder beats a guess: the most PLAUSIBLE sentence
+ * available was false. "The SDK models JSON, and these stream" would have
+ * retired two entries, and it is refuted by the SDK itself — `http.ts` has
+ * `requestEventStream` and already uses it for `POST /v1/agent-sessions/{id}/message`.
+ * The sibling guard for unpublished routes reached for the same excuse an hour
+ * earlier and was refuted the same way. A list of names without justification is
+ * how a real gap hides among deliberate ones; a list of names with INVENTED
+ * justification is worse, because it also stops anyone looking again.
+ *
+ * This map exists so a THIRTY-FIFTH cannot appear in silence, not to bless the
+ * thirty-four.
  */
 const SDK_ABSENT = new Map<string, string>([
   ['/health', 'infra — liveness probe, not customer API surface'],
   [
     '/v1/account/cost',
-    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+    "first-party console surface: consumed directly by apps/gui-client over raw HTTP, never through the SDK (4 call site(s)). Explains why no method was written; does NOT by itself justify the absence for a published, documented endpoint — that is an owner's call (W-7)",
   ],
   [
     '/v1/account/me/billing-portal',
-    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+    'PUBLISHED and documented with NO consumer anywhere in this repo — not the desktop client, not the dashboard, not the admin panel. The purest of the three gaps: it exists only as customer surface, and no SDK reaches it (W-7)',
   ],
   [
     '/v1/account/me/notifications',
-    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+    'first-party console surface: apps/gui-client/src/lib/notifications.ts opens an EventSource against it with ?ds_token=. NOT because it streams — the TS SDK has SSE plumbing (http.ts requestEventStream) and already uses it for POST /v1/agent-sessions/{id}/message (W-7)',
   ],
   [
     '/v1/account/me/oauth-links',
-    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+    "first-party console surface: consumed directly by apps/customer-dashboard over raw HTTP, never through the SDK (2 call site(s)). Explains why no method was written; does NOT by itself justify the absence for a published, documented endpoint — that is an owner's call (W-7)",
   ],
   [
     '/v1/account/me/organization',
-    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+    "first-party console surface: consumed directly by apps/gui-client over raw HTTP, never through the SDK (2 call site(s)). Explains why no method was written; does NOT by itself justify the absence for a published, documented endpoint — that is an owner's call (W-7)",
   ],
   [
     '/v1/account/mfa/disable',
-    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+    'NOT A GAP — this entry was wrong. account-mfa.ts calls it a V-353f POST alias of the canonical shape: "Same gate, same handler." Both routes share disableHandler and an identical preHandler chain, and the SDK covers the sibling as mfa.disable() -> DELETE /v1/account/mfa. Listed here only because the first census matched SDK RESOURCE NAMES instead of paths',
   ],
   [
     '/v1/agent-sessions/:p/cookies',
-    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+    "first-party console surface: consumed directly by apps/gui-client over raw HTTP, never through the SDK (6 call site(s)). Explains why no method was written; does NOT by itself justify the absence for a published, documented endpoint — that is an owner's call (W-7)",
   ],
   [
     '/v1/agent-sessions/:p/cookies/set',
-    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+    "first-party console surface: consumed directly by apps/gui-client over raw HTTP, never through the SDK (3 call site(s)). Explains why no method was written; does NOT by itself justify the absence for a published, documented endpoint — that is an owner's call (W-7)",
   ],
   [
     '/v1/agent-sessions/:p/downloads',
-    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+    "first-party console surface: consumed directly by apps/gui-client over raw HTTP, never through the SDK (3 call site(s)). Explains why no method was written; does NOT by itself justify the absence for a published, documented endpoint — that is an owner's call (W-7)",
   ],
   [
     '/v1/agent-sessions/:p/downloads/content',
-    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+    "first-party console surface: consumed directly by apps/gui-client over raw HTTP, never through the SDK (1 call site(s)). Explains why no method was written; does NOT by itself justify the absence for a published, documented endpoint — that is an owner's call (W-7)",
   ],
   [
     '/v1/agent-sessions/:p/files',
-    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+    "first-party console surface: consumed directly by apps/gui-client over raw HTTP, never through the SDK (2 call site(s)). Explains why no method was written; does NOT by itself justify the absence for a published, documented endpoint — that is an owner's call (W-7)",
   ],
   [
     '/v1/agent-sessions/:p/history',
-    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+    "first-party console surface: consumed directly by apps/gui-client over raw HTTP, never through the SDK (2 call site(s)). Explains why no method was written; does NOT by itself justify the absence for a published, documented endpoint — that is an owner's call (W-7)",
   ],
   [
     '/v1/agent-sessions/:p/page-state',
-    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+    "first-party console surface: consumed directly by apps/gui-client over raw HTTP, never through the SDK (2 call site(s)). Explains why no method was written; does NOT by itself justify the absence for a published, documented endpoint — that is an owner's call (W-7)",
   ],
   [
     '/v1/agent-sessions/:p/transcript',
-    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+    'PUBLISHED and documented with NO consumer anywhere in this repo — not the desktop client, not the dashboard, not the admin panel. The purest of the three gaps: it exists only as customer surface, and no SDK reaches it (W-7). Streaming is NOT the reason — the SDK streams /message through the same requestEventStream. The GUI\'s "transcript" is its own local chat history, not this endpoint',
   ],
   ['/v1/auth/oauth-client/confirm-merge', 'OAuth 2 browser flow step — redirect-driven'],
   ['/v1/auth/oauth-client/start', 'OAuth 2 browser flow entry — redirect-driven'],
   [
     '/v1/auth/resend-verification',
-    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+    "first-party console surface: consumed directly by apps/customer-dashboard over raw HTTP, never through the SDK (2 call site(s)). Explains why no method was written; does NOT by itself justify the absence for a published, documented endpoint — that is an owner's call (W-7)",
   ],
   [
     '/v1/billing/crypto-orders/:p/receipt.pdf',
@@ -180,11 +204,11 @@ const SDK_ABSENT = new Map<string, string>([
   ],
   [
     '/v1/egress/echo',
-    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+    "first-party console surface: consumed directly by apps/gui-client over raw HTTP, never through the SDK (1 call site(s)). Explains why no method was written; does NOT by itself justify the absence for a published, documented endpoint — that is an owner's call (W-7)",
   ],
   [
     '/v1/fleet/events',
-    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+    'PUBLISHED and documented with NO consumer anywhere in this repo — not the desktop client, not the dashboard, not the admin panel. The purest of the three gaps: it exists only as customer surface, and no SDK reaches it (W-7)',
   ],
   [
     '/v1/oauth/authorize',
