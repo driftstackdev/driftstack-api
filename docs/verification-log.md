@@ -17742,3 +17742,50 @@ clearest illustration this log has of why a green total is not evidence about wh
 Twelve operations remain unrouted under the harness, unchanged from V-1588 and for the same stated reason.
 Full e2e 225 passed against a disposable migrated Postgres; full suite and `verify-suite` green. The 3074
 files / 30966 tests still include a peer's in-flight gui-client work, whose ratchets were left alone.
+
+## V-1590 — the same defect one door over, in the query string
+
+Eleven batches on path parameters had reached the point of diminishing returns, so this one moved the
+proven instrument to the other place ids arrive. The move paid immediately.
+
+**`GET /v1/admin/webhook-dlq?endpoint_id=` answered 500 for anything that was not a uuid.** The route
+removed the public `webhook_endpoint_` prefix and handed the remainder to a repo filtering
+`webhook_deliveries.webhook_id`, a `uuid` column. Confirmed against Postgres rather than inferred:
+`invalid input syntax for type uuid: "not-a-uuid"`. The schema declared
+`endpoint_id: z.string().min(1).max(200)` — a length, not a shape.
+
+That is the third time this session the finding has been the same sentence: **stripping a prefix is not
+validating what is left.** `bareAccountId` in admin-cost, the account-id params in admin-usage, and now
+this. The fix follows the established idiom — accept `webhook_endpoint_<uuid>` or a bare uuid, refuse
+anything else — and the file's own `PUBLIC_ID_RE` could not be reused because it only matches
+three-letter prefixes.
+
+**One of the hostile values needs a disclaimer.** `?endpoint_id=' OR 1=1--` also returned 500, and that
+is NOT injection. The queries are parameterised and the string never reaches the planner; it fails for
+exactly the same reason `not-a-uuid` does. It stays in the value set because it is a plausible paste from
+a support ticket, but reading that 500 as an injection finding would have been wrong, and the probe output
+invites precisely that misreading.
+
+**The measurement was clean, which is itself the result.** 309 hostile requests across 35 operations
+produced three server errors, all the same parameter. `limit` at -1, 0 and a billion, `cursor` as garbage,
+dates as nonsense, enums as unknown values — all correctly refused. The query surface was in good shape
+apart from one filter, and that is worth recording as plainly as the defect.
+
+**The instrument is now permanent.** A new spec sweeps every declared query parameter with values derived
+from its own type, so a parameter added tomorrow is covered without anyone remembering. It carries the
+lessons the sibling spec learned expensively: unrouted operations are detected by body and bounded from
+the start rather than after twenty of them were scored as passes, and deployment gates are keyed on the
+declared problem type rather than the status. Reverting the fix reds it on the exact parameter.
+
+Both instruments were proven against the defect: the integration arms red on four cases when the strip is
+restored, and the new sweep reds with `?endpoint_id=not-a-uuid -> 500`.
+
+**Working-tree note, recorded because it affects what the numbers mean.** Partway through this batch the
+source fix and the new spec were committed by a concurrent writer — correctly scoped, correct author,
+correct pathspecs, but not by this session. Separately, a peer's in-flight audit-archive work is dirty in
+the tree and accounts for seven failures across `audit-archive`, `bootstrap` and the scheduler guards.
+Attributed via `git status` before investigating; none of the seven names a file this batch touched, and
+the four files it does touch pass. The full suite is therefore NOT green as of this entry, and the reason
+is not this work.
+
+Playwright moves 225 → 226 over 38 spec files, updated in all four places the blind-spot suite pins them.
