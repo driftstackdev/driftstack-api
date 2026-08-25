@@ -16891,3 +16891,44 @@ value is telling the author their edit dropped an assertion — a review aid, no
 silent regression.
 
 **No code changed.** Both mutations restored byte-identical, and the file verified back at 2 passing arms.
+
+## V-1571 — running the gate I had been claiming to run
+
+Every batch in this session reported "full gate green" from `npx vitest run`. **That is not the gate.**
+`scripts/verify-suite.mjs` is, and it applies judgement the bare command does not: a collected-file floor,
+an unhandled-error check, and a refusal to trust a run whose workspace packages failed to build. It had
+never been executed here, so the claim rested on a weaker instrument than the one the repo provides.
+
+**Both modes pass, and the numbers reconcile.**
+
+```
+node scripts/verify-suite.mjs         exit 0   3017 files / 30155 tests   "full file count"
+node scripts/verify-suite.mjs --all   exit 0   3188 files / 30949 tests   "full file count"
+```
+
+The `--all` figures are identical to what `npx vitest run` reported all session, so the claims were
+accurate — made with a blunter tool, but not wrong. The node-project pin is exact: **3017 collected against
+a 3017 pin**, so the three files added this session were bumped correctly.
+
+**The `_ALL` pin has drifted nine files below reality**, 3179 against 3188 collected. Floor semantics mean
+the gate still says "full file count" while nine files could stop being collected unnoticed. That drift is
+not mine: three files were added here and the pin was raised by exactly three. Recording the number rather
+than absorbing it, per the standing rule that a pin is raised only for files its author added — quietly
+closing someone else's nine-file gap would hide whatever caused it.
+
+**And the gate is one CI job of five.** It says so itself, which is the good kind of guard:
+
+```
+e2e            222 Playwright tests — the only ones hitting real Postgres + Redis
+python-sdk     365 pytest tests + ruff/mypy
+go-sdk         go vet, go test, examples build
+bench          perf regression (advisory)
+```
+
+So "gate green" in every entry of this log means **build-test green**, with 115 further files collected but
+never executed because they gate on `DATABASE_URL`. None of the SDK or end-to-end work this session touched
+was covered by the runs backing those statements — the Python and Go SDK checks in particular, which
+several batches reasoned about.
+
+That bound belongs in the record next to the claims it qualifies, and it is stated here rather than left
+for a reader to discover that "full gate" meant one job of five.
