@@ -17082,3 +17082,42 @@ fails.**
 
 Full runs after the change: 393 integration files / 3798 tests, and the gate green at 3017 files. Database
 created and dropped, Redis index 12 flushed.
+
+## V-1576 — the seam where V-1565's bug lived is covered by one file
+
+V-1575 found that the fixture behind `/v1/admin/audit-log` uses an in-memory repo, so the 500 V-1565 fixed
+could not be reproduced there. That is not a property of one test — it is the shape of the whole
+integration suite, and it bounds two claims made in this log.
+
+**Measured across 376 integration files:**
+
+```
+199   buildTestApp only          routes exercised against in-memory repos
+172   real Postgres only         134 db-*, 38 *-repo-contract — repository layer
+  5   both
+```
+
+`build-test-app.ts` wires **47 in-memory repositories** and contains no `postgres(` call and no
+`DATABASE_URL`. So route behaviour is tested without a database, and database behaviour is tested without
+routes.
+
+**The seam between them is one file.** Exactly one integration file uses a real database AND injects an
+HTTP request: `atlas-priority-events-end-to-end.test.ts`, on an internal route. Nothing drives a
+customer-facing route against real Postgres.
+
+**That is why V-1565 survived.** Its defect was precisely a route handing an unvalidated value to a
+`uuid` column. The route half of that sentence is tested in-memory, where a garbage filter matches nothing
+and returns 200; the column half is tested by repo contracts that are handed already-valid values. The
+failure lives in the join, and the join has one test on a route no customer calls.
+
+**Two of my own claims need narrowing, and this is where.** V-1573 said the route changes had been verified
+"against a real database", and V-1574 said they "survive contact with a real database, a real Redis and a
+real browser". The database sentence is too strong. What those runs established is that 393 integration
+files pass, that the repository layer is exercised against Postgres, and that Playwright drives the app
+end to end — which is real coverage, and is not the same as the routes I changed having met a uuid column.
+
+**Not proposed as a fix here.** Giving `buildTestApp` a Postgres mode is an architectural change to a
+helper 199 files depend on, and it is the kind of change whose value is a judgement about test strategy
+rather than a defect to close. What is defensible is naming the seam, the single file that covers it, and
+the specific bug class it lets through — so the next person deciding whether that helper needs a database
+is deciding with the number in front of them.
