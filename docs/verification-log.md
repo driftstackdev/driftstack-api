@@ -19157,3 +19157,32 @@ twenty-four quoted strings inside them; two more have prose headers with no rost
 headers are carefully maintained, use range notation, and split their rosters across several constants —
 none of which a line-counter reads. **W869's header was a one-off, not an instance of a class**, so the arm
 is pinned where it belongs and nowhere else.
+
+## V-1625 — the status-comment class is closed, proven by making the detector find a known defect first
+
+V-1613 found two comments claiming a malformed trim body is "a 422" while `BadRequestError` returns 400,
+with the route's own tests and the published spec both saying 400. That is a class, not an instance: a
+comment naming a status the adjacent code does not return sends the next maintainer to write the wrong
+client.
+
+Swept `apps/server/src` for it. **The first pass reported 44 and every one I read was the heuristic, not a
+defect** — a comment may legitimately name a status it is contrasting AGAINST, and "nearest throw within
+twelve lines" cannot tell that apart: "no valid key — reject, don't 500" beside an `UnauthorizedError`,
+"reporting it as 429 would hand the caller a…" beside a `ForbiddenError`, and several narrating a
+historical 500 that a fix removed. Sixth proximity heuristic today to produce a list of its own making.
+
+Tightened to ASSERTIVE phrasing only — `is a NNN`, `answers NNN`, `returns NNN`, `surfaces as NNN` — with
+the throw within four lines. **Zero.**
+
+**A zero from an unvalidated detector is worth nothing, so the detector was made to find a known positive
+first.** Run against `profiles.ts` as it stood at `b7b8cfec2~1`, before V-1613 landed, it reports exactly
+one hit: line 573, "A malformed body is a 422 rather than a silent fallback", against a `BadRequestError`
+that returns 400. That is the defect V-1613 fixed, recovered by the instrument from history. The zero on
+the current tree is therefore a measurement rather than a silence.
+
+**Boundary, stated because it is narrower than "the class is closed" sounds.** The detector sees an
+assertive status claim with a `throw new …Error` within four lines, in `apps/server/src`. It does not see
+the OTHER half of V-1613 — the docstring at `profiles.ts:33` said "a typo'd key is a 422" with no throw
+near it, and would not be caught by this. It does not see statuses set by `reply.code(...)`, nor claims in
+docs pages or tests. So: no comment in the server source assertively contradicts an adjacent throw, and
+that is all this says.
