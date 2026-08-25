@@ -36,7 +36,7 @@ describe('agent-session response schema parity', () => {
     expect(new Set(Object.keys(AgentSessionSchema.shape))).toEqual(new Set(ifaceFields));
   });
 
-  it('OpenAPI registers AgentSession as a named component (Pydantic/Go/TS codegen gets a named type, not an inline anonymous shape)', () => {
+  it('OpenAPI registers AgentSession as a named component. V-1626 — the title of this arm used to add "so Pydantic/Go/TS codegen gets a named type, not an inline anonymous shape", and that does NOT follow from what it checks. `r.register(name, schema)` creates the component; it does not tag the schema, so a route using the BARE `AgentSessionSchema` (lines ~4755, ~4809, ~4899) still emits an inline object. Measured in the published spec: zero `$ref` to AgentSession, and `GET /v1/agent-sessions/{id}` returns an inline 19-property object — exactly the anonymous shape the old title claimed was avoided. The pattern that produces a `$ref` is `Schema.openapi(name)` with routes using the TAGGED object: 41 of those are referenced, against 39 of 40 `r.register` components orphaned. Closing that is a change to the published contract, so it is recorded as OPEN-ITEMS W-10 rather than done here.', () => {
     const oapi = read(resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts'));
     expect(oapi).toMatch(/r\.register\('AgentSession', AgentSessionSchema\);/);
   });

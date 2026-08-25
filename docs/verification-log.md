@@ -19186,3 +19186,38 @@ the OTHER half of V-1613 — the docstring at `profiles.ts:33` said "a typo'd ke
 near it, and would not be caught by this. It does not see statuses set by `reply.code(...)`, nor claims in
 docs pages or tests. So: no comment in the server source assertively contradicts an adjacent throw, and
 that is all this says.
+
+## V-1626 — thirty-nine named components the document declares and no operation points at
+
+`openapi-spec-validity-invariant` guards the published spec against a **dangling** `$ref` — a reference to
+a component that was removed. Measured: zero, so that direction holds. **The reverse was never checked**,
+and it is occupied: **39 of the 81 declared component schemas are referenced by no `$ref` at all**,
+including `Account`, `AgentSession`, `ApiKey` and `CreateSessionRequest`.
+
+**The cause is two patterns in `lib/openapi.ts` that look equivalent and are not.**
+
+    Schema.openapi('Name')   + routes use the TAGGED object   -> 41 registered, 41 referenced
+    r.register('Name', Schema) + routes use the BARE schema   -> 40 registered, 39 orphaned
+
+`r.register` creates the component. It does not tag the schema, so a route handing the generator the bare
+`AgentSessionSchema` still emits an inline object — and `GET /v1/agent-sessions/{id}` returns exactly that:
+an inline nineteen-property shape, no `$ref`. The split is almost perfectly clean, which is what makes it a
+mechanism rather than an accident.
+
+**A guard already claimed the benefit that does not follow.** `agent-session-response-schema-parity` has an
+arm titled "OpenAPI registers AgentSession as a named component (Pydantic/Go/TS codegen gets a named type,
+not an inline anonymous shape)" — and it asserts only that `r.register('AgentSession', AgentSessionSchema)`
+appears in the source. Registration is real; the parenthesis is false, and it is false in the direction
+that stops anyone looking. A customer generating a client from this document gets an anonymous model for
+all thirty-nine.
+
+The title now states what the assertion actually establishes and names the measurement. **The fix is not
+mine to take**: making those thirty-nine referenced changes the published contract — every affected
+response becomes a `$ref` where it is currently an inline object, which is better for codegen and is still
+a change to the artifact customers generate from. Recorded as `OPEN-ITEMS` W-10.
+
+**Boundary.** This counts `$ref` occurrences in `packages/sdk-python/openapi.json` against the components it
+declares. It does not measure whether any particular generator inlines or names an unreferenced component —
+`datamodel-codegen` emits a model per component regardless, which is why the hand-written Python resources
+are unaffected. The claim is about the document and about a client generated from it, not about our own
+three SDKs.
