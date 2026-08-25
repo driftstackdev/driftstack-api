@@ -182,7 +182,7 @@ describe('POST /v1/profiles/:id/trim', () => {
     return { app: built, sentTrim };
   }
 
-  it('CRITICAL no scope in the body means NO scope on the wire. An emitted default would change the frame every existing caller sends, and an older node decodes an unknown key as a hard failure rather than ignoring it.', async () => {
+  it('CRITICAL no scope in the body means NO scope on the wire, so a frame an existing caller sends is byte-identical to what it sent before the field existed. NOT because an old node would reject the key — TrimProfileRequest has no custom init(from:), so Swift synthesizes a decoder that IGNORES unknown keys; that tolerance is what makes an additive contract possible at all.', async () => {
     const h = await scopeHarness();
     app = h.app;
     const res = await trim(app);

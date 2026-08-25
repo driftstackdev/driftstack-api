@@ -578,10 +578,22 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
           `Invalid scope. Expected one of: ${TRIM_PROFILE_SCOPES.join(', ')}.`,
         );
       }
-      // Left UNDEFINED when absent rather than defaulted to 'cache'. The node
-      // already treats a missing scope as cache, so emitting the default would
-      // add a key to every frame an existing caller sends — and the harness's
-      // Codable decode is strict about keys it does not know.
+      // Left UNDEFINED when absent rather than defaulted to 'cache', so an
+      // existing caller's frame stays byte-identical to what it sent before the
+      // field existed. The node already treats a missing scope as cache, so the
+      // default would be a key that says what silence already says.
+      //
+      // ⚠️ NOT because an old node would reject it. `TrimProfileRequest` has no
+      // custom `init(from:)` — only `CodingKeys` and a memberwise init — so
+      // Swift SYNTHESIZES the decoder, and a synthesized Codable decoder
+      // silently IGNORES keys outside `CodingKeys`. The only unknown-thing
+      // throws in ControlClient.swift are on the message TYPE tag
+      // (`unknown ControlInbound type`), not on fields. An earlier version of
+      // this comment claimed the decode was strict about unknown keys; that was
+      // false, and it mattered — if it were true, no additive field could ever
+      // be safe and the whole optional-contract design would be impossible.
+      // Tolerance is what MAKES the contract safe; omitting is belt-and-braces
+      // on top of it, not the thing standing between us and a broken node.
       const scope = scopeParsed.data.scope;
       // Owner-check exactly like the other mutating routes: the trim scopes to the
       // OWNER account (self → caller; admin-on-team → owner), and `service.get`
