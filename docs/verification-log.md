@@ -18932,3 +18932,39 @@ and Python samples against the TypeScript SDK's method names.
 Not fixed here: the arm to add is "a route in the docs is also in the spec, or carries a reason", and it
 would fail immediately on these three, so it needs their three reasons from an owner rather than my guess.
 Recorded in `docs/internal/OPEN-ITEMS.md`.
+
+## V-1620 — the scope prose is honest, checked across ninety-four operations
+
+Ninety-five operation summaries in `lib/openapi.ts` state which scopes a caller needs, in prose —
+"(requires `write:profiles`, broad `write`, or `account_owner`)". One hundred and sixty-one routes enforce
+a scope with `requireScope(...)`. **Nothing compares them**, and a mismatch is not a cosmetic one: a
+customer reads the summary, mints a key carrying exactly the scope it names, and is refused.
+
+Ninety-four operations are comparable by method and path. **None is disjoint, and none over-promises.**
+The prose is accurate everywhere it appears.
+
+**Getting there took correcting my own instrument twice, and the second correction is the useful record.**
+The first parser matched no routes at all — the registration shape is
+`app.post<{…}>(\n  '/path',\n  { preHandler: [...] },` and my regex demanded the handler immediately
+after. The second reported **seventy** operations promising scopes the route does not enforce: summary
+`['account_owner', 'write', 'write:profiles']` against a route calling `requireScope('write:profiles')`.
+
+That is not a defect, it is a **hierarchy my instrument did not model**, and it is worth writing down
+because the next reader will otherwise re-derive it from `services/auth.ts`:
+
+- exact match;
+- V-174 — `admin` satisfies `account_owner`, and never the staff `driftstack_internal_admin`;
+- `account_owner` satisfies the BARE `read` / `write` verbs, added because a device-login key minted with
+  `scopes:['account_owner']` alone was 403ing every session launch;
+- V-481 — broad satisfies granular: `read` or `account_owner` for any `read:X`, `write`/`account_owner`
+  for `write:X`, `admin`/`account_owner` for `admin:X`. **Granular never satisfies broad.**
+
+So a summary naming three acceptable scopes against a route naming the one granular minimum is exactly
+correct, and the seventy were my reading `requireScope('X')` as "accepts only X". Seventy findings and
+zero defects — the same ratio as this session's other instrument faults, and caught the same way, by
+looking at the output instead of reporting the count.
+
+**Owed rather than done:** the arm to add is "every scope a summary names is one `requireScope` would
+accept, under the V-174/V-481 hierarchy", over the ninety-four. It is preventive — there is nothing to fix
+today — and it could not be validated in this batch because a peer suite held the runner. Recorded in
+`docs/internal/OPEN-ITEMS.md`.
