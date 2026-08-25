@@ -169,7 +169,7 @@ import { TIER_MONTHLY_PRICE_CENTS } from './cost-defaults.js';
 // cookie read/import routes emit + validate. Imported from the harness
 // control protocol (the routes' own single source of truth) rather than
 // re-declared here, so a wire-shape change flows into the spec.
-import { CookieSchema } from '../schemas/harness-control-protocol.js';
+import { CookieSchema, TRIM_PROFILE_SCOPES } from '../schemas/harness-control-protocol.js';
 import { PLATFORM_SECRET_VALUE_MAX_UTF8_BYTES } from './platform-secret-value-encryption.js';
 
 const PaginatedSessionsSchema = z.object({
@@ -7844,10 +7844,41 @@ function buildRegistry(): OpenAPIRegistry {
     path: '/v1/profiles/{id}/trim',
     operationId: 'trimProfile',
     summary:
-      "Trim a profile's re-fetchable caches to reclaim storage (cookies / localStorage / IndexedDB / tabs are kept) (requires `write:profiles`, broad `write`, or `account_owner`)",
+      "Clear a profile's stored data. With no body it clears re-fetchable caches only and keeps cookies / localStorage / IndexedDB / tabs, which is the pre-`scope` behaviour; `scope` selects a wider clear, and `cookies`, `history` and `all` DESTROY identity state (requires `write:profiles`, broad `write`, or `account_owner`)",
     tags: ['profiles'],
     security: auth,
-    request: { params: z.object({ id: prefixedIdParam('prof', 'profile') }) },
+    request: {
+      params: z.object({ id: prefixedIdParam('prof', 'profile') }),
+      // V-1609 — the route has parsed this body since the scope field landed
+      // (routes/profiles.ts:37, TrimScopeBodySchema, `.strict()`), and the
+      // document declared no requestBody at all. Three of the four scopes DELETE
+      // identity state, so the only values that make this operation destructive
+      // were undiscoverable from the spec — and the Python and Go SDKs are
+      // generated from it, so neither could express them.
+      //
+      // Derived from TRIM_PROFILE_SCOPES, the same constant the route builds its
+      // enum from, rather than a second hand-copied list.
+      body: {
+        required: false,
+        content: {
+          'application/json': {
+            schema: z
+              .object({
+                scope: z
+                  .enum(TRIM_PROFILE_SCOPES)
+                  .optional()
+                  .describe(
+                    'What to clear. Omitted means `cache` — re-fetchable caches only, keeping cookies, localStorage, IndexedDB and open tabs. `cookies` also drops cookies and per-origin site data, which signs the profile out everywhere. `history` drops the remembered open tabs. `all` drops caches, site data and tabs together. No scope alters the fingerprint, so the profile stays the same device to every site.',
+                  ),
+              })
+              .strict()
+              .describe(
+                'Optional. An unknown key, or a scope outside the enum, is refused with 400 rather than falling back to the default — this body selects which data a destructive operation destroys.',
+              ),
+          },
+        },
+      },
+    },
     responses: {
       200: {
         description:

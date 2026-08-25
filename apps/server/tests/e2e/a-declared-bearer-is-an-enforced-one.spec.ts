@@ -1,4 +1,4 @@
-// V-1591 — the document says these need a token. This asks whether they do.
+// V-1610 — the document says these need a token. This asks whether they do.
 //
 // `openapi.json` declares `security: [{ BearerAuth: [] }]` on 201 of 232
 // operations. That declaration is generated from the route definitions, but it is
@@ -132,7 +132,7 @@ test('an operation that declares a bearer token refuses a caller without one', a
   }
 
   console.log(
-    `[V-1591] ${targets.length} bearer-declared operations — ${refused} refused anonymous, ` +
+    `[V-1610] ${targets.length} bearer-declared operations — ${refused} refused anonymous, ` +
       `${gated.length} answered a deployment gate first, ${unrouted.length} unrouted`,
   );
 

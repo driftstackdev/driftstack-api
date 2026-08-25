@@ -55107,7 +55107,7 @@
     "/v1/profiles/{id}/trim": {
       "post": {
         "operationId": "trimProfile",
-        "summary": "Trim a profile's re-fetchable caches to reclaim storage (cookies / localStorage / IndexedDB / tabs are kept) (requires `write:profiles`, broad `write`, or `account_owner`)",
+        "summary": "Clear a profile's stored data. With no body it clears re-fetchable caches only and keeps cookies / localStorage / IndexedDB / tabs, which is the pre-`scope` behaviour; `scope` selects a wider clear, and `cookies`, `history` and `all` DESTROY identity state (requires `write:profiles`, broad `write`, or `account_owner`)",
         "tags": ["profiles"],
         "security": [
           {
@@ -55127,6 +55127,25 @@
             "in": "path"
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "enum": ["cache", "cookies", "history", "all"],
+                    "description": "What to clear. Omitted means `cache` — re-fetchable caches only, keeping cookies, localStorage, IndexedDB and open tabs. `cookies` also drops cookies and per-origin site data, which signs the profile out everywhere. `history` drops the remembered open tabs. `all` drops caches, site data and tabs together. No scope alters the fingerprint, so the profile stays the same device to every site."
+                  }
+                },
+                "additionalProperties": false,
+                "description": "Optional. An unknown key, or a scope outside the enum, is refused with 400 rather than falling back to the default — this body selects which data a destructive operation destroys."
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Discriminated body: status 'ok' → the trim ran and the smaller size was persisted ({ size_bytes, bytes_reclaimed }); 'unavailable' → nothing ran (profile in use by a running session, no saved state to trim yet, storage/fleet not enabled, or no node connected — `reason` says which); 'timeout' → the node did not reply; 'error' → the node reported a failure (`reason` set) and the stored state is untouched.",

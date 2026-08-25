@@ -513,13 +513,36 @@ members can.
 
 `POST /v1/profiles/:id/trim`
 
-Reclaims storage by clearing a profile's **re-fetchable caches**
-(HTTP/media cache and per-origin CacheStorage / service-worker
-registrations) while **keeping the identity state** — cookies,
-`localStorage`, `IndexedDB`, and open tabs. Use it when an account
-is near its storage cap and you want space back without losing the
-profile's logins. No request body; write scope (`write:profiles`),
-admin-only on a team workspace, same as the other mutating routes.
+Clears a profile's stored data. **What it clears depends on `scope`,
+and three of the four values are destructive of identity state.**
+
+With **no body** it clears only the **re-fetchable caches** (HTTP/media
+cache and per-origin CacheStorage / service-worker registrations) and
+keeps cookies, `localStorage`, `IndexedDB` and open tabs. That is the
+behaviour this endpoint had before `scope` existed, so an existing
+caller that sends nothing is unaffected.
+
+| `scope`               | Clears                                                                  | Keeps                           |
+| --------------------- | ----------------------------------------------------------------------- | ------------------------------- |
+| _(omitted)_ / `cache` | Re-fetchable caches                                                     | Cookies, site data, tabs        |
+| `cookies`             | Cookies and per-origin site data — **signs the profile out everywhere** | Cached files, tabs              |
+| `history`             | The profile's remembered open tabs                                      | Logins, cached files            |
+| `all`                 | Caches, site data and tabs together — **signs the profile out**         | The profile and its fingerprint |
+
+No scope alters the profile's fingerprint: it stays the same device to
+every site. Clearing a profile's tabs does not clear the server-side
+record of session activity, which is governed by the retention policy
+rather than by this endpoint.
+
+```json
+{ "scope": "cookies" }
+```
+
+The body is optional and **strict**: an unknown key, or a scope outside
+the four values, is refused with `400` rather than falling back to the
+default — this body selects which data a destructive operation destroys.
+Write scope (`write:profiles`), admin-only on a team workspace, same as
+the other mutating routes.
 
 The trim runs out-of-session on the fleet against the profile's
 last-saved encrypted state, so the response is a **discriminated
@@ -530,7 +553,7 @@ last-saved encrypted state, so the response is a **discriminated
 { "status": "ok", "size_bytes": 18874368, "bytes_reclaimed": 41943040 }
 
 // "unavailable" — nothing ran; reason says why
-{ "status": "unavailable", "reason": "profile is currently in use — stop its running session before clearing the cache" }
+{ "status": "unavailable", "reason": "profile is currently in use — stop its running session before clearing its data" }
 
 // "timeout" — the node didn't reply
 { "status": "timeout" }

@@ -17790,49 +17790,6 @@ is not this work.
 
 Playwright moves 225 → 226 over 38 spec files, updated in all four places the blind-spot suite pins them.
 
-## V-1591 — the document says 201 operations need a token; this asks whether they do
-
-`openapi.json` is generated from the route definitions, which makes it a good second artefact for most
-questions and a useless one for this one. The security block is generated from what a route DECLARES, not
-from what it enforces: a handler whose auth `preHandler` went missing publishes the same
-`security: [{ BearerAuth: [] }]` it always did, and every static check in this repo would keep agreeing
-with it. The only artefact that can disagree is the running server, asked without a token.
-
-**Nothing was wrong, and the measurement is the result.** Of 201 bearer-declared operations, 146 refuse an
-anonymous caller outright and 27 answer a typed deployment gate before authentication is reached. Not one
-served data. The remaining 28 are unrouted under this harness for the reasons V-1587 established.
-
-**The gate-before-auth ordering is recorded rather than filed.** Those 27 answer 503 `feature-unavailable`
-to a request carrying no credentials, so an anonymous caller can learn which optional features a
-deployment has switched on. That is information the public status page carries anyway and the bodies are
-product copy, not secrets — but a later reader finding 27 unauthenticated 503s should not have to
-rediscover why, so the spec says it out loud.
-
-**A bound copied instead of measured, and it failed immediately.** The first version bounded the unrouted
-set at twelve, taken from the sibling id-sweep. That sweep walks the 106 single-parameter operations; this
-one walks all 201 that declare a bearer requirement, so more dependency-gated modules fall inside it. The
-real figure is 28. A number restated from a neighbouring file rather than measured for the population at
-hand is the exact fault this log keeps recording, and it is a small mercy that it failed on the first run
-rather than passing with slack.
-
-**The mutation proof, stated for what it actually shows.** Removing the `requireScope` preHandler from
-`admin-usage` reds the guard — but the route then answers 500 rather than serving data, because the
-handler reaches for an account context that is no longer there. So this proves the guard notices when a
-bearer-declared operation stops refusing anonymous; it does not prove it catches a route that would
-happily serve. That is a weaker claim than "catches an auth bypass" and is the one worth writing down.
-
-**Two working-tree facts, both about concurrency rather than code.** The restore step after that mutation
-silently did nothing: `$S` was set in an earlier shell and each command runs in a fresh one, so `cp`
-received an empty path and the route stayed unauthenticated until the next check caught it. Restores use
-absolute paths from here. Separately, a peer's retention commit swept up this batch's spec and figure
-edits into `de8155994` via a broad add — correctly, as it happens, but not by this session.
-
-**One red is outstanding and it is not this work.** `EXPECTED_TEST_FILES` reads 3017 where the node
-project now collects 3018. That commit added two test files and deleted one, a net of exactly one, so the
-pin is theirs to raise; absorbing it here would hide which change moved the number.
-
-Playwright moves 226 → 227 over 39 spec files, in all four pinned places.
-
 ## V-1593 — the pin that judged the `--all` run was maintained by hand, and had drifted
 
 `EXPECTED_TEST_FILES` has been checked against disk all along: a census in
@@ -18477,3 +18434,113 @@ does not touch the code under test proves nothing in either direction, and the t
 arm still passed.
 
 Both pins raised by one, for the one file this batch adds.
+
+## V-1610 — the document says 201 operations need a token; this asks whether they do
+
+`openapi.json` is generated from the route definitions, which makes it a good second artefact for most
+questions and a useless one for this one. The security block is generated from what a route DECLARES, not
+from what it enforces: a handler whose auth `preHandler` went missing publishes the same
+`security: [{ BearerAuth: [] }]` it always did, and every static check in this repo would keep agreeing
+with it. The only artefact that can disagree is the running server, asked without a token.
+
+**Nothing was wrong, and the measurement is the result.** Of 201 bearer-declared operations, 146 refuse an
+anonymous caller outright and 27 answer a typed deployment gate before authentication is reached. Not one
+served data. The remaining 28 are unrouted under this harness for the reasons V-1587 established.
+
+**The gate-before-auth ordering is recorded rather than filed.** Those 27 answer 503 `feature-unavailable`
+to a request carrying no credentials, so an anonymous caller can learn which optional features a
+deployment has switched on. That is information the public status page carries anyway and the bodies are
+product copy, not secrets — but a later reader finding 27 unauthenticated 503s should not have to
+rediscover why, so the spec says it out loud.
+
+**A bound copied instead of measured, and it failed immediately.** The first version bounded the unrouted
+set at twelve, taken from the sibling id-sweep. That sweep walks the 106 single-parameter operations; this
+one walks all 201 that declare a bearer requirement, so more dependency-gated modules fall inside it. The
+real figure is 28. A number restated from a neighbouring file rather than measured for the population at
+hand is the exact fault this log keeps recording, and it is a small mercy that it failed on the first run
+rather than passing with slack.
+
+**The mutation proof, stated for what it actually shows.** Removing the `requireScope` preHandler from
+`admin-usage` reds the guard — but the route then answers 500 rather than serving data, because the
+handler reaches for an account context that is no longer there. So this proves the guard notices when a
+bearer-declared operation stops refusing anonymous; it does not prove it catches a route that would
+happily serve. That is a weaker claim than "catches an auth bypass" and is the one worth writing down.
+
+**Two working-tree facts, both about concurrency rather than code.** The restore step after that mutation
+silently did nothing: `$S` was set in an earlier shell and each command runs in a fresh one, so `cp`
+received an empty path and the route stayed unauthenticated until the next check caught it. Restores use
+absolute paths from here. Separately, a peer's retention commit swept up this batch's spec and figure
+edits into `de8155994` via a broad add — correctly, as it happens, but not by this session.
+
+**One red is outstanding and it is not this work.** `EXPECTED_TEST_FILES` reads 3017 where the node
+project now collects 3018. That commit added two test files and deleted one, a net of exactly one, so the
+pin is theirs to raise; absorbing it here would hide which change moved the number.
+
+Playwright moves 226 → 227 over 39 spec files, in all four pinned places.
+
+## V-1608 — the guard counted twelve tiers on an eight-tier page, and would have counted anything
+
+`published-tier-caps-match-the-code` reads six docs pages and compares every published cap against
+`TIER_CONCURRENT_SESSION_LIMITS` and `PROFILES_PER_TIER`. Four of those pages key their rows by slug, two
+by display name, and the two branches were not the same check. A display-name row had to name a known
+tier — `if (surface.key === 'name' && !DISPLAY_NAMES.has(label)) continue;`. A slug row had to match
+`/^\|\s*`([a-z_]+)`\s*\|(.+)\|\s*$/` and nothing else.
+
+The scan walks the whole file, not the tier table. So the slug branch's real claim was _any row on the
+page whose first cell is a backticked lowercase word is a tier_, which is true of the tier table and of
+nothing else only by accident. It held for as long as these pages happened to publish one table each.
+
+It stopped holding the moment one of them published two. Documenting the profile-trim `scope` values
+(V-1609) added three rows — `` `cookies` ``, `` `history` ``, `` `all` `` — and `api/profiles.md` began
+reporting "12 of 8 tiers", with three non-tiers carried into the cap comparison. The completeness check
+caught it, which is the check earning its place: an eight-tier page reading as twelve is loud, whereas the
+same fault in the other direction is silent, because the comparison walks only the rows it found.
+
+The fix is the symmetry the file already had on one side. `TIER_SLUGS` is derived from the keys of the two
+cap constants — the same source the comparison reads — so a row may only enter the tier set if there is a
+cap on the other side to read it against, and the slug branch now filters on it. Deriving rather than
+listing is this file's own convention: it says so about the display-name mapping, that "a hand-kept
+mapping goes stale while every test stays green".
+
+Both directions mutation-proved on the real page. Changing `free`'s published profile cap from 1 to 8
+fails with "published cap(s) the server does not enforce"; renaming one tier slug fails twice, with
+"api/profiles.md: 7 of 8 tiers" and "free (profiles)" absent. The membership filter narrows what counts as
+a tier; it does not narrow what is checked about one.
+
+**The first attempt at that first mutation proved nothing and said it had.** It rewrote `| 1 ` to `| 8 `
+on a line reading ``| `free`          |            1 |`` — a substring that is not there — and reported
+"mutated: free 1 -> 8" from the values it had computed rather than from the file, which was unchanged. The
+guard passed, and a passing guard under a mutation that never landed is indistinguishable from a guard
+that does not work. Every mutation here now asserts the file differs before the result is read. This is
+the same fault the log keeps recording in the code under test, and it is worth noting that it is just as
+easy to build into the instrument doing the testing.
+
+## V-1609 — the trim route has parsed a body for as long as it has had one to parse, and the spec never said so
+
+`POST /v1/profiles/{id}/trim` takes an optional `scope`. `routes/profiles.ts:37` declares
+`TrimScopeBodySchema` as a `.strict()` object over `z.enum(['cache','cookies','history','all'])`, line 575
+runs it through `safeParse`, and line 577 throws `BadRequestError` on a failure. The body is read, is
+validated, and decides which of four quite different things the route does — one of which signs the
+profile out everywhere.
+
+The OpenAPI registration declared no `request.body` at all.
+
+The three consumers of that document disagree with the route accordingly. The Python and Go SDKs are
+generated from `openapi.json`, so neither has any way to send a scope: every caller of those SDKs gets the
+cache-only default and cannot ask for anything else. `api/profiles.md` stated it as a fact — "keeping the
+identity state ... No request body" — which was written when it was true and has been wrong since the
+field landed. Only the hand-written TypeScript SDK, which does not read the spec, could reach the other
+three scopes.
+
+Fixed at the source: the registration now declares the body as `required: false` — the no-body call is
+still the documented cache-only clear — over a `.strict()` schema of the same enum, imported as
+`TRIM_PROFILE_SCOPES` from the protocol module rather than restated, so the spec cannot drift from the
+values the codec accepts. Regenerated and read back rather than assumed: `requestBody present: true,
+required: false`, `scope enum: ["cache","cookies","history","all"]`, `additionalProperties: false`.
+
+The docs page carried a second, smaller wrongness on the way past. Its stated refusal reason ended
+"before clearing the cache" while `routes/profiles.ts:605` says "before clearing its data" — accurate when
+cache was the only thing a trim cleared, and quietly misleading once it was not. The page now describes
+the scopes in a table with an example body, and quotes the reason the route actually emits.
+
+Adding that table is what tripped V-1608.

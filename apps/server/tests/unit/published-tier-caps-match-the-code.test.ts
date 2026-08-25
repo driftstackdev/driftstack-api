@@ -112,6 +112,18 @@ interface Row {
   cells: string[];
 }
 
+/**
+ * The tier slugs, taken from the cap constants this file compares against.
+ *
+ * Derived rather than listed, for the reason the display-name mapping is: a row
+ * may only enter the tier set if there is a cap on the other side to read it
+ * against.
+ */
+const TIER_SLUGS: ReadonlySet<string> = new Set([
+  ...Object.keys(TIER_CONCURRENT_SESSION_LIMITS),
+  ...Object.keys(PROFILES_PER_TIER),
+]);
+
 /** Tier rows of one page, keyed by slug however the page spells them. */
 function rowsOf(surface: (typeof SURFACES)[number], names: Map<string, string>): Row[] {
   const md = readFileSync(resolve(DOCS, surface.file), 'utf8');
@@ -123,7 +135,16 @@ function rowsOf(surface: (typeof SURFACES)[number], names: Map<string, string>):
         : /^\|\s*([A-Z][A-Za-z ]+?)\s*\|(.+)\|\s*$/.exec(line);
     if (m === null) continue;
     const label = m[1]!;
+    // V-1608 — the two branches were asymmetric: a display-name row had to name a
+    // known tier, a slug row did not. The slug pattern is `| \`word\` | ... |`, which
+    // matches ANY row on the page whose first cell is a backticked lowercase word,
+    // and the scan walks the whole file rather than the tier table. So a second
+    // table on one of these six pages silently enlarged the tier set: documenting
+    // the profile-trim `scope` values took api/profiles.md to "12 of 8 tiers" and
+    // put three non-tiers into the cap comparison. Membership is checked on both
+    // branches now, so the completeness count means what it says.
     if (surface.key === 'name' && !DISPLAY_NAMES.has(label)) continue;
+    if (surface.key === 'slug' && !TIER_SLUGS.has(label)) continue;
     const slug = surface.key === 'slug' ? label : names.get(label);
     if (slug === undefined) continue;
     out.push({ slug, cells: (m[2] ?? '').split('|').map((c) => c.trim()) });
