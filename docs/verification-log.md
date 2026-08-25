@@ -17789,3 +17789,46 @@ the four files it does touch pass. The full suite is therefore NOT green as of t
 is not this work.
 
 Playwright moves 225 → 226 over 38 spec files, updated in all four places the blind-spot suite pins them.
+
+## V-1591 — the document says 201 operations need a token; this asks whether they do
+
+`openapi.json` is generated from the route definitions, which makes it a good second artefact for most
+questions and a useless one for this one. The security block is generated from what a route DECLARES, not
+from what it enforces: a handler whose auth `preHandler` went missing publishes the same
+`security: [{ BearerAuth: [] }]` it always did, and every static check in this repo would keep agreeing
+with it. The only artefact that can disagree is the running server, asked without a token.
+
+**Nothing was wrong, and the measurement is the result.** Of 201 bearer-declared operations, 146 refuse an
+anonymous caller outright and 27 answer a typed deployment gate before authentication is reached. Not one
+served data. The remaining 28 are unrouted under this harness for the reasons V-1587 established.
+
+**The gate-before-auth ordering is recorded rather than filed.** Those 27 answer 503 `feature-unavailable`
+to a request carrying no credentials, so an anonymous caller can learn which optional features a
+deployment has switched on. That is information the public status page carries anyway and the bodies are
+product copy, not secrets — but a later reader finding 27 unauthenticated 503s should not have to
+rediscover why, so the spec says it out loud.
+
+**A bound copied instead of measured, and it failed immediately.** The first version bounded the unrouted
+set at twelve, taken from the sibling id-sweep. That sweep walks the 106 single-parameter operations; this
+one walks all 201 that declare a bearer requirement, so more dependency-gated modules fall inside it. The
+real figure is 28. A number restated from a neighbouring file rather than measured for the population at
+hand is the exact fault this log keeps recording, and it is a small mercy that it failed on the first run
+rather than passing with slack.
+
+**The mutation proof, stated for what it actually shows.** Removing the `requireScope` preHandler from
+`admin-usage` reds the guard — but the route then answers 500 rather than serving data, because the
+handler reaches for an account context that is no longer there. So this proves the guard notices when a
+bearer-declared operation stops refusing anonymous; it does not prove it catches a route that would
+happily serve. That is a weaker claim than "catches an auth bypass" and is the one worth writing down.
+
+**Two working-tree facts, both about concurrency rather than code.** The restore step after that mutation
+silently did nothing: `$S` was set in an earlier shell and each command runs in a fresh one, so `cp`
+received an empty path and the route stayed unauthenticated until the next check caught it. Restores use
+absolute paths from here. Separately, a peer's retention commit swept up this batch's spec and figure
+edits into `de8155994` via a broad add — correctly, as it happens, but not by this session.
+
+**One red is outstanding and it is not this work.** `EXPECTED_TEST_FILES` reads 3017 where the node
+project now collects 3018. That commit added two test files and deleted one, a net of exactly one, so the
+pin is theirs to raise; absorbing it here would hide which change moved the number.
+
+Playwright moves 226 → 227 over 39 spec files, in all four pinned places.
