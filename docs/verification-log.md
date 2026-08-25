@@ -16855,3 +16855,39 @@ is "necessary and not sufficient" — the accurate statement is that the three c
 the count is the only one that covers silent arm loss.
 
 **No code changed.** The file was restored byte-identical and the suite verified green afterwards.
+
+## V-1570 — measuring the gap V-1569 named, and deciding not to build a ratchet for it
+
+V-1569 said a file that parses but loses an arm is "caught by NOTHING" and left that as an open gap. Before
+adding a second ratchet to `verify-suite.mjs` to close it, the gap got measured. **It is narrower than the
+sentence implied, and the mechanism V-1569 named does not produce it at all.**
+
+**Case 1 — a stray `);` closing the describe early.** This is the case the standing rule is written for.
+Closing the describe before the second arm of a real guard produces:
+
+```
+Transform failed with 1 error
+Tests  no tests
+```
+
+The file does not PARSE — the original closing `});` is now unbalanced — so it is not a silent arm loss at
+all. V-1569 established that in a full run this exits 1 and additionally reds
+`the-server-source-type-checks`. Caught twice.
+
+**Case 2 — an arm commented out.** The file parses, `Tests 1 passed` where it was 2, and `it(` drops 2→1.
+This is the genuinely silent one: the file count is unchanged, nothing fails, and the suite is one
+assertion lighter.
+
+**And a ratchet is still the wrong fix.** `judge()` reads only the "Test Files" line, so a test-count pin
+would be new machinery. It would need bumping on every arm added anywhere in a 30,949-test suite — churn
+on every contribution — to catch a case that is already caught twice over: by the `it(`-versus-HEAD
+comparison the standing rules require, and by the fact that commenting out an arm is a visible, deliberate
+diff. A pin nobody can add a test without bumping becomes a pin bumped without reading, which is the exact
+failure this arc has documented in a filename roster, a duplicated list and a magic window.
+
+So the correction to V-1569 is precise rather than cosmetic: the count check does not cover a case the
+other two miss because the stray-paren path breaks parsing. It covers **deliberate arm removal**, where its
+value is telling the author their edit dropped an assertion — a review aid, not a safety net against a
+silent regression.
+
+**No code changed.** Both mutations restored byte-identical, and the file verified back at 2 passing arms.
