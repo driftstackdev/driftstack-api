@@ -42,7 +42,16 @@ This repository (`driftstack-api`) is Agent 2's scope ONLY:
 
 Cross-agent dependencies coordinate via planning file 133 schema + `docs/internal/cross-agent-control-plane-contract.md`.
 
-**⚠️ A2↔A3 LIVE CHANNEL = THE BUS: `/Users/john/code/driftstack/operations/agent-bus/A2-A3-BUS.md`** (in the `driftstack` repo; A2 has a Rule-G write carve-out for that ONE file). When A3 asks something, or you need to reply to A3, **read + append THERE** — never in a hand-off/contract doc (A3 does **not** watch those; a reply elsewhere is invisible to them — this cost a real "you haven't replied" miss 2026-06-19). To post: append at the bottom as `**[A2 <date> W#### → A3: …]**`, then `git add operations/agent-bus/A2-A3-BUS.md` (NEVER `git add -A` — concurrent writers) + commit (`Driftstack <dev@driftstack.dev>`, no AI trailer). It is a **shared working tree**; A3 reads the working-tree file directly and the origin push lags badly, so a local pathspec-commit is enough — do NOT `git pull --rebase` (A1/A3 WIP blocks it) or push the whole repo.
+**⚠️ A2↔A3 CHANNEL — POST TO THE LIVE OUTBOX FIRST.** Two layers exist and they are NOT interchangeable (`operations/agent-bus/live/README.md` is the authority):
+
+1. **`operations/agent-bus/live/A2.md` — YOUR OUTBOX, and the layer agents actually read.** Only A2 appends to it; all agents read all three of `live/A{1,2,3}.md`. This is the low-latency channel. **Post here.**
+2. `operations/agent-bus/A2-A3-BUS.md` — the durable PAIRWISE ARCHIVE. Material outcomes get copied here once it is clean. It is a record, not a channel.
+
+⛔ This line used to name the pairwise file as "THE BUS", and that cost real messages: on 2026-08-25 three posts — including a wire-contract proposal and a "please review" on a change made inside A3's own files — went to the archive while the live layer sat untouched. Never edit or commit another agent's outbox (`live/A1.md`, `live/A3.md`).
+
+To post: append at the bottom of `live/A2.md` as `**[A2 <date> W#### | …]**`, keep it compact, then `git add operations/agent-bus/live/A2.md` (NEVER `git add -A` — concurrent writers) + commit (`Driftstack <dev@driftstack.dev>`, no AI trailer). Shared working tree: peers read the working-tree file directly and the origin push lags, so a local pathspec-commit is enough — do NOT `git pull --rebase` (A1/A3 WIP blocks it) or push the whole repo.
+
+⚠️ **Check that your correspondent is ALIVE before treating a post as a handoff.** `grep -oE "\[A3[^]]{0,40}" operations/agent-bus/live/A3.md | tail -1` gives their last entry. A3 has been silent on every bus since 2026-08-01; A1 writes to `live/A1.md` daily. Writing into a dormant agent's lane is not delegation, and "blocked on A3" is not a real status unless A3 has posted recently. A peer session may also be reachable directly — check `ListAgents` and message it rather than assuming the file is read.
 
 ## Key rules (full set in ORCHESTRATOR-STATE.md + AGENTS.md)
 
