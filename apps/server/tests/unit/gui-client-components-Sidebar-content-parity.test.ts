@@ -89,6 +89,17 @@ describe('W486.S apps/gui-client/src/components/Sidebar.tsx content parity', () 
       "onChange={(e) => setActiveWorkspace(e.target.value === '' ? null : e.target.value)}",
     );
     expect(body).toMatch(/<option value="">Personal<\/option>/);
-    expect(body).toContain('function workspaceLabel(');
+    // V-1611 #14 — was `function workspaceLabel(`, a LOCAL helper that rendered
+    // "Team 3f9a2c1d · admin" from the owner id while the payload carried
+    // `owner_name`/`owner_email` for exactly this purpose (the SDK comment says
+    // so: "let the dashboard label a team by who owns it"). Replaced by one
+    // shared definition, because ProfilesView had a second, worse label
+    // ("Team · member", no identity at all) and two surfaces disagreeing about
+    // what a team is called is how one goes stale.
+    expect(body).toContain("import { teamWorkspaceLabel } from '../lib/team-label'");
+    expect(body).toContain('teamWorkspaceLabel(t)');
+    expect(body, 'the local label must be GONE, not merely unused').not.toContain(
+      'function workspaceLabel(',
+    );
   });
 });

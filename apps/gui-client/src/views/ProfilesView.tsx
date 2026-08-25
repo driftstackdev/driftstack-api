@@ -120,6 +120,7 @@ import {
 } from '../lib/account-proxies';
 import { parseWireGuardConfig } from '../lib/parse-wireguard';
 import { validateOpenVpnConfig } from '../lib/parse-openvpn';
+import { teamWorkspaceLabel, teamWorkspaceTitle } from '../lib/team-label';
 
 // 2026-05-20 — match SessionsView: slow background poll + skip the
 // visible loading flicker on tick refreshes so the panel doesn't
@@ -3398,10 +3399,10 @@ export function ProfilesView({
                   ? 'bg-accent-subtle font-medium text-ink-primary'
                   : 'border border-surface-divider text-ink-secondary hover:border-ink-muted/40'
               }`}
-              title={`Owner account ${t.owner_account_id}`}
+              title={teamWorkspaceTitle(t)}
               onClick={() => setActiveWorkspace(t.owner_account_id)}
             >
-              Team · {t.role}
+              {teamWorkspaceLabel(t)}
             </button>
           ))}
           {/* Discoverability (2026-06-16, founder "where am I supposed to look"):

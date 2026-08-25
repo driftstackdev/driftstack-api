@@ -20,6 +20,7 @@ import { useRecordings } from '../lib/recordings';
 import { isCloudBaseUrl } from '../lib/telemetry';
 import { listProxyMetadata } from '../lib/proxies';
 import { fetchActiveAgentSessionCount } from '../lib/active-agent-sessions';
+import { teamWorkspaceLabel } from '../lib/team-label';
 
 export type SidebarViewKind =
   | 'home'
@@ -290,7 +291,7 @@ export function Sidebar({
                 <option value="">Personal</option>
                 {(accountMe.teams ?? []).map((t) => (
                   <option key={t.membership_id} value={t.owner_account_id}>
-                    {workspaceLabel(t)}
+                    {teamWorkspaceLabel(t)}
                   </option>
                 ))}
               </select>
@@ -380,15 +381,6 @@ function SidebarItem({ children, icon, badge, active, onClick }: SidebarItemProp
       )}
     </button>
   );
-}
-
-/** Label for a team-workspace option. The teams[] payload carries only the
- *  owner account id + role (no team name yet), so show a short id + the
- *  caller's role in that workspace. A friendlier team name is a follow-up once
- *  the API surfaces one. */
-function workspaceLabel(t: { owner_account_id: string; role: 'admin' | 'member' }): string {
-  const short = t.owner_account_id.replace(/^acc_/, '').slice(0, 8);
-  return `Team ${short} · ${t.role}`;
 }
 
 function fmtRatio(value: number | null, cap: number | null): string | null {
