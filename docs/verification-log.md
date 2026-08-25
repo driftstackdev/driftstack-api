@@ -20218,3 +20218,49 @@ finding.
 full schema equality. Two schemas with the same property names and different types would match here and
 should not. Every matched pair above is a response the routes demonstrably build from the named schema, but
 the instrument is a fingerprint, not a proof of identity.
+
+## V-1651 — making a test double MORE faithful broke a test, and the class was 88 of 89 not 89
+
+⛔ **Correcting V-1639 and V-1645.** Both recorded that W-12's ~89 argument/assignment errors are
+"type-only", and V-1639 recommended the fix: have `makeResponse` return a real
+`new Response(JSON.stringify(body), {status})` instead of a hand-built `{ok, status, json}`, which "removes
+the double-cast entirely rather than papering it".
+
+**The recommendation was wrong, and A2 found it by predicting the delta.** Applied, the error count landed
+where predicted and the gui suite went RED.
+
+**A real `Response` body is SINGLE-USE.** The stub's `json: () => Promise.resolve(body)` was a closure and
+could be read forever. The test queued **one shared instance twice**:
+
+    .mockResolvedValueOnce(bound)      // consumed
+    …
+    .mockResolvedValueOnce(bound)      // "Body is unusable"
+
+The sign-in flow never reached its success state and `waitFor` timed out.
+
+⭐ **The transferable finding is the inverse of the usual one.** The standing lesson is that a faithful
+double hides the real artefact. This is the opposite: **making a double more faithful broke a test that was
+relying on a way the double was UNFAITHFUL** — and nobody could have written that dependency down, because
+with a plain object re-readability is not a property, it is just how objects behave. **A test can depend on
+an affordance the double has only by accident of being a different kind of thing.**
+
+⚠️ So the class is **88 of 89 type-only, not 89**. The exception is not a different kind of error; it is the
+same error whose _fix_ has a behavioural consequence. That distinction was not in my framing and should
+have been: "type-only" described the defect and I let it describe the remedy too.
+
+**Fixed by A2 as a factory rather than by `.clone()`**, which is the better call for a reason beyond
+passing: a real `fetch` never hands the same `Response` instance to two requests, so calling the factory
+twice is the more faithful double as well as the working one. `.clone()` would have preserved the
+shared-instance shape and left the same trap for the next author.
+
+⭐ **And the catch mechanism deserves its own line, because it caught a second thing nobody was looking
+for.** A predicted delta of −26 came back −24: a deleted interface had two surviving references, so a commit
+whose subject is removing errors had silently ADDED two. **Read as "148 → 124, good progress", that ships.**
+A fix that improves the number while creating new instances of the very thing it removes is invisible to
+every check except a predicted delta.
+
+**The pair, which cover opposite failures and belong together:**
+
+- **Before trusting a zero, make the instrument produce a one.** (Catches an instrument that cannot see.)
+- **After applying a fix, check the number moved by what you predicted.** (Catches a fix that did not do
+  what you thought — and it is the only fault today that caught itself with no human reading any code.)
