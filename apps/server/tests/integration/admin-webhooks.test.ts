@@ -176,6 +176,39 @@ describe('POST /v1/admin/webhook-deliveries/:id/replay', () => {
 });
 
 describe('GET /v1/admin/webhook-dlq', () => {
+  // V-1590 — the endpoint_id drill-down used to have its `webhook_endpoint_`
+  // prefix removed and the remainder passed straight through. The repo filters a
+  // uuid column, so a mistyped filter was a cast error the admin saw as a 500
+  // rather than a bad request. Confirmed against Postgres before fixing:
+  // `invalid input syntax for type uuid`.
+  it.each([
+    ['a bare word', 'not-a-uuid'],
+    ['the public form with a broken uuid', 'webhook_endpoint_not-a-uuid'],
+    ['an almost-uuid', '1111111-2222-3333-4444-555555555555'],
+    ['an empty-ish value', '%20'],
+  ])('refuses a malformed endpoint_id filter — %s', async (_label, value) => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/admin/webhook-dlq?endpoint_id=${value}`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, 'a malformed filter is refused at the boundary').toBe(400);
+  });
+
+  it('accepts both published shapes of a well-formed endpoint_id', async () => {
+    fx = await buildTestApp();
+    const uuid = '11111111-2222-3333-4444-555555555555';
+    for (const value of [uuid, `webhook_endpoint_${uuid}`]) {
+      const res = await fx.app.inject({
+        method: 'GET',
+        url: `/v1/admin/webhook-dlq?endpoint_id=${value}`,
+        headers: auth(fx),
+      });
+      expect(res.statusCode, `${value} is a shape this filter publishes`).toBe(200);
+    }
+  });
+
   it('returns dlq deliveries paginated', async () => {
     fx = await buildTestApp();
     const { id: a } = await seedDelivery(fx, { status: 'dlq' });

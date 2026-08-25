@@ -16,6 +16,28 @@ import { readClientIp } from '../lib/client-ip.js';
 
 const PUBLIC_ID_RE = /^[a-z]{3}_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 
+/**
+ * V-1590 — `webhook_endpoint_` is not a three-letter prefix, so `PUBLIC_ID_RE`
+ * above cannot judge it and the DLQ filter only ever STRIPPED it. Stripping is
+ * not validating: whatever remained went to a repo that filters a `uuid` column,
+ * where a non-uuid is a cast error rather than a filter that matches nothing, and
+ * the admin saw a 500 for a mistyped drill-down. The bare form is accepted too,
+ * because an operator reading the id out of a database pastes it without the
+ * prefix.
+ */
+const ENDPOINT_FILTER_RE =
+  /^(?:webhook_endpoint_)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+
+function endpointUuidFromFilter(value: string): string {
+  const match = ENDPOINT_FILTER_RE.exec(value);
+  if (!match?.[1]) {
+    throw new BadRequestError(
+      'Invalid endpoint_id. Expected "webhook_endpoint_<uuid>" or a bare UUID.',
+    );
+  }
+  return match[1];
+}
+
 function uuidFromPrefixedId(value: string, expectedPrefix: string): string {
   const match = PUBLIC_ID_RE.exec(value);
   if (!match || !match[1] || !value.startsWith(`${expectedPrefix}_`)) {
@@ -139,11 +161,13 @@ export function registerAdminWebhookRoutes(
       if (!ctx) throw new Error('account context missing after requireAuth');
       const rawQuery = (request.query ?? {}) as ListDlqQueryInput;
       const query = ListDlqQuerySchema.parse(rawQuery);
-      // V-512 — strip the public `webhook_endpoint_` prefix off the
-      // optional drill-down filter so the repo sees a bare uuid.
+      // V-512 — accept the public `webhook_endpoint_` form on the optional
+      // drill-down filter and hand the repo a bare uuid. V-1590 — the shape is
+      // checked rather than merely stripped, because the value reaches a uuid
+      // column.
       const endpointIdRaw = query.endpoint_id;
       const endpointId =
-        endpointIdRaw !== undefined ? endpointIdRaw.replace(/^webhook_endpoint_/, '') : undefined;
+        endpointIdRaw !== undefined ? endpointUuidFromFilter(endpointIdRaw) : undefined;
       const page = await webhooksAdmin.listDlq(ctx, {
         limit: query.limit,
         ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),

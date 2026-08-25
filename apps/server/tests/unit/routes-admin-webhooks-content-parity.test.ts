@@ -18,8 +18,9 @@
 //     success + error with err.name lowercase /error$/ strip.
 //   • clientIp helper: shared Fastify trustProxy-resolved request.ip
 //     to request.ip.
-//   • V-512 endpoint_id prefix strip: `webhook_endpoint_` removed
-//     before passing to repo.
+//   • V-512 endpoint_id filter: the public `webhook_endpoint_` form or a bare
+//     uuid is accepted, anything else refused, and the repo sees the uuid.
+//     V-1590 — this used to remove the prefix without judging the remainder.
 //   • Scope-gate: requireScope('driftstack_internal_admin') +
 //     rateLimit('global') on ALL 5 routes.
 //   • ListDlqQuerySchema + ListDlqQueryInput from @driftstack/api-types.
@@ -108,12 +109,19 @@ describe('W419.A apps/server/src/routes/admin-webhooks.ts content parity', () =>
     );
   });
 
-  it('V-512 endpoint_id prefix strip: removes `webhook_endpoint_` before passing bare uuid to repo (admin GUI drill-down compatibility)', () => {
+  // V-1590 — this pinned a prefix removal. Removing a prefix says nothing about
+  // what is left, and what is left reaches a uuid column, so a mistyped filter
+  // was a cast error answered as 500. The route now judges the shape and the
+  // public form is one of two it accepts.
+  it('V-512 endpoint_id filter: accepts `webhook_endpoint_<uuid>` or a bare uuid and refuses anything else, passing the bare uuid to the repo (admin GUI drill-down compatibility)', () => {
     expect(body).toMatch(
-      /\/\/ V-512 — strip the public `webhook_endpoint_` prefix off the\s*\n?\s*\/\/ optional drill-down filter so the repo sees a bare uuid\./,
+      /const ENDPOINT_FILTER_RE =\s*\n?\s*\/\^\(\?:webhook_endpoint_\)\?\(\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{12\}\)\$\/i;/,
     );
     expect(body).toMatch(
-      /const endpointId =\s*\n?\s*endpointIdRaw !== undefined \? endpointIdRaw\.replace\(\/\^webhook_endpoint_\/, ''\) : undefined;/,
+      /throw new BadRequestError\(\s*\n?\s*'Invalid endpoint_id\. Expected "webhook_endpoint_<uuid>" or a bare UUID\.',\s*\n?\s*\);/,
+    );
+    expect(body).toMatch(
+      /const endpointId =\s*\n?\s*endpointIdRaw !== undefined \? endpointUuidFromFilter\(endpointIdRaw\) : undefined;/,
     );
   });
 

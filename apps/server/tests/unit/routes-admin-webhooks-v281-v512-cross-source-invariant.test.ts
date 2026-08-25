@@ -27,8 +27,9 @@
 //   AdminAuditAction taxonomy — 'webhook_delivery.replayed' +
 //   'webhook_delivery.requeued'.
 //
-//   V-512 endpoint_id filter — strips 'webhook_endpoint_' public
-//   prefix before calling the repo.
+//   V-512 endpoint_id filter — accepts the 'webhook_endpoint_' public
+//   form or a bare uuid, refuses anything else, and calls the repo with
+//   the uuid. V-1590 — it previously stripped without validating.
 //
 //   trustProxy-resolved request.ip derivation (per D-025
 //   admin-audit IP capture).
@@ -126,12 +127,15 @@ describe('W1043 routes/admin-webhooks V-281 + V-512 cross-source invariant', () 
 
   // ─── V-512 endpoint_id filter ────────────────────────────────
 
-  it("CRITICAL V-512 endpoint_id filter — strips 'webhook_endpoint_' public prefix before calling repo. The route-side strip keeps the public-id convention out of the repo's storage layer.", () => {
+  it("CRITICAL V-512 endpoint_id filter — accepts the 'webhook_endpoint_' public form or a bare uuid, refuses anything else, and calls the repo with the uuid. Keeping the public-id convention out of the storage layer is why the route translates; V-1590 is why it also judges, since the value lands in a uuid column and a strip alone made a mistyped filter a 500.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-webhooks.ts'));
     expect(p).toMatch(
-      /V-512 — strip the public `webhook_endpoint_` prefix off the\s*\n?\s*\/\/\s*optional drill-down filter so the repo sees a bare uuid\./,
+      /V-512 — accept the public `webhook_endpoint_` form on the optional\s*\n?\s*\/\/\s*drill-down filter and hand the repo a bare uuid\./,
     );
-    expect(p).toMatch(/endpointIdRaw\.replace\(\/\^webhook_endpoint_\/, ''\)/);
+    // V-1590 — a strip is not a check, and the stripped value reaches a uuid
+    // column. The filter is now validated and the refusal is a bad request.
+    expect(p).toMatch(/endpointUuidFromFilter\(endpointIdRaw\)/);
+    expect(p).toMatch(/\(\?:webhook_endpoint_\)\?/);
   });
 
   // ─── DLQ pagination envelope ─────────────────────────────────
