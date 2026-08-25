@@ -14,7 +14,7 @@
 // glanceable. Connection state (reconnecting / closed) surfaces as a
 // small text hint in the empty state, not a separate alert.
 
-import { useNotifications } from '../lib/use-notifications';
+import type { UseNotificationsResult } from '../lib/use-notifications';
 import type { NotificationEvent } from '../lib/notifications';
 
 function formatTotalCents(cents: number): string {
@@ -106,8 +106,29 @@ function describe(event: NotificationEvent): { title: string; body: string } {
   }
 }
 
-export function NotificationToastStack(): JSX.Element | null {
-  const { events, connection, dismiss, reconnect } = useNotifications();
+/**
+ * ⛔ V-1611 #18 — takes the feed as PROPS rather than calling
+ * `useNotifications()` itself.
+ *
+ * That hook opens an SSE subscription on mount, so every component calling it
+ * gets its OWN connection. Adding a notification bell that called it again
+ * would have opened a second stream to the same account for the same events —
+ * invisible in the UI and obvious in the server logs.
+ *
+ * One call site (App) now owns the subscription and passes it to both readers.
+ * An optional prop with a hook fallback was the tempting alternative and is
+ * worse: two code paths, one of which only tests ever take.
+ *
+ * The props type is the hook's own exported `UseNotificationsResult` — I added
+ * a second name for it before grepping and removed that again; one shape should
+ * not have two names.
+ */
+export function NotificationToastStack({
+  events,
+  connection,
+  dismiss,
+  reconnect,
+}: UseNotificationsResult): JSX.Element | null {
   // Render the overlay when there's something to show OR the stream needs
   // attention. 'closed' now surfaces even with zero queued events: the
   // subscriber latches 'closed' only after it actively gave up retrying (the

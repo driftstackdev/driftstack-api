@@ -24,6 +24,8 @@ import { TitleBar } from './components/TitleBar';
 import { ThemeSwitcher } from './components/ThemeSwitcher';
 import { ShortcutsCheatsheet } from './components/ShortcutsCheatsheet';
 import { NotificationToastStack } from './components/NotificationToastStack';
+import { NotificationBell } from './components/NotificationBell';
+import { useNotifications } from './lib/use-notifications';
 import { RecordingsProvider } from './lib/recordings';
 import { SettingsProvider, useSettings } from './lib/SettingsContext';
 import { useConnectionStatus } from './lib/use-connection-status';
@@ -395,6 +397,18 @@ function Shell(): JSX.Element {
   // P2 #11 — the real app version (Tauri runtime / build-time), not a hardcoded
   // literal that silently lies after a version bump.
   const appVersion = useAppVersion();
+  // ⛔ V-1611 #18 — ONE subscription for the whole shell. `useNotifications()`
+  // opens an SSE stream on mount, so each caller gets its own connection; the
+  // toast stack and the bell are two readers of one feed, not two subscribers.
+  //
+  // ⛔ AND IT LIVES HERE, with the other unconditional hooks, because Shell has
+  // early returns at the wizard and error paths. I first put it just above the
+  // final `return` and every app-shell test broke with "Rendered more hooks
+  // than during the previous render" — the same defect V-1611 fixed in
+  // SettingsView this morning, and the one the comment further down this file
+  // already warns about. A hook below an early return is a hook that sometimes
+  // does not run.
+  const notificationFeed = useNotifications();
   // Toast surface for the app-boot deep-link listener below: a dashboard
   // "Open in desktop client" that can't open the window must SHOW the reason,
   // not bury it in console.warn (the customer re-clicks with no idea why).
@@ -730,11 +744,12 @@ function Shell(): JSX.Element {
           session.errored toasts surface regardless of which view the
           customer is on. Subscribes via useNotifications() — auto-
           closes on sign-out (apiKey flips null). */}
-        <NotificationToastStack />
+        <NotificationToastStack {...notificationFeed} />
         <TitleBar
           subtitle={mode}
           right={
             <>
+              <NotificationBell events={notificationFeed.events} />
               <ThemeSwitcher />
               <span className="text-surface-divider">|</span>
               <LiveConnectionPill

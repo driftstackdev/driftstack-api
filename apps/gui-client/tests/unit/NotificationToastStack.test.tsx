@@ -20,16 +20,26 @@ const hookState: {
   connection: 'idle',
 };
 
-vi.mock('../../src/lib/use-notifications', () => ({
-  useNotifications: () => ({
+// ⛔ V-1611 #18 — the module mock is GONE. The component used to call
+// `useNotifications()` itself, so a test could only reach it by replacing the
+// module. It now takes the feed as props, because that hook opens an SSE
+// subscription per caller and a second reader (the notification bell) would
+// have opened a second stream to the same account.
+//
+// So this renders the real component with real props. Nothing is doubled, and
+// the arms below assert on the thing that ships rather than on a stand-in.
+const { NotificationToastStack } = await import('../../src/components/NotificationToastStack');
+
+/** The feed the component receives, assembled from the same `hookState` the
+ *  mocked hook used to serve. */
+function feed(): Parameters<typeof NotificationToastStack>[0] {
+  return {
     events: hookState.events,
     connection: hookState.connection,
     dismiss: dismissMock,
     reconnect: reconnectMock,
-  }),
-}));
-
-const { NotificationToastStack } = await import('../../src/components/NotificationToastStack');
+  };
+}
 
 function setHookState(
   events: NotificationEvent[],
@@ -55,7 +65,7 @@ const baseEvent: NotificationEvent = {
 describe('NotificationToastStack', () => {
   it('renders nothing when idle + no events', () => {
     setHookState([], 'idle');
-    const { container } = render(<NotificationToastStack />);
+    const { container } = render(<NotificationToastStack {...feed()} />);
     expect(container.firstChild).toBeNull();
   });
 
@@ -64,7 +74,7 @@ describe('NotificationToastStack', () => {
       { ...baseEvent, at: '2026-05-20T23:00:00.000Z' },
       { ...baseEvent, severity: 'critical', at: '2026-05-20T22:00:00.000Z' },
     ]);
-    render(<NotificationToastStack />);
+    render(<NotificationToastStack {...feed()} />);
     const toasts = screen.getAllByTestId('notification-toast');
     expect(toasts).toHaveLength(2);
     // First (newest) card carries the Dismiss CTA.
@@ -75,7 +85,7 @@ describe('NotificationToastStack', () => {
   it("clicking a single toast's Dismiss invokes the hook's dismiss callback", () => {
     setHookState([baseEvent]);
     dismissMock.mockClear();
-    render(<NotificationToastStack />);
+    render(<NotificationToastStack {...feed()} />);
     // A single queued toast carries its own per-card Dismiss (the "Clear all"
     // header only appears once >1 toast is queued).
     fireEvent.click(screen.getByLabelText('Dismiss notification'));
@@ -88,7 +98,7 @@ describe('NotificationToastStack', () => {
       { ...baseEvent, severity: 'critical', at: '2026-05-20T22:00:00.000Z' },
     ]);
     dismissMock.mockClear();
-    render(<NotificationToastStack />);
+    render(<NotificationToastStack {...feed()} />);
     expect(screen.getByText('2 notifications')).toBeTruthy();
     // No per-card Dismiss when the "Clear all" header is present.
     expect(screen.queryByLabelText('Dismiss notification')).toBeNull();
@@ -98,7 +108,7 @@ describe('NotificationToastStack', () => {
 
   it("connection 'reconnecting' surfaces the amber banner even with zero events", () => {
     setHookState([], 'reconnecting');
-    render(<NotificationToastStack />);
+    render(<NotificationToastStack {...feed()} />);
     expect(screen.getByTestId('notification-connection-banner').textContent).toMatch(
       /reconnecting/i,
     );
@@ -107,7 +117,7 @@ describe('NotificationToastStack', () => {
   it("connection 'closed' + at least one event surfaces the rose banner with a working Reconnect button", () => {
     setHookState([baseEvent], 'closed');
     reconnectMock.mockClear();
-    render(<NotificationToastStack />);
+    render(<NotificationToastStack {...feed()} />);
     expect(screen.getByTestId('notification-connection-banner').textContent).toMatch(
       /disconnected/i,
     );
@@ -118,7 +128,7 @@ describe('NotificationToastStack', () => {
   it("connection 'closed' with zero events STILL surfaces the banner + Reconnect (the subscriber actively gave up; a silent death is the bug we're fixing — sign-out is 'idle', not 'closed')", () => {
     setHookState([], 'closed');
     reconnectMock.mockClear();
-    render(<NotificationToastStack />);
+    render(<NotificationToastStack {...feed()} />);
     // The degraded state is visible even with an empty ring…
     expect(screen.getByTestId('notification-connection-banner').textContent).toMatch(
       /disconnected/i,
@@ -130,13 +140,13 @@ describe('NotificationToastStack', () => {
 
   it("connection 'idle' with zero events stays hidden (sign-out / no key → no banner spam)", () => {
     setHookState([], 'idle');
-    const { container } = render(<NotificationToastStack />);
+    const { container } = render(<NotificationToastStack {...feed()} />);
     expect(container.firstChild).toBeNull();
   });
 
   it('renders an empty footer (not "Invalid Date") when the event timestamp is malformed', () => {
     setHookState([{ ...baseEvent, at: 'not-a-date' }]);
-    render(<NotificationToastStack />);
+    render(<NotificationToastStack {...feed()} />);
     const card = screen.getByTestId('notification-toast');
     expect(card.textContent).not.toContain('Invalid Date');
   });
@@ -152,7 +162,7 @@ describe('NotificationToastStack', () => {
         at: '2026-05-20T22:00:00.000Z',
       },
     ]);
-    render(<NotificationToastStack />);
+    render(<NotificationToastStack {...feed()} />);
     const card = screen.getByTestId('notification-toast');
     expect(card.getAttribute('data-notification-kind')).toBe('incident.broadcast');
     expect(card.textContent).toContain('Incident: API degraded');
