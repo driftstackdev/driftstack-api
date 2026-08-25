@@ -17009,3 +17009,43 @@ the e2e runner documents as unused.
 **Still unrun: the Playwright e2e job** — 222 specs, the other half of the "real Postgres + Redis" claim.
 `scripts/e2e-local.mjs` exists to run it without Docker, and its own header records why that matters:
 three `rate-limit.spec.ts` specs "were able to rot unnoticed until someone ran them."
+
+## V-1574 — the last uncovered CI job, and the whole surface verified once
+
+V-1571 established that "gate green" in every entry of this log meant one CI job of five. V-1572 ran the
+Python and Go SDK jobs; V-1573 ran the 115 database-gated suites. **The Playwright e2e job was the last,
+and it passes:**
+
+```
+node scripts/e2e-local.mjs      222 passed (45.6s)      exit 0
+```
+
+That completes the surface. Every CI job this repository defines has now been run against this working
+tree, which no single command here does:
+
+```
+build-test      verify-suite            3017 files / 30155 tests   exit 0
+build-test      verify-suite --all      3188 files / 30949 tests   exit 0
+integration     DATABASE_URL enabled     393 files /  3796 tests   exit 0
+python-sdk      pytest + ruff + mypy     365 passed, 31 files clean
+go-sdk          go vet + go test         clean
+e2e             Playwright                222 passed
+bench           advisory, not run — it does not gate a merge
+```
+
+**The Playwright figure was exact.** The gate's note says "222 Playwright tests over 36 spec files" and the
+run reports 222. That is worth stating beside V-1572's corrections: of three recorded counts checked, one
+was right, one had drifted (Python skips 4 → 9) and one matched nothing measurable (Go 236 → 209 or 242).
+The difference is not diligence — it is that the Playwright number gets re-measured whenever specs are
+added, and its own comment records doing exactly that twice. **A figure with a re-measurement habit
+attached stays true; one without it does not**, which is the argument for writing the method beside the
+number rather than the number alone.
+
+**What this means for the log.** Every batch here reasoned from source and mutation-proved its guards, and
+those methods stand on their own. What was missing was the confirmation that the thirteen declared status
+codes, the UUID validator, the two webhook refusals and the dependency declarations survive contact with a
+real database, a real Redis and a real browser. They do.
+
+**Cleanup.** Two databases created across V-1573 and this batch, both dropped; Redis indices 14 and 13
+flushed of the keys those runs left. The `driftstack_iso_*` databases were deliberately left — the helper
+creates them only when absent and reuses them, so they belong to its lifecycle rather than to me.
