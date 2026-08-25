@@ -19921,3 +19921,40 @@ third (`api_scale.apiKeyEnvironment 'live' -> 'test'`) also fails.
 containing a lazy any-char run. Their prefixes are DECLARATIONS (`${name} = z.object({`, `${group}=(`),
 which are structurally unique in a file, where v485's prefix was a repeated KEY. **I have not
 mutation-proved those eight**, and the distinction is a reading, not a measurement.
+
+## V-1644 — twice now, the fix that satisfies the compiler would have made the code less true
+
+Closing the last of W-12's argument/assignment class turned 81-measured-and-8-inferred into 89 of 89 read.
+Nothing behavioural in any of them. But two of the last three are the `icon` requirement, and I had a
+recommendation half-drafted: _make `ProfileMeta.icon` optional and thirteen errors vanish with no
+behavioural change._
+
+⛔ **That would have been wrong, and the field's own doc comment says so:**
+
+    /** Optional chosen icon (a short emoji); empty string = use the monogram. */
+    icon: string;
+
+The sentinel for "no icon" is `''`, not `undefined`. `profiles-meta.ts` normalises to `''` on the way in at
+two sites, and every consumer guards with `r.icon ?`, which treats `''` as absent correctly. **Making it
+`icon?: string` would introduce a SECOND spelling of absent** — `undefined` and `''` would both mean it,
+and every guard would have to handle both. The correct fix is the opposite direction: add `icon: ''` to the
+fixtures so they match a contract that is already coherent.
+
+⚠️ I also had _"`icon` is inconsistent across the codebase"_ — because `addFolder(rawName, scope, icon?)`
+takes it optionally. **That is not an inconsistency.** Omitting an argument and storing an empty value are
+different things; a required stored field with an empty-string sentinel is compatible with an optional
+parameter. I read drift into a coherent design.
+
+⭐ **This is the second time in one backlog.** The first was `nextCursor`: a fixture annotated with the
+hook's internal type when it is a wire body, where adding the camelCase property would have satisfied `tsc`
+and made the fixture lie. **Both times the type looked wrong and the design note said otherwise. Both times
+the compiler-satisfying edit was the destructive one.**
+
+**The rule, and it is cheap: read the field's doc comment before loosening it.** A type error says these two
+declarations disagree. It does not say which one is wrong, and the compiler has no opinion about which of
+them encodes a decision. ⛔ **A type is not evidence about itself** — the same shape as this morning's
+lesson that a verification expressed in terms of the change can only confirm the change happened.
+
+Boundary: 89 of 89 sites in this class read individually; the ~137 mock class proven mechanically on one
+file and inferred by shape elsewhere. Full gate after the v485 repair: 3208 passed (3208), 31,919 tests,
+0 failures, nothing excluded.
