@@ -5,7 +5,7 @@
 // owner-scoped account_proxies record whose secret fields are encrypted under
 // the account key hierarchy.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { EmptyState } from '../components/EmptyState';
 import { RelativeTime } from '../components/RelativeTime';
@@ -308,6 +308,63 @@ export function ProxiesView(): JSX.Element {
     }
   }
 
+  /**
+   * Everything removing a proxy entails, WITHOUT the confirmation.
+   *
+   * Split out so a bulk remove can ask once for the whole selection instead of
+   * once per proxy — N modals for one intent is not a confirmation, it is an
+   * obstacle course, and the reflex it trains (click through the dialog) is
+   * exactly the reflex a destructive action needs intact.
+   *
+   * Returns the profile names that lost their default binding, so the caller can
+   * aggregate them into a single notice.
+   */
+  async function removeOne(id: string): Promise<string[]> {
+    // Capture the server-side account_proxies id (set on first launch-sync)
+    // BEFORE the local entry is wiped, so we can also delete the encrypted
+    // server row. Without this the wrapped password / VPN secret orphans on
+    // the server forever after a local delete — a credential-hygiene leak for
+    // an anti-detect tool, and a CRUD desync (the proxy is "gone" locally but
+    // still resolvable server-side by its id).
+    const removed = state.proxies.find((p) => p.id === id);
+    await removeProxy(id);
+    // Best-effort server delete: the account row deletion must not block the
+    // local remove (offline / unauth still leaves the operator with the proxy
+    // gone locally). deleteAccountProxy treats a 404 as already-gone.
+    if (removed?.serverId !== undefined && settings.apiKey !== null && settings.apiKey.length > 0) {
+      void deleteAccountProxy(settings.baseUrl, settings.apiKey, removed.serverId).catch(
+        (err: unknown) => {
+          console.warn('[proxies] failed to delete server-side proxy row', err);
+        },
+      );
+    }
+    testEpochRef.current++; // discard any in-flight probe for the removed proxy
+    // Drop the cached probe too, else its exit-IP/geo orphans in the
+    // cache (and a future re-minted id could inherit stale geo).
+    void invalidateProbe(id).catch(() => undefined);
+    setTestResults((r) => dropKey(r, id));
+    setExitResults((r) => dropKey(r, id));
+    // Clear any profile default-proxy bindings that referenced this proxy, so a
+    // profile bound to it doesn't keep a DANGLING defaultProxyId. Without this,
+    // Launch would silently reroute that profile's egress to a different proxy
+    // (or, post-fix, refuse to launch) with no trace of why — a privacy hazard
+    // for an anti-detect tool. Surface which profiles were unbound so the
+    // operator knows to re-bind a proxy on purpose.
+    try {
+      return await clearBindingsForProxy(id);
+    } catch (err) {
+      console.warn('[proxies] failed to clear dangling bindings for deleted proxy', err);
+      return [];
+    }
+  }
+
+  /** Notice text for N profiles left with no default proxy. */
+  function unboundNotice(n: number): string {
+    return `${String(n)} profile${n === 1 ? '' : 's'} ${
+      n === 1 ? 'was' : 'were'
+    } using this proxy as a default — they now have no default proxy. Re-bind one before launching.`;
+  }
+
   async function handleRemove(id: string): Promise<void> {
     if (
       !(await confirm(
@@ -318,61 +375,65 @@ export function ProxiesView(): JSX.Element {
       return;
     setBusyId(id);
     try {
-      // Capture the server-side account_proxies id (set on first launch-sync)
-      // BEFORE the local entry is wiped, so we can also delete the encrypted
-      // server row. Without this the wrapped password / VPN secret orphans on
-      // the server forever after a local delete — a credential-hygiene leak for
-      // an anti-detect tool, and a CRUD desync (the proxy is "gone" locally but
-      // still resolvable server-side by its id).
-      const removed = state.proxies.find((p) => p.id === id);
-      await removeProxy(id);
-      // Best-effort server delete: the account row deletion must not block the
-      // local remove (offline / unauth still leaves the operator with the proxy
-      // gone locally). deleteAccountProxy treats a 404 as already-gone.
-      if (
-        removed?.serverId !== undefined &&
-        settings.apiKey !== null &&
-        settings.apiKey.length > 0
-      ) {
-        void deleteAccountProxy(settings.baseUrl, settings.apiKey, removed.serverId).catch(
-          (err: unknown) => {
-            console.warn('[proxies] failed to delete server-side proxy row', err);
-          },
-        );
-      }
-      testEpochRef.current++; // discard any in-flight probe for the removed proxy
-      // Drop the cached probe too, else its exit-IP/geo orphans in the
-      // cache (and a future re-minted id could inherit stale geo).
-      void invalidateProbe(id).catch(() => undefined);
-      setTestResults((r) => dropKey(r, id));
-      setExitResults((r) => dropKey(r, id));
-      // Clear any profile default-proxy bindings that referenced this proxy, so a
-      // profile bound to it doesn't keep a DANGLING defaultProxyId. Without this,
-      // Launch would silently reroute that profile's egress to a different proxy
-      // (or, post-fix, refuse to launch) with no trace of why — a privacy hazard
-      // for an anti-detect tool. Surface which profiles were unbound so the
-      // operator knows to re-bind a proxy on purpose.
-      let unbound: string[] = [];
-      try {
-        unbound = await clearBindingsForProxy(id);
-      } catch (err) {
-        console.warn('[proxies] failed to clear dangling bindings for deleted proxy', err);
-      }
+      const unbound = await removeOne(id);
       await refresh();
       if (unbound.length > 0) {
-        const n = unbound.length;
-        setState((s) => ({
-          ...s,
-          notice: `${String(n)} profile${n === 1 ? '' : 's'} ${
-            n === 1 ? 'was' : 'were'
-          } using this proxy as a default — they now have no default proxy. Re-bind one before launching.`,
-        }));
+        setState((s) => ({ ...s, notice: unboundNotice(unbound.length) }));
       }
     } catch (err) {
       setState((s) => ({
         ...s,
         error: friendlyError(err, "Couldn't remove this proxy. Try again."),
       }));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  /**
+   * Remove a whole selection behind ONE confirmation that names the count.
+   *
+   * Removals run in sequence rather than in parallel: each one bumps
+   * testEpochRef, refreshes local state and clears bindings, and overlapping
+   * those is how a half-applied delete leaves a dangling binding behind.
+   */
+  async function handleRemoveMany(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    const n = ids.length;
+    if (
+      !(await confirm(
+        `Remove ${String(n)} ${n === 1 ? 'proxy' : 'proxies'}? Any profiles using ${
+          n === 1 ? 'it' : 'them'
+        } as a default will be unbound and must be re-bound before launching.`,
+        { confirmLabel: `Remove ${String(n)}`, tone: 'danger' },
+      ))
+    )
+      return;
+    setBusyId(ids[0] ?? null);
+    const unbound = new Set<string>();
+    const failed: string[] = [];
+    try {
+      for (const id of ids) {
+        try {
+          for (const name of await removeOne(id)) unbound.add(name);
+        } catch (err) {
+          // One failure must not abandon the rest of the selection — the
+          // operator asked for all of them, and a silent partial leaves them
+          // guessing which survived.
+          console.warn('[proxies] bulk remove failed for one proxy', err);
+          failed.push(id);
+        }
+      }
+      await refresh();
+      if (failed.length > 0) {
+        setState((s) => ({
+          ...s,
+          error: `${String(failed.length)} of ${String(n)} could not be removed. The rest were.`,
+        }));
+      }
+      if (unbound.size > 0) {
+        setState((s) => ({ ...s, notice: unboundNotice(unbound.size) }));
+      }
     } finally {
       setBusyId(null);
     }
@@ -456,11 +517,19 @@ export function ProxiesView(): JSX.Element {
   // native probe opens real sockets; parallel probes through consumer
   // egress endpoints skew each other's latency numbers.
   const [testingAll, setTestingAll] = useState(false);
-  async function handleTestAll(): Promise<void> {
+  /**
+   * Sweep every proxy, or just `only` when the grid hands up a selection.
+   *
+   * Parameterised rather than given a sibling: this function owns the
+   * run-claiming protocol (activeTestAllRunRef + runId) that stops a stale sweep
+   * announcing over a newer one, and a second copy of that protocol is a second
+   * thing to keep correct.
+   */
+  async function handleTestAll(only?: ProxyConfig[]): Promise<void> {
     // `disabled` is state-driven and therefore takes one render to land. Guard
     // synchronously too, so a double activation cannot start two socket sweeps.
     if (activeTestAllRunRef.current !== null) return;
-    const targets = state.proxies.filter((p) => isSocks5Probeable(p.scheme));
+    const targets = (only ?? state.proxies).filter((p) => isSocks5Probeable(p.scheme));
     // Normally unreachable through the disabled button, but keep direct/rapid
     // invocation honest: zero probes should not flash busy or claim completion.
     if (targets.length === 0) return;
@@ -667,7 +736,7 @@ export function ProxiesView(): JSX.Element {
       {state.proxies.length === 0 ? (
         <Empty loading={state.loading} onAdd={() => setEditor({ kind: 'add' })} />
       ) : (
-        <ProxyList
+        <ProxyTable
           proxies={state.proxies}
           busyId={busyId}
           testingId={testingId}
@@ -678,6 +747,8 @@ export function ProxiesView(): JSX.Element {
           onEdit={(id) => setEditor({ kind: 'edit', id })}
           onRemove={(id) => void handleRemove(id)}
           onTest={(p) => void handleTest(p)}
+          onRemoveMany={(ids) => void handleRemoveMany(ids)}
+          onTestMany={(ps) => void handleTestAll(ps)}
         />
       )}
     </div>
@@ -718,53 +789,60 @@ function Empty({ loading, onAdd }: { loading: boolean; onAdd: () => void }): JSX
   );
 }
 
-/** Card-shaped first-load state that occupies the same responsive grid as ProxyList. */
+/**
+ * First-load state, shaped like the grid it precedes.
+ *
+ * A skeleton whose silhouette does not match what arrives is a layout jump: the
+ * page settles into a different shape than the one it promised. This one is
+ * rows, because the page is rows.
+ */
 function ProxyListSkeleton(): JSX.Element {
   return (
     <SkeletonRegion label="Loading proxies">
       <div
         data-component="proxy-list-skeleton"
-        className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+        className="overflow-hidden rounded-lg border border-surface-divider bg-surface-raised"
       >
-        {Array.from({ length: 4 }).map((_, index) => (
-          <article
+        {Array.from({ length: 5 }).map((_, index) => (
+          <div
             key={index}
-            className="flex min-h-40 flex-col gap-2.5 rounded-lg border border-surface-divider bg-surface-raised p-3"
+            className="flex items-center gap-3 border-b border-surface-divider/40 px-3 py-2.5 last:border-b-0"
           >
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-                <Skeleton className="h-3.5 w-2/3" />
-                <Skeleton className="h-2.5 w-2/5" />
-              </div>
-              <Skeleton className="h-5 w-16 rounded-full" />
-            </div>
-
-            <div className="flex flex-col gap-2 rounded-lg border border-surface-divider/60 p-2">
-              <div className="flex items-center justify-between gap-3">
-                <Skeleton className="h-3 w-1/2" />
-                <Skeleton className="h-2.5 w-14" />
-              </div>
-              <Skeleton className="h-2.5 w-3/4" />
-              <div className="flex gap-1.5">
-                <Skeleton className="h-4 w-14 rounded-sm" />
-                <Skeleton className="h-4 w-10 rounded-sm" />
-                <Skeleton className="h-4 w-12 rounded-sm" />
-              </div>
-            </div>
-
-            <div className="mt-auto flex items-center gap-2 pt-1">
-              <Skeleton className="h-7 flex-1" />
-              <Skeleton className="h-7 w-10" />
-              <Skeleton className="h-7 w-14" />
-            </div>
-          </article>
+            <Skeleton className="h-3.5 w-3.5 rounded-sm" />
+            <Skeleton className="h-3 w-32" />
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="h-3 w-28" />
+            <Skeleton className="ml-auto h-3 w-12" />
+            <Skeleton className="h-4 w-16 rounded-[5px]" />
+            <Skeleton className="h-6 w-14 rounded-md" />
+          </div>
         ))}
       </div>
     </SkeletonRegion>
   );
 }
 
-function ProxyList({
+type SortKey = 'status' | 'label' | 'scheme' | 'latency' | 'tested';
+
+/**
+ * Where a proxy sits when sorting by "what needs me". Lower comes first.
+ *
+ * ⚠️ This ordering is the whole reason the grid is safe to prefer over cards. A
+ * row is a thin target: a failure reads as a coloured stripe and a word, which
+ * is easy to walk past when you opened the page for another reason. Sorting
+ * problems to the top means you do not have to notice — the broken proxy is
+ * simply the first thing under the header.
+ *
+ * Untested ranks BELOW slow and above healthy: it is a gap in knowledge rather
+ * than a fault, but it is still not a proxy you should assume works.
+ */
+function statusRank(result: ProxyTestResult | undefined): number {
+  if (result === undefined) return 2;
+  if (!result.reachable || !result.auth_ok) return 0;
+  return (result.latency_ms ?? 0) > 100 ? 1 : 3;
+}
+
+function ProxyTable({
   proxies,
   busyId,
   testingId,
@@ -775,6 +853,8 @@ function ProxyList({
   onEdit,
   onRemove,
   onTest,
+  onRemoveMany,
+  onTestMany,
 }: {
   proxies: ProxyConfig[];
   busyId: string | null;
@@ -786,36 +866,250 @@ function ProxyList({
   onEdit: (id: string) => void;
   onRemove: (id: string) => void;
   onTest: (p: ProxyConfig) => void;
+  onRemoveMany: (ids: string[]) => void;
+  onTestMany: (ps: ProxyConfig[]) => void;
 }): JSX.Element {
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({
+    key: 'status',
+    dir: 'asc',
+  });
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+
+  /**
+   * The selection, intersected with the proxies that still exist.
+   *
+   * DERIVED rather than synced in an effect. A proxy removed elsewhere must not
+   * keep voting — a stale id would make "Remove 3" act on two and the count in
+   * the bulk bar lie — and an effect fixes that one render too late, so the
+   * wrong number is briefly on screen. Deriving it cannot be stale.
+   */
+  const live = useMemo(() => {
+    const ids = new Set(proxies.map((p) => p.id));
+    return new Set([...selected].filter((id) => ids.has(id)));
+  }, [proxies, selected]);
+
+  const sorted = useMemo(() => {
+    const dir = sort.dir === 'asc' ? 1 : -1;
+    const val = (p: ProxyConfig): string | number => {
+      const r = testResults[p.id];
+      switch (sort.key) {
+        case 'label':
+          return p.label.toLowerCase();
+        case 'scheme':
+          return schemeLabel(p.scheme).text.toLowerCase();
+        case 'latency':
+          // An unreachable proxy has no latency. Infinity parks it at the end
+          // ascending rather than letting a 0 masquerade as the fastest exit.
+          return r !== undefined && r.reachable ? (r.latency_ms ?? Infinity) : Infinity;
+        case 'tested':
+          return testedAt[p.id] ?? 0;
+        case 'status':
+        default:
+          return statusRank(r);
+      }
+    };
+    // Tie-break on the ORIGINAL position, not the label. Equal-status rows are
+    // the common case (nothing tested yet, or everything healthy), so an
+    // alphabetical tie-break would silently reorder the whole page relative to
+    // the order the proxies were added — and "the first Remove button" would
+    // stop meaning the first proxy. Index keeps ties exactly where they were and
+    // is just as stable across renders.
+    const order = new Map(proxies.map((p, i) => [p.id, i]));
+    return [...proxies].sort((a, b) => {
+      const av = val(a);
+      const bv = val(b);
+      if (av < bv) return -1 * dir;
+      if (av > bv) return 1 * dir;
+      return (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0);
+    });
+  }, [proxies, sort, testResults, testedAt]);
+
+  const attention = proxies.filter((p) => statusRank(testResults[p.id]) === 0).length;
+  const selectedProxies = sorted.filter((p) => live.has(p.id));
+  const allSelected = proxies.length > 0 && live.size === proxies.length;
+
+  function toggleSort(key: SortKey): void {
+    setSort((s) =>
+      s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' },
+    );
+  }
+
+  function toggleOne(id: string): void {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const ariaSort = (key: SortKey): 'ascending' | 'descending' | 'none' =>
+    sort.key !== key ? 'none' : sort.dir === 'asc' ? 'ascending' : 'descending';
+
+  function Th({
+    label,
+    sortKey,
+    align,
+  }: {
+    label: string;
+    sortKey?: SortKey;
+    align?: 'right';
+  }): JSX.Element {
+    const cls =
+      'whitespace-nowrap px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-ink-muted';
+    if (sortKey === undefined) {
+      return (
+        <th scope="col" className={`${cls} ${align === 'right' ? 'text-right' : 'text-left'}`}>
+          {label}
+        </th>
+      );
+    }
+    const active = sort.key === sortKey;
+    return (
+      <th
+        scope="col"
+        aria-sort={ariaSort(sortKey)}
+        className={`${cls} ${align === 'right' ? 'text-right' : 'text-left'}`}
+      >
+        <button
+          type="button"
+          onClick={() => toggleSort(sortKey)}
+          className={`inline-flex items-center gap-1 uppercase tracking-wider transition-colors hover:text-ink-primary ${
+            active ? 'text-ink-primary' : ''
+          }`}
+        >
+          {label}
+          <span aria-hidden="true" className={active ? '' : 'opacity-0 group-hover:opacity-40'}>
+            {active ? (sort.dir === 'asc' ? '\u2191' : '\u2193') : '\u2191'}
+          </span>
+        </button>
+      </th>
+    );
+  }
+
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {proxies.map((p) => (
-        <ProxyCard
-          key={p.id}
-          proxy={p}
-          busy={busyId === p.id}
-          testing={testingId === p.id}
-          // During a Test-all the whole row is locked so a stray per-card click
-          // can't spawn a concurrent probe that clobbers the shared spinner.
-          testingAll={testingAll}
-          result={testResults[p.id]}
-          exit={p.id in exitResults ? exitResults[p.id] : undefined}
-          testedAt={testedAt[p.id]}
-          onEdit={() => onEdit(p.id)}
-          onRemove={() => onRemove(p.id)}
-          onTest={() => onTest(p)}
-        />
-      ))}
+    <div data-component="proxy-table" className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-3 px-1 text-[11px] text-ink-muted">
+        <span>
+          {proxies.length} {proxies.length === 1 ? 'proxy' : 'proxies'}
+          {attention > 0 && (
+            <>
+              {' \u00b7 '}
+              <span className="font-semibold text-status-error">
+                {attention} need{attention === 1 ? 's' : ''} attention
+              </span>
+            </>
+          )}
+        </span>
+        {sort.key !== 'status' && (
+          <button
+            type="button"
+            className="text-ink-muted underline-offset-2 hover:text-ink-primary hover:underline"
+            onClick={() => setSort({ key: 'status', dir: 'asc' })}
+          >
+            Sort by status
+          </button>
+        )}
+      </div>
+
+      {/* The grid is wide by design; it scrolls INSIDE this box so the page
+          body never scrolls sideways. */}
+      <div className="overflow-x-auto rounded-lg border border-surface-divider bg-surface-raised">
+        <table className="w-full min-w-[880px] border-collapse text-[12px]">
+          <thead>
+            <tr className="group border-b border-surface-divider">
+              <th scope="col" className="w-9 px-3 py-2">
+                <input
+                  type="checkbox"
+                  aria-label={allSelected ? 'Clear selection' : 'Select all proxies'}
+                  checked={allSelected}
+                  onChange={() =>
+                    setSelected(allSelected ? new Set() : new Set(proxies.map((p) => p.id)))
+                  }
+                  className="accent-[rgb(var(--accent-rgb))]"
+                />
+              </th>
+              <Th label="Proxy" sortKey="label" />
+              <Th label="Type" sortKey="scheme" />
+              <Th label="Endpoint" />
+              <Th label="Exit" />
+              <Th label="Latency" sortKey="latency" align="right" />
+              <Th label="Capabilities" />
+              <Th label="Status" sortKey="status" />
+              <Th label="Last test" sortKey="tested" />
+              <Th label="" />
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((p) => (
+              <ProxyRow
+                key={p.id}
+                proxy={p}
+                selected={live.has(p.id)}
+                onToggle={() => toggleOne(p.id)}
+                busy={busyId === p.id}
+                testing={testingId === p.id}
+                testingAll={testingAll}
+                result={testResults[p.id]}
+                exit={p.id in exitResults ? exitResults[p.id] : undefined}
+                testedAt={testedAt[p.id]}
+                onEdit={() => onEdit(p.id)}
+                onRemove={() => onRemove(p.id)}
+                onTest={() => onTest(p)}
+              />
+            ))}
+          </tbody>
+        </table>
+
+        {live.size > 0 && (
+          <div
+            data-component="proxy-bulk-bar"
+            className="flex flex-wrap items-center gap-3 border-t border-surface-divider bg-surface-inset px-3 py-2 text-[11.5px]"
+          >
+            <span className="text-ink-secondary">{live.size} selected</span>
+            <button
+              type="button"
+              className="rounded-md border border-surface-divider px-2.5 py-1 text-ink-secondary transition-colors hover:border-ink-muted hover:text-ink-primary disabled:opacity-50"
+              disabled={testingAll || testingId !== null}
+              onClick={() => onTestMany(selectedProxies)}
+            >
+              Test selected
+            </button>
+            <button
+              type="button"
+              className="rounded-md border border-surface-divider px-2.5 py-1 text-ink-secondary transition-colors hover:border-status-error hover:text-status-error disabled:opacity-50"
+              disabled={busyId !== null}
+              onClick={() => onRemoveMany(selectedProxies.map((p) => p.id))}
+            >
+              Remove selected
+            </button>
+            <button
+              type="button"
+              className="ml-auto text-ink-muted hover:text-ink-primary"
+              onClick={() => setSelected(new Set())}
+            >
+              Clear
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-// Console proxy card — mirrors the Profiles hub proxy-row treatment:
-// country flag + exit IP (mono) + latency + inline meter + health pill +
-// UDP badge + last-checked, with Test / Edit / Remove as quiet actions.
-// All facts come from the REAL probe result (no fabricated health).
-function ProxyCard({
+/**
+ * One proxy, one row.
+ *
+ * ⚠️ Row actions are QUIET (bordered, ink-coloured), not the filled accent the
+ * card used. That is deliberate and not only density: the accent is oxblood
+ * #a83b4d and status-error is #d8453c, near enough that a filled accent button
+ * on every row competes with the one colour that means "this is broken". In a
+ * grid, saturated colour belongs to state, not to chrome.
+ */
+function ProxyRow({
   proxy: p,
+  selected,
+  onToggle,
   busy,
   testing,
   testingAll,
@@ -827,6 +1121,8 @@ function ProxyCard({
   onTest,
 }: {
   proxy: ProxyConfig;
+  selected: boolean;
+  onToggle: () => void;
   busy: boolean;
   testing: boolean;
   testingAll: boolean;
@@ -834,8 +1130,6 @@ function ProxyCard({
   // undefined = exit-geo never recorded for this proxy; null = probed, and the
   // echo round-trip did not complete through this proxy (V-857).
   exit: ProxyExitProbeResult | null | undefined;
-  /** Epoch-ms of the last probe (undefined = never tested). Drives the
-   *  "tested <relative>" staleness line so a green pill isn't read as fresh. */
   testedAt: number | undefined;
   onEdit: () => void;
   onRemove: () => void;
@@ -845,104 +1139,89 @@ function ProxyCard({
   const authOk = result?.auth_ok ?? false;
   const healthy = reachable && authOk;
   const lat = result?.latency_ms;
-  // latency meter fill: 0–250ms mapped to 0–100% (clamped). Mirrors the
-  // hub card's latFill mapping.
   const latFill = lat !== undefined && lat > 0 ? Math.max(6, Math.min(100, (lat / 250) * 100)) : 0;
   const latGood = lat !== undefined && lat <= 100;
   const exitIp = exit?.ip;
   const exitCountry = exit?.country ?? null;
+  const failed = result !== undefined && !healthy;
 
   return (
-    <article
-      className={`group flex flex-col gap-2.5 rounded-lg border bg-surface-raised p-3 transition-all hover:-translate-y-px hover:shadow-md ${
-        result === undefined
-          ? 'border-surface-divider hover:border-ink-muted/60'
-          : healthy
-            ? 'border-status-ready/50 hover:border-status-ready'
-            : 'border-status-error/40 hover:border-status-error/60'
+    <tr
+      className={`border-b border-surface-divider/40 transition-colors last:border-b-0 hover:bg-surface-inset/50 ${
+        selected ? 'bg-[rgb(var(--accent-rgb)/0.07)]' : ''
       }`}
     >
-      {/* HEADER — label + health pill on the right. */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="truncate text-[13px] font-semibold tracking-tight text-ink-primary">
-            {p.label}
-          </p>
-          <p className="mt-0.5 flex items-center gap-1 text-[10.5px] text-ink-muted">
-            {/* P2 #3 — label by the proxy's ACTUAL scheme (was hardcoded SOCKS5 →
-                a VPN/HTTP proxy read as SOCKS5). */}
-            <span aria-hidden="true">{schemeLabel(p.scheme).icon}</span>
-            {schemeLabel(p.scheme).text}
-            {p.username !== null && p.username.length > 0 && (
-              <>
-                <span className="text-surface-divider">·</span>
-                <span className="mono truncate">{p.username}</span>
-              </>
-            )}
-          </p>
-        </div>
-        <HealthPill result={result} healthy={healthy} latGood={latGood} />
-      </div>
+      <td
+        className={`px-3 py-2 ${failed ? 'shadow-[inset_3px_0_0_rgb(var(--status-error-rgb))]' : ''}`}
+      >
+        <input
+          type="checkbox"
+          aria-label={`Select ${p.label}`}
+          checked={selected}
+          onChange={onToggle}
+          className="accent-[rgb(var(--accent-rgb))]"
+        />
+      </td>
 
-      {/* PROXY row — flag + exit IP (mono) + latency + inline meter, on a
-          surface-inset panel, exactly like the hub card. Honest 'untested'
-          when never probed. */}
-      <div className="flex flex-col gap-1 rounded-lg bg-surface-inset px-2 py-1.5">
-        <div className="flex items-center gap-2">
-          <span aria-hidden="true" className="text-[13px] leading-none">
-            {exitCountry !== null ? flagEmoji(exitCountry) : '🌍'}
+      <td className="max-w-[190px] px-3 py-2">
+        <div className="truncate font-semibold tracking-tight text-ink-primary">{p.label}</div>
+        {p.username !== null && p.username.length > 0 && (
+          <div className="mono truncate text-[10px] text-ink-muted">{p.username}</div>
+        )}
+      </td>
+
+      <td className="whitespace-nowrap px-3 py-2 text-ink-secondary">
+        <span aria-hidden="true">{schemeLabel(p.scheme).icon}</span> {schemeLabel(p.scheme).text}
+      </td>
+
+      <td className="mono whitespace-nowrap px-3 py-2 text-[11px] text-ink-muted">
+        {p.host}:{p.port}
+      </td>
+
+      <td className="whitespace-nowrap px-3 py-2">
+        <span aria-hidden="true" className="mr-1.5">
+          {exitCountry !== null ? flagEmoji(exitCountry) : '\ud83c\udf0d'}
+        </span>
+        <span
+          className={
+            exitIp !== undefined
+              ? 'mono text-[11px] text-ink-secondary'
+              : 'italic text-[10.5px] text-ink-muted'
+          }
+        >
+          {exitIp ?? 'run Test for exit IP'}
+        </span>
+      </td>
+
+      <td className="whitespace-nowrap px-3 py-2 text-right">
+        {lat !== undefined && reachable ? (
+          <span className="inline-flex items-center justify-end gap-1.5">
+            <span className="mono tabular-nums text-ink-secondary">{lat}ms</span>
+            <span className="inline-block h-1 w-[30px] overflow-hidden rounded-[2px] bg-surface-divider">
+              <span
+                className="block h-full rounded-[2px]"
+                style={{
+                  width: `${latFill.toFixed(0)}%`,
+                  background: latGood
+                    ? 'rgb(var(--status-ready-rgb))'
+                    : 'rgb(var(--status-busy-rgb))',
+                }}
+              />
+            </span>
           </span>
-          <span
-            className={`min-w-0 truncate text-[10.5px] ${
-              exitIp !== undefined ? 'mono text-ink-secondary' : 'italic text-ink-muted'
-            }`}
-          >
-            {/* Real EXIT IP from the geo probe, not the local SOCKS5 forward. */}
-            {exitIp ?? 'run Test for exit IP'}
+        ) : (
+          <span className="mono text-ink-muted opacity-60">
+            {result !== undefined ? 'down' : '\u2014'}
           </span>
-          <span className="ml-auto flex items-center gap-1.5 text-[10px] text-ink-muted">
-            {lat !== undefined && reachable ? (
-              <>
-                <span className="mono">{lat}ms</span>
-                <span className="inline-block h-1 w-[34px] overflow-hidden rounded-[2px] bg-surface-divider">
-                  <span
-                    className="block h-full rounded-[2px]"
-                    style={{
-                      width: `${latFill.toFixed(0)}%`,
-                      background: latGood
-                        ? 'rgb(var(--status-ready-rgb))'
-                        : 'rgb(var(--status-busy-rgb))',
-                    }}
-                  />
-                </span>
-              </>
-            ) : (
-              <span className="mono opacity-60">{result !== undefined ? 'down' : '—'}</span>
-            )}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="mono truncate text-[10px] text-ink-muted">
-            {p.host}:{p.port}
-          </span>
-          <span className="ml-auto shrink-0 text-[9.5px] text-ink-muted">
-            {/* Show when the probe last ran (not when the proxy was ADDED) once
-                tested — a green pill is meaningless without it. Falls back to the
-                Added time only when never tested. */}
-            {result !== undefined && testedAt !== undefined ? (
-              <RelativeTime iso={new Date(testedAt).toISOString()} tooltipPrefix="Tested" />
-            ) : (
-              <RelativeTime iso={p.createdAt} tooltipPrefix="Added" />
-            )}
-          </span>
-        </div>
-        {/* Protocol capabilities — honest "Has WebRTC / QUIC / HTTP-2"
-            breakdown derived from the probe (replaces the bare UDP badge). */}
+        )}
+      </td>
+
+      <td className="px-3 py-2">
         {result !== undefined && reachable ? (
           <ProxyCapabilityChips result={result} size="xs" />
         ) : (
           <span
-            className="w-fit rounded-sm bg-surface-divider/60 px-1 py-px text-[9px] text-ink-muted"
+            className="rounded-sm bg-surface-divider/60 px-1 py-px text-[9px] text-ink-muted"
             title={
               result !== undefined
                 ? 'Exit down on last test — no protocols verified.'
@@ -952,75 +1231,70 @@ function ProxyCard({
             {result !== undefined ? 'no egress' : 'untested'}
           </span>
         )}
-      </div>
+      </td>
 
-      {/* TEST DETAIL — shown only once probed. Exit-geo line + QUIC/WebRTC
-          derivation + the raw probe message, all from the real result. */}
-      {result !== undefined && (
-        <div role="status" className="flex flex-col gap-1 text-[10px]">
-          {healthy && exit !== undefined && (
-            <span className="text-ink-secondary">
-              {exit !== null ? (
-                <>
-                  exit <span className="mono">{exit.ip}</span>
-                  {exit.country !== null && ` · ${exit.country}`}
-                </>
-              ) : (
-                'exit geo unavailable — the probe did not complete'
-              )}
-            </span>
-          )}
-          {result.message.length > 0 && (
+      <td className="px-3 py-2">
+        <div className="flex flex-col items-start gap-0.5">
+          <HealthPill result={result} healthy={healthy} latGood={latGood} />
+          {failed && result.message.length > 0 && (
             <span
-              className={`truncate ${healthy ? 'text-ink-muted' : 'text-status-error'}`}
+              className="max-w-[150px] truncate text-[10px] text-status-error"
               title={result.message}
             >
               {result.message}
             </span>
           )}
         </div>
-      )}
+      </td>
 
-      {/* ACTIONS — Test is the primary affordance; Edit / Remove are quiet. */}
-      <div className="mt-auto flex items-center gap-2 pt-1">
-        {/* P2 #3 — the card Test runs a SOCKS5 probe, which is meaningless for a
-            VPN/HTTP endpoint (it always read "unreachable"). Only offer it for a
-            SOCKS5 proxy; otherwise show a clear note (the tunnel verifies at launch),
-            mirroring the create flow which gates the SOCKS5 probe to socks5. */}
-        {isSocks5Probeable(p.scheme) ? (
+      <td className="whitespace-nowrap px-3 py-2 text-[10.5px] text-ink-muted">
+        {result !== undefined && testedAt !== undefined ? (
+          <RelativeTime iso={new Date(testedAt).toISOString()} tooltipPrefix="Tested" />
+        ) : (
+          <RelativeTime iso={p.createdAt} tooltipPrefix="Added" />
+        )}
+      </td>
+
+      <td className="whitespace-nowrap px-3 py-2 text-right">
+        <div className="inline-flex items-center gap-1.5">
+          {/* The row Test runs a SOCKS5 probe, which is meaningless for a
+              VPN/HTTP endpoint (it always read "unreachable"). Only offer it for
+              a SOCKS5 proxy; otherwise say where it IS verified. */}
+          {isSocks5Probeable(p.scheme) ? (
+            <button
+              type="button"
+              className="rounded-md border border-surface-divider px-2 py-1 text-[11px] text-ink-secondary transition-colors hover:border-ink-muted hover:text-ink-primary disabled:opacity-50"
+              onClick={onTest}
+              disabled={testing || testingAll}
+            >
+              {testing ? 'Testing…' : result !== undefined ? 'Re-test' : 'Test'}
+            </button>
+          ) : (
+            <span
+              className="text-[10px] italic text-ink-muted"
+              title="A VPN/HTTP endpoint has no SOCKS5 reachability probe — the tunnel verifies when a session launches."
+            >
+              Verified at launch
+            </span>
+          )}
           <button
             type="button"
-            className="btn-primary flex-1 text-xs"
-            onClick={onTest}
-            disabled={testing || testingAll}
+            className="rounded-md px-2 py-1 text-[11px] text-ink-muted transition-colors hover:text-ink-primary"
+            onClick={onEdit}
           >
-            {testing ? 'Testing…' : result !== undefined ? 'Re-test' : 'Test'}
+            Edit
           </button>
-        ) : (
-          <span
-            className="flex-1 text-[10px] italic text-ink-muted"
-            title="A VPN/HTTP endpoint has no SOCKS5 reachability probe — the tunnel verifies when a session launches."
+          <button
+            type="button"
+            className="rounded-md px-2 py-1 text-[11px] text-ink-muted transition-colors hover:text-status-error disabled:opacity-60"
+            onClick={onRemove}
+            disabled={busy}
           >
-            Verified at launch
-          </span>
-        )}
-        <button
-          type="button"
-          className="text-xs text-ink-muted transition-colors hover:text-ink-primary"
-          onClick={onEdit}
-        >
-          Edit
-        </button>
-        <button
-          type="button"
-          className="text-xs text-ink-muted transition-colors hover:text-status-error disabled:opacity-60"
-          onClick={onRemove}
-          disabled={busy}
-        >
-          {busy ? 'Removing…' : 'Remove'}
-        </button>
-      </div>
-    </article>
+            {busy ? 'Removing…' : 'Remove'}
+          </button>
+        </div>
+      </td>
+    </tr>
   );
 }
 

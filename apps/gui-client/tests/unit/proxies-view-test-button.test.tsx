@@ -64,17 +64,21 @@ async function clickTestAndSettle(): Promise<void> {
 }
 
 describe('ProxiesView first-load silhouette', () => {
-  it('uses the same responsive card grid as the loaded proxy list', async () => {
+  it('uses the same ROW silhouette as the loaded grid — a skeleton shaped unlike what arrives is a layout jump', async () => {
     const { container } = render(<ProxiesView />);
 
     expect(screen.getByRole('status', { name: 'Loading proxies' })).toBeInTheDocument();
     const skeleton = container.querySelector('[data-component="proxy-list-skeleton"]');
-    expect(skeleton).toHaveClass('grid', 'gap-3', 'sm:grid-cols-2', 'lg:grid-cols-3');
-    expect(skeleton?.querySelectorAll('article')).toHaveLength(4);
+    // The page was a three-column card deck and is now a grid of rows, so the
+    // silhouette is rows. Asserted as "stacked children, not a card grid"
+    // rather than by pinning Tailwind classes, which say nothing about shape.
+    expect(skeleton).not.toHaveClass('sm:grid-cols-2');
+    expect(skeleton?.querySelectorAll(':scope > div').length ?? 0).toBeGreaterThan(2);
 
-    // The silhouette is first-load-only and yields to the real card topology.
+    // …and it yields to the real grid, which is the thing it was standing in for.
     expect(await screen.findByRole('button', { name: 'Test' })).toBeInTheDocument();
     expect(screen.queryByRole('status', { name: 'Loading proxies' })).not.toBeInTheDocument();
+    expect(container.querySelector('[data-component="proxy-table"]')).not.toBeNull();
   });
 
   it('hides native storage details when the saved proxy list cannot load', async () => {
