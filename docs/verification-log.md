@@ -17479,3 +17479,43 @@ migration. What changed is that the gap is now inside the guard's stated scope a
 directions instead of invisible to it.
 
 Full suite 3073 files / 30962 tests; `verify-suite` OK.
+
+## V-1584 — the sweep that found the last two bugs now covers the surface it was written for
+
+V-1581 built a malformed-id sweep and scoped it to GET, which was honest at the time and covered 32 of
+106 id-taking operations. V-1582 then found a real defect in the other 74 — but with a throwaway probe
+that was deleted afterwards, so the instrument that found the bug did not exist in the repository. This
+closes that: every method is swept, and the assertion that actually caught V-1582 is now part of the
+guard rather than something I happened to notice in probe output.
+
+**Two assertions, and the second is the one that earns its place.** A malformed id may be refused as a
+400, a 404, a 401/403 before it is read, or a 422; it may not be a 5xx. That was V-1581. Added here: it
+may not be a **2xx** either. An operation answering success for an id that cannot exist has not looked the
+id up, which is exactly what `POST /v1/admin/validation-schedules/{archetype}/trigger` did — 200 with a
+run id for any string at all, persisting nothing but dispatching work for an archetype that does not
+exist. A 5xx-only sweep reads that as perfectly healthy, and did.
+
+Both proven against the real defects rather than against synthetic ones. With V-1582's guard reverted the
+sweep reds on `POST /v1/admin/validation-schedules/{archetype}/trigger -> 200`; with V-1580's reverted it
+reds on `GET /v1/admin/usage/accounts/{id} -> 500`. Both sources restored byte-identical.
+
+**One exemption, argued rather than excluded.** `DELETE /v1/admin/oauth/clients/{id}` answers 204 for a
+client that does not exist, because `revokeClient` returns silently when it is absent — revoking twice is
+the same as revoking once. That is a considered idiom, though it does make the pair inconsistent: the
+sibling GET on the same path answers 404. It sits in a named roster so a second one has to be argued for
+here instead of quietly passing.
+
+**Coverage, measured: 106 operations, 82 refused, 24 behind a deployment flag.** The gated share grew from
+9 to 24 with the mutating half in scope, which is why the blind-spot bound is asserted rather than
+described — if activation flags ever hide the majority of the roster that is a fact about this guard's
+reach and it fails instead of ticking green over untested routes.
+
+**A weakness worth stating, because it bounds the claim.** POST, PUT and PATCH are swept with an empty
+object as the body. Several handlers parse the body before the id, so some of those 400s are
+body-validation refusals and the id was never judged. That does not weaken either assertion — a rejected
+body yields 400, which is neither a 5xx nor a 2xx — but it does mean the non-GET half is covered less
+deeply than the GET half. DELETE, which takes no body, is swept at full strength, and that is where two of
+the three V-1580/V-1582 sites lived.
+
+Full suite 3073 files / 30962 tests; e2e 223 passed against a disposable migrated Postgres, dropped
+afterwards; `verify-suite` OK. No new test file, so no ratchet movement.

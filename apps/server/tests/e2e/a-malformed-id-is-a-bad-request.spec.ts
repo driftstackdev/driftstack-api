@@ -62,7 +62,28 @@ const MALFORMED = 'not-a-uuid';
 /** Paths whose single parameter is not an id at all. */
 const NOT_AN_ID = new Set<string>();
 
-function idTakingGetPaths(): string[] {
+const METHODS = ['get', 'post', 'put', 'patch', 'delete'] as const;
+type Method = (typeof METHODS)[number];
+
+/**
+ * Operations that answer 2xx for an id that cannot exist, and are entitled to.
+ *
+ * V-1584 — only one, and it is a considered idiom rather than an oversight:
+ * `revokeClient` returns silently when the client is absent, so revoking twice
+ * is the same as revoking once. The sibling GET on the same path answers 404,
+ * which makes the pair inconsistent but not wrong. Listed rather than excluded
+ * from the sweep, so that if a second one ever appears it has to be argued for
+ * here instead of just passing.
+ */
+const IDEMPOTENT_ON_MISSING = new Set<string>(['DELETE /v1/admin/oauth/clients/{id}']);
+
+interface Operation {
+  method: Method;
+  path: string;
+  key: string;
+}
+
+function idTakingOperations(): Operation[] {
   const doc = JSON.parse(readFileSync(SPEC, 'utf8')) as {
     paths: Record<string, Record<string, unknown>>;
   };
@@ -70,11 +91,16 @@ function idTakingGetPaths(): string[] {
   // An empty or unparsed document would make every assertion below vacuous, so
   // the population is asserted before it is used.
   expect(paths.length, 'the spec parsed and has paths').toBeGreaterThan(100);
-  return paths
-    .filter((p) => (p.match(/\{/g) ?? []).length === 1)
-    .filter((p) => doc.paths[p]?.get !== undefined)
-    .filter((p) => !NOT_AN_ID.has(p))
-    .sort();
+  const out: Operation[] = [];
+  for (const path of paths.sort()) {
+    if ((path.match(/\{/g) ?? []).length !== 1) continue;
+    if (NOT_AN_ID.has(path)) continue;
+    for (const method of METHODS) {
+      if (doc.paths[path]?.[method] === undefined) continue;
+      out.push({ method, path, key: `${method.toUpperCase()} ${path}` });
+    }
+  }
+  return out;
 }
 
 let server: TestServer;
@@ -87,7 +113,7 @@ test.afterAll(async () => {
   if (server) await server.cleanup();
 });
 
-test('no id-taking GET route answers 5xx for a malformed id', async ({ request }) => {
+test('no id-taking route answers 5xx or 2xx for a malformed id', async ({ request }) => {
   await server.resetState();
 
   // Internal-admin so the admin half of the surface is reached rather than
@@ -96,45 +122,72 @@ test('no id-taking GET route answers 5xx for a malformed id', async ({ request }
   const admin = await seedAccount(server.client, {
     scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
   });
+  const headers = authHeader(admin.plaintext);
 
-  const targets = idTakingGetPaths();
-  expect(targets.length, 'the sweep has targets').toBeGreaterThan(20);
+  const targets = idTakingOperations();
+  expect(targets.length, 'the sweep has targets').toBeGreaterThan(80);
+  expect(
+    targets.filter((o) => o.method !== 'get').length,
+    'and the mutating half is in scope, which is where the schedule bug lived',
+  ).toBeGreaterThan(60);
 
   const serverErrors: string[] = [];
+  const succeeded: string[] = [];
   const gated: string[] = [];
   const exercised: string[] = [];
 
-  for (const path of targets) {
-    const url = server.baseUrl + path.replace(/\{[^}]+\}/, MALFORMED);
-    const res = await request.get(url, { headers: authHeader(admin.plaintext) });
+  for (const op of targets) {
+    const url = server.baseUrl + op.path.replace(/\{[^}]+\}/, MALFORMED);
+    // An empty object rather than no body at all: several handlers parse the
+    // body before the id, and omitting it entirely changes which error comes
+    // back without changing what is being tested.
+    const opts = {
+      headers,
+      ...(op.method === 'get' || op.method === 'delete' ? {} : { data: {} }),
+    };
+    const res =
+      op.method === 'get'
+        ? await request.get(url, opts)
+        : op.method === 'delete'
+          ? await request.delete(url, opts)
+          : op.method === 'put'
+            ? await request.put(url, opts)
+            : op.method === 'patch'
+              ? await request.patch(url, opts)
+              : await request.post(url, opts);
     const status = res.status();
 
-    if (status < 500) {
-      exercised.push(`${status} ${path}`);
+    if (status >= 500) {
+      let text = '';
+      try {
+        text = await res.text();
+      } catch {
+        text = '<unreadable>';
+      }
+      // The exemption is keyed on the declared problem type, not on the status,
+      // so a route that breaks cannot inherit it by happening to answer 503.
+      if (status === 503 && text.includes('errors.driftstack.dev/feature-unavailable')) {
+        gated.push(op.key);
+      } else {
+        serverErrors.push(`${op.key} -> ${status} ${text.slice(0, 200)}`);
+      }
       continue;
     }
 
-    let body = '';
-    try {
-      body = await res.text();
-    } catch {
-      body = '<unreadable>';
-    }
-    // The exemption is keyed on the declared problem type, not on the status, so
-    // a route that breaks cannot inherit it by happening to answer 503.
-    if (status === 503 && body.includes('errors.driftstack.dev/feature-unavailable')) {
-      gated.push(`${status} ${path}`);
+    if (status < 300 && !IDEMPOTENT_ON_MISSING.has(op.key)) {
+      succeeded.push(`${op.key} -> ${status}`);
       continue;
     }
-    serverErrors.push(`${status} ${path} — ${body.slice(0, 200)}`);
+
+    exercised.push(`${status} ${op.key}`);
   }
 
   // Printed unconditionally: the value of this spec is the roster it walks, and
   // a silent pass tells a later reader nothing about what was actually covered.
   console.log(
-    `[V-1581] ${targets.length} id-taking GET routes — ${exercised.length} exercised, ` +
+    `[V-1584] ${targets.length} id-taking operations — ${exercised.length} refused, ` +
       `${gated.length} behind a deployment flag:\n` +
-      `EXERCISED\n${exercised.join('\n')}\nGATED (not swept)\n${gated.join('\n')}`,
+      `REFUSED\n${exercised.join('\n')}\nGATED (not swept)\n${gated.join('\n')}`,
   );
 
   expect(
@@ -142,10 +195,20 @@ test('no id-taking GET route answers 5xx for a malformed id', async ({ request }
     'a malformed id is the client getting it wrong, never the server failing',
   ).toEqual([]);
 
+  // The assertion that actually found something. A route answering 2xx for an id
+  // that cannot exist has not looked the id up — the validation-schedule trigger
+  // returned 200 with a run id for any string at all, and dispatched work for an
+  // archetype that does not exist. A 5xx sweep alone reads that as healthy.
+  expect(
+    succeeded,
+    'an id that cannot exist must not produce a success; either it was never looked up ' +
+      'or the lookup matched something it should not have',
+  ).toEqual([]);
+
   // The sweep is only worth something if most of the surface actually ran. This
   // is the blind-spot bound: if activation flags ever hide the majority of the
   // roster, that is a fact about this guard's reach and it should surface as a
-  // failure rather than as a green tick over nine untested routes.
+  // failure rather than as a green tick over untested routes.
   expect(
     exercised.length,
     'most of the id-taking surface is genuinely reached, not gated away',
