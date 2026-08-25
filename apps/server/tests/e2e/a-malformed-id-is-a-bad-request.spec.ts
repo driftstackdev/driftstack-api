@@ -59,6 +59,18 @@ const SPEC = resolve(REPO_ROOT, 'packages/sdk-python/openapi.json');
  */
 const MALFORMED = 'not-a-uuid';
 
+/**
+ * Well-formed and certainly absent.
+ *
+ * V-1585 — the malformed pass above is refused early by every route that checks
+ * the shape of its id, which is most of them and is correct behaviour. That means
+ * it never reaches the lookup, and everything behind the lookup went untested:
+ * four admin actions answered 500 for an account that simply does not exist, and
+ * this spec was green over all four. A second pass with a well-formed id that
+ * matches nothing is what actually exercises the miss path.
+ */
+const ABSENT_UUID = '11111111-2222-3333-4444-555555555555';
+
 /** Paths whose single parameter is not an id at all. */
 const NOT_AN_ID = new Set<string>();
 
@@ -75,12 +87,110 @@ type Method = (typeof METHODS)[number];
  * from the sweep, so that if a second one ever appears it has to be argued for
  * here instead of just passing.
  */
+/**
+ * Problem types that mean "this deployment does not do that", not "this broke".
+ *
+ * Both are declared, typed refusals emitted before any work is attempted:
+ * `feature-unavailable` is an activation flag (AI chat, recipes, egress) and
+ * `driver-not-integrated` is a browser driver that does not implement the
+ * operation here. Membership is keyed on the type, never on the 503, so a route
+ * that genuinely fails cannot inherit the exemption by returning a bare 503.
+ *
+ * V-1585 — the second of these only became reachable once the sweep started
+ * sending bodies the handlers accept; with an empty body those operations were
+ * refused earlier and the gate was never seen.
+ */
+const DEPLOYMENT_GATES = [
+  'errors.driftstack.dev/feature-unavailable',
+  'errors.driftstack.dev/driver-not-integrated',
+] as const;
+
+const isDeploymentGate = (status: number, text: string): boolean =>
+  status === 503 && DEPLOYMENT_GATES.some((t) => text.includes(t));
+
 const IDEMPOTENT_ON_MISSING = new Set<string>(['DELETE /v1/admin/oauth/clients/{id}']);
+
+/**
+ * A body that satisfies the operation's required scalar fields, and nothing more.
+ *
+ * V-1585 — without this the mutating half of the sweep is shadowed: a handler
+ * that parses its body before looking the id up answers 400 for the body and the
+ * id is never judged. That is not hypothetical — `POST /v1/admin/accounts/{id}/tier`
+ * is one of the four routes that answered 500 for an absent account, and an
+ * empty-body sweep cannot see it because `ChangeTierRequestSchema` rejects `{}`
+ * first.
+ *
+ * Only required scalars are filled, and only from the schema: an enum takes its
+ * first value, a string 'x', a number its declared minimum. Required object and
+ * array fields are left out rather than guessed, so those operations stay
+ * body-shadowed — six of them, reported rather than papered over.
+ */
+type JsonNode = Record<string, unknown>;
+
+function minimalBody(
+  doc: JsonNode,
+  op: unknown,
+): { data: Record<string, unknown>; complete: boolean } {
+  const deref = (node: unknown): JsonNode | undefined => {
+    let cur = typeof node === 'object' && node !== null ? (node as JsonNode) : undefined;
+    for (let guard = 0; guard < 10; guard += 1) {
+      const ref = cur?.['$ref'];
+      if (typeof ref !== 'string') break;
+      let walk: unknown = doc;
+      for (const key of ref.replace(/^#\//, '').split('/')) {
+        walk = typeof walk === 'object' && walk !== null ? (walk as JsonNode)[key] : undefined;
+      }
+      cur = typeof walk === 'object' && walk !== null ? (walk as JsonNode) : undefined;
+    }
+    return cur;
+  };
+  const scalar = (node: unknown): unknown => {
+    const sc = deref(node) ?? {};
+    const en = sc['enum'];
+    if (Array.isArray(en) && en.length > 0) return en[0];
+    switch (sc['type']) {
+      case 'string':
+        return sc['format'] === 'date-time' ? '2026-01-01T00:00:00.000Z' : 'x';
+      case 'integer':
+      case 'number':
+        return typeof sc['minimum'] === 'number' ? sc['minimum'] : 1;
+      case 'boolean':
+        return true;
+      default:
+        return undefined;
+    }
+  };
+  const opNode = typeof op === 'object' && op !== null ? (op as JsonNode) : undefined;
+  const content = deref(opNode?.['requestBody'])?.['content'];
+  const json =
+    typeof content === 'object' && content !== null
+      ? (content as JsonNode)['application/json']
+      : undefined;
+  const schema = deref(
+    typeof json === 'object' && json !== null ? (json as JsonNode)['schema'] : undefined,
+  );
+  if (!schema) return { data: {}, complete: true };
+  const required = Array.isArray(schema['required']) ? (schema['required'] as string[]) : [];
+  const props =
+    typeof schema['properties'] === 'object' && schema['properties'] !== null
+      ? (schema['properties'] as JsonNode)
+      : {};
+  const data: Record<string, unknown> = {};
+  let complete = true;
+  for (const key of required) {
+    const value = scalar(props[key]);
+    if (value === undefined) complete = false;
+    else data[key] = value;
+  }
+  return { data, complete };
+}
 
 interface Operation {
   method: Method;
   path: string;
   key: string;
+  body: Record<string, unknown>;
+  bodyComplete: boolean;
 }
 
 function idTakingOperations(): Operation[] {
@@ -97,7 +207,14 @@ function idTakingOperations(): Operation[] {
     if (NOT_AN_ID.has(path)) continue;
     for (const method of METHODS) {
       if (doc.paths[path]?.[method] === undefined) continue;
-      out.push({ method, path, key: `${method.toUpperCase()} ${path}` });
+      const { data, complete } = minimalBody(doc, doc.paths[path]?.[method]);
+      out.push({
+        method,
+        path,
+        key: `${method.toUpperCase()} ${path}`,
+        body: data,
+        bodyComplete: complete,
+      });
     }
   }
   return out;
@@ -143,7 +260,7 @@ test('no id-taking route answers 5xx or 2xx for a malformed id', async ({ reques
     // back without changing what is being tested.
     const opts = {
       headers,
-      ...(op.method === 'get' || op.method === 'delete' ? {} : { data: {} }),
+      ...(op.method === 'get' || op.method === 'delete' ? {} : { data: op.body }),
     };
     const res =
       op.method === 'get'
@@ -166,7 +283,7 @@ test('no id-taking route answers 5xx or 2xx for a malformed id', async ({ reques
       }
       // The exemption is keyed on the declared problem type, not on the status,
       // so a route that breaks cannot inherit it by happening to answer 503.
-      if (status === 503 && text.includes('errors.driftstack.dev/feature-unavailable')) {
+      if (isDeploymentGate(status, text)) {
         gated.push(op.key);
       } else {
         serverErrors.push(`${op.key} -> ${status} ${text.slice(0, 200)}`);
@@ -213,4 +330,92 @@ test('no id-taking route answers 5xx or 2xx for a malformed id', async ({ reques
     exercised.length,
     'most of the id-taking surface is genuinely reached, not gated away',
   ).toBeGreaterThan(targets.length / 2);
+});
+
+test('no id-taking route answers 5xx for an id that is well-formed and absent', async ({
+  request,
+}) => {
+  await server.resetState();
+
+  const admin = await seedAccount(server.client, {
+    scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
+  });
+  const headers = authHeader(admin.plaintext);
+
+  const targets = idTakingOperations();
+  const serverErrors: string[] = [];
+  const gated: string[] = [];
+  const reached: string[] = [];
+  let reshaped = 0;
+
+  for (const op of targets) {
+    const call = async (idValue: string) => {
+      const url = server.baseUrl + op.path.replace(/\{[^}]+\}/, idValue);
+      const opts = {
+        headers,
+        ...(op.method === 'get' || op.method === 'delete' ? {} : { data: op.body }),
+      };
+      const r =
+        op.method === 'get'
+          ? await request.get(url, opts)
+          : op.method === 'delete'
+            ? await request.delete(url, opts)
+            : op.method === 'put'
+              ? await request.put(url, opts)
+              : op.method === 'patch'
+                ? await request.patch(url, opts)
+                : await request.post(url, opts);
+      let text = '';
+      try {
+        text = await r.text();
+      } catch {
+        text = '<unreadable>';
+      }
+      return { status: r.status(), text };
+    };
+
+    // Most ids on this surface are published as `xxx_<uuid>`, and a bare uuid is
+    // refused for the shape alone. The refusal names the shape it wants, so ask
+    // again in that shape rather than maintaining a prefix table here that would
+    // drift the moment a route is added. The inner quotes arrive JSON-escaped.
+    let out = await call(ABSENT_UUID);
+    const wants = /Expected \\?"([a-z]+)_<uuid>/.exec(out.text);
+    if (out.status === 400 && wants) {
+      reshaped += 1;
+      out = await call(`${wants[1] as string}_${ABSENT_UUID}`);
+    }
+
+    if (out.status >= 500) {
+      if (isDeploymentGate(out.status, out.text)) {
+        gated.push(op.key);
+      } else {
+        serverErrors.push(`${op.key} -> ${out.status} ${out.text.slice(0, 200)}`);
+      }
+      continue;
+    }
+    reached.push(`${out.status} ${op.key}`);
+  }
+
+  console.log(
+    `[V-1585] ${targets.length} operations, ${reshaped} re-asked in the shape the route named — ` +
+      `${reached.length} answered, ${gated.length} gated:\n${reached.join('\n')}`,
+  );
+
+  expect(
+    serverErrors,
+    'an id that is well-formed and simply matches nothing is a miss, not a server failure',
+  ).toEqual([]);
+
+  // Without the re-ask this sweep degenerates into the malformed pass: every
+  // prefixed route answers 400 on shape and the lookup is never reached, which is
+  // exactly how four 500s stayed hidden. Asserted so the second pass cannot
+  // quietly stop being a second pass.
+  expect(reshaped, 'the re-ask actually fired for the prefixed-id routes').toBeGreaterThan(15);
+
+  // The operations whose required body could not be built from scalars alone.
+  // They are still body-shadowed and this says so rather than letting a green
+  // read as full coverage; the bound keeps that set from quietly growing.
+  const shadowed = targets.filter((o) => !o.bodyComplete).map((o) => o.key);
+  console.log(`[V-1585] still body-shadowed (${shadowed.length}):\n${shadowed.join('\n')}`);
+  expect(shadowed.length, 'the un-buildable-body set stays small').toBeLessThan(10);
 });

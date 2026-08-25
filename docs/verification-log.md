@@ -17519,3 +17519,65 @@ the three V-1580/V-1582 sites lived.
 
 Full suite 3073 files / 30962 tests; e2e 223 passed against a disposable migrated Postgres, dropped
 afterwards; `verify-suite` OK. No new test file, so no ratchet movement.
+
+## V-1585 — four admin actions that answered 500 for an account that simply does not exist
+
+V-1584 closed with a stated weakness: POST/PUT/PATCH were swept with an empty body, so a handler parsing
+its body before the id would answer 400 and the id would never be judged. Chasing that produced a
+correction to my own reasoning and then four real defects.
+
+**The stated weakness was mostly wrong, and the real gap was worse.** Probing with a well-formed absent id
+and an empty body, 32 of 59 body-bearing operations answered 400 — which I first read as body validation
+shadowing the id check. Reading the response body rather than the status shows the opposite: the detail
+says `Invalid id format. Expected "acc_<uuid>"`. That is the ID check firing, correctly, first. My
+"well-formed" uuid was malformed for those routes because they publish prefixed ids.
+
+Which exposes the actual hole. **The sweep only ever sent `not-a-uuid`, and every route that checks the
+shape of its id refuses that immediately — correctly — so the lookup behind it was never reached.** The
+guard was green over everything past the shape check. Asking again in the shape the refusal names, the
+picture changes completely: 28 answered 404, and **four answered 500**.
+
+```
+POST /v1/admin/accounts/{id}/delete       500
+POST /v1/admin/accounts/{id}/suspend      500
+POST /v1/admin/accounts/{id}/tier         500
+POST /v1/admin/accounts/{id}/unsuspend    500
+```
+
+**The cause is the audit write on the failure path.** `admin_audit_log.target_account_id` is a foreign key
+to `accounts`. The service is correct — `if (!updated) throw new NotFoundError(...)` — and `withAudit`
+catches that, records `result: 'error: notfound'` with the same `targetAccountId`, and the insert violates
+the constraint. The constraint error then replaces the 404. Proven directly rather than reasoned:
+
+```
+ERROR: insert or update on table "admin_audit_log" violates foreign key constraint
+       "admin_audit_log_target_account_id_accounts_id_fk"
+DETAIL: Key (target_account_id)=(1111…) is not present in table "accounts".
+```
+
+**The file already contained the answer.** `POST /v1/admin/accounts/{id}/audit-note` carries an explicit
+`// Confirm target exists.` lookup before `withAudit`, which is why it answers 404 while its four siblings
+do not. The fix here is the more general one: on the error path, when the thrown error is a NotFound, the
+id moves to `target_resource_id` — plain text, no key — and `target_account_id` goes null. Attribution
+survives, no extra query is added to the happy path, and it also covers the race the pre-check cannot,
+where the row disappears between the check and the action.
+
+**Fixing the sweep mattered more than fixing the routes.** A second pass now asks with a well-formed
+absent id and, when the refusal names a shape, asks again in that shape — 49 of 106 operations are
+re-asked. That number is asserted, because without the re-ask the pass silently degenerates into the
+malformed one and re-hides everything.
+
+**And the body-shadowing was real after all, for one route.** With an empty body the second pass caught
+three of the four: `/tier` was still refused by `ChangeTierRequestSchema` before the lookup. Minimal
+bodies are now generated from the operation's own schema — required scalars only, enums taking their first
+value — and the fourth appears. Required object and array fields are not guessed, so eight operations stay
+body-shadowed; that set is printed and bounded rather than described.
+
+Sending bodies the handlers accept also reached a second deployment gate that had never been visible:
+`driver-not-integrated`, distinct from `feature-unavailable`. Both are declared typed refusals and are now
+named as a set, still keyed on the type rather than the 503, so a route that genuinely fails cannot
+inherit the exemption.
+
+Reverting the fix reds the sweep on all four routes; restored, both passes are green. Full suite 3073
+files / 30962 tests; e2e 224 passed against a disposable migrated Postgres, dropped afterwards;
+`verify-suite` OK. The Playwright figure moves 223 -> 224 in all four places the blind-spot suite pins it.

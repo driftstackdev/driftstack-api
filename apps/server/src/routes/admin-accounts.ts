@@ -46,7 +46,7 @@ import type {
   RateLimitOverridesService,
 } from '../services/rate-limit-overrides.js';
 import type { UsageService, UsageSummary } from '../services/usage.js';
-import { BadRequestError } from '../lib/errors.js';
+import { BadRequestError, NotFoundError } from '../lib/errors.js';
 import { readClientIp } from '../lib/client-ip.js';
 
 const PUBLIC_ID_RE = /^[a-z]{3}_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
@@ -147,7 +147,18 @@ export function registerAdminAccountsRoutes(
         adminAccountId: ctx.account.id,
         adminKeyId: ctx.apiKey.id,
         action,
-        targetAccountId,
+        // V-1585 — `admin_audit_log.target_account_id` is a foreign key to
+        // `accounts`. On this path the action has already failed, and when it
+        // failed BECAUSE the account does not exist, writing the id here violates
+        // that constraint. The constraint error then replaces the thrown
+        // NotFound, so an admin acting on an absent account saw a 500 where the
+        // route had correctly produced a 404. The id moves to
+        // `target_resource_id`, which is plain text and carries no key, so the
+        // attempt stays attributable — a failed staff action is exactly the row
+        // worth keeping.
+        ...(err instanceof NotFoundError
+          ? { targetAccountId: null, targetResourceId: targetAccountId }
+          : { targetAccountId }),
         inputPayload,
         result: `error: ${code}`,
         ipAddress: readClientIp(request),

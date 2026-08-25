@@ -65,7 +65,7 @@ export const EXPECTED_TEST_FILES_ALL = 3179;
  * The CI jobs this gate does NOT run, with how to run each locally.
  *
  * Current figures, RE-MEASURED 2026-08-25 by running the suite:
- * 223 Playwright tests over 37 spec files, 365 passing Python tests, and Go
+ * 224 Playwright tests over 37 spec files, 365 passing Python tests, and Go
  * tests from an uncached run.
  *
  * V-1581 — the Playwright pair moved 222/36 -> 223/37, the added spec being the
@@ -104,7 +104,7 @@ export const EXPECTED_TEST_FILES_ALL = 3179;
  * webServer and no browser project, and each spec boots the app in-process via
  * `tests/e2e/helpers/server.ts`. Given a migrated throwaway database and a spare
  * Redis index the whole suite runs in about 45 seconds — 222 green when this was
- * written, 223 as of V-1581.
+ * written, 224 as of V-1585.
  *
  * V-992 — this used to add that those 29 spec files were the only tests touching
  * `apps/server/src/db/**` against a real Postgres, and therefore that this gate
@@ -141,7 +141,7 @@ export const EXPECTED_TEST_FILES_ALL = 3179;
 export const NOT_COVERED_BY_THIS_GATE = [
   {
     job: 'e2e',
-    what: '223 Playwright tests — the only ones hitting real Postgres + Redis',
+    what: '224 Playwright tests — the only ones hitting real Postgres + Redis',
     local: 'DATABASE_URL=<disposable db> REDIS_URL=<unused index> node scripts/e2e-local.mjs',
   },
   {
