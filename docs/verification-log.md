@@ -18354,3 +18354,41 @@ turned a silent zero-result sweep into a 27-row one.
 
 Full suite green apart from the two `ProxiesView` content-parity failures, unchanged from three batches
 ago and still `4056443ab`'s rewrite outrunning its pins.
+
+## V-1604 — the shape of the V-1603 defect, pinned
+
+The V-1603 sweep is exhausted and the result is worth stating: 27 response fields assigned a constant, one
+defect, 26 correct. `override_expires_at: null` is null exactly when `source: 'tier_default'` — a
+discriminated shape, not a placeholder — and the agent-session `cookies: null` family always arrives with
+`status: 'unavailable'` and a `reason` beside it, which is the disclosure pattern done right.
+
+**The defect had a shape, and the shape has exactly one member.** A response builder with a DEFAULTED
+parameter that fills a published field, called without it. Scanning every route file for
+`function name(... = {literal})` returns `publicEndpoint` and nothing else, so this guard says it is a
+one-member class rather than implying a general rule it does not enforce.
+
+**Why a static guard on top of V-1603's behavioural one.** That integration test asserts the list, the
+detail view and the update agree — the right assertion, and it needed a seeded delivery to have any force.
+Its first version compared a fresh endpoint's zeros against the default's zeros and passed with the fix
+reverted. A call site added tomorrow without counts is caught here whether or not the next person
+remembers that a fixture has to be non-zero to mean anything.
+
+The create site keeps the default and is rostered with the reason: an endpoint created microseconds ago
+cannot have a delivery, so zero is the measurement rather than a stand-in for one. A second such claim has
+to be argued for in that roster.
+
+Both arms proven: dropping the counts argument on `GET /v1/webhooks/{id}` — the V-1603 defect exactly —
+is flagged, and making the rostered create site pass counts reds the stale-roster arm. Restored
+byte-identical.
+
+Both pins raised by one, for the one file this batch adds.
+
+### Concurrency
+
+Six failures are outstanding and none is this work. A peer has a large change in flight —
+`profiles.ts`, `harness-control-protocol.ts`, `fleet-control-registry.ts`, `sdk-typescript` and
+`gui-client` all dirty — and the failures track it exactly:
+`cross-sdk-profiles-lifecycle-parity`, `schemas-harness-control-protocol-content-parity`,
+`sdk-typescript-index-content-parity`, `unknown-request-fields-coverage-invariant`, plus the two
+`ProxiesView` pins outstanding since `4056443ab`. Attributed via `git status`; this batch added one test
+file and touched no source, and both files it did touch pass.
