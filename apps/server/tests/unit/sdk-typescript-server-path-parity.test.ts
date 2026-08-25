@@ -59,6 +59,165 @@ function registeredPaths(blob: string): Set<string> {
   return out;
 }
 
+/**
+ * Customer-facing operations the DOCUMENT publishes, normalised like the rest.
+ *
+ * Read from `registerRoute(…)` in `lib/openapi.ts` — the published contract,
+ * which is what a customer generates a client from. Staff (`/v1/admin/*`),
+ * internal and inbound-provider-webhook surfaces are excluded: they are not part
+ * of the customer client surface and most carry no operation at all.
+ */
+function publishedCustomerPaths(): Set<string> {
+  const spec = readFileSync(join(SERVER_SRC, 'lib', 'openapi.ts'), 'utf8');
+  const excluded = [
+    '/v1/admin/',
+    '/v1/internal/',
+    '/v1/mac-nodes',
+    '/v1/webhooks/stripe',
+    '/v1/webhooks/nowpayments',
+  ];
+  const out = new Set<string>();
+  for (const m of spec.matchAll(
+    /method:\s*'(?:get|post|put|patch|delete)',\s*\n\s*path:\s*'([^']+)'/g,
+  )) {
+    const path = (m[1] ?? '').replace(/\{[^}]+\}/g, ':p').replace(/\/$/, '');
+    if (excluded.some((e) => path.startsWith(e))) continue;
+    out.add(path);
+  }
+  return out;
+}
+
+/**
+ * Published customer operations this SDK does not reach, each with its reason.
+ *
+ * V-1622 — the arm at the top of this file runs SDK -> server: an SDK path that
+ * no route serves. The reverse has never been checked, and it is the direction a
+ * customer feels: an endpoint the document publishes and the client library
+ * cannot call. Measured when this landed, by extracting quoted `/v1/…` path
+ * LITERALS from each SDK's source — the TypeScript SDK reaches 100 of 134 customer
+ * operations, Python 54 and Go 55, and **none of the 34 below is reachable from
+ * Python or Go either**. So this is the customer surface no client library
+ * reaches, not a TypeScript omission. (A looser first measurement matched paths as
+ * substrings anywhere in each SDK and reported Python 70 / Go 71; it was counting
+ * paths that appear only in comments and docstrings.)
+ *
+ * ⚠️ A reason of REASON OWED means nobody has supplied one. The evidence-backed
+ * entries state what was actually checked (a gate that is not `requireAuth`, a
+ * non-JSON response body); the rest say plainly that they are undecided. This map
+ * exists so a THIRTY-FIFTH cannot appear in silence, not to bless the thirty-four.
+ */
+const SDK_ABSENT = new Map<string, string>([
+  ['/health', 'infra — liveness probe, not customer API surface'],
+  [
+    '/v1/account/cost',
+    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+  ],
+  [
+    '/v1/account/me/billing-portal',
+    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+  ],
+  [
+    '/v1/account/me/notifications',
+    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+  ],
+  [
+    '/v1/account/me/oauth-links',
+    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+  ],
+  [
+    '/v1/account/me/organization',
+    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+  ],
+  [
+    '/v1/account/mfa/disable',
+    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+  ],
+  [
+    '/v1/agent-sessions/:p/cookies',
+    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+  ],
+  [
+    '/v1/agent-sessions/:p/cookies/set',
+    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+  ],
+  [
+    '/v1/agent-sessions/:p/downloads',
+    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+  ],
+  [
+    '/v1/agent-sessions/:p/downloads/content',
+    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+  ],
+  [
+    '/v1/agent-sessions/:p/files',
+    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+  ],
+  [
+    '/v1/agent-sessions/:p/history',
+    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+  ],
+  [
+    '/v1/agent-sessions/:p/page-state',
+    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+  ],
+  [
+    '/v1/agent-sessions/:p/transcript',
+    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+  ],
+  ['/v1/auth/oauth-client/confirm-merge', 'OAuth 2 browser flow step — redirect-driven'],
+  ['/v1/auth/oauth-client/start', 'OAuth 2 browser flow entry — redirect-driven'],
+  [
+    '/v1/auth/resend-verification',
+    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+  ],
+  [
+    '/v1/billing/crypto-orders/:p/receipt.pdf',
+    'returns application/pdf; the SDK’s typed-response shape models JSON only',
+  ],
+  [
+    '/v1/billing/crypto-orders/:p/receipt.txt',
+    'returns text/plain; the SDK’s typed-response shape models JSON only',
+  ],
+  [
+    '/v1/egress/echo',
+    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+  ],
+  [
+    '/v1/fleet/events',
+    'REASON OWED (OPEN-ITEMS W-7) — a documented customer endpoint with no method here and none in the Python or Go SDKs either',
+  ],
+  [
+    '/v1/oauth/authorize',
+    'OAuth 2 protocol — authorizeGate, not requireAuth; driven by a browser redirect from a third-party app, not by the account holder’s client',
+  ],
+  ['/v1/oauth/introspect', 'OAuth 2 protocol — introspectGate; third-party client credentials'],
+  ['/v1/oauth/revoke', 'OAuth 2 protocol — revokeGate; third-party client credentials'],
+  [
+    '/v1/oauth/token',
+    'OAuth 2 protocol — tokenGate; a third-party client exchanges here with its own credentials',
+  ],
+  [
+    '/v1/status',
+    'public status page — gated by statusSnapshotGate with no requireAuth, so no API key is involved and no client-library call exists to make',
+  ],
+  ['/v1/status/incidents', 'public status page — no requireAuth'],
+  ['/v1/status/incidents/:p', 'public status page — no requireAuth'],
+  ['/v1/status/sla', 'public status page — statusSlaGate, no requireAuth'],
+  [
+    '/v1/status/subscribe',
+    'public status page — subscribeGate, no requireAuth; an email-confirmation flow rather than an API call',
+  ],
+  [
+    '/v1/status/subscribe/confirm',
+    'public status page — email-link confirmation, driven by a browser',
+  ],
+  [
+    '/v1/status/subscribe/unsubscribe',
+    'public status page — email-link unsubscribe, driven by a browser',
+  ],
+  ['/version', 'infra — build identity probe, not customer API surface'],
+]);
+
 describe('W249.C SDK-typescript ↔ server path parity', () => {
   const sdkBlob = readAll(SDK_RESOURCES, '.ts');
   const serverBlob = readAll(SERVER_SRC, '.ts');
@@ -115,5 +274,32 @@ describe('W249.C SDK-typescript ↔ server path parity', () => {
       0,
     );
     expect(registeredPaths(errorText).size, 'a path named in prose is not a registration').toBe(0);
+  });
+
+  it('V-1622 CRITICAL every published customer operation is reachable from this SDK, or is recorded with its reason. The first arm runs SDK -> server and catches a stale SDK path; this is the reverse, and it is the direction a customer feels — an endpoint the published document offers and no client library can call. Both directions assert: an unrecorded absence fails, and a recorded entry the SDK has since gained fails as stale.', () => {
+    const sdkPaths = new Set<string>();
+    for (const m of sdkBlob.matchAll(/path:\s*[`'"]([^`'"]+)[`'"]/g)) {
+      const raw = m[1]!;
+      if (!raw.startsWith('/v1/')) continue;
+      sdkPaths.add(raw.replace(/\$\{[^}]+\}/g, ':p').replace(/\/$/, ''));
+    }
+    const published = publishedCustomerPaths();
+
+    // Vacuity on the READERS. This arm's result is empty once the debt is paid,
+    // so an empty result can never itself be the signal that something is wrong.
+    expect(sdkPaths.size, 'SDK path literals extracted').toBeGreaterThanOrEqual(100);
+    expect(published.size, 'published customer operations extracted').toBeGreaterThanOrEqual(120);
+
+    const absent = [...published].filter((p) => !sdkPaths.has(p)).sort();
+
+    expect(
+      absent.filter((p) => !SDK_ABSENT.has(p)),
+      'the document publishes these customer operations and this SDK cannot call them, with no reason recorded:',
+    ).toEqual([]);
+
+    expect(
+      [...SDK_ABSENT.keys()].filter((k) => !absent.includes(k)).sort(),
+      'these entries claim the SDK cannot reach an operation and it now can — a stale entry makes the list look considered while hiding nothing:',
+    ).toEqual([]);
   });
 });

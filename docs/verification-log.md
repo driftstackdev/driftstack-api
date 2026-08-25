@@ -19022,3 +19022,40 @@ merely agreeing with itself.
 W-8 moves from OPEN to the arm being in place with its three reasons still owed. The set can no longer grow
 in silence, which was the whole of the defect; what remains is a decision, and decisions are not mine to
 invent.
+
+## V-1622 — the reverse of the SDK path guard: an operation the document offers and no client can call
+
+`sdk-typescript-server-path-parity` runs SDK → server, and says so: "every `path: '/v1/...'` literal in the
+SDK resources must correspond to a server-side route registration", catching a stale SDK path after a
+rename. **The reverse has never been checked**, and it is the direction a customer feels — an endpoint the
+published document offers that no client library can reach.
+
+Thirty-four published customer operations are in that state. Measured by extracting quoted `/v1/…` path
+LITERALS from each SDK's source: TypeScript reaches 100 of 134 customer operations, Python 54, Go 55, and
+**none of the thirty-four is reachable from Python or Go either**. It is the customer surface no client
+library reaches, not a TypeScript omission.
+
+**Seventeen carry an evidence-backed reason, seventeen say plainly that they do not.** The public status
+page is gated by `statusSnapshotGate` / `statusSlaGate` / `subscribeGate` with no `requireAuth` — checked,
+not assumed — so no API key is involved and there is no client-library call to make. The OAuth 2 endpoints
+use `authorizeGate` / `tokenGate` / `introspectGate` / `revokeGate` rather than account auth: a third-party
+app drives them by redirect with its own credentials. The two receipt endpoints return `application/pdf`
+and `text/plain`, which the SDK's typed-response shape does not model. `/health` and `/version` are probes.
+
+Everything else — the agent-session feature set (`transcript`, `page-state`, `history`, `files`,
+`downloads`, `cookies`), the account-management set, `resend-verification`, `egress/echo`, `fleet/events` —
+carries `REASON OWED (W-7)`. Those are decisions and I am not going to invent seventeen of them; the map's
+docstring says it exists so a THIRTY-FIFTH cannot appear in silence, not to bless the thirty-four.
+
+Vacuity is asserted on the readers rather than the result, for the same reason as V-1621: this arm's empty
+result is the state it wants once the debt is paid, so emptiness can never be the alarm.
+
+Three mutations, restored byte-identical from path-keyed snapshots. Dropping an entry fails naming it;
+recording an operation the SDK already reaches fails; and **adding a real `path:` literal to
+`sdk-typescript/src/resources/account.ts` flips `/v1/account/cost` to stale**, which is the one that
+matters because it proves the SDK reader is live rather than the map agreeing with itself.
+
+**A number was corrected before it landed rather than after.** The comment first said Python 70 and Go 71,
+from an earlier measurement that matched paths as substrings anywhere in each SDK — counting paths that
+appear only in comments and docstrings. Literal extraction gives 54 and 55. The conclusion did not change;
+the figures in a guard someone will trust did.
