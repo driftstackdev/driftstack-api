@@ -19268,3 +19268,20 @@ it belongs to whoever next needs a gate anyway.
 **A correction to my own framing.** I used "flat RSS + long elapsed = stall" to tell A2 their run was
 broken. The symptom reading was right and the scope was not: in both of our cases the suite had
 essentially finished, and a stalled worker is not a stalled suite — which is the title M-7 already carries.
+
+⚠️ **A boundary on that green, added after publishing it, because the number was already quoted.** The run
+skipped **115 of 3201 files and 815 of 31,881 tests**, and those are not arbitrary: the dominant gate in
+this repo is `skipIf(!process.env.CI && !process.env.DATABASE_URL)` — 131 files carry it, 4 more carry the
+Redis equivalent, and **all 135 live under `apps/server/tests/integration`**. Neither `CI` nor
+`DATABASE_URL` is set in this shell, so those suites did not execute. **The green covers the 3085 files
+that ran; it says nothing about the Postgres- and Redis-backed integration surface.**
+
+That is immaterial to what these sixteen commits touched — guards under `tests/unit`, `lib/openapi.ts`
+comments and two schema derivations, none of which reach a repo or a query — but "3085 passed" reads as
+"everything passed" and it should not.
+
+**The 135 and the 115 do not reconcile and I am not going to invent the difference.** Twenty gated files
+are not in the skipped count, which most likely means those files also contain ungated describes that ran,
+but the reporter names neither the skipped nor the passing files, so that is a hypothesis rather than a
+measurement. What is measured: 115 files skipped, 135 files carrying a DB or Redis gate, all of the latter
+under `tests/integration`.
