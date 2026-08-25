@@ -19691,3 +19691,36 @@ apostrophe and produced four unterminated literals — caught by `tsc -p tsconfi
 byte-identical from a snapshot, and redone with a real TS-literal encoder. And `echo "rc=$?"` after piping
 `tsc` into `head` reports `head`'s status, not the compiler's; the errors were read from the output rather
 than the exit code, which is the only reason it did not read as clean.
+
+## V-1638 — the last sixteen skips, and the first gate this repo has run with nothing excluded
+
+With `DATABASE_URL` and `REDIS_URL` both set: **3206 files passed (3206), 31,903 tests, 0 failures,
+206s.** That is the first full gate either agent has run with no file-level exclusions — the 135
+database-gated integration files and the four Redis ones all execute. A2 reported one failure on the same
+tree; it does not reproduce here and their broken import (a missing `.js`, since fixed in `4f1ad88a8`) is
+the likely cause, so it is resolved rather than outstanding.
+
+**Sixteen tests still skip, and after today the right move was to read them rather than assume.** They are
+three families, and all sixteen are intentional:
+
+- **Nine are self-retiring doc guards whose conditions have flipped.** Five assert the marketing and trust
+  pages do not claim customer-controlled egress _while no implementation exists_; four assert the docs frame
+  `crypto.order.*` as not-yet-subscribable _while the enum stays gated_. Both features shipped, so the
+  guards retired themselves — which is the design, not a failure.
+- ⭐ **And every one of the nine announces its own retirement with a live passing test.** `trust-index`:
+  "CRITICAL the egress gate was computed and has RETIRED. This file had the correct gate but still branched
+  on it inside the test body, so once egress shipped the arm below asserted nothing while reporting as a
+  pass." `marketing-egress-claim-sweep`: "both facts stated out loud because neither is visible otherwise
+  … a silent no-op is indistinguishable in the summary from a real check." **This is the exact remedy for
+  the thing that cost two agents nine hours today** — a skip is a zero that never looks wrong, and these
+  files make their own zero say so.
+- **Six are the flag-gated `profiles-lifecycle-actions` blocks** — `CLONE_ENABLED` ("clone is currently
+  useless") and `IMPORT_EXPORT_ENABLED` ("profile-cheat abuse vector"). `gui-flag-gated-suites-track-their-flag`
+  binds the skip to the flag rather than checking that the two agree, so flipping a flag runs the tests on
+  the next pass with nobody in the loop.
+
+⚠️ The literal `it.skip(` census is a reminder in miniature: five hits repo-wide, **all five are fixtures
+inside the guards that forbid them**. Counting the token would have reported five permanent skips where
+there are none — the same class of error as reading `115 skipped` as terrain.
+
+So the suite has no unexplained skips, and no unexplained red.
