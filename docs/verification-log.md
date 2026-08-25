@@ -18987,3 +18987,38 @@ that requires the enforced scope to be named at all.
 
 **W-9 is withdrawn, not deferred.** There is no gap worth an arm here, and proposing one was my
 duplicating an existing guard I had already been shown.
+
+## V-1621 — closing the disjunction that let a documented route go unpublished
+
+V-1619 found the hole and could not close it: `a-route-in-neither-the-spec-nor-the-docs-is-a-decision`
+accepts **in the spec OR in the docs OR listed with a reason**, so a documented route satisfies the arm and
+is never asked whether it is published. Three sit in that space — `GET /v1/whoami`, `GET /v1/status/stream`,
+`POST /v1/oauth/authorize/complete` — and closing it needed three justifications I did not have.
+
+**The arm is written without inventing them.** `DOCUMENTED_BUT_UNPUBLISHED` records the three with the
+value `REASON OWED (OPEN-ITEMS W-8)` and what is known about each — SSE models poorly in OpenAPI, the OAuth
+step is a browser redirect rather than an API call, and `/v1/whoami` is an ordinary authenticated GET with
+no evident reason at all. The map's own docstring says it exists to stop a FOURTH appearing silently rather
+than to bless these three, because this file's own header is where the rule lives: a list of names with no
+justification is how a real gap hides among deliberate ones. Writing the debt into the value is the
+difference between a recorded gap and a hidden one.
+
+Both directions are asserted. An unrecorded route in that state fails; a recorded one that has since been
+published fails as **stale**, which is the failure mode the sibling arm above already guards for the
+undocumented list — an entry that no longer describes reality makes the list look considered while hiding
+nothing.
+
+**Vacuity is asserted on the READERS, not on the result**, and that distinction is load-bearing here: this
+arm's result being empty is the state it wants once the debt is paid, so an empty result can never be the
+signal that something is wrong. Three empty readers would agree with everything, so the arm floors them at
+200 registrations, 200 operations and 100 documented endpoints first.
+
+Three mutations, each with the file proven changed before the result was read, each restored byte-identical
+from a path-keyed snapshot. Dropping `/v1/whoami` from the map fails naming it. Renaming an entry fails,
+because the real route becomes unrecorded. And **publishing `/v1/whoami` in `openapi.ts` flips its entry to
+stale** — which is the one that matters, because it proves the spec reader is live rather than the map
+merely agreeing with itself.
+
+W-8 moves from OPEN to the arm being in place with its three reasons still owed. The set can no longer grow
+in silence, which was the whole of the defect; what remains is a decision, and decisions are not mine to
+invent.

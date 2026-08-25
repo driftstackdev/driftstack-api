@@ -71,6 +71,37 @@ const codeLines = (file: string): string =>
  *             category where "undocumented" means a customer cannot use what
  *             they are entitled to and cannot review what their key can do.
  */
+/**
+ * Routes the DOCS teach that the published document does not contain.
+ *
+ * V-1621 — the central arm below accepts "in the spec OR in the docs OR listed
+ * here", and that disjunction has a hole: a DOCUMENTED route satisfies it and is
+ * never asked whether it is PUBLISHED. Docs-presence excuses spec-absence,
+ * silently and permanently. The API reference customers read is generated from
+ * that document, and so are the Python models — so an endpoint in this state is
+ * taught on the docs site and absent from the reference and every client library.
+ *
+ * ⚠️ Each value is the reason the route is unpublished, and REASON OWED means
+ * exactly that: nobody has supplied one. This map exists to stop a FOURTH
+ * appearing silently, not to bless these three. An exemption list whose entries
+ * carry no justification is how a real gap hides among deliberate ones, which is
+ * why the debt is written into the value rather than left implicit.
+ */
+const DOCUMENTED_BUT_UNPUBLISHED = new Map<string, string>([
+  [
+    'GET /v1/status/stream',
+    'REASON OWED (OPEN-ITEMS W-8) — server-sent events, which OpenAPI models poorly. Plausible, unrecorded.',
+  ],
+  [
+    'GET /v1/whoami',
+    'REASON OWED (OPEN-ITEMS W-8) — an ordinary authenticated GET. No evident reason not to publish it; taught at reference/scopes.md.',
+  ],
+  [
+    'POST /v1/oauth/authorize/complete',
+    'REASON OWED (OPEN-ITEMS W-8) — a step in the browser OAuth flow rather than an API call. Plausible, unrecorded.',
+  ],
+]);
+
 const UNDOCUMENTED_ROUTES = new Map<string, string>([
   ['GET /healthz', 'infra — liveness probe'],
   ['GET /metrics', 'infra — Prometheus scrape'],
@@ -266,5 +297,30 @@ describe('a route in neither the spec nor the docs is a decision, not an oversig
     expect([...new Set(gated)].sort(), 'endpoints gated by the gui_control scope:').toEqual([
       'POST /v1/sessions/:p/gui-input',
     ]);
+  });
+
+  it('V-1621 CRITICAL a route the docs TEACH is also published, or is recorded above with its reason. The arm before this one accepts "in the spec OR in the docs", so a documented route is never asked whether it is published — and the reference customers read, plus the generated Python models, come from the document rather than the docs site. Both directions are checked: an unrecorded one fails, and a recorded one that has since been published fails as stale.', () => {
+    const spec = inSpec();
+    const docs = inDocs();
+    const routes = registered();
+
+    // Vacuity first: three empty readers agree with everything. Asserted on the
+    // readers rather than on the result, because the result being empty is the
+    // outcome this arm WANTS once the debt is paid.
+    expect(routes.size, 'the route reader found registrations').toBeGreaterThan(200);
+    expect(spec.size, 'the spec reader found operations').toBeGreaterThan(200);
+    expect(docs.size, 'the docs reader found endpoints').toBeGreaterThan(100);
+
+    const unpublished = [...routes.keys()].filter((k) => docs.has(k) && !spec.has(k)).sort();
+
+    expect(
+      unpublished.filter((k) => !DOCUMENTED_BUT_UNPUBLISHED.has(k)),
+      'these routes are taught on the docs site and absent from the published document, with no reason recorded:',
+    ).toEqual([]);
+
+    expect(
+      [...DOCUMENTED_BUT_UNPUBLISHED.keys()].filter((k) => !unpublished.includes(k)).sort(),
+      'these entries claim a route is documented-but-unpublished and it no longer is — a stale entry makes the list look considered while hiding nothing:',
+    ).toEqual([]);
   });
 });
