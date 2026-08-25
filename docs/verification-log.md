@@ -19724,3 +19724,43 @@ inside the guards that forbid them**. Counting the token would have reported fiv
 there are none — the same class of error as reading `115 skipped` as terrain.
 
 So the suite has no unexplained skips, and no unexplained red.
+
+## V-1639 — the 137 are one mock and a short list, and the body test found a quarter of them
+
+W-12's backlog was characterised as ~137 errors sharing one root cause — untyped `vi.fn()` making
+`.mock.calls` a `[][]`. Measured, that is right in substance and wrong in shape twice over.
+
+**TS2493 (87) and TS2352 (50) are ONE cause, not two.** The untyped mock makes `calls[0][0]` an index
+error, and casting the resulting `undefined` is the second error on the next line. 87 + 50 = 137. Counting
+error codes presents one problem as two.
+
+**Attributed by which mock each error lands on: 13 identifiers, and the distribution is lopsided** —
+`fetchMock` 79, multi-line sites 22, `saveOrganization` 12, `sendInputEvent` 8, and sixteen more spread
+across nine names. **So 79 of 137 share a single signature**, and the remainder is a bounded list of about
+eleven mocks each needing the signature of what it stands in for. A sweep followed by a short drain.
+
+⭐ **The class cannot surface behavioural failures, and the reason is worth stating precisely.** These
+mocks are not merely untyped — their implementations declare ZERO parameters while the subject calls them
+with two, and the tests then assert on both:
+
+    const fetchMock = vi.fn(() => Promise.resolve(new Response(...)));  // declared: no args
+    expect(String(fetchMock.mock.calls[0]?.[0]))…                       // asserted: arg 0
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;           // asserted: arg 1
+
+**The file asserts on two arguments the type system believes do not exist**, and tsc never saw it because
+nothing typechecked this workspace's tests. Adding the parameters changes nothing about what is asserted;
+it makes the existing assertions expressible. Verified end to end on `account-organization.test.ts`: eight
+sites rewritten, 6 errors to 0, 12/12 tests still passing, then restored byte-identical since
+`apps/gui-client/**` is not mine to commit.
+
+⛔ **And the instrument fault, which is the day's recurring one in a new costume.** My first scoping asked
+what the mock's BODY contained — "does it construct a `new Response`" — and reported 14 fetch mocks across
+4 files. Keying on **use** instead, the identifier each error actually lands on, reports 79 across many
+more. `account-proxies` and `use-crypto-checkout` build their responses through helpers, so the body test
+could not see them. **I was one step from reporting the fetch pattern as a minor contributor when it is
+58% of the backlog.** The body is what a thing is made of; the use is what it is. When those disagree, the
+question was almost always about use.
+
+⚠️ Left for the owner of that workspace, with one decision attached: the already-typed fetch mocks
+disagree with each other — ten use `(url: string, init?: RequestInit)`, others `(_input: RequestInfo | URL,
+_init?: RequestInit)`. Matching whatever is adjacent would bake the inconsistency in at 88 sites.
