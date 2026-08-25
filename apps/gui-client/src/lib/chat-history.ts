@@ -11,6 +11,81 @@ import { LazyStore } from '@tauri-apps/plugin-store';
 import { makeWriteLock } from './store-write-lock';
 import type { ChatModel, ChatTurn } from './use-agent-chat';
 
+/**
+ * One line of history for a stored turn — everything the rail can show without
+ * a network call, derived from what is already persisted.
+ *
+ * ⚠️ `AgentMessageResponse` is a FOUR-member discriminated union and only
+ * `plan-executed` carries `intents`. A summariser that reaches for `.intents`
+ * unconditionally is `undefined` on three of four turn kinds, which is exactly
+ * the class of bug that took the Settings tab down today (a shape assumed
+ * rather than read). Every member is handled explicitly below and the compiler
+ * enforces exhaustiveness.
+ */
+export interface TurnSummary {
+  role: 'user' | 'agent';
+  /** One-line description, safe to render directly. */
+  headline: string;
+  /** Present only for a plan-executed turn. */
+  intentCount?: number;
+  /** True/false only for plan-executed; undefined where the notion is absent. */
+  ok?: boolean;
+}
+
+/** Trim to a readable single line without cutting mid-word where avoidable. */
+function oneLine(text: string, max = 90): string {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  if (flat.length <= max) return flat;
+  const cut = flat.slice(0, max);
+  const lastSpace = cut.lastIndexOf(' ');
+  return `${lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut}\u2026`;
+}
+
+/**
+ * Summarise one persisted turn. PURE — no React, no clock, no I/O — so the
+ * union handling is unit-testable on its own, which is the point of splitting
+ * it out from the rail.
+ */
+export function summariseTurn(turn: ChatTurn): TurnSummary {
+  if (turn.role === 'user') {
+    return { role: 'user', headline: oneLine(turn.text ?? '') };
+  }
+  const r = turn.response;
+  if (r === undefined) {
+    // An agent turn with no response is a turn that never completed — a stop,
+    // a transport failure, or a crash mid-stream. Saying so is more useful than
+    // rendering an empty row.
+    return { role: 'agent', headline: 'no response recorded' };
+  }
+  switch (r.kind) {
+    case 'plan-executed': {
+      const verbs = r.intents.map((i) => i.kind);
+      const unique = [...new Set(verbs)];
+      const head =
+        r.intents.length === 0
+          ? 'no actions'
+          : `${String(r.intents.length)} action${r.intents.length === 1 ? '' : 's'} \u00b7 ${unique.join(', ')}`;
+      return {
+        role: 'agent',
+        headline: r.ok ? head : `${head} \u2014 failed`,
+        intentCount: r.intents.length,
+        ok: r.ok,
+      };
+    }
+    case 'clarify':
+      return { role: 'agent', headline: `asked: ${oneLine(r.clarifying_question, 70)}` };
+    case 'refuse':
+      return { role: 'agent', headline: `declined: ${oneLine(r.refuse_reason, 70)}` };
+    case 'logged-manual':
+      return { role: 'agent', headline: 'manual mode \u2014 you drove this turn' };
+  }
+}
+
+/** Count of completed exchanges, for the collapsed row. */
+export function chatTurnCount(chat: StoredChat): number {
+  return chat.turns.length;
+}
+
 export interface StoredChat {
   id: string;
   /** Display title — derived from the first user message (deriveChatTitle). */
@@ -22,6 +97,15 @@ export interface StoredChat {
   turns: ChatTurn[];
   createdAt: number;
   updatedAt: number;
+  /**
+   * The server session these turns were produced by, when there was one.
+   *
+   * OPTIONAL on purpose: every chat persisted before this field existed has
+   * none, and `loadChats` validation is shallow. A missing value means "no
+   * handle to reattach with" — it must never be read as "the session is gone",
+   * because those are different facts and only one of them is knowable here.
+   */
+  sessionId?: string | null;
 }
 
 const STORE_FILE = 'agent-chats.json';

@@ -156,12 +156,47 @@ export interface UseAgentChatResult {
    *  server session is dropped — continuing the chat starts a fresh session,
    *  while the restored transcript stays visible as the chat's memory. */
   restore: (turns: ReadonlyArray<ChatTurn>) => void;
+  /** Try to reattach a reopened chat to the server session that produced it.
+   *  No-ops unless that session is still `active`. Safe to call unconditionally
+   *  — it drops its own answer if the customer moves on while it is in flight. */
+  adopt: (sessionId: string) => void;
+  /** True while an `adopt` is in flight. The view holds the "continuing starts
+   *  a fresh session" divider back until this settles, because until the GET
+   *  answers we do not yet know whether that sentence is true. */
+  adopting: boolean;
   /** Count of leading turns that were RESTORED from saved history and are NOT
    *  backed by the (now-absent) live server session. While > 0 and there is no
    *  live session, continuing the chat starts a FRESH server session that won't
    *  remember these turns — the view shows an honest divider after them. Cleared
    *  once a new live session is created (or on reset/new-chat). */
   restoredHistoryCount: number;
+}
+
+/**
+ * Whether a reopened chat may reattach to the session that produced it.
+ *
+ * Pure and exported so all three outcomes are testable without a hook harness —
+ * the same shape as `extractPendingConfirmation` below it.
+ *
+ * ⛔ `'stale'` is not a defensive extra. `restore()` bumps the cancel
+ * generation, so a GET issued for chat A can land after the customer has opened
+ * chat C. Adopting then would bind C's view to A's server session — the same
+ * class as the wrong-chat attach that made the earlier P0 reachable.
+ *
+ * ⛔ `'not-active'` covers `paused` AND `closed`, and **`resume` cannot rescue
+ * either**: the server rejects any non-active session with a 409
+ * (`agent-sessions.ts`, `if (rec.status !== 'active')`), and a harness
+ * challenge-pause does not move `status` off `'active'` in the first place. So
+ * there is no second chance to try here — the honest divider is the answer.
+ */
+export function adoptionOutcome(
+  status: AgentSession['status'],
+  generationMoved: boolean,
+): 'adopt' | 'stale' | 'not-active' {
+  // Order matters: a stale answer must be discarded even when it says 'active',
+  // because the question it answers is no longer the one on screen.
+  if (generationMoved) return 'stale';
+  return status === 'active' ? 'adopt' : 'not-active';
 }
 
 export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
@@ -265,6 +300,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   // generation discards its result on resolve. (UI stop; the server turn may
   // still complete — a true network/turn abort is a follow-up.)
   const cancelGenRef = useRef(0);
+  const [adopting, setAdopting] = useState(false);
   const cancel = useCallback(() => {
     cancelGenRef.current += 1;
     activePostRef.current = null;
@@ -299,6 +335,40 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     },
     [closeServerSession, clearProfileBinding],
   );
+
+  /**
+   * Reattach a reopened chat to its own still-running server session.
+   *
+   * ⛔ Adoption is allowed ONLY on `status === 'active'`. `resume` is not a
+   * revival path: `agent-sessions.ts` rejects any non-active session with a
+   * 409, and a harness challenge-pause does not change `status` anyway. A
+   * `paused` or `closed` session therefore keeps the honest divider.
+   *
+   * The generation check is not defensive padding — `restore()` bumps
+   * `cancelGenRef`, so an answer arriving after the customer has opened a third
+   * chat is detected and dropped rather than attaching this session to whatever
+   * is on screen. Same guard the in-flight post uses.
+   */
+  const adopt = useCallback((sid: string): void => {
+    const gen = cancelGenRef.current;
+    const c = clientRef.current;
+    if (c === null || typeof c.agentSessions?.get !== 'function') return;
+    setAdopting(true);
+    void Promise.resolve(c.agentSessions.get(sid))
+      .then((s) => {
+        if (adoptionOutcome(s.status, cancelGenRef.current !== gen) !== 'adopt') return;
+        setSession(s);
+        // The adopted session's own transcript holds these turns, so they are
+        // no longer history the agent cannot see.
+        setRestoredHistoryCount(0);
+      })
+      // A 404 (closed, reaped, or cross-account) is the ordinary case for an old
+      // chat, not an error worth showing. The divider already says the truth.
+      .catch(() => undefined)
+      .finally(() => {
+        if (cancelGenRef.current === gen) setAdopting(false);
+      });
+  }, []);
 
   const post = useCallback(
     async (
@@ -629,6 +699,8 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     deny,
     reset,
     restore,
+    adopt,
+    adopting,
     cancel,
     restoredHistoryCount,
   };

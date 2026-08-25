@@ -16,10 +16,13 @@ import { Fragment, memo, useCallback, useEffect, useRef, useState } from 'react'
 import {
   type AgentIntent,
   type AgentIntentResult,
+  type AgentSession,
   type AgentMessageResponse,
   type AgentUsage,
   type LiveKitInfo,
 } from '@driftstack/sdk';
+import { describeAgentSessionState } from '../lib/session-liveness';
+import type { SessionStateDescriptor } from '../lib/session-liveness';
 import { useSettings } from '../lib/SettingsContext';
 import { useConnectionStatus } from '../lib/use-connection-status';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
@@ -34,6 +37,8 @@ import {
   upsertChat,
   deleteChat,
   deriveChatTitle,
+  chatTurnCount,
+  summariseTurn,
   type StoredChat,
 } from '../lib/chat-history';
 import { RelativeTime } from '../components/RelativeTime';
@@ -209,6 +214,23 @@ function formatUsd(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
+/* Written out in full rather than composed, because Tailwind's scanner only
+   sees class names that appear literally in the source. */
+const STATUS_PILL_TONE: Record<SessionStateDescriptor['tone'], string> = {
+  running: 'bg-accent/15 text-accent',
+  starting: 'bg-status-busy/15 text-status-busy',
+  stopping: 'bg-status-idle/15 text-status-idle',
+  ready: 'bg-status-ready/15 text-status-ready',
+  error: 'bg-status-error/15 text-status-error',
+};
+const STATUS_DOT_TONE: Record<SessionStateDescriptor['tone'], string> = {
+  running: 'bg-accent',
+  starting: 'bg-status-busy',
+  stopping: 'bg-status-idle',
+  ready: 'bg-status-ready',
+  error: 'bg-status-error',
+};
+
 export function AgentChatView({
   initialProfileId,
   onGoToSettings,
@@ -236,6 +258,12 @@ export function AgentChatView({
   // key. (The server-side LLM config can't be probed from here; an API key is
   // the necessary + honest precondition the GUI can assert.)
   const aiReady = settings.apiKey !== null;
+  /**
+   * Server-reported lifecycle status of the open session, or null when there is
+   * no session. Distinct from `watch.kind`, which describes whether WE are
+   * watching the video — a session runs perfectly well with the pane closed.
+   */
+  const [liveSession, setLiveSession] = useState<AgentSession | null>(null);
   const [model, setModel] = useState<ChatModel>('claude-opus-4-8');
   const [profileId, setProfileId] = useState<string>(initialProfileId ?? '');
   const [profiles, setProfiles] = useState<ReadonlyArray<{ id: string; name: string }>>([]);
@@ -271,6 +299,51 @@ export function AgentChatView({
     ...(proxyId !== undefined ? { proxyId } : {}),
   });
   const started = chat.turns.length > 0;
+
+  /**
+   * V-1611 — the badge polls HERE rather than reusing the lifecycle poll in
+   * `LiveAutomationPanel`.
+   *
+   * ⚠️ That poll looks like the natural home and is not: the panel is a memo'd
+   * child that mounts only when the video pane is open, which is exactly the
+   * case where the customer can already SEE the session running. A background
+   * session — the one a badge exists for — never mounts it, so no amount of
+   * widening its guard would have worked. The line reference alone did not say
+   * that; the scope did.
+   *
+   * 10s rather than the panel's 5s: this drives a text label, not an end latch,
+   * so it is deliberately the cheaper of the two when both are live.
+   */
+  const liveSessionId = chat.session?.id ?? null;
+  const sessionState = describeAgentSessionState(liveSession ?? chat.session, aiReady);
+  useEffect(() => {
+    if (liveSessionId === null) {
+      setLiveSession(null);
+      return undefined;
+    }
+    if (client === null || typeof client.agentSessions?.get !== 'function') return undefined;
+    let cancelled = false;
+    const poll = (): void => {
+      void client.agentSessions
+        .get(liveSessionId)
+        .then((s) => {
+          if (cancelled) return;
+          // Store the WHOLE session: the badge needs `liveness` as well as
+          // `status`, and deciding between them is `describeAgentSessionState`'s
+          // job, not the fetcher's.
+          setLiveSession(s);
+        })
+        // A transient GET failure is not evidence the session ended. Leaving the
+        // last known status is more honest than flipping the badge off and back.
+        .catch(() => undefined);
+    };
+    poll();
+    const handle = setInterval(poll, 10_000);
+    return () => {
+      cancelled = true;
+      clearInterval(handle);
+    };
+  }, [client, liveSessionId]);
   // Below the lg breakpoint the live-view pane is hidden inline; this toggles it
   // as a slide-over so a narrow window can still open it (it used to vanish with
   // no affordance). Ignored at lg+ where the pane is a permanent column.
@@ -371,6 +444,9 @@ export function AgentChatView({
         turns: [...chat.turns],
         createdAt,
         updatedAt: now,
+        // The handle that makes reopening this chat able to rejoin its session
+        // rather than silently starting a new one.
+        sessionId: chat.session?.id ?? null,
       },
       now,
     ).then(setChats);
@@ -411,6 +487,11 @@ export function AgentChatView({
     setProfileId(c.profileId);
     setModel(c.model);
     chat.restore(c.turns);
+    // Reopening a chat whose session is still running should REJOIN it, not
+    // abandon a live session and start a second one against the same profile.
+    // restore() has just bumped the cancel generation, so this call is bound to
+    // THIS selection and drops its answer if the customer moves again.
+    if (typeof c.sessionId === 'string' && c.sessionId !== '') chat.adopt(c.sessionId);
   }
   function handleDeleteChat(id: string): void {
     if (chat.sending) return;
@@ -598,22 +679,23 @@ export function AgentChatView({
               <span className="text-sm font-medium text-ink-primary">AI Browser Automation</span>
               <span className="text-2xs text-ink-muted">natural-language automation</span>
             </div>
+            {/* V-1611 — this pill reported API-KEY PRESENCE and called it "AI
+                ready": a claim about CONFIGURATION worn as a claim about STATE.
+                A customer with a key and no session, and one with a session
+                running right now, saw the identical pill. The freshest session
+                we hold wins — the poll's copy if it has answered, else the one
+                the chat hook created. */}
             <span
-              className={`ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-medium ${
-                aiReady
-                  ? 'bg-status-ready/15 text-status-ready'
-                  : 'bg-status-error/15 text-status-error'
-              }`}
-              title={
-                aiReady
-                  ? 'Connected — the assistant is ready.'
-                  : 'No API key — connect one in Settings before sending.'
-              }
+              data-component="agent-status-pill"
+              className={`ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-medium ${STATUS_PILL_TONE[sessionState.tone]}`}
+              title={sessionState.title}
             >
               <span
-                className={`h-1.5 w-1.5 rounded-full ${aiReady ? 'bg-status-ready' : 'bg-status-error'}`}
+                className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT_TONE[sessionState.tone]} ${
+                  sessionState.tone === 'running' ? 'animate-pulse' : ''
+                }`}
               />
-              {aiReady ? 'AI ready' : 'Not connected'}
+              {sessionState.label}
             </span>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -775,6 +857,10 @@ export function AgentChatView({
                       say so, rather than presenting one seamless conversation the
                       agent silently has amnesia about (sweep2). */}
                   {chat.session === null &&
+                    // Held back while an adoption is in flight: until the GET
+                    // answers, "continuing starts a fresh session" is a claim we
+                    // cannot yet make.
+                    !chat.adopting &&
                     chat.restoredHistoryCount > 0 &&
                     i === chat.restoredHistoryCount - 1 && <RestoredHistoryDivider />}
                 </Fragment>
@@ -1476,6 +1562,16 @@ function ChatRail({
   onSelect: (c: StoredChat) => void;
   onDelete: (id: string) => void;
 }): JSX.Element {
+  // Which chats are showing their turn breakdown. Local and deliberately not
+  // persisted: it is a reading position, not a preference.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const toggleExpanded = useCallback((id: string): void => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }, []);
   return (
     <aside className="flex w-52 shrink-0 flex-col border-r border-surface-divider bg-surface-raised/60">
       <div className="border-b border-surface-divider p-2">
@@ -1512,12 +1608,41 @@ function ChatRail({
                   >
                     <span className="block truncate text-xs text-ink-primary">{c.title}</span>
                     <span className="block text-2xs text-ink-muted">
+                      {/* V-1611 — the rail showed a title and a timestamp and
+                          discarded the rest. `turns` has been persisted in full
+                          all along, so the count costs nothing to show and is
+                          the first thing that distinguishes two same-named
+                          chats. */}
+                      {chatTurnCount(c) > 0 && (
+                        <>
+                          {chatTurnCount(c)} turn{chatTurnCount(c) === 1 ? '' : 's'}
+                          {' · '}
+                        </>
+                      )}
                       <RelativeTime
                         iso={new Date(c.updatedAt).toISOString()}
                         tooltipPrefix="Updated"
                       />
                     </span>
                   </button>
+                  {c.turns.length > 0 && (
+                    <button
+                      type="button"
+                      aria-expanded={expanded.has(c.id)}
+                      aria-controls={`chat-turns-${c.id}`}
+                      aria-label={`${expanded.has(c.id) ? 'Hide' : 'Show'} what happened in ${c.title}`}
+                      title={expanded.has(c.id) ? 'Hide details' : 'Show what happened'}
+                      onClick={() => toggleExpanded(c.id)}
+                      className="shrink-0 px-1 text-ink-muted transition-colors hover:text-ink-primary"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`inline-block transition-transform ${expanded.has(c.id) ? 'rotate-90' : ''}`}
+                      >
+                        ›
+                      </span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     aria-label={`Delete chat ${c.title}`}
@@ -1529,6 +1654,39 @@ function ChatRail({
                     ✕
                   </button>
                 </div>
+                {expanded.has(c.id) && (
+                  <ol id={`chat-turns-${c.id}`} className="flex flex-col gap-1 py-1 pl-3 pr-1">
+                    {c.turns.map((t) => {
+                      const summary = summariseTurn(t);
+                      return (
+                        <li key={t.id} className="flex gap-1.5 text-2xs leading-snug">
+                          <span
+                            aria-hidden="true"
+                            className={`mt-1 h-1 w-1 shrink-0 rounded-full ${
+                              summary.role === 'user'
+                                ? 'bg-ink-muted'
+                                : summary.ok === false
+                                  ? 'bg-status-error'
+                                  : 'bg-accent'
+                            }`}
+                          />
+                          <span
+                            className={
+                              summary.ok === false
+                                ? 'break-words text-status-error'
+                                : 'break-words text-ink-secondary'
+                            }
+                          >
+                            <span className="sr-only">
+                              {summary.role === 'user' ? 'You: ' : 'Agent: '}
+                            </span>
+                            {summary.headline}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                )}
               </li>
             ))}
           </ul>
