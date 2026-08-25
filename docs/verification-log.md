@@ -19958,3 +19958,52 @@ lesson that a verification expressed in terms of the change can only confirm the
 Boundary: 89 of 89 sites in this class read individually; the ~137 mock class proven mechanically on one
 file and inferred by shape elsewhere. Full gate after the v485 repair: 3208 passed (3208), 31,919 tests,
 0 failures, nothing excluded.
+
+## V-1645 — W-13: 105 customer mutations, 9 uncovered, and none of the nine leaves no trace
+
+`every-mutating-admin-route-writes-an-audit-row` scopes itself BY PATH to `/v1/admin/` and had no customer
+sibling, so every mutation a CUSTOMER makes was outside any audit-coverage guard.
+
+⛔ **The first measurement of this was 119 of 125 unaudited, and it was correctly thrown away rather than
+published.** The mechanism is sharper than "audit calls live in services": **three spellings reach the
+recorder** — `accountAudit.record`, `this.accountAudit.record` (services), and `accountAudit?.record` (the
+optional dep in agent-sessions) — and between them two thirds of the call sites are invisible to the obvious
+pattern. ⚠️ Note the direction: that wrong number said _there IS a problem_, which is the kind that gets
+believed. Four of the five instrument errors in V-1642 said "fine"; this one did not, and it was still
+wrong.
+
+**Measured: 105 customer mutating routes (deduped; admin, fleet-internal, OAuth-protocol, inbound provider
+webhooks and 503 stubs excluded), 9 with no central audit call reachable.**
+
+⭐ **And none of the nine is a change that leaves no trace** — each checked rather than inferred.
+`crypto-checkout/quote` is not a mutation at all (pure computation, POST only because it takes a body).
+`POST /v1/legal/accept` writes `legal_acceptances`, **whose schema comment calls it the audit log of
+customer acceptance** — listing it as unaudited would have been the `owner_email` error again: right
+measurement, wrong story. Five leave a domain record; two build Stripe sessions where Stripe owns the
+durable record. **So W-13 is a coverage question — the central log does not cover the billing surface —
+rather than a defect count.**
+
+⚠️ **The number is a FLOOR, and the error direction was measured rather than assumed.** The detector tests
+the whole route file plus one hop of imports. Run against the three `/v1/admin/oauth/clients` routes the
+sibling guard already declares unaudited, it reports **all three as covered**, because another function in
+an imported module audits. A one-sided arm on a proven-direction floor beats a point estimate nobody can
+bound.
+
+**Four instrument faults on the way, every one caught by reading rather than by a failure:**
+
+1. The first registration regex missed `app.post<{Body:X}>(` and found **4** admin mutations where the
+   sibling guard measured **33**. ⭐ Reproducing that 33 is what made the population trustworthy — a
+   borrowed known-good number is the cheapest positive control available.
+2. The stub filter matched `, stub)` but not `handler: stub`.
+3. `/v1/internal/*` was counted as customer surface; it is fleet bearer auth. So were `/v1/oauth/*`
+   (third-party client credentials) and `/v1/webhooks/*` (the payment provider is the caller).
+4. ⛔ **Block-scoped detection reported three `byok-anthropic-key` routes as bare** because the file's audit
+   call sits in a helper at line 103, ABOVE the first registration at 139. **An audit call does not have to
+   be inside the block that needs it.**
+
+Mutation-proved in both directions, restoring byte-identical each time: adding an audit call to a LISTED
+route fails the staleness arm (`POST /v1/legal/accept`), and the coverage arm caught twelve routes before
+the population was corrected. ⚠️ A third mutation — neutering the single audit call in
+`account-web-sessions.ts` — did NOT fire, and that is the documented over-approximation rather than a
+defect: the file has one call and **two imported modules that also audit**. Recorded because a mutation
+that fails to fire is evidence about the instrument, not proof of a hole.
