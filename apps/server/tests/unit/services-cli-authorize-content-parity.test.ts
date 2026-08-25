@@ -179,7 +179,7 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
       /if \(raw === null\) \{\s*throw new CliAuthorizeError\('not_found', 'Authorization code not found or expired\.'\);/,
     );
     expect(body).toMatch(
-      /const stored = parseStoredCode\(raw\);\s*if \(stored === null\) \{\s*[\s\S]+?await this\.store\.del\(key\);\s*throw new CliAuthorizeError\('invalid_code', 'Authorization code state is invalid\.'\);/,
+      /const stored = parseStoredCode\(raw\);\s*if \(stored === null\) \{[\s\S]+?await this\.store\.del\(key\);\s*throw new CliAuthorizeError\('invalid_code', 'Authorization code state is invalid\.'\);/,
     );
     expect(body).toMatch(
       /if \(!constantTimeStringEqual\(stored\.state, input\.state\)\) \{\s*throw new CliAuthorizeError\('state_mismatch', 'State parameter does not match\.'\);/,

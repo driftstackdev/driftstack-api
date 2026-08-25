@@ -123,7 +123,7 @@ describe('W436.C packages/api-types/src/crypto-orders.ts content parity', () => 
       /\/\/ V-666\.BR — typed query schema for GET \/v1\/billing\/crypto-orders\.\s*\/\/ Customer dashboards \+ SDK consumers can reuse this instead of\s*\/\/ re-declaring the status union inline\./,
     );
     expect(body).toMatch(
-      /export const ListCryptoOrdersQuerySchema = z\.object\(\{\s*limit: z\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.optional\(\),\s*status: CryptoOrderStatusSchema\.optional\(\),\s*[\s\S]*?cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),\s*\/\*\* V-666\.BX — half-open window on created_at; ISO 8601 strings\. \*\/\s*created_after: z\.string\(\)\.datetime\(\)\.optional\(\),\s*created_before: z\.string\(\)\.datetime\(\)\.optional\(\),\s*\}\);/,
+      /export const ListCryptoOrdersQuerySchema = z\.object\(\{\s*limit: z\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.optional\(\),\s*status: CryptoOrderStatusSchema\.optional\(\),[\s\S]*?cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),\s*\/\*\* V-666\.BX — half-open window on created_at; ISO 8601 strings\. \*\/\s*created_after: z\.string\(\)\.datetime\(\)\.optional\(\),\s*created_before: z\.string\(\)\.datetime\(\)\.optional\(\),\s*\}\);/,
     );
     expect(body).toMatch(
       /\*\s*V-666\.BU — forward cursor; null when there is no further page\.\s*\*\s*Pass back as `\?cursor=` on the next request\. Treat as opaque\./,

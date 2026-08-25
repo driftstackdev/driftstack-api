@@ -19510,3 +19510,40 @@ thing I believed about it.
 The ratchets move to 3029/3204. That count includes a peer's uncommitted +1 for their own new test file,
 which this commit necessarily carries because the two bumps live in one line each; recorded here rather
 than left to be discovered in the blame.
+
+## V-1634 — the shape had three more spellings, and my guard hand-rolled what another guard forbids
+
+V-1633 covered three spellings of the ambiguous-whitespace construct. Sweeping for the SHAPE — any two
+adjacent quantified atoms ranging over overlapping characters — found **three more, across 13 sites**:
+`\s*[\s\S]*?` (10), `\s*\s+` (2), `\s*[\s\S]+?` (1).
+
+**Measured before touching them, because "looks ambiguous" is not "is slow".** Literals matching deeply,
+failure at the end, ten chained groups:
+
+    \s* \n? \s*      484,949ms
+    \s* [\s\S]*?      81,471ms
+    \s*                    0.3ms
+
+So the lazy form is six times cheaper than the known-bad one and still **eighty-one seconds** where the
+plain form is a third of a millisecond. Not a theoretical hazard.
+
+**Identity proven before replacing**, 183 cases each against real source: `\s*[\s\S]*?` ≡ `[\s\S]*?`,
+`\s*[\s\S]+?` ≡ `[\s\S]+?`, `\s*\s+` ≡ `\s+`. Zero disagreements. Applied to a fixed point with the
+post-condition asserted afterwards — zero remain — which is the V-1631 lesson rather than a comparison
+against my own transformation.
+
+⭐ **And the guard I wrote to forbid one hand-rolled shape was itself hand-rolling another.** A2 reported
+that `no-guard-strips-comments-by-hand` was failing on my new file: I had written my own
+`.replace(/\/\*[\s\S]*?\*\//g, '')` comment stripper. `tests/unit/_helpers/code-only.ts` exists for
+exactly that job, and its header records that the block-first spelling — **the one I wrote** — silently ate
+all 61 imports of a file, leaving three guards scanning an empty string and reporting nothing wrong.
+
+So the correct reading is not that I was careless. It is that **two guards written in one sitting will
+reproduce each other's mistake**, and the reason `no-guard-strips-comments-by-hand` earns its keep is that
+it caught the author of a sibling guard on the first run — the same way my own guard caught `\s*\s*` on
+its first run. Now imports the canonical helper.
+
+Mutation-proved against real subjects, each restored byte-identical: reintroducing any of the six spellings
+fails the guard. Two of those proofs initially reported PASS because my shell quoting appended `\\s+`
+rather than `\s+`; the guard was right and the harness was wrong, which is why the mutation writes the
+bytes directly now and asserts the token is present as written before reading the result.

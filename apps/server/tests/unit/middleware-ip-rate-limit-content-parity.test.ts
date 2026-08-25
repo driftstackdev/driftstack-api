@@ -70,7 +70,7 @@ describe('W395.A apps/server/src/middleware/ip-rate-limit.ts content parity', ()
 
   it('ipRateLimit factory: preHandler returning (req, reply) => Promise<void> (3rd optional metrics arg for the fallback counter)', () => {
     expect(body).toMatch(
-      /export function ipRateLimit\(\s*store: RateLimitStore,\s*cfg: IpRateLimitConfig,\s*[\s\S]*?metrics\?: MetricsRegistry,\s*\): \(req: FastifyRequest, reply: FastifyReply\) => Promise<void>/,
+      /export function ipRateLimit\(\s*store: RateLimitStore,\s*cfg: IpRateLimitConfig,[\s\S]*?metrics\?: MetricsRegistry,\s*\): \(req: FastifyRequest, reply: FastifyReply\) => Promise<void>/,
     );
   });
 

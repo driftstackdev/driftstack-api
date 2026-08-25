@@ -38,45 +38,43 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 
+import { codeOnly } from './_helpers/code-only.js';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..', '..', '..', '..');
 
 const WS = String.raw`\s*`;
 
+const ANY = '[' + String.raw`\s` + String.raw`\S` + ']';
+
 /**
- * Redundant whitespace constructs: each accepts exactly what `\s*` accepts, and
- * each is AMBIGUOUS, so a failing match explores many divisions of one run.
+ * Redundant whitespace constructs: in each, two adjacent quantified atoms range
+ * over overlapping characters, so one run of whitespace can be divided between
+ * them many ways. A match that succeeds takes the first division; a match that
+ * FAILS tries every one.
  *
- * Assembled from fragments rather than written out, so this file does not
- * contain the constructs it forbids and flag itself. A name-keyed self-exemption
- * would also have worked and would have been worse — it keeps passing the day
- * someone adds a real one here.
+ * Six spellings, because the first sweep removed a TOKEN when the defect is a
+ * SHAPE — taking `\s*` + `\n?` + `\s*` out of 799 files left the doubled form
+ * standing in a seventh, and this guard found it on its first run. Measured, with
+ * literals matching deeply and failure at the end, at ten chained groups:
+ *
+ *     \s* \n? \s*      484,949ms
+ *     \s* [\s\S]*?      81,471ms
+ *     \s*                    0.3ms
+ *
+ * Assembled from fragments rather than written out, so this file does not contain
+ * the constructs it forbids and flag itself. A name-keyed self-exemption would
+ * also have worked and would have been worse — it keeps passing the day someone
+ * adds a real occurrence to this very file.
  */
 const AMBIGUOUS: readonly { readonly pattern: string; readonly equivalent: string }[] = [
   { pattern: WS + String.raw`\n?` + WS, equivalent: WS },
   { pattern: WS + WS, equivalent: WS },
   { pattern: '(' + String.raw`\s` + '|' + String.raw`\n` + ')*', equivalent: WS },
+  { pattern: WS + String.raw`\s+`, equivalent: String.raw`\s+` },
+  { pattern: WS + ANY + '*?', equivalent: ANY + '*?' },
+  { pattern: WS + ANY + '+?', equivalent: ANY + '+?' },
 ];
-
-/**
- * Source with comments removed. A construct written in PROSE is inert, and this
- * file's own header quotes the forbidden pattern while explaining it — a scanner
- * that could not tell those apart would either flag itself or need a name-keyed
- * exemption, and an exemption keyed by filename keeps passing the day someone
- * adds a real one here. Conservative: block comments, and whole lines that are
- * `//` or a `*` continuation. A `//` sharing a line with code is left alone
- * rather than risking a mangled strip.
- */
-function codeOnly(src: string): string {
-  return src
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .split('\n')
-    .filter((l) => {
-      const t = l.trim();
-      return !t.startsWith('//') && !t.startsWith('*');
-    })
-    .join('\n');
-}
 
 function testFiles(): string[] {
   return execFileSync(

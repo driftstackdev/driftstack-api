@@ -216,7 +216,7 @@ describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () 
 
   it("V-324 help links pinned: 'Status (uptime + incidents)' status.driftstack.dev + 'Docs (quickstart + reference)' docs.driftstack.dev + 'support@driftstack.dev' mailto — pinned so customers don't dig through marketing site for support context; framing comment 'help links so customers don't have to dig through the marketing site to find status / docs / support contact from inside the app.'", () => {
     expect(body).toMatch(
-      /\{\/\* V-324 — help links so customers don't have to dig through\s*\s+the marketing site to find status \/ docs \/ support contact\s*\s+from inside the app\. \*\/\}/,
+      /\{\/\* V-324 — help links so customers don't have to dig through\s+the marketing site to find status \/ docs \/ support contact\s+from inside the app\. \*\/\}/,
     );
     expect(body).toMatch(/href="https:\/\/status\.driftstack\.dev"/);
     expect(body).toMatch(/href="https:\/\/docs\.driftstack\.dev"/);

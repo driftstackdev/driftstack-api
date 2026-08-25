@@ -98,14 +98,14 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
 
   it('SessionSchema: 14-field shape (id + account_id + api_key_id + status + archetype + V-169 purpose + label nullable + metadata nullable + egress_capabilities (migration 0045) nullable + egress_capability_report (Arc 5 EGRESS eg.1 migration 0054) nullable + 4 timestamps incl. last_state_at/destroyed_at nullable)', () => {
     expect(body).toMatch(
-      /export const SessionSchema = z\.object\(\{\s*id: SessionIdSchema,\s*account_id: AccountIdSchema,\s*api_key_id: ApiKeyIdSchema,\s*status: SessionStatusSchema,\s*archetype: ArchetypeSchema,\s*\/\*\* V-169 — harness purpose; defaults to `production_customer`\. \*\/\s*purpose: SessionPurposeSchema,\s*label: z\.string\(\)\.nullable\(\),\s*metadata: SessionMetadataSchema\.nullable\(\),\s*[\s\S]*?egress_capabilities: EgressCapabilitiesSchema\.nullable\(\),\s*[\s\S]*?egress_capability_report: z\.record\(z\.unknown\(\)\)\.nullable\(\),\s*created_at: Iso8601Schema,\s*updated_at: Iso8601Schema,\s*last_state_at: Iso8601Schema\.nullable\(\),\s*destroyed_at: Iso8601Schema\.nullable\(\),\s*\}\);/,
+      /export const SessionSchema = z\.object\(\{\s*id: SessionIdSchema,\s*account_id: AccountIdSchema,\s*api_key_id: ApiKeyIdSchema,\s*status: SessionStatusSchema,\s*archetype: ArchetypeSchema,\s*\/\*\* V-169 — harness purpose; defaults to `production_customer`\. \*\/\s*purpose: SessionPurposeSchema,\s*label: z\.string\(\)\.nullable\(\),\s*metadata: SessionMetadataSchema\.nullable\(\),[\s\S]*?egress_capabilities: EgressCapabilitiesSchema\.nullable\(\),[\s\S]*?egress_capability_report: z\.record\(z\.unknown\(\)\)\.nullable\(\),\s*created_at: Iso8601Schema,\s*updated_at: Iso8601Schema,\s*last_state_at: Iso8601Schema\.nullable\(\),\s*destroyed_at: Iso8601Schema\.nullable\(\),\s*\}\);/,
     );
   });
 
   it('CreateSessionRequest: selectable archetype optional + canonical bounded label + metadata/profile/persona fields', () => {
     expect(body).toMatch(/export const SessionLabelSchema = z\.string\(\)\.max\(120\);/);
     expect(body).toMatch(
-      /export const CreateSessionRequestSchema = z\.object\(\{\s*archetype: SelectableArchetypeIdSchema\.optional\(\),\s*\/\*\* V-169 — harness purpose; defaults to `production_customer`\. \*\/\s*purpose: SessionPurposeSchema\.optional\(\),\s*label: SessionLabelSchema\.optional\(\),\s*metadata: SessionMetadataSchema\.optional\(\),\s*[\s\S]*?profile_id: ProfileIdInputSchema\.optional\(\),\s*[\s\S]*?behavioral_profile: BehavioralProfileSchema\.optional\(\),\s*\}\);/,
+      /export const CreateSessionRequestSchema = z\.object\(\{\s*archetype: SelectableArchetypeIdSchema\.optional\(\),\s*\/\*\* V-169 — harness purpose; defaults to `production_customer`\. \*\/\s*purpose: SessionPurposeSchema\.optional\(\),\s*label: SessionLabelSchema\.optional\(\),\s*metadata: SessionMetadataSchema\.optional\(\),[\s\S]*?profile_id: ProfileIdInputSchema\.optional\(\),[\s\S]*?behavioral_profile: BehavioralProfileSchema\.optional\(\),\s*\}\);/,
     );
     // 2026-05-20 anti-enumeration framing pinned
     expect(body).toMatch(/a profile_id outside it returns/);

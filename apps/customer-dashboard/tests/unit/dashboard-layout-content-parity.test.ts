@@ -206,9 +206,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
   });
 
   it('W211 absolute-URL footer 5 legal links to https://driftstack.dev/* (Privacy / Terms / DPA / AUP / Sub-processors)', () => {
-    expect(body).toMatch(
-      /W211 — these pages live on the marketing-site at\s*[\s\S]*?driftstack\.dev/,
-    );
+    expect(body).toMatch(/W211 — these pages live on the marketing-site at[\s\S]*?driftstack\.dev/);
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
       /<a href="https:\/\/driftstack\.dev\/legal\/privacy\/" class="hover:text-tk-accent-text">Privacy<\/a>/,

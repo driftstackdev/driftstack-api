@@ -162,7 +162,7 @@ describe('W458.B packages/webrtc-streaming/src/mock-codec-wrapper.ts content par
 
   it("stop: idempotent via stopped flag; current.pipeline.stop + await current.source.stop; framing pinned 'Give the pipeline loop a chance to observe the stopped state.' + 50ms setTimeout race; clears the run latch so a subsequent start() restarts", () => {
     expect(body).toMatch(
-      /async stop\(\) \{\s*if \(stopped\) return;\s*stopped = true;\s*current\.pipeline\.stop\(\);\s*await current\.source\.stop\(\);[\s\S]*?\/\/ Give the pipeline loop a chance to observe the stopped state\.\s*if \(runPromise !== null\) \{\s*await Promise\.race\(\[runPromise, new Promise<void>\(\(resolve\) => setTimeout\(resolve, 50\)\)\]\);\s*\}\s*[\s\S]*?runPromise = null;/,
+      /async stop\(\) \{\s*if \(stopped\) return;\s*stopped = true;\s*current\.pipeline\.stop\(\);\s*await current\.source\.stop\(\);[\s\S]*?\/\/ Give the pipeline loop a chance to observe the stopped state\.\s*if \(runPromise !== null\) \{\s*await Promise\.race\(\[runPromise, new Promise<void>\(\(resolve\) => setTimeout\(resolve, 50\)\)\]\);\s*\}[\s\S]*?runPromise = null;/,
     );
   });
 
