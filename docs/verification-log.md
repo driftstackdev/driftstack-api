@@ -17705,3 +17705,40 @@ that the claim was checked before it was written down.
 Coverage moves from 62 refused / 60 answered to **70 refused / 68 answered**, with 24 and 26 respectively
 behind deployment flags. Full e2e 225 passed against a disposable migrated Postgres — unchanged, because
 this batch adds coverage rather than tests. Full suite and `verify-suite` green.
+
+## V-1589 — the last shadowed bodies, and a bound that was absorbing them
+
+The sweep carried a set it called "still body-shadowed", bounded with
+`expect(shadowed.length).toBeLessThan(10)` while eight operations sat inside it. A bound with slack is a
+number quietly absorbing the thing it is supposed to report, so this batch was about emptying the set
+rather than describing it.
+
+**Checked before building anything.** The five session operations in that set — wait, interact, extract,
+navigate, capture — were probed by hand with bodies matching their schemas. All four that take a
+discriminated union answer **404 for a well-formed absent session id**, correctly. There is no defect
+hiding behind the shadowing; what there was is untested surface, which is a different problem and worth
+separating.
+
+**The generator learned three shapes, and each was already in the document.** A `oneOf`/`anyOf` takes its
+FIRST variant — the aim is a body the handler accepts so the id is reached, not exercising the union. An
+array takes exactly one item, since nothing on this surface asks for more. A nested object fills its own
+required properties recursively, depth-capped at six, because a self-referential schema would otherwise
+hang and a sweep that hangs is worse than one that skips.
+
+That took the shadowed set from eight to two. The last two were `type: ['string', 'null']` — JSON Schema
+permitting a LIST of types, which this surface uses for nullable fields. Reading the whole array as one
+unknown type is what left them unbuildable; taking the first non-null member is the whole fix, and the
+set reaches zero.
+
+**The bound is now none, and it is load-bearing.** Removing the union handling puts three operations back
+and reds the suite. An operation whose required body cannot be built is one this sweep cannot reach, and
+that deserves a failure asking the generator to learn the shape rather than a threshold absorbing it.
+
+**A number that did not move, and a fact that did.** Refused stayed 70 and answered stayed 68 across this
+change, because those five session routes were already counted as refusals — they were answering 400 on
+the body. They now answer 404 on the id. The count is identical and the coverage is not, which is the
+clearest illustration this log has of why a green total is not evidence about what was actually exercised.
+
+Twelve operations remain unrouted under the harness, unchanged from V-1588 and for the same stated reason.
+Full e2e 225 passed against a disposable migrated Postgres; full suite and `verify-suite` green. The 3074
+files / 30966 tests still include a peer's in-flight gui-client work, whose ratchets were left alone.

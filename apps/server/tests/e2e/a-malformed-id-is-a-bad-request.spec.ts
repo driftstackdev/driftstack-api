@@ -165,11 +165,40 @@ function minimalBody(
     }
     return cur;
   };
-  const scalar = (node: unknown): unknown => {
+  /**
+   * A value satisfying `node`, or undefined when one cannot be built from the
+   * schema alone.
+   *
+   * V-1589 — this handled scalars only, which left the discriminated-union and
+   * array-bodied operations permanently shadowed: five session routes could not
+   * be swept because their body was rejected before the id was looked at. A
+   * `oneOf` takes its FIRST variant rather than trying them all — the point is to
+   * get a body the handler accepts so the id is reached, not to exercise the
+   * union — and an array takes exactly one item, since `minItems` on this surface
+   * is never more than one.
+   *
+   * Depth-capped. A self-referential schema would otherwise recurse forever, and
+   * a sweep that hangs is worse than one that skips.
+   */
+  const scalar = (node: unknown, depth = 0): unknown => {
+    if (depth > 6) return undefined;
     const sc = deref(node) ?? {};
     const en = sc['enum'];
     if (Array.isArray(en) && en.length > 0) return en[0];
-    switch (sc['type']) {
+
+    const variants = sc['oneOf'] ?? sc['anyOf'];
+    if (Array.isArray(variants) && variants.length > 0) {
+      return scalar(variants[0], depth + 1);
+    }
+
+    // JSON Schema allows `type` to be a list, and this surface uses it for
+    // nullable fields — `['string', 'null']`. Taking the first non-null member is
+    // what makes those buildable; treating the whole array as an unknown type is
+    // what left the two crypto-orders notes shadowed.
+    const declared = sc['type'];
+    const kind = Array.isArray(declared) ? declared.find((t) => t !== 'null') : declared;
+
+    switch (kind) {
       case 'string':
         return sc['format'] === 'date-time' ? '2026-01-01T00:00:00.000Z' : 'x';
       case 'integer':
@@ -177,6 +206,24 @@ function minimalBody(
         return typeof sc['minimum'] === 'number' ? sc['minimum'] : 1;
       case 'boolean':
         return true;
+      case 'array': {
+        const item = scalar(sc['items'], depth + 1);
+        return item === undefined ? undefined : [item];
+      }
+      case 'object': {
+        const req = Array.isArray(sc['required']) ? (sc['required'] as string[]) : [];
+        const props =
+          typeof sc['properties'] === 'object' && sc['properties'] !== null
+            ? (sc['properties'] as JsonNode)
+            : {};
+        const out: Record<string, unknown> = {};
+        for (const key of req) {
+          const value = scalar(props[key], depth + 1);
+          if (value === undefined) return undefined;
+          out[key] = value;
+        }
+        return out;
+      }
       default:
         return undefined;
     }
@@ -493,7 +540,13 @@ test('no id-taking route answers 5xx for an id that is well-formed and absent', 
   // read as full coverage; the bound keeps that set from quietly growing.
   const shadowed = targets.filter((o) => !o.bodyComplete).map((o) => o.key);
   console.log(`[V-1585] still body-shadowed (${shadowed.length}):\n${shadowed.join('\n')}`);
-  expect(shadowed.length, 'the un-buildable-body set stays small').toBeLessThan(10);
+  // V-1589 — this was "stays small" with a bound of ten while eight operations
+  // sat behind it. Every body on this surface is now buildable from its own
+  // schema, so the honest bound is none: an operation whose required body cannot
+  // be constructed is one this sweep cannot reach, and that should be a failure
+  // asking for the generator to learn the shape rather than a number quietly
+  // absorbing it.
+  expect(shadowed, 'every required body is buildable from the published schema').toEqual([]);
 
   expect(
     unrouted.length,
