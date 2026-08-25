@@ -19430,3 +19430,42 @@ output matches what the transformation produced.**
 Fixed, prettier-formatted, tsc clean, and the affected guard passes 9/9 — which also confirms its
 rewritten patterns still match the source they pin, since a `toMatch` against a pattern that matched
 nothing would fail rather than pass.
+
+## V-1632 — my typecheck layer was vacuous, and only 2 of 14 workspaces typecheck their tests at all
+
+⚠️ **Correcting V-1630 before it is relied on.** Its layer 3 was "`tsc --noEmit` clean". I ran
+`tsc -p apps/server/tsconfig.json`, and that config is `include: ['src/**/*']`, `exclude: [… 'tests']`.
+**It typechecked none of the 799 files I rewrote.** The layer was not weak, it was empty, and I reported
+it as evidence. A2 caught it and was careful to say they were not assuming the bad case; it was the bad
+case.
+
+**Re-run against the config that does cover them — `apps/server/tsconfig.test.json`, whose include reaches
+`tests/**/\*` — it passes clean, and it covers 742 of the 799.\*\* The conclusion of V-1630 stands; that
+particular evidence for it did not. The remaining 57 live in other workspaces, and they are covered by the
+layers that were real: byte-exact substitution, behavioural equivalence over 77,000 comparisons, and a
+green suite — which also proves they PARSE, since vitest's transform fails a mangled file outright rather
+than skipping it.
+
+**And the gap generalises well past my sweep.** Every `apps/*` and `packages/*` tsconfig, read for whether
+any `include` reaches tests:
+
+    apps/server              YES  (tsconfig.test.json)
+    packages/sdk-typescript  YES
+    the other twelve         no
+
+**Twelve of fourteen workspaces have no tsconfig that typechecks their own test files.** A2 found this the
+expensive way: a hand-written `ProxyTestResult` fixture omitted `can_route`, and since
+`isProxyUsable = reachable && auth_ok && can_route`, their "healthy proxy" fixture was silently exercising
+the UNHEALTHY path. Two arms failed and that is the only reason it surfaced — the compiler was never
+looking. That is the recorded trap _a fabricated input shape tests the parser, not the path_, in the one
+place where the tool that would normally prevent it is absent.
+
+⚠️ **Boundary, because "unchecked" is stronger than what I measured.** `tsconfig.eslint.json` DOES include
+`apps/**/tests/**/*.ts(x)` and `packages/**/tests/**/*.ts`, so tests are visible to type-aware linting.
+What no configuration does in twelve workspaces is run `tsc --noEmit` over them, which is what reports a
+missing required property in an object literal. The repo-level `typecheck` script is
+`npm run typecheck --workspaces --if-present`, so it inherits whatever each workspace defines.
+
+Not fixed here: adding a `tsconfig.test.json` per workspace would surface a backlog across roughly 250
+previously-unchecked files in gui-client alone, which is its own item with its own gate rather than a
+rider on anything. Recorded for whoever takes it.
