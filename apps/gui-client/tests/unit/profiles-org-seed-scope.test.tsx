@@ -16,6 +16,7 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import type * as ProbeCacheModule from '../../src/lib/proxy-probe-cache';
 
 // A mutable settings controller so a test can flip the active workspace and
 // re-render to simulate a workspace switch (the org-sync effect keys on it).
@@ -119,7 +120,12 @@ vi.mock('../../src/lib/account-organization', () => ({
   saveOrganization: (...a: unknown[]) => saveOrganization(...(a as [])),
 }));
 
-vi.mock('../../src/lib/proxy-probe-cache', () => ({
+vi.mock('../../src/lib/proxy-probe-cache', async (importOriginal) => ({
+  // Spread the REAL module: this double overrides only the I/O. Stubbing
+  // the pure derivation instead would make the arms that depend on it pass
+  // vacuously, and a hand-listed factory silently omits every export added
+  // later — which is exactly how P-8 broke 18 files at once.
+  ...(await importOriginal<typeof ProbeCacheModule>()),
   loadProbeCache: () => Promise.resolve({}),
   saveProbeResult: vi.fn(() => Promise.resolve({})),
   saveExitResult: vi.fn(() => Promise.resolve({})),

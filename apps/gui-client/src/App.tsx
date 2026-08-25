@@ -29,6 +29,9 @@ import { SettingsProvider, useSettings } from './lib/SettingsContext';
 import { useConnectionStatus } from './lib/use-connection-status';
 import { isCloudBaseUrl } from './lib/telemetry';
 import { useAppVersion } from './lib/app-version';
+import { listProxies, testProxy, type ProxyConfig } from './lib/proxies';
+import { loadProbeCache, saveProbeResult } from './lib/proxy-probe-cache';
+import { runSweep, SWEEP_INTERVAL_MS } from './lib/proxy-probe-sweeper';
 import { FirstRunWizard } from './views/FirstRunWizard';
 import { CommandPalette, type PaletteAction } from './components/CommandPalette';
 import { ToastProvider, useToasts } from './lib/toasts';
@@ -535,6 +538,32 @@ function Shell(): JSX.Element {
   // returns (hooks-order rule, like the keydown effect above).
   const [update, setUpdate] = useState<AvailableUpdate | null>(null);
   const [updateDismissed, setUpdateDismissed] = useState(false);
+  // P-8 — keep the probe cache young enough that BULK launch can trust it.
+  // Single launch re-probes at launch time; bulk deliberately does not, so the
+  // cache is load-bearing exactly where nothing re-tests it. Same shape as the
+  // update check below: best-effort, silent, never blocking.
+  //
+  // Interval, not on-mount-only: the app stays open for days. The first sweep
+  // is deferred by one interval rather than fired at startup — launch is the
+  // busiest moment for the machine and nothing is stale-urgent in the first
+  // quarter hour.
+  useEffect(() => {
+    const deps = {
+      loadCache: loadProbeCache,
+      listProxies,
+      testProxy: (px: ProxyConfig) =>
+        testProxy({ host: px.host, port: px.port, username: px.username, password: px.password }),
+      saveResult: saveProbeResult,
+      now: () => Date.now(),
+      sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, ms)),
+    };
+    const id = window.setInterval(() => {
+      // runSweep is single-flight; a tick arriving while one runs is a no-op.
+      void runSweep(deps).catch(() => undefined);
+    }, SWEEP_INTERVAL_MS);
+    return () => window.clearInterval(id);
+  }, []);
+
   useEffect(() => {
     void checkForUpdate().then(async (u) => {
       setUpdate(u);

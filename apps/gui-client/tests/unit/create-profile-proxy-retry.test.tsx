@@ -7,6 +7,7 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import type * as ProbeCacheModule from '../../src/lib/proxy-probe-cache';
 
 const addProxy = vi.fn<(d: unknown) => Promise<{ id: string }>>(() =>
   Promise.resolve({ id: 'p_minted' }),
@@ -74,7 +75,12 @@ vi.mock('../../src/lib/account-organization', () => ({
   fetchOrganization: () => Promise.reject(new Error('offline')),
   saveOrganization: vi.fn(() => Promise.resolve()),
 }));
-vi.mock('../../src/lib/proxy-probe-cache', () => ({
+vi.mock('../../src/lib/proxy-probe-cache', async (importOriginal) => ({
+  // Spread the REAL module: this double overrides only the I/O. Stubbing
+  // the pure derivation instead would make the arms that depend on it pass
+  // vacuously, and a hand-listed factory silently omits every export added
+  // later — which is exactly how P-8 broke 18 files at once.
+  ...(await importOriginal<typeof ProbeCacheModule>()),
   loadProbeCache: () => Promise.resolve({}),
   saveProbeResult: vi.fn(() => Promise.resolve({})),
   saveExitResult: vi.fn(() => Promise.resolve({})),

@@ -12,7 +12,7 @@
 
 import { LazyStore } from '@tauri-apps/plugin-store';
 import { makeWriteLock } from './store-write-lock';
-import type { ProxyTestResult } from './proxies';
+import { isProxyUsable, type ProxyExitProbeResult, type ProxyTestResult } from './proxies';
 
 export interface CachedProbe {
   result: ProxyTestResult;
@@ -31,6 +31,108 @@ export interface CachedProbe {
 
 export type ProbeCacheMap = Record<string, CachedProbe>;
 
+/**
+ * How long a probe result is treated as still describing the proxy.
+ *
+ * Six hours is chosen against the ONE path that acts on the cache without
+ * re-testing: bulk launch. Single launch always re-probes (`ProfilesView` —
+ * "Re-test the proxy NOW rather than trusting whatever the cache remembers"),
+ * but bulk deliberately skips that, because probing N proxies serially would
+ * stall the batch. So the cache is load-bearing exactly there, and this bounds
+ * how old a verdict a batch can act on.
+ *
+ * Not shorter: every expiry costs a real TCP + SOCKS5 handshake per proxy, and
+ * a residential endpoint that rotates within six hours will be caught by the
+ * launch-time gate anyway. Not longer: a lapsed plan or a changed ruleset is
+ * invisible until something tests it, and "healthy" from last week is a claim
+ * we cannot support.
+ */
+/** The three view-shaped maps both proxy surfaces render from. */
+export interface ProbeViewState {
+  testResults: Record<string, ProxyTestResult>;
+  exitResults: Record<string, ProxyExitProbeResult | null>;
+  testedAt: Record<string, number>;
+}
+
+/**
+ * Derive the render state from a cache snapshot. Pure, and extracted so the
+ * mount path and the change-subscription path cannot drift apart — before P-8
+ * this lived inline in `ProxiesView.refresh`, and a background sweep updating
+ * the cache had no way to reuse it.
+ *
+ * ⛔ Exit-geo is re-hydrated ONLY when the last capability probe was healthy.
+ * `saveProbeResult` deliberately preserves prior exit-geo across a failed
+ * re-test (capability and exit probes are separate calls), so a proxy that was
+ * healthy and then went down would otherwise render its old exit IP and country
+ * flag beside a red "unreachable" pill — "exits from US 1.2.3.4" for a dead
+ * proxy. This is the one rule in the derivation that is not a transcription.
+ */
+export function deriveProbeViewState(cache: ProbeCacheMap): ProbeViewState {
+  const testResults: Record<string, ProxyTestResult> = {};
+  const exitResults: Record<string, ProxyExitProbeResult | null> = {};
+  const testedAt: Record<string, number> = {};
+  for (const [id, c] of Object.entries(cache)) {
+    testResults[id] = c.result;
+    if (typeof c.at === 'number') testedAt[id] = c.at;
+    if (c.exitIp !== undefined && isProxyUsable(c.result)) {
+      exitResults[id] = {
+        ip: c.exitIp,
+        country: c.exitCountry ?? null,
+        ...(c.exitCity !== undefined ? { city: c.exitCity } : {}),
+        ...(c.exitRegion !== undefined ? { region: c.exitRegion } : {}),
+        ...(c.exitTimezone !== undefined ? { timezone: c.exitTimezone } : {}),
+        ...(c.exitAsnOrg !== undefined ? { asn_org: c.exitAsnOrg } : {}),
+      };
+    }
+  }
+  return { testResults, exitResults, testedAt };
+}
+
+export const PROBE_TTL_MS = 6 * 60 * 60 * 1000;
+
+/** What a cached verdict is still worth. `untested` and `stale` are distinct:
+ *  one has no evidence, the other has evidence we no longer trust, and the two
+ *  deserve different words in front of a customer. */
+export type ProbeFreshness = 'untested' | 'fresh' | 'stale';
+
+/**
+ * Classify a cached probe by age. Pure — `now` is injected — so every boundary
+ * is testable without a clock.
+ *
+ * ⚠️ A timestamp in the FUTURE reads as fresh, which is what we want: it means
+ * the host clock moved backwards (DST, an NTP correction, a VM resume), not
+ * that the probe is old. Treating it as stale would re-probe every proxy the
+ * customer owns on every clock adjustment.
+ *
+ * That behaviour falls out of the comparison — a negative age is below any
+ * positive TTL — so there is deliberately NO special case for it here. An
+ * earlier revision had an explicit `if (age < 0) return 'fresh'` guard; a
+ * mutation test showed it could be deleted with no test failing, because it
+ * could never change the result. It is gone rather than kept as decoration:
+ * a branch that cannot alter behaviour still reads as load-bearing.
+ */
+export function probeFreshness(at: number | undefined, now: number): ProbeFreshness {
+  if (at === undefined || !Number.isFinite(at)) return 'untested';
+  return now - at >= PROBE_TTL_MS ? 'stale' : 'fresh';
+}
+
+/** True when a cached verdict is too old to present as current. `untested` is
+ *  NOT stale — there is nothing to have gone off. */
+export function isProbeStale(at: number | undefined, now: number): boolean {
+  return probeFreshness(at, now) === 'stale';
+}
+
+/** The proxy ids whose verdicts a sweep should refresh, oldest FIRST so a
+ *  rate-limited sweep spends its budget on the least trustworthy entries.
+ *  Untested proxies are not included: this refreshes what has gone off, and a
+ *  proxy that has never been tested is the customer's to test. */
+export function staleProxyIds(cache: ProbeCacheMap, now: number): string[] {
+  return Object.entries(cache)
+    .filter(([, c]) => isProbeStale(c.at, now))
+    .sort((a, b) => a[1].at - b[1].at)
+    .map(([id]) => id);
+}
+
 const STORE_FILE = 'proxy-probe-cache.json';
 const KEY = 'probes';
 
@@ -40,6 +142,39 @@ function getStore(): LazyStore {
     store = new LazyStore(STORE_FILE);
   }
   return store;
+}
+
+type ProbeCacheListener = (cache: ProbeCacheMap) => void;
+const listeners = new Set<ProbeCacheListener>();
+
+/**
+ * Subscribe to cache writes. Returns an unsubscribe.
+ *
+ * Both views keep the cache in local state, and before this there was nothing
+ * to tell them it had moved — so a background refresh would update the store
+ * and leave every open surface rendering the OLD verdict. That is worse than
+ * not sweeping at all: the customer would be reading a value we know to be
+ * superseded while believing it current.
+ */
+export function subscribeProbeCache(fn: ProbeCacheListener): () => void {
+  listeners.add(fn);
+  return () => {
+    listeners.delete(fn);
+  };
+}
+
+/** Notify subscribers. Iterates a COPY, so a listener that unsubscribes itself
+ *  during the callback cannot mutate the set mid-iteration; and a throwing
+ *  listener is contained, because a broken subscriber must not turn a
+ *  successful cache write into a failed one. */
+function emitProbeCache(cache: ProbeCacheMap): void {
+  for (const fn of [...listeners]) {
+    try {
+      fn(cache);
+    } catch {
+      /* a subscriber's fault is not the writer's problem */
+    }
+  }
 }
 
 // Serialize read-modify-write mutations so concurrent probes/invalidations
@@ -133,6 +268,7 @@ export function saveProbeResult(
     };
     await getStore().set(KEY, all);
     await getStore().save();
+    emitProbeCache(all);
     return all;
   });
 }
@@ -166,6 +302,7 @@ export function saveExitResult(
     };
     await getStore().set(KEY, all);
     await getStore().save();
+    emitProbeCache(all);
     return all;
   });
 }
@@ -183,6 +320,7 @@ export function invalidateProbe(proxyId: string): Promise<ProbeCacheMap> {
     delete all[proxyId];
     await getStore().set(KEY, all);
     await getStore().save();
+    emitProbeCache(all);
     return all;
   });
 }

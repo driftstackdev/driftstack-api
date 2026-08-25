@@ -10,6 +10,7 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import type * as ProbeCacheModule from '../../src/lib/proxy-probe-cache';
 
 const LIVEKIT = {
   ws_url: 'ws://localhost:7880',
@@ -146,7 +147,12 @@ vi.mock('../../src/lib/account-proxies', () => ({
 // The cached probe (loadProbeCache on mount). A prior healthy probe recorded an
 // exit IP/country; the LAST probe's reachability is configurable per test.
 let lastReachable = false;
-vi.mock('../../src/lib/proxy-probe-cache', () => ({
+vi.mock('../../src/lib/proxy-probe-cache', async (importOriginal) => ({
+  // Spread the REAL module: this double overrides only the I/O. Stubbing
+  // the pure derivation instead would make the arms that depend on it pass
+  // vacuously, and a hand-listed factory silently omits every export added
+  // later — which is exactly how P-8 broke 18 files at once.
+  ...(await importOriginal<typeof ProbeCacheModule>()),
   loadProbeCache: () =>
     Promise.resolve({
       p1: {

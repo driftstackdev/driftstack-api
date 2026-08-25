@@ -26,6 +26,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { openSimulatorWindow } from '../../src/lib/open-simulator';
+import type * as ProbeCacheModule from '../../src/lib/proxy-probe-cache';
 
 const agentCreate = vi.fn<(b: unknown, opts?: unknown) => Promise<unknown>>(() =>
   Promise.resolve({ id: 'agt_new', livekit: LIVEKIT }),
@@ -136,7 +137,12 @@ vi.mock('../../src/lib/account-organization', () => ({
   fetchOrganization: () => Promise.reject(new Error('offline')),
   saveOrganization: vi.fn(() => Promise.resolve()),
 }));
-vi.mock('../../src/lib/proxy-probe-cache', () => ({
+vi.mock('../../src/lib/proxy-probe-cache', async (importOriginal) => ({
+  // Spread the REAL module: this double overrides only the I/O. Stubbing
+  // the pure derivation instead would make the arms that depend on it pass
+  // vacuously, and a hand-listed factory silently omits every export added
+  // later — which is exactly how P-8 broke 18 files at once.
+  ...(await importOriginal<typeof ProbeCacheModule>()),
   loadProbeCache: () => Promise.resolve({}),
   saveProbeResult: vi.fn(() => Promise.resolve({})),
   saveExitResult: vi.fn(() => Promise.resolve({})),

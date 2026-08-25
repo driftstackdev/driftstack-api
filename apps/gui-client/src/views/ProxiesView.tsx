@@ -28,7 +28,9 @@ import {
 } from '../lib/proxies';
 import {
   invalidateProbe,
+  deriveProbeViewState,
   loadProbeCache,
+  subscribeProbeCache,
   saveExitResult,
   saveProbeResult,
 } from '../lib/proxy-probe-cache';
@@ -183,35 +185,13 @@ export function ProxiesView(): JSX.Element {
       // keeps showing its reachability / UDP / exit-geo across visits instead
       // of reverting to "untested" + needing a re-test every time (the cache
       // was written by saveProbeResult/saveExitResult but never read back here).
-      const cache = await loadProbeCache();
-      const tr: Record<string, ProxyTestResult> = {};
-      const er: Record<string, ProxyExitProbeResult | null> = {};
-      const ta: Record<string, number> = {};
-      for (const [id, c] of Object.entries(cache)) {
-        tr[id] = c.result;
-        if (typeof c.at === 'number') ta[id] = c.at;
-        // Only re-hydrate exit-geo when the LAST capability probe was healthy.
-        // saveProbeResult preserves the prior exitIp/country across a failed
-        // re-test (capability + exit probes are separate), so a proxy that was
-        // healthy (exit IP cached) then went down would, after a reload, show its
-        // STALE exit IP + country flag next to the red "unreachable" pill — a
-        // misleading "exits from US 1.2.3.4" for a dead proxy. In-session
-        // handleTest already drops the exit on a failed probe; this matches that
-        // for the reload path.
-        if (c.exitIp !== undefined && isProxyUsable(c.result)) {
-          er[id] = {
-            ip: c.exitIp,
-            country: c.exitCountry ?? null,
-            ...(c.exitCity !== undefined ? { city: c.exitCity } : {}),
-            ...(c.exitRegion !== undefined ? { region: c.exitRegion } : {}),
-            ...(c.exitTimezone !== undefined ? { timezone: c.exitTimezone } : {}),
-            ...(c.exitAsnOrg !== undefined ? { asn_org: c.exitAsnOrg } : {}),
-          };
-        }
-      }
-      setTestResults(tr);
-      setExitResults(er);
-      setTestedAt(ta);
+      // P-8 — one shared derivation with the subscription path below, so the
+      // two cannot drift. The exit-geo rule that used to live inline here is
+      // documented on deriveProbeViewState.
+      const view = deriveProbeViewState(await loadProbeCache());
+      setTestResults(view.testResults);
+      setExitResults(view.exitResults);
+      setTestedAt(view.testedAt);
     } catch (err) {
       setState((s) => ({
         ...s,
@@ -220,6 +200,21 @@ export function ProxiesView(): JSX.Element {
       }));
     }
   }, []);
+
+  // P-8 — the background sweep rewrites verdicts while this grid is open. Without
+  // this, a proxy re-tested and found DOWN would keep showing the healthy pill it
+  // was rendered with, which is worse than not sweeping: the customer would be
+  // reading a verdict we already know is superseded.
+  useEffect(
+    () =>
+      subscribeProbeCache((cache) => {
+        const view = deriveProbeViewState(cache);
+        setTestResults(view.testResults);
+        setExitResults(view.exitResults);
+        setTestedAt(view.testedAt);
+      }),
+    [],
+  );
 
   useEffect(() => {
     void refresh();

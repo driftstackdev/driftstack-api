@@ -45,6 +45,7 @@ import {
 } from '../lib/account-organization';
 import {
   loadProbeCache,
+  subscribeProbeCache,
   saveProbeResult,
   saveExitResult,
   type ProbeCacheMap,
@@ -840,6 +841,12 @@ export function ProfilesView({
   useEffect(() => {
     void loadProfilesMeta().then(setProfilesMeta);
     void loadProbeCache().then(setProbeCache);
+    // P-8 — the background sweep rewrites verdicts while this view is open.
+    // Without this the card would keep rendering the value it loaded on mount:
+    // a proxy we have just re-tested and found DOWN would still show its old
+    // healthy pill, which is worse than never sweeping, because the customer
+    // would be reading a verdict we know to be superseded.
+    return subscribeProbeCache(setProbeCache);
   }, []);
 
   // F1 deep-link — once the list has loaded WITH the requested profile, select it,
