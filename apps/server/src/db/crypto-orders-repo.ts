@@ -262,7 +262,21 @@ export class DrizzleCryptoOrdersRepo implements CryptoOrdersRepo {
         await tx
           .update(cryptoOrders)
           .set({
-            accountId: updated.account_id,
+            // V-1649 — `accountId` is deliberately NOT in this SET.
+            //
+            // An order's owner is fixed at creation: nothing in the service
+            // rebinds it, and there is no claim/attach path. But this UPDATE used
+            // to write `accountId: updated.account_id` from the CALLBACK'S object,
+            // so a callback that built `updated` from anything other than the
+            // locked row — an IPN payload, say — would silently transfer the order
+            // to another account. Every callback spreads `...order` today; that is
+            // a convention, and the row lock does not police it, because a lock
+            // protects against concurrency, not against authorship.
+            //
+            // Omitting the column makes the invariant structural instead of
+            // conventional. Behaviour is unchanged today: every caller already
+            // passes the locked value back, so writing it wrote what was already
+            // there.
             paymentId: updated.payment_id,
             payAmount: updated.pay_amount,
             payCurrency: updated.pay_currency,

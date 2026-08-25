@@ -20122,3 +20122,52 @@ untouched, now fails with `expected 3 to be 5`. Restored byte-identical.
 
 **A comparison claim has to open both sides.** That is the whole rule, and it is worth more than the
 enumeration I could not make credible.
+
+## V-1649 — a row lock protects against concurrency, not against authorship
+
+Sweeps had stopped yielding, so this audited a route end to end instead: the crypto-order cancel and IPN
+path, chosen because it moves money and because W-13 had just found it absent from the central audit log.
+
+**Most of it is the best code I have read today, and saying so is a result.** `withOrderLock` is a real
+lock — `db.transaction` plus `.for('update')`, re-reading the COMMITTED row inside the transaction.
+`cancelOrder` re-checks ownership AND status against the locked row rather than a pre-lock read. The IPN
+callback is careful everywhere it could be careless: `order.payment_id ?? args.payment_id` so the STORED id
+wins and an inbound IPN can only backfill a null; a forward-only state machine on the locked status;
+`firePaid: order.status !== 'paid' && …` so a re-delivered IPN cannot re-fire the webhook and the receipt;
+amount reconciliation in CRYPTO units with an explicit refusal to compare against the fiat price.
+
+⛔ **One thing was wrong, and it was invisible at every call site.** The helper's UPDATE wrote
+`accountId: updated.account_id` — from the CALLBACK'S object, alongside ten other fields. All eight
+callbacks spread `...order`, so every one wrote the locked value back and nothing was ever wrong. **That is
+a convention, not a constraint**, and the lock does not police it: a lock serialises writers, it says
+nothing about what a writer is allowed to change.
+
+⚠️ **And nothing else would have caught it.** `account_id` is `uuid('account_id')` — **nullable, and with no
+foreign key.** A callback built from an IPN payload rather than from the locked row would have moved the
+order to an arbitrary account and Postgres would have accepted it in silence.
+
+**Fixed structurally rather than by guard: the column is no longer in the SET.** Behaviour is unchanged
+today — every caller already passed the locked value back, so writing it wrote what was already there — and
+the invariant is now a property of the statement instead of an agreement among eight callbacks.
+
+**Proved on a real Postgres, both directions.** A new arm in `db-crypto-order-lock-exclusivity` runs a
+callback that does NOT spread the locked row and asserts the order does not move while the legitimate half
+of the write still lands. With the fix: 3 passed. With `accountId` restored to the SET:
+`expected '44728d85-…' to be null` — **the hijack succeeded.** So this was exploitable, not theoretical.
+
+⭐ **Prior art was checked first, and it is why the arm is not a duplicate.** The same file covers
+CONCURRENCY (two IPNs serialise), and `cross-account-crypto-order-isolation` covers ACCESS (account B gets
+a 404 and nothing is written). Neither covers the lock helper carrying an ownership change — a third
+property, and the one with no natural place to be noticed.
+
+**Then swept the shape rather than the token.** Of 16 `.set({…})` blocks fed from a callback-style object
+across `apps/server/src/db`, two appeared to write an ownership column — and ⚠️ **both are false
+positives**: the `accountId:` keys in `webhooks-repo` are the encryption-context argument nested inside
+`encryptForStorage(...)`, not columns. Caught by reading. After the fix, no repo writes an ownership column
+from caller input.
+
+⚠️ One unexplained obstacle, recorded rather than dressed up: the new arm's INSERT — **byte-identical to the
+working one above it** — failed inside postgres.js parameter binding (`Received an instance of Array`) with
+`cachedError` in the stack, which is consistent with prepared-statement caching keyed on query text. **I did
+not establish the mechanism.** The arm uses an explicit `'[]'::jsonb` literal instead, which avoids
+parameter binding for that column entirely.

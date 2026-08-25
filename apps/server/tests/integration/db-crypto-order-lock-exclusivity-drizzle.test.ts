@@ -130,5 +130,41 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         SELECT status FROM crypto_orders WHERE order_id = ${orderId}`;
       expect(row?.status).toBe('paid');
     });
+
+    it('CRITICAL the lock cannot carry an ownership change: a callback that returns a DIFFERENT account_id does not move the order. `account_id` is nullable with no foreign key, so before V-1649 the database would have accepted a wrong owner silently — the row lock protects against concurrency, not against authorship.', async () => {
+      if (!a) {
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG crypto-lock test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
+        return;
+      }
+      const orderId = `ord_${randomUUID().replaceAll('-', '')}`;
+      seeded.push(orderId);
+      await a`
+        INSERT INTO crypto_orders (order_id, product, price_cents, price_currency, status, events)
+        VALUES (${orderId}, 'tier_upgrade', 5000, 'usd', 'pending', '[]'::jsonb)`;
+
+      const [before] = await a<Array<{ account_id: string | null }>>`
+        SELECT account_id FROM crypto_orders WHERE order_id = ${orderId}`;
+      expect(before?.account_id, 'seeded unowned, so a write would be visible').toBeNull();
+
+      // A callback that does NOT spread the locked row, which is exactly the
+      // mistake the SET clause used to trust every caller not to make.
+      const hijacker = randomUUID();
+      const status = await repoFor(a).withOrderLock(orderId, (order) => ({
+        updated: { ...order, account_id: hijacker, status: 'paid' as const },
+        result: order.status,
+      }));
+      expect(status, 'the callback ran against the locked row').toBe('pending');
+
+      const [after] = await a<Array<{ account_id: string | null; status: string }>>`
+        SELECT account_id, status FROM crypto_orders WHERE order_id = ${orderId}`;
+      // The rest of the update lands...
+      expect(after?.status, 'the legitimate half of the write still applies').toBe('paid');
+      // ...and the ownership change does not.
+      expect(after?.account_id, 'account_id is not writable through the lock').toBeNull();
+    });
   },
 );
