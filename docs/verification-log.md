@@ -17914,3 +17914,41 @@ both call sites.
 
 Full suite 3076 files / 30996 tests, green; e2e 227 passed against a disposable migrated Postgres,
 dropped afterwards.
+
+## V-1593 — the third door, and two mutations that proved nothing
+
+Path parameters produced six findings and query parameters one, so the remaining place an id arrives is
+the request body. Sixteen body properties across the surface are named like ids.
+
+**Nothing was wrong, and the checking is the interesting part.** Every reachable one refuses a malformed
+value with an explicit message — `must be "prof_<uuid>" or a bare uuid` on `POST /v1/sessions`,
+`Expected "acc_<uuid>"` on the profile transfer, an `invalid_request` on the OAuth client create. Eight of
+the sixteen sit behind activation flags and prove nothing either way, which the sweep now states and
+bounds rather than folding into a green.
+
+**The first mutation was inert and looked like a pass.** `POST /v1/sessions` answers 400 for a bad
+`profile_id`, so removing the throw from `parseProfileId` should have reded the sweep. It did not, and the
+reason is that the refusal comes from a zod schema in `@driftstack/api-types` — a second, earlier guard.
+`parseProfileId` is the backstop, not the gate.
+
+**The second mutation was inert for a different reason, and only the message gave it away.** Relaxing that
+zod regex ALSO changed nothing: the server consumes api-types as built `dist`, so editing the package
+source without rebuilding has no effect on a running server. The tell was that the 400 came back with the
+identical text — a real change would have altered it. Two mutations in a row that a green would have
+credited to the guard.
+
+**The proof that counts used a guard in server source.** Removing V-1582's archetype check makes
+`PUT /v1/admin/validation-schedules {archetype_id}` answer 200 for a nonsense archetype, and the sweep's
+no-2xx assertion fires on it. That is the assertion doing real work, on a mutation that actually reached
+the running code.
+
+Worth keeping separate from the result: this batch found no defect, and the only reason that statement is
+worth anything is that two of the three attempts to test the instrument were themselves broken. A sweep
+declared effective on the strength of either of the first two would have been a guard nobody had
+established could fail.
+
+The input surface is now covered in all three places an id arrives — path, query, body — each with a
+sweep, each mutation-proven against a defect the repository actually had.
+
+Full suite 3076 files / 30996 tests, green; e2e 228 passed against a disposable migrated Postgres,
+dropped afterwards; `verify-suite` OK. Playwright moves 227 → 228 over 39 spec files.

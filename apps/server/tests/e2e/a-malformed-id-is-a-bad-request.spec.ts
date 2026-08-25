@@ -580,3 +580,123 @@ test('a refusal names what is actually missing', async ({ request }) => {
   expect(detail, 'and the refusal is about the account').toMatch(/account/i);
   expect(detail, 'not about an override that was never the missing thing').not.toMatch(/override/i);
 });
+
+/**
+ * Body properties whose NAME says they carry an id.
+ *
+ * V-1593 — path parameters and query parameters both turned out to hide the same
+ * defect, so the third door is the request body. `POST /v1/sessions` takes
+ * `profile_id`, `POST /v1/admin/oauth/clients` takes `account_id`, and both land
+ * in `uuid` columns exactly like the parameters that produced six findings.
+ */
+const ID_FIELD_RE = /(^|_)ids?$/;
+
+test('no id-shaped body field turns a malformed value into a server error', async ({ request }) => {
+  await server.resetState();
+
+  const admin = await seedAccount(server.client, {
+    scopes: [
+      'read',
+      'write',
+      'admin',
+      'driftstack_internal_admin',
+      'write:profiles',
+      'write:sessions',
+    ],
+  });
+  const headers = authHeader(admin.plaintext);
+
+  const doc = JSON.parse(readFileSync(SPEC, 'utf8')) as {
+    paths: Record<string, Record<string, unknown>>;
+  };
+
+  const serverErrors: string[] = [];
+  const succeeded: string[] = [];
+  const gated: string[] = [];
+  const unrouted: string[] = [];
+  const observed: string[] = [];
+  let poked = 0;
+
+  for (const path of Object.keys(doc.paths).sort()) {
+    for (const method of ['post', 'put', 'patch'] as const) {
+      const op = doc.paths[path]?.[method];
+      if (op === undefined) continue;
+      const { data } = minimalBody(doc, op);
+      // Every id-shaped property, whether or not the schema requires it: an
+      // optional filter is exactly where the crypto-orders defect lived.
+      const schema = (() => {
+        const rb = (op as JsonNode)['requestBody'];
+        const content =
+          typeof rb === 'object' && rb !== null ? (rb as JsonNode)['content'] : undefined;
+        const json =
+          typeof content === 'object' && content !== null
+            ? (content as JsonNode)['application/json']
+            : undefined;
+        return typeof json === 'object' && json !== null ? (json as JsonNode)['schema'] : undefined;
+      })();
+      const resolved = typeof schema === 'object' && schema !== null ? (schema as JsonNode) : {};
+      const props =
+        typeof resolved['properties'] === 'object' && resolved['properties'] !== null
+          ? (resolved['properties'] as JsonNode)
+          : {};
+
+      for (const field of Object.keys(props)) {
+        if (!ID_FIELD_RE.test(field)) continue;
+        poked += 1;
+        const url = server.baseUrl + path.replace(/\{[^}]+\}/, ABSENT_UUID);
+        const body = { ...data, [field]: MALFORMED };
+        const res =
+          method === 'post'
+            ? await request.post(url, { headers, data: body })
+            : method === 'put'
+              ? await request.put(url, { headers, data: body })
+              : await request.patch(url, { headers, data: body });
+
+        const status = res.status();
+        let text = '';
+        try {
+          text = await res.text();
+        } catch {
+          text = '<unreadable>';
+        }
+        const key = `${method.toUpperCase()} ${path} {${field}}`;
+        observed.push(`  ${status} ${key} :: ${text.slice(0, 90).replace(/\s+/g, ' ')}`);
+        if (isUnrouted(status, text)) {
+          unrouted.push(key);
+        } else if (isDeploymentGate(status, text)) {
+          gated.push(key);
+        } else if (status >= 500) {
+          serverErrors.push(`${key} -> ${status} ${text.slice(0, 160)}`);
+        } else if (status < 300) {
+          succeeded.push(`${key} -> ${status}`);
+        }
+      }
+    }
+  }
+
+  console.log(
+    `[V-1593] ${poked} id-shaped body fields poked — ${gated.length} gated, ${unrouted.length} unrouted\n` +
+      observed.join('\n'),
+  );
+
+  expect(poked, 'the surface has id-shaped body fields to push on').toBeGreaterThan(8);
+
+  // Half of them are behind activation flags, so half of this sweep proves
+  // nothing about validation. Stated and bounded rather than folded into the
+  // pass: if the gated share grows, the two assertions below quietly cover less
+  // while still reporting green.
+  expect(
+    gated.length,
+    'the deployment-gated share of body fields stays bounded',
+  ).toBeLessThanOrEqual(8);
+
+  expect(
+    serverErrors,
+    'a malformed id in a body field is the client getting it wrong, never the server failing',
+  ).toEqual([]);
+
+  expect(
+    succeeded,
+    'an id that cannot exist must not produce a success from a body field either',
+  ).toEqual([]);
+});
