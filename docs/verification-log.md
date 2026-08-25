@@ -17049,3 +17049,36 @@ real database, a real Redis and a real browser. They do.
 **Cleanup.** Two databases created across V-1573 and this batch, both dropped; Redis indices 14 and 13
 flushed of the keys those runs left. The `driftstack_iso_*` databases were deliberately left — the helper
 creates them only when absent and reuses them, so they belong to its lifecycle rather than to me.
+
+## V-1575 — covering the V-1565 defect, and correcting the claim that it was uncovered
+
+V-1573 reported "zero integration files for admin-audit-log" and left the coverage gap unwritten because a
+test could not be verified to reach its branch. Both halves needed revisiting.
+
+**The "zero" was a filename count reported as a coverage claim.** Three integration files drive
+`/v1/admin/audit-log` — `admin-reads`, `admin-scope-refusal-coverage` and `openapi` — and one of them
+already sends a malformed `admin_id`. Counting files named `admin-audit-log*` and calling the result
+coverage is the filename-keyed-roster fault from V-1547, committed one batch after writing about it. The
+standing rule to enumerate with BOTH patterns exists for exactly this; I used one.
+
+**The gap is real but narrower, and the existing test misses it by construction.**
+`admin-reads.test.ts:257` sends `admin_id=not-an-id` — nine characters, which fails the old length check
+AND the strict shape that replaced it. It answered 400 before V-1565 and after, so it never touched the
+defect. The defect needed a THIRTY-SIX character hex-or-dash string, which is precisely what the old branch
+accepted.
+
+Two cases added beside it: thirty-six dashes, and thirty-six hex digits with no dashes.
+
+**Proved by reverting the fix, which is the check V-1573 said it could not run.** With the old validator
+restored, exactly the two new cases fail and the other seventeen pass. With the fix, nineteen pass.
+
+**And the failure is 200, not 500 — which changes what the test may claim.** This fixture uses the
+in-memory admin-audit repo, so a garbage filter matches nothing and returns an empty page; there is no
+Postgres uuid cast to fail. The 500 V-1565 fixed is a production symptom this fixture cannot reproduce. The
+assertion message said "a client error, not a server one", which described a mechanism the test never
+exercises, and now says the boundary must REFUSE the value rather than silently match nothing. **A test
+that fails for a different reason than its message states is a test that will be misread the day it
+fails.**
+
+Full runs after the change: 393 integration files / 3798 tests, and the gate green at 3017 files. Database
+created and dropped, Redis index 12 flushed.

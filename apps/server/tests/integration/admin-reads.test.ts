@@ -263,6 +263,32 @@ describe('GET /v1/admin/audit-log', () => {
     });
     expect(res.statusCode).toBe(400);
   });
+  // V-1575 — the arm above sends a 9-character id, which failed the old length
+  // check AND the strict shape that replaced it, so it answered 400 before and
+  // after V-1565 and never covered the defect. That needed a THIRTY-SIX
+  // character hex-or-dash string, which the old raw-UUID branch accepted. Both
+  // values below are 36 characters and neither is a UUID.
+  //
+  // What this observes, precisely: with the old branch these returned **200**
+  // with an empty page, because this fixture uses the in-memory admin-audit repo
+  // and a garbage filter simply matches nothing. In production the same value
+  // reaches `eq(adminAuditLog.adminAccountId, ...)` against a Postgres uuid
+  // column and answers 500 — the symptom V-1565 fixed. So the assertion here is
+  // that the boundary REJECTS the value, not that it produces any particular
+  // server error: the fixture cannot reproduce a PG cast, and pretending
+  // otherwise would be a test asserting something it never exercises.
+  it.each([
+    ['thirty-six dashes', '-'.repeat(36)],
+    ['thirty-six hex digits, no dashes', 'a'.repeat(36)],
+  ])('400, not 500, for a 36-char non-UUID admin_id (%s)', async (_label, value) => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/admin/audit-log?admin_id=${encodeURIComponent(value)}`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, 'a malformed filter is a client error, not a server one').toBe(400);
+  });
 
   it('403 without admin scope', async () => {
     fx = await buildTestApp({ scopes: ['read', 'write'] });
