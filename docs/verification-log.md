@@ -18437,3 +18437,43 @@ Seven failures outstanding, none this work: a peer's in-flight profiles and harn
 pins from `4056443ab`, and `a-workspace-declares-what-its-source-imports` reporting hoisted `jsdom`,
 `github-slugger` and `@driftstack/api-types` — an install-state condition in workspaces this batch does
 not touch. The three openapi pins nearest this change pass.
+
+## V-1606 — three idempotency scopes checked, two sound by construction, one dead and worth keeping dead
+
+Cursors first, and briefly: sixteen operations take one, several pass it to the repo with only a length
+bound. V-1590 already pushed hostile values through every query parameter and found no 5xx there, and a
+keyset cursor stays account-scoped by the query's own predicate rather than by the cursor, so there is
+nothing here. Recorded so the next sweep does not re-open it.
+
+**Idempotency looked worse than it is, and the reason is worth writing down.** `crypto_orders` carries
+`uniqueIndex('crypto_orders_idempotency_key_unique').on(idempotencyKey)` — one column, no account — while
+its two siblings are explicitly `(accountId, key)`: `agent_sessions_idempotency_key_unique` and
+`session_operations_account_idempotency_key`, the latter commented "Account-scoped and partial". An index
+on a bare client-chosen key reads as a cross-account collision.
+
+It is not one. The VALUE in that column is already scoped: `createIdempotent` builds
+`` `${args.account_id ?? '_anon'}:${args.idempotency_key}` `` and the repo persists exactly that. So the
+global index is correct, and the schema comment calling it "the scoped idempotency key" is accurate about
+the value even though the index names one column.
+
+**What survives the check is the fallback.** Every caller with a null `account_id` lands in ONE scope
+called `_anon`, so two of them choosing the same key collide — and the second is answered with the first's
+order as a replay. That is a cross-caller READ, not a duplicate write. Idempotency keys are client-chosen;
+a client picking `checkout-1` is not exotic.
+
+**It is unreachable today**, and that was verified rather than assumed: the only `createIdempotent` call
+site is `routes/billing-crypto.ts`, behind `requireAuth` + `requireScope('admin:billing')`, passing
+`account_id: ctx.account.id`. Every other crypto-order route authenticates too.
+
+So the guard is forward-looking by design. `schema.ts` says the anonymous flow is intended — "Nullable for
+pre-signup checkouts (V-666 supports anonymous flow → claim on signup)" — and that is precisely the change
+that brings `_anon` to life. This file fails on that change rather than after it, and says in its header
+what the next person has to decide.
+
+**A mutation of mine was invalid before it was informative.** The first attempt at proving the caller arm
+replaced the FIRST `account_id: ctx.account.id` in the file — line 233 — while the call site is line 259.
+The guard did not fire and for a moment read as inert. Targeting the right line flags it. A mutation that
+does not touch the code under test proves nothing in either direction, and the tell was that the vacuity
+arm still passed.
+
+Both pins raised by one, for the one file this batch adds.
