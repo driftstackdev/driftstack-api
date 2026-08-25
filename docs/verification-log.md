@@ -20171,3 +20171,50 @@ working one above it** — failed inside postgres.js parameter binding (`Receive
 `cachedError` in the stack, which is consistent with prepared-statement caching keyed on query text. **I did
 not establish the mechanism.** The arm uses an explicit `'[]'::jsonb` literal instead, which avoids
 parameter binding for that column entirely.
+
+## V-1650 — W-10 measured as a blast radius instead of a schema count
+
+W-10 has sat open as "39 declared component schemas that no operation `$ref`s — the fix changes the
+published contract, so it needs the owner's call". That is true and unactionable: it says nothing about how
+much of the contract moves. This measures it, so the decision has a size.
+
+**Accounting over all 39, and it closes:**
+
+    39   orphaned components
+    33   distinct property-set groups (two groups carry two names each)
+    31   orphans matched to a shape a document operation emits INLINE
+     8   unmatched, itemised below
+    33   DISTINCT OPERATIONS affected, of 232 in the document
+         (31 responses + 11 request bodies; some operations are both)
+
+The affected set is not obscure: `GET /v1/account/me` (16 properties), `POST /v1/agent-sessions` and
+`GET /v1/agent-sessions/{id}` (19), `POST /v1/api-keys`, `POST /v1/webhooks`, `POST /v1/sessions`,
+`GET /v1/usage`. **A customer generating a client today gets anonymous inline models for the operations they
+use first.**
+
+⭐ **And the measurement surfaced a decision inside the decision, which the schema count hides entirely.**
+Two pairs of orphaned components have **IDENTICAL property sets**:
+
+    Account            ==  AdminAccount
+    CreateSessionResponse  ==  Session
+
+An inline shape can only `$ref` ONE name. So fixing W-10 is not purely mechanical: for these two shapes
+somebody has to decide which name the document keeps, and that choice is what customers will see in every
+generated client. ⚠️ **I found this only because my first pass undercounted by two** — it took
+`group[0]` as the name and I noticed the arithmetic did not close (29 + 8 ≠ 39). The discrepancy was the
+finding.
+
+**The 8 unmatched, itemised so the number is not a residue:**
+
+- **4 have no property set** — `AgentIntent`, `IntentResult`, `SearchResponse`, `SessionLoginResponse`.
+  Enums or aliases; nothing to reference.
+- **2 appear only NESTED** — `ApiKey` (2×) and `AdminAuditLogEntry` (1×), inside list envelopes rather than
+  as a whole response. Consistent with the earlier note that six are reached via `z.array(...)`.
+- **2 are query-object schemas** — `ListDeliveriesQuery`, `PaginationQuery`. OpenAPI flattens a query object
+  into individual parameters, so these can never be `$ref`'d from an operation at all. ⛔ **They are not a
+  gap to fix; they are components that should probably not be declared.**
+
+⚠️ Boundary, in the same sentence as the result: shapes were matched by **exact property-name set**, not by
+full schema equality. Two schemas with the same property names and different types would match here and
+should not. Every matched pair above is a response the routes demonstrably build from the named schema, but
+the instrument is a fingerprint, not a proof of identity.
