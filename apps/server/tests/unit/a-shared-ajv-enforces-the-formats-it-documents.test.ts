@@ -1,31 +1,40 @@
-// V-1550 — the shared spec-conformance Ajv does not validate formats, and the
-// option it names is not what stops it.
+// V-1550/V-1551 — the shared spec-conformance Ajv does not validate formats, and
+// the reason is that two different Ajv versions are installed.
 //
-// `createSpecAjv()` passes `validateFormats: false`, which is an **Ajv 8** option.
-// This repo runs Ajv 6.15, and Ajv 6 ignores it: constructed directly,
-// `new Ajv({ allErrors: true, strict: false, validateFormats: false })` still
-// rejects `not-a-uuid`. The only Ajv 6 option that turns formats off is
-// `format: false`, which the helper does not pass.
+// `createSpecAjv()` passes `validateFormats: false`. V-1550 recorded that as an
+// Ajv 8 option inert under Ajv 6, could not explain why formats were off anyway,
+// and said so rather than guessing. V-1551 resolved it, and the original reading
+// was wrong in the way that matters:
 //
-// The helper's instance nonetheless accepts `not-a-uuid`, and its `_opts.format`
-// reads `undefined` where a real Ajv 6 instance carries `'fast'`. WHAT disables
-// them is not established here: the obvious suspect is the interop cast this
-// helper exists to perform, and resolving `.default` off the module before
-// constructing did NOT switch formats on, so that guess is unproven and is not
-// asserted. The measurement stands on its own — through this helper, formats are
-// not enforced; constructed directly with the same options, they are.
+//   node_modules/ajv                       6.15.0   hoisted from another dependency
+//   apps/server/node_modules/ajv           8.20.0   what apps/server/package.json declares (^8.17.1)
 //
-// The BEHAVIOUR matches the helper's stated intent, so nothing is wrong to fix:
-// format assertions are advisory, and a `date-time` Ajv dislikes is not a
-// contract violation. What is fragile is that the intent rests on something other
-// than the option that documents it. Whatever is holding formats off is not named
-// anywhere, so a future edit to this helper can switch them ON and make three
-// response-conformance suites stricter at once, with no line in that diff
-// mentioning formats.
+// A `require('ajv')` from the repo root gets 6.15.0 and enforces formats; the
+// helper, resolving from `apps/server`, gets 8.20.0 where `validateFormats: false`
+// is a real option that really disables them. Confirmed from the instance rather
+// than from the lockfile: its `opts` carry `strictSchema`, `strictTypes`,
+// `loopEnum` and `code`, which are Ajv 8 keys, and `opts.format` is `undefined`
+// where Ajv 6 would hold `'fast'`.
 //
-// This file pins the behaviour so that change cannot arrive silently. It is
-// deliberately NOT a claim that formats should stay off — it is a claim that
-// turning them on is a decision someone makes on purpose.
+// So the helper does exactly what its comment says. The three response-conformance
+// suites treat format assertions as advisory on purpose, and a `date-time` Ajv
+// dislikes is not a contract violation.
+//
+// What this file guards is the version coupling. Nothing in the helper names a
+// version, and the option that carries the intent is silently inert against the
+// copy of Ajv one directory up. A dependency bump, a hoist change, or a lockfile
+// refresh that makes `apps/server` resolve the 6.x copy switches formats ON and
+// makes three response-conformance suites stricter at once, in a diff whose
+// subject is dependencies.
+//
+// Turning formats on may well be the right call. This file does not argue either
+// way; it makes the switch a decision instead of a side effect.
+//
+// ⚠️ NOT established: whether the interop cast the helper performs is still needed
+// under Ajv 8. `apps/server/tsconfig.json` sets `exclude: ["tests"]`, so a probe
+// importing Ajv directly reports nothing — a deliberate type error in that probe
+// produced no diagnostic either. The question is open because the instrument that
+// would answer it does not look at this directory.
 
 import { describe, expect, it } from 'vitest';
 import { createSpecAjv } from '../integration/_helpers/ajv.js';

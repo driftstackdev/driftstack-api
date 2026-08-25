@@ -16110,3 +16110,49 @@ mutation — forcing the real constructor — did not flip the behaviour, which 
 that turned an assertion into an open question.
 
 `EXPECTED_TEST_FILES` 3015→3016 and `_ALL` 3177→3178, one file, mine.
+
+## V-1551 — resolving what V-1550 left open, and correcting what it got wrong
+
+V-1550 ended on an honest gap: through `createSpecAjv()` formats are not enforced, constructed directly
+they are, and I declined to name the cause. Leaving that is the failure this arc keeps finding in other
+people's work, so this batch closed it. **The answer also invalidates a claim V-1550 made.**
+
+**Two Ajv versions are installed.**
+
+```
+node_modules/ajv                6.15.0   hoisted from another dependency
+apps/server/node_modules/ajv    8.20.0   what apps/server/package.json declares (^8.17.1)
+```
+
+A `require('ajv')` from the repo root — which is what my V-1550 control did — gets 6.15.0, where
+`validateFormats` is unknown and formats are enforced. The helper, resolving from `apps/server`, gets
+8.20.0, where `validateFormats: false` is a real option that really disables them.
+
+Confirmed from the live instance rather than from a lockfile: its `opts` carry `strictSchema`,
+`strictTypes`, `loopEnum` and `code` — all Ajv 8 keys — and `opts.format` is `undefined` where Ajv 6 holds
+`'fast'`.
+
+**So the helper does exactly what its comment says, and V-1550's header was wrong** where it stated "this
+repo runs Ajv 6.15" and treated the behaviour as unexplained. Corrected in place. The value of the guard
+is unchanged but its subject is sharper: it no longer pins a mystery, it pins a **version coupling**.
+
+**Proved at the mechanism.** Moving `apps/server/node_modules/ajv` aside makes the server resolve the
+hoisted 6.15.0, and the guard reds with "the shared Ajv started enforcing formats". That is the real
+scenario — a dependency bump, a hoist change, or a lockfile refresh — reproduced exactly, not an
+approximation of it. Restored and re-verified afterwards.
+
+### A fourth inert control, caught the same way
+
+While checking whether the helper's interop cast is still needed under Ajv 8, a probe importing Ajv
+directly typechecked clean. It had not been typechecked at all: `apps/server/tsconfig.json` sets
+`exclude: ["tests"]`. A deliberate `const x: number = 'string'` in the same probe also produced no
+diagnostic, which is how the emptiness was distinguished from a pass.
+
+So the cast question stays **open and is marked open in the guard**, rather than answered by an instrument
+that never looked. That is the fourth silently-inert control this session — after the repo-root probe
+(V-1536), the swallowed `addFormats` throw (V-1550), and the patch that never applied (V-1544). Each was
+caught by demanding a failure first, and none by reading the code.
+
+**The generalisation worth keeping:** when two runs of the "same" check disagree, suspect that they are not
+the same check. Here one `require` and one `import` of the same package name reached different major
+versions, and every downstream conclusion inherited that.
