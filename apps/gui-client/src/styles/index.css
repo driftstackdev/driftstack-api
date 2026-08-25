@@ -305,14 +305,21 @@
 }
 [data-mode='light'] {
   color-scheme: light;
-  --surface-base-rgb: 242 243 246;
-  --surface-raised-rgb: 255 255 255;
-  --surface-elevated-rgb: 255 255 255;
-  --surface-inset-rgb: 235 236 240;
-  --surface-divider-rgb: 228 230 236;
-  --ink-primary-rgb: 15 16 20;
-  --ink-secondary-rgb: 71 74 85;
-  --ink-muted-rgb: 138 141 153;
+  /* V-1611 — rebalanced. Was base #f2f3f6 / raised #ffffff / elevated #ffffff /
+     ink #0f1014: a near-uniform white field at maximum text contrast, with
+     raised and elevated IDENTICAL so nothing had real elevation. Pure white is
+     now scarce and reserved for the top layer, the ground drops far enough to
+     read as a page rather than a lit surface, and ink softens off near-black
+     while staying well above AA (#1a1d23 on #fdfdfe is 15.6:1 against a 4.5
+     requirement — the excess was glare, not accessibility). Dark is untouched. */
+  --surface-base-rgb: 235 237 242;
+  --surface-raised-rgb: 248 249 251;
+  --surface-elevated-rgb: 253 253 254;
+  --surface-inset-rgb: 224 227 234;
+  --surface-divider-rgb: 205 211 220;
+  --ink-primary-rgb: 26 29 35;
+  --ink-secondary-rgb: 82 88 99;
+  --ink-muted-rgb: 133 140 152;
   --ink-inverted-rgb: 255 255 255;
   --status-ready-rgb: 12 154 93;
   --status-busy-rgb: 201 138 18;

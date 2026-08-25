@@ -22,6 +22,13 @@ interface ReceiptState {
   settledSequence: number;
   /** Consecutive unanswered receipts; reset by any ack that arrives. */
   missedAcks: number;
+  /**
+   * Epoch-ms of the most recent miss, or 0 if none. Misses DECAY: two losses far
+   * apart are background noise, not a broken device, and without this the
+   * counter only ever reset on an ack or a full reset — so unrelated losses
+   * minutes apart still stacked to the alarm threshold.
+   */
+  lastMissAt: number;
 }
 
 export const INPUT_RECEIPT_DEADLINE_MS = 5_000;
@@ -44,6 +51,17 @@ export const INPUT_RECEIPT_DEADLINE_MS = 5_000;
  * unbroken run of misses and still trips on the second one.
  */
 export const MISSED_ACKS_BEFORE_ALARM = 2;
+
+/**
+ * How long a miss stays "recent". Beyond this the counter starts over, so the
+ * alarm means "misses arrived together" rather than "two misses have happened
+ * since this session began".
+ *
+ * 30s is four deadlines' worth of the flat 5s receipt budget: long enough that
+ * a genuinely wedged control link still trips it on consecutive inputs, short
+ * enough that unrelated losses minutes apart never accumulate.
+ */
+const MISS_DECAY_MS = 30_000;
 export const MAX_PENDING_INPUT_RECEIPTS = 128;
 
 const states = new WeakMap<Room, ReceiptState>();
@@ -60,6 +78,7 @@ function stateFor(room: Room): ReceiptState {
       nextSequence: 0,
       settledSequence: 0,
       missedAcks: 0,
+      lastMissAt: 0,
     };
     states.set(room, state);
   }
@@ -71,6 +90,16 @@ function stateFor(room: Room): ReceiptState {
  * have stacked up without an ack in between.
  */
 function noteMissedAck(state: ReceiptState, sequence: number): void {
+  // V-1611 — misses DECAY. The counter used to reset only on an ack or a full
+  // reset, so two lost acks minutes apart still stacked to the threshold. The
+  // harness swallows both not-connected errors and publish timeouts on its
+  // side, so an isolated lost ack is expected background rather than a signal;
+  // what indicates a broken device is misses arriving CLOSE TOGETHER.
+  const now = Date.now();
+  if (state.lastMissAt !== 0 && now - state.lastMissAt > MISS_DECAY_MS) {
+    state.missedAcks = 0;
+  }
+  state.lastMissAt = now;
   state.missedAcks += 1;
   if (state.missedAcks < MISSED_ACKS_BEFORE_ALARM) return;
   publish(state, 'timeout', sequence);
@@ -101,6 +130,20 @@ function expireOldest(state: ReceiptState): void {
   clearTimeout(oldest[1].timer);
   state.pending.delete(oldest[0]);
   rememberTimeout(state, oldest[0], oldest[1].sequence);
+  // ⚠️ V-1611 — I removed this call and put it back. Recording why, so the next
+  // reader does not spend the same hour.
+  //
+  // The argument for removing it: eviction drops a receipt that is STILL IN
+  // FLIGHT, and nothing has said it failed, so counting it as a miss looks like
+  // accusing the device of our own bookkeeping limit.
+  //
+  // Why that argument is wrong: receipts are removed from `pending` on ACK, so
+  // reaching MAX_PENDING_INPUT_RECEIPTS means 128 receipts are outstanding
+  // SIMULTANEOUSLY, none of them answered. That is not a fast typist — it is a
+  // device that has stopped acknowledging inside its own deadline, which is
+  // exactly what the badge exists to report. `bounds pending cardinality and
+  // fails visibly instead of growing without limit` pins this on purpose: a
+  // silent eviction means the table overflowed and nobody was told.
   noteMissedAck(state, oldest[1].sequence);
 }
 
@@ -184,6 +227,10 @@ export function resetInputReceipts(room: Room): void {
   state.settledSequence = 0;
   state.issue = null;
   state.missedAcks = 0;
+  // Clear the decay clock with the counter. A stale timestamp means the FIRST
+  // miss after a reset compares against a pre-reset instant, decays immediately,
+  // and quietly raises the alarm threshold from two to three.
+  state.lastMissAt = 0;
   for (const listener of state.listeners) listener(null);
 }
 

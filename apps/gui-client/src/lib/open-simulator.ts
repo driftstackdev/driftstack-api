@@ -201,8 +201,21 @@ async function openInProcessSimulatorWindow(
       alwaysOnTop: false,
       minimizable: true,
       skipTaskbar: false,
+      // V-1611 — the macOS simulator app sets these; this path did not, so a
+      // drag could collapse the window on the one platform where the grab
+      // target is already hard to find. Mirrors `.min_inner_size(280, 560)` in
+      // the Rust builder.
+      minWidth: 280,
+      minHeight: 560,
       ...(position !== null ? { x: position.x, y: position.y } : { center: true }),
-      shadow: false,
+      // ⛔ V-1611 — was `false`, and that is why dragging to resize barely works
+      // on Windows. macOS gives a borderless NSWindow a resize margin on every
+      // edge for free; on Windows the sizing frame is part of the NON-CLIENT
+      // area drawn by DWM, and suppressing the shadow on a borderless
+      // transparent window suppresses that frame — which is what carries the
+      // hit-test region. No frame, no grab target. The separate macOS simulator
+      // app has always had `shadow: true`; this path is now consistent with it.
+      shadow: true,
     });
 
   interface Attempt {

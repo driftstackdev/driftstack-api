@@ -175,9 +175,15 @@ const pricingStructuredData = {
           </p>
           <ul class="mt-4 space-y-1.5 text-sm text-tk-ink-2">
             <li class="flex gap-2">
-              <span class="arrow-bullet">›</span> The real iPhone browser engine — Apple's
-              <a href="/glossary/#webkit" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">WebKit</a>.
-              Not an emulator, and nothing patched on top to fake it.
+              <span class="arrow-bullet">›</span>
+              {/* The sentence is wrapped so this <li> has exactly TWO flex items.
+                  Left unwrapped, the inline <a> becomes its own flex item and the
+                  word space before it stops existing as text — it survives only as
+                  `gap`, which rendered as "Apple'sWebKit". The sibling bullets are
+                  safe only because they contain no inline link. */}
+              <span>
+                The real iPhone browser engine — Apple's <a href="/glossary/#webkit" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">WebKit</a>. Not an emulator, and nothing patched on top to fake it.
+              </span>
             </li>
             {/* S26 2026-07-06 (#132) — accuracy fix (audit M2): this
                  bullet previously promised the "same code library
