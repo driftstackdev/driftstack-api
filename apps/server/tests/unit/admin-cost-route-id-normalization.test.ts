@@ -77,6 +77,30 @@ describe('admin-cost route — account-id normalization (bareAccountId, app.inje
     await app.close();
   });
 
+  // V-1580 — the three arms above are all well-formed ids, so they could not see
+  // that the route handed whatever it was given to a service backed by a uuid
+  // column. A malformed id was a cast error there and surfaced as a 500 for what
+  // is plainly a bad request. One negative per call site; the overview arm uses a
+  // mixed list so it proves every element is checked, not just the first.
+  it('GET /accounts/:id refuses a malformed id at the boundary rather than casting it', async () => {
+    const { app, summaryIds } = await harness();
+    const res = await app.inject({ method: 'GET', url: '/v1/admin/cost/accounts/acc_not-a-uuid' });
+    expect(res.statusCode, 'a malformed id is a bad request, not a server error').toBe(400);
+    expect(summaryIds, 'and it never reached the service').toEqual([]);
+    await app.close();
+  });
+
+  it('GET /overview refuses the whole list when any single account_id is malformed', async () => {
+    const { app, overviewIds } = await harness();
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/admin/cost/overview?account_ids=${BARE},not-a-uuid`,
+    });
+    expect(res.statusCode, 'a bad id anywhere in the CSV is refused').toBe(400);
+    expect(overviewIds, 'and no partial query ran').toEqual([]);
+    await app.close();
+  });
+
   it('GET /overview normalizes every account_id (mixed prefixed + bare → bare)', async () => {
     const { app, overviewIds } = await harness();
     const res = await app.inject({

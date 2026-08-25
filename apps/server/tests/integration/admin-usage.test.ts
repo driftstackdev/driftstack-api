@@ -49,11 +49,25 @@ describe('V-689 GET /v1/admin/usage/accounts/:id', () => {
     fx = await buildTestApp({
       scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
     });
-    const res = await fx.app.inject({
+    // V-1580 — this sent `acc_does_not_exist` and expected 404. That number came
+    // from the in-memory repo, where a garbage id is simply a miss. Against the
+    // real `uuid` column it was an invalid cast and the route answered 500, so
+    // the assertion was pinning a fixture artefact rather than the contract. A
+    // malformed id is now refused at the boundary with 400, matching
+    // admin-accounts.ts for the same shape. The well-formed-but-absent case is
+    // asserted separately below, so 404 keeps its own coverage.
+    const malformed = await fx.app.inject({
       method: 'GET',
       url: '/v1/admin/usage/accounts/acc_does_not_exist',
       headers: { authorization: `Bearer ${fx.plaintext}` },
     });
-    expect(res.statusCode).toBe(404);
+    expect(malformed.statusCode, 'a malformed id is refused, not looked up').toBe(400);
+
+    const absent = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/usage/accounts/acc_11111111-2222-3333-4444-555555555555',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(absent.statusCode, 'a well-formed id for no account is still 404').toBe(404);
   });
 });

@@ -41,6 +41,22 @@ export function bareAccountId(id: string): string {
   return id.startsWith('acc_') ? id.slice(4) : id;
 }
 
+// V-1580 — `bareAccountId` STRIPS; it does not validate, and its own tests pin
+// that (`bareAccountId('ses_<uuid>')` returns the value unchanged). Stripping
+// and validating are different jobs, so the shape check belongs here, at the
+// call site, on the normalised result. `cost_daily.account_id` is a `uuid`
+// column: without this a malformed id reaches Postgres as an invalid cast
+// (22P02) and the route answers 500 where the boundary owes 400.
+const BARE_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function accountUuidFromParam(value: string): string {
+  const bare = bareAccountId(value);
+  if (!BARE_UUID_RE.test(bare)) {
+    throw new BadRequestError('Invalid id format. Expected "acc_<uuid>" or a bare UUID.');
+  }
+  return bare;
+}
+
 export interface RegisterAdminCostRoutesDeps {
   service: CostMonitoringService;
   /** Time source — defaults to `Date.now`. Test seam. */
@@ -63,7 +79,7 @@ export function registerAdminCostRoutes(
       const params = parseOrThrow(AccountSummaryParams, req.params);
       const query = parseOrThrow(AccountSummaryQuery, req.query);
       const summary = await deps.service.getAccountSummary({
-        accountId: bareAccountId(params.id),
+        accountId: accountUuidFromParam(params.id),
         billingCycle: query.billing_cycle ?? billingCycleFromDate(new Date(now())),
       });
       if (summary === null) {
@@ -96,7 +112,7 @@ export function registerAdminCostRoutes(
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean)
-        .map(bareAccountId);
+        .map(accountUuidFromParam);
       if (ids.length === 0) {
         throw new BadRequestError('account_ids must contain at least one id.');
       }

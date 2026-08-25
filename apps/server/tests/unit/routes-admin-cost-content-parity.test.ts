@@ -76,9 +76,12 @@ describe('W416.A apps/server/src/routes/admin-cost.ts content parity', () => {
     expect(body).toMatch(/const now = deps\.nowFn \?\? Date\.now;/);
   });
 
+  // V-1580 — both call sites previously handed the raw param to the service. The
+  // helper they used only strips an acc_ prefix, so a malformed id reached a uuid
+  // column and the cast error surfaced as a 500. They now validate the shape first.
   it('Account summary: getAccountSummary dispatch + null → 404 NotFoundError (distinct from customer V-541.D synthesis)', () => {
     expect(body).toMatch(
-      /const summary = await deps\.service\.getAccountSummary\(\{\s*\n?\s*accountId: bareAccountId\(params\.id\),\s*\n?\s*billingCycle: query\.billing_cycle \?\? billingCycleFromDate\(new Date\(now\(\)\)\),\s*\n?\s*\}\);/,
+      /const summary = await deps\.service\.getAccountSummary\(\{\s*\n?\s*accountId: accountUuidFromParam\(params\.id\),\s*\n?\s*billingCycle: query\.billing_cycle \?\? billingCycleFromDate\(new Date\(now\(\)\)\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /if \(summary === null\) \{\s*\n?\s*throw new NotFoundError\('Account has no usage in the requested billing cycle\.'\);/,
@@ -87,7 +90,7 @@ describe('W416.A apps/server/src/routes/admin-cost.ts content parity', () => {
 
   it('Overview: account_ids CSV split + trim + filter(Boolean); empty → 400 "account_ids must contain at least one id."', () => {
     expect(body).toMatch(
-      /const ids = query\.account_ids\s*\n?\s*\.split\(','\)\s*\n?\s*\.map\(\(s\) => s\.trim\(\)\)\s*\n?\s*\.filter\(Boolean\)\s*\n?\s*\.map\(bareAccountId\);/,
+      /const ids = query\.account_ids\s*\n?\s*\.split\(','\)\s*\n?\s*\.map\(\(s\) => s\.trim\(\)\)\s*\n?\s*\.filter\(Boolean\)\s*\n?\s*\.map\(accountUuidFromParam\);/,
     );
     expect(body).toMatch(
       /if \(ids\.length === 0\) \{\s*\n?\s*throw new BadRequestError\('account_ids must contain at least one id\.'\);/,

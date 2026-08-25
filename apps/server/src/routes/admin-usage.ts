@@ -26,6 +26,22 @@ export interface RegisterAdminUsageRoutesDeps {
 // the slice 116/117 defensive pattern.
 const Params = z.object({ id: z.string().min(1).max(100) });
 
+const ACCOUNT_ID_RE = /^(?:acc_)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+
+/**
+ * V-1580 — the `:id` param reaches a `uuid` column. A value that is not a uuid is
+ * a cast error there, which surfaces as a 500 for what is really a bad request,
+ * so the shape is checked at the boundary. `acc_` is accepted because that is the
+ * id the API publishes; the bare form is accepted because operators paste it.
+ */
+function accountUuidFromParam(value: string): string {
+  const match = ACCOUNT_ID_RE.exec(value);
+  if (!match?.[1]) {
+    throw new BadRequestError('Invalid id format. Expected "acc_<uuid>" or a bare UUID.');
+  }
+  return match[1];
+}
+
 export function registerAdminUsageRoutes(
   app: FastifyInstance,
   deps: RegisterAdminUsageRoutesDeps,
@@ -38,7 +54,10 @@ export function registerAdminUsageRoutes(
       // AccountsAdminService.getAccount enforces the same scope check
       // as our preHandler — kept to surface 404 on unknown ids using
       // the same NotFoundError shape every other admin route uses.
-      const account = await deps.accountsAdminService.getAccount(req.account!, params.id);
+      const account = await deps.accountsAdminService.getAccount(
+        req.account!,
+        accountUuidFromParam(params.id),
+      );
       const summary = await deps.usageService.summaryFor(account.id, account.tier);
       return reply.send({
         account_id: account.id,

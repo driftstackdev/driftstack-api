@@ -648,8 +648,12 @@ describe('V-927 a published bound matches the route', () => {
     'POST /v1/admin/validation-schedules/{archetype}/trigger':
       'request.params.archetype is used raw',
     'GET /v1/admin/cost/accounts/{id}':
-      'bareAccountId only strips an acc_ prefix when present; it validates nothing',
-    'GET /v1/admin/usage/accounts/{id}': 'passed straight to getAccount',
+      'V-1580 — bareAccountId still only strips, by design and by its own tests; the ' +
+      'call site now rejects a normalised value that is not a uuid, so the spec is what ' +
+      'is unconstrained, not the handler',
+    'GET /v1/admin/usage/accounts/{id}':
+      'V-1580 — now shape-checked at the route (acc_<uuid> or a bare uuid, else 400); ' +
+      'unconstrained here only in the sense that the SPEC publishes no pattern',
     'GET /v1/sessions/{id}/proxy': 'id is only compared against body.session_id',
     'POST /v1/sessions/{id}/proxy': 'id is only compared against body.session_id',
     'GET /v1/agent-sessions/{id}':

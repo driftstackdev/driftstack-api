@@ -95,7 +95,9 @@ describe('W1030 routes/admin-cost V-541.B + V-683 cross-source invariant', () =>
     // V-541 normalize: the cost endpoints lenient-strip acc_ so they accept the
     // public acc_<uuid> form like sibling admin routes. See
     // project_admin_cost_id_prefix_inconsistency.
-    expect(p).toMatch(/\.map\(bareAccountId\);/);
+    // V-1580 — the mapped helper only stripped a prefix; the ids land in a uuid
+    // column, so a malformed one was a cast error answered as 500. Now validated.
+    expect(p).toMatch(/\.map\(accountUuidFromParam\);/);
     expect(p).toMatch(/if \(ids\.length === 0\) \{/);
     expect(p).toMatch(/throw new BadRequestError\('account_ids must contain at least one id\.'\);/);
   });

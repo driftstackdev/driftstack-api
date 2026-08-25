@@ -17254,3 +17254,52 @@ this route's `Params.id`. What genuinely moves is the 404 assertion and the two
 **Not applied here, deliberately.** The analysis is the part that needed care and it is done; what remains
 is mechanical and touches a live admin surface, and this session has repeatedly documented what a rushed
 edit at the end of a batch costs. Recorded so the next pass is an edit rather than an investigation.
+
+## V-1580 — two admin id params that answered 500 where they meant 400, and the pins that hid the second
+
+V-1579 scoped this as "two call sites, mechanical". It was three, and the third was found by the rule
+about enumerating with both grep patterns rather than by reading the route.
+
+**The defect.** `GET /v1/admin/usage/accounts/:id` and `GET /v1/admin/cost/accounts/:id` handed their
+`:id` param to services that filter a `uuid` column. Postgres rejects a non-uuid literal outright, so a
+malformed id was never a lookup that missed — it was a cast error, surfaced to the operator as a 500 for
+what is plainly a bad request. Proven against a real column rather than argued:
+
+```
+SELECT * FROM t WHERE account_id = 'not-a-uuid';
+ERROR:  invalid input syntax for type uuid: "not-a-uuid"
+```
+
+**The assertion that concealed it.** `admin-usage.test.ts` sent `acc_does_not_exist` and expected 404.
+That number came from `buildTestApp`'s in-memory repo, where a garbage id is simply a key that is not
+present. The same literal run against the real column is the error above. So the test was not pinning the
+contract; it was pinning a property of the fixture, and it read as coverage of exactly the case that was
+broken. Both halves are now asserted separately — 400 for a malformed id, 404 for a well-formed id that
+names no account — so the 404 path keeps its own arm instead of standing in for two behaviours.
+
+**The third call site.** `/v1/admin/cost/overview` maps a CSV of `account_ids` through the same
+strip-only helper into the same column. Nothing in the route file's name or path led there; the file that
+named it was a content-parity pin quoting the handler tail, reached only by grepping the helper's
+basename. Its negative uses a mixed list — one good id, one malformed — so it proves every element is
+checked rather than just the first.
+
+**`bareAccountId` is deliberately unchanged.** It strips an `acc_` prefix and its own tests pin that it
+returns `ses_<uuid>` untouched. Stripping and validating are different jobs; the validation was added at
+the call sites, so the normalizer's pinned contract survives and the new guard is not entangled with it.
+
+**Five pins, four of them found only by the wider patterns.** Two froze the admin-cost handler text, two
+froze the admin-usage call, one roster carried reasons that were true when written and are not now. The
+roster entries still passed after the fix — they assert the spec publishes no pattern, which is still
+true — so their stale _reasons_ would have survived a green suite indefinitely. Corrected on the same
+pass, since a correct assertion with an obsolete reason is how the next reader is misled.
+
+**Two instruments earned their place.** A mutation run against `admin-cost.test.ts` reported nothing at
+all: no such file exists, and vitest answers a missing filter with "No test files found" and exit 1 — an
+exit-code check would have scored that as a mutation proof. Counting the "No test files found" line
+instead is what caught it, and it caught a second one immediately after, where zsh's lack of word
+splitting passed three test paths as a single filter. Both are the session's recurring shape: an empty
+result that is indistinguishable from a check which never ran.
+
+Each of the three call sites was reverted independently and reds its own arm; restored, the file is
+byte-identical. Full suite 3073 files / 30953 tests; integration 393 files / 3798 tests against a
+disposable migrated Postgres, dropped afterwards.

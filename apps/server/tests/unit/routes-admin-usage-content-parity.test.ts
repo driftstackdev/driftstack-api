@@ -77,7 +77,7 @@ describe('W413.C apps/server/src/routes/admin-usage.ts content parity', () => {
 
   it('getAccount + summaryFor dispatch: accountsAdminService.getAccount(req.account!, params.id) + usageService.summaryFor(account.id, account.tier)', () => {
     expect(body).toMatch(
-      /const account = await deps\.accountsAdminService\.getAccount\(req\.account!, params\.id\);\s*\n?\s*const summary = await deps\.usageService\.summaryFor\(account\.id, account\.tier\);/,
+      /const account = await deps\.accountsAdminService\.getAccount\(\s*\n?\s*req\.account!,\s*\n?\s*accountUuidFromParam\(params\.id\),\s*\n?\s*\);\s*\n?\s*const summary = await deps\.usageService\.summaryFor\(account\.id, account\.tier\);/,
     );
   });
 

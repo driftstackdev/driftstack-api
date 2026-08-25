@@ -78,8 +78,12 @@ describe('W1019 routes/admin-usage V-689 cross-source invariant', () => {
     expect(p).toMatch(/\/\/ AccountsAdminService\.getAccount enforces the same scope check/);
     expect(p).toMatch(/\/\/ as our preHandler — kept to surface 404 on unknown ids using/);
     expect(p).toMatch(/\/\/ the same NotFoundError shape every other admin route uses\./);
+    // V-1580 — the param used to reach getAccount verbatim. It lands in a uuid
+    // column, so a malformed id was a cast error answered as 500 rather than as a
+    // bad request. The shape is checked first; getAccount still runs, so the V-689
+    // framing above is untouched — a well-formed id for no account is still a 404.
     expect(p).toMatch(
-      /const account = await deps\.accountsAdminService\.getAccount\(req\.account!, params\.id\);/,
+      /const account = await deps\.accountsAdminService\.getAccount\(\s*\n?\s*req\.account!,\s*\n?\s*accountUuidFromParam\(params\.id\),\s*\n?\s*\);/,
     );
   });
 
