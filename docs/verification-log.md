@@ -15898,3 +15898,47 @@ re-reading an assertion.** Two were in the mutation rather than the guard, one m
 execute, and one — this one — had already shipped looking green. The practice that caught all of them is
 cheap and unreasonably effective: write the violation, watch what happens, and disbelieve any green that
 was not earned in front of you.
+
+## V-1546 — finishing the sweep V-1545 said it had finished
+
+V-1545 concluded "zero live false-greens of this class in anyone else's guard". That sentence was broader
+than the measurement behind it. The sweep read `.toContain('literal')` assertions only. The suite's dominant
+assertion style is `.toMatch(/regex/)`, and a regex is blind to a commented-out line in exactly the same
+way. **The claim covered the class; the scan covered one spelling of it** — which is the fault this arc has
+now found five times in other people's guards, four times in my own tooling, and here in my own conclusion.
+
+**Measured properly this time, by evaluating the regexes rather than approximating them.** Every
+`.toMatch(/…/)` in the suite compiled and run against both the raw source its guard reads and a
+comment-stripped copy; a pattern matching the first but not the second is satisfied only by a comment.
+20,898 patterns, narrowed to 2,501 that pin something behavioural (a throw, an await, a const, an
+equality) rather than prose.
+
+**44 survived, and every one is deliberate.** Documentation sentences that happen to contain `return` or
+`===`; code examples inside `@example` blocks, such as the webhook-signature guide's
+`app.post('/driftstack-webhook', …)`; and patterns that deliberately spell `//` because they pin a line
+together with its trailing comment. Nothing to fix — the same verdict as V-1545, now actually earned for
+the whole class.
+
+### The sweep tool had the bug the last batch documented
+
+The first run reported 58. Fourteen of those were mine: my comment stripper cut at the first `//`, which
+truncates `'http://localhost:3000'` inside a string literal, so guards pinning a default base URL looked
+comment-satisfied. **That is verbatim the limitation written into `codeOf` one batch earlier** — recorded
+there as harmless because nothing in that file asserts on a URL, then reused in a sweep where it was not
+harmless at all.
+
+Replaced with a stripper that tracks quote state, checked against four cases before being trusted:
+
+```
+"const D = 'http://x';"        -> unchanged
+"const a = 1; // note"         -> "const a = 1; "
+"// whole"                     -> ""
+"const u = `https://y`; // t"  -> "const u = `https://y`; "
+```
+
+58 → 44, and the fourteen that vanished were the URL ones.
+
+**No code changed in the repo.** What changed is that a conclusion in the log is now supported by the
+measurement it claims, and the eighth tooling bug is on the record: a documented limitation is not a
+handled one, and the place it bites is the next tool that copies the technique without the context that
+made it safe.
