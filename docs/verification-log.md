@@ -20380,3 +20380,56 @@ mutation probes, which is the one package that is guarded.
 locally with nothing to announce it.** It is the `115 skipped` shape again — the suite is green about a
 stale artefact rather than about the change you just made, and nothing in the output says so. The cheap fix
 is not a guard: **run `npm test` after touching a package, `npx vitest run` when you have not.**
+
+## V-1654 — one `await` carried an integration's derived identity, and my guard for it was wrong three times
+
+V-1653 found that every inbound Stripe webhook resolves the account through `accounts.stripe_customer_id`
+— a column we wrote — rather than through anything in the payload. **That property rests on a single
+ordering**, and A2 was right that it deserved a guard:
+
+    const customerId = await this.provider.ensureCustomer(...);
+    await this.repo.setStripeCustomerId({ accountId, customerId });   // <- awaited BEFORE the return
+    return customerId;
+
+Make it `void`, move it after the return, or race the checkout with `Promise.all`, and the account row can
+still be missing its customer id when `customer.subscription.created` arrives. The resolver returns null,
+the handler logs "unknown customer; ignoring", and **a paying customer silently does not get their tier**.
+⛔ Nothing would fail at the time of the refactor: the unit tests stub the repo and the ordering is
+invisible to types.
+
+**Guarded in four arms** — a positive control that the body reader isolates one method, the
+persist-before-return ordering, the await-not-`void` form, and that all five webhook resolver call sites
+still pass `clientReferenceId: null` (which turns V-1653's dead branch from an unexamined risk into a
+pinned fact). Mutation-proved against the real subject: `await`→`void`, racing the ensure, and letting one
+call site trust the round-tripped id each fail exactly one arm; sources restored byte-identical.
+
+⛔ **The extractor was wrong THREE TIMES, each one construct further right, and every version was exposed
+by the BASELINE rather than by a mutation.**
+
+    v1  end the body at the first `\n  }`   → matched the multi-line PARAMETER OBJECT's close
+    v2  paren-walk past the parameters     → landed on the RETURN TYPE's braces,
+                                             `Promise<{ url: string; … }>`; body = 34 chars of type
+    v3  + track angle depth                → 2318 chars, containing what it must
+
+⭐ **M1 and M3 added a failure under every single broken version.** Reading only the mutations I would have
+shipped an arm that could never pass, three times over. **A mutation proves an arm CAN fail; only the
+unmutated run proves it can PASS.** That is the third rule, and of the three it is the cheapest:
+
+- Before trusting a zero, make the instrument produce a one.
+- After applying a fix, check the number moved by what you predicted.
+- **Run the guard unmutated before you trust the mutations.**
+
+⚠️ **A separate finding, verified by reading and deliberately left unquantified.** The repo's vacuity guard
+`a-test-arm-may-not-hide-all-its-assertions` detects arms whose every assertion sits behind a CONDITIONAL —
+its `ifBlocks` matches `/\bif\s*\(/g` and nothing else. **A `for (const m of x.matchAll(...))` hides
+assertions identically when the iterable is empty, and is outside its scope.**
+
+⛔ **My detector for that blind spot brace-counted RAW SOURCE, so `{4,}` in a regex and `${…}` in templates
+counted as braces — the exact bug that guard's own header records ("the first version of this guard did …
+which mis-delimited 8 arms"), which I had read minutes earlier.** Three variants produced **517, then 1,
+then 406**. None is published. What survives is the read: `ifBlocks` is `if`-only.
+
+⭐ And extending it to loops is probably wrong anyway: wrapping every assertion in an `if` is nearly always
+suspicious, which is why that arm found eleven real cases, whereas looping over a literal or an
+independently-counted collection is ordinary correct code. **The blind spot is real; the fix is not a wider
+regex.**
