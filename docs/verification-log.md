@@ -20736,3 +20736,46 @@ the check is explicit, commented, and adjacent to the threat it names.
 wiring — **not by connecting a second node and attempting to spoof the first.**
 
 **Eleven audits, one defect.**
+
+## V-1664 — a guard's regex misses four localhost defaults, and it does not matter
+
+Twelfth audit, on a question the identity axis had not asked: **which config values silently default to
+something wrong in production?** The classic shape — a developer fallback that is invisible until a
+customer's inbox contains a `localhost` link.
+
+**A guard exists** — `deploy-templates-define-every-localhost-defaulted-var` — and its detector is:
+
+    /env\.([A-Z][A-Z0-9_]*)\s*\?\?\s*'([^']*(?:localhost|127\.0\.0\.1)[^']*)'/g
+
+⛔ **That is one spelling, and `config.ts` contains a second.** The regex finds two (`DATABASE_URL`,
+`REDIS_URL`). It cannot see **four** more, written as zod schema defaults:
+
+    verifyEmail:   z.string().url().default('http://localhost:5173/verify-email')
+    magicLink:     z.string().url().default('http://localhost:5173/auth/magic-link')
+    passwordReset: z.string().url().default('http://localhost:5173/reset-password')
+    (plus the bare origin)
+
+**All four are customer-facing auth URLs.** And the chain to reach them is real, not theoretical: the
+effective resolution is `env.AUTH_VERIFY_EMAIL_URL ?? fromOrigin('/verify-email')`, and `fromOrigin`
+returns **`undefined`** when `DASHBOARD_ORIGIN` is unset — **which is exactly what a zod `.default()` fills
+in.**
+
+⭐ **And it does not matter, because the protection is somewhere I was not looking.** `config.ts` refuses to
+boot in production if any resolved auth URL contains `localhost`, AND refuses to boot if `DASHBOARD_ORIGIN`
+is unset — with the comment naming the precise chain I had just traced: _"the zod default would otherwise
+land on the localhost fallback and the CLI-authorize browser URL would point there."_
+
+**So the guard's regex is not wrong; it guards a different mechanism.** `env.X ?? 'localhost'` is a value
+that ships silently, so it is checked against the deploy templates. A zod default is a value that ships
+**loudly** — the boot refuses — so it needs no template entry. **Two mechanisms, each matched to how its
+failure would present.**
+
+⚠️ **Sixth time today the protection was not where I searched**, and the pattern is now stable enough to
+state as a rule: **searching for one mechanism finds gaps that are not gaps.** V-1661 was the same shape (I
+searched for a guard on an ordering; the guard was on the outcome). The correction is cheap — before
+reporting a gap, ask what the failure would LOOK like and search for that instead.
+
+⚠️ Boundary: established by reading `config.ts`'s resolution chain and its production block — **not by
+booting with the variables unset.**
+
+**Twelve audits, one defect.**
