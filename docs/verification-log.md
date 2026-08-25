@@ -20846,3 +20846,49 @@ run it standalone before believing it.\* I had recorded that rule and still spen
 trustworthy-labelled red as real — **because my own harness had put the word "trustworthy" on it.** A
 verdict from an instrument is worth exactly the invariants that instrument checks, and mine was checking
 one of two.
+
+## V-1667 — the last uncovered page clamp, found by batch mutation
+
+A timed-out test's own title carried someone else's finding: _"This clamp had NO coverage of ANY kind:
+removing it left the entire suite green — 28,015 passed, not even a source-text pin noticed. Its two
+siblings (profiles, profile-snapshots) at least had pins."_ **That is a method, not just a note** — so I ran
+it against the siblings.
+
+⭐ **Batch mutation makes it affordable.** Five `Math.min(limit …)` page clamps exist. Rather than one suite
+run per clamp, **neutralise several at once in ONE run**: green means every mutated clamp is uncovered, red
+means binary-search. Two candidates, one 213s run:
+
+    admin-accounts clamp   →  4 files failed (content-parity, cross-source, drizzle, repo-contract)
+    atlas-priority clamp   →  0 failures — the mutation SURVIVED
+
+**So `atlas-priority-events-repo.listRecent`'s clamp had no coverage of any kind.** The route in front
+carries `z.coerce.number().int().min(1).max(1000)`, so it is defence-in-depth — but a caller reaching the
+repo directly would pull the customer's whole event table.
+
+⚠️ **I predicted before reading and was right in direction, wrong in depth**: I expected admin to fail the
+ONE content-parity pin I had found. It failed four. **A prediction wrong in the safe direction is still
+information** — that clamp is guarded four ways, which is why nobody has broken it.
+
+⛔ **A substring trap on the way, and it produced a second finding.** Grepping `MAX_PAGE` to check the
+profiles sibling returned five files — **all matching `DESTROY_RECONCILE_MAX_PAGE`**, a different constant.
+Reading the real pin: `expect(body).toMatch(/export const DEFAULT_PAGE = 50;\s*export const MAX_PAGE = 100;/)`
+— **it pins the constants' VALUES, not their USE.** Deleting the `Math.min(...)` while leaving the constants
+declared would pass it. Recorded rather than fixed: a weaker pin, not a hole, since the route bounds that
+path too.
+
+**Covered behaviourally rather than by a source pin**, following the recipes precedent: seed 1001 rows in
+one `generate_series` statement, then assert **both halves** — `limit: 5000` clamps to 1000, and `limit: 0`
+raises to 1. ⭐ The second assertion is the one a `Math.min`-only clamp would fail, and mutation confirms it:
+removing the ceiling gives `expected 1001 to be 1000`; removing the floor gives `expected +0 to be 1`.
+
+⛔ **And the baseline caught my own fixture THREE times before either mutation was trustworthy.** Run
+unmutated first, every time:
+
+1. `status: 'pending'` violated a CHECK constraint — the allowed set is
+   `emitted|queued|bs_in_flight|bs_succeeded|bs_failed|atlas_appended|atlas_failed`.
+2. 1001 identical rows violated `UNIQUE (op_seq_sha, archetype_id, emitted_at)` — a real dedup triple my
+   fixture ignored by being unrealistic.
+3. Only then: 12 passed, and the mutations meant something.
+
+**Three consecutive runs where "1 failed" looked identical and meant three different things.** Had I read
+only the mutations, all three would have looked like the guard working.

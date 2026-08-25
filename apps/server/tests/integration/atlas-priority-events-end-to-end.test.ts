@@ -24,6 +24,7 @@
 //   - GET event/:id → row + lifecycle timeline.
 //   - All 4 routes reject missing/wrong Authorization → 401.
 
+import { randomUUID } from 'node:crypto';
 import Fastify, { type FastifyInstance } from 'fastify';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
@@ -46,6 +47,7 @@ const AUTH = `Bearer ${TEST_TOKEN}`;
 // fallthroughs.
 let client: ReturnType<typeof postgres> | null = null;
 let app: FastifyInstance | null = null;
+let repo: DrizzleAtlasPriorityEventsRepo | null = null;
 
 beforeAll(async () => {
   const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
@@ -69,7 +71,7 @@ beforeAll(async () => {
   // root-caused yet (separate followup). Cast through `unknown` to
   // satisfy the test typecheck against the schema-typed Database.db.
   const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
-  const repo = new DrizzleAtlasPriorityEventsRepo({ client, db, close: async () => {} });
+  repo = new DrizzleAtlasPriorityEventsRepo({ client, db, close: async () => {} });
   const auth = new InternalFleetAuth({ internalToken: TEST_TOKEN });
   const rateLimitStore = new MemoryRateLimitStore();
   app = Fastify({ logger: false });
@@ -104,6 +106,32 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         app,
         `could not build against ${DB_URL} — no arm below exercised anything`,
       ).not.toBeNull();
+    });
+
+    it("CRITICAL listRecent clamps limit into [1, 1000]. This clamp had NO coverage of any kind: neutralising it left the ENTIRE suite green — 3212 files, 31,944 tests — while the four sibling page-clamps each failed between one and four files under the same treatment. The route in front carries a Zod .min(1).max(1000), so this is defence-in-depth: a caller reaching the repo directly would pull the customer's whole event table.", async () => {
+      if (!client || !repo) return;
+      const customerId = `clamp-${randomUUID()}`;
+      try {
+        // 1001 rows so the upper clamp has something to clamp. One statement.
+        await client`
+          INSERT INTO atlas_priority_events
+            (op_seq_sha, op_seq_bytes_b64, canvas_w, canvas_h, archetype_id,
+             session_id, customer_id, page_url, status)
+          SELECT ${customerId} || '-' || i, 'b64', 100, 100, 'arch', 'sess',
+                 ${customerId}, 'https://example.test/', 'emitted'
+          FROM generate_series(1, 1001) AS g(i)`;
+
+        const oversized = await repo.listRecent({ customerId, limit: 5000 });
+        expect(oversized.length, 'an oversized limit is clamped to 1000').toBe(1000);
+
+        // The lower half of the same expression, which a Math.min-only clamp
+        // would not provide: a zero or negative limit must still return a row
+        // rather than an empty page (or a Postgres error on LIMIT -1).
+        const zero = await repo.listRecent({ customerId, limit: 0 });
+        expect(zero.length, 'a zero limit is raised to 1').toBe(1);
+      } finally {
+        await client`DELETE FROM atlas_priority_events WHERE customer_id = ${customerId}`;
+      }
     });
 
     it('rejects missing Authorization with 401', async () => {
