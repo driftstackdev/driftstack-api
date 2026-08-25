@@ -20349,3 +20349,34 @@ cross-checks its own.
 
 ⚠️ Boundary: reachability established by tracing all five call sites in `stripe-webhooks.ts` and grepping
 every `clientReferenceId` reference in `apps/server/src` — not by instrumenting a running system.
+
+## V-1655 — `npx vitest run` skips the build, and five of six packages have nothing to notice
+
+⚠️ **A caveat on our own evidence, including mine, recorded with both halves — the alarm and the climb-down.**
+
+`npm test` has a **`pretest`** that runs `npm run build --workspaces --if-present`. `npx vitest run` — which
+both agents have used for every gate today — **skips it.** Workspace packages resolve to `dist/index.js`
+(checked in each `package.json`), and there is no vitest alias mapping `@driftstack/*` back to `src`. So a
+direct vitest run tests **whatever build happens to be on disk**.
+
+Of the six workspace packages consumed via `dist/` and imported by server tests — `api-types` (278 test
+files), `webhook-delivery` (9), `behavioural-simulation` (6), `recapture-automation` (4), `webrtc-streaming`
+(3), `recipe-library` (2) — **exactly one has a built-vs-source guard**:
+`the-built-api-types-agrees-with-its-source`. That guard exists precisely because of this, and it works: it
+went red on cue when V-1643's probe mutated `common.ts` without rebuilding.
+
+⛔ **My first measurement said FIVE packages were stale, and it was wrong in the way I had already been
+burned by four hours earlier.** It compared **mtime**, and mtime is not content: `api-types/src/common.ts`
+read "1409 minutes newer than dist" purely because my own snapshot restores had touched it, while the
+content agreed exactly — three fields across all eight tiers, verified at the time. **A file's timestamp is
+evidence about the filesystem, not about the build.**
+
+**And the honest conclusion is narrower than the alarm.** `dist/` is gitignored and **zero dist files are
+tracked**, so it is a local artefact: CI builds from a clean checkout and cannot be stale. My gate results
+today are not retroactively qualified either — the only package source I touched was `api-types`, during
+mutation probes, which is the one package that is guarded.
+
+⭐ **What remains true is a habit rather than a defect: five of six dist-consumed packages can go stale
+locally with nothing to announce it.** It is the `115 skipped` shape again — the suite is green about a
+stale artefact rather than about the change you just made, and nothing in the output says so. The cheap fix
+is not a guard: **run `npm test` after touching a package, `npx vitest run` when you have not.**
