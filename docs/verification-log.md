@@ -16070,3 +16070,43 @@ lists that have no business holding them.
 The useful residue is the discriminator, since the sweep's raw output was 51 pairs and its real content was
 one: **two rosters need pinning only when they encode the same claim, not when their contents happen to
 intersect.** The admin-audit pair failed that test and is pinned; this pair passes it and is not.
+
+## V-1550 — the spec's examples are clean, and the validator that would prove it does not check formats
+
+Pivoting off the guard-meta veins to something customers touch: the `example` values in the published
+document are what people copy. All **39** validate against the schemas they sit on. No defect there.
+
+**Getting to that answer took three wrong turns, and each was caught by a control rather than by reading.**
+
+**1. A swallowed failure.** Re-running with formats enabled meant `addFormats(ajv)` inside a
+`try {} catch {}`. `ajv-formats` is installed but targets Ajv 8 and throws against Ajv 6 — so formats were
+never enabled and the second "0 failures" measured nothing. Same shape as V-1536's probe that silently
+never ran. Caught by asking the instrument to reject a value it must reject.
+
+**2. A correction that was backwards, written and reverted before commit.** Bare Ajv 6.15 rejects
+`not-a-uuid`, `nope` and `yesterday`, and `validateFormats` is an Ajv **8** option Ajv 6 ignores — so the
+shared helper's comment ("`validateFormats: false` because format assertions are advisory") looked like a
+documented-but-false claim, and I edited it to say the opposite. Then the new guard failed: through
+`createSpecAjv()` those three bad values are ACCEPTED. The helper's stated intent is satisfied; only its
+stated mechanism is inert. The comment was restored byte-identical. **Running the test before committing
+is the only reason a false correction did not ship.**
+
+**3. A cause I could not demonstrate, so it is not claimed.** The obvious explanation is the interop cast
+the helper exists to perform. Resolving `.default` off the module before constructing did NOT switch
+formats on, so that guess is unproven and the guard's header says so instead of asserting it. Direct
+construction with identical options enforces formats; through this helper it does not. That difference is
+measured; its mechanism is not.
+
+### What shipped
+
+A guard pinning the CURRENT behaviour — formats not enforced — with a non-vacuity arm proving the
+validator is alive (`type: 'string'` still rejects `42`, and well-formed values of all three formats are
+accepted). It is deliberately not a claim that formats should stay off. It is a claim that turning them on
+is a decision, because whatever holds them off is not named anywhere: a tidy-up of this helper would make
+three response-conformance suites stricter at once, in a diff whose subject is module interop.
+
+Mutation: making the validator inert reds the non-vacuity arm naming the `42` case. The complementary
+mutation — forcing the real constructor — did not flip the behaviour, which is precisely the observation
+that turned an assertion into an open question.
+
+`EXPECTED_TEST_FILES` 3015→3016 and `_ALL` 3177→3178, one file, mine.
