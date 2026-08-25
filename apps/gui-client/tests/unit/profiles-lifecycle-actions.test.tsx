@@ -316,7 +316,16 @@ describe('ProfilesView profile-lifecycle actions', () => {
       );
       fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Clear history for Demo' }));
-      expect(await screen.findByText(/only record of visited pages a profile keeps/)).toBeTruthy();
+      const body = await screen.findByText(
+        /only record of visited pages held in the profile itself/,
+      );
+      // ⛔ The retracted claim must not come back. It used to read "nothing else
+      // stores a history", which was false: the control plane records page URLs
+      // and titles into session_events per navigate and per state capture,
+      // joined to the profile, and no scope of this op clears them.
+      expect(body.textContent).not.toMatch(/nothing else stores a history/i);
+      // The server-side log is NAMED rather than denied.
+      expect(body.textContent).toMatch(/session log for up to 90 days/i);
     });
 
     it('every clear scope is reachable from the card menu', async () => {

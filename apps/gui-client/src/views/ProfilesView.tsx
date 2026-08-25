@@ -1574,10 +1574,21 @@ export function ProfilesView({
    * W3120 (doc-150 §8.4) — copy for each clear scope, in the customer's words.
    *
    * ⚠️ `history` says "open tabs", not "history", in the BODY while the action is
-   * still called "Clear history": a profile persists no browsing history, so a
+   * still called "Clear history": the PROFILE persists no browsing history, so a
    * confirmation promising to clear one would be a lie about what the button
    * does. The label meets the customer where they are; the sentence tells them
    * the truth about what goes.
+   *
+   * ⛔ W3120 follow-up — the body used to add "nothing else stores a history",
+   * and that was FALSE. The control plane records page URLs and titles per
+   * navigate (`sessions.ts` payload `{url, final_url}`) and per state capture
+   * (`{url, title}`) into `session_events`, joined to the profile through
+   * `sessions.profileId`. Nothing on the profile path clears them, so no scope
+   * of this op touches them — and the V-1591 archive uploads them to R2 before
+   * deleting, so they outlive the 90-day window in archive form. The copy now
+   * scopes its claim to the profile and names the server-side log rather than
+   * denying it exists. Widening `history` to purge session_events is a real
+   * decision about an operational log, not a copy fix.
    */
   const CLEAR_COPY: Record<
     TrimProfileScope,
@@ -1601,14 +1612,14 @@ export function ProfilesView({
       verb: 'history',
       confirmLabel: 'Clear history',
       question: (name) =>
-        `Clear browsing history for "${name}"? This forgets the remembered open tabs, which is the only record of visited pages a profile keeps — nothing else stores a history. Logins and cached files are kept.`,
+        `Clear browsing history for "${name}"? This forgets the remembered open tabs — the only record of visited pages held in the profile itself. Page URLs and titles are also recorded in your account's session log for up to 90 days; this does not clear those. Logins and cached files are kept.`,
       done: 'Cleared browsing history',
     },
     all: {
       verb: 'data',
       confirmLabel: 'Clear everything',
       question: (name) =>
-        `Clear ALL browsing data for "${name}"? Cookies, site data, cached files and remembered tabs all go, and the profile is signed out everywhere. The profile itself and its fingerprint are kept, so it stays the same device to every site.`,
+        `Clear ALL browsing data for "${name}"? Cookies, site data, cached files and remembered tabs all go, and the profile is signed out everywhere. Your account's session log keeps page URLs and titles for up to 90 days and is not affected. The profile itself and its fingerprint are kept, so it stays the same device to every site.`,
       done: 'Cleared all browsing data',
     },
   };
