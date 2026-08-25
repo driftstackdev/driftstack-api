@@ -17121,3 +17121,39 @@ helper 199 files depend on, and it is the kind of change whose value is a judgem
 rather than a defect to close. What is defensible is naming the seam, the single file that covers it, and
 the specific bug class it lets through — so the next person deciding whether that helper needs a database
 is deciding with the number in front of them.
+
+## V-1577 — what actually crosses the thin seam, and why it is mostly safe
+
+V-1576 measured the route/database seam at one covering file and declined to widen it, because that is an
+architectural judgement. What can be settled without that judgement is the exposure: **what does a route
+hand to a typed column, and is it converted first?**
+
+**The answer turns on the column type, and the schema is deliberate about it.** 38 tables carry a
+`uuid('id')` column; two carry `text('id').primaryKey()`. `agent_sessions` is one of the two, and the
+consequence is visible in one line: `sessions.get(req.params.id)` passes the raw `agt_…` param straight
+into `eq(agentSessions.id, id)` with no conversion — and that is SAFE, because Postgres compares text,
+matches nothing, and the route answers 404. The same table's `accountId` is `uuid('account_id')`, which is
+exactly the column family the audit-log filters reach and where V-1565's 500 lived.
+
+So the rule is not "validate every param" — it is **prefixed public identifiers are stored as text and
+pass raw; internal keys are uuid and must be converted.** The routes follow it through four helpers:
+
+```
+uuidFromPrefixedId       64 call sites
+uuidFromProfileId        11
+uuidFromPublicSessionId   2
+uuidFromMemberId          2
+```
+
+**Stated precisely, because a crude scan said otherwise twice.** A first pass reported 122 "unvalidated"
+param uses; the first line of its own output was `uuidFromPublicSessionId(request.params.id)`, a helper the
+detector did not know. A second reported zero tables with a uuid primary key, because the pattern demanded
+`.primaryKey()` immediately after `uuid('id')`. Both numbers were artefacts of the tool, and neither is
+carried into this entry.
+
+**What is verified: the agent-session path, end to end, and the helper inventory.** What is NOT verified is
+every one of the 103 uuid columns against every route that can reach it — that needs the cross-file trace
+V-1541 built for status codes, and this batch did not run it. The claim here is bounded to what was
+opened: the seam is thin, the column types make most of it harmless by construction, and the one family
+that is not harmless — uuid columns fed from customer input — is the family V-1565 fixed and V-1566/V-1568
+enumerated at exactly two delegation points.
