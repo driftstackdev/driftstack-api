@@ -15581,3 +15581,43 @@ settle. The coverage half stays pinned by the existing guard, so the way in cann
 
 No code changed. What changed is that a customer-visible cross-language difference now sits in the
 register with the other open decisions instead of in a comment inside a test file.
+
+## V-1539 — ten deferred decisions with no home, and the one that leaks money
+
+V-1538 moved a cross-SDK split out of a test-file comment into the register, on the grounds that a
+decision whose only home is a comment is one nobody re-reads. That is a class, so this batch swept it.
+
+**Thirteen guard headers defer a decision** — "a product call", "the SDK owner's call", "raised on the
+bus", "NOT taken here". Cross-checked against `docs/decisions.md`: **three have a durable home** — the
+paid-session cap, the anonymous-exemption reporting question, and the retry split registered last batch,
+all three of which were moved there by this arc. **Ten do not.** Among them: whether a legal-acceptance
+reason should silently block key minting, whether admin list-reads write audit rows, whether the SDK error
+classes should converge (a MAJOR-bump rename), and the one below.
+
+**The one with money attached: `profiles` is capped only where profiles are acquired.**
+
+Verified in source rather than taken from the guard that found it. `profileLimitFor` has exactly four call
+sites and all four are acquisition paths — `create`, restore ("Tier cap is shared with create — same
+enforcement path"), clone, and transfer against the RECIPIENT's tier. Its own definition comment says the
+cap is "enforced at the /v1/profiles creation gate". Neither `routes/profiles.ts` nor `routes/sessions.ts`
+consults it, so listing, loading, binding to a session and saving a retained profile are ungated. Of the
+ten sweepers in `services/`, none re-checks profile count on a tier change; the crypto entitlement-expiry
+sweeper — the one that exists precisely to walk back an entitlement — does not touch profiles.
+
+So an account that creates 500 profiles on `api_scale` and drops to `free`, cap 1, keeps all 500 and uses
+them exactly as before. Only the 501st is refused. Subscribe, create, downgrade, keep.
+
+**The neighbouring caps are the control that makes this a finding rather than an opinion.**
+`maxSessionMinutes` has a create gate AND the session-duration sweeper, so a tier change reaches a session
+already running. `concurrentSessions` is create-only but self-draining — sessions end, and a downgraded
+account cannot start more. `profiles` neither drains nor is swept. One of three numeric caps has no second
+half, and it is the one holding durable customer assets.
+
+Registered as **D-2026-08-24-04**, unplaced by tier. The remedy is genuinely a product call: deleting
+profiles on downgrade destroys data a customer may be paying to recover, while freezing, refusing to bind,
+or a grace window each carry a different refund and support story. Recording that the call is open, and
+which cap it applies to, is not a product call.
+
+No code changed. Nine deferrals remain without a home; this was the one with a commercial consequence
+rather than a documentation one, and the sweep that found them is now written down so the rest can be
+worked through rather than rediscovered.
