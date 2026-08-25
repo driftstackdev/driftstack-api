@@ -20470,3 +20470,43 @@ next audit target, and it put `crypto-tier-activation` at the bottom — 386 lin
 dedicated `crypto-tier-activation.test.ts` and three more.** The proxy matched filename stems, and
 `crypto-order-paid-tier-activation.test.ts` does not contain the stem `crypto-tier-activation`. **Third
 proxy metric to mislead me today; I have stopped using them to choose targets.**
+
+## V-1657 — why one payment path has a reconciler and the other must not
+
+Eighth end-to-end audit, chasing a shape rather than a spelling: **which state transitions dual-write
+across two transactions with no repair path?** The crypto payment path has one —
+`crypto-entitlement-reconcile-sweeper` (V-779) recovers "paid crypto orders whose entitlement never
+landed". The obvious question is whether its sibling, the Stripe path, has the same hole and no sweeper.
+
+**It does not, and the reason is worth writing down because the asymmetry looks like an omission and is
+not.** Recorded so nobody closes it in either direction — adding a Stripe reconciler that repairs nothing,
+or deleting the crypto one as redundant.
+
+**Crypto cannot self-heal, by construction.** `firePaid` is computed from the LOCKED pre-update status, so a
+re-delivered IPN finds `status='paid'`, computes `firePaid = false`, and skips activation, the webhook and
+the receipt. The handler says so itself. **Hence the reconciler.**
+
+**Stripe self-heals, and three separate decisions carry it:**
+
+1. ⭐ **`setWhere: subscriptions.updatedAt <= excluded.updated_at` — `<=`, not `<`.** A redelivery of the
+   same event carries the same `event.created`, so equal timestamps still apply, `applied` comes back true,
+   and the caller re-drives the tier grant. **One character.** The comment gives a second reason for it
+   (second-granularity timestamps mean two genuinely-distinct ordered events can share a second), which is
+   why it survives.
+2. ⭐ **`dispatch()` runs BEFORE `recordEvent()`.** A transient failure re-throws, **no ledger row is
+   written**, the route returns non-2xx, and Stripe re-delivers within ~3 days. Claiming the event first —
+   which looks like sensible concurrency hygiene — would leave a ledger row on a mid-flight death and
+   suppress the redelivery permanently.
+3. **Permanent errors are swallowed and DO write the ledger row**, returning 200, because retrying a
+   deterministic bug earns a multi-day retry storm and risks Stripe disabling the endpoint.
+
+⭐ **And the cost of decision 2 is itself guarded, which is the part I did not expect.** Dispatching before
+the ledger insert means a concurrent delivery can execute dispatch twice — so every write on that path must
+be idempotent. `stripe-dispatch-has-no-additive-write` pins exactly that, with a detector positive control
+and a scan-reaches arm. **The trade-off is named, and the price is paid explicitly.**
+
+⚠️ Boundary: established by reading `handle()`, `dispatch()`, `upsertSubscription` and the three guards
+around them — not by killing a process mid-window and observing recovery.
+
+**Eight end-to-end audits now, one defect (V-1649), and every follow-on thread already guarded.** That
+remains evidence about the codebase rather than about the search.
