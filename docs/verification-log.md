@@ -16156,3 +16156,50 @@ caught by demanding a failure first, and none by reading the code.
 **The generalisation worth keeping:** when two runs of the "same" check disagree, suspect that they are not
 the same check. Here one `require` and one `import` of the same package name reached different major
 versions, and every downstream conclusion inherited that.
+
+## V-1552 — the dependency-split class, and an SSRF invariant confirmed end to end
+
+Two sweeps, both clean, and the second is worth having confirmed rather than assumed.
+
+**Dependency majors: 80 splits, none of ours.** V-1551 found `ajv` resolving to different majors from
+different directories, which is a real integrity risk wherever it reaches our own code. Measured across
+every nested copy: 80 packages differ in major version between the root hoist and some nested location.
+Almost all are transitive deps of third-party tooling — `eslint`, `astro`, `listr2`, `log-update` — where
+hoisting is doing its job. Only three reach a workspace we own, and all three are declared:
+
+```
+ajv           root 6.15.0  ·  apps/server 8.20.0     apps/server declares ^8.17.1
+undici        root 7.28.0  ·  apps/server 8.10.0     apps/server declares ^8.7.0
+tailwindcss   root 3.4.19  ·  apps/docs, apps/status-site 4.3.2   each app declares its own
+```
+
+`undici` has exactly one importer in our code, `lib/ssrf-guarded-fetch.ts`, which sits in `apps/server` and
+therefore gets the 8.x it asked for. Tailwind's 3-versus-4 split is five apps each declaring a version, a
+migration in progress rather than a resolution accident. **The ajv surprise in V-1551 was never a
+dependency defect either** — `apps/server` declares 8 and gets 8; what was wrong was my control importing
+from the repo root.
+
+**The SSRF invariant, confirmed rather than assumed.** `packages/webhook-delivery` carries a warning worth
+taking seriously: its `fetch` seam defaults to plain `globalThis.fetch`, and "PRODUCTION CALLERS MUST
+INJECT AN SSRF-GUARDED FETCH", because a hostname that resolves publicly at registration can resolve to
+loopback or a metadata address by the time a retry fires an hour later.
+
+Bootstrap constructs `WebhookDeliveryWorker` with `repo`, `batchSize`, `logger` and `metrics` — **no
+`fetch`** — which reads like the violation the warning describes. It is not. `webhook-worker.ts:326` is
+`const fetchImpl = this.config.fetch ?? ssrfGuardedFetch`: the guarded implementation is the DEFAULT, and
+the injection point exists as a test seam. The unguarded default lives in the dependency-free package,
+which is not constructed in production at all — it appears in `durable-webhook-delivery.ts` only as a
+comment naming its predecessor.
+
+So the warning applies to a component production does not use, and the component production does use fails
+closed. Checked in that order because the alternative — reading the bootstrap call, seeing no `fetch`, and
+filing it — was one step away.
+
+Prior art was checked FIRST this time, which is the V-1548 correction applied: five guards already cover
+this surface, including `ssrf-guarded-fetch`, `webhook-target-guard` and
+`account-proxies-dispatch-ssrf-reguard`. No new guard was added, because the invariant is enforced by a
+default rather than by a wiring decision, and a default cannot be forgotten at a call site.
+
+**No code change in either sweep.** Three consecutive batches have now ended that way, which is itself the
+finding: the contract and guard surface reachable by deriving work from the repo is in good order, and the
+remaining known work is the part that needs a human — the numbered actions, which are still unrecoverable.
