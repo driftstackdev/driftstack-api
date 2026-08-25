@@ -26,13 +26,34 @@
 // arguments WITH the reason each is safe, so a new lookup from an unvetted source
 // fails here and has to be argued for rather than merged.
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const AGENT_SESSIONS = resolve(HERE, '..', '..', 'src', 'routes', 'agent-sessions.ts');
+const ROUTES = resolve(HERE, '..', '..', 'src', 'routes');
+
+/**
+ * Every file that can mark a request control-key-authorized.
+ *
+ * V-1601 — this read `agent-sessions.ts` alone while claiming a property about a
+ * control-key request. `agent-sessions-livekit-token.ts` and
+ * `agent-sessions-transport-report.ts` carry their own copy of the auth shape and
+ * set the same flag, so both were outside a check whose sentence covers them.
+ * Their lookups do resolve to the path session — verified before widening, not
+ * after — which is the usual answer and not a reason to leave the scan narrow.
+ */
+function controlKeyFiles(): string[] {
+  const files = readdirSync(ROUTES)
+    .filter((f) => f.endsWith('.ts'))
+    .map((f) => resolve(ROUTES, f))
+    .filter((f) => /req\.guiControlKeyAuthorized\s*=\s*true/.test(codeOf(readFileSync(f, 'utf8'))));
+  expect(files.length, 'files that can set the control-key flag were found').toBeGreaterThanOrEqual(
+    3,
+  );
+  return files;
+}
 
 /** The argument every control-key-reachable lookup should use. */
 const PATH_SESSION = 'req.params.id';
@@ -46,7 +67,7 @@ const PATH_SESSION = 'req.params.id';
  */
 const RESOLVES_TO_PATH_SESSION: Record<string, string> = {
   sessionId:
-    'the parameter of validateControlKey, called only as validateControlKey(req, sessionId) where sessionId is req.params.id',
+    'the parameter of validateControlKey, called only as validateControlKey(req, sessionId) where sessionId is req.params.id; in the livekit-token and transport-report routes the same name is a local assigned directly from req.params.id',
   'args.sessionId': 'commitPairModeTransition; all three call sites pass sessionId: req.params.id',
   agentSessionId:
     'resolveAgentMessageAdmission; both call sites pass req.params.id as the first argument',
@@ -81,9 +102,37 @@ function codeOf(src: string): string {
     .join('\n');
 }
 
+/**
+ * Session lookups across every control-key file.
+ *
+ * The receiver is matched as a FAMILY (`sessions`, `agentSessionsRepo`, …) rather
+ * than by name. Naming them is what made the first version of this widening inert:
+ * it matched `sessions.get` and a guessed `sessionRepo.get`, the siblings call
+ * `agentSessionsRepo.get`, and both new files therefore contributed nothing while
+ * the file reported itself widened.
+ *
+ * `await` is what separates a repository lookup from a Map read. Without it the
+ * family pattern also caught `sessionUploadLifetimeBytes.get(rec.id)` — an
+ * in-memory upload counter keyed by session id, which is not a session lookup at
+ * all. Rostering those would have papered over a population that was simply
+ * wrong; discriminating on the await keeps the set to the thing being asserted
+ * about, and does it structurally rather than by another list of names.
+ *
+ * The per-file assertion below is the real defence — a file that yields no
+ * lookups is a file this scan is not reading, whatever the regex says.
+ */
 function lookupArguments(): string[] {
-  const code = codeOf(readFileSync(AGENT_SESSIONS, 'utf8'));
-  return [...code.matchAll(/sessions\.get\(\s*([^)]*?)\s*\)/g)].map((m) => (m[1] ?? '').trim());
+  const out: string[] = [];
+  for (const file of controlKeyFiles()) {
+    const code = codeOf(readFileSync(file, 'utf8'));
+    const hits = [...code.matchAll(/await\s+\w*[Ss]essions?\w*\.get\(\s*([^)]*?)\s*\)/g)];
+    expect(
+      hits.length,
+      `${file.split('/').pop()} contributed no session lookups — the scan is not reading it`,
+    ).toBeGreaterThan(0);
+    for (const m of hits) out.push((m[1] ?? '').trim());
+  }
+  return out;
 }
 
 describe('a control-key request touches only its own session', () => {

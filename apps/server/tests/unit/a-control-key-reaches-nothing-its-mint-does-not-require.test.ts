@@ -30,13 +30,40 @@
 // {read:sessions, write}. Equal today; the assertion is subset, because requiring
 // MORE at the mint than the key can reach is a tightening, not a hole.
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const AGENT_SESSIONS = resolve(HERE, '..', '..', 'src', 'routes', 'agent-sessions.ts');
+const ROUTES = resolve(HERE, '..', '..', 'src', 'routes');
+const AGENT_SESSIONS = resolve(ROUTES, 'agent-sessions.ts');
+
+/**
+ * Every file that can mark a request control-key-authorized.
+ *
+ * V-1601 — this scanned `agent-sessions.ts` alone, and its own header claims a
+ * property about "a gui_control_key". Two sibling routes carry their own copy of
+ * the same auth shape rather than importing the factory —
+ * `agent-sessions-livekit-token.ts` and `agent-sessions-transport-report.ts`, each
+ * validating the key inline and setting `guiControlKeyAuthorized` — so both were
+ * outside a check whose sentence covers them. Nothing was wrong there, which is
+ * the usual finding when the scope of a scan is narrower than the scope of its
+ * claim, and is not a reason to leave it narrow.
+ *
+ * Derived rather than listed: any routes file that assigns the flag is a file
+ * where a control key skips a scope check.
+ */
+function controlKeyFiles(): string[] {
+  const files = readdirSync(ROUTES)
+    .filter((f) => f.endsWith('.ts'))
+    .map((f) => resolve(ROUTES, f))
+    .filter((f) => /req\.guiControlKeyAuthorized\s*=\s*true/.test(codeOf(readFileSync(f, 'utf8'))));
+  expect(files.length, 'files that can set the control-key flag were found').toBeGreaterThanOrEqual(
+    3,
+  );
+  return files;
+}
 
 /** Cut `//` to end of line, leaving string literals alone. */
 function codeOf(src: string): string {
@@ -65,10 +92,30 @@ function codeOf(src: string): string {
     .join('\n');
 }
 
-/** Scopes a control key can reach without proving them. */
-function scopesReached(code: string): { scopes: string[]; sites: number } {
-  const hits = [...code.matchAll(/controlKeyOrAccountAuth\(\s*'([a-z_:]+)'\s*\)/g)];
-  return { scopes: [...new Set(hits.map((m) => m[1] as string))].sort(), sites: hits.length };
+/**
+ * Scopes a control key can reach without proving them.
+ *
+ * Two spellings, because the surface has two. `agent-sessions.ts` names the scope
+ * in the `controlKeyOrAccountAuth` factory; the two sibling routes inline the same
+ * shape and name it in the `app.requireScope` they fall through to when no key is
+ * presented. A key skips that call, so the scope it names is reached unproven
+ * either way.
+ */
+function scopesReached(): { scopes: string[]; sites: number } {
+  const scopes = new Set<string>();
+  let sites = 0;
+  for (const file of controlKeyFiles()) {
+    const code = codeOf(readFileSync(file, 'utf8'));
+    for (const m of code.matchAll(/controlKeyOrAccountAuth\(\s*'([a-z_:]+)'\s*\)/g)) {
+      scopes.add(m[1] as string);
+      sites += 1;
+    }
+    for (const m of code.matchAll(/app\.requireScope\(\s*'([a-z_:]+)'\s*\)\(\s*req/g)) {
+      scopes.add(m[1] as string);
+      sites += 1;
+    }
+  }
+  return { scopes: [...scopes].sort(), sites };
 }
 
 /** Scopes the mint itself demands, read from its own preHandler block. */
@@ -87,7 +134,7 @@ function scopesRequiredToMint(code: string): string[] {
 describe('a control key reaches nothing its mint does not require', () => {
   it('CRITICAL both sides parsed a real population. A subset assertion is satisfied by an empty left-hand side, and this file would then pass while saying nothing — which is the failure mode it exists to prevent elsewhere.', () => {
     const code = codeOf(readFileSync(AGENT_SESSIONS, 'utf8'));
-    const reached = scopesReached(code);
+    const reached = scopesReached();
     expect(reached.scopes, 'control-key-reachable scopes were found').not.toEqual([]);
     expect(
       reached.sites,
@@ -101,7 +148,7 @@ describe('a control key reaches nothing its mint does not require', () => {
   it('CRITICAL every scope a control key reaches is one the mint already demanded. A control key skips requireScope on the routes it reaches, so the mint is the only gate; a reachable scope outside the minted set is audit wxzlp9yiz reopened in a new place — a key that proves write + read:sessions and then reaches something it proved neither for.', () => {
     const code = codeOf(readFileSync(AGENT_SESSIONS, 'utf8'));
     const minted = new Set(scopesRequiredToMint(code));
-    const escapes = scopesReached(code).scopes.filter((s) => !minted.has(s));
+    const escapes = scopesReached().scopes.filter((s) => !minted.has(s));
     expect(
       escapes,
       'these are reachable with a control key that never proved them at the mint',

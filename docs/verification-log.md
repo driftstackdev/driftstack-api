@@ -18228,3 +18228,51 @@ commit `4056443ab` rewrote as a sortable grid without moving the pins. Attribute
 batch's only files are a new server unit test and the two pins it required — and left alone, because
 updating a content-parity pin for a rewrite I did not make is exactly the absorption rule 9 exists to
 prevent. `verify-suite` will report failure until that is resolved, for that reason and not this one.
+
+## V-1601 — the scope fault I have found six times, in my own two guards
+
+V-1599 and V-1600 both open by claiming a property about "a gui_control_key". Both read
+`agent-sessions.ts` and nothing else. Two sibling routes —
+`agent-sessions-livekit-token.ts` and `agent-sessions-transport-report.ts` — carry their own copy of the
+control-key auth shape rather than importing the factory, validate the key inline, and set the same
+`guiControlKeyAuthorized` flag. Neither guard could see them.
+
+Nothing was wrong in either sibling, which is what this fault almost always produces: livekit-token falls
+through to `requireScope('write')` and transport-report to `requireScope('read:sessions')`, both inside
+the minted set, and both derive `sessionId` from `req.params.id` before looking a session up. Verified
+before widening rather than after.
+
+**Both populations are now derived from the flag rather than from a filename**: any routes file that
+assigns `req.guiControlKeyAuthorized = true` is a file where a control key skips a scope check, so it
+belongs in both scans. The scope side also learned the second spelling — the siblings name their scope in
+the `app.requireScope(...)` they fall through to, not in a `controlKeyOrAccountAuth(...)` argument.
+
+**And the widening was inert on its first attempt, which is the part worth recording.** The session guard
+matched `sessions.get` and a guessed `sessionRepo.get`; the siblings call `agentSessionsRepo.get`. Both
+new files contributed nothing while the file reported itself widened, and the scope mutation passed while
+the session mutation did not — the asymmetry is what exposed it. Fixing a
+narrow-scan-behind-a-broad-claim by writing another list of names reproduces the fault exactly.
+
+Two changes came out of that. The receiver is matched as a family, and — because the family pattern then
+swept in `sessionUploadLifetimeBytes.get(rec.id)`, an in-memory upload counter that is not a session
+lookup at all — the discriminator is `await`. A repository call is awaited and a Map read is not, which
+separates the two structurally instead of by another name list. Rostering those counters would have
+papered over a population that was simply wrong.
+
+The real defence is neither regex: each control-key file must contribute at least one lookup, so a file
+the scan cannot read fails loudly rather than passing quietly. That arm is what would have caught the
+inert widening on its own, and it is proven — renaming the sibling's lookup so the scan finds none reds
+it with "contributed no session lookups".
+
+Three mutations, all against sibling files rather than the original: an unminted scope in livekit-token is
+flagged, a header-keyed lookup there is flagged, and a file yielding no lookups is flagged. Restores
+byte-identical.
+
+No source changed. Both guards now cover the surface their first sentence claims.
+
+### Concurrency
+
+The two outstanding failures are unchanged from the previous batch and still not this work:
+`gui-client-views-ProxiesView-content-parity` and `the-gui-does-not-blame-a-shipped-server-for-a-failed-probe`
+freeze `ProxiesView.tsx`, rewritten by `4056443ab` without its pins moving. This batch touched two test
+files and no source, so `verify-suite` remains red for that reason alone.
