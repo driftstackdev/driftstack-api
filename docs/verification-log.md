@@ -18091,3 +18091,46 @@ that predated this batch stripped both changes — caught by asserting the ident
 re-applying, which is the check this session added after the same trap three times.
 
 Full suite 3076 files / 30996 tests, green; e2e 229 over 40 spec files; `verify-suite` OK.
+
+## V-1598 — a branch that reads as reachable, and the invariant that now says so
+
+V-1597 fixed thirteen 429 responses that omitted `Retry-After`. The obvious next question was the other
+status in the same sentence: `middleware/error-handler.ts` branches on `429 || 503`, its comment cites
+RFC 7231 for both, and the document declares 46 responses with status 503 and `Retry-After` on none of
+them. That looked like the same finding one status over.
+
+**It is not, and the tracing is the work.** The handler only sets the header when the error carries a
+`retry_after_seconds` extension. Exactly one class does — `RateLimitedError`, status 429. The two
+503-producing classes, `FeatureUnavailableError` and `DriverNotIntegratedError`, do not. The agent-message
+passthrough has the same `429 || 503` shape and reads its value from `terminal.body`, which is
+`apiError.toProblem()` — so it inherits the same limitation rather than escaping it. Both 503 halves are
+currently unreachable, and the document is right to omit the header.
+
+Recorded rather than removed. The comment states the intent — RFC conformance for a 503 that has an honest
+retry time — so this is a documented decision with no caller yet, not dead code to delete.
+
+**What the batch produces instead is the invariant that makes the next version of this cheap.** Two sides,
+both derived: the statuses whose error class sets `retry_after_seconds`, read out of `lib/errors.ts`, and
+the statuses whose published responses declare a `Retry-After` header. The assertion is one-directional on
+purpose — a response MAY declare the header without every instance carrying one, which is exactly the
+concurrency-limit 429 the header's own description already calls out. What must not happen is the reverse,
+and that reverse is precisely what V-1597 found thirteen times.
+
+Measured when it landed: emits {429}, declares {429}. Give `FeatureUnavailableError` a retry hint and the
+subset assertion fails naming 503, which is the moment the spec needs updating — proven, not asserted.
+Renaming every declared `Retry-After` in the document reds it too, on the vacuity arm rather than the
+subset one, because an empty right-hand side would otherwise make the check trivially false in a way that
+looks like a real finding.
+
+**A hypothesis that survived three checks and still died on the fourth** is worth the space: the branch
+reads as reachable, the comment says it should be, a second file repeats the shape, and only following the
+extension to its single producer settles it. Three of those four readings pointed the same wrong way.
+
+Both pins raised by one for the file this batch adds, and only for that file. Full suite 3077 files /
+30998 tests, green; `verify-suite` OK.
+
+### Also noted, not acted on
+
+`/v1/status/stream` has zero mentions in `openapi.ts` and is absent from the published document, while its
+connection-cap gate sets `retry-after: 30` on refusal. An undocumented public SSE endpoint is a separate
+question from this one and is left recorded rather than folded in.
