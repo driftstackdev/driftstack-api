@@ -17418,3 +17418,64 @@ Postgres; `verify-suite` OK. One integration failure appeared on a single run wh
 residual state from this batch's own probe runs; it did not reproduce across three subsequent runs
 including one on a pristine database and a clean index, and the failing test's identity was not captured,
 so it is recorded here as unexplained rather than as resolved.
+
+## V-1583 — a guard that reported "0 unaudited" because it could not see the three that are
+
+Followed from V-1582's non-GET sweep. Two operations answered success for an impossible id; the second was
+`DELETE /v1/admin/oauth/clients/not-a-uuid` → 204. That one is not a defect — `revokeClient` returns
+silently for a missing client and an idempotent delete is a legitimate idiom, even though the sibling GET
+on the same path answers 404. Reading it did surface something else.
+
+**Three mutating admin routes reach no audit call at all**, and a guard exists whose entire job is to make
+that impossible:
+
+```
+POST   /v1/admin/oauth/clients
+DELETE /v1/admin/oauth/clients/:id
+POST   /v1/admin/oauth/clients/:id/rotate-secret
+```
+
+Creating an OAuth client, revoking one, and rotating its secret — staff actions on third-party
+credentials, none attributable afterwards.
+
+**The gap itself is known and correctly handled; the guard is what was wrong.** This is worth stating
+plainly because the first read looked like a live finding. `admin-audit-route-coverage-invariant` (V-1007)
+owns it, and `every-admin-mutation-writes-an-audit-row` carries the same three with the same reasoning and
+pins the two lists equal by reading each other's source. Both scan by PATH. The reason none of them can be
+wired is real and recorded in `docs/decisions.md`: `admin_audit_log.action` is a closed Postgres enum with
+no `oauth_client.*` value, and choosing that vocabulary is the migration-bearing part.
+
+**`every-mutating-admin-route-writes-an-audit-row` was the straggler.** It selected files with
+`f.startsWith('admin-')` — a roster keyed by filename rather than by what a route IS — while its own
+opening sentence claims every mutating admin route. `oauth.ts` registers five `/v1/admin/` routes and
+`internal-atlas-priority.ts` two, so its `toEqual([])` was true only because the three violations were
+outside the scan. Its header recorded "30 mutating admin routes, 0 without an audit call"; by path the
+population is 33 with 3 unaudited, and the widened scan is a strict superset — nothing was lost, exactly
+three gained.
+
+Measured rather than argued, by injecting one unaudited mutating admin route into `oauth.ts` and running
+both versions against it:
+
+```
+widened scan   1 failed — "oauth.ts POST /v1/admin/oauth/probe-unaudited"
+filename scan  2 passed
+```
+
+Same violation, same file, one guard blind. That is the V-1529 shape again and now the sixth instance:
+when a guard's header states an absolute, the scope of the scan must equal the scope of the sentence.
+
+**Four arms, each mutation-proven.** The population arm now asserts that at least one admin mutation
+outside an `admin-`named module is in scope, which is the specific thing the previous version passed
+without. The main arm subtracts the roster. A third checks the reverse — a rostered route that starts
+auditing, or one that no longer exists, must be struck — because an exemption outlives its reason
+silently, and when the enum migration lands nothing else here would notice these entries had become false.
+The fourth pins the set equal to V-1007's by reading its source, following the convention the two siblings
+already established: three literal copies with textual equality pins, so a rename fails loudly rather than
+two lists quietly disagreeing. Striking an entry, wiring an audit call, and perturbing the sibling each
+red their own arm; all restores byte-identical.
+
+No source behaviour changed — the three routes are still unaudited and still blocked on the same
+migration. What changed is that the gap is now inside the guard's stated scope and bounded in both
+directions instead of invisible to it.
+
+Full suite 3073 files / 30962 tests; `verify-suite` OK.
