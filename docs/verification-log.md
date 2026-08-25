@@ -18823,9 +18823,26 @@ the artefact.
 
 ## V-1618 — the documented API and the flagship SDK disagree about 28 endpoints, and nothing measures it
 
-Three SDKs ship. Python and Go are generated from `openapi.json`, so their coverage follows the document by
-construction. **TypeScript is hand-written**, which means its coverage is whatever someone remembered to
-add, and the log shows exactly that history — "Live SDK coverage now: account, api-keys, archetypes,
+Three SDKs ship. ⚠️ **The first version of this entry said "Python and Go are generated from
+`openapi.json`, so their coverage follows the document by construction". That is wrong, it was committed
+in `245ca3239`, and it is corrected here rather than quietly edited.** Only the MODELS are generated:
+`packages/sdk-python/scripts/generate.sh` runs `datamodel-codegen` into `_generated/models.py` and says so
+in its own header — "Re-generate Pydantic models from the OpenAPI spec" — while `src/driftstack/resources/`
+is hand-written. The Go SDK has **no generator at all**: no script, and files carrying hand-authored
+comments like "handles /v1/account/email-preferences (V-204)".
+
+**So all three SDKs hand-write their method surface, and none follows the document by construction.** I
+asserted a mechanism from the word "generated" without opening the generator — the same fault as V-1617's
+`onSend`, in the same session, and this time it reached a commit. Re-measured with that corrected:
+
+    TypeScript  reaches 100/132 customer paths   missing 32
+    Python      reaches  70/132                  missing 62
+    Go          reaches  71/132                  missing 61
+    reachable from NO SDK                        32
+
+TypeScript is the most complete of the three, not the laggard the original framing implied — and the 32 it
+misses are missed by all three, so that set is not an SDK-specific omission but the customer surface no
+client library reaches at all. The log shows the history plainly — "Live SDK coverage now: account, api-keys, archetypes,
 sessions, profiles, usage" is an incremental build-out, not an invariant.
 
 Measured against the published document: 196 paths, 132 customer-facing once staff (`/v1/admin/*`),
