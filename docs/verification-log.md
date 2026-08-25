@@ -16489,3 +16489,40 @@ and V-1557. Caught in seconds this time by grepping the restored file for `V-155
 The pattern is stable enough to name: **a snapshot taken to enable a mutation is not a snapshot of the work
 in progress.** The two need separate names, and the cheap check after any restore is to grep for the
 identifier of the thing being built, not to trust that a restore only undid the mutation.
+
+## V-1560 — the complement direction: no unused dependencies, and a check that could never have said so
+
+Three batches added fourteen dependency declarations. The complement is the obvious next question and it
+doubles as a check on that work: does any workspace declare a package nothing imports?
+
+**The first run reported nothing, and that was the instrument, not the answer.** The scan had a text pass
+for packages named in config strings rather than imported — eslint plugins, Astro integrations — and it
+walked every file in the workspace, `package.json` included. Every declared dependency appears in
+`package.json` by definition, so every one was marked used. **The check could not have reported a finding
+under any circumstances.**
+
+Caught by a control rather than by reading: adding `left-pad-does-not-exist-here` to
+`packages/api-types` produced no output. With `package.json` excluded from the text pass, the same control
+names it immediately. That is the **seventh** silently-inert instrument this session, and the third whose
+emptiness was indistinguishable from a pass.
+
+**The real answer, once the tool worked: nothing is unused.** Thirteen workspaces report entries, and every
+one is a package that is correctly declared and correctly never imported:
+
+```
+typescript, @astrojs/check, @tauri-apps/cli, pagefind    invoked as binaries
+autoprefixer, postcss, tailwindcss, @tailwindcss/typography   loaded by config, not by import
+@types/node, @types/react, @types/react-dom, @types/ws   ambient types, never imported by name
+```
+
+The only one worth opening was `apps/server :: @types/ws`, since a types package for an unused runtime
+package would be pure weight. `apps/server` declares `ws` too, and
+`tests/integration/fleet-events-websocket.test.ts:25` imports it. Correctly declared.
+
+**No guard added, deliberately.** A guard here needs an allowance list of roughly fifteen entries spanning
+three different reasons for never being imported, and that list would rot exactly like the filename-keyed
+roster in V-1547 and the duplicated set in V-1548. The check is worth running; it is not worth freezing.
+
+**It also verified the last three batches.** None of the fourteen declarations added in V-1556, V-1558 and
+V-1559 appears as unused, so each names something genuinely imported rather than padding a manifest to
+satisfy a check I wrote.
