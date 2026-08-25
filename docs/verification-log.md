@@ -15942,3 +15942,51 @@ Replaced with a stripper that tracks quote state, checked against four cases bef
 measurement it claims, and the eighth tooling bug is on the record: a documented limitation is not a
 handled one, and the place it bites is the next tool that copies the technique without the context that
 made it safe.
+
+## V-1547 — three admin mutations that leave no trace, hidden by a roster keyed on filename
+
+The audit-coverage guard defers a genuine product call — whether admin READS should be audited, a row per
+list call against a real control. Reading the mechanism behind that deferral turned up something that is
+not a decision at all.
+
+**`every-admin-mutation-writes-an-audit-row` scanned only route files NAMED `admin*`.** Membership of the
+admin surface is decided by PATH — the file even has `isAdmin = r.path.startsWith('/v1/admin/')` — but the
+file list was keyed on filename. Seven `/v1/admin/` routes live elsewhere: five in `oauth.ts`, two in
+`internal-atlas-priority.ts`.
+
+**Three of them are mutations that write no audit row:**
+
+```
+POST   /v1/admin/oauth/clients                     register a third-party OAuth client
+DELETE /v1/admin/oauth/clients/{id}                revoke one — and every access token it issued
+POST   /v1/admin/oauth/clients/{id}/rotate-secret
+```
+
+Verified rather than inferred from my own regex, which I did not trust: `oauth.ts` contains no audit call
+at all (its single `audit` match is a comment about `revoked_at`), the service it delegates to writes no
+admin audit row, and — decisively — `admin_audit_log.action` is a closed enum whose fifteen values include
+no `oauth_client.*` at all. These three could not have been audited even by accident.
+
+`docs/decisions.md` stated the opposite: "Every admin endpoint that MUTATES writes the audit row inside the
+same handler that performs the action. Failure to audit fails the request." A compliance reader takes that
+as covering the surface. It covers 30 of 33.
+
+**The counts there were scoped, not stale.** The register's "30 mutating, 31 GET" matches the guard's view
+exactly — both were faithful to a scan that could not see seven routes. The real figures are 33 and 35.
+Corrected with the reason, so the next reader learns why two honest numbers disagreed.
+
+### What changed, and what deliberately did not
+
+The scan now reads every route file; `isAdmin` already decided membership correctly. Wiring the three to
+an audit row is NOT done here — the enum has no vocabulary for them and the same decision entry records
+that adding one is migration-bearing. Quietly reusing an existing action that means something else would
+be worse than the gap.
+
+So they are recorded in a set checked in BOTH directions: a new unaudited admin mutation anywhere fails,
+and an entry that starts auditing, or is renamed, or is deleted, also fails and must be struck. A backlog
+nobody is forced to revisit becomes a permanent exemption — which is precisely how a filename-keyed roster
+hid three admin mutations for as long as it did.
+
+Proved both ways: a throwaway `POST /v1/admin/probe-unaudited` added to `webhooks.ts` — a file the old
+roster never opened — reds naming the path; adding an audit call to a recorded entry reds with "now writes
+an audit row".
