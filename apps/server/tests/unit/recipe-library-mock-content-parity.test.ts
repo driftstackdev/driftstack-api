@@ -76,7 +76,7 @@ describe('W457.A packages/recipe-library/src/mock.ts content parity', () => {
 
   it('MockRecipeRegistry: 3 methods (get via .find on recipeId + list returns this.recipes + listByCategory filters); default constructor falls back to DEFAULT_RECIPES', () => {
     expect(body).toMatch(
-      /export class MockRecipeRegistry implements RecipeRegistry \{\s*constructor\(private readonly recipes: readonly Recipe\[\] = DEFAULT_RECIPES\) \{\}\s*\n?\s*get\(recipeId: string\): Recipe \| undefined \{\s*return this\.recipes\.find\(\(r\) => r\.id === recipeId\);\s*\}\s*\n?\s*list\(\): readonly Recipe\[\] \{\s*return this\.recipes;\s*\}\s*\n?\s*listByCategory\(category: string\): readonly Recipe\[\] \{\s*return this\.recipes\.filter\(\(r\) => r\.category === category\);\s*\}/,
+      /export class MockRecipeRegistry implements RecipeRegistry \{\s*constructor\(private readonly recipes: readonly Recipe\[\] = DEFAULT_RECIPES\) \{\}\s*get\(recipeId: string\): Recipe \| undefined \{\s*return this\.recipes\.find\(\(r\) => r\.id === recipeId\);\s*\}\s*list\(\): readonly Recipe\[\] \{\s*return this\.recipes;\s*\}\s*listByCategory\(category: string\): readonly Recipe\[\] \{\s*return this\.recipes\.filter\(\(r\) => r\.category === category\);\s*\}/,
     );
   });
 

@@ -19401,3 +19401,32 @@ literals as though it were one. And the equivalence harness first reported nothi
 redirected stdout into the same file `json.dump` was writing. Each would have read as a finding.
 
 **The suite is also 8× faster: 1965s → 250s.** One file was eating twenty-seven minutes of every run.
+
+## V-1631 — the W-11 sweep missed three sites, and my verification could not have seen it
+
+`a2db88985` replaced 20,733 occurrences. **Three survived**, all in
+`recipe-library-mock-content-parity` — a file the sweep did touch, taking it from 45 occurrences to 3.
+
+**The cause is overlap.** The original contained `\s*\n?\s*\n?\s*`. A string replace scans
+left-to-right for NON-overlapping matches: the first `\s*\n?\s*` is consumed and rewritten to `\s*`,
+which then abuts the leftover `\n?\s*` and **reassembles into a fresh occurrence the same pass has
+already moved past.** One further pass reaches a fixed point; the sweep now runs to one.
+
+⛔ **The part worth keeping is that my five-layer verification was structurally incapable of catching
+this.** Layer 2 asserted `HEAD + substitution == working tree` — applying _the same single-pass
+substitution_ to the original and comparing. A transformation compared against itself agrees with itself
+whether or not it is complete. Every other layer inherited the same blind spot: the behavioural check
+tested the literals that HAD been rewritten, the suite passed because the residual patterns still matched,
+and tsc has no opinion. **Five independent-looking layers, one shared assumption.**
+
+**The check that would have caught it is a POST-CONDITION, not a comparison: "no occurrences remain."**
+One line, no reference to how the change was made, and it is now what the sweep asserts — currently zero
+repo-wide.
+
+That generalises past this sweep. A verification built from the same procedure as the edit can only
+confirm the procedure ran, never that it finished. **Ask what must be TRUE afterwards, not whether the
+output matches what the transformation produced.**
+
+Fixed, prettier-formatted, tsc clean, and the affected guard passes 9/9 — which also confirms its
+rewritten patterns still match the source they pin, since a `toMatch` against a pattern that matched
+nothing would fail rather than pass.
