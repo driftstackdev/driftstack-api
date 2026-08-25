@@ -20007,3 +20007,39 @@ the population was corrected. ⚠️ A third mutation — neutering the single a
 `account-web-sessions.ts` — did NOT fire, and that is the documented over-approximation rather than a
 defect: the file has one call and **two imported modules that also audit**. Recorded because a mutation
 that fails to fire is evidence about the instrument, not proof of a hole.
+
+## V-1646 — closing V-1643's boundary: the other eight lazy scans, measured rather than read
+
+V-1643 repaired seven vacuous arms and ended with an honest hedge: eight other guards build an interpolated
+`RegExp` containing a lazy any-char run, their prefixes "are DECLARATIONS rather than repeated KEYS, and
+**that is a reading, not a measurement**". This measures it, because a stated boundary that is never closed
+is just a hedge.
+
+**The predicate is exact: a lazy unanchored scan is only exploitable if its interpolated prefix occurs more
+than once in the file being searched.** One occurrence and the match cannot start anywhere but the right
+block.
+
+| guard                           | prefix                   | occurrences                             | verdict                     |
+| ------------------------------- | ------------------------ | --------------------------------------- | --------------------------- |
+| `v485-tier-features-parity`     | `${tier}: {` — a KEY     | **2 per tier**                          | vacuous; repaired in V-1643 |
+| `email-template-registry`       | `'${t}': {` — a KEY      | 1 per key (20 keys, 0 duplicated)       | safe                        |
+| `account-tier-enum`             | `AccountTierSchema`      | **4**                                   | safe — see below            |
+| `anti-enumeration-response`     | `${schema} = z.object({` | 1 per schema (22, 0 duplicated)         | safe                        |
+| `lib-transient-error`           | `${name} = [`            | 1 per name (4, 0 duplicated)            | safe                        |
+| `commit-msg-hook-actually-runs` | `${group}=(`             | 1 per group (2, 0 duplicated)           | safe                        |
+| `webhook-event-type`            | `'${ev}'`                | no lazy run in the interpolated pattern | n/a                         |
+
+⭐ **`account-tier-enum` is the interesting one, and it is safe for a reason worth naming rather than for
+the reason I expected.** Its prefix genuinely repeats — `AccountTierSchema` appears four times in
+`common.ts` — but the assertion is **`.not.toMatch(...)`**. An over-broad regex makes a match MORE likely,
+which makes a NEGATIVE assertion more likely to FAIL. **It fails safe: it can raise a false alarm, it cannot
+produce a false green.** Direction of an assertion decides whether over-breadth is a hazard or a nuisance,
+and I would have mis-filed this one on prefix-count alone.
+
+⚠️ **`email-template-registry` is safe by DATA, not by construction.** It uses the same key-shaped prefix
+that made v485 vacuous, and is fine only because no key is duplicated in `email.ts` today. A second object
+literal reusing those keys would silently make it vacuous, with nothing to announce it.
+
+**So `v485` was the only guard where a repeated prefix met a positive assertion** — the boundary is closed,
+and the answer happens to be the reassuring one. That is worth recording precisely because V-1642's lesson
+is that reassuring answers are the ones nobody re-checks: this one was checked.
