@@ -20264,3 +20264,48 @@ every check except a predicted delta.
 - **Before trusting a zero, make the instrument produce a one.** (Catches an instrument that cannot see.)
 - **After applying a fix, check the number moved by what you predicted.** (Catches a fix that did not do
   what you thought — and it is the only fault today that caught itself with no human reading any code.)
+
+## V-1652 — five paths audited end to end: one defect, four sound, and what made them sound
+
+Recorded together so the coverage is on file and nobody spends an afternoon re-reading these. ⚠️ **Boundary
+in the same sentence as the result: this was READING, path by path, not exhaustive proof.** Each claim below
+names the specific line or property that carries it, so a later reader can check the claim rather than trust
+the verdict.
+
+**1. Crypto order cancel / IPN — ONE DEFECT, fixed in V-1649.** `accountId` was writable through the lock's
+UPDATE from a callback-supplied object. Proven exploitable on real Postgres.
+
+**2. Webhook secret rotation — sound.** AES-256-GCM with the account+endpoint tuple as **AAD**, so a context
+mismatch fails the auth tag and throws rather than yielding a wrong secret. Already proven:
+`webhook-secret-encryption.test.ts` asserts cross-context, cross-key and tampered reads all throw. ⚠️ The
+asymmetry I flagged on the way in — `input.accountId` at one rotation site, `contextRow.accountId` at the
+other — is a robustness nit and not a hole, precisely because a mismatch fails closed and loudly.
+
+**3. Pair-mode takeover — sound.** `SET key clientId NX EX ttl` to acquire; the canonical Lua
+`if redis.call("get", KEYS[1]) == ARGV[1] then del` to release, **so release checks identity** — the exact
+failure this repo's notes warn about ("a lease acquired with identity, released without checking"). Both
+call sites pass the acquiring `client_id`, release sits in a `finally`, and a comment records a
+previously-fixed leak that held the lock for the full 30s TTL. Authorization happens before the lock and the
+state transition is a CAS on the persisted state.
+
+**4. API key authentication — sound, and it is the most carefully written path I read.** Revoked and expiry
+are checked **after** scrypt verification, so revocation cannot be probed without a valid key. The key
+authority is **re-read after capturing cache generations** and re-checked on BOTH `id` and `keyHash`, which
+closes a revoke racing the read. The account is resolved from the key's own row, never from input. Deleted
+accounts return `InvalidKeyError` rather than a distinguishable error, so existence does not leak.
+`key_prefix` is uniquely indexed in the schema AND in migration 0000 — checked in both places, because a
+schema declaration is not the deployed constraint.
+
+**5. LLM usage metering — sound, and the interesting part is the billing idempotency.** All three
+`recordUsageRowWithRetry` call sites attribute to `session.accountId`, derived from the session record
+rather than from request input. ⭐ **And the retry contract is ENFORCED, not merely documented**: one
+`recordId` is minted per row and reused across every attempt, the recorder uses it as the row `id`, and the
+insert carries `.onConflictDoNothing()` — with `id` being the primary key, a retry after a committed write
+is a no-op rather than a second charge. **The no-id path deliberately does NOT add a conflict target**, and
+says so: "the write keeps its previous behaviour rather than silently pretending to be retry-safe."
+
+⭐ **The pattern worth carrying: four of the five sound paths are sound because identity is DERIVED rather
+than accepted.** The account comes from the key's row, the session's row, the locked row. The one defect was
+the one place a caller-supplied object could carry an identity field into a write. **"Where does this
+identity come from?" found a real bug in one path and confirmed four others in an afternoon**, which is a
+better yield than any token sweep I ran today.
