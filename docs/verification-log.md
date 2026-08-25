@@ -16711,3 +16711,35 @@ branch QUOTED in the assertions.
 `/** Accept either a raw UUID or a prefixed id; return the UUID. */`. Rather than rewrite that pin, the
 sentence was restored and my note moved above it as `//` lines — the pinned contract is the doc comment,
 and it should not churn because an explanation needed somewhere to live.
+
+## V-1566 — the class V-1565 belonged to has exactly two members, and both were the bug
+
+V-1565 fixed a validator that admitted 36 dashes as a UUID and handed them to a Postgres uuid column. The
+class is broader than uuids: **customer input reaching a typed column without a boundary check** is a 500
+where a 400 is owed, whatever the type.
+
+**Numeric and date input: clean, and the scanner was proved before the zero was believed.** No route
+converts a query, param or body field with `Number`/`parseInt`/`new Date` without a validity check nearby.
+A planted `Number(req.query.limit)` in `routes/legal.ts` is reported immediately, so the zero is a result
+rather than an empty run — the eighth time this session that distinction mattered.
+
+**Enum input: clean, and it is where my scanner's own blind spot showed.** `admin-audit-log` passes
+`query.action` straight into `eq(adminAuditLog.action, ...)` against a closed 15-value Postgres enum, which
+looks exactly like the uuid bug. It is not: `ListAuditLogQuerySchema` types it `AdminAuditActionSchema`, and
+types `from`/`to` as `Iso8601Schema`. Worth noting that my numeric scan did NOT see `new Date(query.from)`
+two lines away, because it matched `req.query.X` and the code uses the parsed variable — one spelling of a
+mechanism, again, in the tool hunting for exactly that.
+
+**The generalisation, and it closes the class.** A field typed as a bare `z.string()` is a DELEGATION
+POINT: the schema declines to check its shape, so something downstream must. Across every request, query,
+body and params schema in api-types there are **exactly two** — `admin_id` and `target_id` on the audit-log
+query — and they are bare deliberately, because each accepts either a raw UUID or a prefixed id, which one
+zod type cannot express.
+
+Those two are precisely where V-1565 found the defect. Every other request field carries a length, a
+regex, an enum or a format, so Postgres rejects nothing the schema let through. **The one place validation
+was delegated away from the schema is the one place it was wrong**, and there is no third.
+
+Pinned as an exact set rather than a floor, so both directions fail: a third bare field reds naming it (a
+new delegation whose delegate nobody has written), and an existing one gaining its own constraint reds too,
+because then the recorded list has stopped being true. Proved both ways.
