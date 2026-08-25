@@ -2073,6 +2073,53 @@ export type NewSystemHealthProbe = typeof systemHealthProbes.$inferInsert;
 
 export const teamRole = pgEnum('team_role', ['member', 'admin']);
 
+/**
+ * V-1611 #14 — a team as a THING rather than an account id.
+ *
+ * Before this, `team_members.owner_account_id` and `team_invites.owner_account_id`
+ * both pointed at `accounts`, so a team WAS its owner. Two consequences the
+ * customer sees: the workspace switcher can only render "Team 3f9a2c1d · admin"
+ * because there is no name to show, and one owner can never have two teams.
+ *
+ * ⚠️ EXPAND PHASE. `owner_account_id` remains on both child tables and remains
+ * authoritative; `teamId` below is additive and nullable. Nothing reads it yet.
+ * The contract phase — teamId NOT NULL, ownerAccountId dropped — is a separate
+ * migration once every reader has moved.
+ *
+ * ⛔ NO unique constraint on `ownerAccountId`, deliberately: "one owner can
+ * never have two teams" is the defect being fixed, so constraining it here
+ * would preserve the bug in the schema. The backfill in 0114 is made idempotent
+ * by a NOT EXISTS guard instead — verified by running it twice against a seeded
+ * database, where the unguarded version turned 3 teams into 6.
+ */
+export const teams = pgTable(
+  'teams',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    name: text('name').notNull(),
+    /** Nullable-unique-when-set, mirroring `accounts_slug_unique` exactly.
+     *  Whether slugs become public URL components is an open product decision
+     *  (see the accounts.slug comment); minting required team slugs here would
+     *  quietly settle it. */
+    slug: text('slug'),
+    ownerAccountId: uuid('owner_account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    uniqueIndex('teams_slug_unique').on(t.slug),
+    index('teams_owner_idx').on(t.ownerAccountId),
+  ],
+);
+
 export const teamMembers = pgTable(
   'team_members',
   {
@@ -2091,6 +2138,9 @@ export const teamMembers = pgTable(
     invitedByAccountId: uuid('invited_by_account_id').references(() => accounts.id, {
       onDelete: 'set null',
     }),
+    /** V-1611 #14 — additive forward pointer, backfilled by 0114. NOT yet
+     *  authoritative: `ownerAccountId` above is still the source of truth. */
+    teamId: uuid('team_id').references(() => teams.id, { onDelete: 'cascade' }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -2098,6 +2148,7 @@ export const teamMembers = pgTable(
   (t) => [
     uniqueIndex('team_members_owner_member_unique').on(t.ownerAccountId, t.memberAccountId),
     index('team_members_member_idx').on(t.memberAccountId),
+    index('team_members_team_idx').on(t.teamId),
   ],
 );
 
@@ -2118,6 +2169,9 @@ export const teamInvites = pgTable(
       onDelete: 'set null',
     }),
     acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+    /** V-1611 #14 — additive forward pointer, backfilled by 0114. NOT yet
+     *  authoritative: `ownerAccountId` above is still the source of truth. */
+    teamId: uuid('team_id').references(() => teams.id, { onDelete: 'cascade' }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -2129,6 +2183,7 @@ export const teamInvites = pgTable(
       .where(isNull(t.acceptedAt)),
     index('team_invites_owner_idx').on(t.ownerAccountId, t.acceptedAt),
     index('team_invites_email_idx').on(t.inviteeEmail),
+    index('team_invites_team_idx').on(t.teamId),
   ],
 );
 

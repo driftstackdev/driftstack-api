@@ -98,6 +98,10 @@ const CASCADE_ONLY_TABLES = new Map<string, string>([
   ],
   ['sessions', 'PER-EVENT — marked destroyed, never removed. The case W438 documented'],
   ['subscriptions', 'entity — per account'],
+  [
+    'teams',
+    'entity — one per owner today, minted ONLY by the 0114 backfill; no create route exists yet. ⚠️ Deliberately NOT unique on owner_account_id, because multiple teams per owner is the point of the table, so nothing caps this structurally. When a create route lands this bound stops being true and must be re-stated — an owner able to POST teams is per-request, not per-account',
+  ],
   ['usage_records', 'PER-EVENT — one row per metered event'],
   ['web_sessions', 'PER-EVENT — one row per browser login; revoked by UPDATE'],
   ['webhook_endpoints', 'entity — per account, capped by the endpoint limit'],
@@ -132,6 +136,7 @@ const UNIQUENESS_KEY = new Map<string, string>([
   ['rate_limit_buckets', '(pk only)'],
   ['sessions', '(pk only)'],
   ['subscriptions', 'stripeSubscriptionId'],
+  ['teams', 'slug'],
   ['usage_records', '(pk only)'],
   ['web_sessions', 'tokenHash'],
   ['webhook_endpoints', '(pk only)'],
