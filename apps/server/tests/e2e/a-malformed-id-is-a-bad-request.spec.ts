@@ -108,6 +108,24 @@ const DEPLOYMENT_GATES = [
 const isDeploymentGate = (status: number, text: string): boolean =>
   status === 503 && DEPLOYMENT_GATES.some((t) => text.includes(t));
 
+/**
+ * Fastify's own "there is no such route" answer.
+ *
+ * V-1587 — this sweep counted a 404 as a healthy refusal, and an operation whose
+ * module was never registered answers 404 too. Twenty of the 106 declared
+ * operations are in that state under the e2e harness: `buildApp` registers
+ * several route modules only when an optional dependency is supplied
+ * (`if (deps.incidentsService !== undefined)` and its siblings), and the harness
+ * supplies a subset. So a fifth of the roster was being scored as covered while
+ * nothing behind those paths was ever reached — the same silently-inert shape
+ * this suite keeps finding, this time in the guard rather than in the code.
+ *
+ * They are counted separately, listed, and bounded. Nothing here is a production
+ * defect: every one of these routes is registered by the real application.
+ */
+const isUnrouted = (status: number, text: string): boolean =>
+  status === 404 && /No route for/i.test(text);
+
 const IDEMPOTENT_ON_MISSING = new Set<string>(['DELETE /v1/admin/oauth/clients/{id}']);
 
 /**
@@ -284,6 +302,7 @@ test('no id-taking route answers 5xx or 2xx for a malformed id', async ({ reques
   const succeeded: string[] = [];
   const gated: string[] = [];
   const exercised: string[] = [];
+  const unrouted: string[] = [];
 
   for (const op of targets) {
     const url = server.baseUrl + op.path.replace(/\{[^}]+\}/, MALFORMED) + op.query;
@@ -305,14 +324,19 @@ test('no id-taking route answers 5xx or 2xx for a malformed id', async ({ reques
               ? await request.patch(url, opts)
               : await request.post(url, opts);
     const status = res.status();
+    let text = '';
+    try {
+      text = await res.text();
+    } catch {
+      text = '<unreadable>';
+    }
+
+    if (isUnrouted(status, text)) {
+      unrouted.push(op.key);
+      continue;
+    }
 
     if (status >= 500) {
-      let text = '';
-      try {
-        text = await res.text();
-      } catch {
-        text = '<unreadable>';
-      }
       // The exemption is keyed on the declared problem type, not on the status,
       // so a route that breaks cannot inherit it by happening to answer 503.
       if (isDeploymentGate(status, text)) {
@@ -335,8 +359,9 @@ test('no id-taking route answers 5xx or 2xx for a malformed id', async ({ reques
   // a silent pass tells a later reader nothing about what was actually covered.
   console.log(
     `[V-1584] ${targets.length} id-taking operations — ${exercised.length} refused, ` +
-      `${gated.length} behind a deployment flag:\n` +
-      `REFUSED\n${exercised.join('\n')}\nGATED (not swept)\n${gated.join('\n')}`,
+      `${gated.length} behind a deployment flag, ${unrouted.length} not registered here:\n` +
+      `REFUSED\n${exercised.join('\n')}\nGATED (not swept)\n${gated.join('\n')}\n` +
+      `NOT ROUTABLE (not swept)\n${unrouted.join('\n')}`,
   );
 
   expect(
@@ -362,6 +387,15 @@ test('no id-taking route answers 5xx or 2xx for a malformed id', async ({ reques
     exercised.length,
     'most of the id-taking surface is genuinely reached, not gated away',
   ).toBeGreaterThan(targets.length / 2);
+
+  // V-1587 — the count that was silently wrong. These answer 404 because their
+  // module is not registered under this harness, which is indistinguishable from
+  // a genuine miss unless the body is read. Bounded so the untested share cannot
+  // grow without someone deciding it should.
+  expect(
+    unrouted.length,
+    'operations the harness does not route are not covered by this sweep',
+  ).toBeLessThanOrEqual(20);
 });
 
 test('no id-taking route answers 5xx for an id that is well-formed and absent', async ({
@@ -378,6 +412,7 @@ test('no id-taking route answers 5xx for an id that is well-formed and absent', 
   const serverErrors: string[] = [];
   const gated: string[] = [];
   const reached: string[] = [];
+  const unrouted: string[] = [];
   let reshaped = 0;
 
   for (const op of targets) {
@@ -417,6 +452,11 @@ test('no id-taking route answers 5xx for an id that is well-formed and absent', 
       out = await call(`${wants[1] as string}_${ABSENT_UUID}`);
     }
 
+    if (isUnrouted(out.status, out.text)) {
+      unrouted.push(op.key);
+      continue;
+    }
+
     if (out.status >= 500) {
       if (isDeploymentGate(out.status, out.text)) {
         gated.push(op.key);
@@ -430,7 +470,8 @@ test('no id-taking route answers 5xx for an id that is well-formed and absent', 
 
   console.log(
     `[V-1585] ${targets.length} operations, ${reshaped} re-asked in the shape the route named — ` +
-      `${reached.length} answered, ${gated.length} gated:\n${reached.join('\n')}`,
+      `${reached.length} answered, ${gated.length} gated, ${unrouted.length} not registered here:\n` +
+      `${reached.join('\n')}\nNOT ROUTABLE (not swept)\n${unrouted.join('\n')}`,
   );
 
   expect(
@@ -450,6 +491,11 @@ test('no id-taking route answers 5xx for an id that is well-formed and absent', 
   const shadowed = targets.filter((o) => !o.bodyComplete).map((o) => o.key);
   console.log(`[V-1585] still body-shadowed (${shadowed.length}):\n${shadowed.join('\n')}`);
   expect(shadowed.length, 'the un-buildable-body set stays small').toBeLessThan(10);
+
+  expect(
+    unrouted.length,
+    'operations the harness does not route are not covered by this sweep',
+  ).toBeLessThanOrEqual(20);
 });
 
 test('a refusal names what is actually missing', async ({ request }) => {

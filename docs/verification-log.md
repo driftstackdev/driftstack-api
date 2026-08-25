@@ -17619,3 +17619,47 @@ that does not exist has no account to attribute to, and the admin who acted is s
 Full suite 3073 files / 30962 tests; e2e 225 passed against a disposable migrated Postgres, dropped
 afterwards; `verify-suite` OK. The Playwright figure moves 224 -> 225 in all four pinned places; the
 spec-file count is unchanged at 37 because the new arm joined an existing file.
+
+## V-1587 — a fifth of the sweep's roster was never reached, and it scored as covered
+
+Closing out the id-handling class produced one clean negative result and one defect in my own instrument.
+
+**The negative result first, because it bounds the class.** Every route file with an error-path audit
+write was checked, not just the one the bug appeared in. Six omit `targetAccountId` or set it null;
+`admin-force-actions.ts` uses a deferred value that starts null and is assigned only AFTER the not-found
+throw, so its thunk resolves to null on exactly the path that would violate the key — correct by design,
+not by luck. Only `admin-accounts.ts` carried the defect, in three helpers, all fixed in V-1585 and
+V-1586. The class is closed.
+
+**Then the instrument.** Chasing the eight body-shadowed operations, two crypto-orders routes answered
+`404 "No route for PATCH /v1/admin/crypto-orders/…"` — Fastify's own not-found handler. Both are declared
+in `openapi.json` and both are registered in source. `buildApp` registers several route modules only when
+an optional dependency is supplied (`if (deps.incidentsService !== undefined)` and siblings), and the e2e
+harness supplies a subset.
+
+**Twenty of the 106 operations are in that state, and this sweep counted every one as a healthy refusal.**
+A 404 meaning "looked it up, not there" and a 404 meaning "there is no such route" are the same status,
+and the sweep only read the body on a 5xx. So a fifth of the roster was scored as covered while nothing
+behind those paths was ever reached — the same silently-inert shape this suite keeps finding in guards,
+this time in mine.
+
+**The record needs correcting rather than leaving flattering.** V-1584 reported "82 refused", V-1585 "80
+answered". With unrouted operations counted separately the real figures are **62 refused and 60
+answered**, overstated by exactly the twenty. Nothing previously reported as a defect changes — the five
+500s and the 200 were all found on routes that do answer — but the coverage claims were wrong and are
+restated here.
+
+One earlier inference also loses its support. When checking `admin-force-actions.ts` I cited the probe
+showing `POST /v1/admin/sessions/{id}/destroy` and `POST /v1/admin/api-keys/{id}/revoke` answering 404.
+Both are in the unrouted twenty, so that evidence was worthless. The conclusion survives on the source
+reading — the deferred value is null until the session is found — but it rested for a while on an
+experiment that could not have distinguished the two outcomes.
+
+Unrouted operations are now detected by their body, counted separately, listed on every run, and bounded
+at twenty in both passes. Tightening the bound to nineteen reds both, so the bound is load-bearing rather
+than decorative. None of the twenty is a production defect: every one is registered by the real
+application.
+
+Full suite and gates green. The file and test totals moved by one file and four tests during this batch;
+`git status` attributes both to a peer's in-flight gui-client work, so the ratchets are theirs to move and
+were left alone.
