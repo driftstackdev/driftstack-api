@@ -16241,3 +16241,42 @@ clean — but it is the signal worth stating plainly: **the surface reachable by
 repository has been worked out.** What remains needs inputs only a human has, and has been listed
 unchanged for many batches: the numbered actions from the two missing files, six open decisions, and the
 OAuth-client audit gap that needs an enum migration.
+
+## V-1554 — the docs-examples axis: real, unexplored, and NOT reported, because the instrument failed three times
+
+The published spec's own 39 examples were validated in V-1550. The docs SITE carries its own hand-written
+ones — **163 JSON blocks across 24 API pages** — and those are what a customer copies. No guard parses
+them. That is a genuine gap in coverage and the axis is worth doing.
+
+**What is established.** All 163 blocks were parsed. Eleven do not parse, and all eleven are deliberate
+documentation notation rather than defects: `...` elisions inside arrays, `<profile>` placeholders,
+`"password" | "mfa_totp"` type unions, `/* same shape as the list entry */`, and `//`-prefixed labels
+naming a variant. A customer reads those correctly even though `JSON.parse` does not.
+
+**What is NOT established, and is therefore not reported as findings.** Validating the parseable request
+examples against their endpoint's published schema went wrong three times in a row:
+
+1. Matching the method and path from markdown HEADINGS returned **0 of 163**. The pages put
+   `` `POST /v1/profiles` `` on its own line as inline code, not in a heading. A run reporting zero
+   findings because it examined nothing looks exactly like a clean result.
+2. Fixed, it reported **41 failures** — and the first two checked were RESPONSE examples. `api-keys.md`
+   labels the block "Response (201):" three lines above. The selector took every block after a method
+   line.
+3. Response-aware, it reported **12**, whose errors read `(root) should NOT be shorter than 12
+characters` against `POST /v1/auth/login`. That is the PASSWORD constraint applied to the whole body,
+   so the schema being compiled is a field's, not the request's — the `$ref` resolution is still wrong.
+
+Three readings, three different numbers, and the only ones I confirmed by opening the file were false. So
+the twelve are not findings; they are an unfinished measurement. Reporting them would be exactly the
+88-96% self-confirmation the standing brief warns about — a tool agreeing with itself.
+
+**The tool is deleted rather than left in the tree**, because a half-right analyser is worse than none: the
+next reader would trust its output. What is worth carrying forward is the shape of the target — request
+examples on 24 pages, matched by the inline-code method line, stopping at the first Response marker — and
+the knowledge that `$ref` resolution against this document needs to be verified against a known-good case
+before any result from it is believed.
+
+**This is the fifth silently-inert control this session** (after V-1536's repo-root probe, V-1544's patch
+that never applied, V-1550's swallowed throw, and V-1551's excluded tsconfig). Every one produced a
+plausible number. The only reason none of them shipped is that each was asked to prove itself on a case
+whose answer was already known.
