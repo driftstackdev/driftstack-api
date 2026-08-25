@@ -19797,3 +19797,44 @@ posture that V-1635 established while refuting the SSE claim about its sibling.
 
 An exemption list is only as honest as its weakest value. This one now has no value that was written
 without opening the thing it describes.
+
+## V-1641 — a finding can be correct, written down, guarded, and still never reach anyone
+
+Sweeping the exemption maps for reasons that make a **capability claim** — the shape that failed twice in
+V-1635 and V-1637 — returned four hits. Three were entries I had just written or just proved. The fourth
+was a different kind of claim, and following it found a commercial gap that has been documented all along.
+
+`a-numeric-tier-cap-that-only-guards-creation` records that the `profiles` cap is enforced only on create.
+Verified here independently rather than taken on trust: all five call sites of `profileLimitFor` are
+creation paths (profile create, restore, transfer, and snapshot create), and the tier-change handler
+mentions profiles **only in a comment** — it audits and emails and never looks at them.
+
+So an account that creates 500 profiles on `api_scale` and downgrades to `free`, cap 1, **keeps all 500,
+fully usable**: it can bind them to sessions, load them and save them. Only the next create is refused.
+The guard's own comparison is what makes it legible:
+
+    maxSessionMinutes    create gate + duration sweeper   a downgrade DOES reach it
+    concurrentSessions   create gate only                 drains on its own; sessions end
+    profiles             create gate only                 nothing drains — a profile is stored
+
+⛔ **Subscribe for a month, create the profiles, downgrade, keep them.** That is the paid tiers'
+differentiator not being real: a revenue question rather than a security one.
+
+⭐ **The lesson is not the gap — the guard found that. It is that the guard was the END of the finding's
+journey.** It is correct, it is measured, it explicitly says "THIS FILE DOES NOT PICK THE FIX", and it has
+been passing quietly ever since. A test that encodes a product decision nobody has made will go on passing
+forever, because passing is what it is for. **The ledger and the test suite are where findings are
+recorded, and neither is where decisions get made** — so a finding that needs a human ends its life as a
+green check unless somebody carries it out.
+
+It is now the fourth item in the decision memo, alongside the three published-contract questions, where a
+person can actually say yes or no to it. Recommendation there is deliberately not "delete on downgrade":
+destroying a customer's stored work because their plan lapsed is the single option that converts a billing
+event into a support incident, and it does not reverse.
+
+⚠️ Separately, and worth the protocol note: a peer's new migration `0114` stranded this agent's database
+mid-gate, surfacing as six failures across `db-team-invite-single-use` and
+`db-schema-matches-the-migrations` — red that reads exactly like defects in work landed an hour earlier.
+The migration-count guard named it instead, for the second time today and the first time about someone
+else's code. **After a peer lands a migration, run `db:migrate` before trusting any `db-*` red.** The
+hazard did not exist until both agents had real databases attached this afternoon.
