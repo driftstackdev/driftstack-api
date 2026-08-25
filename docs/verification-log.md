@@ -16932,3 +16932,42 @@ several batches reasoned about.
 
 That bound belongs in the record next to the claims it qualifies, and it is stated here rather than left
 for a reader to discover that "full gate" meant one job of five.
+
+## V-1572 — running the two CI jobs the gate names but does not run
+
+V-1571 bounded "gate green" to one CI job of five and noted that the Python and Go SDK checks — which
+several batches this session reasoned about — were never among the runs backing those claims. Leaving that
+recorded is the failure this arc keeps finding, so both were run.
+
+**Both pass, and the SDK reasoning holds.**
+
+```
+go vet ./...                      exit 0
+go test ./...                     exit 0
+pytest -q                         365 passed, 9 skipped
+ruff check .                      All checks passed
+mypy src                          Success: no issues found in 31 source files
+```
+
+That matters beyond a green tick: V-1532 read `datamodel-codegen` to establish the Python SDK generates
+models rather than method signatures, V-1538 traced `is_retryable` through `PROBLEM_TYPE_TO_ERROR`, and
+V-1550 hit `ajv-formats`. Each of those conclusions was drawn from source that no executed check covered.
+They are now covered.
+
+**Two figures in the gate's own notes had drifted**, and both are corrected in the same commit:
+
+- **Python skips: 4 → 9.** The recorded REASON was exactly right — "want a live base URL and key" — and
+  every one of the nine is `tests/test_live_contract.py` skipping on absent `DS_LIVE_BASE_URL` and
+  `DS_LIVE_API_KEY`. The file grew; the number did not follow. A correct reason attached to a stale count
+  reads as verified, which is what made this worth measuring rather than assuming.
+- **Go tests: 236 → 209, or 242.** 209 top-level test functions, 242 counting subtests. **236 matches
+  neither**, and nothing in the old note says which it was counting, so both are now stated with the method
+  rather than picking one and calling it re-measured.
+
+That block already carried two prior corrections in its own text — the Python figure "read 362 until the
+re-run", the Playwright count "read 199 for a day". This is the third and fourth, which says the figures
+drift faster than they are re-measured. Recording the METHOD beside them is the part that might change
+that.
+
+`EXPECTED_TEST_FILES` and `_ALL` are untouched: this batch corrected prose, not pins, and the nine-file
+`_ALL` drift V-1571 recorded is still someone else's to close. The gate re-run after the edit is green.

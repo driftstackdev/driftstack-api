@@ -66,9 +66,21 @@ export const EXPECTED_TEST_FILES_ALL = 3179;
  *
  * Measured 2026-08-18, RE-RUN 2026-08-19, and the Playwright figure RE-MEASURED
  * 2026-08-19 after V-1038..V-1046 added seven specs: 222 Playwright tests
- * over 36 spec files, 365 passing Python tests with 4 skipped that want a live
- * base URL and key, and 236 Go tests from an uncached run. The Python figure
- * read 362 until the re-run.
+ * over 36 spec files, 365 passing Python tests, and Go tests from an uncached
+ * run. The Python figure read 362 until the re-run.
+ *
+ * V-1572 — RE-MEASURED 2026-08-24 by actually running the two jobs, which this
+ * file had never been used to do. Both pass: `go vet` and `go test` clean,
+ * pytest 365 passed, ruff clean, mypy clean over 31 source files. Two figures
+ * above had drifted and are corrected here rather than in the sentence, because
+ * an unqualified count is the thing that drifts:
+ *
+ *   Python skips  4 -> 9. The REASON was right and the count was not: all nine
+ *                 are `tests/test_live_contract.py` skipping on absent
+ *                 DS_LIVE_BASE_URL + DS_LIVE_API_KEY, and that file grew.
+ *   Go tests      236 -> 209 top-level test functions, or 242 counting subtests.
+ *                 Stated both ways with the method, since 236 matches neither and
+ *                 there is no way to tell from the old number which it meant.
  *
  * V-1079 — that Playwright count read 199 for a day, which was exact when written
  * and made wrong by my own later work: the specs added after it contribute 23 more
