@@ -16601,3 +16601,38 @@ result means nothing", the second naming the scanned count. And a planted
 its own constant says. Re-planted in `lib/errors.ts` it reds naming the flag. A mutation that fails to red
 is a claim about the mutation until the mutation is checked, which is the V-1531 lesson arriving again from
 a different direction.
+
+## V-1563 — why the vacuity sweep found real bugs in walks and none in single-file scans
+
+V-1562 fixed two whole-source walks that passed while reading nothing. The same fault has a second
+possible shape — a population extracted from ONE file by regex, where a pattern that stops matching yields
+an empty list and an empty list passes. That is the V-1536 `spreadCodes` bug exactly, so it was worth
+sweeping.
+
+**Four candidates survived filtering, and all four are safe.** Each was opened rather than reported:
+
+- `webhook-backoff-schedule-agrees-everywhere` pins `expect(worker.size, '…').toBe(5)` for all four
+  sources. Its own helper comment says "the caller floors the entry count", and it does.
+- `v2-12-error-kind-catalog-parity` guards its fragile half with
+  `expect(m, 'TYPE_TO_CTOR map must exist').not.toBeNull()`, and its other half iterates an IMPORTED
+  `PROBLEM_TYPES` rather than a scan.
+- `legal-refunds-doc-parity` and the two remaining doc-parity files derive offenders from a file that was
+  successfully read.
+
+**The distinction is the finding, and it explains both results.** A tree walk that yields nothing means
+_we did not look_ — the directory can exist and be empty, silently. A single-file read that yields no
+matches means _this file contains none_, because `readFileSync` throws when the path is wrong. The first is
+a vacuity bug; the second is a true answer. That is why V-1562 found two real blind spots and this sweep
+found zero, and it is worth writing down so the next person does not re-run this and mistake four safe
+files for four unexamined ones.
+
+### My detector was wrong four times, and the last two were the same mistake
+
+It flagged `route-auth-coverage-invariant` (V-1561) while that file carried `toHaveLength(288)`. It flagged
+`webhook-backoff` and `v2-12` here. The cause in both of this batch's cases: the repo writes
+`expect(value, 'message').toBe(5)`, and my pattern required `.size)` immediately followed by `.toBe(`.
+**A detector that does not know the codebase's dominant idiom reports the codebase as deficient** — which is
+the same fault as a scan that knows one spelling of a mechanism, arriving in the tool that hunts it.
+
+Corrected mid-batch, which took 6 candidates to 4, and the remaining four then fell to reading. **No code
+changed and no finding filed**, because four verified-safe files are not a finding.
