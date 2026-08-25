@@ -64,7 +64,7 @@ describe('V-534.AA useCryptoReceipt — fetch', () => {
   });
 
   it('hits the encoded /receipt subpath with bearer auth and an abort signal', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -77,7 +77,7 @@ describe('V-534.AA useCryptoReceipt — fetch', () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
       'https://api.driftstack.dev/v1/billing/crypto-orders/ord%2Fx/receipt',
     );
-    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const init = fetchMock.mock.calls[0]?.[1];
     expect((init?.headers as Record<string, string>).authorization).toBe('Bearer sk_test');
     expect(init?.signal).toBeInstanceOf(AbortSignal);
   });
@@ -156,7 +156,7 @@ describe('V-534.AA useCryptoReceipt — fetch', () => {
   });
 
   it('stays idle when orderId is null', () => {
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
     vi.stubGlobal('fetch', fetchMock);
     const { result } = renderHook(() => useCryptoReceipt(null));
     expect(result.current.state.kind).toBe('idle');

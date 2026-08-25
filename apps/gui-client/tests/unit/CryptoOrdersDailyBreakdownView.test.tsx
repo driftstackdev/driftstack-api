@@ -86,7 +86,7 @@ describe('V-534.AH CryptoOrdersDailyBreakdownView', () => {
   });
 
   it('refetches with days= when the dropdown changes', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,

@@ -28,7 +28,7 @@ afterEach(() => {
 
 describe('useAdminInternalNote', () => {
   it('PATCHes the encoded order path with auth and the exact nullable JSON field', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -43,7 +43,7 @@ describe('useAdminInternalNote', () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
       'https://api.driftstack.dev/v1/admin/crypto-orders/ord%2Fx/internal-note',
     );
-    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const init = fetchMock.mock.calls[0]?.[1];
     expect(init?.method).toBe('PATCH');
     expect(init?.signal).toBeInstanceOf(AbortSignal);
     expect((init?.headers as Record<string, string>).authorization).toBe('Bearer sk_admin');

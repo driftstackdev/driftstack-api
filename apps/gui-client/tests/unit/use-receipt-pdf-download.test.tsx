@@ -98,7 +98,7 @@ describe('V-534.BM useReceiptPdfDownload', () => {
   });
 
   it('starts idle and does not fetch on mount', () => {
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
     vi.stubGlobal('fetch', fetchMock);
     const { result } = renderHook(() => useReceiptPdfDownload());
     expect(result.current.state.kind).toBe('idle');
@@ -106,7 +106,7 @@ describe('V-534.BM useReceiptPdfDownload', () => {
   });
 
   it('hits /receipt.pdf with Bearer auth + accept: application/pdf', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(pdfResponse()));
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) => Promise.resolve(pdfResponse()));
     vi.stubGlobal('fetch', fetchMock);
     URL.createObjectURL = vi.fn(() => 'blob:mock');
     URL.revokeObjectURL = vi.fn();
@@ -124,7 +124,7 @@ describe('V-534.BM useReceiptPdfDownload', () => {
   });
 
   it('hits /receipt.txt with accept: text/plain when format=txt', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(pdfResponse()));
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) => Promise.resolve(pdfResponse()));
     vi.stubGlobal('fetch', fetchMock);
     URL.createObjectURL = vi.fn(() => 'blob:mock');
     URL.revokeObjectURL = vi.fn();
@@ -138,7 +138,7 @@ describe('V-534.BM useReceiptPdfDownload', () => {
   });
 
   it('encodes special characters in the order id', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(pdfResponse()));
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) => Promise.resolve(pdfResponse()));
     vi.stubGlobal('fetch', fetchMock);
     URL.createObjectURL = vi.fn(() => 'blob:mock');
     URL.revokeObjectURL = vi.fn();
@@ -229,7 +229,7 @@ describe('V-534.BM useReceiptPdfDownload', () => {
     useSettingsMock.mockReturnValue({
       settings: { apiKey: null, baseUrl: 'https://api.driftstack.dev' },
     });
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
     vi.stubGlobal('fetch', fetchMock);
     const { result } = renderHook(() => useReceiptPdfDownload());
     await act(async () => {

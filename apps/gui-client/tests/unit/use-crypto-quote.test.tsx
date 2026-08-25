@@ -60,7 +60,7 @@ describe('V-534.V useCryptoQuote — auto-fetch', () => {
   });
 
   it('POSTs the product + priceCurrency body with bearer auth', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -73,7 +73,7 @@ describe('V-534.V useCryptoQuote — auto-fetch', () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
       'https://api.driftstack.dev/v1/billing/crypto-checkout/quote',
     );
-    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const init = fetchMock.mock.calls[0]?.[1];
     expect(init?.method).toBe('POST');
     expect(init?.signal).toBeTruthy();
     const headers = init?.headers as Record<string, string> | undefined;
@@ -85,7 +85,7 @@ describe('V-534.V useCryptoQuote — auto-fetch', () => {
   });
 
   it('idle when product is null and does not fetch', () => {
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
     vi.stubGlobal('fetch', fetchMock);
     const { result } = renderHook(() => useCryptoQuote({ product: null }));
     expect(result.current.state.kind).toBe('idle');
@@ -184,7 +184,7 @@ describe('V-534.V useCryptoQuote — manual mode + refetch', () => {
   });
 
   it('manual=true starts idle and does not auto-fetch', () => {
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
     vi.stubGlobal('fetch', fetchMock);
     const { result } = renderHook(() => useCryptoQuote({ product: 'solo_manual', manual: true }));
     expect(result.current.state.kind).toBe('idle');
@@ -192,7 +192,7 @@ describe('V-534.V useCryptoQuote — manual mode + refetch', () => {
   });
 
   it('refetch() advances from idle through to ready', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,

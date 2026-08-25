@@ -33,7 +33,7 @@ afterEach(() => {
 
 describe('useAdminCryptoDaily', () => {
   it('auto-fetches the requested lookback with bearer auth', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -47,13 +47,13 @@ describe('useAdminCryptoDaily', () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
       'https://api.driftstack.dev/v1/admin/crypto-orders/daily?days=30',
     );
-    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const init = fetchMock.mock.calls[0]?.[1];
     expect((init?.headers as Record<string, string>).authorization).toBe('Bearer sk_admin');
     expect(init?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('omits the days query when the server default is requested', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,

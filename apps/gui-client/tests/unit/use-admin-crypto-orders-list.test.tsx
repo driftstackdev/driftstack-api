@@ -29,7 +29,7 @@ afterEach(() => {
 
 describe('V-534.AG useAdminCryptoOrdersList', () => {
   it('fetches /v1/admin/crypto-orders on mount + sets ready state', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -44,12 +44,12 @@ describe('V-534.AG useAdminCryptoOrdersList', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const url = fetchMock.mock.calls[0]?.[0] as string;
     expect(url).toContain('/v1/admin/crypto-orders');
-    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const init = fetchMock.mock.calls[0]?.[1];
     expect(init?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('appends status + search + accountId + limit to the URL', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -76,7 +76,7 @@ describe('V-534.AG useAdminCryptoOrdersList', () => {
   });
 
   it('V-534.BC appends paymentId to the URL when supplied', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -91,7 +91,7 @@ describe('V-534.AG useAdminCryptoOrdersList', () => {
   });
 
   it('V-534.BC omits paymentId when null / empty / whitespace', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -106,7 +106,7 @@ describe('V-534.AG useAdminCryptoOrdersList', () => {
   });
 
   it('trims and omits empty-string search / accountId', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -144,7 +144,7 @@ describe('V-534.AG useAdminCryptoOrdersList', () => {
   });
 
   it('refetch re-runs the request', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -264,7 +264,7 @@ describe('V-534.AW useAdminCryptoOrdersList — cursor pagination', () => {
   });
 
   it('loadMore is a no-op when next_cursor is null', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,

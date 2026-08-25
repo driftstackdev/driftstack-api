@@ -38,7 +38,7 @@ function csvResponse(body: string): Response {
 
 describe('V-534.AX useAdminCsvExport', () => {
   it('starts in idle state and does not fetch on mount', () => {
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
     vi.stubGlobal('fetch', fetchMock);
     const { result } = renderHook(() => useAdminCsvExport());
     expect(result.current.state.kind).toBe('idle');
@@ -46,7 +46,9 @@ describe('V-534.AX useAdminCsvExport', () => {
   });
 
   it('sends Bearer auth + accept: text/csv to the .csv endpoint on download()', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(csvResponse('order_id\n')));
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
+      Promise.resolve(csvResponse('order_id\n')),
+    );
     vi.stubGlobal('fetch', fetchMock);
     // jsdom provides URL.createObjectURL/revokeObjectURL as undefined; stub them
     URL.createObjectURL = vi.fn(() => 'blob:mock');
@@ -65,7 +67,9 @@ describe('V-534.AX useAdminCsvExport', () => {
   });
 
   it('appends status + search + accountId to the URL', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(csvResponse('order_id\n')));
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
+      Promise.resolve(csvResponse('order_id\n')),
+    );
     vi.stubGlobal('fetch', fetchMock);
     URL.createObjectURL = vi.fn(() => 'blob:mock');
     URL.revokeObjectURL = vi.fn();
@@ -82,7 +86,9 @@ describe('V-534.AX useAdminCsvExport', () => {
   });
 
   it('does not append status when null + omits empty search', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(csvResponse('order_id\n')));
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
+      Promise.resolve(csvResponse('order_id\n')),
+    );
     vi.stubGlobal('fetch', fetchMock);
     URL.createObjectURL = vi.fn(() => 'blob:mock');
     URL.revokeObjectURL = vi.fn();
@@ -99,7 +105,9 @@ describe('V-534.AX useAdminCsvExport', () => {
   });
 
   it('mints a blob URL, clicks a synthesized anchor with a .csv filename, then revokes', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(csvResponse('order_id\nord_1\n')));
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
+      Promise.resolve(csvResponse('order_id\nord_1\n')),
+    );
     vi.stubGlobal('fetch', fetchMock);
     const createObjectUrl = vi.fn(() => 'blob:mock-object-url');
     const revokeObjectUrl = vi.fn();
@@ -210,7 +218,7 @@ describe('V-534.AX useAdminCsvExport', () => {
   });
 
   it('reports HTTP errors via state.kind = failed', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: false,
         status: 403,
@@ -233,7 +241,9 @@ describe('V-534.AX useAdminCsvExport', () => {
   });
 
   it('reports network errors via state.kind = failed', async () => {
-    const fetchMock = vi.fn(() => Promise.reject(new Error('boom')));
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
+      Promise.reject(new Error('boom')),
+    );
     vi.stubGlobal('fetch', fetchMock);
     const { result } = renderHook(() => useAdminCsvExport());
     await act(async () => {
@@ -263,7 +273,7 @@ describe('V-534.AX useAdminCsvExport', () => {
     useSettingsMock.mockReturnValue({
       settings: { apiKey: null, baseUrl: 'https://api.driftstack.dev' },
     });
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
     vi.stubGlobal('fetch', fetchMock);
     const { result } = renderHook(() => useAdminCsvExport());
     await act(async () => {
@@ -274,7 +284,9 @@ describe('V-534.AX useAdminCsvExport', () => {
   });
 
   it('reset() returns state to idle after a failure', async () => {
-    const fetchMock = vi.fn(() => Promise.reject(new Error('net')));
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
+      Promise.reject(new Error('net')),
+    );
     vi.stubGlobal('fetch', fetchMock);
     const { result } = renderHook(() => useAdminCsvExport());
     await act(async () => {

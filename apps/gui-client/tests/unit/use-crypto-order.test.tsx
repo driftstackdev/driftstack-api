@@ -62,7 +62,7 @@ describe('V-534.T useCryptoOrder — initial fetch', () => {
   });
 
   it('hits /v1/billing/crypto-orders/:id with the bearer header', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -75,14 +75,14 @@ describe('V-534.T useCryptoOrder — initial fetch', () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
       'https://api.driftstack.dev/v1/billing/crypto-orders/ord_abc',
     );
-    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const init = fetchMock.mock.calls[0]?.[1];
     const headers = init?.headers as Record<string, string> | undefined;
     expect(headers?.authorization).toBe('Bearer sk_test');
     expect(init?.signal).toBeTruthy();
   });
 
   it('idle when orderId is null and does not fetch', () => {
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
     vi.stubGlobal('fetch', fetchMock);
     const { result } = renderHook(() => useCryptoOrder(null, { pollIntervalMs: 0 }));
     expect(result.current.state.kind).toBe('idle');
@@ -204,7 +204,7 @@ describe('V-534.T useCryptoOrder — polling', () => {
       sample({ status: 'paid' }), // this one should never be requested
     ];
     let call = 0;
-    const fetchMock = vi.fn(() => {
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) => {
       const body = responses[Math.min(call, responses.length - 1)];
       call += 1;
       return Promise.resolve({
@@ -240,7 +240,7 @@ describe('V-534.T useCryptoOrder — polling', () => {
 
   it('manual mode starts idle + does not auto-poll', () => {
     vi.useFakeTimers();
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
     vi.stubGlobal('fetch', fetchMock);
     const { result } = renderHook(() =>
       useCryptoOrder('ord_abc', { manual: true, pollIntervalMs: 1_000 }),

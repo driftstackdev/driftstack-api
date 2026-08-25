@@ -27,7 +27,7 @@ afterEach(() => {
 
 describe('V-534.BD useAdminOrderEvents', () => {
   it('idle when orderId is null', () => {
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
     vi.stubGlobal('fetch', fetchMock);
     const { result } = renderHook(() => useAdminOrderEvents(null));
     expect(result.current.state.kind).toBe('idle');
@@ -35,7 +35,7 @@ describe('V-534.BD useAdminOrderEvents', () => {
   });
 
   it('fetches /events on mount and exposes the timeline', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -58,13 +58,13 @@ describe('V-534.BD useAdminOrderEvents', () => {
     }
     const url = fetchMock.mock.calls[0]?.[0] as string;
     expect(url).toContain('/v1/admin/crypto-orders/ord_a/events');
-    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const init = fetchMock.mock.calls[0]?.[1];
     expect((init?.headers as Record<string, string>).authorization).toBe('Bearer sk_admin');
     expect(init?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('encodes the orderId in the URL', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,

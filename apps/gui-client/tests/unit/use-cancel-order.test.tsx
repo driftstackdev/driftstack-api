@@ -27,7 +27,7 @@ afterEach(() => {
 
 describe('V-534.Y useCancelOrder — starting state', () => {
   it('starts idle and does not fetch on mount', () => {
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
     vi.stubGlobal('fetch', fetchMock);
     const { result } = renderHook(() => useCancelOrder());
     expect(result.current.state.kind).toBe('idle');
@@ -37,7 +37,7 @@ describe('V-534.Y useCancelOrder — starting state', () => {
 
 describe('V-534.Y useCancelOrder — happy path', () => {
   it('transitions submitting → succeeded with the returned order', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -67,7 +67,7 @@ describe('V-534.Y useCancelOrder — happy path', () => {
   });
 
   it('POSTs to /v1/billing/crypto-orders/:id/cancel with bearer auth', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -82,7 +82,7 @@ describe('V-534.Y useCancelOrder — happy path', () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
       'https://api.driftstack.dev/v1/billing/crypto-orders/ord_x/cancel',
     );
-    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const init = fetchMock.mock.calls[0]?.[1];
     expect(init?.method).toBe('POST');
     expect((init?.headers as Record<string, string>).authorization).toBe('Bearer sk_test');
     expect(init?.signal).toBeTruthy();

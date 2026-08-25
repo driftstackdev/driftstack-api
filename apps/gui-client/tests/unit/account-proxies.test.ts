@@ -22,7 +22,7 @@ const META = {
 
 describe('listProxies', () => {
   it('GETs the proxies endpoint with a bearer token and returns data[]', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve(new Response(JSON.stringify({ data: [META] }), { status: 200 })),
     );
     vi.stubGlobal('fetch', fetchMock);
@@ -81,7 +81,7 @@ describe('listProxies', () => {
 
 describe('createProxy', () => {
   it('POSTs the input as JSON and returns the created metadata', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve(new Response(JSON.stringify(META), { status: 201 })),
     );
     vi.stubGlobal('fetch', fetchMock);
@@ -100,7 +100,7 @@ describe('createProxy', () => {
 
 describe('updateProxy', () => {
   it('PUTs to the id-scoped URL', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve(new Response(JSON.stringify(META), { status: 200 })),
     );
     vi.stubGlobal('fetch', fetchMock);
@@ -114,7 +114,9 @@ describe('updateProxy', () => {
 
 describe('deleteProxy', () => {
   it('DELETEs the id-scoped URL and treats 404 as already-gone', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response(null, { status: 404 })));
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
+      Promise.resolve(new Response(null, { status: 404 })),
+    );
     vi.stubGlobal('fetch', fetchMock);
     await expect(
       deleteProxy('https://api.driftstack.dev', 'ds_key', 'p1'),

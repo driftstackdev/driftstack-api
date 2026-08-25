@@ -84,7 +84,7 @@ describe('V-534.J useCryptoCheckout.start — happy path', () => {
   });
 
   it('serialises product + price + currency in the request body', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 201,
@@ -101,7 +101,7 @@ describe('V-534.J useCryptoCheckout.start — happy path', () => {
         price_currency: 'USD',
       });
     });
-    const callArgs = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const callArgs = fetchMock.mock.calls[0]?.[1];
     expect(callArgs?.method).toBe('POST');
     expect(callArgs?.redirect).toBe('error');
     expect(callArgs?.signal).toBeTruthy();
@@ -450,7 +450,7 @@ describe('V-534.J useCryptoCheckout.start — error paths', () => {
 
 describe('V-534.AY useCryptoCheckout — Idempotency-Key', () => {
   it('sends an Idempotency-Key header on start()', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 201,
@@ -467,7 +467,7 @@ describe('V-534.AY useCryptoCheckout — Idempotency-Key', () => {
         price_currency: 'USD',
       });
     });
-    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const init = fetchMock.mock.calls[0]?.[1];
     const headers = init?.headers as Record<string, string>;
     expect(headers['idempotency-key']).toBeTruthy();
     expect(headers['idempotency-key'].length).toBeGreaterThanOrEqual(10);
@@ -606,7 +606,7 @@ describe('V-534.AY useCryptoCheckout — Idempotency-Key', () => {
   });
 
   it('rotates the Idempotency-Key on reset()', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 201,
@@ -961,7 +961,9 @@ describe('V-534.AY useCryptoCheckout — navigation-safe recovery owner', () => 
   it('expires the credential without user interaction before the 24-hour server window and retains a fail-closed tombstone', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-05-11T00:00:00.000Z'));
-    const fetchMock = vi.fn(() => Promise.reject(new Error('response lost')));
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
+      Promise.reject(new Error('response lost')),
+    );
     vi.stubGlobal('fetch', fetchMock);
     const first = renderHook(() => useCryptoCheckout());
     await act(async () => first.result.current.start(args));
@@ -1031,7 +1033,7 @@ describe('V-534.AY useCryptoCheckout — navigation-safe recovery owner', () => 
   );
 
   it('evicts credential-free ready history before refusing a ninth scope', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 201,
@@ -1054,7 +1056,9 @@ describe('V-534.AY useCryptoCheckout — navigation-safe recovery owner', () => 
   });
 
   it('refuses a ninth unresolved scope without evicting the first', async () => {
-    const fetchMock = vi.fn(() => Promise.reject(new Error('response lost')));
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
+      Promise.reject(new Error('response lost')),
+    );
     vi.stubGlobal('fetch', fetchMock);
     for (let index = 0; index < 8; index += 1) {
       useSettingsMock.mockReturnValue({
@@ -1089,7 +1093,7 @@ describe('V-534.AY useCryptoCheckout — navigation-safe recovery owner', () => 
   });
 
   it('dispatches nothing until account identity is available', async () => {
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
     vi.stubGlobal('fetch', fetchMock);
     useSettingsMock.mockReturnValue({
       settings: { apiKey: 'sk_test', baseUrl: 'https://api.driftstack.local' },

@@ -291,7 +291,7 @@ describe('SettingsView (V-288 jsdom + RTL foundation)', () => {
         new Error('securityd denied /Users/customer/Library/Keychains token=private-key'),
       )
       .mockResolvedValueOnce();
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve(
         new Response(JSON.stringify({ git_sha: 'settings-test' }), {
           status: 200,

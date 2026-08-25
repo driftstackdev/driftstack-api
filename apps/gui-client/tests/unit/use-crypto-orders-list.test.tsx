@@ -53,7 +53,7 @@ afterEach(() => {
 
 describe('V-534.W useCryptoOrdersList — auto-fetch', () => {
   it('transitions loading → ready with the orders array', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -68,12 +68,12 @@ describe('V-534.W useCryptoOrdersList — auto-fetch', () => {
       expect(result.current.state.data.orders).toHaveLength(2);
       expect(result.current.state.data.orders[0]?.order_id).toBe('ord_1');
     }
-    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const init = fetchMock.mock.calls[0]?.[1];
     expect(init?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('omits ?limit when not specified', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -89,7 +89,7 @@ describe('V-534.W useCryptoOrdersList — auto-fetch', () => {
   });
 
   it('passes ?limit when specified', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -137,7 +137,7 @@ describe('V-534.W useCryptoOrdersList — error paths', () => {
 
 describe('V-534.W useCryptoOrdersList — manual mode', () => {
   it('manual=true starts idle and does not auto-fetch', () => {
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
     vi.stubGlobal('fetch', fetchMock);
     const { result } = renderHook(() => useCryptoOrdersList({ manual: true }));
     expect(result.current.state.kind).toBe('idle');
@@ -145,7 +145,7 @@ describe('V-534.W useCryptoOrdersList — manual mode', () => {
   });
 
   it('refetch() advances from idle → ready', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -160,7 +160,7 @@ describe('V-534.W useCryptoOrdersList — manual mode', () => {
   });
 
   it('maps problem+json diagnostics to fixed input guidance on 400', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: false,
         status: 400,

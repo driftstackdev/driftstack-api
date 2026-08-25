@@ -55,7 +55,7 @@ describe('V-534.Q useAccountMe — auto-fetch', () => {
     useSettingsMock.mockReturnValue({
       settings: { apiKey: 'sk_test', baseUrl: 'https://api.driftstack.dev///' },
     });
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -69,7 +69,7 @@ describe('V-534.Q useAccountMe — auto-fetch', () => {
   });
 
   it('sends the bearer Authorization header', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -79,7 +79,7 @@ describe('V-534.Q useAccountMe — auto-fetch', () => {
     vi.stubGlobal('fetch', fetchMock);
     renderHook(() => useAccountMe());
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const init = fetchMock.mock.calls[0]?.[1];
     const headers = init?.headers as Record<string, string> | undefined;
     expect(headers?.authorization).toBe('Bearer sk_test');
   });
@@ -132,7 +132,7 @@ describe('V-534.Q useAccountMe — error paths', () => {
 
 describe('V-534.Q useAccountMe — manual mode', () => {
   it('starts idle and does not auto-fetch when manual=true', () => {
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
     vi.stubGlobal('fetch', fetchMock);
     const { result } = renderHook(() => useAccountMe({ manual: true }));
     expect(result.current.state.kind).toBe('idle');
@@ -140,7 +140,7 @@ describe('V-534.Q useAccountMe — manual mode', () => {
   });
 
   it('refetch() advances from idle through to ready', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,

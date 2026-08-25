@@ -62,7 +62,7 @@ describe('V-534.H useAccountCost — auto-fetch on mount', () => {
   });
 
   it('includes billing_cycle in the query string when provided', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -78,7 +78,7 @@ describe('V-534.H useAccountCost — auto-fetch on mount', () => {
   });
 
   it('sends Bearer auth header with the settings apiKey', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -183,7 +183,7 @@ describe('V-534.H useAccountCost — manual + refetch', () => {
   });
 
   it('manual=true skips auto-fetch; refetch() fires the request', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,

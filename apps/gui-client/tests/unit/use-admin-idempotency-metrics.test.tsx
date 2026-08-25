@@ -27,7 +27,7 @@ afterEach(() => {
 
 describe('V-534.BA useAdminIdempotencyMetrics', () => {
   it('fetches the metrics endpoint on mount and reports ready', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -42,7 +42,7 @@ describe('V-534.BA useAdminIdempotencyMetrics', () => {
     }
     const url = fetchMock.mock.calls[0]?.[0] as string;
     expect(url).toContain('/v1/admin/crypto-orders/idempotency-metrics');
-    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const init = fetchMock.mock.calls[0]?.[1];
     expect(init?.signal).toBeInstanceOf(AbortSignal);
   });
 
@@ -67,7 +67,7 @@ describe('V-534.BA useAdminIdempotencyMetrics', () => {
   });
 
   it('refetch() re-fires the request', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -84,7 +84,7 @@ describe('V-534.BA useAdminIdempotencyMetrics', () => {
   });
 
   it('does not fetch when manual:true; refetch triggers it', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,

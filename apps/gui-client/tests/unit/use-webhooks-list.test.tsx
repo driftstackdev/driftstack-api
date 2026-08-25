@@ -63,7 +63,7 @@ describe('V-534.S useWebhooksList — auto-fetch', () => {
   });
 
   it('calls /v1/webhooks with the bearer Authorization header', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -74,7 +74,7 @@ describe('V-534.S useWebhooksList — auto-fetch', () => {
     renderHook(() => useWebhooksList());
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe('https://api.driftstack.dev/v1/webhooks');
-    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const init = fetchMock.mock.calls[0]?.[1];
     const headers = init?.headers as Record<string, string> | undefined;
     expect(headers?.authorization).toBe('Bearer sk_test');
     expect(init?.signal).toBeTruthy();
@@ -154,7 +154,7 @@ describe('V-534.S useWebhooksList — manual mode', () => {
   });
 
   it('starts idle when manual=true', () => {
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
     vi.stubGlobal('fetch', fetchMock);
     const { result } = renderHook(() => useWebhooksList({ manual: true }));
     expect(result.current.state.kind).toBe('idle');
@@ -162,7 +162,7 @@ describe('V-534.S useWebhooksList — manual mode', () => {
   });
 
   it('refetch() advances from idle to ready', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,

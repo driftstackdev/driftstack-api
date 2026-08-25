@@ -68,7 +68,7 @@ describe('V-534.O useSessionsList — auto-fetch', () => {
   });
 
   it('default limit is 25 in the query string', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -84,7 +84,7 @@ describe('V-534.O useSessionsList — auto-fetch', () => {
   });
 
   it('honours custom limit', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -145,7 +145,7 @@ describe('V-534.O useSessionsList — error paths', () => {
 
 describe('V-534.O useSessionsList — manual mode', () => {
   it('does not fetch on mount when manual=true', () => {
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
     vi.stubGlobal('fetch', fetchMock);
     const { result } = renderHook(() => useSessionsList({ manual: true }));
     expect(result.current.state.kind).toBe('idle');
@@ -153,7 +153,7 @@ describe('V-534.O useSessionsList — manual mode', () => {
   });
 
   it('refetch() fires the fetch from idle', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,

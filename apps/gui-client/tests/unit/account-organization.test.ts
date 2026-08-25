@@ -14,7 +14,7 @@ afterEach(() => {
 
 describe('fetchOrganization', () => {
   it('GETs the org endpoint with a bearer token and normalizes the response', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve(
         new Response(JSON.stringify({ folders: [{ name: 'Sales', icon: '🛒' }], tags: ['aged'] }), {
           status: 200,
@@ -80,7 +80,7 @@ describe('fetchOrganization', () => {
   });
 
   it('sends X-Driftstack-Account when an active workspace is passed (matches profile scope)', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve(new Response(JSON.stringify({ folders: [], tags: [] }), { status: 200 })),
     );
     vi.stubGlobal('fetch', fetchMock);
@@ -90,7 +90,7 @@ describe('fetchOrganization', () => {
   });
 
   it('omits X-Driftstack-Account for personal scope (null)', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve(new Response(JSON.stringify({ folders: [], tags: [] }), { status: 200 })),
     );
     vi.stubGlobal('fetch', fetchMock);
@@ -102,7 +102,9 @@ describe('fetchOrganization', () => {
 
 describe('saveOrganization', () => {
   it('PUTs the taxonomy as JSON with a bearer token', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response('{}', { status: 200 })));
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
+      Promise.resolve(new Response('{}', { status: 200 })),
+    );
     vi.stubGlobal('fetch', fetchMock);
     await saveOrganization('https://api.driftstack.dev', 'ds_key', {
       folders: [{ name: 'QA' }],
@@ -117,7 +119,9 @@ describe('saveOrganization', () => {
   });
 
   it('sends X-Driftstack-Account on the PUT when an active workspace is passed', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response('{}', { status: 200 })));
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
+      Promise.resolve(new Response('{}', { status: 200 })),
+    );
     vi.stubGlobal('fetch', fetchMock);
     await saveOrganization(
       'https://api.driftstack.dev',

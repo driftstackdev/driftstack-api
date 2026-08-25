@@ -71,7 +71,7 @@ describe('V-534.AG CryptoOrdersAdminView', () => {
   });
 
   it('refetches with status= when the status filter changes', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -92,7 +92,7 @@ describe('V-534.AG CryptoOrdersAdminView', () => {
   });
 
   it('refetches with search= when the search box changes', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -310,7 +310,7 @@ describe('V-534.AL CryptoOrdersAdminView — internal note editor', () => {
   });
 
   it('Cancel closes the modal without firing a PATCH', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
