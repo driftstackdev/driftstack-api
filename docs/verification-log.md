@@ -20043,3 +20043,36 @@ literal reusing those keys would silently make it vacuous, with nothing to annou
 **So `v485` was the only guard where a repeated prefix met a positive assertion** — the boundary is closed,
 and the answer happens to be the reassuring one. That is worth recording precisely because V-1642's lesson
 is that reassuring answers are the ones nobody re-checks: this one was checked.
+
+## V-1647 — I fixed the vacuity and left the title lying
+
+V-1643 repaired seven arms in `v485-tier-features-parity` whose regex could match the wrong tier. An hour
+later, hunting a different defect class, I looked at one of my own repaired arms:
+
+    it('CRITICAL cross-record consistency — TIER_FEATURES.concurrentSessions[tier] ===
+        TIER_CONCURRENT_SESSION_LIMITS[tier] …', () => {
+      …
+      const expected: Array<[string, number]> = [['free', 1], ['solo_manual', 1], …];
+
+⛔ **The body never reads `TIER_CONCURRENT_SESSION_LIMITS`.** It compares `TIER_FEATURES` against literals
+typed into the test file. It is a value pin wearing the title of a cross-record check — and repairing the
+regex had made it a CORRECT value pin, which is why nothing about it looked wrong.
+
+⭐ **The lesson is about where I was looking.** I spent an hour on those arms — measured the ambiguity,
+mutation-proved it, wrote the repair, proved the repair — and never read the sentence above the assertion.
+**A guard has two claims: what it asserts, and what it says it asserts.** I checked one of them very
+carefully. This is the mirror of V-1635's "correcting the entries left the header lying", and it happened
+to me in the opposite direction within the same file family.
+
+**Both arms now read both records.** Mutation-proved in the way that distinguishes them: changing ONLY
+`TIER_CONCURRENT_SESSION_LIMITS.free` from 1 to 99, leaving `TIER_FEATURES` untouched, now fails the arm —
+`expected '…concurrentSessions: 1,…' to match /concurrentSessions: 99,/`. **The literal-comparing version
+could not have noticed, because the record it names was never opened.** Restored byte-identical.
+
+⚠️ It also picks up `enterprise`, which the hardcoded list omitted: seven tiers of eight, a coverage gap
+sitting inside an arm titled "for every tier".
+
+**The generalisation is a defect class I had not named:** a test whose title asserts a relationship between
+two artefacts while its body reads only one. It is invisible to every check we run — it passes, it is not
+vacuous, its assertion is true — and the only thing wrong is that it does not test what the suite's own
+index says it tests.

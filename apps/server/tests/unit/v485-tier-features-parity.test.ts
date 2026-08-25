@@ -38,6 +38,33 @@ const COMMON = resolve(REPO_ROOT, 'packages/api-types/src/common.ts');
  * edit and `tier-features` compares the built records — but a layer that
  * CANNOT fail is worse than no layer, because it reads as coverage.
  */
+/**
+ * A flat `Record<AccountTier, …>` from common.ts, as tier -> value text.
+ *
+ * ⛔ The two arms below are TITLED "cross-record consistency —
+ * TIER_FEATURES.concurrentSessions[tier] === TIER_CONCURRENT_SESSION_LIMITS[tier]"
+ * and, until V-1647, never read the second record at all: they compared
+ * TIER_FEATURES against literals typed into this file. Repairing their regex in
+ * V-1643 fixed the vacuity and left the MISLABEL — a title claiming a property
+ * the body does not test is its own defect, and it survived an hour of my own
+ * attention because I was looking at the assertion and not at the sentence above
+ * it. They now read both records, which also picks up `enterprise`: the hardcoded
+ * list covered seven tiers of eight.
+ */
+function flatRecord(decl: string): Map<string, string> {
+  const c = read(COMMON);
+  const start = c.indexOf(`export const ${decl}`);
+  if (start < 0) throw new Error(`${decl} not found in common.ts`);
+  const open = c.indexOf('{', start);
+  const close = c.indexOf('\n};', open);
+  if (open < 0 || close < 0) throw new Error(`${decl} block not delimited as expected`);
+  const out = new Map<string, string>();
+  for (const m of c.slice(open, close).matchAll(/(\w+):\s*([^,\n]+),/g)) {
+    out.set(m[1] ?? '', (m[2] ?? '').trim());
+  }
+  return out;
+}
+
 function tierRow(tier: string): string {
   const c = read(COMMON);
   const start = c.indexOf('export const TIER_FEATURES');
@@ -196,40 +223,30 @@ describe('W732 V-485 TIER_FEATURES per-tier feature registry parity', () => {
     expect(c).toMatch(/export const TIER_FEATURES: Record<AccountTier, TierFeatures> = \{/);
   });
 
-  it('CRITICAL cross-record consistency — TIER_FEATURES.concurrentSessions[tier] === TIER_CONCURRENT_SESSION_LIMITS[tier]. The "Mirrors TIER_CONCURRENT_SESSION_LIMITS" doc-comment is the explicit cross-reference.', () => {
+  it('CRITICAL cross-record consistency — TIER_FEATURES.concurrentSessions[tier] === TIER_CONCURRENT_SESSION_LIMITS[tier]. Both records are READ; the doc-comment cross-reference is pinned beside them.', () => {
     const c = read(COMMON);
     expect(c).toMatch(/Concurrent session cap\. Mirrors TIER_CONCURRENT_SESSION_LIMITS/);
 
-    const expected: Array<[string, number]> = [
-      ['free', 1],
-      ['solo_manual', 1],
-      ['team_manual', 3],
-      ['agency_manual', 8],
-      ['api_starter', 2],
-      ['api_builder', 8],
-      ['api_scale', 24],
-    ];
-    for (const [tier, val] of expected) {
-      expect(tierRow(tier), `${tier} concurrentSessions: ${val}`).toMatch(
-        new RegExp(`concurrentSessions: ${val},`),
-      );
+    const limits = flatRecord('TIER_CONCURRENT_SESSION_LIMITS');
+    expect(limits.size, 'the limits record parsed').toBe(8);
+
+    for (const [tier, limit] of limits) {
+      expect(
+        tierRow(tier),
+        `${tier} concurrentSessions must equal its limits-record value`,
+      ).toMatch(new RegExp(`concurrentSessions: ${limit},`));
     }
   });
 
-  it('CRITICAL cross-record consistency — TIER_FEATURES.profiles[tier] === PROFILES_PER_TIER[tier]. The values mirror across both records.', () => {
-    const expected: Array<[string, string]> = [
-      ['free', '1'],
-      ['solo_manual', '10'],
-      ['team_manual', '50'],
-      ['agency_manual', '200'],
-      ['api_starter', '25'],
-      ['api_builder', '100'],
-      ['api_scale', '500'],
-      ['enterprise', "'custom'"],
-    ];
-    for (const [tier, val] of expected) {
-      const re = new RegExp(`profiles: ${val.replace(/'/g, "'")},`);
-      expect(tierRow(tier), `${tier} profiles: ${val}`).toMatch(re);
+  it('CRITICAL cross-record consistency — TIER_FEATURES.profiles[tier] === PROFILES_PER_TIER[tier]. Both records are READ rather than one being compared to literals.', () => {
+    const perTier = flatRecord('PROFILES_PER_TIER');
+    expect(perTier.size, 'the profiles record parsed').toBe(8);
+
+    for (const [tier, val] of perTier) {
+      const escaped = val.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      expect(tierRow(tier), `${tier} profiles must equal its per-tier-record value`).toMatch(
+        new RegExp(`profiles: ${escaped},`),
+      );
     }
   });
 
