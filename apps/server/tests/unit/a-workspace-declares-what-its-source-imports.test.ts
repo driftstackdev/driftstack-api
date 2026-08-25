@@ -242,4 +242,56 @@ describe('a workspace declares what its TypeScript source imports', () => {
       'these workspaces import a package their package.json never asked for',
     ).toEqual([]);
   });
+
+  it('V-1558 CRITICAL the repo\'s own scripts declare what they import. `scripts/*` runs against the ROOT manifest, and eight of them imported `playwright`, `postgres` and `sharp`, which no manifest in the repo named — they resolved only because another dependency happened to hoist them there. None is referenced by a package.json script or a workflow, so the breakage would have surfaced as "this tool is broken" long after the dependency that carried them changed. A workspace CONFIG file is judged differently and deliberately: `apps/*/vitest.config.ts` importing `vitest` is correct, because the root declares it and the root runner executes the config — that is resolution working as designed, not a phantom.', () => {
+    const scriptsDir = resolve(REPO_ROOT, 'scripts');
+    if (!existsSync(scriptsDir)) return;
+
+    const rootPkg = JSON.parse(readFileSync(resolve(REPO_ROOT, 'package.json'), 'utf8')) as Record<
+      string,
+      Record<string, string> | undefined
+    >;
+    const rootDeclared = new Set(
+      ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'].flatMap((k) =>
+        Object.keys(rootPkg[k] ?? {}),
+      ),
+    );
+
+    const scripts = readdirSync(scriptsDir)
+      .filter((n) => /\.(ts|mts|cts|mjs|cjs|js)$/.test(n))
+      .map((n) => join(scriptsDir, n));
+    // Reports an absence, so an empty directory listing would pass it clean.
+    expect(scripts.length, 'executable scripts found under scripts/').toBeGreaterThan(10);
+
+    const offenders: string[] = [];
+    let seen = 0;
+    for (const file of scripts) {
+      for (const spec of importSpecifiers(file, readFileSync(file, 'utf8'))) {
+        if (
+          spec.startsWith('.') ||
+          spec.startsWith('node:') ||
+          spec.startsWith('~') ||
+          spec.startsWith('/')
+        ) {
+          continue;
+        }
+        seen += 1;
+        const name = spec.startsWith('@')
+          ? spec.split('/').slice(0, 2).join('/')
+          : (spec.split('/')[0] ?? spec);
+        if (BUILTINS.has(name)) continue;
+        if (!rootDeclared.has(name))
+          offenders.push(`${name} (${file.slice(REPO_ROOT.length + 1)})`);
+      }
+    }
+    // Measured at 8. The floor is a non-vacuity check, not a pin: adding or
+    // removing a script must not fail this arm, but a parser that stopped
+    // reading them must.
+    expect(seen, 'bare-specifier imports parsed out of the scripts').toBeGreaterThan(4);
+    expect(
+      [...new Set(offenders)].sort(),
+      'these scripts import a package the root manifest never asked for, and work only while ' +
+        'something else keeps hoisting it',
+    ).toEqual([]);
+  });
 });

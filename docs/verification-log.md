@@ -16407,3 +16407,41 @@ Editing `pricing.astro` and restoring it byte-identical still moved its mtime, a
 
 Rebuilt the app as the guard instructs rather than back-dating the file, which would have made the guard
 green by editing the evidence it reads. 68 pages, and the gate is clean.
+
+## V-1558 — three packages the repo's own tooling uses and no manifest names
+
+V-1556 and V-1557 covered workspace `src/` and template frontmatter. The same hazard lives one directory
+up: config files and `scripts/` import packages too, and an undeclared one there breaks CI or a developer
+tool rather than a request.
+
+**Measured across 45 config and script files carrying 32 bare-specifier imports. Ten looked undeclared, and
+they split cleanly into one false positive and one real finding.**
+
+**Not a defect:** `apps/server/vitest.config.ts` and `apps/gui-client/vitest.config.ts` import `vitest`,
+which neither workspace declares. The ROOT declares it (`^4.1.10`) and the root runner executes those
+configs — that is resolution working as designed. Judging a workspace config by the workspace manifest is
+the wrong rule, and the arm below says so rather than carrying `vitest` in an allowance list.
+
+**A defect:** eight scripts import `playwright`, `postgres` and `sharp`, and **no manifest in the
+repository names any of the three** — not the root, not a workspace. They resolve only because something
+else hoists them to `node_modules/`. Verified rather than assumed: all three resolve today, at 1.60.0,
+3.4.9 and 0.35.3.
+
+None of the eight is referenced by a `package.json` script or a workflow, which is what makes this quiet.
+The day a transitive dependency stops carrying `sharp`, the failure reads "the icon generator is broken",
+not "a dependency vanished", and nobody connects it to a lockfile change weeks earlier.
+
+Declared in the root `devDependencies` at the versions already installed. **This adds no install weight** —
+the packages are being fetched today regardless; the change names what is already there. `apps/server`
+already declares its own `postgres` for the driver, so only the tooling copy was unnamed.
+
+The new arm judges `scripts/*` against the ROOT manifest, which is the manifest they actually run under,
+and pins the distinction from workspace configs in its title rather than in a list. Proved by removing
+`sharp` again: it reds with `sharp (scripts/gen-apple-touch-icon.mjs)`.
+
+**A wrong floor, caught by the count.** The arm's non-vacuity bound was written as `>10` bare-specifier
+imports from a figure that covered configs AND scripts; `scripts/` alone has 8, so it failed against
+correct code on its first run. Corrected to a bound that is a non-vacuity check rather than a pin — adding
+or removing a script must not fail it, but a parser that stopped reading them must — and the reasoning is
+in the code beside the number, since a bare `>4` is exactly the kind of unexplained constant V-1536 found
+truncating a scan.
