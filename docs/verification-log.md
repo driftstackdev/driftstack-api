@@ -19221,3 +19221,15 @@ declares. It does not measure whether any particular generator inlines or names 
 `datamodel-codegen` emits a model per component regardless, which is why the hand-written Python resources
 are unaffected. The claim is about the document and about a client generated from it, not about our own
 three SDKs.
+
+**Sharpened afterwards: none of the thirty-nine is dead, so the fix is uniform.** Asking which orphans
+have a matching `*Schema` handed to a route split them 32 inlined / 7 apparently unused — and **all seven
+were my naming assumption, not the code.** Six are used nested (`data: z.array(ApiKeySchema)`,
+`intents: z.array(AgentIntentSchema)`), which my `schema: XSchema` pattern could not see; the seventh,
+`AdminAccount`, is registered as `AdminAccountResponseSchema` — itself an alias of `AccountSchema` — and
+appears in two route responses. So the component-to-schema name mapping is not `X` → `XSchema`, and every
+one of the thirty-nine corresponds to a schema the routes actually use.
+
+That matters for W-10 because it removes a whole branch: there is nothing to DELETE, only shapes to tag.
+The fix is one pattern applied thirty-nine times — `Schema.openapi('Name')` with the route handed the
+tagged object — and its blast radius is exactly the operations that currently inline those shapes.
