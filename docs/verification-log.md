@@ -19838,3 +19838,37 @@ mid-gate, surfacing as six failures across `db-team-invite-single-use` and
 The migration-count guard named it instead, for the second time today and the first time about someone
 else's code. **After a peer lands a migration, run `db:migrate` before trusting any `db-*` red.** The
 hazard did not exist until both agents had real databases attached this afternoon.
+
+## V-1642 — four instruments in one day, each narrower than the question it was asked
+
+Recorded together because separately each looked like a small mistake, and together they are one failure
+mode with a cheap check. **Every one of these returned a confident number. None of them errored.**
+
+| Asked                                  | Measured                                    | Reported                         | Truth                                   |
+| -------------------------------------- | ------------------------------------------- | -------------------------------- | --------------------------------------- |
+| Do the SDKs cover this route?          | Do the SDK **resource names** mention it?   | `/v1/account/mfa/disable` absent | Present, as a sibling path              |
+| Which tests are fetch mocks?           | Does the mock **body** build a `Response`?  | 14 across 4 files                | 79 — two files use helpers              |
+| Which guards can detect a stale entry? | Does the file match **my** staleness idiom? | 1 unprotected                    | 0 — the last uses a count pin           |
+| Is anything stranded in the stash?     | Is `a-simulator-…` in HEAD?                 | 244 lines lost                   | Nothing lost — I invented that filename |
+| Does the test suite typecheck?         | `tsconfig.json`, which **excludes** tests   | Clean                            | 257 errors across 76 files              |
+
+⛔ **The shape is always the same: the instrument answers a NARROWER question than the one asked, and the
+narrower question has an answer, so nothing looks wrong.** A resource name is not a path. A mock's body is
+not its use. My idiom is not the property. A truncated path is not a path. A tsconfig that excludes tests
+does not typecheck tests.
+
+⭐ **The cheap check that catches all five is the same one: make the instrument find something you already
+know is there.** The SDK re-census got a positive control and it paid immediately — five known-present
+routes found, and the one zero was my own bad guess rather than a hole. The cast sweep got one and found
+the known `room_name` defect in the pre-fix commit, which is the only reason its clean result on
+`apps/server/src` means anything. The stash inventory needed nothing cleverer than listing all nine files
+instead of testing one guessed name.
+
+⚠️ **And the failure mode is worse when the narrow answer is the REASSURING one.** Four of the five above
+reported "fine" — clean census, small blast radius, one unprotected guard, typecheck clean. A wrong number
+that says _there is a problem_ gets investigated. A wrong number that says _there is no problem_ gets
+believed and closed. `115 skipped` was the same thing at the largest scale we hit today: an instrument
+reporting its own boundary honestly, read as terrain.
+
+**The rule, stated so it survives the person who learned it: before trusting a zero, make the instrument
+produce a one.**
