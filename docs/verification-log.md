@@ -15990,3 +15990,44 @@ hid three admin mutations for as long as it did.
 Proved both ways: a throwaway `POST /v1/admin/probe-unaudited` added to `webhooks.ts` — a file the old
 roster never opened — reds naming the path; adding an audit call to a recorded entry reds with "now writes
 an audit row".
+
+## V-1548 — correcting V-1547: the finding was already found, by a file I did not look for
+
+V-1547 presented three unaudited admin OAuth-client mutations as a discovery. **They were already found,
+already measured and already recorded** by `admin-audit-route-coverage-invariant` (V-1007), which scans the
+whole admin surface, states "33 mutations, of which THREE audit nothing: the admin OAuth-client routes",
+carries the identical set as `UNAUDITED_MUTATIONS`, and gives the same reason — the closed
+`admin_audit_action` enum makes auditing them a migration, therefore a decision. Its header even names the
+worst read: `GET /v1/admin/crypto-orders.csv`, a bulk export of up to 1000 rows of account_id, payment_id
+and customer notes.
+
+**This was a process failure with a rule already written for it.** The standing instruction is to grep the
+topic and read every plausible hit BEFORE auditing a surface, never dismissing one by filename. There are
+fifteen files matching `admin.*audit` in that directory. I opened one, fixed its scope, and wrote up its
+contents as new. The three near-identical names —
+`every-admin-mutation-writes-an-audit-row`, `every-mutating-admin-route-writes-an-audit-row`,
+`admin-audit-route-coverage-invariant` — are exactly the shape the rule exists for.
+
+### What survives from V-1547, stated precisely
+
+- **The scope widening is real.** `every-admin-mutation-writes-an-audit-row` decided membership by path
+  while listing files by name, so it could not see seven `/v1/admin/` routes. That is fixed and it is an
+  improvement independent of who found the gap.
+- **The register correction is right, and was not new either.** 33 mutating and 35 GET are exactly V-1007's
+  figures. The correction stands; the framing that it took a fresh measurement does not.
+- **The framing was wrong**, and the log now says so where the claim was made.
+
+### The duplication V-1547 created, and what closes it
+
+Recording the same three routes in a second file was itself the fault this arc keeps finding: two copies of
+one list drift, and here the drift has a date attached — whichever file is edited when the migration lands
+leaves the other asserting a gap that has closed, in a compliance-relevant claim.
+
+So the two sets are now pinned EQUAL, by parsing the sibling's declaration rather than trusting them to be
+edited together. Proved both ways: striking `rotate-secret` from the sibling reds with "the two
+recorded-unaudited lists have diverged", and renaming its constant reds on the parse with the rename named.
+The second matters as much as the first — a mirror that silently stops finding its source is a mirror that
+passes forever.
+
+**A sibling with a near-identical name is not prior art you can skip; it is the most likely place the
+answer already is.** Three files here differ by word order alone.

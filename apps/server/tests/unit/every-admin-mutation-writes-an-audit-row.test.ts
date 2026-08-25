@@ -115,6 +115,15 @@ const isAdmin = (r: Route): boolean => r.path.startsWith('/v1/admin/');
  * sit here rather than being quietly wired to an existing action that means
  * something else.
  *
+ * V-1548 — NOT this file's discovery, and the record is corrected here rather
+ * than left flattering. `admin-audit-route-coverage-invariant` (V-1007) found
+ * these three first, scans the whole admin surface, and carries the identical
+ * set as `UNAUDITED_MUTATIONS` with the same closed-enum reasoning. What this
+ * file adds is that the scan above no longer stops at a filename.
+ *
+ * Two copies of one list drift, so the arm below pins this set EQUAL to that
+ * file's rather than trusting them to be edited together.
+ *
  * Checked in BOTH directions below: a new unaudited admin mutation fails, and an
  * entry here that starts auditing fails too, so the list cannot outlive the gap.
  */
@@ -188,5 +197,22 @@ describe('V-820 every admin mutation writes an audit row', () => {
       nowAudited,
       'recorded as unaudited but now writes an audit row — strike it so the list keeps meaning what it says',
     ).toEqual([]);
+  });
+
+  it("V-1548 CRITICAL this file's recorded-unaudited set is the same set admin-audit-route-coverage-invariant carries. That file owns the finding and scans the whole admin surface; this one duplicated its list while widening a narrower scan. Two lists of the same three routes drift — one gets struck when the migration lands and the other keeps asserting a gap that closed — so they are pinned equal by reading the sibling's source rather than by hoping. If that file renames its constant, this fails and points at the rename, which is the cheap failure compared to a stale compliance claim.", () => {
+    const sibling = readFileSync(
+      resolve(HERE, 'admin-audit-route-coverage-invariant.test.ts'),
+      'utf8',
+    );
+    const block = /const UNAUDITED_MUTATIONS: ReadonlySet<string> = new Set\(\[([\s\S]*?)\]\)/.exec(
+      sibling,
+    );
+    expect(block, 'the sibling still declares UNAUDITED_MUTATIONS as a literal set').not.toBeNull();
+    const theirs = [...(block?.[1] ?? '').matchAll(/'([^']+)'/g)].map((m) => m[1] ?? '').sort();
+    expect(theirs.length, 'entries parsed from the sibling').toBeGreaterThan(0);
+    expect(
+      [...KNOWN_UNAUDITED_ADMIN_MUTATIONS].sort(),
+      'the two recorded-unaudited lists have diverged — reconcile them in one commit',
+    ).toEqual(theirs);
   });
 });
