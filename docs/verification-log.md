@@ -18888,3 +18888,47 @@ twenty-ninth fails instead of joining a silent pile — and that file's own head
 without justification is how a real gap hides among deliberate ones. I cannot supply twenty-eight
 justifications I do not have. Recorded in `docs/internal/OPEN-ITEMS.md` as owed, with the enumerated set,
 for the agent that owns the SDKs.
+
+## V-1619 — three endpoints the docs teach and the published document does not contain
+
+`a-route-in-neither-the-spec-nor-the-docs-is-a-decision` closes the case of a route nobody wrote down. Its
+central arm reads: **every route is in the spec, OR in the docs, OR in this list with a reason.** The
+disjunction is the gap. A route that is documented satisfies it and is never asked whether it is
+_published_ — so docs-presence excuses spec-absence, permanently and silently.
+
+Three endpoints sit in exactly that space. Each is registered, each is taught to customers, none appears
+in `openapi.json`, and none is on the adjudication list:
+
+    /v1/whoami                    lib/app.ts:1834          reference/scopes.md:116
+    /v1/status/stream             routes/status-stream.ts:65   api/status.md
+    /v1/oauth/authorize/complete  routes/oauth.ts:258      api/oauth.md
+
+**What it costs.** The API reference customers read is generated from that document, and so are the Python
+models; the hand-written SDKs follow it by habit. So a customer is told in the scopes reference to call
+`GET /v1/whoami`, and then finds it in neither the reference nor any client library. `/v1/status/stream`
+is server-sent events, which OpenAPI models poorly and is a plausible deliberate omission — but plausible
+is not recorded, and the file built to record exactly this kind of decision never sees it.
+
+Not all three are the same. `/v1/whoami` is an ordinary authenticated GET with no reason not to publish;
+the other two have arguable reasons that nobody has written down. Which is the point: **the guard cannot
+distinguish them because it never asks the question.**
+
+**Three instrument corrections on the way to a three-item answer, all mine, all the same shape.** The first
+pass compared documented paths against the spec and reported **48** — because it normalised `{id}` and not
+`:id`, so `/v1/profiles/:id` failed to match `/v1/profiles/{id}`. Fixing the normaliser gave 5. Of those,
+`/v1/models` is **Anthropic's** endpoint quoted in `api/byok-anthropic.md` ("Calls Anthropic's
+authenticated `GET /v1/models?limit=1`") and `/v1/legal/*` is a wildcard in prose. And `/v1/whoami` had
+been invisible to an earlier sweep of mine entirely, because that sweep read `apps/server/src/routes` and
+this route is registered in `lib/app.ts`.
+
+Forty-eight, then five, then three. Each cut came from widening a boundary I had not stated, which is the
+rule in `OPEN-ITEMS.md` M-6, and the reason the first number never reached anyone.
+
+**Related, and checked because it was cheap: the docs do not lie about SDK samples.** Every
+`client.<resource>.<method>()` in a fenced code block calls a method that exists in the SDK **of that
+block's language** — 148 distinct samples, zero missing. A first pass reported 40 missing by checking Go
+and Python samples against the TypeScript SDK's method names.
+
+Not fixed here: the arm to add is "a route in the docs is also in the spec, or carries a reason", and it
+would fail immediately on these three, so it needs their three reasons from an owner rather than my guess.
+Recorded in `docs/internal/OPEN-ITEMS.md`.
