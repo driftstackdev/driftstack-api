@@ -18276,3 +18276,45 @@ The two outstanding failures are unchanged from the previous batch and still not
 `gui-client-views-ProxiesView-content-parity` and `the-gui-does-not-blame-a-shipped-server-for-a-failed-probe`
 freeze `ProxiesView.tsx`, rewritten by `4056443ab` without its pins moving. This batch touched two test
 files and no source, so `verify-suite` remains red for that reason alone.
+
+## V-1602 — six more mint sites for a credential that no redactor can catch
+
+V-1601 was the seventh instance of a guard whose scan is narrower than its claim, so rather than wait for
+an eighth this batch swept for the shape: unit guards making a universal claim in their header while
+reading exactly one source file. Fifteen candidates, most of them legitimately single-file — `cors-posture`
+is about `bootstrap.ts` by nature, `every-account-scoped-table-declares-its-foreign-key` reads `schema.ts`
+because that IS every table.
+
+**`an-unredactable-auth-token-is-never-logged` was the sharp one, and it deserves credit before the
+finding.** Its author wrote the limitation down: "SCOPE: this checks the mint sites' own file. A token
+copied into another module and logged there is out of reach of a textual scan, and is called out here
+rather than left implied." That is the honest practice this log keeps asking for, and it is why the gap
+was findable in a minute rather than a morning.
+
+**The gap is not the one the note anticipated.** It guards against a token COPIED elsewhere. What is
+actually elsewhere is six more MINT SITES: `status-subscribers.ts` mints five (confirm and unsubscribe
+tokens) and `team-members.ts` one (the invite token), all through the same unprefixed
+`generateAuthToken`. The header said "5 mint sites in auth-flows", which was true of that file and read as
+true of the credential class.
+
+These are the tokens `redact-url.ts` states outright it cannot scrub — bare base64url, nothing to pattern
+on — so the whole protection is that the plaintext never reaches a logger. One in a log line is account
+takeover for anyone who can read logs.
+
+**Nothing is wrong there, and the reason is the fragile kind.** Neither file makes a single logger call,
+so there is nothing for a token to ride out on. That is a fact about today, not a property either file
+asserts. One `logger.info({ plaintext })` on the subscriber confirm path and the credential is in the log
+stream. The file set is now derived from the mint call rather than named, so a fourth minting service is
+covered the day it is written — and the count of minting files that log nothing is asserted at two, so the
+day one of them gains a logger is the day this guard starts doing work there rather than a day the shape
+of the coverage changes unnoticed.
+
+Proven on both halves: adding `this.logger.info({ plaintext })` to `status-subscribers` flags
+`status-subscribers.ts:102` — a file the guard could not see an hour ago — and reds the zero-logger count
+too, which is that assertion working rather than a side effect. The same edit in `auth-flows` still flags
+`auth-flows.ts:739`, so widening did not cost the original coverage. Restores byte-identical.
+
+### Concurrency
+
+The two outstanding failures are unchanged and still not this work: `ProxiesView.tsx` was rewritten by
+`4056443ab` without its content-parity pins moving. This batch touched one test file and no source.
