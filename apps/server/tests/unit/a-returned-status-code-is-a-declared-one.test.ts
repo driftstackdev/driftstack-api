@@ -633,14 +633,14 @@ describe('a returned status code is a declared one', () => {
     ).toEqual([]);
   });
 
-  it('V-1566 CRITICAL a request-schema field typed as a bare z.string() is a DELEGATION POINT — the schema declines to check its shape, so something downstream must. There are exactly two on the whole surface, `admin_id` and `target_id` on the audit-log query, and they are bare deliberately: each accepts either a raw UUID or a prefixed id, which one zod type cannot express. Both are also precisely where V-1565 found a validator that admitted 36 dashes and handed them to a Postgres uuid column as a 500. Every other request field carries a length, a regex, an enum or a format, and PG rejects what the schema lets through. A third bare field means a third delegation, and the delegate is the part that was wrong last time.', () => {
-    const ADMIN_TYPES = resolve(REPO_ROOT, 'packages/api-types/src');
-    const bare = /^\s*([a-z_]\w*):\s*z\.string\(\)(?:\.optional\(\))?\s*,\s*$/;
+  it('V-1566 CRITICAL a request-schema field typed as a bare z.string() is a DELEGATION POINT — the schema declines to check its shape, so something downstream must. V-1568 corrects the scope this arm itself claimed: it said exactly two on the whole surface while scanning api-types ONLY, and four more are declared inline in route files. Six in total, each bare for a stated reason — the audit-log pair accept either a raw UUID or a prefixed id, which one zod type cannot express; `keep` and `active_only` are confirmation tokens whose refusal message is the contract, narrowed to a type rather than a literal on purpose; `tabId` and `last_fill_text` are free text. Both are also precisely where V-1565 found a validator that admitted 36 dashes and handed them to a Postgres uuid column as a 500. Every other request field carries a length, a regex, an enum or a format, and PG rejects what the schema lets through. A third bare field means a third delegation, and the delegate is the part that was wrong last time.', () => {
+    const TYPES_DIR = resolve(REPO_ROOT, 'packages/api-types/src');
+    const bare = /^\s*([a-z_]\w*):\s*z\.string\(\)(?:\.optional\(\)|\.nullable\(\))*\s*,?\s*$/;
     const found: string[] = [];
     let schemas = 0;
-    for (const entry of readdirSync(ADMIN_TYPES)) {
+    for (const entry of readdirSync(TYPES_DIR)) {
       if (!entry.endsWith('.ts')) continue;
-      const lines = codeOf(resolve(ADMIN_TYPES, entry)).split('\n');
+      const lines = codeOf(resolve(TYPES_DIR, entry)).split('\n');
       let current: string | null = null;
       for (const line of lines) {
         const opened = /export const (\w*(?:Query|Request|Body|Params)\w*)\s*=\s*z\.object\(/.exec(
@@ -662,11 +662,46 @@ describe('a returned status code is a declared one', () => {
     }
 
     // A parse that matched no schemas would report no delegation points.
-    expect(schemas, 'request/query/body/params schemas parsed from api-types').toBeGreaterThan(30);
+    // Route files declare schemas inline, which the api-types walk cannot see —
+    // the scope gap this arm carried while claiming the whole surface.
+    for (const entry of readdirSync(ROUTES_DIR)) {
+      if (!entry.endsWith('.ts')) continue;
+      const lines = codeOf(resolve(ROUTES_DIR, entry)).split('\n');
+      let current: string | null = null;
+      let depth = 0;
+      for (const line of lines) {
+        const opened = /(?:const (\w+)\s*=\s*)?z\.object\(\{/.exec(line);
+        if (opened) {
+          current = opened[1] ?? `${entry}:<inline>`;
+          depth = 1;
+          schemas += 1;
+          continue;
+        }
+        if (current === null) continue;
+        depth += (line.match(/\{/g) ?? []).length - (line.match(/\}/g) ?? []).length;
+        if (depth <= 0) {
+          current = null;
+          continue;
+        }
+        const m = bare.exec(line);
+        if (m) found.push(`${current}.${m[1] ?? ''}`);
+      }
+    }
+
+    expect(schemas, 'schemas parsed from api-types and the route files').toBeGreaterThan(60);
     expect(
       found.sort(),
       'a request field whose shape the schema does not check — confirm something downstream does, ' +
-        'the way maybeUuidFromInput does for these two, then add it here',
-    ).toEqual(['ListAuditLogQuerySchema.admin_id', 'ListAuditLogQuerySchema.target_id']);
+        'the way maybeUuidFromInput does for the audit-log pair, then add it here',
+    ).toEqual(
+      [
+        'BulkRevokeQuerySchema.keep',
+        'ListAuditLogQuerySchema.admin_id',
+        'ListAuditLogQuerySchema.target_id',
+        'ListOAuthLinksQuerySchema.active_only',
+        'NavigateHistoryBodySchema.tabId',
+        'probeSignatureBodySchema.last_fill_text',
+      ].sort(),
+    );
   });
 });

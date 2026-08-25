@@ -16775,3 +16775,44 @@ resolves to `Iso8601Schema`, used **75 times** across ten api-types modules. If 
 correction applied as routine rather than as a lesson. The result V-1566 claimed is now supported by a scan
 that can see the code it was claiming about — which is the entire content of this batch, and worth a
 number: the blind version found 0 of 6.
+
+## V-1568 — the delegation-point inventory was api-types only while claiming the whole surface
+
+V-1566 pinned the fields whose shape a request schema declines to check, and said "there are exactly two on
+the whole surface". Its scan read `packages/api-types` alone. V-1530 had already established that route
+files declare schemas inline — the two `auth-oauth-client` bodies and the `oauth.ts` revoke body are named
+there — so the claim was broader than the evidence, the same fault V-1567 corrected one batch earlier in a
+different scan.
+
+**Six, not two.** The four the api-types walk could not see:
+
+```
+BulkRevokeQuerySchema.keep                  account-web-sessions.ts
+ListOAuthLinksQuerySchema.active_only       account-oauth-links.ts
+NavigateHistoryBodySchema.tabId             agent-sessions.ts
+probeSignatureBodySchema.last_fill_text     internal-atlas-priority.ts
+```
+
+**All four are safe, each checked rather than counted.** `keep` is lowercased and compared as a
+confirmation token — its own comment explains that `z.string()` rather than `z.literal('current')` is
+deliberate, so the refusal message naming the exact parameter keeps being what a caller sees, and that it
+"narrows the TYPE only" after a repeated query key once produced a 500. `active_only` is compared to a
+string with the same array-arity reasoning recorded above it. `tabId` ships gated-inert per V-1479, and
+`last_fill_text` is free text on an internal route. None reaches a typed column, which is what separates
+them from the audit-log pair V-1565 fixed.
+
+The arm now walks both api-types and the route files and pins the exact set of six, so a new inline
+delegation fails as loudly as a new named one. Proved both ways against a ROUTE-LOCAL schema specifically —
+adding a bare field to `BulkRevokeQuerySchema` reds naming it, and giving `keep` a `.max(32)` reds too,
+because the recorded set has stopped being true.
+
+### The failure rule 5 exists for, hit exactly as described
+
+The first attempt wrote `arm's own scope` into a title that is SINGLE-quoted. Vitest reported
+**"Tests no tests"** — not a failure — and the `it(` count still read 13, matching HEAD, so the count check
+passed while the file did not parse. The esbuild line was the only signal: `Expected ")" but found "s"`.
+
+Two things worth keeping from that. The `it(` count is necessary and not sufficient: it cannot distinguish
+a file that lost an arm from a file that lost the ability to be read. And an earlier attempt in the same
+batch asserted against text prettier had reformatted, failed its own assertion, and wrote nothing — which
+is the safe way to fail, and the reason there was no half-edited file to untangle.
