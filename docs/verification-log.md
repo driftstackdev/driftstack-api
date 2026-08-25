@@ -20968,3 +20968,43 @@ the headroom is known, and the only missing input is somebody deciding that CI s
 ⚠️ Boundary: the 92.29/90.74/90.94/81.74 figures are quoted from V-1002's note, **not re-measured here** —
 re-running coverage with the exclusion lifted would cost a full instrumented suite run and would not change
 what the decision needs.
+
+## V-1670 — the compensating guard is coarser than the risk it compensates for
+
+V-1669 found that the coverage gate excludes `apps/server/src/db/`. This closes the chain, and the answer
+is structural rather than an oversight by anyone.
+
+**Three facts, each individually defensible, landing in the same place:**
+
+1. `vitest.config.ts` leaves `apps/server/src/db/**` out of coverage, on grounds its own comment records as
+   expired.
+2. ⛔ **`verify-suite --all` is CI job `build-test`, which does not run the e2e job at all** — so the
+   directory the coverage gate declines to measure is also the directory the unit gate never reaches. I had
+   only found the first of these.
+3. **A compensating guard exists** — `every-drizzle-repo-is-driven-against-a-real-postgres` — and its header
+   states the situation exactly: _"measured by neither gate, so this asserts the one thing that still holds
+   it: every repo class is constructed by an integration test."_
+
+⭐ **And that is the gap, precisely: the compensating guard asserts CLASS CONSTRUCTION, not line
+execution.** `DrizzleAtlasPriorityEventsRepo` **is** constructed by `atlas-priority-events-end-to-end` — so
+the guard was satisfied, correctly, by its own terms — while `listRecent`'s limit clamp inside that class
+was never executed by anything. **A defensive line inside a constructed class is measured by nothing at
+all.** That is the complete causal story for V-1667, and it is not that anyone was careless: it is that the
+substitute for coverage operates one granularity coarser than the thing coverage would have caught.
+
+⚠️ **Two corrections to what I told the owner in the memo.**
+
+**"One line of config" was wrong.** Removing the exclusion fails **three guards** that pin the config —
+`a-gate-that-does-not-name-its-blind-spot-reads-as-total`, `a-workspace-declares-what-its-source-imports`,
+and `workspace-vitest-config-content-parity`. Measured by removing the line and running the suite: 3 failed,
+3209 passed. It is a coordinated change, not a one-liner — and the first of those guards exists precisely to
+stop a gate quietly widening its blind spot, so its failing is the system working.
+
+**And the per-line enumeration I set out to produce does not exist.** The instrumented run wrote no
+`coverage-final.json`; vitest cleans `coverage/` at start and my reporter flags did not produce the
+artifact. ⚠️ **A side effect worth stating: that cleaning destroyed the pre-existing coverage directory**
+(dated a day earlier). It was untracked and regenerable, so no repo impact — but I removed a workspace
+artifact while probing, and would not have noticed if I had not gone looking for the file.
+
+**So the finding stands on reading, not on a coverage measurement**: the chain is established from the
+config, the CI job, and the compensating guard's own stated scope.
