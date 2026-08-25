@@ -86,7 +86,7 @@ describe('profiles-meta store', () => {
   });
 
   it('corrupt entries degrade to defaults; corrupt root degrades to empty', async () => {
-    seed({ ok: { folder: 'F', tags: ['t'], note: 'n' }, bad: 42, worse: null });
+    seed({ ok: { folder: 'F', tags: ['t'], note: 'n', icon: '' }, bad: 42, worse: null });
     const all = await loadProfilesMeta();
     expect(all['ok']).toEqual({ folder: 'F', tags: ['t'], note: 'n', icon: '' });
     expect(all['bad']).toEqual({ folder: '', tags: [], note: '', icon: '' });
@@ -168,7 +168,7 @@ describe('profiles-meta store', () => {
 
   it('seedMetaFromServer: seeds only no-local-entry profiles with server organization; local wins conflicts; empty server org skipped', async () => {
     const { seedMetaFromServer } = await import('../../src/lib/profiles-meta');
-    const local = { kept: { folder: 'Local', tags: ['mine'], note: 'n' } };
+    const local = { kept: { folder: 'Local', tags: ['mine'], note: 'n', icon: '' } };
     const { map, changed } = seedMetaFromServer(local, [
       // Local entry exists — server value must NOT overwrite (local wins).
       { id: 'kept', folder: 'Server', tags: ['theirs'] },
@@ -180,7 +180,7 @@ describe('profiles-meta store', () => {
       { id: 'old-server' },
     ]);
     expect(changed).toBe(true);
-    expect(map['kept']).toEqual({ folder: 'Local', tags: ['mine'], note: 'n' });
+    expect(map['kept']).toEqual({ folder: 'Local', tags: ['mine'], note: 'n', icon: '' });
     expect(map['new']).toEqual({ folder: 'Synced', tags: ['remote'], note: '', icon: '' });
     expect(map['plain']).toBeUndefined();
     expect(map['old-server']).toBeUndefined();
@@ -207,8 +207,8 @@ describe('profiles-meta store', () => {
     const { persistProfilesMeta } = await import('../../src/lib/profiles-meta');
     await persistProfilesMeta(
       {
-        live: { folder: 'A', tags: [], note: '' },
-        gone: { folder: 'B', tags: [], note: '' },
+        live: { folder: 'A', tags: [], note: '', icon: '' },
+        gone: { folder: 'B', tags: [], note: '', icon: '' },
       },
       ['live'],
     );
@@ -220,10 +220,10 @@ describe('profiles-meta store', () => {
   it('folderList: distinct, sorted, unfiled excluded', () => {
     expect(
       folderList({
-        a: { folder: 'Zeta', tags: [], note: '' },
-        b: { folder: 'Alpha', tags: [], note: '' },
-        c: { folder: 'Alpha', tags: [], note: '' },
-        d: { folder: '', tags: [], note: '' },
+        a: { folder: 'Zeta', tags: [], note: '', icon: '' },
+        b: { folder: 'Alpha', tags: [], note: '', icon: '' },
+        c: { folder: 'Alpha', tags: [], note: '', icon: '' },
+        d: { folder: '', tags: [], note: '', icon: '' },
       }),
     ).toEqual(['Alpha', 'Zeta']);
   });
@@ -232,11 +232,11 @@ describe('profiles-meta store', () => {
     const { aggregateTags } = await import('../../src/lib/profiles-meta');
     expect(
       aggregateTags({
-        a: { folder: '', tags: ['shop', 'eu'], note: '' },
-        b: { folder: '', tags: ['shop', 'us'], note: '' },
-        c: { folder: '', tags: ['shop'], note: '' },
-        d: { folder: '', tags: ['eu', ''], note: '' }, // empty tag skipped
-        e: { folder: '', tags: [], note: '' },
+        a: { folder: '', tags: ['shop', 'eu'], note: '', icon: '' },
+        b: { folder: '', tags: ['shop', 'us'], note: '', icon: '' },
+        c: { folder: '', tags: ['shop'], note: '', icon: '' },
+        d: { folder: '', tags: ['eu', ''], note: '', icon: '' }, // empty tag skipped
+        e: { folder: '', tags: [], note: '', icon: '' },
       }),
     ).toEqual([
       { tag: 'shop', count: 3 },
