@@ -34,9 +34,38 @@
 //
 // Two measurements say an mtime rule is the wrong instrument here. First, all three
 // packages whose `src` mtime currently exceeds their `dist` mtime are false alarms:
-// a fresh `tsc` build of `api-types` into a scratch directory is byte-identical to
-// the committed `dist` across all 24 emitted files, and the newest `src` mtime is a
-// `cp` that restored a mutation to its original bytes. `behavioural-simulation` and
+// a fresh `tsc` build of `api-types` into a scratch directory reproduces the `dist`
+// ON DISK, and the newest `src` mtime is a `cp` that restored a mutation to its
+// original bytes. On disk rather than committed: `dist/` is gitignored and carries
+// zero tracked files, so what the server loads is whatever the last local build
+// left, which is exactly why the comparison is worth making.
+//
+// V-1594 — RE-MEASURED, and the word "byte-identical" this note used to carry does
+// not survive the re-measurement. It is true of the thing that matters and false of
+// the artefact as a whole, which is worth stating precisely because someone
+// repeating the check and seeing fourteen differing files would read drift that is
+// not there. Today, building into a scratch `--outDir`:
+//
+//   • emitted `.js`   — 0 differences. The code the server executes is identical.
+//   • emitted `.d.ts` — 24 files, 14 of them differing in BYTES and none in meaning.
+//     Every difference is ordering: properties emitted in a different sequence, and
+//     union members likewise (`admin.d.ts` moves `webhook_delivery.replayed` to the
+//     front of a 32-member union whose membership is unchanged). Verified as a token
+//     multiset per file rather than by reading the diffs, because a reordered union
+//     is indistinguishable from an edited one at a glance.
+//   • `.map` and `.tsbuildinfo` — expected to differ. Sourcemaps embed the output
+//     path, so a scratch `outDir` guarantees it; the buildinfo is incremental state.
+//
+// So the scope decision stands on "semantically identical", not on byte equality.
+//
+// V-1595 — a third hazard belongs here, distinct from the two above because it bites
+// the person checking rather than the test. Both of those are about assertions
+// reading a stale artefact. This one is about MUTATION PROOFS: editing
+// `packages/api-types/src` and re-running proves nothing, because the running server
+// and every e2e spec load the built package. It cost two inert mutations that each
+// looked like a guard correctly holding, and the only tell was an error message
+// returning with identical text. A mutation aimed at a package must rebuild it or
+// aim at the server source instead. `behavioural-simulation` and
 // `recipe-library` are the same shape — a checkout or touch, with `dist` built after
 // the last real source commit. An mtime guard over packages would have opened this
 // session red, three times, with nothing wrong.

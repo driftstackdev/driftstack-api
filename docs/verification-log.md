@@ -17915,7 +17915,7 @@ both call sites.
 Full suite 3076 files / 30996 tests, green; e2e 227 passed against a disposable migrated Postgres,
 dropped afterwards.
 
-## V-1593 — the third door, and two mutations that proved nothing
+## V-1595 — the third door, and two mutations that proved nothing
 
 Path parameters produced six findings and query parameters one, so the remaining place an id arrives is
 the request body. Sixteen body properties across the surface are named like ids.
@@ -17952,3 +17952,55 @@ sweep, each mutation-proven against a defect the repository actually had.
 
 Full suite 3076 files / 30996 tests, green; e2e 228 passed against a disposable migrated Postgres,
 dropped afterwards; `verify-suite` OK. Playwright moves 227 → 228 over 39 spec files.
+
+## V-1594 — re-measuring the claim a scope decision rests on
+
+V-1595 lost two mutations to a package consumed as `dist`. `dist-reading-suites-have-fresh-artifacts`
+already knows that hazard — V-951 was bitten by it and V-954 recorded the decision to leave
+`packages/*/dist` out of scope. The decision is sound and its load-bearing invariant is pinned: `pretest`
+runs `npm run build --workspaces` before `vitest run`, verified still present. What had rotted is the
+evidence quoted beside it.
+
+**"Byte-identical across all 24 emitted files" is not true today, and the correction matters more than it
+sounds.** Building `api-types` into a scratch `--outDir` and comparing:
+
+```
+emitted .js      0 differences
+emitted .d.ts    24 files, 14 differing in bytes, 0 differing in meaning
+.map             differ — sourcemaps embed the output path
+.tsbuildinfo     present only on disk — incremental state
+```
+
+Every `.d.ts` difference is ordering: properties in a different sequence, and union members likewise —
+`admin.d.ts` moves `webhook_delivery.replayed` to the front of a 32-member union whose membership is
+unchanged. That was verified as a per-file token multiset rather than by reading diffs, because a
+reordered union and an edited one look identical at a glance, and my first attempt using sorted LINES
+reported nine files as genuinely different when none were.
+
+So the decision stands on **semantic** identity, not byte equality. The distinction is worth the words:
+anyone repeating the check, seeing fourteen differing files, would read drift that is not there and
+either re-derive the whole argument or act on a false alarm.
+
+**A second imprecision, in the original note and then in my correction of it.** Both said "the committed
+`dist`". `dist/` is gitignored and carries zero tracked files. What the server loads is whatever the last
+local build left, which is exactly why comparing it against a fresh build is worth doing at all — and
+calling it committed hides that.
+
+**The mutation hazard is now recorded where it will be found.** The two hazards already listed are about
+assertions reading a stale artefact. The one that cost me two inert mutations is different in kind: it
+bites the person checking. Editing `packages/api-types/src` and re-running proves nothing, because the
+running server and every e2e spec load the built package — and both inert mutations looked exactly like a
+guard correctly holding. The only tell was an error message coming back with identical text.
+
+No defect, no behaviour changed. A dated measurement re-taken, two imprecise words replaced with what is
+measurable, and a hazard written down at the cost of two wasted proofs rather than left for the next
+person to pay again.
+
+Full suite green; `verify-suite` OK.
+
+### Numbering
+
+This batch also corrected a collision: a peer's `493855898` took V-1593 first, and my later entry reused
+it. Mine is renumbered to V-1595 along with its three citations, leaving the peer's citation in
+`scripts/tests/verify-suite.test.ts` resolving to the entry it was written against. The log is
+append-only, so the later entry is the one that moves.

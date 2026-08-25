@@ -584,7 +584,7 @@ test('a refusal names what is actually missing', async ({ request }) => {
 /**
  * Body properties whose NAME says they carry an id.
  *
- * V-1593 — path parameters and query parameters both turned out to hide the same
+ * V-1595 — path parameters and query parameters both turned out to hide the same
  * defect, so the third door is the request body. `POST /v1/sessions` takes
  * `profile_id`, `POST /v1/admin/oauth/clients` takes `account_id`, and both land
  * in `uuid` columns exactly like the parameters that produced six findings.
@@ -675,7 +675,7 @@ test('no id-shaped body field turns a malformed value into a server error', asyn
   }
 
   console.log(
-    `[V-1593] ${poked} id-shaped body fields poked — ${gated.length} gated, ${unrouted.length} unrouted\n` +
+    `[V-1595] ${poked} id-shaped body fields poked — ${gated.length} gated, ${unrouted.length} unrouted\n` +
       observed.join('\n'),
   );
 
