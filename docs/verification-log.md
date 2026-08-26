@@ -12666,3 +12666,46 @@ byte-identical from a snapshot keyed by full path.
 
 VERIFIED: 2003 unit files, 20887 passed, 10 skipped, 0 failed.
 BOUNDED: the customer surface only. 11 admin operations still 404 when the gate is off, by decision.
+
+## V-1787 — four audit-log filters the route accepts were published nowhere, so no SDK could reach them
+
+2026-08-26. `GET /v1/account/audit-log` accepts seven query filters and the document published three.
+`from`, `to`, `actor_type` and `target_resource_id` worked, and no generated client knew they existed —
+all three SDKs are generated from this spec, so **a customer could not date-filter their own audit log
+from any SDK**, only by hand-building a URL against undocumented parameters. Confirmed against the
+shipped artifact (`packages/sdk-python/openapi.json`), not just the builder.
+
+⭐ FOUND BY A DIFFERENT AXIS OF AN ALREADY-GUARDED SURFACE. `openapi-admin-list-limit-bounds-parity`
+exists because this exact surface drifted before: the spec advertised `limit` max 200 while the route
+enforced 100, so an integrator sending 150 got an unexpected 400. That guard pins the limit MAX. Nothing
+pinned the KEY SET — which parameters exist at all — and that is where the next drift landed. A guarded
+surface is guarded on the axis someone thought of.
+
+⭐⭐ THE CAUSE IS STATED IN THE FILE'S OWN COMMENTS, by whoever fixed the last instance: "Seven sibling
+list endpoints already publish it, all of them by using the api-types schema directly; the hand-written
+mirrors are the ones that lost it." The comparison that proves it is the same resource's other surface —
+`/v1/admin/audit-log` passes `ListAuditLogQuerySchema` DIRECTLY and is correct; `/v1/account/audit-log`
+used a hand-written `ListAccountAuditQueryOpenApi` mirror and lost four fields.
+
+FIXED by taking the four from the route's own schema via `.shape`, matching the file's existing
+`PaginationQuerySchema.shape.cursor` idiom, so those four cannot drift again by construction. Spec
+regenerated; the published set now equals the route's schema exactly.
+
+⛔ AND THE OBVIOUS POLISH WOULD HAVE MADE IT WRONG. The four publish `from`/`to` as bare
+`['string','null']` with no `format`, while five other date params in the document — including `from`
+and `to` on the ADMIN twin of this endpoint — carry `format: date-time`. Adding it for consistency was
+one keystroke and would have been a false claim: the admin schema is `Iso8601Schema`, the account
+schema is `z.coerce.date()`, which accepts anything `new Date()` accepts. The document now says what
+the route enforces rather than what its sibling enforces. That the two surfaces of one resource disagree
+on the accepted date syntax is a real observation, recorded rather than fixed, because narrowing what a
+live endpoint accepts is a contract change.
+
+⛔ MY OWN INSTRUMENT PRODUCED TWO FALSE DRIFT HITS BEFORE THIS ONE SURVIVED. The key extractor did not
+strip comments, so it read the word `bearing` out of prose and reported it as a published parameter; and
+the pairing regex took the FIRST `.parse(request.query` in a file, so it compared the EXPORT operation
+against the LIST route's schema. Both were caught by reading the accused declaration. The finding above
+is what remained after the instrument was fixed and re-controlled.
+
+BOUNDED: 8 hand-written `*QueryOpenApi` mirrors examined; 5 agree with their route schema, 1 drifted
+(this one), 2 (`OAuthAuthorizeQueryOpenApi`, `StatusTokenQueryOpenApi`) have no `.parse(req.query)` in
+their route file and were NOT measured — that is unmeasured, not clean.

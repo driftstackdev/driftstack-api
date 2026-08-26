@@ -117,6 +117,7 @@ import {
   ListDlqQuerySchema,
   NavigateRequestSchema,
   NavigateResponseSchema,
+  ListAccountAuditLogQuerySchema,
   PaginationQuerySchema,
   ProfileNameSchema,
   ProblemSchema,
@@ -2753,6 +2754,13 @@ function buildRegistry(): OpenAPIRegistry {
     // the ones that lost it.
     limit: z.number().int().min(1).max(100).default(50),
     cursor: PaginationQuerySchema.shape.cursor,
+    // V-1787 — these four filters were accepted by the route and published
+    // nowhere, so no generated SDK could reach them. Taken from the route's own
+    // schema by `.shape` rather than restated, so they cannot drift again.
+    from: ListAccountAuditLogQuerySchema.shape.from,
+    to: ListAccountAuditLogQuerySchema.shape.to,
+    actor_type: ListAccountAuditLogQuerySchema.shape.actor_type,
+    target_resource_id: ListAccountAuditLogQuerySchema.shape.target_resource_id,
     // V-1479 — `ListAccountAuditLogQuerySchema.action` is
     // `AccountAuditActionSchema`, the same 46-value enum the response publishes
     // since V-1477. Published bare here, so the one filter whose legal values a
