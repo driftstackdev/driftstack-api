@@ -21218,3 +21218,43 @@ that cannot slip quietly, and the cost of guards that pin already-safe defaults 
 three of the things I reached for today were redundant with something already in the tree,
 and each one had to be found and reverted. Recorded so the next sweep can start from the
 measurement instead of repeating it.
+
+## V-1676
+
+**The CLI device-authorization flow, audited end to end. Sound — and it is the worked example
+of the property V-1649 was missing.**
+
+Device-code flows fail in a small number of well-known ways, and each was checked against the
+source rather than assumed:
+
+- **Code entropy.** The device `code` is `randomBytes(32)` as base64url — 256 bits, and it is
+  the Redis key, so guessing it is the whole attack and it is not available. The `user_code`
+  is 40 bits over a 32-character alphabet with the ambiguous glyphs removed (no I, O, 0, 1),
+  which is a UX decision that costs nothing here because the user code is only ever checked
+  inside `bind`, which already requires the 256-bit code.
+- **The user code is never stored.** Redis holds `sha256(domain || normalized(user_code))`,
+  so a Redis read does not yield something a caller can present.
+- **Identity is DERIVED, not accepted.** This is the V-1649 question asked of a different
+  subject and answered correctly: the bind route runs behind `app.requireAuth` and passes
+  `account_id: acc_${ctx.account.id}` from the authenticated context — the request cannot name
+  an account. It also throws explicitly if the context is missing after `requireAuth`, so the
+  fallback is a crash rather than an unowned bind.
+- **The secret is bound to that identity cryptographically.** The minted key is encrypted
+  before it enters Redis with AAD over code + state + user_code_hash + account_id, and
+  `exchange` decrypts with those values read from the STORED record — never from its input.
+  A swapped or replayed field fails the decrypt, which surfaces as `expired`, not a 500.
+- **Both races are atomic.** `bind` uses a compare-and-set against the exact bytes it read, so
+  two concurrent binds cannot both win, and the route revokes the losing racer's just-minted
+  key. `exchange` uses `getDel`, so of two concurrent bound polls exactly one receives the
+  key. It then re-checks that the claimed bytes equal the peeked bytes and still describe a
+  bound record, failing closed rather than delivering a swapped secret.
+- **Comparisons are constant-time**, and pre-v2 blobs are consumed as expired rather than
+  dual-read without identity binding.
+- **TTLs** are 5 minutes pre-bind and 2 minutes post-bind, and both `initiate` and `exchange`
+  are IP rate-limited, which is what makes the 40-bit user code a non-issue.
+
+**Boundary.** This audit covers `services/cli-authorize.ts` and `routes/auth-cli.ts`. The
+dashboard consent page that calls bind is a peer's surface and was dirty in the shared tree
+throughout; I did not read it, so nothing here is a claim about the browser half of the flow.
+
+No defect. Fourteenth end-to-end audit; thirteen sound, one defect (V-1649).
