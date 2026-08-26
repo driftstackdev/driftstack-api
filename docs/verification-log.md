@@ -10894,3 +10894,42 @@ is the measurement V-1739 set out to make and could not trust until now.
 BOUNDED: kind names and depth-1 field names. It does not compare TYPES — a field declared `z.string()`
 against a Swift `Int` agrees here and fails at runtime — nor optionality, nor enum members. Those are a
 larger measurement and are not claimed.
+
+## V-1744 — optionality parity: zero dangerous mismatches, and severity turns on which side DECODES
+
+2026-08-26. V-1743 bounded itself at field NAMES and named the gap: "a field declared `z.string()`
+against a Swift `Int` agrees here and fails at runtime — nor optionality". Took the optionality half,
+because it has a hard failure mode: **Swift's `Codable` THROWS on a missing non-optional field**, and
+`ControlInbound`'s decoder already throws on an unknown type, so a CP-optional / Swift-required pair
+means the whole frame is REJECTED whenever the control plane omits that field.
+
+FIRST PASS: 12 mismatches, ALL POINTING THE SAME WAY. ⛔ That uniformity is this log's own tell for a
+broken instrument, and it was: my Swift type capture ran to end-of-line, so `public let
+inlineProxyConfig: Data?   // H3.exec.107…` did not end with `?` and every COMMENTED optional read as
+required. I could falsify it immediately — V-1740 records me reading that exact line as `Data?`.
+Stripping the trailing comment first took 12 to 4, and a third control now pins that shape.
+
+SECOND PASS: 4 mismatches, and ALL FOUR ARE BENIGN FOR A REASON THE TOOL COULD NOT SEE. ⭐ **An
+optionality mismatch's severity depends on which side DECODES.** `capabilityReport`, `challengeDetected`
+and `downloadData` sit in `public enum HarnessOutbound` — the harness ENCODES them. A required Swift
+field there means the box ALWAYS SENDS one, and the CP's `.optional()` is lenient acceptance: the safe
+configuration, not a fault. Only a frame the harness DECODES — `ControlInbound`, which `sessionAssign`
+belongs to and these three do not — can be rejected for a missing field. Verified by reading the
+enclosing enum rather than trusting my own scan.
+
+So: **zero dangerous optionality mismatches on the decode direction.** The protocol agrees on names
+(V-1743) and on optionality where it can hurt.
+
+⚠️ SIX INSTRUMENT CORRECTIONS ACROSS THIS AND V-1743, and the last is the one worth carrying: paren-depth
+counting, `z.object(` adjacency against the multi-line house style, a case-sensitive danger counter that
+reported "DANGEROUS: 0" while printing a dangerous row, end-of-line type capture, window spill — and
+then **direction-blindness**. The first five made the tool wrong; the sixth made it right about the data
+and wrong about the meaning, which is harder to notice because every row was factually accurate.
+
+⭐ A synthetic positive was used where no real one existed: making `sessionAssign.sessionId` CP-optional
+produced the expected "CP optional -> Swift REQUIRED" row, proving the detector can see the shape before
+its zero was trusted. Restored byte-identically under a trap.
+
+BOUNDED: optionality only. TYPES are still uncompared — a `z.string()` against a Swift `Int` agrees on
+name and optionality and fails at decode — as are enum MEMBERS, where Swift's decoder throws on an
+unknown case. Both are reachable with the same tool and are not claimed here.
