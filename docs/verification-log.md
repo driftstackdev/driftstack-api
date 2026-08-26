@@ -11413,3 +11413,55 @@ spec-size and operation-count figures in V-1753 (13% smaller, 46 of 234) are una
 
 BOUNDED: structural duplication measured over `components.schemas` by exact canonical JSON only. Components
 differing solely in a description or example would NOT be caught by that and are not counted here.
+
+## V-1755 — CORRECTION to V-1753's fix shape: 42 of 43 schemas live in a PUBLISHED package, so it is a refactor
+
+2026-08-26. Came back to land W-10 at the head of a clean turn, as V-1753 said it should be: no peer
+message, no vitest running, tree quiescent, the only dirty file A2's. Sized the edit before making it, and
+the sizing killed the plan.
+
+⛔ **V-1753's "the fix is ADDITIVE and one line per schema, no restructuring" is withdrawn.** That
+generalised from a SAMPLE OF ONE. `AccountMeResponseSchema` is declared at `lib/openapi.ts:208`, locally,
+where appending `.openapi('Name')` really is a one-liner — and I checked no others before publishing the
+shape. Measured properly, of the 43 registrations:
+
+    declared LOCALLY in lib/openapi.ts:       1
+    declared in packages/api-types (shared): 42
+
+⭐ AND THAT EXPLAINS THE CODE, which the "someone forgot" framing did not. `api-types` is a PUBLISHED
+customer package. Putting `.openapi()` metadata on its schemas means adding `@asteasolutions/zod-to-openapi`
+
+- `extendZodWithOpenApi` to a package customers install, purely so the server can generate its own spec.
+  The author was right to refuse that, and `r.register(name, schema)` is the natural way to name a schema
+  that lives somewhere you should not modify. The defect is narrower than "a discarded return value": it is
+  that this API only works if you USE what it hands back, and here there was nowhere natural to put it.
+
+TRUE COST, measured rather than assumed. Keeping `api-types` clean means capturing the return into a local
+alias and rewiring the use-sites:
+
+    distinct registered schemas:                                    40
+    references to them in lib/openapi.ts (excluding the registers): 121
+    file size:                                                8,325 lines
+
+So: 40 new alias declarations plus 121 mechanical renames, THEN a 2 MB regenerated artifact, 46 of 234
+operations changing rendering, and up to 38 spec-reading test files to check (V-1753's upper bound).
+
+⭐ RECOMMENDED SHAPE, since the renames are mechanical and therefore scriptable: register once into a
+lookup — `const S = registerAll(r, { Account: AccountSchema, ... })` returning the ref-carrying schemas —
+and rewrite the 121 sites to `S.Account`. ⭐⭐ The whole edit has an exact POST-CONDITION available: the
+regenerated spec must equal the simulated spec from V-1753/V-1754 (70 replacements, orphans 39 -> 4). If it
+does not match, the refactor is wrong somewhere, and no reading of the diff is needed to know it.
+
+⚠️ SO THE ORIGINAL FRAMING WAS RIGHT AFTER ALL, FOR THE WRONG REASON. W-10 was filed as "needs the owner's
+call because the fix changes the published contract"; V-1752 argued it is a bug, not a decision. Both are
+true and neither is the point: the SEMANTICS do not change, but the COST is a 121-site refactor of the
+spec's single largest source file plus a full artifact regeneration. That is a prioritisation call, not a
+contract one — and not something to start at the tail of an analysis.
+
+NOT LANDED. Three successive estimates of this fix (one-liner -> additive -> 121-site refactor) all moved
+in the same direction, and each moved because I measured one more layer. Recording the number so the fourth
+estimate is not needed.
+
+BOUNDED: the 121 count is `\bIdentifier\b` occurrences in `lib/openapi.ts` only, minus the register lines.
+It does not include any use of those schema identifiers elsewhere in the server, which the alias approach
+would leave untouched by design but which I have not counted.
