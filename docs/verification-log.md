@@ -13380,3 +13380,36 @@ their 92.29/81.74 would be comparing two different scopes.
 BOUNDED: one machine, one disposable database, the repo's default coverage scope; liveness counted as
 `grep`-visible references under `apps/server/src` outside the file itself, which misses a purely
 dynamic-string import.
+
+## V-1803 — the tree-quiescence guard I ran before every suite launch this session has never worked
+
+2026-08-26. Found by accident: a `find … -newermt '-30 minutes'` on the coverage artifact printed a bfs
+usage error instead of a result. The same construction is the prescribed pre-suite check.
+
+find apps packages scripts docs -newermt '-90 seconds' -not -path '_/node_modules/_' -type f
+-> exit 1, "bfs: error: Invalid timestamp"
+
+⛔ **`find` on this machine is a shell FUNCTION shimming to `bfs`, and bfs rejects RELATIVE `-newermt`
+arguments** — it accepts ISO-8601 only. Every invocation piped through `2>/dev/null | wc -l`, which is how
+I ran it, therefore printed **0**, and I read that zero as "the tree is quiescent" before every suite and
+coverage run in this session.
+
+⭐ THE WORKING FORM, PROVED ON A KNOWN POSITIVE RATHER THAN ASSUMED: `-mmin -2` exits 0 and, after
+touching `docs/verification-log.md`, returns exactly that file. The prescribed form exits 1 on the same
+tree in the same second. Both checked side by side.
+
+⚠️ HOW BAD IT WAS, stated honestly rather than minimised or inflated. Only this third of the guard was
+dead: the `vitest` and `push`/`pre-push` process checks are plain `ps` pipelines and worked throughout —
+they aborted a suite launch earlier today when a peer started a push between my check and the run, and
+held this very commit four times while the peer pushed. So runs were guarded against a second suite and
+against a peer's push, and blind ONLY to a peer WRITING files. The instruction exists because that has
+happened, in both directions, which is what makes a dead guard for it worth an entry.
+
+⛔ AND MY FIRST ATTEMPT TO FIND A WORKING FORM REPORTED BOTH CANDIDATES BROKEN, WRONGLY. I looped over
+`for form in "-mmin -2" "-newermt <iso>"` and passed `$form` unquoted — **zsh does not word-split, so each
+was handed to bfs as ONE argument** and both errored. A documented trap of mine, reproduced while
+investigating a different documented trap of mine. The control — touch a file, confirm the detector sees
+it — is what separated the real answer from my second bad instrument inside the same measurement.
+
+BOUNDED: this machine's `find` shim only. A host with GNU findutils would accept the relative form, so the
+instruction is not wrong everywhere — it is wrong here, silently, and silence is the whole problem.
