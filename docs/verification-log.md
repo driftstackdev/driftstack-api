@@ -22566,3 +22566,32 @@ consequence here is nil: the method is correct, pinned by two guards, and its ab
 is the ordinary result of `consumeAuthTokenFamily` superseding it.
 
 **Ten of 22 obligations checked; one unenforced, one dormant, eight honoured and guarded.**
+
+## V-1704
+
+**`git add <path>` is not a scoped commit. The pathspec has to be on the COMMIT, and a peer's
+pre-commit hook is what stopped me learning that the expensive way.**
+
+My standing rule is "explicit pathspecs, never `git add -A`". I have followed it all session —
+and it is not sufficient. `git add docs/verification-log.md` adds one path **to an index that may
+already contain someone else's**, and `git commit` then commits **the whole index**.
+
+A peer had **37 files staged** for their own in-progress commit. My one-file `git add` followed by
+a bare `git commit` would have committed all 38 under my message and my name.
+
+**What stopped it was their lint errors, not my discipline.** lint-staged ran over 38 files rather
+than my 1 — the tell I should have read immediately — and failed on three
+`@typescript-eslint/require-await` errors in a helper of theirs. The commit aborted with nothing
+written. Had their staged code been clean, it would have gone in.
+
+**The correct form is `git commit <pathspec>`**, which scopes the commit AND what the hook sees:
+re-running as `git commit docs/verification-log.md` reported _"`_.{ts,tsx,…}`— no files,`_.md` —
+1 file"_ and left all 38 of their entries still staged afterwards.
+
+⚠️ **Every commit I have made this session used the insufficient form.** They were all correct only
+because that index happened to be empty of anyone else's work at the time. That is luck reported
+as process, and the honest way to record it is that the rule was wrong rather than that the
+outcome was fine.
+
+The tell is cheap and worth watching for: **lint-staged printing a file count larger than what you
+staged means the index is not yours.**
