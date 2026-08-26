@@ -13725,3 +13725,44 @@ identical timestamp, so the drop was real."
 BOUNDED: `list` and the two other selects in `account-audit-repo.ts`, and the CSV branch of the export
 handler. The post-condition uses a backward window to associate a select with its predicate, so it is a
 statement about proximity rather than a parse; the first select was additionally confirmed by reading.
+
+## V-1812 — the OAuth account-linking chain audited end to end: no takeover path, and the code is stronger than its own comment
+
+2026-08-26. Third item from the stated-unknowns backlog (V-1810). Two entries had left this unread:
+V-1810 — "the pending-link CREATION path — which decides what a merge token is minted for — was not read";
+V-1804 — "`lib/oauth-client-exchange.ts` and `services/oauth-client.ts` were not read at all". Same chain,
+recorded as unmeasured twice, so it was the obvious next target. 78 entries carry a `BOUNDED` line; this
+closes two of them.
+
+⭐ THE QUESTION THAT MATTERS. V-1810 proved the merge token is single-use via an atomic CAS. That
+guarantee is worthless if the token is minted for the wrong account or handed to the wrong party — a
+single-use key to someone else's front door is still a key. So: on an email collision, who receives it?
+
+VERIFIED SOUND, reading the whole chain:
+
+- **Step 2, collision.** `findIdByEmail(args.email)` finds an existing account with no link for this IDP
+  identity. A plaintext token is generated, **only `sha256Hex(plaintext)` is stored**, and the plaintext
+  goes to `sendVerifyMergeEmail({ to: args.email, … })`. ⭐ **The API response carries
+  `{ kind: 'collision-pending-verification', pendingLinkId, expiresAt }` and NOT the token.** The caller
+  who completed the OAuth flow learns that a merge is pending; only the mailbox learns how to complete it.
+  That is the property the whole flow rests on, and it holds.
+- **Email verification is enforced upstream, at the exchange.** Google requires `email_verified === true`;
+  anything else returns `{ kind: 'unverified-email' }` before the service is reached.
+- **GitHub is the interesting one and it is correct.** `/user` carries no per-user verified flag, so the
+  code calls `/user/emails` and accepts only an entry with `primary === true && verified === true`; if
+  none matches, `email` stays empty and the refusal fires.
+- **Step 3, no collision**, creates an account from the IDP identity — reachable only after that
+  verification gate, so an address nobody has proved control of cannot be claimed here.
+
+⭐⭐ ONE THING WORTH RECORDING BECAUSE IT IS THE GOOD DIRECTION: **the justification comment is weaker than
+the code it explains.** It says to "treat the primary email as verified … since GitHub only exposes
+primary emails on verified accounts" — an assumption about GitHub's behaviour. The code does not rely on
+it; it checks `verified === true` explicitly. A comment claiming less than the code enforces is the safe
+asymmetry, and the opposite of V-1793, where the code implemented half of what the docs promised.
+
+NO DEFECT. No path was found by which controlling an IDP identity yields access to an existing account.
+
+BOUNDED: `linkOrCreateAccount` steps 1-3 and the Google and GitHub branches of `fetchUserInfo` were read
+in full. `sendVerifyMergeEmail` was not read — whether the mail is actually dispatched, and to which
+address the mailer resolves, is taken from the call site. The IDP token exchange itself
+(`exchangeCodeForTokens`) and the revoked-link fork were not read.
