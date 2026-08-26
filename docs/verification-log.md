@@ -13413,3 +13413,41 @@ it — is what separated the real answer from my second bad instrument inside th
 
 BOUNDED: this machine's `find` shim only. A host with GNU findutils would accept the relative form, so the
 instruction is not wrong everywhere — it is wrong here, silently, and silence is the whole problem.
+
+## V-1804 — the branch-coverage GAP is a better target list than raw coverage, and the route it named is sound
+
+2026-08-26. With a valid coverage report in hand (V-1802), raw lowest-coverage was exhausted after the
+liveness filter left one already-audited candidate. A different cut of the same data is more useful:
+files where STATEMENT coverage is high and BRANCH coverage is not. A statement runs on the happy path; a
+branch that never runs is an error path nobody exercises.
+
+gap 26.9 routes/profile-snapshots.ts 95.77 stmts / 68.88 br of 45
+gap 26.2 routes/auth-oauth-client.ts 89.81 / 63.63 of 77
+gap 24.9 services/profile-blob-orphan-sweeper 94.91 / 70.00 of 30
+gap 24.1 routes/mac-nodes-register.ts 94.52 / 70.37 of 54
+gap 22.4 routes/admin-accounts.ts 88.35 / 65.97 of 97
+
+⭐ AUDITED THE MOST SECURITY-RELEVANT ENTRY — `auth-oauth-client.ts`, ~28 unexercised branches on the
+sign-in-with-Google/GitHub surface. **Sound, and unusually well-reasoned.**
+
+- **The PKCE cookie is HMAC-bound to the state nonce, and the comment explains why that is not
+  redundant**: signing over `${verifier}.${nonce}` "blocks pairing a valid state from one flow with the
+  verifier cookie of another (login-CSRF) — a gap PKCE can't close for providers that ignore it (GitHub
+  OAuth Apps)". A protection aimed at a specific provider's specific weakness, not a generic ritual.
+- Cookie flags are complete: `HttpOnly; Secure; SameSite=Lax`, `Path=/v1/auth/oauth-client`, `Max-Age=300`
+  matching the state TTL.
+- **Open-redirect defence at the source.** `/start` rejects a `redirect_to` whose origin is not the
+  dashboard's, because "the callback echoes redirect_to back in its JSON and the SPA navigates it" —
+  explicitly belt-and-braces with an SPA-side sanitiser rather than relying on it.
+- **The merge route is deliberately unauthenticated and that is right.** `confirmMergeGate` is an IP rate
+  limit, not an auth check; the authorisation IS the merge token, which `confirmPendingLink` rejects when
+  invalid, expired OR already used — single-use and TTL-bounded. A user completing an account-collision
+  merge has no session yet, so requiring one would be incoherent.
+- Its cookie-verifier comparison is one of the fourteen constant-time sites censused in V-1796.
+
+NO DEFECT. The unexercised branches are refusal paths on a route whose refusals are the point.
+
+BOUNDED: the `/start` handler, the confirm-merge handler and the cookie helpers were read; the two
+callback handlers were read only for their gates, and `lib/oauth-client-exchange.ts` and
+`services/oauth-client.ts` were not read at all — `confirmPendingLink`'s single-use enforcement is taken
+from the route's contract with it, not verified in the service.
