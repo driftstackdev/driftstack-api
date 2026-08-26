@@ -11080,3 +11080,50 @@ BOUNDED: measured `pageState.url`/`title` only. The other capped free-text field
 the shape — the harness caps the cookie jar's TOTAL serialized size at 8 MiB but applies NO per-field cap
 (`value: c.value` verbatim at :1432) — and their reachability is NOT measured here, because it turns on
 WebKit's own per-cookie limit, which I have not tested.
+
+## V-1748 — enum parity closes clean, and a 5-vs-4 state mismatch that looks like a defect is correct BY TRANSPORT
+
+2026-08-26. Closed the last boundary V-1744 named: enum MEMBERS. Swift's `Codable` throws on an unknown
+raw value, so a case one side can produce and the other cannot name is the same silent frame loss as
+V-1746/V-1747. Both directions measured; both sound.
+
+⭐ ONLY ONE raw-value enum is wire-decoded — `ProfileSaveFailed.Reason` (ControlClient.swift:859).
+Boundary stated: grepped `enum … : String … Codable` across ALL of `Sources/`, not just ControlClient,
+which finds six such enums; the other five (`ChallengeType`, `StreamingCodec`, `SameSite`, `ProxyKind`,
+`IPType`) are internal and never typed onto a wire struct's field. The detector found a known positive
+before its zero was trusted.
+
+`Reason` is 6/6 with the CP, in the same order, plus `.catch('upload_failed')` so an unrecognised FUTURE
+reason cannot reject the frame. ⭐ Worth noting because the Swift doc comment above it still says `reason`
+"MUST be one of the **4** the CP enum accepts … a 5th leg needs A2's enum widened in lockstep FIRST" —
+written when there were four. Two were added since (`degenerate_dump` W2977, `superseded` W2991) and BOTH
+were widened in lockstep as instructed. The comment is stale; the code is right, which is the good
+direction for that pair to disagree in.
+
+⛔ THE INTERESTING PART. `pageState.state` looks like a live defect and is not. The harness emits FIVE
+states — `loading`, `loaded`, `errored`, `stalled`, `ended` — and the CP declares FOUR:
+`z.enum(['loading','loaded','errored','stalled'])`. `ended` comes from
+`terminalPageStateForEndReason`, whose own doc says an UNKNOWN reason is treated as NORMAL `ended`,
+"fail-SAFE" — so it is the DEFAULT terminal, not an edge case. A 5-vs-4 mismatch on a
+default-path value is exactly the shape of the last two findings.
+
+It is sound, and only tracing the SEND shows why. `pageState` rides BOTH transports:
+
+- `emitNavStall` does `pageStateBuffer.append(ps)` AND `publishPageStateToRoom(ps)` → `stalled` reaches
+  the CP, which is why the CP enum lists it.
+- `terminalPageStateForEndReason` has exactly ONE caller (:7555) and it is `publishPageStateToRoom` with
+  NO buffer append → `ended` reaches the LiveKit room only and never enters `drainPendingPageStates()`,
+  the sole CP-bound path (`main.swift:2331`).
+
+So the CP's four members are exactly the four that can reach it. The harness doc even records that the
+GUI's `isHarnessState` guard is `loading|loaded|errored|stalled` and therefore ignores `ended` — handled
+by deliberate non-handling.
+
+⭐⭐ THE REUSABLE RULE, and the fifth time this split has misled a comparison today: when one type serves
+two transports, an enum's valid member set is PER-TRANSPORT. Reading the type tells you what can be
+constructed; only the SEND tells you what can arrive. A member-set diff against a shared type is not a
+defect report until every producer's send path is traced.
+
+⭐ Incidentally CONFIRMS V-1746/V-1747's premise rather than assuming it: the CP genuinely does receive
+`pageState`, via `connection.send(.pageState(ps))` at `main.swift:2331`. Had it been room-only, both
+findings' impact claims would have been wrong.
