@@ -22255,3 +22255,39 @@ exist; here, four of eight.
 it takes a frame, a correlator, a registry method and a missing route across four files. A guard
 would also need an exemption for `setEgress` today and a deletion of that exemption the day the
 route lands, which is two edits to catch a mistake nobody has made.
+
+## V-1695
+
+**"Is this pinned?" is a question a grep cannot answer. Mutate instead.**
+
+`trim-profile-request-correlator` states a requirement on its caller: _"The route MUST compare
+this against what it asked for: an old node accepts an unknown `scope`, ignores it, runs a cache
+trim and replies ok, so without this an `ok` is not evidence the requested op happened."_ The
+route honours it — `profiles.ts:719` refuses to report success when the applied scope differs and
+names both halves in the error.
+
+**I then searched 2391 test files for `appliedScope`, found nothing, and was one commit from
+reporting a stated MUST honoured by one caller and pinned by none.** The search space was real —
+controls found 1 test mentioning `requestTrim` and 4 mentioning trim scope — so the zero was not a
+broken path. It was a broken question.
+
+**The mutation settled it in one run.** Neutralising the comparison to `if (false)` reds
+`profiles-trim-route.test.ts` on **two CRITICAL arms**, the first of which is the property
+verbatim: _"an `ok` from a node that IGNORED the scope is reported as a FAILURE, not a success."_
+Restored byte-identical.
+
+⛔ **The tests never name the field, because they assert the RESPONSE.** A grep shaped like the
+implementation cannot find a test written in terms of behaviour — and the better a test is
+written, the less it looks like the code it guards. So a name-search systematically under-finds
+exactly the strongest guards.
+
+**The rule, and it is cheap:** to ask whether something is pinned, break it and run. A grep for
+the identifier answers _"does a test mention this name"_, which is a different question from
+_"does a test fail if this breaks"_ — and only the second one is what "pinned" means. Third time
+today a grep-based "unpinned" claim has been refuted by a mutation.
+
+⚠️ Separately, my extractor for the correlator outcome unions was wrong three times in a row —
+first cutting at the first `;` in the file, then at the first line ending in `;`, which lands
+inside a multi-line variant whose doc comment contains one. Each version produced a plausible,
+short answer. The union shapes were never the finding, but the count I would have published was
+wrong three ways.
