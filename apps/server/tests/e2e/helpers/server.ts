@@ -98,6 +98,10 @@ import {
 import { DrizzleValidationSchedulesRepo } from '../../../src/db/validation-schedules-repo.js';
 import { randomUUID } from 'node:crypto';
 import * as schema from '../../../src/db/schema.js';
+import { NotificationEventBus } from '../../../src/services/notification-event-bus.js';
+import { IncidentEventBus } from '../../../src/services/incident-event-bus.js';
+import { SlaReportingService } from '../../../src/services/sla-reporting.js';
+import { DrizzleProbesRepo } from '../../../src/db/health-probes-repo.js';
 
 export interface TestServer {
   baseUrl: string;
@@ -207,6 +211,23 @@ export async function startTestServer(): Promise<TestServer> {
   await redis.flushdb();
 
   const database = { client, db, close: async () => client.end({ timeout: 5 }) };
+
+  // ⛔ Every SSE route in this app is gated behind an optional dep, and none of
+  // them were wired here — so all FOUR `reply.raw.writeHead` hijack sites were
+  // unreachable in e2e and the whole streaming surface had zero end-to-end
+  // coverage. That is not a coincidence of this harness; it is why a missing
+  // Access-Control-Allow-Origin on a hijacked reply has now shipped twice
+  // (`/v1/account/me/notifications`, 2026-06-11, founder-reported; then
+  // `agent-sessions.ts:5201`, which took AI automation down entirely). Both were
+  // caught by reading source, because nothing here could observe a response.
+  //
+  // All three are in-memory and zero-argument in substance — the buses hold a
+  // Set of subscribers, and SlaReportingService takes the probes repo that the
+  // same `database` above already backs. Nothing is stubbed and no behaviour is
+  // faked; these are the production classes.
+  const notificationEventBus = new NotificationEventBus();
+  const incidentEventBus = new IncidentEventBus();
+  const slaReportingService = new SlaReportingService(new DrizzleProbesRepo(database));
 
   const logger = createTestLogger();
   const authRepo = new DrizzleAccountAuthRepo(database);
@@ -532,6 +553,9 @@ export async function startTestServer(): Promise<TestServer> {
     profilesService,
     profileSnapshotsService,
     cliAuthorizeService,
+    notificationEventBus,
+    incidentEventBus,
+    slaReportingService,
     permissiveCors: true,
   });
 

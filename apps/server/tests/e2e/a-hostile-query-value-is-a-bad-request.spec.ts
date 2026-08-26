@@ -18,6 +18,21 @@
 // 5xx. Values are derived from each parameter's own declared type, so a new
 // parameter is swept the day it is published.
 //
+// ⛔ 2026-08-26 — THE SWEEP'S REACH WAS BOUNDED BY THE HARNESS, NOT BY THIS FILE.
+// Every SSE route in the app registers only when an optional dep is wired, and
+// the e2e harness wired none of them, so `/v1/account/me/notifications` — which
+// publishes `ds_token` as a query parameter and was therefore always a target —
+// simply answered 404 and scored as unrouted. Wiring the buses to give the
+// streaming surface any e2e coverage at all made it reachable, and this spec
+// hung: `request.get` waits for a complete body, and an SSE body never completes.
+//
+// The hostile value is still pushed at it. What changed is that a streaming
+// operation is read HEADERS-ONLY, because for a stream the status line is the
+// whole answer and the body is infinite by design. Which operations those are is
+// DERIVED from the document's own `text/event-stream` response declarations, so
+// a fourth stream is handled the day it is published rather than the day someone
+// notices the suite hanging.
+//
 // Scope, stated because it bounds the claim: GET and DELETE only. Operations that
 // also require a body are covered for their ids by the sibling spec; adding body
 // construction here would duplicate that machinery to reach a handful of extra
@@ -25,6 +40,7 @@
 // and for the same reasons the sibling excludes them.
 
 import { readFileSync } from 'node:fs';
+import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { test, expect } from '@playwright/test';
@@ -71,6 +87,53 @@ interface QueryTarget {
   path: string;
   param: string;
   values: readonly string[];
+  /** The operation declares a `text/event-stream` response — read headers only. */
+  stream: boolean;
+}
+
+/**
+ * Probe a possibly-streaming operation without waiting on an endless body.
+ *
+ * ⛔ Only a SUCCESSFUL stream is infinite. A streaming operation that refuses —
+ * 401 before the token is read, 404, or the 503 a deployment gate returns —
+ * answers on the NORMAL reply path with an ordinary finite body. The first
+ * version of this ignored that, returned the status alone, and so bypassed the
+ * `isUnrouted` and `isDeploymentGate` classifiers the non-streaming path
+ * applies: four deployment-gated 503s on `/v1/agent-sessions/{id}/transcript`
+ * were reported as server errors this spec exists to find.
+ *
+ * So: read the content type first, and read the body whenever there is one to
+ * read, so every response reaches the same classifiers by the same rules.
+ */
+function streamProbe(
+  url: string,
+  headers: Record<string, string>,
+): Promise<{ status: number; body: string }> {
+  return new Promise<{ status: number; body: string }>((settle, reject) => {
+    const req = http.request(url, { method: 'GET', headers }, (res) => {
+      const status = res.statusCode ?? 0;
+      if (String(res.headers['content-type'] ?? '').includes('text/event-stream')) {
+        settle({ status, body: '<stream>' });
+        res.destroy();
+        req.destroy();
+        return;
+      }
+      let buf = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk: string) => {
+        if (buf.length < 4096) buf += chunk;
+      });
+      res.on('end', () => {
+        settle({ status, body: buf });
+      });
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+    req.setTimeout(15_000, () => {
+      req.destroy(new Error(`timed out waiting for response headers from ${url}`));
+    });
+    req.end();
+  });
 }
 
 function queryTargets(): QueryTarget[] {
@@ -110,7 +173,18 @@ function queryTargets(): QueryTarget[] {
         const declared = sc['type'];
         const kind = Array.isArray(declared) ? declared.find((t) => t !== 'null') : declared;
         const key = sc['format'] === 'date-time' ? 'date-time' : String(kind ?? 'string');
-        out.push({ method, path, param: name, values: HOSTILE[key] ?? HOSTILE['string']! });
+        const responses = op['responses'];
+        const stream =
+          typeof responses === 'object' &&
+          responses !== null &&
+          JSON.stringify(responses).includes('text/event-stream');
+        out.push({
+          method,
+          path,
+          param: name,
+          values: HOSTILE[key] ?? HOSTILE['string']!,
+          stream,
+        });
       }
     }
   }
@@ -149,6 +223,23 @@ test('no query parameter turns a hostile value into a server error', async ({ re
         server.baseUrl +
         t.path.replace(/\{[^}]+\}/, PATH_ID) +
         `?${encodeURIComponent(t.param)}=${encodeURIComponent(value)}`;
+      if (t.stream) {
+        sent += 1;
+        const probe = await streamProbe(url, headers);
+        if (probe.status < 500) continue;
+        if (isUnrouted(probe.status, probe.body)) {
+          unrouted.add(`${t.method.toUpperCase()} ${t.path}`);
+          continue;
+        }
+        if (isDeploymentGate(probe.status, probe.body)) {
+          gated.add(`${t.method.toUpperCase()} ${t.path}`);
+          continue;
+        }
+        serverErrors.push(
+          `${t.method.toUpperCase()} ${t.path} ?${t.param}=${value} -> ${probe.status} ${probe.body.slice(0, 160)}`,
+        );
+        continue;
+      }
       const res =
         t.method === 'get'
           ? await request.get(url, { headers })
