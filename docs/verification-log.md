@@ -10154,3 +10154,37 @@ about the literal lookup — the ledger above included — and a text match woul
 documentation as a violation. The first version did exactly that and would have shipped a guard whose
 first false positive was the entry describing it. Files restored byte-identically after every mutation;
 `it(` 2 to 3; tsc clean.
+
+## V-1726 — swept "a helper exists to replace a raw call"; both real instances are already closed
+
+2026-08-26. V-1716, V-1718 and V-1724 are one shape: a safe helper exists and some caller still uses the
+raw primitive. Swept the marker that shape leaves — a comment telling callers to go through a helper —
+across `apps/server/src` and `packages/*/src`. Six files; four are business-process prose ("cancellation
+must go through support") or a preference for mockability. Two are the real shape, and both are closed.
+
+`lib/unknown-request-fields.ts` says a structural test "can pin that customer-facing writes go through
+here rather than calling `safeParse` directly". That claim is honoured rather than aspirational:
+`unknown-request-fields-coverage-invariant` exists, alongside `a-hand-validated-write-body-is-listed`,
+`an-anonymous-exemption-is-earned-per-route`, `an-exempt-surface-that-can-drop-a-field-is-listed` and
+`the-anonymous-exemption-rests-on-a-published-shape`, whose four arms measured V-951's two stated reasons
+and recorded that BOTH have stopped holding — the exclusion is filed as an open decision rather than
+left reading like a conclusion. Nine files on one helper. Nothing to add.
+
+`services/webhook-worker.ts` says recovery "must go through `recordRetry` / `recordDlq` rather than a raw
+UPDATE: both are fenced on `status='in_flight'`". Checked all TEN `update(webhookDeliveries)` sites: every
+one is fenced, each on the status its own operation requires — `in_flight` for claiming, reclaiming,
+discarding and outcome recording; `inArray(status, ['delivered','failed'])` for `replay`; `'dlq'` for
+`requeue`, whose comment records the unfenced version as a fixed bug. The fences are guarded by 29 test
+files including four written for nothing else (`webhooks-repo-reset-to-pending-in-flight-guard`,
+`webhooks-customer-replay-fenced-delivery`, `webhook-claim-lease-outlasts-delivery-attempt`,
+`db-durable-webhook-reclaim-fence-drizzle`).
+
+⚠️ MY DETECTOR FLAGGED TWO OF THOSE TEN AND BOTH WERE FALSE. It tested for the literal `in_flight`,
+because that is the fence the comment names — but the correct fence VARIES by operation, and `replay`
+and `requeue` are precisely the two that must NOT match an in-flight row. A detector that fixes one
+correct value for a property that legitimately varies reports the two most carefully written sites as
+the defective ones. Caught by reading both, which took less time than the sweep did.
+
+BOUNDED: the marker is a COMMENT, so this finds helpers whose authors said so. A helper introduced with
+no such sentence, and a raw caller beside it, is invisible to this sweep — which is the same limit that
+made V-1724 findable only because someone had written down what `canonical_email` was for.
