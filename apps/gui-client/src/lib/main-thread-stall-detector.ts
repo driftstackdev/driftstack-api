@@ -196,3 +196,145 @@ export function browserStallCensusDeps(extra: Partial<StallCensusDeps> = {}): St
     ...extra,
   };
 }
+
+// ─── Flight recorder ────────────────────────────────────────────────────────
+//
+// ⛔ THE STALL WATCH ABOVE CANNOT SEE THE FAILURE THE OWNER ACTUALLY REPORTED.
+// It detects a stall by a timer firing LATE, which means the thread recovered
+// enough to run it. A freeze that never lets go fires nothing, and the customer
+// cannot open devtools during it — the report is "nothing is usable, I have to
+// restart", so the console is gone by the time anyone could read it.
+//
+// So the census is also written to disk periodically. A terminal freeze then
+// leaves its last known state behind, and the next startup finds it. That is the
+// difference between "it froze again" and "it froze holding 9 videos, 41k DOM
+// nodes and 128 pending receipts".
+//
+// ⚠️ Bounded by construction: ONE key, overwritten in place, never appended. A
+// diagnostic that grows without limit while investigating a suspected resource
+// leak would be its own punchline.
+
+export interface FlightRecord {
+  /** Epoch ms of the snapshot. */
+  at: number;
+  census: StallCensus;
+  /** True when written because a stall was detected, not on the schedule. */
+  onStall: boolean;
+}
+
+export const FLIGHT_RECORDER_INTERVAL_MS = 30_000;
+
+/**
+ * Should a recovered record be surfaced to the user?
+ *
+ * PURE so the decision is testable without a store. A record only means
+ * something if the previous run ended WITHOUT clearing it — a clean shutdown
+ * clears the key, so a surviving record is evidence the process died holding
+ * that state.
+ */
+export function shouldSurfaceRecord(record: FlightRecord | null, cleanShutdown: boolean): boolean {
+  if (record === null) return false;
+  // ⛔ A clean shutdown that failed to clear the key would otherwise report a
+  // freeze on every subsequent launch, forever, from one stale write.
+  if (cleanShutdown) return false;
+  return true;
+}
+
+/** One line describing what the previous run was holding when it died. */
+export function formatFlightRecord(record: FlightRecord): string {
+  const when = new Date(record.at).toISOString();
+  const why = record.onStall ? 'after a detected stall' : 'last periodic snapshot';
+  return `[flight-recorder] previous run ended without shutting down — ${why} at ${when}: ${formatStall(record.census)}`;
+}
+
+/** Separate from settings.json: a diagnostic must not risk the file that holds
+ *  the customer's configuration. */
+export const FLIGHT_STORE_FILE = 'diagnostics.json';
+const FLIGHT_KEY = 'lastRun';
+const CLEAN_KEY = 'cleanShutdown';
+
+/**
+ * Read whatever the previous run left behind, report it, then clear it.
+ *
+ * ⚠️ Every failure here is swallowed. A diagnostic that breaks the app it is
+ * diagnosing is worse than no diagnostic, and this runs on the startup path.
+ */
+export async function reportPreviousRun(
+  store: {
+    get: <T>(k: string) => Promise<T | undefined>;
+    set: (k: string, v: unknown) => Promise<void>;
+    save: () => Promise<void>;
+  },
+  onReport: (line: string, record: FlightRecord) => void,
+): Promise<void> {
+  try {
+    const record = (await store.get<FlightRecord>(FLIGHT_KEY)) ?? null;
+    const clean = (await store.get<boolean>(CLEAN_KEY)) ?? false;
+    if (shouldSurfaceRecord(record, clean) && record !== null) {
+      onReport(formatFlightRecord(record), record);
+    }
+    // Cleared unconditionally, including when nothing was surfaced: a record
+    // left in place would be re-read on every subsequent launch.
+    await store.set(FLIGHT_KEY, null);
+    await store.set(CLEAN_KEY, false);
+    await store.save();
+  } catch {
+    /* a diagnostic must never break startup */
+  }
+}
+
+export interface FlightStore {
+  get: <T>(k: string) => Promise<T | undefined>;
+  set: (k: string, v: unknown) => Promise<void>;
+  save: () => Promise<void>;
+}
+
+/**
+ * Persist the census on a schedule and on every stall. Returns a stop function
+ * that marks the shutdown clean.
+ *
+ * ⭐ The schedule is what makes a TERMINAL freeze reportable: the stall watch
+ * needs the thread to recover before it can fire, and the reported failure never
+ * does. The last periodic snapshot is the state the process died holding.
+ */
+export function startFlightRecorder(
+  store: FlightStore,
+  deps: StallCensusDeps,
+  intervalMs: number = FLIGHT_RECORDER_INTERVAL_MS,
+): { stop: () => Promise<void>; recordStall: (census: StallCensus) => void } {
+  const write = (census: StallCensus, onStall: boolean): void => {
+    const record: FlightRecord = { at: Date.now(), census, onStall };
+    void (async () => {
+      try {
+        await store.set(FLIGHT_KEY, record);
+        await store.save();
+      } catch {
+        /* never break the app to record a diagnostic */
+      }
+    })();
+  };
+
+  const handle =
+    typeof window === 'undefined'
+      ? 0
+      : window.setInterval(() => {
+          write(takeStallCensus(0, deps), false);
+        }, intervalMs);
+
+  return {
+    recordStall: (census) => {
+      write(census, true);
+    },
+    stop: async () => {
+      if (handle !== 0) window.clearInterval(handle);
+      try {
+        // ⛔ The clean-shutdown mark is what stops a stale record announcing a
+        // freeze on every launch forever.
+        await store.set(CLEAN_KEY, true);
+        await store.save();
+      } catch {
+        /* swallow */
+      }
+    },
+  };
+}

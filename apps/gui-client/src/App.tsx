@@ -26,7 +26,14 @@ import { ShortcutsCheatsheet } from './components/ShortcutsCheatsheet';
 import { NotificationToastStack } from './components/NotificationToastStack';
 import { NotificationBell } from './components/NotificationBell';
 import { useNotifications } from './lib/use-notifications';
-import { browserStallCensusDeps, startStallWatch } from './lib/main-thread-stall-detector';
+import {
+  browserStallCensusDeps,
+  reportPreviousRun,
+  startFlightRecorder,
+  startStallWatch,
+  FLIGHT_STORE_FILE,
+} from './lib/main-thread-stall-detector';
+import { LazyStore } from '@tauri-apps/plugin-store';
 import { RecordingsProvider } from './lib/recordings';
 import { SettingsProvider, useSettings } from './lib/SettingsContext';
 import { useConnectionStatus } from './lib/use-connection-status';
@@ -442,10 +449,28 @@ function Shell(): JSX.Element {
   // in this component. A hook below one is the defect that took the Settings tab
   // down (P-10) and that I then repeated in this very file — twice is enough.
   useEffect(() => {
-    return startStallWatch((line, census) => {
-      // customer can copy out of the console into a bug report.
+    const store = new LazyStore(FLIGHT_STORE_FILE);
+    const deps = browserStallCensusDeps();
+
+    // ⛔ What did the LAST run die holding? Reported first, because the freeze
+    // this exists for never lets the watch below fire: a stall is detected by a
+    // timer running LATE, which needs the thread to recover, and the reported
+    // failure never does. The customer cannot open devtools during it either —
+    // the report is "nothing is usable, I have to restart".
+    void reportPreviousRun(store, (line) => {
+      console.warn(line);
+    });
+
+    const recorder = startFlightRecorder(store, deps);
+    const stopWatch = startStallWatch((line, census) => {
       console.warn(line, census);
-    }, browserStallCensusDeps());
+      recorder.recordStall(census);
+    }, deps);
+
+    return () => {
+      stopWatch();
+      void recorder.stop();
+    };
   }, []);
 
   useEffect(() => {

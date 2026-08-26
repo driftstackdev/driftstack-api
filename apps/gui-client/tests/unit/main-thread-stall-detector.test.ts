@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   classifyStall,
+  formatFlightRecord,
   formatStall,
+  shouldSurfaceRecord,
   takeStallCensus,
+  type FlightRecord,
   STALL_THRESHOLD_MS,
   STALL_HEARTBEAT_MS,
 } from '../../src/lib/main-thread-stall-detector';
@@ -92,5 +95,46 @@ describe('main-thread stall detector', () => {
       takeStallCensus(3_500, { videoElements: () => 1, documentChildren: () => 42 }),
     );
     expect(line).toBe('[stall] main thread blocked 3500ms video=1 dom=42');
+  });
+
+  describe('flight recorder', () => {
+    const record = (onStall: boolean): FlightRecord => ({
+      at: Date.UTC(2026, 7, 26, 9, 30, 0),
+      onStall,
+      census: takeStallCensus(0, {
+        videoElements: () => 9,
+        documentChildren: () => 41_000,
+        tabCount: () => 12,
+        pendingReceipts: () => 128,
+        heapUsedMiB: () => 1_800,
+      }),
+    });
+
+    it('CRITICAL a surviving record after an UNCLEAN exit is surfaced — this is the whole point, because the freeze the owner reports never lets the stall watch fire at all', () => {
+      expect(shouldSurfaceRecord(record(false), false)).toBe(true);
+    });
+
+    it('CRITICAL a clean shutdown is NOT reported. Without this, one stale write would announce a freeze on every launch forever.', () => {
+      expect(shouldSurfaceRecord(record(false), true)).toBe(false);
+    });
+
+    it('no record means nothing to say — the ordinary case, and it must not be a false positive', () => {
+      expect(shouldSurfaceRecord(null, false)).toBe(false);
+      expect(shouldSurfaceRecord(null, true)).toBe(false);
+    });
+
+    it('the surfaced line says WHEN, WHY, and what was held — the three things nobody can reconstruct after a restart', () => {
+      const line = formatFlightRecord(record(false));
+      expect(line).toContain('previous run ended without shutting down');
+      expect(line).toContain('last periodic snapshot');
+      expect(line).toContain('2026-08-26T09:30:00.000Z');
+      expect(line).toContain('video=9');
+      expect(line).toContain('receipts=128');
+    });
+
+    it('distinguishes a snapshot taken BECAUSE of a stall from a scheduled one — they mean different things about how the run died', () => {
+      expect(formatFlightRecord(record(true))).toContain('after a detected stall');
+      expect(formatFlightRecord(record(false))).toContain('last periodic snapshot');
+    });
   });
 });
