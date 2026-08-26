@@ -50,6 +50,21 @@ const FICTIONAL_PREFIXES: { pattern: RegExp; canonical: string }[] = [
 ];
 
 describe('W267.D workspace-wide id-prefix sweep', () => {
+  // ⛔ Non-vacuity floor, added 2026-08-26. `walk` returns [] for a missing
+  // root, so a renamed corpus directory turns this entire sweep green while
+  // examining nothing. Mutation-proved: with both roots repointed at paths
+  // that do not exist, the verdict was byte-identical to the clean run.
+  //
+  // Asserted PER ROOT on purpose. A floor on the combined count still passes
+  // when ONE of the two directories disappears — which is the likelier
+  // accident — because the survivor alone clears any threshold worth setting.
+  // No count is pinned, so this cannot rot as pages are added or removed.
+  it('every corpus root contributes files to the sweep', () => {
+    for (const d of targets) {
+      expect(walk(d).filter((f) => /\.(astro|md)$/.test(f)).length, d).toBeGreaterThan(0);
+    }
+  });
+
   for (const { pattern, canonical } of FICTIONAL_PREFIXES) {
     it(`no page uses a fictional id prefix — expected ${canonical}`, () => {
       const offenders: string[] = [];

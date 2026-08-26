@@ -33,6 +33,21 @@ const targets = [
 const allFiles = targets.flatMap((d) => walk(d)).filter((f) => /\.(astro|md)$/.test(f));
 
 describe('W278.C workspace-wide <img> alt-text baseline', () => {
+  // ⛔ Non-vacuity floor, added 2026-08-26. `walk` returns [] for a missing
+  // root, so a renamed corpus directory turns this entire sweep green while
+  // examining nothing. Mutation-proved: with both roots repointed at paths
+  // that do not exist, the verdict was byte-identical to the clean run.
+  //
+  // Asserted PER ROOT on purpose. A floor on the combined count still passes
+  // when ONE of the two directories disappears — which is the likelier
+  // accident — because the survivor alone clears any threshold worth setting.
+  // No count is pinned, so this cannot rot as pages are added or removed.
+  it('every corpus root contributes files to the sweep', () => {
+    for (const d of targets) {
+      expect(walk(d).filter((f) => /\.(astro|md)$/.test(f)).length, d).toBeGreaterThan(0);
+    }
+  });
+
   it('every <img> tag has an alt attribute (even empty)', () => {
     const offenders: { file: string; tag: string }[] = [];
     const imgRe = /<img\b[^>]*>/g;

@@ -12499,3 +12499,37 @@ BOUNDED: read `.husky/{pre-commit,pre-push,commit-msg}`, the `lint-staged` globs
 grepped `.github/workflows/*.yml` for the tool names. A check invoked indirectly — through an npm script
 whose name does not contain the tool — would not appear in that grep, so "0 workflows" is a statement about
 the tool NAME appearing, not a proof the tool never runs.
+
+## V-1782 — a corpus sweep whose directory is renamed reports the same green as one that swept everything
+
+2026-08-26. Direct descendant of V-1781. That entry's shape was "a check that degrades to SKIP on a
+missing prerequisite reports the same green as a check that passed", found in the push hooks. The same
+shape lives one level deeper, inside the suite itself, and there it is mutation-proven rather than argued.
+
+80 test files share a `walk()` helper opening `if (!existsSync(dir)) return out;`. That line reads as
+ordinary defensive coding. It is not, because of where it can fire: `walk` recurses only into entries
+that `readdirSync` just listed and `statSync` just called directories, so those exist by construction.
+⛔ **The guard's only reachable case is the ROOT — i.e. it fires only when the test's corpus is broken,
+and converts that into an empty sweep that passes.** It protects nothing and hides the one thing worth
+seeing.
+
+⭐ MUTATION-PROVED, not inferred. `workspace-id-prefix-sweep` clean: 6 passed. With both corpus roots
+repointed at directories that do not exist: **6 passed, identical verdict**, having read zero files.
+Same result for `workspace-image-alt-baseline` and `workspace-api-key-scope-sweep`.
+
+⛔ THE OBVIOUS FIX WOULD HAVE BEEN VACUOUS, and catching that mattered more than the fix. The corpus is
+130 files — 68 under `apps/marketing-site/src/pages`, 62 under `apps/docs/src/pages`. A floor on the
+COMBINED count is defeated by the likelier accident: rename one directory and 62 files remain, clearing
+any threshold worth setting. So the floor is asserted PER ROOT, and pins no count at all, so it cannot
+rot as pages come and go. Proved on the case that motivated it: dropping ONE root fails the new test.
+
+BOUNDED, and the boundary is wide. Fixed in 3 files — the 3 whose vacuity is mutation-proven. The other
+77 share the helper and 41 carry no visible floor, but I have not proved those vacuous: a per-file
+mutation on 3 of them reported "no tests", which is my own documented trap (a file broken at module
+scope reports "no tests", not a failure), so my mutation hit something other than the corpus and those
+are INDETERMINATE, not confirmed. ⚠️ The clean way to measure all 80 at once is to rename the real
+`src/pages` roots and run the suite — declined deliberately: that leaves a shared working tree with
+source directories missing for the length of a suite run while a peer is committing.
+
+Filed as a ledger row rather than swept, because the honest population is "78 files not yet measured",
+and reporting 41 as defective on a regex would be the instrument error this entry is about.
