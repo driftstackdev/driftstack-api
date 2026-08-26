@@ -21046,3 +21046,44 @@ neglected code will find the opposite, which is worth knowing before rather than
 unused-variable errors in the mutated tree — helpers and parameters orphaned by the mutation. That is
 `noUnusedLocals` only and vitest transpiles without typechecking, so the behavioural signal stands, **but
 neither batch is a clean instrument and no number here is claimed beyond the direction it points.**
+
+## V-1672
+
+**The Playwright e2e surface, audited end to end — no defect, and one arm of mine reverted as redundant.**
+
+V-1670 noted in passing that `verify-suite --all` is CI job `build-test`, which does not
+run e2e. Read as "a third body of tests nothing gates", that is wrong in every part, and
+each part was checked rather than reasoned about:
+
+- **Collected.** 40 `.spec.ts` on disk; `playwright test --list` reports 229 tests in 40
+  files. Nothing orphaned. (Boundary: `--list` enumerates, it does not execute.)
+- **Run.** `ci.yml` job `e2e` runs `npm run test:e2e` on every push and pull_request to
+  main — no path filter, no `if:`, no `continue-on-error`, with Postgres and Redis
+  services. Blocking. This is unlike `gui-build-check.yml`, which V-1656 found path-filtered.
+- **Cannot pass vacuously.** 0 unconditional-skip idioms and 0 early `return;` across all
+  40 specs. The detector was positive-controlled first: against four planted idioms it
+  matched 4/4, so its zero on the real specs means absence, not a broken regex. The harness
+  defaults `DATABASE_URL` rather than testing for it, so a missing database is a `beforeAll`
+  error, not a skip.
+- **Protected against future skips — proven, not derived.** `no-permanently-skipped-tests`
+  filters on `/\.(test|spec)\.tsx?$/`, which reads as covering e2e. Reading a regex is not
+  evidence, so an unconditional skip was planted in a real e2e spec: the guard failed and
+  named `apps/server/tests/e2e/webhooks.spec.ts:89`. Restored byte-identical.
+
+**The blind spot was already named.** `a-gate-that-does-not-name-its-blind-spot-reads-as-total`
+exists for exactly this and states the figure I independently re-measured today — the same
+40 files and 229 tests — so that pin has not rotted.
+
+**Retraction.** I added an arm holding that file's stated spec-file count against an fs
+scan, on the belief the figure was prose nothing enforced. It is enforced: an existing arm
+derives the count from disk and compares it against both `scripts/verify-suite.mjs` and
+that guard file itself. My arm was fully redundant and is reverted byte-identical (12 `it(`,
+12 passing, `git status` clean). I found the duplication because a mutation that should have
+failed one arm failed two.
+
+**Why I missed it.** I grepped the literal values to ask whether they were enforced. A grep
+for `40` cannot find the code that computes `specs.length`, and the file's header sentence
+saying its counts "cannot be derived here" is scoped to the three _test_ counts, which need
+browsers and a Go toolchain. I extended that sentence to the _file_ count, which the very
+next arm derives. Asking "is this number enforced?" is a search for the subject, never for
+the value — and a guard file's arms must be enumerated before one is added to it.
