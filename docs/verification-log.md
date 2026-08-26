@@ -10112,3 +10112,45 @@ address rather than `args.email`, which needs the repo interface widened from re
 returning the row. Both change sign-in semantics on an auth path while a release is being cut, and the
 owner held W-10 for less. Recorded with the evidence so the decision is theirs and the work is one
 lookup, not an investigation.
+
+## V-1725 — V-1724 reproduced against a live database, dated to the week it drifted, and the class closed without touching the instance
+
+2026-08-26. Three things follow V-1724, in the order they change what is known.
+
+⭐ FIRST, IT IS OBSERVED RATHER THAN READ. V-1724 stated its own boundary — read from source and schema,
+no database, the 23505 never seen. The agent holding the database ran the repro: an account created with
+the literal `first.last.<n>@gmail.com` stores `canonical_email` `firstlastb<n>@gmail.com`;
+`findAccountByEmail` on the undotted spelling MISSES; `createAccount` then THROWS on the insert. Every
+link in the chain held, and the two spellings differ literally, so the only unique index that can fire
+is the canonical one. The half a static read could not settle is settled.
+
+SECOND, THE DRIFT HAS A DATE. The OAuth-client accounts wiring in `lib/bootstrap.ts` was written
+**2026-05-15**. `canonical_email`, `findAccountByCanonicalEmail` and the `findAccountByEmailOrCanonical`
+helper all landed **2026-07-01** — six and a half weeks later — and moved FOUR call sites in
+`services/auth-flows.ts` onto the safe helper. The OAuth caller was not moved. Its comment describes
+what it wires and never claims the literal lookup is deliberate, which is the tell: this is an omission,
+not a decision. ⚠️ And the reason it was missed is worth more than the miss — the sweep that adopted the
+new helper worked in `auth-flows.ts`, and the one caller that needed it lives in `bootstrap.ts`. **A
+hardening that introduces a safe helper must be swept by every FILE calling the unsafe primitive, not by
+the file where the helper lives.** Neither file shows the problem on its own.
+
+THIRD, THE CLASS IS NOW CLOSED WHILE THE INSTANCE STAYS OPEN. Fixing the caller changes sign-in
+semantics on an auth path and remains the owner's call. Preventing a SECOND one needs no decision, and
+nothing was stopping one: five existing guards cover canonicalisation BEHAVIOUR and not one constrains
+WHO may consult the literal column. A static arm now enumerates every caller outside the repo method and
+the service that pairs it with a canonical lookup, and requires each to be exempted with a stated
+reason. The single exemption carries V-1724's, including what the repair costs.
+
+Mutation-proved in three directions, the third being the one that matters:
+
+```
+  a SECOND unexempted caller        FAILS, naming lib/client-ip.ts
+  an exemption gone stale           FAILS — a roster may not outlive its reasons
+  a COMMENT merely mentioning it    PASSES — negative control
+```
+
+That last one is why the arm reads `codeOnly(...)` rather than raw text. This repo is full of prose
+about the literal lookup — the ledger above included — and a text match would have reported its own
+documentation as a violation. The first version did exactly that and would have shipped a guard whose
+first false positive was the entry describing it. Files restored byte-identically after every mutation;
+`it(` 2 to 3; tsc clean.
