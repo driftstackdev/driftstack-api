@@ -21087,3 +21087,46 @@ saying its counts "cannot be derived here" is scoped to the three _test_ counts,
 browsers and a Go toolchain. I extended that sentence to the _file_ count, which the very
 next arm derives. Asking "is this number enforced?" is a search for the subject, never for
 the value — and a guard file's arms must be enumerated before one is added to it.
+
+## V-1673
+
+**Was V-1649 the only UPDATE that moves a row between accounts? Yes — and the sweep that
+established it was wrong twice before it was right.**
+
+V-1649 removed `accountId` from `withOrderLock`'s `.set({…})`. That fixed a named file. The
+class question — does any other UPDATE assign an ownership column — was never asked, and
+the guards that look adjacent do not answer it: `db-repo-account-ownership-boundary` has
+thirteen arms and every one is WHERE-predicate enforcement, which a SET clause is invisible
+to, because the account issuing the UPDATE is the legitimate owner.
+
+**Two instrument failures, both caught before the result was believed.**
+
+1. The first scan reported 3 hits, all false. It matched `args.customerId` (a _value_, where
+   the key was `stripeCustomerId`) and `accountId` inside a _nested_ object — the AAD handed
+   to `encryptForStorage`, not a column. Rewritten to read only keys at payload depth 1.
+2. The rewritten scan reported a clean 0 — while checking one ownership column of eleven.
+   Its column list was hand-written and guessed: `ownerId`, `teamId`, `createdBy`. The schema
+   says `ownerAccountId`, `memberAccountId`, `createdByAccountId`. Six of seven names matched
+   nothing. **A guessed population produces a zero indistinguishable from a real one.** The
+   list is now derived from `schema.ts` — every uuid column that is a FK to `accounts.id`.
+
+**Positive control.** The detector was run against the pre-fix blob from `c4a27e473^`, real
+code that really contained the defect. It found it at line 245. A zero from an unproven
+detector is not evidence, and this one is now proven on a true positive rather than a plant.
+
+**Result, with its boundary.** Across all `.ts` under `apps/server/src`: 136 Drizzle updates
+take an object literal — none assigns an ownership column. 6 build the payload as a variable
+(`bundled-llm`, `auth`, `webhooks`, `atlas-priority-events`, `profiles`×2); all 26 keys they
+assign were enumerated and none is an ownership column. No Drizzle updates exist outside
+`apps/server/src`. So V-1649 was the sole member and that fix was class-complete.
+
+**Pinned.** `an-update-may-not-move-a-row-between-accounts` scans both shapes and derives its
+columns from the schema, so a new ownership column is covered the day it is added rather than
+the day someone remembers this file. Mutation-proved by reintroducing the real V-1649 line
+into `crypto-orders-repo.ts`: exactly one arm failed — the predicted count, which is also how
+I know nothing already covered it — and it named the file and column. Restored byte-identical.
+
+**A defect in the guard itself, found by the same discipline.** It first reported line 247 for
+a payload that opens at 264: stripping comments deleted lines and shifted every number by 17.
+Comments are now blanked in place, preserving newlines and offsets, and the reported line is
+the payload's own. A guard that names the wrong line sends the reader where the defect is not.
