@@ -14722,8 +14722,8 @@ and its own note says the justification expired and that what the layer lacks is
 MEASUREMENT — "the layer runs, and nothing reports which parts of it ran". Flipping that exclusion is
 a filed decision (A2-PRODUCTION-READINESS 5e), so I did not; I measured it instead, without changing
 what CI enforces. Boundary: `apps/server/tests` only (2396 files, 24694 tests), not the full
-3227-file run and not Playwright. Result — **the db layer is 88.12 lines / 76.79 branches / 94.58
-functions**, its first reported figure.
+3227-file run and not Playwright. Result — **the db layer is 90.05 lines / 76.79 branches / 94.58
+functions / 88.12 statements**, its first reported figure.
 
 Branches is the weak axis, and branches are where guards live. `recipes-repo.ts` came back with lines
 322-334 never executed — the entire body of `purgeRecipesForTerminatedAccountsBefore`. An independent
@@ -14763,3 +14763,43 @@ counting. (8) An extraction regex assumed a repo method where the wiring calls a
 name came out EMPTY and `grep -rln ""` matched every file in the tree — an empty pattern reads exactly
 like universal coverage, the mirror of a failing grep reading as a clean tree. Both were caught by
 re-reading with explicit line numbers and a non-empty pattern.
+
+## V-1835 — the pin I missed, and a detector retired at a measured 75% false-positive rate
+
+2026-08-26. Two corrections to V-1834, both found by running things rather than reasoning about them.
+
+⛔ **THE PIN I MISSED.** V-1834 added a `describe.skipIf(!CI && !DATABASE_URL)` file, and
+`scripts/verify-suite.mjs` carries prose saying "132 test files gate on `DATABASE_URL`" which
+`a-gate-that-does-not-name-its-blind-spot-reads-as-total` reads with `/(\d+) test files gate on/`.
+The full run went red on exactly that: "the gate says 132 files gate on DATABASE_URL; there are 133".
+Source and pin belong in ONE commit and I split them. The guard did its job. Enumerated with both
+patterns before editing: ONE live occurrence, and the other `132` in the tree is a wave baseline in a
+batch report with its own separate pin, deliberately untouched. Post-condition after the edit — zero
+occurrences of the old string remain under `scripts/` or `apps/server/` — rather than deriving that
+the substitution must have worked.
+
+⛔⛔ **A DETECTOR RETIRED BY ITS OWN CONTROL.** After the recipes finding I generalised it: census
+every db repo method and free function, and flag those whose name appears in NO test file (comments
+stripped, non-empty patterns asserted). It returned 12. ⭐ Then the known positive killed it:
+`atlas-priority-events-repo::updateStatus` was on the list, and I had personally measured that method
+failing a concurrency test earlier today. The name genuinely appears in no test — it is reached
+through the SERVICE and the ROUTE, so it executes with its name nowhere in the corpus.
+
+Cross-checked against the coverage summary, which measures EXECUTION rather than MENTION:
+`atlas-priority-events` 0 uncovered functions, `retention-scrub` 0, `rate-limit-overrides` 0,
+`chunk-ids` 0 — **at least 9 of the 12 are false positives**, and `listPaidOrdersMissingEntitlement`
+makes it 10, since `db-crypto-entitlement-reconcile-drizzle` builds the real repo and drives the
+sweeper that calls it.
+
+⭐⭐ **THE RULE THIS SETTLES.** A name census measures MENTION; coverage measures EXECUTION. Only their
+INTERSECTION is a finding, and that is exactly why the recipes gap was real — coverage said the body
+never ran AND no test named the function. Had I trusted the census alone I would have filed a dozen
+false alarms against code that is fine. The remaining honest candidates are the 10 genuinely uncovered
+functions coverage reports in `agent-sessions-repo` (6), `crypto-orders-repo` (2) and
+`fleet-nodes-repo` (2); naming them needs a `--coverage.reporter=json` run for per-function detail,
+which the summary reporter does not carry.
+
+⚠️ FIGURE CORRECTED in V-1834 above and in P-42: I read the text reporter's columns in the wrong
+order. They are Stmts | Branch | Funcs | Lines, so the db layer is 90.05 LINES and 88.12 STATEMENTS,
+not the reverse. Both numbers were present and I transposed the labels; corrected in place because
+that row exists to inform a decision someone else makes.
