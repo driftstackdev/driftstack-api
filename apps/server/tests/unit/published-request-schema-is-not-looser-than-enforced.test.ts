@@ -302,6 +302,27 @@ describe('the published request schema is not looser than the enforced one', () 
     // genuine, small loss of coverage and NOT a reformatting artefact. Restoring
     // it needs the comparison keyed per-OPERATION rather than per-field-name,
     // which is a real change to this file and not a number edit.
+    //
+    // V-1709 — that remedy was MEASURED before being attempted, and it is not
+    // reachable the obvious way. Keying by operation positionally — attributing a
+    // declaration to the nearest preceding `app.<method>(` — is unsound here: 144
+    // of the 153 route-side declarations (94%) sit at MODULE scope, before any
+    // route registration, because schemas are `const XSchema = z.object({…})`
+    // referenced later. Under that heuristic the two agent-sessions `name`
+    // declarations attribute to `/history` and `/downloads`, which is arbitrary,
+    // and manufacturing pairings is the exact thing this file declines to do.
+    //
+    // Keying by the enclosing schema CONST is sound and resolves the route side
+    // completely — 16 of 16 ambiguous names, none left, with `name` separating into
+    // DownloadFetchQuerySchema, UploadFileBodySchema and team.ts's
+    // RenameTeamBodySchema. It still does not PAIR the sides: `lib/openapi.ts`
+    // declares 80 named `z.object` consts and NONE of those names coincide with a
+    // route-side const, so there is no shared key to join on.
+    //
+    // So restoring `name` needs each schema const linked to the operations that
+    // reference it, on BOTH sides — symbol resolution, not a keying change. The
+    // floor stays at 22 deliberately, and this note exists so the next attempt does
+    // not spend itself rediscovering that the cheap version cannot work.
     expect(
       pairs.length,
       'published request fields with an unambiguous enforced counterpart',

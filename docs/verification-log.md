@@ -9425,3 +9425,36 @@ guard is green again.
 The arm now derives archives from the walk it already performs and asserts every one of them is
 ignored, with a count arm because an empty match list satisfies a `for` loop forever — the same
 failure mode discovery has in V-1707, guarded the same way. `it(` count unchanged at 3; tsc clean.
+
+## V-1709 — the prescribed fix for the request-schema coverage drop cannot work; measured before attempting it
+
+2026-08-26. `published-request-schema-is-not-looser-than-enforced` lost `name` from its compared set
+when the team rename added a second real chain, and its own note prescribed the repair: "keyed
+per-OPERATION rather than per-field-name, which is a real change to this file and not a number edit."
+Measured that remedy before building it. It is not reachable the obvious way, and the note understated
+the work rather than overstating it.
+
+POSITIONAL OPERATION-KEYING IS UNSOUND HERE. Attributing a declaration to the nearest preceding
+`app.<method>(` assumes declarations live inside route registrations. They do not: 144 of 153
+route-side declarations — 94% — sit at MODULE scope, because schemas are written as
+`const XSchema = z.object({…})` and referenced later. Under the heuristic the two agent-sessions
+`name` declarations attribute to `/history` and `/downloads`, which is arbitrary. Manufacturing
+pairings is precisely what this guard declines to do, so a change that produced them would be a
+regression dressed as coverage.
+
+KEYING BY THE ENCLOSING SCHEMA CONST IS SOUND, AND HALF AN ANSWER. It resolves the route side
+completely — 16 of 16 ambiguous names, none remaining — and separates `name` into
+`DownloadFetchQuerySchema`, `UploadFileBodySchema` and `team.ts:RenameTeamBodySchema`. It does not
+PAIR the two sides: `lib/openapi.ts` declares 80 named `z.object` consts and NOT ONE of those names
+coincides with a route-side const, so there is no shared key to join on. Checked by intersecting the
+two name sets, which is empty.
+
+So restoring `name` needs each schema const linked to the operations referencing it on BOTH sides —
+symbol resolution, not a keying change. The floor stays at 22 deliberately and the guard now carries
+this measurement, so the next attempt does not spend itself rediscovering that the cheap version
+cannot work. A negative result recorded is cheaper than the same dead end walked twice.
+
+Separately, `.prettierignore` now states why its archive entries are literal rather than a glob
+(V-1707/V-1708): the budget guard's matcher is literal, so a glob would satisfy Prettier and leave
+the guard red on a hook that was fine. That file is exactly where someone reaches for a glob, so the
+reason belongs there and not only in the ledger.

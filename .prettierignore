@@ -32,3 +32,9 @@ apps/status-site/dist/
 # lockfiles above: reformatting produces a large meaningless diff on a file nobody should touch.
 docs/verification-log-archive-through-v1200.md
 docs/verification-log-archive-through-v1499.md
+#
+# ⛔ Each archive is listed LITERALLY, and a glob here would be a silent mistake.
+# `no-formatted-markdown-outgrows-the-format-hook` keeps this list honest by reading
+# it, and its matcher is literal (`rel === p || rel.endsWith(p)`) — so a glob would
+# satisfy Prettier while leaving that guard red on a hook that was in fact fine.
+# One line per archive, added by hand at each split.
