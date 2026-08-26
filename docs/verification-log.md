@@ -14445,3 +14445,45 @@ the predicate is the WHOLE clause and deleting it would change arity.
 BOUNDED: one file of seven, three predicates of eighteen. `auth-repo`, `mfa-repo`, `oauth-links-repo`,
 `oauth-store`, `rate-limit-overrides-repo` and `stripe-webhooks-repo` carry the other fifteen and are
 UNMEASURED for this property — the tenant sweep covered those files, but for a different predicate.
+
+## V-1828 — the expiry sweep is COMPLETE: 14 validity predicates, 7 files, all witnessed — and one file is thin on BOTH axes
+
+2026-08-26. Finished the population V-1827 opened, using the conjunct-removal form it derived. The
+arithmetic closes: 18 enumerated expiry/consumption predicates = **14 validity checks** (mutated) + 4
+`lte(expiresAt, …)` PRUNE queries, which deliberately SELECT expired rows and would be meaningless to
+neutralise.
+
+auth-flows-repo 3 pred → 9 arms "an expired web session still authenticated"
+stripe-webhooks-repo 4 → 2 "the lapsed entitlement is not ranked in"
+auth-repo 2 → 5 "an override past its expiry is still being applied — a
+temporary limit increase that never ends"
+oauth-store 2 → 3 (authorization-code / access-token validity)
+rate-limit-overrides 1 → 4 "an expired override was listed as active"
+mfa-repo 1 → 2 "refused: expected true to be false"
+oauth-links-repo 1 → 2 ← V-1810's named boundary, now closed
+
+**14 of 14 witnessed, and not one mutation broke a module** — the removal form introduced no identifier in
+any of the seven files, which is exactly why V-1827 preferred it after `gte` was not in scope.
+
+⭐⭐ ONE FILE IS THE THINNEST ON BOTH AXES, WHICH NO SINGLE SWEEP WOULD HAVE SHOWN.
+`stripe-webhooks-repo` carries 4 of the 14 expiry predicates — the largest share — and they are caught by
+just 2 arms. It was also the outlier of the tenant sweep (V-1820): 5 account predicates, 4 witnesses, and
+**all of them incidental**, with 0 of its test files containing any cross-account phrasing. Same file,
+lowest witness density on tenancy AND on expiry. Its one expiry message, "the lapsed entitlement is not
+ranked in", is again a RANKING assertion that happens to move when a lapsed row leaks in — the same
+incidental shape, on a different property.
+
+That is a real signal about a file rather than about a predicate, and it is only visible because two
+independent sweeps agreed. Not a defect: the predicates are present and currently caught. Recorded so the
+next person who touches entitlement ranking knows that those assertions are load-bearing for two
+properties they do not mention.
+
+⭐ THE PROPERTY-CLASS METHOD IS THE TRANSFERABLE PART. The same instrument, pointed at a different
+predicate on the same layer, produced a second complete population and a finding neither sweep could
+reach alone. "Is this row mine?" and "is this row still valid?" are both answerable by breaking the clause
+and reading the message.
+
+BOUNDED: `gt(<table>.expiresAt, <expr>)` under `apps/server/src/db` only. Expiry enforced in a service
+above the repo, in raw SQL, by a `consumedAt` check alone, or by a scheduled prune rather than a query
+predicate, is outside these 14 — and `oauth-store`'s two arms were not classified deliberate-vs-incidental
+because their assertion text names neither property.
