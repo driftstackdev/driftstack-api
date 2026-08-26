@@ -14048,3 +14048,46 @@ positive rather than a false zero.
 BOUNDED: two repos measured by mutation (`account-audit-repo` in V-1817, `account-proxies-repo` here),
 against targeted subsets rather than the full suite. The remaining 21 repos and ~117 predicates are
 UNMEASURED — not unguarded, and not guarded, simply not tested by me.
+
+## V-1819 — third tenant predicate guarded, and I learned how to tell a VALID mutation from a broken one
+
+2026-08-26. Continuing V-1818's sweep on the highest-value repo left: `api-keys-repo`, where a
+cross-account read or revoke would be severe rather than merely a disclosure.
+
+⭐ GUARDED, AND EMPHATICALLY. All 6 tenant predicates neutralised at once fail **26 arms across 7 files**,
+and the assertion messages name the attack rather than the mechanism:
+
+"a foreign account read the key by id: expected { … } to be null"
+"a foreign account revoked the key: expected 'revoked' not to be 'revoked'"
+"a customer's own keys were missing from their listing"
+
+Caught chiefly by `api-keys-repo-contract.test.ts` — a FOURTH naming convention for this one class of
+guard, after `*tenant-scope*`, `*reads-boundary*` and `*ownership-boundary*`. Three repos are now measured
+by mutation (audit, proxies, api-keys) and all three are guarded, each by differently-named files.
+
+⛔ MY FIRST ATTEMPT AT THIS MEASUREMENT WAS INVALID AND LOOKED LIKE A SUCCESS. I rewrote each predicate to
+`sql\`true\``; 41 arms failed and the numbers looked like a thorough guard. They were
+`'sql is not defined'`—`api-keys-repo`does not import`sql`, so the module was broken, not the
+predicate neutralised. **A broken module fails everything, which is indistinguishable from a
+well-guarded one if you only read the count.**
+
+⛔⛔ AND THE CHECK I USED TO VALIDATE THE MUTATION WAS CONTAMINATED BY THE MUTATION. I grepped the file for
+`sql` AFTER rewriting it and counted 6 — my own insertions. Verifying a change with a measurement taken
+after the change is the same circularity as a verification expressed in terms of the change, and it read
+as confirmation.
+
+⭐ THE CORRECT FORM IS THE PRIOR ART'S, and it is prior art precisely because it avoids this:
+`eq(t.accountId, t.accountId)` — always true, introduces no new identifier, cannot fail to resolve.
+
+⭐⭐ HOW TO TELL A VALID MUTATION FROM A BROKEN ONE, since this cost two attempts:
+
+- Check the import on the SNAPSHOT, before mutating, never on the mutated file.
+- Typecheck the mutated file. **TS6133 "declared but never read" is EXPECTED here** — neutralising the
+  predicate orphans the `accountId` parameter — and is a lint-level complaint on code that still runs. A
+  ReferenceError is not.
+- Read the failure MESSAGES, not the count. `AssertionError: a foreign account read the key by id` is a
+  guard firing; `'sql is not defined'` is a build failing.
+
+BOUNDED: three repos measured (`account-audit`, `account-proxies`, `api-keys`) of the 23 carrying an
+`eq(.accountId)` predicate; 20 repos and roughly 111 predicates remain UNMEASURED — neither guarded nor
+unguarded, simply not tested by me.
