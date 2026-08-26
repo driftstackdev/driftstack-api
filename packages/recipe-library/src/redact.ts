@@ -78,6 +78,22 @@ const SECRET_QUERY_PARAMS = new Set([
   'magic_token',
   'jwt',
   'otp',
+  // V-1717 — this product's OWN token parameters, which a known-secrets list had
+  // no business omitting. `ds_token` is published as a query parameter on the
+  // account notification stream, so a recipe navigating a Driftstack URL carried
+  // it into a step result in clear. The other four are the central redactor's
+  // (`apps/server/src/lib/redact-url.ts`) and are unambiguously secret-bearing.
+  'ds_token',
+  'session_token',
+  'challenge_token',
+  'debug_token',
+  'code_verifier',
+  // ⛔ `state` is deliberately NOT here, though the central redactor scrubs it.
+  // In OAuth `state` is CSRF protection, not a secret — it is meant to be
+  // comparable by the client and is routinely logged. The central list scrubs it
+  // because a log line is not worth the argument; a step result is for a human
+  // reading back what a recipe did, and redacting a non-secret there costs
+  // observability for no gain. The two lists diverge here ON PURPOSE.
 ]);
 
 /**

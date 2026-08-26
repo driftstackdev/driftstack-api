@@ -9788,3 +9788,48 @@ BOUNDED: the fix is verified by byte-identity with a redactor that is behavioura
 not by an independent behavioural test of the mirror's own scrubbing. Identity transfers the property
 and is what the arm can enforce; a behavioural test of `safeTransportError` would need the function
 exported and does not exist.
+
+## V-1717 — the second hand-maintained redactor: bidirectional divergence, this product's own token missing, and dormant
+
+2026-08-26. Swept the SHAPE behind V-1716 rather than the token: other hand-maintained copies of a
+central security control. The first detector was over-broad — matching any file containing `ds_live_`,
+`whsec_` or `sk-ant-` returned 15 files, nearly all of which hold those prefixes because they GENERATE
+or SIGN with them. Narrowed to the precise signal, code that emits a `[redacted]` marker, giving seven
+true sites: the central, three that correctly import it, the mirror fixed in V-1716, one false positive
+where `[redacted]` appears only in a doc comment (`agent-decomposer.ts`), and one genuine second
+redactor — `packages/recipe-library/src/redact.ts`.
+
+IT IS NOT A MIRROR, AND THE DIVERGENCE RUNS BOTH WAYS. It redacts recipe STEP RESULTS — structured
+data, path segments, JWT shapes — and is broader than the central in places, carrying 15 names the
+central lacks (`auth`, `authorization`, `jwt`, `otp`, `sid`, `sig`, `reset_token`, …). It also missed
+six of the central's. Two lists evolved independently; neither derives from the other; both are right
+about things the other is not.
+
+⚠️ ONE OF THE SIX IS `ds_token`, WHICH IS OURS. The file states its own posture — "a
+redact-the-known-secrets posture, not a fail-closed allowlist" — so a name absent from it is a
+credential printed in clear rather than a near-miss. `ds_token` is published as a query parameter on
+the account notification stream, so a recipe navigating a Driftstack URL carried it into a step result
+verbatim. A known-secrets list had no business omitting the product's own token.
+
+DORMANT, AND SAYING SO IS THE POINT. `apps/server/src` does not import `recipe-library` anywhere:
+`redactStepForResult` has exactly one caller, the package's own `mock.ts`. So this is a gap in a
+library awaiting its runner, not a live exposure — green here reads "uncalled", not "unguarded". That
+is why the remedy is five names and one arm rather than the cross-source guard V-1716 earned.
+
+Fixed: `ds_token`, `session_token`, `challenge_token`, `debug_token` and `code_verifier` added, each a
+central name and unambiguously secret-bearing. ⛔ `state` deliberately NOT added, though the central
+scrubs it: in OAuth `state` is CSRF protection rather than a secret, meant to be compared by the client
+and routinely logged. A log line is not worth the argument; a step result is a human reading back what
+a recipe did, and redacting a non-secret there costs observability for nothing. The lists now diverge
+there ON PURPOSE, which is the difference between an absence and an oversight. Post-condition after the
+edit: `state` is the only central name still absent.
+
+⭐ THE ARM FAILED FIRST AND THE FIX WAS RIGHT. Written behaviourally rather than as a membership check —
+a name added to the Set with the matcher broken would still pass a membership assertion — it failed on
+`expected … to contain '[redacted]'`. The subject was correct: the value WAS redacted, and the marker is
+written through `URLSearchParams`, which percent-encodes it to `%5Bredacted%5D`. My assertion was
+testing the serializer's spelling. Decoding first fixes it. That is four instruments in one session that
+were wrong about code that was right.
+
+Mutation-proved on the real subject: removing `ds_token` from the Set fails with "ds_token was left in
+clear". Restored byte-identically; `it(` 29 to 30; tsc clean; 34 tests pass.

@@ -36,6 +36,38 @@ describe('redactStepForResult', () => {
     expect(out.url).toContain(encodeURIComponent(REDACTED));
   });
 
+  // V-1717 — this list is explicitly a "redact-the-known-secrets posture, not a
+  // fail-closed allowlist", so a name absent from it is a credential printed in
+  // clear rather than a near-miss. It had grown independently of the server's
+  // central redactor and had never acquired this product's OWN token parameters —
+  // `ds_token` most of all, which the account notification stream publishes as a
+  // query parameter, so a recipe navigating a Driftstack URL carried it into a
+  // step result verbatim. Behavioural rather than a list assertion: a name added
+  // to the Set with the matcher broken would still pass a membership check.
+  it("redacts this product's own token query parameters, ds_token included", () => {
+    for (const name of [
+      'ds_token',
+      'session_token',
+      'challenge_token',
+      'debug_token',
+      'code_verifier',
+    ]) {
+      const step: RecipeStep = {
+        kind: 'navigate',
+        url: `https://app.driftstack.dev/stream?${name}=SUPERSECRETVALUE123&page=2`,
+      };
+      const out = redactStepForResult(step) as { url: string };
+      expect(out.url, `${name} was left in clear`).not.toContain('SUPERSECRETVALUE123');
+      // The marker is written through `URLSearchParams`, which percent-encodes the
+      // brackets — `ds_token=%5Bredacted%5D`. Decoding first asserts the marker is
+      // present rather than asserting the serializer's spelling of it.
+      expect(decodeURIComponent(out.url), `${name} was not replaced with the marker`).toContain(
+        REDACTED,
+      );
+      expect(out.url, 'a non-secret param must survive').toContain('page=2');
+    }
+  });
+
   it('redacts a URL credential in a wait url-condition, leaves other wait conditions alone', () => {
     const waitUrl: RecipeStep = {
       kind: 'wait',
