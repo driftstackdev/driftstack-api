@@ -22467,3 +22467,37 @@ constant that physics holds still is not a trade worth making.
 What would change that: a fourth parameter, or any value that CAN legitimately move. Recorded so
 the next reader finds a measurement rather than an oddity, and knows the per-parameter version of
 the check is the one that sees it.
+
+## V-1701
+
+**Two more caller obligations checked, both covered — and the principle behind V-1697 turns out to
+be house doctrine already, written down in a guard I had not read.**
+
+**client-ip** — _"consumers must not parse `X-Forwarded-For` themselves"_, because nginx appends
+the observed peer and the raw leftmost value is caller-supplied. A **negative** obligation, so it
+is checkable directly rather than by mutation: swept `apps/server/src` for any read of the
+forwarding header outside the shared extractor and found **seven hits, all prose comments**. And
+`client-ip-shared-parser` already enforces it with three arms — _"no route reads X-Forwarded-For
+outside the shared reader"_, _"no route decides the IP trust boundary for itself"_, and a
+discovery arm confirming its own population is not empty.
+
+**metrics-registry** — _"callers MUST keep label values bounded (enum-like)"_, with the file
+admitting the registry cannot enforce it. Covered by
+`metrics-label-cardinality-cross-source-invariant`.
+
+⭐ **And that guard's header is the finding.** It says, of the very comment it is protecting:
+
+> _That comment is already pinned … Pinning the comment freezes what the file SAYS; it cannot
+> notice a caller registering `['account_id']` tomorrow. This file checks the thing the comment is
+> about._
+
+That is V-1697's shape — a claim pinned while the behaviour making it true is not — **articulated
+in this repository before I arrived at it**, and acted on with a non-vacuity arm and a visible
+roster. So the stripe launch gate was not a new class of gap; it was a known class with one
+unapplied instance, and `the-stripe-launch-gate-actually-fires-at-bootstrap` is the same pattern
+applied a second time.
+
+Worth stating plainly because it changes what the sweep is for: **not discovering a principle, but
+finding where an existing one lapsed.** Eight obligations checked, one unenforced — and the one
+that was unenforced is the only one whose neighbouring guard pinned prose without a sibling
+checking behaviour.
