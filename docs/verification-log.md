@@ -14487,3 +14487,46 @@ BOUNDED: `gt(<table>.expiresAt, <expr>)` under `apps/server/src/db` only. Expiry
 above the repo, in raw SQL, by a `consumedAt` check alone, or by a scheduled prune rather than a query
 predicate, is outside these 14 — and `oauth-store`'s two arms were not classified deliberate-vs-incidental
 because their assertion text names neither property.
+
+## V-1829 — third property class swept complete: 33 revocation/consumption predicates, and 2 have only a text-pin witness
+
+2026-08-26. Same instrument, third property on the same layer. Tenancy asked "is this row mine?", expiry
+"is it still valid?", and this asks "has it been revoked or already used?" — the question behind a revoked
+API key that still authenticates and a one-time token that replays.
+
+auth-flows-repo 9 pred → 24 arms "an earlier reset link survived"
+oauth-store 9 → 5 "the token still authenticated after being revoked"
+fleet-nodes-repo 6 → 4 "a revoked node was listed as active in its region"
+api-keys-repo 2 → 3 revoked keys must not list as active
+oauth-links-repo 2 → 4 "and the token is spent from then on"
+mfa-repo 2 → 1 "refused: expected true to be false" ← thin, generic
+profiles-repo 1 → 17 "a trashed profile still counted toward the cap"
+auth-repo 1 → 2 ⛔ TEXT PINS ONLY
+team-members-repo 1 → 1 ⛔ TEXT PIN ONLY
+
+33 of 33, matching the enumeration exactly, and no mutation broke a module.
+
+⛔⛔ THE SHARP ONE IS `auth-repo`, AND IT IS SHARP BECAUSE OF WHAT SITS BESIDE IT. Its single predicate is
+in the web-session lookup:
+
+and(eq(webSessions.tokenHash, …), gt(webSessions.expiresAt, now), isNull(webSessions.revokedAt))
+
+V-1827 proved the EXPIRY conjunct of that exact `and()` is behaviourally guarded — "an expired web session
+still authenticated: expected { … } to be null". The REVOCATION conjunct beside it is caught only by
+`db-auth-repo-content-parity` and a cross-source invariant, both of which assert the SOURCE TEXT. **Same
+query, same file, two properties, one with a behavioural witness and one without.** A revoked web session
+that still authenticates is the thing that predicate exists to prevent, and nothing executes it.
+
+⭐ THAT ASYMMETRY IS THE ARGUMENT, exactly as it was for P-39: not "this is unguarded" but "its own
+neighbour is guarded and it is not", which makes the fix a copy rather than a design.
+
+⛔ AND MY INSTRUMENT MISSED A FILE FOR THE THIRD TIME BY SPELLING. `profiles-repo` hoists its filter —
+`const notDeleted = isNull(profiles.deletedAt);` used at 24 sites — so an inline-shape regex found nothing
+and reported "no mutation" rather than a zero. Mutating the CONST instead (to
+`or(isNull(x), isNotNull(x))`, always true for a nullable column and using only identifiers already
+imported) typechecks clean and fails 17 arms. Sweep the shape, not the token — a predicate can be hoisted
+as easily as it can be spelled differently.
+
+BOUNDED: `isNull(<table>.{revokedAt,consumedAt,deletedAt})` under `apps/server/src/db`, plus the one
+hoisted const. A revocation expressed as `eq(x.revoked, false)`, in raw SQL, or enforced in a service
+above the repo is outside these 33 — `eq(x.revoked,false)` was searched for and returns 0.
