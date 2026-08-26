@@ -456,7 +456,7 @@ describe('V-266 D1 — encryption of the minted key at rest', () => {
       JSON.stringify({
         ...pending,
         status: 'bound',
-        secret_blob: encryptPlatformSecret('ds_test_pre_v2', ENC_KEY).toString('base64'),
+        secret_blob: encryptPlatformSecret('ds_test_pre_v2', ENC_KEY, undefined).toString('base64'),
         encrypted: true,
         account_id: 'acc_pre_v2',
       }),

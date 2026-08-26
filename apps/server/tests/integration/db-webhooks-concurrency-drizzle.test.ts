@@ -202,6 +202,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       const previousV1 = `${WEBHOOK_SECRET_V1_PREFIX}${encryptPlatformSecret(
         previous,
         WEBHOOK_KEY,
+        undefined,
       ).toString('base64')}`;
       const [inserted] = await client`
         INSERT INTO webhook_endpoints
@@ -256,6 +257,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       const invalidV1 = `${WEBHOOK_SECRET_V1_PREFIX}${encryptPlatformSecret(
         secretA2,
         wrongKey,
+        undefined,
       ).toString('base64')}`;
       const updatedAt = new Date('2026-07-14T22:50:00.000Z');
       const updatedAtIso = updatedAt.toISOString();
@@ -281,6 +283,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       const repairedV1 = `${WEBHOOK_SECRET_V1_PREFIX}${encryptPlatformSecret(
         secretA2,
         WEBHOOK_KEY,
+        undefined,
       ).toString('base64')}`;
       await client`UPDATE webhook_endpoints SET secret = ${repairedV1} WHERE id = ${idA2}`;
       // Invariant-scoped for the reason given on the first upgrader case above.

@@ -45,7 +45,7 @@ function encodeAuthenticatedContext(context: string | undefined): Buffer | undef
 export function encryptPlatformSecret(
   plaintext: string,
   keyBase64: string,
-  authenticatedContext?: string,
+  authenticatedContext: string | undefined,
 ): Buffer {
   if (plaintext.length === 0) {
     throw new Error('platform-secret plaintext is empty; refusing to encrypt');
@@ -65,7 +65,7 @@ export function encryptPlatformSecret(
 export function decryptPlatformSecret(
   blob: Buffer,
   keyBase64: string,
-  authenticatedContext?: string,
+  authenticatedContext: string | undefined,
 ): PlatformSecretPlaintext {
   const key = decodeKey(keyBase64);
   const context = encodeAuthenticatedContext(authenticatedContext);

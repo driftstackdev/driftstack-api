@@ -20,21 +20,21 @@ describe('platform-secret encryption', () => {
   it('encrypt + decrypt round-trips the plaintext', () => {
     const key = makeKey();
     const plaintext = 'sk-live-totally-fake-test-vector-not-a-real-secret-1234567890';
-    const blob = encryptPlatformSecret(plaintext, key);
+    const blob = encryptPlatformSecret(plaintext, key, undefined);
     // Blob layout: 12 bytes IV + 16 bytes tag + N bytes ciphertext.
     expect(blob.length).toBeGreaterThanOrEqual(12 + 16 + plaintext.length);
-    const decrypted = decryptPlatformSecret(blob, key);
+    const decrypted = decryptPlatformSecret(blob, key, undefined);
     expect(decrypted).toBe(plaintext);
   });
 
   it('encrypt produces a different ciphertext on each call (random IV)', () => {
     const key = makeKey();
     const plaintext = 'sk-live-determinism-check';
-    const a = encryptPlatformSecret(plaintext, key);
-    const b = encryptPlatformSecret(plaintext, key);
+    const a = encryptPlatformSecret(plaintext, key, undefined);
+    const b = encryptPlatformSecret(plaintext, key, undefined);
     expect(Buffer.compare(a, b)).not.toBe(0);
-    expect(decryptPlatformSecret(a, key)).toBe(plaintext);
-    expect(decryptPlatformSecret(b, key)).toBe(plaintext);
+    expect(decryptPlatformSecret(a, key, undefined)).toBe(plaintext);
+    expect(decryptPlatformSecret(b, key, undefined)).toBe(plaintext);
   });
 
   // Regression: encryptPlatformSecret previously had no empty-plaintext
@@ -42,7 +42,7 @@ describe('platform-secret encryption', () => {
   // encryptGuiControlKey, which both refuse an empty string.
   it('encrypt rejects an empty plaintext', () => {
     const key = makeKey();
-    expect(() => encryptPlatformSecret('', key)).toThrow(/empty.*refusing/i);
+    expect(() => encryptPlatformSecret('', key, undefined)).toThrow(/empty.*refusing/i);
   });
 
   // Regression: decryptPlatformSecret previously accepted an exact
@@ -51,30 +51,30 @@ describe('platform-secret encryption', () => {
   it('decrypt rejects a blob that is exactly IV + tag with zero ciphertext bytes', () => {
     const key = makeKey();
     const ivTagOnly = Buffer.alloc(12 + 16); // 28 bytes, no ciphertext at all
-    expect(() => decryptPlatformSecret(ivTagOnly, key)).toThrow(/too short/i);
+    expect(() => decryptPlatformSecret(ivTagOnly, key, undefined)).toThrow(/too short/i);
   });
 
   it('decrypt accepts a blob with exactly one ciphertext byte (boundary)', () => {
     const key = makeKey();
-    const blob = encryptPlatformSecret('a', key);
+    const blob = encryptPlatformSecret('a', key, undefined);
     expect(blob.length).toBe(12 + 16 + 1);
-    expect(decryptPlatformSecret(blob, key)).toBe('a');
+    expect(decryptPlatformSecret(blob, key, undefined)).toBe('a');
   });
 
   it('decrypt rejects a tampered blob (GCM auth failure)', () => {
     const key = makeKey();
     const plaintext = 'sk-live-tamper-detection-test';
-    const blob = encryptPlatformSecret(plaintext, key);
+    const blob = encryptPlatformSecret(plaintext, key, undefined);
     const tampered = Buffer.from(blob);
     tampered[tampered.length - 1] = tampered[tampered.length - 1]! ^ 0x01;
-    expect(() => decryptPlatformSecret(tampered, key)).toThrow();
+    expect(() => decryptPlatformSecret(tampered, key, undefined)).toThrow();
   });
 
   it('decrypt rejects a different key (key-mismatch ⇒ GCM auth failure)', () => {
     const keyA = makeKey();
     const keyB = makeKey();
-    const blob = encryptPlatformSecret('sk-live-wrong-key-test', keyA);
-    expect(() => decryptPlatformSecret(blob, keyB)).toThrow();
+    const blob = encryptPlatformSecret('sk-live-wrong-key-test', keyA, undefined);
+    expect(() => decryptPlatformSecret(blob, keyB, undefined)).toThrow();
   });
 
   it('authenticated context round-trips only under the exact same context', () => {
@@ -82,22 +82,22 @@ describe('platform-secret encryption', () => {
     const blob = encryptPlatformSecret('context-bound-value', key, 'purpose:record-a');
     expect(decryptPlatformSecret(blob, key, 'purpose:record-a')).toBe('context-bound-value');
     expect(() => decryptPlatformSecret(blob, key, 'purpose:record-b')).toThrow();
-    expect(() => decryptPlatformSecret(blob, key)).toThrow();
+    expect(() => decryptPlatformSecret(blob, key, undefined)).toThrow();
   });
 
   it('rejects an explicitly empty authenticated context', () => {
     const key = makeKey();
     expect(() => encryptPlatformSecret('value', key, '')).toThrow(/authenticated context is empty/);
-    const blob = encryptPlatformSecret('value', key);
+    const blob = encryptPlatformSecret('value', key, undefined);
     expect(() => decryptPlatformSecret(blob, key, '')).toThrow(/authenticated context is empty/);
   });
 
   it('encrypt/decrypt reject a key that does not decode to 32 bytes', () => {
     const tooShortKey = Buffer.alloc(16).toString('base64');
-    expect(() => encryptPlatformSecret('v', tooShortKey)).toThrow(/32 bytes/);
+    expect(() => encryptPlatformSecret('v', tooShortKey, undefined)).toThrow(/32 bytes/);
     const key = makeKey();
-    const blob = encryptPlatformSecret('v', key);
-    expect(() => decryptPlatformSecret(blob, tooShortKey)).toThrow(/32 bytes/);
+    const blob = encryptPlatformSecret('v', key, undefined);
+    expect(() => decryptPlatformSecret(blob, tooShortKey, undefined)).toThrow(/32 bytes/);
   });
 });
 
@@ -120,6 +120,8 @@ describe('platform-secret-encryption — over-long key', () => {
     // base64 STRING, matching the parameter type — a Buffer compiles under
     // vitest and fails `npm run typecheck`, which this repo asserts as a test.
     const LONGKEY = Buffer.alloc(48, 7).toString('base64');
-    expect(() => encryptPlatformSecret('x', LONGKEY)).toThrow(/32 bytes|must be 32|AES/i);
+    expect(() => encryptPlatformSecret('x', LONGKEY, undefined)).toThrow(
+      /32 bytes|must be 32|AES/i,
+    );
   });
 });

@@ -117,9 +117,11 @@ describe('record-bound webhook secret encryption', () => {
   });
 
   it('accepts canonical plaintext and v1 only through the bootstrap converter', () => {
-    const legacyV1 = `${WEBHOOK_SECRET_V1_PREFIX}${encryptPlatformSecret(SECRET, KEY).toString(
-      'base64',
-    )}`;
+    const legacyV1 = `${WEBHOOK_SECRET_V1_PREFIX}${encryptPlatformSecret(
+      SECRET,
+      KEY,
+      undefined,
+    ).toString('base64')}`;
     expect(() => readWebhookSecret(SECRET, KEY, CONTEXT)).toThrow(/not a v2/);
     expect(() => readWebhookSecret(legacyV1, KEY, CONTEXT)).toThrow(/not a v2/);
 

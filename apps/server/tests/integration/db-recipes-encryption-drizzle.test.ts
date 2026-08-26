@@ -53,7 +53,7 @@ function legacyIntent(key = KEY): unknown {
   return {
     kind: 'driftstack.recipe-intent-log',
     version: 1,
-    ciphertext: encryptPlatformSecret(JSON.stringify(intentLog), key).toString('base64'),
+    ciphertext: encryptPlatformSecret(JSON.stringify(intentLog), key, undefined).toString('base64'),
   };
 }
 
@@ -61,7 +61,9 @@ function legacyTranscript(key = KEY): unknown {
   return {
     kind: 'driftstack.agent-transcript',
     version: 1,
-    ciphertext: encryptPlatformSecret(JSON.stringify(transcript), key).toString('base64'),
+    ciphertext: encryptPlatformSecret(JSON.stringify(transcript), key, undefined).toString(
+      'base64',
+    ),
   };
 }
 

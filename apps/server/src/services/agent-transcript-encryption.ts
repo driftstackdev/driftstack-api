@@ -47,9 +47,11 @@ export function encryptAgentTranscript(
   return {
     kind: AGENT_TRANSCRIPT_ENVELOPE_KIND,
     version: 1,
-    ciphertext: encryptPlatformSecret(JSON.stringify(transcript), encryptionKeyBase64).toString(
-      'base64',
-    ),
+    ciphertext: encryptPlatformSecret(
+      JSON.stringify(transcript),
+      encryptionKeyBase64,
+      undefined,
+    ).toString('base64'),
   };
 }
 
@@ -67,6 +69,7 @@ export function readAgentTranscript(
   const plaintext = decryptPlatformSecret(
     Buffer.from(stored.ciphertext, 'base64'),
     encryptionKeyBase64,
+    undefined,
   );
   return parseAgentTranscript(JSON.parse(plaintext) as unknown);
 }

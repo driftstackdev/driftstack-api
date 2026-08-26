@@ -98,12 +98,14 @@ describe('saved recipe record-bound payload encryption', () => {
     const legacyIntent = {
       kind: 'driftstack.recipe-intent-log',
       version: 1,
-      ciphertext: encryptPlatformSecret(JSON.stringify(intents), KEY).toString('base64'),
+      ciphertext: encryptPlatformSecret(JSON.stringify(intents), KEY, undefined).toString('base64'),
     };
     const legacyTranscript = {
       kind: 'driftstack.agent-transcript',
       version: 1,
-      ciphertext: encryptPlatformSecret(JSON.stringify(transcript), KEY).toString('base64'),
+      ciphertext: encryptPlatformSecret(JSON.stringify(transcript), KEY, undefined).toString(
+        'base64',
+      ),
     };
     expect(() => readRecipeIntentLog(intents, KEY, CONTEXT_A)).toThrow('not a v2 envelope');
     expect(() => readRecipeIntentLog(legacyIntent, KEY, CONTEXT_A)).toThrow('not a v2 envelope');

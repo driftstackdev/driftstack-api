@@ -148,7 +148,7 @@ export function convertWebhookSecretToV2(
   let plaintext: string;
   if (stored.startsWith(WEBHOOK_SECRET_V1_PREFIX)) {
     const blob = decodeCanonicalPayload(stored.slice(WEBHOOK_SECRET_V1_PREFIX.length));
-    plaintext = decryptPlatformSecret(blob, encryptionKeyBase64);
+    plaintext = decryptPlatformSecret(blob, encryptionKeyBase64, undefined);
   } else {
     if (stored.startsWith('driftstack:webhook-secret:')) {
       throw new Error('Webhook signing secret storage has an unknown envelope version.');

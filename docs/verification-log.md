@@ -21434,3 +21434,43 @@ reds, the new one. Restored byte-identical.
   identical bug I fixed in a guard four hours earlier** — reintroduced the moment I wrote a
   script instead of a test. The fix is not to remember it; it is that the shared helper exists
   and a scratch script does not import it.
+
+## V-1680
+
+**`authenticatedContext` is now REQUIRED. Omitting an AAD is a compile error; the guard moved
+with the signature instead of dying with it.**
+
+V-1679 pinned by test what the type system permitted: `encryptPlatformSecret(plaintext, key,
+authenticatedContext?)` accepted two arguments and silently produced ciphertext bound to
+nothing. The sibling `encryptPlatformSecretValue(plaintext, key, name)` already proved the
+ergonomics — its binding is required — so the parameter is now `string | undefined` rather than
+optional, on both encrypt and decrypt.
+
+**Predicted 42 call sites would fail to compile; 42 did**, every one `TS2554`. The prediction was
+made by running the corrected argument counter over `src`, `tests` and `packages` first, and it
+required excluding three matches that are string literals rather than calls — two
+`expect(REPO).toContain('encryptPlatformSecret(')` assertions in a parity test, and the control
+string inside the guard itself. A raw count would have predicted 45 and been wrong by exactly
+the three things that are not calls.
+
+Each of the 42 now passes an explicit `undefined`, so **deliberate absence is visible in the
+call and accidental absence cannot be written at all.**
+
+**The guard was re-pointed, not deleted.** Its header said to delete it the day the signature
+changed, and that was wrong: with the parameter required, every call in the repo has three
+arguments, so an argument-counting guard would pass everything — including the calls that pass
+nothing. The unbound shape is now a literal `undefined` in the third position, and that is what
+it flags, against the same three listed exemptions. Mutation-proved by making a real bound site
+pass `undefined`: one arm reds, naming the site. So omission is impossible and deliberate
+absence still has to be justified — which is strictly more than either mechanism alone.
+
+**I broke the guard while improving its message and the suite said "no tests".** Rewording the
+failure to name the cause rather than the argument count, I put backticks inside a template
+literal and terminated it early. Vitest reported `Tests no tests` — not a failure — and a
+mutation run against the broken file printed a clean restore line. Caught by the standing check
+rather than by noticing: `it(` count against HEAD (5 = 5) and `tsc` (0 errors). **A file that
+does not parse reports success in the same shape as a file that passes.**
+
+**Boundary.** This covers `platform-secret-encryption` only. The other four crypto modules bind
+by their own means (V-1679b) and their signatures are unchanged; the cipher-construction arm is
+what covers them.

@@ -78,7 +78,7 @@ function sourceFiles(dir: string): string[] {
 }
 
 /** Top-level argument count of the call whose opening paren is at `open`. */
-function argCount(src: string, open: number): number {
+function argSegments(src: string, open: number): string[] | null {
   let depth = 0;
   let close = -1;
   for (let k = open; k < src.length; k += 1) {
@@ -92,9 +92,9 @@ function argCount(src: string, open: number): number {
       }
     }
   }
-  if (close < 0) return -1;
+  if (close < 0) return null;
   const args = src.slice(open + 1, close);
-  if (args.trim() === '') return 0;
+  if (args.trim() === '') return [];
   // Split into top-level segments and count the NON-EMPTY ones. Counting commas
   // and adding one reads a trailing comma as an extra argument — and prettier
   // writes a trailing comma on every multi-line call, which is how four of the
@@ -112,7 +112,24 @@ function argCount(src: string, open: number): number {
     } else cur += ch;
   }
   segments.push(cur);
-  return segments.filter((seg) => seg.trim() !== '').length;
+  return segments.map((seg) => seg.trim()).filter((seg) => seg !== '');
+}
+
+/** Argument count, or -1 when the call could not be parsed. */
+function argCount(src: string, open: number): number {
+  return argSegments(src, open)?.length ?? -1;
+}
+
+/**
+ * Whether this call deliberately passes no context.
+ *
+ * Since `authenticatedContext` became REQUIRED, omission is a compile error and
+ * this is the only remaining spelling of an unbound call. The guard moved with
+ * the signature: it used to count arguments, and counting would now pass every
+ * call in the repo, including the ones that pass nothing.
+ */
+function passesNoContext(segs: string[]): boolean {
+  return segs.length < 3 || segs[2] === 'undefined';
 }
 
 interface Site {
@@ -120,6 +137,7 @@ interface Site {
   fn: string;
   line: number;
   args: number;
+  segs: string[];
 }
 
 function callSites(): Site[] {
@@ -136,6 +154,7 @@ function callSites(): Site[] {
         fn: m[1] as string,
         line: src.slice(0, m.index ?? 0).split('\n').length,
         args: argCount(src, open),
+        segs: argSegments(src, open) ?? [],
       });
     }
   }
@@ -175,7 +194,7 @@ function cipherSites(): { rel: string; kind: string; line: number; aad: boolean 
 
 describe('an at-rest secret is bound to what it belongs to', () => {
   const sites = callSites();
-  const contextFree = sites.filter((s) => s.args >= 0 && s.args < 3);
+  const contextFree = sites.filter((s) => s.args >= 0 && passesNoContext(s.segs));
 
   it('CRITICAL the scan finds the real call sites. A zero here reads exactly like a clean sweep, and this file would then be asserting nothing about a codebase full of unbound ciphertext.', () => {
     expect(
@@ -198,12 +217,24 @@ describe('an at-rest secret is bound to what it belongs to', () => {
       argCount(trailing, trailing.indexOf('(')),
       'a trailing comma is not an argument — the first version of this counter said 3 here and let a stripped AAD through',
     ).toBe(2);
+    const explicit = 'encryptPlatformSecret(pt, key, undefined)';
+    expect(
+      passesNoContext(argSegments(explicit, explicit.indexOf('(')) ?? []),
+      'an explicit `undefined` third argument is the unbound call now that the parameter is required',
+    ).toBe(true);
+    expect(
+      passesNoContext(argSegments(bound, bound.indexOf('(')) ?? []),
+      'a real context is not an unbound call',
+    ).toBe(false);
   });
 
   it('every encrypt and decrypt passes an authenticated context, except the sites listed with a reason. Omitting it is one token and the type system permits it; what it produces is ciphertext that decrypts under any record, for any account.', () => {
     const unexplained = contextFree
       .filter((s) => !ALLOWED.some((a) => a.file === s.rel && a.fn === s.fn))
-      .map((s) => `${s.rel}:${s.line} ${s.fn} called with ${s.args} arguments`);
+      .map(
+        (s) =>
+          `${s.rel}:${s.line} ${s.fn} passes no authenticated context — third argument is ${s.segs[2] ?? '<absent>'}`,
+      );
     expect(
       unexplained.sort(),
       'an at-rest secret is encrypted or read without binding the record it belongs to',

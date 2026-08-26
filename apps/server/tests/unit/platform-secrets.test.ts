@@ -26,32 +26,32 @@ const OTHER_KEY = randomBytes(32).toString('base64');
 
 describe('platform-secret encryption (BYOK blob pattern)', () => {
   it('roundtrips: encrypt → [IV|tag|ct] blob → decrypt', () => {
-    const blob = encryptPlatformSecret('sk-live-SECRET', KEY);
+    const blob = encryptPlatformSecret('sk-live-SECRET', KEY, undefined);
     // 12 IV + 16 tag + ciphertext
     expect(blob.length).toBeGreaterThan(28);
-    expect(decryptPlatformSecret(blob, KEY)).toBe('sk-live-SECRET');
+    expect(decryptPlatformSecret(blob, KEY, undefined)).toBe('sk-live-SECRET');
   });
 
   it('unique IV per encryption — same plaintext, different blobs', () => {
-    const a = encryptPlatformSecret('same', KEY);
-    const b = encryptPlatformSecret('same', KEY);
+    const a = encryptPlatformSecret('same', KEY, undefined);
+    const b = encryptPlatformSecret('same', KEY, undefined);
     expect(a.equals(b)).toBe(false);
   });
 
   it('rejects a tampered blob (GCM auth failure)', () => {
-    const blob = encryptPlatformSecret('value', KEY);
+    const blob = encryptPlatformSecret('value', KEY, undefined);
     blob.writeUInt8(blob.readUInt8(blob.length - 1) ^ 0xff, blob.length - 1);
-    expect(() => decryptPlatformSecret(blob, KEY)).toThrow();
+    expect(() => decryptPlatformSecret(blob, KEY, undefined)).toThrow();
   });
 
   it('rejects the wrong key', () => {
-    const blob = encryptPlatformSecret('value', KEY);
-    expect(() => decryptPlatformSecret(blob, OTHER_KEY)).toThrow();
+    const blob = encryptPlatformSecret('value', KEY, undefined);
+    expect(() => decryptPlatformSecret(blob, OTHER_KEY, undefined)).toThrow();
   });
 
   it('rejects a too-short blob + a non-32-byte key', () => {
-    expect(() => decryptPlatformSecret(Buffer.alloc(10), KEY)).toThrow(/too short/);
-    expect(() => encryptPlatformSecret('v', Buffer.alloc(8).toString('base64'))).toThrow(
+    expect(() => decryptPlatformSecret(Buffer.alloc(10), KEY, undefined)).toThrow(/too short/);
+    expect(() => encryptPlatformSecret('v', Buffer.alloc(8).toString('base64'), undefined)).toThrow(
       /32 bytes/,
     );
   });
