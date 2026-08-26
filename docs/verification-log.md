@@ -21153,3 +21153,34 @@ Swapped to `codeOnly`; re-proved by the same mutation, which still names
 morning in a new place: I reached for a local helper without asking whether the repo already
 had one, and rediscovering a solved bug is the cheap outcome — shipping the two I did not
 rediscover was the expensive one.
+
+## V-1674
+
+**Three suite reds that read as a repo defect are one unapplied local migration.**
+
+A full run showed 33 failed files / 67 failed tests. Attribution first, before any
+investigation: 22 files and 47 tests are content-parity guards over `customer-dashboard`
+pages that a peer had dirty in the shared tree — confirmed by running only the 195 tests
+that reference that app, and later confirmed by the peer directly. Four were left.
+
+Of those, `no-guard-strips-comments-by-hand` was mine and is fixed in V-1673b. The other
+three are `db-schema-matches-the-migrations-drizzle`, `db-team-invite-single-use-drizzle`
+and `db-team-members-role-change-drizzle`, and their message is
+"table teams is declared but not migrated" — which reads as exactly the defect it is not.
+
+Measured: 114 migrations applied, 115 on disk, `to_regclass('public.teams')` NULL. The
+local database is one migration behind. `0114_teams_entity.sql` is committed, does create
+the table, and landed in `fa4df20a1` alongside the schema declaration. CI migrates a fresh
+database, so `build-test` is unaffected. Nothing in the repo is wrong.
+
+**Not applied deliberately** — a peer's gate was running, and moving the schema under an
+in-flight suite produces failures far more confusing than the three it would fix. Reported
+to the owner instead.
+
+**The instrument failed first, again.** Asking whether a migration existed, I grepped
+`apps/server/drizzle/*.sql` — a directory that does not exist — and got a clean zero I was
+one keystroke from reporting as "no migration creates teams". They live in
+`apps/server/src/db/migrations/`. A zero from a wrong path is byte-identical to a zero from
+a right one, and the only thing that separates them is checking that the search space is
+real before believing what it returns. Third instance today, after a guessed column list
+that checked one column of eleven and a literal-value grep that could not see a derivation.
