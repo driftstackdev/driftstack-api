@@ -142,6 +142,37 @@ function callSites(): Site[] {
   return out;
 }
 
+/**
+ * Cipher constructions allowed to omit setAAD, because they bind by KEY instead.
+ *
+ * `profile-key-hierarchy` derives a per-account Tenant Master Key —
+ * `HKDF-SHA256(master, salt = "tenant" || account_id, info = "TMK-v1")` — so a
+ * secret wrapped under account A's TMK cannot be unwrapped with B's. That is
+ * binding in the key rather than in the tag, and it is stronger, not weaker.
+ * Both `wrapSecret`/`unwrapSecret` callers pass a derived TMK; nothing wraps
+ * under the raw master key.
+ */
+const KEY_BOUND: ReadonlyArray<string> = ['lib/profile-key-hierarchy.ts'];
+
+/** Every `createCipheriv` / `createDecipheriv`, and whether setAAD follows it. */
+function cipherSites(): { rel: string; kind: string; line: number; aad: boolean }[] {
+  const out: { rel: string; kind: string; line: number; aad: boolean }[] = [];
+  for (const abs of sourceFiles(SRC)) {
+    const src = codeOnly(readFileSync(abs, 'utf8'));
+    for (const m of src.matchAll(/create(Cipheriv|Decipheriv)\s*\(/g)) {
+      out.push({
+        rel: abs.slice(REPO_ROOT.length + 1).replace('apps/server/src/', ''),
+        kind: m[1] as string,
+        line: src.slice(0, m.index ?? 0).split('\n').length,
+        aad: /\.setAAD\s*\(/.test(
+          src.slice((m.index ?? 0) + m[0].length, (m.index ?? 0) + m[0].length + 400),
+        ),
+      });
+    }
+  }
+  return out;
+}
+
 describe('an at-rest secret is bound to what it belongs to', () => {
   const sites = callSites();
   const contextFree = sites.filter((s) => s.args >= 0 && s.args < 3);
@@ -176,6 +207,21 @@ describe('an at-rest secret is bound to what it belongs to', () => {
     expect(
       unexplained.sort(),
       'an at-rest secret is encrypted or read without binding the record it belongs to',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL every cipher construction binds, whichever mechanism it uses. The call-site arm above only sees `encryptPlatformSecret`, and four other modules build their own ciphers — livekit calls setAAD unconditionally, byok builds its AAD from a validated accountId, and profile-key-hierarchy binds in the KEY. A guard scoped to one helper reads as covering the codebase.', () => {
+    const sites = cipherSites();
+    expect(
+      sites.length,
+      'no cipher constructions found — the sweep is measuring nothing',
+    ).toBeGreaterThanOrEqual(15);
+    const unbound = sites
+      .filter((s) => !s.aad && !KEY_BOUND.includes(s.rel))
+      .map((s) => `${s.rel}:${s.line} create${s.kind} with no setAAD`);
+    expect(
+      unbound.sort(),
+      'a cipher is constructed without binding the record, and its file is not one that binds by key',
     ).toEqual([]);
   });
 

@@ -21392,3 +21392,45 @@ what this checks at test time.
 ⚠️ Unrelated and not mine: `tsc -p apps/server/tsconfig.test.json` currently fails on
 `tests/e2e/helpers/server.ts:230`, which `git status` shows modified in the shared tree. Attributed
 before investigating and reported to its owner. My file contributes zero diagnostics.
+
+## V-1679b
+
+**Extension of V-1679 — the claim was right, the demonstration covered a third of it, and the
+guard covered a fifth.**
+
+V-1679 said "every production at-rest encryption binds the record it belongs to" and proved it
+for the call sites of ONE helper. Four other modules build their own ciphers and never touch
+that helper, so neither the measurement nor the guard could see them. Swept properly — every
+`createCipheriv` and `createDecipheriv` under `apps/server/src`:
+
+**10 encrypt sites, 11 decrypt sites.** The invariant holds, by three distinct mechanisms:
+
+1. **AAD passed at the call site** — the `encryptPlatformSecret` sites of V-1679.
+2. **AAD applied unconditionally inside the module** — `livekit-secret-encryption` calls
+   `setAAD(buildLivekitSecretAad(context))` with no conditional at all;
+   `byok-anthropic-encryption` builds its AAD from an accountId it first validates as a UUID and
+   lowercases, so a case-variant cannot address a different envelope.
+3. **Binding in the KEY, not the tag** — `profile-key-hierarchy` derives a per-account Tenant
+   Master Key, `HKDF-SHA256(master, salt = "tenant" || account_id, info = "TMK-v1")`, throwing on
+   an empty accountId. A secret wrapped under account A's TMK cannot be unwrapped with B's. Its
+   two AAD-free cipher constructions are `wrapSecret`/`unwrapSecret`, whose only two callers both
+   pass `deriveTenantMasterKey(masterKey, accountId)` — nothing wraps under the raw master key.
+
+Mechanism 3 is stronger than an AAD, not an exception to it, and the guard now says so rather
+than treating the file as an oversight.
+
+**The guard has a new arm covering all three**, mutation-proved by deleting the unconditional
+`setAAD` from livekit — a module the original arm is structurally blind to. Exactly one arm
+reds, the new one. Restored byte-identical.
+
+**Two more instrument failures in this stretch, both mine, both caught by reading:**
+
+- The sweep that found these sites printed `if (aad)` for source that reads
+  `if (aad !== undefined)`, because it displayed only the captured group. I was one step from
+  reporting a truthiness weakness — an empty value silently skipping `setAAD` — that does not
+  exist in any of the four.
+- That same throwaway sweep deleted comment lines before reporting line numbers, so every
+  location it printed was short by the height of the header above it. **That is V-1254, the
+  identical bug I fixed in a guard four hours earlier** — reintroduced the moment I wrote a
+  script instead of a test. The fix is not to remember it; it is that the shared helper exists
+  and a scratch script does not import it.
