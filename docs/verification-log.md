@@ -13608,3 +13608,34 @@ answer** — reporting `Account` and `Session` as shapes appearing nowhere when 
 BOUNDED: `packages/sdk-python/openapi.json` as generated at HEAD; orphan means the component name appears
 in no `$ref` anywhere in the document, including from other components. Whether each orphan's shape is
 otherwise reachable inline is UNMEASURED, not zero.
+
+## V-1809 — correcting V-1808: the duplicate pairs were already measured, and the cause of missing that is mechanical
+
+2026-08-26, minutes after V-1808. I presented as new a finding that W-10's own ledger row already carried,
+in more detail, from V-1650.
+
+That row's status column already says: 33 of the document's 232 operations would change (31 responses + 11
+request bodies), **`Account`/`AdminAccount` and `CreateSessionResponse`/`Session` have identical property
+sets** with the decision that follows — "an inline shape can only `$ref` ONE name, so somebody must choose
+which name customers see in every generated client" — and **8 of the 39 are not part of the fix**: 4 have
+no property set, 2 appear only nested in list envelopes, and 2 are query objects OpenAPI flattens into
+parameters so no operation can ever reference them.
+
+I found two of those things and reported them as discoveries. V-1650 had them plus the operation count
+plus the eight exclusions, which I did not have.
+
+⛔ THE CAUSE IS MECHANICAL AND IT IS MY OWN DOCUMENTED RULE. I located the row with
+`grep -n "^| W-10" … | cut -c1-180`, read the 180 characters that printed, and appended. **A truncated read
+is a scoped search, and I stated a conclusion without the boundary the truncation imposed** — on a row
+whose useful content began after the cut. The same rule that has caught me on files caught me on a single
+line.
+
+⭐ WHAT SURVIVES AS GENUINELY NEW is one sentence: two spec edits landed today (V-1786 nine crypto 503s,
+V-1787 four audit-log query parameters) and the orphan SET is unchanged at 39 while the declared total
+moved 81 -> 83, so both added components are referenced and neither edit touched this surface. The ledger
+row has been trimmed to that, with the rest attributed to V-1650.
+
+⚠️ FOURTH REDISCOVERY TODAY, and the trend matters more than any one of them: prior art for the audit-log
+scope check (V-1792), for the non-vacuity floor (V-1785), for the coverage-census instrument
+(feedback memory, V-1798), and now this. Three were in the repo and one was in my own memory index. The
+common factor is not forgetting to look — it is looking at a PREFIX and treating the answer as complete.
