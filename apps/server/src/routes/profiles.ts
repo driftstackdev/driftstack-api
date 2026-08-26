@@ -40,6 +40,7 @@ export const TrimScopeBodySchema = z
 import type { ProfileRecord, ProfilesService } from '../services/profiles.js';
 import type { AgentSessionsRepo } from '../services/agent-sessions.js';
 import { BadRequestError, ForbiddenError, NotFoundError, ValidationError } from '../lib/errors.js';
+import { requireArchetypeForTier } from '../lib/errors-helpers.js';
 import type { AccountAuthRepo } from '../services/auth.js';
 import { resolveEffectiveAccount } from '../services/auth.js';
 import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
@@ -179,6 +180,14 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
         if (!owner) throw new ForbiddenError('Owner account no longer exists.');
         accountId = owner.id;
         tier = owner.tier;
+      }
+
+      // V-1611 #15 — device entitlement. Checked AFTER the effective-owner
+      // resolution above, so an act-as create is judged on the OWNER's tier and
+      // not the caller's: a free member acting on a paid owner gets the owner's
+      // devices, and a paid member acting on a free owner does not smuggle one in.
+      if (parsed.data.archetype !== undefined) {
+        requireArchetypeForTier(tier, parsed.data.archetype);
       }
 
       const profile = await service.create({

@@ -2,6 +2,9 @@
 // services can import without pulling the auth service.
 
 import {
+  ARCHETYPE_DEVICES_PER_TIER,
+  ARCHETYPE_REGISTRY,
+  archetypeAllowedForTier,
   parseGranularScope,
   TIER_FEATURES,
   type AccountTier,
@@ -9,7 +12,7 @@ import {
   type TierBooleanFeature,
 } from '@driftstack/api-types';
 import type { AccountContext } from '../services/auth.js';
-import { ForbiddenError, NotFoundError } from './errors.js';
+import { ForbiddenError, NotFoundError, ValidationError } from './errors.js';
 
 /**
  * V-174 + V-481 — scope check with backwards-compat aliases.
@@ -126,6 +129,35 @@ export function requireTierFeature(tier: AccountTier, feature: TierBooleanFeatur
  * BYOK-only: the byok-anthropic settings routes stay ungated.
  * Error shape mirrors requireTierFeature (403 ForbiddenError).
  */
+/**
+ * V-1611 #15 — device entitlement gate for profile creation.
+ *
+ * ⛔ Fail-closed on an UNKNOWN archetype id as well as a disallowed one, and the
+ * two get different messages. An id the registry does not carry is a client
+ * error whatever the tier, and answering it with "upgrade" would send a customer
+ * to the billing page to fix a typo.
+ *
+ * Enforced here rather than by filtering `GET /v1/archetypes`, which is public,
+ * unauthenticated and cached: the catalog says what the product supports, this
+ * says what an account may select. Same split as `vpnEgress`, which is likewise
+ * published and gated at the point of use.
+ */
+export function requireArchetypeForTier(tier: AccountTier, archetypeId: string): void {
+  if (archetypeAllowedForTier(tier, archetypeId)) return;
+  const known = ARCHETYPE_REGISTRY.some((a) => a.id === archetypeId);
+  if (!known) {
+    throw new ValidationError({
+      formErrors: [`Unknown archetype "${archetypeId}".`],
+      fieldErrors: {},
+    });
+  }
+  const allowed = ARCHETYPE_DEVICES_PER_TIER[tier] ?? [];
+  throw new ForbiddenError(
+    `The "${tier}" tier can create profiles on ${allowed.join(' and ')} only. ` +
+      `Upgrade to use other devices.`,
+  );
+}
+
 export function requireBundledLlmTier(tier: AccountTier): void {
   const llmBilling = TIER_FEATURES[tier].llmBilling;
   if (llmBilling === 'byok_or_bundled' || llmBilling === 'byok_or_bundled_custom') return;

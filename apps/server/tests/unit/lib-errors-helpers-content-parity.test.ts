@@ -131,12 +131,14 @@ describe('W392.C apps/server/src/lib/errors-helpers.ts content parity', () => {
     expect(body).toMatch(/export \{ NotFoundError \};/);
   });
 
-  it('imports: parseGranularScope + TIER_FEATURES + 3 types from @driftstack/api-types + AccountContext + ForbiddenError/NotFoundError', () => {
+  it('imports: parseGranularScope + TIER_FEATURES + the archetype entitlement trio + 3 types from @driftstack/api-types + AccountContext + ForbiddenError/NotFoundError/ValidationError', () => {
     expect(body).toMatch(
-      /import \{\s*parseGranularScope,\s*TIER_FEATURES,\s*type AccountTier,\s*type ApiKeyScope,\s*type TierBooleanFeature,\s*\} from '@driftstack\/api-types';/,
+      /import \{\s*ARCHETYPE_DEVICES_PER_TIER,\s*ARCHETYPE_REGISTRY,\s*archetypeAllowedForTier,\s*parseGranularScope,\s*TIER_FEATURES,\s*type AccountTier,\s*type ApiKeyScope,\s*type TierBooleanFeature,\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(/import type \{ AccountContext \} from '\.\.\/services\/auth\.js';/);
-    expect(body).toMatch(/import \{ ForbiddenError, NotFoundError \} from '\.\/errors\.js';/);
+    expect(body).toMatch(
+      /import \{ ForbiddenError, NotFoundError, ValidationError \} from '\.\/errors\.js';/,
+    );
   });
 
   it('file exists at canonical path', () => {

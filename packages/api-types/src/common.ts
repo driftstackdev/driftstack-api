@@ -623,6 +623,39 @@ export interface ArchetypeConfig {
   readonly status: ArchetypeStatus;
 }
 
+/**
+ * Devices a tier may select when creating a profile. `null` means unrestricted.
+ *
+ * ⛔ Keyed on DEVICE, not on iOS version, and that is the whole decision. The
+ * plan called for "older iOS only", and the registry cannot express it: iOS has
+ * three distinct values across 79 archetypes and two of the three are the same
+ * product generation, so an iOS cut separates almost nothing. **Device has 19
+ * distinct values and is what a customer already understands** — "you get an
+ * iPhone 13 on the free plan" is a sentence someone can act on; "you get
+ * iOS 18.4" is not.
+ *
+ * Free gets the two oldest BASE models. Not the Pro variants, so the cut is a
+ * generation boundary rather than an arbitrary pair, and both carry
+ * `status: 'available'` so neither is a promise the atlas cannot keep.
+ *
+ * ⚠️ This is an ENTITLEMENT, not a catalog filter. `GET /v1/archetypes` stays
+ * public, unauthenticated and cacheable — it answers "what does this product
+ * support", which is the same answer for everyone. What a given account may
+ * SELECT is enforced where the selection happens. Hiding the catalog per tier
+ * would need auth on a public route and would break its 300s cache for no
+ * security gain, since the ids are published in the OpenAPI document anyway.
+ */
+export const ARCHETYPE_DEVICES_PER_TIER: Record<AccountTier, readonly string[] | null> = {
+  free: ['iPhone 13', 'iPhone 13 mini'],
+  solo_manual: null,
+  team_manual: null,
+  agency_manual: null,
+  api_starter: null,
+  api_builder: null,
+  api_scale: null,
+  enterprise: null,
+};
+
 export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
   {
     id: LOCKED_ARCHETYPE_ID,
@@ -1370,6 +1403,26 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     status: 'reference',
   },
 ];
+
+/**
+ * Is `archetypeId` selectable on `tier`?
+ *
+ * PURE and registry-derived: an unknown id is NOT allowed, so a typo cannot slip
+ * through a tier gate by failing to match anything — the fail-closed direction.
+ * A tier with no restriction allows any id the registry knows.
+ */
+export function archetypeAllowedForTier(tier: AccountTier, archetypeId: string): boolean {
+  const entry = ARCHETYPE_REGISTRY.find((a) => a.id === archetypeId);
+  if (entry === undefined) return false;
+  const allowed = ARCHETYPE_DEVICES_PER_TIER[tier];
+  if (allowed === null) return true;
+  return allowed.includes(entry.device);
+}
+
+/** Every archetype id `tier` may select. Empty only if the registry is empty. */
+export function archetypeIdsForTier(tier: AccountTier): readonly string[] {
+  return ARCHETYPE_REGISTRY.filter((a) => archetypeAllowedForTier(tier, a.id)).map((a) => a.id);
+}
 
 /**
  * Map an internal archetype identifier to its human-readable label,
