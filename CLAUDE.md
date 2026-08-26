@@ -59,14 +59,20 @@ for fork edits rather than relying on timing.
 
 Cross-agent dependencies coordinate via planning file 133 schema + `docs/internal/cross-agent-control-plane-contract.md`.
 
-**⚠️ A2↔A3 CHANNEL — THE FILE BUS IS UNREACHABLE FOR A3. USE `docs/internal/OPEN-ITEMS.md`.**
+**⚠️ A2↔A3 CHANNEL — corrected 2026-08-26. BOTH halves of the old note are now false.**
 
-⛔ The agent-bus lives at `/Users/john/code/driftstack/operations/agent-bus/` — in the
-**`driftstack`** repo, which line 41 of this file forbids touching. A3 is scoped to
-`driftstack-api` and correctly refuses to go there, so **A3 can neither read nor write the
-bus**. That is structural, not a dormancy problem: the A2↔A3 file channel has never worked,
-and posting to it is writing into a room the correspondent cannot enter. A3 searched for it
-on 2026-08-25 and reported it missing, because from `driftstack-api` it is.
+⛔ It used to say the file bus was structurally unreachable for A3, and to route handoffs
+through `docs/internal/OPEN-ITEMS.md` in THIS repo. Neither holds, and following it writes a
+handoff into a path that does not exist:
+
+- **The ledger MOVED.** `docs/internal/OPEN-ITEMS.md` was carved out of this public repo in
+  `c99b4e75e` and now lives at **`/Users/john/code/driftstack/docs/internal/OPEN-ITEMS.md`**,
+  byte-identical. Appending here silently creates a new untracked file nobody reads.
+- **A3 reaches the bus.** The blanket prohibition this section cited was superseded by the
+  owner's grant recorded at the top of this file — A3 works `driftstack` directly and posts to
+  `operations/agent-bus/live/A3.md`, which A1 reads.
+- ⚠️ **`operations/agent-bus/A1-A3-BUS.md` is the DEAD channel** (last write 2026-07-12). The
+  live lanes are `live/A1.md` and `live/A3.md`; check mtimes, not the filename.
 
 - **A2 ↔ A1:** the file bus WORKS. A1 lives in `driftstack` and writes `live/A1.md` daily.
   A2 has a Rule-G write carve-out for `live/A2.md` only. Post there for A1.
