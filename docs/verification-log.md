@@ -10850,3 +10850,47 @@ rather than asserted. Restored byte-identically under a trap, narrowest test set
 BOUNDED: this makes the fault VISIBLE in logs, not queryable. Correlating a freeze to a worker fault
 still means reading server logs by hand, and the durable version — a column plus an admin surface — is
 the migration I am not taking unilaterally.
+
+## V-1743 — the parity tool rebuilt until its controls passed: one real gap across 29 frames, already filed
+
+2026-08-26. V-1742 reported its own table as noise and said a trustworthy version needed brace-matched
+parsing. Rebuilt it: balanced-brace block extraction on both sides, depth-1 keys only so nested objects
+cannot leak up, and nested Swift struct bodies stripped before reading properties. Held to FOUR controls
+— one positive (the known-open `geolocation` gap must appear) and three negatives (a correctly-mapped
+`exitIdentity` must not, the now-fixed `lastErrorSummary` must not, and `intentDispatch` must be free of
+`sessionAssign` spill).
+
+⛔ IT FAILED THEM FOUR TIMES, AND THE FAILURES ARE THE ENTRY. Counting parens as depth meant a multi-line
+Zod chain pushed depth above 1 and every later field was skipped. Then the positive control still failed:
+`ts_fields('sessionAssign')` was returning **intentDispatch's** fields, because `rfind('z.object(')`
+walked back past the real schema — `SessionAssignSchema = z\n  .object({` puts `z` and `.object(` on
+SEPARATE LINES. ⚠️ That multi-line style has now broken THREE separate extractors tonight: a `z\.`
+field regex, a named-schema field regex, and this block anchor. **It is the house idiom, and every
+schema-parsing instrument written against this file must assume it.**
+
+WITH ALL FOUR CONTROLS PASSING, 29 frames compare and six differ. Every one resolves:
+
+```
+  sessionAssign   cp-only geolocation      REAL — V-1741, filed to A1, awaiting a decision
+  pageState       5 harness-only fields    TRANSPORT SPLIT, not a gap
+  heartbeat       sequence, webkitForkBuild present in the repo
+  intentResult    7 harness-only fields    present in the repo (different declaration shape)
+  navigateHistory tabId                    present in the repo
+  sessionEnd      reason                   present in the repo
+```
+
+⚠️ THE pageState ONE IS THE SAME MISTAKE FOR THE THIRD TIME AND THAT IS THE FINDING ABOUT ME. The harness
+sends `progress`, `inputFocused`, `logicalContentWidth/Height` and `tabIncarnation`; the CP schema keeps
+`sessionId` and a four-state enum. With `app.ts` calling its consumer the "GUI loading-bar/overlay", a
+loading BAR that never receives progress reads exactly like a defect. It is not: `SimulatorWindow.tsx`
+takes those fields DIRECTLY from the harness over LiveKit, and `agent-session-control.ts:400` documents
+the control-plane path as the minimal one for the live URL. **One Swift struct serves two transports**,
+so a diff against either schema alone reports the other's fields as missing — V-1739's error, then
+V-1740's one level down, and now this.
+
+So: the two hand-written implementations AGREE across every frame, with the single filed exception. That
+is the measurement V-1739 set out to make and could not trust until now.
+
+BOUNDED: kind names and depth-1 field names. It does not compare TYPES — a field declared `z.string()`
+against a Swift `Int` agrees here and fails at runtime — nor optionality, nor enum members. Those are a
+larger measurement and are not claimed.
