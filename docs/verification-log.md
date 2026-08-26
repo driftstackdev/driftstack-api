@@ -13683,3 +13683,45 @@ closed rather than carried forward.
 BOUNDED: `confirmPendingLink` and `markConsumedAt` were read in full. `findActiveByTokenHash`'s expiry
 predicate was read only for its existence, and the pending-link CREATION path — which decides what a
 merge token is minted for — was not read.
+
+## V-1811 — closed both halves of V-1792's boundary: the CSV export redacts, and tenant scoping is seeded not appended
+
+2026-08-26. Second item worked from the log's own unmeasured-boundary list (V-1810). V-1792 audited the
+account audit log and left two things explicitly unread: "the repository layer below it and the redaction
+of the EXPORT format path". Both are security properties and neither had a prior entry — `scrubActorPrivacy`
+and `rowNeedsActorPrivacyRedaction` appear 0 times in the live log.
+
+⭐ THE CSV BRANCH REDACTS, and the question was worth asking because the two format branches are separate
+code. A comment claims both union the per-row check; the code agrees:
+
+redact ? '' : (row.ipAddress ?? '')
+redact ? '' : (row.userAgent ?? '')
+
+with `redact = redactActorPrivacy || rowNeedsActorPrivacyRedaction(row)` — the same union the JSON branch
+uses — and the payload passed through `scrubActorPrivacy` on the same condition. So a team member
+exporting the owner's log as CSV receives neither the owner's IP nor user-agent, matching JSON. `buildCsv`
+then applies the CWE-1236 formula-injection guard, and the comment names why it matters here specifically:
+audit rows carry client-controlled free text, "user_agent especially".
+
+⭐⭐ THE REPO IS TENANT-SCOPED BY CONSTRUCTION, WHICH IS STRONGER THAN BEING SCOPED. The filter array is
+SEEDED with the account predicate rather than having it pushed alongside the optional ones:
+
+const filters: SQL[] = [eq(accountAuditLog.accountId, accountId)];
+
+Every later `filters.push(...)` — cursor keyset, action, from/to, actor_type, target_resource_id — can only
+ADD to that. There is no conditional path on which the tenant scope is absent, because it is not
+conditional. POST-CONDITION over the file: all 3 selects from `accountAuditLog` carry an `accountId`
+equality in scope.
+
+⛔ I ALMOST READ PAST IT. The window I first printed showed six `filters.push` calls and no account
+predicate, which reads exactly like a scoping bug; the seed was six lines above where I started. Had I
+reported the window instead of finding the initialisation, that would have been a false accusation of a
+tenant-isolation defect on the compliance surface — the most expensive kind of wrong.
+
+NOTED IN PASSING: the keyset cursor carries a fix worth knowing — a timestamp-only cursor "dropped every
+row sharing the cursor's timestamp at a page boundary — and audit rows written in one transaction share an
+identical timestamp, so the drop was real."
+
+BOUNDED: `list` and the two other selects in `account-audit-repo.ts`, and the CSV branch of the export
+handler. The post-condition uses a backward window to associate a select with its predicate, so it is a
+statement about proximity rather than a parse; the first select was additionally confirmed by reading.
