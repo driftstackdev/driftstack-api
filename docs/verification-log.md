@@ -21820,3 +21820,38 @@ at create and never after. Uniformity was the third direction and it is empty.
 **Thirteenth consecutive negative**, against one finding (V-1685) in that span. Recorded because
 the measurement is cheap to redo and expensive to re-derive, and because the yield itself is now
 the useful signal: the questions I can generate are landing on ground this suite already holds.
+
+## V-1690
+
+**The drain holds under the real gate — and the config set is missing the package with the most
+tests, for a reason that is a trap in the opposite direction.**
+
+The W-12 split had me drain and the config owner land the configs. Six `tsconfig.test.json` files
+now exist. Verified against **their** configs rather than the scratch one I drained with, because
+a zero measured under my own instrument is not a zero under the gate: **0 errors across all six.**
+
+Their template is right about the trap I hit: it extends `tsconfig.base.json` rather than the
+sibling build config, and says why in its own header — `extends` inherits `exclude`, an `include`
+cannot win it back, and extending the build config would compile nothing while reporting a
+confident zero. That is V-1684's instrument failure turned into a permanent comment in the file
+that would otherwise have repeated it.
+
+**But the same correct choice creates the opposite trap for exactly one package.** Extending base
+also discards package-specific `compilerOptions`, and `sdk-typescript` is the only package that
+has any: `lib: ["ES2023", "DOM"]`. Enumerated across all eight packages, so the exception is
+measured rather than assumed.
+
+- `sdk-typescript` has **31 test files, more than any other package**, and **no
+  `tsconfig.test.json`**.
+- Its tests already typecheck **0 errors** — measured with the DOM lib restated.
+- Without restating it, the same config template yields a false
+  `TS2304: Cannot find name 'SubtleCrypto'` — which is the exact artifact my first cross-package
+  sweep produced and misread as a finding.
+
+So the seventh config is free to add and must restate `lib`. Reported rather than written: the
+configs are the other half of an agreed split, and crossing it unilaterally is the same mistake
+as bumping someone else's ratchet.
+
+⚠️ My own config failed twice more getting here — `TS5069` from setting `declaration: false`
+without `declarationMap: false`, and before that the missing DOM lib. Both were mine, both were
+caught by reading the error rather than the count.
