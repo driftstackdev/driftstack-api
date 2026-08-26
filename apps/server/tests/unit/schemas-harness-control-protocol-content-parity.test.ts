@@ -1962,18 +1962,35 @@ describe('harness-control-protocol behavioral contract', () => {
     expect(futureReason).toMatchObject({ reason: 'upload_failed' });
   });
 
-  it('CookieSchema domain/name/value/path are bounded (RFC 6265-realistic) — reused by both the customer write-path (SetCookiesRequestSchema) and the harness read-path (CookiesResultSchema); an ~oversized field on either is rejected', () => {
+  it('CookieSchema domain/name/value/path are bounded at 4096 — reused by both the customer write-path (SetCookiesRequestSchema) and the harness read-path (CookiesResultSchema); the bound holds, and it is no longer tighter than what a real cookie can carry', () => {
+    // ⛔ These were 512 for domain/name/path against 4096 for value, and the
+    // asymmetry had no stated reason. Measured against real `Set-Cookie` headers,
+    // a 4000-character NAME and a 2000-character PATH both parse — uncommon,
+    // entirely legal, and an over-cap field fails CookieSchema, which fails the
+    // array, which fails the frame. ONE unusual cookie silently dropped the
+    // ENTIRE jar. Same failure shape as the http_status defect.
     const okCookie = {
-      domain: 'x'.repeat(512),
-      name: 'y'.repeat(512),
+      domain: 'x'.repeat(4096),
+      name: 'y'.repeat(4096),
       value: 'z'.repeat(4096),
-      path: '/'.repeat(512),
+      path: '/'.repeat(4096),
     };
     expect(CookieSchema.safeParse(okCookie).success).toBe(true);
-    expect(CookieSchema.safeParse({ ...okCookie, domain: 'x'.repeat(513) }).success).toBe(false);
-    expect(CookieSchema.safeParse({ ...okCookie, name: 'y'.repeat(513) }).success).toBe(false);
+    // The values that used to be REFUSED and are legal — this is the regression
+    // arm, and it fails the moment anyone tightens these back.
+    expect(
+      CookieSchema.safeParse({ ...okCookie, name: 'y'.repeat(4000) }).success,
+      'a 4000-character name is legal and must not drop the jar',
+    ).toBe(true);
+    expect(
+      CookieSchema.safeParse({ ...okCookie, path: '/'.repeat(2000) }).success,
+      'a 2000-character path is legal and must not drop the jar',
+    ).toBe(true);
+    // The bound still exists — it was the NUMBER that was wrong, not the idea.
+    expect(CookieSchema.safeParse({ ...okCookie, domain: 'x'.repeat(4097) }).success).toBe(false);
+    expect(CookieSchema.safeParse({ ...okCookie, name: 'y'.repeat(4097) }).success).toBe(false);
     expect(CookieSchema.safeParse({ ...okCookie, value: 'z'.repeat(4097) }).success).toBe(false);
-    expect(CookieSchema.safeParse({ ...okCookie, path: '/'.repeat(513) }).success).toBe(false);
+    expect(CookieSchema.safeParse({ ...okCookie, path: '/'.repeat(4097) }).success).toBe(false);
     // Write path (SetCookiesRequestSchema) rejects an oversized cookie value too.
     expect(
       SetCookiesRequestSchema.safeParse({

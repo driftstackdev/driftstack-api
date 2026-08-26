@@ -2687,12 +2687,24 @@ export function registerAgentSessionsRoutes(
   // cookiesResult, A2 W2816 / A3 W2817). Returns a DISCRIMINATED body (200 in
   // every case) — mirroring GET /:id/page-state's "null when not wired" style —
   // so the GUI Cookies panel renders without treating expected-inert states as
-  // HTTP errors (avoids Sentry noise while A3's harness `getAllCookies`
-  // WD-extension is pending; until it lands, a wired+live request resolves
-  // `timeout`, which the drawer shows as "pending data source").
+  // HTTP errors.
+  //
+  // ⛔ STALE (2026-08-26): this said the harness `getAllCookies` WD-extension was
+  // PENDING and that a wired+live request therefore resolves `timeout`. It is
+  // NOT pending — the node handler fetches a real jar via the standard W3C
+  // WebDriver endpoint and has worked on the deployed box for weeks; it never
+  // needed the fork extension this sentence was waiting on.
+  //
+  // ⚠️ Kept and marked rather than deleted, because the sentence did damage worth
+  // recording: the cookie path was documented as inert in TWO independent places,
+  // one per side, so anyone checking whether a cookie-path defect was reachable
+  // read either comment and concluded the path was dead. It is live, and a
+  // schema bound that was too tight silently dropped whole jars while both
+  // comments said nothing could be flowing.
   //   status:'ok'          → cookies: Cookie[]   (the live jar)
   //   status:'unavailable' → cookies: null       (not wired / not live / node offline)
-  //   status:'timeout'     → cookies: null       (node didn't reply — A3 handler pending)
+  //   status:'timeout'     → cookies: null       (node genuinely didn't reply in time —
+  //                                                NOT "handler pending"; the handler is live)
   //   status:'error'       → cookies: null        (node reported a failure OR the account
   //                                                is at its concurrent-relay cap; reason set)
   // Security-audit hardening (2026-06-30): now carries the SAME per-account

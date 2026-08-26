@@ -38079,11 +38079,11 @@
                         "properties": {
                           "domain": {
                             "type": "string",
-                            "maxLength": 512
+                            "maxLength": 4096
                           },
                           "name": {
                             "type": "string",
-                            "maxLength": 512
+                            "maxLength": 4096
                           },
                           "value": {
                             "type": "string",
@@ -38091,7 +38091,7 @@
                           },
                           "path": {
                             "type": "string",
-                            "maxLength": 512
+                            "maxLength": 4096
                           },
                           "expires": {
                             "type": ["number", "null"]
@@ -38312,11 +38312,11 @@
                       "properties": {
                         "domain": {
                           "type": "string",
-                          "maxLength": 512
+                          "maxLength": 4096
                         },
                         "name": {
                           "type": "string",
-                          "maxLength": 512
+                          "maxLength": 4096
                         },
                         "value": {
                           "type": "string",
@@ -38324,7 +38324,7 @@
                         },
                         "path": {
                           "type": "string",
-                          "maxLength": 512
+                          "maxLength": 4096
                         },
                         "expires": {
                           "type": ["number", "null"]

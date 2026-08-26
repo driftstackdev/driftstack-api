@@ -1486,10 +1486,24 @@ export type CookiesRequest = z.infer<typeof CookiesRequestSchema>;
 // ~8MB domain/name/value/path string. Bounds below are realistic per RFC 6265
 // (domain/name/path ~512 bytes, value ~4096 bytes) with headroom.
 export const CookieSchema = z.object({
-  domain: z.string().max(512),
-  name: z.string().max(512),
+  // ⛔ RAISED 512 → 4096 (2026-08-26). The bound is right and the NUMBER was
+  // wrong, and the failure mode is what makes it worth fixing: an over-cap value
+  // fails this object, which fails `z.array(CookieSchema)`, which fails
+  // `CookiesResultSchema` — so ONE unusual cookie silently drops the ENTIRE jar
+  // frame, not the offending cookie. Same shape as the http_status defect above.
+  //
+  // 512 was chosen as "realistic per RFC 6265 with headroom", and measured
+  // against real `Set-Cookie` headers it is not: a 4000-character NAME and a
+  // 2000-character PATH both parse through `HTTPCookie.cookies(withResponseHeaderFields:)`.
+  // Uncommon, entirely legal, and the customer loses every cookie when it happens.
+  //
+  // 4096 matches `value`, which was already there — so the worst case per field
+  // is now uniform rather than one field being four times another for no stated
+  // reason, and the array `.max(2000)` plus the frame cap still bound the whole.
+  domain: z.string().max(4096),
+  name: z.string().max(4096),
   value: z.string().max(4096),
-  path: z.string().max(512).optional(),
+  path: z.string().max(4096).optional(),
   expires: z.number().nullable().optional(),
   httpOnly: z.boolean().optional(),
   secure: z.boolean().optional(),
