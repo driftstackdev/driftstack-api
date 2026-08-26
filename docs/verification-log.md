@@ -21700,3 +21700,36 @@ and the remedy but never the file, and the file is the one thing that cannot be 
 obvious means. A census arm that reports "N untracked test/source files present — commit or park
 them" would collapse both diagnoses to zero. Offered to the census's owner rather than written
 here.
+
+## V-1686
+
+**Hardcoded device dimensions, checked against my own standing rule — and the one inconsistency
+found is a documented trade-off, not a defect.**
+
+Swept every literal device dimension across `apps/server/src` and `packages/*/src`. Boundary:
+the numeric pair 390/844 and the archetype ladder, comments blanked line-preservingly. Three
+sites, all legitimate:
+
+- `drivers/playwright.ts:255` — inside `approximateViewport`, where the dimensions are **derived
+  from the archetype**, which is the correct direction.
+- `webrtc-streaming/mock-codec-wrapper.ts:64-65` — a mock's defaults.
+- `api-types/common.ts` — pricing prose; the digits are coincidental.
+
+**The one thing I did find, and why it is not being filed as a defect.** The two fallbacks in
+that driver disagree with each other: `approximateViewport` defaults to iPhone 16 Pro (402×874)
+while `approximateUserAgent` defaults to iOS 17.4 — and the 16 Pro shipped on iOS 18, so the
+default pair describes a device that cannot exist. They also fall back in opposite directions:
+the newest viewport with the older OS.
+
+Both fallbacks are **deliberately pinned by name in two separate guards**, and those same guards
+pin the file's own framing: _"What this DRIVER is NOT for: Production customer traffic. The
+WebKit fork is the only production-eligible driver"_, and the mapping is described in source as
+best-effort and _"good enough for fingerprint-permissive sites"_. A driver that explicitly
+declines to be fingerprint-consistent is not made wrong by an inconsistent fingerprint. Changing
+either constant would edit two pinned guards to correct a property the file disclaims.
+
+**Tenth consecutive negative**, after V-1683 recorded seven. The one finding in this stretch was
+V-1685, and its distinguishing feature holds up: it was a gap between what the product _sells_
+(a persona as behavioural identity) and what the code _implements_, rather than a gap between
+code and its own stated intent. Guards are extremely good at the second kind here and cannot see
+the first — a guard pins what a file says about itself, and V-1685's file says nothing wrong.
