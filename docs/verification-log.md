@@ -10188,3 +10188,50 @@ the defective ones. Caught by reading both, which took less time than the sweep 
 BOUNDED: the marker is a COMMENT, so this finds helpers whose authors said so. A helper introduced with
 no such sentence, and a raw caller beside it, is invisible to this sweep — which is the same limit that
 made V-1724 findable only because someone had written down what `canonical_email` was for.
+
+## V-1727 — the guard written to stop stale exemptions had two ways of keeping one
+
+2026-08-26. The OAuth-client fix landed in `5c9b01115`, so the single exemption V-1725 recorded is
+spent. Removing it exposed two defects in my own arm, both of the class it was written to catch.
+
+FIRST, THE ROSTER WAS KEYED ON THE WRONG THING. It exempted a file for "calling
+`findAccountByEmail`". After the repair `bootstrap.ts` still calls it — correctly, paired with
+`findAccountByCanonicalEmail`, which is exactly what `findAccountByEmailOrCanonical` does — so the file
+remained a "caller", kept its exemption, and the recorded reason went on describing a 500 that no longer
+happens. An exemption keyed on something BROADER than the defect outlives the defect silently, and the
+arm reported green throughout. It now keys on the unpaired shape: a literal lookup with no canonical
+lookup beside it.
+
+⭐ SECOND, AND THE ONE WORTH CARRYING: the non-vacuity control asserted the defect still existed.
+
+```ts
+expect(callers.length, 'no caller found — the detector would pass on an empty set').toBeGreaterThan(
+  0,
+);
+```
+
+That is a progress bar wearing a control's clothes. It holds only while at least one offender survives,
+so it goes RED on the commit that fixes the last one — the guard punishing the repair it exists to
+drive. It fired for real: with the fix in the tree the count was zero, which is the GOAL state, and my
+arm called it a broken detector. What actually proves a detector can see its subject is that the
+primitive is found at all, safely or not. The arm now floors on `anyCaller`, which is unaffected by
+whether any caller is unsafe.
+
+Mutation-proved in three directions, the middle one being the point of the change:
+
+```
+  an UNPAIRED literal caller        FAILS, naming lib/client-ip.ts
+  a PAIRED literal caller           PASSES — the shape the old arm would have demanded an exemption for
+  an exemption gone stale           FAILS — delete the entry
+```
+
+`EXEMPT` is empty now, and an entry must name a file AND say why it cannot pair the two lookups. Files
+restored byte-identically after every mutation; `it(` unchanged at 3; tsc clean.
+
+⚠️ SEQUENCING, recorded because it nearly cost a shared red. The tightened arm was ready while the fix
+was still UNCOMMITTED in the peer's working tree. Landing it then would have reported the exemption
+stale — correctly — against a tree where HEAD still held the unpaired lookup, reddening the suite over
+a race between two agents rather than over a defect. Held until `5c9b01115` was in, verified BOTH HEAD
+and the working tree paired the lookups, and only then landed. A static guard reads the worktree, so its
+verdict is a function of a peer's uncommitted state; that is a coordination fact, not a bug, and the
+remedy is to sequence rather than to weaken the arm.

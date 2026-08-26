@@ -30,16 +30,18 @@ describe('provider-scoped email canonicalization', () => {
   // against a live database). It stops a SECOND one appearing, which needs no
   // decision. The exemption carries its reason so the list cannot quietly grow.
   it('CRITICAL every literal-email account lookup outside auth-flows is exempted WITH a reason. canonical_email exists because a Gmail alias must collide with whichever literal was registered first; a caller consulting only the literal column misses that collision and reaches an insert the unique index refuses.', () => {
-    const EXEMPT = new Map<string, string>([
-      [
-        'lib/bootstrap.ts',
-        'V-1724 — the OAuth-client accounts wiring predates canonical_email (2026-05-15 vs ' +
-          '2026-07-01). Consulting only the literal column turns a Gmail-alias sign-in into a ' +
-          '500 instead of the Verdict-1 merge flow. The repair is one lookup plus widening the ' +
-          'repo interface to return a row so the merge mail addresses the stored email; both ' +
-          "change sign-in semantics on an auth path and are the owner's call.",
-      ],
-    ]);
+    // V-1725/V-1727 — keyed on the UNSAFE shape, not on the raw call. A caller
+    // that consults the literal column AND the canonical one is correct: that is
+    // exactly what `findAccountByEmailOrCanonical` does. Keying the roster on the
+    // raw call let the first version of this arm miss the fix landing — the file
+    // stayed a "caller", kept its exemption, and the recorded reason went on
+    // naming a bug that no longer existed.
+    //
+    // Empty today: the OAuth wiring that earned the single exemption was repaired
+    // in `5c9b01115`. An entry here must name a file AND say why it cannot pair
+    // the two lookups; an entry for a file that has since been fixed fails below.
+    const EXEMPT = new Map<string, string>();
+
     const SRC = resolve(REPO_ROOT, 'apps/server/src');
     const walk = (dir: string, out: string[] = []): string[] => {
       for (const entry of readdirSync(dir)) {
@@ -53,31 +55,40 @@ describe('provider-scoped email canonicalization', () => {
     expect(files.length, 'the walk found no server sources at all').toBeGreaterThan(100);
 
     // The repo method itself and the service that pairs it with a canonical
-    // lookup are the two legitimate homes; everything else must be exempted.
+    // lookup are the two legitimate homes; everything else is measured.
+    // Comments stripped: a file DISCUSSING the literal lookup — this repo is full
+    // of such comments — is not a file performing it, and a text match would read
+    // the ledger's own prose as a violation.
     const HOMES = ['db/auth-flows-repo.ts', 'services/auth-flows.ts'];
-    const callers = files
-      // Comments stripped: a file DISCUSSING the literal lookup — this repo is
-      // full of such comments — is not a file performing it, and a text match
-      // would read the ledger's own prose as a violation.
-      .filter((f) => /\.findAccountByEmail\(/.test(codeOnly(readFileSync(f, 'utf8'))))
-      .map((f) => f.slice(SRC.length + 1))
-      .filter((rel) => !HOMES.includes(rel))
+    const consults = files
+      .map((f) => ({ rel: f.slice(SRC.length + 1), code: codeOnly(readFileSync(f, 'utf8')) }))
+      .filter(({ rel }) => !HOMES.includes(rel));
+    const anyCaller = consults.filter(({ code }) => /\.findAccountByEmail\(/.test(code));
+    const unsafe = anyCaller
+      .filter(({ code }) => !/\.findAccountByCanonicalEmail\(/.test(code))
+      .map(({ rel }) => rel)
       .sort();
+
+    // ⛔ NON-VACUITY, and the version that survives success. The earlier arm
+    // asserted an UNSAFE caller still existed, so it went red on the commit that
+    // fixed the last one — a progress bar wearing a control's clothes. What
+    // proves the detector can see its subject is that the primitive is found at
+    // all, safely or not.
     expect(
-      callers.length,
-      'no caller found — the detector would pass on an empty set',
+      anyCaller.length,
+      'no file outside the two homes consults findAccountByEmail — the pattern matches nothing, so the arm below would pass over an empty set',
     ).toBeGreaterThan(0);
 
     expect(
-      callers.filter((rel) => !EXEMPT.has(rel)),
-      'literal-email lookups with no recorded reason — use findAccountByEmailOrCanonical, or add the file here with why it cannot',
+      unsafe.filter((rel) => !EXEMPT.has(rel)),
+      'literal-email lookups with no canonical lookup beside them and no recorded reason — call findAccountByCanonicalEmail too, or add the file here with why it cannot',
     ).toEqual([]);
 
-    // A roster must not outlive its reasons: an exemption for a file that no
-    // longer performs the lookup is a stale claim about live code.
+    // A roster must not outlive its reasons: an exemption for a file that has
+    // since been repaired is a stale claim about live code.
     expect(
-      [...EXEMPT.keys()].filter((rel) => !callers.includes(rel)),
-      'exemptions naming a file that no longer looks up by literal email',
+      [...EXEMPT.keys()].filter((rel) => !unsafe.includes(rel)),
+      'exemptions naming a file that no longer performs an unpaired literal lookup — delete the entry',
     ).toEqual([]);
     for (const [rel, why] of EXEMPT) {
       expect(why.length, `${rel} is exempted without a usable reason`).toBeGreaterThan(80);
