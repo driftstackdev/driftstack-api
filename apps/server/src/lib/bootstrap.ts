@@ -156,7 +156,7 @@ import { IncidentEventBus } from '../services/incident-event-bus.js';
 import { SlaReportingService } from '../services/sla-reporting.js';
 import { RateLimitOverridesService } from '../services/rate-limit-overrides.js';
 import { LegalService } from '../services/legal.js';
-import { AuthFlowsService } from '../services/auth-flows.js';
+import { AuthFlowsService, canonicalizeEmailForDedup } from '../services/auth-flows.js';
 import {
   AuthTokensSweeperService,
   enqueueNextAuthTokensSweep,
@@ -2963,7 +2963,34 @@ export async function createProductionDeps(
               pending: new DrizzleOAuthPendingLinksRepo(dbHandle),
               accounts: {
                 findIdByEmail: async (e) => {
-                  const row = await authFlowsRepo.findAccountByEmail(e);
+                  // ⛔ V-1724 — this consulted ONLY the literal column, and that
+                  // produced a customer-facing 500 on an auth path. Observed on a
+                  // real database, not reasoned about: an account created as
+                  // `first.last@gmail.com` stores `canonical_email` =
+                  // `firstlast@gmail.com`; signing in through Google with the
+                  // undotted spelling MISSED here, fell through to
+                  // `createFromIdp`, and the insert died on
+                  // `accounts_canonical_email_unique`. The merge flow that
+                  // should handle a collision is already built and correct — it
+                  // was simply never reached.
+                  //
+                  // ⚠️ The drift is dated and the lesson is about WHERE a sweep
+                  // looks. This wiring is 2026-05-15; canonical dedup and the
+                  // `findAccountByEmailOrCanonical` helper arrived 2026-07-01 and
+                  // moved four callers in `auth-flows.ts` onto the safe path. The
+                  // fifth caller lives HERE, and neither file shows the problem
+                  // alone: `auth-flows.ts` looks fully migrated and this looks
+                  // like ordinary wiring. A hardening that adds a safe helper has
+                  // to be swept by every file calling the unsafe primitive.
+                  //
+                  // Both lookups run unconditionally, mirroring the service
+                  // helper. Short-circuiting on the literal hit would make query
+                  // count vary with which spelling matched.
+                  const [byLiteral, byCanonical] = await Promise.all([
+                    authFlowsRepo.findAccountByEmail(e),
+                    authFlowsRepo.findAccountByCanonicalEmail(canonicalizeEmailForDedup(e)),
+                  ]);
+                  const row = byLiteral ?? byCanonical;
                   return row ? row.id : null;
                 },
                 createFromIdp: async (args) => {
