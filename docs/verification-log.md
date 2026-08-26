@@ -9833,3 +9833,47 @@ were wrong about code that was right.
 
 Mutation-proved on the real subject: removing `ds_token` from the Set fails with "ds_token was left in
 clear". Restored byte-identically; `it(` 29 to 30; tsc clean; 34 tests pass.
+
+## V-1718 — the same mirrored function had a second divergence: a raw slice where the server truncates surrogate-safely
+
+2026-08-26. Continued the V-1716 audit by sweeping the SHAPE rather than the token — comments claiming
+a copy or parity relationship — across `packages/` and `apps/server`. 185 files carry such a comment,
+32 of them inside `packages/`, which cannot import `apps/server`. The detector was proved on a known
+positive first: V-1716's own "keep the central redactText credential classes mirrored here" is among
+the hits.
+
+Most are benign prose or type mirrors with real parity guards. Two claims in the same file were
+VALUE/BEHAVIOUR mirrors with nothing comparing them, and checking both is what this entry records.
+
+THE BACKOFF CURVE AND THE CONSTANTS AGREE. `BACKOFF_MS_BY_ATTEMPT` is 1/5/15/30/60 minutes in both
+`packages/webhook-delivery/src/in-memory.ts` and `apps/server/src/services/webhook-worker.ts`, and
+`MAX_ATTEMPTS` 6, `DEFAULT_TIMEOUT_MS` 10_000 and `TRANSPORT_ERROR_MAX_CHARS` 500 match. Sound today —
+though the arm pinning the backoff claim asserts the mirror's own COMMENT text, so nothing would say
+if the numbers parted.
+
+⚠️ THE TRUNCATION DID NOT AGREE. The server bounds its transport diagnostics with
+`sliceWithoutSplittingSurrogate` on BOTH slices; the copy used a raw `.slice(0, …)` on both. That
+helper exists for a measured reason recorded in `lib/bounded-text.ts`: a bound landing mid-emoji leaves
+an unpaired high surrogate, which does not survive `Buffer.from(out, 'utf8')` — it returns carrying
+U+FFFD — and which Node's `setHeader` rejects outright with "Invalid character in header content". So a
+transport failure whose 500th code unit fell inside an emoji stored a broken `errorMessage`.
+
+SEVERITY, THE SAME BOUNDARY AS V-1716 AND STATED FOR THE SAME REASON. Both production delivery paths
+call the server's own copy; this is the in-memory implementation, scoped by its own header to tests and
+"small self-hosted single-process workloads". Real and shipped, not the hosted plane.
+
+Fixed by mirroring the helper byte-identically and applying it at both sites. Post-condition rather
+than derivation: `grep` for `slice(0, TRANSPORT_ERROR_MAX_CHARS)` in the package returns nothing.
+
+⭐ THE EVIDENCE CHAIN, because byte-identity only transfers a property if the original has one. The
+central helper is behaviourally tested — `sliceWithoutSplittingSurrogate('ab😀', 3)` is `'ab'`,
+`('ab😀cd', 4)` is `'ab😀'` — so a copy proven identical inherits that. The new cross-source arm
+compares the two bodies and fails on drift: mutating the copy's `0xdbff` to `0xdbfe` reports "the copy
+has drifted from lib/bounded-text.ts". Restored byte-identically; `it(` 20 to 21; tsc clean.
+
+⛔ AND I BROKE IT MYSELF ON THE WAY, in the way this log has a standing rule about. Rewriting the
+function across three separate edits without re-reading between them left a stray closing parenthesis:
+three package test files stopped PARSING, which reads as three failing files rather than as a syntax
+error. Caught by re-reading the function and running the tests, then fixed by replacing the whole
+function in one edit instead of patching it in pieces. The rule is written down; following it costs
+less than the four minutes not following it cost.

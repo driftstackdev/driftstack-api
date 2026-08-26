@@ -742,26 +742,46 @@ async function readResponseExcerpt(response: Response): Promise<string | null> {
   }
 }
 
+/**
+ * V-1718 — slice to at most `max` UTF-16 code units without leaving a lone
+ * surrogate at the end. Body kept identical to
+ * `apps/server/src/lib/bounded-text.ts`, which this package cannot import, and
+ * compared against it by a cross-source arm rather than trusted to a comment.
+ *
+ * Why it matters here rather than being tidiness: a truncation that splits an
+ * emoji leaves an unpaired high surrogate, and that string does not survive
+ * `Buffer.from(out, 'utf8')` — it comes back carrying U+FFFD — while Node's
+ * `setHeader` rejects it outright with "Invalid character in header content".
+ * The server bounded its transport diagnostics with this on both slices; this
+ * copy used a raw `.slice()` on both, so a transport error whose 500th code
+ * unit landed mid-emoji stored a broken `errorMessage`.
+ */
+function sliceWithoutSplittingSurrogate(value: string, max: number): string {
+  if (value.length <= max) return value;
+  const cut = value.slice(0, max);
+  const last = cut.charCodeAt(cut.length - 1);
+  return last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut;
+}
+
 function safeTransportError(error: Error): string {
   if (error.name === 'AbortError' || error.name === 'TimeoutError') return 'timeout';
   // This package deliberately has no apps/server dependency, so keep the
   // central redactText credential classes mirrored here and pinned by tests.
-  const bounded = error.message.slice(0, TRANSPORT_ERROR_MAX_CHARS);
-  return (
-    (
-      bounded
-        .replace(TRANSPORT_TOKEN_RE, '$1[redacted]')
-        .replace(TRANSPORT_BEARER_RE, '$1[redacted]')
-        .replace(TRANSPORT_BASIC_RE, '$1[redacted]')
-        // Positional patterns run BEFORE the prefix patterns, for the reason the
-        // central redactor gives: reversed, a bearer credential is rewritten to
-        // `ds_live_[redacted]` first and the bearer pattern then stops at the `[`,
-        // leaving a doubled marker that reads as a bug and invites a wrong fix.
-        .replace(TRANSPORT_PREFIXED_SECRET_RE, '$1[redacted]')
-        .replace(TRANSPORT_ANTHROPIC_KEY_RE, '$1[redacted]')
-        .replace(TRANSPORT_OAUTH_SECRET_RE, '$1[redacted]')
-        .replace(TRANSPORT_USERINFO_RE, '$1[redacted]@') || 'transport failure'
-    ).slice(0, TRANSPORT_ERROR_MAX_CHARS)
+  const bounded = sliceWithoutSplittingSurrogate(error.message, TRANSPORT_ERROR_MAX_CHARS);
+  return sliceWithoutSplittingSurrogate(
+    bounded
+      .replace(TRANSPORT_TOKEN_RE, '$1[redacted]')
+      .replace(TRANSPORT_BEARER_RE, '$1[redacted]')
+      .replace(TRANSPORT_BASIC_RE, '$1[redacted]')
+      // Positional patterns run BEFORE the prefix patterns, for the reason the
+      // central redactor gives: reversed, a bearer credential is rewritten to
+      // `ds_live_[redacted]` first and the bearer pattern then stops at the `[`,
+      // leaving a doubled marker that reads as a bug and invites a wrong fix.
+      .replace(TRANSPORT_PREFIXED_SECRET_RE, '$1[redacted]')
+      .replace(TRANSPORT_ANTHROPIC_KEY_RE, '$1[redacted]')
+      .replace(TRANSPORT_OAUTH_SECRET_RE, '$1[redacted]')
+      .replace(TRANSPORT_USERINFO_RE, '$1[redacted]@') || 'transport failure',
+    TRANSPORT_ERROR_MAX_CHARS,
   );
 }
 

@@ -222,6 +222,28 @@ describe('W454.B packages/webhook-delivery/src/in-memory.ts content parity', () 
   // central redactor after this copy was written on 2026-07-13 and never reached
   // it, while its own arm stayed green and its title said "mirrored credential
   // classes". This arm DERIVES the classes from the central file instead.
+  // V-1718 — the second thing this file copies rather than imports. The credential
+  // classes got a derived comparison in V-1716; the surrogate-safe slice arrived
+  // without one, and a helper copied by hand is the same failure waiting on a
+  // longer fuse. Compared body-to-body against `lib/bounded-text.ts`.
+  it('CRITICAL the surrogate-safe slice is byte-identical to the one it was copied from. A truncation that splits an emoji leaves a lone surrogate, which does not survive a UTF-8 round-trip and is rejected outright by setHeader, so a divergence here is a broken stored diagnostic rather than a style difference.', () => {
+    const central = read(resolve(REPO_ROOT, 'apps/server/src/lib/bounded-text.ts'));
+    const bodyOf = (src: string, where: string): string => {
+      const m =
+        /function sliceWithoutSplittingSurrogate\(value: string, max: number\): string \{(.*?)\n\}/s.exec(
+          src,
+        );
+      expect(
+        m,
+        `sliceWithoutSplittingSurrogate did not parse out of ${where} — this arm would assert nothing`,
+      ).not.toBeNull();
+      return m![1]!.replace(/\s+/g, ' ').trim();
+    };
+    expect(bodyOf(body, 'in-memory.ts'), 'the copy has drifted from lib/bounded-text.ts').toBe(
+      bodyOf(central, 'bounded-text.ts'),
+    );
+  });
+
   it('CRITICAL every credential class the central redactText declares is mirrored here, compared against that file rather than restated. A copy of a security control in a package that cannot import the original diverges silently, and its own content pins cannot see it.', () => {
     const central = read(CENTRAL_REDACTOR);
     const pattern = (src: string, name: string, where: string): string => {
@@ -275,7 +297,14 @@ describe('W454.B packages/webhook-delivery/src/in-memory.ts content parity', () 
     expect(body).toMatch(
       /if \(error\.name === 'AbortError' \|\| error\.name === 'TimeoutError'\) return 'timeout';/,
     );
-    expect(body).toMatch(/error\.message\.slice\(0, TRANSPORT_ERROR_MAX_CHARS\)/);
+    // V-1718 — the bound is applied through the surrogate-safe helper on BOTH
+    // slices now, as the server's copy always did. A raw `.slice()` here could
+    // cut an emoji in half, and the resulting lone surrogate does not survive a
+    // UTF-8 round-trip and is rejected outright by `setHeader`.
+    expect(body).toMatch(
+      /const bounded = sliceWithoutSplittingSurrogate\(error\.message, TRANSPORT_ERROR_MAX_CHARS\);/,
+    );
+    expect(body).not.toMatch(/\.slice\(0, TRANSPORT_ERROR_MAX_CHARS\)/);
     expect(body).toMatch(/\.replace\(TRANSPORT_TOKEN_RE, '\$1\[redacted\]'\)/);
     expect(body).toMatch(/\.replace\(TRANSPORT_BEARER_RE, '\$1\[redacted\]'\)/);
     expect(body).toMatch(/\.replace\(TRANSPORT_BASIC_RE, '\$1\[redacted\]'\)/);
