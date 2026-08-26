@@ -14530,3 +14530,46 @@ as easily as it can be spelled differently.
 BOUNDED: `isNull(<table>.{revokedAt,consumedAt,deletedAt})` under `apps/server/src/db`, plus the one
 hoisted const. A revocation expressed as `eq(x.revoked, false)`, in raw SQL, or enforced in a service
 above the repo is outside these 33 — `eq(x.revoked,false)` was searched for and returns 0.
+
+## V-1830 — correcting P-40: it is BOTH properties, not one, and the repo query is the ONLY line rather than the second
+
+2026-08-26. V-1829 filed P-40 as "revocation has no behavioural witness while the expiry check in the SAME
+`and()` does". Going to copy that expiry arm, I could not find it where the finding implied — and the
+reason invalidates two of the entry's claims.
+
+⛔ THERE ARE TWO `findActiveWebSession` IMPLEMENTATIONS. `auth-flows-repo.ts:303` and `auth-repo.ts:86`.
+The behavioural arm I cited — "an EXPIRED web session does not authenticate", in
+`db-auth-flows-web-session-revoke-drizzle` — exercises the FIRST. I mutated the SECOND. **"Its neighbour
+is guarded" compared two different repos**, which is the same mistake as pairing an export operation with
+a list schema (V-1790): a name is not an identity.
+
+⭐ ISOLATED AND RE-MEASURED. Removing BOTH webSessions conjuncts from `auth-repo` alone —
+`gt(expiresAt, now)` AND `isNull(revokedAt)` — and running the FULL suite:
+
+Test Files 2 failed | 3221 passed | 4 skipped (3227)
+both failures: db-auth-repo-content-parity, db-auth-repo-v016-v298a-cross-source-invariant
+
+**Both are source-TEXT pins. Neither property has a behavioural witness on this lookup** — not revocation,
+and not expiry either. P-40 named half the gap.
+
+⛔⛔ AND IT IS THE ONLY LINE, NOT THE SECOND. P-40 said "not a live exposure — revocation is also enforced
+above the repo". The caller says otherwise, in `services/auth.ts` right beneath the call:
+
+"findActiveWebSession already filters expired + revoked rows in the query. A null result here means:
+token unknown OR expired OR revoked. We can't distinguish the cases (and shouldn't — same 401
+InvalidKey response avoids leaking session state)."
+
+The service deliberately does NOT re-check; it delegates entirely to the query and treats null as the
+answer. So the predicate is the enforcement, not a backstop for it.
+
+⭐ AND IT IS LIVE, checked rather than assumed: `bootstrap.ts:463` constructs
+`new DrizzleAccountAuthRepo(dbHandle)`, and `slowPathWebSession(repo: AccountAuthRepo, …)` is the
+web-session branch of request authentication.
+
+⚠️ STILL NOT A VULNERABILITY, and the distinction matters: both predicates are present and correct today.
+What is missing is any test that would notice their removal. This is "defence that nothing verifies" where
+the defence happens to be the only one.
+
+BOUNDED: `auth-repo.findActiveWebSession` only, measured by removing both conjuncts together against the
+FULL suite. Whether `auth-flows-repo`'s parallel implementation is the one reached on other paths was not
+traced, and the two were not diffed for behavioural equivalence.
