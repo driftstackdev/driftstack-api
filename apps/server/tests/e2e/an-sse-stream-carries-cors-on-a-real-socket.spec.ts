@@ -94,8 +94,16 @@ test('CRITICAL POSITIVE CONTROL a normal reply on this server reflects the origi
 }) => {
   // `/v1/account/me` rather than a status route: it is the most exercised normal
   // reply in this suite, so if it stops reflecting, the cause is CORS and not
-  // this route. (`/v1/status/sla` was the first choice and answers 500 against a
-  // database with no probe rows — see W-19.)
+  // this route.
+  //
+  // ⚠️ `/v1/status/sla` was the first choice and answered 500. That was NOT a
+  // defect in the route — it was this file's own harness change passing the
+  // drizzle handle where DrizzleProbesRepo wants the {client, db, close} triple,
+  // so the repo dereferenced undefined. Verified after fixing: it returns 200
+  // with `{"data":[]}` against a database with no probe rows. Written down
+  // because the 500 arrived with a ready-made and completely wrong explanation
+  // ("the SLA route mishandles empty probe history"), which was one edit away
+  // from being filed as a product bug.
   const seed = await seedAccount(server.client);
   const res = await request.get(`${server.baseUrl}/v1/account/me`, {
     headers: { Origin: ORIGIN, Authorization: `Bearer ${seed.plaintext}` },
