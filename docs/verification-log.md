@@ -13912,3 +13912,56 @@ carry it, and that is a migration against a live table.
 BOUNDED: `updateStatus` only. The concurrency arm drives six simultaneous reports through the HTTP route
 against real Postgres; it is deterministic in the passing direction (the CAS admits exactly one) and
 probabilistic in the failing one, which is the ordinary shape for a race test.
+
+## V-1816 — closed V-1812's boundary: the merge mail is dispatched faithfully, and OAuth-client is not gated on email
+
+2026-08-26. V-1812 verified the OAuth account-linking chain but stopped one layer short and said so:
+"`sendVerifyMergeEmail` was not read — whether the mail is actually dispatched, and to which address the
+mailer resolves, is taken from the call site." The entire merge security rests on that token reaching a
+mailbox the caller does not control, so a call-site reading was not good enough.
+
+⭐ DISPATCH IS FAITHFUL, THROUGH ALL THREE LAYERS.
+
+service `void this.deps.mailer.sendVerifyMergeEmail({ to: args.email, plaintextToken, … })`
+bootstrap `sendVerifyMergeEmail: async (args) => { … email.sendOauthPendingLinkVerification({ to: args.to, … }) }`
+email `sendOauthPendingLinkVerification: ({ to, … }) => send('oauth-pending-verification', to, { … })`
+
+`to` is passed verbatim at every hop — no lookup, no override, no test-mode redirect.
+
+⭐⭐ AND THE DETAIL THAT MATTERS MORE THAN THE ADDRESS: the confirm link is built from
+`config.dashboardOrigin`, which is server configuration, not anything the caller supplies. Had that origin
+been caller-influenced, an attacker could have had the token delivered to a confirm page they control —
+the address would have been right and the token still stolen. It is not.
+
+⛔ WHAT THE LAST LAYER EXPOSED, WHICH THE CALL SITE COULD NOT. `email.ts` has TWO implementations: the real
+one, and a null object returned when Postmark is unconfigured, which logs "email sends will be no-ops" and
+sets `isConfigured: false`. **`sendOauthPendingLinkVerification` in that object is `async () => {}`.**
+
+So on a deployment with OAuth-client configured and Postmark not:
+
+new email → account created, sign-in works
+COLLIDING email → pending link is minted, the token email silently does nothing, and the caller is
+told `collision-pending-verification`. There is no API path to complete the merge.
+
+⭐ MEASURED RATHER THAN ASSUMED: `isConfigured` appears exactly 4 times in `apps/server/src` — its
+declaration, the two constructors, and `bootstrap.ts:3369` where it is REPORTED as an activation flag.
+**Nothing gates the OAuth-client wiring on it.** The two features are configured independently
+(`config.oauthClient` needs a signing secret, callback base and provider credentials; none of them
+mentions email), so the dependency is real and unchecked.
+
+⚠️ SEVERITY, honestly. It fails CLOSED — nobody gains access they should not have, and the collision path
+is the only one affected. An operator can see `email: false` on the activation flags. The cost is a user
+told a verification email is on its way when it is not, with no recovery through the API.
+
+⛔ NOT FIXED. Refusing to wire OAuth-client without a mailer, or surfacing the dependency at startup, is a
+deployment-behaviour change — the kind that turns a working staging box into a failing one on the next
+restart. That belongs to whoever owns the activation matrix.
+
+BOUNDED: the three dispatch layers and the null-object construction were read; `send()` itself — which
+performs the Postmark call — was not, so "faithful" here means the address and link survive to `send`, not
+that Postmark receives them.
+
+⭐ V-1815 CONFIRMED AT FULL SCALE, recorded here because the entry predated the run: the whole suite
+against real Postgres after the CAS fix is **3222 files passed / 4 skipped, 32046 tests passed / 47
+skipped, 0 failed, 197.28s** — one test more than the pre-fix run, which is the concurrency arm itself.
+The predicate change did not disturb anything else in the tree.
