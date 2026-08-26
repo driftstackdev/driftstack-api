@@ -11611,3 +11611,53 @@ BOUNDED: this closes the 404-instead-of-503 deviation for account-mfa and auth-c
 still has no stub, so its 19 published operations still 404 when `cryptoOrdersService` is unwired, and the
 stub-side census in both invariants still cannot see a gate that ships nothing — V-1757's structural
 finding is unaddressed by this commit.
+
+## V-1759 — the crypto stub's blocker is NOT the admin gate, and the attempt poisoned the index in the documented way
+
+2026-08-26. Went back for the third gate. Two results, one of which withdraws V-1758's framing.
+
+⭐ FIRST: V-1758 called the admin half "a design question about which guarantee wins", between the
+unauthed-503 stub posture and the invariant that every `/v1/admin` registration is scope- or owner-gated.
+⛔ That framing is withdrawn — the codebase had already decided it, in a mechanism I had not read.
+`admin-routes-authorization-invariant.test.ts:40` carries
+
+    const STUB_EXEMPTIONS: readonly StubExemption[] = [];
+
+under the comment "Activation-off routes return a fixed 503 and expose no admin data or mutation. Keep this
+list exact; a new stub does not become exempt merely by being a two-argument registration." The machinery
+is purpose-built for this case and is EMPTY only because no admin surface had ever carried an activation
+stub. Populating it with the 11 crypto admin routes took that invariant green immediately. ⭐ An empty list
+is not an absent decision; it is a decision waiting for its first member, and reading it would have saved
+V-1758 a paragraph of speculation.
+
+⛔⛔ SECOND, AND IT IS THE REAL BLOCKER: four AUDIT invariants disagree with each other about the same
+three routes. Adding `POST /v1/admin/crypto-orders/sweep-expired`, `.../:order_id/apply-ipn` and
+`PATCH .../internal-note` to the three "deliberately unaudited" rosters produced the OPPOSITE complaint
+from two of them — "these now write an audit row — delete them from the list" and "recorded here as
+unaudited but now reaches the recorder — strike it". The stub function is appended to
+`billing-crypto-orders.ts`, whose REAL handlers do audit, and their block detection attributes those calls
+to my stub. So one arm demands the routes be listed and another demands they not be, and no roster edit
+satisfies both. That is a defect in the guards' block attribution, not something to route around by
+tuning exemption lists at the end of a long turn.
+
+REVERTED the crypto attempt in full rather than force it: `git checkout HEAD --` over the route module,
+`app.ts` and the six test files. Targeted re-run green (95 passed). MFA and auth-cli from V-1758 are
+untouched and still landed.
+
+⛔⛔ THE REVERT EXPOSED A POISONED INDEX, exactly the shape AGENTS.md warns about and the first time I have
+seen it directly. `git status` showed `MM` on `lib/openapi.ts`, a file I had not edited this turn:
+
+    worktree vs HEAD:  0 lines      <- HEAD is CORRECT
+    index vs HEAD:    51 lines      <- the index held the PRE-PRETTIER text
+    worktree vs index: 51 lines
+
+lint-staged reformatted my one-line `503: { ... }` declarations into multi-line during the V-1758 commit;
+the commit captured the formatted result, and the index kept the unformatted one. ⭐ Repaired with
+`git reset -q -- <path>` (index ← HEAD, worktree untouched). ⛔ NOT `git checkout -- <path>`, which
+restores FROM the index and would have written the stale unformatted text back into a worktree that was
+already correct. The distinction is written down precisely because the wrong one looks like a fix.
+
+BOUNDED: the admin-gate question is closed by the mechanism above; the audit-attribution conflict is
+diagnosed but NOT fixed, and crypto's 19 published operations still answer 404 when `cryptoOrdersService`
+is unwired. I did not measure whether the same misattribution affects any existing stub — every other
+disabled-stub registrar lives in a file whose handlers may or may not audit, and that census was not run.
