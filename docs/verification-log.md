@@ -14406,3 +14406,42 @@ deliberate. `verify-suite` then reports "OK — exit 0, no unhandled errors, ful
 BOUNDED: this closes the inner gate for `sessions.listAll` only. The route gate at `admin-sessions.ts` was
 already covered by `route-auth-coverage-invariant`, and the other two conditional-predicate listings were
 already witnessed (V-1825), so the conditional category now has three of three.
+
+## V-1827 — a new property class: expiry predicates are deliberately guarded, and REMOVAL is the safer mutation form
+
+2026-08-26. The tenant sweep asked "is this row mine?"; this asks a different question of the same layer —
+"is this row still valid?". V-1810 left it open in its boundary: "`findActiveByTokenHash`'s expiry
+predicate was read only for its existence."
+
+POPULATION: 18 expiry/consumption predicates across 7 db files. Measured ONE file — `auth-flows-repo.ts`,
+which carries the email-verify, magic-link, password-reset and web-session lookups, i.e. the surface where
+an unexpiring token is worst.
+
+⭐ GUARDED, AND DELIBERATELY. Removing all three live expiry conjuncts fails **9 arms across 6 files**, and
+the assertions name the property rather than a side effect:
+
+"an expired sign-in must not be advertised as active"
+"an expired password_reset token still resolved: expected { … } to be null"
+"an expired web session still authenticated: expected { … } to be null"
+
+Those are tests written for exactly this, in the deliberate sense V-1820 distinguished from incidental.
+
+⛔ MY FIRST MUTATION WAS INVALID AND FAILED 18 ARMS — SECOND TIME TODAY FOR THE SAME CLASS. I rewrote
+`gt(t.expiresAt, args.now)` to `gte(t.expiresAt, t.expiresAt)`; the file imports `gt` and NOT `gte`, so
+every failure was `ReferenceError: gte is not defined`. **18 failures reads as thorough coverage and was a
+broken module.** V-1819 recorded this exact trap and prescribed checking the import on the SNAPSHOT — I
+pre-checked the column NULLABILITY (correctly: `expiresAt` is `.notNull()`, so a self-comparison would
+have been always-true) and forgot the identifier.
+
+⭐⭐ THE BETTER FORM, LEARNED HERE: for a predicate that is one conjunct of an `and(...)`, **DELETE THE
+CONJUNCT**. `and(eq(hash), gt(expiresAt, now), isNull(consumed))` → `and(eq(hash), isNull(consumed))`
+introduces no identifier at all, so it cannot fail to resolve — strictly safer than the self-comparison
+form the tenant sweep used, which needs the comparator to be in scope. Self-comparison remains right where
+the predicate is the WHOLE clause and deleting it would change arity.
+
+⭐ AND THE TELL IS THE SAME EITHER WAY: `ReferenceError` in the failures means the module broke;
+`AssertionError: an expired web session still authenticated` means a guard fired. Read the messages.
+
+BOUNDED: one file of seven, three predicates of eighteen. `auth-repo`, `mfa-repo`, `oauth-links-repo`,
+`oauth-store`, `rate-limit-overrides-repo` and `stripe-webhooks-repo` carry the other fifteen and are
+UNMEASURED for this property — the tenant sweep covered those files, but for a different predicate.
