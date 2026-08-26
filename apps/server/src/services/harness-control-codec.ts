@@ -26,6 +26,7 @@ import {
   ControlCommandSchema,
   CookiesRequestSchema,
   SetCookiesRequestSchema,
+  SetEgressRequestSchema,
   NavigateHistoryRequestSchema,
   UploadFileRequestSchema,
   ListDownloadsRequestSchema,
@@ -43,6 +44,9 @@ import {
   type ControlCommandKind,
   type CookiesRequest,
   type SetCookiesRequest,
+  type SetEgressApplyPoint,
+  type SetEgressRequest,
+  type SetEgressExitIdentity,
   type NavigateHistoryRequest,
   type Cookie,
   type UploadFileRequest,
@@ -379,6 +383,33 @@ export function serializeSetCookies(args: {
     requestId: args.requestId,
     sessionId: args.sessionId,
     cookies: args.cookies,
+  });
+}
+
+/**
+ * Live egress swap (A3 P-17) — build a wire-ready `setEgress` to move a RUNNING
+ * session onto a different exit over that node's WSS. Correlated by `requestId`
+ * (the harness echoes it on the `setEgressResult` reply). Re-validated so a
+ * malformed envelope never leaves the server.
+ *
+ * `exitIdentity` travels WITH `inlineProxyConfig` rather than being derived
+ * later: the two describe one exit, and a frame that carried the new IP with the
+ * old timezone would hand the node a self-contradicting geography.
+ */
+export function serializeSetEgress(args: {
+  requestId: string;
+  sessionId: string;
+  inlineProxyConfig: string;
+  exitIdentity: SetEgressExitIdentity;
+  applyPoint: SetEgressApplyPoint;
+}): SetEgressRequest {
+  return SetEgressRequestSchema.parse({
+    type: 'setEgress',
+    requestId: args.requestId,
+    sessionId: args.sessionId,
+    inlineProxyConfig: args.inlineProxyConfig,
+    exitIdentity: args.exitIdentity,
+    applyPoint: args.applyPoint,
   });
 }
 

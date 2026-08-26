@@ -34,6 +34,8 @@ import {
   type SessionStatus,
   type CapabilityReport,
   type HarnessErrorEvent,
+  type SetEgressApplyPoint,
+  type SetEgressExitIdentity,
 } from '../schemas/harness-control-protocol.js';
 import { IntentDispatchCorrelator, type DispatchTransport } from './harness-dispatch-correlator.js';
 import {
@@ -46,6 +48,11 @@ import {
   type SetCookiesTransport,
   type SetCookiesOutcome,
 } from './set-cookies-request-correlator.js';
+import {
+  SetEgressRequestCorrelator,
+  type SetEgressTransport,
+  type SetEgressOutcome,
+} from './set-egress-request-correlator.js';
 import {
   NavigateHistoryRequestCorrelator,
   type NavigateHistoryTransport,
@@ -70,6 +77,7 @@ import {
 import {
   serializeCookiesRequest,
   serializeSetCookies,
+  serializeSetEgress,
   serializeNavigateHistory,
   serializeUploadFile,
   serializeListDownloads,
@@ -115,6 +123,10 @@ export class FleetControlConnection {
    *  setCookiesResult) over this node's socket, keyed by requestId. The write-twin
    *  of cookiesCorrelator; owned here like above. */
   readonly setCookiesCorrelator: SetCookiesRequestCorrelator;
+
+  /** Live egress swap (A3 P-17) — correlates POST /:id/egress against
+   *  setEgressResult over this node's socket, keyed by requestId. */
+  readonly setEgressCorrelator: SetEgressRequestCorrelator;
   /** Sim back/forward (A3 W2870) — correlates POST /:id/history steps (navigateHistory
    *  → navigateHistoryResult) over this node's socket, keyed by requestId. The sibling
    *  of setCookiesCorrelator; owned here like above. */
@@ -216,6 +228,8 @@ export class FleetControlConnection {
     this.cookiesCorrelator = new CookiesRequestCorrelator(cookiesTransport, log);
     const setCookiesTransport: SetCookiesTransport = { send: (r) => send(JSON.stringify(r)) };
     this.setCookiesCorrelator = new SetCookiesRequestCorrelator(setCookiesTransport, log);
+    const setEgressTransport: SetEgressTransport = { send: (r) => send(JSON.stringify(r)) };
+    this.setEgressCorrelator = new SetEgressRequestCorrelator(setEgressTransport, log);
     const navigateHistoryTransport: NavigateHistoryTransport = {
       send: (r) => send(JSON.stringify(r)),
     };
@@ -349,6 +363,34 @@ export class FleetControlConnection {
   ): Promise<SetCookiesOutcome> {
     const req = serializeSetCookies({ requestId, sessionId, cookies });
     return this.setCookiesCorrelator.request(req, timeoutMs);
+  }
+
+  /**
+   * Live egress swap (A3 P-17) — move a RUNNING session onto a different exit.
+   * Awaits a uniform SetEgressOutcome and NEVER rejects, so the route maps each
+   * case to a response. `requestId` is caller-generated (the route mints a uuid).
+   *
+   * ⛔ `applyPoint` has no default here on purpose. The safe value belongs at the
+   * customer-facing route, where a caller who says nothing gets the deferred swap;
+   * defaulting it here too would put the safe choice in two places that can
+   * disagree, and the disagreement would be silent.
+   */
+  setEgress(
+    requestId: string,
+    sessionId: string,
+    inlineProxyConfig: string,
+    exitIdentity: SetEgressExitIdentity,
+    applyPoint: SetEgressApplyPoint,
+    timeoutMs?: number,
+  ): Promise<SetEgressOutcome> {
+    const req = serializeSetEgress({
+      requestId,
+      sessionId,
+      inlineProxyConfig,
+      exitIdentity,
+      applyPoint,
+    });
+    return this.setEgressCorrelator.request(req, timeoutMs);
   }
 
   /**
@@ -580,6 +622,14 @@ export class FleetControlConnection {
           // unknown/stale requestId is a no-op (already settled).
           this.setCookiesCorrelator.onResultFrame(frame);
           break;
+        case 'setEgressResult':
+          // Live egress swap (A3 P-17) — settles the pending POST /:id/egress
+          // request keyed by requestId. Self-contained request/reply like
+          // setCookiesResult: no injected consumer; the awaiting route holds the
+          // promise via this connection's set-egress correlator. An unknown/stale
+          // requestId is a no-op (already settled).
+          this.setEgressCorrelator.onResultFrame(frame);
+          break;
         case 'navigateHistoryResult':
           // Sim back/forward (A3 W2870) — settles the pending POST /:id/history request
           // keyed by requestId (the harness echoes it). Self-contained request/reply
@@ -668,6 +718,7 @@ export class FleetControlConnection {
     this.correlator.failAll(reason);
     this.cookiesCorrelator.failAll(reason);
     this.setCookiesCorrelator.failAll(reason);
+    this.setEgressCorrelator.failAll(reason);
     this.navigateHistoryCorrelator.failAll(reason);
     this.uploadCorrelator.failAll(reason);
     this.downloadCorrelator.failAll(reason);

@@ -1776,6 +1776,7 @@ export const SetEgressRequestSchema = z
   })
   .strict();
 export type SetEgressRequest = z.infer<typeof SetEgressRequestSchema>;
+export type SetEgressExitIdentity = z.infer<typeof SessionAssignExitIdentitySchema>;
 
 // node→CP RESULT: echoes `requestId` + `sessionId`. SUCCESS → `ok:true`; FAILURE
 // (unknown/inactive session, proxy unreachable, refused) → `error` set. Plain
@@ -1836,6 +1837,7 @@ export const HarnessOutboundSchema = z.union([
   DownloadsListResultSchema,
   DownloadDataResultSchema,
   TrimProfileResultSchema,
+  SetEgressResultSchema,
 ]);
 export type HarnessOutbound = z.infer<typeof HarnessOutboundSchema>;
 export type ProfileSaved = z.infer<typeof ProfileSavedSchema>;

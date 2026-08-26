@@ -22070,3 +22070,39 @@ reader finding full coverage would otherwise reasonably conclude the feature shi
 applies a `next_navigation` swap — and since that is the default, an idle session is the common
 case. Either the pending state is surfaced or it expires; inventing an expiry here would settle a
 product decision silently.
+
+## V-1692b
+
+**P-17 wiring complete: the frame is registered, the registry exposes it, and two pins moved with
+it in the same commit.**
+
+`serializeSetEgress` in the codec (re-validating so a malformed envelope never leaves the
+server), `setEgressCorrelator` on `FleetControlConnection` beside its six siblings — field,
+transport, construction, request method, inbound routing case, and `failAll` on close — and
+`SetEgressResultSchema` joined to `HarnessOutboundSchema`.
+
+**Registering the frame moved two pins, and both were guards doing exactly their job:**
+
+- The union-membership regex, which enumerates every outbound frame in order. Updated.
+- ⭐ **`every harness→server frame carries the unknown-key mode it was given`**, which refused
+  the new frame with _"whether it tolerates an unknown key was never decided. Add it with the mode
+  you intend."_ Declared `strip`, like every sibling result — and the reason is the frame's own
+  design: the `applyPoint` echo is deliberately optional, `strip` is what lets an older node omit
+  it, and that omission is precisely why the correlator treats an absent echo as its own outcome
+  rather than a success. **A guard that made me write down the tolerance decision is the reason
+  the tolerance is safe here.**
+
+`applyPoint` takes no default at the registry layer on purpose: the safe value belongs at the
+customer-facing route, and defaulting in both places would put the safe choice somewhere it could
+silently disagree with itself.
+
+**38 files / 684 tests pass; `it(` count 75 against HEAD's 75 on the edited pin file; tsc clean.**
+
+⚠️ **Two process faults on the way, both mine and both the same one.** An edit script asserted a
+seven-anchor batch, aborted on the last, and a SECOND script in the same command still ran and
+added type imports for code that no longer existed — leaving the file importing types nothing
+used. That is standing lesson four exactly: _when patching a file across several edits, re-read
+between them_, and the sharper version is that a multi-block command is several edits whether or
+not it looks like one. Restored byte-identical from the snapshot and redone as a single atomic
+block; the second miss after that was an anchor written with 8 spaces where the file has 6, caught
+by the same assert before anything was written.

@@ -284,7 +284,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       /export const TERMINAL_SESSION_STATUSES = new Set<string>\(\['ended', 'errored'\]\);/,
     );
     expect(body).toMatch(
-      /export const HarnessOutboundSchema = z\.union\(\[\s*IntentResultEnvelopeSchema,\s*SessionStatusSchema,\s*HeartbeatSchema,\s*CapabilityReportSchema,\s*ErrorEventSchema,\s*ProfileSavedSchema,\s*ChallengeDetectedSchema,\s*PageStateFrameSchema,\s*ProfileSaveFailedSchema,\s*CookiesResultSchema,\s*SetCookiesResultSchema,\s*NavigateHistoryResultSchema,\s*UploadResultSchema,\s*DownloadsListResultSchema,\s*DownloadDataResultSchema,\s*TrimProfileResultSchema,\s*\]\);/,
+      /export const HarnessOutboundSchema = z\.union\(\[\s*IntentResultEnvelopeSchema,\s*SessionStatusSchema,\s*HeartbeatSchema,\s*CapabilityReportSchema,\s*ErrorEventSchema,\s*ProfileSavedSchema,\s*ChallengeDetectedSchema,\s*PageStateFrameSchema,\s*ProfileSaveFailedSchema,\s*CookiesResultSchema,\s*SetCookiesResultSchema,\s*NavigateHistoryResultSchema,\s*UploadResultSchema,\s*DownloadsListResultSchema,\s*DownloadDataResultSchema,\s*TrimProfileResultSchema,\s*SetEgressResultSchema,\s*\]\);/,
     );
     // ControlInbound.sessionEnd — the trivial W122 teardown envelope (source-pinned).
     expect(body).toMatch(
@@ -2272,6 +2272,12 @@ describe('harness→server frame strictness is pinned per frame', () => {
       downloadsList: 'strip',
       downloadData: 'strip',
       trimResult: 'strip',
+      // Live egress swap (A3 P-17). `strip` like every sibling result: the box
+      // owns the field set and may add to it. The applyPoint echo this frame
+      // depends on is OPTIONAL by design, and strip is what lets an older node
+      // omit it — which is exactly why the correlator treats its absence as a
+      // distinct outcome rather than a bare success.
+      setEgressResult: 'strip',
     };
     const actual = outboundLeaves().map((leaf, i) => ({
       name: frameName(leaf, i),
