@@ -9399,3 +9399,29 @@ matcher is literal (`rel === p || rel.endsWith(p)`). A glob would satisfy Pretti
 which would leave the guard red while the hook was fine — a divergence its second arm exists to
 prevent. So a future archive still needs one line added there by hand; only the two test files are
 now self-maintaining.
+
+## V-1708 — the arm that keeps archives out of the format hook covered only the first archive
+
+2026-08-26. Swept the shape behind V-1707 rather than the token — "a guard that names one member of
+a growing family goes blind when the family grows" — across every test that hardcodes a file literal
+carrying a version or date suffix. Three hits; two are genuine 1:1 pairings (a dated audit doc and
+its own parity guard). The third was a hole I had just created myself.
+
+`no-formatted-markdown-outgrows-the-format-hook` asserts that the frozen log archive is listed in
+`.prettierignore`, and it named `...through-v1200.md` specifically. V-1707 added a second archive, so
+that assertion covered one of two. The hole is not academic and it does not fail loudly: an archive
+is UNDER the 1.5 MB budget at the moment it is split off (v1499 is 885 KB), so deleting its
+`.prettierignore` line fails no arm at all — the budget arm is satisfied, and the ignore arm is
+looking at a different file. Prettier then quietly resumes reformatting a frozen 885 KB document,
+producing exactly the "large meaningless diff on a file nobody should touch" the ignore list exists
+to prevent. Every future archive would have inherited the same hole.
+
+PROVED BOTH WAYS, because the claim is about what a guard FAILS to see and that cannot be shown by a
+green: with the v1499 line deleted, the arm as it stood at HEAD reported 3 passed — blind — while the
+replacement fails with "docs/verification-log-archive-through-v1499.md is no longer ignored, so the
+hook would try to format 0.9 MB". `.prettierignore` was restored byte-identically afterwards and the
+guard is green again.
+
+The arm now derives archives from the walk it already performs and asserts every one of them is
+ignored, with a count arm because an empty match list satisfies a `for` loop forever — the same
+failure mode discovery has in V-1707, guarded the same way. `it(` count unchanged at 3; tsc clean.

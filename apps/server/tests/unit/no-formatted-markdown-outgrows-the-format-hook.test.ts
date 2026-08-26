@@ -91,10 +91,24 @@ describe('V-1216 no formatted markdown outgrows the format hook', () => {
   it('CRITICAL the ignore list is read from .prettierignore, not restated here. A private copy would keep passing after the real list changed, and this guard would be enforcing a rule the hook no longer follows.', () => {
     const patterns = prettierIgnored();
     expect(patterns.length, 'no patterns were parsed out of .prettierignore').toBeGreaterThan(5);
+    // V-1708 — EVERY archive, not the first one. A second archive landed on 2026-08-26 and this
+    // arm named only the first, which left a hole nothing else covered: an archive is under the
+    // budget at the moment it is split off, so dropping its `.prettierignore` line fails no arm
+    // here and Prettier silently starts reformatting a frozen file. The count guards the loop —
+    // an empty match list would satisfy a `for` forever.
+    const archives = markdownFiles().filter((f) =>
+      /^docs\/verification-log-archive-through-v\d+\.md$/.test(f.rel),
+    );
     expect(
-      isIgnored('docs/verification-log-archive-through-v1200.md', patterns),
-      'the frozen log archive is no longer ignored, so the hook would try to format 3.4 MB again',
-    ).toBe(true);
+      archives.length,
+      'no frozen log archive was found, so the loop below would assert nothing',
+    ).toBeGreaterThanOrEqual(2);
+    for (const a of archives) {
+      expect(
+        isIgnored(a.rel, patterns),
+        `${a.rel} is no longer ignored, so the hook would try to format ${(a.bytes / 1_000_000).toFixed(1)} MB`,
+      ).toBe(true);
+    }
     expect(
       isIgnored('docs/verification-log.md', patterns),
       'the LIVE log is ignored, which would silently drop it from the hook entirely',
