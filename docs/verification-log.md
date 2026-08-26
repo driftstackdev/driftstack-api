@@ -14230,3 +14230,50 @@ BOUNDED: the predicate swept is the literal `eq(<table>.accountId, <expr>)` shap
 `apps/server/src/db/*repo*.ts`. Account scoping expressed another way — `inArray`, a raw `sql` fragment, a
 join predicate, or a filter applied in a service above the repo — is not in the 126 and is not covered by
 this zero. Each repo was run against its own name-matched subset, not the full suite.
+
+## V-1823 — swept the SHAPE, not the token: one repo scopes only in raw SQL and was outside the whole sweep
+
+2026-08-26. V-1822 closed the tenant sweep at 126 predicates and bounded itself honestly: "Account scoping
+expressed another way — `inArray`, a raw `sql` fragment, a join predicate — is not in the 126." That is the
+third standing lesson describing my own measurement, so I ran it.
+
+eq(t.accountId, x) 127 occurrences / 24 files ← I swept 126 / 23
+inArray(t.accountId, …) 0
+ne/lt/gt on accountId 0
+raw sql`… account_id …` 3 occurrences / 3 files ← UNMEASURED
+client`… account_id …` 0
+.accountId === … 9 / 5 files (JS-level, not SQL)
+
+⛔ TWO OMISSIONS, ONE OF THEM REAL.
+
+**127 vs 126, 24 files vs 23.** My population came from a `*repo*.ts` FILENAME GLOB — the same proxy that
+has misled me three times today, this time inside my own sweep's scope. The 24th file is
+`apps/server/src/db/seed.ts`, a dev seeder, so nothing is at risk; but the count I published was of a
+glob, not of the directory.
+
+⭐⭐ **`legal-repo.ts` HAS NO `eq(.accountId)` AT ALL AND WAS NEVER IN THE 23.** It scopes in raw SQL:
+`WHERE account_id = ${accountId}`, parameterised. An entire repo holding compliance data — legal document
+acceptances, with the IP and user-agent of each acceptance — sat outside a sweep that reported itself
+complete, because it spells the boundary differently.
+
+**It is guarded, and deliberately.** Neutralising that filter to a tautology fails **8 arms across 4
+files**, one of which says it outright:
+
+"the other account's acceptance does not leak: expected true to be false"
+
+⭐ THE OTHER TWO RAW-SQL SITES ARE CORRECTLY UNSCOPED, which is why reading beats grepping for `account_id`
+and calling a hit a finding:
+
+- `crypto-orders-repo.ts:203` — the entitlement-reconcile query from V-1813. `AND o.account_id IS NOT NULL`
+  is a presence check; the query is a platform-wide sweeper and MUST see every account.
+- `scheduled-jobs-repo.ts:118` — the `SELECT … FOR UPDATE SKIP LOCKED` job claim. A global poller.
+
+⭐ SO THE CORRECTED STATEMENT: every account-scoping expression under `apps/server/src/db` that is a tenant
+boundary — 126 drizzle predicates across 23 repos plus one raw-SQL filter in `legal-repo` — has at least
+one witness. The two remaining raw-SQL matches are deliberately global and the 127th predicate is in a
+seeder.
+
+BOUNDED, and narrower than it sounds: seven shapes were enumerated, not all conceivable ones. Scoping done
+by a JOIN whose predicate names a different column, by a service above the repo, or inside a view or
+trigger, is still outside. `.accountId ===` appears 9 times in 5 files and is JS-level filtering that this
+entry did not examine at all.
