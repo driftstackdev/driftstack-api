@@ -10,6 +10,7 @@
 // from the clean re-run that followed it. Writing the bad case by hand would
 // have tested my memory of the failure rather than the failure.
 
+import { execSync } from 'node:child_process';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -106,6 +107,45 @@ function countAllTestFiles(): number {
   return n;
 }
 
+/**
+ * Untracked test files, which count into the census while appearing in nothing
+ * anyone reads to find them.
+ *
+ * Twice in one session a shared-tree suite went red from a file that existed
+ * only in a working tree: once here, once in the artifact-freshness guard. Both
+ * messages named the pin or the app and neither named the file — and `git diff`,
+ * `git log` and any review of "what changed" are all blind to an untracked path,
+ * so the three places anyone looks first are exactly the three that cannot say
+ * it. This does not add a failure; it tells the existing one what to say.
+ *
+ * Best-effort by construction: no git, no worktree, or a git that errors yields
+ * an empty list and the message reads as it did before.
+ */
+function untrackedTestFiles(): string[] {
+  try {
+    const out = execSync('git status --porcelain --untracked-files=all', {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return out
+      .split('\n')
+      .filter((line) => line.startsWith('?? '))
+      .map((line) => line.slice(3).trim())
+      .filter((path) => /\.test\.tsx?$/.test(path))
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+/** Appended to a census failure so its cause is named rather than inferred. */
+function censusHint(): string {
+  const untracked = untrackedTestFiles();
+  if (untracked.length === 0) return '';
+  return ` — ${String(untracked.length)} UNTRACKED test file(s) are counted by this census and appear in no diff: ${untracked.join(', ')}`;
+}
+
 describe('the suite verifier refuses to call an under-run green', () => {
   it('CRITICAL rejects the REAL false-green run — the one that exited 0 with nine files unexecuted. Exit code alone accepts it, which is exactly why this exists.', () => {
     const verdict = judge({ output: FALSE_GREEN, exitCode: 0 });
@@ -177,7 +217,7 @@ describe('the suite verifier refuses to call an under-run green', () => {
     ).toBeGreaterThan(countTestFiles());
     expect(
       EXPECTED_TEST_FILES_ALL,
-      'raise EXPECTED_TEST_FILES_ALL in the same commit that adds or removes a test file',
+      `raise EXPECTED_TEST_FILES_ALL in the same commit that adds or removes a test file${censusHint()}`,
     ).toBe(count);
   });
 
@@ -186,7 +226,7 @@ describe('the suite verifier refuses to call an under-run green', () => {
     expect(count, 'the globs found a real population').toBeGreaterThan(2000);
     expect(
       EXPECTED_TEST_FILES,
-      'raise EXPECTED_TEST_FILES in the same commit that adds or removes a test file',
+      `raise EXPECTED_TEST_FILES in the same commit that adds or removes a test file${censusHint()}`,
     ).toBe(count);
   });
 });

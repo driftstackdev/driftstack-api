@@ -21763,3 +21763,33 @@ error position — handled 44. Three more named a _variable_ (`'last' is possibl
 the fix belongs at the declaration rather than each use; my first prediction of the remaining
 count was wrong because I had forgotten my own script targeted a single file. Predicted 0 for the
 final run and got 0.
+
+## V-1688
+
+**The census now names the untracked file instead of leaving it to be found.**
+
+Twice in one session a shared-tree suite went red from a file that existed only in a working
+tree — V-1681 (a component, via the artifact-freshness guard) and V-1681b (a test file, via this
+census). Both messages named the pin or the app; **neither named the file**, and an untracked
+path is invisible to `git diff`, to `git log`, and to any review of "what changed", which are the
+three places anyone looks first. The cause was the one thing the obvious means could not find.
+
+Both census failures now append the untracked test files they are counting:
+
+```
+raise EXPECTED_TEST_FILES in the same commit that adds or removes a test file
+  — 1 UNTRACKED test file(s) are counted by this census and appear in no diff:
+    apps/server/tests/unit/zz-untracked-census-probe.test.ts
+```
+
+**It adds no failure.** The arms fail exactly when they failed before; only the message changed.
+That was the design constraint — an arm that failed on any untracked file would red the suite for
+ordinary work-in-progress, which is the opposite of useful in a tree three sessions write to.
+
+Best-effort by construction: no git, no worktree, or a git that errors yields an empty list and
+the message reads as it did before. Mutation-proved in both directions — 6/6 with a clean tree,
+both arms red and naming the file with one untracked test present, 6/6 again once removed.
+`it(` count 6 against HEAD's 6, tsc clean.
+
+Written at the census owner's request after I hit the same mechanism twice; the argument for me
+writing it was that I kept hitting it, not that it was mine.
