@@ -3,6 +3,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { R2 } from '../../src/lib/r2.js';
 import { profileSealedBlobKey } from '../../src/lib/r2.js';
+import { PROFILE_SAVE_BACK_PUT_TTL_SECONDS } from '../../src/routes/agent-sessions.js';
 import {
   ProfileBlobOrphanSweeperService,
   DEFAULT_ORPHAN_GRACE_MS,
@@ -258,15 +259,19 @@ describe('ProfileBlobOrphanSweeperService defaults + scheduling', () => {
     expect(DEFAULT_ORPHAN_SWEEP_INTERVAL_MS).toBe(6 * HOUR_MS);
   });
 
-  it('grace default (6h) exceeds the max presigned save-back PUT TTL (~4.5h)', () => {
-    // The reaper's whole safety hinge: grace MUST exceed the max minted
-    // presigned save-back TTL so an in-flight save-back is never reaped
-    // mid-flight. The save-back PUT is minted for the session lifetime — up to
-    // MANUAL_SESSION_MAX_DURATION_SECONDS (14400s / 4h) + a ~1800s teardown
-    // margin = ~16200s (4.5h). 6h leaves headroom over that ceiling. If the
-    // save-back TTL is ever raised, this bound (and the grace default) must rise.
-    const MAX_SAVE_BACK_PUT_TTL_SECONDS = 14400 + 1800;
-    expect(DEFAULT_ORPHAN_GRACE_MS).toBeGreaterThan(MAX_SAVE_BACK_PUT_TTL_SECONDS * 1000);
+  it('grace default exceeds the max presigned save-back PUT TTL, read from the constant the mint site uses', () => {
+    // The reaper's whole safety hinge: grace MUST exceed the max minted save-back
+    // TTL, or an in-flight save-back lands after its object was reaped and the
+    // customer's encrypted browser state is lost.
+    //
+    // ⛔ V-1736 — this used to retype the TTL as `14400 + 1800`, with its own
+    // comment telling a HUMAN to raise the bound "if the save-back TTL is ever
+    // raised". Both sides of a comparison have to be READ: with the literal in
+    // place, raising MANUAL_SESSION_MAX_DURATION_SECONDS moved the real TTL while
+    // this assertion went on checking the old one — green while the hinge it
+    // exists to protect had already opened. It now imports the value the mint site
+    // actually passes, so that same edit fails here instead.
+    expect(DEFAULT_ORPHAN_GRACE_MS).toBeGreaterThan(PROFILE_SAVE_BACK_PUT_TTL_SECONDS * 1000);
   });
 
   it('start() arms a self-re-arming chain via the injected timer (re-arms after each tick)', async () => {

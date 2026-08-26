@@ -789,6 +789,25 @@ export const MANUAL_SESSION_IDLE_TIMEOUT_SECONDS = 1800;
 export const MANUAL_SESSION_MAX_DURATION_SECONDS = 14400;
 
 /**
+ * V-1736 — the save-back PUT TTL, as ONE value rather than an expression repeated
+ * where it is minted and a pair of literals typed into the test that bounds it.
+ *
+ * The presigned save-back PUT is consumed at session TEARDOWN, so it must outlive
+ * the whole session: the max manual duration plus a margin for teardown itself.
+ *
+ * ⛔ It is also the SAFETY HINGE of the R2 orphan reaper. That sweeper deletes a
+ * `profiles/<uuid>.sealed` object older than its grace window whose uuid has no
+ * profiles row, and its grace MUST exceed this TTL or an in-flight save-back is
+ * reaped mid-flight and the customer's encrypted browser state is lost. The bound
+ * is asserted in `profile-blob-orphan-sweeper.test.ts` — which used to retype
+ * `14400 + 1800` as literals, so raising the duration above would have moved the
+ * real TTL while the assertion went on checking the old one.
+ */
+export const PROFILE_SAVE_BACK_TEARDOWN_MARGIN_SECONDS = 1800;
+export const PROFILE_SAVE_BACK_PUT_TTL_SECONDS =
+  MANUAL_SESSION_MAX_DURATION_SECONDS + PROFILE_SAVE_BACK_TEARDOWN_MARGIN_SECONDS;
+
+/**
  * Connectivity-aware dispatch-node selection (multi-box region fix). Returns the
  * region-nearest LiveKit node whose control-WSS is ACTUALLY connected right now,
  * plus its live connection, so the publisher dispatch + the viewer token (minted
@@ -1087,7 +1106,7 @@ export async function dispatchSessionAssignOnCreate(args: {
             // max session + a teardown margin (clamped to the 7-day SigV4 ceiling
             // inside buildAssignProfileBlock).
             profile = await buildAssignProfileBlock(r2, profileId, dekBase64, {
-              urlTtlSeconds: MANUAL_SESSION_MAX_DURATION_SECONDS + 1800,
+              urlTtlSeconds: PROFILE_SAVE_BACK_PUT_TTL_SECONDS,
             });
           } catch (err) {
             // An R2 hiccup minting the restore/save-back URLs must NOT abort the

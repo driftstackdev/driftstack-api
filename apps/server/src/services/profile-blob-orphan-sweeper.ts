@@ -23,14 +23,24 @@
 // all (hard-deleted / never existed) is deleted.
 //
 // CONSERVATIVE BY DESIGN — it must NEVER reap a live or in-flight blob:
-//   • GRACE WINDOW (default 2h). An object is only a reap candidate if its
-//     lastModified is non-null AND older than the grace window. This MUST
-//     exceed the max presigned save-back PUT TTL so a fresh create's first
-//     in-flight save-back is never reaped mid-flight. The current max minted
-//     TTL is DEFAULT_PROFILE_URL_TTL_SECONDS = 3600s (1h) — both dispatch call
-//     sites (routes/agent-sessions.ts + routes/profiles.ts) use the default and
-//     nothing passes a larger urlTtlSeconds — so 2h comfortably exceeds it. An
-//     object with a null lastModified, or younger than the grace, is SKIPPED.
+//   • GRACE WINDOW (DEFAULT_ORPHAN_GRACE_MS, 6h). An object is only a reap
+//     candidate if its lastModified is non-null AND older than the grace window.
+//     This MUST exceed the max presigned save-back PUT TTL so an in-flight
+//     save-back is never reaped mid-flight. An object with a null lastModified,
+//     or younger than the grace, is SKIPPED.
+//
+//     ⛔ V-1736 — this paragraph used to say the grace was 2h and that "the
+//     current max minted TTL is DEFAULT_PROFILE_URL_TTL_SECONDS = 3600s (1h) —
+//     both dispatch call sites use the default and nothing passes a larger
+//     urlTtlSeconds". BOTH halves were wrong: the grace is 6h, and
+//     routes/agent-sessions.ts DOES pass a larger value —
+//     PROFILE_SAVE_BACK_PUT_TTL_SECONDS, currently 16200s (4.5h), because that
+//     PUT is consumed at session TEARDOWN and must outlive the session. The two
+//     errors cancelled and the invariant held (6h > 4.5h), which is exactly why
+//     nobody noticed: a safety comment can be false in both directions and still
+//     read as reassuring. The margin is 1.5h, not the 1h-against-1h the text
+//     implied, and the relation is now asserted against the imported constant
+//     rather than against literals retyped in the test.
 //   • EXISTENCE CHECK is soft-delete-INCLUSIVE (findExistingProfileIds returns
 //     trashed rows too): a trashed profile still owns its blob until the 30-day
 //     retention purge, so we only reap a blob whose uuid has NO row whatsoever.

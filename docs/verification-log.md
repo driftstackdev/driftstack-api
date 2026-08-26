@@ -10550,3 +10550,52 @@ BOUNDED: this traced the DEK path, the key derivation and the URL minting. It di
 of the dispatch helper to confirm where `accountId` originates, and did not audit R2 bucket policy or
 the presigner's own signature construction — a correctly-scoped URL against a misconfigured bucket is
 not visible from anything read here.
+
+## V-1736 — the reaper's safety hinge was asserted against literals retyped in its own test
+
+2026-08-26. Audited `services/profile-blob-orphan-sweeper.ts` — 246 lines, one test file, live in
+bootstrap, no prior art. It deletes `profiles/<uuid>.sealed` objects from R2 whose uuid has no profiles
+row, as the GDPR-erasure backstop for a purge racing an in-flight save-back PUT. Irreversible deletion of
+customer data is the highest-stakes shape left, and V-1735 had just read the other half of the same
+asset.
+
+⛔ THE HINGE IS STATED IN ITS OWN HEADER: the grace window "MUST exceed the max presigned save-back PUT
+TTL so an in-flight save-back is never reaped mid-flight". Its justification was false in BOTH
+directions. It said the grace is 2h — it is `DEFAULT_ORPHAN_GRACE_MS`, SIX hours. It said "the current
+max minted TTL is DEFAULT_PROFILE_URL_TTL_SECONDS = 3600s (1h) — both dispatch call sites use the
+default and nothing passes a larger urlTtlSeconds" — and `routes/agent-sessions.ts` DOES pass a larger
+one, `MANUAL_SESSION_MAX_DURATION_SECONDS + 1800` = 16200s (4.5h), because that PUT is consumed at
+session TEARDOWN and must outlive the session. V-1735 had read that exact line the firing before, which
+is the only reason the claim looked wrong on sight.
+
+⭐ THE TWO ERRORS CANCELLED, AND THAT IS WHY IT SURVIVED. 6h > 4.5h, so the invariant HOLDS and nothing
+was ever at risk. A safety comment can be false in both directions and still read as reassuring; the
+real margin is 1.5h rather than the 2h-against-1h the text implied, and the ratio is 1.33x rather than
+2x.
+
+⛔ THE DEFECT IS THE GUARD, and it is this log's own recurring shape. The arm that asserts the hinge read:
+
+```ts
+const MAX_SAVE_BACK_PUT_TTL_SECONDS = 14400 + 1800; // ← retyped, not read
+expect(DEFAULT_ORPHAN_GRACE_MS).toBeGreaterThan(MAX_SAVE_BACK_PUT_TTL_SECONDS * 1000);
+```
+
+with its own comment instructing a HUMAN: "if the save-back TTL is ever raised, this bound must rise".
+One side of the comparison was typed in, so raising `MANUAL_SESSION_MAX_DURATION_SECONDS` would move the
+real TTL while the assertion went on checking the old number — the guard staying green while the hinge
+it protects had opened, and the operation it gates is deletion.
+
+PROVED IN BOTH DIRECTIONS, which is what makes it a defect rather than a preference. Raising the cap to
+21600 (6h → 6.5h TTL, past the 6h grace) fails the repaired arm — and the SAME mutation against the
+guard as it stood at HEAD passes 13 of 13. It was blind to exactly the edit it existed to catch.
+
+Fixed at the source rather than in the test: `PROFILE_SAVE_BACK_PUT_TTL_SECONDS` is now one exported
+constant, used at the mint site and imported by the arm, so both sides are read from the same value. The
+header's false paragraph is replaced with what is actually true, including that it was wrong both ways.
+Files restored byte-identically after every mutation, with the restore in a TRAP and the run narrowed to
+one file — V-1733's protocol, applied this time.
+
+BOUNDED: this audited the grace/TTL relation, the reap predicate (soft-delete-inclusive existence check,
+so a trashed profile keeps its blob) and the failure handling (a listObjects denial or any throw is
+caught, logged and re-armed with no deletes). It did NOT audit R2 bucket lifecycle rules, which could
+delete objects on a schedule this code never sees.
