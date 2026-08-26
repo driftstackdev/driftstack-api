@@ -12558,3 +12558,33 @@ silence.
 
 BOUNDED: roots written as `resolve(REPO_ROOT, '<literal>')`. A root built by concatenation, or passed
 in as a variable, is not in the 45 and not covered by this zero.
+
+## V-1784 — closing V-1781's own stated boundary: the Go/Rust formatting gap survives the indirect path
+
+2026-08-26. V-1781 claimed CI carries no `gofmt`, `cargo fmt` or `clippy`, and bounded itself honestly:
+that was a grep for the tool NAME, so "a check invoked indirectly — through an npm script whose name
+does not contain the tool — would not appear". Closing my own boundary rather than leaving it as a
+caveat, because a caveat that nobody ever discharges is just a claim with a disclaimer attached.
+
+The indirect path is the two npm scripts CI does invoke:
+
+- `lint` -> `eslint . && node scripts/check-subprocessor-mirror.mjs`
+- `format:check` -> `prettier --check .`
+
+Neither names or reaches `.go` or `.rs`, and prettier does not handle either language. Separately, no
+`package.json` script in the workspace wraps `gofmt`, `cargo fmt` or `clippy` — 0 hits.
+
+⭐ THE CONTROL IS WHY THE ZERO IS WORTH ANYTHING: the same search, run for `ruff`, finds
+`sdk:python:lint` at `package.json:51` wrapping `ruff check`, `ruff format --check` and `mypy`. So the
+technique demonstrably finds a wrapper of exactly the shape it is looking for, and its silence on the
+other three tools is a measurement rather than a failed search — the failure mode that produced a
+meaningless zero twice earlier in this same session.
+
+So V-1781 stands, and stands more firmly: Go and Rust formatting is enforced only by a local pre-push
+hook that skips itself when the toolchain is absent, and by nothing in CI on either path.
+
+⚠️ ONE THING V-1781 UNDERSTATED. `ruff check .` and `ruff format --check .` appear DIRECTLY in
+`ci.yml` (lines 253, 257), not merely in one workflow by name. Python is genuinely backstopped, which
+means the ruff error that refused the release was the pre-push hook saving a CI red rather than the
+only thing standing between the repo and unformatted Python. The asymmetry in that entry — Python as
+the best-covered member of the uncovered set — is correct, and this is the number behind it.
