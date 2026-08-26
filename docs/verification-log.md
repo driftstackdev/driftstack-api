@@ -12533,3 +12533,28 @@ source directories missing for the length of a suite run while a peer is committ
 
 Filed as a ledger row rather than swept, because the honest population is "78 files not yet measured",
 and reporting 41 as defective on a regex would be the instrument error this entry is about.
+
+## V-1783 — the same sweep class is nowhere vacuous TODAY, which downgrades V-1782 from live to latent
+
+2026-08-26, addendum to V-1782. Having proved the mechanism, the useful question is not "how many
+files COULD go vacuous" but "how many are reading nothing right now". That is answerable without
+touching the tree: extract every root the 80 walkers actually walk and test whether it exists.
+
+45 distinct roots. **All 45 exist.** So no sweep in this family is currently blind, and V-1782's three
+fixes are prospective hardening rather than repairs of a live hole. P-35 is latent, not open-and-firing.
+
+⛔ THE DETECTOR PRODUCED ONE HIT AND IT WAS A FALSE POSITIVE — recorded because the failure mode is
+the interesting part. `apps/marketing-site/src/pages/docs/cli-quickstart.astro` is genuinely absent, and
+`docs-cli-quickstart-parity.test.ts` genuinely references it. Reading the file settles it: line 43 is
+`expect(existsSync(CLI_PAGE)).toBe(false)`. The path is absent BY DESIGN and the test exists to assert
+that we never publish a quickstart for a CLI that does not exist. A path being missing and a path being
+a broken corpus root are indistinguishable to any filesystem check; only the use site separates them.
+Third time today the thing needing verification was my own instrument.
+
+⭐ THE CENSUS IS BACKED, which is the only reason I will state a zero. A clean census proves nothing on
+its own, so: the detector was first shown to report a known-absent path (control), and the vacuity
+mechanism it looks for was independently mutation-proved in V-1782. The zero is a measurement, not a
+silence.
+
+BOUNDED: roots written as `resolve(REPO_ROOT, '<literal>')`. A root built by concatenation, or passed
+in as a variable, is not in the 45 and not covered by this zero.
