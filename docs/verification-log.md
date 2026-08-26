@@ -11661,3 +11661,54 @@ BOUNDED: the admin-gate question is closed by the mechanism above; the audit-att
 diagnosed but NOT fixed, and crypto's 19 published operations still answer 404 when `cryptoOrdersService`
 is unwired. I did not measure whether the same misattribution affects any existing stub — every other
 disabled-stub registrar lives in a file whose handlers may or may not audit, and that census was not run.
+
+## V-1760 — the audit guards' route-body rule READ rather than inferred: over-wide, and with zero current victims
+
+2026-08-26. V-1759 asserted a cause for the crypto failure — that the audit invariants' block detection
+attributes a file's audit calls to a stub appended below them. ⛔ **That was inferred from an error
+message, not read.** Read the extraction, and the real rule is both simpler and different:
+
+    const start = m.index;
+    const end   = i + 1 < marks.length ? marks[i + 1].index : source.length;
+    const body  = source.slice(start, end);
+
+A route's body runs from its own `app.<verb>(` to the NEXT registration — and **the LAST registration in a
+file runs to END OF FILE**, absorbing every trailing helper. So the exposure is not "a stub steals credit
+from handlers above it"; it is "whatever sits below the final route in a file counts as that route's body".
+Appending anything to a route module therefore also TRUNCATES the previous last route's body, which is a
+second-order effect V-1759 did not consider at all. I am withdrawing that entry's causal claim; what
+remains true there is that four guards gave contradictory verdicts, which is still unexplained.
+
+⭐ MEASURED AGAINST CURRENT CODE, and it is clean. Seven mutating `/v1/admin` routes are the last
+registration in their file, so their bodies run to EOF:
+
+    POST   /v1/admin/accounts/:id/refund-record                (4868B body)
+    PATCH  /v1/admin/crypto-orders/:order_id/internal-note
+    POST   /v1/admin/api-keys/:id/revoke
+    DELETE /v1/admin/owner/secrets/:name
+    POST   /v1/admin/status-subscribers/:id/force-unsubscribe
+    POST   /v1/admin/validation-schedules/:archetype/trigger
+    POST   /v1/admin/webhook-dlq/:id/discard
+
+Walked balanced parens from each registration's own `(` to its matching `)` and asked whether the audit
+call is INSIDE the registration or only after it. **All seven audit inside their own registration.** Only
+`admin-accounts.ts` also has an audit call after its last route, and it audits inside too, so nothing is
+credited by a trailing helper. The over-wide rule is a latent weakness with ZERO victims today.
+
+⛔ THE SEVEN-OUT-OF-SEVEN RESULT IS EXACTLY THE SHAPE THAT SHOULD BE DISTRUSTED — a detector that only ever
+answers True proves nothing. Ran a negative control: the five `/v1/admin/oauth/clients*` routes that BOTH
+audit invariants list as deliberately unaudited must come back False, and all five do. So the paren-walker
+discriminates, and the seven Trues are findings rather than agreement.
+
+⭐ WHY IT MATTERS ANYWAY, despite no current victim: the rule means a mutating admin route that writes no
+audit row passes this guard the moment an audited helper is appended below it, and "append a helper at the
+end of a route module" is an ordinary edit nobody would flag in review. The precondition already exists in
+two shipped files — `agent-sessions.ts` (8 audit-call mentions alongside a disabled-stub registrar) and
+`account-byok-anthropic.ts` (4) — neither of which registers an admin mutation today, which is the only
+reason they are not victims.
+
+BOUNDED: measured over `apps/server/src/routes/*.ts` for `/v1/admin/*` MUTATING routes that are last in
+their file, against the four audit-call spellings that guard uses. A route credited through a differently
+spelled recorder, a non-admin route, or a non-final route whose body reaches into a neighbour's helpers is
+not covered by this count, and the customer-mutation guard (which has its own `DISABLED_STUB` recognition)
+was not re-measured here.
