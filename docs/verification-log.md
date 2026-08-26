@@ -11836,3 +11836,91 @@ half named differently or living in another module would come back UNPAIRED rath
 today, which is what makes the 9/9 meaningful. Path extraction reads `app.<verb>('...')` literals only, so
 a route registered through a variable or a loop is not counted on either side, and "published" is spec
 membership after templating `:param` to `{param}`.
+
+## V-1764 — P-29 was LIVE, not latent; I had classified it from a comment about someone else's deployment
+
+2026-08-26. V-1746 filed `pageState.http_status` as latent — the CP declares `z.null().optional()`, the
+harness builds an Int for status >= 400, and I recorded it as dormant because
+`HarnessCoordinator.swift:5073` says "the deployed fork does NOT yet emit httpStatus". ⛔ That was wrong,
+and it was breaking in production the whole time.
+
+With fork access, all three conditions hold: the fork SOURCE appends the key
+(`WebLocalFrameLoaderClient.cpp:241`, `if (httpStatus > 0) json.append(",\"httpStatus\":"…)`); the DEPLOYED
+BINARY carries it (our own stale-verify in `operations/verification-log.md:359` records `strings`/`nm`
+finding the `"httpStatus":` key in the built fork); and the GATE is on (`DRIFTSTACK_NAV_PAGESTATE=1` in the
+daemon env, per W2963 and a live-box inspection). So a customer landing on a 4xx/5xx had the frame rejected
+and dropped at `fleet-control-registry.ts:533` with no log — the white-screen class W2962 exists to fix,
+reintroduced at the CP boundary.
+
+⭐ FIXED by A2 (`d5f589179`) after I escalated. Verified by POST-CONDITION rather than by reading the diff:
+numeric 404 accepted, `null` and absent still accepted, out-of-range 99 still rejected. Then checked the
+half a schema fix cannot prove — that the value reaches anyone: `session-page-state-store.ts` keeps
+`error: PageStateFrame['error']`, typed FROM the schema, so the widening propagates to the published
+`GET /v1/agent-sessions/{id}/page-state` with no further change.
+
+⛔⛔ THE LESSON IS BROADER THAN DEPLOYMENT AND IT CAUGHT ME TWICE. A comment in file A about what file B
+does is HEARSAY. The deployment form is worst (it needs a binary and an env checked, neither visible from
+the asserting file), but I repeated it one turn later on a BEHAVIOURAL claim: a protocol comment said a
+frame failing the envelope schema means "the correlator drops the frame", so I filed P-34 claiming a
+customer's intent would hang to TIMEOUT. Reading `harness-dispatch-correlator.ts:186` killed it — the throw
+is caught and settled deterministically, and the file's own comment says "Settle deterministically rather
+than waiting for its timeout". ⭐ The asymmetry is the trap: I demand proof that code DOES execute and
+accept a bare sentence that it does NOT.
+
+BOUNDED: the three P-29 conditions were confirmed from fork source, a recorded binary stale-verify, and
+recorded env inspections — not from reading the live box myself, which I cannot do from here.
+
+## V-1765 — five comments asserting a feature had not shipped; all five were false, and two of them hid a real defect
+
+2026-08-26. Generalised V-1764's lesson into a sweep: comments claiming the OTHER side has not shipped
+something. Five, and none was a documented decision — every one described a state that had ended.
+
+1-3. `set-cookies-` / `navigate-history-` / `trim-profile-request-correlator.ts` — each says a live node
+"never emits" its result so a wired request resolves `timeout`; the setCookies one adds "until A3's
+harness WD-extension lands". All three landed: `handleSetCookies` (:1482), `handleNavigateHistory`
+and `handleTrimProfile` exist, are dispatched, and each result is sent on BOTH drains. 4. `HarnessCoordinator.swift:1399` — doc-comment says the cookie path "returns a CLEAR error … so this
+stub is never hit in prod yet", EIGHT LINES above an in-body comment reading "Zero fork work, works
+on the deployed box today", and code that fetches a real jar. Self-contradicting within one function. 5. `agent-sessions.ts:2690` — "A3's harness getAllCookies WD-extension is PENDING … resolves timeout".
+
+⭐⭐ 4 AND 5 ARE WHY P-30 SAT UNNOTICED, and that is the part worth keeping. The cookie path was documented
+as inert in two independent places, one per side. Anyone checking whether an oversized cookie could drop
+the jar would read either sentence and stop. It was live the whole time.
+
+Both are now corrected, and BOTH BY MARKING RATHER THAN DELETING — mine at `96c0306cf` (comment-only,
+proved: zero added or removed lines that are not `///`), A2's at `5213154a7`. A sentence that records a
+past belief is useful; the same sentence readable as current fact is a trap.
+
+⚠️ CORRECTION TO MY OWN REPORT, and it is the same lesson as V-1766 below: I reported #5 as still open. It
+had been fixed in `5213154a7` before I said so — I read the file, then A2 committed, then I reported. Two
+of the five were already closed by the time my sweep was written up.
+
+## V-1766 — a probe that disagreed with itself, and the reflex that nearly retracted a correct measurement
+
+2026-08-26. P-30 (an over-cap cookie `name`/`path` drops the WHOLE jar frame) closed structurally: A2's
+`9b1cca9ac` filters cookies failing `CookieSchema` before `z.array(...)`, so a bad cookie costs that cookie.
+Raising the caps first (`5213154a7`, 512 -> 4096) closed `name` and `domain` but not `path` — measured
+through the real ingress path, a `Set-Cookie` Path of 4095/5000/10000/20000 all PARSE with no upper bound —
+and the array-level fix retires that, since the cliff no longer takes the frame.
+
+⛔⛔ THE INSTRUMENT LESSON IS THE INVERSE OF EVERY OTHER ONE IN THIS LOG. I ran one jar probe twice and got
+opposite answers. My immediate reading was "my earlier test was wrong", and I was one message from telling
+A2 I had misled them. The probe was fine: `git log -S` on the filter line shows it arriving in `9b1cca9ac`,
+BETWEEN the two runs. Both results were true of the tree they ran against.
+
+⭐ So: **when two runs of one probe disagree, ask whether the SUBJECT moved before doubting the tool** —
+one `git log -S` on the load-bearing line answers it. Distrusting the instrument is right so often that it
+becomes reflexive, and in a shared tree with an active peer that reflex produces the opposite false
+conclusion: retracting good evidence. ⚠️ Corollary I had not drawn: "a peer WRITING ruins a run" was a rule
+I held for the SUITE and never extended to my own ad-hoc probes, which can import a file mid-write and read
+a state that never existed as a commit. And two runs bracketing a peer's commit are not noise — they are a
+before/after that proves the fix.
+
+⭐ SOUND, measured while here and worth recording as a negative: every throwing `.parse()` on harness-family
+data is safe. Eight exist; SEVEN are serializers validating frames the CP itself builds
+("Re-validated so a malformed envelope never leaves the server"), where a throw is correct fail-fast on our
+own bug, and the ONE that parses inbound harness data is wrapped in try/catch at its single call site.
+Frame dispatch uses `safeParse`. No uncaught throw reaches the receive loop, which the registry's own
+comment names as the thing that would take down more than one node's connection.
+
+BOUNDED: the parse sweep is `*Schema.parse(` for the harness-protocol family in `apps/server/src`,
+non-test; a parse through a variable-held schema is not in the eight.
