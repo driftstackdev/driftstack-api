@@ -13,9 +13,17 @@
 //
 // Pure + transport-agnostic on purpose: it produces the params OBJECT and
 // validates it against HARNESS_INTENT_PARAM_SCHEMAS, but does NOT serialise
-// inputParams (the Swift `Data` wire codec is still pending Agent-3
-// confirmation — see the harness-control-protocol header). So this mapping
-// is stable regardless of how the envelope is ultimately encoded.
+// inputParams. So this mapping is stable regardless of how the envelope is encoded.
+//
+// ⛔ STALE (2026-08-26) — this said the Swift `Data` wire codec was "still pending
+// Agent-3 confirmation". It was RESOLVED 2026-06-05, and the very header this line
+// points at says so: "Wire codec (RESOLVED 2026-06-05 by Agent-3): … cross the wire
+// as a BASE64 STRING of the UTF-8 JSON". `harness-control-codec.ts` has implemented
+// both directions since.
+//
+// ⚠️ Worth keeping as a caution: this sentence CITED its own refutation. A reader
+// following the pointer lands on the resolution, so the cross-reference did not go
+// stale — only the claim wrapped around it did, and a citation reads as freshness.
 //
 // Vocab reconciliation: the current AgentIntent union is narrower than the
 // harness vocabulary, and a few verbs have no clean 1:1 target. Those map

@@ -12264,3 +12264,40 @@ apart will keep reporting the first kind forever.
 BOUNDED: widened sweep over `apps/server/src/**.ts` with the four correlators as a proven control. The
 harness side was swept separately (V-1772) with its own control; a claim phrased without one of the seven
 actor words, or naming a component not in that list, is still outside both.
+
+## V-1776 — the post-condition sweep that silently errored, and a sixth claim that cited its own refutation
+
+2026-08-26. Ran a post-condition over the whole class — "no unmarked temporal cross-component claim
+remains" — and it returned EMPTY. ⛔⛔ **The emptiness was a regex ERROR, not a clean tree.**
+
+`grep` here is **ugrep**, and my combined actor+temporal alternation blew its complexity budget:
+`ugrep: error at position 493 … exceeds complexity limits`. An errored regex prints NOTHING to stdout, so
+inside a `while read` pipeline — with stderr not captured — it is **indistinguishable from "no matches"**.
+The five files I had marked stale THAT HOUR should all have appeared as controls; zero output where the
+controls must match is the only reason I looked.
+
+⭐ **A grep that fails and a grep that finds nothing produce the same output.** Every sweep in this log is
+one over-long alternation away from silently reporting all-clear. The fix is cheap and now used here:
+redirect stderr to a file, check it is empty, check the exit code, and require the known positives in the
+output before reading the negatives.
+
+Re-run in two simple stages with those checks (exit 0, stderr 0 bytes, all five controls present), the
+sweep gave 10 candidates and 4 unmarked. Three are NOT members and the distinction is V-1775's temporal /
+permanent filter: `playwright.ts` ("'state'/'pdf' … not yet wired") and `socks5.ts` ("OpenVPN + WireGuard
+… not yet wired") describe THIS repo's own capability, and `fleet-control-registry.ts` ("not yet wired /
+stateless deploy") names a legitimate runtime deployment state, not a dated promise.
+
+⛔ THE FOURTH IS A SIXTH MEMBER, AND ITS SHAPE IS THE MOST DECEPTIVE YET.
+`agent-intent-to-dispatch.ts:16` says the Swift `Data` wire codec is "still pending Agent-3 confirmation —
+**see the harness-control-protocol header**". Followed the pointer: that header reads "Wire codec
+(**RESOLVED 2026-06-05 by Agent-3**): … cross the wire as a BASE64 STRING of the UTF-8 JSON", and
+`harness-control-codec.ts` has implemented both directions since. **The sentence cited its own refutation.**
+
+⭐⭐ That is worse than an unsourced stale claim. An assertion with no citation invites a check; one that
+points at a document reads as ALREADY CHECKED, and the reader's instinct is to trust the pointer rather
+than follow it. The cross-reference never rotted — only the claim wrapped around it did.
+
+Marked stale rather than deleted, matching the five siblings. Comment-only, `tsc` clean.
+
+BOUNDED: two-stage sweep over `apps/server/src/**.ts` with verified exit status, empty stderr, and five
+proven positive controls. A claim using none of the four temporal phrases is still outside it.
