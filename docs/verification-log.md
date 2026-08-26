@@ -22400,3 +22400,35 @@ exactly like "unguarded". Status lines must be gated on the actual diff, and the
 (the `throw` starts mid-line, so my indentation was wrong), and a mutation that left
 `ForbiddenError` unused — `tsc=1`, which would have mixed a typecheck failure in with the guards
 exactly as V-1696 describes.
+
+## V-1699
+
+**Six caller obligations checked, and a triplicated authz helper that only LOOKED divergent.**
+
+Continuing V-1698's sweep with the two sharpest remaining: `api-keys` privilege de-escalation
+(_"a caller must not be able to grant an ELEVATED scope it does not itself hold"_) and
+`webhooks.rotateSecret` (_"Caller is responsible for the admin-scope gate"_). Batch-mutated both,
+selection by mechanism — 480 files that touch either surface. Baseline 4 failed; mutated **10
+failed**. Both guarded. **Six obligations checked, one unenforced** (the stripe gate, V-1697).
+
+**The webhooks trace surfaced something better: `effectiveAccountIdForWrite` is copied into three
+route files** — profiles, webhooks and profile-snapshots — and **21 write endpoints** depend on it
+to refuse a non-admin acting on a team owner.
+
+⚠️ **My first comparison said all three diverge, and that was my method, not their code.** Hashing
+the normalised bodies gave three different digests, one copy 36 characters shorter. Reading them:
+identical logic, differing only in a local named `eff` instead of `effective` and a per-domain
+refusal message. **Comparing raw text of code that legitimately varies in identifiers and string
+literals is the token comparison, not the shape one** — the same lesson as the correlator sweep,
+now applied to my own diff.
+
+**The triplication is still worth a guard, by the criterion I hold myself to.** A copy that gained
+a condition, lost the throw, or returned the account id before checking the role would be a silent
+authz hole in one domain — **one line, in one of three files, with nothing else to notice**. So
+`the-team-admin-write-gate-is-one-shape-in-three-files` compares the copies with identifiers and
+message text normalised away, which is the comparison that is about behaviour rather than prose.
+
+Three arms: all three files still define the gate (or the comparison silently compares fewer than
+three), the shapes match, and the shape still contains the refusal — so the equality arm cannot
+pass on three copies that lost it together. Mutation-proved by deleting one copy's team-scope
+early return: exactly one arm reds, naming the divergent file.
