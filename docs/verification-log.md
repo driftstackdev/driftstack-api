@@ -12046,3 +12046,34 @@ ever enumerated by a Windows client, which is not a path this product has.
 BOUNDED: one route traced end to end across both repos. The sanitizer was tested by copying its body
 verbatim, so this proves the ALGORITHM is sound, not that the deployed binary runs this version — the
 V-1764 lesson applies and I did not re-verify the shipped fork/daemon build here.
+
+## V-1770 — the upload size chain is deliberately sized; the cookie guard sizes itself against a number that moved
+
+2026-08-26. Followed V-1769's open thread: the CP bounds `dataB64` by `bodyLimit` (base64 TEXT) while the
+harness caps 64 MiB of DECODED bytes, and base64 inflates 4/3 — so the two only agree if someone did the
+arithmetic.
+
+⭐ THEY DID, and the chain is coherent: `UPLOAD_MAX_BODY_BYTES` = 96 MiB, `FLEET_WS_MAX_PAYLOAD_BYTES` =
+96 MiB, harness per-file ceiling 64 MiB decoded = ~85.3 MiB base64 + envelope. The fleet comment states the
+reasoning explicitly and notes it supersedes an older 8 MiB intentResult rationale. Sound, nothing to fix.
+
+⛔ BUT THE COOKIE-JAR GUARD SIZES ITSELF AGAINST THE OLD NUMBER. `HarnessCoordinator:1426/1429` bounds the
+outbound jar at 8 MiB and justifies it as "safely under the 16 MiB WSS cap". The CP raised
+`FLEET_WS_MAX_PAYLOAD_BYTES` from 16 to 96 MiB in `cf218a65e` (2026-07-01) — to fit this very download
+inflation. Verified rather than assumed: `git log -S "16 * 1024 * 1024"` shows the CP genuinely used 16 MiB
+before that commit, so the harness comment was TRUE when written and has been wrong for eight weeks.
+
+Corrected the REASONING and kept the CEILING (`9619586e1`, comment-only, zero non-comment lines changed).
+8 MiB is generous for any real jar and bounds harness memory regardless of what the CP will accept; the
+defect was never the 8, it is that its justification is 12x off and the next person sizing a frame would
+copy "16 MiB" from that line.
+
+⭐⭐ THIS IS THE SIXTH MEMBER OF THE V-1765 CLASS AND THE WORST-SHAPED ONE. The other five are PROSE — "the
+harness never emits X", "the extension is pending" — and prose asserting something about another component
+at least invites doubt. **A NUMBER reads as measured.** It does not look like hearsay; it looks like a fact
+somebody checked, and its failure mode is worse than being disbelieved: it gets COPIED into the next
+component's sizing instead of re-derived. A stale sentence misleads one reader; a stale constant propagates.
+
+BOUNDED: checked the caps on the upload/download/cookies paths that share `FLEET_WS_MAX_PAYLOAD_BYTES`.
+Other cross-component constants are NOT swept here, and the 8 MiB ceiling's own adequacy is taken from the
+code's claim ("generous for any real jar") rather than measured against production jar sizes.
