@@ -11465,3 +11465,50 @@ estimate is not needed.
 BOUNDED: the 121 count is `\bIdentifier\b` occurrences in `lib/openapi.ts` only, minus the register lines.
 It does not include any use of those schema identifiers elsewhere in the server, which the alias approach
 would leave untouched by design but which I have not counted.
+
+## V-1756 — three activation-gated route groups 404 instead of returning the 503 the documented pattern requires
+
+2026-08-26. Moved off W-10 to a new surface and found a live inconsistency: the published spec declares
+every operation UNCONDITIONALLY, while `createApp` registers 20 route groups behind
+`if (deps.X !== undefined)`.
+
+⭐ This is invisible to the guard that would seem to cover it. `openapi-route-coverage.test.ts` parses
+`routes/` and `app.ts` with the TypeScript compiler — it is STATIC. It proves every published operation has
+a route DECLARATION in source; it cannot prove the operation is REACHABLE in a deployment. A route behind an
+unwired optional dep passes that guard and answers 404 in production.
+
+The repo already has the right answer to this and names it: `app.ts:384` — "when omitted, those routes
+register as 503 FeatureUnavailable stubs" — and `:527` calls it "the activation-gate pattern". The billing
+site states the reason outright: expose 503 + FeatureUnavailable "instead of leaving the routes
+unregistered (which 404s)". Thirteen route modules implement it.
+
+Measured the 20 gates against how bootstrap wires each dep: **15 are wired UNCONDITIONALLY** (always
+registered, no exposure) and **5 are wired CONDITIONALLY**. Reading all five:
+
+    billingService        else -> registerBillingDisabledRoutes            ✅ 503
+    byokAnthropicService  else -> registerAccountByokAnthropicDisabledRoutes ✅ 503
+    mfaService            NO else                                          ⛔ 404
+    cliAuthorizeService   NO else                                          ⛔ 404
+    cryptoOrdersService   NO else                                          ⛔ 404
+
+⛔ So three published route groups vanish rather than degrade when their config is absent, against a
+pattern this codebase documents, names, and implements in thirteen other modules. The consequence is the
+one the billing comment already articulates: a client cannot distinguish "this deployment has not enabled
+the feature" from "wrong URL / no such endpoint", so no machine-readable signal reaches the dashboard or an
+SDK.
+
+⚠️ MFA is the one worth flagging first, because it is a security surface. In a deployment without
+`MFA_ENCRYPTION_KEY` the published enrolment endpoints answer 404, so the dashboard cannot tell a customer
+"MFA is not enabled here" — it sees the same thing it would see for a typo.
+
+⛔⛔ MY DETECTOR WAS WRONG IN BOTH DIRECTIONS AND ONLY READING FIXED IT. A brace-depth scan over a fixed
+220-line window reported `byokAnthropicService` as having NO else — it has one, the loop broke before
+reaching it — and reported `mfaService` as carrying a FeatureUnavailable stub because the phrase appears in
+the COMMENT of the NEXT gate, sixteen lines below. A false negative and a false positive from one heuristic;
+the table above is from reading all five blocks, not from the scan.
+
+BOUNDED, and this is the part I cannot close from here: whether these three gates are OPEN in production
+depends on deploy-side config (`MFA_ENCRYPTION_KEY` and the CLI/crypto equivalents), which I have not read
+and will not infer. The defect measured here is the deviation from the documented pattern, which holds in
+every deployment; whether it is currently CUSTOMER-VISIBLE depends on prod config. Also bounded to
+`if (deps.X !== undefined)` gates in `app.ts` — a route gated by some other shape is not in the 20.
