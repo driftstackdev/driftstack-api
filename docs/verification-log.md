@@ -14091,3 +14091,46 @@ as confirmation.
 BOUNDED: three repos measured (`account-audit`, `account-proxies`, `api-keys`) of the 23 carrying an
 `eq(.accountId)` predicate; 20 repos and roughly 111 predicates remain UNMEASURED — neither guarded nor
 unguarded, simply not tested by me.
+
+## V-1820 — two more payment repos guarded, and "guarded" turns out to have two degrees
+
+2026-08-26. Fourth and fifth repos in the mutation sweep, both payment surfaces with no guard file named
+for them: `billing-repo` (3 predicates) and `stripe-webhooks-repo` (5). Both caught. But the assertion
+messages are not the same KIND of thing, and the difference matters more than the count.
+
+⭐ `billing-repo` IS GUARDED DELIBERATELY. 8 arms across 4 files, and one states the property in so many
+words:
+
+"an account with no subscription of its own was handed another account's: expected { … } to be null"
+
+That is a test written to catch this. Break the predicate and it says what broke.
+
+⚠️ `stripe-webhooks-repo` IS GUARDED INCIDENTALLY. 4 arms across 3 files, and every message is about
+entitlement RANKING rather than tenancy:
+
+"the lapsed entitlement is not ranked in: expected 'api_scale' to be 'api_starter'"
+"a cancelled sub is not an active set: expected 'api_scale' to be 'free'"
+
+Measured rather than inferred from the wording: **0 of its test files contain "another account",
+"foreign account" or "cross-account"** in any form. The catchers are `db-account-tier-best-active-drizzle`,
+`db-crypto-entitlements-drizzle` and `stripe-webhooks-repo-contract` — tier-computation tests that fail
+because a leaked foreign subscription changes the tier they assert.
+
+⭐⭐ THE DISTINCTION IS WORTH CARRYING BECAUSE THE SECOND KIND IS CONDITIONAL. An incidental guard holds
+only while the leak happens to alter an asserted outcome. Change the ranking logic so a foreign
+subscription no longer outranks the local one — a plausible refactor, since ranking is exactly what those
+tests exist to pin — and the tenant predicate silently loses its only witness. Nothing would fail, and
+nothing would say so. A deliberate guard cannot lose its witness that way, because its subject IS the
+tenancy.
+
+⛔ IT IS NOT A DEFECT AND I AM NOT FILING IT AS ONE. The predicates are present and currently caught. What
+this records is that the sweep's answer is "guarded" for five repos but "guarded ON PURPOSE" for only
+four — and the ownership-boundary guard's author made the mirror-image observation, that route tests drove
+a repo DOUBLE and so exercised the service check while never touching the SQL. Same lesson from the other
+side: a test can pass through the code you care about while asserting something else entirely.
+
+BOUNDED: five repos measured by mutation of the `eq(.accountId)` predicates (`account-audit`,
+`account-proxies`, `api-keys`, `billing`, `stripe-webhooks`) of 23 carrying them; 18 repos and roughly
+103 predicates remain unmeasured. "Deliberate" here means a test file containing an explicit
+cross-account phrase, which is a search over wording and would miss a deliberate guard that words it
+differently.
