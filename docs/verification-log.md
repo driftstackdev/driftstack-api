@@ -11762,3 +11762,45 @@ now, so the join reflects the landed fix rather than agreeing by construction.
 BOUNDED: gates are `if (deps.X !== undefined` in `app.ts` only; "conditionally wired" is the absence of a
 bare `dep,` or `dep: ` line in `bootstrap.ts`, which would misread a dep wired through some third shape;
 and "published" is membership in `packages/sdk-python/openapi.json` after templating `:param` to `{param}`.
+
+## V-1762 — LANDED: the gate-side census, proved against the exact defect three guards were green on
+
+2026-08-26. V-1757 found that every guard on this surface censuses the STUB side; V-1761 found a third
+one doing it and established why the gate side is harder than I first said. Landed the missing half:
+`apps/server/tests/unit/every-published-activation-gate-ships-a-stub.test.ts`.
+
+The population is the four-term join V-1761 derived, and each term removes a class of false positive that
+was MEASURED rather than imagined: (1) the gate's block registers routes; (2) it has no
+`register…DisabledRoutes`; (3) `bootstrap.ts` wires the dep CONDITIONALLY; (4) the routes are PUBLISHED.
+Dropping term 3 gives 17 findings against a real 3 — the noise is gates whose dep is always wired, so the
+`else` is unreachable. Dropping term 4 wrongly indicts `nowpaymentsIpnSecret`, where a 404 is CORRECT:
+inbound webhook ingress, unpublished, and a 503 would make the sender retry forever.
+
+⛔⛔ THE FIRST MUTATION PROVED THE WRONG THING, and it looked like a pass. Removing MFA's stub and its
+`else` made the three existing guards go RED (5 failures) — which reads as "they catch it after all". They
+did not: their hand rosters NAME `registerAccountMfaDisabledRoutes`, so deleting the function tripped a
+STALENESS arm, not a blind-spot detection. The real pre-V-1758 world had MFA in no roster at all.
+
+Re-ran against that exact world — no stub, no `else`, and MFA removed from both rosters:
+
+    the THREE stub-side guards:  3 passed (68 tests)   ← ALL GREEN on a real violation
+    the NEW gate-side guard:     RED — "mfaService → 5 published path(s) that 404 when unwired"
+
+All four mutated files restored byte-identical from a path-keyed snapshot under a trap.
+
+⭐ The file carries its own non-vacuity arms, because a census that only ever agrees proves nothing: gates
+WITH a stub and gates WITHOUT must both be visible; at least 5 gates must read as unconditionally wired
+(or term 3 is not discriminating and the join collapses to the 17-item list); and at least one gate must
+read as unpublished (or term 4 is decorative). A `KNOWN_GAPS` map carries `cryptoOrdersService` with its
+blocker, and a third arm fails when a listed gap stops qualifying, so closing one deletes its line rather
+than letting it rot into a permanent exemption.
+
+VERIFIED: full server unit suite **2001 files, 20,871 passed, 10 skipped, 0 failed**. Ratchets raised for
+the one file added and PROVED rather than incremented — `vitest list --filesOnly` reports node=3048 and
+root=3224, matching the new pins exactly.
+
+BOUNDED: the census reads `if (deps.X !== undefined` in `app.ts` only, so a gate expressed another way is
+outside it; "conditionally wired" is the absence of a bare `dep,` or `dep: ` line in `bootstrap.ts`, which
+would misread a dep wired through some third shape; and "published" is membership in
+`packages/sdk-python/openapi.json` after templating `:param` to `{param}`. It does not check that an
+existing stub covers all of its feature's paths — only that one exists.
