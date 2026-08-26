@@ -22224,3 +22224,34 @@ line implied otherwise.
 mention inside a doc comment rather than the method — the same "index from a token that appears
 more than once" fault I recorded two commits earlier, repeated within the hour. The fix that
 works is anchoring on the declaration shape (`^  onResultFrame`) rather than the bare name.
+
+## V-1694
+
+**No dead harness surface: every registry request method has exactly one route caller, and the
+sole exception is the one I added an hour ago.**
+
+A frame and correlator built but never wired is a maintenance cost and a false signal of
+capability — the surface claims an operation nothing can invoke. Measured across the
+`FleetControlConnection` public request API, boundary `apps/server/src/{routes,services,lib}`
+excluding the registry itself:
+
+| method                                                                                                             | route callers                               |
+| ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------- |
+| requestTrim, requestDownloadList, requestDownloadFetch, requestUpload, requestCookies, setCookies, navigateHistory | **1 each**                                  |
+| **setEgress**                                                                                                      | **0** — added in V-1692, awaiting its route |
+
+So the harness control surface is fully wired, and the only unreachable method is mine, which is
+the expected mid-handoff state rather than a finding.
+
+⛔ **The first version of this sweep reported FIVE methods as unreachable, and every one was my
+own invention.** I derived the names from the frames and correlators — `uploadFile`,
+`listDownloads`, `fetchDownload`, `cookies` — instead of reading the class. The registry calls
+them `requestUpload`, `requestDownloadList`, `requestDownloadFetch`, `requestCookies`. **A
+population guessed from a neighbouring layer's vocabulary is not the population**, which is
+V-1673's hand-written column list in a new costume: there, six of seven guessed names did not
+exist; here, four of eight.
+
+**No guard added**, by the V-1675 criterion. Leaving a method unwired is not a one-line drift —
+it takes a frame, a correlator, a registry method and a missing route across four files. A guard
+would also need an exemption for `setEgress` today and a deletion of that exemption the day the
+route lands, which is two edits to catch a mistake nobody has made.
