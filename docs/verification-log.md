@@ -21130,3 +21130,26 @@ I know nothing already covered it — and it named the file and column. Restored
 a payload that opens at 264: stripping comments deleted lines and shifted every number by 17.
 Comments are now blanked in place, preserving newlines and offsets, and the reported line is
 the payload's own. A guard that names the wrong line sends the reader where the defect is not.
+
+## V-1673b
+
+**Correction to V-1673 — the hand-rolled comment stripper was itself the defect it described.**
+
+V-1673 recorded that I found and fixed a line-drift bug in my own `stripComments`. The full
+suite then failed `no-guard-strips-comments-by-hand`, naming my file as the sole offender: a
+canonical `codeOnly` helper exists at `tests/unit/_helpers/code-only.ts` and a guard requires
+it. Reading it, the drift I "found" is V-1254 — already discovered, already fixed there, in
+the same words ("named a line that did not contain what it had found").
+
+The helper also handles two failures my version had and I had not thought to look for: a `/*`
+inside a LINE comment, which the naive block-comment pass treats as an opener and which
+deleted 7962 characters including the imports in one real route file — eighteen files under
+`apps/server/src` carry that shape — and a quote inside a regex literal, which opens a string
+that never closes, after which every comment survives and the guard silently matches prose
+again. My version would have gone quietly wrong on both.
+
+Swapped to `codeOnly`; re-proved by the same mutation, which still names
+`crypto-orders-repo.ts:264` and still fails exactly one arm. The lesson is the one from this
+morning in a new place: I reached for a local helper without asking whether the repo already
+had one, and rediscovering a solved bug is the cheap outcome — shipping the two I did not
+rediscover was the expensive one.

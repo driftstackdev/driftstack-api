@@ -24,6 +24,8 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
+import { codeOnly } from './_helpers/code-only.js';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const SRC = resolve(REPO_ROOT, 'apps/server/src');
@@ -31,22 +33,17 @@ const SRC = resolve(REPO_ROOT, 'apps/server/src');
 /**
  * Comments are not code; a column named in prose is not a column assigned.
  *
- * Blanked rather than deleted, preserving every newline and offset. Deleting them
- * shifted the reported line by 17 in the mutation that proved this file — it named
- * 247 for a payload that opens at 264 — and a guard that names the wrong line sends
- * the reader somewhere the defect is not. The line reported is the payload's own,
- * which is the UPDATE at fault; the offending column is named in the message.
- * Trailing comments go too — `// accountId: legacy` inside a payload would read as
- * a key — with `:` excluded before the slashes so a `https://` URL survives.
+ * `codeOnly` rather than a local regex. The hand-rolled version this replaced hit
+ * V-1254 exactly — it deleted comment lines, so the reported line drifted by the
+ * height of the header above the hit and named 247 for a payload opening at 264.
+ * The shared helper had already fixed that, and two more this file never reached:
+ * a `/*` inside a line comment (eighteen route files carry one) and a quote inside
+ * a regex literal, either of which silently turns stripping into a no-op.
  */
-const stripComments = (s: string): string =>
-  s
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
-    .replace(/(?<![:\w])\/\/[^\n]*/g, (m) => ' '.repeat(m.length));
 
 /** Every uuid column in the schema that is a foreign key to `accounts.id`. */
 function ownershipColumns(): string[] {
-  const schema = stripComments(readFileSync(resolve(SRC, 'db/schema.ts'), 'utf8'));
+  const schema = codeOnly(readFileSync(resolve(SRC, 'db/schema.ts'), 'utf8'));
   const found = new Set<string>();
   for (const m of schema.matchAll(
     /([A-Za-z_$][\w$]*)\s*:\s*uuid\((?:[^()]|\([^()]*\))*\)((?:[^,;]|\([^()]*\))*)/g,
@@ -127,7 +124,7 @@ describe('an UPDATE may not move a row between accounts', () => {
 
   it('CRITICAL the scan reaches real `.set({…})` payloads, so a zero below means absence rather than a scan that matched nothing.', () => {
     const total = files.reduce(
-      (n, f) => n + setLiterals(stripComments(readFileSync(f, 'utf8'))).length,
+      (n, f) => n + setLiterals(codeOnly(readFileSync(f, 'utf8'))).length,
       0,
     );
     expect(total, 'no `.set({…})` payloads found in apps/server/src').toBeGreaterThan(100);
@@ -145,7 +142,7 @@ describe('an UPDATE may not move a row between accounts', () => {
   it('no UPDATE payload in apps/server/src assigns an ownership column. The exemption list is empty and should stay empty: a legitimate owner change is a delete and an insert, not a column write, because the row carries history that does not transfer.', () => {
     const offenders: string[] = [];
     for (const f of files) {
-      const src = stripComments(readFileSync(f, 'utf8'));
+      const src = codeOnly(readFileSync(f, 'utf8'));
       for (const { line, keys } of setLiterals(src)) {
         const hit = keys.filter((k) => columns.includes(k));
         if (hit.length > 0)
@@ -162,7 +159,7 @@ describe('an UPDATE may not move a row between accounts', () => {
     const pattern = new RegExp(String.raw`\b(?:set|sets)\.(${columns.join('|')})\s*=`, 'g');
     const offenders: string[] = [];
     for (const f of files) {
-      const src = stripComments(readFileSync(f, 'utf8'));
+      const src = codeOnly(readFileSync(f, 'utf8'));
       for (const m of src.matchAll(pattern)) {
         offenders.push(
           `${f.slice(REPO_ROOT.length + 1)}:${src.slice(0, m.index ?? 0).split('\n').length} sets ${m[1] as string}`,
