@@ -15,6 +15,7 @@ import Section from '../components/Section.astro';
 import Card from '../components/Card.astro';
 import IconTile from '../components/IconTile.astro';
 import CtaBand from '../components/CtaBand.astro';
+import AgentPlanDemo from '../components/AgentPlanDemo.astro';
 
 // Compact fleet strip — the same phone-framed profile cards the
 // desktop app renders (and the homepage cockpit mockup draws):
@@ -103,6 +104,27 @@ const walkthroughProfiles = [
         <a href="/use-cases/qa-testing/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">QA page</a>.
       </Card>
     </div>
+  </Section>
+
+  <Section
+    label="What &ldquo;the agent drives&rdquo; means"
+    title="It plans in a fixed vocabulary, and you can read every step."
+  >
+    <p class="mt-6 max-w-prose text-tk-ink-2">
+      Describe the job in plain English and the agent turns it into a short list of
+      actions, then runs them on the phone. The list is not free-form: the agent
+      picks from a closed set of verbs and cannot invent new ones, so what it is
+      about to do is always something you can read before it happens &mdash; and
+      afterwards, in the session history.
+    </p>
+    <AgentPlanDemo />
+    <p class="max-w-prose text-tk-ink-2">
+      The third step is the one that has no equivalent in a normal automation tool.
+      <span class="text-tk-ink">Pausing is an action.</span> The agent waits the way
+      a person reading that much text would wait, at the pace set by the profile it
+      is running as &mdash; because a real browser on a real device is only
+      convincing if it also spends time like one.
+    </p>
   </Section>
 
   <Section
