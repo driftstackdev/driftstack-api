@@ -13250,3 +13250,41 @@ argument FOR correcting it rather than against: the wording is what a future con
 BOUNDED: coverage totals are the gate's configured scope, which EXCLUDES `apps/server/src/db/**` (55
 files, see V-1798) and the Astro apps, GUI client and generated SDK code. The bottom-12 list is over
 files with 20+ statements inside that scope only.
+
+## V-1800 — correcting V-1799: the coverage ranking is skewed by 116 skipped files, and the skew is not uniform
+
+2026-08-26, same day. V-1799 published a lowest-coverage ranking and bounded it to the gate's configured
+scope. That boundary was real and incomplete. ⛔ **The run skipped 116 test files for want of
+`DATABASE_URL`, so any source file whose exercisers are integration tests reads artificially low, and the
+ranking is a ranking of two different things mixed together.**
+
+Found by auditing the ranking's second entry. `routes/internal-atlas-priority.ts` scored 44.00 statements
+/ 11.36 branches, and 11% branch coverage on a 400-line route with 28 referencing test files did not
+reconcile. It reconciles once you look at what ran: its primary exerciser,
+`tests/integration/atlas-priority-events-end-to-end.test.ts`, opens with
+`describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)`. **The number was measured with the test
+that drives the route switched off.**
+
+The skew is structural, not incidental: 169 of 396 integration files carry a `DATABASE_URL` / `dbReachable`
+gate. A file exercised by unit tests is measured honestly; a file exercised by integration tests is not.
+Comparing the two in one ordered list is comparing measurements taken under different conditions.
+
+⭐ WHAT SURVIVES THE CORRECTION, because not all of it was wrong. The finding V-1799 acted on —
+`crypto-entitlement-reconcile-sweeper` at 32% — was audited by READING, and the documentation defect
+found there stands on the read, not on the percentage. And the withdrawn name-based ranking of V-1798 is
+still withdrawn: this correction says the coverage instrument needs the right conditions, not that
+filename correlation was ever valid.
+
+⭐⭐ THE PATTERN IN MY OWN ERRORS TODAY IS NOW UNMISTAKABLE AND WORTH NAMING. V-1789/V-1794 (a guard blind
+on the axis it does not relate), V-1791 (a detector whose skips were the finding), V-1798 (a proxy that
+measured naming), and this. **Every one is a measurement whose CONDITIONS were not stated alongside its
+result.** The standing instruction is to state the boundary in the same sentence as the result; the
+failure mode is subtler than forgetting to — it is stating A boundary and believing it complete.
+
+⚠️ THE VALID MEASUREMENT IS AVAILABLE AND NOT YET TAKEN. Postgres is running locally and the suite's own
+default URL is `postgres://driftstack:driftstack@localhost:5432/driftstack`. A coverage run against a
+DISPOSABLE database would produce a ranking measured under one set of conditions, and would also
+re-verify the four percentages V-1798 had to leave as measured-on-2026-08-14. Not done in this entry.
+
+BOUNDED: 169 of 396 integration files carry a DB gate, counted by the literal patterns `skipIf(...
+DATABASE_URL` and `dbReachable`. A file gated by another spelling is not in that count.
