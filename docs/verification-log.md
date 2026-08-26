@@ -21532,3 +21532,35 @@ Two conventions coexist for where the version lives — most arrays carry it as 
 a deliberate choice of encoding, which is the V-1675 criterion rather than the V-1673 one. Fifth
 time today a question I judged worth building was already answered in the tree; recorded so the
 sixth sweep starts from the measurement.
+
+## V-1683
+
+**Seven questions I judged worth building a guard for, all already answered in the tree. The
+pattern is the finding.**
+
+Recorded so the eighth pass starts here rather than re-deriving it. Each was chosen as a
+cross-cutting invariant that per-file guards should structurally miss, and each was already
+covered — several better than I would have written them:
+
+| Question                                                      | Already covered by                                                                                                                                            |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Are the Playwright e2e specs actually run and collected?      | `a-gate-that-does-not-name-its-blind-spot-reads-as-total`, which derives the spec-file count from disk                                                        |
+| Can a test opt out of running unnoticed?                      | `no-permanently-skipped-tests`, whose filter includes `.spec.ts` — mutation-proved                                                                            |
+| Can a create path accept ownership from the request?          | no schema declares one; zod strips unknown keys; nothing spreads a body into a write                                                                          |
+| Do the four key-sharing modules carry distinct AAD purposes?  | `mfa-encryption-key-shared-cross-source-invariant`, keyed by **file+constant** rather than name — the refinement I would have needed                          |
+| Is crypto money decided by float noise?                       | `crypto-amount-tolerance-stays-above-float-noise`, which measured the 14-orders-of-magnitude gap AND verified that tightening the tolerance fails a real test |
+| Does webhook delivery follow redirects to an internal target? | `redirect: 'error'` in both implementations, each pinned by its own content-parity guard                                                                      |
+| Is the response-body read bounded?                            | 64 KiB in both, and the worker's guard pins the **loop structure**, not just the constant, citing undici decompression bombs                                  |
+
+**The honest reading is about my question-selection, not only about the codebase.** Seven
+negatives from questions I chose is evidence that I am converging on well-trodden ground. The
+two that did yield — V-1649's ownership-through-lock defect and V-1680's optional AAD parameter
+— shared a property none of the seven had: **a weakness the type system or an API signature
+permitted silently**, rather than a behaviour a test could describe. That is the shape worth
+hunting, and it is scarcer than defect-classes-in-general.
+
+**Where the remaining value is**, stated so it is not re-litigated: not in new defect classes
+under `apps/server`, whose guard suite answered seven of seven. It is in the owner decisions
+already measured and parked on the memo (ten items, W-10 among them), and in surfaces where
+verification is structurally thinner — W-12 records that only 2 of 14 workspaces typecheck their
+own tests, which is a measured statement that `packages/` is not held to the same bar.
