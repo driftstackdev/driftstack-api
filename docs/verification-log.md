@@ -12192,3 +12192,38 @@ literals agrees by convention; only a derived comparison agrees by construction.
 
 BOUNDED: audited the WD drive path's three timeouts, their construction sites and their pins. Other harness
 timeouts (SIGTERM grace, re-anchor windows, nav-stall) are NOT in this ladder and were not checked.
+
+## V-1774 — a FOURTH correlator carried the same stale claim, missed because my actor list omitted one word
+
+2026-08-26. A2 marked the three correlator comments stale (`e5c5827c3`), which I read as closing the
+V-1765 class. Checking rather than accepting it found a FOURTH:
+`cookies-request-correlator.ts:17` still says "a live node never emits `cookiesResult`, so a wired request
+resolves `timeout` — which the GUI renders as the 'pending data source' state". It is false — the harness
+handler fetches a real jar via the standard W3C WD `GET /cookie`, needing no fork extension.
+
+⛔ MY ORIGINAL SWEEP MISSED IT, AND THE CAUSE IS ONE MISSING WORD. V-1765's pattern matched on the actor
+(`harness|fork|box|A3`) and this sentence names the actor as **"node"**. The three I did find say "node"
+too — they matched a different clause of the same regex — so the sweep looked complete while being
+alternation-lucky. ⭐ An OR-pattern that finds N does not tell you it found all N+1: the members it caught
+may each have matched a different branch, and one branch's blind spot is invisible in the output.
+
+⛔⛔ TWO MORE OF MY OWN CHECKS WERE WRONG IN THE SAME MINUTE, and both printed reassuring labels:
+
+- I grepped `"never emits"` with `grep -v STALE` and called an empty result "no surviving unmarked claim".
+  The marker sits on a DIFFERENT LINE from the claim, so per-line filtering can never work; the output was
+  non-empty and my label said the opposite of what it showed.
+- I iterated a hardcoded list of three correlator basenames to check for markers — the same hand-roster
+  failure this log has documented four times. Globbing `*-request-correlator.ts` is what surfaced the fourth.
+
+⭐⭐ THE FINDING IS WORSE THAN A COUNT. This is the THIRD independent comment asserting that ONE path — the
+cookie jar — was inert. `HarnessCoordinator.swift` (fixed `96c0306cf`), `agent-sessions.ts` (fixed
+`5213154a7`), and now this. While all three stood, a reachability check on the cookie surface hit one of
+them and stopped, from any direction an auditor approached. That is the mechanism by which the >512-byte
+name/path jar-drop (fixed `9b1cca9ac`) stayed invisible: not one stale sentence, but a consistent, mutually
+corroborating account of a path that was live the whole time.
+
+Marked stale rather than deleted, matching the treatment of its two siblings. Comment-only: zero non-comment
+lines changed, `tsc` clean.
+
+BOUNDED: globbed every `*-request-correlator.ts` for the claim, which is four files; a correlator named
+differently, or the same claim in a non-correlator service, is outside that glob.

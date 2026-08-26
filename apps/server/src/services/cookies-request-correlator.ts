@@ -14,9 +14,21 @@
 //   timeout → 200 { cookies:null, status:'timeout' }         (node didn't reply in time)
 // (the route handles "no live connection / not wired" before ever calling here).
 //
-// Ships gated-inert until A3's harness `getAllCookies` WD-extension lands: until
-// then a live node never emits `cookiesResult`, so a wired request resolves
-// `timeout` — which the GUI renders as the "pending data source" state.
+// ⛔ STALE (2026-08-26) — kept as the record of a past belief, NOT true now. The
+// harness handler is LIVE: `HarnessCoordinator.handleCookiesRequest` fetches a real
+// jar via the standard W3C WD `GET /cookie` ("Zero fork work, works on the deployed
+// box today"), so the A1 #36 fork extension was never required and a wired request
+// resolves `ok` with the jar, not `timeout`.
+//
+// ⚠️ This is the THIRD comment to have claimed this one path was inert — the others
+// were `HarnessCoordinator.swift` (fixed 96c0306cf) and `agent-sessions.ts` (fixed
+// 5213154a7). While all three stood, anyone checking whether a cookie-jar defect was
+// REACHABLE would read one, conclude the path was dead, and stop. That is exactly
+// what happened to the oversized-name/path jar-drop fixed in 9b1cca9ac.
+//
+// ⛔ SUPERSEDED: "Ships gated-inert until A3's harness `getAllCookies` WD-extension
+// lands: until then a live node never emits `cookiesResult`, so a wired request
+// resolves `timeout` — which the GUI renders as the 'pending data source' state."
 
 import type { Logger } from '../lib/logger.js';
 import {
