@@ -10735,3 +10735,34 @@ BOUNDED: this compares message KIND names, not field shapes. Two implementations
 `type` string and still disagree on a field's presence, type or encoding — `snake_case` on the Swift
 side against camelCase in Zod is exactly where that would hide. Field-level parity is a larger
 measurement and is NOT claimed here.
+
+## V-1740 — field-level parity on the busiest frame, and the near-miss was a field name borrowed from the wrong contract
+
+2026-08-26. V-1739 compared message KIND names across the two implementations and stated its boundary
+plainly: two sides can agree on every `type` string and still disagree on a field's presence or
+encoding, "snake_case on the Swift side against camelCase in Zod is exactly where that would hide".
+Took one bounded step into that boundary — `sessionAssign`, the frame every session starts with.
+
+THE CASING IS MIXED ON PURPOSE AND BOTH SIDES IMPLEMENT THE SAME MIX. Top-level fields are camelCase on
+the wire (`sessionId`, `archetype`, `behaviorProfile`, `transportMode`, `idleTimeoutSeconds`,
+`initialUrl`) and Swift decodes them with default coding, property name as key. Every snake_case field
+is one where Swift declares an EXPLICIT `CodingKeys` mapping — `quic_ok`, `probed_at`, `profile_id`,
+`sealed_blob`, `sealed_blob_url`, `sealed_blob_put_url`, `ws_url`, `expires_at` — and the CP's Zod
+declares those same snake_case names. Checked in both directions; they agree.
+
+⚠️ AND I NEARLY FILED A DEFECT ON IT. `initialUrl` has no `CodingKeys` entry, so Swift decodes it from
+the literal key `"initialUrl"`. V-1539 records the field as `initial_url`, which would mean the CP sends
+a key the harness never reads — every session silently starting blank, a user-visible failure with no
+error. The reasoning was sound and the premise was borrowed from the wrong document: `initial_url` is
+the CUSTOMER-facing request field on `POST /v1/agent-sessions`, which the control plane TRANSLATES. The
+harness frame declares `initialUrl` at `harness-control-protocol.ts:857` and the codec emits
+`initialUrl`. Both sides camelCase, no gap.
+
+⭐ The transferable half, and it is a sibling of V-1739's: **one concept can have two spellings in two
+contracts of the same system, and a parity check must take each field name from the contract it is
+actually checking.** V-1739's error was importing a TRANSPORT's messages into the wrong comparison;
+this one was importing a FIELD's name from the wrong layer. Same class, one level down — and both
+produced a confident, alarming, wrong answer that reading refuted in one command.
+
+BOUNDED: one frame of the thirty-one, chosen because it is the one every session begins with. The
+remaining thirty are unchecked at field level, and nothing here licenses a claim about them.
