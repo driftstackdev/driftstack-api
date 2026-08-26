@@ -64,3 +64,16 @@ scripts/scroll-e2e/harness.iife.js
 
 # Cross-agent ad-hoc canary/test scripts (e.g. A3 BUG-42 NodeMaven canary) — not committed
 scripts/.*-canary.mjs
+
+# ⛔ The internal ledger is NOT tracked here. `driftstack-api` is PUBLIC, and this
+# file is the one piece of P-1's move-set that had not yet reached origin — it
+# carries open findings, decision rationale and where the guards are weak. It
+# lives in the PRIVATE repo at `driftstack/docs/internal/OPEN-ITEMS.md`, which
+# both agents can now read and write.
+#
+# ⚠️ The other 242 `docs/internal` files, CLAUDE.md, AGENTS.md and the
+# verification log are ALREADY on origin. Moving them now removes them from the
+# tip and not from history, which the owner's "scrub files, keep git history"
+# decision accepted. So this entry is the only one with preventive value; the
+# rest is hygiene.
+docs/internal/OPEN-ITEMS.md
