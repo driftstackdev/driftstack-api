@@ -22199,3 +22199,28 @@ counting: it checks identity on a bounded header **before** parsing the full env
 prevents — DOM, screenshot and extracted text crossing accounts.
 
 The setEgress correlator added in V-1692 conforms, mirrored from setCookies rather than invented.
+
+## V-1693b
+
+**Correction to my own closing remark in V-1693: no correlator does heavy payload work before its
+identity check, because none of them decode before it.**
+
+V-1693 ended by calling the dispatch correlator's ordering _"the better one where payloads are
+large"_, implying the others pay a cost. Checked, because a hypothesis I raise is one I should
+close rather than leave as an aside.
+
+`download-request-correlator` is the only one whose frame carries file bytes, and it parses the
+envelope before checking identity — but it **passes `dataB64` through as an opaque string and
+decodes nothing**. The pre-check work is zod confirming a string, not materialising bytes. The
+dispatch correlator's early-header check earns its complexity for the opposite reason: its
+`parseIntentResult` genuinely decodes base64 `outputData` into JSON, and it runs that only after
+the identity check.
+
+So the two orderings are not a better and a worse version of one thing — each matches what its
+own parse actually costs. **The asymmetry is real in form and absent in cost**, and my closing
+line implied otherwise.
+
+⚠️ Getting here, my extraction anchored on the first `onResultFrame` in the file, which is a
+mention inside a doc comment rather than the method — the same "index from a token that appears
+more than once" fault I recorded two commits earlier, repeated within the hour. The fix that
+works is anchoring on the declaration shape (`^  onResultFrame`) rather than the bare name.
