@@ -109,7 +109,7 @@
 // findings. Both numbers are floored, because a comparison that quietly covers
 // less reads exactly like one that finds nothing.
 //
-// Two blind spots worth naming rather than leaving to be discovered. `.refine()`
+// Three blind spots worth naming rather than leaving to be discovered. `.refine()`
 // is not treated as a narrowing constraint: it carries an arbitrary predicate
 // that OpenAPI cannot express anyway, so `initial_url`'s http/https restriction
 // is enforced and unpublishable rather than a drift. And a multi-line chain is
@@ -117,6 +117,27 @@
 // why its published `max` was a hardcoded 8192 sitting beside a
 // `PLATFORM_SECRET_VALUE_MAX_UTF8_BYTES` of 8192; that literal now derives from
 // the constant, so there is one fewer copy for this file to fail to check.
+//
+// V-1710 — the third is DERIVATION, and it was measured rather than left as a
+// worry. A `field: SomeSchema,` line does not begin with `z.` so FIELD_LINE cannot
+// see it, and the fear is that a request field quietly leaves the comparison. The
+// published document carries 19 such lines; excluding the structural wrappers
+// (`params`, `query`, `schema`) exactly two are request fields, and NEITHER is a
+// gap. `category` derives from `ConsequentialActionCategorySchema` — and the ROUTE
+// derives from the same imported constant, so there are no longer two hand-written
+// copies that could disagree. `cursor` derives at one site and still has a visible
+// request-side chain at openapi.ts:6303, which is the declaration actually compared.
+//
+// ⭐ So a derivation is only a blind spot when ONE side derives and the other keeps
+// a hand-written copy. When BOTH sides reference one constant the drift is removed
+// at the source, and a falling compared-count means the risk went away rather than
+// went unseen. Worth stating because the V-1611 note above reads the other way.
+//
+// ⚠️ Measured by POST-CONDITION on this file's own `pairs`, not by a replica. A
+// replica scanning only the DERIVED lines called `cursor` one-sided and unguarded,
+// which is wrong — it never looked at the union with the visible declarations. The
+// populations differed, and a mismatched population is indistinguishable from a
+// contradicted claim until someone states which set was counted.
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';

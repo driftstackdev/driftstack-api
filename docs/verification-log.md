@@ -9458,3 +9458,39 @@ Separately, `.prettierignore` now states why its archive entries are literal rat
 (V-1707/V-1708): the budget guard's matcher is literal, so a glob would satisfy Prettier and leave
 the guard red on a hook that was fine. That file is exactly where someone reaches for a glob, so the
 reason belongs there and not only in the ledger.
+
+## V-1710 — the derivation blind spot is real in mechanism and empty in fact; measured, not assumed
+
+2026-08-26. `published-request-schema-is-not-looser-than-enforced` reads single-line `field: z.…`
+declarations, so a field DERIVED from a named schema (`field: SomeSchema,`) is invisible to it. The
+file's own V-1611 note treats that as a live hazard — deriving a field "drops it out of comparison
+entirely — silently, because the assertion below is a FLOOR" — and names two near-misses. Nobody had
+measured how many fields are actually in that state.
+
+Measured. The published document carries 19 derived declarations. Excluding the structural wrappers
+the guard already accounts for (`params`, `query`, `schema`), exactly TWO are request fields, and
+neither is a coverage gap:
+
+category derives from `ConsequentialActionCategorySchema` — and routes/agent-sessions.ts:292
+derives from THE SAME imported constant. There are no longer two hand-written copies to
+disagree, so there is nothing for this guard to compare and nothing at risk.
+cursor derives at one site but still has a visible request-side chain at openapi.ts:6303, and
+that is the declaration actually compared. It is in `pairs` today.
+
+⭐ THE DISTINCTION THAT MATTERS, and it inverts the V-1611 note's worry. A derivation is a blind spot
+only when ONE side derives and the other keeps a hand-written copy — then an invisible declaration
+faces a live one that can still drift. When BOTH sides reference a single constant the drift is
+eliminated at the source, and a falling compared-count means the risk went away rather than went
+unseen. The guard now says so where the hazard is described.
+
+⚠️ HOW THIS WAS NEARLY REPORTED AS A DEFECT. A replica scanning only the DERIVED lines classified
+`cursor` as "one-sided — the route hand-writes it, nothing compares them", which looked exactly like
+a real finding against a guard whose note claims `cursor` entered the compared set. It was wrong: the
+replica never took the union with the visible declarations. Settled by POST-CONDITION on the guard's
+own `pairs` — instrumented in place, 22 names printed, `cursor` among them, file restored
+byte-identically. The replica and the guard were counting different populations, and a mismatched
+population is indistinguishable from a contradicted claim until someone states which set was counted.
+Preferring the real instrument over the derivation is what kept a false report out of this log.
+
+No production change. The guard gains its third named blind spot with the measurement attached, so
+the next reader inherits the fact rather than the fear.
