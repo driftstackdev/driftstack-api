@@ -11559,3 +11559,55 @@ stubs, never before: on its own it is a deliberately red test.
 BOUNDED: the seven-registrar census is `export function register*DisabledRoutes` across
 `apps/server/src/routes` only; a stub defined elsewhere or spelled differently is not counted, and the
 gate census remains the 20 `if (deps.X !== undefined)` sites in `app.ts` from V-1756.
+
+## V-1758 — LANDED: account-mfa and auth-cli now degrade to 503 instead of vanishing
+
+2026-08-26. Fixed V-1756/V-1757 for two of the three gates. `deps.mfaService` and `deps.cliAuthorizeService`
+had no `else` branch, so on a deployment without `MFA_ENCRYPTION_KEY` or the CLI service the published
+operations answered 404 and a client could not tell "not enabled here" from "wrong URL".
+
+Landed: `registerAccountMfaDisabledRoutes` (6 routes) and `registerAuthCliDisabledRoutes` (3), both
+unauthed-by-design exactly like `registerBillingDisabledRoutes` — answering 503 BEFORE requireAuth means a
+customer with a stale token learns the real reason instead of a 401 pointing at a token that is not the
+problem. Both wired into their `else` branch, both rostered in the two activation-gate invariants, both
+given a declared 503 in `openapi.ts`, and the spec regenerated.
+
+⭐ MUTATION-PROVED rather than assumed. Removing the MFA `else` under a trapped restore fails with exactly
+the sentence the defect describes — "registerAccountMfaDisabledRoutes is imported but never called — the
+unset branch registers nothing and the endpoints 404 rather than returning 503" — and the file was restored
+byte-identical from a snapshot keyed by path. So the invariant now COVERS mfa, which it structurally could
+not before.
+
+⛔⛔ CRYPTO WAS CUT, AND THE REASON IS A DESIGN QUESTION I HAD NOT MEASURED. The first attempt stubbed all
+three gates: 28 routes, of which 19 were crypto and 11 of those `/v1/admin/*`. That produced 13 failures
+across 10 files, and five were admin invariants — "every /v1/admin registration is gated, by the
+internal-admin scope or by the stricter owner guard". ⭐ An unauthed-503-before-auth stub is by
+construction NOT scope-gated, so the billing posture and the admin-gating invariant are in direct tension
+on any admin surface. That is a real question about which guarantee wins, not a mechanical fix, and it is
+not one to answer while landing something else. Cutting crypto took the failures from 13 to 5. P-32 stays
+open for it, now with the tension named.
+
+⭐ THE GUARDS DID THE WORK, which is the argument for having them. Every remaining failure was a guard
+demanding I classify what I had added: caller-authority exemptions (+9 routes, ratchet 290 -> 299,
+DISABLED_EXEMPTIONS 37 -> 46), mutation rate-limit exemptions (+8, 162 -> 170), two import content-parity
+pins, and — the one worth keeping — `parameterised-routes-document-404`, which required the SPEC to declare
+the 503 the stub raises, "which only works if the document says the status is possible". Nine operations
+gained a 503 and the spec was re-dumped.
+
+⚠️ THE SPEC RE-DUMP LOOKED LIKE A 118 KB DRIFT AND WAS NOT. `npm run sdk:python:dump-spec` writes raw
+`JSON.stringify(spec, null, 2)`; the committed snapshot is prettier-formatted. The first regeneration
+showed 7,255 insertions / 1,900 deletions, which reads exactly like a stale snapshot absorbing someone
+else's undumped work. Parsed both sides, deleted my nine additions from the regenerated copy, and compared
+canonically: identical to HEAD. Running prettier took the diff to **90 insertions, 0 deletions** — my nine
+declarations and nothing else. ⛔ A byte diff on a generated artifact is not evidence of content drift
+until the parsed forms are compared; committing the raw dump would have put a 118 KB reformat in a commit
+that claims to add nine responses.
+
+VERIFIED: full server unit suite **2000 files, 20,867 passed, 10 skipped, 0 failed**. Source and every pin
+in ONE commit. `apps/gui-client/src/lib/main-thread-stall-detector.ts` was dirty throughout and is A2's —
+not staged.
+
+BOUNDED: this closes the 404-instead-of-503 deviation for account-mfa and auth-cli only. crypto-orders
+still has no stub, so its 19 published operations still 404 when `cryptoOrdersService` is unwired, and the
+stub-side census in both invariants still cannot see a gate that ships nothing — V-1757's structural
+finding is unaddressed by this commit.

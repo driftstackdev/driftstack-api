@@ -161,7 +161,7 @@ describe('W418.B apps/server/src/routes/auth-cli.ts content parity', () => {
       /import \{ CliAuthorizeError, type CliAuthorizeService \} from '\.\.\/services\/cli-authorize\.js';/,
     );
     expect(body).toMatch(
-      /import \{ BadRequestError, ForbiddenError, NotFoundError, ValidationError \} from '\.\.\/lib\/errors\.js';/,
+      /import \{\s*BadRequestError,\s*FeatureUnavailableError,\s*ForbiddenError,\s*NotFoundError,\s*ValidationError,\s*\} from '\.\.\/lib\/errors\.js';/,
     );
     expect(body).toMatch(
       /import \{ AUTH_IP_LIMITS, ipRateLimit \} from '\.\.\/middleware\/ip-rate-limit\.js';/,

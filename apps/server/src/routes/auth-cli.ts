@@ -17,7 +17,13 @@ import {
 import type { ApiKeyScope } from '@driftstack/api-types';
 import type { ApiKeysService } from '../services/api-keys.js';
 import { CliAuthorizeError, type CliAuthorizeService } from '../services/cli-authorize.js';
-import { BadRequestError, ForbiddenError, NotFoundError, ValidationError } from '../lib/errors.js';
+import {
+  BadRequestError,
+  FeatureUnavailableError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from '../lib/errors.js';
 import { AUTH_IP_LIMITS, ipRateLimit } from '../middleware/ip-rate-limit.js';
 import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import type { RateLimitStore } from '../services/rate-limit.js';
@@ -174,4 +180,22 @@ function mapCliAuthorizeError(err: CliAuthorizeError): Error {
     case 'invalid_code':
       return new BadRequestError('Authorization code is invalid.');
   }
+}
+
+// V-1756 — activation-gate disabled stubs. `app.ts` registers these only when
+// `deps.cliAuthorizeService` is wired; the else branch was missing, so a deployment
+// without it answered 404 on published `/v1/auth/cli-authorize/*` operations. The CLI
+// polls `exchange` in a loop, and a 404 there is indistinguishable from a wrong base
+// URL — a 503 + FeatureUnavailable tells it to stop and say why.
+export function registerAuthCliDisabledRoutes(app: FastifyInstance): void {
+  const detail =
+    'CLI authorization is not configured on this server. Reach out to support@driftstack.dev if you expected to use this endpoint.';
+
+  const stub = (): never => {
+    throw new FeatureUnavailableError(detail);
+  };
+
+  app.post('/v1/auth/cli-authorize/initiate', stub);
+  app.post('/v1/auth/cli-authorize/bind-device-code', stub);
+  app.post('/v1/auth/cli-authorize/exchange', stub);
 }

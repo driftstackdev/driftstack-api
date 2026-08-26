@@ -76,7 +76,10 @@ import type { AccountProxiesService } from '../services/account-proxies.js';
 import type { ProxyConnectivityProbe } from '../services/proxy-connectivity-probe.js';
 import { registerAccountMeRoutes } from '../routes/account-me.js';
 import { registerAccountWebSessionsRoutes } from '../routes/account-web-sessions.js';
-import { registerAccountMfaRoutes } from '../routes/account-mfa.js';
+import {
+  registerAccountMfaDisabledRoutes,
+  registerAccountMfaRoutes,
+} from '../routes/account-mfa.js';
 import {
   registerAccountByokAnthropicDisabledRoutes,
   registerAccountByokAnthropicRoutes,
@@ -119,7 +122,7 @@ import { registerAdminApiKeysRoutes } from '../routes/admin-api-keys.js';
 import { registerAdminRateLimitOverridesRoutes } from '../routes/admin-rate-limit-overrides.js';
 import { registerLegalRoutes } from '../routes/legal.js';
 import { registerAuthRoutes } from '../routes/auth.js';
-import { registerAuthCliRoutes } from '../routes/auth-cli.js';
+import { registerAuthCliDisabledRoutes, registerAuthCliRoutes } from '../routes/auth-cli.js';
 import { registerStripeWebhookRoutes } from '../routes/webhooks-stripe.js';
 import { registerNowpaymentsWebhookRoutes } from '../routes/webhooks-nowpayments.js';
 import { registerOAuthClientRoutes } from '../routes/auth-oauth-client.js';
@@ -1276,6 +1279,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // bearer-auth-gated like everything else, no /v1/auth/* dependency.
   if (deps.mfaService !== undefined) {
     registerAccountMfaRoutes(app, { service: deps.mfaService });
+  } else {
+    // V-1756 — activation-gate pattern: 503 FeatureUnavailable, not a bare 404.
+    registerAccountMfaDisabledRoutes(app);
   }
   // AI-CHAT BYOK Anthropic — 6th activation-gate feature (after
   // billing / session-proxy / saved-proxies / agent-sessions /
@@ -1319,6 +1325,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       apiKeysService: deps.apiKeysService,
       rateLimitStore: deps.rateLimitStore,
     });
+  } else {
+    // V-1756 — activation-gate pattern: 503 FeatureUnavailable, not a bare 404.
+    registerAuthCliDisabledRoutes(app);
   }
   // V-1465 — `.length > 0`, matching the nowpayments gate directly below. These
   // two adjacent registrations guarded the same class of secret at different

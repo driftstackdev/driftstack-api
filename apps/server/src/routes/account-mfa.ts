@@ -8,7 +8,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import { CompleteMfaEnrollmentRequestSchema } from '@driftstack/api-types';
 import type { MfaService } from '../services/mfa.js';
-import { BadRequestError, ForbiddenError } from '../lib/errors.js';
+import { BadRequestError, FeatureUnavailableError, ForbiddenError } from '../lib/errors.js';
 
 export interface AccountMfaRoutesOptions {
   service: MfaService;
@@ -199,4 +199,31 @@ export function registerAccountMfaRoutes(
       return { recovery_codes: recoveryCodes };
     },
   );
+}
+
+// V-1756 — activation-gate disabled stubs. `app.ts` registers the real routes only
+// when `deps.mfaService` is wired (MFA_ENCRYPTION_KEY present); before this existed
+// the else branch was missing entirely, so on a deployment without that key the
+// published `/v1/account/mfa*` operations answered 404. That is the one thing the
+// activation-gate pattern exists to prevent: a client cannot tell "this deployment
+// has not enabled MFA" from "wrong URL", and for a SECURITY surface the dashboard
+// then has no way to tell a customer why enrolment is unavailable.
+//
+// Unauthed-but-stubbed, matching `registerBillingDisabledRoutes`: answering 503
+// before requireAuth means a customer with a stale token gets the real reason
+// instead of a 401 that would send them to fix a token that is not the problem.
+export function registerAccountMfaDisabledRoutes(app: FastifyInstance): void {
+  const detail =
+    'Multi-factor authentication is not configured on this server. Reach out to support@driftstack.dev if you expected to use this endpoint.';
+
+  const stub = (): never => {
+    throw new FeatureUnavailableError(detail);
+  };
+
+  app.get('/v1/account/mfa', stub);
+  app.delete('/v1/account/mfa', stub);
+  app.post('/v1/account/mfa/enroll', stub);
+  app.post('/v1/account/mfa/verify', stub);
+  app.post('/v1/account/mfa/disable', stub);
+  app.post('/v1/account/mfa/recovery-codes/regenerate', stub);
 }

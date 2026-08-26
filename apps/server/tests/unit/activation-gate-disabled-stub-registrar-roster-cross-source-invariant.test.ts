@@ -3,9 +3,11 @@
 // than a bare 404 — an SDK client must be able to tell "not enabled on this
 // deployment" from "no such endpoint".
 //
-// The seven stubs, as `routes/` actually defines them: billing, session-proxy,
+// The nine stubs, as `routes/` actually defines them: billing, session-proxy,
 // agent-sessions, fleet-events, account-byok-anthropic, recipes, and
-// internal-atlas-priority (DRIFTSTACK_FLEET_INTERNAL_TOKEN unset).
+// internal-atlas-priority (DRIFTSTACK_FLEET_INTERNAL_TOKEN unset), and — added
+// V-1756 — account-mfa and auth-cli, which were gated with no
+// stub at all and so 404'd on any deployment that had not enabled them.
 //
 // This header used to name a different seven — it listed `saved-proxies`, which
 // ships no registrar, and omitted internal-atlas-priority, which does. The hand
@@ -42,6 +44,13 @@ const ROUTES = [
     file: 'internal-atlas-priority.ts',
     registrar: 'registerInternalAtlasPriorityDisabledRoutes',
   },
+  // V-1756/V-1757 — three gates shipped NO stub at all, so they 404'd where this
+  // pattern requires 503. They were invisible here because this file and its sibling
+  // both enumerate from the STUB side: discovery below scans routes/ for
+  // `register*DisabledRoutes`, which can only ever find features that already
+  // comply. A gate shipping no stub is unreachable by a stub-side census.
+  { file: 'account-mfa.ts', registrar: 'registerAccountMfaDisabledRoutes' },
+  { file: 'auth-cli.ts', registrar: 'registerAuthCliDisabledRoutes' },
 ];
 
 function read(p: string): string {

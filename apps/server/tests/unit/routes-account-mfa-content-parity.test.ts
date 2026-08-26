@@ -153,7 +153,7 @@ describe('W417.A apps/server/src/routes/account-mfa.ts content parity', () => {
     );
     expect(body).toMatch(/import type \{ MfaService \} from '\.\.\/services\/mfa\.js';/);
     expect(body).toMatch(
-      /import \{ BadRequestError, ForbiddenError \} from '\.\.\/lib\/errors\.js';/,
+      /import \{ BadRequestError, FeatureUnavailableError, ForbiddenError \} from '\.\.\/lib\/errors\.js';/,
     );
   });
 

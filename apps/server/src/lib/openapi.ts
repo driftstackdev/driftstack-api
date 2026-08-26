@@ -4173,6 +4173,11 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['account', 'mfa'],
     security: auth,
     responses: {
+      503: {
+        description:
+          'Multi-factor authentication is not enabled on this deployment (activation gate).',
+        content: problemContent,
+      },
       200: {
         description:
           'Enrolled flag + timestamps + remaining recovery-code count. Requires broad `read` or `account_owner`.',
@@ -4189,6 +4194,11 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['account', 'mfa'],
     security: auth,
     responses: {
+      503: {
+        description:
+          'Multi-factor authentication is not enabled on this deployment (activation gate).',
+        content: problemContent,
+      },
       200: {
         description: 'Pending enrollment row created; secret shown once for QR / manual entry.',
         content: { 'application/json': { schema: MfaEnrollResponseOpenApi } },
@@ -4211,6 +4221,11 @@ function buildRegistry(): OpenAPIRegistry {
       },
     },
     responses: {
+      503: {
+        description:
+          'Multi-factor authentication is not enabled on this deployment (activation gate).',
+        content: problemContent,
+      },
       200: {
         description: 'Enrollment activated; recovery codes shown ONCE.',
         content: { 'application/json': { schema: MfaVerifyResponseOpenApi } },
@@ -4238,6 +4253,11 @@ function buildRegistry(): OpenAPIRegistry {
       },
     },
     responses: {
+      503: {
+        description:
+          'Multi-factor authentication is not enabled on this deployment (activation gate).',
+        content: problemContent,
+      },
       204: { description: 'MFA disabled; recovery codes invalidated.' },
       ...errors4xx,
     },
@@ -4255,6 +4275,11 @@ function buildRegistry(): OpenAPIRegistry {
       },
     },
     responses: {
+      503: {
+        description:
+          'Multi-factor authentication is not enabled on this deployment (activation gate).',
+        content: problemContent,
+      },
       204: { description: 'MFA disabled.' },
       ...errors4xx,
     },
@@ -4266,6 +4291,11 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['account', 'mfa'],
     security: auth,
     responses: {
+      503: {
+        description:
+          'Multi-factor authentication is not enabled on this deployment (activation gate).',
+        content: problemContent,
+      },
       200: {
         description: 'Fresh recovery codes shown ONCE.',
         content: { 'application/json': { schema: MfaVerifyResponseOpenApi } },
@@ -6787,6 +6817,10 @@ function buildRegistry(): OpenAPIRegistry {
       },
     },
     responses: {
+      503: {
+        description: 'CLI authorization is not enabled on this deployment (activation gate).',
+        content: problemContent,
+      },
       200: {
         description:
           'Opaque activation code, separate device-displayed user code, and browser URL. Codes expire after ~5min.',
@@ -6808,6 +6842,10 @@ function buildRegistry(): OpenAPIRegistry {
       },
     },
     responses: {
+      503: {
+        description: 'CLI authorization is not enabled on this deployment (activation gate).',
+        content: problemContent,
+      },
       409: {
         description:
           'The account owes acceptance on one or more legal documents, so no key was minted. The problem body carries `pending_acceptances`, each entry naming a `document_key` and its `current_version`; accept them and retry.',
@@ -6836,6 +6874,10 @@ function buildRegistry(): OpenAPIRegistry {
       },
     },
     responses: {
+      503: {
+        description: 'CLI authorization is not enabled on this deployment (activation gate).',
+        content: problemContent,
+      },
       200: {
         description:
           'Discriminated-union: { status: pending } / { status: bound, api_key, account_id } / { status: expired }. The bound branch is one-shot — subsequent calls 404.',

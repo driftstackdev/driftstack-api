@@ -1,7 +1,8 @@
-// Cross-source invariant — activation-gate pattern is now used 7 times
-// (billing / session-proxy / saved-proxies / agent-sessions /
-// fleet-events / byok-anthropic / recipes) and the pattern is
-// structurally identical across all 7:
+// Cross-source invariant — activation-gate pattern is now used 9 times
+// (billing / session-proxy / agent-sessions / fleet-events / byok-anthropic /
+// recipes / internal-atlas-priority, and V-1756's account-mfa / auth-cli)
+// and the pattern is structurally identical across all 9.
+// NOTE: this header used to name `saved-proxies`, which ships no registrar.
 //
 //   1. Each route file exports BOTH `registerXxxRoutes(app, deps)`
 //      AND `registerXxxDisabledRoutes(app)`.
@@ -98,6 +99,24 @@ const FEATURES: GatedFeature[] = [
     wiredFn: 'registerRecipesRoutes',
     disabledFn: 'registerRecipesDisabledRoutes',
     depsField: 'recipesRepo',
+  },
+  // V-1756 — these two were activation-gated with NO disabled stub and no FEATURES
+  // entry, so they 404'd instead of 503-ing and nothing here checked them. They were
+  // unreachable by this file's own census because it enumerates features that already
+  // ship a stub; a gate with none cannot appear.
+  {
+    name: 'account-mfa',
+    routesFile: 'apps/server/src/routes/account-mfa.ts',
+    wiredFn: 'registerAccountMfaRoutes',
+    disabledFn: 'registerAccountMfaDisabledRoutes',
+    depsField: 'mfaService',
+  },
+  {
+    name: 'auth-cli (CLI device authorization)',
+    routesFile: 'apps/server/src/routes/auth-cli.ts',
+    wiredFn: 'registerAuthCliRoutes',
+    disabledFn: 'registerAuthCliDisabledRoutes',
+    depsField: 'cliAuthorizeService',
   },
 ];
 

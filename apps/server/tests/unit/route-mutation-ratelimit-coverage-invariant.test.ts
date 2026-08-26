@@ -59,6 +59,33 @@ const SIGNED_INGRESS_EXEMPTIONS: readonly RouteExemption[] = [
 const DISABLED_503 =
   'Activation-off route returns a fixed FeatureUnavailable response and performs no work.';
 const STUB_EXEMPTIONS: readonly StubExemption[] = [
+  // V-1756 — account-mfa and auth-cli were activation-gated with NO disabled stub,
+  // so their published operations 404'd on a deployment that had not enabled them.
+  // Same posture as the billing/byok stubs above: a fixed 503, no work, no state.
+  ...[
+    ['delete', '/v1/account/mfa'],
+    ['post', '/v1/account/mfa/enroll'],
+    ['post', '/v1/account/mfa/verify'],
+    ['post', '/v1/account/mfa/disable'],
+    ['post', '/v1/account/mfa/recovery-codes/regenerate'],
+  ].map(([method, path]) => ({
+    file: 'account-mfa.ts',
+    method: method!,
+    path: path!,
+    handler: 'stub',
+    reason: DISABLED_503,
+  })),
+  ...[
+    '/v1/auth/cli-authorize/initiate',
+    '/v1/auth/cli-authorize/bind-device-code',
+    '/v1/auth/cli-authorize/exchange',
+  ].map((path) => ({
+    file: 'auth-cli.ts',
+    method: 'post',
+    path,
+    handler: 'stub',
+    reason: DISABLED_503,
+  })),
   ...['/v1/billing/checkout-session', '/v1/billing/portal-session'].map((path) => ({
     file: 'billing.ts',
     method: 'post',
@@ -300,7 +327,9 @@ describe('mutation-route rate-limit coverage invariant', () => {
     // routes is a mutation; `GET /v1/teams` is not, which is why this moves by one
     // where the caller-authority pin moves by two. Refreshed with violations()
     // proven empty first, as the note above requires.
-    expect(routes).toHaveLength(162);
+    // V-1756 — 170 since account-mfa (+5 mutations) and auth-cli (+3) gained the
+    // disabled stubs their activation gates had always lacked.
+    expect(routes).toHaveLength(170);
     // +1: `app.patch<{ Params: { id: string } }>('/v1/teams/:id', ...)` is the only
     // one of the two new routes carrying type arguments.
     expect(routes.filter((route) => route.hasTypeArguments)).toHaveLength(76);

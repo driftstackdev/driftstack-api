@@ -337,6 +337,38 @@ const DISABLED_EXEMPTIONS: readonly RouteExemption[] = [
     'disabled',
     DISABLED_503,
   ),
+  // V-1756 — three activation gates had NO disabled stub, so their published
+  // operations 404'd on a deployment that had not enabled them. Unauthed-by-design
+  // exactly like the billing stubs above: answering 503 BEFORE requireAuth means a
+  // customer with a stale token learns the real reason instead of a 401 that would
+  // send them to fix a token that is not the problem.
+  ...exactRoutes(
+    'account-mfa.ts',
+    'registerAccountMfaDisabledRoutes',
+    [
+      ['get', '/v1/account/mfa'],
+      ['delete', '/v1/account/mfa'],
+      ['post', '/v1/account/mfa/enroll'],
+      ['post', '/v1/account/mfa/verify'],
+      ['post', '/v1/account/mfa/disable'],
+      ['post', '/v1/account/mfa/recovery-codes/regenerate'],
+    ],
+    'stub',
+    'disabled',
+    DISABLED_503,
+  ),
+  ...exactRoutes(
+    'auth-cli.ts',
+    'registerAuthCliDisabledRoutes',
+    [
+      ['post', '/v1/auth/cli-authorize/initiate'],
+      ['post', '/v1/auth/cli-authorize/bind-device-code'],
+      ['post', '/v1/auth/cli-authorize/exchange'],
+    ],
+    'stub',
+    'disabled',
+    DISABLED_503,
+  ),
 ];
 
 const EXEMPTIONS = [...PUBLIC_EXEMPTIONS, ...MANUAL_AUTH_EXEMPTIONS, ...DISABLED_EXEMPTIONS];
@@ -540,11 +572,13 @@ describe('all-route caller-authority invariant', () => {
     // DISABLED registrar — they were the only live routes there without a twin,
     // so with AI chat off they were unregistered rather than answering 503.
     // Both are stubs, so both land in the disabled exemption set above.
+    // V-1756 — 299 since two activation gates that shipped no disabled stub gained
+    // one (+6 account-mfa, +3 auth-cli).
     // V-1611 #14 — 290 since `GET /v1/teams` + `PATCH /v1/teams/:id`. Refreshed
     // the way this pin requires: the authority arm below was confirmed EMPTY of
     // violations at this count first, so the +2 is two properly gated routes and
     // not two new holes.
-    expect(routes).toHaveLength(290);
+    expect(routes).toHaveLength(299);
     // +2 alongside the +2 above, which is the part worth reading: BOTH new team
     // routes are structurally authorized. Had one shipped ungated, this number
     // would have moved by one while the total moved by two.
@@ -564,7 +598,9 @@ describe('all-route caller-authority invariant', () => {
     expect(MANUAL_AUTH_EXEMPTIONS).toHaveLength(1);
     // V-1491 — 35 to 37: the agent-sessions disabled registrar gained
     // `transcript` and `gui-control-key`, the two live routes it had no twin for.
-    expect(DISABLED_EXEMPTIONS).toHaveLength(37);
+    // V-1756 — 46 since account-mfa (+6) and auth-cli (+3) gained the disabled
+    // stubs their gates had always lacked.
+    expect(DISABLED_EXEMPTIONS).toHaveLength(46);
     const exemptionKeys = EXEMPTIONS.map((exemption) =>
       [
         exemption.file,
