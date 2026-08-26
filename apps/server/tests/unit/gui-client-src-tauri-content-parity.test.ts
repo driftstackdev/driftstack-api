@@ -45,7 +45,7 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     const body = read(T('Cargo.toml'));
     expect(body).toMatch(/^\[package\]$/m);
     expect(body).toMatch(/^name = "driftstack-gui"$/m);
-    expect(body).toMatch(/^version = "0\.1\.3"$/m);
+    expect(body).toMatch(/^version = "0\.1\.4"$/m);
     expect(body).toMatch(/^description = "Driftstack self-hosted GUI client"$/m);
     expect(body).toMatch(/^edition = "2021"$/m);
     expect(body).toMatch(/^license = "MIT"$/m);
@@ -518,7 +518,7 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     };
     expect(body).toMatch(/"\$schema": "https:\/\/schema\.tauri\.app\/config\/2"/);
     expect(body).toMatch(/"productName": "Driftstack"/);
-    expect(body).toMatch(/"version": "0\.1\.3"/);
+    expect(body).toMatch(/"version": "0\.1\.4"/);
     expect(body).toMatch(/"identifier": "dev\.driftstack\.gui"/);
     expect(body).toMatch(/"frontendDist": "\.\.\/dist"/);
     expect(body).toMatch(/"devUrl": "http:\/\/localhost:1420"/);
