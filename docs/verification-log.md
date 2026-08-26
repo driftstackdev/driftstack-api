@@ -10274,3 +10274,46 @@ the `[]`-then-push shape rather than tracing every push, so a `[]` later filled 
 would read as an accumulator and be missed. Given zero problem-filtered hits and the accumulators all
 being probe/result collections built before assertions run, that residual risk is small and stated
 rather than dissolved.
+
+## V-1729 — the three surfaces V-1628 bounded itself out of, audited: all sound, one for a reason worth pinning in prose
+
+2026-08-26. V-1628 audited team-member REMOVAL and stated its own boundary: "not an audit of invite
+acceptance, role changes, or the auth-cache invalidation that follows a removal." Three named gaps in
+this log's own words. All three are now closed.
+
+INVITE ACCEPTANCE — sound, and pinned. `POST /v1/team/invites/accept` takes only a token from the body
+and derives `acceptingAccountId` from the authenticated context, so the caller cannot name whose
+membership is created. The service hashes the presented token, rejects an expired invite, and refuses
+when the signed-in account's email does not equal the invitee's. Consumption is an ATOMIC CAS on
+(id, token hash, still-unaccepted) in the same transaction that upserts the membership, and the
+comment names the attack it closes: binding the HASH stops an invalidated old link winning with its
+stale role after a concurrent re-invite, with the repository sourcing authority fields from the row the
+CAS returns rather than the earlier snapshot. Role is fixed at invite creation and defaults to
+`member`, so an accept cannot choose its own privilege.
+
+Mutation-proved against a 345-test control, three of three caught: deleting the email binding, the
+expiry check, or the CAS-failure branch each turns two tests red.
+
+ROLE CHANGES — there is no such surface. No route mutates a role and no service method exists to;
+changing a member's role means re-inviting, which re-enters the flow above with its defaults. The gap
+V-1628 named is empty rather than unguarded, which is a different and better answer.
+
+AUTH-CACHE INVALIDATION AFTER REMOVAL — sound, and NOT because invalidation works. Team memberships are
+"loaded on auth-cache misses and refreshed on every positive cache hit, so membership/role/owner-status
+changes remain authoritative EVEN IF DISTRIBUTED INVALIDATION IS LOST". Removal therefore takes effect
+on the next request regardless of whether the invalidation reached Redis. The cache is an accelerator,
+never a staleness budget — so the surface V-1628 flagged cannot carry the bug it was flagged for.
+
+⭐ ONE THING TO PIN IN PROSE, because the next reader will see it as a bug. The accept-time comparison
+is `acceptingEmail.trim().toLowerCase() !== invite.inviteeEmail`, with the invite side normalised the
+same way at creation — LITERAL normalisation, not the `canonical_email` form V-1724 is about. So a
+Gmail alias that differs from the invited spelling cannot accept, and gets a clear ConflictError. That
+is the SAFE direction of the same asymmetry: it fails CLOSED, refusing a membership rather than granting
+one. **Making this canonical to match V-1724 would loosen a security check** — the invite is an
+authorisation to one address, and dot/+tag folding would let a different literal claim it. V-1724's fix
+belongs on the sign-in path, where a miss costs a 500; it does not belong here, where a miss costs
+nothing and a hit would grant team access.
+
+BOUNDED: mutations were scored against the 29 team unit files (345 tests). Team integration tests are
+DATABASE_URL-gated and did not execute, so the three caught counts are a floor on what fails, not a
+ceiling — the safe direction for a claim that each check is pinned.
