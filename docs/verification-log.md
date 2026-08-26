@@ -13529,3 +13529,45 @@ would ever have shown.
 BOUNDED: six files from the top of the branch-gap ranking, fragments extracted from the coverage HTML of
 the DATABASE_URL-enabled run (V-1802). Files further down the ranking were not examined, and a branch
 istanbul does not instrument is not in any of these counts.
+
+## V-1807 — the same result one layer down, and the idiom that produces it has a name: `X ?? 'default'`
+
+2026-08-26. V-1806 closed the branch-gap question for `routes/`. The obvious objection is that routes are
+thin and services are where logic lives, so the conclusion might not survive the move. It does.
+
+Ranked `services/` and `lib/` by branch gap (80 files with 40+ statements and 15+ branches) and extracted
+fragments for the two carrying the most absolute uncovered branches — `lib/config.ts` (186 branches at
+77.95) and `services/agent-runtime.ts` (385 at 73.76, the largest count in the tree).
+
+lib/config.ts 13 fragments Stripe/Anthropic optional-env conditional spreads, `String(err)`
+services/agent-runtime 27 fragments 14x `{})`, 3x optional keySource spread, 3 `??` fallbacks
+
+⛔ THREE FRAGMENTS LOOKED LIKE REFUSALS AND ALL THREE ARE `??` FALLBACKS. Read in their lines:
+
+refusal.reason ?? 'This task is not permitted.'
+current.closedReason ?? `session ${current.status}`
+session.closedReason ?? `session ${session.status}`
+
+In each case the REFUSAL is driven — `else if (refusal.refuse)`, `if (current.status !== 'active')`,
+`if (session.status !== 'active')` are all covered — and only the nullish alternative is not, because a
+refusal always carries a reason and a closed session always carries a closedReason in the fixtures.
+`'This task is not permitted.'` on the agent runtime is the third time this session a fragment has read
+as an untested security refusal and been a default string.
+
+⭐ SO THE IDIOM HAS A NAME AND IT IS THE ANSWER: **`X ?? 'default'` is systematically uncovered wherever
+tests always supply X**, and it is indistinguishable from an untested guard until you read the line. Same
+family as the conditional spread, arriving from the other side — one leaves the empty object undriven, the
+other leaves the default undriven.
+
+**Across two layers, eight files and roughly 80 uncovered branches, there is not one untested refusal.**
+That closes the coverage-derived hunt with an answer rather than a suspicion: the branch gap in this repo
+measures fixture completeness, not guard coverage.
+
+⚠️ THE ONE RESIDUAL RISK, stated because it is the only way this could bite: a `??` fallback that never
+runs in tests DOES run in production if the primary is ever absent, and nothing has exercised it. Here all
+three produce a display string, so the blast radius is a message a customer reads rather than a decision
+the server makes. That is worth knowing rather than worth fixing.
+
+BOUNDED: two files' fragments read from the `services/`+`lib/` ranking, chosen by absolute uncovered
+branch count rather than by gap alone; the other 78 files in that ranking were not examined, and this says
+nothing about `db/`, which the coverage gate excludes entirely (V-1798).
