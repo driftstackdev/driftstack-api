@@ -21184,3 +21184,37 @@ one keystroke from reporting as "no migration creates teams". They live in
 a right one, and the only thing that separates them is checking that the search space is
 real before believing what it returns. Third instance today, after a guessed column list
 that checked one column of eleven and a literal-value grep that could not see a derivation.
+
+## V-1675
+
+**The other half of identity provenance: ownership is never ACCEPTED from client input either.
+Closed, and deliberately not pinned.**
+
+V-1673 closed the update side — no UPDATE assigns an ownership column. The sibling question
+is the more dangerous one: can a caller CREATE a row owned by someone else? Four independent
+facts say no, each measured rather than reasoned:
+
+- **No request schema declares an ownership field.** Zero across 24 files and 59
+  `*RequestSchema` definitions in `packages/api-types/src`, against the eleven column names
+  derived from `schema.ts`. The anchored pattern finds 32 real fields (`name`, `description`,
+  `folder`, `tags`) in the same files and matches a planted `accountId:`, so the zero is
+  absence and not a broken anchor.
+- **No handler reads one from client input.** Zero `body.<ownership>` / `query.<ownership>`
+  across `routes/` and `lib/`; the pattern matches a planted `req.body.accountId`.
+- **Unknown keys are stripped**, which is zod's default for `z.object`. The six
+  `.passthrough()`/`.catchall()` uses are a nested `pair_mode_state`, the problem-details
+  schema, the harness control protocol and two openapi document builders — no top-level
+  customer request body among them.
+- **Nothing spreads a body into a write.** Zero `.insert(…{...body})` / `.set(…{...body})`;
+  the pattern matches a planted spread.
+
+The TypeScript SDK never references an ownership field either, so no client sends one today.
+
+**No guard added, on purpose.** V-1673 earned one because its defect was a ONE-LINE drift
+inside an existing construct — adding `accountId:` to a `.set({…})` that is already there,
+which is exactly how V-1649 happened. Reaching this class needs three coordinated changes in
+three files: declare the field, read it, and write it. A guard here would pin a convention
+that cannot slip quietly, and the cost of guards that pin already-safe defaults is not zero —
+three of the things I reached for today were redundant with something already in the tree,
+and each one had to be found and reverted. Recorded so the next sweep can start from the
+measurement instead of repeating it.
