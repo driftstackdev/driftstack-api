@@ -10317,3 +10317,30 @@ nothing and a hit would grant team access.
 BOUNDED: mutations were scored against the 29 team unit files (345 tests). Team integration tests are
 DATABASE_URL-gated and did not execute, so the three caught counts are a floor on what fails, not a
 ceiling — the safe direction for a claim that each check is pinned.
+
+## V-1730 — the two email lookups differ in DIRECTION, and only one has a collision question
+
+2026-08-26. Checking whether V-1729's conclusion collides with V-1727's guard — the guard requires every
+`findAccountByEmail` caller to pair with the canonical lookup, and V-1729 argues the invite flow must
+NOT canonicalise. Both hold, and the reason is a distinction sharp enough to be worth pinning where
+someone will meet it.
+
+```
+  findAccountByEmail(email)     EMAIL → ACCOUNT   a Gmail alias may collide with a different
+                                                  literal; canonical decides if they are one account
+  findAccountEmail(accountId)   ACCOUNT → EMAIL   no collision question exists — the account is
+                                                  already identified by its primary key
+```
+
+The team invite flow uses the SECOND to fetch the signed-in account's own address, so the guard
+correctly never sees it, and the two conclusions never meet. The names differ by one word.
+
+⭐ The substantive half is that canonical is the SAFE answer in one direction and the UNSAFE one in the
+other. On sign-in, a literal-only lookup misses a collision and costs a 500 (V-1724). On invite
+acceptance, canonical matching would let a DIFFERENT literal claim an invite addressed to one mailbox —
+loosening an authorisation. Same folding rule, opposite consequence, decided by whether a miss refuses
+or grants. Recorded in the guard itself rather than only here, because the person at risk of conflating
+them is the one adding a caller or editing that arm.
+
+No behavioural change; a comment in `auth-email-canonicalization-security` and this entry. `it(`
+unchanged at 3; tsc clean; 3 tests pass.

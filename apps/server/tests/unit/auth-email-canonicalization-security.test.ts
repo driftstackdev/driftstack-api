@@ -59,6 +59,16 @@ describe('provider-scoped email canonicalization', () => {
     // Comments stripped: a file DISCUSSING the literal lookup — this repo is full
     // of such comments — is not a file performing it, and a text match would read
     // the ledger's own prose as a violation.
+    // ⚠️ DIRECTION, because the neighbouring method reads almost identically.
+    // This targets `findAccountByEmail(email)` — EMAIL → ACCOUNT, where a Gmail
+    // alias can collide with a different literal and the canonical form decides
+    // whether they are one account. `findAccountEmail(accountId)` is the other
+    // direction, ACCOUNT → EMAIL, and has no collision question at all; the team
+    // invite flow uses it and is correctly out of scope here. V-1729 records why
+    // that flow must ALSO stay literal at its own comparison: the invite
+    // authorises one address, and folding dots or +tags there would let a
+    // different literal claim it — canonical is the safe answer on sign-in and
+    // the unsafe one on acceptance.
     const HOMES = ['db/auth-flows-repo.ts', 'services/auth-flows.ts'];
     const consults = files
       .map((f) => ({ rel: f.slice(SRC.length + 1), code: codeOnly(readFileSync(f, 'utf8')) }))
