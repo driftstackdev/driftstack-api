@@ -21953,3 +21953,41 @@ the persona" are opposite answers to the same question.
 
 Boundary: this covers `apps/server/src/schemas/harness-control-protocol.ts` only, read whole
 rather than headed.
+
+## V-1685d
+
+**Retraction: the persona DOES cross the harness wire. I published the opposite twice, from two
+different patterns that were both wrong about the same field.**
+
+`SessionAssignSchema` carries `behaviorProfile: z.string().min(1)` — **required**, beside
+`archetype`, under an annotation that could not be clearer about why:
+
+> archetype + behaviorProfile stay REQUIRED (A3 W138): no safe default — a wrong-fingerprint or
+> inert-behaviour fallback would be a silent detection tell.
+
+**Both of my detectors missed it, for different reasons, and the pair is the lesson.** The name
+sweep matched `behaviou?ral` — the field is `behaviorProfile`, "behavior" without the `-al`, so
+the pattern was written for a morphology the code does not use. The value sweep looked for
+`casual_browser_us` / `power_user`, which **cannot appear in a `z.string()`** — a schema that
+accepts a string names no members, so searching for members is structurally incapable of finding
+it. Two passes, two methods, one field, zero hits: **agreement between two instruments is not
+corroboration when both are blind in the same place.**
+
+**What is actually true, having read it.** The only code that populates `behaviorProfile` is a
+`sessionDispatch` block in `bootstrap.ts` that hardcodes the literal `'default'` — and that block
+is a documented local fleet-demo config, _"only assembled behind `FLEET_CONTROL_PLANE_ENABLED`
+(so inert in prod)"_, with a hardcoded archetype and a localhost SOCKS5 proxy beside it. So the
+customer's selected `BehavioralProfile` does **not** feed the wire field today, and nothing in
+production does, because the dispatch path is not live: the WebKit driver is a stub and the fleet
+control plane is flag-gated.
+
+**Which sharpens V-1685 rather than dissolving it.** The wire has a required field whose own
+annotation says an inert value is a detection tell; the only wiring that exists sets a constant;
+and the customer-selected enum that ought to feed it stops at the mock driver. That is a concrete
+integration requirement — when the harness path goes live, `behaviorProfile` must be fed from the
+selection — rather than a live defect. Memo item 11 and W-17 gain a third fact: the field is
+already there and already required, so the decision is about what value to put in it, not whether
+to add one.
+
+Boundary: `apps/server/src` read whole for `behaviorProfile`, four files, five occurrences in the
+schema and one populator.
