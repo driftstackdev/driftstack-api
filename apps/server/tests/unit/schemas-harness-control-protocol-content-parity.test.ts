@@ -1962,6 +1962,34 @@ describe('harness-control-protocol behavioral contract', () => {
     expect(futureReason).toMatchObject({ reason: 'upload_failed' });
   });
 
+  it('CRITICAL a single over-cap cookie costs THAT cookie, not the whole jar. Raising the caps only moved the cliff — `path` has no natural bound, and real Set-Cookie parsing accepts 20000 characters — so the structural fix is that one bad element cannot take the array.', () => {
+    const good = { domain: 'a.example', name: 'sid', value: 'v', path: '/' };
+    const monstrous = { domain: 'a.example', name: 'big', value: 'v', path: '/'.repeat(20000) };
+    const parsed = CookiesResultSchema.safeParse({
+      type: 'cookiesResult',
+      requestId: 'r1',
+      sessionId: 'agt_1',
+      cookies: [good, monstrous, { ...good, name: 'other' }],
+    });
+    expect(parsed.success, 'the frame survives a cookie no cap can bound').toBe(true);
+    const kept = parsed.success ? (parsed.data.cookies ?? []) : [];
+    expect(kept, 'the two good cookies are kept and only the offender is dropped').toHaveLength(2);
+    expect(kept.map((c) => c.name)).toEqual(['sid', 'other']);
+  });
+
+  it('CRITICAL the WRITE path stays strict — a customer sending a bad cookie must be told, not silently have it dropped. There is a person to tell here and none on the read path, which is the whole reason the two differ.', () => {
+    const monstrous = { domain: 'a.example', name: 'big', value: 'v', path: '/'.repeat(20000) };
+    expect(
+      SetCookiesRequestSchema.safeParse({
+        type: 'setCookies',
+        requestId: 'r1',
+        sessionId: 'agt_1',
+        cookies: [monstrous],
+      }).success,
+      'the write path must refuse it rather than filter it',
+    ).toBe(false);
+  });
+
   it('CookieSchema domain/name/value/path are bounded at 4096 — reused by both the customer write-path (SetCookiesRequestSchema) and the harness read-path (CookiesResultSchema); the bound holds, and it is no longer tighter than what a real cookie can carry', () => {
     // ⛔ These were 512 for domain/name/path against 4096 for value, and the
     // asymmetry had no stated reason. Measured against real `Set-Cookie` headers,

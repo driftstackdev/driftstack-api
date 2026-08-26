@@ -1523,7 +1523,32 @@ export const CookiesResultSchema = z.object({
   // (SetCookiesBodySchema, agent-sessions.ts). Without this a compromised/
   // malformed harness node could return tens of thousands of cookies (up to
   // the 96 MiB frame cap), forwarded verbatim to any polling GUI/API client.
-  cookies: z.array(CookieSchema).max(2000).optional(),
+  // ⛔ TOLERANT ON THE READ PATH — one bad cookie costs THAT cookie, not the jar.
+  //
+  // Raising the per-field caps (512 → 4096) was the wrong shape of fix and only
+  // moved the cliff: `path` has no natural bound at all — real `Set-Cookie`
+  // parsing accepts 5000, 10000, 20000 characters with no ceiling found — so a
+  // long enough path still took the whole frame. `name` and `domain` DO have
+  // natural bounds (Foundation caps name+value at 4096 combined; DNS caps a
+  // domain at 253), which is why 4096 is genuinely sufficient for those two and
+  // was never going to be for this one.
+  //
+  // The defect was never the number. It is that a single element failing takes
+  // the array, which takes the frame, which the registry drops with no log — so
+  // one unusual cookie empties the customer's entire panel. Filtering first means
+  // the caps become defence-in-depth instead of the only thing standing between a
+  // weird site and an empty jar.
+  //
+  // ⚠️ The WRITE path stays strict on purpose — see SetCookiesBodySchema. A
+  // customer sending a malformed cookie must be TOLD (400), not silently have it
+  // dropped; there is a person to tell. Here there is not: the alternative to
+  // filtering is discarding a jar the customer can neither see nor correct.
+  cookies: z
+    .preprocess(
+      (v) => (Array.isArray(v) ? v.filter((c) => CookieSchema.safeParse(c).success) : v),
+      z.array(CookieSchema).max(2000),
+    )
+    .optional(),
   error: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).optional(),
 });
 export type CookiesResult = z.infer<typeof CookiesResultSchema>;
