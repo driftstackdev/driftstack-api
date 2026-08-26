@@ -16,7 +16,12 @@
 // (the route handles "no healthy node / not wired / nothing to trim" before ever
 // calling here).
 //
-// Ships gated-inert until A3's harness `trimProfile` handler lands: until then a live
+// ⛔ STALE (2026-08-26): the `trimProfile` handler has landed and a live node DOES
+// emit `trimResult` — schema'd here, dispatched by `fleet-control-registry.ts`.
+// Marked rather than deleted: a "never emitted" claim is a deployment fact written
+// from a source file, and that wording hid two production defects tonight by making
+// a live path read as dead. Original text:
+// "Ships gated-inert until A3's harness `trimProfile` handler lands: until then a live
 // node never emits `trimResult`, so a wired request resolves `timeout`.
 
 import type { Logger } from '../lib/logger.js';

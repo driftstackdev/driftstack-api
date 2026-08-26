@@ -13,7 +13,18 @@
 //   timeout → 200 { status:'timeout' }                 (node didn't reply in time)
 // (the route handles "no live connection / not wired" before ever calling here).
 //
-// Ships gated-inert until A3's harness `setCookies` WD-extension lands: until then
+// ⛔ STALE (2026-08-26): this said the harness `setCookies` WD-extension had not
+// landed and that a live node NEVER emits `setCookiesResult`, so a wired request
+// resolves `timeout`. It has landed and the node emits the result; the frame is
+// schema'd here and dispatched by `fleet-control-registry.ts`.
+//
+// ⚠️ Kept and marked rather than deleted, because this class of sentence did real
+// damage tonight. A "never emitted / handler pending" claim is a DEPLOYMENT fact
+// written from a source file, where neither the binary nor the env is visible —
+// and two production defects survived weeks behind exactly that wording, because
+// anyone checking whether the path was reachable read the comment and stopped.
+// The original text, for the record:
+// "Ships gated-inert until A3's harness `setCookies` WD-extension lands: until then
 // a live node never emits `setCookiesResult`, so a wired request resolves `timeout`
 // — which the GUI renders as the "ships with the next device update" state.
 

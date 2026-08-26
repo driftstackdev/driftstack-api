@@ -13,7 +13,12 @@
 //   timeout → 200 { status:'timeout' }                 (node didn't reply in time)
 // (the route handles "no live connection / not wired" before ever calling here).
 //
-// Ships gated-inert until A3's harness `navigateHistory` WD-extension lands: until then
+// ⛔ STALE (2026-08-26): the `navigateHistory` handler has landed and a live node
+// DOES emit `navigateHistoryResult` — schema'd here, dispatched by
+// `fleet-control-registry.ts`. Marked rather than deleted: a "never emitted"
+// claim is a deployment fact written from a source file, and that wording hid two
+// production defects tonight by making a live path read as dead. Original text:
+// "Ships gated-inert until A3's harness `navigateHistory` WD-extension lands: until then
 // a live node never emits `navigateHistoryResult`, so a wired request resolves `timeout`
 // — which the GUI renders as the "ships with the next device update" state.
 
