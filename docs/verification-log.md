@@ -21855,3 +21855,34 @@ as bumping someone else's ratchet.
 ⚠️ My own config failed twice more getting here — `TS5069` from setting `declaration: false`
 without `declarationMap: false`, and before that the missing DOM lib. Both were mine, both were
 caught by reading the error rather than the count.
+
+## V-1685b
+
+**Boundary closed with the newly granted scope: the persona axis is unimplemented everywhere
+except the mock — which makes the V-1685 decision cheaper now than it will ever be again.**
+
+V-1685 filed the persona question with an explicit limit: the simulation package has zero
+importers, the real behaviour is native, and _"someone who can read the fork has to close it."_
+Scope was granted for `driftstack` and `webkit-driftstack`; this is that check.
+
+- **The persona ids appear in neither repo.** `casual_browser_us` / `power_user` return nothing
+  across `driftstack` and `webkit-driftstack` source (boundary: `.ts/.js/.py/.swift/.mm/.cpp/.h`,
+  excluding `node_modules`, `WebKitBuild`, `dist` and `.git`). The fork has no concept of them.
+- **The harness wire protocol does not carry one.** `harness-control-protocol.ts` has
+  `behavioral_pause` and `behavioral` booleans, but no persona or profile field.
+- **`behavioralProfile` is consumed by `mock.ts` and nothing else** — not by `webkit.ts`, not by
+  `playwright.ts`, though `types.ts:67` declares it on the driver create-input as optional.
+
+**And the correction that stopped a false finding.** "The production driver ignores the persona"
+was one grep from being reported. `webkit.ts` is an **81-line stub** whose every method throws
+`DriverNotIntegratedError` — it exists so the factory can return something. There is no
+integrated production driver to ignore anything, so mock-only threading is correct for a
+pre-integration state rather than a defect. The check that mattered was asking whether the
+accused file does anything at all.
+
+**What this changes about V-1685.** Nothing about the question, and everything about its cost.
+The persona axis is not a shipped behaviour that would have to be migrated — it is a spec with no
+implementation on either side of the boundary. Deciding now whether a persona means "typing
+rhythm" or "behavioural identity" costs a docs edit or three interface parameters; deciding after
+the fork integrates costs a behavioural change to live sessions. Memo item 11 and W-17 stand,
+with that added.
