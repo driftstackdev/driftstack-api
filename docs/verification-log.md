@@ -22625,3 +22625,31 @@ Mutation-confirmed on the route half: replacing the call with a no-op reds sever
 `routes-account-notifications-content-parity`. Type-clean, restored byte-identical.
 
 **Twelve of 22 obligations checked: one unenforced, one dormant, ten honoured and guarded.**
+
+## V-1706
+
+**The caller-obligation class, swept: 19 of 22 assessed, one was unenforced.**
+
+| outcome                              | count | which                                                                                                                                                                            |
+| ------------------------------------ | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| honoured **and guarded** by mutation | 10    | trim scope, email-preferences admin, bundled-turn release, api-keys elevation, webhooks rotate-secret gate, client-ip, metric cardinality, SSE CORS, both event-bus unsubscribes |
+| honoured, verified by reading        | 4     | oauth-client claim race, pair-mode `acquired:false` → 409 with the winner's id, webhook-grace `updated === null`, recipes access check                                           |
+| satisfied **structurally**           | 3     | session-operations' distinct cases instead of a boolean, profiles' rename-first (a documented error, not a runtime obligation), the harness enum whose "caller" is the SDK       |
+| ⛔ **unenforced**                    | 1     | the stripe launch gate — fixed and pinned (V-1697)                                                                                                                               |
+| **dormant** — no production caller   | 1     | `consumeAuthToken` (V-1703)                                                                                                                                                      |
+| not assessed                         | 2     | `auth-flows` currentTokenHash (a "this device" UI marker) and `agent-sessions:5469` pair-mode return shape                                                                       |
+| self-authored                        | 1     | the `applyPoint` echo comment I wrote in V-1692                                                                                                                                  |
+
+**One in nineteen.** The single failure had a distinguishing feature the other eighteen lacked: a
+neighbouring guard that pinned the module's PROSE — including the sentence claiming the check
+"fires during bootstrap" — with no sibling checking the behaviour that made the sentence true.
+Every other obligation either had a behavioural guard, or was enforced adjacent to its own
+statement where reading settles it.
+
+**What the sweep is worth repeating for.** Not the hit rate, which is low, but the shape: a
+comment saying _"the caller MUST"_ marks a property the type system has been asked to stop
+policing, and those are enumerable. 22 exist in `apps/server/src`, found by scanning comment lines
+only for `caller|route|consumer` + `MUST|must|is responsible`. The method that answers each is
+V-1695's — neutralise the honouring code with a **type-clean** mutation and select the test set by
+the mechanism a guard would have to use — and V-1703's caveat: with no honouring code to
+neutralise, green means "uncalled", not "unguarded".
