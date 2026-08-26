@@ -38,7 +38,24 @@ This repository (`driftstack-api`) is Agent 2's scope ONLY:
 - `packages/recapture-automation` — file 102/123 capture orchestration
 - `packages/webhook-delivery` — webhook subsystem
 
-**DO NOT touch** `driftstack` or `webkit-driftstack` repos (Agent 1 scope: WebKit fork, atlas, capture orchestration).
+**Repo scope for `driftstack` / `webkit-driftstack`** — updated 2026-08-26 by the
+owner, superseding the blanket prohibition that stood here.
+
+- **A1 stays on device FINGERPRINTS full time** and owns the fork's
+  fingerprint-matching surface. Do not disturb that lane.
+- **A3 may work `driftstack` and `webkit-driftstack`** for everything else the
+  product needs there — harness plumbing, device/input, capture orchestration.
+  Granted by the owner directly, in A3's own session.
+- **A2 (this repo's agent) still does not write those repos.** Nothing here
+  needs them: measured 2026-08-26, every correlator, `harness-control-codec.ts`,
+  `fleet-control-registry.ts` and `harness-control-protocol.ts` live in
+  `apps/server/src`, and `inputLogical` — the tap-coordinate space — is in
+  `apps/gui-client/src`. ⛔ **"Harness control plane" is the server-side code
+  that SPEAKS to the harness; it is not the harness.** Two ledger rows sat
+  blocked on a boundary neither was behind because that distinction was missed.
+
+⚠️ Concurrent writers to the same fork source have bitten before. Use a worktree
+for fork edits rather than relying on timing.
 
 Cross-agent dependencies coordinate via planning file 133 schema + `docs/internal/cross-agent-control-plane-contract.md`.
 
