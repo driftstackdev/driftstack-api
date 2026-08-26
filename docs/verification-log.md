@@ -13571,3 +13571,40 @@ the server makes. That is worth knowing rather than worth fixing.
 BOUNDED: two files' fragments read from the `services/`+`lib/` ranking, chosen by absolute uncovered
 branch count rather than by gap alone; the other 78 files in that ranking were not examined, and this says
 nothing about `db/`, which the coverage gate excludes entirely (V-1798).
+
+## V-1808 — W-10 re-measured after two spec changes: still 39, and 4 of them are duplicate pairs
+
+2026-08-26. W-10 has stood open for the owner's call. I changed the published spec twice today — nine
+crypto 503 declarations (V-1786) and four audit-log query parameters (V-1787) — so the count is worth
+re-taking rather than carrying forward.
+
+declared component schemas 83
+names appearing in any $ref 44
+ORPHANS (declared, never $ref'd) 39 — unchanged
+
+Control: `Problem` is correctly classified as referenced, so the zero-side of the census is not a failed
+search. My spec changes added operations and parameters, not components, which is why the number held.
+
+⭐ NEW, AND IT SHARPENS THE OWNER'S QUESTION: the 39 are not 39 distinct shapes. Keyed by exact property
+signature they collapse to **33 distinct signatures**, with two shared by more than one component:
+
+Account + AdminAccount identical 7-property shape, NEITHER referenced
+Session + CreateSessionResponse identical 14-property shape, NEITHER referenced
+
+So four of the thirty-nine are duplicate declarations of two shapes. That is a small part of the whole —
+the substance is still ~37 distinct declared-and-unpublished shapes — but it means any cleanup is
+slightly smaller than the headline, and it answers a question the earlier framing left open: these pairs
+are not "one published, one orphaned twin". Both halves are orphans.
+
+⛔ WHAT I COULD NOT MEASURE, AND WHY I AM NOT REPORTING THE NUMBER I GOT. I tried to establish whether the
+orphan SHAPES nonetheless appear inline inside operations — which would make them redundant declarations
+rather than unpublished contract — and my detector returned "0 of 35 appear inline". I do not believe it
+and am not recording it as a result: it matches an orphan's property names as a SUBSET of the keys found
+in the first 2000 characters of any inline `properties` object, which is both too loose and truncated.
+⚠️ **Earlier this session a shape-keyed map on this same spec produced exactly this class of false
+answer** — reporting `Account` and `Session` as shapes appearing nowhere when they are twins of
+`AdminAccount` and `CreateSessionResponse`. Prior art of my own, on the same data, one session old.
+
+BOUNDED: `packages/sdk-python/openapi.json` as generated at HEAD; orphan means the component name appears
+in no `$ref` anywhere in the document, including from other components. Whether each orphan's shape is
+otherwise reachable inline is UNMEASURED, not zero.
