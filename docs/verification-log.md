@@ -12332,3 +12332,37 @@ control that proves the search can see a positive OF THE SAME KIND.
 BOUNDED: re-validated two zeros — the two whose falseness would have changed a written conclusion. Other
 zero-results this session (the `scriptFailed` construction-site census, the array sweep) already carried
 same-pattern controls when run and were not re-checked. Zeros with no consequence attached were left alone.
+
+## V-1778 — CORRECTION to V-1777: one positive control proves reach, not COVERAGE
+
+2026-08-26. V-1777 strengthened P-34's "latent" classification by claiming the search **demonstrably finds
+enabled flags**, using `DRIFTSTACK_NAV_PAGESTATE` — known live on the box — as the positive control, because
+it appears in `operations/verification-log.md` while `DRIFTSTACK_TAP_OCCLUSION_CHECK` does not.
+
+⛔ **That discriminator is too narrow, and a second enabled flag proves it.** Enumerated all 62
+`DRIFTSTACK_*` gates the harness reads and checked which appear in ops records: twelve do —
+and `DRIFTSTACK_WARM_TABS` is NOT among them, despite a bus post recording `daemon PID 76436` carrying
+`DRIFTSTACK_WARM_TABS=1`. An enabled flag with ZERO ops-record mentions. My control had passed by accident
+of WHERE its enablement happened to be written.
+
+Widened to ops records OR agent-bus posts, searching for the `=1` form:
+
+    WARM_TABS           ops=0  bus=8  "=1" in A2-A3-BUS.md, A1-A3-BUS.md
+    NAV_PAGESTATE       ops=3  bus=3  "=1" in verification-log.md, A3.md
+    TAP_OCCLUSION_CHECK ops=0  bus=0  "=1" recorded NOWHERE
+
+⭐ P-34 STANDS — latent — but on the wider search, not the one V-1777 described. The conclusion survived;
+the reasoning I published for it did not, which is the second time today a correct classification rested on
+an argument that had to be replaced.
+
+⭐⭐ THE LESSON REFINES THIS LOG'S OWN DOMINANT RULE. "Prove the detector finds a KNOWN POSITIVE before
+trusting its zero" is necessary and NOT sufficient: one positive proves the search can find something of
+that kind, never that it finds ALL of that kind. Here one control passed while a second instance of the very
+same kind — an enabled gate — sat entirely outside the search. ⭐ **Two positives that differ in HOW they
+qualify are worth more than ten that qualify identically**, because the second is what maps the boundary.
+The cheap version: before believing a zero, ask where else a positive could legitimately live.
+
+BOUNDED: enumerated gates by `environment["DRIFTSTACK_*"]` reads in `harness/Sources`, which is 62; a gate
+read through a variable or a different accessor is outside that population. Enablement was searched in ops
+records and agent-bus files only — I cannot read the live box env from here, so "recorded nowhere" remains
+a statement about our written record, not about the daemon.
