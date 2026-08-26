@@ -13135,3 +13135,33 @@ introducing the defect and watching nothing fail.
 
 BOUNDED: the constant-time COMPARISON surface under `apps/server/src` only. Whether each secret is
 correctly derived, stored or rotated is a different question and was not audited here.
+
+## V-1797 — the pagination layer does not carry V-1793's shape: 12 of 12 repos use an exact lookahead
+
+2026-08-26. V-1793 was a boolean derived from a proxy that could not distinguish two states — a row count
+that read the same for a complete result at the cap and a truncated one. The obvious place for the same
+error one layer down is pagination: a repo that returns a cursor whenever `rows.length === limit` emits a
+cursor pointing at an EMPTY page whenever the total is an exact multiple of the page size, and the client
+fetches one page too many to discover it.
+
+It does not happen here. Every paginating repo fetches `limit + 1` and derives `hasMore` from
+`rows.length > limit`, which distinguishes the two states exactly rather than inferring one from a count:
+
+db files under apps/server/src/db (recursive) 55
+files mentioning `nextCursor` 12
+of those, computing a `hasMore` 12 (all)
+of those, using a `.limit(limit + 1)` lookahead 12 (all)
+
+⭐ THE CONTROL IS WHY THE ZERO IS WORTH STATING: `account-audit-repo.ts` — the repo underneath the
+endpoint whose export flag WAS defective — is classified as having the lookahead, correctly. The defect in
+V-1793 was never in the repo; the repo told the truth and the route ignored half of it.
+
+⛔ AND MY FIRST PASS AT THIS MEASUREMENT WAS MISLABELLED, which is why the second exists. I grepped for
+`hasMore` lines not containing `limit + 1` and reported "12 files without a lookahead" — but
+`hasMore = rows.length > limit` never contains that string on the same line, so the filter excluded
+nothing and the label was invented. Pairing has to be done per FILE, not per line, and the corrected
+measurement inverts the answer completely: 0 without, not 12.
+
+BOUNDED: `apps/server/src/db/**` only, keyed on the literal identifiers `nextCursor` and `hasMore`. A
+paginator living outside the db layer, or one signalling "more" by another name, is not in the 12 and is
+not covered by this zero.
