@@ -21564,3 +21564,50 @@ under `apps/server`, whose guard suite answered seven of seven. It is in the own
 already measured and parked on the memo (ten items, W-10 among them), and in surfaces where
 verification is structurally thinner — W-12 records that only 2 of 14 workspaces typecheck their
 own tests, which is a measured statement that `packages/` is not held to the same bar.
+
+## V-1684
+
+**W-12 quantified: 51 type errors sit in package test suites that no tool has ever typechecked
+— and my instrument was wrong three times before the number meant anything.**
+
+W-12 records that only 2 of 14 workspaces typecheck their own tests. Confirmed mechanically:
+every `packages/*/tsconfig.json` sets `"include": ["src/**/*"]` and most also
+`"exclude": [… "tests"]`, so package tests are transpiled by vitest and type-checked by nothing.
+
+Measured at each package's OWN strictness bar (none relaxes `tsconfig.base.json`, which sets
+`strict`, `strictNullChecks` and `noUncheckedIndexedAccess`):
+
+| package                | errors, all inside test files |
+| ---------------------- | ----------------------------- |
+| behavioural-simulation | 21 (13 TS2532, 8 TS18048)     |
+| webrtc-streaming       | 12 (TS2532)                   |
+| recipe-library         | 10 (TS2532)                   |
+| recapture-automation   | 6 (TS2532)                    |
+| webhook-delivery       | 2 (1 **TS2345**, 1 TS2532)    |
+| api-types              | 0                             |
+
+**49 of 51 are "possibly undefined"** — the bar `apps/server` tests already meet, so this is a
+real difference in what the two halves of the repo are held to, not a latent crash.
+
+**The one that is not strictness is real fixture drift.** `webhook-delivery/tests/in-memory.test.ts:810`
+constructs a queue entry missing `attemptsBaseline`, a field the production type requires and
+`nextAttemptNumber` reads as `entry.record.attempts.length - entry.attemptsBaseline + 1`. Absent,
+that is **NaN**, and every NaN comparison is false — so an attempt-budget check would take the
+opposite branch. **This particular test is unaffected**, because `replay()` assigns the field
+before anything reads it; the fixture is wrong and harmless _by accident_, not by design. The
+hazard is the next fixture, which nothing would catch.
+
+**Three instrument failures on one measurement, each producing a confident wrong number:**
+
+1. A generic config for all seven packages reported `TS2304: Cannot find name 'SubtleCrypto'` in
+   the SDK — my config forced `"types": ["node"]` and dropped the `"lib": ["ES2023", "DOM"]` the
+   package sets for itself. Under its own config that package is 0 errors.
+2. Extending each package's config instead **inherited its `exclude: ["tests"]`**, so the run
+   typechecked only `src` and reported a clean **0 for every package** — a zero from a scan that
+   opened no test file, which is the exact shape this log keeps recording.
+3. That zero was caught only because run 1 had produced a KNOWN POSITIVE — webhook-delivery's
+   TS2345 — and its disappearance was impossible. The final run carries that positive as an
+   explicit control.
+
+Reported to W-12's owner rather than fixed here: 51 corrections across five packages is their
+item, and the remedy that matters is adding tests to the tsconfigs so the number cannot grow back.
