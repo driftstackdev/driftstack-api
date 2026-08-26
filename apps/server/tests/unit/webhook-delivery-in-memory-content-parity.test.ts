@@ -222,6 +222,41 @@ describe('W454.B packages/webhook-delivery/src/in-memory.ts content parity', () 
   // central redactor after this copy was written on 2026-07-13 and never reached
   // it, while its own arm stayed green and its title said "mirrored credential
   // classes". This arm DERIVES the classes from the central file instead.
+  // V-1719 — the THIRD copy claim in this file, and the last one left unenforced.
+  // Its own comment says "Backoff curve mirrors apps/server/src/services/
+  // webhook-worker.ts", and the arm pinning that claim asserts the COMMENT text,
+  // so the numbers could part without a word. They agree today; this is what
+  // keeps them agreeing. Values are read out of both files, never restated here.
+  it('CRITICAL the retry schedule and its bounds equal the server worker they claim to mirror. Delivery timing is customer-visible and split across two implementations; a copy that drifts retries on a different curve than the one the docs describe.', () => {
+    const worker = read(resolve(REPO_ROOT, 'apps/server/src/services/webhook-worker.ts'));
+    const table = (src: string, where: string): string => {
+      const m = /BACKOFF_MS_BY_ATTEMPT: Record<number, number> = \{(.*?)\}/s.exec(src);
+      expect(
+        m,
+        `the backoff table did not parse out of ${where} — this arm would assert nothing`,
+      ).not.toBeNull();
+      return m![1]!.replace(/\s+/g, '');
+    };
+    expect(table(body, 'in-memory.ts'), 'the mirrored backoff curve has drifted').toBe(
+      table(worker, 'webhook-worker.ts'),
+    );
+
+    const scalar = (src: string, name: string, where: string): string => {
+      const m = new RegExp(`const ${name} = ([0-9_ *]+);`).exec(src);
+      expect(m, `${name} did not parse out of ${where}`).not.toBeNull();
+      return m![1]!.replace(/[\s_]/g, '');
+    };
+    expect(scalar(body, 'DEFAULT_MAX_ATTEMPTS', 'in-memory.ts')).toBe(
+      scalar(worker, 'MAX_ATTEMPTS', 'webhook-worker.ts'),
+    );
+    expect(scalar(body, 'DEFAULT_TIMEOUT_MS', 'in-memory.ts')).toBe(
+      scalar(worker, 'DEFAULT_TIMEOUT_MS', 'webhook-worker.ts'),
+    );
+    expect(scalar(body, 'TRANSPORT_ERROR_MAX_CHARS', 'in-memory.ts')).toBe(
+      scalar(worker, 'TRANSPORT_ERROR_MAX_CHARS', 'webhook-worker.ts'),
+    );
+  });
+
   // V-1718 — the second thing this file copies rather than imports. The credential
   // classes got a derived comparison in V-1716; the surrogate-safe slice arrived
   // without one, and a helper copied by hand is the same failure waiting on a

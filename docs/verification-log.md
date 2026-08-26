@@ -9877,3 +9877,32 @@ three package test files stopped PARSING, which reads as three failing files rat
 error. Caught by re-reading the function and running the tests, then fixed by replacing the whole
 function in one edit instead of patching it in pieces. The rule is written down; following it costs
 less than the four minutes not following it cost.
+
+## V-1719 — the third copy claim in the same file, closed while the values still agree
+
+2026-08-26. `packages/webhook-delivery/src/in-memory.ts` makes three claims to copy the server. V-1716
+found the credential classes eight behind; V-1718 found the truncation using a raw slice where the
+server truncates surrogate-safely. The third is the retry schedule — "Backoff curve mirrors
+apps/server/src/services/webhook-worker.ts" — and it is CORRECT: 1/5/15/30/60 minutes on both sides,
+with `MAX_ATTEMPTS` 6, `DEFAULT_TIMEOUT_MS` 10_000 and `TRANSPORT_ERROR_MAX_CHARS` 500 matching.
+
+Recorded anyway, because the reason it was correct is not that anything checked. The arm pinning that
+claim asserts the mirror's own COMMENT text — the same one-file comparison that let the credential
+classes drift for six weeks under a title that said "mirrored credential classes". A guard that reads
+only the copy cannot distinguish a curve that agrees from a curve that has parted; both render as a
+matching comment.
+
+So the values are now compared against `webhook-worker.ts` directly, read out of both files and
+restated in neither: the backoff table normalized whitespace-free, and the three scalars by name
+(`DEFAULT_MAX_ATTEMPTS` against the server's `MAX_ATTEMPTS`, which differ in name and must not differ
+in value). Each extraction asserts it parsed, because a regex that matches nothing compares nothing and
+passes — the failure mode of every derived arm added this session.
+
+Mutation-proved on the real subject: moving the third retry from 15 to 20 minutes reports "the mirrored
+backoff curve has drifted", and raising max attempts to 7 reports `expected '7' to be '6'`. Restored
+byte-identically; `it(` 20 to 22 across V-1718 and this entry; tsc clean; 22 tests pass.
+
+⭐ All three copy claims in this file are now enforced against the file they name. That is the point
+worth carrying: the fix for a hand-maintained mirror is not to check it once but to make the ORIGINAL
+the thing the test reads, so the next divergence fails on the day it is written rather than six weeks
+later in an audit.
