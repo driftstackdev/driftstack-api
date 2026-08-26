@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Logger } from '../../src/lib/logger.js';
 import type { Heartbeat } from '../../src/schemas/harness-control-protocol.js';
+import { HeartbeatSchema } from '../../src/schemas/harness-control-protocol.js';
 import { makeFleetHeartbeatConsumer } from '../../src/services/fleet-heartbeat-consumer.js';
 
 function heartbeat(nodeId: string, timestamp: string): Heartbeat {
@@ -28,6 +29,32 @@ function logger(): Logger {
 }
 
 describe('makeFleetHeartbeatConsumer', () => {
+  // V-1742 — the worker has always shipped its latest fault on the heartbeat
+  // (`ControlClient.swift` populates lastErrorSummary/lastErrorAtMs so "an
+  // operator sees a worker's latest fault WITHOUT log-scraping") and this schema
+  // never declared it. Zod's default object STRIPS unknown keys rather than
+  // rejecting, so every beat parsed cleanly and the fault was discarded at the
+  // receiver — the one signal that would explain an otherwise silent worker
+  // failure, thrown away by the side that asked for it.
+  //
+  // Nothing else parses this schema, so a stripped field had no way to be noticed.
+  it('CRITICAL a heartbeat carrying the worker-reported fault RETAINS it. Zod strips unknown keys silently, so an undeclared field is not an error anywhere — it is telemetry that arrives and vanishes.', () => {
+    const beat = HeartbeatSchema.parse({
+      type: 'heartbeat',
+      macNodeId: 'node-1',
+      timestamp: new Date().toISOString(),
+      cpuPercent: 10,
+      memoryPercent: 20,
+      activeSessionCount: 0,
+      lastErrorSummary: 'WebProcess terminated unexpectedly',
+      lastErrorAtMs: 1_756_000_000_000,
+    });
+    expect(beat.lastErrorSummary, 'the fault summary must survive parsing').toBe(
+      'WebProcess terminated unexpectedly',
+    );
+    expect(beat.lastErrorAtMs, 'the fault timestamp must survive parsing').toBe(1_756_000_000_000);
+  });
+
   it('runs one beat per node and coalesces repeats to one newest successor', async () => {
     const first = deferred();
     const persisted: string[] = [];

@@ -2601,6 +2601,28 @@ export async function createProductionDeps(
                   }),
                 };
                 await drizzleFleetNodesRepo.recordHeartbeat(frame.macNodeId, snapshot);
+                // V-1742 — the worker ships its latest fault on every beat so an
+                // operator can see it WITHOUT log-scraping, and the control plane
+                // used to strip it: the field was never in the schema, and Zod's
+                // default object drops unknown keys silently. It is present only
+                // when a worker has actually faulted, so this is rare by
+                // construction and is exactly the beat worth keeping.
+                //
+                // NOT persisted — a column needs a migration, which is the owner's
+                // call. Logged so the next unexplained fault leaves a trace.
+                if (frame.lastErrorSummary !== undefined) {
+                  logger.warn(
+                    {
+                      component: 'fleet-heartbeat',
+                      macNodeId: frame.macNodeId,
+                      lastErrorSummary: frame.lastErrorSummary,
+                      ...(frame.lastErrorAtMs !== undefined && {
+                        lastErrorAtMs: frame.lastErrorAtMs,
+                      }),
+                    },
+                    'worker reported a recent fault on its heartbeat',
+                  );
+                }
               },
               // A2 W2679 re-base — feed the per-session liveness map into the
               // store the agent-sessions `liveness` field reads. Stamp receive

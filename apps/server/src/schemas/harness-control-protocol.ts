@@ -94,6 +94,8 @@ export const HARNESS_LOGIN_PRODUCER_DEADLINE_MS = 600_000;
 // is small — see the agent-sessions.ts / worker-disconnect-reaper.ts
 // comments), so a few hundred is already generous headroom for spiky
 // reconnect/migration windows.
+/** V-1742 — cap on the worker-reported fault summary; untrusted text from a node. */
+const HARNESS_ERROR_SUMMARY_MAX_LENGTH = 512;
 export const HARNESS_HEARTBEAT_MAX_ACTIVE_SESSION_STATES = 500;
 
 // The Swift producer folds excess rolling-outcome reasons into `other` at 32
@@ -1145,6 +1147,22 @@ const HeartbeatPayloadSchema = z.object({
         message: `activeSessionStates must not exceed ${HARNESS_HEARTBEAT_MAX_ACTIVE_SESSION_STATES} entries`,
       },
     ),
+  // V-1742 — the worker's latest fault, which it has always sent and this schema
+  // has never declared. `ControlClient.swift` populates `lastErrorSummary` /
+  // `lastErrorAtMs` explicitly so "an operator sees a worker's latest fault
+  // WITHOUT log-scraping", and Zod's default object strips unknown keys, so the
+  // heartbeat parsed cleanly and the fault went in the bin at the receiver.
+  //
+  // Declared and LOGGED here, deliberately NOT persisted: a column needs a
+  // migration, and that is a production schema change to put to the owner rather
+  // than take. Logging alone means the next unexplained worker fault leaves a
+  // trace, which is the whole point of the field.
+  //
+  // Bounded because it is untrusted text from a node; the logger redacts.
+  /** Worker-reported summary of its most recent fault, if any. */
+  lastErrorSummary: z.string().min(1).max(HARNESS_ERROR_SUMMARY_MAX_LENGTH).optional(),
+  /** Epoch-ms of that fault. */
+  lastErrorAtMs: z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
   // Host-health (A3-4) — proactive-placement signals; gated on the worker via
   // DRIFTSTACK_HEARTBEAT_HOST_HEALTH (flipped on, W2197).
   /** nominal | fair | serious | critical. */

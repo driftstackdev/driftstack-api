@@ -10809,3 +10809,44 @@ codec to the wire schema, then through `ControlClient` (no decode), `HarnessCoor
 `probeResult` only) and `BrowserProcess` (env from the derived value). I did NOT build or run the
 harness, and did NOT read `webkit-driftstack` — the fork consumes the env vars, which are set from the
 auto-derive, so a fork-side reader could not change the conclusion without a Swift writer feeding it.
+
+## V-1742 — the worker sends its latest fault on every heartbeat and the control plane was binning it
+
+2026-08-26. Ran the field-level parity comparison across all 31 frames rather than the one V-1740
+checked. ⛔ THE TABLE IS NOISE AND I AM NOT REPORTING IT AS A RESULT: the Zod extractor uses a character
+window, so it spills into neighbouring schemas — `intentDispatch` shows sessionAssign's LiveKit fields,
+`errorEvent` shows capabilityReport's twenty. Nearly every "zod-only" entry is spill, and a trustworthy
+version needs brace-matched block parsing. (V-1741 is unaffected: geolocation was confirmed by reading
+the route, the codec, the schema and three Swift files, never from this table.)
+
+One row survived scrutiny because it pointed somewhere I could check by hand. The harness heartbeats
+`lastErrorSummary` and `lastErrorAtMs` — `ControlClient.swift:438-442`, with the purpose written out:
+"so an operator sees a worker's latest fault WITHOUT log-scraping". Both spellings, camelCase and
+snake_case, appear **ZERO times across `apps/` and `packages/`**. Five sibling health fields
+(`thermalState`, `memoryPressureLevel`, `diskFreePercent`, `busiestCorePercent`, `harnessVersion`) are
+declared AND consumed; these two are the only ones that are not.
+
+⚠️ AND NOTHING FAILS, WHICH IS WHY IT LASTED. The heartbeat schema is a plain `z.object({…})` with no
+`.strict()`, and Zod's default STRIPS unknown keys. So the beat parses cleanly, the fault evaporates, and
+neither side raises anything. I checked the strictness specifically because the alternative was worse: a
+strict schema would have REJECTED the whole heartbeat exactly when a worker had faulted, losing contact
+at the worst moment. It does not; the loss is silent rather than catastrophic.
+
+⭐ THIS IS THE SIGNAL P-25 IS MISSING. The owner's freeze produces "no error message", and the device has
+been reporting its most recent fault on every beat for the whole time — into a receiver that discards it.
+Nothing else parses this schema in any test, so a stripped field had no way to be noticed.
+
+Declared, bounded (512 chars, untrusted text from a node, and the logger redacts), and LOGGED at warn
+when present — which is rare by construction, since it is populated only after an actual fault. ⛔ NOT
+persisted: a column needs a migration, and a production schema change is the owner's call rather than
+mine. Logging alone means the next unexplained fault leaves a trace, which is the entire point of the
+field.
+
+Proved by mutation on the real subject: with the two declarations removed the new arm fails with
+"expected undefined to be 'WebProcess terminated unexpectedly'" — the pre-fix behaviour, demonstrated
+rather than asserted. Restored byte-identically under a trap, narrowest test set, per V-1733. `it(` 3 to
+4; tsc clean; bootstrap and schema content-parity pins both still green (40 and 75).
+
+BOUNDED: this makes the fault VISIBLE in logs, not queryable. Correlating a freeze to a worker fault
+still means reading server logs by hand, and the durable version — a column plus an admin surface — is
+the migration I am not taking unilaterally.
