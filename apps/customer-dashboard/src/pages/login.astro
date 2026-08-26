@@ -116,14 +116,14 @@ const apiBaseUrl = resolveApiBaseUrl();
         <button type="submit" class="btn-primary w-full">Sign in</button>
       </form>
 
-      <!-- W528 — MFA challenge step. Hidden until /v1/auth/login returns
+      {/* W528 — MFA challenge step. Hidden until /v1/auth/login returns
            { mfa_required: true, challenge_token }; then the password form
            hides and this one shows. Submits POST /v1/auth/mfa/challenge
            with { challenge_token, code } (or { recovery_code } when the
            recovery toggle is active) → { session } → same redirect path
            as a plain login. Pre-W528 this branch dead-ended with a banner
            telling the customer to use the API instead — an MFA-enrolled
-           customer could not sign in to the dashboard at all. -->
+           customer could not sign in to the dashboard at all. */}
       <!-- novalidate: this form has TWO inputs (authenticator code + recovery
            code), only one visible at a time via the toggle. Native HTML5
            constraint validation runs on the HIDDEN input too, so a partial code
@@ -185,14 +185,14 @@ const apiBaseUrl = resolveApiBaseUrl();
         >.
       </p>
 
-      <!-- V-667.C — sign-in-with-IDP. Buttons trigger a POST to
+      {/* V-667.C — sign-in-with-IDP. Buttons trigger a POST to
            /v1/auth/oauth-client/start which returns an authorize_url;
            the page redirects window.location to it.
            2026-05-16 founder feedback: text-only buttons read less
            professional than peer sign-in surfaces (Stripe / Linear /
            Vercel). Inline brand SVGs (Google G multi-color, GitHub
            octocat single-color) placed before the label; aria-hidden
-           since the button carries the full aria-label. -->
+           since the button carries the full aria-label. */}
       <div class="mt-5 flex flex-col gap-2" data-oauth-buttons>
         <button
           type="button"

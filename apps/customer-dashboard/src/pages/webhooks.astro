@@ -232,12 +232,10 @@ const apiBaseUrl = resolveApiBaseUrl();
       </button>
     </div>
 
-    <!--
-      V-475 — rotate-secret in-page reveal. Replaces the window.prompt
+    {/* V-475 — rotate-secret in-page reveal. Replaces the window.prompt
       shown in earlier slices; some browsers block prompts in
       non-interactive contexts (incognito, autofill blockers, etc.).
-      Inline reveal is keyboard-accessible + paste-target-friendly.
-    -->
+      Inline reveal is keyboard-accessible + paste-target-friendly. */}
     <div
       data-rotate-reveal
       class="mb-8 hidden rounded-lg border border-tk-accent/40 bg-tk-accent/10 p-6"

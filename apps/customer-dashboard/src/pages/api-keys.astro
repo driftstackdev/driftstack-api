@@ -102,7 +102,7 @@ npm i @driftstack/sdk</code></pre>
       </a>
     </section>
 
-    <!-- V-270: Create-key form (hidden by default) -->
+    {/* V-270: Create-key form (hidden by default) */}
     <div
       data-create-form-wrap
       class="mb-8 hidden rounded-lg border border-tk-border bg-tk-surface p-6"
@@ -179,11 +179,9 @@ npm i @driftstack/sdk</code></pre>
             </label>
           </div>
 
-          <!--
-            V-481 — granular scope picker. Hidden by default; reveals when
+          {/* V-481 — granular scope picker. Hidden by default; reveals when
             the "granular" radio is selected. Submits the raw array of
-            selected `verb:resource` scopes.
-          -->
+            selected `verb:resource` scopes. */}
           <div
             data-granular-scopes
             class="mt-4 hidden rounded-md border border-tk-border bg-tk-bg p-4"
@@ -303,7 +301,7 @@ npm i @driftstack/sdk</code></pre>
       </form>
     </div>
 
-    <!-- V-270: Just-created key reveal (shown once, dismissible) -->
+    {/* V-270: Just-created key reveal (shown once, dismissible) */}
     {/* 2026-05-23 — icon on key-created success panel. */}
     <div
       data-created-reveal
@@ -344,13 +342,11 @@ npm i @driftstack/sdk</code></pre>
       </div>
     </div>
 
-    <!--
-      V-296b — dedicated rotate reveal pane. Mirrors the V-475 webhook
+    {/* V-296b — dedicated rotate reveal pane. Mirrors the V-475 webhook
       rotate-secret pattern. Surfaces the new plaintext + grace expiry
       so the customer knows how long the OLD key keeps working.
       Replaces the previous reuse of the create-flow pane (which
-      didn't surface the grace metadata).
-    -->
+      didn't surface the grace metadata). */}
     <div
       data-rotate-reveal
       class="mb-8 hidden rounded-lg border border-tk-accent/40 bg-tk-accent/10 p-6"
