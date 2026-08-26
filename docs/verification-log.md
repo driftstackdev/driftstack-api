@@ -21672,3 +21672,31 @@ whether the shipped behaviour has the same shape. What is established is what th
 
 Raised for the fingerprinting owner rather than fixed: widening the persona axis to gestures is a
 product decision about what a persona means, not a defect to patch.
+
+## V-1681b
+
+**Second instance of the same mechanism within hours: an untracked file reds the shared suite.**
+
+V-1681 recorded a stale marketing-site artifact caused by an untracked component. That is now a
+pattern rather than an incident — measured just now:
+
+```
+  disk countTestFiles()    = 3040   pin = 3039
+  disk countAllTestFiles() = 3216   pin = 3215
+```
+
+The extra file is an untracked `apps/server/tests/unit/*.test.ts`, so `verify-suite`'s census arm
+fails on any run, while `dist-reading-suites-have-fresh-artifacts` is still red from V-1681's
+untracked component. **Two different guards, two different mechanisms, one cause**: an untracked
+file counts as source to the freshness guard and counts into the population for the ratchet,
+while appearing in no `git diff`, no `git log`, and no review of "what changed".
+
+Pins not raised — the file is a peer's, and my rule is to raise them only for files I add;
+bumping for someone else's in-flight file would hide the real state if its shape changes before
+it lands.
+
+**The cheap general fix is a message change, not a mechanism change.** Both failures name the app
+and the remedy but never the file, and the file is the one thing that cannot be found by the
+obvious means. A census arm that reports "N untracked test/source files present — commit or park
+them" would collapse both diagnoses to zero. Offered to the census's owner rather than written
+here.
