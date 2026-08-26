@@ -31,3 +31,4 @@ apps/status-site/dist/
 # enough that Prettier needs more heap than the pre-commit hook gives it. Same rationale as the
 # lockfiles above: reformatting produces a large meaningless diff on a file nobody should touch.
 docs/verification-log-archive-through-v1200.md
+docs/verification-log-archive-through-v1499.md

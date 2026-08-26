@@ -21,7 +21,7 @@
 //   • V-278 Hetzner deployment automation.
 //   • V-328 Tauri driftstack:// custom URL scheme.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -34,15 +34,23 @@ const LIB = resolve(REPO_ROOT, 'docs/verification-log.md');
  * the frozen archive. The pins describe the whole log, not its live tail, so the body below is both
  * halves concatenated. Repointing them at the live file alone would have quietly dropped every
  * anchor from V-001 to V-1200 while still reporting green.
+ *
+ * V-1707 — split again on 2026-08-26 (V-1201..V-1499). Archives are DISCOVERED rather than listed,
+ * so a pin whose text ages into the next archive keeps matching without this file being touched.
  */
-const ARCHIVE = resolve(REPO_ROOT, 'docs/verification-log-archive-through-v1200.md');
+function archives(): string[] {
+  return readdirSync(resolve(REPO_ROOT, 'docs'))
+    .filter((f) => /^verification-log-archive-through-v\d+\.md$/.test(f))
+    .sort()
+    .map((f) => resolve(REPO_ROOT, 'docs', f));
+}
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
 describe('W549.B /docs/verification-log.md content parity', () => {
-  const body = `${read(LIB)}\n${read(ARCHIVE)}`;
+  const body = [read(LIB), ...archives().map(read)].join('\n');
 
   it("Header + append-only + reality-wins charter framing pinned: '# Driftstack API — Verification Log' + 'This log records every verification of empirical reality (build cycles, test runs, infrastructure assumptions) and every discrepancy between intent and behaviour. Entries are append-only and dated.' + 'When intent and reality disagree: reality wins, code reflects reality, planning is updated, the change is recorded here.' + 'Format: `V-NNN — title`. Date in body.' — pinned so the empirical-reality-verification + append-only-dated + reality-wins-not-intent + V-NNN-format commitment survives", () => {
     expect(body).toMatch(/^# Driftstack API — Verification Log$/m);

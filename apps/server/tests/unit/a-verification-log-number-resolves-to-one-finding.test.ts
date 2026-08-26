@@ -30,7 +30,7 @@
 // number whose two entries are unrelated has to carry a note that tells a reader
 // which one they want.
 
-import { readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -44,12 +44,24 @@ const LOG = resolve(REPO_ROOT, 'docs/verification-log.md');
  * heap. The uniqueness invariant spans the WHOLE history, not the live tail, so every arm below
  * reads both halves. Reading only the live file would have let a number be reused the moment its
  * first use aged into the archive — which is precisely when a reader is least able to notice.
+ *
+ * V-1707 — it happened a SECOND time on 2026-08-26 (V-1201..V-1499 to a second archive), which is
+ * the tell that archives are a growing set and not a pair. They are DISCOVERED by name now, so the
+ * next split is covered the day it lands rather than the day someone remembers this file. The
+ * `CRITICAL` arm below exists because the failure mode of discovery is silence: a regex that
+ * matches nothing yields an empty list, and the uniqueness check would then pass by reading the
+ * live tail alone — green, and blind to every number it was written to protect.
  */
-const ARCHIVE = resolve(REPO_ROOT, 'docs/verification-log-archive-through-v1200.md');
+function archives(): string[] {
+  return readdirSync(resolve(REPO_ROOT, 'docs'))
+    .filter((f) => /^verification-log-archive-through-v\d+\.md$/.test(f))
+    .sort()
+    .map((f) => resolve(REPO_ROOT, 'docs', f));
+}
 
-/** Both halves, concatenated. The archive is frozen; the live file is where entries are appended. */
+/** Every half, concatenated. Archives are frozen; the live file is where entries are appended. */
 function wholeLog(): string {
-  return `${readFileSync(ARCHIVE, 'utf8')}\n${readFileSync(LOG, 'utf8')}`;
+  return [...archives().map((a) => readFileSync(a, 'utf8')), readFileSync(LOG, 'utf8')].join('\n');
 }
 
 interface Shared {
@@ -110,11 +122,26 @@ function duplicatedNumbers(): number[] {
 
 describe('V-858 a verification-log number resolves to one finding', () => {
   it('CRITICAL the log really parses into headings. Both arms below compare sets, so an empty parse would report no duplicates over no entries — the shape this guard exists because V-856 shipped.', () => {
+    const found = archives();
     expect(
-      statSync(ARCHIVE).size + statSync(LOG).size,
-      'the log file (archive + live)',
+      found.length,
+      'archives discovered by name — an empty list narrows every arm below to the live tail while still reporting green',
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      found.reduce((n, a) => n + statSync(a).size, 0) + statSync(LOG).size,
+      'the log file (every archive + live)',
     ).toBeGreaterThan(500_000);
     expect(canonicalHeadings().length, 'canonical `## V-<n> ` headings').toBeGreaterThan(700);
+
+    // Known positives, one per half: V-001 exists only in the first archive, V-1201 only in the
+    // second, V-1500 only in the live file — so a discovery that dropped any half fails here
+    // rather than passing quietly on a smaller log than it claims to read.
+    const whole = wholeLog();
+    for (const anchor of ['## V-001 ', '## V-1201 ', '## V-1500 ']) {
+      expect(whole.includes(anchor), `${anchor.trim()} is missing from the assembled log`).toBe(
+        true,
+      );
+    }
   });
 
   it('CRITICAL every number carried by more than one heading is declared with a reason. A V-number is how source and test files cite a finding; reusing one silently makes those citations unresolvable, and the log is append-only so it cannot be fixed by renumbering later.', () => {
