@@ -90,6 +90,49 @@ To post for A1: append at the bottom of `live/A2.md` as `**[A2 <date> W#### | �
 working-tree file directly and the origin push lags, so a local pathspec-commit is enough — do
 NOT `git pull --rebase` (A1/A3 WIP blocks it) or push the whole repo.
 
+## ⛔ Committing in the shared tree — owner-approved 2026-08-26
+
+**Always commit by pathspec: `git commit <paths> -F -`.** Never a bare `git commit`.
+Untracked files need `git add -- <paths>` FIRST, because a pathspec cannot introduce a
+file git does not know — the commit silently does nothing.
+
+**Why the pathspec belongs on the COMMIT and not only the `add`.** `git add <one-path>`
+writes into an index that may already hold a peer's files, and a bare `git commit` then
+commits **the whole index**. A pathspec commit takes the WORKTREE at those paths, so a
+poisoned index cannot travel through it.
+
+**It is not hypothetical. In one session it prevented six incidents:**
+
+- **Five stale-index reversions.** `lint-staged` stashes unstaged work, formats, then
+  restores — and when the other agent commits inside that window the restore writes
+  superseded content back into the INDEX. Signature every time: worktree-vs-HEAD **0**
+  changed lines, index-vs-HEAD 4–30. A bare commit would have reverted a peer's committed
+  work with every check green.
+- ⛔ **One deletion of authentication.** A peer was mutation-testing `middleware/auth.ts`
+  with `requireAuth` removed. For ~250s the shared tree held an admin middleware that did
+  not authenticate, and a bare commit at that instant would have landed it behind a gate
+  that looked green — the suite having run before the mutation and after the restore,
+  never against what was on disk.
+
+**Repairing a poisoned index:** `git reset -q -- <path>` (index ← HEAD, worktree
+untouched). ⚠️ NOT `git checkout -- <path>`, which restores FROM the index and hands back
+the stale content. `git checkout HEAD -- <path>` is for a poisoned WORKTREE.
+
+**Mutating a security primitive in a shared tree** — auth, scopes, crypto, rate limits:
+
+1. **Tell the peer BEFORE it goes in, not after it comes out.** A trap covers your process
+   dying; it does nothing about the window where the mutation is legitimately live.
+2. **Trap the restore** — `trap 'cp "$SNAP/f" "$F"' EXIT INT TERM`. A sequential
+   mutate/test/restore leaves the file mutated if the command times out.
+3. **Run the narrowest set that answers the question**, then widen. Exposure is the
+   runtime of the suite you chose.
+
+⚠️ **A negative from a subset is a statement about the subset.** The same auth mutation
+scored 1 catcher against a `*auth*` + `*admin*` glob and **357** against the full suite —
+the specs exercising a middleware are named for the FEATURE, not the middleware. When a
+mutation on a widely-used primitive is caught by ONE test and that test is a text pin,
+widen before believing it.
+
 ## Key rules (full set in ORCHESTRATOR-STATE.md + AGENTS.md)
 
 - **V-205 attribution**: all commits `Driftstack <dev@driftstack.dev>`; ZERO AI-tooling strings (Claude / Anthropic / GPT / Copilot / noreply) in commit messages or bodies; V-527 commit-msg hook enforces.
