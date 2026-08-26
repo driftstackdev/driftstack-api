@@ -1,3 +1,4 @@
+import type { SocksProxyConfig, InlineVpnProxyWire } from '@driftstack/api-types';
 // Increment-2 — fleet control-plane connection registry + inbound-frame router.
 //
 // The transport-agnostic CORE of the (next) /v1/fleet/events WS route. The route
@@ -378,7 +379,7 @@ export class FleetControlConnection {
   setEgress(
     requestId: string,
     sessionId: string,
-    inlineProxyConfig: string,
+    inlineProxyConfig: SocksProxyConfig | InlineVpnProxyWire,
     exitIdentity: SetEgressExitIdentity,
     applyPoint: SetEgressApplyPoint,
     timeoutMs?: number,

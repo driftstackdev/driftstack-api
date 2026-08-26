@@ -22106,3 +22106,34 @@ between them_, and the sharper version is that a multi-block command is several 
 not it looks like one. Restored byte-identical from the snapshot and redone as a single atomic
 block; the second miss after that was an anchor written with 8 spaces where the file has 6, caught
 by the same assert before anything was written.
+
+## V-1692c
+
+**A defect in my own new code, found by reading the sibling I had already mirrored once.**
+
+`serializeSetEgress` took `inlineProxyConfig` as a **pre-encoded base64 string and validated
+nothing**. Its sibling `serializeSessionAssign` takes the config as an OBJECT, checks it against
+the contract its `type` selects, and documents the consequence: _"@throws HarnessWireCodecError if
+inlineProxyConfig fails SocksProxyConfig validation."_ So the same field, on the same wire, to the
+same node, was guarded on assign and unguarded on swap — **a config the harness would refuse when
+a session starts would have sailed through when it moved.**
+
+Fixed by extracting `encodeInlineProxyConfig` and giving BOTH serializers the one encoder, rather
+than copying the validation into mine. Two encoders for one wire field is the shape that drifts,
+and the drift is silent: any test exercising only one caller passes while the other diverges.
+
+**Pinned three ways** — that an invalid config throws naming `egress swap`, that a valid one is
+base64 JSON on the wire, and **structurally that the socks and vpn contracts are each checked in
+exactly one place**. Mutation-proved: reintroducing a second socks encoder reds the structural arm
+with "the socks contract is checked in more than one place: expected 2 to be 1". Restored
+byte-identical; 15 arms pass; 22 files / 527 tests confirm the extraction left `sessionAssign`
+behaviour unchanged.
+
+⚠️ **Three instrument faults getting there, and the middle one is the instructive one.** An index
+slice anchored its inner search on `SocksProxyConfigWireSchema` — whose FIRST occurrence in the
+file is earlier than the branch I meant — so the slice covered the `if` arm only and left
+`} else { … }` orphaned, producing a syntax error rather than a wrong result. **An index computed
+from a token that appears more than once is a guess with a number attached.** Replaced by
+brace-balanced extraction of the enclosing block, which cannot land in the wrong place. The other
+two were reconstructed anchor text with the wrong indentation, both caught by asserts before any
+write.

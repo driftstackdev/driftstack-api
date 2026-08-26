@@ -198,28 +198,7 @@ export function serializeSessionAssign(args: {
 }): SessionAssign {
   let inlineProxyConfig: string | undefined;
   if (args.inlineProxyConfig !== undefined) {
-    // VPN configs carry a `type` of openvpn|wireguard and use the FLAT
-    // sibling-field wire (A3 W2163 — NOT nested); socks5 keeps its existing
-    // type-less SocksProxyConfig shape. Validate against the matching contract,
-    // then base64( utf8( JSON.stringify ) ) verbatim (same Data encoding as inputParams).
-    const cfg = args.inlineProxyConfig as { type?: unknown };
-    if (cfg.type === 'openvpn' || cfg.type === 'wireguard') {
-      const parsed = InlineVpnProxyWireSchema.safeParse(args.inlineProxyConfig);
-      if (!parsed.success) {
-        throw new HarnessWireCodecError(
-          `inlineProxyConfig failed the InlineVpnProxyWire contract before assign: ${parsed.error.message}`,
-        );
-      }
-      inlineProxyConfig = encodeWireData(parsed.data);
-    } else {
-      const parsed = SocksProxyConfigWireSchema.safeParse(args.inlineProxyConfig);
-      if (!parsed.success) {
-        throw new HarnessWireCodecError(
-          `inlineProxyConfig failed the SocksProxyConfig contract before assign: ${parsed.error.message}`,
-        );
-      }
-      inlineProxyConfig = encodeWireData(parsed.data);
-    }
+    inlineProxyConfig = encodeInlineProxyConfig(args.inlineProxyConfig, 'assign');
   }
   const assign = {
     type: 'sessionAssign' as const,
@@ -396,10 +375,43 @@ export function serializeSetCookies(args: {
  * later: the two describe one exit, and a frame that carried the new IP with the
  * old timezone would hand the node a self-contradicting geography.
  */
+/**
+ * Validate a proxy config against the contract its `type` selects, then
+ * base64( utf8( JSON.stringify ) ) it for the wire.
+ *
+ * Shared by `sessionAssign` and `setEgress` deliberately. Both put the SAME field
+ * on the wire, and two encoders for one field is the shape that drifts: the moment
+ * one gains a contract the other does not, a config the harness would refuse on
+ * assign sails through on a swap. `where` only names the operation in the error,
+ * so a failure says which call refused it.
+ */
+function encodeInlineProxyConfig(
+  config: SocksProxyConfig | InlineVpnProxyWire,
+  where: string,
+): string {
+  const cfg = config as { type?: unknown };
+  if (cfg.type === 'openvpn' || cfg.type === 'wireguard') {
+    const parsedVpn = InlineVpnProxyWireSchema.safeParse(config);
+    if (!parsedVpn.success) {
+      throw new HarnessWireCodecError(
+        `inlineProxyConfig failed the InlineVpnProxyWire contract before ${where}: ${parsedVpn.error.message}`,
+      );
+    }
+    return encodeWireData(parsedVpn.data);
+  }
+  const parsedSocks = SocksProxyConfigWireSchema.safeParse(config);
+  if (!parsedSocks.success) {
+    throw new HarnessWireCodecError(
+      `inlineProxyConfig failed the SocksProxyConfig contract before ${where}: ${parsedSocks.error.message}`,
+    );
+  }
+  return encodeWireData(parsedSocks.data);
+}
+
 export function serializeSetEgress(args: {
   requestId: string;
   sessionId: string;
-  inlineProxyConfig: string;
+  inlineProxyConfig: SocksProxyConfig | InlineVpnProxyWire;
   exitIdentity: SetEgressExitIdentity;
   applyPoint: SetEgressApplyPoint;
 }): SetEgressRequest {
@@ -407,7 +419,7 @@ export function serializeSetEgress(args: {
     type: 'setEgress',
     requestId: args.requestId,
     sessionId: args.sessionId,
-    inlineProxyConfig: args.inlineProxyConfig,
+    inlineProxyConfig: encodeInlineProxyConfig(args.inlineProxyConfig, 'egress swap'),
     exitIdentity: args.exitIdentity,
     applyPoint: args.applyPoint,
   });

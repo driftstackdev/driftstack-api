@@ -19,6 +19,15 @@ import {
   SET_EGRESS_APPLY_POINTS,
   type SetEgressRequest,
 } from '../../src/schemas/harness-control-protocol.js';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { serializeSetEgress } from '../../src/services/harness-control-codec.js';
+
+const CODEC_SRC = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../src/services/harness-control-codec.ts',
+);
 
 const EXIT = {
   ip: '203.0.113.7',
@@ -169,6 +178,48 @@ describe('SetEgressRequestCorrelator', () => {
     });
     expect(c.inFlight()).toBe(0);
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('CRITICAL serializeSetEgress VALIDATES the proxy config instead of trusting a pre-encoded string. The first version took base64 and checked nothing, so a config the harness would refuse on assign would have sailed through on a swap.', () => {
+    expect(() =>
+      serializeSetEgress({
+        requestId: 'r14',
+        sessionId: 'agt_x',
+        inlineProxyConfig: { host: '', port: 99999 } as never,
+        exitIdentity: { ...EXIT },
+        applyPoint: 'next_navigation',
+      }),
+    ).toThrow(/egress swap/);
+  });
+
+  it('serializeSetEgress base64-encodes a valid config onto the wire field', () => {
+    const frame = serializeSetEgress({
+      requestId: 'r15',
+      sessionId: 'agt_x',
+      inlineProxyConfig: { host: '127.0.0.1', port: 1080, udp_associate: true } as never,
+      exitIdentity: { ...EXIT },
+      applyPoint: 'immediate',
+    });
+    const decoded: unknown = JSON.parse(
+      Buffer.from(frame.inlineProxyConfig, 'base64').toString('utf8'),
+    );
+    expect(decoded).toMatchObject({ host: '127.0.0.1', port: 1080 });
+  });
+
+  it('CRITICAL ONE encoder, not two. sessionAssign and setEgress put the SAME field on the wire, and two encoders is the shape that drifts — the moment one gains a contract the other lacks, a config refused on assign is accepted on a swap. Pinned structurally because the divergence would be invisible to any test that exercised only one caller.', () => {
+    const src = readFileSync(CODEC_SRC, 'utf8');
+    expect(
+      src.match(/SocksProxyConfigWireSchema\.safeParse/g)?.length ?? 0,
+      'the socks contract is checked in more than one place',
+    ).toBe(1);
+    expect(
+      src.match(/InlineVpnProxyWireSchema\.safeParse/g)?.length ?? 0,
+      'the vpn contract is checked in more than one place',
+    ).toBe(1);
+    expect(
+      src.match(/encodeInlineProxyConfig\(/g)?.length ?? 0,
+      'the shared encoder should be defined once and called by both serializers',
+    ).toBe(3);
   });
 
   it('failAll resolves every in-flight request with error and settle is idempotent', async () => {
