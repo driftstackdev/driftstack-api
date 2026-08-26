@@ -22163,3 +22163,39 @@ call look alike to a pattern that only knows parentheses. Stated because the hon
 and a reader seeing "4 sites, 3 validated" would look for a defect that is not there.
 
 Class closed: one instance, fixed, with the surrounding convention confirmed rather than assumed.
+
+## V-1693
+
+**Every identity-keyed correlator carries the cross-session spoof guard — and the three that
+looked like gaps were my pattern, not their code.**
+
+The V-1692c shape asked one level up: a shared fleet connection carries every session on a node,
+so a correlated reply settled by request id ALONE could resolve another account's in-flight
+request with this frame's payload. Eight correlators key on an identity; the setCookies guard is
+annotated _"audit M1 extended to the correlated reply path"_, and "extended" is the word that
+invites the question of where it stopped.
+
+**It stopped nowhere.** All eight guard, each on the identity its operation is keyed by:
+
+| correlator                                                 | keys on                                                                                        |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| cookies, set-cookies, navigate-history, upload, set-egress | `sessionId`                                                                                    |
+| download                                                   | `sessionId`, inside a compound condition                                                       |
+| harness-dispatch                                           | `sessionId`, checked on the bounded header BEFORE parsing the envelope or decoding any payload |
+| trim-profile                                               | **`profileId`** — trim is out-of-session, and the file says so in its header                   |
+
+`session-readiness-correlator` carries no such key and is a different shape.
+
+⛔ **My sweep reported three of these as unguarded, and all three were false negatives.** It
+matched the tokens the setCookies implementation happens to use — `pendingSessionId`,
+`sessionId !== pending` — so it missed `target.sessionId !== header.data.sessionId` (dispatch),
+`pending.sessionId !== sessionId ||` (download), and `profileId !== pending.profileId`
+(trim-profile). **Sweep the shape, not the token** — third instance today, and the costly version
+of this one would have been reporting a security gap in code that is correct.
+
+The dispatch correlator is the strongest of the eight and worth copying rather than merely
+counting: it checks identity on a bounded header **before** parsing the full envelope or decoding
+`outputData`, so a spoofed frame consumes no payload work at all. Its comment names the leak it
+prevents — DOM, screenshot and extracted text crossing accounts.
+
+The setEgress correlator added in V-1692 conforms, mirrored from setCookies rather than invented.
