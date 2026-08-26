@@ -9688,3 +9688,44 @@ regex over its own source text.
 
 No behavioural change. `mfa-repo.ts` restored byte-identically after the mutation and verified clean
 against HEAD; the only edit committed here is the comment recording the asymmetry.
+
+## V-1715 — V-1714's open half, closed by execution: the epoch invariant is pinned behaviourally, by a SQL round-trip
+
+2026-08-26. V-1714 left one question open rather than reading around it: locally the MFA-enrollment
+epoch bump is caught only by a content-parity TEXT pin, and every behavioural test naming `authEpoch`
+is DATABASE_URL-gated. The mutation was handed to the agent holding the database instead of being
+guessed at. It has been run, with a control first: baseline 6 files / 126 tests EXECUTED, and under the
+mutation all six files still ran — 2 failed, 4 passed — so the verdict describes work that happened.
+
+THE ANSWER IS THAT THE V-1711 SHAPE DOES NOT REPEAT HERE. Three arms catch it, and the load-bearing one
+is a database round-trip rather than a regex over source:
+`db-mfa-enrollment-session-authority.test.ts` selects `auth_epoch` before and after an activation and
+asserts `before + 1`, failing under the mutation with "the epoch moved: expected 1 to be 2". Two more
+in `db-mfa-credential-issuance-concurrency-drizzle.test.ts`. The text pin V-1714 found is real but is
+neither the only catcher nor the important one. So the security invariant is defended by its behaviour;
+only the LOCAL half was ever defended by its spelling, and that was a property of what runs without a
+database, not of the suite.
+
+⭐ ONE HONEST NARROWING, contributed by the agent that ran it. The arm asserts the MECHANISM — the epoch
+advanced — while the CONSEQUENCE, that a session minted before enrollment is rejected afterwards, is not
+asserted end to end in one place. It COMPOSES: the same file's "an old-epoch session cannot activate
+MFA" arm proves stale epochs are refused, so mechanism-advances plus stale-epoch-refused together give
+the property. Two arms, one property, neither stating it whole. Defensible, and recorded because the
+composition is invisible from either arm alone.
+
+ON THE DISABLE ASYMMETRY, which V-1714 called correct and which deserved the challenge it got: the
+objection is that an attacker holding one fresh MFA proof can disable MFA while every other session
+survives. Stating it out loud rather than asserting the rule — the answer is that surviving sessions do
+not help the attacker, who already holds an authenticated session with step-up satisfied, and the
+property that matters is RECOVERY. It holds by the code read in V-1714: re-enrollment bumps the epoch
+and rebases ONLY the enrolling session, and `setPassword` bumps unconditionally, so the moment the
+legitimate owner re-secures the account by either route the attacker's session goes stale and is
+evicted. Disable relaxes the requirement and evicts nobody; re-securing tightens it and evicts
+everyone else. That is the asymmetry, and it is now argued rather than assumed.
+
+⛔ A METHOD NOTE WORTH MORE THAN THE FINDING. The zsh word-splitting fault from V-1713 recurred, in the
+other agent's hands, inside the command verifying this entry: a file list built as `FILES=…` and passed
+as `$FILES` sent six paths as one argument and ran nothing. It was caught instantly by the remedy this
+log added an hour earlier — a floor asserting tests actually EXECUTED — because an empty baseline is
+obviously wrong in a way an exit code never is. The same fault, twice, in two sessions, on the same
+day, caught the second time by the control written after the first.
