@@ -13639,3 +13639,47 @@ row has been trimmed to that, with the rest attributed to V-1650.
 scope check (V-1792), for the non-vacuity floor (V-1785), for the coverage-census instrument
 (feedback memory, V-1798), and now this. Three were in the repo and one was in my own memory index. The
 common factor is not forgetting to look — it is looking at a PREFIX and treating the answer as complete.
+
+## V-1810 — mined the log's own stated unknowns instead of hunting fresh, and closed a security boundary I had asserted
+
+2026-08-26. Four rediscoveries in one session (V-1809) argue against picking a target and then checking
+prior art, because that order is what keeps failing. Inverted it: the log already carries a curated list of
+things known to be unmeasured, because every entry is required to state its boundary.
+
+entries in the live log 323
+entries stating an explicit unmeasured boundary 37
+
+That is a backlog of known-unknowns written by the only person who knew what was left out, and working it
+CANNOT rediscover — each item is by construction something no entry has measured.
+
+⭐ TOOK THE MOST LOAD-BEARING ONE, WHICH WAS MINE. V-1804 audited the OAuth-client route and said of the
+account-merge endpoint: "`confirmPendingLink`'s single-use enforcement is taken from the route's contract
+with it, not verified in the service." **A single-use guarantee on an account-MERGE token is exactly the
+kind of claim that must not rest on a contract.**
+
+⛔ AND THE FIRST THING I READ WAS ANOTHER CONTRACT. `services/oauth-client.ts:162` is the INTERFACE, whose
+JSDoc says the token is rejected when "expired / consumed / not found" — a restatement of the same promise,
+one indirection down. The implementation is in a different file (`oauth-client-service.ts:137`).
+
+VERIFIED SOUND, by reading the code and the repo method under it:
+
+- The plaintext is `sha256Hex`-ed before any lookup; 32 random bytes → 64 hex chars, matching the other
+  auth-flow tokens.
+- `findActiveByTokenHash` handles expiry, and the code labels it a "fast-fail pre-check" rather than the
+  guarantee — the honest framing.
+- **The guarantee is an atomic CAS**: `markConsumedAt` issues `UPDATE … SET consumed_at = ? WHERE id = ?
+AND consumed_at IS NULL RETURNING id` and returns `claimed.length > 0`. Only the caller that flips NULL
+  claims the row.
+- ⭐ **The claim happens BEFORE link creation**, which is the part that makes it correct rather than merely
+  atomic. Two concurrent confirm-merges on one token → exactly one claims, exactly one link exists, and
+  the loser gets a clean `null` → 400 "already used" instead of a duplicate-key 500. The comment says so
+  and the ordering in the code matches.
+- It mirrors `OAuthService.consumeCodeIfUnconsumed`, so this is the codebase's established shape for
+  single-use, not a local invention.
+
+NO DEFECT. The V-1804 assertion was right; it is now verified rather than assumed, and that boundary is
+closed rather than carried forward.
+
+BOUNDED: `confirmPendingLink` and `markConsumedAt` were read in full. `findActiveByTokenHash`'s expiry
+predicate was read only for its existence, and the pending-link CREATION path — which decides what a
+merge token is minted for — was not read.
