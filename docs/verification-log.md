@@ -11258,3 +11258,57 @@ lower-stakes question (`$ref` for named SDK types vs leave inline) that does not
 
 BOUNDED: measured against the sdk-python spec only. If the TS/Go specs are generated separately rather
 than from this file, their orphan sets are not covered by this count and I have not checked.
+
+## V-1752 — W-10's root cause: `register()`'s return value is discarded, so the components it creates can never be referenced
+
+2026-08-26. V-1751 classified W-10's 39 orphans and left the owner a product question. That question was
+premature: the orphans are not a contract decision, they are **one mechanical bug repeated at ~39 sites**,
+and the code states the intent it is failing to achieve.
+
+`buildRegistry()` in `apps/server/src/lib/openapi.ts` does, under the comment "Reusable schemas — promote
+to components.schemas so codegen produces named types (Pydantic, Go structs, etc.) **instead of inline
+anonymous shapes**":
+
+    r.register('AccountMeResponse', AccountMeResponseSchema);      // line 271, return DISCARDED
+
+and every route then uses the ORIGINAL object — `content: { 'application/json': { schema:
+AccountMeResponseSchema } }` at :1888. In `@asteasolutions/zod-to-openapi`, `register<T>(refId, schema): T`
+returns a NEW schema carrying the refId metadata; the input is not mutated. Using the pre-registration
+object emits the shape INLINE and leaves the component unreferenced.
+
+⛔ I inferred that twice and got it wrong the first time — reasoning from the library that the operation
+and component must be two different Zod objects, when line 271 and line 1888 name the SAME const. So I
+ran it instead of arguing about it, on this exact library version:
+
+    path uses the DISCARDED-return original : INLINE ({"type":"object","properties":{"a":...)
+    path uses the RETURNED schema           : $ref -> #/components/schemas/Thing
+
+That is the whole of W-10. It explains the shape of V-1751's numbers exactly: 36 of 39 orphans appear
+VERBATIM inline because the inline copy and the orphaned component are rendered from the SAME Zod object,
+so they cannot disagree — which is also why nothing has ever gone visibly wrong. The other 3 fit too:
+`PaginationQuery`/`ListDeliveriesQuery` are query groupings never used as a body schema, and
+`IntentResult` is registered but used by no route at all.
+
+⭐ THIS CHANGES WHAT W-10 IS. Not "39 orphans, and the fix changes the published contract so it needs the
+owner's call" but "a discarded return value defeats a documented intent". The response SEMANTICS do not
+change — identical shapes, rendered from one source — only the spec's STRUCTURE (`$ref` instead of an
+inline copy), which is precisely what codegen consumes and precisely what the comment asked for. The
+Python SDK already ships the model classes; today no operation points at them.
+
+⚠️ NOT FIXED IN THIS TURN, and the reason is blast radius, not doubt about the cause. Rewriting ~39
+registrations rewrites a 2 MB published artifact, and this repo carries ~220 SDK-parity tests plus a large
+spec-conformance suite (`openapi-route-coverage`, `response-body-matches-the-published-schema`,
+`api-types-shapes-match-the-spec`, `sdk-python-models-cover-every-spec-schema`,
+`sdk-go-structs-cover-openapi-fields` …). Several assert against INLINE shapes and would move. That is a
+measurement to make before the edit, not during it.
+
+⭐⭐ AND IT UNDERMINES A GUARD, which is the part worth acting on soonest. `api-types-shapes-match-the-spec`
+enumerates its reference side from `spec.components.schemas`: measured just now, it compares 39 of the 178
+shapes `api-types` exports, and **32 of those 39 are orphans**. So for 32 of its 39 checks the guard is
+pinned to a component NO operation publishes. It is correct today only because both renderings come from
+one Zod object — a property of the bug, not of the guard. Fixing the registrations makes that guard's
+reference side real; leaving them means a guard whose correctness rests on the defect it sits next to.
+
+BOUNDED: measured against `packages/sdk-python/openapi.json` (the only spec file in the repo — checked)
+and the registry behaviour of the installed `@asteasolutions/zod-to-openapi`. I did not enumerate which of
+the ~220 parity tests would move.
