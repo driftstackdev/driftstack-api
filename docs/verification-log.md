@@ -13766,3 +13766,106 @@ BOUNDED: `linkOrCreateAccount` steps 1-3 and the Google and GitHub branches of `
 in full. `sendVerifyMergeEmail` was not read — whether the mail is actually dispatched, and to which
 address the mailer resolves, is taken from the call site. The IDP token exchange itself
 (`exchangeCodeForTokens`) and the revoked-link fork were not read.
+
+## V-1813 — a dedup documented as "coalesces to one" races, and the unique constraint named for it cannot catch the race
+
+2026-08-26. Fourth item from the stated-unknowns backlog. V-1801 audited the internal atlas-priority route
+and recorded: "The repo methods behind `deps.repo` (`insertEmittedWithDedup`, `updateStatus`) were not
+read." Reading `insertEmittedWithDedup` finds the first defect the backlog has produced. **Zero mentions
+across the live log and both archives — genuinely unexamined.**
+
+THE GUARANTEE IS WRITTEN DOWN. `migrations/0058_atlas_priority_events.sql` says:
+
+-- Dedup: same op_seq_sha + archetype_id within 5 min coalesces to one
+
+⛔ THE IMPLEMENTATION IS READ-THEN-WRITE. `insertEmittedWithDedup` SELECTs for a row matching
+`(op_seq_sha, archetype_id)` with `emitted_at >= now - 5min`, returns `{deduped: true}` if it finds one,
+and otherwise INSERTs. Two concurrent calls carrying the same signature both find nothing and both insert.
+There is no transaction, no lock and no upsert around the pair.
+
+⛔⛔ AND THE UNIQUE CONSTRAINT CANNOT CLOSE IT, WHICH IS THE PART WORTH READING TWICE:
+
+CONSTRAINT "atlas_priority_events_dedup_triple_unique"
+UNIQUE ("op_seq_sha", "archetype_id", "emitted_at")
+
+`emitted_at` is `args.now`, a fresh `new Date()` per request. **Two concurrent emissions differ in that
+column, so they do not collide** — the constraint admits exactly the duplicates the dedup exists to
+prevent, and only rejects two inserts landing on the identical timestamp. A constraint NAMED
+`dedup_triple_unique` that cannot enforce the dedup is worse than no constraint, because its name is what
+a reader checks.
+
+⭐ THE CONTRAST IS IN THIS REPO AND ONE DIRECTORY AWAY. `oauth-links-repo.markConsumedAt` (V-1810) does the
+same job correctly: `UPDATE … WHERE consumed_at IS NULL RETURNING id`, a conditional CAS where exactly one
+caller wins and the loser is told. The codebase knows the pattern; this table does not use it.
+
+⚠️ SEVERITY, stated without inflation. This is an internal fleet-node route behind bearer auth and a
+per-token rate limit, so it is not a security defect and not customer-reachable. The consequence is
+duplicate rows where a comment promises one, and whatever consumes the atlas-priority queue counting the
+same probe signature twice. Concurrency is not hypothetical here: the dedup exists because duplicate
+emissions were expected, and several fleet nodes can emit the same signature at once.
+
+⛔ NOT FIXED, deliberately. Both real repairs — dropping `emitted_at` from the unique triple so
+`onConflictDoNothing` can carry the dedup, or taking an advisory lock on the pair — are migrations that
+change a live table's constraints. That is a schema decision with a deployment ordering question attached,
+not a patch to slip in beside a docs sweep.
+
+⛔⛔ AND THE SECOND METHOD V-1801 LEFT UNREAD HAS THE SAME SHAPE, ON A STATE MACHINE. `updateStatus`
+reads the row, validates the requested transition against `ALLOWED_TRANSITIONS[current.status]`, builds a
+SET payload — and then issues:
+
+.update(atlasPriorityEvents).set(set).where(eq(atlasPriorityEvents.id, args.eventId))
+
+**The status it just validated is not in the WHERE.** Two concurrent reports on one event both read
+`emitted`, both find their transition legal from `emitted`, and both write. Last-write-wins, the losing
+transition disappears along with the timestamp columns it set (`bs_started_at`, `bs_completed_at`,
+`atlas_appended_at`), and the row can end up in a state no single legal transition from its true previous
+state would have produced. The guard is real and is enforced against a value that may already be stale by
+the time the UPDATE lands.
+
+Concurrency here is the ordinary case rather than the exotic one: `/v1/internal/atlas-priority/event-status`
+is how fleet nodes report progress, and a retried report racing its original is exactly the shape.
+
+⭐ THE FIX FOR THIS ONE IS A SINGLE CLAUSE and the codebase already writes it elsewhere:
+`.where(and(eq(id, eventId), eq(status, current.status)))`, with zero returned rows treated as a lost race
+rather than a missing event — precisely `markConsumedAt`. It is still a behaviour change (a caller that
+loses now learns it lost) and it needs a test, so it is recorded rather than slipped in.
+
+BOUNDED: `insertEmittedWithDedup`, `updateStatus` and the `0058` migration were read in full. Whether any
+consumer of the atlas-priority queue actually double-counts a duplicate, or misbehaves on a lost
+transition, was NOT traced — the defect is in the repo's guarantees, and its downstream cost is unmeasured.
+
+## V-1814 — closed V-1798's boundary: re-measured the src/db coverage decision, and every metric improved
+
+2026-08-26. V-1798 corrected a stale justification in the coverage config and had to leave one thing
+open, in its own words: "I could not re-run coverage to refresh V-1002's percentages — `DATABASE_URL` is
+unset here — so those four numbers remain as measured on 2026-08-14 and are NOT re-verified by this
+entry." Those four numbers are what a pending owner decision rests on. Closed now.
+
+Ran the suite under coverage with `DATABASE_URL` pointed at my own disposable database AND the
+`apps/server/src/db/**` exclusion lifted — reproducing the other four exclusions on the CLI rather than
+editing `vitest.config.ts`, so the working tree stayed at 0 changes for the whole run and no peer's push
+gate could be broken by it.
+
+Test Files 3222 passed | 4 skipped (3226)
+Tests 32045 passed | 47 skipped (32092) exit 0
+
+                    2026-08-14 (V-1002)   today    threshold   headroom
+
+lines 92.29 93.15 85 +8.15
+statements 90.74 91.79 83 +8.79
+functions 90.94 92.57 84 +8.57
+branches 81.74 83.28 75 +8.28
+
+⭐ ALL FOUR IMPROVED, AND THE TIGHTEST HEADROOM GREW FROM 6.74 TO 8.15 POINTS. V-1002's conclusion — that
+including `src/db` in the gate costs at most ~1.3 points and every threshold still passes — holds twelve
+days later with more room than it had. The 54-files-excluded figure is now 55, and the integration files
+importing those repos went 135 -> 189 (V-1798), so the justification for the exclusion has weakened on
+every axis measured while the cost of removing it has not appeared.
+
+⛔ STILL NOT CHANGING IT, and the config says why better than I would: "the number says removing this line
+is free — but changing what CI enforces is still a decision somebody makes, not one a measurement makes
+for them." What was missing was a current number. There is one now.
+
+BOUNDED: one machine, one disposable database, the four remaining exclusions reproduced on the CLI —
+`**/*.test.ts`, `**/tests/**`, `apps/server/src/index.ts`, `apps/server/src/lib/dump-openapi.ts`. A CI
+runner differs in what it can reach; these are local figures under CI-like conditions, not CI's own.
