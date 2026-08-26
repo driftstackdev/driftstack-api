@@ -22595,3 +22595,33 @@ outcome was fine.
 
 The tell is cheap and worth watching for: **lint-staged printing a file count larger than what you
 staged means the index is not yours.**
+
+## V-1705
+
+**Three more obligations checked — the OAuth link race and both event-bus unsubscribes. All
+honoured, and the unsubscribe pair is guarded by two instruments that are only adequate together.**
+
+**oauth-client** — _"Callers must only create the link when the claim wins, so a double-submit
+can't produce a duplicate-key 500."_ `markConsumedAt` is a compare-and-set returning whether THIS
+call transitioned the row; `oauth-client-service.ts:152` gates on it directly
+(`if (!(await …markConsumedAt(…)))`). Honoured.
+
+**Both event buses** — _"Returns an unsubscribe function the caller MUST call on disconnect."_ A
+subscriber never removed is a handler leaked per connection, which is invisible in normal
+operation and therefore the kind of property most likely to go unguarded. Three SSE routes
+subscribe — account-notifications, agent-sessions transcript, status-stream — and all three bind a
+`cleanup()` to `close` and `error`, with every `cleanup` body calling `unsubscribe`. Verified by
+brace-matching each cleanup rather than grepping near the subscribe.
+
+**The coverage is a pair, and neither half would do alone:**
+
+- the **route** half is pinned by content-parity on the source text, which catches deletion of the
+  call but would miss a refactor that keeps the text and breaks the effect;
+- the **bus** half is behavioural — _"subscriberCount reflects add + remove lifecycle"_,
+  _"idempotent unsubscribe"_, and on the session bus _"subscriberCount drops to 0 + the per-session
+  set is cleaned up when the last unsubscribe fires"_, which is the leak itself.
+
+Mutation-confirmed on the route half: replacing the call with a no-op reds several arms of
+`routes-account-notifications-content-parity`. Type-clean, restored byte-identical.
+
+**Twelve of 22 obligations checked: one unenforced, one dormant, ten honoured and guarded.**
