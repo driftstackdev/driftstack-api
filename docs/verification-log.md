@@ -11512,3 +11512,50 @@ depends on deploy-side config (`MFA_ENCRYPTION_KEY` and the CLI/crypto equivalen
 and will not infer. The defect measured here is the deviation from the documented pattern, which holds in
 every deployment; whether it is currently CUSTOMER-VISIBLE depends on prod config. Also bounded to
 `if (deps.X !== undefined)` gates in `app.ts` — a route gated by some other shape is not in the 20.
+
+## V-1757 — the activation-gate invariant is stated universally but enforced only over features that already satisfy it
+
+2026-08-26. Went to FIX V-1756's three 404-ing gates and read the prior art first, which changed what the
+finding is. Two guards already cover this surface, and neither is a documented exemption — both assert
+exactly the invariant the three gates break.
+
+`activation-gate-disabled-stub-registrar-roster-cross-source-invariant.test.ts` opens with: "**every**
+activation-gated feature ships a disabled-stub registrar, so the AppDeps-unset branch surfaces 503
+FeatureUnavailable rather than a bare 404 — an SDK client must be able to tell 'not enabled on this
+deployment' from 'no such endpoint'." Its sibling
+`activation-gate-pattern-cross-source-invariant.test.ts` names my defect as its own drift mode (3):
+"forgetting the else clause — leaves routes unregistered when the service is absent, which silently 404s."
+
+⛔⛔ SO IT IS NOT AN EXEMPTION — IT IS AN UNENFORCED HOLE, and the hole is structural. Both guards
+enumerate from the STUB SIDE: the roster names seven registrars and additionally DISCOVERS registrars by
+scanning `routes/` for `register*DisabledRoutes`, requiring the roster to cover what discovery finds.
+⭐ That direction catches adding a stub without rostering it. It cannot catch a GATE THAT SHIPS NO STUB AT
+ALL, because nothing in either file enumerates gates. `mfaService`, `cliAuthorizeService` and
+`cryptoOrdersService` have `if (deps.X !== undefined)` in `app.ts` and no `register*DisabledRoutes`
+anywhere, so they are invisible to a stub-side census by construction — the classic shape of a guard whose
+population is drawn from the side that already complies.
+
+⭐ The roster file has already learned this lesson in its own words and applied it one level too shallow:
+"A list a human must remember to update cannot be the thing that enforces completeness." Discovery was
+added — over stubs. The set that needs discovering is GATES.
+
+VERIFIED, not inferred, since both headers make roster claims and they disagree with each other. Exactly
+seven `register*DisabledRoutes` exist in `routes/`:
+
+    AccountByokAnthropic · AgentSessions · Billing · FleetEvents · InternalAtlasPriority · Recipes · SessionProxy
+
+⚠️ The pattern test's header still names `saved-proxies` among its seven; `saved-proxies` ships no
+registrar (the roster file's header records this correction and lists `internal-atlas-priority` in its
+place). Two sibling invariants over one population, corrected at different times, still carrying
+contradictory membership in their prose.
+
+⭐⭐ THIS CHANGES THE FIX. V-1756 proposed three stubs mirroring billing. That closes today's three and
+leaves the hole open for the fourth. The durable change is one commit carrying BOTH: the three
+`register*DisabledRoutes` plus their `else` branches, AND a guard that enumerates
+`if (deps.X !== undefined)` gates from `app.ts` and requires each to have a stub — the same discovery
+direction the roster file already argued for, pointed at the other side. ⛔ The guard must land WITH the
+stubs, never before: on its own it is a deliberately red test.
+
+BOUNDED: the seven-registrar census is `export function register*DisabledRoutes` across
+`apps/server/src/routes` only; a stub defined elsewhere or spelled differently is not counted, and the
+gate census remains the 20 `if (deps.X !== undefined)` sites in `app.ts` from V-1756.
