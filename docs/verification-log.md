@@ -14666,3 +14666,49 @@ output as if it were the method; (5) a literal grep for the predicate found zero
 the pins write it as an ESCAPED regex. The two-sided control — the pre-fix `atlas-priority-events`
 blob as a known positive against its fixed self — is what exposed (1); without a KNOWN positive the
 first four errors all read as clean results.
+
+## V-1833 — the refund clawback ran only through a mock hardcoded to "nothing happened"
+
+2026-08-26. Follow-on from V-1832, and it corrects that entry's systemic claim.
+
+⛔ **P-41 AS I FILED IT WAS WRONG, and I am retracting that half.** I wrote that 29 in-memory doubles
+each re-implement invariants that may exist only there. The mechanism to prevent exactly that is
+already universal: there are **31 contract specs, all 31 both-sided**, and **all 29 doubles** are
+named by at least one. The gap is not per-DOUBLE. It is per-INVARIANT — `mfa-totp-replay-repo-contract`
+exists and is both-sided, and recovery-code single-use was still uncovered, which is why V-1832 was a
+real finding rather than a symptom of a missing contract.
+
+**Re-measured on the corrected axis.** Every method in a double whose body or preamble claims fidelity
+to the real repo (32 methods; the marker words are _mirrors_, _faithful_, _same as the_, _as the
+Drizzle_), against every test file that constructs a real Drizzle repo (165 files). Result:
+**30 of 32 witnessed.** One survivor is a category error — `in-memory-billing.ts` doubles the STRIPE
+API, which has no Postgres counterpart. The other is real.
+
+**FIXED — `revokeCryptoEntitlementByOrderId`, the crypto refund clawback.** Its only appearance in
+the entire test tree was `vi.fn().mockResolvedValue({ revoked: false })`. Neither implementation's
+logic ran, and because that mock always reports `revoked: false`, the caller
+(`crypto-tier-activation.revokeTierForRefundedOrder`) short-circuits at its first branch — so the
+downgrade-and-emit path behind `revoked: true` was unreachable from any test. A refunded customer
+keeping a paid tier would have been caught by nothing.
+
+Two arms added to `stripe-webhooks-repo-contract` (existing file, no ratchet movement), which runs
+each arm against BOTH implementations: the clawback (a still-valid grant is revoked, and the account
+actually leaves the floored tier after reconcile) and the replay (a second refund reports
+`revoked: false`). The seam grew three methods to carry them.
+
+⭐⭐ PROVED PER ARM AND PER IMPLEMENTATION. Removing `gt(expires_at, at)` fails the REPLAY arm on the
+drizzle half alone — "a replayed refund revoked a second time" — with the in-memory half green, which
+is simultaneously the proof that the drizzle half is not silently skipped (`if (!enabled()) return`
+makes a skipped arm PASS, so 19/19 green proves nothing on its own). Inverting the same predicate to
+`lte` fails the CLAWBACK arm, and also trips the replay arm's positive control — "the FIRST refund
+must revoke — otherwise the replay assertion below proves nothing" — which is the control doing its job.
+
+⚠️ MY ERROR, CORRECTED MID-WORK: the first version reconciled with `setAccountTierToBestActive` and
+failed on BOTH halves. Both implementations agreeing is the signature of a wrong assumption, not a
+defect — a real one-sided defect fails the drizzle half only. The refund path calls
+`downgradeAccountTierToBestRemaining`; I had asserted against a method production never uses.
+
+⛔ SIXTH INSTRUMENT ERROR OF THIS SWEEP: the coverage detector matched method names inside COMMENTS,
+so `markRecoveryCodeUsed` scored "witnessed" at the commit BEFORE its arm existed — the header quotes
+the call in prose. Stripping comments first turns the control two-sided: 0 real calls before, 5 after.
+Every one of the six errors returned a confident, plausible, wrong answer.

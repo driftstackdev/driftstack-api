@@ -98,6 +98,29 @@ interface LedgerSubject {
     accountId: string;
     at: Date;
   }) => Promise<{ previousTier: string | null; appliedTier: string | null }>;
+  /**
+   * V-1833 — the refund clawback. Added because NOTHING exercised it: the only mention of
+   * `revokeCryptoEntitlementByOrderId` anywhere in the tests was a `vi.fn()` hardcoded to
+   * `{ revoked: false }`, so neither implementation's SQL ran and the caller's `revoked: true`
+   * branch — the reconcile that actually drops the tier — was unreachable from any test.
+   */
+  activateCryptoEntitlement: (args: {
+    accountId: string;
+    orderId: string;
+    tier: 'solo_manual' | 'team_manual' | 'agency_manual';
+    paidAt: Date;
+    termDays: number;
+  }) => Promise<{ applied: boolean; entitlementInserted: boolean; expiresAt: Date }>;
+  revokeCryptoEntitlementByOrderId: (args: {
+    orderId: string;
+    at: Date;
+  }) => Promise<{ revoked: boolean }>;
+  /** The reconcile the refund path actually calls — NOT setAccountTierToBestActive. */
+  downgradeAccountTierToBestRemaining: (args: {
+    accountId: string;
+    fallbackTier: 'free';
+    at: Date;
+  }) => Promise<{ previousTier: string | null; appliedTier: string }>;
 }
 
 function eventId(): string {
@@ -135,6 +158,9 @@ function inMemorySubject(): LedgerSubject {
       return Promise.resolve();
     },
     setAccountTierToBestActive: (a) => repo.setAccountTierToBestActive(a),
+    activateCryptoEntitlement: (a) => repo.activateCryptoEntitlement(a),
+    revokeCryptoEntitlementByOrderId: (a) => repo.revokeCryptoEntitlementByOrderId(a),
+    downgradeAccountTierToBestRemaining: (a) => repo.downgradeAccountTierToBestRemaining(a),
   };
 }
 
@@ -167,6 +193,9 @@ function drizzleSubject(): LedgerSubject {
       });
     },
     setAccountTierToBestActive: (a) => repo.setAccountTierToBestActive(a),
+    activateCryptoEntitlement: (a) => repo.activateCryptoEntitlement(a),
+    revokeCryptoEntitlementByOrderId: (a) => repo.revokeCryptoEntitlementByOrderId(a),
+    downgradeAccountTierToBestRemaining: (a) => repo.downgradeAccountTierToBestRemaining(a),
   };
 }
 
@@ -295,6 +324,76 @@ function stripeLedgerContract(
         await s.getAccountTier(account),
         'the tier moved despite the call reporting it had not',
       ).toBe('team_manual');
+    });
+
+    it('CRITICAL a refund claws back the entitlement it granted, in both. This is the money path in the losing direction: the grant floors the account tier, and if bringing its expiry forward does not report revoked the caller returns early and the refunded customer keeps the paid tier.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const account = await s.account('free');
+      const orderId = `order_clawback_${randomUUID().slice(0, 12)}`;
+      const paidAt = NOW;
+
+      const granted = await s.activateCryptoEntitlement({
+        accountId: account,
+        orderId,
+        tier: 'solo_manual',
+        paidAt,
+        termDays: 30,
+      });
+      // Positive control: without it a revoke that always reported false would
+      // satisfy nothing here, and the replay arm below would pass vacuously.
+      expect(granted.entitlementInserted, 'the grant under test was never created').toBe(true);
+      expect(await s.getAccountTier(account), 'the grant did not floor the tier').toBe(
+        'solo_manual',
+      );
+
+      const refundedAt = new Date(paidAt.getTime() + 60_000);
+      expect(
+        (await s.revokeCryptoEntitlementByOrderId({ orderId, at: refundedAt })).revoked,
+        'a refund did not revoke the still-valid entitlement it paid for — the caller treats this as "nothing to claw back" and the refunded customer keeps the paid tier',
+      ).toBe(true);
+
+      // The consequence, not just the flag: once the grant is expired it must stop
+      // flooring the tier when the account is reconciled to its best remaining.
+      await s.downgradeAccountTierToBestRemaining({
+        accountId: account,
+        fallbackTier: 'free',
+        at: refundedAt,
+      });
+      expect(
+        await s.getAccountTier(account),
+        'the revoked grant still floored the tier after reconcile',
+      ).toBe('free');
+    });
+
+    it('CRITICAL a REPLAYED refund reports revoked false, in both. Stripe retries, and the gt(expires_at, at) conjunct is the whole idempotence: reporting true a second time re-runs the downgrade and its emit for an entitlement already clawed back.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const account = await s.account('free');
+      const orderId = `order_replay_${randomUUID().slice(0, 12)}`;
+
+      await s.activateCryptoEntitlement({
+        accountId: account,
+        orderId,
+        tier: 'solo_manual',
+        paidAt: NOW,
+        termDays: 30,
+      });
+      const refundedAt = new Date(NOW.getTime() + 60_000);
+      expect(
+        (await s.revokeCryptoEntitlementByOrderId({ orderId, at: refundedAt })).revoked,
+        'the FIRST refund must revoke — otherwise the replay assertion below proves nothing',
+      ).toBe(true);
+
+      expect(
+        (
+          await s.revokeCryptoEntitlementByOrderId({
+            orderId,
+            at: new Date(refundedAt.getTime() + 60_000),
+          })
+        ).revoked,
+        'a replayed refund revoked a second time — the downgrade and its emit run twice',
+      ).toBe(false);
     });
   });
 }
