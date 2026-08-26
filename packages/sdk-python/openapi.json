@@ -41486,6 +41486,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Cryptocurrency billing is not enabled on this deployment (activation gate).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         }
       }
@@ -41795,6 +41805,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Cryptocurrency billing is not enabled on this deployment (activation gate).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         }
       }
@@ -42042,6 +42062,16 @@
                 }
               }
             },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Cryptocurrency billing is not enabled on this deployment (activation gate).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -42318,6 +42348,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Cryptocurrency billing is not enabled on this deployment (activation gate).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         }
       }
@@ -42539,6 +42579,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Cryptocurrency billing is not enabled on this deployment (activation gate).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         }
       }
@@ -42713,6 +42763,16 @@
                 }
               }
             },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Cryptocurrency billing is not enabled on this deployment (activation gate).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -42902,6 +42962,16 @@
                 }
               }
             },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Cryptocurrency billing is not enabled on this deployment (activation gate).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -43166,6 +43236,16 @@
                 }
               }
             },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Cryptocurrency billing is not enabled on this deployment (activation gate).",
             "content": {
               "application/problem+json": {
                 "schema": {

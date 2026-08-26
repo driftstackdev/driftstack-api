@@ -129,7 +129,10 @@ import { registerOAuthClientRoutes } from '../routes/auth-oauth-client.js';
 import { registerAccountOauthLinksRoutes } from '../routes/account-oauth-links.js';
 import type { OAuthLinksRepo } from '../services/oauth-client.js';
 import type { OAuthClientService } from '../services/oauth-client.js';
-import { registerCryptoCheckoutRoutes } from '../routes/billing-crypto.js';
+import {
+  registerCryptoCheckoutRoutes,
+  registerCryptoOrdersDisabledRoutes,
+} from '../routes/billing-crypto.js';
 import { registerCryptoQuoteRoutes } from '../routes/billing-crypto-quote.js';
 import { registerCustomerCryptoOrdersRoutes } from '../routes/billing-crypto-orders.js';
 import { registerAdminCryptoOrdersRoutes } from '../routes/admin-crypto-orders.js';
@@ -1411,6 +1414,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       service: deps.cryptoOrdersService,
       audit: deps.adminAuditService,
     });
+  } else {
+    // The 19 published crypto operations answer 503 rather than vanishing.
+    registerCryptoOrdersDisabledRoutes(app);
   }
   registerCryptoQuoteRoutes(app, { pricing: deps.pricingService });
   if (deps.oauthStore !== undefined) {

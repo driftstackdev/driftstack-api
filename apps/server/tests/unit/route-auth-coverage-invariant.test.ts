@@ -369,6 +369,23 @@ const DISABLED_EXEMPTIONS: readonly RouteExemption[] = [
     'disabled',
     DISABLED_503,
   ),
+  ...exactRoutes(
+    'billing-crypto.ts',
+    'registerCryptoOrdersDisabledRoutes',
+    [
+      ['post', '/v1/billing/crypto-checkout'],
+      ['get', '/v1/billing/crypto-orders'],
+      ['get', '/v1/billing/crypto-orders/:order_id'],
+      ['patch', '/v1/billing/crypto-orders/:order_id'],
+      ['get', '/v1/billing/crypto-orders/:order_id/receipt'],
+      ['get', '/v1/billing/crypto-orders/:order_id/receipt.txt'],
+      ['get', '/v1/billing/crypto-orders/:order_id/receipt.pdf'],
+      ['post', '/v1/billing/crypto-orders/:order_id/cancel'],
+    ],
+    'stub',
+    'disabled',
+    DISABLED_503,
+  ),
 ];
 
 const EXEMPTIONS = [...PUBLIC_EXEMPTIONS, ...MANUAL_AUTH_EXEMPTIONS, ...DISABLED_EXEMPTIONS];
@@ -572,13 +589,15 @@ describe('all-route caller-authority invariant', () => {
     // DISABLED registrar — they were the only live routes there without a twin,
     // so with AI chat off they were unregistered rather than answering 503.
     // Both are stubs, so both land in the disabled exemption set above.
+    // V-1786 — 307 since the cryptoOrdersService gate gained an 8-route disabled
+    // stub for its customer surface (the 11 /v1/admin crypto ops stay unstubbed).
     // V-1756 — 299 since two activation gates that shipped no disabled stub gained
     // one (+6 account-mfa, +3 auth-cli).
     // V-1611 #14 — 290 since `GET /v1/teams` + `PATCH /v1/teams/:id`. Refreshed
     // the way this pin requires: the authority arm below was confirmed EMPTY of
     // violations at this count first, so the +2 is two properly gated routes and
     // not two new holes.
-    expect(routes).toHaveLength(299);
+    expect(routes).toHaveLength(307);
     // +2 alongside the +2 above, which is the part worth reading: BOTH new team
     // routes are structurally authorized. Had one shipped ungated, this number
     // would have moved by one while the total moved by two.
@@ -600,7 +619,7 @@ describe('all-route caller-authority invariant', () => {
     // `transcript` and `gui-control-key`, the two live routes it had no twin for.
     // V-1756 — 46 since account-mfa (+6) and auth-cli (+3) gained the disabled
     // stubs their gates had always lacked.
-    expect(DISABLED_EXEMPTIONS).toHaveLength(46);
+    expect(DISABLED_EXEMPTIONS).toHaveLength(54);
     const exemptionKeys = EXEMPTIONS.map((exemption) =>
       [
         exemption.file,

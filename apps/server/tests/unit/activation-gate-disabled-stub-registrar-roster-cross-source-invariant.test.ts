@@ -51,6 +51,7 @@ const ROUTES = [
   // comply. A gate shipping no stub is unreachable by a stub-side census.
   { file: 'account-mfa.ts', registrar: 'registerAccountMfaDisabledRoutes' },
   { file: 'auth-cli.ts', registrar: 'registerAuthCliDisabledRoutes' },
+  { file: 'billing-crypto.ts', registrar: 'registerCryptoOrdersDisabledRoutes' },
 ];
 
 function read(p: string): string {

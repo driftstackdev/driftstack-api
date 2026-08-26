@@ -53,16 +53,7 @@ const SPEC = resolve(REPO_ROOT, 'packages/sdk-python/openapi.json');
  * gains its stub, so closing one forces the line to be deleted rather than left
  * to rot into a permanent exemption.
  */
-const KNOWN_GAPS: ReadonlyMap<string, string> = new Map([
-  [
-    'cryptoOrdersService',
-    'P-32 — stubbing it registers 11 /v1/admin routes, and four audit invariants then ' +
-      'give contradictory verdicts on the same three mutating paths (one arm demands they ' +
-      'be listed as unaudited, another reports they now reach a recorder). Blocked on that ' +
-      'attribution conflict, not on the admin gate, which admin-routes-authorization-invariant ' +
-      'already resolves through its STUB_EXEMPTIONS list.',
-  ],
-]);
+const KNOWN_GAPS: ReadonlyMap<string, string> = new Map([]);
 
 interface Gate {
   dep: string;

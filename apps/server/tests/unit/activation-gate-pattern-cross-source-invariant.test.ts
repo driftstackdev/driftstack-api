@@ -49,6 +49,15 @@ interface GatedFeature {
 
 const FEATURES: GatedFeature[] = [
   {
+    // V-1786 — only the 8 customer-facing paths are stubbed. The 11 /v1/admin
+    // crypto operations remain unstubbed on purpose; see the ledger row.
+    name: 'crypto-orders (cryptocurrency billing, customer surface)',
+    routesFile: 'apps/server/src/routes/billing-crypto.ts',
+    wiredFn: 'registerCryptoCheckoutRoutes',
+    disabledFn: 'registerCryptoOrdersDisabledRoutes',
+    depsField: 'cryptoOrdersService',
+  },
+  {
     name: 'billing',
     routesFile: 'apps/server/src/routes/billing.ts',
     wiredFn: 'registerBillingRoutes',

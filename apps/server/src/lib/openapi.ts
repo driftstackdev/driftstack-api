@@ -6070,6 +6070,10 @@ function buildRegistry(): OpenAPIRegistry {
       },
     },
     responses: {
+      503: {
+        description: 'Cryptocurrency billing is not enabled on this deployment (activation gate).',
+        content: problemContent,
+      },
       201: {
         description:
           'Order minted; response carries payment context for the customer. On a replayed key, the response also sets `Idempotent-Replayed: 1`.',
@@ -6148,6 +6152,10 @@ function buildRegistry(): OpenAPIRegistry {
       }),
     },
     responses: {
+      503: {
+        description: 'Cryptocurrency billing is not enabled on this deployment (activation gate).',
+        content: problemContent,
+      },
       200: {
         description: 'Order list scoped to the calling account.',
         content: { 'application/json': { schema: ListCryptoOrdersResponseSchema } },
@@ -6166,6 +6174,10 @@ function buildRegistry(): OpenAPIRegistry {
       params: z.object({ order_id: BillingCryptoOrderIdOpenApi }),
     },
     responses: {
+      503: {
+        description: 'Cryptocurrency billing is not enabled on this deployment (activation gate).',
+        content: problemContent,
+      },
       200: {
         description: 'Order envelope.',
         content: { 'application/json': { schema: CryptoOrderEnvelopeSchema } },
@@ -6189,6 +6201,10 @@ function buildRegistry(): OpenAPIRegistry {
       },
     },
     responses: {
+      503: {
+        description: 'Cryptocurrency billing is not enabled on this deployment (activation gate).',
+        content: problemContent,
+      },
       200: {
         description: 'Updated order envelope.',
         content: { 'application/json': { schema: CryptoOrderEnvelopeSchema } },
@@ -6208,6 +6224,10 @@ function buildRegistry(): OpenAPIRegistry {
       params: z.object({ order_id: BillingCryptoOrderIdOpenApi }),
     },
     responses: {
+      503: {
+        description: 'Cryptocurrency billing is not enabled on this deployment (activation gate).',
+        content: problemContent,
+      },
       200: {
         description: 'Normalised receipt payload (status, paid_at, amounts).',
         content: { 'application/json': { schema: CryptoOrderReceiptSchema } },
@@ -6227,6 +6247,10 @@ function buildRegistry(): OpenAPIRegistry {
       params: z.object({ order_id: BillingCryptoOrderIdOpenApi }),
     },
     responses: {
+      503: {
+        description: 'Cryptocurrency billing is not enabled on this deployment (activation gate).',
+        content: problemContent,
+      },
       200: {
         description: 'Text receipt; same fields as the JSON variant.',
         content: {
@@ -6250,6 +6274,10 @@ function buildRegistry(): OpenAPIRegistry {
       params: z.object({ order_id: BillingCryptoOrderIdOpenApi }),
     },
     responses: {
+      503: {
+        description: 'Cryptocurrency billing is not enabled on this deployment (activation gate).',
+        content: problemContent,
+      },
       200: {
         description: 'PDF bytes; the route also sets a meaningful filename.',
         content: {
@@ -6286,6 +6314,10 @@ function buildRegistry(): OpenAPIRegistry {
       params: z.object({ order_id: BillingCryptoOrderIdOpenApi }),
     },
     responses: {
+      503: {
+        description: 'Cryptocurrency billing is not enabled on this deployment (activation gate).',
+        content: problemContent,
+      },
       200: {
         description: 'Order cancelled; envelope returned with status: cancelled.',
         content: { 'application/json': { schema: CancelCryptoOrderResponseSchema } },

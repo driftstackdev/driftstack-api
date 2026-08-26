@@ -37,7 +37,7 @@ import { z } from 'zod';
 import { randomBytes } from 'node:crypto';
 import type { CryptoOrdersService } from '../services/crypto-orders.js';
 import { mapNowpaymentsStatus } from '../services/crypto-orders.js';
-import { BadRequestError, ValidationError } from '../lib/errors.js';
+import { BadRequestError, FeatureUnavailableError, ValidationError } from '../lib/errors.js';
 import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import { readIdempotencyKey } from '../lib/idempotency-key.js';
 import { EFFECTIVE_ACCOUNT_HEADER } from '../lib/effective-account-header.js';
@@ -502,4 +502,44 @@ export function registerCryptoCheckoutRoutes(
       });
     },
   );
+}
+
+/**
+ * The 503 face of the `cryptoOrdersService` activation gate.
+ *
+ * The spec publishes 20 crypto operations unconditionally. 19 of them are
+ * registered only when `cryptoOrdersService` is wired, so on a server without
+ * it they answered 404 — a documented operation that simply is not there,
+ * which reads to a client as "you got the path wrong" rather than "this
+ * server does not run that feature". The 20th, `POST /v1/billing/
+ * crypto-checkout/quote`, is registered unconditionally by
+ * `registerCryptoQuoteRoutes` and is deliberately NOT stubbed here; adding it
+ * would be a duplicate registration and Fastify would refuse to boot.
+ *
+ * Same contract as `registerAccountMfaDisabledRoutes` and
+ * `registerAuthCliDisabledRoutes`: every published path stays routable and
+ * answers FeatureUnavailable. No stub reads a body, touches a service, or
+ * writes an audit record — a gate that is off performs no work, which is also
+ * why the audit-attribution question on the three mutating admin routes does
+ * not arise here.
+ */
+export function registerCryptoOrdersDisabledRoutes(app: FastifyInstance): void {
+  const detail =
+    'Cryptocurrency billing is not configured on this server. Reach out to support@driftstack.dev if you expected to use this endpoint.';
+
+  const stub = (): never => {
+    throw new FeatureUnavailableError(detail);
+  };
+
+  // billing-crypto.ts — checkout (the quote route is unconditional; see above)
+  app.post('/v1/billing/crypto-checkout', stub);
+
+  // billing-crypto-orders.ts — customer order surface
+  app.get('/v1/billing/crypto-orders', stub);
+  app.get('/v1/billing/crypto-orders/:order_id', stub);
+  app.patch('/v1/billing/crypto-orders/:order_id', stub);
+  app.get('/v1/billing/crypto-orders/:order_id/receipt', stub);
+  app.get('/v1/billing/crypto-orders/:order_id/receipt.txt', stub);
+  app.get('/v1/billing/crypto-orders/:order_id/receipt.pdf', stub);
+  app.post('/v1/billing/crypto-orders/:order_id/cancel', stub);
 }

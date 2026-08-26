@@ -143,6 +143,20 @@ const STUB_EXEMPTIONS: readonly StubExemption[] = [
     handler: 'reject',
     reason: DISABLED_503,
   })),
+  // V-1786 — the cryptoOrdersService gate published 20 operations and stubbed none,
+  // so 19 of them 404'd unwired. These are the 3 mutating members of the 8-route
+  // customer stub; the 11 /v1/admin crypto operations remain unstubbed on purpose.
+  ...[
+    ['post', '/v1/billing/crypto-checkout'],
+    ['patch', '/v1/billing/crypto-orders/:order_id'],
+    ['post', '/v1/billing/crypto-orders/:order_id/cancel'],
+  ].map(([method, path]) => ({
+    file: 'billing-crypto.ts',
+    method: method!,
+    path: path!,
+    handler: 'stub',
+    reason: DISABLED_503,
+  })),
 ];
 
 function collectIpGateIdentifiers(sourceFile: ts.SourceFile): ReadonlySet<string> {
@@ -327,9 +341,11 @@ describe('mutation-route rate-limit coverage invariant', () => {
     // routes is a mutation; `GET /v1/teams` is not, which is why this moves by one
     // where the caller-authority pin moves by two. Refreshed with violations()
     // proven empty first, as the note above requires.
+    // V-1786 — 173 since billing-crypto gained 3 mutating stubs (checkout, patch
+    // order, cancel) for the cryptoOrdersService gate.
     // V-1756 — 170 since account-mfa (+5 mutations) and auth-cli (+3) gained the
     // disabled stubs their activation gates had always lacked.
-    expect(routes).toHaveLength(170);
+    expect(routes).toHaveLength(173);
     // +1: `app.patch<{ Params: { id: string } }>('/v1/teams/:id', ...)` is the only
     // one of the two new routes carrying type arguments.
     expect(routes.filter((route) => route.hasTypeArguments)).toHaveLength(76);

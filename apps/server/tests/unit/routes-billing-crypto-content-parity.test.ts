@@ -245,7 +245,7 @@ describe('W419.B apps/server/src/routes/billing-crypto.ts content parity', () =>
       /import type \{ CryptoOrdersService \} from '\.\.\/services\/crypto-orders\.js';/,
     );
     expect(body).toMatch(
-      /import \{ BadRequestError, ValidationError \} from '\.\.\/lib\/errors\.js';/,
+      /import \{ BadRequestError, FeatureUnavailableError, ValidationError \} from '\.\.\/lib\/errors\.js';/,
     );
   });
 

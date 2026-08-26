@@ -12624,3 +12624,45 @@ vacuity in this repo, separately, both landed on per-root rather than a floor on
 BOUNDED, and the boundary is the whole point: 23 scripts, only those matching `if (!existsSync(...))`
 examined, so a script bailing on a missing prerequisite by any other spelling — a try/catch, a length
 check, an env-var guard — was never a candidate. Precision of the detector on what it did surface: 0/3.
+
+## V-1786 — P-32 closed for the customer surface: 19 published crypto operations answered 404, not 503
+
+2026-08-26. The `cryptoOrdersService` activation gate published 20 crypto operations in the spec and
+shipped no disabled stub, so on a deployment without the service **19 of them answered 404** — verified
+by reading `setNotFoundHandler`, which returns `No route for {METHOD} {url}`, not inferred from the
+absence of a registration. **None of the 20 declared a 503.** A documented operation that simply is not
+there reads to a client as "you got the path wrong" rather than "this server does not run that feature".
+
+Fixed for the 8 customer-facing paths: `registerCryptoOrdersDisabledRoutes` (checkout, the order list,
+one order, its PATCH, three receipt formats, cancel), wired in the gate's else branch, with a 503
+declared on each of the 8 operations and the spec artifact regenerated. The unconditional
+`POST /v1/billing/crypto-checkout/quote` is deliberately NOT stubbed — it is registered outside the gate
+by `registerCryptoQuoteRoutes`, and duplicating it would make Fastify refuse to boot.
+
+⛔ THE 11 `/v1/admin` CRYPTO OPERATIONS STAY UNSTUBBED, and that is the honest half of this entry.
+Stubbing them trips two admin invariants that cannot see the difference between a refusing stub and a
+real staff route: every mutating `/v1/admin` route must write an audit row, and every `/v1/admin`
+registration must be scope- or owner-gated. A 503 stub does neither BY DESIGN. Resolving that means
+teaching those two guards a concept they do not have, and doing it under release pressure is how a
+guard family gets hollowed out. Recorded rather than forced.
+
+⭐ THE DESIGN QUESTION TURNED OUT TO BE ALREADY ANSWERED IN-REPO, and I had overstated it. I told my
+peer this needed new design work across six guard families. It did not: `route-auth-coverage` and
+`route-mutation-ratelimit-coverage` both carry a reason-keyed exemption —
+`'Activation-off handler performs no work and always returns FeatureUnavailable.'` — with **8 stub
+registrars already listed against it**, including the two I landed earlier this session. The crypto
+entry is the 9th of an established family, not a new concept. Prior art, again, sitting one grep away
+from where I stopped looking.
+
+⭐ EVERY COUNT PIN WAS DERIVED FROM A RUN, NOT PREDICTED. route-auth 299 -> 307 and DISABLED_EXEMPTIONS
+46 -> 54; mutation coverage 170 -> 173. Two pins I expected to move did NOT — `structurallyAuthorized`
+held at 217 and `hasTypeArguments` at 76 — which is exactly why the numbers came from failure messages
+instead of arithmetic. The one number I did derive statically first (46+8=54) was checked by parsing
+the block and reproducing the existing pin of 46 exactly before trusting the addition.
+
+MUTATION-PROVED: deleting the else branch fails two guards — the app.ts wiring invariant and the
+CRITICAL "a published operation behind an activation gate answers 503" arm. `app.ts` restored
+byte-identical from a snapshot keyed by full path.
+
+VERIFIED: 2003 unit files, 20887 passed, 10 skipped, 0 failed.
+BOUNDED: the customer surface only. 11 admin operations still 404 when the gate is off, by decision.
