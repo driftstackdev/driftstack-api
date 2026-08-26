@@ -10766,3 +10766,46 @@ produced a confident, alarming, wrong answer that reading refuted in one command
 
 BOUNDED: one frame of the thirty-one, chosen because it is the one every session begins with. The
 remaining thirty are unchecked at field level, and nothing here licenses a claim about them.
+
+## V-1741 — the per-session geolocation override is accepted, validated, documented, transmitted, and never read
+
+2026-08-26. Extending V-1740's field-level parity from one frame to a generated comparison across all
+thirty-one found a real one, on a contract carrying my own approval.
+
+`POST /v1/agent-sessions` accepts a `geolocation` override — `{ latitude, longitude, accuracy? }`,
+bounds-validated at the route (`routes/agent-sessions.ts:272`), **published in the OpenAPI document**,
+re-validated on the wire by the Zod harness schema, and serialized onto the sessionAssign frame by
+`harness-control-codec.ts:247-251`. Its documentation is explicit about what it promises: "present ⇒ the
+fork's location provider serves exactly these coordinates."
+
+⛔ THE HARNESS NEVER READS IT. `ControlClient.swift` decodes no coordinate field at all — a grep for
+`latitude|longitude|geoloc|"lat"` across it returns nothing, and `SessionAssign` declares no such
+property. `HarnessCoordinator.swift:6452` sets `var geoLoc: String? = nil` and fills it from
+`probeResult` — the EGRESS PROBE — with the comment stating the only behaviour that exists:
+"navigator.geolocation follows the proxy exit". `BrowserProcess` then writes `DRIFTSTACK_GEO_LAT/LON`
+from that derived value. The customer's coordinates reach the device and are dropped.
+
+⚠️ AND NOTHING FAILS. Swift's `Codable` throws on an unknown message TYPE — the decoder has an explicit
+`default:` that does — but ignores unknown FIELDS by construction. So the frame decodes cleanly, the
+override evaporates, and no error is raised on either side. A customer who pins coordinates gets the
+proxy-exit auto-derive and is told nothing.
+
+⭐ THE CONTRAST THAT MAKES THIS A DEFECT RATHER THAN STAGING. `setEgress`/`setEgressResult` are also
+CP-only with no Swift handler — and that is FINE, because when I built that half I wrote in its header
+that it was against a stub driver and could not be verified end to end. There is no such note anywhere
+for `geolocation`. The difference between an unimplemented half and a documented one is whether anybody
+wrote it down; this one was published to customers instead.
+
+It is my own contract — "A3-approved contract 2026-07-01" is in the route comment — which is the
+uncomfortable part. I approved the shape, the control-plane half shipped, the device half never did, and
+nothing tracked the gap for eight weeks.
+
+NOT A SECURITY DEFECT, and for an anti-detect product that is not the whole story: a customer setting
+coordinates to cohere with some other signal they control gets silent incoherence with the proxy exit
+instead, which is the opposite of what the feature is for.
+
+BOUNDED, and this is a static trace rather than a run: I followed the field from the route through the
+codec to the wire schema, then through `ControlClient` (no decode), `HarnessCoordinator` (geoLoc from
+`probeResult` only) and `BrowserProcess` (env from the derived value). I did NOT build or run the
+harness, and did NOT read `webkit-driftstack` — the fork consumes the env vars, which are set from the
+auto-derive, so a fork-side reader could not change the conclusion without a Swift writer feeding it.
