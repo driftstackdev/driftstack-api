@@ -126,7 +126,7 @@ describe('V-530.A touch event generator — properties', () => {
           seed,
         });
         for (let i = 1; i < ev.samples.length; i += 1) {
-          expect(ev.samples[i].tMs).toBeGreaterThanOrEqual(ev.samples[i - 1].tMs);
+          expect(ev.samples[i]!.tMs).toBeGreaterThanOrEqual(ev.samples[i - 1]!.tMs);
         }
       }
     }
@@ -140,8 +140,8 @@ describe('V-530.A touch event generator — properties', () => {
           bounds: SAMPLE_BOUNDS,
           seed,
         });
-        expect(ev.samples[0].tMs).toBe(0);
-        expect(ev.samples[ev.samples.length - 1].tMs).toBeCloseTo(ev.durationMs, 9);
+        expect(ev.samples[0]!.tMs).toBe(0);
+        expect(ev.samples[ev.samples.length - 1]!.tMs).toBeCloseTo(ev.durationMs, 9);
       }
     }
   });

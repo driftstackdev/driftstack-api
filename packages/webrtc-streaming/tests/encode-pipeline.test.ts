@@ -47,10 +47,10 @@ describe('V-531.A MockFrameSource', () => {
       frames.push(f!);
     }
     for (let i = 0; i < frames.length; i += 1) {
-      expect(frames[i].sequence).toBe(i + 1);
+      expect(frames[i]!.sequence).toBe(i + 1);
     }
     for (let i = 1; i < frames.length; i += 1) {
-      expect(frames[i].timestampMicros).toBeGreaterThan(frames[i - 1].timestampMicros);
+      expect(frames[i]!.timestampMicros).toBeGreaterThan(frames[i - 1]!.timestampMicros);
     }
   });
 
@@ -121,7 +121,7 @@ describe('V-531.A EncodePipeline', () => {
     pipeline.onChunk((c) => chunks.push(c));
     await pipeline.start();
     for (let i = 0; i < chunks.length; i += 1) {
-      expect(chunks[i].sequence).toBe(i + 1);
+      expect(chunks[i]!.sequence).toBe(i + 1);
     }
   });
 
@@ -133,15 +133,15 @@ describe('V-531.A EncodePipeline', () => {
     pipeline.onChunk((c) => chunks.push(c));
     await pipeline.start();
     // Keyframes at seq 1, 31, 61.
-    expect(chunks[0].isKeyframe).toBe(true);
-    expect(chunks[30].isKeyframe).toBe(true);
-    expect(chunks[60].isKeyframe).toBe(true);
+    expect(chunks[0]!.isKeyframe).toBe(true);
+    expect(chunks[30]!.isKeyframe).toBe(true);
+    expect(chunks[60]!.isKeyframe).toBe(true);
     // Non-keyframes at seq 2..30, 32..60, 62..65.
-    expect(chunks[1].isKeyframe).toBe(false);
-    expect(chunks[29].isKeyframe).toBe(false);
-    expect(chunks[31].isKeyframe).toBe(false);
-    expect(chunks[59].isKeyframe).toBe(false);
-    expect(chunks[61].isKeyframe).toBe(false);
+    expect(chunks[1]!.isKeyframe).toBe(false);
+    expect(chunks[29]!.isKeyframe).toBe(false);
+    expect(chunks[31]!.isKeyframe).toBe(false);
+    expect(chunks[59]!.isKeyframe).toBe(false);
+    expect(chunks[61]!.isKeyframe).toBe(false);
   });
 
   it('keyframeIntervalFrames=1 marks every chunk as a keyframe (intra-only)', async () => {

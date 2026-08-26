@@ -21733,3 +21733,33 @@ V-1685, and its distinguishing feature holds up: it was a gap between what the p
 (a persona as behavioural identity) and what the code _implements_, rather than a gap between
 code and its own stated intent. Guards are extremely good at the second kind here and cannot see
 the first — a guard pins what a file says about itself, and V-1685's file says nothing wrong.
+
+## V-1687
+
+**W-12 drained: package test suites now typecheck clean at their own bar, 50 → 0.**
+
+The half of W-12 that had to come first. A2 holds the tsconfig change; draining before the
+configs land avoids opening a red window in a tree three sessions are writing to, and the configs
+are inert until the count is zero anyway.
+
+Fixed at each package's own strictness (none relaxes base): behavioural-simulation 21,
+webrtc-streaming 12, recipe-library 10, recapture-automation 6, webhook-delivery 1 — **50 → 0**,
+with `api-types` already at 0. 63 test files and 864 tests still pass.
+
+**The idiom was chosen by measurement, not preference.** `apps/server` tests already meet this
+bar, and they meet it with a non-null assertion on the indexed access — **626 uses** against 123
+`toBeDefined()`. So `arr[i]!` is what the surrounding code does, and one of the files being fixed
+already used it at line 510 while line 481 did not: the inconsistency was internal to a single
+file.
+
+**On whether `!` silences rather than proves.** In these tests it is the correct shape: every
+index sits inside a loop bounded by the same array's `length`, or reads an element of an array
+the test constructed a line earlier. If any array were actually empty, the test would already
+throw on the property access — so the suites passing before and after is the evidence that the
+assertion is describing what is there rather than hiding what is not.
+
+**Two shapes, and only one was mechanical.** The positional fix — insert `!` after the `]` at the
+error position — handled 44. Three more named a _variable_ (`'last' is possibly undefined`), where
+the fix belongs at the declaration rather than each use; my first prediction of the remaining
+count was wrong because I had forgotten my own script targeted a single file. Predicted 0 for the
+final run and got 0.

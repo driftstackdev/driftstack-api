@@ -33,10 +33,10 @@ describe('V-533.A expandCaptureMatrix', () => {
     const expanded = expandCaptureMatrix(spec);
     expect(expanded).toHaveLength(3);
     for (let i = 0; i < expanded.length; i += 1) {
-      expect(expanded[i].archetypeId).toBe(spec.archetypeIds[i]);
-      expect(expanded[i].trigger).toBe('ios_version_bump');
-      expect(expanded[i].baselineVersion).toEqual(BASELINE);
-      expect(expanded[i].targetVersion).toEqual(TARGET);
+      expect(expanded[i]!.archetypeId).toBe(spec.archetypeIds[i]);
+      expect(expanded[i]!.trigger).toBe('ios_version_bump');
+      expect(expanded[i]!.baselineVersion).toEqual(BASELINE);
+      expect(expanded[i]!.targetVersion).toEqual(TARGET);
     }
   });
 
@@ -60,7 +60,7 @@ describe('V-533.A expandCaptureMatrix', () => {
       targetVersion: TARGET,
       trigger: 'baseline_drift_detected',
     });
-    expect(expanded[0].reason).toBeUndefined();
+    expect(expanded[0]!.reason).toBeUndefined();
   });
 
   it('rejects empty archetypeIds', () => {
@@ -116,7 +116,7 @@ describe('V-533.A dedupComparisons', () => {
     const b = mkComparison({ notes: 'second note' });
     const out = dedupComparisons([a, b]);
     expect(out).toHaveLength(1);
-    expect(out[0].notes).toBe('first note'); // first wins
+    expect(out[0]!.notes).toBe('first note'); // first wins
   });
 
   it('handles a long list with many duplicates', () => {

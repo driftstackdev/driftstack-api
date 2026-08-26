@@ -254,7 +254,7 @@ describe('processTick — failure + retry curve', () => {
     expect(updated?.attempts).toHaveLength(1);
     expect(updated?.attempts[0]?.outcome).toBe('http_error');
     // First failure schedules retry 1 = 60s out.
-    expect(updated?.nextAttemptAtMs).toBe(nowMs() + BACKOFF_MS_BY_ATTEMPT[1]);
+    expect(updated?.nextAttemptAtMs).toBe(nowMs() + BACKOFF_MS_BY_ATTEMPT[1]!);
   });
 
   it('#7: a delayed RETRY is re-stamped + re-signed with its OWN send time (not the emit time)', async () => {

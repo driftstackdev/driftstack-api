@@ -105,8 +105,8 @@ describe('V-530.B generateScrollVelocityProfile — properties', () => {
           seed,
         });
         for (let i = 1; i < profile.ticks.length; i += 1) {
-          expect(profile.ticks[i].velocityPxPerSec).toBeLessThanOrEqual(
-            profile.ticks[i - 1].velocityPxPerSec,
+          expect(profile.ticks[i]!.velocityPxPerSec).toBeLessThanOrEqual(
+            profile.ticks[i - 1]!.velocityPxPerSec,
           );
         }
       }
@@ -122,7 +122,7 @@ describe('V-530.B generateScrollVelocityProfile — properties', () => {
           seed,
         });
         for (let i = 1; i < profile.ticks.length; i += 1) {
-          expect(profile.ticks[i].tMs).toBeGreaterThan(profile.ticks[i - 1].tMs);
+          expect(profile.ticks[i]!.tMs).toBeGreaterThan(profile.ticks[i - 1]!.tMs);
         }
       }
     }
@@ -182,7 +182,7 @@ describe('V-530.B generateScrollVelocityProfile — properties', () => {
           elementClass: klass,
           seed: 'total-distance',
         });
-        const lastCum = profile.ticks[profile.ticks.length - 1].cumulativePx;
+        const lastCum = profile.ticks[profile.ticks.length - 1]!.cumulativePx;
         expect(profile.totalDistancePx).toBeCloseTo(Math.abs(lastCum), 9);
       }
     }
@@ -195,7 +195,7 @@ describe('V-530.B generateScrollVelocityProfile — properties', () => {
         elementClass: klass,
         seed: 'duration',
       });
-      expect(profile.durationMs).toBe(profile.ticks[profile.ticks.length - 1].tMs);
+      expect(profile.durationMs).toBe(profile.ticks[profile.ticks.length - 1]!.tMs);
     }
   });
 
@@ -404,9 +404,9 @@ describe('V-530.B generateScrollVelocityProfile — properties', () => {
     expect(profile.initialVelocityPxPerSec).toBe(2000);
     expect(profile.decayRate).toBe(2.0);
     expect(profile.ticks.length).toBeGreaterThan(0);
-    expect(profile.ticks[0].tMs).toBe(0);
+    expect(profile.ticks[0]!.tMs).toBe(0);
     // Tick 0 velocity should equal initial velocity exactly.
-    expect(profile.ticks[0].velocityPxPerSec).toBe(2000);
+    expect(profile.ticks[0]!.velocityPxPerSec).toBe(2000);
     // Cumulative at last tick should be close to the analytic asymptote
     // v0 / decay for an indefinite decay (= 1000 px) — but truncated at
     // the rest threshold.
@@ -478,7 +478,7 @@ describe('V-530.B generateScrollVelocityProfile — properties', () => {
       tickIntervalMs: 16,
       seed: 'physical-boundary',
     });
-    const last = profile.ticks[profile.ticks.length - 1];
+    const last = profile.ticks[profile.ticks.length - 1]!;
 
     expect(profile.durationMs).toBeLessThanOrEqual(5000);
     expect(last.velocityPxPerSec).toBeGreaterThan(0);
@@ -489,11 +489,11 @@ describe('V-530.B generateScrollVelocityProfile — properties', () => {
 
     let runningSum = 0;
     for (let i = 0; i < profile.ticks.length; i += 1) {
-      const tick = profile.ticks[i];
+      const tick = profile.ticks[i]!;
       runningSum += tick.deltaPx;
       expect(tick.cumulativePx).toBeCloseTo(runningSum, 9);
       if (i > 0) {
-        expect(Math.abs(tick.deltaPx)).toBeLessThanOrEqual(Math.abs(profile.ticks[i - 1].deltaPx));
+        expect(Math.abs(tick.deltaPx)).toBeLessThanOrEqual(Math.abs(profile.ticks[i - 1]!.deltaPx));
       }
     }
     expect(profile.totalDistancePx).toBeCloseTo(Math.abs(last.cumulativePx), 9);
@@ -507,7 +507,7 @@ describe('V-530.B generateScrollVelocityProfile — properties', () => {
           elementClass: klass,
           seed,
         });
-        const last = profile.ticks[profile.ticks.length - 1];
+        const last = profile.ticks[profile.ticks.length - 1]!;
         expect(last.velocityPxPerSec).toBeGreaterThan(0);
         expect(last.velocityPxPerSec).toBeLessThan(5);
         expect(profile.ticks.every((tick) => Number.isFinite(tick.deltaPx))).toBe(true);

@@ -33,8 +33,8 @@ describe('V-532.B buildLoginRecipe', () => {
     // Verify credentials made it into the type steps in order.
     const typeSteps = recipe.steps.filter((s) => s.kind === 'type');
     expect(typeSteps).toHaveLength(2);
-    if (typeSteps[0].kind === 'type') expect(typeSteps[0].text).toBe('alice');
-    if (typeSteps[1].kind === 'type') expect(typeSteps[1].text).toBe('s3cret');
+    if (typeSteps[0]!.kind === 'type') expect(typeSteps[0]!.text).toBe('alice');
+    if (typeSteps[1]!.kind === 'type') expect(typeSteps[1]!.text).toBe('s3cret');
   });
 
   it('username and password selectors land on their respective type steps', () => {
@@ -50,8 +50,8 @@ describe('V-532.B buildLoginRecipe', () => {
       password: 'p',
     });
     const typeSteps = recipe.steps.filter((s) => s.kind === 'type');
-    if (typeSteps[0].kind === 'type') expect(typeSteps[0].selector).toBe('#username-field');
-    if (typeSteps[1].kind === 'type') expect(typeSteps[1].selector).toBe('#password-field');
+    if (typeSteps[0]!.kind === 'type') expect(typeSteps[0]!.selector).toBe('#username-field');
+    if (typeSteps[1]!.kind === 'type') expect(typeSteps[1]!.selector).toBe('#password-field');
   });
 });
 
@@ -106,8 +106,8 @@ describe('V-532.B buildFillFormRecipe', () => {
       const step = typeSteps[i];
       expect(step?.kind, `type step ${String(i)} exists`).toBe('type');
       if (step?.kind !== 'type') throw new Error('unreachable — asserted above');
-      expect(step.selector).toBe(fields[i].selector);
-      expect(step.text).toBe(fields[i].value);
+      expect(step.selector).toBe(fields[i]!.selector);
+      expect(step.text).toBe(fields[i]!.value);
     }
   });
 
