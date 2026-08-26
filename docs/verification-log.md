@@ -10235,3 +10235,42 @@ a race between two agents rather than over a defect. Held until `5c9b01115` was 
 and the working tree paired the lookups, and only then landed. A static guard reads the worktree, so its
 verdict is a function of a peer's uncommitted state; that is a coordination fact, not a bug, and the
 remedy is to sequence rather than to weaken the arm.
+
+## V-1728 — swept the vacuity-control shape across every suite; V-1727's bug is a one-off
+
+2026-08-26. V-1727 found a non-vacuity arm that asserted the DEFECT still existed, so it went red on the
+commit that fixed the last instance. The peer generalised it better than the finding was written: any
+control flooring a found-set is suspect when the set it counts is a DEFECT population rather than a
+SEARCHABLE one, and the tell is "does this assertion still hold the day the last instance is fixed?"
+Swept for it.
+
+⛔ THE DETECTOR FAILED ITS CONTROL TWICE, and both failures are more useful than the sweep's result.
+
+The first version keyed on offender-sounding variable names and messages. It did not flag the KNOWN
+positive — my own arm from one commit earlier — because the variable was named `callers` and the message
+said "no caller found". **The signal is not in the naming.** Replaced with a structural rule: the same
+set is floored above zero AND required empty by a later assertion.
+
+The second version still missed it, because the floor was written `toBeGreaterThan(0)` and my pattern
+required `[1-9]`. **`toBeGreaterThan(0)` and `toBeGreaterThanOrEqual(1)` are the same assertion**, and I
+had filtered on the literal digit — the commoner spelling was invisible to a detector built to hunt
+exactly that assertion. That is this log's own "a guard that matches literals cannot see a constant",
+committed by the person who wrote it down. Only after both fixes did the positive control flag and the
+negative control (the same file after repair) stay silent.
+
+THE RESULT IS A CLEAN NEGATIVE. Across `apps/server/tests`, `packages/*/tests` and `scripts/tests`: 39
+sets are both floored above zero and required empty. Classified by how each floored set is DERIVED —
+24 by enumeration (`readdirSync`, `matchAll`, `Object.keys`, a `…Routes()` / `…Sites()` helper), 15 by
+accumulation (`const probes: Probe[] = []` filled in a `beforeAll`), and **0 by filtering for a
+problem**. Every one floors a population that exists whether or not the codebase is correct, with the
+emptiness applied to a filtered offender subset — the sound shape. A separate pass over the 756
+non-server app test files found one such set, also an accumulator.
+
+So V-1727's arm was the only instance, which is the answer worth having: the pattern is understood here
+and I wrote the exception.
+
+BOUNDED: the classifier reads each floored variable's DEFINITION. For the 15 accumulators it infers from
+the `[]`-then-push shape rather than tracing every push, so a `[]` later filled with only-the-broken-ones
+would read as an accumulator and be missed. Given zero problem-filtered hits and the accumulators all
+being probe/result collections built before assertions run, that residual risk is small and stated
+rather than dissolved.
