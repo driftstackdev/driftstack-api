@@ -14134,3 +14134,49 @@ BOUNDED: five repos measured by mutation of the `eq(.accountId)` predicates (`ac
 103 predicates remain unmeasured. "Deliberate" here means a test file containing an explicit
 cross-account phrase, which is a search over wording and would miss a deliberate guard that words it
 differently.
+
+## V-1821 — six more repos guarded; the one that looked unguarded is protected by its PRIMARY KEY, and my fix for it was vacuous
+
+2026-08-26. Tail of the mutation sweep — the small, single-predicate repos a hardcoded guard list is most
+likely to have grown past. Six measured, all caught: `team-members` (1 predicate), `usage` (2),
+`agent-turn-receipts` (2), `session-operations` (2), `auth` (1), `scheduled-jobs` (1). Eleven of 23 repos
+now measured, none unguarded.
+
+⭐ FOUR ARE DELIBERATE, and their assertions say the property out loud:
+
+usage "another account's usage was counted: expected 12 to be +0"
+auth "an override belonging to another account reached this context"
+scheduled-jobs "one account's pending job suppressed another account's"
+team-members "the member's key on this owner survived offboarding"
+
+⛔ ONE LOOKED LIKE A REAL GAP AND WAS NOT, AND THE CORRECTION IS THE ENTRY.
+`agent-turn-receipts-repo`'s two predicates had exactly ONE witness in the whole suite and it was a
+source-TEXT pin. Two behavioural files exercise that repo against real Postgres and neither caught the
+mutation — the exact shape the ownership-boundary guard describes ("none of them ever passes a mismatched
+account id"). I wrote a cross-account arm to close it.
+
+**The arm passed with the predicates neutralised.** It was vacuous, and reading the code explains why:
+
+CONSTRAINT "agent_turn_receipts_pk" PRIMARY KEY ("account_id", "idempotency_key")
+
+`reserve` INSERTs first and only falls through to the replay lookup — the one place the `accountId`
+predicate lives — when that insert CONFLICTS. The primary key is account-scoped, so a second account's
+insert never conflicts and the lookup is never reached; when it IS reached, the accounts already match by
+construction. **The predicate is redundant with the primary key, and no behavioural test can distinguish
+its presence from its absence.** A source-text pin is not a weak witness here — it is the only witness
+available, and the right one.
+
+⛔ TWO OF MY OWN ERRORS ON THE WAY, both documented traps. The arm first failed CLEAN with "Agent
+transcript encryption key is unavailable": I guessed the `DrizzleAgentSessionsRepo` options shape
+(`encryptionKey`) instead of reading the two correct call sites in the same file
+(`transcriptEncryptionKeyBase64`) — **and wrote `as ConstructorParameters<…>` to make the guess compile,
+which suppressed exactly the type error that would have caught it.** A cast marks a guard worth checking,
+and here it hid one. Then the corrected arm passed both ways, which is how a vacuous test announces
+itself: identical results clean and mutated prove nothing.
+
+ARM REVERTED. A test that cannot fail is worse than no test, and this one would have sat in the file
+looking like a cross-account guard.
+
+BOUNDED: eleven repos measured of 23 carrying an `eq(.accountId)` predicate; 12 repos and roughly 97
+predicates remain unmeasured. "Deliberate" is judged by wording in the failing assertion, which would
+misclassify a guard phrased differently.
