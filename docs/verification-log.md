@@ -10063,3 +10063,52 @@ BOUNDED: the mutations were scored against `tests/unit/*oauth*` — 45 files. Th
 are DATABASE_URL-gated and did not execute here, so the counts above are a floor on what catches each
 deletion, never a ceiling. That direction is the safe one for this claim: every check is pinned by at
 least the unit half, and additional integration coverage can only add to that.
+
+## V-1724 — the Gmail-alias dedup fix reached signup and not OAuth sign-in, where the collision becomes a 500
+
+2026-08-26. Audited the OAuth-client (sign-in-with-Google/GitHub) link flow after V-1723 found the
+authorization-code exchange sound. The link flow's own design is good and its riskiest question has a
+better answer than the checklist wants: on an existing-email collision it does NOT auto-link, and it
+does not trust the IDP's `email_verified` either — it issues a one-time token and emails it, so control
+of the mailbox is proved independently of what the provider asserts. The absence of an `email_verified`
+check looked like the finding and is in fact the stronger design.
+
+⚠️ THE DEFECT IS ONE LOOKUP. The collision test is
+`accounts.findIdByEmail(args.email)` → `findAccountByEmail`, which matches
+`eq(accounts.email, email.trim().toLowerCase())` — the LITERAL column. Signup does not: the 2026-07-01
+security fix (migration 0096, scope corrected by 0102) added `canonical_email` precisely so a signup
+"collides with ANY existing account whose Gmail dot/+tag canonical form matches — regardless of which
+literal variant was stored first". `canonicalizeEmailForDedup` strips `+tag` and removes every dot for
+gmail.com/googlemail.com. `createAccount` computes and stores it on BOTH creation paths, and
+`accounts_canonical_email_unique` is a real unique index on it. The OAuth path never got the matching
+lookup.
+
+So for a customer whose stored literal differs from the literal the IDP returns — dots or a `+tag`,
+which for Gmail are the SAME human's mailbox:
+
+```
+  step 1  no existing link (first OAuth sign-in)                    → continue
+  step 2  findIdByEmail(idp email)  literal ≠ stored literal        → MISS, no collision detected
+  step 3  createFromIdp → createAccount → canonical form collides   → accounts_canonical_email_unique
+          nothing catches 23505                                     → 500
+```
+
+The customer cannot sign in with Google and receives a server error, when the Verdict-1 merge flow —
+already built, already correct — was designed for exactly this collision and is simply never reached.
+Same class as V-1716 and V-1718: an invariant hardened on one path while its sibling kept the old
+lookup, with nothing comparing the two.
+
+⛔ NOT A TAKEOVER, and worth saying so plainly. Canonicalisation applies to Gmail only, where every
+dot/+tag variant is the same mailbox, so no attacker can hold a variant of someone else's address. The
+impact is a denial of sign-in plus a 5xx on a legitimate customer action, not an account-linking bypass.
+
+⚠️ BOUNDED — NOT REPRODUCED. This is read from source and schema, with no database: I have not observed
+the 23505, and the trigger requires the IDP to return a literal differing from the one registered. That
+is plausible rather than proven, and the reachability is the half a static read cannot settle.
+
+FIX NOT APPLIED, deliberately. The repair is to consult the canonical lookup in step 2 so the collision
+routes into the existing merge flow, and — strictly — to address the merge email to the ACCOUNT's stored
+address rather than `args.email`, which needs the repo interface widened from returning an id to
+returning the row. Both change sign-in semantics on an auth path while a release is being cut, and the
+owner held W-10 for less. Recorded with the evidence so the decision is theirs and the work is one
+lookup, not an investigation.
