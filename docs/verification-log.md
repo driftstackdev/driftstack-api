@@ -10507,3 +10507,46 @@ attached to the thing it would break.
 BOUNDED: this audited the crypto core, the AAD construction and the version handling. It did NOT audit
 key provisioning, rotation, or where `encryptionKeyBase64` comes from — those sit in bootstrap and
 config, and a key that is well-used but badly sourced would not show up in anything read here.
+
+## V-1735 — profile blobs on the session-assign path: sound, and sound at the strongest of the three binding levels
+
+2026-08-26. `services/profile-store.ts` — 370 lines, ONE test file, live on the session-assign path
+(imported by `routes/profiles.ts`, `routes/agent-sessions.ts` and bootstrap), and no prior art in this
+log. A durable customer asset handed to a remote box over presigned URLs is the strongest remaining
+shape, so it was the next target by the same measurement that produced V-1732.
+
+⚠️ THE FUNCTION ACCEPTS WHAT IT MINTS AGAINST. `buildAssignProfileBlock(r2, profileId, dek, opts)`
+verifies no ownership: it takes a profile id and a DEK and returns presigned R2 URLs for that profile's
+sealed store. Read alone, that is the shape V-1652 found its one defect in — a helper trusting a
+caller-supplied identity. Read in context it is fine, and the reason is worth recording because it is
+stronger than the usual answer.
+
+THE GATE IS THE DEK, AND THE DEK IS BOUND BY KEY DERIVATION. The dispatch calls
+`profilesService.getProfileDek({ profileId, accountId })`, and `buildAssignProfileBlock` is reached only
+inside `if (dek !== null)` — so no URL is minted unless the DEK resolved. `getProfileDek` scopes its row
+lookup by `accountId` AND then calls `unwrapProfileDek(masterKey, accountId, profileId, wrapped)`, which
+derives a TENANT master key from the account id before unwrapping. So a mismatched account does not fail
+a WHERE clause — it derives a DIFFERENT KEY and the unwrap fails cryptographically.
+
+⭐ That is the third and strongest of the binding levels this log distinguishes: identity DERIVED rather
+than accepted, identity bound as AAD, and identity bound into KEY DERIVATION. Only the last survives a
+query bug. It also means the provenance of `accountId` in the dispatch args — which I did not trace to
+its caller — is not load-bearing for confidentiality: a wrong one yields a wrong TMK, a failed unwrap, a
+null DEK, and no presigned URL at all.
+
+THE TTLs ARE LEAST-PRIVILEGE AND THE REASONING IS WRITTEN DOWN. The save-back PUT is consumed at session
+END so it must outlive the session (max duration + teardown margin, clamped to R2's 7-day SigV4
+ceiling); the restore GET is consumed at session START, so it gets the shorter 1h restore window and is
+never longer than the PUT. A leaked GET — ciphertext of the customer's sealed store — stays valid only
+while a restore could plausibly be pending, not for a four-hour session. The GET is minted only when a
+prior blob exists.
+
+DEGRADATION IS FAIL-USEFUL RATHER THAN FAIL-OPEN. A corrupt or rotated-but-unrewrapped DEK does not
+abort the dispatch — which would strand the session active-but-never-dispatched, holding a concurrency
+slot until the 12h reaper while the GUI spins. It degrades to a stateless run: the session works, it
+just cannot open or seal the encrypted store. Nothing is disclosed by the degrade.
+
+BOUNDED: this traced the DEK path, the key derivation and the URL minting. It did NOT trace every caller
+of the dispatch helper to confirm where `accountId` originates, and did not audit R2 bucket policy or
+the presigner's own signature construction — a correctly-scoped URL against a misconfigured bucket is
+not visible from anything read here.
