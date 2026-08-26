@@ -16,6 +16,7 @@
 // `tsconfig.test.json`.
 
 import { execFileSync } from 'node:child_process';
+import { readdirSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -53,7 +54,53 @@ const BACKLOG = [
   { project: 'packages/recipe-library/tsconfig.test.json', pinned: 0, minTestFiles: 6 },
   { project: 'packages/webhook-delivery/tsconfig.test.json', pinned: 0, minTestFiles: 3 },
   { project: 'packages/webrtc-streaming/tsconfig.test.json', pinned: 0, minTestFiles: 4 },
+  // W-12, 2026-08-26 (second pass) — the packages sweep fixed the family in front
+  // of it and never asked the same question one directory up. FIVE apps drive
+  // their typecheck through `astro check`, whose tsconfig `include` is
+  // `src/**/*`: a blatant type error in a test file does NOT fail
+  // `npm run typecheck` for that workspace. Proved by mutation rather than by
+  // reading config — baseline exit 0, mutated exit 0 — because a config can look
+  // like it covers tests and not.
+  //
+  // 290 errors across 502 test files, pinned where they stand so the debt is
+  // visible and two-sided rather than drained in one sitting.
+  //
+  // ⚠️ The floors below were FIRST set from a grep of `--listFiles` for
+  // `apps/X/tests` — no leading slash — which counts 151 for admin-panel where
+  // 57 files exist. The floor arm rejected its own author's numbers, which is
+  // the best evidence it works. They are now the on-disk counts with margin:
+  // 57 / 146 / 96 / 191 / 12.
+  { project: 'apps/admin-panel/tsconfig.test.json', pinned: 94, minTestFiles: 50 },
+  { project: 'apps/customer-dashboard/tsconfig.test.json', pinned: 168, minTestFiles: 140 },
+  { project: 'apps/docs/tsconfig.test.json', pinned: 12, minTestFiles: 90 },
+  { project: 'apps/marketing-site/tsconfig.test.json', pinned: 16, minTestFiles: 180 },
+  { project: 'apps/status-site/tsconfig.test.json', pinned: 0, minTestFiles: 10 },
 ];
+
+/**
+ * Workspaces with tests that BACKLOG deliberately omits, and why.
+ *
+ * ⛔ Exists because a hand-written project list cannot report what is missing
+ * from it. The packages sweep listed six projects, was correct about all six,
+ * and was blind to five apps carrying 290 errors — the list had no way to say
+ * "and there is a whole family I never considered". The derivation below closes
+ * that; this map is what keeps the derivation honest instead of noisy.
+ */
+const NOT_IN_BACKLOG = new Map([
+  [
+    'apps/server',
+    'covered by `the-server-source-type-checks`, which runs tsconfig.test.json inside the suite and asserts the program actually loaded',
+  ],
+  [
+    'apps/gui-client',
+    'IS in BACKLOG — listed here only so the derivation below can assert this map and BACKLOG are disjoint',
+  ],
+  [
+    'packages/sdk-typescript',
+    'its own tsconfig.json already includes tests/**/* and it declares a `typecheck` script, so `npm run typecheck --workspaces` covers it in pre-push. Proved at the GATE: a type error in tests/unit/errors.test.ts takes `npm run typecheck` from exit 0 to exit 2',
+  ],
+  ['packages/sdk-python', 'Python. mypy/pytest territory, not tsc'],
+]);
 
 const TSC = resolve(REPO_ROOT, 'node_modules/.bin/tsc');
 let failed = false;
@@ -111,6 +158,47 @@ for (const { project, pinned, minTestFiles } of BACKLOG) {
     actual > pinned
       ? `✗ ${project}: type errors rose to ${String(actual)} (pinned ${String(pinned)}).\n  npx tsc --noEmit -p ${project}`
       : `✗ ${project}: type errors fell to ${String(actual)} (pinned ${String(pinned)}).\n  Lower the pin in scripts/typecheck-test-backlog.mjs in this same change.`,
+  );
+}
+
+// ⛔ DERIVE the population, do not trust the list above to be complete.
+//
+// A workspace with tests and no entry anywhere is exactly the shape that hid
+// five apps: every listed project passed, and nothing was able to say that a
+// whole family was unlisted. A new workspace joins BELOW every threshold this
+// script enforces — it has no pin to exceed and no floor to fall under — so no
+// existing arm can see it. This is the arm that can.
+const workspacesWithTests = [];
+for (const root of ['apps', 'packages']) {
+  let entries = [];
+  try {
+    entries = readdirSync(resolve(REPO_ROOT, root), { withFileTypes: true });
+  } catch {
+    continue;
+  }
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    if (!existsSync(resolve(REPO_ROOT, root, e.name, 'tests'))) continue;
+    workspacesWithTests.push(`${root}/${e.name}`);
+  }
+}
+
+const backlogWorkspaces = new Set(BACKLOG.map(({ project }) => dirname(project)));
+const unaccounted = workspacesWithTests
+  .filter((w) => !backlogWorkspaces.has(w) && !NOT_IN_BACKLOG.has(w))
+  .sort();
+
+if (unaccounted.length > 0) {
+  failed = true;
+  console.error(
+    `✗ ${String(unaccounted.length)} workspace(s) have tests and are neither pinned nor ` +
+      `exempted, so nothing typechecks them and nothing says so:\n` +
+      unaccounted.map((w) => `    ${w}`).join('\n') +
+      `\n  Add a tsconfig.test.json + a BACKLOG entry, or a NOT_IN_BACKLOG reason.`,
+  );
+} else {
+  console.log(
+    `→ ${String(workspacesWithTests.length)} workspaces with tests: all pinned or exempted`,
   );
 }
 

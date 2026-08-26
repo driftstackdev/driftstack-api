@@ -1,0 +1,21 @@
+{
+  // W-12 — typecheck this app's TESTS.
+  //
+  // ⛔ SEPARATE FROM tsconfig.json because that file drives `astro check`, whose
+  // `include` is `src/**/*` only. A blatant type error in a test file does not
+  // fail `npm run typecheck` for this workspace — proved by mutation, not by
+  // reading config: baseline exit 0, mutated exit 0.
+  //
+  // ⛔ EXTENDS THE APP CONFIG deliberately, unlike the packages/* siblings which
+  // extend the base. Astro apps need `astro/tsconfigs/strict` and the generated
+  // `.astro/types.d.ts` reference that lives there; extending the base instead
+  // would strip both and manufacture errors that are artifacts of the harness.
+  // `exclude` is inherited (`dist`), which is correct here — the include below
+  // adds tests without needing to win anything back.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src/**/*", "tests/**/*"]
+}
