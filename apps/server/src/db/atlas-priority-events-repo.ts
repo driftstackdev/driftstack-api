@@ -218,13 +218,31 @@ export class DrizzleAtlasPriorityEventsRepo {
       set.atlasAppendedAt = args.now;
       if (args.atlasErrorReason !== undefined) set.atlasErrorReason = args.atlasErrorReason;
     }
+    // V-1815 — CAS on the status we validated, not on the id alone. The read
+    // above and this write are separate round-trips, so without `status` in the
+    // predicate two concurrent reports both validate against the same `emitted`
+    // row and both commit: measured at SIX of six concurrent transitions
+    // succeeding. `bs_failed` is terminal (`ALLOWED_TRANSITIONS.bs_failed === []`),
+    // so that let a row LEAVE a terminal state and let a loser's timestamp columns
+    // overwrite the winner's. Mirrors `oauth-links-repo.markConsumedAt`, which is
+    // the same conditional-update shape.
     const updated = await this.database.db
       .update(atlasPriorityEvents)
       .set(set)
-      .where(eq(atlasPriorityEvents.id, args.eventId))
+      .where(
+        and(
+          eq(atlasPriorityEvents.id, args.eventId),
+          eq(atlasPriorityEvents.status, current.status),
+        ),
+      )
       .returning();
     if (!updated[0]) {
-      throw new EventNotFoundError(args.eventId);
+      // Zero rows means the row still exists but no longer holds the status this
+      // call validated against — a lost race, not a missing event. Re-read so the
+      // caller is told the SAME thing a sequential late report would be told.
+      const now = await this.findById(args.eventId);
+      if (!now) throw new EventNotFoundError(args.eventId);
+      throw new InvalidStateTransitionError(now.status, args.newStatus);
     }
     return updated[0];
   }

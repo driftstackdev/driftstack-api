@@ -13869,3 +13869,46 @@ for them." What was missing was a current number. There is one now.
 BOUNDED: one machine, one disposable database, the four remaining exclusions reproduced on the CLI —
 `**/*.test.ts`, `**/tests/**`, `apps/server/src/index.ts`, `apps/server/src/lib/dump-openapi.ts`. A CI
 runner differs in what it can reach; these are local figures under CI-like conditions, not CI's own.
+
+## V-1815 — FIXED the transition race from V-1813: all SIX concurrent reports were winning, not one
+
+2026-08-26. V-1813 recorded two read-then-write defects in `atlas-priority-events-repo` and filed P-37
+without fixing either, on the grounds that both were decisions. That was right for the dedup, which needs
+a migration altering a live UNIQUE constraint. It was WRONG for `updateStatus`: making a documented guard
+actually hold is a bug fix, not a product decision, and the guard is `ALLOWED_TRANSITIONS`, which the code
+already declares and already enforces — just against a value it read in a separate round-trip.
+
+⭐ THE TEST CAME FIRST AND THE NUMBER WAS WORSE THAN THE ESTIMATE. `emitted` legally reaches `queued`,
+`bs_in_flight` and `bs_failed`, and **`bs_failed` is TERMINAL** (`ALLOWED_TRANSITIONS.bs_failed === []`).
+Six concurrent `event-status` reports, every one legal from `emitted`, against real Postgres:
+
+expected 6 to be 1
+
+**All six committed.** I had written that the guard "doesn't hold under concurrency"; it provides no
+protection at all — every concurrent caller validates against the same `emitted` row and every one writes.
+A row can leave a terminal state, and a loser's timestamp columns can overwrite the winner's.
+
+FIXED by putting the validated status into the predicate — the shape `oauth-links-repo.markConsumedAt`
+already uses one directory away:
+
+.where(and(eq(id, args.eventId), eq(status, current.status)))
+
+⭐ AND THE ZERO-ROW CASE IS ANSWERED HONESTLY RATHER THAN COLLAPSED. Zero rows previously meant "no such
+event" and threw `EventNotFoundError`; with the status in the predicate it also means "the row moved". The
+fix re-reads: still absent → `EventNotFoundError` as before; present but moved → `InvalidStateTransitionError`
+carrying the ACTUAL current status, which is exactly what a sequential late report already receives. A
+losing caller is told the same thing whether it lost a race or simply arrived late.
+
+MUTATION-PROVED both directions: the arm fails `expected 6 to be 1` on unmodified source, passes after,
+and reverting the predicate reproduces the failure. `atlas-priority-events-repo.ts` restored byte-identical
+from a snapshot keyed by full path. The file's other 12 tests — the sequential chain, the invalid-transition
+400, the unknown-id 404 — all still pass, so the CAS did not buy concurrency safety by breaking the
+ordinary path.
+
+⛔ THE DEDUP HALF OF P-37 IS STILL NOT FIXED, and still for the stated reason: `insertEmittedWithDedup`
+needs `emitted_at` out of `atlas_priority_events_dedup_triple_unique` before `onConflictDoNothing` can
+carry it, and that is a migration against a live table.
+
+BOUNDED: `updateStatus` only. The concurrency arm drives six simultaneous reports through the HTTP route
+against real Postgres; it is deterministic in the passing direction (the CAS admits exactly one) and
+probabilistic in the failing one, which is the ordinary shape for a race test.

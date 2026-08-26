@@ -233,6 +233,41 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(last?.status).toBe('atlas_appended');
     });
 
+    // V-1815 — the transition guard must hold under CONCURRENCY, not only in
+    // sequence. `emitted` legally reaches `queued`, `bs_in_flight` AND `bs_failed`,
+    // and `bs_failed` is TERMINAL (`ALLOWED_TRANSITIONS.bs_failed === []`). So if
+    // two concurrent reports both validate against the same `emitted` read and both
+    // write, the row can LEAVE a terminal state, or land in one carrying the other
+    // transition's timestamp columns. Exactly one report may win.
+    it('CRITICAL concurrent event-status reports: exactly one wins, so a terminal state cannot be left', async () => {
+      if (!app) return;
+      const probeRes = await app.inject({
+        method: 'POST',
+        url: '/v1/internal/atlas-priority/probe-signature',
+        headers: { authorization: AUTH },
+        payload: probePayload(),
+      });
+      const eventId = probeRes.json().event_id;
+
+      // Six concurrent transitions, every one legal from `emitted`.
+      const wanted = ['bs_failed', 'bs_in_flight', 'queued', 'bs_failed', 'bs_in_flight', 'queued'];
+      const results = await Promise.all(
+        wanted.map((newStatus) =>
+          app!.inject({
+            method: 'POST',
+            url: '/v1/internal/atlas-priority/event-status',
+            headers: { authorization: AUTH },
+            payload: { event_id: eventId, new_status: newStatus },
+          }),
+        ),
+      );
+      const ok = results.filter((r) => r.statusCode === 200);
+      expect(
+        ok.length,
+        'each report validated against the row it read; only the one that still matched may commit',
+      ).toBe(1);
+    });
+
     it('POST event-status with invalid transition → 400 BadRequest', async () => {
       if (!app) return;
       const probeRes = await app.inject({
