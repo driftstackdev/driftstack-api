@@ -13059,3 +13059,42 @@ enough confident lists that turned out to be my own instrument.
 
 BOUNDED: 247 files enumerated by filename suffix under `apps/server/tests/unit`; 3 read by hand; the
 classification of the remaining 244 is withdrawn.
+
+## V-1795 — hunting V-1793's shape found one more instance, fail-safe, and one false claim about it
+
+2026-08-26. V-1793 was a boundary flag derived from a count that could not distinguish a complete result
+at the cap from a truncated one. Rather than sweep generically, I hunted that specific shape.
+
+⭐ THE DETECTOR WAS PROVED ON A KNOWN POSITIVE FIRST, which is the only reason its small yield means
+anything: run against `07a2969c2^` it matches the pre-fix `truncated = all.length >= EXPORT_MAX_ROWS`.
+Three hits across `apps/server/src` and `packages/*/src`; two are the same site in `lib/r2.ts`.
+
+`listObjects` caps at `MAX_KEYS = 50_000`, and on reaching it logs "results truncated" and stops. **Same
+boundary arithmetic**: a prefix holding exactly 50,000 keys fills the list, trips `out.length >= MAX_KEYS`,
+and warns about truncation that did not happen. Not fixed — the consequence is one misleading operator log
+line at a boundary the code's own comment calls unreachable ("one key per profile"), and no flag crosses
+an API boundary.
+
+⭐ WHAT I CHECKED INSTEAD OF THE ARITHMETIC, because it is the question that actually matters: what a
+CALLER does with a silently-capped listing. `listObjects` returns no truncation signal at all, and its
+consumer is a reaper that DELETES blobs. **It is fail-safe, and the direction is why.** The sweeper builds
+its candidate set FROM the listing — well-formed `profiles/<uuid>.sealed` keys older than the grace
+window — then deletes only those whose uuid has NO database row. A short listing therefore produces FEWER
+deletions, and the orphans survive to the next pass. It deletes R2 blobs, never rows. The dangerous
+inversion — iterate DB rows and reap those missing from the listing — would have turned a capped listing
+into data loss, and is not what this does.
+
+⛔ THE ONE REAL DEFECT WAS A COMMENT ASSERTING THE OPPOSITE. `db/profiles-repo.ts` justified its id
+chunking with a parenthetical stating the listing runs to completion. It does not, and the chunking is
+required either way — so the conclusion was right and its stated reason was false. Corrected to give the
+concrete bound (at most 50,000 ids), which is a better argument for chunking than an unbounded one.
+
+⛔ AND MY OWN RETRACTION BROKE THE POST-CONDITION, in the way the standing rule exists to prevent. I
+wrote the correction quoting the old phrase verbatim, then swept for remaining occurrences and found
+1 — my own retraction text. Retraction PARAPHRASES, sentinel QUOTES: a retraction that quotes the thing
+it retracts is indistinguishable from the defect to every future sweep, including mine, thirty seconds
+later. Rewritten to paraphrase; the post-condition is now 0.
+
+BOUNDED: the shape swept is a flag or branch keyed on `.length >=` a cap constant, across
+`apps/server/src` and `packages/*/src`. A cap compared with `>`, or held in a variable rather than a
+SCREAMING_CASE constant, is outside it.

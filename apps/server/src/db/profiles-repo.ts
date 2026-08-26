@@ -666,8 +666,15 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
   async findExistingProfileIds(ids: string[]): Promise<Set<string>> {
     if (ids.length === 0) return new Set<string>();
     // Chunked: the orphan-blob reaper passes one id per sealed blob in the
-    // bucket (listObjects paginates to exhaustion), so this grows with stored
-    // profiles and would cross the bind-parameter ceiling. That sweeper is
+    // bucket, so this grows with stored profiles and would cross the
+    // bind-parameter ceiling.
+    //
+    // V-1795 — this used to claim the listing runs to completion. It does not:
+    // `lib/r2.ts` stops at MAX_KEYS = 50_000 and warns. The chunking
+    // is needed either way, and the bound is now concrete rather than unbounded
+    // — at most 50,000 ids reach here — but the property as written was false,
+    // and a reader taking it at face value would be relying on a listing being
+    // complete when it is capped. That sweeper is
     // wrapped to never throw, so the failure would have been a log line and a
     // reap pass that silently did nothing. See db/chunk-ids.ts.
     const found = new Set<string>();
