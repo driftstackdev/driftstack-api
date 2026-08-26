@@ -74,6 +74,24 @@ export interface RemoveMemberResult {
   revokedApiKeyIds: string[];
 }
 
+/**
+ * A team as a THING, from the `teams` table (V-1611 #14, migration 0114).
+ *
+ * ⚠️ `slug` is nullable and stays that way. The migration's own comment records
+ * why: whether team slugs become public URL components is an open product
+ * decision, and minting one here would settle it silently. Nullable-unique-when-
+ * set mirrors `accounts_slug_unique` exactly, so adding slugs later is additive
+ * against a column that already exists.
+ */
+export interface TeamRow {
+  id: string;
+  name: string;
+  slug: string | null;
+  ownerAccountId: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface TeamMembersRepo {
   /** Insert or refresh a pending invite (deduped by owner + email). */
   upsertInvite(input: {
@@ -149,6 +167,16 @@ export interface TeamMembersRepo {
    * (trim+lowercase) to match how inviteeEmail is stored.
    */
   deleteInvitesForEmail(ownerAccountId: string, email: string): Promise<void>;
+
+  /** Teams this account OWNS, newest first. */
+  listTeamsOwnedBy(ownerAccountId: string): Promise<TeamRow[]>;
+
+  /**
+   * Rename a team the account owns. Returns the updated row, or null when no
+   * team matches BOTH the id and the owner — so a caller cannot distinguish
+   * "does not exist" from "not yours", which is the whole point of the pair.
+   */
+  renameTeam(teamId: string, ownerAccountId: string, name: string): Promise<TeamRow | null>;
 }
 
 export const TEAM_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -192,6 +220,53 @@ export class TeamMembersService {
     } catch {
       /* swallow */
     }
+  }
+
+  /** Teams the caller owns. */
+  async listTeams(ownerAccountId: string): Promise<TeamRow[]> {
+    return this.repo.listTeamsOwnedBy(ownerAccountId);
+  }
+
+  /**
+   * Rename a team the caller owns.
+   *
+   * ⛔ Returns null rather than throwing when the team is not the caller's. The
+   * route turns that into a 404, deliberately the SAME answer an unknown id
+   * gets: distinguishing them would let anyone probe which team ids exist by
+   * reading the status code.
+   *
+   * The audit row is best-effort and its failure never fails the rename, which
+   * matches every other mutation on this service. It carries the previous name —
+   * an audit entry saying only "renamed" cannot answer the one question anybody
+   * asks of it.
+   */
+  async renameTeam(input: {
+    teamId: string;
+    ownerAccountId: string;
+    actorAccountId: string;
+    name: string;
+  }): Promise<TeamRow | null> {
+    const before = (await this.repo.listTeamsOwnedBy(input.ownerAccountId)).find(
+      (t) => t.id === input.teamId,
+    );
+    const updated = await this.repo.renameTeam(input.teamId, input.ownerAccountId, input.name);
+    if (updated === null) return null;
+    if (this.accountAudit) {
+      try {
+        await this.accountAudit.record({
+          accountId: input.ownerAccountId,
+          actorType: 'customer',
+          actorAccountId: input.actorAccountId,
+          actorKeyId: null,
+          action: 'team.updated',
+          targetResourceId: updated.id,
+          payload: { previous_name: before?.name ?? null, name: updated.name },
+        });
+      } catch {
+        /* swallow */
+      }
+    }
+    return updated;
   }
 
   /**

@@ -540,8 +540,15 @@ describe('all-route caller-authority invariant', () => {
     // DISABLED registrar — they were the only live routes there without a twin,
     // so with AI chat off they were unregistered rather than answering 503.
     // Both are stubs, so both land in the disabled exemption set above.
-    expect(routes).toHaveLength(288);
-    expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(215);
+    // V-1611 #14 — 290 since `GET /v1/teams` + `PATCH /v1/teams/:id`. Refreshed
+    // the way this pin requires: the authority arm below was confirmed EMPTY of
+    // violations at this count first, so the +2 is two properly gated routes and
+    // not two new holes.
+    expect(routes).toHaveLength(290);
+    // +2 alongside the +2 above, which is the part worth reading: BOTH new team
+    // routes are structurally authorized. Had one shipped ungated, this number
+    // would have moved by one while the total moved by two.
+    expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(217);
   });
 
   it('every route has structural caller authority or one exact reviewed exemption', () => {

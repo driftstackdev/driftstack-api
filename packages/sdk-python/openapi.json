@@ -3015,6 +3015,43 @@
         },
         "required": ["token"]
       },
+      "TeamRecord": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Prefixed team id (team_<uuid>)"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": ["string", "null"],
+            "description": "Always null today. The column is nullable-unique-when-set and no route mints one, because whether team slugs become public URL components is an open product decision. Published so a client that starts reading it does not have to change shape later."
+          },
+          "owner_account_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "name", "slug", "owner_account_id", "created_at", "updated_at"]
+      },
+      "RenameTeamRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          }
+        },
+        "required": ["name"]
+      },
       "TeamOwner": {
         "type": "object",
         "properties": {
@@ -3415,6 +3452,7 @@
               "team.member_invited",
               "team.invite_accepted",
               "team.member_removed",
+              "team.updated",
               "account.mfa_enrolled",
               "account.mfa_disabled",
               "account.recovery_code_used",
@@ -11065,6 +11103,374 @@
           },
           "409": {
             "description": "Accepting account email does not match invite.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying. Present on rate-limit refusals; absent on concurrency-limit and tier-limit refusals, which share this status but have no meaningful retry time.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "RateLimit-Limit": {
+                "description": "Request capacity of the bucket this call was charged to.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in that bucket.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until that bucket refills.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "X-RateLimit-Bucket": {
+                "description": "Which bucket was charged, e.g. `global` or `sessions:create`. Sent alongside the X-RateLimit-* aliases of the three headers above, kept for existing clients.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "Legacy alias of `RateLimit-Limit`, sent alongside it.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Legacy alias of `RateLimit-Remaining`, sent alongside it.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Legacy alias of `RateLimit-Reset`, sent alongside it.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "X-Request-Id": {
+                "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/teams": {
+      "get": {
+        "summary": "List teams the caller owns (requires broad `read` or `account_owner`)",
+        "tags": ["team"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Teams owned by the calling account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TeamRecord"
+                      }
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Request-Id": {
+                "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying. Present on rate-limit refusals; absent on concurrency-limit and tier-limit refusals, which share this status but have no meaningful retry time.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "RateLimit-Limit": {
+                "description": "Request capacity of the bucket this call was charged to.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in that bucket.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until that bucket refills.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "X-RateLimit-Bucket": {
+                "description": "Which bucket was charged, e.g. `global` or `sessions:create`. Sent alongside the X-RateLimit-* aliases of the three headers above, kept for existing clients.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "Legacy alias of `RateLimit-Limit`, sent alongside it.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Legacy alias of `RateLimit-Remaining`, sent alongside it.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Legacy alias of `RateLimit-Reset`, sent alongside it.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "X-Request-Id": {
+                "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/teams/{id}": {
+      "patch": {
+        "summary": "Rename a team the caller owns (requires `account_owner`)",
+        "tags": ["team"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^team_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "Prefixed team id (team_<uuid>)"
+            },
+            "required": true,
+            "description": "Prefixed team id (team_<uuid>)",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameTeamRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The renamed team.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "team": {
+                      "$ref": "#/components/schemas/TeamRecord"
+                    }
+                  },
+                  "required": ["team"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Request-Id": {
+                "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No team with that id is owned by the caller. Deliberately the same answer for a team that does not exist and one that belongs to someone else — separating them would make this route an oracle for which team ids are real.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -20545,6 +20951,7 @@
                 "team.member_invited",
                 "team.invite_accepted",
                 "team.member_removed",
+                "team.updated",
                 "account.mfa_enrolled",
                 "account.mfa_disabled",
                 "account.recovery_code_used",

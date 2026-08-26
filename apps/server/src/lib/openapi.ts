@@ -1231,6 +1231,38 @@ function buildRegistry(): OpenAPIRegistry {
     })
     .openapi('TeamMember');
 
+  const TeamRecordSchema = z
+    .object({
+      id: z.string().describe('Prefixed team id (team_<uuid>)'),
+      name: z.string(),
+      slug: z
+        .string()
+        .nullable()
+        .describe(
+          'Always null today. The column is nullable-unique-when-set and no route mints one, because whether team slugs become public URL components is an open product decision. Published so a client that starts reading it does not have to change shape later.',
+        ),
+      owner_account_id: z.string(),
+      created_at: z.string(),
+      updated_at: z.string(),
+    })
+    // ⛔ NOT `Team`, and the reason is worth keeping. `AccountMeResponse.teams`
+    // is an INLINE array whose item schema has no component name, so the Python
+    // generator invents one from the property name — and it invents `Team`.
+    // Registering this as `Team` did not win the name; it lost it, and shipped
+    // as `Team1` in the generated models. A meaningless name in a customer's
+    // typed client is worse than a longer accurate one.
+    //
+    // The better fix is to give that inline membership shape a real name
+    // (`TeamMembership` — it carries `membership_id` and `role`) and let this be
+    // `Team`. That is a BREAKING rename for anyone importing `Team` from the
+    // Python SDK today, so it is the owner's call, not a drive-by. Recorded in
+    // the ledger beside W-10, which is the same problem at scale.
+    .openapi('TeamRecord');
+
+  const RenameTeamRequestSchema = z
+    .object({ name: z.string().min(1).max(120) })
+    .openapi('RenameTeamRequest');
+
   const TeamInviteSchema = z
     .object({
       id: z.string().describe('Prefixed invite id (inv_<uuid>)'),
@@ -1333,6 +1365,49 @@ function buildRegistry(): OpenAPIRegistry {
         content: problemContent,
       },
       ...errors4xx,
+    },
+  });
+
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/teams',
+    summary: 'List teams the caller owns (requires broad `read` or `account_owner`)',
+    tags: ['team'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Teams owned by the calling account.',
+        content: { 'application/json': { schema: z.object({ data: z.array(TeamRecordSchema) }) } },
+      },
+      ...errors4xx,
+    },
+  });
+
+  registerRoute(r, {
+    method: 'patch',
+    path: '/v1/teams/{id}',
+    summary: 'Rename a team the caller owns (requires `account_owner`)',
+    tags: ['team'],
+    security: auth,
+    request: {
+      params: z.object({ id: prefixedIdParam('team', 'team') }),
+      body: {
+        required: true,
+        content: { 'application/json': { schema: RenameTeamRequestSchema } },
+      },
+    },
+    responses: {
+      200: {
+        description: 'The renamed team.',
+        content: { 'application/json': { schema: z.object({ team: TeamRecordSchema }) } },
+      },
+      ...errors4xx,
+      404: {
+        description:
+          'No team with that id is owned by the caller. Deliberately the same answer for a team that does not exist and one that belongs to someone else — separating them would make this route an oracle for which team ids are real.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
     },
   });
 

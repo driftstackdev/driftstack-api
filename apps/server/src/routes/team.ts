@@ -27,7 +27,12 @@ import type { FastifyInstance } from 'fastify';
 import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import { z } from 'zod';
 import { NotFoundError, ValidationError } from '../lib/errors.js';
-import type { TeamInviteRow, TeamMemberRow, TeamMembersService } from '../services/team-members.js';
+import type {
+  TeamInviteRow,
+  TeamMemberRow,
+  TeamMembersService,
+  TeamRow,
+} from '../services/team-members.js';
 
 const InviteBodySchema = z.object({
   email: z.string().trim().email('Must be a valid email.').max(254),
@@ -39,6 +44,19 @@ const AcceptBodySchema = z.object({
 });
 
 const MEMBER_ID_RE = /^mem_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+const TEAM_ID_RE = /^team_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+
+/**
+ * V-1611 #14 — rename only.
+ *
+ * ⛔ `slug` is deliberately NOT accepted. The column is nullable-unique-when-set
+ * because whether team slugs become public URL components is an open product
+ * decision (migration 0114); accepting one here would mint slugs and settle it.
+ * Adding the field later is additive against a column that already exists.
+ */
+const RenameTeamBodySchema = z.object({
+  name: z.string().trim().min(1, 'Name cannot be empty.').max(120),
+});
 
 function uuidFromMemberId(value: string): string {
   const match = MEMBER_ID_RE.exec(value);
@@ -49,6 +67,28 @@ function uuidFromMemberId(value: string): string {
     });
   }
   return match[1];
+}
+
+function uuidFromTeamId(value: string): string {
+  const match = TEAM_ID_RE.exec(value);
+  if (!match || !match[1]) {
+    throw new ValidationError({
+      formErrors: ['Invalid id format. Expected "team_<uuid>".'],
+      fieldErrors: {},
+    });
+  }
+  return match[1];
+}
+
+function publicTeam(row: TeamRow): Record<string, unknown> {
+  return {
+    id: `team_${row.id}`,
+    name: row.name,
+    slug: row.slug,
+    owner_account_id: `acc_${row.ownerAccountId}`,
+    created_at: row.createdAt.toISOString(),
+    updated_at: row.updatedAt.toISOString(),
+  };
 }
 
 function publicMember(row: TeamMemberRow): Record<string, unknown> {
@@ -108,6 +148,46 @@ export function registerTeamRoutes(app: FastifyInstance, opts: TeamRoutesOptions
       return reply
         .code(202)
         .send({ message: 'Invite sent. The invitee can accept via the email link.' });
+    },
+  );
+
+  app.get(
+    '/v1/teams',
+    { preHandler: [app.requireAuth, app.requireScope('read'), app.rateLimit('global')] },
+    async (request) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const rows = await service.listTeams(ctx.account.id);
+      return { data: rows.map(publicTeam) };
+    },
+  );
+
+  app.patch<{ Params: { id: string } }>(
+    '/v1/teams/:id',
+    { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
+    async (request, reply) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const parsed = RenameTeamBodySchema.safeParse(request.body);
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      reportUnknownRequestFields({
+        body: request.body,
+        knownKeys: knownRequestKeys(RenameTeamBodySchema),
+        reply,
+        logger: request.log,
+        route: 'PATCH /v1/teams/:id',
+      });
+      const updated = await service.renameTeam({
+        teamId: uuidFromTeamId(request.params.id),
+        ownerAccountId: ctx.account.id,
+        actorAccountId: ctx.account.id,
+        name: parsed.data.name,
+      });
+      // ⛔ 404 for "not yours" as well as "does not exist", and the same body for
+      // both. Separating them would turn this route into an oracle for which team
+      // ids are real.
+      if (updated === null) throw new NotFoundError('Team not found.');
+      return reply.code(200).send({ team: publicTeam(updated) });
     },
   );
 

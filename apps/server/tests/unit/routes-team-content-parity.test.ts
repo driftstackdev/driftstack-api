@@ -59,7 +59,9 @@ describe('W437.C apps/server/src/routes/team.ts content parity', () => {
   });
 
   it('team reads require broad read and invite acceptance requires account_owner', () => {
-    expect(body.match(/app\.requireScope\('read'\)/g)).toHaveLength(3);
+    // 4 since V-1611 #14 added `GET /v1/teams` — the team DIRECTORY read, beside
+    // the three membership reads.
+    expect(body.match(/app\.requireScope\('read'\)/g)).toHaveLength(4);
     expect(body).toMatch(
       /'\/v1\/team\/invites\/accept',[\s\S]*?app\.requireScope\('account_owner'\)/,
     );
@@ -70,7 +72,10 @@ describe('W437.C apps/server/src/routes/team.ts content parity', () => {
     expect(body).toMatch(/import \{ z \} from 'zod';/);
     expect(body).toContain("import { NotFoundError, ValidationError } from '../lib/errors.js';");
     expect(body).toMatch(
-      /import type \{ TeamInviteRow, TeamMemberRow, TeamMembersService \} from '\.\.\/services\/team-members\.js';/,
+      // Whitespace-tolerant: this import is now long enough for prettier to wrap
+      // it across lines, and a pin written against the one-line form would break
+      // on a reformat that changed nothing.
+      /import type \{\s*TeamInviteRow,\s*TeamMemberRow,\s*TeamMembersService,\s*TeamRow,?\s*\} from '\.\.\/services\/team-members\.js';/,
     );
   });
 

@@ -46,7 +46,7 @@ describe('W591.A packages/sdk-go/team.go content parity', () => {
     // The old "no implicit permissions until V-298d ships" caveat was a
     // deferred promise that is now simply false on a shipped SDK surface.
     expect(body).toMatch(
-      /\/\/ TeamResource handles \/v1\/team\/\*\. V-298c routes\. Team membership IS/,
+      /\/\/ TeamResource handles \/v1\/team\/\* and \/v1\/teams\. V-298c routes\. Team membership IS/,
     );
     expect(body).toMatch(
       /\/\/ honored on the auth path: send X-Driftstack-Account: acc_<owner-uuid> to/,

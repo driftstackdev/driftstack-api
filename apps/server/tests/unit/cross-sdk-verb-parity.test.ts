@@ -157,6 +157,11 @@ describe('W649 cross-SDK verb parity', () => {
       '/v1/team/members',
       '/v1/team/invites/accept',
       '/v1/team/owners',
+      // Only the BASE. `PATCH /v1/teams/:id` collapses into this same entry:
+      // extractV1Paths strips the trailing slash so the per-id form is wire-
+      // comparable across all three SDKs, which is why `/v1/team/members/:id`
+      // has no entry of its own either.
+      '/v1/teams',
     ]);
     expect(extractV1Paths(read(goPath('team')))).toEqual(expected);
     expect(extractV1Paths(read(pythonPath('team')))).toEqual(expected);

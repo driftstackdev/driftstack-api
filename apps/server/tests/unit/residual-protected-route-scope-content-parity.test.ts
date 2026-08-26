@@ -13,7 +13,9 @@ function read(relativePath: string): string {
 describe('residual protected-route API-key scope contract', () => {
   it('pins the team directory and membership-mutation route floors', () => {
     const route = read('apps/server/src/routes/team.ts');
-    expect(route.match(/app\.requireScope\('read'\)/g)).toHaveLength(3);
+    // 4 since `GET /v1/teams` — the team DIRECTORY read, beside the three
+    // membership reads.
+    expect(route.match(/app\.requireScope\('read'\)/g)).toHaveLength(4);
     expect(route).toMatch(
       /'\/v1\/team\/invites\/accept',[\s\S]*?app\.requireScope\('account_owner'\)/,
     );
@@ -41,15 +43,19 @@ describe('residual protected-route API-key scope contract', () => {
 
   it('keeps handwritten SDK scope comments coherent', () => {
     const tsTeam = read('packages/sdk-typescript/src/resources/team.ts');
-    expect(tsTeam.match(/Requires broad read or account_owner\./g)).toHaveLength(3);
+    // 4 since `listTeams` — the team directory read, beside the three membership
+    // directory reads.
+    expect(tsTeam.match(/Requires broad read or account_owner\./g)).toHaveLength(4);
     expect(tsTeam).toContain('Requires account_owner (dashboard web sessions satisfy it).');
     expect(read('packages/sdk-typescript/src/resources/crypto-orders.ts')).toContain(
       'Requires read:billing (broad read/account_owner also satisfy it).',
     );
 
     const pythonTeam = read('packages/sdk-python/src/driftstack/resources/team.py');
-    expect(pythonTeam.match(/Requires broad read or account_owner\./g)).toHaveLength(6);
-    expect(pythonTeam.match(/Requires account_owner\./g)).toHaveLength(2);
+    // The Python resource carries a sync AND an async class, so every comment is
+    // doubled: 4 directory reads x 2 = 8, and 2 owner-gated mutations x 2 = 4.
+    expect(pythonTeam.match(/Requires broad read or account_owner\./g)).toHaveLength(8);
+    expect(pythonTeam.match(/Requires account_owner\./g)).toHaveLength(4);
     expect(read('packages/sdk-python/src/driftstack/resources/crypto_orders.py')).toContain(
       'Requires read:billing; broad read/account_owner also satisfy it.',
     );

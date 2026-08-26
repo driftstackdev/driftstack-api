@@ -17,6 +17,7 @@ import {
   type TeamInviteRow,
   type TeamMemberRow,
   type TeamMembersRepo,
+  type TeamRow,
 } from '../../src/services/team-members.js';
 import { tokenHash } from '../../src/lib/auth-tokens.js';
 import type { AccountAuditService } from '../../src/services/account-audit.js';
@@ -55,6 +56,7 @@ function makeRepo(): {
       createdByAccountId: string | null;
       revoked: boolean;
     }[],
+    teams: [] as TeamRow[],
   };
   let inviteCounter = 0;
   let memberCounter = 0;
@@ -211,6 +213,20 @@ function makeRepo(): {
         (i) => !(i.ownerAccountId === ownerAccountId && i.inviteeEmail === norm),
       );
       return Promise.resolve();
+    },
+    listTeamsOwnedBy: (ownerAccountId) =>
+      Promise.resolve(
+        state.teams
+          .filter((t) => t.ownerAccountId === ownerAccountId)
+          .sort((x, y) => y.createdAt.getTime() - x.createdAt.getTime())
+          .map((t) => ({ ...t })),
+      ),
+    renameTeam: (teamId, ownerAccountId, name) => {
+      const found = state.teams.find((t) => t.id === teamId && t.ownerAccountId === ownerAccountId);
+      if (!found) return Promise.resolve(null);
+      found.name = name;
+      found.updatedAt = new Date();
+      return Promise.resolve({ ...found });
     },
   };
   return { repo, state };

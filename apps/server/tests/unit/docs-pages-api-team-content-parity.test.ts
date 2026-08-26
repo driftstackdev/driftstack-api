@@ -31,7 +31,7 @@ describe('W766 docs /api/team content parity', () => {
 
     expect(p).toMatch(/^---\nlayout: \.\.\/\.\.\/layouts\/DocLayout\.astro\ntitle: Team RBAC\n/);
     expect(p).toMatch(
-      /description: Invite team members, accept invites, list members, remove members via \/v1\/team\/\*\./,
+      /description: Invite team members, accept invites, list members, remove members via \/v1\/team\/\*, and read or rename teams via \/v1\/teams\./,
     );
   });
 

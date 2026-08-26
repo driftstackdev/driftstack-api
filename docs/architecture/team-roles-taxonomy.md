@@ -185,11 +185,19 @@ breaking-change taxonomy and the path V-174 took when expanding scopes.
 >   `invited_at`, `accepted_at`, `invited_by_account_id`.
 > - **Role enum**: `pgEnum('team_role', ['member', 'admin'])` — see the
 >   correction under "The four roles".
-> - **Routes**: six under `/v1/team/*` — `POST` and `GET /v1/team/invites`,
+> - **Routes**: eight — six under `/v1/team/*` (`POST` and `GET /v1/team/invites`,
 >   `POST /v1/team/invites/accept`, `GET /v1/team/members`,
->   `GET /v1/team/owners`, `DELETE /v1/team/members/:id`. The paths below are
->   the sketch, and differ: there is no `PATCH .../role` endpoint, and
->   `/v1/team/owners` was never sketched.
+>   `GET /v1/team/owners`, `DELETE /v1/team/members/:id`) and two under
+>   `/v1/teams` for the team ENTITY itself (`GET /v1/teams`,
+>   `PATCH /v1/teams/:id`), added with the `teams` table in V-1611 #14. The
+>   singular/plural split is real and load-bearing: `/v1/team/*` is about
+>   MEMBERSHIP of the caller's own team, `/v1/teams` is about teams as rows.
+>   There is deliberately no `POST /v1/teams` — `team_members` is uniquely
+>   indexed on `(owner_account_id, member_account_id)`, so a second team under
+>   one owner could not hold an overlapping member, and creating one would mint
+>   a team that cannot be populated. The paths below are the sketch, and differ:
+>   there is no `PATCH .../role` endpoint, and `/v1/team/owners` was never
+>   sketched.
 > - **Auth**: membership rides on `AccountContext.teams` and is resolved per
 >   request by `resolveEffectiveAccount()`, not via "the API key's owning
 >   user" — there is no user to own it.

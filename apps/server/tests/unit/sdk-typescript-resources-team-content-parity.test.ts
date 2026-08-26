@@ -52,12 +52,16 @@ describe('W427.B packages/sdk-typescript/src/resources/team.ts content parity', 
   it('file exists at canonical path + module header + all six team endpoints scope', () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(/\/\/ V-298c \/ V-309e — Team RBAC resource\./);
-    expect(body).toMatch(/\/\/ All six \/v1\/team\/\* endpoints\./);
+    // V-1611 #14 added the two `/v1/teams` team-record endpoints beside the six
+    // membership ones, so this sentence now names both families.
+    expect(body).toMatch(
+      /\/\/ All six \/v1\/team\/\* endpoints, plus the two \/v1\/teams team-record endpoints\./,
+    );
   });
 
   it("CRITICAL acting-as contract pinned per-line. The old text claimed membership granted NO implicit permissions until a future release; `resolveEffectiveAccount` in apps/server/src/services/auth.ts proves otherwise — it resolves `X-Driftstack-Account: acc_<uuid>` against `ctx.teams` and carries the membership role through, so members DO act on the owner's resources today. Pinning the stale caveat would keep a false limitation on a shipped SDK surface.", () => {
     expect(body).toMatch(
-      /\/\/ All six \/v1\/team\/\* endpoints\. Team membership IS honored on the auth\s*\/\/ path: send `X-Driftstack-Account: acc_<owner-uuid>` to act on the\s*\/\/ resources of an owner you are a member of\./,
+      /\/\/ All six \/v1\/team\/\* endpoints, plus the two \/v1\/teams team-record endpoints\. Team membership IS honored on the auth\s*\/\/ path: send `X-Driftstack-Account: acc_<owner-uuid>` to act on the\s*\/\/ resources of an owner you are a member of\./,
     );
     // The superseded claim must never come back to a shipped SDK surface.
     expect(body).not.toMatch(/grants no implicit permissions/);
@@ -159,16 +163,29 @@ describe('W427.B packages/sdk-typescript/src/resources/team.ts content parity', 
     );
   });
 
-  it('6-verb inventory + verb-mix invariants — 2 POSTs + 3 GETs + 1 DELETE and no role-update mutation', () => {
+  it('8-verb inventory + verb-mix invariants — 2 POSTs + 4 GETs + 1 DELETE + 1 PATCH, and still no role-update mutation', () => {
     const methods = body.match(/^ {2}(?!constructor)[a-zA-Z]+\(/gm) ?? [];
-    expect(methods.length, 'expected 6 verb declarations').toBe(6);
+    // 8: the six membership verbs + listTeams + renameTeam.
+    expect(methods.length, 'expected 8 verb declarations').toBe(8);
     const posts = (body.match(/method: 'POST'/g) ?? []).length;
     expect(posts, 'expected 2 POSTs (invite + acceptInvite)').toBe(2);
     const gets = (body.match(/method: 'GET'/g) ?? []).length;
-    expect(gets, 'expected 3 GETs (members + invites + owners)').toBe(3);
+    expect(gets, 'expected 4 GETs (members + invites + owners + teams)').toBe(4);
     const deletes = (body.match(/method: 'DELETE'/g) ?? []).length;
     expect(deletes, 'expected 1 DELETE (removeMember)').toBe(1);
-    expect(body).not.toMatch(/method: 'PATCH'/);
+    // ⛔ This used to be a blanket `not.toMatch(/method: 'PATCH'/)`, and V-1611 #14
+    // made that false by adding `renameTeam`. Deleting it would have thrown away
+    // the claim it was actually protecting, which is not "there are no PATCHes"
+    // but "membership ROLE is not mutable through this resource" — the endpoint
+    // the original sketch promised and that was deliberately never built.
+    //
+    // So the negative is kept and made specific: exactly one PATCH, and no PATCH
+    // pointed at a role.
+    const patches = (body.match(/method: 'PATCH'/g) ?? []).length;
+    expect(patches, 'expected 1 PATCH (renameTeam)').toBe(1);
+    expect(body, 'a role-update mutation has appeared on the team resource').not.toMatch(
+      /\/role\b/,
+    );
     expect(body).not.toMatch(/method: 'PUT'/);
   });
 
@@ -176,7 +193,7 @@ describe('W427.B packages/sdk-typescript/src/resources/team.ts content parity', 
     const ownerScopeMatches = body.match(/account_owner scope required/g) ?? [];
     expect(
       ownerScopeMatches.length,
-      'expected 2 account_owner scope mentions (invite + removeMember)',
-    ).toBe(2);
+      'expected 3 account_owner scope mentions (invite + removeMember + renameTeam)',
+    ).toBe(3);
   });
 });

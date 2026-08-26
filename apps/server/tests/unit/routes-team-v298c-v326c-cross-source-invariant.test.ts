@@ -184,7 +184,11 @@ describe('W1050 routes/team V-298c + V-326c cross-source invariant', () => {
     // mutations; the three directory reads carry broad read.
     expect((p.match(/app\.requireAuth/g) ?? []).length).toBeGreaterThanOrEqual(6);
     expect((p.match(/app\.rateLimit\('global'\)/g) ?? []).length).toBeGreaterThanOrEqual(6);
-    expect((p.match(/app\.requireScope\('account_owner'\)/g) ?? []).length).toBe(3);
-    expect((p.match(/app\.requireScope\('read'\)/g) ?? []).length).toBe(3);
+    // V-1611 #14 moved BOTH counts by one, and that pairing is the point: the
+    // team entity added one directory read (`GET /v1/teams`) and one owner-gated
+    // mutation (`PATCH /v1/teams/:id`). A change moving only one of these would
+    // mean a read had been gated as a mutation or the reverse.
+    expect((p.match(/app\.requireScope\('account_owner'\)/g) ?? []).length).toBe(4);
+    expect((p.match(/app\.requireScope\('read'\)/g) ?? []).length).toBe(4);
   });
 });

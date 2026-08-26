@@ -195,7 +195,10 @@ describe('S22.4/S27 DOC_NAV endpoint children ↔ api/*.md + webhooks/*.md integ
     // nav children match each page's h2 endpoint set byte-for-byte. The +1 is
     // `/api/account/#profile-organization-taxonomy`, the resource `98d767a73`
     // added to api/account.md without a sidebar entry.
-    expect(apiTotal).toBe(137);
+    // 138 since V-1611 #14 added `/api/team/#the-team-itself`. Refreshed the way
+    // this tripwire requires: the EXACTNESS arm above passed first, so the +1 is
+    // a nav child that matches a real h2 rather than a drifting count.
+    expect(apiTotal).toBe(138);
     expect(webhooksTotal).toBe(8);
   });
 });

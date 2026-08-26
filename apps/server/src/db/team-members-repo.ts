@@ -7,9 +7,10 @@ import type {
   TeamMemberRow,
   TeamMembersRepo,
   TeamRole,
+  TeamRow,
 } from '../services/team-members.js';
 import type { Database } from './client.js';
-import { accounts, apiKeys, teamInvites, teamMembers } from './schema.js';
+import { accounts, apiKeys, teamInvites, teamMembers, teams } from './schema.js';
 
 type InviteDb = typeof teamInvites.$inferSelect;
 type MemberDb = typeof teamMembers.$inferSelect;
@@ -194,6 +195,26 @@ export class DrizzleTeamMembersRepo implements TeamMembersRepo {
       .update(teamInvites)
       .set({ acceptedAt: at })
       .where(eq(teamInvites.id, inviteId));
+  }
+
+  async listTeamsOwnedBy(ownerAccountId: string): Promise<TeamRow[]> {
+    return this.database.db
+      .select()
+      .from(teams)
+      .where(eq(teams.ownerAccountId, ownerAccountId))
+      .orderBy(desc(teams.createdAt));
+  }
+
+  async renameTeam(teamId: string, ownerAccountId: string, name: string): Promise<TeamRow | null> {
+    // The owner predicate is in the WHERE, not checked beforehand: a read-then-
+    // write would let a team change hands between the two statements, and the
+    // update would then apply to a team the caller no longer owns.
+    const rows = await this.database.db
+      .update(teams)
+      .set({ name, updatedAt: new Date() })
+      .where(and(eq(teams.id, teamId), eq(teams.ownerAccountId, ownerAccountId)))
+      .returning();
+    return rows.length > 0 ? (rows[0] ?? null) : null;
   }
 
   async listMembers(ownerAccountId: string): Promise<TeamMemberRow[]> {

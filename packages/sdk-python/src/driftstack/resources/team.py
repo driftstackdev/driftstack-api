@@ -1,6 +1,6 @@
 """V-298c / V-309f — Team RBAC resource.
 
-All six /v1/team/* endpoints. Team membership IS honored on the auth
+All six /v1/team/* endpoints, plus the two /v1/teams team-record endpoints. Team membership IS honored on the auth
 path: send ``X-Driftstack-Account: acc_<owner-uuid>`` to act on the
 resources of an owner you are a member of. The request is authorized
 against your membership role (``admin`` or ``member``) and the route's
@@ -65,6 +65,33 @@ class AcceptInviteResponse(BaseModel):
     membership: TeamMember
 
 
+class TeamRecord(BaseModel):
+    """A team as a record — what ``GET /v1/teams`` returns.
+
+    Distinct from ``TeamOwner``, which describes a team you BELONG to (it
+    carries your ``role`` and ``membership_id``). This one is the team itself.
+
+    ``slug`` is always ``None`` today: the field exists on the record but no
+    endpoint sets one, because whether team slugs become public URL components
+    is an open decision. Safe to read; it stays ``None`` until that is settled.
+    """
+
+    id: str
+    name: str
+    slug: str | None
+    owner_account_id: str
+    created_at: str
+    updated_at: str
+
+
+class TeamRecordsList(BaseModel):
+    data: list[TeamRecord]
+
+
+class RenameTeamResponse(BaseModel):
+    team: TeamRecord
+
+
 class TeamResource:
     """Synchronous team resource."""
 
@@ -100,6 +127,20 @@ class TeamResource:
 
     def remove_member(self, membership_id: str) -> None:
         self._http.request("DELETE", f"/v1/team/members/{quote(membership_id, safe='')}")
+
+    # Requires broad read or account_owner.
+    def list_teams(self) -> TeamRecordsList:
+        data = self._http.request("GET", "/v1/teams")
+        return parse_model(TeamRecordsList, data)
+
+    # Requires account_owner. 404 covers both an unknown id and a team owned by
+    # someone else, deliberately — telling them apart would let a caller
+    # enumerate which team ids exist.
+    def rename_team(self, team_id: str, name: str) -> RenameTeamResponse:
+        data = self._http.request(
+            "PATCH", f"/v1/teams/{quote(team_id, safe='')}", json_body={"name": name}
+        )
+        return parse_model(RenameTeamResponse, data)
 
 
 class AsyncTeamResource:
@@ -139,3 +180,17 @@ class AsyncTeamResource:
 
     async def remove_member(self, membership_id: str) -> None:
         await self._http.request("DELETE", f"/v1/team/members/{quote(membership_id, safe='')}")
+
+    # Requires broad read or account_owner.
+    async def list_teams(self) -> TeamRecordsList:
+        data = await self._http.request("GET", "/v1/teams")
+        return parse_model(TeamRecordsList, data)
+
+    # Requires account_owner. 404 covers both an unknown id and a team owned by
+    # someone else, deliberately — telling them apart would let a caller
+    # enumerate which team ids exist.
+    async def rename_team(self, team_id: str, name: str) -> RenameTeamResponse:
+        data = await self._http.request(
+            "PATCH", f"/v1/teams/{quote(team_id, safe='')}", json_body={"name": name}
+        )
+        return parse_model(RenameTeamResponse, data)

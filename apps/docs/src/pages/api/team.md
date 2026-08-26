@@ -1,7 +1,7 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: Team RBAC
-description: Invite team members, accept invites, list members, remove members via /v1/team/*.
+description: Invite team members, accept invites, list members, remove members via /v1/team/*, and read or rename teams via /v1/teams.
 ---
 
 # Team RBAC
@@ -203,6 +203,49 @@ Two consequences worth planning for:
 - Keys created before this behaviour shipped have no recorded creator and are
   **not** revoked, because there is nothing to attribute them to. Review
   `GET /v1/api-keys` when offboarding a long-standing member.
+
+## The team itself
+
+Everything above is about MEMBERSHIP — who belongs to your team. These two are
+about the team as a thing with a name.
+
+`GET /v1/teams` — the teams you own. Requires broad `read` or `account_owner`.
+
+```json
+{
+  "data": [
+    {
+      "id": "team_3f9a2c1d-...",
+      "name": "Acme Research",
+      "slug": null,
+      "owner_account_id": "acc_...",
+      "created_at": "2026-08-25T12:00:00.000Z",
+      "updated_at": "2026-08-25T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+`PATCH /v1/teams/:id` — rename a team you own. Requires `account_owner`. Body is
+`{ "name": "..." }`, 1–120 characters. Returns `{ "team": { ... } }`.
+
+Renaming writes a `team.updated` audit entry carrying both the previous and new
+name.
+
+**404 covers two cases deliberately:** a team id that does not exist, and one
+that belongs to someone else. They are indistinguishable on purpose — otherwise
+the status code would tell you which team ids are real.
+
+**`slug` is always `null` today.** The field is published because it exists on
+the record, but no endpoint sets one: whether team slugs become public URL
+components is still open. It is safe to read and will stay `null` until that is
+decided.
+
+**Teams cannot be created through the API.** Your team was created for you, and
+there is deliberately no create endpoint. A second team
+under the same owner is not yet possible — memberships are currently keyed to the
+owning account rather than to a team, so a second team could not hold any member
+who is already on your first one. Creating teams arrives with that change.
 
 ## SDK examples
 

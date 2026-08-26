@@ -49,7 +49,7 @@ describe('W582.B packages/sdk-python/src/driftstack/resources/team.py content pa
     // The old "no implicit permissions until V-298d ships" caveat was a
     // deferred promise that is now simply false on a shipped SDK surface.
     expect(body).toMatch(
-      /All six \/v1\/team\/\* endpoints\. Team membership IS honored on the auth/,
+      /All six \/v1\/team\/\* endpoints, plus the two \/v1\/teams team-record endpoints\.\s*Team membership IS honored on the auth/,
     );
     expect(body).toMatch(/``X-Driftstack-Account: acc_<owner-uuid>`` to act on the/);
     expect(body).toMatch(/against your membership role \(``admin`` or ``member``\)/);

@@ -346,6 +346,8 @@ describe('OpenAPI spec generation', () => {
         '/v1/team/members',
         '/v1/team/members/{id}',
         '/v1/team/owners',
+        '/v1/teams',
+        '/v1/teams/{id}',
         '/v1/usage',
         '/v1/usage/series',
         // V-458 legal acceptance machinery

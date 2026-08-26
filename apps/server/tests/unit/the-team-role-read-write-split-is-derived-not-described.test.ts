@@ -186,9 +186,34 @@ describe('V-837 the team-role read/write split is derived, not described', () =>
 
     // …and the count it states, spelled, against what was parsed.
     const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'];
+    const word = WORDS[live.length] ?? String(live.length);
+    expect(block, `the correction states a route count that is not ${word}`).toContain(
+      `**Routes**: ${word}`,
+    );
+    // ⛔ The count used to be pinned as "<word> under `/v1/team/*`", and V-1611
+    // #14 made that phrase FALSE while leaving it satisfiable: this file's own
+    // matcher treats `/v1/team` as a prefix, so `/v1/teams` and `/v1/teams/:id`
+    // count toward the total while sitting under a different path family. Writing
+    // "eight under `/v1/team/*`" would have kept the guard green and made the
+    // sentence wrong — the one outcome a doc guard exists to prevent.
+    //
+    // So: the count is pinned where it is STATED, both families must be named,
+    // and the count may not be ATTRIBUTED to the `/v1/team/*` family alone.
+    //
+    // ⚠️ The last of those three is the one that took a second attempt. Requiring
+    // both families to be MENTIONED does not catch the false sentence, because
+    // the block lists every route underneath it — so `/v1/teams` appears anyway
+    // and the check passes while the summary above it lies. Proved by mutation:
+    // restoring the old phrasing left this file green until the negative below
+    // was added.
+    for (const family of ['/v1/team/*', '/v1/teams']) {
+      expect(block, `the correction no longer names the ${family} routes`).toContain(family);
+    }
     expect(
       block,
-      `the correction states a route count that is not ${WORDS[live.length] ?? String(live.length)}`,
-    ).toContain(`${WORDS[live.length] ?? String(live.length)} under \`/v1/team/*\``);
+      'the correction attributes its whole route count to `/v1/team/*`, and two of those routes ' +
+        'are under `/v1/teams` instead. This file counts them together because its matcher treats ' +
+        '`/v1/team` as a prefix, so the sentence can be wrong while the count is right.',
+    ).not.toContain(`${word} under \`/v1/team/*\``);
   });
 });

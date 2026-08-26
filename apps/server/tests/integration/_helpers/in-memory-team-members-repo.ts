@@ -7,6 +7,7 @@ import type {
   TeamMemberRow,
   TeamMembersRepo,
   TeamRole,
+  TeamRow,
 } from '../../../src/services/team-members.js';
 
 /**
@@ -33,6 +34,7 @@ function snapRow<T extends object>(row: T | undefined | null): T | null {
 export class InMemoryTeamMembersRepo implements TeamMembersRepo {
   private readonly members: TeamMemberRow[] = [];
   private readonly invites: TeamInviteRow[] = [];
+  private readonly teams: TeamRow[] = [];
   /** Test seam — the service needs to look up account email by id. */
   private readonly accountEmails = new Map<string, string>();
 
@@ -188,15 +190,50 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
     if (row) row.acceptedAt = at;
   }
 
-  // eslint-disable-next-line @typescript-eslint/require-await
-  async listMembers(ownerAccountId: string): Promise<TeamMemberRow[]> {
+  /** Seed a team so the rename/list paths have something to act on. */
+  seedTeam(team: TeamRow): void {
+    this.teams.push({ ...team });
+  }
+
+  listTeamsOwnedBy(ownerAccountId: string): Promise<TeamRow[]> {
+    // Mirrors DrizzleTeamMembersRepo's ORDER BY created_at DESC, for the reason
+    // listMembers does: write order here is the REVERSE of what the customer is
+    // shown, so an unsorted double lets a test assert the list upside down.
+    return Promise.resolve(
+      this.teams
+        .filter((t) => t.ownerAccountId === ownerAccountId)
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        .map((t) => snapRow(t)),
+    );
+  }
+
+  renameTeam(teamId: string, ownerAccountId: string, name: string): Promise<TeamRow | null> {
+    const found = this.teams.find((t) => t.id === teamId && t.ownerAccountId === ownerAccountId);
+    if (!found) return Promise.resolve(null);
+    found.name = name;
+    found.updatedAt = new Date();
+    return Promise.resolve(snapRow(found));
+  }
+
+  // ⚠️ Not `async`, and the reason is a trap worth leaving written down.
+  // `listMembers` carried an `eslint-disable-next-line require-await` directly
+  // above it. Inserting a new method BETWEEN the directive and this one silently
+  // re-pointed the suppression at the inserted method — which is synchronous and
+  // never needed it — and this method started failing lint having not changed.
+  //
+  // `eslint-disable-next-line` binds to whatever line follows it, so inserting
+  // after one moves it. Both are now plain Promise-returning methods and neither
+  // needs the directive.
+  listMembers(ownerAccountId: string): Promise<TeamMemberRow[]> {
     // V-1209 — mirrors DrizzleTeamMembersRepo's `ORDER BY created_at DESC`. Write order is not
     // merely a different order here, it is the REVERSE one, so a unit test asserting this list
     // was asserting it upside down relative to what the customer is shown.
-    return this.members
-      .filter((m) => m.ownerAccountId === ownerAccountId)
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .map((m) => snapRow(m));
+    return Promise.resolve(
+      this.members
+        .filter((m) => m.ownerAccountId === ownerAccountId)
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        .map((m) => snapRow(m)),
+    );
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await

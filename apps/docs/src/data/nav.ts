@@ -474,6 +474,7 @@ export const DOC_NAV: DocNavSection[] = [
           { href: '/api/team/#accept-an-invite', label: 'Accept an invite', method: 'POST' },
           { href: '/api/team/#list-members', label: 'List members', method: 'GET' },
           { href: '/api/team/#remove-a-member', label: 'Remove a member', method: 'DELETE' },
+          { href: '/api/team/#the-team-itself', label: 'The team itself', method: 'GET' },
         ],
       },
       {

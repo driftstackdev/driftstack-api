@@ -296,8 +296,14 @@ describe('mutation-route rate-limit coverage invariant', () => {
     // privileged gate, or an exact reviewed exemption. NOTE: A3's dual
     // actor + effective-owner limiter lane will move this number again; refresh
     // it the same way (prove violations() empty first), never by chasing green.
-    expect(routes).toHaveLength(161);
-    expect(routes.filter((route) => route.hasTypeArguments)).toHaveLength(75);
+    // V-1611 #14 — 162 since `PATCH /v1/teams/:id`. Only ONE of the two new team
+    // routes is a mutation; `GET /v1/teams` is not, which is why this moves by one
+    // where the caller-authority pin moves by two. Refreshed with violations()
+    // proven empty first, as the note above requires.
+    expect(routes).toHaveLength(162);
+    // +1: `app.patch<{ Params: { id: string } }>('/v1/teams/:id', ...)` is the only
+    // one of the two new routes carrying type arguments.
+    expect(routes.filter((route) => route.hasTypeArguments)).toHaveLength(76);
   });
 
   it('every mutation route has a limiter, privileged gate, or exact exemption', () => {

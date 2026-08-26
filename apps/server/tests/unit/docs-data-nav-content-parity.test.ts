@@ -318,14 +318,17 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
     // +1 anchor: the organization taxonomy child added alongside `98d767a73`.
     // Refreshed after the endpoint-children integrity guard proved the tree
     // matches every page's h2 set exactly.
-    expect(anchors).toHaveLength(145);
+    // 146 since `/api/team/#the-team-itself` (V-1611 #14), refreshed on the same
+    // condition: the endpoint-children integrity guard proved the tree matches
+    // every page's h2 set exactly before this census moved.
+    expect(anchors).toHaveLength(146);
     // No duplicate hrefs at either level (the apps/docs
     // doc-nav-section-label-baseline suite enforces the top-level rule at
     // runtime too; mirrored here so a server-only run still catches it).
     expect(new Set(topLevel).size).toBe(61);
     // Set size must track the count — equality here is what proves NO duplicate
     // anchor was introduced along with the new child.
-    expect(new Set(anchors).size).toBe(145);
+    expect(new Set(anchors).size).toBe(146);
   });
 
   it('the 22 previously-orphaned routes are all present (6 reference + 5 sdk/api spillover checks kept explicit for the highest-traffic ones)', () => {

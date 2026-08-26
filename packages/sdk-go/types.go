@@ -267,6 +267,38 @@ type TeamOwnersList struct {
 	Data []TeamOwner `json:"data"`
 }
 
+// TeamRecord is a team as a record — what GET /v1/teams returns.
+//
+// Distinct from TeamOwner, which describes a team you BELONG to (it carries
+// your Role and MembershipID). This one is the team itself.
+//
+// Slug is always nil today: the field exists on the record but no endpoint sets
+// one, because whether team slugs become public URL components is an open
+// decision. Safe to read; it stays nil until that is settled.
+type TeamRecord struct {
+	ID             string  `json:"id"`
+	Name           string  `json:"name"`
+	Slug           *string `json:"slug"`
+	OwnerAccountID string  `json:"owner_account_id"`
+	CreatedAt      string  `json:"created_at"`
+	UpdatedAt      string  `json:"updated_at"`
+}
+
+// TeamRecordsList is the GET /v1/teams envelope.
+type TeamRecordsList struct {
+	Data []TeamRecord `json:"data"`
+}
+
+// RenameTeamRequest is the PATCH /v1/teams/{id} body.
+type RenameTeamRequest struct {
+	Name string `json:"name"`
+}
+
+// RenameTeamResponse is the PATCH /v1/teams/{id} envelope.
+type RenameTeamResponse struct {
+	Team TeamRecord `json:"team"`
+}
+
 type TeamInviteRequest struct {
 	Email string   `json:"email"`
 	Role  TeamRole `json:"role,omitempty"`

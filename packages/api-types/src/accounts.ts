@@ -268,6 +268,7 @@ export const AccountAuditActionSchema = z.enum([
   'team.member_invited',
   'team.invite_accepted',
   'team.member_removed',
+  'team.updated',
   // V-353b — MFA lifecycle. mfa_enrolled fires on successful first
   // verify (not on /enroll, which is reversible). mfa_disabled fires
   // when the customer explicitly disables. recovery_code_used fires

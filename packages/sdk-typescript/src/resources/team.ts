@@ -1,6 +1,6 @@
 // V-298c / V-309e — Team RBAC resource.
 //
-// All six /v1/team/* endpoints. Team membership IS honored on the auth
+// All six /v1/team/* endpoints, plus the two /v1/teams team-record endpoints. Team membership IS honored on the auth
 // path: send `X-Driftstack-Account: acc_<owner-uuid>` to act on the
 // resources of an owner you are a member of. The request is authorized
 // against your membership role ('admin' or 'member') and the route's
@@ -56,12 +56,60 @@ export interface AcceptInviteResponse {
   membership: TeamMember;
 }
 
+/**
+ * A team as a record — what `GET /v1/teams` returns.
+ *
+ * Distinct from `TeamOwner`, which describes a team you BELONG to (it carries
+ * your `role` and `membership_id`). This one is the team itself.
+ */
+export interface TeamRecord {
+  id: string;
+  name: string;
+  /**
+   * Always `null` today. Published because it exists on the record, but no
+   * endpoint sets one — whether team slugs become public URL components is an
+   * open decision. Safe to read; will stay null until that is settled.
+   */
+  slug: string | null;
+  owner_account_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TeamRecordsList {
+  data: TeamRecord[];
+}
+
 export interface InviteOptions {
   role?: TeamRole;
 }
 
 export class TeamResource {
   constructor(private readonly http: HttpClient) {}
+
+  // Requires broad read or account_owner.
+  /** List the teams the calling account OWNS. */
+  listTeams(): Promise<TeamRecordsList> {
+    return this.http.request<TeamRecordsList>({
+      method: 'GET',
+      path: '/v1/teams',
+    });
+  }
+
+  /**
+   * Rename a team the calling account owns. account_owner scope required.
+   *
+   * A 404 covers both an unknown id and a team owned by someone else, and does
+   * so deliberately — distinguishing them would let a caller enumerate which
+   * team ids exist.
+   */
+  renameTeam(teamId: string, name: string): Promise<{ team: TeamRecord }> {
+    return this.http.request<{ team: TeamRecord }>({
+      method: 'PATCH',
+      path: `/v1/teams/${encodeURIComponent(teamId)}`,
+      body: { name },
+    });
+  }
 
   /** Invite an email to the calling owner's team. account_owner scope required. */
   invite(email: string, options: InviteOptions = {}): Promise<{ message: string }> {

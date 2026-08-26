@@ -311,7 +311,10 @@ describe('sdk-go structs cover the fields the API returns', () => {
     );
 
     expect(schemas.size, 'spec schemas carrying properties').toBeGreaterThanOrEqual(70);
-    expect(tsMatched.length, 'spec schemas a TypeScript interface shares a name with').toBe(11);
+    // 12 since `TeamRecord`, which the TypeScript SDK declares under the same
+    // name the spec registers — deliberately, so a reader of either can find the
+    // other.
+    expect(tsMatched.length, 'spec schemas a TypeScript interface shares a name with').toBe(12);
     expect(goMatched.length, 'spec schemas a Go struct shares a name with').toBeGreaterThanOrEqual(
       39,
     );
