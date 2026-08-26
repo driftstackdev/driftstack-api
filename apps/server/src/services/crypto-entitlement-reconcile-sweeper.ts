@@ -59,7 +59,17 @@ export interface CryptoEntitlementReconcileResult {
   readonly found: number;
   readonly recovered: number;
   readonly failed: number;
-  /** True when the batch limit was hit — more remain for the next tick. */
+  /**
+   * True when the batch limit was hit, so more MAY remain for the next tick.
+   *
+   * V-1799 — this used to assert that more DO remain. It cannot know: the repo
+   * query fetches at most `limit` with no lookahead, so a batch holding exactly
+   * `limit` orders and no others is indistinguishable from a truncated one.
+   * `sweepExpired` states the same flag honestly ("more may remain") and this
+   * now matches it. Nothing reads this field today — the job discards the
+   * result — which is precisely why the wording is worth correcting before
+   * something starts to.
+   */
   readonly capped: boolean;
 }
 

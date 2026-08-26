@@ -13203,3 +13203,50 @@ BOUNDED: the importer figure counts integration files with an explicit `from '�
 of 433); counting any mention of `src/db` gives 193. I could not re-run coverage to refresh V-1002's
 percentages — `DATABASE_URL` is unset here — so those four numbers remain as measured on 2026-08-14 and
 are NOT re-verified by this entry.
+
+## V-1799 — the coverage report answered what no name-based proxy could, and the audit it pointed at was sound but for one word
+
+2026-08-26. V-1798 withdrew a name-based ranking of under-guarded routes and concluded the only valid
+instrument is a coverage report. Ran one: suite green under `--coverage` (3110 files, 31268 tests),
+totals 91.82 statements / 83.70 branches / 91.42 functions / 93.08 lines across the gate's scope.
+
+⭐ THE RESULT IS NOTHING LIKE THE WITHDRAWN RANKING, which is the point. Lowest statement coverage among
+files with 20+ statements:
+
+crypto-entitlement-reconcile-sweeper.ts 32.00% (branches 35.71)
+routes/internal-atlas-priority.ts 44.00% (branches 11.36)
+services/durable-webhook-delivery.ts 48.98% (branches 37.60)
+lib/bootstrap.ts 49.83% (branches 29.12)
+lib/r2.ts 61.90% (branches 55.55)
+
+None of these appeared in the name-based list, and `account-bundled-llm` — which that list called the
+worst-covered substantial route — is not in the bottom 12 at all.
+
+⭐ AUDITED THE TOP ENTRY END TO END. `crypto-entitlement-reconcile-sweeper` recovers paid crypto orders
+whose entitlement never landed, a real dual-write window: `withOrderLock` commits `status='paid'` and the
+tier activator runs in a separate transaction, so a process death between them leaves a paying customer
+with no tier. It cannot self-heal — `firePaid` is computed from the LOCKED pre-update status, so a
+re-delivered IPN sees `paid`, skips activation, and the alarm only fires when the activator THROWS, never
+when the process dies. The population is not hypothetical: a migration backfilled exactly this predicate
+once. The sweeper is idempotent (`onConflictDoNothing` on `orderId`), bounded per tick, per-order
+try/catch, and re-arms unconditionally with the reason stated. Sound.
+
+⛔ ONE DEFECT, AND IT IS V-1793's SHAPE WEARING DIFFERENT CLOTHES. It returns
+`capped: orders.length >= limit`, and the repo query fetches at most `limit` with NO lookahead — so a
+batch of exactly `limit` orders with none behind it is indistinguishable from a truncated one. Its JSDoc
+asserted "more remain for the next tick".
+
+⭐⭐ THE SAME EXPRESSION IS CORRECT IN THE SIBLING, AND THAT IS THE WHOLE LESSON. `sweepExpired` computes
+`capped` identically and documents it as "true when the sweep hit `limit` (more MAY remain)", adding that
+an exact count "defeats the point of the limit; `capped` is the honest signal". Identical arithmetic,
+opposite verdict — because the contract differs. **A boundary flag is not right or wrong on its
+arithmetic; it is right or wrong against what it claims to mean.** V-1793's `truncated` was specified as
+a conjunction the code did not implement; this one over-asserted a certainty the query cannot supply.
+
+FIXED as documentation only: the flag now says MAY remain, matching its sibling. ⚠️ Nothing reads the
+field today — `registerCryptoEntitlementReconcileJob` discards the result of `tickOnce()` — which is the
+argument FOR correcting it rather than against: the wording is what a future consumer would trust.
+
+BOUNDED: coverage totals are the gate's configured scope, which EXCLUDES `apps/server/src/db/**` (55
+files, see V-1798) and the Astro apps, GUI client and generated SDK code. The bottom-12 list is over
+files with 20+ statements inside that scope only.
