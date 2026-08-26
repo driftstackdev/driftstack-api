@@ -21632,3 +21632,43 @@ one rather than a NaN waiting for a reader.
 The 49 remaining errors are not fixed here on purpose: correcting them one by one leaves the
 tsconfigs unchanged and the count free to grow back. The remedy that holds is adding `tests` to
 the package configs, which is W-12 and its owner's.
+
+## V-1685
+
+**A customer-selectable persona changes typing rhythm and nothing else. Every persona scrolls,
+taps, pinches and idles identically — by construction, not by oversight.**
+
+`BehavioralProfile` is a published, customer-facing enum: three personas, threaded
+create-request → service → driver → mock and exposed in the Go SDK, all of which
+`behavioral-profile-persona-cross-source-invariant` pins. What no guard covers is what selecting
+one actually changes.
+
+Enumerated across `packages/behavioural-simulation/src` — all 13 default seed derivations, read
+rather than pattern-matched, because several route through a local `defaultSeed(opts)` whose
+content depends on the opts shape:
+
+| carries the persona                  | does not                                                                          |
+| ------------------------------------ | --------------------------------------------------------------------------------- |
+| `keyboard:${profile.id}:${text}`     | `scroll-v:${direction}:${elementClass}`                                           |
+| `typing:${profile.id}:${text}`       | `touch:${elementClass}:${bounds}`                                                 |
+| mock's `('kb', { text, profileId })` | `idle:${idleClass}:${duration}`                                                   |
+|                                      | `pinch:${startSpanPx}->${endSpanPx}`                                              |
+|                                      | `two-finger-scroll` / `three-finger-swipe` / `region-touch` / mouse / mock-scroll |
+
+**3 of 13.** And it is structural rather than forgetful: only three options interfaces declare
+`profile: BehaviouralProfile` at all, so the gesture and idle entry points never receive a
+persona to key on. A `power_user` and a `casual_browser_us` produce byte-identical pinch, scroll,
+tap and idle timings for the same geometry.
+
+**Determinism itself is intended and pinned** — `keyboard.test.ts` asserts the literal default
+seed `keyboard:casual_browser_us:login` and that two calls match. This entry is not about that.
+It is that the persona axis stops at the keyboard while the product sells it as a behavioural
+identity.
+
+**Boundary, and it is a large one.** This package has **zero importers and zero declared
+dependents** in this repo — the three files naming it do so only in prose comments. It is the
+canonical spec that the native fork mirrors, and the fork is outside my scope, so I cannot say
+whether the shipped behaviour has the same shape. What is established is what the spec says.
+
+Raised for the fingerprinting owner rather than fixed: widening the persona axis to gestures is a
+product decision about what a persona means, not a defect to patch.
