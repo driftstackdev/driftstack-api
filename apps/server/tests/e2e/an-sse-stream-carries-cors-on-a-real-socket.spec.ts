@@ -27,9 +27,12 @@
 // `/v1/status/stream` and `/v1/account/me/notifications`. The two in
 // `agent-sessions.ts` (`:3556` and `:5201`, the P-4 site itself) are NOT covered
 // here: reaching them needs a dispatched agent session on a live mac node, and
-// no e2e spec creates an agent session at all — measured across all 40 `.spec.ts`
-// files in this directory, zero mention agent-sessions. So this spec is evidence
-// about the MECHANISM those two share, and is not verification of P-4.
+// no e2e spec creates an agent session at all — measured across the 40 `.spec.ts`
+// files that existed in this directory before this one, zero mention
+// agent-sessions. (The tree now holds 41, and the count is pinned in two places;
+// this file is the 41st and it only mentions agent-sessions in prose.) So this
+// spec is evidence about the MECHANISM those two share, and is not verification
+// of P-4.
 //
 // ⚠️ The harness runs `permissiveCors: true`, so this cannot exercise the
 // allow-list — a refused origin has no e2e coverage anywhere. That posture is

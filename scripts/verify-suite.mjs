@@ -64,8 +64,8 @@ export const EXPECTED_TEST_FILES_ALL = 3215;
 /**
  * The CI jobs this gate does NOT run, with how to run each locally.
  *
- * Current figures, RE-MEASURED 2026-08-25 by running the suite:
- * 229 Playwright tests over 40 spec files, 365 passing Python tests, and Go
+ * Current figures, RE-MEASURED 2026-08-26 by running the suite:
+ * 233 Playwright tests over 41 spec files, 365 passing Python tests, and Go
  * tests from an uncached run.
  *
  * V-1581 — the Playwright pair moved 222/36 -> 223/37, the added spec being the
@@ -141,7 +141,7 @@ export const EXPECTED_TEST_FILES_ALL = 3215;
 export const NOT_COVERED_BY_THIS_GATE = [
   {
     job: 'e2e',
-    what: '229 Playwright tests — the only ones hitting real Postgres + Redis',
+    what: '233 Playwright tests — the only ones hitting real Postgres + Redis',
     local: 'DATABASE_URL=<disposable db> REDIS_URL=<unused index> node scripts/e2e-local.mjs',
   },
   {
