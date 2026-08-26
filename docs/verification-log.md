@@ -21611,3 +21611,24 @@ hazard is the next fixture, which nothing would catch.
 
 Reported to W-12's owner rather than fixed here: 51 corrections across five packages is their
 item, and the remedy that matters is adding tests to the tsconfigs so the number cannot grow back.
+
+## V-1684b
+
+**The one real drift from V-1684 is fixed; the 49 strictness errors are deliberately left.**
+
+`webhook-delivery/tests/in-memory.test.ts:810` now sets `attemptsBaseline: 0` on the whitebox
+queue entry, which is the value the semantics require: the single attempt in that fixture was
+spent from the ORIGINAL budget, so `nextAttemptNumber` reads
+`attempts.length - attemptsBaseline + 1` = 2. Predicted the package would go 2 type errors → 1,
+and it did — the remaining one is `TS2532`, the strictness class that belongs to W-12's remedy
+rather than to a one-off correction.
+
+Behaviour is unchanged and that is the point rather than a caveat: `replay()` assigns the field
+before anything reads it, so the fixture was wrong and harmless **by accident**. 66 tests still
+pass, `it(` count 47 against HEAD's 47. What the edit buys is that the fixture now describes a
+shape `enqueue` actually produces, so the next whitebox entry copied from it inherits a correct
+one rather than a NaN waiting for a reader.
+
+The 49 remaining errors are not fixed here on purpose: correcting them one by one leaves the
+tsconfigs unchanged and the count free to grow back. The remedy that holds is adding `tests` to
+the package configs, which is W-12 and its owner's.

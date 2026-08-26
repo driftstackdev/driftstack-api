@@ -831,6 +831,11 @@ describe('WD-1: replay()/requeue() reject an in_flight delivery (no clobbered le
       endpointId: ENDPOINT.id,
       accountId: ENDPOINT.accountId,
       leasedUntilMs: null,
+      // The one attempt above was spent from the ORIGINAL budget, so the
+      // baseline is still zero and nextAttemptNumber reads 2. Omitting it made
+      // this a shape no enqueue produces; nothing caught that because package
+      // tests are outside every tsconfig (W-12).
+      attemptsBaseline: 0,
     });
     const service = new InMemoryWebhookDeliveryService(
       store,
