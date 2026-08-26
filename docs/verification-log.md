@@ -21499,3 +21499,36 @@ thing that cannot be found by the obvious means.
 Recorded in `OPEN-ITEMS.md` as W-15 rather than over the socket: the peer session ended
 mid-investigation and `ListAgents` no longer lists it, which is precisely the case CLAUDE.md
 warns about — the low-latency channel dies with the session and leaves no artifact.
+
+## V-1682
+
+**Four encryption classes deliberately share one key. What separates them is the AAD purpose —
+verified distinct, and verified unambiguous, which is a different property.**
+
+BYOK Anthropic, gui_control_key, LiveKit and MFA TOTP all take their AES-256-GCM key material
+from `MFA_ENCRYPTION_KEY`. That is intentional and documented: a single trust boundary, so one
+rotation rotates all four ciphertexts. It also means the AAD purpose string is the only thing
+keeping a ciphertext from one class from being read as another under the same key.
+
+**Already guarded, and better than I would have written it.**
+`mfa-encryption-key-shared-cross-source-invariant` has nine arms, three of them on exactly this:
+a census that fails if it stops matching, "no two AAD purpose labels in `apps/server/src` are
+equal" **keyed by file+constant rather than constant name** (because `AAD_PURPOSE` appears as a
+bare name in account-proxy and a name-keyed census would silently dedupe it), and a dedicated arm
+for the four modules that share the key. Independently re-derived rather than taken on trust:
+**13 purpose labels, 13 distinct, 0 collisions.**
+
+**The property past that guard — and it also holds.** Distinct labels only separate domains if
+the AAD encoding is unambiguous. Every builder uses `JSON.stringify([purpose, …ids])`, so a field
+containing a delimiter cannot shift the parse; a concatenated `purpose + ':' + accountId` could.
+Checked for the subtler version too: **no purpose is a prefix of another** (0 of 13), which is
+the failure a concatenating builder would need.
+
+Two conventions coexist for where the version lives — most arrays carry it as a field
+(`[PURPOSE, 2, …]`) while gui-control-key and agent-session-transcript embed it in the label
+(`…:v2`, `….v2`). Both are unambiguous, so this is a note, not a finding.
+
+**No guard added.** Writing a new AAD builder is not a one-line drift — it takes a new module and
+a deliberate choice of encoding, which is the V-1675 criterion rather than the V-1673 one. Fifth
+time today a question I judged worth building was already answered in the tree; recorded so the
+sixth sweep starts from the measurement.
