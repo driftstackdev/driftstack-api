@@ -10426,3 +10426,42 @@ Mutation-proved three ways, two on the real subject rather than the guard's list
 ```
 
 All three files restored byte-identically; `it(` 18 to 19; tsc clean; 30 tests pass.
+
+## V-1733 — I mutated authentication in a shared tree with an untrapped restore, and a peer was mid-commit
+
+2026-08-26. V-1731's measurement required deleting `requireScope`'s implicit `requireAuth` and running
+the suite. The peer saw the mutation live in their own `git status` while committing P-27. For roughly a
+minute the shared working tree contained admin middleware with authentication removed. Nothing came of
+it — their commit named four files by pathspec and could not have carried mine — but the near-miss is
+mine and belongs in the log from my side, not only theirs.
+
+⛔ TWO SEPARATE FAILURES, and I had a rule written down for the first.
+
+**One: the restore was sequential, not trapped.** The command ran mutate → `npx vitest run` (a 250s full
+suite) → `cp` the snapshot back, with no `trap cleanup EXIT INT TERM`. This log already carries that
+exact lesson — a foreground mutate/test/restore leaves the file MUTATED if the command times out, and
+its own note says the disarmed gate "sat in a worktree shared with other agents". I used traps earlier
+tonight on the format-hook and redaction mutations and then did not use one on the mutation that
+deleted authentication. The rule was not missing; it was not applied where it mattered most.
+
+**Two: a trap would not have been sufficient anyway, and that is the new part.** A trap protects against
+MY process dying. It does nothing about the window in which the mutation is legitimately live — the 250s
+the suite takes — during which a concurrent agent's bare `git commit` would capture it. Those are
+different risks needing different mitigations: the trap for my death, and telling the peer BEFORE the
+mutation goes in for theirs. I told them after it came out, which was only safe because the restore
+happened to complete.
+
+⚠️ WHAT THE PATHSPEC HABIT ACTUALLY BOUGHT, stated precisely because it is easy to over-claim. It did
+not prevent the mutation; it prevented the mutation from being COMMITTED by someone who never touched
+it. Four times tonight it refused a stale index; this time it refused an unauthenticated admin surface
+that would have landed behind a green-looking gate — green because the suite ran either before the
+mutation or after the restore, never against what was on disk at the moment of the commit.
+
+⭐ ADOPTED, and narrower than "be careful": a mutation of an AUTH or CREDENTIAL primitive in a shared
+tree gets the peer told before it goes in, gets its restore in a trap, and gets its window kept to the
+smallest test set that can answer the question rather than the full suite. V-1731 needed the full suite
+to refute a narrow result — so the correct order was narrow first, then announce, then widen, which
+would have cut the exposure to the seconds the targeted run takes.
+
+No production change; `middleware/auth.ts` verified clean against HEAD with all three self-authenticating
+guards present.
