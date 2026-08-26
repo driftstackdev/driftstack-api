@@ -10465,3 +10465,45 @@ would have cut the exposure to the seconds the targeted run takes.
 
 No production change; `middleware/auth.ts` verified clean against HEAD with all three self-authenticating
 guards present.
+
+## V-1734 — recipe payload encryption audited: sound, with one latent inconsistency I am deliberately NOT guarding
+
+2026-08-26. Continued picking targets by measurement. `services/recipe-payload-encryption.ts` — 322
+lines, two test references, LIVE (`db/recipes-repo.ts` imports it), and **no prior art in this log**.
+Encryption with thin coverage and no audit history is the strongest remaining shape.
+
+It is sound, and on the axes that actually decide whether AAD binding is real rather than decorative:
+
+```
+  AAD content        JSON.stringify([purpose, 2, accountId, recipeId, slot]) — delimiter-safe,
+                     bound to the ACCOUNT, the RECIPE and the SLOT, so a ciphertext cannot be
+                     moved between rows, accounts, or the two payload fields of one recipe
+  AAD inputs         normalizeContext throws unless accountId is a UUID and recipeId matches
+                     rec_<uuid>, so nothing malformed reaches the authenticated string
+  enforcement        setAAD → setAuthTag → decipher.final() IS called, which is what makes GCM
+                     verify. Without final() the tag is never checked and the AAD is decoration
+  read path          readRecipeIntentLog REFUSES anything that is not a v2 envelope, by message
+                     — "not a v2 envelope" — so a v1 row is unreadable rather than downgraded
+  v1                 reachable ONLY through a bootstrap-only converter, which decrypts the
+                     unbound legacy ciphertext and RE-ENCRYPTS it with the full v2 AAD
+  bounds             key length checked, plaintext size capped, and an exact-UTF-8 round-trip
+                     assertion that rejects a lone surrogate rather than returning U+FFFD
+```
+
+⚠️ ONE LATENT INCONSISTENCY, recorded because it is real and NOT guarded because it is not a defect.
+The version `2` is a bare literal in FIVE places — the two envelope interfaces, the AAD builder, and the
+two constructors — with no named constant tying them. A v3 that bumped the envelopes and missed the AAD
+would give v2 and v3 ciphertexts of the same record an IDENTICAL authenticated context.
+
+⭐ I am not adding a guard for it, and the reason is the discipline rather than laziness. The AAD's job
+is to bind a ciphertext to its CONTEXT — account, recipe, slot — and it does that correctly; the version
+byte is belt-and-braces. Exploiting the fork would require substituting one ciphertext for another in
+the database, which needs write access that is already game over. Compare V-1732, which I did guard: a
+money decision failing OPEN on an omission, reachable with no special access. **Guarding every latent
+inconsistency dilutes the signal of the guards that mark real ones**, and this log is more useful if
+"there is an arm for this" keeps meaning something. Recorded here so a future v3 has the warning
+attached to the thing it would break.
+
+BOUNDED: this audited the crypto core, the AAD construction and the version handling. It did NOT audit
+key provisioning, rotation, or where `encryptionKeyBase64` comes from — those sit in bootstrap and
+config, and a key that is well-used but badly sourced would not show up in anything read here.
