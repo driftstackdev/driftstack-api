@@ -12113,3 +12113,39 @@ fix kept the ceiling and removed only the justification.
 
 BOUNDED: swept CP comments citing harness limits with a numeric unit, and the harness comment that started
 this. A cross-component number stated without a unit, or as a word ("the same cap as"), is not in the sweep.
+
+## V-1772 — the sweep for welded cross-component claims, and the distinction that makes the rule usable
+
+2026-08-26. Turned V-1771's principle into a sweep of the harness for comments justifying an owned bound
+BY another component's number.
+
+⛔⛔ THE FIRST SWEEP RETURNED ZERO AND THE ZERO WAS WORTHLESS. I had the perfect control available — the
+sentence I removed in `9619586e1` — and ran the pattern against its pre-fix state: **it did not match**.
+Two defects, both mine: the real text reads "over the CP's 16 MiB control-WSS cap" and my verb list had
+`under|below|within|matches|mirrors|same as|per` but not "over"; and the sibling line reads "safely under
+the 16 MiB WSS cap", where a NUMBER sits between the attribution and the noun my pattern required to be
+adjacent. ⭐ Sweeping the SHAPE not the token, for the third time in this log, and I still wrote the token
+first. Rebuilt around "a cross-component actor within 60 chars of a size/time literal, in either order",
+re-ran the control, it matched — only then was the live sweep worth reading.
+
+⭐⭐ THE LIVE SWEEP FOUND THE SAME 16 MiB AGAIN, AND THIS ONE IS SOUND — which is the useful result.
+`WebDriverClient.swift:68`: "largest legit WD response ≈ 2 MiB page source (W629) + base64-screenshot
+headroom; 16 MiB bounds a hostile/buggy fork's transient buffer (cf. the W148 CP inbound cap)". The CP's
+inbound cap is now 96 MiB, so the parenthetical IS stale — and nothing depends on it. The load-bearing
+justification is entirely OWNED (a measured page-source size plus headroom, bounding this process's own
+buffer), and the cross-component note is explicitly a "cf." comparison.
+
+⭐ SO THE RULE NEEDED SHARPENING, and this is the version worth keeping: **it is not "never cite another
+component's number" — it is "never let another component's number be the JUSTIFICATION".**
+
+    load-bearing  "8 MiB, safely under the CP's 16 MiB cap"          -> rots into WRONGNESS
+    contextual    "16 MiB bounds our buffer (cf. their inbound cap)" -> degrades to a stale aside
+
+The first sentence becomes false when they move. The second stays true; only its parenthetical ages. That
+is the difference between a comment that misleads a sizing decision and one that merely dates itself, and
+it is why the V-1770 fix deleted a clause rather than updating a number.
+
+BOUNDED: swept `harness/Sources/**.swift` for a cross-component actor within 60 characters of a size or
+time literal, in either order, with the removed sentence as a proven positive control. Remaining hits are
+harness↔FORK relationships (WD timeouts, SIGTERM grace, re-anchor windows) — both sides of those are in my
+lane and locally verifiable, and they are NOT audited here.
