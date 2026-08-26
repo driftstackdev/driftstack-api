@@ -199,13 +199,14 @@ describe('W1037 routes/account-audit V-216 + V-297 + V-330b/c + V-484 cross-sour
     expect(lib).toMatch(/const value = Array\.isArray\(raw\) \? raw\[0\] : raw;/);
   });
 
-  it('CRITICAL export pagination loop — while (all.length < EXPORT_MAX_ROWS) { page = await accountAudit.list; all.push(...items); if (nextCursor === null) break; cursor = nextCursor } + truncated = all.length >= EXPORT_MAX_ROWS.', () => {
+  it('CRITICAL export pagination loop — the loop records WHICH exit it took. A row count cannot tell a complete export of exactly the cap from a truncated one, because 10,000 divides by the 200-row page size; V-1793 replaced `truncated = all.length >= EXPORT_MAX_ROWS` with `!exhausted`, set only on the null-cursor break.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/account-audit.ts'));
     expect(p).toMatch(/while \(all\.length < EXPORT_MAX_ROWS\) \{/);
     expect(p).toMatch(/all\.push\(\.\.\.page\.items\);/);
-    expect(p).toMatch(/if \(page\.nextCursor === null\) break;/);
+    expect(p).toMatch(/if \(page\.nextCursor === null\) \{/);
+    expect(p).toMatch(/exhausted = true;/);
     expect(p).toMatch(/cursor = page\.nextCursor;/);
-    expect(p).toMatch(/const truncated = all\.length >= EXPORT_MAX_ROWS;/);
+    expect(p).toMatch(/const truncated = !exhausted;/);
   });
 
   it('test file metadata — file exists at canonical path', () => {

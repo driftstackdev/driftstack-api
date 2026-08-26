@@ -169,4 +169,41 @@ describe('an export declares how it signals truncation', () => {
     },
     120_000,
   );
+
+  // V-1793 — the OTHER side of the boundary the arm above tests from one side.
+  // `truncated` is `all.length >= EXPORT_MAX_ROWS`, and 10,000 divides exactly by
+  // the 200-row page size, so an account holding EXACTLY the cap fills fifty pages,
+  // gets `nextCursor: null` on the fiftieth (the repo uses a limit+1 lookahead, so
+  // it knows there is no successor), breaks — and still reports truncation, having
+  // lost nothing. A complete export that calls itself partial makes the signal
+  // untrustworthy in the direction nobody checks, and this is a compliance export:
+  // a customer told their Art-15 log was cut short cannot discover that it was not.
+  it('CRITICAL an export of EXACTLY the cap is complete and must not claim truncation. 10,001 rows proves the flag CAN be true; only 10,000 proves it is not true for the wrong reason.', async () => {
+    fx = await buildTestApp();
+    for (let i = 0; i < 10_000; i++) {
+      await fx.accountAuditRepo.insert({
+        accountId: fx.accountId,
+        actorType: 'customer',
+        actorAccountId: fx.accountId,
+        actorKeyId: fx.apiKeyId,
+        action: 'api_key.minted',
+      });
+    }
+
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log/export?format=json',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ truncated: boolean; row_count: number }>();
+    expect(body.row_count, 'every row is present').toBe(10_000);
+    expect(body.truncated, 'nothing was dropped: the fiftieth page reported no successor').toBe(
+      false,
+    );
+    expect(res.headers['x-driftstack-export-truncated'], 'header agrees with the body').toBe(
+      'false',
+    );
+  }, 120_000);
 });

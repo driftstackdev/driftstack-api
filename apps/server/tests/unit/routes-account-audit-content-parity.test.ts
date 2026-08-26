@@ -144,11 +144,11 @@ describe('W417.C apps/server/src/routes/account-audit.ts content parity', () => 
     expect(body).toMatch(/const EXPORT_PAGE_SIZE = 200;/);
   });
 
-  it('Export pagination walk: while length < EXPORT_MAX_ROWS; break on nextCursor === null; truncated = length >= EXPORT_MAX_ROWS', () => {
+  it('Export pagination walk: while length < EXPORT_MAX_ROWS; the null-cursor exit records `exhausted`; truncated is !exhausted, NOT a row count (V-1793)', () => {
     expect(body).toMatch(
-      /while \(all\.length < EXPORT_MAX_ROWS\) \{\s*const page = await accountAudit\.list\(ctx, \{\s*limit: EXPORT_PAGE_SIZE,\s*\.\.\.\(cursor !== undefined \? \{ cursor \} : \{\}\),\s*\.\.\.\(effective\.kind === 'team' \? \{ effectiveAccountId: effective\.accountId \} : \{\}\),\s*\}\);\s*all\.push\(\.\.\.page\.items\);\s*if \(page\.nextCursor === null\) break;/,
+      /while \(all\.length < EXPORT_MAX_ROWS\) \{\s*const page = await accountAudit\.list\(ctx, \{\s*limit: EXPORT_PAGE_SIZE,\s*\.\.\.\(cursor !== undefined \? \{ cursor \} : \{\}\),\s*\.\.\.\(effective\.kind === 'team' \? \{ effectiveAccountId: effective\.accountId \} : \{\}\),\s*\}\);\s*all\.push\(\.\.\.page\.items\);\s*if \(page\.nextCursor === null\) \{\s*exhausted = true;/,
     );
-    expect(body).toMatch(/const truncated = all\.length >= EXPORT_MAX_ROWS;/);
+    expect(body).toMatch(/const truncated = !exhausted;/);
   });
 
   it('Export filenameBase: driftstack-audit-log-YYYY-MM-DD via toISOString().slice(0, 10)', () => {

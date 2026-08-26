@@ -172,6 +172,14 @@ export function registerAccountAuditRoutes(
       // already enforces account-scoping; we just iterate.
       const all: AccountAuditEntryRow[] = [];
       let cursor: string | undefined;
+      // V-1793 — `exhausted` records WHICH exit the loop took, because the row
+      // count cannot distinguish them. The cap divides exactly by the page size,
+      // so a log holding precisely EXPORT_MAX_ROWS fills the last page, is told by
+      // the repo's limit+1 lookahead that there is no successor, and leaves through
+      // the `break` having lost nothing — while `all.length >= EXPORT_MAX_ROWS`
+      // reported that as truncation. A complete compliance export that calls itself
+      // partial is the same defect as a partial one that stays silent, reversed.
+      let exhausted = false;
       while (all.length < EXPORT_MAX_ROWS) {
         const page = await accountAudit.list(ctx, {
           limit: EXPORT_PAGE_SIZE,
@@ -179,10 +187,13 @@ export function registerAccountAuditRoutes(
           ...(effective.kind === 'team' ? { effectiveAccountId: effective.accountId } : {}),
         });
         all.push(...page.items);
-        if (page.nextCursor === null) break;
+        if (page.nextCursor === null) {
+          exhausted = true;
+          break;
+        }
         cursor = page.nextCursor;
       }
-      const truncated = all.length >= EXPORT_MAX_ROWS;
+      const truncated = !exhausted;
       // Same cross-actor scrub as the read endpoint (a team member exporting
       // the owner's log must not receive the owner's IP/UA). Request-level
       // only — see rowNeedsActorPrivacyRedaction for the per-row half that

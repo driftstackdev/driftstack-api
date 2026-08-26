@@ -12912,3 +12912,46 @@ Least privilege holds on this endpoint. A one-directional reading of a two-direc
 
 BOUNDED: the list and export handlers in `routes/account-audit.ts` and `AccountAuditService.list`. The
 repository layer below it and the redaction of the EXPORT format path were not read.
+
+## V-1793 — a complete audit-log export of exactly 10,000 rows reported itself as TRUNCATED
+
+2026-08-26. Found by auditing a route end to end after sweeps stopped yielding, which is what the
+standing order says auditing is for. It is the first true positive since V-1787, and it was sitting one
+row below an existing test's fixture.
+
+`GET /v1/account/audit-log/export` walks pages until it has everything or hits a 10,000-row ceiling, then
+reports `truncated` in the JSON envelope and in `x-driftstack-export-truncated` — for CSV the header is
+the ONLY signal a client can read. The flag was `all.length >= EXPORT_MAX_ROWS`.
+
+⛔ **10,000 divides exactly by the 200-row page size.** An account holding precisely the cap fills fifty
+pages; the repo's `limit + 1` lookahead tells the fiftieth there is no successor, so the loop leaves
+through the `break` having lost NOTHING — and `10000 >= 10000` reported truncation anyway. A compliance
+export telling a customer their Article-15 log was cut short when it was complete, with no way for them
+to discover otherwise.
+
+⭐ THE EXISTING TEST WAS ONE ROW AWAY. `an-export-declares-how-it-signals-truncation` is a careful file:
+V-1417 specifically added the true branch after measuring that seeding 10,001 rows costs about a third of
+a second, because "the string 'true' had never been produced by either branch". It seeds **10,001** and
+asserts `truncated === true` — correct, and it proves the flag CAN be true. Nothing seeded **10,000**,
+which is what proves it is not true for the wrong reason. The file's own prose even quotes the defective
+expression — `truncated` is `all.length >= EXPORT_MAX_ROWS` — while explaining the arm. Reading an
+expression is not evaluating it at its boundary.
+
+PROVED BEFORE FIXING: the new arm failed against unmodified source —
+`expected true to be false` — then passed after. The 10,001 arm still reports `true`, so the fix did not
+buy the false case by breaking the true one.
+
+FIXED by recording WHICH exit the loop took (`exhausted`, set only on the null-cursor break) rather than
+inferring it from a row count that cannot distinguish the two.
+
+⛔ TWO PARITY PINS HAD FROZEN THE DEFECT, and their test NAMES asserted it as correct behaviour —
+"truncated = length >= EXPORT_MAX_ROWS" read as a specification. Both updated in this commit, names
+included: a pin whose title states the bug is worse than no pin, because it answers the question for the
+next reader.
+
+MUTATION-PROVED: reverting `const truncated = !exhausted;` to the row-count form fails 3 arms across 3
+files — both text pins and the behavioural boundary test. `account-audit.ts` restored byte-identical from
+a snapshot keyed by full path.
+
+BOUNDED: the JSON branch is asserted directly; the CSV branch shares the same `truncated` value and its
+header is asserted, but no arm parses a 10,000-row CSV body.
