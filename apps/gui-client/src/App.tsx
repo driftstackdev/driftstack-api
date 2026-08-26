@@ -26,6 +26,7 @@ import { ShortcutsCheatsheet } from './components/ShortcutsCheatsheet';
 import { NotificationToastStack } from './components/NotificationToastStack';
 import { NotificationBell } from './components/NotificationBell';
 import { useNotifications } from './lib/use-notifications';
+import { browserStallCensusDeps, startStallWatch } from './lib/main-thread-stall-detector';
 import { RecordingsProvider } from './lib/recordings';
 import { SettingsProvider, useSettings } from './lib/SettingsContext';
 import { useConnectionStatus } from './lib/use-connection-status';
@@ -429,6 +430,24 @@ function Shell(): JSX.Element {
   // Keyboard-shortcuts cheatsheet (5→10 polish) — `?` or ⌘/. `?` is suppressed
   // while typing in a field so it doesn't hijack a literal question mark.
   const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
+
+  // P-25 — the freeze reports itself.
+  //
+  // The owner's report is an unrecoverable hang that emits NOTHING, which is why
+  // two independent static sweeps and 32,000 tests have not found it. This does
+  // not diagnose it; it makes the NEXT occurrence carry a measurement instead of
+  // a restart. Cost is one timestamp comparison per second.
+  //
+  // ⛔ Mounted here with the other unconditional hooks, ABOVE every early return
+  // in this component. A hook below one is the defect that took the Settings tab
+  // down (P-10) and that I then repeated in this very file — twice is enough.
+  useEffect(() => {
+    return startStallWatch((line, census) => {
+      // customer can copy out of the console into a bug report.
+      console.warn(line, census);
+    }, browserStallCensusDeps());
+  }, []);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
