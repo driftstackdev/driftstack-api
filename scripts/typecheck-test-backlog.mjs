@@ -39,18 +39,36 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
  *         cannot be judged from the error code — each needs its call site read.
  *    ~89  argument/assignment mismatches.
  */
-const BACKLOG = [{ project: 'apps/gui-client/tsconfig.test.json', pinned: 96 }];
+const BACKLOG = [
+  { project: 'apps/gui-client/tsconfig.test.json', pinned: 96, minTestFiles: 200 },
+  // W-12, 2026-08-26 — every `packages/*` suite was transpiled by vitest and
+  // typechecked by NOTHING: each package's `tsconfig.json` includes only
+  // `src/**/*`, and five of them additionally `exclude` tests. Measured at 50
+  // errors across six packages, all inside test files, and drained to 0 before
+  // these pins landed — so they are pinned at zero, which is the only pin that
+  // cannot rot: any regression is a rise, and there is no downward drift to miss.
+  { project: 'packages/api-types/tsconfig.test.json', pinned: 0, minTestFiles: 4 },
+  { project: 'packages/behavioural-simulation/tsconfig.test.json', pinned: 0, minTestFiles: 10 },
+  { project: 'packages/recapture-automation/tsconfig.test.json', pinned: 0, minTestFiles: 4 },
+  { project: 'packages/recipe-library/tsconfig.test.json', pinned: 0, minTestFiles: 6 },
+  { project: 'packages/webhook-delivery/tsconfig.test.json', pinned: 0, minTestFiles: 3 },
+  { project: 'packages/webrtc-streaming/tsconfig.test.json', pinned: 0, minTestFiles: 4 },
+];
 
 const TSC = resolve(REPO_ROOT, 'node_modules/.bin/tsc');
 let failed = false;
 
-for (const { project, pinned } of BACKLOG) {
+for (const { project, pinned, minTestFiles } of BACKLOG) {
   let out = '';
   try {
-    execFileSync(TSC, ['--noEmit', '-p', project], {
+    // `--listFiles` on the SAME run, so the file census and the error count can
+    // never describe different compilations. Captured on success too: a project
+    // with zero errors exits 0, and the old code only read stdout from a throw.
+    out = execFileSync(TSC, ['--noEmit', '--listFiles', '-p', project], {
       cwd: REPO_ROOT,
       encoding: 'utf8',
       stdio: 'pipe',
+      maxBuffer: 64 * 1024 * 1024,
     });
   } catch (err) {
     out = `${err.stdout ?? ''}${err.stderr ?? ''}`;
@@ -62,9 +80,30 @@ for (const { project, pinned } of BACKLOG) {
       process.exit(1);
     }
   }
+  // ⛔ A ZERO FROM A PROJECT THAT OPENED NO TEST FILE IS THE BEST-LOOKING
+  // FAILURE THERE IS. `extends` inherits `exclude`, and an `include` cannot win
+  // it back — so a test config that extends its sibling BUILD config inherits
+  // `exclude: [... "tests"]`, compiles only `src`, and reports a confident 0.
+  // That exact mistake produced a clean sweep across seven packages while
+  // opening not one test file. The floor is what makes the 0 above mean
+  // something.
+  const dir = dirname(project);
+  const testFiles = out.split('\n').filter((l) => l.includes(`/${dir}/tests/`)).length;
+  if (minTestFiles !== undefined && testFiles < minTestFiles) {
+    console.error(
+      `✗ ${project}: compiled ${String(testFiles)} test files, expected at least ` +
+        `${String(minTestFiles)}. The project is not reading its tests, so its ` +
+        `error count describes nothing.`,
+    );
+    failed = true;
+    continue;
+  }
+
   const actual = [...out.matchAll(/error TS\d+/g)].length;
   if (actual === pinned) {
-    console.log(`→ ${project}: ${String(actual)} known type errors (pinned)`);
+    console.log(
+      `→ ${project}: ${String(actual)} type errors (pinned), ${String(testFiles)} test files compiled`,
+    );
     continue;
   }
   failed = true;

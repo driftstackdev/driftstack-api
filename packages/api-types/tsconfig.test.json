@@ -1,0 +1,24 @@
+{
+  // W-12 — typecheck this package's TESTS.
+  //
+  // ⛔ SEPARATE FROM tsconfig.json ON PURPOSE. That file is the BUILD config:
+  // `tsc --build` emits it into `dist/`, which is the published artifact. Adding
+  // `tests/**/*` to its `include` would ship the test suite inside the package.
+  //
+  // ⛔ EXTENDS THE BASE, NOT THE SIBLING BUILD CONFIG. `extends` inherits
+  // `exclude`, and an `include` cannot win it back — extending `./tsconfig.json`
+  // would inherit its `"exclude": [... "tests"]` and this config would compile
+  // NOTHING while reporting a confident zero. `exclude` is restated below rather
+  // than inherited from anywhere, for the same reason.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src/**/*", "tests/**/*"],
+  "exclude": ["dist", "node_modules"]
+}
