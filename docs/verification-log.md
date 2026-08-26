@@ -22366,3 +22366,37 @@ the wiring is what this pins.
 
 ⚠️ Ratchets raised by one after checking the delta was **exactly** my file — the disk had moved
 under a peer's work, and a blind +1 would have papered over whatever else had changed.
+
+## V-1698
+
+**Comment-stated caller obligations, swept by mutation: 4 of 22 checked, 1 was unenforced.**
+
+A module that says _"the caller MUST …"_ has moved a correctness property across a boundary the
+type system does not police. V-1697 found one such obligation honoured but unguarded, so the
+class is worth working rather than sampling. 22 exist under `apps/server/src` (comment lines
+only, `caller|route|consumer` + `MUST|must|is responsible`), and I took the four with the
+sharpest consequences.
+
+Each was tested the same way: neutralise the honouring code with a **type-clean** mutation, and
+select the test set by the MECHANISM a guard would have to use rather than by name.
+
+| obligation                                                           | honoured?                                               | guarded?                                                                                                           |
+| -------------------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| trim — _the route MUST compare the applied scope_                    | yes                                                     | **yes** — 2 CRITICAL arms (V-1695)                                                                                 |
+| stripe — _caller must fail the bootstrap when ok=false_              | yes                                                     | ⛔ **NO** — 33/33 both sides (V-1697, now pinned)                                                                  |
+| email-preferences — _the caller MUST be admin on that team_          | yes                                                     | **yes** — 3 files, including `team-rbac-auth-path`, which exercises the real RBAC path rather than the source text |
+| bundled-turn-concurrency — _caller MUST call release() in a finally_ | yes — and the `finally` says "so a slot can never leak" | **yes** — 163 → 162                                                                                                |
+
+**One in four unenforced, and eighteen unchecked.** The remaining obligations are listed in the
+sweep output and are ordinary work for a later pass: notification-event-bus's unsubscribe,
+auth-flows' _"the caller must reject rather than double-run"_, webhook-grace's _"treat a null
+return as…"_, and fifteen more.
+
+⚠️ **Three instrument faults, and the first is the worst kind.** My mutation script printed
+`mutation landed` **unconditionally**, after a python block that had already failed its anchor
+assert — so a run that changed nothing reported a clean A/B with identical numbers, which reads
+exactly like "unguarded". Status lines must be gated on the actual diff, and they now are
+(`cmp` then abort). The other two: an anchor reconstructed from a display rather than extracted
+(the `throw` starts mid-line, so my indentation was wrong), and a mutation that left
+`ForbiddenError` unused — `tsc=1`, which would have mixed a typecheck failure in with the guards
+exactly as V-1696 describes.
