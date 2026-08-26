@@ -13493,3 +13493,39 @@ uncovered fragments before spending an audit on it. Fragment extraction costs se
 BOUNDED: one file's fragments read; the spread-idiom share is a count of the `...(cond ? {` spelling only,
 across `apps/server/src/routes/*.ts` with 15+ branches, and says nothing about ternaries or
 null-coalescing.
+
+## V-1806 — applied the refined method to the whole gap list: six files, 41 uncovered branches, zero untested refusals
+
+2026-08-26. V-1805 concluded that a branch-gap ranking must have its fragments READ before an audit is
+spent on it. Applied that to the remaining top of the list — extracting uncovered fragments from the
+istanbul HTML for five more files took seconds, against the ~30 minutes an end-to-end read of one route
+costs.
+
+profile-blob-orphan-sweeper.ts 4 Date.now; (c String(err) x2
+mac-nodes-register.ts 5 now().toISOString() body.livekit.ws_url undefined; String(err) {})
+admin-accounts.ts 12 'unknown'; { targetAccountId }) {} x4 ...
+admin-status-subscribers.ts 4 {}) null, row.unsubscribedAt.toISOString() : n 'unknown';
+account-mfa.ts 4 {}) 'Invalid body.') {}, {}) as { confirm?: string }
+profile-snapshots.ts (V-1805) 12 all optional-value handling
+
+⭐ EVERY ONE IS OPTIONAL-VALUE HANDLING. Conditional-spread empty halves, null-coalesced timestamps,
+`'unknown'` defaults, injected-clock defaults (`Date.now;`), and the non-Error half of
+`err instanceof Error ? err.message : String(err)` — a defensive arm that only fires if something throws a
+non-Error. **Across six files and 41 uncovered branches there is not one untested refusal, guard or error
+path.** The route layer's refusals are driven; what tests leave unset are optional fields.
+
+⛔ AND THE ONE FRAGMENT THAT LOOKED LIKE A REFUSAL WAS NOT, WHICH IS THE WHOLE ARGUMENT FOR READING THEM.
+`'Invalid body.')` in `account-mfa.ts` reads as an untested rejection on a security-critical route, and I
+went to audit it as one. It is the fallback half of
+`parsed.error.issues[0]?.message ?? 'Invalid body.'` — Zod always supplies a message, so only the nullish
+alternative is undriven. The refusal itself, `if (!parsed.success) throw`, is covered. A fragment is a
+substring, not a statement, and it has to be read in its line.
+
+⭐ NOTED IN PASSING, since I was in the file: MFA enrollment completion gates on
+`app.requireScope('account_owner')` AND `requireInteractiveWebSession` — an API key alone cannot complete
+an enrollment, which is the right posture for that operation and is not something the coverage number
+would ever have shown.
+
+BOUNDED: six files from the top of the branch-gap ranking, fragments extracted from the coverage HTML of
+the DATABASE_URL-enabled run (V-1802). Files further down the ranking were not examined, and a branch
+istanbul does not instrument is not in any of these counts.
