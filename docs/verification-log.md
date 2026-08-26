@@ -22329,3 +22329,40 @@ what is established is that a type-clean mutation exists and that the first resu
 The comparison needs a baseline run and a mutated run with no peer suite in flight; both were
 deferred because a peer runner is active, and running either against a moving tree would repeat
 the fault this entry is about.
+
+## V-1697
+
+**The claim was pinned; the behaviour that makes it true was not. A fail-closed launch gate whose
+enforcement nothing guarded.**
+
+`lib/stripe-key-safety.ts` refuses an `sk_live_` key used before the BV KvK cutover. It is
+thoroughly covered — eleven behavioural arms on `validateStripeKeyForLaunch`, plus a
+content-parity guard pinning its framing, **including the sentence "The check intentionally lives
+outside BillingService so it fires during bootstrap regardless of whether billingService is
+constructed"**.
+
+**Nothing pinned the half that makes that sentence true.** The module only RETURNS
+`{ ok: false, reason }`; refusing to boot is the caller's job, and the file says so: _"Caller is
+responsible for failing the bootstrap when ok=false"_. `bootstrap.ts:2064` honours it with a
+throw — and removing that throw was invisible.
+
+**Established by mutation, not by reading**, and the selection is why it is trustworthy: I chose
+the test set by the MECHANISM any guard would have to use — the five files that invoke
+`createProductionDeps` / `buildAppWithFatalTeardown`, since the check lives inside the former —
+rather than by grepping for "stripe". Baseline 33 of 33; type-clean mutation (0 tsc errors) **33
+of 33 again, identical.** Nothing noticed.
+
+**A prose pin asserting a safety property, over a module that cannot enforce it alone, is the
+"statement is decoration" shape** that `every-boolean-tier-feature-is-enforced` names in its own
+header — here with a commercial edge: an `sk_live_` key before the cutover boots a server that
+can take real money in a pre-launch environment.
+
+Pinned now by `the-stripe-launch-gate-actually-fires-at-bootstrap`: the module still claims the
+obligation, bootstrap CALLS the gate, bootstrap THROWS on failure, and the thrown message is the
+module's own operator-facing reason rather than a rewritten one. Predicted 2 arms would red under
+the mutation and exactly 2 did. Source-reading rather than behavioural because
+`createProductionDeps` needs a database, Redis and a full config — the wiring is what drifts, and
+the wiring is what this pins.
+
+⚠️ Ratchets raised by one after checking the delta was **exactly** my file — the disk had moved
+under a peer's work, and a blind +1 would have papered over whatever else had changed.
