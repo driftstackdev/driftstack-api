@@ -12227,3 +12227,40 @@ lines changed, `tsc` clean.
 
 BOUNDED: globbed every `*-request-correlator.ts` for the claim, which is four files; a correlator named
 differently, or the same claim in a non-correlator service, is outside that glob.
+
+## V-1775 — the widened sweep found a fifth, and this one pointed a false blocker at another agent
+
+2026-08-26. V-1774 established that my V-1765 sweep was alternation-lucky — it matched on the actor and my
+list lacked "node". Re-ran it widened (`node|harness|fork|box|A3|A1|daemon` against
+`never emits|does not yet emit|has not landed|is pending|not yet wired…`), holding all four known
+correlators as the control. They all appeared, and one new file did:
+`services/session-page-state-store.ts`, unmarked.
+
+⭐ IT CARRIES TWO CLAIMS OF THE SAME SURFACE SHAPE AND ONLY ONE IS A MEMBER, which is the distinction that
+keeps this sweep from becoming a false-positive machine:
+
+- line 10 — "a DIFFERENT — driver — session type the harness never emits pageState for" — a PERMANENT
+  DESIGN FACT about session types. Not stale, not a member, no action.
+- line 63 — "A3 contract pending … null until the box sends it" — a TEMPORAL deployment claim, and false.
+
+The box sends it: `HarnessCoordinator.stampTabId` is applied at FIVE PageState construction sites and
+`tabId` is on the wire type (`ControlClient.swift:755`). The CP already carries the field through its own
+`SessionPageState`, so nothing is functionally broken.
+
+⭐⭐ THE COST HERE IS DIFFERENT FROM THE OTHER FOUR, and worse in kind: this one names an agent.
+"A3 contract pending" reads as per-tab keying being BLOCKED ON ME, for a harness half that had already
+landed. The other members made a live path look dead; this one made finished work look outstanding and
+attributed the delay to a person. ⚠️ I had already told A2 the GUI-side twins of this sentence were stale
+prose in an earlier session — and missed this CP-side one, so the correction I asked for was incomplete
+because my own sweep was.
+
+Marked stale rather than deleted, matching its four siblings. Comment-only: zero non-comment lines changed,
+`tsc` clean.
+
+⭐ Temporal vs permanent is the filter that makes this class tractable. "Never emits X for session type Y"
+can never rot; "never emits X yet" is a dated claim wearing the same words. A sweep that cannot tell them
+apart will keep reporting the first kind forever.
+
+BOUNDED: widened sweep over `apps/server/src/**.ts` with the four correlators as a proven control. The
+harness side was swept separately (V-1772) with its own control; a claim phrased without one of the seven
+actor words, or naming a component not in that list, is still outside both.

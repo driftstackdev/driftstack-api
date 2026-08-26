@@ -60,10 +60,17 @@ export interface SessionPageState {
   // self-heal the title from a title-only change frame (the box may emit `title`
   // on ANY state, not just 'loaded'). null when no frame has carried one yet.
   title: string | null;
-  // Forward-compat: the tab this frame is attributed to (A3 contract pending —
-  // see harness-control-protocol PageStateFrameSchema). Carried through so the
-  // GUI can eventually key live state per tab; null until the box sends it. The
-  // store stays a per-session record for now (no per-tab Map restructure yet).
+  // The tab this frame is attributed to. Carried through so the GUI can key live
+  // state per tab; the store itself stays a per-session record for now (no per-tab
+  // Map restructure yet), which is a GUI-side decision, not a missing wire field.
+  //
+  // ⛔ STALE (2026-08-26) — this said "A3 contract pending … null until the box
+  // sends it". The box SENDS it: `HarnessCoordinator.stampTabId` is applied at five
+  // PageState construction sites and `tabId` is on the wire type
+  // (ControlClient.swift:755). ⚠️ The cost of leaving it was a FALSE BLOCKER pointed
+  // at another agent — per-tab keying read as waiting on a harness contract that had
+  // already landed. Same class as the four correlator comments; this one attributed
+  // the delay to someone.
   tabId: string | null;
   error: PageStateFrame['error'];
 }
