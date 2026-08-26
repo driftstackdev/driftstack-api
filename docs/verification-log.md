@@ -10933,3 +10933,47 @@ its zero was trusted. Restored byte-identically under a trap.
 BOUNDED: optionality only. TYPES are still uncompared — a `z.string()` against a Swift `Int` agrees on
 name and optionality and fails at decode — as are enum MEMBERS, where Swift's decoder throws on an
 unknown case. Both are reachable with the same tool and are not claimed here.
+
+## V-1745 — the parity tool STRIPPED nested payloads, so two prior "parity" claims covered top-level fields only
+
+2026-08-26. Extending V-1744 into TYPES surfaced something worse than a type mismatch: my own parser
+carries `flat=re.sub(r'public struct \w+[^{]*\{…\}','',blk)`, which deletes NESTED structs before the
+comparison runs. I wrote that line to stop the field walk leaking into a sibling type; what it also did
+was remove eleven payloads from the scope of BOTH V-1743 (names) and V-1744 (optionality). `LiveKitInfo`
+was compared as "is this field optional" and never for its CONTENTS. ⛔ A tool's own preprocessing
+narrows every claim built on it, and neither prior entry stated this boundary because I did not know it
+was there.
+
+Four of the eleven ride INBOUND, where the harness DECODES and a missing required field throws out the
+whole frame. Compared all four by hand:
+
+- `LiveKitInfo` — 4/4. CP `room/token/ws_url/expires_at` all required strings; Swift `String×3 + Date`.
+- `ProfileInfo` — 5/5, required/optional aligned exactly (`profile_id`+`dek` required, three blob fields optional).
+- `ExitIdentityInfo` — Swift is ALL-optional against a CP that sends every field. Maximally lenient;
+  cannot reject. The Swift comment says so deliberately: "always sent by A2, but lenient here".
+- `TabDescriptor` — no CP counterpart, and that is correct: `tabListUpdate` rides the LIVEKIT DATA
+  CHANNEL, not the CP socket. ⚠️ Fourth time this session that split has misled a comparison. Counterpart
+  found at `apps/gui-client/src/lib/livekit.ts:63` — `{id, url, scrollY: number, title}`, exact 4-field
+  match, and `scrollY`'s camelCase is the LiveKit convention rather than a snake_case violation.
+
+⛔⛔ A HIGH-CONFIDENCE DEFECT WAS FALSIFIED BY RUNNING IT. `expires_at` is minted at
+`routes/agent-sessions.ts:1200` as `new Date(...).toISOString()`, which ALWAYS emits milliseconds, and
+Swift decodes it into a `Date` under `.iso8601` (ControlClient.swift:1675). Foundation's
+`.iso8601` is documented and widely reported to use `[.withInternetDateTime]`, which EXCLUDES fractional
+seconds — so the derivation said every GUI-streaming `sessionAssign` is rejected outright. I compiled the
+real struct with the real strategy and fed it the real string:
+
+    OK  JS toISOString (millis): 2026-08-26T12:34:56.789Z
+    OK  no fractional seconds  : 2026-08-26T12:34:56Z
+
+BOTH PARSE on this toolchain. The famous gotcha does not hold here, and reporting it would have been a
+fabricated production-critical defect resting on a correct-sounding derivation about someone else's
+library. ⭐ A post-condition beat a derivation again — and note the near-miss compounding it:
+`ExitIdentityInfo.probedAt` is annotated "kept as String — no Date-strategy throw risk", so the fix I was
+about to propose would have been pattern-matched onto a decision already taken deliberately.
+
+BOUNDED: the seven OUTBOUND nested payloads (Cookie, UploadedFile, DownloadEntry, SafeguardCheckEntry,
+ChallengeInfo, PageStateError, Tab) are NOT compared here. ⚠️ They are not the benign direction they were
+for optionality: the CP parses inbound frames with `.strict()`, so a Swift field the CP schema fails to
+declare makes the CP reject the whole frame. That is a NAME question in the outbound direction and is the
+next measurement, not a claim made now.
