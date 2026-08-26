@@ -9494,3 +9494,46 @@ Preferring the real instrument over the derivation is what kept a false report o
 
 No production change. The guard gains its third named blind spot with the measurement attached, so
 the next reader inherits the fact rather than the fear.
+
+## V-1711 — an audit of the MFA disable surface found sound code and one arm a test file claimed but never had
+
+2026-08-26. Audited the MFA account surface end to end after noticing the document publishes two ways
+to disable: `DELETE /v1/account/mfa` and `POST /v1/account/mfa/disable`. Two paths to one
+security-critical action is where one quietly skips a check the other enforces.
+
+THE SURFACE IS SOUND, and the checks are mechanisms rather than comments. Both registrations carry an
+identical five-step chain — `requireAuth`, `requireScope('account_owner')`,
+`requireInteractiveWebSession`, `requireMfaFresh()`, `rateLimit('global')` — and the same
+`disableHandler`. The source comment says "Same gate, same handler"; that claim was tested by removing
+`requireMfaFresh()` from the POST alias alone, which two independent guards caught: the V-353e
+cross-source invariant pinning all THREE step-up-gated routes as a family, and the V-353f content
+parity carrying the whole chain. Restored byte-identically; 30 files / 449 tests green.
+
+The step-up family is COMPLETE, checked by enumerating every route whose path touches MFA rather than
+by reading the guard's list: exactly three routes call `requireMfaFresh` in the whole app, and they
+are the three pinned. `POST /v1/account/mfa/enroll` is deliberately not among them and does not need
+to be — `startEnrollment` refuses an enrolled account, so the V-353e chain (mint a credential, redeem
+it to satisfy freshness, then disable) cannot be re-opened through enrollment.
+
+THE FINDING IS A TEST CLAIM, NOT A VULNERABILITY. `mfa-service.test.ts` has always documented, in its
+own header, `completeEnrollment(): rejects no-pending / already-enrolled / wrong code`. Two of those
+three had an arm. Deleting the service's `row.enrolledAt !== null` refusal left every behavioural arm
+in all 30 MFA unit files green — only a content-parity regex noticed, and a text pin cannot tell a
+deleted guard from an inverted one. The `/already enrolled/` assertion that made the file look covered
+belongs to `startEnrollment`, a different method.
+
+⚠️ Production never depended on that check, which is precisely why it could rot unseen.
+`mfa-repo.completeEnrollmentIfPending` carries `isNull(accountMfa.enrolledAt)` in the WHERE of its
+conditional UPDATE, inside a transaction under an advisory lock, returning false when no row matches.
+The service check is the friendlier error; the database is the enforcement. So the missing arm was a
+defence-in-depth layer nothing measured, not an exposure.
+
+The arm now exists, reaches the state through the real enrol/complete flow rather than a hand-built
+row, and is mutation-sensitive by construction: without the refusal the second call verifies the code,
+reaches the repo and fails with "MFA enrollment changed while the code was being verified", which is
+not `/already enrolled/`. Proved — mutation applied, arm red with exactly that message, source restored
+byte-identically, 29 passed. `it(` 28 to 29, tsc clean, no new file so no census bump.
+
+BOUNDED: the mutation was evaluated against the MFA UNIT files. The MFA integration tests are
+DATABASE_URL-gated and did not execute here; they were READ instead, and none asserts the
+already-enrolled refusal, which is what makes the gap a gap rather than a local-visibility artefact.

@@ -224,6 +224,47 @@ describe('V-553.B-11 MfaService.completeEnrollment', () => {
     ).rejects.toThrow(/Invalid/);
   });
 
+  // V-1711 — this file's own header has always claimed `completeEnrollment():
+  // rejects no-pending / already-enrolled / wrong code`, and two of those three
+  // had an arm. Deleting the service's `row.enrolledAt !== null` refusal left
+  // every behavioural arm here green; only a content-parity regex noticed, and a
+  // text pin cannot tell a deleted guard from an inverted one.
+  //
+  // The state is reached through the real flow rather than a hand-built row, so
+  // the arm exercises the path a customer takes. It is mutation-sensitive because
+  // the fall-through error differs: without the refusal the second call verifies
+  // the code, reaches `completeEnrollmentIfPending`, and fails with "MFA
+  // enrollment changed while the code was being verified" — which is not
+  // /already enrolled/, so this goes red rather than passing on a near-miss.
+  //
+  // ⚠️ Production never depended on this: `mfa-repo.completeEnrollmentIfPending`
+  // carries `isNull(accountMfa.enrolledAt)` in the WHERE of its conditional
+  // UPDATE, under an advisory lock. The service check is the friendlier error,
+  // not the enforcement — which is exactly why it could rot unnoticed.
+  it('rejects a second completion once already enrolled', async () => {
+    const { repo, state } = makeRepo();
+    const svc = new MfaService(repo, SVC_CONFIG);
+    const start = await svc.startEnrollment({ accountId: 'acc_1', email: 'u@e.test' });
+    const secretBytes = base32Decode(start.secretBase32);
+    const code = computeTotpCode(secretBytes, Math.floor(Date.now() / 1000));
+    await svc.completeEnrollment({
+      accountId: 'acc_1',
+      currentWebSessionId: CURRENT_WEB_SESSION_ID,
+      code,
+    });
+    expect(
+      state.row?.enrolledAt,
+      'the account is enrolled before the second attempt',
+    ).not.toBeNull();
+    await expect(
+      svc.completeEnrollment({
+        accountId: 'acc_1',
+        currentWebSessionId: CURRENT_WEB_SESSION_ID,
+        code,
+      }),
+    ).rejects.toThrow(/already enrolled/);
+  });
+
   it('on correct code: enrolledAt is set, 10 recovery codes minted + audited', async () => {
     const { repo, state } = makeRepo();
     const { audit, calls } = makeAudit();
