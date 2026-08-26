@@ -12077,3 +12077,39 @@ component's sizing instead of re-derived. A stale sentence misleads one reader; 
 BOUNDED: checked the caps on the upload/download/cookies paths that share `FLEET_WS_MAX_PAYLOAD_BYTES`.
 Other cross-component constants are NOT swept here, and the 8 MiB ceiling's own adequacy is taken from the
 code's claim ("generous for any real jar") rather than measured against production jar sizes.
+
+## V-1771 — why one cross-component number rotted and its sibling did not, and why a guard is the wrong fix
+
+2026-08-26. V-1770 found a harness constant justified by a CP number that had moved. Swept the shape in
+the other direction — CP comments citing a HARNESS numeric limit — and found three, all citing the same
+value: "the harness caps inline outputData at 8 MiB (A3 W227)".
+
+⭐ THAT ONE HOLDS. Harness `HarnessCoordinator:353` is `static let maxInlineOutputDataBytes = 8 * 1024 *
+1024`; CP `harness-control-protocol.ts:127` is `HARNESS_INTENT_OUTPUT_MAX_BYTES = 8 * 1024 * 1024`. Equal.
+So this class is not uniformly rotten, and the difference between the two cases is structural:
+
+    8 MiB  — MIRRORED as a named constant on both sides        -> still correct
+    16 MiB — existed only inside a PROSE justification         -> wrong for 8 weeks
+
+⭐⭐ A cross-component number survives when each side owns a named constant, and rots when one side merely
+narrates the other's value. That is the actionable distinction, not "numbers go stale".
+
+⛔ BUT THE AGREEMENT IS CONVENTION, NOT ENFORCEMENT, and I checked rather than assumed. The only test
+touching it (`schemas-harness-control-protocol-content-parity:258`) pins the CP's own USAGE —
+`outputData: boundedBase64Schema(HARNESS_INTENT_OUTPUT_MAX_BASE64_LENGTH, HARNESS_INTENT_OUTPUT_MAX_BYTES)`
+— which catches a CP-side edit and would not notice the harness moving.
+
+⛔⛔ AND A CROSS-REPO GUARD IS THE WRONG FIX, which is worth recording because it is the obvious next idea.
+CI checks out `driftstack-api` ONLY — no workflow references the sibling harness repo — so a test reading
+Swift source would fail in CI, or skip when the sibling is absent, which is a guard CI never runs and
+therefore not a guard. Two languages in two repos have no shared source of truth for a wire constant; that
+is inherent, not an oversight.
+
+⭐ SO THE MITIGATION IS THE ONE V-1770 ACCIDENTALLY APPLIED: the DEPENDENT side should assert only the
+relationship it OWNS, and never restate the other side's number. The cookie guard's "8 MiB, safely under
+the CP's 16 MiB cap" had two claims welded together — one it owns (8 MiB bounds harness memory) and one it
+cannot verify (what the CP accepts). Deleting the second leaves a sentence that cannot rot. That is why the
+fix kept the ceiling and removed only the justification.
+
+BOUNDED: swept CP comments citing harness limits with a numeric unit, and the harness comment that started
+this. A cross-component number stated without a unit, or as a word ("the same cap as"), is not in the sweep.
