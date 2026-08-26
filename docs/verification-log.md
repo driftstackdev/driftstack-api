@@ -11712,3 +11712,53 @@ their file, against the four audit-call spellings that guard uses. A route credi
 spelled recorder, a non-admin route, or a non-final route whose body reaches into a neighbour's helpers is
 not covered by this count, and the customer-mutation guard (which has its own `DISABLED_STUB` recognition)
 was not re-measured here.
+
+## V-1761 — a THIRD stub-side guard, and why the gate side is harder than V-1757 admitted
+
+2026-08-26. Went looking for guards sharing the audit-body rule and found a file I had missed in two
+previous sweeps of this surface: `every-activation-gate-has-a-refusing-disabled-variant.test.ts`. Its
+header states V-1756 as the thing it exists to prevent — "Drop it and the paths are simply never
+registered, so a caller gets a 404 ... A 503 says the true thing: the feature is real and off here" — and
+claims to be "DERIVED on both sides".
+
+⛔ It is derived on two sides that are BOTH the stub side. Read it rather than trusting the comment:
+
+    for (const m of text.matchAll(/\b(register\w*DisabledRoutes)\s*\(/g)) found.add(m[1]!);
+
+`gatesWiredInApp()` scans `app.ts` for stub CALLS. A gate that never had a stub produces no call and is
+invisible. So THREE guards now — this one, the roster, and the pattern invariant — all state the universal
+invariant and all census from the side that already complies. V-1757 stands, confirmed across all three.
+
+⛔⛔ BUT V-1757's EXPLANATION WAS TOO KIND TO ME. I wrote that the authors applied their own
+completeness doctrine "one level too shallow", implying the gate side was simply there for the taking. I
+built it, and the first version reported **17** route-registering gates with no stub — against my own
+V-1756 count of 3. Sixteen were noise: a gate is only dangerous if the dep can actually be ABSENT, and
+that fact lives in `bootstrap.ts`, not `app.ts`. ⭐ **A gate-side census is unusable without joining two
+files**, which is a real reason to have stayed stub-side, not an oversight. The honest criterion is a
+three-way join:
+
+    route-registering gate (app.ts) x conditionally-wired dep (bootstrap.ts) x no disabled stub
+
+which yields **2**, and adding a fourth term — does the gate register PUBLISHED operations — yields the
+one that matters:
+
+    nowpaymentsIpnSecret   routes=1    published=0    <- correct NON-case
+    cryptoOrdersService    routes=18   published=18   <- the real gap (P-32)
+
+⭐ `nowpaymentsIpnSecret` is not a defect and the distinction is worth keeping: `/v1/webhooks/nowpayments`
+is INBOUND ingress and is not in the customer spec at all. A 404 tells NOWPayments to stop retrying; a 503
+would have them retry forever against a deployment that will never accept the callback. The activation-gate
+pattern is for PUBLISHED customer operations, and applying it here would have been actively worse.
+
+⛔ V-1756 UNDERCOUNTED ITS OWN POPULATION. Its gate regex was `if \(deps\.(\w+) !== undefined\)` with the
+close-paren required, so every COMPOUND condition was invisible: 26 gates exist, not the 20 it reported,
+and the 6 it missed include `nowpaymentsIpnSecret` (`!== undefined && .length > 0`). None of the six
+changes an earlier conclusion — the join clears all of them — but the "20" in V-1756 is wrong and the
+regex that produced it would miss a real gate written with a compound guard.
+
+CONTROL: `mfaService` and `cliAuthorizeService` were in the at-risk set before V-1758 and are absent from it
+now, so the join reflects the landed fix rather than agreeing by construction.
+
+BOUNDED: gates are `if (deps.X !== undefined` in `app.ts` only; "conditionally wired" is the absence of a
+bare `dep,` or `dep: ` line in `bootstrap.ts`, which would misread a dep wired through some third shape;
+and "published" is membership in `packages/sdk-python/openapi.json` after templating `:param` to `{param}`.
