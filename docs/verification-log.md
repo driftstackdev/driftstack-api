@@ -11804,3 +11804,35 @@ outside it; "conditionally wired" is the absence of a bare `dep,` or `dep: ` lin
 would misread a dep wired through some third shape; and "published" is membership in
 `packages/sdk-python/openapi.json` after templating `:param` to `{param}`. It does not check that an
 existing stub covers all of its feature's paths — only that one exists.
+
+## V-1763 — the stub-coverage boundary closes clean: all 9 stubs serve every published path their live half does
+
+2026-08-26. V-1762 shipped the gate-side census and stated its own limit: it proves a disabled stub
+EXISTS, never that the stub covers all of its feature's paths. A stub serving 3 of 5 paths leaves the
+other 2 answering 404 — the identical defect one level down, and invisible to all four guards on this
+surface, mine included.
+
+Measured it: for each `register…DisabledRoutes`, extract the paths it registers, extract the paths its
+live twin registers, and report any PUBLISHED path the live half serves and the stub does not.
+
+RESULT: **9 of 9 stubs resolved, 0 unpaired, 0 published paths unstubbed.** Counts match exactly on every
+pair — byok 4/4, mfa 6/6, agent-sessions 19/19, auth-cli 3/3, billing 4/4, atlas-priority 4/4, recipes
+5/5, session-proxy 2/2, fleet-events 1/1. Sound, with no action.
+
+⛔ A ZERO ACROSS EIGHT IS THE SHAPE THAT SHOULD BE DISTRUSTED, so the detector was proved before its zero
+was believed: deleting `/v1/billing/portal-session` from the billing stub in memory makes it report
+exactly `[('post', '/v1/billing/portal-session')]`. It discriminates.
+
+⛔⛔ AND THE FIRST RUN SILENTLY DROPPED ONE OF THE NINE. It resolved 8 pairs and reported 8 clean results
+— which reads as a complete census. `fleet-events.ts` was missing, and the cause was my regex: the pairing
+required `export function <name>`, and the live half is `export **async** function registerFleetEventsRoutes`.
+⭐ What surfaced it was counting the stubs INDEPENDENTLY of the pairs — 9 registrars exist, 8 pairs were
+measured, and the discrepancy is the only reason I looked. A census that reports only what it managed to
+pair will always look complete; the count of what it FAILED to pair is the arm that makes it honest, and
+the corrected run carries an explicit `unpaired` counter for that reason.
+
+BOUNDED: pairing is by name (`register<X>DisabledRoutes` ↔ `register<X>Routes`) within one file, so a live
+half named differently or living in another module would come back UNPAIRED rather than clean — it is 0
+today, which is what makes the 9/9 meaningful. Path extraction reads `app.<verb>('...')` literals only, so
+a route registered through a variable or a loop is not counted on either side, and "published" is spec
+membership after templating `:param` to `{param}`.
