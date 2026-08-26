@@ -146,6 +146,32 @@ describe('POST /v1/mac-nodes/:id/control — fleet-admin node control', () => {
     await app.close();
   });
 
+  // V-1722 — the OTHER way delivery fails, and the one that used to answer 5xx.
+  // `registry.get()` proving a connection existed does not prove the send will
+  // land: the socket can close in the window since, and `sendFleetFrame` refuses
+  // outright once the outbound buffer passes FLEET_WS_MAX_BUFFERED_BYTES. Both
+  // are the node being unreachable — the same condition the arm above answers
+  // 409 for — and an unreachable worker is not this server erroring. The throw
+  // used to escape to Fastify, so an admin saw 500 for a 409 situation.
+  it('409, not 500, when the connection exists but the transport send refuses', async () => {
+    const registry = {
+      get: () => ({
+        sendControlCommand: () => {
+          throw new Error('fleet control socket outbound buffer capacity exceeded');
+        },
+      }),
+    } as unknown as FleetControlRegistry;
+    const app = await buildHarness({ repo: fakeRepo(), controlRegistry: registry });
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/mac-nodes/${NODE}/control`,
+      headers: { authorization: 'Bearer ds_live_test', 'content-type': 'application/json' },
+      payload: { command: 'restart' },
+    });
+    expect(res.statusCode, 'a node that cannot be reached is not a server error').toBe(409);
+    await app.close();
+  });
+
   it('400 on an unknown command + on a non-uuid id', async () => {
     const { registry } = fakeRegistry();
     const app = await buildHarness({ repo: fakeRepo(), controlRegistry: registry });

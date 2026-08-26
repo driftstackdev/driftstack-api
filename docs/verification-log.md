@@ -9970,3 +9970,48 @@ the two this session cannot open.
 So the honest claim is narrow: the control plane's in-process bounded resources are not the leak, on the
 three shapes checked, with no load applied. Reproduction under sustained multi-site traffic remains the
 only thing that can localise this, and nothing here substitutes for it.
+
+## V-1722 — an unreachable worker answered 500 on the one send path that bypassed the reconciler
+
+2026-08-26. Continued the P-25 hunt into the shape both agents independently ranked highest: a writer
+that stops draining. The control plane turns out to guard this deliberately, and the audit found one
+site that does not.
+
+THE OUTBOUND PATH IS BOUNDED AND DOCUMENTED. `routes/fleet-events.ts` refuses a frame once
+`bufferedAmount + frameBytes` passes `FLEET_WS_MAX_BUFFERED_BYTES` (96 MiB), and says why the refusal is
+synchronous: "every registry correlator already converts transport throws to its bounded error outcome
+and clears its pending timer. The shared node socket stays open, so a later request can proceed once the
+existing queue drains." That is a degrade-and-recover design, not a wedge.
+
+⚠️ THAT SENTENCE IS A CLAIM, AND IT COVERS THE CORRELATOR ONLY. Five call sites send on a node connection
+WITHOUT going through a correlator. Enumerated rather than sampled: three in `routes/agent-sessions.ts`
+sit inside a try whose catch reconciles — `closeFailedSessionAssign` closes the row, re-sends `sessionEnd`
+on the SAME connection, and retains one bounded pending teardown if that fails, with its comment naming
+the exact risk ("leaving the row active would consume a slot until the orphan reaper and leave the GUI
+waiting for a publisher that never starts"). A fourth, `cp-daemon-reconcile`, wraps its send in a
+per-session try/catch INSIDE the loop, so one failure cannot abandon the remaining orphans. Sound, and
+sound on purpose.
+
+THE FIFTH WAS NOT. `POST /v1/mac-nodes/:id/control` resolves a connection, answers **409** when there is
+none — "has no live control-plane connection — cannot deliver the command" — and then calls
+`sendControlCommand` with no guard at all. `registry.get()` proving a connection existed does not prove
+the send lands: the socket can close in the window since, and the frame is refused outright once the
+outbound buffer is over cap. Both are the node being unreachable, the identical customer-facing
+condition the line above answers 409 for, and the throw escaped to Fastify as a **500**. An unreachable
+worker is not this server erroring, and the route already knew that one line earlier.
+
+Converted at the boundary rather than narrowed by message: at that point the command demonstrably did
+not reach the node whatever the cause, which is what the caller needs. The original error is logged so a
+genuine defect stays diagnosable instead of being flattened into a 409. Mutation-proved by reverting the
+guard: the new arm reports "expected 500 to be 409". Restored byte-identically; `it(` 6 to 7; tsc clean.
+
+⛔ THIS IS NOT THE FREEZE, and saying so is the point. It is a status-fidelity defect on an admin route.
+Nothing here degrades over sustained use, and the outbound cap it exposes recovers by design. P-25
+remains undiagnosed.
+
+⚠️ TWO INSTRUMENT ERRORS ON THE WAY, both caught by widening rather than by suspicion. A backpressure
+sweep scored `fleet-control-registry.ts` as having five backpressure signals; all five were the word
+"drain" in a QUEUE-drain sense, an unrelated meaning. Then a grep for `bufferedAmount` scoped to that
+file returned nothing and I concluded the send path was unguarded — the check lives one module away in
+the route. Both would have produced a confident, wrong finding; the second would have been a fabricated
+security-adjacent claim about a file that is in fact careful.

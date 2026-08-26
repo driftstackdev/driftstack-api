@@ -391,12 +391,39 @@ export function registerMacNodesRoutes(
           `Fleet node ${nodeId} has no live control-plane connection — cannot deliver the command.`,
         );
       }
-      conn.sendControlCommand(
-        serializeControlCommand({
-          command: parsed.data.command,
-          ...(parsed.data.reason !== undefined ? { reason: parsed.data.reason } : {}),
-        }),
-      );
+      // V-1722 — the send is the second way this route fails to deliver, and it
+      // used to be the only one that answered 5xx. `registry.get()` proves a
+      // connection EXISTED; `sendControlCommand` refuses if the socket closed in
+      // the window since, or if the outbound buffer is over
+      // FLEET_WS_MAX_BUFFERED_BYTES. Both are the node being unreachable — the
+      // same customer-facing condition the line above answers 409 for — and an
+      // unreachable worker is not this server erroring.
+      //
+      // Converted at the boundary rather than narrowed by message: at this point
+      // the command demonstrably did not reach the node whatever the cause, which
+      // is what the caller needs to know. The original is logged so a genuine
+      // defect here stays diagnosable instead of being flattened into a 409.
+      try {
+        conn.sendControlCommand(
+          serializeControlCommand({
+            command: parsed.data.command,
+            ...(parsed.data.reason !== undefined ? { reason: parsed.data.reason } : {}),
+          }),
+        );
+      } catch (err) {
+        req.log?.warn(
+          {
+            component: 'fleet-node-control',
+            nodeId,
+            command: parsed.data.command,
+            err: err instanceof Error ? err.message : String(err),
+          },
+          'controlCommand transport send failed; answering 409 rather than 500',
+        );
+        throw new ConflictError(
+          `Fleet node ${nodeId} could not be reached — the command was not delivered.`,
+        );
+      }
       // Audit: a node-control action changes a production worker's
       // availability, so record WHO issued WHICH command against WHICH node.
       // Best-effort (mirrors the LK.2 emit) — a failed audit insert must not
