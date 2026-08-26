@@ -14008,3 +14008,43 @@ NO DEFECT, and V-1811's boundary is now closed by mutation rather than by proxim
 BOUNDED: one predicate neutralised (`list`'s seed) and the audit-log-referencing subset run — 95 files,
 1490 tests. The repo's other two selects were not separately mutated, and a full-suite run under this
 mutation was not performed because the targeted subset already failed.
+
+## V-1818 — mutation-tested a second tenant predicate: guarded, and the guards that DO exist have hardcoded populations
+
+2026-08-26. V-1817 established that "is X guarded?" is answered by breaking X, not by searching for a
+guard. Applied it to a second repo rather than stopping at the one that prompted the lesson.
+
+POPULATION: 23 repo files under `apps/server/src/db` carry an `eq(<table>.accountId, …)` predicate, 126
+predicates in total. Per-predicate resolution would cost 126 runs, so this entry measures TWO and says so.
+
+⭐ `account-proxies-repo` — all 6 predicates neutralised at once — is GUARDED: 3 arms in
+`db-repo-account-ownership-boundary.test.ts` fail. Combined with V-1817's audit-repo result, both repos I
+have tested by mutation are covered.
+
+⭐⭐ THE GUARD THAT CAUGHT IT IS THE BEST ARGUMENT FOR THIS METHOD I HAVE READ, and it was itself born
+this way: "Found by mutation sweep, not by reading. Every `eq(table.accountId, …)` predicate in
+`agent-sessions-repo.ts` (8) and `account-proxies-repo.ts` (6) was neutralised … and the ENTIRE suite
+stayed green: 2,564 files, 26,584 tests, zero failures." It also diagnoses WHY reading and route tests
+both miss it — the route tests "drive a repo DOUBLE, so they exercise the service check and never the
+SQL" — and states the principle exactly: **"defence in depth that nothing verifies is defence in belief."**
+
+⛔ BUT ITS POPULATION IS HARDCODED, WHICH IS THE FINDING WORTH CARRYING. That guard covers two named repos
+(agent-sessions, account-proxies); its sibling `db-repo-account-scoped-reads-boundary` covers three
+(crypto-orders, bundled-llm, oauth-links). Five of the twenty-three, fixed by name at the moment each was
+written. Nothing forces a repo that gains an `accountId` predicate tomorrow into either — the shape my own
+notes call "a guard naming one member of a growing family goes blind". The other repos are not therefore
+unguarded — `account-audit-repo` is covered by three differently-named files (V-1817) — but coverage is
+per-repo happenstance rather than derived.
+
+⛔ AND MY OWN INSTRUMENT COST THREE ATTEMPTS TO THE SAME DOCUMENTED TRAP. The first run reported
+`exit 1` with no test counts, which I nearly read as "the mutation was caught"; it was
+"No test files found". The cause was not the mutation and not the filter contents: **zsh does not
+word-split an unquoted `$VAR`**, so `npx vitest run $SUB` handed 19 paths to vitest as ONE argument.
+Inline `$(...)` command substitution IS split, which is why every earlier subset run worked. Proved by
+running the identical unmutated subset both ways: `$SUB` → "No test files found"; inline → 19 files, 481
+tests, exit 0. Third time today this trap has fired, and the first time it nearly produced a false
+positive rather than a false zero.
+
+BOUNDED: two repos measured by mutation (`account-audit-repo` in V-1817, `account-proxies-repo` here),
+against targeted subsets rather than the full suite. The remaining 21 repos and ~117 predicates are
+UNMEASURED — not unguarded, and not guarded, simply not tested by me.
