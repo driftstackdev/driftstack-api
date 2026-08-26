@@ -9647,3 +9647,44 @@ Four instruments have now failed in this one line of work — two detectors that
 and two sweeps that never ran a test — against one real finding, on a subject that was correct
 throughout. `services/mfa.ts` restored byte-identically after every mutation and verified clean against
 HEAD. The V-1711 arm's Prettier line-wrap is committed here so the tree stops carrying it.
+
+## V-1714 — the session-invalidation epoch: two writers, one deliberate asymmetry, and a security invariant pinned only by its spelling
+
+2026-08-26. Audited `accounts.authEpoch` — the mechanism that invalidates web sessions after a
+security event — end to end. No prior art: nothing in this log audits it, and only two guards carry
+its name.
+
+ENUMERATED RATHER THAN ASSUMED. Exactly two sites advance the account epoch:
+`auth-flows-repo.setPassword` and `mfa-repo.completeEnrollmentIfPending`. The enrollment path bumps
+under optimistic concurrency (`where authEpoch = <observed>`), then rebases ONLY the enrolling session
+to the new value and sets its `mfaSatisfiedAt`, throwing if either update returns no row. Every other
+session keeps the old epoch and goes stale, which is the property: enrolling MFA logs out everything
+else.
+
+THE ASYMMETRY IS CORRECT AND WAS UNDOCUMENTED. `mfa-repo.deleteForAccount` — MFA disable — does not
+bump. That is the authority model rather than an oversight: the epoch invalidates sessions whose
+authority is now INSUFFICIENT, so it advances when the requirement gets STRICTER. Disabling relaxes
+it, every live session already satisfies the weaker rule, and a later re-enrollment bumps again, so no
+session carries a stale `mfaSatisfiedAt` across an upgrade. Sound — but the reason existed nowhere, and
+an undocumented asymmetry in session invalidation is precisely where a real gap hides among deliberate
+ones. Now stated at the disable site.
+
+⚠️ THE FINDING IS THAT THE INVARIANT IS PINNED BY ITS SPELLING, LOCALLY. Mutating the bump so it stops
+advancing (`authEpoch + 1` to `authEpoch`, which keeps types and the optimistic WHERE valid, so it is a
+semantic weakening rather than a compile break) fails 3 files in the full local suite — and narrowing
+with a control (8 unit files naming `authEpoch`, 117 tests executing at baseline) the only unit catcher
+is `db-mfa-repo-content-parity.test.ts`, a TEXT pin. It fires because the source string changed, not
+because a session survived anything. No test pins the literal bump expression, and EVERY behavioural
+file naming `authEpoch` is an integration test: `db-mfa-enrollment-session-authority`,
+`web-session-authority-repo-contract`, `db-auth-flows-session-revocation-drizzle`, `auth-flows`,
+`db-mfa-credential-issuance-concurrency-drizzle`, `admin-suspend-roundtrip`.
+
+BOUNDED, AND THE BOUNDARY IS BEING CLOSED RATHER THAN STATED. Those integration files are
+DATABASE_URL-gated and did not execute here. V-1712 was withdrawn for exactly this — substituting
+reading for executing on gated files — so this time the mutation was handed to the agent holding the
+database to run, instead of being read around. Whether a behavioural arm catches it is therefore OPEN
+in this entry, and only the local half is claimed: locally, a security invariant is defended by a
+regex over its own source text.
+
+No behavioural change. `mfa-repo.ts` restored byte-identically after the mutation and verified clean
+against HEAD; the only edit committed here is the comment recording the asymmetry.

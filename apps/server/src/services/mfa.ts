@@ -242,7 +242,17 @@ export class MfaService {
 
   /** V-353b — disable MFA: drop the row + recovery codes. Caller is
    *  responsible for the step-up gate (V-353e); the service trusts
-   *  the route. */
+   *  the route.
+   *
+   *  V-1714 — this deliberately does NOT advance `accounts.authEpoch`,
+   *  while `completeEnrollmentIfPending` does. The asymmetry is the
+   *  authority model, not an oversight: the epoch exists to invalidate
+   *  sessions whose authority is now INSUFFICIENT, so it advances when the
+   *  requirement gets STRICTER. Disabling relaxes it — every live session
+   *  already satisfies the weaker rule, and re-enrolling later bumps the
+   *  epoch again, so no session can carry a stale `mfaSatisfiedAt` across
+   *  an upgrade. Stated here because an undocumented asymmetry in session
+   *  invalidation is exactly where a real gap would hide. */
   async disable(args: { accountId: string }): Promise<void> {
     const row = await this.repo.findByAccount(args.accountId);
     if (!row) {
