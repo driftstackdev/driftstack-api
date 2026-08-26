@@ -9597,3 +9597,53 @@ substring detector can find this class at all. Recorded so the next attempt does
 
 No production change in this entry. `services/mfa.ts` restored byte-identically after every mutation
 and verified clean against HEAD.
+
+## V-1713 — V-1712 named the wrong cause: both sweeps were vacuous for one reason, and an exit code is not a verdict
+
+2026-08-26. V-1712 attributed the broken mutation harness to vitest colourising its summary line. A2
+challenged that on the correct ground — vitest disables colour when stdout is not a TTY, and the
+harness captured through `$(...)`, which is a pipe — so the explanation could not be right. It is not.
+Reproduced instead of argued: with the mutation applied and output captured exactly as the sweep
+captured it, there is no colour anywhere and **no summary line at all**. What came back was vitest's
+"no test files found" diagnostic — its `filter:`, `include:` and `exclude:` echo — and exit code 1.
+
+THE REAL CAUSE IS A SHELL RULE THIS LOG HAS RECORDED BEFORE. The harness built its file list once and
+reused it: `BEH=$(ls … | grep -v …); npx vitest run $BEH`. **zsh does not word-split a parameter
+expansion.** All ten paths were handed over as a SINGLE argument, matched nothing, and the run ended
+before a test executed. Unquoted command substitution DOES split, which is exactly why every earlier
+inline `npx vitest run $(ls …)` in this session worked and why the difference was invisible.
+
+⚠️ ONE FAULT PRODUCED BOTH OPPOSITE VERDICTS, WHICH IS WHY IT SURVIVED SCRUTINY. The text-scoring pass
+reported 0 of 7 caught — there was no summary line to parse. The exit-code pass reported 7 of 7 caught
+— **vitest exits non-zero when it finds no files**, so "nothing ran" and "a test failed" are the same
+status. Two runs, two contradictory tables, neither containing a single executed test. Concluding the
+second was right because it agreed with a known positive was luck: it agreed with everything.
+
+⭐ SO AN EXIT CODE IS NOT A VERDICT EITHER. V-1712's remedy — score on the process status rather than
+parsed text — is not wrong so much as insufficient, and stating it as the fix is what let a second
+vacuous sweep look like a correction of the first. A mutation run must prove WORK HAPPENED before its
+result means anything: assert a floor on tests actually EXECUTED, then read pass/fail. Status alone
+cannot distinguish a caught mutation from a harness that never started.
+
+Re-run with the list expanded inline and a control asserting execution: baseline 10 files / 145 tests,
+then each of the seven single-throw guards in `services/mfa.ts` deleted in turn, every run executing
+145-ish tests and failing exactly one:
+
+```
+  [0] CAUGHT (1 failed)  MFA is already enrolled. Disable first via DELETE …
+  [1] CAUGHT (1 failed)  No pending MFA enrollment. Call POST …/enroll first.
+  [2] CAUGHT (1 failed)  MFA is already enrolled. Disable + re-enroll …
+  [3] CAUGHT (1 failed)  Invalid 6-digit code. Try again.
+  [4] CAUGHT (1 failed)  MFA is not enrolled for this account.
+  [5] CAUGHT (1 failed)  MFA is not enrolled for this account.
+  [6] CAUGHT (1 failed)  MFA recovery codes changed during regeneration. …
+```
+
+Seven of seven, now established rather than asserted. The number is unchanged from V-1712 and that is
+the uncomfortable part: a vacuous instrument returned the right answer, and agreement with the truth is
+not evidence an instrument works. Only the control is.
+
+Four instruments have now failed in this one line of work — two detectors that failed their controls,
+and two sweeps that never ran a test — against one real finding, on a subject that was correct
+throughout. `services/mfa.ts` restored byte-identically after every mutation and verified clean against
+HEAD. The V-1711 arm's Prettier line-wrap is committed here so the tree stops carrying it.
