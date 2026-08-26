@@ -557,7 +557,9 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     // frame without it still validates + is carried as null downstream.
     expect(body).toContain('tabId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH).optional(),');
     expect(body).toContain('kind: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),');
-    expect(body).toContain('http_status: z.null().optional(),');
+    expect(body).toContain(
+      'http_status: z.number().int().min(100).max(599).nullable().optional(),',
+    );
     // The exact A3 W2730 wire shapes must ALL parse (these are what the box sends):
     // loading: url present, NO error key.
     expect(
@@ -616,14 +618,49 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
         url: 'https://example.com/app',
       }).success,
     ).toBe(true);
-    // http_status, if ever present, must be null — a numeric status is rejected.
+    // ⛔ THIS ARM USED TO ASSERT `.toBe(false)` — that a numeric status is
+    // REJECTED — and that is why the defect survived three sweeps looking like a
+    // deliberate decision. The frames it rejected are exactly the ones reporting
+    // a failed page load, so a customer landing on a 4xx/5xx got no error overlay
+    // and nothing recorded why. A test that pins a defect makes it look intended.
     expect(
       HarnessOutboundSchema.safeParse({
         type: 'pageState',
         sessionId: 'agt_1',
         state: 'errored',
-        error: { kind: 'net', http_status: 404, message: 'x' },
+        error: { kind: 'http', http_status: 404, message: 'Not Found' },
       }).success,
+      'a real HTTP status must parse — this is the failed-page-load frame',
+    ).toBe(true);
+    // Both older shapes still parse, so the widening is backward compatible in
+    // both directions rather than a swap.
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'pageState',
+        sessionId: 'agt_1',
+        state: 'errored',
+        error: { kind: 'net', http_status: null, message: 'x' },
+      }).success,
+      'null still parses',
+    ).toBe(true);
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'pageState',
+        sessionId: 'agt_1',
+        state: 'errored',
+        error: { kind: 'net', message: 'x' },
+      }).success,
+      'absent still parses',
+    ).toBe(true);
+    // And the bounds hold — a status outside 100-599 is not a status.
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'pageState',
+        sessionId: 'agt_1',
+        state: 'errored',
+        error: { kind: 'http', http_status: 9999, message: 'x' },
+      }).success,
+      'an out-of-range status is refused',
     ).toBe(false);
     // title-only change frame on a NON-loaded state (the box may emit `title` on
     // ANY state, e.g. an in-page document.title update with no navigation) — must

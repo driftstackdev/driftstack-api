@@ -1383,8 +1383,10 @@ export type ProfileSaveFailed = z.infer<typeof ProfileSaveFailedSchema>;
 // Emitted on an AGENT-INITIATED navigate: loading → loaded | errored. Intended
 // to drive the GUI loading-bar / error-overlay (W615/W616). `error.kind` is
 // net|timeout ONLY (tls/dns/http-distinct + http_status need an A1 nav-error
-// channel — A3 W1222); `http_status` is on the wire per the spec but the
-// harness ALWAYS sends null. Recognized + typed here so the frame is no longer
+// channel — A3 W1222); ⛔ STALE (2026-08-26 — see the `http_status` field below):
+// this said the harness ALWAYS sends null. It does not: the fork emits a real
+// status and the deployed binary carries it. Kept as the record of a past belief
+// and marked so it cannot be quoted as current fact. Recognized + typed here so the frame is no longer
 // silently dropped at safeParse (was: unknown type → ignored). The CONSUMER
 // (map → the session's REST page_state) is GATED on the agent↔driver session
 // coupling: the harness emits pageState for the ControlPlaneAgentExecutor
@@ -1407,7 +1409,9 @@ export const PageStateFrameSchema = z.object({
   state: z.enum(['loading', 'loaded', 'errored', 'stalled']),
   // A3 W2730 (authoritative wire spec — Swift encodeIfPresent → nil keys are
   // OMITTED, not null): `url` is absent on reload, `error` only on 'errored', and
-  // `http_status` is NEVER emitted. The previous REQUIRED url / error /
+  // ⛔ STALE (2026-08-26 — see the field below): `http_status` is NEVER emitted.
+  // It is emitted now, and treating that sentence as current is what kept the
+  // failed-page-load frames being dropped in production for weeks. The previous REQUIRED url / error /
   // error.http_status therefore failed safeParse on EVERY real frame → it was
   // silently dropped → the page-state store stayed empty → no live URL in the
   // GUI. All three are now optional; `kind` is lenient (A3 emits net|timeout;
@@ -1431,7 +1435,27 @@ export const PageStateFrameSchema = z.object({
     .object({
       kind: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
       message: z.string().max(PAGE_STATE_TEXT_MAX_LENGTH),
-      http_status: z.null().optional(),
+      // ⛔ WIDENED — this was `z.null().optional()` and it was dropping exactly
+      // the frames that report a failed page load, in production.
+      //
+      // The comment above says `http_status` is NEVER emitted. That was a
+      // DEPLOYMENT claim written from a source file, and all three of its
+      // conditions have since become true: the fork emits it
+      // (`WebLocalFrameLoaderClient.cpp` appends `"httpStatus":` when > 0), the
+      // deployed binary carries that key (confirmed by a stale-verify against the
+      // running nav producer), and the gate `DRIFTSTACK_NAV_PAGESTATE=1` is set
+      // in the daemon env.
+      //
+      // So a customer landing on a 4xx/5xx produced `PageStateError(kind:"http",
+      // httpStatus: 404)`, which failed safeParse here, and
+      // `fleet-control-registry.ts` drops an unparsed frame with `return;` and no
+      // log. No error overlay, and nothing anywhere recording why — the
+      // white-screen class, reintroduced at the CP boundary.
+      //
+      // Backward compatible in both directions: null still parses, absent still
+      // parses, and a real status now parses instead of taking the whole frame
+      // down with it.
+      http_status: z.number().int().min(100).max(599).nullable().optional(),
     })
     .nullable()
     .optional(),
