@@ -12007,3 +12007,42 @@ BOUNDED: the guard asserts the route's id REACHES the control-key decision; it d
 then compares correctly — that is `validateGuiControlKey`'s own contract, covered by
 `tests/integration/v2-8-gui-control-key.test.ts`, which I did not re-derive here. Discovery is by the
 `controlKeyOrAccountAuth` declaration name, so a fourth gate under a different name is outside it.
+
+## V-1769 — route audit: file upload is sound end to end, and the sanitizer was tested rather than read
+
+2026-08-26. Audited `POST /v1/agent-sessions/:id/files` — customer-supplied BYTES written to disk on a
+worker, so the classic risks are traversal, size, and jail escape. Sound at every layer, and this time the
+load-bearing function was executed rather than reasoned about.
+
+CONTROL PLANE: `name`/`mime` capped at 255 (matching the filesystem limit measured in V-1763 — 255 accepted,
+256 refused, so a name that can exist on disk can never exceed the cap); `dataB64` bounded by
+`bodyLimit: UPLOAD_MAX_BODY_BYTES` rather than a schema `.max()`; auth via `controlKeyOrAccountAuth('write')`,
+whose id binding is now pinned by V-1768; owner-attributed rate limit.
+
+HARNESS (`handleUploadFile`, HarnessCoordinator:2698) — where the bytes actually land:
+
+- base64 validated before anything is written; a 64 MiB per-file ceiling
+- ⭐ the jail subdir is keyed on `requestId` ONLY when it matches `^[A-Za-z0-9_-]{1,128}$`, else a fresh
+  UUID — so the requestId cannot inject a path either, a second traversal vector most audits would miss
+  because the obvious one is the filename
+- path is always `<dataDir>/uploads/<id>/<sanitizeUploadName(name)>` in a 0o700 dir; the reply is an OPAQUE
+  handle, never a worker filesystem path
+
+⭐ THE SANITIZER WAS RUN, NOT READ. `sanitizeUploadName` is four lines and looked obviously correct, which
+is exactly when reading is worth least. Copied it verbatim and executed it against twelve hostile inputs:
+
+    "../../etc/passwd"       -> "passwd"        "...//...//etc/passwd" -> "passwd"
+    "/etc/shadow"            -> "shadow"        "a/b/c.txt"            -> "c.txt"
+    ".." / "." / "   "       -> "upload.bin"    "evil\0.png"           -> "evil_.png"
+    "~/.ssh/authorized_keys" -> "authorized_keys"
+
+No output contained `/`, a NUL, or resolved to `.`/`..`. Every attempt contained.
+
+⚠️ ONE CASE THAT LOOKS LIKE A MISS AND IS NOT: `"..\\..\\win.ini"` passes through UNCHANGED. That is
+correct on this platform — `\` is a legal filename character on POSIX, not a separator, so the result is a
+file literally named `..\..\win.ini` INSIDE the jail, not an escape. It would matter only if the jail were
+ever enumerated by a Windows client, which is not a path this product has.
+
+BOUNDED: one route traced end to end across both repos. The sanitizer was tested by copying its body
+verbatim, so this proves the ALGORITHM is sound, not that the deployed binary runs this version — the
+V-1764 lesson applies and I did not re-verify the shipped fork/daemon build here.
