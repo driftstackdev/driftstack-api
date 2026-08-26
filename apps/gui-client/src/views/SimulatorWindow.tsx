@@ -8453,6 +8453,20 @@ export function SimulatorWindow(): JSX.Element {
                         />
                         <LabeledControl
                           label={landscape ? 'Rotate to portrait' : 'Rotate to landscape'}
+                          // The label promises a rotation the DEVICE does not perform:
+                          // `toggleRotate` reflows this window and the stream keeps
+                          // arriving portrait, so the phone stays upright inside a
+                          // landscape frame. Saying so is the honest interim — a
+                          // control that visibly does a third of what its name says
+                          // teaches people the app is unreliable, and the device-side
+                          // half is P-20's fork work. Delete this hint when the
+                          // orientation frame lands, together with swapping the
+                          // tap-coordinate space.
+                          hint={
+                            landscape
+                              ? 'Turns this window back — the phone itself never rotated'
+                              : 'Turns this window only — the phone stays upright'
+                          }
                           active={landscape}
                           onClick={toggleRotate}
                           glyph={
