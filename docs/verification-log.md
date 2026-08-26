@@ -21474,3 +21474,28 @@ does not parse reports success in the same shape as a file that passes.**
 **Boundary.** This covers `platform-secret-encryption` only. The other four crypto modules bind
 by their own means (V-1679b) and their signatures are unchanged; the cipher-construction arm is
 what covers them.
+
+## V-1681
+
+**A full-suite red caused by a file that appears in no diff.**
+
+Full run with a database and Redis after the V-1680 signature change: **3214 passed, 1 failed of
+3215 files**, 31,969 tests, 215s uncontended — so the twelve-file crypto change is clean and the
+pins (3039 / 3215) agree with the run's own count.
+
+The single failure is `dist-reading-suites-have-fresh-artifacts`: marketing-site's artifact was
+built `2026-08-25T17:35` while its source changed `2026-08-26T06:21`. Attributed before
+investigating — marketing-site is a peer's surface — and the source change is exactly one file,
+`src/components/AgentPlanDemo.astro`, which `git status` reports as `??`. **Untracked. Never
+added, never committed, no marketing-site commit in four hours.**
+
+**The mechanism is the part worth keeping.** The guard compares newest-source-mtime against
+artifact-mtime, and an untracked file counts as source. So work-in-progress living only in a
+working tree turns the suite red for every agent sharing that tree, while being invisible to
+`git diff`, to `git log`, and to any review of "what changed" — the three places anyone looks
+first. The failure text names the app and the remedy but not the file, and the file is the one
+thing that cannot be found by the obvious means.
+
+Recorded in `OPEN-ITEMS.md` as W-15 rather than over the socket: the peer session ended
+mid-investigation and `ListAgents` no longer lists it, which is precisely the case CLAUDE.md
+warns about — the low-latency channel dies with the session and leaves no artifact.
