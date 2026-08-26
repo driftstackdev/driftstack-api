@@ -10385,3 +10385,44 @@ reason about why the result might still hold.
 BOUNDED: the 357 figure is one full-suite run taken while a peer's suite was also live, so the count is
 approximate; the conclusion rests on its order of magnitude and on which files failed, neither of which a
 concurrent run moves. `middleware/auth.ts` restored byte-identically and verified clean against HEAD.
+
+## V-1732 — a tier missing from the price map ranks ABOVE every paid tier, and nothing walked the enum to notice
+
+2026-08-26. Picked the next audit target by measurement rather than guess: counted, for every
+`apps/server/src` module over 60 lines, how many test files reference it (control:
+`byok-anthropic-encryption` at 11, high as expected). `services/crypto-tier-activation.ts` came back
+lowest by size — 385 lines of money-granting logic. That count under-reported (a dedicated test file
+exists; the basename simply appears once), but the audit it prompted found a latent defect.
+
+`tierActivationRank` is the whole upgrade decision: `free` returns 0, otherwise
+`TIER_MONTHLY_PRICE_CENTS[tier] ?? Number.POSITIVE_INFINITY`. The fallback is deliberate for
+`enterprise` — sales-negotiated, no self-serve price, so a crypto purchase must never overwrite it —
+and that case is explicitly pinned. ⛔ But the fallback applies to ANY unmapped tier, and it fails OPEN:
+a tier added to the enum and forgotten in the price map does not rank low or throw. It ranks above
+$1,499/mo `api_scale`, so `isCryptoTierUpgrade` treats buying it as an upgrade from ANY state, and —
+the other half — refuses every later move away from it, stranding that customer.
+
+NOTHING COULD HAVE NOTICED. The ordering arm walks "the six self-serve tiers" as a HARDCODED list, so a
+seventh is invisible to it. Every other consumer iterates `Object.keys(TIER_MONTHLY_PRICE_CENTS)` —
+which walks the MAP, and is therefore structurally blind to an enum member absent from it. Measured: the
+enum has 8 members, the map has 6, and the two absent are exactly the two that are special-cased today.
+The map's own comment names the eventual seventh out loud — "the future api_pro tier" — so this is a
+documented expectation, not a hypothetical.
+
+Not a defect today: all 8 tiers are accounted for. It is a money decision that fails open on an
+OMISSION rather than a mistake, which is the harder kind to catch in review.
+
+Closed by walking the ENUM — the one direction that can see the omission — and requiring every tier to
+be priced or declared deliberately unpriced WITH the rank it should carry. The declared ranks are then
+checked against what the function actually returns, so the roster cannot drift from the behaviour it
+describes, and priced tiers must rank by their price rather than by the fallback.
+
+Mutation-proved three ways, two on the real subject rather than the guard's list:
+
+```
+  a tier drops out of the price map    FAILS, naming api_starter
+  rank stops equalling the price       FAILS — "solo_manual should rank by price: 7901 to be 7900"
+  the declared roster drifts           FAILS — "enterprise does not rank as declared"
+```
+
+All three files restored byte-identically; `it(` 18 to 19; tsc clean; 30 tests pass.

@@ -8,7 +8,8 @@
 // and the service's fan-out/skip behaviour against a mock repo.
 
 import { describe, expect, it, vi } from 'vitest';
-import type { AccountTier } from '@driftstack/api-types';
+import { AccountTierSchema, type AccountTier } from '@driftstack/api-types';
+import { TIER_MONTHLY_PRICE_CENTS } from '../../src/lib/cost-defaults.js';
 import {
   CRYPTO_ENTITLEMENT_TERM_DAYS,
   CryptoTierActivationService,
@@ -66,6 +67,51 @@ describe('S41 tierActivationRank', () => {
 
   it('enterprise (no self-serve price) ranks +Infinity — never overwritable by a self-serve purchase', () => {
     expect(tierActivationRank('enterprise')).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  // V-1732 — the arm above pins the two tiers that are deliberately unpriced, and
+  // the one above THAT walks the six self-serve tiers as a hardcoded list. Neither
+  // can notice a SEVENTH. `tierActivationRank` falls back to
+  // `?? Number.POSITIVE_INFINITY`, so a tier added to the enum and forgotten in
+  // TIER_MONTHLY_PRICE_CENTS does not rank low or throw — it ranks ABOVE EVERY
+  // PAID TIER, and `isCryptoTierUpgrade` then treats buying it as an upgrade from
+  // any state while refusing every later move away from it. That is a money
+  // decision failing open, silently, on an omission rather than a mistake.
+  //
+  // Every other consumer iterates `Object.keys(TIER_MONTHLY_PRICE_CENTS)`, which
+  // walks the MAP and is therefore structurally blind to an enum member missing
+  // from it. This arm walks the ENUM instead — the one direction that can see the
+  // omission — and requires each tier to be priced or deliberately ranked.
+  it('CRITICAL every AccountTier is priced or deliberately unpriced. The rank fallback is +Infinity, so a tier added to the enum and forgotten here outranks $1,499/mo api_scale and can never be upgraded away from.', () => {
+    const DELIBERATELY_UNPRICED = new Map<AccountTier, number>([
+      // Lowest by construction; the rank function special-cases it.
+      ['free', 0],
+      // No self-serve price by design — sales-negotiated — so a crypto purchase
+      // must never overwrite it and no self-serve tier may outrank it.
+      ['enterprise', Number.POSITIVE_INFINITY],
+    ]);
+    const all = AccountTierSchema.options as readonly AccountTier[];
+    expect(all.length, 'the tier enum parsed').toBeGreaterThan(2);
+
+    const unaccounted = all.filter(
+      (t) => TIER_MONTHLY_PRICE_CENTS[t] === undefined && !DELIBERATELY_UNPRICED.has(t),
+    );
+    expect(
+      unaccounted,
+      'tiers absent from TIER_MONTHLY_PRICE_CENTS and not declared deliberately unpriced — price them, or add them above with the rank they should carry and why',
+    ).toEqual([]);
+
+    // The declared ranks must be what the function actually returns, so this
+    // roster cannot drift from the behaviour it claims to describe.
+    for (const [tier, rank] of DELIBERATELY_UNPRICED) {
+      expect(tierActivationRank(tier), `${tier} does not rank as declared`).toBe(rank);
+    }
+    // And a priced tier must rank by its price, not by the fallback.
+    for (const tier of all.filter((t) => TIER_MONTHLY_PRICE_CENTS[t] !== undefined)) {
+      expect(tierActivationRank(tier), `${tier} should rank by price`).toBe(
+        TIER_MONTHLY_PRICE_CENTS[tier],
+      );
+    }
   });
 });
 
