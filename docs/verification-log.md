@@ -11163,3 +11163,45 @@ upstream; whether they are REACHABLE turns on WebKit's own per-cookie limit, whi
 am not claiming either way. And `errorEvent.summary` (4096) is `redactIPsForTelemetry(status.detail)` —
 the surrounding code matches closed-vocab reason codes so it is short in every branch I read, but I did
 not trace `status.detail` to every producer, so that is measured only as far as this sentence says.
+
+## V-1750 — the size-cap axis closes: `capabilityReport` sound, and the real finding is that "bound before emit" is applied UNEVENLY
+
+2026-08-26. Closed the remaining size-capped fields from V-1747/V-1749's boundary.
+
+⭐ `capabilityReport` is SOUND with ~64x headroom. The CP enforces a 64 KiB SERIALIZED-frame ceiling
+(harness-control-protocol.ts:1254), which is a different kind of bound from the per-field `.max()`s and
+worth checking separately because the two can disagree: `safeguardChecks` permits `.max(16)` entries each
+with `detail: z.string().max(4096)`, and **16 x 4096 = 65,536 = exactly the frame cap**, before keys, JSON
+overhead, or the other fifteen fields. So a frame satisfying every per-field cap can still fail the frame
+cap. That is NOT a defect — the aggregate ceiling is a correct backstop and binding first is the safe
+order — and it is unreachable anyway: `buildCapabilityReport` emits exactly THREE safeguard entries, two
+fixed literals (~75 chars) and `perSpawnSafeguard`, which deliberately reports "the VERDICT + duration,
+NOT the raw IPs" (W1012). Every other field is a scalar. Real frames land near ~1 KB. ⚠️ Recorded because
+the arithmetic becomes live the day safeguardChecks turns dynamic (a per-layer check list); the producer
+is what makes it safe today, not the schema.
+
+⛔⛔ THE ACTUAL FINDING IS THE PATTERN, not another instance. Six sites interpolate a RAW Swift error into
+a `SessionStatus` detail that the CP caps at 4096 — `"spawn failed: \(error)"`, `"proxy_boot_failed:
+\(error)"`, `"webdriver_connect_failed: \(error)"`, `"network_shim_boot_failed: \(error)"`, `"reserve
+failed: \(error)"`, `"validate failed: \(error)"` (HarnessCoordinator 6093/6180/6294/6324/6822/6893). A
+Swift `Error` interpolation is unbounded in principle — a `DecodingError` carries its full coding path, an
+`NSError` its `userInfo`. Both consumers of that string cap at 4096 (`SessionStatusSchema.detail` and
+`errorEvent.summary` via `redactIPsForTelemetry`), so an over-cap error description drops the frame
+silently — and these are precisely the frames that report a session FAILING TO START.
+
+⚠️ REACHABILITY NOT MEASURED, and I am not claiming it: whether any of those six errors actually
+serializes past 4096 needs real failure output, which needs a live failing box. The asymmetry is what is
+measured here — an unbounded interpolation feeding a bounded field with a silent-drop consumer.
+
+⭐⭐ Stepping back, this is the THIRD sighting of one shape today and it is a CLASS, not three incidents:
+**the harness applies "bound before emit" unevenly, while the CP bounds everything and drops silently.**
+BOUNDED at the source: cookie jar TOTAL (8 MiB, with an honest `cookie jar too large` error rather than
+a silent truncation), intent output (`result_too_large`), tab id/field (`truncate` + `maxTabIdChars`/
+`maxTabFieldChars`), challenge detail (closed literal set, V-1749), capabilityReport (scalars + 3 entries).
+NOT BOUNDED: `pageState.url`/`title` (V-1747 — CONFIRMED reachable, P-30), cookie PER-FIELD
+`value`/`name` (total-only guard, `value: c.value` verbatim), `sessionStatus.detail` at the six
+`\(error)` sites above.
+⭐ So P-30 is not an isolated bug but the one confirmed member of a family, and the durable fix is a
+bound-before-emit helper applied at every wire boundary — which must count UTF-16 units, not grapheme
+clusters, per V-1747's measurement. Filed against P-30 rather than opened as a second row, because the
+same helper closes all of them.
