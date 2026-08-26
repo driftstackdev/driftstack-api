@@ -9932,3 +9932,41 @@ every arm in V-1716 through V-1719 was added to give something else.
 attributed to load rather than to a change, and NOT investigated further here — a deadline test that
 fails only under a concurrent suite is a flake report, and asserting more than that from two runs would
 be the derivation this log keeps warning about.
+
+## V-1721 — P-25 control-plane half: three saturation shapes swept, none found, and what that does NOT cover
+
+2026-08-26. The owner reports the app freezing under sustained real use — many activities, then stuck,
+then unusable until a full restart, with no error message. "Works, then degrades, then stops" is a
+bounded resource filling, so the control plane was swept for the three shapes that produce it. This
+entry is a NEGATIVE result, recorded because eliminating a plane is half the value when the other half
+cannot be seen from here.
+
+1. IN-MEMORY STORES WITHOUT EVICTION. 80 long-lived Maps/Sets in `apps/server/src` are written; 17 have
+   no `delete`/`clear` in their file. Every one resolves: SIX are `InMemory*` repositories production never
+   constructs (`InMemoryAgentSessionsRepo`, `InMemoryAuthCache`, `InMemoryAgentTurnReceiptsRepo`,
+   `InMemoryBYOKAnthropicRepo`, `InMemoryCryptoOrdersRepo`, `InMemoryBundledLlmRepo`, `InMemoryFleetNodesRepo`
+   — bootstrap wires the Drizzle and Redis ones), FOUR are bounded by static definition counts (scheduled-job
+   handlers, metric definitions, the legal catalogue, the tier-by-price map), and one —
+   `FleetInboundFrameBudget.states` — is keyed by authenticated fleet-node identity and deliberately
+   reconnect-resistant, since a bucket that reset on reconnect would not be a rate limit.
+
+2. LISTENERS ON LONG-LIVED EMITTERS. Eleven files register persistent listeners; ten remove none, and
+   all ten attach to per-request or per-socket objects that are collected with them. The one long-lived
+   emitter is `IncidentEventBus`, whose `subscribe` returns a closure that deletes the listener, and both
+   SSE routes hold it and call it from an idempotent `cleanup` bound to BOTH `close` and `error`.
+
+3. TIMERS. Seven files call `setInterval`. Both SSE heartbeats pair it with `clearInterval` in the same
+   idempotent cleanup and additionally `unref()`. The two unpaired calls are single process-lifetime
+   intervals started at boot, which is what they are for.
+
+⛔ WHAT THIS DOES NOT COVER, stated because a clean sweep of three shapes is not a clean bill of health.
+It is STATIC and it is in-process: it says nothing about Redis key growth, Postgres, socket and stream
+write buffers or backpressure, the WebSocket send queue, promise chains that never settle, or file
+descriptors. It ran no sustained load, so it cannot see a resource that fills only under the traffic the
+report describes — and the report is precisely of something that survives light use. It also covers
+neither the GUI nor the device fork, which are the two planes the freeze is most likely to live in and
+the two this session cannot open.
+
+So the honest claim is narrow: the control plane's in-process bounded resources are not the leak, on the
+three shapes checked, with no load applied. Reproduction under sustained multi-site traffic remains the
+only thing that can localise this, and nothing here substitutes for it.
