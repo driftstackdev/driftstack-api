@@ -10599,3 +10599,50 @@ BOUNDED: this audited the grace/TTL relation, the reap predicate (soft-delete-in
 so a trashed profile keeps its blob) and the failure handling (a listObjects denial or any throw is
 caught, logged and re-armed with no deletes). It did NOT audit R2 bucket lifecycle rules, which could
 delete objects on a schedule this code never sees.
+
+## V-1737 — P-25's device plane: every deadlock shape swept in the harness, none reachable
+
+2026-08-26. The owner granted `driftstack` / `webkit-driftstack` and ratified it in `CLAUDE.md`, so the
+harness — the plane neither A2 nor I could see — is readable for the first time. P-25 is an
+UNRECOVERABLE freeze needing a full restart, which fits a deadlock far better than a leak: a leak
+degrades, a lock that never releases STOPS. Swept the shapes that stop a process.
+
+```
+  locks                 10 sites (6 NSLock, 4 DispatchSemaphore) — READ ALL TEN
+  unbounded .wait()     ZERO in the runtime modules
+  DispatchQueue.sync    ZERO in the runtime modules
+  continuations         12 sites; 11 carry a timeout/deadline/cancellation backstop
+```
+
+⚠️ TWO CANDIDATES LOOKED LIKE THE ANSWER AND NEITHER SURVIVED READING, which is the whole method.
+
+`IntentExecutor.swift:56` locks and unlocks WITHOUT `defer`, while three other sites in the same file
+use `defer { lock.unlock() }`. An inconsistent lock release is the classic permanent wedge. Reading it:
+the critical section is one assignment, `authorized = false` — it cannot throw, return early or suspend,
+so there is no path that skips the unlock. Stylistic, not a defect.
+
+`BrowserProcess.swift:1566` was the only continuation with a single `.resume(` against one creation,
+which is the shape where an error path leaks the continuation forever. Reading it: the single resume is
+reached by TWO paths — the paint marker and a deadline — behind an idempotent lock-guarded flag, with
+the deadline guaranteeing resume even if the marker never arrives. My ratio measured occurrences of the
+TEXT `.resume(`, not the number of paths reaching it.
+
+⛔ THE ONE REAL GAP IS IN DEAD CODE. `NewTabServer.start()` awaits `NWListener`'s state and resumes on
+`.ready`, `.failed` and `.cancelled` — but `NWListener` also has `.waiting(error)`, which falls to
+`default: break` and resumes NOTHING, with no timeout anywhere. A listener can sit in `.waiting`
+indefinitely; it does not auto-fail. Under heavy tab churn that is a permanent hang of an actor, which is
+the P-25 symptom exactly.
+
+It cannot be P-25. `NewTabServer` has ONE reference outside its own file — a single test — and NO
+production caller. The live new-tab path is a fork-side network-loader intercept
+(`DriftstackNetworkLoader` W3093), and the start page moved to the marketing site in P-27. Green here
+reads "uncalled", not "unguarded" — the same distinction V-1717 turned on. Recorded so that wiring
+`NewTabServer` up later carries the warning attached to the thing it would break.
+
+BOUNDED, and the boundary is the whole point: this is STATIC and covers the shapes that HALT a process —
+locks, unbounded waits, sync-on-self, leaked continuations. It says nothing about actor reentrancy, an
+await on a remote peer that never answers, unbounded task queues, memory growth, or anything that needs
+the sustained multi-site traffic the report describes. **Neither A2 nor I have run load, and every
+elimination any of us has published is subject to that.** Three planes are now swept statically and P-25
+remains undiagnosed on all three, which is itself the finding: the bug is not in the shapes a static
+read can reach.
