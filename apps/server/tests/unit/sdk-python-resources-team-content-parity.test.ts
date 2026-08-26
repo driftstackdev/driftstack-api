@@ -49,7 +49,11 @@ describe('W582.B packages/sdk-python/src/driftstack/resources/team.py content pa
     // The old "no implicit permissions until V-298d ships" caveat was a
     // deferred promise that is now simply false on a shipped SDK surface.
     expect(body).toMatch(
-      /All six \/v1\/team\/\* endpoints, plus the two \/v1\/teams team-record endpoints\.\s*Team membership IS honored on the auth/,
+      // Whitespace-tolerant at EVERY join, not just the one that happened to
+      // wrap when this was written. Ruff's 100-char limit forced a rewrap and the
+      // break landed mid-phrase, so a pattern tolerant at one seam and literal at
+      // the next failed on a change that altered no words.
+      /All six\s+\/v1\/team\/\*\s+endpoints,\s+plus\s+the\s+two\s+\/v1\/teams\s+team-record\s+endpoints\.\s+Team\s+membership\s+IS\s+honored\s+on\s+the\s+auth/,
     );
     expect(body).toMatch(/``X-Driftstack-Account: acc_<owner-uuid>`` to act on the/);
     expect(body).toMatch(/against your membership role \(``admin`` or ``member``\)/);

@@ -1,6 +1,7 @@
 """V-298c / V-309f — Team RBAC resource.
 
-All six /v1/team/* endpoints, plus the two /v1/teams team-record endpoints. Team membership IS honored on the auth
+All six /v1/team/* endpoints, plus the two /v1/teams team-record
+endpoints. Team membership IS honored on the auth
 path: send ``X-Driftstack-Account: acc_<owner-uuid>`` to act on the
 resources of an owner you are a member of. The request is authorized
 against your membership role (``admin`` or ``member``) and the route's
