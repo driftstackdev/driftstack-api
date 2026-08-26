@@ -22432,3 +22432,38 @@ Three arms: all three files still define the gate (or the comparison silently co
 three), the shapes match, and the shape still contains the refusal — so the equality arm cannot
 pass on three copies that lost it together. Mutation-proved by deleting one copy's team-scope
 early return: exactly one arm reds, naming the divergent file.
+
+## V-1700
+
+**A guard that asks "does this file import from the home module" cannot see a file that imports
+two of three parameters and inlines the third. One instance, benign, deliberately not fixed.**
+
+`aes-gcm-parameters-are-never-redeclared` exists because _"ten encryption modules each declared
+`AES_256_KEY_BYTES = 32`, `GCM_IV_BYTES = 12` and `GCM_TAG_BYTES = 16` locally"_. It has two arms:
+nothing outside the home module may DECLARE them, and every consumer must IMPORT them.
+
+**Its consumer arm is whole-file.** A "consumer" is any file whose body _contains one of the
+parameter names_, and the check is that such a file's body contains the home module's import path.
+So a file that imports two parameters and inlines the third **satisfies both arms**: it declares
+nothing, and it does import — just not the one it inlined.
+
+**Exactly one module does this.** `lib/mfa-totp.ts` imports `GCM_IV_BYTES` and `GCM_TAG_BYTES` and
+writes `if (key.length !== 32)` for the key. Measured over cipher-constructing modules, per
+parameter rather than per file.
+
+⛔ **My first detector reproduced the guard's own flaw.** It filtered on `bare && !imports` — the
+same whole-file test — so it excluded `mfa-totp` for importing _something_ and returned a clean
+zero. The control caught it: I had asserted the known positive must appear, and it did not.
+**An instrument built to find a blind spot inherited the blind spot**, which is the most
+persuasive kind of wrong answer.
+
+**Not fixed, and the reasoning is the finding.** I made the change — import the constant, use it,
+0 tsc errors, runtime message identical since the template renders the same "32" — and reverted
+it. It breaks **four source-text pins across three files**, and buys a property that cannot drift:
+AES-256's key length is fixed by the algorithm, and the guard's own "the values are the
+algorithm's" arm already pins that 32 is correct. Churning deliberate pins to deduplicate a
+constant that physics holds still is not a trade worth making.
+
+What would change that: a fourth parameter, or any value that CAN legitimately move. Recorded so
+the next reader finds a measurement rather than an oddity, and knows the per-parameter version of
+the check is the one that sees it.
