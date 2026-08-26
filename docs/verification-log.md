@@ -12459,3 +12459,43 @@ re-run-until-green rather than fixed.
 ⛔ AND THE RUN ITSELF LIED ABOUT ITS STATUS: the background command reported `exited with code 0` while
 one test failed, because I piped vitest into `tail` — the exit code was tail's. A piped runner reports the
 LAST command's status, so a suite's pass/fail must be read from its OUTPUT, never from the pipeline's code.
+
+## V-1781 — the gate ladder: three languages have no pre-commit tier, and their push tier SKIPS silently
+
+2026-08-26. A2's release was refused by a ruff line-length error that pre-commit had not caught, because
+"pre-commit lints staged files per-file; the Python lint runs on push, so that was its first exposure".
+Measured whether that is a Python quirk or a class. It is a class, and Python is the best-covered member.
+
+**lint-staged acts on** `*.{ts,tsx,js,jsx,mjs,cjs}` and `*.{json,md,yml,yaml,css}` — so `.py`, `.go` and
+`.rs` have NO pre-commit tier at all. First exposure for all three is pre-push.
+
+⛔ **And the push tier skips itself when a toolchain is missing** — its own output says so:
+"sdk-python lint SKIPPED (no .venv …)", "sdk-go gofmt SKIPPED (no go toolchain on PATH)",
+"gui-client cargo fmt SKIPPED (no cargo on PATH)". A contributor lacking the toolchain gets a green push
+with the check never run. On THIS machine all three are present (checked: `.venv` present, `go` and `cargo`
+on PATH), so the local ladder is intact here — which is exactly why the gap is easy to miss from here.
+
+⭐ CHECKED THE BACKSTOP RATHER THAN ASSUMING THE WORST, and it changes the severity a lot. CI does build and
+test both surfaces — `go build` in 1 workflow, `go test` in 2, `cargo test` in 1, `tauri` in 2 — so
+CORRECTNESS is covered regardless of local toolchains. What CI does NOT carry is `gofmt` (0 workflows),
+`cargo fmt` (0) and `clippy` (0); `ruff` appears in 1.
+
+So the precise hole is narrow: **formatting for Go and Rust is enforced ONLY by a local hook that skips
+itself when the toolchain is absent, and by nothing else anywhere.** A contributor without `cargo` pushes
+unformatted Rust, the hook skips, CI compiles it happily, and it lands. Clippy is absent from every tier —
+a lint that catches real defects, not only style, which nobody runs.
+
+⚠️ NOT FIXED, and deliberately: adding `clippy` or a `cargo fmt --check` job to CI is a project decision
+with real noise and runtime cost, and it is the kind of change that belongs to whoever maintains those
+surfaces rather than to a passing audit.
+
+⭐ THE SHAPE WORTH KEEPING, and it generalises past this repo: **a check that degrades to SKIP on a missing
+prerequisite reports the same green as a check that passed.** The three SKIP lines are honest and printed —
+and a push that prints "SKIPPED" three times still exits 0, so nothing downstream distinguishes it from a
+clean run. Same family as the errored grep and the piped exit code, and the third instance today of an
+instrument reporting success by structural accident.
+
+BOUNDED: read `.husky/{pre-commit,pre-push,commit-msg}`, the `lint-staged` globs in `package.json`, and
+grepped `.github/workflows/*.yml` for the tool names. A check invoked indirectly — through an npm script
+whose name does not contain the tool — would not appear in that grep, so "0 workflows" is a statement about
+the tool NAME appearing, not a proof the tool never runs.
