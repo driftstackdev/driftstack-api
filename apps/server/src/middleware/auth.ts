@@ -234,6 +234,24 @@ function authPlugin(
 
   app.decorate('requireAuthEventSource', requireAuthEventSource);
 
+  /**
+   * ⭐ THIS AUTHENTICATES FIRST, AND THAT FACT LIVES ONLY HERE.
+   *
+   * 61 preHandler chains rely on it — they read
+   * `preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')]`
+   * with NO `requireAuth`, while 104 others name both. The omission is
+   * concentrated exactly where it looks worst: admin-crypto-orders (11),
+   * admin-accounts (11), admin-incidents (7), admin-webhooks (5).
+   *
+   * ⛔ So a money route whose chain begins with `requireScope` reads as an
+   * UNAUTHENTICATED admin surface to anyone opening that file, and it is not
+   * one. That misreading has been reached once already during an audit and
+   * abandoned one step from being filed. The reassuring fact is here; the
+   * alarming-looking code is in sixty-one other places, which is the whole
+   * reason this comment exists rather than a note in a ledger.
+   *
+   * `requireMfaFresh` below does the same thing for the same reason.
+   */
   app.decorate('requireScope', (scope: ApiKeyScope) => {
     return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
       if (!request.account) {
