@@ -21920,3 +21920,36 @@ config**, enumerated rather than counted.
 `byte-identical: NO` because the `cmp` ran inside a subshell I had `cd`'d, so the repo-relative
 path resolved to nothing. The file was in fact restored exactly. **A path is only relative to
 where it is evaluated, and a subshell is not where I wrote it.**
+
+## V-1685c
+
+**The conclusion in V-1685b was right and the evidence under it was truncated — and re-deriving
+it properly found the claim a third time, now in the wire protocol's own comment.**
+
+V-1685b asserted that the harness protocol carries no persona field. Re-checked because a comment
+at `harness-control-protocol.ts:748` says the assign frame carries _"its egress + persona +
+transport + caps"_, which directly contradicted it.
+
+**The conclusion survives.** Zero occurrences of the `BehavioralProfile` enum values anywhere in
+that file. `SessionAssignProfileSchema` carries `profile_id` + `dek` + sealed blob — the saved,
+encrypted **browser profile**, not the behavioural persona. Two different things share the word
+"profile", which is what the comment is loosely calling a persona.
+
+⛔ **But the evidence I published for it was a truncated read.** The original check piped
+`grep -i persona` through `head -4`, saw four `behavioral_*` lines, and I wrote _"empty = not in
+the harness wire protocol"_. The persona line sat below the cut. **A right answer from a wrong
+method is the most expensive kind, because it certifies the method** — I have written that rule
+into this log about other people's instruments and then published a conclusion under a `head -4`
+in the same session.
+
+**And the re-derivation found something the first pass could not.** The protocol's own comment
+says the assign frame assigns a persona. It does not. That is the same claim from V-1685 in its
+third location: the product sells a persona as a behavioural identity, the simulation package
+varies only typing, the fork has no concept of one, and now the wire protocol's summary of its own
+frame names one that never crosses it. **Three independent surfaces describe a feature; none
+implements it.** The comment is one word and the cheapest of the three to correct — but which way
+it should be corrected is memo item 11's decision, not an edit, because "say profile" and "carry
+the persona" are opposite answers to the same question.
+
+Boundary: this covers `apps/server/src/schemas/harness-control-protocol.ts` only, read whole
+rather than headed.
