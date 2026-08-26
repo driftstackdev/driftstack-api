@@ -9537,3 +9537,63 @@ byte-identically, 29 passed. `it(` 28 to 29, tsc clean, no new file so no census
 BOUNDED: the mutation was evaluated against the MFA UNIT files. The MFA integration tests are
 DATABASE_URL-gated and did not execute here; they were READ instead, and none asserts the
 already-enrolled refusal, which is what makes the gap a gap rather than a local-visibility artefact.
+
+## V-1712 — V-1711's boundary claim was wrong, and the sweep that followed it reported the exact opposite of the truth
+
+2026-08-26. Two corrections, both to my own instruments, in the same hour.
+
+FIRST, V-1711 IS NARROWED. That entry stated the refusal had no behavioural coverage anywhere, on the
+strength of having READ the DATABASE_URL-gated integration files rather than executed them. A2 has the
+database wired and ran the same mutation: 12 MFA integration files, 81 tests, and deleting the
+`row.enrolledAt !== null` refusal turns exactly one red. The catcher is
+`tests/integration/account-mfa.test.ts`, whose arm already described the near-miss my new unit arm was
+designed around — a caller dropped onto the already-exercised fallback and told the enrollment changed,
+advice that can never succeed for someone simply already enrolled. It even records the same coverage
+observation about the guard line versus its fallback.
+
+So the accurate shape is: the refusal was uncovered at UNIT level, covered at INTEGRATION level, and
+never an exposure — the database's `isNull(accountMfa.enrolledAt)` in the conditional UPDATE was always
+the enforcement. The new unit arm is still worth having: it runs without a database, which is the half
+of the suite anyone runs locally. But V-1711's sentence about nothing asserting the refusal is
+withdrawn. I read three of twelve files looking for a pattern, and the assertion that disproved me sits
+300 characters inside an `it(` title. A test's coverage is a RUNTIME property; reading is not a
+substitute for executing, and a gated boundary is a reason to ask the agent holding the database rather
+than to downgrade the method.
+
+SECOND, AND WORSE, THE SWEEP THAT FOLLOWED REPORTED A UNIFORM FALSEHOOD. Having decided mutation is the
+only reliable instrument for this class, I mutation-swept all seven single-throw guards in
+`services/mfa.ts` against the behavioural MFA unit files. It reported all seven SURVIVING — no
+behavioural test catches any refusal in a security-critical service. That is a dramatic result and it
+was entirely an artefact: the harness classified runs by grepping vitest's output for a failure count,
+and vitest colourises that line, so the pattern never matched and every run was scored as passing.
+
+⭐ It was caught by contradiction with a known positive, not by suspicion. Minutes earlier I had proved
+by mutation that deleting guard [2] turns the new V-1711 arm red; the sweep said guard [2] survived.
+One cell of a fresh table disagreeing with a result already established is worth more than the other
+six agreeing with each other. Re-run scoring on the process EXIT CODE instead of parsed text, the same
+seven guards report:
+
+```
+  [0] CAUGHT  MFA is already enrolled. Disable first via DELETE …
+  [1] CAUGHT  No pending MFA enrollment. Call POST /v1/account/mfa/enroll …
+  [2] CAUGHT  MFA is already enrolled. Disable + re-enroll …
+  [3] CAUGHT  Invalid 6-digit code. Try again.
+  [4] CAUGHT  MFA is not enrolled for this account.
+  [5] CAUGHT  MFA is not enrolled for this account.
+  [6] CAUGHT  MFA recovery codes changed during regeneration. …
+```
+
+Seven of seven, with guard [2] covered by the arm added in V-1711 — before it, that one survived. The
+verdict inverted completely on an instrument fix, with no change to the subject.
+
+⚠️ TWO EARLIER DETECTORS IN THE SAME LINE FAILED THEIR CONTROLS AND WERE DISCARDED, which is why this
+one existed. A header-manifest matcher (does each behaviour a test file's own header advertises have an
+arm?) flagged 44 fragments across 13 files at roughly five false positives to one true, tripping twice
+on synonyms — the manifest says "deletes" where the arm says "drops". An exact-error-message matcher
+then failed its controls in BOTH directions for a principled reason: `startEnrollment` and
+`completeEnrollment` share the phrase "MFA is already enrolled", so one method's substring assertion
+makes the other's message look covered. That ambiguity is precisely why V-1711 hid, and it means no
+substring detector can find this class at all. Recorded so the next attempt does not build either.
+
+No production change in this entry. `services/mfa.ts` restored byte-identically after every mutation
+and verified clean against HEAD.
