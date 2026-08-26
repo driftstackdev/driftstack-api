@@ -11312,3 +11312,56 @@ reference side real; leaving them means a guard whose correctness rests on the d
 BOUNDED: measured against `packages/sdk-python/openapi.json` (the only spec file in the repo — checked)
 and the registry behaviour of the installed `@asteasolutions/zod-to-openapi`. I did not enumerate which of
 the ~220 parity tests would move.
+
+## V-1753 — W-10's fix shape proven and its blast radius measured, without mutating the shared tree
+
+2026-08-26. V-1752 established the cause (a discarded `register()` return). This measures the fix before
+making it, which is the order the last several findings earned.
+
+⛔ MY PROPOSED FIX WAS WRONG AND THE CODE SAYS SO. "Capture the return value" cannot work: the schemas are
+module-scope `const`s and the `r.register(...)` calls run later inside `buildRegistry()`, so there is
+nothing to assign to. Ran the alternatives against the installed library instead of reasoning about them:
+
+    declare -> register() later, use original (TODAY)   path=INLINE                      components=[Thing]
+    declare with .openapi('Thing'), no register         path=#/components/schemas/Thing  components=[Thing]
+    declare with .openapi('Thing') + register too       path=#/components/schemas/Thing  components=[Thing]
+
+⭐ So the fix is ADDITIVE and one line per schema: `.openapi('Name')` on the DECLARATION, leaving every
+existing `r.register(...)` call untouched — the third row proves keeping them is harmless. No restructuring,
+no deletions.
+
+BLAST RADIUS, simulated on the JSON rather than by mutating `lib/openapi.ts` in a shared tree — legitimate
+here because V-1752 proved the inline copy and the component render from ONE Zod object and are therefore
+byte-identical, so replacing each inline occurrence with a `$ref` is exactly what the fix emits:
+
+    inline occurrences replaced:            72
+    orphans:                                39 -> 4
+    spec size:                   2,177,064 -> 1,874,887 bytes  (13% smaller)
+    operations whose rendering changes:     46 of 234
+
+⛔⛔ THE FIRST RUN OF THAT SIMULATION WAS WRONG AND ONLY THE POST-CONDITION SHOWED IT. It substituted
+top-down without descending into a node it had just replaced, and never rewrote component BODIES at all, so
+a component nested inside another matched component stayed invisible: it reported 57 replacements and SIX
+surviving orphans. The residual orphan list is what gave it away — `AgentIntent` was in it, and V-1751 had
+already established `AgentIntent` appears inline under `GET /v1/recipes/{id}`. Recursing into component
+bodies (skipping self-reference) took it to 72 and 4. ⭐ Choosing "orphans must go to ~0" as the
+post-condition is what made a wrong simulation visible; a count of replacements alone would have looked fine.
+
+The 4 survivors: `PaginationQuery` and `ListDeliveriesQuery` are query groupings nothing can ever `$ref`
+(V-1751), and `Account` and `Session` are a genuine residue — their exact shape appears NOWHERE in the
+document, so a route embeds a near-miss variant. Not blocking, and worth a look separately.
+
+⚠️ TEST BLAST RADIUS, and it is an UPPER BOUND, not a count of breakages: of 97 spec-reading test files, 21
+already handle `$ref`/component references and are resilient; **38 read `schema`/`properties` with no ref
+handling**. Several of those certainly read only `components.schemas`, which this change does not touch
+(`sdk-python-models-cover-every-spec-schema` is in the list and is exactly that case). A precise number
+needs the edit made and the suite run, which is the next step and not this turn's.
+
+⛔ The measuring loop itself was wrong first: `for f in $FILES` reported 0 resilient AND 0 naive across 97
+files, because **zsh does not word-split an unquoted variable** — one iteration over a single newline-laden
+string. A both-branches-zero result on a non-empty input is what exposed it. Same trap as the `vitest run
+$BEH` sweep earlier in this session.
+
+NOT LANDED THIS TURN, deliberately: it rewrites a 2 MB published artifact across 46 operations and may
+require edits to as many as 38 test files, and the standing rule is source plus every pin in ONE commit.
+That belongs at the head of a turn with a green suite, not the tail of a long one.
