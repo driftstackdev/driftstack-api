@@ -12588,3 +12588,39 @@ hook that skips itself when the toolchain is absent, and by nothing in CI on eit
 means the ruff error that refused the release was the pre-push hook saving a CI red rather than the
 only thing standing between the repo and unformatted Python. The asymmetry in that entry — Python as
 the best-covered member of the uncovered set — is correct, and this is the number behind it.
+
+## V-1785 — the repo's own gate scripts are sound, my detector was 0-for-3, and the floor I "found" was already here
+
+2026-08-26. Pushed V-1781's shape — a check that degrades to a silent pass on a missing prerequisite —
+into the 23 scripts under `scripts/`, several of which CI invokes directly. A crude classifier
+(missing-file guard, then look 3 lines ahead for `exit(1)` or `throw`) flagged 3. **All 3 are false
+positives.** Reading each:
+
+- `check-bench-regression.mjs:64` calls a `fail()` helper. The classifier does not know the helper, so
+  a loud abort read as a silent one.
+- `check-bench-regression.mjs:71` is a documented first-run bootstrap that records a baseline — and it
+  ends in `process.exit(2)`. A missing baseline turns CI RED. That is the inverse of the shape I was
+  hunting, and the strongest possible negative.
+- `typecheck-test-backlog.mjs:192` is a `continue` past a workspace with no `tests/` directory, which
+  is correct, and four lines later the script does the thing I was checking whether anyone did.
+
+⭐⭐ THE THIRD IS THE FIND, AND IT IS NOT IN MY FAVOUR. That script already carries the exact
+non-vacuity floor V-1782 added, keyed PER ROOT — the subtle half I congratulated myself on working out —
+and its error text explains it better than my commit message did:
+
+> `✗ <root>/ yielded ZERO workspaces with tests. That is a broken checkout, not a clean repo — the
+census below would otherwise report the survivors as the whole population.`
+
+That is the union-floor defeat stated exactly, by someone who got here first. ⛔ My own standing rule is
+to grep prior art BEFORE investigating rather than after, and I did not: I mutation-proved a mechanism,
+designed a floor, and shipped it, and only then found the canonical implementation sitting in a script
+that the pre-push gate runs. The fix is not wrong and the mutation proof still stands — but it was
+rediscovery, and V-1782 should be read as "applied an existing in-repo pattern to 3 sweeps that lacked
+it", not as a new idea.
+
+⭐ What this does buy: the design is now independently corroborated. Two people reasoning about corpus
+vacuity in this repo, separately, both landed on per-root rather than a floor on the union.
+
+BOUNDED, and the boundary is the whole point: 23 scripts, only those matching `if (!existsSync(...))`
+examined, so a script bailing on a missing prerequisite by any other spelling — a try/catch, a length
+check, an env-var guard — was never a candidate. Precision of the detector on what it did surface: 0/3.
