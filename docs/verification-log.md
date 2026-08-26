@@ -22501,3 +22501,40 @@ Worth stating plainly because it changes what the sweep is for: **not discoverin
 finding where an existing one lapsed.** Eight obligations checked, one unenforced — and the one
 that was unenforced is the only one whose neighbouring guard pinned prose without a sibling
 checking behaviour.
+
+## V-1702
+
+**The SSE CORS obligation is guarded repo-wide and derived — and I nearly reported a gap because I
+read a filename instead of its arms.**
+
+`lib/cors-allow.ts` states that every SSE / `reply.raw.writeHead` route must include the CORS
+headers, and A2 reports a missing ACAO on a hijacked reply **has shipped twice** — the highest
+prior of any obligation in the W-18 list. There are **four** hijack sites across three route
+files, and A2's e2e spec reaches only two, the others needing a dispatched session no spec
+creates. So a source-level check is the only thing that can cover all four.
+
+**All four sites carry `sseCorsHeaders`**, established by brace-matching each `writeHead` object
+rather than reading a fixed window — my first pass used 12 lines and reported two sites as
+missing it, when both simply have long comment blocks before the headers.
+
+**And it is guarded, twice over, both derived:**
+
+- `every-hijacked-stream-forwards-the-pipeline-headers` — derives the sites by scanning for
+  `reply.raw.writeHead`, and checks the PIPELINE helper, that it is spread FIRST (spread last it
+  would override content-type), and that no site re-derives the forwarding by hand.
+- `cors-allow.test.ts:117` — _"every hijacked writeHead feeds CORS into it — DERIVED from the
+  source, not a named list … a fifth hijack route cannot be added uncovered."_
+
+Mutation-confirmed: removing the spread from `account-notifications.ts` reds the derived CORS arm,
+a behavioural integration test, and the per-file pin.
+
+⛔ **My hypothesis was that no derived guard covered the CORS half, and it was wrong for a reason
+worth naming.** I had `cors-allow.test.ts` in a list of files mentioning `sseCorsHeaders` and
+dismissed it as "the helper's own unit tests" **from its name**. That is the same move that made
+`lib-stripe-key-safety-content-parity` worth opening — and there I did open it, and found the real
+gap. Filenames are a hypothesis about contents, never a reading of them.
+
+⭐ **Its own comment states a principle I have been re-deriving all session:** _"A guard whose scan
+is narrower than its own claim is the recurring shape."_ With V-1701's _"pinning the comment
+freezes what the file SAYS"_, that is twice now that the doctrine I thought I was discovering was
+already written down here. **Nine obligations checked, one unenforced.**
