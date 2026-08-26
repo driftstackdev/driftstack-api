@@ -12990,3 +12990,72 @@ the derivation (my grep, believed complete) missed.
 
 BOUNDED: surfaces asserting the phrase "row count hit" were enumerated across `apps`, `docs` and
 `packages` — 3 source files and 5 pinning tests, plus build artifacts under `dist/` that regenerate.
+
+## V-1794 — correcting V-1793b: the guard DID relate its sources, on the axis where nothing had drifted
+
+2026-08-26, retracting a claim I made in V-1793b about an hour earlier. I wrote that
+`audit-log-export-10k-ceiling-cross-source-invariant.test.ts` "pinned both statements without comparing
+them" and that it was "N independent freeze-frames wearing one filename". ⛔ **That is false, and reading
+the file rather than the two lines I had quoted settles it.**
+
+The file extracts the ceiling FROM the route at module scope — `/const EXPORT_MAX_ROWS = (\d[\d_]*);/`
+against the route source, with its own arm failing loudly if the constant stops being a plain literal —
+formats it as `grouped`, and then builds the documentation assertions out of that derived value:
+`new RegExp(\`Cap: ${grouped} rows per file\\.\`)`. So the customer-facing NUMBER is checked against the
+server's own constant, deriving one source from the other. That is exactly what a cross-source invariant
+should do, and the file does it deliberately.
+
+⭐ THE CORRECTED FINDING IS SHARPER THAN THE WRONG ONE. The guard is relational on the VALUE axis and
+freeze-frame on the RULE axis. Code says `truncated = <expression>`; docs say "true when ... AND older
+entries weren't included"; each is pinned to itself, nothing derives one from the other. **The
+contradiction lived precisely on the axis the guard did not relate** — and the cap value, which it did
+relate, never drifted at all.
+
+⭐⭐ THAT IS THE SECOND INSTANCE OF ONE SHAPE TODAY, which is what makes it worth keeping:
+
+- V-1789 — `published-request-schema-is-not-looser-than-enforced` relates CONSTRAINT VALUES between spec
+  and route (`max(100)` vs `max(200)`), and is blind to KEY-SET MEMBERSHIP. V-1787's four missing fields
+  formed no pair, so absence was unexpressible.
+- V-1793b — this guard relates the CAP VALUE between route and docs, and is blind to the RULE. The
+  implementation dropped half a conjunction and both pins stayed green.
+
+**Guards in this repo relate NUMBERS across sources far more readily than they relate SEMANTICS.** A
+number is easy to extract and compare; a rule has to be re-expressed in a form both sides can be measured
+against, so it gets pinned as text on each side instead. Every such pair is a place where the two sources
+can disagree indefinitely with everything green.
+
+⛔ AND THE FAILURE IN MY OWN CLAIM WAS THE SAME ONE I HAVE MADE ALL SESSION: I quoted two adjacent lines
+and generalised about a file I had read 30 lines of. The derivation was at module scope, above both arms
+I looked at. A truncated read is a scoped search, and I stated the conclusion without the boundary.
+
+⚠️ V-1793b's substantive content stands — the docs were right, the code implemented half a conjunction,
+and three pins froze the defect. What is retracted is the characterisation of the guard as non-relational.
+
+### The sweep that was meant to size this class could not, and the reason is a third mode
+
+Having stated the shape twice, I tried to count it: 247 `*cross-source-invariant.test.ts` files, classify
+each as relational (derives a value from one source and asserts it against another) or freeze-frame. The
+detector said 39 relational, 208 freeze-frame, and the control passed — the file proved relational above
+was classified relational.
+
+⛔ THE 208 IS NOT A FINDING, because the detector conflates two unlike things. Reading three of the
+accused: `account-slug-policy-cross-source-invariant` EXTRACTS `SLUG_REGEX`, `SLUG_MIN` and `SLUG_MAX`
+from source and then **executes** the regex against valid and invalid sample slugs
+(`expect(SLUG_REGEX.test('acme_corp')).toBe(false)`). That is not a freeze-frame — it proves the artifact
+BEHAVES correctly, not merely that its text is unchanged, and it is stronger than the relational mode on
+its own axis. So there are at least three modes, not two:
+
+1. freeze-frame `expect(source).toMatch(/literal/)`
+2. relational derive from source A, assert against source B
+3. behavioural extract from source, then EXERCISE it
+
+My pattern cannot separate 1 from 3, so "208" is the size of a category I have not actually defined.
+
+⭐ THE CLAIM THEREFORE RESTS ON THE TWO INSTANCES I READ, and I would rather say that than dress a
+number around it. V-1789 and V-1793b are each a guard that relates its sources on a VALUE and is blind on
+a SEMANTIC axis, and in both the drift landed on the blind axis. That is a shape worth watching for when
+writing or reviewing one of these guards. It is not a measured population, and this session has produced
+enough confident lists that turned out to be my own instrument.
+
+BOUNDED: 247 files enumerated by filename suffix under `apps/server/tests/unit`; 3 read by hand; the
+classification of the remaining 244 is withdrawn.
