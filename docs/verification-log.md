@@ -22137,3 +22137,29 @@ from a token that appears more than once is a guess with a number attached.** Re
 brace-balanced extraction of the enclosing block, which cannot land in the wrong place. The other
 two were reconstructed anchor text with the wrong indentation, both caught by asserts before any
 write.
+
+## V-1692d
+
+**Was the unvalidated-payload defect a class or an instance? An instance — now closed.**
+
+V-1692c fixed `serializeSetEgress` embedding a proxy config it never validated. The question that
+should follow any fix is whether the named file was the only member, so: two sweeps of
+`harness-control-codec.ts`, comments blanked line-preservingly.
+
+**Envelope validation is uniform.** All **14** serializers end in a `Schema.parse` of their own
+envelope — `serializeIntentDispatch`, `serializeSessionAssign`, … `serializeTrimProfile`. No
+serializer trusts its caller with the frame shape.
+
+**Nested encoded payloads are the shape that mattered**, because an envelope typed `z.string()`
+can only check that a field is a non-empty string, never what its base64 decodes to. Every
+`encodeWireData` call site: **3 real calls, all passing `parsed.data`** — the intent dispatch's
+`inputParams` (validated against the per-intent param map) and the two arms of the shared proxy
+encoder. So `inlineProxyConfig` on the swap path was the outlier rather than the norm, and the
+doctrine it broke was already the house style everywhere else.
+
+⚠️ The sweep reported a fourth site as raw. It is the **function definition** —
+`encodeWireData(value: unknown)` — which the call-site regex matched because a declaration and a
+call look alike to a pattern that only knows parentheses. Stated because the honest count is 3,
+and a reader seeing "4 sites, 3 validated" would look for a defect that is not there.
+
+Class closed: one instance, fixed, with the surrounding convention confirmed rather than assumed.
