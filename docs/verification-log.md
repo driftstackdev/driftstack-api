@@ -22538,3 +22538,31 @@ gap. Filenames are a hypothesis about contents, never a reading of them.
 is narrower than its own claim is the recurring shape."_ With V-1701's _"pinning the comment
 freezes what the file SAYS"_, that is twice now that the doctrine I thought I was discovering was
 already written down here. **Nine obligations checked, one unenforced.**
+
+## V-1703
+
+**A third category in the obligation sweep: an obligation whose caller does not exist.**
+
+`auth-flows-repo.consumeAuthToken` is a compare-and-set — it updates `WHERE id = ? AND consumed_at
+IS NULL` and returns whether this call claimed the row, with the obligation stated on the return:
+_"0 → already consumed (a concurrent winner), so the caller must reject rather than double-run."_
+
+**There is no production caller.** Repo-wide, non-comment: the method is defined in
+`db/auth-flows-repo.ts`, declared on the service interface, implemented by the in-memory test
+double, and **called only from integration tests** using it as a fixture to mark a token consumed.
+Production consumes tokens through `consumeAuthTokenFamily`, which has two live call sites.
+
+So the obligation is neither honoured nor violated — **it is dormant**, and that is a third
+outcome the sweep had not produced before. It also changes how a green mutation reads: had I gone
+straight to "neutralise the honouring code and see what reds", there would have been no honouring
+code to neutralise, and the green would have looked like "unguarded" rather than "uncalled".
+
+**Not a gap in the dormancy register.** `every-service-is-wired-or-recorded-as-dormant` exists for
+exactly this shape — it was written after a service that _"bounded five tables on a 90-day window
+and had never run"_ — but it is scoped to service CLASSES (_"every recorded entry still names a
+real class"_). A repo method with no production caller is a different granularity, and widening
+that register to methods would multiply its population by an order of magnitude for a case whose
+consequence here is nil: the method is correct, pinned by two guards, and its absence of callers
+is the ordinary result of `consumeAuthTokenFamily` superseding it.
+
+**Ten of 22 obligations checked; one unenforced, one dormant, eight honoured and guarded.**
