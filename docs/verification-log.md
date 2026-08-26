@@ -14369,3 +14369,40 @@ outer layer is covered by `route-auth-coverage-invariant`.
 BOUNDED: three conditional-predicate methods, each mutated at its service wrapper and measured against the
 FULL suite. Whether other services carry an unwitnessed `throwIfMissingScope` was not measured — this
 entry covers the three listings reached from V-1823's `.accountId ===` sites and nothing wider.
+
+## V-1826 — FIXED P-39: the all-tenant sessions listing now has a behavioural witness on its scope check
+
+2026-08-26. V-1825 specified this fix rather than rushing it. Landed now.
+
+⛔ THE GAP, restated from measurement: `sessions-repo.listAllSessions` takes an OPTIONAL `accountId`, so
+with none supplied the listing spans every tenant. `throwIfMissingScope(ctx, 'driftstack_internal_admin')`
+in `services/sessions.ts listAll` is the inner gate, and removing it left the FULL suite green except two
+`the-server-source-type-checks` arms firing on TS6133 for the orphaned `ctx`. A lint objection is not a
+guard: a refactor that drops the check while still referencing `ctx` passes it.
+
+FIXED with `tests/unit/sessions-list-all-stays-admin-only.test.ts`, copying the better of the two
+instruments its siblings use — `rate-limit-overrides`' behavioural refusal arm rather than `api-keys`'
+text roster:
+
+- **The scope arm tries BOTH wrong scopes.** `account_owner` is the strongest CUSTOMER scope and `admin`
+  is not `driftstack_internal_admin`; both must be rejected, which proves the EXACT scope is required and
+  not merely an elevated one. That is the template's own design and worth copying deliberately.
+- ⭐ **A non-vacuity arm asserts it RESOLVES for `driftstack_internal_admin`.** Without it, deleting
+  `listAll` or making it throw for everyone would leave the first arm green and reading as a guard. Today
+  I wrote a cross-account arm that passed both clean and mutated (V-1821); this is the check that would
+  have caught it.
+
+PROVED BOTH DIRECTIONS: clean 2/2 pass; with the scope check removed the arm fails with
+`promise resolved "{ items: [], nextCursor: null }" instead of rejecting` — the leak itself — while the
+non-vacuity arm still passes, which is exactly the split that shows arm one is a scope check rather than a
+blanket refusal. `services/sessions.ts` restored byte-identical.
+
+⭐ RATCHETS DERIVED, NOT ASSUMED. A new file moves both, and the two count DIFFERENT populations:
+`EXPECTED_TEST_FILES` is the node project, `EXPECTED_TEST_FILES_ALL` is the root config over both vitest
+projects. Measured with `vitest list --filesOnly`: node 3050 → **3051**, root 3226 → **3227**. Had I
+assumed one number applied to both, the gate would have been wrong in one direction while looking
+deliberate. `verify-suite` then reports "OK — exit 0, no unhandled errors, full file count".
+
+BOUNDED: this closes the inner gate for `sessions.listAll` only. The route gate at `admin-sessions.ts` was
+already covered by `route-auth-coverage-invariant`, and the other two conditional-predicate listings were
+already witnessed (V-1825), so the conditional category now has three of three.
