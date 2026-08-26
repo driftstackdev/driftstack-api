@@ -21991,3 +21991,36 @@ to add one.
 
 Boundary: `apps/server/src` read whole for `behaviorProfile`, four files, five occurrences in the
 schema and one populator.
+
+## V-1691
+
+**P-17 design: what in-flight connections do when egress swaps. One option is ruled out by
+physics, and that is what decides it rather than preference.**
+
+The blocking question before any `setEgress` wire shape is frozen: when egress changes on a live
+session, do existing connections drain, reset, or stay on the old exit? It is observable to the
+site, so it belongs in the frame design. Confirmed undecided: planning file 133 is 467 lines with
+29 mentions of egress and 34 of SOCKS5, and nothing in it addresses changing egress after a
+session starts — controls run so the zero means absence rather than a bad search.
+
+**The invariant that settles it: at most one egress IP may be observable at any instant.** A
+single-interface device has one public address at a time. Every option is then judged by whether
+it can put two on the wire together.
+
+| Option                                                                        | What the site sees                                                                                                         | Verdict                                                                                                                                         |
+| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Drain** — existing connections finish on the old exit, new ones use the new | Subresources for one page arriving from **two IPs concurrently**, overlapping in time                                      | ⛔ **Ruled out.** No real device can produce this. It is the only option that is not merely unusual but impossible                              |
+| **Reset** — tear down all connections, everything reconnects on the new exit  | A hard break mid-page, then everything resuming from a new IP                                                              | ⚠️ Possible for a real device (WiFi→cellular handoff) but the signature is unnaturally clean: simultaneous, no retry storm, no partial failures |
+| **Stay** — the swap applies at the next navigation boundary                   | Nothing anomalous — the exit changes between page loads, which is what a network change looks like when nobody is mid-load | ⭐ **Coherent by default**                                                                                                                      |
+
+**Recommendation: `stay` as the default, `reset` as an explicit opt-in, `drain` unavailable.**
+That makes the safe choice the one a caller gets by not thinking about it, and forces the
+detectable option to be named. The cost is that `setEgress` becomes asynchronous in effect — it
+returns "will apply at next navigation", which has to be in the API contract rather than
+discovered.
+
+**Boundary, and it is the important one.** This is reasoning about what is observable, not a
+measurement of what any detector actually keys on. I have not tested a real site against either
+signature, and "unnaturally clean handoff" is an argument, not evidence. The physics claim
+(two concurrent public IPs) is solid; the ranking of `reset` versus `stay` is a judgement that
+someone with detector telemetry should be able to overturn.
