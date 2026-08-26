@@ -53,9 +53,20 @@ const RESPONSE_READ_MAX_BYTES = 64 * 1024;
 const RESPONSE_EXCERPT_MAX_CHARS = 200;
 const TRANSPORT_ERROR_MAX_CHARS = 500;
 const TRANSPORT_TOKEN_RE =
-  /([?&#](?:ds_token|access_token|refresh_token|id_token|api_key|apikey|client_secret|token|secret|password|signature|code)=)[^&\s"'`]+/gi;
+  /([?&#](?:ds_token|access_token|refresh_token|id_token|session_token|debug_token|challenge_token|code_verifier|api_key|apikey|client_secret|token|secret|password|signature|code|state)=)[^&\s"'`]+/gi;
 const TRANSPORT_BEARER_RE = /(bearer\s+)[A-Za-z0-9._~+/-]+=*/gi;
 const TRANSPORT_BASIC_RE = /(basic\s+)[A-Za-z0-9+/]{8,}={0,2}/gi;
+// V-1716 — the three PREFIX classes the central `redactText` gained AFTER this
+// mirror was written (2026-07-13) and which never propagated: prefixed service
+// secrets 2026-08-13, Anthropic BYOK keys 2026-08-17, OAuth secrets 2026-08-24.
+// Each closed a real leak centrally — "a bare API key in an error message went to
+// the log in full" — while a transport failure here kept printing the same
+// credential in clear. Kept byte-identical to apps/server/src/lib/redact-url.ts
+// so the cross-source arm can compare the two rather than restate one.
+const TRANSPORT_PREFIXED_SECRET_RE =
+  /(ds_(?:live|test)_|gck_|whsec_|sk_(?:live|test)_|rk_(?:live|test)_)[A-Za-z0-9]{12,}/g;
+const TRANSPORT_ANTHROPIC_KEY_RE = /(sk-ant-)[A-Za-z0-9_-]{12,}/g;
+const TRANSPORT_OAUTH_SECRET_RE = /(oas_|oat_|oag_)[A-Za-z0-9_-]{12,}/g;
 const TRANSPORT_USERINFO_RE = /([a-z][a-z0-9+.-]*:\/\/)[^/?#\s@]+@/gi;
 /**
  * Default cap on `store.dlq`'s size (WD-4, LOW-severity audit finding,
@@ -737,12 +748,21 @@ function safeTransportError(error: Error): string {
   // central redactText credential classes mirrored here and pinned by tests.
   const bounded = error.message.slice(0, TRANSPORT_ERROR_MAX_CHARS);
   return (
-    bounded
-      .replace(TRANSPORT_TOKEN_RE, '$1[redacted]')
-      .replace(TRANSPORT_BEARER_RE, '$1[redacted]')
-      .replace(TRANSPORT_BASIC_RE, '$1[redacted]')
-      .replace(TRANSPORT_USERINFO_RE, '$1[redacted]@') || 'transport failure'
-  ).slice(0, TRANSPORT_ERROR_MAX_CHARS);
+    (
+      bounded
+        .replace(TRANSPORT_TOKEN_RE, '$1[redacted]')
+        .replace(TRANSPORT_BEARER_RE, '$1[redacted]')
+        .replace(TRANSPORT_BASIC_RE, '$1[redacted]')
+        // Positional patterns run BEFORE the prefix patterns, for the reason the
+        // central redactor gives: reversed, a bearer credential is rewritten to
+        // `ds_live_[redacted]` first and the bearer pattern then stops at the `[`,
+        // leaving a doubled marker that reads as a bug and invites a wrong fix.
+        .replace(TRANSPORT_PREFIXED_SECRET_RE, '$1[redacted]')
+        .replace(TRANSPORT_ANTHROPIC_KEY_RE, '$1[redacted]')
+        .replace(TRANSPORT_OAUTH_SECRET_RE, '$1[redacted]')
+        .replace(TRANSPORT_USERINFO_RE, '$1[redacted]@') || 'transport failure'
+    ).slice(0, TRANSPORT_ERROR_MAX_CHARS)
+  );
 }
 
 /**

@@ -9729,3 +9729,62 @@ as `$FILES` sent six paths as one argument and ran nothing. It was caught instan
 log added an hour earlier — a floor asserting tests actually EXECUTED — because an empty baseline is
 obviously wrong in a way an exit code never is. The same fault, twice, in two sessions, on the same
 day, caught the second time by the control written after the first.
+
+## V-1716 — a hand-copied credential scrubber fell eight classes behind the original, and the test named "mirrored credential classes" could not see it
+
+2026-08-26. Audited webhook delivery end to end. `packages/webhook-delivery/src/in-memory.ts` carries
+its own transport-error redaction and says why: "This package deliberately has no apps/server
+dependency, so keep the central redactText credential classes mirrored here and pinned by tests." Two
+hand-maintained copies of one security control, with a comment asserting they agree — the shape that
+has produced a finding every time it appeared this session.
+
+THEY DID NOT AGREE, AND THE DIVERGENCE IS DATED. The mirror was written 2026-07-13. The central
+`redactText` in `apps/server/src/lib/redact-url.ts` then gained three PREFIX classes that never reached
+it, each of which was itself a fix for a real leak:
+
+```
+  FREE_TEXT_PREFIXED_SECRET_RE  2026-08-13  "a bare API key in an error message went to the log in full"
+                                            ds_live_ / ds_test_ / gck_ / whsec_ / sk_live_ / rk_live_
+  FREE_TEXT_ANTHROPIC_KEY_RE    2026-08-17  "the one credential format the log scrub missed"  sk-ant-
+  FREE_TEXT_OAUTH_SECRET_RE     2026-08-24  "scrub OAuth client secrets and access tokens"    oas_/oat_/oag_
+```
+
+And FIVE query-parameter names had been added to the central positional pattern and not the copy:
+`session_token`, `debug_token`, `challenge_token`, `code_verifier`, `state`. That alternation is
+anchored on `[?&#]`, so the generic `token` alternative does NOT cover `?session_token=` — checked by
+diffing both lists rather than by reading one, 17 names centrally against 12 in the mirror, with
+nothing in the mirror absent centrally. Pure one-directional drift.
+
+⚠️ `whsec_` is the webhook signing-secret prefix. The webhook package's own redactor did not know the
+prefix of the secret the webhook package issues.
+
+SEVERITY, STATED HONESTLY AND SMALLER THAN IT FIRST LOOKS. Both PRODUCTION delivery paths —
+`webhook-worker.ts` and `durable-webhook-delivery.ts` — import and call the central `redactText`
+directly, so the hosted product was never affected. This copy is the in-memory implementation, which
+its own header scopes to "unit tests, GUI-client integration tests, and small self-hosted
+single-process workloads". So the exposure is a self-hosted deployment storing a transport failure with
+a bare credential in clear on a delivery record's `errorMessage`. Real, shipped, and not the hosted
+plane. I nearly filed it as the hosted plane by reading the package before reading its callers.
+
+THE GUARD IS THE ACTUAL DEFECT. An arm titled "transport diagnostics: mirrored credential classes"
+asserted `toMatch(/const TRANSPORT_TOKEN_RE =/)` and that each constant is applied — every assertion
+reading the mirror's own text. **Both sides of that comparison came from the same file**, so it pinned
+that the copy has the classes it has, and could never observe the original moving on. It stayed green
+through all eight divergences while its title claimed the property.
+
+Fixed together: the three prefix classes and the five parameter names are mirrored byte-identically,
+applied in the central's own order (positional before prefix, for the doubled-marker reason that file
+documents), and a new arm DERIVES the classes from `redact-url.ts` and compares pattern bodies rather
+than restating them. It also fails when a SEVENTH class is declared centrally and left uncompared,
+because the class list is itself a growing family.
+
+Mutation-proved both directions on the real subjects rather than the guard's list: drifting the
+mirror's `sk-ant-` to `sk-anx-` fails with "credential classes whose central definition no longer
+matches the mirror: [FREE_TEXT_ANTHROPIC_KEY_RE]", and declaring a probe class centrally fails with
+"central credential classes this arm does not compare: [FREE_TEXT_PROBE_RE]". Both files restored
+byte-identically; `it(` 19 to 20; tsc clean.
+
+BOUNDED: the fix is verified by byte-identity with a redactor that is behaviourally tested centrally,
+not by an independent behavioural test of the mirror's own scrubbing. Identity transfers the property
+and is what the arm can enforce; a behavioural test of `safeTransportError` would need the function
+exported and does not exist.

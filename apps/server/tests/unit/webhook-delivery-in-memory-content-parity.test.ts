@@ -60,6 +60,13 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const LIB = resolve(REPO_ROOT, 'packages/webhook-delivery/src/in-memory.ts');
+/**
+ * V-1716 — the thing this mirror is a copy OF. The arm below is the only
+ * connection between them: the package deliberately has no `apps/server`
+ * dependency, so the credential classes are hand-copied and nothing but a test
+ * can notice when the original moves on without them.
+ */
+const CENTRAL_REDACTOR = resolve(REPO_ROOT, 'apps/server/src/lib/redact-url.ts');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -206,6 +213,56 @@ describe('W454.B packages/webhook-delivery/src/in-memory.ts content parity', () 
     expect(body).toMatch(
       /if \(attempt\.outcome === 'success'\) \{\s*this\.recordAttempt\(entry, attempt, false\);\s*return 'delivered';\s*\}\s*if \(attemptNumber >= maxAttempts\) \{\s*this\.recordAttempt\(entry, attempt, true\);\s*return 'dlqed';\s*\}/,
     );
+  });
+
+  // V-1716 — the arm below pins that the mirror declares its OWN constants. Both
+  // sides of that comparison come from the same file, so it cannot see the mirror
+  // falling behind the thing being mirrored, and it did not: three prefix classes
+  // (2026-08-13, -08-17, -08-24) and five query-parameter names were added to the
+  // central redactor after this copy was written on 2026-07-13 and never reached
+  // it, while its own arm stayed green and its title said "mirrored credential
+  // classes". This arm DERIVES the classes from the central file instead.
+  it('CRITICAL every credential class the central redactText declares is mirrored here, compared against that file rather than restated. A copy of a security control in a package that cannot import the original diverges silently, and its own content pins cannot see it.', () => {
+    const central = read(CENTRAL_REDACTOR);
+    const pattern = (src: string, name: string, where: string): string => {
+      const m = new RegExp(`const ${name}\\s*=\\s*(/.*?/[gimsuy]*);`, 's').exec(src);
+      expect(
+        m,
+        `${name} did not parse out of ${where} — this arm would assert nothing`,
+      ).not.toBeNull();
+      return m![1]!.replace(/\s+/g, '');
+    };
+    const MIRRORED: ReadonlyArray<readonly [string, string]> = [
+      ['FREE_TEXT_TOKEN_RE', 'TRANSPORT_TOKEN_RE'],
+      ['FREE_TEXT_BEARER_RE', 'TRANSPORT_BEARER_RE'],
+      ['FREE_TEXT_BASIC_RE', 'TRANSPORT_BASIC_RE'],
+      ['FREE_TEXT_PREFIXED_SECRET_RE', 'TRANSPORT_PREFIXED_SECRET_RE'],
+      ['FREE_TEXT_ANTHROPIC_KEY_RE', 'TRANSPORT_ANTHROPIC_KEY_RE'],
+      ['FREE_TEXT_OAUTH_SECRET_RE', 'TRANSPORT_OAUTH_SECRET_RE'],
+    ];
+    const drifted = MIRRORED.filter(
+      ([c, t]) => pattern(central, c, 'redact-url.ts') !== pattern(body, t, 'in-memory.ts'),
+    ).map(([c]) => c);
+    expect(
+      drifted,
+      'credential classes whose central definition no longer matches the mirror',
+    ).toEqual([]);
+
+    // The list of FREE_TEXT_* classes is itself a growing family: a seventh added
+    // centrally must be mirrored or consciously exempted, and an arm that only
+    // walks the six above would never say so.
+    const declared = [...central.matchAll(/const (FREE_TEXT_\w+_RE)\s*=/g)].map((m) => m[1]!);
+    expect(declared.length, 'FREE_TEXT_* classes parsed from the central redactor').toBeGreaterThan(
+      4,
+    );
+    expect(
+      declared.filter((n) => !MIRRORED.some(([c]) => c === n)),
+      'central credential classes this arm does not compare — mirror it, or add it here with its reason',
+    ).toEqual([]);
+
+    expect(body).toMatch(/\.replace\(TRANSPORT_PREFIXED_SECRET_RE, '\$1\[redacted\]'\)/);
+    expect(body).toMatch(/\.replace\(TRANSPORT_ANTHROPIC_KEY_RE, '\$1\[redacted\]'\)/);
+    expect(body).toMatch(/\.replace\(TRANSPORT_OAUTH_SECRET_RE, '\$1\[redacted\]'\)/);
   });
 
   it('transport diagnostics: mirrored credential classes, exact timeout, and a 500-character pre/post bound', () => {
