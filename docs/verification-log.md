@@ -12366,3 +12366,43 @@ BOUNDED: enumerated gates by `environment["DRIFTSTACK_*"]` reads in `harness/Sou
 read through a variable or a different accessor is outside that population. Enablement was searched in ops
 records and agent-bus files only — I cannot read the live box env from here, so "recorded nowhere" remains
 a statement about our written record, not about the daemon.
+
+## V-1779 — 15 harness env knobs exist only in code; the four I opened are all safe, and the hypothesis failed
+
+2026-08-26. The 62-gate population built for V-1778 supports a second question: which gates the harness READS
+are mentioned NOWHERE else — no `docs/`, no `operations/`, no test? Those are operator escape hatches with
+no operator-visible existence.
+
+    gates read by the harness                       62
+    mentioned outside Sources (docs / ops / tests)  47
+    ⛔ mentioned ONLY at their own read site         15
+
+⭐ Controls chosen per V-1778's lesson — TWO enabled gates that qualify DIFFERENTLY (`NAV_PAGESTATE`
+appears in ops records, `WARM_TABS` only on the buses). Both return 9 outside-mentions, so the search sees
+both routes to being "documented" and the 15 are not an artifact of looking in one place.
+
+The 15 are tuning knobs: challenge scan interval and autopause floor, three intent-deadline timeouts, the
+profile-dump handshake, reconnect watchdog, save-back barrier, shutdown reap deadline, tab-capture timeout,
+video DSCP and max bitrate.
+
+⛔⛔ MY HYPOTHESIS WAS THAT AN UNTESTED KNOB WOULD BE A BROKEN KNOB — the parse or the bound would fail the
+first time an operator reached for it, during an incident. **It did not hold in the four I opened**, and the
+way it fails is worth recording:
+
+    RECONNECT_WATCHDOG_MS       max(1000, min(ms, 15000))        clamped
+    VIDEO_MAX_BITRATE_KBPS      max(200, min(kbps, 20000))       clamped
+    SHUTDOWN_REAP_DEADLINE_MS   `if reapDeadlineMs > 0, …`       unclamped BUT guarded
+    SAVEBACK_BARRIER_DEADLINE_MS `if deadlineMs > 0, …`          unclamped BUT guarded
+
+⭐ The two deadlines are the interesting pair. Both are deliberately unclamped because `0` is a DOCUMENTED
+escape hatch ("`0` disables the deadline", "`0` waits unbounded"), so clamping would remove a feature. I
+expected the negative case to be the hole — a stray `-1` making a shutdown deadline expire INSTANTLY, losing
+in-flight save-backs instead of hanging. The `> 0` guard makes a negative behave exactly like `0`:
+unbounded. The safe direction, and by construction rather than by a range check someone had to remember.
+
+So the residual is DISCOVERABILITY, not correctness: a knob nobody can find is not dangerous, it is just
+unavailable when it would have helped. That is a real but much smaller claim than the one I set out to make.
+
+BOUNDED: 4 of the 15 were opened — the two deadline knobs (chosen because a wrong value there loses customer
+data) and the two streaming knobs. The other 11 were NOT inspected, so "the orphans are safe" is a statement
+about four of fifteen and nothing more.
