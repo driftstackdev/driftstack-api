@@ -11028,3 +11028,55 @@ starts emitting, or the gap is silent HTTP-error loss for the length of the depl
 BOUNDED: this covers the nested payloads' names and types. Field-level VALUE constraints (`.max()`
 lengths, `.min(1)`) are not compared against what the harness can actually produce — a Swift string longer
 than a CP `.max()` is the same silent drop, and that measurement has not been run.
+
+## V-1747 — pageState `url`/`title` are emitted untruncated into a bounded schema, and the obvious fix is wrong
+
+2026-08-26. Took V-1746's stated boundary — VALUE constraints, never compared against what the harness
+can actually produce. Unlike V-1746 this one is not latent.
+
+The CP bounds `url` at `PAGE_STATE_URL_MAX_LENGTH` (8192) and `title` at `PAGE_STATE_TEXT_MAX_LENGTH`
+(4096), and that bounding is DELIBERATE — content-parity:658 feeds over-cap values for
+sessionId/url/title/tabId/error and asserts `.toBe(false)` for each. Bounding untrusted input is correct,
+so the CP is not the defect.
+
+The harness emit path applies NO length cap. `HarnessCoordinator.swift:5058` is
+`event.url.map { IntentExecutor.redactCredentialURL($0) }` — credential-redacted, never truncated — and
+`title: event.title` passes verbatim. Proved the consequence against the real schema:
+
+    ACCEPTED  ordinary https URL (60 chars)
+    REJECTED  data: URL, 9000 chars  (cap 8192)
+    REJECTED  title 5000 chars       (cap 4096)
+
+and the drop is the same silent one as V-1746 — `fleet-control-registry.ts:533`, no log, no metric. The
+GUI's page-state store simply stops updating and the address bar freezes on the previous URL.
+
+⭐ REACHABLE TODAY, unlike V-1746. A `data:` URL carrying any inline image clears 8192 trivially, and
+enterprise **SAML SSO** redirects routinely carry a >8KB `SAMLResponse` in the URL — so page-state goes
+silent during exactly the login step a customer is most likely to be watching. The codebase already knows
+what this failure looks like: the schema's own comment records required-url/error/http_status having
+"failed safeParse on EVERY real frame → silently dropped → the page-state store stayed empty → no live
+URL in the GUI".
+
+⛔⛔ THE OBVIOUS FIX IS WRONG, AND THAT IS THE FINDING'S REAL CONTENT. The harness already has
+`HarnessCoordinator.truncate` plus `maxTabFieldChars = 8 * 1024` — exactly the CP's URL cap — and already
+applies it to tab snapshots at :2562. Reusing it here looks like a one-line change. But `truncate` is
+`s.count <= max ? s : String(s.prefix(max))`, which counts **grapheme clusters**, while Zod's `.max()`
+counts **UTF-16 code units**. Measured, not reasoned:
+
+    truncate(<6000 ZWJ family emoji>, 4096) -> Swift Characters 4096 / UTF-16 units 45056 -> STILL REJECTED
+
+Off by 11x, and page titles are exactly where non-BMP content lives. A correct fix needs a surrogate-safe
+UTF-16 slice — the same shape as V-1718's surrogate-safe slice on the CP side earlier this session — not
+the existing helper.
+
+⛔ NOT IMPLEMENTED THIS TURN, and the reason is not the code. The harness tree was clean and quiescent
+when measured (no `.swift` write in 30 min; A1's last bus post 40 min earlier), so the edit was safe to
+make — but the correct version needs a new UTF-16-safe helper plus its own unit tests plus a Swift build
+in a repo A1 works continuously, and "no concurrent fork source writers" is a standing rule. Filed as
+P-30 with the trap recorded so it cannot be closed with the one-liner.
+
+BOUNDED: measured `pageState.url`/`title` only. The other capped free-text fields on harness→CP frames
+(`cookie.value` 4096 / `cookie.name` 512, `errorEvent.summary`/`detail`, `challenge.detail` 4096) share
+the shape — the harness caps the cookie jar's TOTAL serialized size at 8 MiB but applies NO per-field cap
+(`value: c.value` verbatim at :1432) — and their reachability is NOT measured here, because it turns on
+WebKit's own per-cookie limit, which I have not tested.
