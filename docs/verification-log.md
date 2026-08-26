@@ -14606,3 +14606,63 @@ and only one of them was being exercised for these properties — which is exact
 BOUNDED: `auth-repo.findActiveWebSession`'s two conjuncts. Its `innerJoin` on `accounts.authEpoch` — the
 third thing that lookup enforces — is exercised by the neighbouring epoch arms but was NOT separately
 mutation-tested here.
+
+## V-1832 — the read-then-write sweep: 39/39 db + 34 service methods, and one security primitive left unwitnessed
+
+2026-08-26. V-1815 found that six concurrent status transitions all committed, because a
+read-then-`update`-keyed-on-id is not a compare-and-swap. That was found by accident on one repo.
+It is a SHAPE, so I swept it.
+
+**Population and boundary.** Every method in `apps/server/src/db/*.ts` (55 files) holding both a read
+and an `.update(` — 39 methods — plus every method in `apps/server/src/services/*.ts` (140 files)
+that reads and writes through two separate repo calls with no transaction — 34 methods. Not swept:
+`.delete(`-only paths, and cross-service read/write spanning two service objects.
+
+**Result: the db layer is clean, 39/39.** Each either carries a CAS predicate in the UPDATE's own
+WHERE, or takes a `.for('update')` row lock and re-checks under it, or writes every decision-derived
+column in one statement so no interleaving can break its invariant (`incidents.addUpdate` is the
+third kind: it sets `status` and `resolvedAt` together, so `status==='resolved' ⇔ resolved_at != null`
+survives any order). All six one-shot credential consumes — OAuth code, OAuth authorization,
+magic-link/verify token family, TOTP counter, recovery code, pending OAuth link — are atomic.
+
+⭐ Worth recording: `stripe-webhooks-repo`, which the tenancy (V-1822) and expiry (V-1828) sweeps both
+flagged as the thinnest file in the layer, is exemplary here — all five tier writes lock the accounts
+row. Thin on one axis is not thin on the next, and the cross-axis inference I drew in V-1828 does not
+generalise.
+
+**FIXED — the one real gap, and it is not in the source.** `markRecoveryCodeUsed`'s single-use guard
+had exactly TWO catchers, both source-text pins on `mfa-repo.ts`. Nothing exercised it. Worse, BOTH
+test doubles — `_helpers/in-memory-mfa-repo.ts` and the fake in `mfa-service.test.ts` — implement the
+atomic semantics THEMSELVES, commented "mirrors the Drizzle conditional UPDATE" and "Faithful to the
+DB's atomic conditional UPDATE". ⛔⛔ A FAITHFUL DOUBLE HIDES THE REAL ARTIFACT: every service-level
+MFA test passes whether or not the real repo enforces single-use. A refactor that dropped
+`isNull(usedAt)` and updated the two pins alongside it — which is what a refactor does — leaves a
+recovery code infinitely replayable with the whole suite green.
+
+⭐ And the host file's own header argues the unscoped consume is safe _because_ "a code can never be
+spent twice … it inherits its safety from this predicate; it does not have its own". The file rests
+its reasoning on a property it never tested.
+
+Added one arm to `db-mfa-recovery-codes-tenant-scope-drizzle` (existing file, so no ratchet movement):
+a sequential replay with a positive control, and eight concurrent spends of one code. The concurrent
+half runs on its OWN `max: 8` pool — the file's shared client is `max: 1` and would have quietly
+serialised the race into a second sequential replay, proving nothing the first arm had not.
+
+⭐⭐ PROVED PER ASSERTION, NOT PER ARM (the V-1831 lesson, and it mattered again). Dropping
+`isNull(usedAt)` fails the SEQUENTIAL assertion, which runs first, so the concurrency check never
+executes. Isolating it needs a mutation that is sequentially CORRECT and non-atomic — the consume
+rewritten as select-then-update — which passes the replay arm and fails the race arm `expected 5 to
+be 1`. That second mutation is the point of the arm: it is the shape a source-text pin cannot
+distinguish from the real thing.
+
+⛔ FIVE INSTRUMENT ERRORS BEFORE THE MEASUREMENT WAS RIGHT, each producing a confident wrong answer:
+(1) the column extractor read `args.eventId` — an argument — as a table column, so the known positive
+and the known negative both scored GUARD; (2) I grepped the literal `FOR UPDATE` while Drizzle spells
+it `.for('update')` (26 vs 18 occurrences in this layer), calling five locked methods unlocked —
+sweep the SHAPE, not the token; (3) the body extractor terminated on `^  }`, which matches the `})`
+closing a multi-line ARGUMENT object, so five "bodies" were signatures — the tell was body lengths of
+5,5,5,4,7; (4) a pattern-filtered grep dropped the `.for('update')` line and I read the filtered
+output as if it were the method; (5) a literal grep for the predicate found zero pinning tests because
+the pins write it as an ESCAPED regex. The two-sided control — the pre-fix `atlas-priority-events`
+blob as a known positive against its fixed self — is what exposed (1); without a KNOWN positive the
+first four errors all read as clean results.

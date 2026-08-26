@@ -140,5 +140,70 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       const theirCandidates = await repo.listUnusedRecoveryCodes(stranger);
       expect(theirCandidates.map((c) => c.id)).toEqual([theirs?.id as string]);
     });
+
+    it("CRITICAL a recovery code can be spent exactly once, on real Postgres — the atomic consume this file's own premise rests on, which until now had only source-text witnesses", async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG MFA single-use test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleMfaRepo({ client, db, close: async () => {} });
+
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`mfa-single-use-${accountId}@test.local`})`;
+
+      // ── Sequential replay: the stolen-code case ──────────────────────
+      const [replayRow] = await client`
+        INSERT INTO account_mfa_recovery_codes (account_id, code_hash)
+        VALUES (${accountId}, ${`hash-replay-${accountId}`}) RETURNING id`;
+      const replayId = replayRow?.id as string;
+
+      // Positive control first: a method that always returned false would
+      // satisfy the refusal below while proving nothing at all.
+      expect(
+        await repo.markRecoveryCodeUsed(replayId, new Date()),
+        'the FIRST spend of an unused code must succeed — without this the refusal below is vacuous',
+      ).toBe(true);
+      expect(
+        await repo.markRecoveryCodeUsed(replayId, new Date()),
+        'a recovery code was spent TWICE — a used code stays valid forever, so one leaked code is permanent MFA bypass',
+      ).toBe(false);
+
+      // ── Concurrent double-spend: the case no text pin can see ────────
+      // The arm above fails when isNull(usedAt) is dropped. This one also fails
+      // when the consume is rewritten as a read-then-write that still READS as
+      // atomic — the shape a source-text pin cannot distinguish.
+      //
+      // On its OWN pool: the file's shared client is max:1, which would quietly
+      // serialise these eight calls and turn the race into a sequential replay.
+      const racePool = postgres(DB_URL, { max: 8 });
+      try {
+        const raceDb = drizzle(racePool) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+        const raceRepo = new DrizzleMfaRepo({
+          client: racePool,
+          db: raceDb,
+          close: async () => {},
+        });
+        const [raceRow] = await client`
+          INSERT INTO account_mfa_recovery_codes (account_id, code_hash)
+          VALUES (${accountId}, ${`hash-race-${accountId}`}) RETURNING id`;
+        const raceId = raceRow?.id as string;
+        const at = new Date();
+        const spent = await Promise.all(
+          Array.from({ length: 8 }, () => raceRepo.markRecoveryCodeUsed(raceId, at)),
+        );
+        expect(
+          spent.filter(Boolean).length,
+          'exactly one concurrent caller may spend a recovery code; more than one is an MFA bypass',
+        ).toBe(1);
+      } finally {
+        await racePool.end({ timeout: 5 });
+      }
+    });
   },
 );
