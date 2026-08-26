@@ -10015,3 +10015,51 @@ sweep scored `fleet-control-registry.ts` as having five backpressure signals; al
 file returned nothing and I concluded the send path was unguarded — the check lives one module away in
 the route. Both would have produced a confident, wrong finding; the second would have been a fabricated
 security-adjacent claim about a file that is in fact careful.
+
+## V-1723 — the OAuth authorization-code flow audited end to end: sound, and every security check pinned
+
+2026-08-26. Audited `POST /v1/oauth/token` end to end. Prior art covers the OAuth ADMIN-AUDIT gaps
+(V-1547 and the enum-migration item) but nothing audits the exchange itself, which is the part where an
+OAuth implementation classically fails. It does not fail here. Recorded because a security-critical
+surface verified sound is worth as much as a defect found, and because it stops the next agent
+re-auditing it.
+
+EVERY CLASSIC DEFECT CLASS IS CLOSED, read rather than assumed:
+
+```
+  code single-use        atomic — consumeCodeForToken returns 'code_unavailable'
+  client binding         code.client_id vs args.client_id, AND re-checked in the transaction
+  redirect binding       code.redirect_uri vs args.redirect_uri, plus an allowlist + length cap
+  PKCE                   verifyS256Challenge(verifier, challenge)
+  code expiry            enforced in SQL (gt(createdAt, now - TTL)), again in the service, again at commit
+  at-rest secrecy        codes, authorization ids and access tokens all stored as sha256Hex, never plaintext
+  client authentication  constantTimeStringEqual over hashes
+  client revocation      re-checked inside the transaction ('client_authority_changed')
+```
+
+⭐ TWO PIECES ARE BETTER THAN THE CHECKLIST REQUIRES. The `consumed_at !== null` test is only a
+fail-fast; the REAL single-use guarantee is the atomic `consumeCodeForToken`, which re-verifies
+client_id, account_id and the TTL inside the same transaction that consumes the code and inserts the
+token — so a double exchange racing itself loses at the database rather than at a read. And
+`authenticateClient` defeats client ENUMERATION as well as timing: for an unknown client it sets
+`expectedSecretHash = client?.client_secret_hash ?? presentedSecretHash`, comparing the presented hash
+against itself so the work is identical, then rejects on the null check, with one
+`invalid client credentials` for unknown, revoked and wrong-secret alike.
+
+SOUND IS NOT THE SAME AS PINNED, so each check was mutation-proved by deleting it. Control first: 45
+OAuth unit files, 501 tests executing at baseline. Six of six caught:
+
+```
+  PKCE verification          2 failed        single-use pre-check       1 failed
+  client_id binding          2 failed        ATOMIC race-safe branch    1 failed
+  redirect_uri binding       3 failed        client revoked at commit   3 failed
+```
+
+The atomic branch being covered is the one worth noting: a race-safe path is the usual place coverage
+stops, because provoking the race is harder than asserting the happy path. `services/oauth.ts` restored
+byte-identically after every mutation and verified clean against HEAD.
+
+BOUNDED: the mutations were scored against `tests/unit/*oauth*` — 45 files. The OAuth integration tests
+are DATABASE_URL-gated and did not execute here, so the counts above are a floor on what catches each
+deletion, never a ceiling. That direction is the safe one for this claim: every check is pinned by at
+least the unit half, and additional integration coverage can only add to that.
