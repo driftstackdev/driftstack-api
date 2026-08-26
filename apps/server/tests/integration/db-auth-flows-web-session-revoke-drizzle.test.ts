@@ -165,6 +165,73 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       ).toBeNull();
     });
 
+    // V-1831 — the arm above proves `DrizzleAuthFlowsRepo.findActiveWebSession`.
+    // There is a SECOND implementation with its own predicates:
+    // `DrizzleAccountAuthRepo.findActiveWebSession`, which `bootstrap.ts:463`
+    // constructs and `services/auth.ts slowPathWebSession` calls on the
+    // web-session branch of request auth.
+    //
+    // MEASURED (V-1830): removing BOTH of its conjuncts — `gt(expiresAt, now)`
+    // AND `isNull(revokedAt)` — left the FULL suite green except two source-TEXT
+    // pins. Neither property was executed on that lookup.
+    //
+    // It is the ONLY enforcement, not a backstop: the caller states directly
+    // beneath the call that the query "already filters expired + revoked rows"
+    // and that a null result cannot be distinguished, so the service delegates
+    // rather than re-checking.
+    it('CRITICAL the RUNTIME auth repo also refuses expired and revoked sessions — a second implementation with its own predicates', async () => {
+      if (!dbReachable || !client) return;
+      const c = client;
+      const db = drizzle(c) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleAuthFlowsRepo({ client: c, db, close: async () => {} });
+      const runtimeAuthRepo = new DrizzleAccountAuthRepo({ client: c, db, close: async () => {} });
+
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await c`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`runtime-ws-${accountId}@test.local`})`;
+
+      const liveHash = `rt-live-${randomUUID()}`;
+      const deadHash = `rt-dead-${randomUUID()}`;
+      const revokedHash = `rt-revoked-${randomUUID()}`;
+      for (const [tokenHash, expiresAt] of [
+        [liveHash, new Date(Date.now() + 60_000)],
+        [deadHash, new Date(Date.now() - 60_000)],
+        [revokedHash, new Date(Date.now() + 60_000)],
+      ] as const) {
+        await repo.insertWebSession({
+          accountId,
+          tokenHash,
+          authEpoch: 0,
+          expiresAt,
+          issuedFromIp: null,
+          userAgent: null,
+        });
+      }
+      const toRevoke = await runtimeAuthRepo.findActiveWebSession({
+        tokenHash: revokedHash,
+        now: new Date(),
+      });
+      expect(toRevoke, 'the session to revoke must exist first').not.toBeNull();
+      await repo.revokeWebSession(toRevoke!.id, new Date());
+
+      // Positive control: without it, an always-null lookup would pass both checks below.
+      expect(
+        (await runtimeAuthRepo.findActiveWebSession({ tokenHash: liveHash, now: new Date() }))
+          ?.accountId,
+        'a LIVE session did not authenticate through the runtime repo — the checks below would prove nothing',
+      ).toBe(accountId);
+
+      expect(
+        await runtimeAuthRepo.findActiveWebSession({ tokenHash: deadHash, now: new Date() }),
+        'an expired web session still authenticated through the RUNTIME repo',
+      ).toBeNull();
+
+      expect(
+        await runtimeAuthRepo.findActiveWebSession({ tokenHash: revokedHash, now: new Date() }),
+        'a REVOKED web session still authenticated through the RUNTIME repo',
+      ).toBeNull();
+    });
+
     it('CRITICAL bulk revoke stops at the account boundary, spares the current session, and is idempotent', async () => {
       // `revokeAllWebSessionsExcept` is what "log out my other devices" runs. Its
       // three predicates are the whole security of that action:

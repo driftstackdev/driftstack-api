@@ -14573,3 +14573,36 @@ the defence happens to be the only one.
 BOUNDED: `auth-repo.findActiveWebSession` only, measured by removing both conjuncts together against the
 FULL suite. Whether `auth-flows-repo`'s parallel implementation is the one reached on other paths was not
 traced, and the two were not diffed for behavioural equivalence.
+
+## V-1831 — FIXED P-40: the runtime web-session lookup now has a behavioural witness for BOTH conjuncts
+
+2026-08-26. V-1830 corrected the finding; this lands the fix.
+
+`DrizzleAccountAuthRepo.findActiveWebSession` is the web-session branch of request auth —
+`bootstrap.ts:463` constructs it, `services/auth.ts slowPathWebSession` calls it, and the caller
+delegates entirely, stating that the query "already filters expired + revoked rows". Both of its
+conjuncts were witnessed only by source-text pins.
+
+FIXED by adding one arm to `db-auth-flows-web-session-revoke-drizzle`, which already imported and
+constructed BOTH repos — so no new file, and no ratchet movement. It mirrors the file's own expiry arm
+against the OTHER implementation:
+
+- three sessions on one account: live, already-expired, and one revoked after insert;
+- a positive control asserting the LIVE session authenticates, copied from the template because without
+  it an always-null lookup would satisfy both refusals;
+- one refusal per conjunct.
+
+⭐⭐ PROVED PER CONJUNCT, NOT JUST PER ARM — and this is the step worth keeping. Removing BOTH predicates
+fails on the EXPIRY assertion, which runs first, so the revocation check never executes and that run
+proves only half. Mutating the revocation conjunct ALONE then fails with "a REVOKED web session still
+authenticated through the RUNTIME repo". **An arm with several assertions is only proven for the first one
+that fails; each conjunct needs its own isolated mutation.** Clean run: 8/8. `auth-repo.ts` restored
+byte-identical after each.
+
+⭐ WHY THE HOST WAS ALREADY RIGHT: that file imports `DrizzleAccountAuthRepo` at line 10 and constructs it
+at line 297 for an unrelated epoch test. The two implementations were already side by side in one file,
+and only one of them was being exercised for these properties — which is exactly how the gap survived.
+
+BOUNDED: `auth-repo.findActiveWebSession`'s two conjuncts. Its `innerJoin` on `accounts.authEpoch` — the
+third thing that lookup enforces — is exercised by the neighbouring epoch arms but was NOT separately
+mutation-tested here.
