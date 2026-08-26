@@ -12709,3 +12709,115 @@ is what remained after the instrument was fixed and re-controlled.
 BOUNDED: 8 hand-written `*QueryOpenApi` mirrors examined; 5 agree with their route schema, 1 drifted
 (this one), 2 (`OAuthAuthorizeQueryOpenApi`, `StatusTokenQueryOpenApi`) have no `.parse(req.query)` in
 their route file and were NOT measured — that is unmeasured, not clean.
+
+## V-1788 — the lockfile gate exists, and 518 commits have never reached it
+
+2026-08-26. A release build died on its first step: `npm ci` refused, `Missing: @driftstack/errors-site@0.0.1
+from lock file`. A2 fixed the instance. The structural question is why a check that EXISTS did not run for
+the ~40 commits between the cause and the release.
+
+Measured:
+
+unpushed commits on main 518
+origin/main c15f58639 (HEAD d4164ad26)
+`tags:` triggers in .github/workflows/ci.yml 0
+ci.yml triggers push+pull_request on `main` ONLY
+workflows triggered by tags gui-release.yml (gui-v*), server-deploy.yml (server-v*)
+d03729b83 (added apps/errors-site) on origin/main? NO
+`npm ci` occurrences in .husky/pre-commit + pre-push 0
+
+So: `npm ci` runs 14 times across the workflows and is the only consumer that reads the lockfile as
+authoritative. It lives in ci.yml, which fires on push to `main`. `main` has not moved in 518 commits.
+⛔ **The gate has therefore never executed against any of this work**, and the tag-triggered release
+workflow — which does not share ci.yml's trigger — was its first execution.
+
+⭐ THE LOCAL INVISIBILITY IS BY CONSTRUCTION, which is what makes it worse than an oversight. The
+workspace glob is `apps/*`, so adding a directory required no `package.json` edit and nothing flagged it.
+Every local command resolves through a `node_modules` that already contains the link, so the suite, the
+pre-push gate and every `npm run` pass truthfully. Nothing local is wrong; the lockfile simply is not
+what any local command consults.
+
+⭐ PRIOR ART, READ BEFORE INVESTIGATING THIS TIME rather than after. `ci.yml:128` already says
+"Deploy runs `npm ci --no-audit`, so nothing else checks this." Someone mapped this exact dependency and
+wrote it down next to the audit gate; what they did not have is the 518.
+
+⚠️ NOT FIXED, deliberately. The obvious repair — `npm ci --dry-run` in `.husky/pre-push` — is repo config,
+and my peer is already putting a related pre-push change to the owner. Two agents editing the same hook on
+their own judgement is how a gate gets quietly hollowed out, which is the thing this entry is about.
+
+BOUNDED: trigger blocks of `.github/workflows/*.yml` and the two husky hooks. A check reaching the
+lockfile through a script whose name does not contain `npm ci` or `package-lock` is outside this
+measurement.
+
+## V-1789 — why the guard built for exactly V-1787's defect could not see it: two independent reasons
+
+2026-08-26. `published-request-schema-is-not-looser-than-enforced` exists to catch precisely the class
+V-1787 found — the hand-written spec schema disagreeing with the schema the route enforces. It found four
+real divergences when it was written. It did not find V-1787, and the reasons are worth more than the fix.
+
+⭐ REASON ONE — IT COMPARES CONSTRAINTS, AND ABSENCE HAS NO CONSTRAINT TO COMPARE. Its subject is a
+published field that is LOOSER than the enforced one: spec omits `max(100)`, route enforces it. That
+requires the field to exist on BOTH sides. V-1787's four filters were absent from the published schema
+entirely, so they never formed a pair. A field published nowhere is arguably the loosest possible
+publication — no constraint at all — and it is the one case the looseness comparison structurally cannot
+express.
+
+⭐ REASON TWO — THE ENFORCED CORPUS IS ONE DIRECTORY. `enforcedFields()` reads
+`apps/server/src/routes/*.ts` and nothing else. All four fields live in
+`packages/api-types/src/accounts.ts`, which the guard never opens. Either reason alone would have been
+enough; both were true at once.
+
+MEASURED, and the boundary is the number that matters: 572 `field: z.…` declarations sit in
+`packages/api-types/src` against 156 in the guard's corpus. ⛔ I am NOT claiming the guard is blind to 79%
+of the contract — the guard deliberately excludes RESPONSE fields (its own comment records that a
+name-only first pass produced nine findings of which five were responses, correctly), and an unknown
+share of those 572 are responses. What is measured is the corpus boundary, not a defect rate.
+
+⭐ A THIRD SUSPECTED GAP WAS FALSIFIED, and it belongs here because it nearly went in unchecked:
+`readdirSync(ROUTES)` is NOT recursive, so any route in a subdirectory would be silently outside the
+sweep. There are 0 subdirectories under `routes/` — 60 files at top level, 60 recursively — so the
+non-recursive read loses nothing TODAY. It is a latent edge, not a live one, and worth knowing before
+someone adds `routes/admin/`.
+
+⭐ WHAT THIS BUYS FOR THE FIX: the guard already solves the hard part I was about to rebuild. Pairing a
+spec schema to its route schema by OPERATION is fiddly — my own attempt mispaired twice, once comparing
+an export operation against a list schema, once attributing a schema to the wrong path because a regex
+window ran into the next declaration. This guard sidesteps it entirely by pairing on FIELD NAME globally.
+A key-set arm belongs on that existing machinery, not in a new file.
+
+⚠️ NOT WRITTEN YET, deliberately: a peer is mid-push and I am holding the tree clean by agreement.
+
+## V-1790 — 54 request bodies compared, 52 agreed, and both disagreements were my own instrument
+
+2026-08-26. Generalising V-1787: if one hand-written spec mirror lost four fields, how many others have?
+Answer, stated with the boundary that makes it worth anything: **no further drift found, and the sweep's
+false-positive rate on what it surfaced was 100%.**
+
+Method that finally worked, after four that did not: index by the GENERATED spec rather than by parsing
+the builder. For each POST/PUT/PATCH, take the published requestBody properties, find the single route
+file containing that path literal, find the schema it parses off `req.body`, compare key sets.
+
+operations compared 54
+agreed 52
+differed 2 — both false, see below
+unpairable, skipped 36 ⛔ UNMEASURED, not clean
+
+⛔ BOTH DISAGREEMENTS WERE MINE, and the second is the useful one:
+
+- `PATCH /v1/profiles/{id}` paired against `CloneProfileRequestSchema` — visibly wrong the moment it was
+  read, a PATCH matched to a clone schema, with an empty route-only set.
+- `POST /v1/legal/accept` reported spec `{content_hash, document_key, version}` against route `{token}` —
+  completely disjoint, which is not what real drift looks like. Reading settled it: they match exactly.
+  ⛔ **There are TWO `AcceptBodySchema` definitions** — `routes/legal.ts` (the three fields) and
+  `routes/team.ts` (`token`) — both module-local `const`s, and my global name-to-definition lookup took
+  whichever the file iteration reached first.
+
+⭐ THAT IS THE LESSON WORTH KEEPING, and it explains a run of failures today rather than one:
+**a module-local `const` name is not unique across a repo, so resolving a schema by NAME alone silently
+picks a stranger.** Four of my five mispairings this session reduce to resolving an identifier without
+its scope — a regex window that ran into the next declaration, a first-match-in-file body parse, a
+positional path heuristic, and this. The reliable index was the artifact, not the source.
+
+⚠️ THE 36 SKIPPED ARE THE HONEST HEADLINE. They were dropped because the path literal appeared in zero or
+several route files, or no `Schema.parse(req.body)` followed it — which includes every route parsing via
+`parseOrThrow`, a helper, or a schema resolved indirectly. 52 of 54 agreeing says nothing about them.
