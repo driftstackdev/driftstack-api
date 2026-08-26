@@ -21793,3 +21793,30 @@ both arms red and naming the file with one untracked test present, 6/6 again onc
 
 Written at the census owner's request after I hit the same mechanism twice; the argument for me
 writing it was that I kept hitting it, not that it was mine.
+
+## V-1689
+
+**Tier differentiation is real: 7 of 7 features vary, and no two tiers are functionally identical.**
+
+The V-1685 shape asked of the paid product: is any advertised axis published as a differentiator
+while differentiating nothing? `TIER_FEATURES` is rendered directly into the pricing table's
+Access column, so a uniform value there is a paid promise with nothing behind it.
+
+Measured over all 8 tiers and all 7 fields of `TierFeatures` — boundary: the exported object in
+`packages/api-types/src/common.ts`, comments blanked, field count cross-checked against the
+interface declaration because my first count of "19 fields" was a sed range that overran into the
+object it was describing:
+
+- **7 of 7 fields vary across tiers.** None is identical everywhere.
+- **No tier pair is identical.** The closest are `agency_manual` and `api_builder`, which share
+  `concurrentSessions: 8` and split on `llmBilling` (`byok_only` vs `byok_or_bundle`) — so two
+  tiers at different prices are not the same product.
+
+The two neighbouring guards cover the other directions and say so: `every-boolean-tier-feature-is-enforced`
+catches a `false` flag nothing enforces ("the statement is decoration — and in the direction that
+matters commercially"), and `a-numeric-tier-cap-that-only-guards-creation` catches a cap checked
+at create and never after. Uniformity was the third direction and it is empty.
+
+**Thirteenth consecutive negative**, against one finding (V-1685) in that span. Recorded because
+the measurement is cheap to redo and expensive to re-derive, and because the yield itself is now
+the useful signal: the questions I can generate are landing on ground this suite already holds.
