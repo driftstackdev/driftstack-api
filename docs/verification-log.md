@@ -13098,3 +13098,40 @@ later. Rewritten to paraphrase; the post-condition is now 0.
 BOUNDED: the shape swept is a flag or branch keyed on `.length >=` a cap constant, across
 `apps/server/src` and `packages/*/src`. A cap compared with `>`, or held in a variable rather than a
 SCREAMING_CASE constant, is outside it.
+
+## V-1796 — audited the constant-time comparison surface: exemplary, and my one discrepancy was named in advance
+
+2026-08-26. Next audit target after V-1795. The question: is every comparison of secret material
+constant-time, or does some path use `===` on an HMAC and leak a timing signal?
+
+⭐ PRIOR ART ANSWERS IT, AND ANSWERS IT BETTER THAN I WOULD HAVE.
+`timing-safe-equal-pattern-cross-source-invariant` is the strongest guard I have read in this repo:
+
+- It **derives** its set from the files that call `timingSafeEqual` rather than hardcoding one. Its own
+  header records that the hardcoded predecessor named FIVE files while the server actually compared in
+  fourteen — "the API-key hash compare, the GUI control key, internal fleet auth, TOTP, the profile key
+  hierarchy, Stripe signing, the OAuth store, CLI authorize — were doing the right thing with nothing
+  checking they kept doing it."
+- It states the direction it CANNOT enforce, plainly: a brand-new plain `===` on secret material, in a
+  file that calls `timingSafeEqual` nowhere, is invisible to it.
+- ⭐⭐ **It MEASURED that blind spot instead of asserting it**: a non-constant-time secret compare was
+  introduced into a module that already handles secrets and the whole suite stayed green — 22,405 tests,
+  zero red. And it explains why the missing direction is deliberately not built: scanning every `===` for
+  secret-ish operands yields 47 hits of which none are real, so the guard would become a 47-entry
+  allow-list that decays into a rubber stamp. Judgement at review time is named as the control instead.
+
+⛔ THE ONE DISCREPANCY I FOUND WAS MY INSTRUMENT, AND THE GUARD HAD ALREADY WRITTEN DOWN WHY. I counted
+15 files using `timingSafeEqual` under `apps/server/src` against a header saying fourteen. The guard's
+own annotation block answers it: `routes/agent-sessions.ts` DOCUMENTS the property in a comment and
+delegates the actual comparison to `lib/agent-session-control-key.ts`, which is listed. **"Mentioning the
+function and calling it are different things, and this guard keys on the call."** My `grep -l` counts
+mentions, comments included; the guard counts calls. Same lesson as audits needing to strip comments,
+arriving from the other side.
+
+NO DEFECT. Recorded because a clean audit of a security surface is worth the same as a finding, and
+because that guard is the pattern the two blind-axis guards in V-1789 and V-1794 should be measured
+against: it relates the right axis, names the axis it cannot relate, and proves the gap is real by
+introducing the defect and watching nothing fail.
+
+BOUNDED: the constant-time COMPARISON surface under `apps/server/src` only. Whether each secret is
+correctly derived, stored or rotated is a different question and was not audited here.
