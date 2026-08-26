@@ -13451,3 +13451,45 @@ BOUNDED: the `/start` handler, the confirm-merge handler and the cookie helpers 
 callback handlers were read only for their gates, and `lib/oauth-client-exchange.ts` and
 `services/oauth-client.ts` were not read at all — `confirmPendingLink`'s single-use enforcement is taken
 from the route's contract with it, not verified in the service.
+
+## V-1805 — the branch-gap heuristic needs its branches READ: the file it ranked first has no untested logic
+
+2026-08-26. V-1804 proposed ranking by statement-minus-branch gap on the theory that an unexercised
+branch is an error path nobody drives. Tested that theory on the file it ranked FIRST,
+`routes/profile-snapshots.ts` (95.77 statements / 68.88 branches of 45), by extracting the uncovered
+branches from the istanbul HTML rather than by reading the route and guessing.
+
+⭐ ALL TWELVE UNCOVERED FRAGMENTS ARE OPTIONAL-VALUE HANDLING, NOT LOGIC:
+
+null, a null default
+p.lastUsedAt.toISOString() : n null-coalesce on a nullable timestamp
+p.lastSavedAt.toISOString() : n the same
+eff.accountId : c (x3) the team-vs-self effective-account ternary
+...( { cursor: query.cursor } : {} ) conditional spread for an optional query param
+{}) (x3) the empty half of the same idiom
+
+Not one is a refusal, an error path, or a security branch. **The gap ranked this file first and the file
+has no untested logic** — so the heuristic locates files where optional fields go unset in tests, which is
+not the same question.
+
+⛔ THE ONE FRAGMENT WORTH CHASING WAS ALSO SOUND. `eff.kind === 'team' ? eff.accountId : ctx.account.id`
+appears at three read sites and it is the TEAM half that is unexercised, so team-scoped snapshot READS are
+not driven by the suite. That is a coverage gap on an implemented, guarded path rather than a defect: the
+same `resolveEffectiveAccount` membership helper verified in V-1792 gates it, and the write path adds an
+explicit admin check that throws `ForbiddenError` — `profile-snapshots-team-write-requires-admin` covers
+that side, and `cross-account-snapshot-isolation` covers the isolation.
+
+⛔ AND I NEARLY OVER-CLAIMED THE CAUSE FROM A NARROWER INSTRUMENT. Having read twelve optional-value
+fragments, I measured "the conditional-spread idiom" with a regex for `...(x ? {` and got 5 sites in this
+file and **4.9% of all route branches (170 of 3455)** — far too small to explain what I had just read. The
+regex counts SPREADS; what I observed was spreads AND ternaries AND null-coalescing. The number is real
+and it does not support the sentence I was about to write with it, so the sentence changed rather than the
+number.
+
+⭐ THE USABLE FORM OF THE HEURISTIC, then: rank by branch gap to pick a candidate, then READ that file's
+uncovered fragments before spending an audit on it. Fragment extraction costs seconds and separates
+"nobody sets this optional field in tests" from "nobody exercises this refusal". Sorting alone does not.
+
+BOUNDED: one file's fragments read; the spread-idiom share is a count of the `...(cond ? {` spelling only,
+across `apps/server/src/routes/*.ts` with 15+ branches, and says nothing about ternaries or
+null-coalescing.
