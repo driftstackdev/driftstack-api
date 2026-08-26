@@ -11967,3 +11967,43 @@ registration count, and the derived guard was the more accurate instrument.
 BOUNDED: one route audited end to end plus the auth helper it shares with 11 others; the other 11 routes
 were not each traced, and the scope floor each passes (`'write'` vs `'read:sessions'`) was not re-derived
 here — V-1599 covers that axis.
+
+## V-1768 — pinned the control-key id binding across three copies, after my own guard produced two false-positive lists
+
+2026-08-26. V-1767 audited the cookie-import route and found THREE independent implementations of
+`controlKeyOrAccountAuth` — `agent-sessions.ts:1912` (12 preHandler registrations),
+`agent-sessions-livekit-token.ts:92`, `agent-sessions-transport-report.ts:94` — all binding the control key
+to the route's own `:id`, and nothing asserting it. V-1599 derives what a control key can REACH; nothing
+covered WHICH SESSION reaching one proves. Landed
+`apps/server/tests/unit/every-control-key-gate-binds-the-route-id.test.ts`, derived from `routes/` so a
+fourth copy is covered the day it is written.
+
+MUTATION-PROVED on the real subject, not the guard's own list: replacing
+`validateControlKey(req, sessionId)` with `validateControlKey(req, '')` makes it red naming
+`agent-sessions.ts`; restored byte-identical from a path-keyed snapshot under a trap.
+
+⛔⛔ THE GUARD PRODUCED TWO FALSE-POSITIVE LISTS BEFORE IT WAS RIGHT, and both were the assertion, not the
+code — which is the whole reason to run a detector against a tree you have already READ.
+
+1. First it flagged `livekit-token` and `transport-report`, because I asserted the id must appear as
+   `validate…ControlKey(…sessionId…)`. Those two pass the session ROW instead —
+   `validateGuiControlKey({ headerRaw, session, … })`, fetched via `agentSessionsRepo.get(sessionId)`.
+   ⭐ That is a STRONGER binding expressed differently, and my assertion had encoded one SPELLING of the
+   property rather than the property. Sweep the shape, not the token — the lesson is in this log's own
+   header and I still wrote the token first.
+2. Rewritten to "the params-derived variable must be USED between the read and the validator", it then
+   flagged `agent-sessions.ts` — the file that binds most directly — because my region ended AT the
+   validator's opening paren, excluding `validateControlKey(req, sessionId)` where the id is used INSIDE
+   the call. The boundary, again, not the code.
+
+⭐ Both were caught only because I had read all three implementations FIRST and knew the answer was zero. A
+detector whose output disagrees with a hand-read of the same code is reporting on itself; had I written
+this guard before the audit, I would have had a plausible two-file "finding" and no reason to doubt it.
+
+VERIFIED: full server unit suite **2003 files, 20,880 passed, 10 skipped, 0 failed**. Ratchets raised for
+the one file added (3049→3050 node, 3225→3226 root).
+
+BOUNDED: the guard asserts the route's id REACHES the control-key decision; it does not prove the validator
+then compares correctly — that is `validateGuiControlKey`'s own contract, covered by
+`tests/integration/v2-8-gui-control-key.test.ts`, which I did not re-derive here. Discovery is by the
+`controlKeyOrAccountAuth` declaration name, so a fourth gate under a different name is outside it.
