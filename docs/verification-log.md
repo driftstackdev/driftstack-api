@@ -10646,3 +10646,47 @@ the sustained multi-site traffic the report describes. **Neither A2 nor I have r
 elimination any of us has published is subject to that.** Three planes are now swept statically and P-25
 remains undiagnosed on all three, which is itself the finding: the bug is not in the shapes a static
 read can reach.
+
+## V-1738 — swept V-1736's shape repo-wide: four hits, four non-defects, and the distinction that separates them
+
+2026-08-26. V-1736 found a safety hinge asserted against a literal retyped in its own test. That shape
+is measurable, so it was swept: a local numeric const in a test, used in an assertion, whose value
+duplicates a constant declared in source.
+
+⛔ THE DETECTOR NEEDED THREE PASSES AND TWO OF ITS CONTROLS FAILED FIRST, which is the usual story. Pass
+one flagged `HOUR_MS = 60 * 60 * 1000` alongside the true positive — a unit conversion is not a
+duplicated domain value. Pass two required the literal to match a source constant and STILL flagged
+`HOUR_MS`, because `1000` matches something. Pass three requires a DISTINCTIVE component — at least 1000
+and not a bare power of ten — after which the positive control (V-1736 pre-fix) flags exactly one
+constant and the negative control (post-fix) is silent.
+
+FOUR HITS, ALL FOUR CORRECT AS WRITTEN, and the reading is the point:
+
+```
+  recipe-payload-encryption  64 MiB literal builds an OVERSIZED payload to prove refusal. Test DATA,
+                             not a comparison — and if the real bound rose past it the test fails
+                             loudly rather than passing silently. Safe direction.
+  profile-policy /           cross-source parity pins. Freezing the policy value IS their job; deriving
+  avatar-policy              it from the file they check would make them assert nothing.
+  scroll-velocity            pins MAX_DURATION_MS / MIN_TICK_INTERVAL_MS <= 10_000 with one side typed
+                             in — but scroll.ts carries a MODULE-LEVEL self-check that THROWS AT IMPORT
+                             if that ratio breaks. The test documents an invariant the source enforces.
+```
+
+⭐ SO THE REFINED RULE IS NARROWER THAN V-1736 IMPLIED. A retyped literal is a defect only when NOTHING
+ELSE enforces the relation. Where the pin's purpose is to freeze a value, or where the source
+self-checks, typing it in is correct — and deriving it would be worse, because a parity pin that reads
+its expected value out of the file it is checking asserts nothing at all. V-1736 was a defect precisely
+because the grace/TTL relation was enforced NOWHERE but that one arm.
+
+⚠️ WORTH RECORDING AND NOT ACTING ON: `scroll.ts`'s module-level self-check is a STRONGER enforcement
+point than any test — it fails at import, whether or not anyone runs the suite. The reaper's grace/TTL
+hinge could take the same form. I am not adding it: the reaper is wired into bootstrap, so a throw there
+turns a violated invariant into a server that will not start. That is arguably the correct trade for a
+path that otherwise deletes customer data silently, but it is a deployment-risk decision rather than a
+test-quality one, and V-1736's repair — the arm now derives both sides — already fails the suite on the
+same edit.
+
+BOUNDED: the detector matches a local `const NAME = <numeric literal>` used in an assertion. A literal
+inlined directly into an `expect(...)`, or one spelled as a string, is invisible to it — so this is a
+clean zero over one spelling of the shape, not over the shape.
