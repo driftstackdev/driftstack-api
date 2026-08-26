@@ -14324,3 +14324,48 @@ further up.
 
 BOUNDED: the six conditional sites under `apps/server/src/db`; the full-suite mutation was run for
 `sessions` only, and `rate-limit-overrides.listAll`'s inner gate was NOT mutation-tested.
+
+## V-1825 — closed V-1824's boundary: two of the three inner gates ARE witnessed, so sessions is an outlier not a pattern
+
+2026-08-26. V-1824 measured the conditional-predicate category and left one thing open in its own
+boundary: "`rate-limit-overrides.listAll`'s inner gate was NOT mutation-tested". Measured now, and it
+changes what the finding means.
+
+⭐ `rate-limit-overrides` IS WITNESSED, BEHAVIOURALLY. Removing its
+`throwIfMissingScope(ctx, 'driftstack_internal_admin')` and running the FULL suite fails 5 arms across 4
+files, and one is exactly the right instrument:
+
+rate-limit-overrides.test.ts › V-553.B-8 RateLimitOverridesService.listAll
+› "requires the exact driftstack_internal_admin scope"
+
+It asserts the refusal twice — once with `account_owner`, once with `admin` — so it proves the EXACT scope
+is required rather than merely an elevated one. That is a better test than the text pin guarding the
+api-keys case.
+
+⭐⭐ SO THE CATEGORY IS NOT UNGUARDED; SESSIONS IS THE OUTLIER:
+
+api-keys.listAll witnessed — `unscoped-cursor-listings-stay-admin-only` roster (text)
+rate-limit-overrides.listAll witnessed — a behavioural refusal test, both wrong scopes tried
+sessions.listAll NOT witnessed — full suite green but for two TS6133 typecheck arms
+
+That reframes V-1824. This is not "a category with no guard"; it is two guarded members and one that was
+never given the same treatment. An inconsistency is a much stronger case for closing than an absence,
+because the pattern to copy already exists twice.
+
+⭐ THE FIX IS SPECIFIED RATHER THAN GUESSED, and it is cheap: `new SessionsService({ repo, driver })` takes
+two fakes in the existing unit tests, and `listAll`'s scope check throws before the repo is touched, so a
+minimal double suffices. Mirror the rate-limit-overrides arm — assert `listAll` rejects with
+`/driftstack_internal_admin/` for a ctx carrying `account_owner` and again for one carrying `admin`.
+
+⚠️ NOT DONE THIS TURN, deliberately. Each sessions service unit test file covers exactly one method, so
+the honest home is a new file, and a new file moves `EXPECTED_TEST_FILES` and `EXPECTED_TEST_FILES_ALL`.
+That is a multi-part change, and earlier today I produced a vacuous cross-account arm by moving quickly on
+a test whose failure mode I had not thought through (V-1821). Writing the fix down precisely is worth more
+than half-landing it.
+
+⚠️ STILL NOT A LIVE VULNERABILITY: `admin-sessions.ts:70` gates the route on the same scope, and that
+outer layer is covered by `route-auth-coverage-invariant`.
+
+BOUNDED: three conditional-predicate methods, each mutated at its service wrapper and measured against the
+FULL suite. Whether other services carry an unwitnessed `throwIfMissingScope` was not measured — this
+entry covers the three listings reached from V-1823's `.accountId ===` sites and nothing wider.
