@@ -13288,3 +13288,95 @@ re-verify the four percentages V-1798 had to leave as measured-on-2026-08-14. No
 
 BOUNDED: 169 of 396 integration files carry a DB gate, counted by the literal patterns `skipIf(...
 DATABASE_URL` and `dbReachable`. A file gated by another spelling is not in that count.
+
+## V-1801 — audited the internal atlas-priority route family: sound, and the P1 it is adjacent to is closed
+
+2026-08-26. Second entry from the coverage list, audited by READING after V-1800 established that its
+percentage was measured with the route's own end-to-end test switched off.
+
+SOUND, on three axes read end to end:
+
+- **Auth + rate limit.** One `requireInternalAuth` preHandler on every route, so adding a route cannot
+  skip either check. It calls `deps.auth.validate(req)` and then rate-limits per token — hashing the
+  bearer SHA-256 and truncating to 16 hex before it becomes the bucket key, "so the plaintext never lands
+  in the in-memory bucket map / Redis key namespace / Prometheus labels". The token file is one of the
+  fourteen in the constant-time comparison census (V-1796).
+- **Body validation.** `schema.parse(req.body)` with no `?? {}`, which raises a bare ZodError on an absent
+  body — and `middleware/error-handler.ts:86` converts `ZodError` to `ValidationError`, so it is a 4xx and
+  not a 500. Checked rather than assumed, because that is exactly what the hostile-input e2e sweeps exist
+  to catch.
+- **Spec absence is a recorded decision, not an omission.** 0 `/v1/internal/*` paths are published, which
+  puts the family outside every spec-derived e2e sweep. `a-route-in-neither-the-spec-nor-the-docs-is-a-
+decision` already measured this exactly: 252 registered routes, 17 written down nowhere, 15 deliberate
+  infrastructure — and it names "the internal atlas-priority pair" among them.
+
+⭐ THAT GUARD IS WORTH CITING FOR ITS RESTRAINT. It found two of the seventeen that are NOT deliberate —
+`POST /v1/sessions/{id}/gui-input` and `GET /v1/agent-sessions/{id}/gui-control-key`, both reachable with
+an ordinary customer key — and then declined to fix them: "Publishing an endpoint is a product commitment
+… Deciding whether that is a public API is not a drift guard's call. **Recording that the decision has not
+been made is.**" Both are still unpublished today, so the decision is still open and still recorded.
+
+⭐⭐ AND THE P1 IT CITES IS CLOSED, WHICH I CHECKED RATHER THAN ASSUMED. The guard refers to audit
+`wxzlp9yiz`, "a P1 auth bypass", because the minted `gui_control_key` reaches five other routes with no
+scope check of its own — every `controlKeyOrAccountAuth` route returns on a valid control key BEFORE
+`requireScope` runs. The mint now requires **both** verbs, `write` AND `read:sessions`, and the reasoning
+in place records the half that was originally missed: the first rationale "reasoned only about the
+read→write direction and missed write→read", so a bare-`write` key could once have minted its way into
+the live cookie jar, page state and downloaded bytes it was refused directly.
+
+NO DEFECT FOUND. Recorded because the coverage number that sent me here was an artifact, the route is
+sound, and the adjacent P1 is verifiably fixed rather than merely referenced.
+
+BOUNDED: the auth preHandler, the two POST handlers and the spec-publication question. The repo methods
+behind `deps.repo` (`insertEmittedWithDedup`, `updateStatus`) were not read, and the two GET handlers were
+read only for their guards.
+
+## V-1802 — took the measurement V-1800 said was owed: three of five ranked files moved 26-52 points
+
+2026-08-26. V-1800 corrected V-1799's coverage ranking as measured with 116 test files skipped for want of
+`DATABASE_URL`, and said the valid measurement was available and not yet taken. Taken now: migrated a
+disposable database of my own (115 migrations, 53 tables; a peer's is separate) and re-ran coverage with
+`DATABASE_URL` set.
+
+test files 3110 passed / 116 skipped -> 3222 passed / 4 skipped
+tests 31268 passed / 824 skipped -> 32045 passed / 47 skipped
+totals 91.82 / 83.70 / 91.42 / 93.08 -> 92.35 / 84.17 / 92.13 / 93.63
+
+⭐ 777 MORE TESTS RAN AND ALL PASSED against real Postgres — a verification worth having on its own,
+independent of the coverage question, since 112 of those files had not executed in any run I had made.
+
+⛔ AND THE PER-FILE MOVEMENT SHOWS THE RANKING WAS ALMOST ENTIRELY AN ARTIFACT:
+
+crypto-entitlement-reconcile-sweeper 32.00 -> 84.00 stmts 35.71 -> 64.28 branches
+routes/internal-atlas-priority 44.00 -> 80.00 11.36 -> 56.81
+services/durable-webhook-delivery 48.98 -> 74.74 37.60 -> 62.40
+lib/r2.ts 61.90 -> 61.90 55.55 -> 55.55 (unmoved)
+
+The file V-1799 called worst-covered is 84%. The 11% branch figure that sent me to audit a route is 57%.
+`r2.ts` did not move at all, because it is exercised by unit tests — and that is what makes it the
+genuinely lowest live file rather than an artifact.
+
+⭐⭐ A SECOND FILTER IS NEEDED AND IT IS CHEAP: LIVENESS. Counting references outside a file's own module
+separates three unlike reasons for a low number:
+
+scripts/seed-local-fleet-node.ts 0 refs dormant — a standalone script
+services/durable-webhook-delivery 1 ref, a COMMENT dormant — the header says webhooks.ts is
+"production today" and this is the forward
+path awaiting migration; nothing constructs it
+drivers/playwright.ts 1 ref live but config-selected (`config.driver ===
+                                                            'playwright'`, dynamically imported)
+lib/bootstrap.ts — it IS the wiring
+lib/r2.ts 12 refs, 2 in bootstrap LIVE
+
+**Only a file that is both live and low is a gap.** After both filters — CI-like conditions and liveness —
+the list yields exactly one candidate, `lib/r2.ts` at 61.90/55.55, which V-1795 already audited and found
+fail-safe in the direction that matters.
+
+⛔ WHAT THIS DOES NOT RE-VERIFY, stated because V-1798 left it open and this entry does not close it. These
+totals are the DEFAULT scope, which still EXCLUDES `apps/server/src/db/**`. V-1002's four percentages were
+measured with that exclusion LIFTED and remain as measured on 2026-08-14; comparing my 92.35/84.17 against
+their 92.29/81.74 would be comparing two different scopes.
+
+BOUNDED: one machine, one disposable database, the repo's default coverage scope; liveness counted as
+`grep`-visible references under `apps/server/src` outside the file itself, which misses a purely
+dynamic-string import.
