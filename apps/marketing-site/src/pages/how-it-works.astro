@@ -16,6 +16,8 @@ import Card from '../components/Card.astro';
 import IconTile from '../components/IconTile.astro';
 import CtaBand from '../components/CtaBand.astro';
 import AgentPlanDemo from '../components/AgentPlanDemo.astro';
+import FingerprintDemo from '../components/FingerprintDemo.astro';
+import ProxyHealthDemo from '../components/ProxyHealthDemo.astro';
 
 // Compact fleet strip — the same phone-framed profile cards the
 // desktop app renders (and the homepage cockpit mockup draws):
@@ -125,6 +127,36 @@ const walkthroughProfiles = [
       is running as &mdash; because a real browser on a real device is only
       convincing if it also spends time like one.
     </p>
+  </Section>
+
+  <Section
+    label="What the device looks like"
+    title="A real profile, matched axis by axis."
+  >
+    <p class="mt-6 max-w-prose text-tk-ink-2">
+      A site does not ask what browser you are. It measures a dozen things and compares
+      them. Driftstack matches those axes to a real device profile rather than
+      randomising them, which is why the answers agree with each other &mdash; a
+      randomised fingerprint is inconsistent in exactly the ways a detector looks for.
+    </p>
+    <FingerprintDemo />
+    <p class="max-w-prose text-tk-ink-2">
+      The device row above is read from the live archetype registry when this page is
+      built, so it cannot quote a version the product stopped shipping.
+    </p>
+  </Section>
+
+  <Section
+    label="Egress you can see"
+    title="A proxy that stops working says so."
+  >
+    <p class="mt-6 max-w-prose text-tk-ink-2">
+      Every proxy is probed and the result is kept with the time it was taken. A failure
+      carries its reason, and a result that has aged past its window is shown as stale
+      rather than quietly presented as current &mdash; the difference between knowing
+      your egress works and assuming it.
+    </p>
+    <ProxyHealthDemo />
   </Section>
 
   <Section

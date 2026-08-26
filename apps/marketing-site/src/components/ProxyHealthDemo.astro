@@ -1,0 +1,121 @@
+---
+/**
+ * Proxy health, as the product actually reports it.
+ *
+ * Every state below is a real one. `AccountProxyTestResultSchema` is a two-member
+ * discriminated union — `{ ok: true, latency_ms }` or `{ ok: false, reason }` —
+ * and a usable probe additionally carries exit geography (ip, country, city,
+ * timezone, asn_org). Staleness is a real concept too: probes carry an `at`
+ * timestamp and expire against a TTL, which is why a row can read "checked 6h
+ * ago" rather than simply pass or fail.
+ *
+ * ⛔ The failure reasons are the kind the probe genuinely produces — a TCP
+ * reachability check to host:port behind an SSRF host-guard. Inventing a
+ * friendlier-sounding failure would misrepresent what a customer will actually
+ * be told when a proxy stops working, which is the one thing a status demo must
+ * not do.
+ *
+ * ⚠️ Latency figures are illustrative, not measured. They are plausible SOCKS5
+ * handshake times and are labelled as an example in the caption rather than
+ * presented as benchmark data.
+ */
+
+interface Row {
+  label: string;
+  country: string;
+  /** Which real state this row rests in. */
+  state: 'ok' | 'stale' | 'failed';
+  latencyMs?: number;
+  reason?: string;
+  checked: string;
+}
+
+const ROWS: Row[] = [
+  { label: 'residential-nl-01', country: 'NL', state: 'ok', latencyMs: 62, checked: 'just now' },
+  { label: 'residential-de-04', country: 'DE', state: 'ok', latencyMs: 88, checked: 'just now' },
+  { label: 'datacenter-us-11', country: 'US', state: 'stale', latencyMs: 141, checked: '6h ago' },
+  {
+    label: 'residential-fr-02',
+    country: 'FR',
+    state: 'failed',
+    reason: 'connection refused',
+    checked: 'just now',
+  },
+];
+
+const TONE: Record<Row['state'], string> = {
+  ok: 'text-tk-ready-text',
+  stale: 'text-tk-busy-text',
+  failed: 'text-tk-err-text',
+};
+const DOT: Record<Row['state'], string> = {
+  ok: 'bg-tk-ready',
+  stale: 'bg-tk-busy',
+  failed: 'bg-tk-err',
+};
+---
+
+<figure class="not-prose my-10">
+  <div class="overflow-hidden rounded-card border border-tk-border bg-tk-surface">
+    <div
+      class="flex items-center justify-between border-b border-tk-border px-4 py-3 text-[11px] uppercase tracking-wider text-tk-ink-3"
+    >
+      <span>Egress health</span><span class="text-tk-ink-2">4 proxies</span>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full min-w-[34rem] border-collapse text-left">
+        <thead>
+          <tr class="text-[11px] uppercase tracking-wider text-tk-ink-3">
+            <th class="px-4 py-2 font-medium">Proxy</th>
+            <th class="px-4 py-2 font-medium">Exit</th>
+            <th class="px-4 py-2 font-medium">Result</th>
+            <th class="px-4 py-2 font-medium">Last test</th>
+          </tr>
+        </thead>
+        <tbody class="font-mono text-[12px]">
+          {
+            ROWS.map((row, i) => (
+              <tr class={`ds-proxy-row ds-proxy-row-${String(i)} border-t border-tk-border`}>
+                <td class="px-4 py-2.5 text-tk-ink-2">{row.label}</td>
+                <td class="px-4 py-2.5 text-tk-ink-3">{row.country}</td>
+                <td class={`px-4 py-2.5 ${TONE[row.state]}`}>
+                  <span
+                    class={`mr-2 inline-block h-1.5 w-1.5 rounded-full align-middle ${DOT[row.state]}`}
+                    aria-hidden="true"
+                  />
+                  {row.state === 'ok' && `ok · ${String(row.latencyMs)}ms`}
+                  {row.state === 'stale' && `ok · ${String(row.latencyMs)}ms · stale`}
+                  {row.state === 'failed' && row.reason}
+                </td>
+                <td class="px-4 py-2.5 text-tk-ink-3">{row.checked}</td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <figcaption class="mt-3 text-center text-[12px] text-tk-ink-3">
+    A failing proxy says <span class="font-mono">why</span>, and a result that has aged past its
+    window says so rather than pretending to be current. Latencies shown are an example.
+  </figcaption>
+</figure>
+
+<style is:inline set:html={`
+@keyframes ds-proxy-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+.ds-proxy-row { animation: ds-proxy-in .5s ease-out both; }
+.ds-proxy-row-0 { animation-delay: .05s; }
+.ds-proxy-row-1 { animation-delay: .20s; }
+.ds-proxy-row-2 { animation-delay: .35s; }
+.ds-proxy-row-3 { animation-delay: .50s; }
+
+/* The site's global reduced-motion reset collapses durations, landing each row
+   on its final keyframe — which is the full table, legible. Stated because the
+   animation's resting state has to be the readable one. */
+@media (prefers-reduced-motion: reduce) {
+  .ds-proxy-row { opacity: 1; transform: none; }
+}
+`} />

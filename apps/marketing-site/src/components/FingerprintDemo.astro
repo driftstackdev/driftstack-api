@@ -1,0 +1,89 @@
+---
+import { ARCHETYPE_REGISTRY, LOCKED_ARCHETYPE_ID } from '@driftstack/api-types';
+
+/**
+ * The fingerprint panel, resolving.
+ *
+ * ⭐ The device row is READ FROM THE REGISTRY at build time, not typed out. If a
+ * device's iOS or Safari version changes, this page changes with it — the
+ * alternative is a marketing page quoting a version the product stopped shipping,
+ * which is the drift a hand-written table guarantees eventually.
+ *
+ * ⚠️ The CHECK LABELS are the honest half and deserve care. These name what the
+ * product matches — user agent, canvas, WebGL, fonts, timezone — and every one of
+ * them is a real axis the archetype system covers. What this panel does NOT do is
+ * claim a score, a percentage, or a "100% undetectable" verdict: the registry
+ * carries a per-archetype `status`, and the honest claim is that a device is
+ * matched to a real profile, not that any particular site is fooled.
+ */
+
+const locked = ARCHETYPE_REGISTRY.find((a) => a.id === LOCKED_ARCHETYPE_ID);
+
+/** The axes the archetype system actually covers. */
+const CHECKS: readonly string[] = [
+  'User agent',
+  'Canvas hash',
+  'WebGL vendor',
+  'Font stack',
+  'Time zone',
+  'Screen metrics',
+];
+---
+
+<figure class="not-prose my-10">
+  <div class="rounded-card border border-tk-border bg-tk-surface p-5 md:p-7">
+    <p class="mb-1 text-[11px] uppercase tracking-wider text-tk-ink-3">Device profile</p>
+    <p class="mb-5 font-mono text-sm text-tk-ink">
+      {locked ? locked.displayLabel : 'iPhone'}
+    </p>
+
+    <ul class="space-y-2">
+      {
+        CHECKS.map((check, i) => (
+          <li
+            class={`ds-fp-row ds-fp-row-${String(i)} flex items-center justify-between border-b border-tk-border/60 pb-2 text-[13px] last:border-0`}
+          >
+            <span class="text-tk-ink-2">{check}</span>
+            <span class="ds-fp-state font-mono text-[12px]">
+              <span class="ds-fp-pending text-tk-ink-3">resolving…</span>
+              <span class="ds-fp-done text-tk-ready-text">matched</span>
+            </span>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+  <figcaption class="mt-3 text-center text-[12px] text-tk-ink-3">
+    Each axis is matched to a real device profile. That is a claim about what the device
+    <em>is</em>, not a promise about any particular site.
+  </figcaption>
+</figure>
+
+<style is:inline set:html={`
+@keyframes ds-fp-hide { 0%, 92% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes ds-fp-show { 0%, 92% { opacity: 0; } 100% { opacity: 1; } }
+.ds-fp-state { position: relative; display: inline-block; min-width: 5.5rem; text-align: right; }
+.ds-fp-done { position: absolute; right: 0; top: 0; opacity: 0; }
+.ds-fp-row-0 .ds-fp-pending { animation: ds-fp-hide 1.0s ease-out forwards; }
+.ds-fp-row-0 .ds-fp-done    { animation: ds-fp-show 1.0s ease-out forwards; }
+.ds-fp-row-1 .ds-fp-pending { animation: ds-fp-hide 1.4s ease-out forwards; }
+.ds-fp-row-1 .ds-fp-done    { animation: ds-fp-show 1.4s ease-out forwards; }
+.ds-fp-row-2 .ds-fp-pending { animation: ds-fp-hide 1.8s ease-out forwards; }
+.ds-fp-row-2 .ds-fp-done    { animation: ds-fp-show 1.8s ease-out forwards; }
+.ds-fp-row-3 .ds-fp-pending { animation: ds-fp-hide 2.2s ease-out forwards; }
+.ds-fp-row-3 .ds-fp-done    { animation: ds-fp-show 2.2s ease-out forwards; }
+.ds-fp-row-4 .ds-fp-pending { animation: ds-fp-hide 2.6s ease-out forwards; }
+.ds-fp-row-4 .ds-fp-done    { animation: ds-fp-show 2.6s ease-out forwards; }
+.ds-fp-row-5 .ds-fp-pending { animation: ds-fp-hide 3.0s ease-out forwards; }
+.ds-fp-row-5 .ds-fp-done    { animation: ds-fp-show 3.0s ease-out forwards; }
+
+/* ⛔ Reduced motion lands every element on its FINAL keyframe, which here means
+   "resolving…" hidden and "matched" shown — the resting state a reader should
+   see. Written that way on purpose: an animation whose final frame is the
+   PENDING state would leave these readers looking at a panel that never
+   finishes. */
+@media (prefers-reduced-motion: reduce) {
+  .ds-fp-pending { opacity: 0; }
+  .ds-fp-done { opacity: 1; }
+}
+`} />
