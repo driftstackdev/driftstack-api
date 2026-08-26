@@ -10344,3 +10344,44 @@ them is the one adding a caller or editing that arm.
 
 No behavioural change; a comment in `auth-email-canonicalization-security` and this entry. `it(`
 unchanged at 3; tsc clean; 3 tests pass.
+
+## V-1731 — the admin routes that omit requireAuth are fine, and the "gap" in what pins that was my test selection
+
+2026-08-26. Audited the admin crypto-order surface, the half V-1649 did not reach (it took cancel and
+the IPN). Every route there reads
+`preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')]` — **no
+`requireAuth`**, where the team and MFA routes all begin with one. On money endpoints that looks like an
+unauthenticated admin surface.
+
+It is not. `middleware/auth.ts` decorates `requireScope` so it authenticates first:
+`if (!request.account) { await requireAuth(request, reply); }`, and `requireMfaFresh` does the same.
+Omitting `requireAuth` from the chain is therefore safe, and the finding would have been fabricated. Read
+before reported, which is the only reason it was not filed.
+
+MEASURED, because an implicit behaviour is worth sizing: **61 preHandler chains use `requireScope`
+WITHOUT `requireAuth`**, against 104 that name both — spread over 17 route files and concentrated in the
+highest-privilege ones (admin-crypto-orders 11, admin-accounts 11, admin-incidents 7, admin-webhooks 5).
+So the implicit authentication is load-bearing for 61 routes, most of them admin.
+
+⛔ AND THEN MY INSTRUMENT PRODUCED THE ALARMING ANSWER. Deleting the two-line self-authentication and
+running the `*auth*` + `*admin*` UNIT files — 232 files, 2563 tests, a control that executed — turned
+exactly ONE test red, and it was `middleware-auth-content-parity`: a regex over the source. Read at face
+value that says a security property carrying 61 admin routes is pinned only by its spelling, which is
+the V-1711 shape on a much more serious property, and it is wrong.
+
+The same mutation against the FULL suite fails **357 tests**, overwhelmingly behavioural — `admin-accounts`
+asserting its 200, 403 and 404, `account-audit`, `account-rate-limits`, and integration specs throughout.
+The property is heavily pinned by behaviour. What I had measured was my own file glob: `*auth*` and
+`*admin*` match unit filenames, and the tests that exercise these routes end-to-end are named for the
+FEATURE rather than for the middleware they depend on.
+
+⚠️ THIRD TIME TONIGHT A NARROW SCOPE NEARLY PRODUCED A FALSE SECURITY CLAIM, and the shape is identical
+each time: V-1722's `bufferedAmount` grep scoped to one file said the send path was unguarded when the
+check sat one module away; V-1712's sweep scored a run that never executed; this one selected tests by
+filename for a property whose tests are named after something else. **A negative from a subset is a
+statement about the subset.** The cheap correction in all three was to widen and re-run rather than to
+reason about why the result might still hold.
+
+BOUNDED: the 357 figure is one full-suite run taken while a peer's suite was also live, so the count is
+approximate; the conclusion rests on its order of magnitude and on which files failed, neither of which a
+concurrent run moves. `middleware/auth.ts` restored byte-identically and verified clean against HEAD.
