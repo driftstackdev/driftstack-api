@@ -21886,3 +21886,37 @@ implementation on either side of the boundary. Deciding now whether a persona me
 rhythm" or "behavioural identity" costs a docs edit or three interface parameters; deciding after
 the fork integrates costs a behavioural change to live sessions. Memo item 11 and W-17 stand,
 with that added.
+
+## V-1690b
+
+**Retraction: `sdk-typescript` is not a missing config. It is the package that already solved
+this, differently — and adding the seventh config would have built the trap the floor exists to
+catch.**
+
+V-1690 reported the config set as short by one because `sdk-typescript` has 31 test files and no
+`tsconfig.test.json`. Wrong, and the error was mine at the point of reading: I had that file open
+two commands earlier and printed only its `lib` line, then carried the `src/**/*`-only pattern
+over from the other six packages without ever looking at its `include`. **A shape generalised from
+six neighbours is not a reading of the seventh.**
+
+What it actually declares — its own `tsconfig.json` compiles `src`, `tests`, `examples`, the
+tsup config, and three cross-package paths, and its `package.json` exposes a `typecheck` script
+that `npm run typecheck --workspaces --if-present` runs in pre-push.
+
+**Proved at the gate rather than by reading the config**, because "a config exists" and "a gate
+enforces it" are different claims and only the second is worth anything. Planting a type error in
+`tests/unit/errors.test.ts` takes the package's own typecheck from exit 0 to **exit 2**, naming
+`TS2322` and the file; restoring returns it to 0. Verified byte-identical against the snapshot and
+clean against HEAD.
+
+**And the fix would have been worse than the gap.** A seventh config would be a second project
+compiling the same files with a **hand-synced `lib`**, and `sdk-typescript` is the only package
+carrying package-specific `compilerOptions` — the very fact V-1690 established. The duplicate
+drifts into false `TS2304`s the moment the real one moves, which is the artifact I hit once and
+briefly read as a finding. The correct boundary is **seven packages, six of which needed a
+config**, enumerated rather than counted.
+
+⚠️ One more instrument fault inside the proof: my restore check printed
+`byte-identical: NO` because the `cmp` ran inside a subshell I had `cd`'d, so the repo-relative
+path resolved to nothing. The file was in fact restored exactly. **A path is only relative to
+where it is evaluated, and a subshell is not where I wrote it.**
