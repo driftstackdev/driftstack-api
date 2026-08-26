@@ -12149,3 +12149,46 @@ BOUNDED: swept `harness/Sources/**.swift` for a cross-component actor within 60 
 time literal, in either order, with the removed sentence as a proven positive control. Remaining hits are
 harness↔FORK relationships (WD timeouts, SIGTERM grace, re-anchor windows) — both sides of those are in my
 lane and locally verifiable, and they are NOT audited here.
+
+## V-1773 — timeout ORDERING audit: the ladder holds, is doubly pinned, and the residual is a relationship stored as two literals
+
+2026-08-26. Pivoted from caps to a different constraint class: ORDERING. `IntentExecutor.swift:411` carries
+a load-bearing claim — "the fork's 45s pageLoad timeout fires BEFORE the harness 55s HTTP timeout, so the
+500 `timeout` is the shape that actually reaches here, not the -1001". If that inverts, the harness abandons
+the request first, the classification chain sees a URLError instead of a WD timeout, and the comment records
+that exact chain having gone inert once already.
+
+VERIFIED — the ladder is real and deliberate:
+
+    45s  pageLoad/script  (WebDriverClient.driveTimeoutMs = 45_000, pinned via W3C /timeouts on newSession)
+    55s  HTTP request     (URLSession timeoutIntervalForRequest, init default)
+
+110s whole transfer (timeoutIntervalForResource, init default)
+
+⭐ Checked the two ways this ordering could silently break, rather than only reading the constants:
+
+- **a caller override** — both `WebDriverClient(...)` construction sites pass neither `timeout:` nor
+  `resourceTimeout:`, so both take the defaults; there is no third site.
+- **a second, divergent pin** — exactly ONE `setTimeouts(` call site exists.
+
+⭐ AND THE PIN'S OWN FAILURE IS HANDLED HONESTLY. `try await setTimeouts(...)` is wrapped: a failure is
+logged with its precise consequence ("a slow navigate may surface as a generic `intent_webdriver_failed` at
+the 55s request cap instead of a clean server-side page-load timeout") and is deliberately non-fatal, so a
+bring-up server without `/timeouts` can still create sessions with the 55s cap as backstop. The degradation
+is named rather than silent.
+
+⛔ THE COMMENT CLAIMED A TEST AND I CHECKED IT — the hearsay shape that has caught me repeatedly. It exists,
+and is STRONGER than claimed: `testNewSessionPinsDriveTimeoutsBelowRequestCap` asserts BOTH
+`driveTimeoutMs < 55_000` AND `>= 40_000`. The lower bound matters as much as the upper — it stops someone
+"fixing" a timeout by dropping it to 5s, which satisfies the ordering while breaking real navigations.
+
+⚠️ THE RESIDUAL, and it is the session's recurring shape one level in: the ordering is stored as TWO
+INDEPENDENT LITERALS, not derived. The upper bound is the literal `55_000`; the request timeout is a bare
+default parameter `timeout: TimeInterval = 55`. I expected that to be an unpinned gap and it is not — a
+separate arm asserts `cfg.timeoutIntervalForRequest == 55` — so BOTH sides are pinned and lowering either
+alone reds a test. The narrow residual is that a DELIBERATE change to the request timeout, updated in its
+own pin, leaves the ordering test's literal `55_000` stale and passing. A relationship encoded as two
+literals agrees by convention; only a derived comparison agrees by construction.
+
+BOUNDED: audited the WD drive path's three timeouts, their construction sites and their pins. Other harness
+timeouts (SIGTERM grace, re-anchor windows, nav-stall) are NOT in this ladder and were not checked.
