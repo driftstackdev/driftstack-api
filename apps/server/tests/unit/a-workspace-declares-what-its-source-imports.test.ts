@@ -33,7 +33,25 @@ import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { describe, expect, it } from 'vitest';
+
+// ⛔ TIMEOUT RAISED — this file is I/O-bound and its runtime scales with machine
+// load, not with anything it asserts. It walks 2000+ files and parses every one
+// with the TypeScript compiler: measured at 2.6s of test time on an idle machine,
+// against vitest's 10s default. Under the full suite (21 workers plus whatever
+// else is on the box) that 4x is enough to exceed it, and the arms then fail with
+// "Test timed out" rather than an assertion — which reads as a regression in the
+// thing being checked and is not one.
+//
+// ⚠️ A test that only fails under load is the kind that gets re-run until green
+// rather than fixed, which is how a real failure eventually gets waved through.
+//
+// 30s is ~11x the measured solo time: enough to absorb heavy contention, and
+// still tight enough that a genuine order-of-magnitude regression in the walk
+// itself surfaces here instead of being absorbed. The 2.6s baseline is recorded
+// so the next person raising this has a number to compare against rather than a
+// feeling.
+vi.setConfig({ testTimeout: 30_000 });
+import { describe, expect, it, vi } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');

@@ -168,18 +168,38 @@ for (const { project, pinned, minTestFiles } of BACKLOG) {
 // whole family was unlisted. A new workspace joins BELOW every threshold this
 // script enforces — it has no pin to exceed and no floor to fall under — so no
 // existing arm can see it. This is the arm that can.
+// ⛔ NO try/catch AROUND THE ROOT READ, and no `continue` on failure.
+//
+// This originally swallowed a missing root and moved on, which is the shape that
+// turns a broken checkout into a SMALLER census that passes. `apps/` and
+// `packages/` are structural: if either cannot be read, the honest outcome is a
+// loud failure, not a derivation that quietly covers half the repo and reports
+// "all pinned or exempted". The per-workspace `tests/` check below IS optional
+// and stays a `continue` — that one is a real absence, not a broken root.
+//
+// A per-root floor rather than a combined one, and the distinction matters: with
+// ~7 workspaces under `apps` and ~8 under `packages`, a COMBINED floor still
+// clears if one root vanishes entirely, because the survivor alone exceeds any
+// threshold worth setting. The likelier accident is exactly that — one root
+// renamed or unmounted — so the floor has to be per root to see it.
 const workspacesWithTests = [];
+const perRoot = {};
 for (const root of ['apps', 'packages']) {
-  let entries = [];
-  try {
-    entries = readdirSync(resolve(REPO_ROOT, root), { withFileTypes: true });
-  } catch {
-    continue;
-  }
+  const entries = readdirSync(resolve(REPO_ROOT, root), { withFileTypes: true });
+  perRoot[root] = 0;
   for (const e of entries) {
     if (!e.isDirectory()) continue;
     if (!existsSync(resolve(REPO_ROOT, root, e.name, 'tests'))) continue;
     workspacesWithTests.push(`${root}/${e.name}`);
+    perRoot[root] += 1;
+  }
+  if (perRoot[root] === 0) {
+    console.error(
+      `✗ ${root}/ yielded ZERO workspaces with tests. That is a broken checkout, ` +
+        `not a clean repo — the census below would otherwise report the survivors ` +
+        `as the whole population.`,
+    );
+    failed = true;
   }
 }
 
