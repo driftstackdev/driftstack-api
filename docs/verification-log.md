@@ -21258,3 +21258,47 @@ dashboard consent page that calls bind is a peer's surface and was dirty in the 
 throughout; I did not read it, so nothing here is a claim about the browser half of the flow.
 
 No defect. Fourteenth end-to-end audit; thirteen sound, one defect (V-1649).
+
+## V-1677
+
+**Suite checkpoint, and a census of every conditional skip — no test in this repo runs nowhere.**
+
+With `DATABASE_URL` and `REDIS_URL` set: **3214 of 3214 files passed, 31,964 tests, zero
+failures, 16 skipped**, 249s uncontended. The file count matches `EXPECTED_TEST_FILES_ALL`
+exactly, which is the pin I raised by one for the test added in V-1673.
+
+Without those variables the same tree reports 3099 passed and 115 skipped FILES. Both numbers
+are green and they are not the same claim — which is the reason `verify-suite` reports skipped
+counts at all, and the reason this entry states the environment before the result.
+
+**The 16 skips, by gating condition**, because a skip reads as a pass and an unexamined one is
+where things hide:
+
+| Condition                                   | Tests | Runs when                                                      |
+| ------------------------------------------- | ----- | -------------------------------------------------------------- |
+| `CI && !DATABASE_URL`                       | 133   | any run with a database — ran here                             |
+| `RUN_DB_TESTS`                              | 12    | **not an env var** — `Boolean(CI \|\| DATABASE_URL)`; ran here |
+| `hasEgressImpl`                             | 7     | derived from source text                                       |
+| `CI && !REDIS_URL`                          | 4     | any run with Redis — ran here                                  |
+| `NPMRC_EXISTS`                              | 4     | operator machines only, **by design**                          |
+| `CLONE_ENABLED` / `IMPORT_EXPORT_ENABLED`   | 3     | when the product flag flips                                    |
+| `isSubscribable` / `incidentIsSubscribable` | 3     | derived from event data                                        |
+
+Two of these looked like blind spots and neither is:
+
+- **`RUN_DB_TESTS` is not an environment variable.** It is a local const derived from `CI` or
+  `DATABASE_URL`. I took it for a third flag nobody sets and was one step from reporting 12
+  tests as unrunnable; reading the declaration was the whole correction.
+- **The `.npmrc` guards are operator-side on purpose.** `.npmrc` is gitignored because it
+  carries publish credentials, CI has none, and the file says so in a comment dated 2026-05-20
+  — "skip the populated-file assertions when the file is absent so CI stays green while the
+  local operator-side drift guard still fires." The boundary was documented before I looked.
+
+- **The feature-flag skips are the pattern done right.** `CLONE_ENABLED` and
+  `IMPORT_EXPORT_ENABLED` are read from the product source, and a sibling arm pins the literal
+  `= false`. When the flag flips, that pin fails — so the dormant behavioural tests cannot flip
+  on unnoticed. A conditional skip with nothing watching the condition is the failure mode; this
+  is not that.
+
+No finding. Recorded because this is the third audit today where the source already documented
+the boundary I was about to report, and the census is worth not re-deriving.
