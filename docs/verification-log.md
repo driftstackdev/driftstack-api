@@ -11127,3 +11127,39 @@ defect report until every producer's send path is traced.
 ⭐ Incidentally CONFIRMS V-1746/V-1747's premise rather than assuming it: the CP genuinely does receive
 `pageState`, via `connection.send(.pageState(ps))` at `main.swift:2331`. Had it been room-only, both
 findings' impact claims would have been wrong.
+
+## V-1749 — the capped free-text fields: `challenge` closes sound, and the hypothesis that killed it was mine
+
+2026-08-26. Continued V-1747's boundary — the OTHER capped free-text fields on harness→CP frames, where
+an over-cap value is the same silent `safeParse` drop. Took `challengeDetected` first because it has the
+worst blast radius: a dropped frame means the customer never receives the `session.challenge_detected`
+webhook, and challenge handoff is a headline feature.
+
+It is SOUND, and the reasoning that nearly made it a finding is worth recording. `ChallengeDetector`
+builds most details as fixed closed labels ("reCAPTCHA iframe"), but EIGHT sites interpolate a matched
+string:
+
+    detail: "Cloudflare interstitial text: \"\(m)\""
+
+which reads exactly like page-controlled text landing in a 4096-capped field — attacker-influenced, and
+therefore unbounded. ⛔ It is not. Every one of the eight binds `m` as
+`<literalArray>.first(where: { text.contains($0) })` — **`m` is the NEEDLE, not the HAYSTACK**. The
+interpolation ships the hardcoded marker that matched, never the page. Longest literal in the file is 49
+chars ("needs to review the security of your connection"), so the longest reachable `detail` is under ~100
+against a cap of 4096: ~40x headroom. `type` is a `ChallengeType` raw value against a 256 cap.
+
+⭐ Both ChallengeInfo producers converge on that one bounded set, which is not obvious from either.
+`parseDetectedChallenge` (HarnessCoordinator:5238) reads `detail` straight out of a JSON blob with no cap
+— `(obj["detail"] as? String) ?? ""` — which looks like a second, unguarded source. Traced it: the
+`detect_challenge` intent is implemented in the HARNESS (`IntentExecutor.swift:3541`), not the fork, and
+its body is `scanForChallenge()` → the same `ChallengeDetector`. So that path round-trips the harness's
+own bounded output through JSON rather than admitting anything new. A cap-free read is benign or a
+bypass depending ENTIRELY on who wrote the value, and only tracing the producer separates them.
+
+⚠️ NOT CLOSED, stated because it bounds this entry: `cookie.value` (4096) / `cookie.name` (512) —
+the harness caps the jar's TOTAL serialized size at 8 MiB and applies NO per-field cap
+(`value: c.value` verbatim, HarnessCoordinator:1432), so the CP caps are load-bearing and unenforced
+upstream; whether they are REACHABLE turns on WebKit's own per-cookie limit, which I have not tested and
+am not claiming either way. And `errorEvent.summary` (4096) is `redactIPsForTelemetry(status.detail)` —
+the surrounding code matches closed-vocab reason codes so it is short in every branch I read, but I did
+not trace `status.detail` to every producer, so that is measured only as far as this sentence says.
