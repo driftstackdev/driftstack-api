@@ -14712,3 +14712,54 @@ defect — a real one-sided defect fails the drizzle half only. The refund path 
 so `markRecoveryCodeUsed` scored "witnessed" at the commit BEFORE its arm existed — the header quotes
 the call in prose. Stripping comments first turns the control two-sided: 0 real calls before, 5 after.
 Every one of the six errors returned a confident, plausible, wrong answer.
+
+## V-1834 — the fourth erasure arm: wired, unit-tested against a stub, and never executed
+
+2026-08-26. Found by two instruments agreeing, from a blind spot the config itself names.
+
+**The measurement that found it.** `vitest.config.ts` excludes `apps/server/src/db/**` from coverage,
+and its own note says the justification expired and that what the layer lacks is not execution but
+MEASUREMENT — "the layer runs, and nothing reports which parts of it ran". Flipping that exclusion is
+a filed decision (A2-PRODUCTION-READINESS 5e), so I did not; I measured it instead, without changing
+what CI enforces. Boundary: `apps/server/tests` only (2396 files, 24694 tests), not the full
+3227-file run and not Playwright. Result — **the db layer is 88.12 lines / 76.79 branches / 94.58
+functions**, its first reported figure.
+
+Branches is the weak axis, and branches are where guards live. `recipes-repo.ts` came back with lines
+322-334 never executed — the entire body of `purgeRecipesForTerminatedAccountsBefore`. An independent
+census of call sites then found **ZERO test files naming that function**.
+
+**FIXED — the account-deletion sweeper has seven arms, and this was the only one with no real-PG
+spec.** Its siblings each have one (`db-terminated-account-{profile,agent-session,turn-receipt}-purge`).
+The recipes arm was wired in `bootstrap.ts` and unit-tested through the sweeper's SEAM
+(`recipes.purgeForTerminatedAccountsBefore`) with a STUB — which proves the arm is connected and
+nothing whatever about the SQL behind it. Added `db-terminated-account-recipe-purge`, mirroring the
+sibling template, on its own isolated database because this purge selects by cutoff across ALL
+accounts and would otherwise reach other files' fixtures.
+
+⭐⭐ PROVED PER CONJUNCT. Dropping `a.status = 'deleted'` fails two arms — "a SUSPENDED account's
+recipes were erased" and "the date predicate selected a row the status predicate should have
+excluded". Dropping `a.deleted_at < cutoff` fails only the window arm — "an account deleted 5 days ago
+lost its recipes inside the 30-day window". Dropping the `LIMIT` fails only the bound arm, "expected 5
+to be 2". ⭐ The pure-ACTIVE arm correctly SURVIVES the status mutation — with the status predicate
+gone, `deleted_at IS NOT NULL` still excludes it — which is exactly why the ACTIVE-carrying-a-deleted_at
+arm exists: it is the only one that can prove that conjunct load-bearing.
+
+**Consequence, stated plainly:** `a.status = 'deleted'` is the entire licence for an irreversible
+DELETE of a live customer's saved automations, and nothing executed it.
+
+⛔ AUDIT NOTE — the rest of the sweeper is sound, and I checked before concluding. The profiles,
+snapshots, BYOK, proxy-secret, agent-session and turn-receipt arms each have a dedicated real-PG spec
+asserting the same three conjuncts per arm, with reachability arms guarding against a vacuous pass.
+`usage-repo`'s uncovered `continue` triages the other way and I did NOT write a test for it: the SQL
+above it already excludes all three record types (line 63 covers `session_minute`), so the JS filter
+is deliberate defence-in-depth, unreachable while layer one holds. Reaching it would need a fabricated
+input shape the SQL cannot produce.
+
+⛔ TWO MORE INSTRUMENT ERRORS, seven and eight of this sweep. (7) I read a coverage line number off a
+`sed` range by eye and put `throw new Error('SLUG_TAKEN')` on line 180; it is on 178, and 180 is the
+`throw err` fallthrough. The SLUG_TAKEN branch IS witnessed on real Postgres — the "gap" was my
+counting. (8) An extraction regex assumed a repo method where the wiring calls a free function, so the
+name came out EMPTY and `grep -rln ""` matched every file in the tree — an empty pattern reads exactly
+like universal coverage, the mirror of a failing grep reading as a clean tree. Both were caught by
+re-reading with explicit line numbers and a non-empty pattern.
