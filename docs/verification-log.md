@@ -21302,3 +21302,45 @@ Two of these looked like blind spots and neither is:
 
 No finding. Recorded because this is the third audit today where the source already documented
 the boundary I was about to report, and the census is worth not re-deriving.
+
+## V-1678
+
+**"The Go SDK has no generator, so it will have drifted." It has not. Go and TypeScript cover
+exactly the same 100 spec paths — identical sets, zero divergence either way.**
+
+The premise was reasonable: the TypeScript SDK is hand-written, the Python models are
+generated, and Go has no generator at all, so Go is the one place drift has nothing to stop
+it. W-7 had already found the TypeScript SDK diverging on 28 documented endpoints, so the
+class was live.
+
+Measured against `openapi.json` (196 paths, 232 operations), with both SDKs extracted by the
+same method and path parameters normalised:
+
+|                     | paths reached |
+| ------------------- | ------------- |
+| Go SDK              | 100           |
+| TypeScript SDK      | 100           |
+| **Go-only**         | **none**      |
+| **TypeScript-only** | **none**      |
+
+The sets are identical, not merely the counts — asserted as set equality, with a control that
+removes one element and confirms the comparison returns False. Equal sizes are not equal sets
+and the check has to be able to say so.
+
+Of the 96 spec paths neither SDK reaches, **61 are `/v1/admin/*`** and 2 are non-`/v1` infra
+endpoints, which a customer SDK correctly omits. That leaves **33 customer-facing paths absent
+from both** — which is the class already open on the decisions memo as "published endpoints no
+client library reaches", not a new finding.
+
+**The instrument was wrong first, for the third time today.** The first extractor read only
+`path:` assignments. `profile_snapshots.go` passes its list path as a function argument
+instead — `r.listInternal(ctx, "/v1/profile-snapshots", query)` — so the extractor missed it
+and reported a Go-only shortfall of 34 paths including a **fabricated divergence**: it claimed
+Go lacked `/v1/profile-snapshots` while `ProfileSnapshotsResource` sits in the file. Caught by
+checking the one divergence before reporting it. The corrected extractor collects every `/v1/`
+literal wherever it appears and follows concatenation chains, and the gap went 34 → 33 with
+the divergence disappearing entirely.
+
+The lesson is the day's, in a third costume: **an extractor that models one idiom measures the
+code that happens to use it.** `path:` was the idiom I read first, so it became the idiom I
+believed in.
