@@ -12406,3 +12406,56 @@ unavailable when it would have helped. That is a real but much smaller claim tha
 BOUNDED: 4 of the 15 were opened — the two deadline knobs (chosen because a wrong value there loses customer
 data) and the two streaming knobs. The other 11 were NOT inspected, so "the orphans are safe" is a statement
 about four of fifteen and nothing more.
+
+## NOTE — commit hashes cited in this log may not resolve
+
+> ⚠️ **Commit hashes cited below may not resolve.** The unpushed range was rewritten on 2026-08-26 to strip
+> `docs/internal/OPEN-ITEMS.md` from history; every hash in it changed. Measured after: ~65% of the hashes
+> cited in these entries are reachable only via `refs/original` (the pre-rewrite backup ref) and will stop
+> resolving when it is deleted. **Cite by commit SUBJECT, not hash, in entries meant to outlive a rewrite** —
+> subjects survive `filter-branch`, hashes never do.
+
+## V-1780 — a rewrite verified as content-identical broke ~65% of the citations in these very docs
+
+2026-08-26. A2 rewrote the unpushed range to strip the internal ledger from history and verified it with six
+checks; I verified it independently against my own pre-rewrite hashes and agreed — content survived,
+`git diff old..new` EMPTY, nothing of mine lost.
+
+⛔ Then measured what the surviving docs POINT AT:
+
+    docs/verification-log.md   17 hashes sampled -> 4 reachable, 11 off-branch, 2 gone
+    docs/internal/OPEN-ITEMS.md 43 hashes cited  -> 15 reachable, 28 off-branch, 0 gone
+
+Two independent samples, both ~65% unresolvable from HEAD. ⭐ **A rewrite preserves CONTENT and breaks
+CITATIONS, and the two are orthogonal.** `git diff old..new` being empty is precisely the check that cannot
+see this: the doc text is byte-identical, and the text is what is now wrong. The strongest content check
+available was structurally blind to it.
+
+⛔⛔ THE TIMING IS THE TRAP. Those hashes still resolve TODAY only because `refs/original` exists (verified:
+1 ref, and `9b1cca9ac` / `5213154a7` / `bbb2a73be` all `git show` correctly). Deleting `refs/original` is
+what you are TOLD to do once a rewrite is verified — so the citations break at CLEANUP time, when everyone
+has concluded it went well, attributed to nothing. Same shape as every silent-drop defect this session: the
+failure lands after the checking stops.
+
+RESOLUTION (with A2): `refs/original` stays for now; there is no old→new map to remap from —
+`.git/filter-repo/commit-map` is a `git-filter-repo` artefact and this was `git filter-branch`, so
+reconstructing the correspondence would mean hand-pairing by subject, which is the exact shape that has gone
+wrong repeatedly tonight. So the hashes stand as historical, a note now heads this file, and the forward rule
+is: **cite by SUBJECT in anything meant to outlive a rewrite** — A2's check 3 verified subjects survive.
+
+⭐ MY INSTRUMENT CORRECTIONS ON THE WAY: the first ledger count checked all 43 hashes against
+`driftstack-api` alone, but the ledger cites BOTH repos, so `96c0306cf` (a `driftstack` commit) failed by
+construction — checking both moved it from "30 unresolvable, 2 gone" to "28 off-branch, 0 gone". And
+`git rev-list b39c7f13b..HEAD` reporting 235 was not a count of anything: that hash is pre-rewrite, so the
+range spanned the boundary.
+
+SUITE: full server unit run — **2003 files, 20,879 passed, 10 skipped, 1 FAILED**.
+`a-workspace-declares-what-its-source-imports.test.ts` hit "Test timed out in 10000ms". Attributed before
+investigating: re-run ALONE with nothing else running it passes **4/4**, so it is contention (21 vitest
+workers plus my own greps), not a regression. ⚠️ Recorded rather than dismissed — a 10s timeout on a test
+that walks the whole workspace is thin, and a test that only fails under load is the kind that gets
+re-run-until-green rather than fixed.
+
+⛔ AND THE RUN ITSELF LIED ABOUT ITS STATUS: the background command reported `exited with code 0` while
+one test failed, because I piped vitest into `tail` — the exit code was tail's. A piped runner reports the
+LAST command's status, so a suite's pass/fail must be read from its OUTPUT, never from the pipeline's code.
