@@ -10690,3 +10690,48 @@ same edit.
 BOUNDED: the detector matches a local `const NAME = <numeric literal>` used in an assertion. A literal
 inlined directly into an `expect(...)`, or one spelled as a string, is invisible to it — so this is a
 clean zero over one spelling of the shape, not over the shape.
+
+## V-1739 — the wire protocol has two hand-written implementations in two repos; nothing had ever compared them
+
+2026-08-26. The harness speaks a control protocol defined twice — Zod schemas in
+`apps/server/src/schemas/harness-control-protocol.ts`, and a hand-written Swift enum in
+`harness/Sources/ControlClient/ControlClient.swift` whose decoder THROWS on an unrecognised type. Two
+hand-maintained copies of one contract across two repos is the shape that produced V-1716, V-1718 and
+V-1727, and **nothing in either repo's ledger had compared them** — because until today no agent could
+read both. Now measured.
+
+⛔ THE FIRST ANSWER WAS WRONG AND THE ERROR IS THE USEFUL PART. Diffing the Swift enum against the CP's
+Zod schema reported SIX kinds the control plane did not declare, including `activateTab`,
+`activateTabResult` and `tabListUpdate` — tab operations, with P-26 open on tab-switching latency. That
+looked like a control plane that had lost the ability to drive tabs.
+
+It is not. Those frames are **GUI → box over the LiveKit data channel**, a different transport, declared
+in `packages/api-types/src/agent-tab-ops.ts`. The Swift enum carries messages from BOTH transports; I
+compared it against ONE schema and assumed a single union meant a single channel. `apps/server/src`
+holds zero occurrences of them because the control plane is deliberately not in that path.
+
+RE-MEASURED AGAINST THE UNION OF BOTH CONTRACTS, four exceptions remain and each is explained:
+
+```
+  validateProxyConfig      Swift implements it; ZERO occurrences in the whole API repo — apps AND
+  proxyValidationResult    packages. Its own comment calls it "the GUI's VPN-config Test", but the
+                           GUI's live Test goes through the SERVER (lib/proxies testProxy → the probe
+                           → ProxyValidationFailedError). Device-side handler, superseded, DORMANT —
+                           the same shape as NewTabServer in V-1737.
+  setEgress                CP declares them, Swift does not handle them. Known and recorded when I
+  setEgressResult          built that half (P-17): the CP side was written against a stub driver and
+                           its header says the round trip could not be verified end to end.
+```
+
+So the two implementations AGREE on every message either side actually uses. That is worth having as a
+measurement rather than an assumption, and it is the first time it has been one.
+
+⭐ The transferable half: **a protocol union in one language can span transports that are separate
+documents in the other.** A parity check across implementations has to enumerate the CONTRACTS the union
+covers before diffing, or it reports the second transport as missing — which is exactly the alarming,
+wrong answer this produced first, on the surface where an open performance ticket made it look credible.
+
+BOUNDED: this compares message KIND names, not field shapes. Two implementations can agree on every
+`type` string and still disagree on a field's presence, type or encoding — `snake_case` on the Swift
+side against camelCase in Zod is exactly where that would hide. Field-level parity is a larger
+measurement and is NOT claimed here.
