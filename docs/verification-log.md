@@ -22291,3 +22291,41 @@ first cutting at the first `;` in the file, then at the first line ending in `;`
 inside a multi-line variant whose doc comment contains one. Each version produced a plausible,
 short answer. The union shapes were never the finding, but the count I would have published was
 wrong three ways.
+
+## V-1696
+
+**A mutation must be TYPE-CLEAN, or it tests the compiler instead of the property — and mine was
+not.**
+
+Applying V-1695's rule (to ask whether something is pinned, break it) to a fail-closed safety
+gate: `stripe-key-safety.ts` states _"Caller is responsible for failing the bootstrap when
+ok=false"_, and `bootstrap.ts:2064` honours it with a throw. The question is whether anything
+would notice if that throw went away.
+
+**First attempt, and the result was uninterpretable.** Rewriting the condition to `if (false)`
+red 14 files across a full run — a number that looked like an answer. It was not: `reason` exists
+only on the `ok: false` variant of the result union, so removing the `!ok` check destroyed the
+narrowing and produced **`TS2339`**. `the-server-source-type-checks` was among the 14, which is
+the tell. **A mutation that fails to compile measures the build, not the guard**, and every
+downstream failure it causes is noise wearing the shape of evidence.
+
+The type-clean form keeps the narrowing and removes only the effect:
+
+```
+  if (!stripeKeySafety.ok) {
+    void stripeKeySafety.reason;   // was: throw new Error(...)
+  }
+```
+
+Verified at **0 tsc errors**, so a run under it measures the property and nothing else.
+
+⚠️ **A second confound I had already walked into:** I ran the mutation before the baseline. A
+peer is mid-flight on team routes and the openapi/SDK parity guards that follow from them, so the
+tree has reds of its own — and 14-minus-unknown is not a measurement. **The baseline is not
+optional when the tree is shared**, which is my own standing rule and I inverted it.
+
+**The safety-gate question is therefore still open**, and stated as open rather than answered:
+what is established is that a type-clean mutation exists and that the first result was noise.
+The comparison needs a baseline run and a mutated run with no peer suite in flight; both were
+deferred because a peer runner is active, and running either against a moving tree would repeat
+the fault this entry is about.
