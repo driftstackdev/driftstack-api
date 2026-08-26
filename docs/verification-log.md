@@ -11924,3 +11924,46 @@ comment names as the thing that would take down more than one node's connection.
 
 BOUNDED: the parse sweep is `*Schema.parse(` for the harness-protocol family in `apps/server/src`,
 non-test; a parse through a variable-held schema is not in the eight.
+
+## V-1767 — route audit: cookie IMPORT is sound end to end, including the claim I most expected to break
+
+2026-08-26. Audited `POST /v1/agent-sessions/:id/cookies/set` end to end — a WRITE that mutates a live
+session's cookie store, so a cross-session write here is session hijacking. Sound at every layer, and the
+layer I doubted is the one that held.
+
+1. missing session → `NotFoundError` before anything else
+2. account path → `callerCanAccessAgentSession(ctx, rec.accountId)`, and a failure is **404, not
+   403** — the anti-enumeration posture, so a caller cannot probe which ids exist
+3. rate limit → `consumeEffectiveOwnerRateLimit(... rec.accountId ...)` — charged to the OWNER
+4. body → `SetCookiesBodySchema.safeParse` → `ValidationError` (4xx). A customer's bad
+   cookie is a client error, never a 500, and never reaches the serializer whose
+   `.parse()` would throw
+5. unknown fields → `reportUnknownRequestFields`
+
+⭐ THE CLAIM I CHASED, because it is the shape that has caught me all session: the route says the
+control-key path is "already decrypt-matched against THIS `:id` in the preHandler" — a comment about
+ANOTHER function's behaviour, which is exactly the hearsay that made me misclassify V-1764 and P-34. Read
+it. It holds: `controlKeyOrAccountAuth` (agent-sessions.ts:1912) does
+`const sessionId = (req.params as { id?: string }).id ?? ''` and passes that into
+`validateControlKey(req, sessionId)`, so a key minted for session A cannot authorise session B.
+
+⚠️ THREE independent implementations of `controlKeyOrAccountAuth` exist — `agent-sessions.ts:1912` (12
+preHandler registrations), `agent-sessions-livekit-token.ts:92`, `agent-sessions-transport-report.ts:94`.
+Checked all three rather than the one in front of me: **all three bind identically**, same line, same shape.
+No divergence today. Recorded because three copies of an auth gate is a standing divergence risk that
+nothing pins — V-1599 derives the SCOPE reachability of control keys on both sides, but nothing asserts the
+three implementations agree on the id binding.
+
+⭐ Prior art opened rather than dismissed: `a-control-key-reaches-nothing-its-mint-does-not-require` (V-1599)
+covers a different axis — that the set of routes a control key reaches stays inside what MINTING required,
+derived on both sides. It passes. Its header quotes the mechanism that makes this load-bearing: a control
+key `return`s before `requireScope` runs, so the mint is the only gate.
+
+⛔ MY COUNT WAS WRONG ON THE WAY IN, and the guard's was right: I read 20 `controlKeyOrAccountAuth(`
+occurrences and briefly took that as 20 registrations against the guard's stated 14. It is 12 preHandler
+uses; the other occurrences are the definition, comments and mirrors. A raw grep count is not a
+registration count, and the derived guard was the more accurate instrument.
+
+BOUNDED: one route audited end to end plus the auth helper it shares with 11 others; the other 11 routes
+were not each traced, and the scope floor each passes (`'write'` vs `'read:sessions'`) was not re-derived
+here — V-1599 covers that axis.
