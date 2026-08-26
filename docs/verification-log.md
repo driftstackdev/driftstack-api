@@ -11365,3 +11365,51 @@ $BEH` sweep earlier in this session.
 NOT LANDED THIS TURN, deliberately: it rewrites a 2 MB published artifact across 46 operations and may
 require edits to as many as 38 test files, and the standing rule is source plus every pin in ONE commit.
 That belongs at the head of a turn with a green suite, not the tail of a long one.
+
+## V-1754 — CORRECTION to V-1753's residual, and the reason is a duplicate-component pair
+
+2026-08-26. V-1753 reported four orphans surviving the simulated W-10 fix and explained two of them by
+saying their shape appeared nowhere in the document and that some route must publish a near-miss variant,
+flagging it as a genuine residue worth investigating. ⛔ **That explanation is withdrawn — it is wrong.**
+The count was right and the reasoning behind it was not, which is the harder kind to notice.
+
+Chased it as its own question and the first measurement already contradicted the claim: comparing the
+component's property set against every inline object under `paths` returned similarity **1.0** — identical
+field names — at `/v1/admin/accounts/{id}/suspend`, `/tier`, `/unsuspend` and, for the other, at
+`GET /v1/sessions/{id}` and `POST /v1/sessions`. A whole-schema diff then returned `identical? True`. The
+shape does not appear "nowhere"; it appears verbatim, repeatedly.
+
+⛔⛔ THE CAUSE WAS A THIRD BUG IN THE SAME SIMULATION, and it is a one-liner:
+
+    bycanon = {canon(v): k for k, v in comps.items()}
+
+A dict comprehension keyed by SHAPE silently collapses any two components that share one, keeping whichever
+comes last. So the substitution emitted a `$ref` to the twin and left the other name unreferenced, and I
+read that as "its shape appears nowhere" when the truth was "its shape appears under another name". ⭐ Three
+successive corrections to one instrument — top-down substitution that never descended into a replaced node,
+never rewriting component bodies, and now a shape-keyed map that discards collisions — and each was found by
+interrogating a RESIDUAL rather than the headline number, which stayed plausible throughout.
+
+⭐ THE REAL FINDING IS THE DUPLICATION. Of 83 components there are exactly **2 structurally identical
+groups**, four names for two shapes:
+
+    ['Account', 'AdminAccount']              7 props, byte-identical
+    ['Session', 'CreateSessionResponse']    14 props, byte-identical
+
+SDK codegen emits both members of each pair as separate identical classes.
+
+⚠️ I checked the one that could have been a real defect and it is not. An ADMIN account view byte-identical
+to the customer view suggests admin-only fields (suspension detail, internal flags) are published as absent
+when the route returns them. Read the serializer: `publicAccount` in `routes/admin-accounts.ts:62` returns
+exactly `id, email, name, tier, status, created_at, updated_at` — the seven published fields, nothing more.
+The duplication is accurate, not an under-declaration. `Session`/`CreateSessionResponse` is the ordinary
+case of a create returning the full object.
+
+CORRECTED NUMBERS for the W-10 fix, superseding V-1753's: **70 replacements** (not 72), orphans **39 -> 4**,
+and the four survivors are `AdminAccount`, `CreateSessionResponse`, `PaginationQuery`, `ListDeliveriesQuery`.
+⚠️ Which member of each duplicate pair survives is ARBITRARY — it falls out of tie-breaking, not out of the
+document — so the fix should name the intended one explicitly rather than let the generator choose. The
+spec-size and operation-count figures in V-1753 (13% smaller, 46 of 234) are unaffected by this correction.
+
+BOUNDED: structural duplication measured over `components.schemas` by exact canonical JSON only. Components
+differing solely in a description or example would NOT be caught by that and are not counted here.
