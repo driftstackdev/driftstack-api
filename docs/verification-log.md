@@ -13965,3 +13965,46 @@ that Postmark receives them.
 against real Postgres after the CAS fix is **3222 files passed / 4 skipped, 32046 tests passed / 47
 skipped, 0 failed, 197.28s** — one test more than the pre-fix run, which is the concurrency arm itself.
 The predicate change did not disturb anything else in the tree.
+
+## V-1817 — closed V-1811's weak verification by mutation: the audit repo's tenant scope IS guarded, and my "gap" was a filename
+
+2026-08-26. V-1811 proved the account-audit repo tenant-scoped by READING — the filter array is seeded
+with `eq(accountAuditLog.accountId, accountId)` — and admitted the weakness in its own boundary: "a
+statement about proximity rather than a parse". Reading proves the predicate is written. It does not prove
+anything would notice if it were deleted.
+
+⭐ THE PRIOR ART MAKES THAT DISTINCTION THE WHOLE POINT.
+`db-repo-account-scoped-reads-boundary` exists because someone neutralised the `eq(table.accountId, …)`
+predicate in three repos AT ONCE and **the full suite stayed green — 2,565 files, 26,592 tests, zero
+failures.** Nine such guards now exist. Its header also names the shape that hides a break: `listAll`'s
+`accountId` is OPTIONAL for admin use, so a broken predicate is indistinguishable from the admin call.
+
+⛔ AND I PRODUCED A FALSE GAP FROM A FILENAME, HAVING WRITTEN THE MEMORY FOR EXACTLY THAT MISTAKE TODAY.
+Grepping the nine `*tenant-scope*` / `*account-scoped*` files for the repos they name gave a tidy list —
+profiles, snapshots, recipes, auth-flows, bundled-llm, crypto-orders, oauth-links, webhooks,
+rate-limit-overrides, mfa, sessions — and `account-audit-repo` in NONE of them. On the compliance surface
+that reads alarming. It measured which files are NAMED for tenant scope, which is V-1798's lesson
+restated: filename correlation measures naming, not coverage.
+
+⭐ THE MUTATION SETTLED IT IN A MINUTE. Neutralising the seed (`const filters: SQL[] = []`) fails **5 arms
+across 3 files**, and the mix is the reassuring part:
+
+db-account-audit-repo-keyset-drizzle 3 arms, BEHAVIOURAL against real Postgres —
+same-timestamp tie groups, mid-walk appends, and
+"reports NO further pages when the final page is exactly full"
+db-account-audit-repo-content-parity pins the seeded `eq(accountId)` construction
+db-account-audit-repo-v216-v484-cross-source "CRITICAL list anchor on accountId tenant scope"
+
+**A guard whose test TITLE contains the exact phrase "tenant scope" sits in a file whose NAME does not.**
+Three of the five catchers execute against a real database, which is the strongest form available.
+
+⭐⭐ NOTED, because it is the shape I fixed elsewhere today: one catcher is "reports NO further pages when
+the final page is exactly full" — the exactly-at-the-boundary case that V-1793 found missing on the audit
+EXPORT. The keyset walk already guards it; the export's truncation flag did not. Same repo, same boundary,
+one covered and one not, which is why V-1793 was findable at all.
+
+NO DEFECT, and V-1811's boundary is now closed by mutation rather than by proximity.
+
+BOUNDED: one predicate neutralised (`list`'s seed) and the audit-log-referencing subset run — 95 files,
+1490 tests. The repo's other two selects were not separately mutated, and a full-suite run under this
+mutation was not performed because the targeted subset already failed.
