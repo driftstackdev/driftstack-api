@@ -14277,3 +14277,50 @@ BOUNDED, and narrower than it sounds: seven shapes were enumerated, not all conc
 by a JOIN whose predicate names a different column, by a service above the repo, or inside a view or
 trigger, is still outside. `.accountId ===` appears 9 times in 5 files and is JS-level filtering that this
 entry did not examine at all.
+
+## V-1824 — a THIRD listing shape: a conditional account filter, whose only inner gate has no behavioural witness
+
+2026-08-26. Closing V-1823's last stated boundary — the 9 `.accountId ===` sites it did not examine.
+Three are the in-memory double inside `account-proxies-repo`. The other six are something the tenant
+sweep never had a category for: **the account predicate is CONDITIONAL**, e.g.
+
+opts.accountId === undefined ? eq(sessions.id, opts.cursor…) : eq(sessions.accountId, opts.accountId)
+
+Three methods carry it: `api-keys-repo.listAllApiKeys`, `sessions-repo.listAllSessions`,
+`rate-limit-overrides-repo.listAll`. With no accountId supplied the listing spans every tenant, by design,
+because these are staff surfaces.
+
+⭐ MEASURED, NOT ASSUMED: all three are gated in their service wrapper by
+`throwIfMissingScope(ctx, 'driftstack_internal_admin')`, and the admin routes gate again in a preHandler
+(`admin-sessions.ts:70`, `admin-api-keys.ts:63`). Two layers, and the outer one is covered by
+`route-auth-coverage-invariant`.
+
+⛔ THE INNER LAYER IS NOT WITNESSED FOR SESSIONS, AND IT IS FOR ITS SIBLING. Removing
+`throwIfMissingScope` from `services/sessions.ts listAll` and running the **FULL suite** leaves it green
+except two arms of `the-server-source-type-checks` — which fire only because the now-unused `ctx`
+parameter trips TS6133. **A lint-level objection is not a guard**: a refactor that drops the check while
+still referencing `ctx` passes. The same mutation on `api-keys` is caught by a real arm whose message
+states the reasoning: "wraps … which has no account filter, so it is the only thing standing between a
+caller and every tenant's rows."
+
+⛔⛔ AND MY FIX WAS WRONG, WHICH THE EXISTING GUARD CAUGHT. I added `sessions-repo.ts:listAllSessions` to
+`unscoped-cursor-listings-stay-admin-only`'s roster. Its correctness arm rejected it —
+"a KNOWN_UNSCOPED entry no longer matches an unscoped cursor listing" — because that guard's discovery
+function is exact and narrower than I assumed: **methods taking a cursor whose body NEVER MENTIONS an
+account column.** `listAllSessions` mentions `accountId` conditionally, so it is not in that set and my
+entry was miscategorised. Reverted. The guard's own header explains why it is scoped that way: the
+ambitious repo→service→route mapping was tried, produced 16 findings mostly legitimate, and "a guard with
+that false-positive rate gets weakened or deleted, which is worse than none."
+
+⭐ SO THE HONEST RESULT IS A CATEGORY, NOT A PATCH. Three shapes now exist: an unconditional account
+predicate (126, all witnessed — V-1822), no account column at all (3, rostered and gated), and a
+CONDITIONAL predicate (3, gated twice, inner gate witnessed for one of three). The third has no guard of
+its own, and adding one is not a roster line — it needs a test asserting a non-admin caller is refused,
+which is a different instrument from the text pin that guards the second category.
+
+⚠️ NOT a live vulnerability: the route preHandler stands and is itself guarded. This is the shape the
+ownership-boundary guard named — "defence in depth that nothing verifies is defence in belief" — one layer
+further up.
+
+BOUNDED: the six conditional sites under `apps/server/src/db`; the full-suite mutation was run for
+`sessions` only, and `rate-limit-overrides.listAll`'s inner gate was NOT mutation-tested.
