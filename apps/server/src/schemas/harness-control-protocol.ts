@@ -1728,6 +1728,77 @@ export const TrimProfileResultSchema = z.object({
 });
 export type TrimProfileResult = z.infer<typeof TrimProfileResultSchema>;
 
+// ── Live EGRESS swap (A3 P-17) ────────────────────────────────────────
+// CP→node REQUEST (`serializeSetEgress`): swaps the exit a RUNNING session
+// browses through, over the node's LIVE control WSS (setEgress → setEgressResult),
+// keyed by `requestId`. Today `proxy_id` is create-only and baked into
+// sessionAssign, so there is no way to move a live session off a burned exit.
+//
+// `inlineProxyConfig` is the SAME base64 UTF-8 JSON SocksProxyConfig the
+// sessionAssign egress path acts on (W137): the harness resolves no saved-proxy
+// ids, so a swap must carry the whole config or there is nothing to swap TO.
+//
+// `exitIdentity` is REQUIRED and moves atomically with the config. A swap that
+// changed the IP but left the old timezone/country would have the session
+// claiming one geography while exiting from another — a contradiction visible in
+// a single page load, and worse than not swapping at all.
+//
+// ⛔ `applyPoint` is why this is a designed frame rather than a "new proxy"
+// message. AT MOST ONE EXIT IP MAY BE OBSERVABLE AT ANY INSTANT — a
+// single-interface device has one public address — so only two behaviours are
+// coherent:
+//   next_navigation → applies at the next navigation boundary, which is what an
+//                     ordinary network change looks like when nobody is mid-load;
+//   immediate       → tears down in-flight connections and reconnects, which a
+//                     real device CAN do (WiFi→cellular handoff) though our
+//                     signature is cleaner than a real one: simultaneous, no
+//                     retry storm, no partial failures.
+// DRAINING — old connections finishing on the old exit while new ones use the new
+// — is deliberately NOT expressible. It puts two exit IPs on the wire
+// concurrently for one page, which no real device can produce. A value the frame
+// cannot carry is a value nobody can select by accident.
+export const SET_EGRESS_APPLY_POINTS = ['next_navigation', 'immediate'] as const;
+export const SetEgressApplyPointSchema = z.enum(SET_EGRESS_APPLY_POINTS);
+export type SetEgressApplyPoint = z.infer<typeof SetEgressApplyPointSchema>;
+
+export const SetEgressRequestSchema = z
+  .object({
+    type: z.literal('setEgress'),
+    requestId: z.string().min(1),
+    sessionId: z.string().min(1),
+    inlineProxyConfig: z.string().min(1),
+    exitIdentity: SessionAssignExitIdentitySchema,
+    // REQUIRED on the wire even though the customer-facing route defaults it to
+    // `next_navigation`: an absent field would leave "what did the node do?"
+    // answerable only by guessing, and the two answers differ in whether the swap
+    // is detectable.
+    applyPoint: SetEgressApplyPointSchema,
+  })
+  .strict();
+export type SetEgressRequest = z.infer<typeof SetEgressRequestSchema>;
+
+// node→CP RESULT: echoes `requestId` + `sessionId`. SUCCESS → `ok:true`; FAILURE
+// (unknown/inactive session, proxy unreachable, refused) → `error` set. Plain
+// object (lenient forward-compat), like the sibling result frames.
+//
+// ⛔ `applyPoint` MUST be echoed, for exactly the reason TrimProfileResult echoes
+// `scope` (W3122): a synthesized Codable decoder ignores unknown keys, so a node
+// predating this field accepts the request, DROPS the apply point, does whatever
+// it does by default, and replies `ok`. The CP would then believe it had bought
+// `next_navigation` while the node reset in-flight connections — the one outcome
+// this design exists to make deliberate. An ABSENT echo is therefore not a
+// cosmetic gap: it means the apply point is unknown, and the caller must be told
+// that rather than shown a bare success.
+export const SetEgressResultSchema = z.object({
+  type: z.literal('setEgressResult'),
+  requestId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+  sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+  ok: z.boolean().optional(),
+  error: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).optional(),
+  applyPoint: SetEgressApplyPointSchema.optional(),
+});
+export type SetEgressResult = z.infer<typeof SetEgressResultSchema>;
+
 // ── HarnessOutbound union (server DECODES) ────────────────────────────
 // All 13 variants pinned. intentResult + sessionStatus are consumed precisely;
 // heartbeat / capabilityReport / errorEvent / profileSaved / challengeDetected

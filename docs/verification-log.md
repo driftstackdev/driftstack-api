@@ -22024,3 +22024,49 @@ measurement of what any detector actually keys on. I have not tested a real site
 signature, and "unnaturally clean handoff" is an argument, not evidence. The physics claim
 (two concurrent public IPs) is solid; the ranking of `reset` versus `stay` is a judgement that
 someone with detector telemetry should be able to overturn.
+
+## V-1692
+
+**P-17 control-plane half: the `setEgress` frames and correlator, built to the V-1691 decision.**
+
+Three pieces, mirroring the `setCookies` request/reply pattern exactly where it applies and
+diverging only where this frame's own hazard demands it.
+
+**Frames** (`harness-control-protocol.ts`) — `setEgress` strict, `setEgressResult` lenient, per
+the file's convention. `inlineProxyConfig` carries the whole base64 SocksProxyConfig because the
+harness resolves no saved-proxy ids (W137), and `exitIdentity` is **required** and moves
+atomically with it: a swap that changed the IP but kept the old timezone would have the session
+claiming one geography while exiting from another, visible in a single page load.
+
+**`applyPoint` is an enum of two**, and the omission is the design: `drain` is not expressible,
+because old connections finishing on the old exit while new ones use the new puts two exit IPs on
+the wire concurrently for one page. A value the frame cannot carry is a value nobody selects by
+accident.
+
+⭐ **The result MUST echo the apply point, and I learned that from the sibling rather than
+inventing it.** `TrimProfileResult` echoes `scope` for a documented reason (W3122): a synthesized
+Codable decoder ignores unknown keys, so a node predating a field accepts the request, drops it,
+does its own default, and replies `ok`. Applied here, a node without `applyPoint` would leave the
+CP believing it had bought a deferred swap while every in-flight connection was reset — the exact
+outcome this design exists to make deliberate. **Tolerance is what makes an additive field safe,
+and what makes a behaviour-changing field dangerous without an echo.**
+
+**Correlator** (`set-egress-request-correlator.ts`) — mirrors the sibling's mechanics including
+the cross-session spoof guard, and splits the success case three ways on a peer's argument that
+**accepted is not applied**: `applied`, `accepted_pending_navigation`, and
+`ok_apply_point_unconfirmed`. Collapsing the first two would make an unapplied swap
+indistinguishable from a broken one to a caller polling "did it take?".
+
+**12 arms, mutation-proved on the property that matters**: deleting the missing-echo branch reds
+exactly one arm. Two arms pin the design itself — that `drain` fails to parse while the same
+object with a legal apply point parses, and that a request without `exitIdentity` fails.
+
+⛔ **Stated in both file headers and repeated here: this half cannot be verified end to end.** The
+WebKit driver is an 81-line stub and the fleet control plane is flag-gated, so these tests prove
+the CP speaks the frame and nothing about what a node does with it. Written down because a later
+reader finding full coverage would otherwise reasonably conclude the feature ships.
+
+⚠️ **One contract question left open on purpose.** A session that never navigates again never
+applies a `next_navigation` swap — and since that is the default, an idle session is the common
+case. Either the pending state is surfaced or it expires; inventing an expiry here would settle a
+product decision silently.
