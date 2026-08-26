@@ -13165,3 +13165,41 @@ measurement inverts the answer completely: 0 without, not 12.
 BOUNDED: `apps/server/src/db/**` only, keyed on the literal identifiers `nextCursor` and `hasMore`. A
 paginator living outside the db layer, or one signalling "more" by another name, is not in the 12 and is
 not covered by this zero.
+
+## V-1798 — a measured justification went stale in the direction that strengthens it: 135 importers is now 189
+
+2026-08-26. Reached by a route that failed first, which is worth recording before the finding.
+
+⛔ THE ROUTE THAT FAILED. Wanting under-guarded surfaces, I ranked the 60 route files by how many test
+files name them. It produced a confident list — `account-bundled-llm` at 3 test files against 189 lines
+of code, `account-oauth-links` at 2 — and **every entry was wrong**. Tests are named for the FEATURE, not
+the route file: `bundled-llm` matches 94 test files, `admin-usage` 241, `account-cost` 42. A filename-stem
+correlation measures NAMING CONVENTION, not coverage. This repo's own CLAUDE.md already records the same
+trap from the other side ("the specs exercising a middleware are named for the FEATURE"). Ranking
+withdrawn in full; there is no valid name-based instrument for this question, and the real one is a
+coverage report.
+
+⭐ WHICH LED SOMEWHERE REAL, because the coverage config is where that instrument is configured. It
+excludes `apps/server/src/db/**` from the gate, and its own comment says the justification has EXPIRED:
+the V-086 audit recorded those repos as "exercised by e2e against real Postgres, not by vitest", and
+integration files now import them directly under vitest. The comment then quantifies it — and both of its
+numbers have drifted since 2026-08-16:
+
+integration files importing src/db comment: 135 measured today: 189 (+40%)
+source files excluded from the gate comment: 54 measured today: 55
+
+**Both moved in the direction that strengthens the note.** The justification is more expired than the
+note claims, not less. Corrected in the config, with the pin that froze `135` updated in the same commit
+and mutation-proved: reverting the figure fails exactly one arm.
+
+⛔ WHAT I DID NOT DO, deliberately. V-1002 already measured that lifting the exclusion is free — lines
+92.29 / statements 90.74 / functions 90.94 / branches 81.74 against thresholds 85/83/84/75, with 6.7
+points of headroom on the tightest — and the config states the conclusion better than I could: "the
+number says removing this line is free — but changing what CI enforces is still a decision somebody
+makes, not one a measurement makes for them." I updated the measurement and left the decision. A fresher
+number makes the case stronger; it does not make the call.
+
+BOUNDED: the importer figure counts integration files with an explicit `from '…db/<name>.js'` import (189
+of 433); counting any mention of `src/db` gives 193. I could not re-run coverage to refresh V-1002's
+percentages — `DATABASE_URL` is unset here — so those four numbers remain as measured on 2026-08-14 and
+are NOT re-verified by this entry.

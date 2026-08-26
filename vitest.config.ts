@@ -17,11 +17,14 @@ export default defineConfig({
       // surfaces only. Excludes:
       //   - Drizzle repos (`apps/server/src/db/`). The V-086 audit recorded
       //     this as "exercised by e2e against real Postgres, not by vitest",
-      //     and that is NO LONGER TRUE: 135 integration files under
+      //     and that is NO LONGER TRUE: 189 integration files under
       //     apps/server/tests/integration import from `src/db/`, including the
       //     repos directly, and they run under vitest whenever DATABASE_URL is
-      //     set. 54 source files are therefore excluded from the gate on a
-      //     justification that has expired. (V-1002 — those two counts were 66
+      //     set. 55 source files are therefore excluded from the gate on a
+      //     justification that has expired. (V-1798 re-measured 2026-08-26:
+      //     these read 135 and 54 when written on 2026-08-16. Both moved in
+      //     the direction that strengthens the note — the importer count is
+      //     up 40% — so the justification is more expired, not less.) (V-1002 — those two counts were 66
       //     and 53 when written on 2026-08-14; the method reproduces them
       //     exactly at that commit, so they grew rather than differ.)
       //     Left in place rather than removed. V-1002 MEASURED the number this
