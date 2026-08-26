@@ -10977,3 +10977,54 @@ ChallengeInfo, PageStateError, Tab) are NOT compared here. ⚠️ They are not t
 for optionality: the CP parses inbound frames with `.strict()`, so a Swift field the CP schema fails to
 declare makes the CP reject the whole frame. That is a NAME question in the outbound direction and is the
 next measurement, not a claim made now.
+
+## V-1746 — pageState `http_status`: two repos, each correct and documented, mutually incompatible the day the fork lands
+
+2026-08-26. Took the boundary V-1745 left — the seven OUTBOUND nested payloads, where the CP is the
+VALIDATOR and an undeclared or mistyped field makes it drop the frame. Six are sound:
+
+- `Cookie` 8/8, and the closed CP enum `sameSite: z.enum(['Strict','Lax','None'])` against Swift's open
+  `String?` is guarded at the source: `HarnessCoordinator.normalizeSameSite` returns **nil** for anything
+  unrecognized, and the CP field is `.nullable().optional()`. A deliberate fail-safe, not a lucky match.
+- `SafeguardCheckEntry` 4/4 — including `timestamp: Date` encoded ISO-8601 into a CP `z.string()`.
+- `ChallengeInfo` 3/3; its required-`detail`-vs-CP-optional is the benign encode direction V-1744 classified.
+- `ProfileInfo`, `LiveKitInfo`, `ExitIdentityInfo` per V-1745. `TabDescriptor` rides LiveKit.
+
+⛔ THE SEVENTH IS A LATENT SILENT-DROP. `PageStateFrameSchema` declares
+`http_status: z.null().optional()` — null or absent, nothing else. `HarnessCoordinator.swift:5075`:
+
+    if let status = event.httpStatus, status >= 400 {
+        ... error: .init(kind: "http", httpStatus: status, ...)
+
+an Int, and `BrowserProcess.swift:452` already parses `httpStatus` off the fork's nav-state event. Proved
+the consequence against the real schema rather than deriving it:
+
+    ACCEPTED  kind=net,  http_status: null   (documented shape)
+    REJECTED  kind=http, http_status: 404    -> error.http_status: Expected null, received number
+    REJECTED  kind=http, http_status: 503    -> error.http_status: Expected null, received number
+
+and the rejection is silent — `fleet-control-registry.ts:533` is `if (!parsed.success) return;`, no log, no
+metric. The frames that would vanish are precisely the ones reporting a FAILED page load, so the GUI's
+error overlay would go dark exactly when it is meant to fire.
+
+⭐ NOT A BUG IN EITHER REPO, WHICH IS WHY IT SURVIVED. The CP's `z.null()` is deliberate, commented
+(W1222 — a real status "needs an A1 nav-error channel"), text-pinned at content-parity:560, and defended
+by an arm at :619 that ASSERTS a numeric status is rejected. The harness branch is equally deliberate and
+annotated "ADDITIVE: the deployed fork does NOT yet emit httpStatus → it stays nil". Each side documents a
+consistent story; they disagree only about a future that has not happened yet.
+
+⛔ NOT FIXED UNILATERALLY, deliberately. The CP arm does not pin stale text — it asserts a chosen
+BEHAVIOUR, and W1222 marks the whole channel an open design item owned by A1's fork work. Flipping a
+peer's intentional behavioural assertion is not the same as correcting a drifted pin, and this is the
+exact shape of "pattern-matching a fix onto a documented decision". No live impact today: the branch is
+unreachable until the fork emits.
+
+⭐ RECOMMENDED, so whoever decides can act in one step: widen to
+`http_status: z.number().int().min(100).max(599).nullable().optional()` — strictly backward compatible
+(null and absent still parse) — and in the SAME commit flip content-parity:560's `toContain` fragment and
+the :619 arm from `.toBe(false)` to `.toBe(true)`. Ordering matters: the CP must widen BEFORE the fork
+starts emitting, or the gap is silent HTTP-error loss for the length of the deploy skew.
+
+BOUNDED: this covers the nested payloads' names and types. Field-level VALUE constraints (`.max()`
+lengths, `.min(1)`) are not compared against what the harness can actually produce — a Swift string longer
+than a CP `.max()` is the same silent drop, and that measurement has not been run.
