@@ -12821,3 +12821,94 @@ positional path heuristic, and this. The reliable index was the artifact, not th
 ⚠️ THE 36 SKIPPED ARE THE HONEST HEADLINE. They were dropped because the path literal appeared in zero or
 several route files, or no `Schema.parse(req.body)` followed it — which includes every route parsing via
 `parseOrThrow`, a helper, or a schema resolved indirectly. 52 of 54 agreeing says nothing about them.
+
+## V-1791 — the request-body sweep, run to exhaustion: 9 false positives, 0 true, and why it cannot work as built
+
+2026-08-26. Closing V-1790's stated boundary — the 36 operations it could not pair — by fixing the
+instrument four times. Final state, and it is a negative worth more than the fixes:
+
+pass 1 (`.parse(req.body)`, global name lookup) 54 compared, 52 agree, 2 differ — BOTH false
+pass 2 (+ local-variable idiom, scope-aware) 63 compared, 60 agree, 3 differ — ALL false
+pass 3 (+ exclude `*ParamsSchema`) 63 compared, 62 agree, 1 differ — false
+
+---
+
+cumulative 9 false positives, 0 true positives
+
+⭐ EVERY ONE OF THE NINE REDUCES TO THE SAME ROOT: an occurrence or an identifier resolved without its
+scope. `AcceptBodySchema` resolved globally when TWO module-local consts carry that name. A 4000-char
+window that ran past the declaration it was anchored on. The FIRST `Schema.parse(...)` in a window when
+the first is usually the PATH PARAMS parse, not the body. And the last one, which is the clearest:
+**`'/v1/profiles/:id'` appears THREE times in one file — get, patch, delete — so my "the path literal
+is in exactly one route file" check passed while the window opened at the GET and ran through the PATCH
+into the clone route.** Uniqueness of the FILE is not uniqueness of the OCCURRENCE.
+
+⛔ AND THE SURFACE HAS AT LEAST FOUR VALIDATION IDIOMS, which is the structural reason a regex index
+cannot measure it:
+
+`Schema.parse(req.body)` 75 occurrences
+`Schema.parse(rawBody)` via a local the whole core session surface
+`parseOrThrow(Schema, req.body)` 9
+`parseRequestBodyReportingUnknown({ schema, req })` the one that falsified the last candidate
+
+The final accused route, `PATCH /v1/profiles/{id}`, is not merely fine — it is BETTER than the ones that
+passed. It validates through `parseRequestBodyReportingUnknown` with `UpdateProfileRequestSchema`
+precisely so that "a mistyped field on update used to be dropped in silence, so the request answered 200
+having changed nothing the caller asked for". ⛔ **The detector's last surviving accusation was the
+repo's most careful handler**, which is the same shape this session's dominant lesson already names.
+
+⭐ WHAT IS GENUINELY LEARNED, stated with its boundary: 62 of 63 pairable request bodies publish exactly
+the field set their route parses. That is real evidence the body contract is largely sound — bounded to
+operations whose path literal resolves unambiguously AND whose validation uses one of two idioms. 27
+remain unpairable and unmeasured, and V-1787 proves the class is not hypothetical.
+
+⚠️ RECOMMENDATION AGAINST MY OWN WORK: do not land this sweep as a guard. A detector with a 100%
+false-positive rate over nine findings would fail on every refactor and be muted within a week, and a
+muted guard catches nothing — which is the exact argument `ci.yml` already makes for its audit gate. The
+reliable form is the one `published-request-schema-is-not-looser-than-enforced` chose: pair by FIELD NAME
+globally and never attempt operation-to-route resolution at all. Its blind spot (V-1789) is worth fixing
+on that foundation, not on this one.
+
+## V-1792 — audited /v1/account/audit-log end to end: sound, and my finding was a documented past false positive
+
+2026-08-26. Sweeps had stopped yielding, so I audited a route instead. Picked the account audit log
+because it is compliance-relevant and because V-1787 proved its immediate neighbourhood had drifted.
+
+⛔ THE FINDING I WAS ASSEMBLING WAS WRONG, AND THE REPO HAD ALREADY REFUTED IT BY NAME. Its route
+registers `preHandler: [app.requireAuth, app.rateLimit('global')]` with NO `requireScope`, while sibling
+account routes gate explicitly — `account-mfa.ts` on `account_owner`/`read`, `account-cost.ts` on
+`read:billing`. Reading that as "the most sensitive account endpoint is the least gated" was one grep
+from a least-privilege writeup.
+
+**Enforcement is at the SERVICE layer**: `services/account-audit.ts:148` is
+`throwIfMissingScope(ctx, 'read:audit')`. ⛔ **"Gated" is not a property of the route registration.** A
+preHandler list without `requireScope` does not mean unscoped, and checking preHandlers alone yields a
+false negative on enforcement.
+
+⚠️ AND THE ARCHIVE RECORDS SOMEONE MAKING EXACTLY THIS MISTAKE ALREADY: "route-only map also missed
+three scopes enforced nowhere else: `read:webhooks`, `read:audit`" … "which would have been four bogus
+findings and four unnecessary doc changes". I reproduced a documented past false positive, which is the
+strongest possible argument for the standing rule to grep prior art BEFORE investigating.
+
+⛔ I ALSO READ THE SCOPE RULE BACKWARDS. The enum comment says "Granular scopes do NOT satisfy broad
+checks — narrow keys stay narrow", and I inferred a narrow key faced no barrier here. The rule is
+asymmetric in the other direction too: broad SATISFIES granular (V-481), granular does not satisfy broad.
+So `read` and `account_owner` pass the `read:audit` check, and a `write:profiles`-only key does NOT.
+Least privilege holds on this endpoint. A one-directional reading of a two-directional rule.
+
+⭐ WHAT THE AUDIT ACTUALLY FOUND — sound code, worth recording because the reasoning is subtle:
+
+- **The team path keeps the scope check on the CALLER.** `X-Driftstack-Account` lets a member read the
+  owner's log, and V-330b states plainly that "being a team member doesn't waive the scope requirement on
+  the calling principal". The natural bug here is checking the OWNER's scopes; it does not.
+- **Redaction unions two independent signals.** Request-level (`effective.kind === 'team'`) covers a
+  cross-account member reading the owner's log; the per-row check covers a row whose recorded actor
+  differs from the account. The comment documents the real leak the union fixes: a staff
+  `admin.support_note` lands on the CUSTOMER's log carrying the STAFF member's real IP, and a
+  request-level-only check let that leak on the customer's own self-read.
+- **A past widening is recorded with its reason.** V-553.B-21: the check used to hard-require literal
+  `account_owner`, so a key minted per the docs' own "Backup automation: read + read:audit" recipe was
+  permanently 403'd. The recipe never worked end to end.
+
+BOUNDED: the list and export handlers in `routes/account-audit.ts` and `AccountAuditService.list`. The
+repository layer below it and the redaction of the EXPORT format path were not read.
