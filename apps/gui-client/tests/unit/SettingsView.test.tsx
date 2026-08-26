@@ -242,9 +242,14 @@ describe('SettingsView (V-288 jsdom + RTL foundation)', () => {
     // The persisted startUrl must be the DEFAULT, not the prior custom value — a
     // blank-clear that silently kept the old value left the field stuck/dirty.
     await waitFor(() => expect(update).toHaveBeenCalled());
-    expect(update.mock.calls[0]?.[0]).toMatchObject({ startUrl: 'https://driftstack.dev' });
+    // The default start URL is the START PAGE, not the marketing homepage: a
+    // session now opens on the branded page with the device-info panel rather
+    // than on the product's own marketing site.
+    expect(update.mock.calls[0]?.[0]).toMatchObject({
+      startUrl: 'https://driftstack.dev/newtab/',
+    });
     // And the field re-syncs to the saved default instead of staying blank.
-    expect(startInput.value).toBe('https://driftstack.dev');
+    expect(startInput.value).toBe('https://driftstack.dev/newtab/');
   });
 
   it('coalesces rapid Save clicks into one credential-store write', async () => {

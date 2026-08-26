@@ -305,7 +305,6 @@
       (function () {
         var form = document.getElementById('newtab-search');
         var input = document.getElementById('newtab-input');
-        if (!form || !input) return;
         // Resolve a typed entry to a destination URL. A value that parses as a
         // HTTP(S) and host-like values navigate directly — prefixing https://
         // when no scheme is present. Unsupported schemes become a Google
@@ -322,11 +321,18 @@
           if (looksLikeHost) return 'https://' + v;
           return 'https://www.google.com/search?q=' + encodeURIComponent(v);
         }
-        form.addEventListener('submit', function (e) {
-          e.preventDefault();
-          var dest = resolve(input.value);
-          if (dest !== null) window.location.assign(dest);
-        });
+        // The guard is scoped to the thing it guards. It used to sit at the top
+        // of this function and return early, which also skipped the connection
+        // panel below — so a markup change that renamed or conditionally
+        // rendered the search box would have left every info field reading
+        // "Checking..." forever, with no error anywhere.
+        if (form && input) {
+          form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var dest = resolve(input.value);
+            if (dest !== null) window.location.assign(dest);
+          });
+        }
 
         // ── Live connection panel ────────────────────────────────────────────
         // Shows what a real website sees about this simulated device: exit IP +

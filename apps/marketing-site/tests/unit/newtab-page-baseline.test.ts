@@ -24,9 +24,13 @@ function read(p: string): string {
 
 describe('newtab page baseline', () => {
   const body = read(PAGE);
-  const resolveSource = body.match(
-    /function resolve\(raw\) \{([\s\S]*?)\n        \}\n        form\.addEventListener/,
-  )?.[1];
+  // ⛔ Anchored on `resolve`'s OWN closing brace, not on whatever follows it.
+  // This used to match up to `form.addEventListener`, so moving that call inside
+  // a guard — a change that touched neither `resolve` nor its behaviour — made
+  // the extraction fail and this whole file throw at import. A pin that depends
+  // on its neighbour breaks when the neighbour moves and reports it as a defect
+  // in the thing it was pinning.
+  const resolveSource = body.match(/function resolve\(raw\) \{([\s\S]*?)\n        \}\n/)?.[1];
   if (!resolveSource) throw new Error('newtab resolve function not found');
   const resolveTypedEntry = new Function(`return function resolve(raw) {${resolveSource}\n}`)() as (
     raw: unknown,

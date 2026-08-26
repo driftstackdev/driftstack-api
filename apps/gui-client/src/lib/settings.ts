@@ -42,8 +42,19 @@ export interface DriftstackSettings {
   /**
    * Start URL the remote iPhone browser opens when a session launches. GUI-local
    * config (like baseUrl/theme; non-sensitive → settings store, never keychain).
-   * Passed per-launch as agentSessions.create({ initial_url }). Default
-   * https://driftstack.dev.
+   * Passed per-launch as agentSessions.create({ initial_url }).
+   *
+   * ⭐ Default is the START PAGE (`/newtab/`), not the marketing homepage.
+   * P-27 — a session used to open on `https://driftstack.dev`, so the branded
+   * start page with the "this device, as sites see it" panel was reachable only
+   * by pressing "+". The first thing a customer saw was the product's own
+   * marketing site, which tells them nothing about the device they just
+   * launched. The start page is the useful landing surface, so it is the
+   * default one.
+   *
+   * ⚠️ Only the DEFAULT moves. A customer who has set their own start URL keeps
+   * it — the persisted value wins in `loadSettings`, so this cannot overwrite a
+   * choice somebody made.
    */
   startUrl: string;
   /**
@@ -72,7 +83,7 @@ export const DEFAULT_SETTINGS: DriftstackSettings = {
   themeMode: 'dark',
   themeAccent: 'oxblood',
   telemetryOptIn: null,
-  startUrl: 'https://driftstack.dev',
+  startUrl: 'https://driftstack.dev/newtab/',
   autoUpdate: false,
 };
 
