@@ -21344,3 +21344,51 @@ the divergence disappearing entirely.
 The lesson is the day's, in a third costume: **an extractor that models one idiom measures the
 code that happens to use it.** `path:` was the idiom I read first, so it became the idiom I
 believed in.
+
+## V-1679
+
+**Every production at-rest encryption binds the record it belongs to — and the guard I wrote to
+prove it was wrong first, in a way that let a real mutation through.**
+
+`encryptPlatformSecret(plaintext, key, authenticatedContext?)` takes its AAD as an OPTIONAL
+third argument and only calls `setAAD` when one is supplied. Omitting one token yields
+ciphertext bound to nothing, which decrypts under any record for any account — V-1649 one layer
+down, where the row named an owner and the bytes did not agree. The sibling API in this repo,
+`encryptPlatformSecretValue(plaintext, key, name)`, takes its binding as REQUIRED. The
+difference between a signature that can be misused and one that cannot is a `?`.
+
+**The invariant holds.** Ten call sites under `apps/server/src`; three are context-free and all
+three are legitimate:
+
+- `agent-transcript-encryption.ts` **encrypt** — v1 envelopes are context-free by definition and
+  this writer has **zero production callers**; the repo writes v2 (which binds) and keeps v1 only
+  so tests can manufacture v1 blobs for the migration path.
+- `agent-transcript-encryption.ts` **decrypt** — the v1 read path. Stated plainly rather than
+  waved through: a v1 row swapped between accounts would decrypt where a v2 row fails its tag.
+  The mitigation is finishing the migration, which `convertLegacyAgentSessionTranscript` does on
+  access, not weakening v2 to match.
+- `webhook-secret-encryption.ts` **decrypt** — the bootstrap-only v1→v2 bridge, which
+  re-encrypts bound to the exact record tuple. `readWebhookSecret` throws on anything that is not
+  a v2 envelope, so this is a migration step and not a dual-read.
+
+**The guard's first version passed a mutation it should have failed.** Its argument counter
+counted commas at depth 0 and added one — so `f(a, b,)` counted as three, and **prettier writes a
+trailing comma on every multi-line call**, which is how four of the five real sites are
+formatted. Stripping a genuine AAD from `agent-session-transcript-encryption.ts` left the guard
+green. Rewritten to count non-empty top-level segments, the same mutation fails naming file,
+line and count, and the control arm now pins the trailing-comma shape explicitly.
+
+**And the fix immediately found a site both instruments had missed.** My python sweep carried the
+identical bug, so its "exactly two context-free sites" was wrong: the corrected counter surfaced
+`agent-transcript-encryption.ts:67` as a third. It is legitimate, but I would have shipped a
+guard whose own census was short by one — and the exemption list would have looked complete.
+
+Mutation-proved in both directions: stripping a real AAD reds the main arm; giving an exempted
+site a context reds the staleness arm, so an exemption cannot outlive the code it excuses. Both
+restored byte-identical. **This guard should be deleted the day `authenticatedContext` becomes
+required** — that change costs 46 call-site edits across the tests and enforces at compile time
+what this checks at test time.
+
+⚠️ Unrelated and not mine: `tsc -p apps/server/tsconfig.test.json` currently fails on
+`tests/e2e/helpers/server.ts:230`, which `git status` shows modified in the shared tree. Attributed
+before investigating and reported to its owner. My file contributes zero diagnostics.
