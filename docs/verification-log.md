@@ -11205,3 +11205,56 @@ NOT BOUNDED: `pageState.url`/`title` (V-1747 — CONFIRMED reachable, P-30), coo
 bound-before-emit helper applied at every wire boundary — which must count UTF-16 units, not grapheme
 clusters, per V-1747's measurement. Filed against P-30 rather than opened as a second row, because the
 same helper closes all of them.
+
+## V-1751 — W-10 made decidable: the 39 orphans are 36 duplicates, 2 by-design vestiges, and 1 real question
+
+2026-08-26. W-10 has sat open as "39 declared component schemas with no operation `$ref`s — the fix
+changes the published contract so it needs the owner's call". Re-measured it rather than inheriting the
+number, then classified it so the call is one question instead of thirty-nine.
+
+CONFIRMED, with the boundary stated: against `packages/sdk-python/openapi.json`, 83 components declared,
+**39 unreachable** by transitive closure from `paths` (not merely "unreferenced" — the closure also
+proves no orphan is kept alive by another orphan; reachable-from-paths and referenced-anywhere are both
+44, so the orphan set is wholly disconnected). Control: three known-referenced components are correctly
+absent from the orphan list.
+
+⛔⛔ MY FIRST CLASSIFIER WAS WRONG AND SAID SO ONLY WHEN CHALLENGED. It matched an orphan to an inline
+"twin" by comparing property-name SETS, and recorded inline schemas only where `type == 'object'` and
+`properties` existed. Union-shaped components — `oneOf` — therefore **could not match by construction**,
+and it reported six orphans as having no inline counterpart. Four of those six were artifacts of the
+instrument's shape, not facts about the spec. Re-run with whole-schema structural equality (canonical
+JSON over any node carrying `properties`/`oneOf`/`anyOf`/`allOf`), holding a positive control that
+`AccountMeResponse` MUST match:
+
+    orphans appearing VERBATIM inline under paths: 36 / 39
+    genuinely absent from every operation:          3   (IntentResult, PaginationQuery, ListDeliveriesQuery)
+
+So the classification:
+
+- **36 are pure duplication.** The operation inlines the identical schema and the component sits beside it
+  unused — e.g. `GET /v1/account/me` inlines a 16-property object matching `AccountMeResponse` exactly.
+  `$ref`-ing these changes the contract's STRUCTURE, never its semantics.
+- **2 are vestigial BY OPENAPI DESIGN.** `PaginationQuery` (`limit`,`cursor`) and `ListDeliveriesQuery`
+  (`+status`) are query-parameter groupings, and query parameters live in `parameters`, not in a body
+  schema. Nothing can ever `$ref` them. Deleting them costs nothing.
+- **1 is the real question.** `IntentResult` — a `oneOf` of `{kind,intent,summary,captureId}` /
+  `{...reason,diagnosis}` / `{...category,matchedText}` — appears in NO operation, while its sibling
+  `AgentIntent` IS used, inline at `GET /v1/recipes/{id}`. Checked whether it documents an endpoint that
+  exists but is undocumented, which would be worse than dead weight: it does not. The server's
+  `IntentResultEnvelopeSchema` is INTERNAL (harness↔CP codec + the node-facing fleet socket), not a
+  customer surface. So `IntentResult` is the paired result type for a published intent type, declared and
+  never attached.
+
+⭐ THE IMPACT IS NOT UNIFORM ACROSS SDKs, which is what makes this actionable. The **Python** SDK emits a
+model class per component — `_generated/models.py` carries `IntentResult`, `PaginationQuery`,
+`AccountMeResponse` and the rest — while **TypeScript and Go emit none of them**. So a Python customer can
+import `IntentResult`, and no API call in the product can ever produce one.
+
+⭐⭐ THE OWNER'S CALL IS NOW NARROW: do recipes return intent results to customers? If YES, `IntentResult`
+is a documentation gap and the fix is to attach it to the operation that returns it. If NO, it is dead and
+should be deleted along with the two query groupings — 3 components, zero contract change, the only
+consumer impact being a Python class nobody could meaningfully have used. The 36 duplicates are a separate,
+lower-stakes question (`$ref` for named SDK types vs leave inline) that does not need answering first.
+
+BOUNDED: measured against the sdk-python spec only. If the TS/Go specs are generated separately rather
+than from this file, their orphan sets are not covered by this count and I have not checked.
