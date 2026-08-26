@@ -227,7 +227,7 @@ describe('W454.B packages/webhook-delivery/src/in-memory.ts content parity', () 
   // webhook-worker.ts", and the arm pinning that claim asserts the COMMENT text,
   // so the numbers could part without a word. They agree today; this is what
   // keeps them agreeing. Values are read out of both files, never restated here.
-  it('CRITICAL the retry schedule and its bounds equal the server worker they claim to mirror. Delivery timing is customer-visible and split across two implementations; a copy that drifts retries on a different curve than the one the docs describe.', () => {
+  it('CRITICAL the retry schedule and its bounds equal the server worker they claim to mirror. Delivery timing is customer-visible and implemented in more than one place; a copy that drifts retries on a different curve than the one the docs describe.', () => {
     const worker = read(resolve(REPO_ROOT, 'apps/server/src/services/webhook-worker.ts'));
     const table = (src: string, where: string): string => {
       const m = /BACKOFF_MS_BY_ATTEMPT: Record<number, number> = \{(.*?)\}/s.exec(src);

@@ -9906,3 +9906,29 @@ byte-identically; `it(` 20 to 22 across V-1718 and this entry; tsc clean; 22 tes
 worth carrying: the fix for a hand-maintained mirror is not to check it once but to make the ORIGINAL
 the thing the test reads, so the next divergence fails on the day it is written rather than six weeks
 later in an audit.
+
+## V-1720 — the arm I wrote to stop a frozen claim froze one in its own title
+
+2026-08-26. The V-1719 arm's title read that delivery timing is "split across two implementations".
+`a-parity-pin-cannot-freeze-a-claim-that-expires` went red on the next full run: 91 pin files freeze a
+hand-maintained count against a ceiling of 90 that may only fall. The offending phrase is verbatim one
+of that guard's own worked examples of the defect, sitting in the header six lines above the pattern
+that caught it.
+
+Not a false positive and worth recording as mine rather than quietly reworded: a count in prose is
+wrong on the next change, and "two implementations" becomes false the day a third appears — which, in
+a file whose entire subject is a copy of another file, is exactly the change to expect. Reworded to
+"implemented in more than one place", which says the same thing and cannot go stale. Post-condition:
+no line in the file matches `HAND_MAINTAINED_COUNT`.
+
+⭐ The uncomfortable symmetry is the point. Three arms added tonight exist because a guard asserted a
+property its own text could not support, and the fourth did the same thing in its title while making
+that argument. The ratchet caught in one run what six weeks of review had not caught in the credential
+mirror, because it DERIVES its number from the tree instead of restating it — which is the property
+every arm in V-1716 through V-1719 was added to give something else.
+
+⚠️ Separately, `proxy-connectivity-probe` failed one run and passed the next on a timing assertion
+("expected 560 to be less than 520") while two suites were live on the machine. Recorded as observed,
+attributed to load rather than to a change, and NOT investigated further here — a deadline test that
+fails only under a concurrent suite is a flake report, and asserting more than that from two runs would
+be the derivation this log keeps warning about.
