@@ -12955,3 +12955,38 @@ a snapshot keyed by full path.
 
 BOUNDED: the JSON branch is asserted directly; the CSV branch shares the same `truncated` value and its
 header is asserted, but no arm parses a 10,000-row CSV body.
+
+## V-1793b — the published contract already specified the correct behaviour; the code implemented half of it
+
+Addendum to V-1793, and it changes what the defect WAS. I went looking for customer-facing copy to
+correct, on the assumption that documentation describing `truncated` would now be wrong. It is not.
+
+`apps/docs/src/pages/api/audit-log.md`, the `api-types` JSDoc and the TypeScript SDK all say the same
+thing, and all three say it correctly:
+
+> The `truncated` flag is `true` when the row count hit the 10,000-row ceiling **and older entries
+> weren't included.**
+
+⭐ THAT IS A CONJUNCTION, AND THE CODE IMPLEMENTED ONLY ITS FIRST HALF. At exactly the cap the row count
+did hit the ceiling and older entries WERE all included, so the documented rule already evaluates to
+false. The contract was written correctly; `all.length >= EXPORT_MAX_ROWS` dropped the second conjunct.
+So this was never a design ambiguity to be resolved — it was an implementation that disagreed with its
+own published specification, and no doc, SDK or dist change is needed.
+
+⛔ AND THE CROSS-SOURCE INVARIANT HELD BOTH STATEMENTS WITHOUT COMPARING THEM.
+`audit-log-export-10k-ceiling-cross-source-invariant.test.ts` pins the code's rule
+(`const truncated = all.length >= EXPORT_MAX_ROWS;`) three lines above pinning the docs' conjunction
+("the row count hit the 10,000-row ceiling and older entries weren't included"). **Two contradictory
+statements, frozen side by side in one file whose entire purpose is cross-source agreement.** Each pin
+was faithful to its own source, which is exactly how the pair survived: a parity test proves two texts
+have not CHANGED, never that they AGREE.
+
+⛔ MY ENUMERATION WAS INCOMPLETE AND THE FULL SUITE CAUGHT IT. I updated two pins and shipped; the full
+run then failed on a third, in this file. My search had used ONE pattern — the header name
+`export-truncated` — and this file never spells that string (0 occurrences; it says `truncated`, 5). The
+standing rule is to enumerate every frozen occurrence with BOTH patterns and I used one. This is the
+second lesson working as intended: the post-condition (a full run, no occurrence remains) caught what
+the derivation (my grep, believed complete) missed.
+
+BOUNDED: surfaces asserting the phrase "row count hit" were enumerated across `apps`, `docs` and
+`packages` — 3 source files and 5 pinning tests, plus build artifacts under `dist/` that regenerate.

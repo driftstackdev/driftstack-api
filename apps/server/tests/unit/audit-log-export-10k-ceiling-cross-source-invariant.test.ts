@@ -56,8 +56,12 @@ describe('audit-log export 10k-row ceiling cross-source invariant', () => {
     expect(route).toMatch(/while \(all\.length < EXPORT_MAX_ROWS\) \{/);
   });
 
-  it('routes/account-audit sets truncated flag when row-count hits the cap', () => {
-    expect(route).toMatch(/const truncated = all\.length >= EXPORT_MAX_ROWS;/);
+  // V-1793 — the flag is no longer derived from the row count. 10,000 divides
+  // exactly by the 200-row page size, so a complete export AT the cap and a
+  // truncated one carry the same length; only the loop's exit distinguishes them.
+  it('routes/account-audit derives truncated from WHICH loop exit was taken, not the row count', () => {
+    expect(route).toMatch(/const truncated = !exhausted;/);
+    expect(route).toMatch(/exhausted = true;/);
   });
 
   it("docs/api/audit-log.md customer copy claims 'Cap: 10,000 rows per file.' + 'truncated flag is true when the row count hit the 10,000-row' — pinned so the customer-facing claim matches the server-side EXPORT_MAX_ROWS constant", () => {
