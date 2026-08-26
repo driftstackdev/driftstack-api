@@ -14180,3 +14180,53 @@ looking like a cross-account guard.
 BOUNDED: eleven repos measured of 23 carrying an `eq(.accountId)` predicate; 12 repos and roughly 97
 predicates remain unmeasured. "Deliberate" is judged by wording in the failing assertion, which would
 misclassify a guard phrased differently.
+
+## V-1822 — the tenant-boundary sweep is COMPLETE: 23 of 23 repos, 126 of 126 predicates, every one witnessed
+
+2026-08-26. Finished the population V-1818 opened. Every `eq(<table>.accountId, …)` predicate in every
+repo under `apps/server/src/db` was neutralised — per repo, all at once, via the prior art's
+self-comparison form — and each run measured against that repo's own test subset.
+
+profiles 22 pred → 33 arms account-audit 3 → 5
+sessions 16 → 30 billing 3 → 8
+mfa 14 → 15 email-preferences 3 → 14
+webhooks 11 → 13 rate-limit-overrides 3 → 13
+agent-sessions 8 → 14 agent-turn-receipts 2 → 1
+account-proxies 6 → 3 session-operations 2 → 1
+api-keys 6 → 26 usage 2 → 4
+recipes 6 → 5 auth 1 → 5
+auth-flows 5 → 17 bundled-llm 1 → 2
+stripe-webhooks 5 → 4 oauth-links 1 → 6
+profile-snapshots 4 → 12 scheduled-jobs 1 → 4
+team-members 1 → 2
+
+**126 predicates, 23 repos, zero unguarded.** No repo's tenant boundary can be removed without something
+failing.
+
+⭐ THAT IS A STRONGER STATEMENT THAN THE PRIOR ART COULD MAKE, and only because the prior art exists.
+`db-repo-account-ownership-boundary` was written after a sweep found 14 predicates across 2 repos with NO
+witness at all — the entire suite green. `db-repo-account-scoped-reads-boundary` closed 3 more the same
+way. Those two guards are why several of the rows above catch anything. The population is now measured end
+to end rather than sampled.
+
+⚠️ THREE THIN SPOTS, NAMED RATHER THAN AVERAGED AWAY:
+
+- `agent-turn-receipts` — 1 witness, a source-TEXT pin, and correctly so: its PRIMARY KEY is
+  `(account_id, idempotency_key)`, so the predicate is redundant and no behavioural test can distinguish
+  its presence from its absence (V-1821, where my attempt to add one was vacuous).
+- `session-operations` — 1 witness, behavioural but generically worded (`expected { … } to be null`).
+- `stripe-webhooks` — 4 witnesses, all incidental: every catcher asserts entitlement RANKING, and 0 of its
+  test files contain any cross-account phrasing (V-1820). It holds while a leaked foreign subscription
+  happens to change a tier someone pins for another reason.
+
+⛔ AND THE INSTRUMENT COST MORE THAN THE SWEEP DID. Across these turns it produced: a mutation that broke
+the module and failed 41 arms while proving nothing; a validity check contaminated by the mutation it was
+validating; a `$VAR` that zsh would not word-split, so 19 paths reached vitest as one argument and "no test
+files" read as a caught mutation; a false gap derived from guard FILENAMES; and a cross-account arm that
+passed both clean and mutated. Every finding above survived only because the failure MESSAGES were read
+rather than the counts.
+
+BOUNDED: the predicate swept is the literal `eq(<table>.accountId, <expr>)` shape under
+`apps/server/src/db/*repo*.ts`. Account scoping expressed another way — `inArray`, a raw `sql` fragment, a
+join predicate, or a filter applied in a service above the repo — is not in the 126 and is not covered by
+this zero. Each repo was run against its own name-matched subset, not the full suite.
