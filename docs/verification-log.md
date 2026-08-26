@@ -12301,3 +12301,34 @@ Marked stale rather than deleted, matching the five siblings. Comment-only, `tsc
 
 BOUNDED: two-stage sweep over `apps/server/src/**.ts` with verified exit status, empty stderr, and five
 proven positive controls. A claim using none of the four temporal phrases is still outside it.
+
+## V-1777 — re-validating the session's LOAD-BEARING zeros after learning a failed grep is invisible
+
+2026-08-26. V-1776 established that ugrep prints nothing on an over-complex pattern, so an errored sweep and
+a clean tree are indistinguishable. That is retroactive: any zero this session could have been a failure.
+Rather than re-run everything, picked the zeros whose FALSENESS WOULD HAVE CHANGED A CONCLUSION.
+
+**1. The harness "CP never sends X" sweep (V-1772).** Re-run with instrumentation: exit=1, stderr=0 bytes,
+0 hits — a genuine no-match, since ugrep returns 1 for no-match and writes nothing to stderr. Control
+exercising the SAME alternation shape (`A3 handler|A1 #36|pending A1`) returns 2 files, so the pattern style
+does match in that tree. ⭐ The zero was real; the mirror-direction claim in V-1772 stands.
+
+**2. P-34's severity, which is the one that mattered.** P-34 (a page-controlled element `id` inflating
+`errorMessage`) was classified LATENT on the strength of "`DRIFTSTACK_TAP_OCCLUSION_CHECK` is enabled
+nowhere". If that grep had errored, the finding is LIVE — exactly the P-29 shape, where a negative
+downgraded a severity.
+
+Re-run: exit=0, stderr=0 bytes, 3 files mention the flag. ⭐⭐ And this time with a DISCRIMINATING control
+rather than a bare absence: `DRIFTSTACK_NAV_PAGESTATE`, which I KNOW is enabled on the box, appears in the
+OPS RECORDS — `operations/verification-log.md`, `V1-LAUNCH-LEDGER.md` — because enablement gets recorded
+there at kickstart. `DRIFTSTACK_TAP_OCCLUSION_CHECK` appears only in a source comment and a test comment,
+in no ops record at all.
+
+⭐ That converts the evidence from "I searched and did not find it" into "**the search demonstrably finds
+enabled flags, and this one is not among them**". My original P-34 check was the weak form; the classification
+was right, and the reason I had for it was not good enough. A negative that carries a severity needs a
+control that proves the search can see a positive OF THE SAME KIND.
+
+BOUNDED: re-validated two zeros — the two whose falseness would have changed a written conclusion. Other
+zero-results this session (the `scriptFailed` construction-site census, the array sweep) already carried
+same-pattern controls when run and were not re-checked. Zeros with no consequence attached were left alone.
