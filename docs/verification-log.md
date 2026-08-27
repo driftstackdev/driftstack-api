@@ -17343,3 +17343,67 @@ hashes and byte counts, not lines.** Those cannot round a one-byte difference to
 ⚠️ And the near-miss is the point: the conclusion I was about to draw was "my safety check is
 over-strict, relax it". Weakening a guard on the strength of a false negative is how a real poisoned
 index gets committed later.
+
+## V-1896 — status subscribers: an anonymous POST cannot suppress or reactivate a recipient
+
+2026-08-27. No defect. The delta since two stored audits of the public status-subscription subsystem,
+and the one property worth reading closely.
+
+**THE DELTA.** Two audits exist (2026-05-31 token security, 2026-06-07 service), and two commits have
+landed since the later one — both security-shaped: "protect subscription token URLs" and "preserve
+subscriber authority until proof". The second added a 158-line real-Postgres concurrency file, which is
+the tell that it fixed a state-transition race rather than a typo.
+
+⭐⭐ **THE AUTHORITY PROPERTY IS THE INTERESTING ONE, because the subsystem takes ANONYMOUS input.**
+Anyone can POST an email address to subscribe. So the question is what a re-subscribe does to a row
+that already exists, and the answer has two attack directions the code names itself: "anonymous POST
+must not suppress an active recipient or reactivate an unsubscribed one."
+
+- **Suppress**: if a re-subscribe reset `confirmedAt` to null, submitting a confirmed subscriber's
+  address would silently drop them back to pending — they stop receiving incident notifications, with
+  no signal to them and none to an operator.
+- **Reactivate**: if it cleared `unsubscribedAt`, submitting an unsubscribed address would start their
+  mail again against a choice they already made.
+
+✅ **BOTH ARE BLOCKED BY THE SHAPE OF THE UPSERT, and the shape is the whole fix.** The `values` clause
+— the NEW-row case — correctly sets `confirmedAt`, `unsubscribeTokenHash` and `unsubscribedAt` to null.
+The `onConflictDoUpdate` set clause touches **only** `confirmTokenHash` and `confirmExpiresAt`. A
+re-subscribe therefore refreshes the pending PROOF and nothing else; the confirmed-or-unsubscribed
+authority survives until the mailbox owner consumes that proof.
+
+⭐ **The failure mode this avoids is a natural one to write.** Reusing a single object for both clauses
+is the obvious implementation and reads as correct — the two clauses look like they should agree. They
+must not: one describes a row that does not exist yet, the other describes what an existing row is
+allowed to lose.
+
+⚠️ BOUNDARY: this covers the re-subscribe transition and the two commits since the 2026-06-07 audit. The
+confirm/unsubscribe token security was the 2026-05-31 audit's subject and those commits did not touch
+it; the LOW dead-branch item that audit recorded in `adminForceSubscribe` was not re-examined here.
+
+## V-1897 — the flake hunted: four greens, one red, and a frequency bound instead of a name
+
+2026-08-27. No product defect found. V-1894's unexplained failure pursued rather than filed.
+
+**THE HUNT.** This repo treats flakes as defects, so the red at `bc576990e` — `1 failed | 3227 passed`,
+no identity, because my own filter had discarded the FAIL lines — was worth chasing. Three further full
+runs at `79eeea81f`, each capturing complete output to its own file: **3228 passed, 3228 passed, 3228
+passed.** With the immediate re-run that is **four consecutive greens against one red.**
+
+⭐ **WHAT THAT BUYS, stated precisely because it is less than a name:** the failure did not reproduce in
+four attempts, which bounds it below roughly one run in five rather than identifying it. That is a
+frequency bound, not a diagnosis, and it is the most the evidence supports. The next occurrence WILL be
+identifiable — full output now goes to a file per run — so this entry exists to give that occurrence a
+first data point to join.
+
+⭐⭐ **AND THE HUNT FOUND SOMETHING ELSE ON THE WAY, which is in V-1895:** its first attempt aborted on
+the dirty-tree guard, and the abort was CORRECT — a one-byte index difference my line-diff reported as
+zero. Chasing a flake surfaced a real poisoned index that a green run would never have shown.
+
+⚠️ **STATE, recorded honestly:** one unexplained failure at `bc576990e`, not reproduced across four
+subsequent full runs, never identified, and now unidentifiable. No test is under suspicion, because
+nothing narrows it — I will not name a candidate the evidence does not support.
+
+⭐ Infrastructure note, since it bounds what any future hunt can do: `verify-suite` writes no per-file
+result artifact and the vitest config sets no retries, so a failure that is not captured at the moment
+it happens leaves nothing behind. Capturing the full stream per run is the whole mitigation available
+without changing a shared script.
