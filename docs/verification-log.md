@@ -16201,3 +16201,79 @@ then trusted the zero.
 
 ⚠️ Three corrections before this measured anything — wrong mode, unreachable subjects, an unvalidated
 zero. That is the cost of the answer, and it is worth writing down beside it.
+
+## V-1867 — correcting V-1863 and V-1865: "CI runs it" was a claim about configuration
+
+2026-08-26. No product defect. A correction to two entries published hours ago, and the sharper version
+of what they were reporting.
+
+⛔⛔ **BOTH ENTRIES READ A WORKFLOW FILE AND CALLED IT EXECUTION.** V-1863 concluded the 117 DB-gated
+files "execute on every CI run"; V-1865 concluded the e2e job "gates every push". Each was inferred
+from `ci.yml` declaring the job. Measured instead:
+
+    ci.yml triggers            push + pull_request on `main` ONLY
+    origin/main                c15f58639, last moved 2026-08-23 15:12
+    local main HEAD            e883cc24f
+    commits origin/main..HEAD  595
+    workflows with any other trigger   tag-push (gui-release, server-deploy) and dependabot PRs
+
+`main` has not moved in three days. Every non-release workflow is gated on a push to it. **So `ci.yml`
+has not run against any of the 595 commits, and the last execution of those jobs was 595 commits ago.**
+
+⭐ **THE CORRECTED CLAIM, and it is stronger than the one it replaces.** Those files were not "dark
+locally but covered in CI". They were covered in CI _as of a tree from three days ago_, and have run
+against nothing since. The nine DB-gated test files committed this session are a harder case: they do
+not exist in `origin/main` at all, so CI has never seen them under any trigger. **Today's DB-wired run
+was their first execution anywhere**, which is what V-1864 should have said and did not.
+
+⭐⭐ **THE ERROR IS THE ONE I HAVE BEEN CATALOGUING ALL DAY, AND I MADE IT WHILE WRITING ABOUT IT.**
+V-1866 exists because a structural guard's claim needed testing by execution. In the same stretch I
+read a YAML file declaring a job and reported that the job runs. A declaration that something will
+happen on a trigger is worth exactly as much as a guard asserting source shape: it describes a
+mechanism, not an event. **The question is never "is it configured", it is "did it fire, against
+what".**
+
+⚠️ **BOUNDARY, and the reason this is recorded rather than acted on.** This is an observation about the
+local repository's state, not a defect in the workflow: 595 unpushed commits on a shared tree is a
+deliberate multi-agent working arrangement, and pushing is outside what I do. What is actionable is
+narrow and mine — **stop citing CI as evidence that anything in this tree has been executed**, and run
+the gate locally with the database wired, which is now the only execution these commits get.
+
+⭐ Cheap post-condition for next time, in the spirit of preferring a post-condition to a derivation:
+`git rev-list --count origin/<branch>..HEAD` before saying "CI covers this". A non-zero count is the
+number of commits the claim does not cover.
+
+⛔⛔ **AND THE HOOKS DO NOT CLOSE THE GAP — I CHECKED, RATHER THAN ASSUMING THEY MIGHT.** Enumerating
+every automatic mechanism that could have executed these commits:
+
+- **`ci.yml`** — not run: `main` unmoved for 595 commits.
+- **`.husky/pre-push`** — never fires, for the same reason. Nothing has been pushed.
+- **`.husky/pre-commit`** — runs `lint-staged` and `npx tsc --noEmit -p "$ws/tsconfig.json"` for each
+  touched workspace. That config carries `exclude: ["dist","node_modules","tests"]`, and
+  `tsc --listFiles` puts **0 files under `tests/`** in the program. Verified two ways because a config
+  read alone is a claim about intent, not about what the compiler loaded.
+- **`.husky/commit-msg`** — message policy only.
+
+**So no automatic mechanism executes a single test in this tree.** Formatting and a src-only typecheck
+are the whole of it. Every test execution these 595 commits have received is a run someone launched by
+hand — which makes the local gate the sole verification of the work, and makes running it with the
+database wired the difference between checking 3111 files and checking 3228.
+
+⭐⭐ **AND THE GATE ITSELF NAMES WHAT IT IS NOT, which is how the last piece surfaced.** Read unfiltered,
+the run at `e883cc24f` ends:
+
+    verify-suite: OK — exit 0, no unhandled errors, full file count
+    verify-suite: this is CI job "build-test" — 4 other CI job(s) are NOT run here:
+      - e2e: 233 Playwright tests — the only ones hitting real Postgres + Redis
+      - python-sdk: 365 pytest tests + ruff/mypy
+      - go-sdk: go vet, go test, and the examples build
+      - bench-regression: perf regression check (advisory)
+
+The e2e figure matches the 233 I ran today exactly, so that job is accounted for. **The two SDK suites
+are not.** Combined with the trigger finding above, `packages/sdk-python`'s 365 pytest tests and the Go
+vet/test pass have been executed by nothing — not by the local gate, which is one CI job of five, and
+not by CI, which has not fired for 595 commits.
+
+⚠️ Stated as the boundary of this entry rather than as a result: I have not run them yet, so I claim
+only that nothing else has. Running them is the next measurement, and until it happens their state is
+unknown rather than good.
