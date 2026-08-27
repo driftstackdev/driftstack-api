@@ -15699,3 +15699,46 @@ mine today and the first I caught unprompted by anything except a method built f
 checkable target; the rest are prose my regex over-caught ("proven in production", "left to discover").
 So this is 3 delegations verified, not a sweep of delegations — and an unstated delegation, where a
 guard silently assumes another covers something, is invisible to it entirely.
+
+## V-1856 — the cross-reference graph measured, and the delegation check applied to five more
+
+2026-08-26. Extending V-1855's check class from 3 targets to the population, and bounding what it can
+and cannot say.
+
+**THE GRAPH IS INTACT.** Guard headers here cite each other constantly: **470 headers name 627
+references to other test files, and ZERO point at a file that does not exist.** (Boundary: matched on
+kebab-case basenames appearing in the first 80 lines and resolved against the real test roster; a
+reference written some other way is not counted.) No dangling pointers — which is worth knowing
+because a citation to a deleted guard reads exactly like live coverage.
+
+⛔ **BUT EXISTENCE IS NOT DELIVERY, which is the whole point of V-1855.** Narrowing to references that
+CLAIM coverage ("covered by", "pinned by", "proven in", "guarded by") gives **29**, and reading them
+shows the set mixes two kinds that must not be conflated:
+
+- **DELEGATIONS** — "correctness is covered by X" — checkable, and the subject of V-1855.
+- **DISTINCTIONS** — naming adjacent coverage to say what this guard ADDS. `no-response-leaks-a-credential`
+  is the model: "The redaction work in this repo covers LOGS ... and ERROR bodies ... Nothing swept the
+  thing customers actually receive: 2xx response bodies." That is not a delegation, it is a gap being
+  closed, and my classifier caught it as one.
+
+**VERIFIED DELIVERY on the delegations that name a target:** `every-lifecycle-email-is-send-once` →
+`db-stripe-event-idempotency-drizzle:106` asserts the replay "must lose, not raise" ✓ ·
+`ssrf-guarded-fetch` → `webhook-target-guard`, whose arms reject non-https, URL userinfo, localhost,
+IPv4 private/loopback/link-local, IPv6 ULA and IPv4-mapped-IPv6 smuggling ✓ ·
+`customer-scope-refusal-coverage` ↔ `admin-scope-refusal-coverage`, structurally symmetric — pinned
+roster, non-vacuity arm, and an insufficient-key check driven through the REAL `scopesSatisfy`
+predicate ✓. The one that did NOT deliver was mine, corrected in V-1855.
+
+⭐⭐ **AND FOLLOWING A STATED BLIND SPOT PAID AGAIN, then closed cleanly.**
+`customer-scope-refusal-coverage` declares "this roster does NOT reach scope gates that live in the
+SERVICE layer" and pins webhooks as the worked example — webhook routes carry no route-file gate, so
+the check lives in `services/webhooks.ts`. ⛔ Its arm is a TEXT PIN
+(`/throwIfMissingScope\(ctx, 'read:webhooks'\)/.test(svc)`), which is precisely the shape behind nine
+findings today. Checked rather than assumed: `webhooks.test.ts:248` drives a real request with a
+`read:sessions` key and asserts **403 — "read:sessions does NOT satisfy read:webhooks"**, and lines
+135/146 cover the `account_owner` write gate in both directions. Both pinned strings have behavioural
+arms. Structural pin plus behavioural arm elsewhere — the same architecture, working.
+
+⚠️ WHAT THIS DOES NOT ESTABLISH: 627 references were checked for EXISTENCE, not for delivery. Only 5
+delegations have been read semantically. An unstated delegation — a guard silently assuming another
+covers something — is invisible to both passes, and is the residual risk this measurement leaves.
