@@ -16959,3 +16959,36 @@ time this week a candidate resolved into one.
 schema, not in the redactor. Any future path that puts an unvalidated URL-ish string into a client
 error or a log — one not sitting behind `z.string().url()` — is exposed to exactly the probe above.
 The two call sites that exist today (`services/webhooks.ts`, `drivers/mock.ts`) are both schema-gated.
+
+## V-1885 — the upstream protection V-1884 relied on is doubled and pinned, proven by removing it
+
+2026-08-27. No defect. The dependency the previous entry flagged, tested by breaking it rather than by
+grepping for a guard.
+
+**WHAT V-1884 LEFT OPEN.** It concluded the credential-echo path is unreachable because the request
+schema rejects a malformed URL before the service is entered, and named that as the boundary: the
+protection is upstream, so it holds only while the schema does. **A protection whose durability is
+asserted rather than tested is the shape this ledger keeps finding**, so it was worth breaking.
+
+⭐ **FIRST, A CORRECTION TO MY OWN FRAMING BEFORE MUTATING.** I was about to remove `.url()`. That
+would not have opened anything: the sibling `.regex(/^https:\/\//)` independently rejects a malformed
+scheme, and `.url()` independently rejects a malformed host. **Two checks, either sufficient for this
+case** — so a mutation of one would have "proven" a protection that the other was holding up. Probed
+with an otherwise-valid payload, the malformed credential URL is rejected on `url` alone and reports
+BOTH messages, "Invalid url" and "Webhook URL must use https://", which is what shows they both fire.
+
+✅ **AND THE PAIR IS PINNED.** Replacing the whole field with a bare `z.string()` reds
+`api-types-webhooks-content-parity` on the arm that pins `CreateWebhookRequest: url .refine(starts with
+https://)`. So the upstream protection cannot be simplified away silently — which is precisely the
+question V-1884 could not answer by reading.
+
+⚠️ **A PROBE THAT LOOKED LIKE A RESULT AND WAS NOT.** My first attempt reported that the mutated schema
+still rejected the malformed URL, which would have been a confusing finding. It rejected on a DIFFERENT
+field: the payload omitted a required one and used an event type I had not checked was subscribable. A
+rejection is only evidence about the field you are testing if every OTHER field is valid — established
+here by first parsing the same payload with a well-formed URL and confirming it is ACCEPTED. Without
+that control the "no" was unreadable in either direction.
+
+**Mutation safety:** snapshot proven by size and `cmp` before the edit, the file asserted to have
+actually changed, a single-path restore trap, and afterwards verified byte-identical against the
+snapshot with the tree clean against HEAD.
