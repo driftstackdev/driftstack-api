@@ -13189,3 +13189,33 @@ from a search whose positive control has not been run is not a measurement.
 
 **No code changed.** Recorded so the scope question is asked once and answered, rather than re-derived the
 next time a directory-scoped guard looks suspicious.
+
+## V-2009 — the poison-key class enumerated and closed: one member, already fixed (2026-08-27)
+
+2026-08-27. V-2007 fixed a sweeper whose loose key pattern could feed a malformed id to a `uuid` column,
+where the throw is swallowed by design and every subsequent tick fails identically — a permanent, silent
+stall. The question that leaves open is whether the repo has other sweepers shaped that way.
+
+**Boundary: the 12 self-arming sweepers and reapers under `apps/server/src/services`, all of which catch a
+per-tick failure and re-arm.** Catch-and-re-arm alone is not the defect — it is the correct design. The
+defect needs four things together:
+
+```
+1  input that originates OUTSIDE the database          (a listing, a filename, a fetch)
+2  a parse that can admit a value the DB will reject   (a pattern looser than the column)
+3  that value fed to a typed column in a BATCH query   (one bad element aborts the whole tick)
+4  the throw swallowed + the chain re-armed            (so the stall is silent and permanent)
+```
+
+All 12 have (4). **Four touch an external source**: `profile-blob-orphan-sweeper`,
+`account-deletion-purge-sweeper`, `profile-trash-purge-sweeper`, `scheduled-jobs-prune-sweeper`. **Exactly
+one has (2)** — the sweeper V-2007 fixed, and it was the only one parsing a key at all.
+
+⛔ **Checked the shape, not the token.** "Parses a key with a regex" would have been a token search, so the
+other three were also swept for `split('/')`, `.slice(`, `.replace(` and a `.key` read — the ways an id can
+be derived from an external name without a regex. **Zero hits**, and confirmed by reading rather than by
+the zero: `profile-trash-purge-sweeper` runs `for (const id of purgedIds) r2.deleteObject(profileSealedBlobKey(id))`.
+That is the safe direction — a database id becomes a key — and never the reverse.
+
+**The class has one member and it is fixed.** Recorded so the next person reading V-2007 does not have to
+re-derive whether it was an instance or a category.
