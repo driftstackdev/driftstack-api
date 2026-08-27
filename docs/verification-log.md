@@ -13715,3 +13715,40 @@ files walked (floor 300), 14 prefixes (floor 10), 201 account bucket-key call si
 
 `EXPECTED_TEST_FILES` 3065 → 3066 and `EXPECTED_TEST_FILES_ALL` 3241 → 3242 for the one file added; the
 two pins that reference those constants name them rather than their values and still pass.
+
+## V-2019 — the token bucket has no memory-vs-Redis seam, and the one untested shape is the one now prevented structurally (2026-08-27)
+
+2026-08-27. V-2018 guarded the key-collision class statically. The obvious follow-up is whether the
+MECHANISM behind the incident is testable at all where the tests actually run — the V-1576 question, asked
+of the rate limiter.
+
+**No seam here, and the reason is that both implementations spell the clamp identically.**
+
+```
+redis-rate-limit-store.ts  (Lua)   local refilled = math.min(capacity, tokens + elapsed * refill_per_sec)
+memory-rate-limit-store.ts         const refilled = Math.min(capacity, existing.tokens + refill)
+```
+
+Both clamp to the capacity passed IN, so a writer arriving with a lower capacity truncates the bucket in
+**either** store. **A test against the in-memory store can reproduce the incident** — which is the opposite
+of the profile-route situation V-1576 measured, where the in-memory double answers 200 for input that
+would 500 against Postgres. The difference is that this double implements the same arithmetic rather than
+standing in for a database.
+
+**And the Lua script is tested against real Redis**, not just replicated in JS:
+`redis-rate-limit-lua-token-bucket.test.ts` opens with _"CRITICAL redis is reachable, so the arms below
+cannot pass vacuously"_ — a reachability control before the behavioural arms — then covers a fresh key
+starting full, draining to exactly capacity, spending the LAST token (pinning that the allow branch is
+`>= cost`, not `> cost`), refilling in proportion to elapsed time and never past capacity, and **100
+concurrent consumes on one key yielding exactly capacity successes**.
+
+⛔ **One shape is absent, and naming it is the point.** Every Lua arm uses a SINGLE capacity. The incident
+was two writers with DIFFERENT capacities on one key, and no behavioural test drives that — which is
+consistent, because after V-2018 the situation is prevented structurally rather than detected at runtime:
+the namespaces are disjoint and a new consume site has to be acknowledged. **A property enforced by
+construction does not need a behavioural test, but it does need someone to have noticed that is why the
+test is missing** — otherwise the next reader adds one and concludes the gap was an oversight.
+
+**No code changed.** Recorded so the "is the memory store a faithful double?" question is answered once for
+this subsystem, with its answer (yes, for the arithmetic) and its boundary (the two-capacity case is
+structural, not behavioural).
