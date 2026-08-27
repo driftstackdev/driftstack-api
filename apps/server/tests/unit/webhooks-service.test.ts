@@ -554,3 +554,61 @@ describe('V-553.B-14 WebhooksService.listWithCounts', () => {
     expect(result).toHaveLength(1);
   });
 });
+
+// V-1858 — the two customer webhook gates whose only witness was a source-text pin.
+//
+// `services/webhooks.ts` carries 10 CUSTOMER scope gates and NOT ONE webhook route
+// carries `requireScope` — every one is `preHandler: [requireAuth, rateLimit]` — so
+// the service gate is the ONLY authorization on these paths, and they are correctly
+// absent from the route-level refusal roster because there is no route gate to
+// enumerate.
+//
+// MEASURED before writing: weakening all 10 to a scope every fixture holds failed 34
+// tests across 6 files — but for `listDeliveries` and `replayDeliveryAsCustomer` the
+// ONLY failures were source-text pins (`docs-reference-scopes-content-parity` matches
+// the gate's text, `services-webhooks-content-parity` matches the replay body). Eight
+// of the ten already have a rejects/allows pair in this file; these two did not.
+//
+// `webhooks-customer-replay-fenced-delivery` does drive the replay method, but for
+// FENCE semantics with a scope-rich context, so it cannot see the gate — the mutation
+// left it green.
+//
+// 'gui_control' is the narrow scope this file already uses for exactly this: it is
+// real, satisfies neither bare 'read' nor the broad-satisfies-granular rule, and so
+// must not reach a webhook surface.
+describe('V-1858 WebhooksService.listDeliveries + replayDeliveryAsCustomer scope gates', () => {
+  it('CRITICAL listDeliveries rejects a caller without read:webhooks. No route above it checks scope, so this gate is the whole authorization on GET /v1/webhooks/:id/deliveries — a delivery list carries request/response metadata for every event the endpoint received.', async () => {
+    const { repo } = makeRepo([baseRow()]);
+    const svc = new WebhooksService(repo);
+    await expect(
+      svc.listDeliveries(ctxWith(['gui_control']), 'wh_1', { limit: 10 }),
+    ).rejects.toThrow(/read:webhooks/);
+  });
+
+  it('allows a caller holding the granular read:webhooks scope — without this the refusal above is satisfied by a method that rejects everyone', async () => {
+    const { repo } = makeRepo([baseRow()]);
+    const svc = new WebhooksService(repo);
+    const page = await svc.listDeliveries(ctxWith(['read:webhooks']), 'wh_1', { limit: 10 });
+    expect(page.items).toEqual([]);
+  });
+
+  it('CRITICAL replayDeliveryAsCustomer rejects a caller without account_owner. Replay re-sends a stored delivery to the endpoint URL, so a read-only key reaching it turns a read credential into an outbound-send credential.', async () => {
+    const { repo } = makeRepo([baseRow()]);
+    const svc = new WebhooksService(repo);
+    await expect(
+      svc.replayDeliveryAsCustomer(ctxWith(['read', 'read:webhooks']), 'wdl_1', {}),
+    ).rejects.toThrow(/account_owner/);
+  });
+
+  it('an account_owner caller gets PAST the scope gate — it may then fail on the delivery lookup, which is the point: the refusal above is the scope and not the fixture', async () => {
+    const { repo } = makeRepo([baseRow()]);
+    const svc = new WebhooksService(repo);
+    const err: unknown = await svc
+      .replayDeliveryAsCustomer(ctxWith(['account_owner']), 'wdl_1', {})
+      .then(() => null)
+      .catch((e: unknown) => e);
+    expect(String(err), 'a properly-scoped caller was still refused on scope').not.toMatch(
+      /account_owner/,
+    );
+  });
+});

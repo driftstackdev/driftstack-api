@@ -15783,3 +15783,50 @@ verified byte-identical against a path-keyed snapshot, tree clean against HEAD.
 isolable — a grouped mutation of the 29 `driftstack_internal_admin` sites would confirm the class but
 not attribute a survivor to a site. The corrected rule above is what generalises; the coverage result
 is about two gates.
+
+## V-1858 — two customer webhook gates whose only witness was a source-text pin
+
+2026-08-26. First real finding since the db-layer arc, reached by following the layered-gate rule
+(V-1857) into a partition of the 47 service-layer scope gates.
+
+**THE PARTITION.** Which service gates have a route-level gate above them, and which are the only
+enforcement? ⛔ My first pass was WRONG — it matched service name to same-named route file and read
+`webhooks` as ungated everywhere; `admin-webhooks.ts` carries 5 `requireScope('driftstack_internal_admin')`,
+so the 7 STAFF gates are layered. Third same-name-different-file error of the day.
+
+⭐ Corrected: **`services/webhooks.ts` carries 10 CUSTOMER gates (4 `read:webhooks`, 6 `account_owner`)
+and NOT ONE webhook route carries `requireScope`** — every route is
+`preHandler: [app.requireAuth, app.rateLimit('global')]`. So on these paths the service gate is the
+WHOLE authorization, and they are correctly absent from the route-level refusal roster because there
+is no route gate to enumerate. That is the blind spot `customer-scope-refusal-coverage` names, with
+webhooks as its own worked example.
+
+**MEASURED, then corrected mid-flight.** Weakening all 10 to a scope every fixture holds failed **34
+tests across 6 files**. ⛔ I had predicted ~5 and was about to file "five customer-facing gates have no
+behavioural witness" — wrong: `webhooks-service.test.ts` carries a rejects/allows PAIR for 8 of the 10,
+directly at the service level, which is where a service-layer gate belongs. I had looked only at HTTP
+arms in `webhooks.test.ts`. **Third instance today of "the tests live somewhere the measurement did not
+look"** (after the api-types density and the SDK coverage scope).
+
+⭐⭐ **THE TWO THAT SURVIVED, and they are the finding.** For `listDeliveries` (`read:webhooks`) and
+`replayDeliveryAsCustomer` (`account_owner`) the only failures were SOURCE-TEXT PINS —
+`docs-reference-scopes-content-parity` matching the gate's text and `services-webhooks-content-parity`
+matching the replay body. No behavioural arm named either.
+`webhooks-customer-replay-fenced-delivery` does drive the replay method, but for FENCE semantics with
+a scope-rich context, so it cannot see the gate and the mutation left it green.
+
+**FIXED** — four arms in `webhooks-service.test.ts` (existing file, no ratchet movement), copying the
+file's own idiom: `gui_control` as the narrow scope that satisfies neither bare `read` nor
+broad-satisfies-granular. `it(` 32 → 36, tsc 0, 36/36 green.
+
+⭐⭐ MUTATION-PROVED PER GATE, by line number rather than by anchor string — those scope strings occur
+4 and 6 times, so no unique anchor exists (V-1840's lesson). Weakening ONLY line 725 fails the
+`listDeliveries` refusal ("expected /read:webhooks/ but got 'This action requires the read scope'") AND
+its positive, because a `read:webhooks`-only credential stops satisfying a gate changed to `read` —
+the layered-gate rule of V-1857 running in reverse. Weakening ONLY line 765 fails the replay refusal
+with "got 'Webhook delivery wdl_1 not found'", the gate having stopped refusing so execution fell
+through to the lookup. Restore byte-identical both times.
+
+⚠️ FRAMING, because it matters: both gates are PRESENT and CORRECT in source. This is a coverage gap,
+not a live exposure — nothing would have noticed if they were removed, which is the same sentence as
+the nine db-layer findings today.
