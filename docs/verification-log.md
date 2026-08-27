@@ -19559,3 +19559,35 @@ release, not release → log.
 **Boundary:** one green run on this machine at this commit with no peer suite competing; it validates
 V-1938 and says nothing about CI, where the contention profile is different and unmeasured. Ratchets
 unchanged at 3062/3238 and matched exactly by the collected count.
+
+## V-1944 — /metrics is sound; the defect was in the note that sent me there (2026-08-27)
+
+Audited the `/metrics` scrape route end to end after the ingress work, on the theory that a layer
+recorded as inert in prod would have an unrehearsed on-path. **It does not, and the route is sound.**
+
+`registerMetricsRoutes` is gated on `deps.metricsRegistry !== undefined` (`lib/app.ts:1259`), and the
+registry is created only when a token is configured (`bootstrap.ts:587`, validated `.min(16)` at
+`config.ts:331`). The route's own posture is fail-closed and does not depend on that gate holding: a
+null-or-empty token throws a typed `FeatureUnavailableError` rather than serving counters, and the
+authorization compare length-guards before `timingSafeEqual` so a wrong-length header yields a uniform
+unauthorized outcome instead of throwing. All four arms are witnessed in
+`tests/integration/metrics-scrape-end-to-end.test.ts` — no header → 401, wrong Bearer → 401,
+unconfigured → 503, correct → 200 — with the challenge header separately pinned by the RFC 7235 guard.
+The ON path is exercised by 21 files that construct a registry and by `buildTestApp`. No action.
+
+**The finding is that three of the four line citations in my own note were stale, and two of them now
+land on valid-looking but unrelated code.** `app.ts:906` resolves today to `'x-ratelimit-bucket'`;
+`config.ts:216` to a bare `.positive()`. Neither errors when followed — they read as ordinary code and
+quietly answer a different question, which is strictly worse than a citation that resolves to nothing,
+because nothing is what triggers doubt. The file had also moved (`app.ts` → `lib/app.ts`), so the
+obvious grep for the gate returned empty and briefly read as "the gate was removed".
+
+**Two lexical wrappings of one citation defeated the first fix.** The repair keyed on backtick-wrapped
+citations and corrected every one — while an unwrapped `bootstrap.ts:289` in the note's own description
+field survived untouched, and only a post-condition sweep over _every_ `file.ts:N` occurrence caught it.
+The general form is already recorded (sweep the shape, not the token); what is new is that it applies to
+prose citations exactly as it applies to source, and that the description field is the easiest place to
+miss because it restates the body in a different style.
+
+Corrected all three, stamped the note with the code-side re-verification, and left the ops half open:
+whether the scrape token is set in prod is an owner/ops call and outside what I verify from here.
