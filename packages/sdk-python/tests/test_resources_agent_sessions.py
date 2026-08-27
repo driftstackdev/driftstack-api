@@ -415,3 +415,116 @@ async def test_async_message_empty_byok_omits_header() -> None:
         assert route.called
         sent_headers = route.calls.last.request.headers
         assert "x-byok-anthropic-api-key" not in sent_headers
+
+
+# ── Pagination. `list` and `iterate` had no arms at all: the tests above cover
+# ── create, get, message, close, takeover, handback and livekit_token, so nothing
+# ── asserted that a caller's limit or cursor ever reached the wire. The TS SDK
+# ── carried the identical gap (V-1974).
+
+
+def test_sync_list_with_no_arguments_sends_no_query() -> None:
+    """The absent direction. `list()` must put no key on the URL — `?limit=None`
+    would be a guaranteed 400."""
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.get("/v1/agent-sessions").mock(
+            return_value=httpx.Response(
+                200, json={"data": [], "has_more": False, "next_cursor": None}
+            )
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            client.agent_sessions.list()
+        assert route.called
+        assert dict(route.calls[0].request.url.params) == {}
+
+
+def test_sync_list_forwards_limit_alone_without_inventing_a_cursor() -> None:
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.get("/v1/agent-sessions").mock(
+            return_value=httpx.Response(
+                200, json={"data": [], "has_more": False, "next_cursor": None}
+            )
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            client.agent_sessions.list(limit=25)
+        assert dict(route.calls[0].request.url.params) == {"limit": "25"}
+
+
+def test_sync_list_forwards_cursor_alone_without_inventing_a_limit() -> None:
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.get("/v1/agent-sessions").mock(
+            return_value=httpx.Response(
+                200, json={"data": [], "has_more": False, "next_cursor": None}
+            )
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            client.agent_sessions.list(cursor="cur_2")
+        assert dict(route.calls[0].request.url.params) == {"cursor": "cur_2"}
+
+
+def test_sync_iterate_threads_next_cursor_into_the_following_page() -> None:
+    """Page 2 must carry the cursor page 1 returned. Drop that handoff and the
+    walk either repeats page 1 forever or stops early — a count of yielded items
+    cannot tell the difference."""
+    page_1 = {
+        "data": [dict(SESSION_ENVELOPE, id="agt_1")],
+        "has_more": True,
+        "next_cursor": "cur_2",
+    }
+    page_2 = {
+        "data": [dict(SESSION_ENVELOPE, id="agt_2")],
+        "has_more": False,
+        "next_cursor": None,
+    }
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.get("/v1/agent-sessions").mock(
+            side_effect=[
+                httpx.Response(200, json=page_1),
+                httpx.Response(200, json=page_2),
+            ]
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            out = [s["id"] for s in client.agent_sessions.iterate(limit=1)]
+        assert out == ["agt_1", "agt_2"]
+        assert dict(route.calls[0].request.url.params) == {"limit": "1"}
+        assert dict(route.calls[1].request.url.params) == {"limit": "1", "cursor": "cur_2"}
+
+
+@pytest.mark.asyncio
+async def test_async_list_forwards_cursor_alone() -> None:
+    """The async list is a separate method and therefore a separate chance to omit
+    the query."""
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.get("/v1/agent-sessions").mock(
+            return_value=httpx.Response(
+                200, json={"data": [], "has_more": False, "next_cursor": None}
+            )
+        )
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            await client.agent_sessions.list(cursor="cur_2")
+        assert dict(route.calls[0].request.url.params) == {"cursor": "cur_2"}
+
+
+@pytest.mark.asyncio
+async def test_async_iterate_threads_next_cursor() -> None:
+    page_1 = {
+        "data": [dict(SESSION_ENVELOPE, id="agt_1")],
+        "has_more": True,
+        "next_cursor": "cur_2",
+    }
+    page_2 = {
+        "data": [dict(SESSION_ENVELOPE, id="agt_2")],
+        "has_more": False,
+        "next_cursor": None,
+    }
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.get("/v1/agent-sessions").mock(
+            side_effect=[
+                httpx.Response(200, json=page_1),
+                httpx.Response(200, json=page_2),
+            ]
+        )
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            out = [s["id"] async for s in client.agent_sessions.iterate(limit=1)]
+        assert out == ["agt_1", "agt_2"]
+        assert dict(route.calls[1].request.url.params) == {"limit": "1", "cursor": "cur_2"}

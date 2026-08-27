@@ -500,3 +500,91 @@ func TestAgentSessions_LivekitToken_URLEscapes(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Pagination. List and Iterate had no arms at all: the tests above cover Create,
+// Get, Message, Close, Takeover, Handback and LivekitToken, so nothing asserted
+// that a caller's Limit or Cursor ever reached the wire. The TS and Python SDKs
+// carried the identical gap (V-1974, V-1976).
+func TestAgentSessions_List_ForwardsPaginationOnlyWhenSet(t *testing.T) {
+	t.Parallel()
+	var rawQuery string
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/agent-sessions" || r.Method != "GET" {
+			t.Errorf("unexpected: %s %s", r.Method, r.URL.Path)
+		}
+		rawQuery = r.URL.RawQuery
+		w.Header().Set("content-type", "application/json")
+		_ = json.NewEncoder(w).Encode(AgentSessionsListPage{Data: []AgentSession{}, HasMore: false})
+	})
+
+	// The zero query: Go treats Limit 0 and Cursor "" as unset, so NOTHING may
+	// reach the URL. A stray "limit=0" would be a different request.
+	if _, err := client.AgentSessions.List(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if rawQuery != "" {
+		t.Errorf("nil query should send no params, got %q", rawQuery)
+	}
+
+	if _, err := client.AgentSessions.List(context.Background(), &ListAgentSessionsQuery{Limit: 25}); err != nil {
+		t.Fatal(err)
+	}
+	if rawQuery != "limit=25" {
+		t.Errorf("limit alone: got %q, want %q", rawQuery, "limit=25")
+	}
+
+	if _, err := client.AgentSessions.List(context.Background(), &ListAgentSessionsQuery{Cursor: "cur_2"}); err != nil {
+		t.Fatal(err)
+	}
+	if rawQuery != "cursor=cur_2" {
+		t.Errorf("cursor alone: got %q, want %q", rawQuery, "cursor=cur_2")
+	}
+}
+
+// The load-bearing one: page 2 must carry the cursor page 1 returned. Drop that
+// handoff and the walk either repeats page 1 forever or stops early — neither is
+// visible to a count of yielded items alone.
+func TestAgentSessions_Iterate_ThreadsNextCursor(t *testing.T) {
+	t.Parallel()
+	var seenCursor []string
+	cur2 := "cur_2"
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/agent-sessions" || r.Method != "GET" {
+			t.Errorf("unexpected: %s %s", r.Method, r.URL.Path)
+		}
+		seenCursor = append(seenCursor, r.URL.Query().Get("cursor"))
+		w.Header().Set("content-type", "application/json")
+		if r.URL.Query().Get("cursor") == "" {
+			_ = json.NewEncoder(w).Encode(AgentSessionsListPage{
+				Data:       []AgentSession{{ID: "agt_1", AccountID: "acc_1"}},
+				HasMore:    true,
+				NextCursor: &cur2,
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(AgentSessionsListPage{
+			Data:       []AgentSession{{ID: "agt_2", AccountID: "acc_1"}},
+			HasMore:    false,
+			NextCursor: nil,
+		})
+	})
+
+	var ids []string
+	err := client.AgentSessions.Iterate(
+		context.Background(),
+		&ListAgentSessionsQuery{Limit: 1},
+		func(s *AgentSession) (bool, error) {
+			ids = append(ids, s.ID)
+			return true, nil
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 2 || ids[0] != "agt_1" || ids[1] != "agt_2" {
+		t.Errorf("ids=%v", ids)
+	}
+	if len(seenCursor) != 2 || seenCursor[0] != "" || seenCursor[1] != "cur_2" {
+		t.Errorf("cursor handoff: got %v, want [\"\" \"cur_2\"]", seenCursor)
+	}
+}

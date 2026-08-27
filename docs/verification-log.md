@@ -20793,3 +20793,56 @@ That trade is still the right one, for reasons worth recording:
 ⛔ **The honest boundary: after V-1975, correctness regressions in these nine walks are caught by
 their pins; runtime regressions in them are caught by nobody.** Recorded so the next person reads a
 measured trade rather than an unqualified "free".
+
+## V-1976 — the same pagination blind spot in the other two SDKs (2026-08-27)
+
+V-1974 closed the `recipes` / `agent-sessions` query gap in the TypeScript SDK. The pagination
+contract is cross-SDK, so the obvious next question is whether Python and Go carried it too. They did.
+
+**Matrix, measured before touching anything** — does any test assert that a caller's `limit`/`cursor`
+reaches the wire?
+
+|        | recipes            | agent_sessions     |
+| ------ | ------------------ | ------------------ |
+| ts     | ✓ closed in V-1974 | ✓ closed in V-1974 |
+| python | ⛔ none            | ⛔ none            |
+| go     | ⛔ none            | ⛔ none            |
+
+⛔ **The detector that built that matrix produced a false positive first**, and it is worth recording
+because the token was the problem: a bare `limit` search "found" a hit in
+`test_resources_agent_sessions.py` that was the substring inside
+`"https://errors.driftstack.dev/rate-limited"`. Re-run with word boundaries: **zero** `\blimit\b`,
+`\bcursor\b`, `\bparams\b` in that file. Its 22 tests covered create, get, message, close, takeover,
+handback and livekit_token — precisely the shape the TS file had.
+
+⭐ **All three implementations are CORRECT; this is a coverage gap, not a live defect.** Read rather
+than assumed: Python builds `_encode_query({"limit": limit, "cursor": cursor})` which skips `None`
+(`if value is None: continue`), Go guards with `if query.Limit > 0` / `if query.Cursor != ""`, and the
+server parses via the shared `PaginationQuerySchema` with a conditional cursor forward. The chain is
+sound end to end.
+
+⛔ **A second false alarm, from my own extractor.** `_encode_query` is defined FOUR times — copied into
+`agent_sessions.py`, `recipes.py`, `profiles.py`, `profile_snapshots.py`, 14 call sites, 0 test
+references. My body-slice regex stopped only at `def`/`class`, so one copy ran on into unrelated
+constants and I printed "⛔ THEY HAVE DIVERGED". **The four bodies are byte-identical.** Extract both
+ends of a body, not just the start.
+
+⭐ Also refined honestly: Python's shared `iterate_paginated` **is** well covered (26 direct test
+references, and it guards a non-advancing cursor). So the Python risk was narrower than the TS one —
+the unpinned path was `_encode_query` → URL, not the pagination loop.
+
+Arms added: python recipes 6 → 12, python agent_sessions 22 → 28, go recipes 4 → 6, go agent_sessions
++2. Both languages get the absent direction, limit-alone, cursor-alone, and a cursor-threading
+`iterate` arm; Python gets async mirrors because, as that suite's own docstring puts it, the async
+method "is a separate method and therefore a separate chance to omit the query".
+
+⭐ **Mutation-proved in both languages, and — the load-bearing half — HEAD proved blind to the same
+mutation.** Dropping `cursor` from both Python `list()` calls: 4 new tests fail, **HEAD's 6 and 22
+pass**. Removing the `q.Set("cursor", …)` from both Go `List` methods: 4 new tests fail, **HEAD's
+whole Go suite passes `ok`**. Sources restored byte-identical, confirmed by an empty `git diff`.
+
+Post-conditions: Go `go test -count=1` (cache-busted, because the first restore run reported
+`(cached)` and a cached pass is not a measurement) and `go vet` both clean; Python **377 passed, 9
+skipped** (was 365), ruff check and format clean, mypy clean. ⭐ And ruff's scope was proved rather
+than trusted: a deliberately misformatted function in one of the two files is caught with
+`Would reformat`, so "already formatted" is a real pass and not a silent exclusion.

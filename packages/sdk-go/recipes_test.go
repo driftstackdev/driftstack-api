@@ -130,3 +130,96 @@ func TestRecipes_Suggest_URLEncodesTheSessionID(t *testing.T) {
 		t.Errorf("intent_count=%d", got.IntentCount)
 	}
 }
+
+// Pagination. List and Iterate had no arms at all: the tests above cover Create
+// and Suggest only, so nothing asserted that a caller's Limit or Cursor ever
+// reached the wire. The TS SDK carried the identical gap (V-1974), and the
+// cross-SDK pagination contract is exactly the kind that drifts silently when
+// only one language pins it.
+func TestRecipes_List_ForwardsPaginationOnlyWhenSet(t *testing.T) {
+	t.Parallel()
+	var rawQuery string
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/recipes" || r.Method != "GET" {
+			t.Errorf("unexpected: %s %s", r.Method, r.URL.Path)
+		}
+		rawQuery = r.URL.RawQuery
+		w.Header().Set("content-type", "application/json")
+		_ = json.NewEncoder(w).Encode(RecipesListPage{Data: []Recipe{}, HasMore: false})
+	})
+
+	// The zero query: Go treats Limit 0 and Cursor "" as unset, so NOTHING may
+	// reach the URL. A stray "limit=0" would be a different request, and the
+	// server rejects a zero limit.
+	if _, err := client.Recipes.List(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if rawQuery != "" {
+		t.Errorf("nil query should send no params, got %q", rawQuery)
+	}
+
+	// Limit alone must not invent a cursor key.
+	if _, err := client.Recipes.List(context.Background(), &ListRecipesQuery{Limit: 25}); err != nil {
+		t.Fatal(err)
+	}
+	if rawQuery != "limit=25" {
+		t.Errorf("limit alone: got %q, want %q", rawQuery, "limit=25")
+	}
+
+	// Cursor alone must not invent a limit key.
+	if _, err := client.Recipes.List(context.Background(), &ListRecipesQuery{Cursor: "cur_2"}); err != nil {
+		t.Fatal(err)
+	}
+	if rawQuery != "cursor=cur_2" {
+		t.Errorf("cursor alone: got %q, want %q", rawQuery, "cursor=cur_2")
+	}
+}
+
+// The load-bearing one: page 2 must carry the cursor page 1 returned. Drop that
+// handoff and the walk either repeats page 1 forever or stops early — neither is
+// visible to a count of yielded items alone.
+func TestRecipes_Iterate_ThreadsNextCursor(t *testing.T) {
+	t.Parallel()
+	var seenCursor []string
+	cur2 := "cur_2"
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/recipes" || r.Method != "GET" {
+			t.Errorf("unexpected: %s %s", r.Method, r.URL.Path)
+		}
+		seenCursor = append(seenCursor, r.URL.Query().Get("cursor"))
+		w.Header().Set("content-type", "application/json")
+		if r.URL.Query().Get("cursor") == "" {
+			_ = json.NewEncoder(w).Encode(RecipesListPage{
+				Data:       []Recipe{{ID: "rec_1", AccountID: "acc_1", Label: "a"}},
+				HasMore:    true,
+				NextCursor: &cur2,
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(RecipesListPage{
+			Data:       []Recipe{{ID: "rec_2", AccountID: "acc_1", Label: "b"}},
+			HasMore:    false,
+			NextCursor: nil,
+		})
+	})
+
+	var ids []string
+	err := client.Recipes.Iterate(
+		context.Background(),
+		&ListRecipesQuery{Limit: 1},
+		func(r *Recipe) (bool, error) {
+			ids = append(ids, r.ID)
+			return true, nil
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 2 || ids[0] != "rec_1" || ids[1] != "rec_2" {
+		t.Errorf("ids=%v", ids)
+	}
+	// Page 1 sends no cursor; page 2 must send the one page 1 returned.
+	if len(seenCursor) != 2 || seenCursor[0] != "" || seenCursor[1] != "cur_2" {
+		t.Errorf("cursor handoff: got %v, want [\"\" \"cur_2\"]", seenCursor)
+	}
+}
