@@ -171,4 +171,39 @@ describe('W443 classifyConsequentialAction', () => {
     // keyword (the accent is preserved on the other word, the keyword is intact)
     expect(classifyConsequentialAction(tap(`Buy Now (nai${acute}ve)`)).category).toBe('purchase');
   });
+
+  // ⛔ RESIDUAL, MEASURED 2026-08-27 — the one evasion class this matcher does
+  // NOT defeat. The arms above close zero-width, bidi, fullwidth and the whole
+  // Default_Ignorable set; NFKC folds none of the cross-script confusables,
+  // correctly, because a Cyrillic "у" is a distinct character rather than a
+  // compatibility variant of "y".
+  //
+  // The source comment delegates this to "the v1.1 LLM-semantic classifier".
+  // THAT CLASSIFIER DOES NOT EXIST — `classifyConsequentialAction` is the only
+  // gate wired, through `consequentialHalt` in services/agent-executor.ts. So
+  // this is uncovered rather than covered elsewhere, and the input is a label
+  // read off whatever page the agent is browsing: attacker-controlled text.
+  //
+  // These assert CURRENT behaviour so the file is green as it stands. They are
+  // the specification for the fix: fold confusables to their Latin skeleton
+  // before matching, then invert the three expectations here. Folding is safe in
+  // the direction that matters — it can only make the gate halt more often.
+  it('does NOT defeat cross-script homoglyphs — documented residual, no v1.1 classifier exists', () => {
+    expect(classifyConsequentialAction(tap('B\u0443y Now')).requiresConfirmation).toBe(false);
+    expect(classifyConsequentialAction(tap('pla\u0441e order')).requiresConfirmation).toBe(false);
+    expect(classifyConsequentialAction(tap('#b\u0443y-now')).requiresConfirmation).toBe(false);
+  });
+
+  it('CRITICAL each homoglyph string is ONE substitution from a form that DOES fire', () => {
+    // Without this the arm above could pass because the fixtures are malformed
+    // rather than because the gate misses them. A first probe of mine returned
+    // false for the ASCII control too — an all-negative result is
+    // indistinguishable from a broken fixture until a positive control runs.
+    expect(classifyConsequentialAction(tap('Buy Now')).requiresConfirmation).toBe(true);
+    expect(classifyConsequentialAction(tap('place order')).requiresConfirmation).toBe(true);
+    expect(classifyConsequentialAction(tap('#buy-now')).requiresConfirmation).toBe(true);
+    expect('B\u0443y Now'.replace('\u0443', 'u')).toBe('Buy Now');
+    expect('pla\u0441e order'.replace('\u0441', 'c')).toBe('place order');
+    expect('#b\u0443y-now'.replace('\u0443', 'u')).toBe('#buy-now');
+  });
 });

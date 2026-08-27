@@ -19878,3 +19878,51 @@ editing it; one grep would have shown the existing arm.
 genuinely zero — my 13 files already have floors or are correct as they stand. The peer applied the
 same check to their share and found **13 of 28 already floored**, so that side is 15 files rather than 28. **The remediation is roughly half what both of us estimated, and neither estimate came from
 counting the thing being remediated.**
+
+## V-1953 — one Cyrillic character evades the agent's confirmation gate (2026-08-27)
+
+Mined the source for stated gaps rather than hunting fresh, and `services/agent-consequential-action.ts`
+names one directly: **"RESIDUAL: cross-script homoglyph substitution (Cyrillic 'е' for Latin 'e') is NOT
+folded by NFKC — caught by the v1.1 LLM-semantic classifier, out of scope for this conservative v1.0
+keyword matcher."**
+
+**The delegation does not resolve. There is no v1.1 classifier** — grepping the tree, the only
+occurrences of "v1.1" are that comment. `classifyConsequentialAction` is the sole gate, wired through
+`consequentialHalt` in `services/agent-executor.ts:143` and applied at two dispatch sites. **So the
+residual is uncovered today rather than covered elsewhere**, which is a different claim from the one the
+comment makes.
+
+**Measured, with controls.** `consequentialHalt` is what stops an agent before a purchase, payment or
+account deletion to wait for human approval, and its input is a selector or value read off whatever page
+the agent is browsing — **attacker-controlled text**. `Buy Now`, `place order`, `#buy-now` and
+`complete purchase` all halt. **`Bуy Now` (U+0443), `plaсe order` (U+0441) and `#bуy-now` do not** —
+each differs from a form that fires by exactly one character.
+
+**My first probe was wrong and the control caught it.** It omitted `kind: 'interact'`, so the ASCII
+control returned false alongside the Cyrillic cases — a uniform negative that would have read as "the
+gate never fires". **An all-negative result with no positive control is indistinguishable from a
+malformed fixture**, which is why the guard carries a fourth arm proving each homoglyph string is one
+substitution away from one that halts.
+
+**I wrote a 70-line parallel guard before checking for existing coverage, and eslint caught it only by
+accident.** A bad cast failed the pre-commit hook; fixing the import led me to
+`agent-consequential-action.test.ts` — **174 lines and ten arms already covering this matcher**,
+including zero-width, bidi, fullwidth and the whole Default_Ignorable class, plus a precision arm and an
+accent-preservation arm. Two of my three arms duplicated it. **The genuinely new thing was one arm.**
+Deleted the parallel file, reverted the ratchets it required, and added two arms to the file that was
+already there — the residual itself, and a control proving each homoglyph string is one substitution
+from a form that fires.
+
+**Mutation-proven as a live specification:** applying a confusables fold reddens exactly the residual arm
+and leaves **all eleven** others green, so the proposed fix is demonstrated to close the gap without
+regressing any existing coverage. Source restored byte-identical.
+
+**Fourth time today the tree already had it** — after the `toBeGreaterThan(2000)` census floor, the
+existing non-vacuity arm in `public-route-has-a-consumer-invariant`, and a peer finding the same. The
+lesson I recorded hours earlier — grep the concept before building the instrument — would have found
+this in one command, and I did not run it because adding a test did not feel like an investigation.
+
+**Not fixing it here.** Folding confusables changes a security-relevant matcher on an outward-facing
+agent-safety path, and the direction is favourable but not free — over-matching costs an extra
+confirmation, under-matching is the vulnerability. That is the owner's call, and the guard now makes it
+a one-line decision with the test already written.
