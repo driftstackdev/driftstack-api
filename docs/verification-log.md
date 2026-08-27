@@ -12429,3 +12429,53 @@ fleet key, the `administrator` password and any token that lived on that box are
 exposed. My standing rules forbid credential mutation, and a peer cannot lift that — flagged here and
 answered to A2 rather than acted on. SSH is now key-only
 (`ssh -i ~/.ssh/driftstack_fleet_ed25519 -o BatchMode=yes …`).
+
+## V-1997 — the suite's 16 skips, audited; and why forcing a retired guard to run proves nothing (2026-08-27)
+
+Applying the lesson from the fleet-box incident locally: **the suite prints "16 skipped" every run and
+nobody asks which.** That is the same shape as 43,661 unread saturation warnings, at a smaller scale.
+So I asked.
+
+**Measured across `apps/**/tests`and`packages/**/tests`: 169 files carry a skip construct, 188
+occurrences.** Almost all are `describe.skipIf(!CI && !DATABASE_URL)` on integration files — legitimate,
+and they RUN under the gate, which sets `DATABASE_URL`. The residue is a small family of
+**"retire when the feature ships"** unit gates: `skipIf(hasEgressImpl)` ×6, plus `isSubscribable`,
+`cryptoIsLive`, `failedIsLive`, `incidentIsSubscribable`, `hasCustomerMtls`.
+
+Running that family directly: **10 arms skip, 64 pass.** Every skip is a retire-when-shipped gate that
+has legitimately retired.
+
+⛔ **I then made an error worth recording in full, because it nearly became a false accusation against
+another agent's files.** Reasoning that V-1987 had established customer egress 503s on every
+deployment, I concluded `hasEgressImpl` must be wrong and six marketing guards had retired on a false
+signal. To test it I forced the condition false so the arms would run — and the honest-disclosure arm
+failed with **three offenders**: `changelog.astro`, `comparison.astro`, `self-hosted.astro`, all in
+`apps/marketing-site`, which is A2's area.
+
+**Reading them refuted the conclusion.** Customer-controlled egress IS shipped — through a different
+route than the one V-1987 examined. `bootstrap.ts:1230` constructs `new SocksProxyBackend()`
+unconditionally and wires it at `:2842`; `SocksProxyBackend implements SessionEgressService`; and a
+create carrying `proxy_id` has "the route validate ownership and the dispatch resolve it (owner-scoped
+unwrap + SSRF re-guard)", gated further by a LIVE connectivity probe that blocks the launch with 422.
+What is unshipped is only the per-session attach route `/v1/sessions/:id/proxy` — which is exactly
+what V-1987's own doc said when it scoped its claim: _"the reusable proxy CRUD methods on this resource
+are unaffected."_ So `hasEgressImpl` is right, the gate retired correctly, and all three pages are
+honest.
+
+⭐⭐ **The transferable lesson: forcing a retired guard to run does not test the code — it tests
+whether the guard's premise still holds, and a retired guard fails BY CONSTRUCTION.** Its assertion
+was written for a world that has since moved. "Three offenders" was not evidence of a marketing
+overclaim; it was evidence that the arm retired for the reason it says it did. The probe answered a
+different question than the one I asked it.
+
+⭐ **And this gate had already solved the problem I came looking for.** `marketing-egress-claim-sweep`
+carries an arm whose title is _"the sweep reached the marketing pages, and the gate below has RETIRED
+— both facts stated out loud"_, with the reasoning: an `if (hasEgressImpl) return;` early-return "is
+indistinguishable in the summary from a real check", so the arms are conditional skips that show in
+the count **and** an arm records why. The retirement is loud, not silent.
+
+Boundary: skip constructs enumerated across `apps/**/tests` and `packages/**/tests`; the
+retire-when-shipped family executed directly to see which arms skip today. Integration skips gated on
+`CI`/`DATABASE_URL`/`REDIS_URL` were classified as legitimate by their condition, not by running them
+without a database. **No defect found, no code changed, and no page reported to A2 — the accusation my
+own probe generated did not survive reading.**
