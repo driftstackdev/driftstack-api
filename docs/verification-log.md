@@ -18046,3 +18046,44 @@ driven directly. It does not exercise them through a route — that remains impo
 route authorization answers 403 first and reads the same `request.account.teams`. Ratchets
 raised 3052→3053 and 3228→3229 for the one added file; a post-condition grep confirms neither
 old value survives in `verify-suite.mjs`.
+
+## V-1914 — two sound guards and the seam between them, after my instrument was wrong about both (2026-08-27)
+
+Auditing the effective-owner limiter's surrounding guards rather than sweeping for a new
+defect. Both are sound; the finding is the boundary between them, and how nearly I published
+two false ones.
+
+`session-route-effective-owner-rate-limit-coverage-invariant.test.ts` (965 lines, 41 arms) is a
+TypeScript-AST guard over a hand-maintained inventory of 35 routes. It has the direction that
+matters — _"turns RED when a new live route is not explicitly classified"_ — plus arms for a
+route losing its owner consume, actor/owner bucket divergence, telemetry publishing before
+owner admission, and a resource-owner authority swapped for the actor account. Each is itself a
+self-test of the detector, so its zero is earned rather than assumed.
+
+**Two measurements I made about it were wrong, and it was right both times.**
+First an indent-anchored count of `route(` gave 33 against its self-checked pin of 14+21=35.
+Then a single-line regex for the inventory's filenames reported that it walks 2 files while 4
+call `consumeEffectiveOwnerRateLimit` — which reads exactly like a coverage hole. Both failures
+have one cause: the inventory contains **multi-line** `route(` calls, and a line-anchored
+pattern cannot see them. `AGENT_SPLIT_ROUTES` names precisely the two files I had just reported
+as missing. Distrusting the instrument before the subject is what stopped a false finding
+reaching this log, twice inside five minutes.
+
+**The seam, stated precisely.** The inventory guard derives `SOURCE_FILES` from its own
+expected-route list (line 220); `ROUTES_DIR` appears only inside a read-of-a-named-file, never a
+directory listing. So its completeness check is complete _within the files the inventory already
+names_. The delegate covers the obvious half — `route-mutation-ratelimit-coverage-invariant.test.ts`
+does `readdirSync(ROUTES_DIR)` and asserts every mutation route has a limiter, a privileged
+gate, or an exact exemption, and self-tests that too. I verified the delegate rather than
+assuming it.
+
+What neither covers: a **future** route file whose route carries an actor limiter but omits the
+effective-owner consume. The disk-walking guard is satisfied by the actor limiter; the inventory
+guard never opens the file. That is a seam, not a defect — no such file exists today (all four
+callers are in the inventory) — and it is recorded here rather than guarded because closing it
+means teaching one of the two guards to enumerate the other's subject from disk, which is a
+change to a 965-line AST guard for a hypothetical file.
+
+**Boundary:** this is a static audit of two guards' own logic and scope at `dfe1dd136`; I did
+not construct a fifth route file to demonstrate the seam empirically, so the claim is about what
+the guards read, not about an observed miss. Gate green at 3229 files / 32112 tests, exit 0.
