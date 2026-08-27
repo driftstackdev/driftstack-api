@@ -20132,3 +20132,80 @@ and only the earlier one carries the caveat.
 
 No action: both migrations are single-transaction with an auto-revert path in `db/migrate.ts`, so the
 failure mode is a rolled-back deploy rather than a half-applied schema.
+
+## V-1959 — three delegations, three outcomes, and the wording is what decided them (2026-08-27)
+
+Swept `exactly once` in `apps/server/src`. **Boundary: the literal phrase, case-insensitive, server
+source only — and the count moved with the instrument: 21 case-sensitive, 23 case-insensitive.** The two
+extra include `db/session-operations-repo.ts:186`, capital-E `Exactly-once`, which my first grep missed
+and which turned out to matter. Of the 23, **ten are the scheduled-sweeper re-arm pattern — counted by
+SHAPE, not token**: a `grep -c "re-arm exactly once"` finds 7, because the same sweeper idiom is also
+spelled "re-armed exactly once", "re-arm runs exactly once" and "still re-arms". One more is the
+`withOrderLock` fix verified in V-1947. The fresh one is billing: `agent-runtime.ts:1229`, _"Account
+that work exactly once whether the answer is published, sanitized to empty, fenced by a new controller,
+or suppressed by a transcript-storage failure."_
+
+**Sound, and correct for the reason that usually fails.** `recordUsageRowWithRetry` retries a write,
+which is at-least-once unless the write is idempotent — so the claim rests entirely on a delegation
+("see the `recordId` contract"). **Verified end to end rather than trusted:** the caller generates
+`recordId` ONCE and reuses it across every attempt; `DrizzleAgentDecomposerUsageRecorder.record` uses it
+as the row `id` and issues `insert.onConflictDoNothing()`. Same id + primary key + ON CONFLICT is
+genuinely idempotent, so a retry after a commit-that-appeared-to-fail is a no-op. Witnessed at both
+layers by dedicated tests — `agent-runtime-usage-record-retry-idempotency` and, against real Postgres,
+`db-usage-record-retry-idempotency`. The interface even names the precise hazard: a connection reset
+after the statement committed producing "a SECOND $0.10 row for one turn".
+
+⭐ **Three delegations examined today resolved three different ways, and the difference was in how each
+was WORDED:**
+
+- **`agent-consequential-action`** deferred a homoglyph residual to "the v1.1 LLM-semantic classifier".
+  v1.1 is a real planned scope, but it has not shipped — **so the gap is open today** and the present
+  tense in "caught by" reads as coverage.
+- **The OAuth code-reuse TOCTOU** prescribed a MECHANISM — a specific conditional `UPDATE … WHERE
+consumed_at IS NULL RETURNING`, under a named method. The implementation satisfied the PROPERTY by
+  pessimistic locking instead. **Grepping for what the note prescribed would have reported correct code
+  as non-compliant.**
+- **The usage recorder** prescribed the PROPERTY — "reused by every retry attempt, so the write is
+  idempotent" — and left the mechanism open. The implementation chose PK + `onConflictDoNothing`, which
+  satisfies it, and a reader checking the contract can confirm adherence without knowing what was
+  intended.
+
+**A delegation that names a property can be verified against any implementation; one that names a
+mechanism can only be verified against the implementation its author imagined.** Same lesson as the
+parity pin freezing text rather than truth: the wording is what the next reader checks, and it is not
+itself under test.
+
+No action.
+
+## V-1960 — a pin froze the value; the CAS needed the relationship (2026-08-27)
+
+Following the `exactly once` sweep into `db/session-operations-repo.ts`, whose comment is the clearest
+statement of today's property-versus-mechanism lesson written by someone else: _"The design doc
+originally said `running`, which cannot expire an operation that never started — a queued operation past
+its deadline would have been unsettleable forever. Exactly-once is preserved either way, because what
+guarantees it is excluding the TERMINAL statuses, not naming a single live one."_
+
+**The CAS is sound** — `settle()` updates `WHERE inArray(status, [...LIVE_STATUSES]) AND incarnation`,
+`.returning()`, and treats zero rows as `superseded`. **And it is well pinned**: an existing parity
+guard freezes `LIVE_STATUSES = ['queued', 'running']` verbatim in the repo AND the partial-index
+predicate in the DDL, so the constant cannot drift unnoticed.
+
+⛔ **But a pin freezes a value, not a relationship.** `LIVE_STATUSES` is an ALLOW-list; the status set
+lives in four places (the DB CHECK in migration 0108, the Drizzle `$type` union, the exported
+`SessionOperationStatus`, and the live list). **Add a seventh status to the first three and every
+existing assertion stays green while the new status is neither live nor terminal — so `settle()` can
+never reach it, and an operation in that state is unsettleable forever.** That is the identical defect
+the comment records as already fixed once, in a new spelling.
+
+Landed a cross-source invariant asserting the RELATIONSHIP: the four declarations agree, LIVE and
+TERMINAL are disjoint, and their union exactly exhausts the set — with each terminal status enumerated
+alongside the reason it is terminal. A new status now fails until somebody classifies it, which is the
+decision the original bug skipped. **Mutation-proven twice: adding `paused` to all three declarations
+(so they agree) reddens the partition arm; reverting `LIVE_STATUSES` to `{running}` reddens all four,
+including the arm named for that regression.** All files restored byte-identical.
+
+⭐ **My own extractor was wrong on the first run and the guard's floor caught it.** `status: text('status')`
+appears in many tables in `schema.ts`, so the unanchored regex returned another table's union —
+`['emitted','queued']`. The non-vacuity arm asserts a COUNT per source, so it failed before any set
+comparison could spuriously agree. **Had that arm asserted merely "non-empty", two wrong sets could have
+matched each other.** Anchored to `sessionOperations = pgTable(`.
