@@ -19737,6 +19737,13 @@ not a file.
 
 ## V-1949 — the corpus already floors 81% of these, and my regex was worse than its convention (2026-08-27)
 
+> ⛔ **RETRACTED IN PART — the 81% in this heading is wrong, and so is the 88% it was corrected to.
+> See V-1951.** The idiom classifier fails its own control: a known-unfloored file classifies as
+> floored because its SYNTHETIC arm asserts a non-empty list. **The floored fraction is unmeasured.**
+> Everything else in this entry — the three detector versions, the false positives, the 93-file
+> residue — stands. This pointer sits here because a grep for `81%` finds the claim and not the
+> retraction: a marker and its correction are different lines.
+
 Having found one vacuity hole in my own guard (V-1948), swept the corpus for the shape: a test that
 reads the real tree and asserts emptiness, with nothing establishing the scan was non-empty.
 
@@ -19752,7 +19759,7 @@ put theirs in a separate arm. Only the hybrid passed all four.
 arm-parsing version, 514 under the file-level one.** The arm parser balances parentheses and breaks on
 regex literals and strings containing them, so it silently under-collected.
 
-**Of 514 tree-reading emptiness tests, 421 — 81% — already declare a floor in the codebase's own
+**Of 514 tree-reading emptiness tests, 421 — 81% [RETRACTED, see V-1951] — already declare a floor in the codebase's own
 idiom** (`non-vacuous:`, `CRITICAL the scan finds …`, `toBeGreaterThan`, `not.toHaveLength(0)`). Two
 hand-reads of my regex's "risks" were both false positives carrying arms named exactly that: _"CRITICAL
 the scan finds the mints AND the logger calls, so an absence is measured against a real set"_ and
