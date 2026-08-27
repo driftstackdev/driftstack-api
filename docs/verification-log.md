@@ -17984,10 +17984,9 @@ control and reproduced its 3 catchers on demand, so a zero here is the instrumen
   holds no membership in. Both stand behind **40 call sites** across four route files, and the
   effective owner is selected by a request header. Nothing in the estate witnesses either.
 
-I did **not** write guards for them. Both route authorization and the limiter read the same
-`request.account.teams`, so isolating 234 needs repo-level mocking that would prove the mock
-rather than the predicate; a rushed guard is worth less than an accurate boundary. Recorded as
-open.
+I did **not** write guards for them in this entry, and the reason I gave was wrong — see the
+correction in V-1913. I judged a unit harness too costly without looking for one, when the
+repo already had exactly the harness required, and the guards landed the same day.
 
 ### One-token fix: the only mixed-convention site in the repo
 
@@ -18005,3 +18004,45 @@ the annotation leaves 318 falling through to meter the request while the other f
 return — a silent, partial regression. Added `return`; post-condition is that **zero** bare
 calls to the helper remain and all six are now uniform. Inert at runtime, which the suite
 confirms twice over: it is green both with that line deleted entirely and with the `return`.
+
+## V-1913 — the two unwitnessed guards, witnessed; and the excuse that nearly buried them (2026-08-27)
+
+V-1912 established that sites 215 and 234 of the effective-owner limiter are live wiring guards
+witnessed by nothing across 3228 vitest files and 233 Playwright tests, and then declined to
+guard them on the grounds that a unit harness would need repo-level mocking that proves the
+mock rather than the predicate.
+
+**That reason was wrong, and it was wrong in the way this log keeps recording: I reasoned about
+the shape of a harness instead of grepping for one.** `rate-limit-double-failure.test.ts` had
+already built it — bare `Fastify()`, a one-line `fp((_a,_o,done)=>done(), { name: 'auth' })` to
+satisfy the plugin's `auth` dependency, `authRepo` optional by design ("Optional only for
+isolated middleware tests"), and a fabricated request whose `account.teams` I set directly. No
+repo mocking of any kind. The instruction to open every prior-art hit rather than dismiss it by
+filename is what surfaced it: the file listing carried four on-topic names, and I had been one
+command away from the answer while writing the paragraph that said there wasn't one.
+
+New guard, `effective-owner-limiter-refuses-a-miswired-route.test.ts`, three arms:
+
+| arm                                              | drives   | mutation-proof                             |
+| ------------------------------------------------ | -------- | ------------------------------------------ |
+| actor limiter never ran for this bucket/cost     | 215      | site-215 fail-open kills **this arm only** |
+| owner the caller holds no membership in          | 234      | site-234 fail-open kills **this arm only** |
+| correct wiring admits and returns the owner tier | positive | survives both                              |
+
+Each mutation is the same type-correct fail-open V-1912 used, applied one at a time to a
+snapshot-restored file, and each killed exactly one arm — a one-to-one mapping confirmed by
+reading which test name failed, not by counting failures. Two mutations each killing "1 of 3"
+would look identical in a count while both hit the same arm.
+
+**Why each arm asserts its own log line rather than just a 429.** Six sites refuse through one
+helper, so status alone cannot say which branch fired; an arm asserting only the refusal could
+pass while witnessing a different guard entirely. Each asserts the site's own
+`failing CLOSED` message. The positive arm exists for the complementary failure: two
+refusal-only tests both pass if the limiter refuses unconditionally, which is exactly the
+regression a pair of negative tests cannot see.
+
+**Boundary:** this witnesses the two guards' refusal and the admit path through the middleware
+driven directly. It does not exercise them through a route — that remains impossible, since
+route authorization answers 403 first and reads the same `request.account.teams`. Ratchets
+raised 3052→3053 and 3228→3229 for the one added file; a post-condition grep confirms neither
+old value survives in `verify-suite.mjs`.
