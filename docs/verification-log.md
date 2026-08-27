@@ -20490,3 +20490,39 @@ proofs — which is precisely how a 100%-false list survives to be reported as a
 
 **No code change: nothing here needs fixing.** Recording it because "seven files still need a floor"
 would otherwise have stood as a durable, entirely fictional item of debt.
+
+## V-1969 — warm tabs: owner chose rehearse-then-enable; procedure written (2026-08-27)
+
+Owner decided directly: **rehearse the rollback while the flag is still OFF, then a watched single-node
+enable.** Procedure written to `docs/internal/warm-tabs-rollback-rehearsal-and-watched-enable.md`.
+
+**Why it was never enabled, assembled from notes dated 07-08 → 07-11 rather than from the relay chain:**
+it shipped deliberately dark behind `DRIFTSTACK_WARM_TABS=0`, split across two owners; the 07-10 handoff
+records it as _"BUILT+STAGED but DISABLED + never validated"_; a 07-09 box-rebuild window was awaiting a
+smoke pass I cannot confirm completed; and on 07-11 a real failure was reproduced on the deployed fork —
+`-1004` / `ECONNREFUSED errno 61`, root-caused to the fork not tearing down the WebDriver listen socket.
+**That last one is the only blocker with a reproduction behind it rather than an unvalidated status.**
+
+⛔ **Two things recorded as NOT established, because they are attributed to me and I cannot verify
+either.** The assessment that the "never validated" blocker is stale, and the hardening specifics (a
+1400 MB reap guard, an LRU, memory-pressure eviction), live in the private repo's `OPEN-ITEMS.md` under
+my name — but were **transcribed from my messages rather than written by me**, as the transcriber has
+since confirmed. **A citation pointing at me that I cannot read is the stale-citation problem with the
+citation reversed**, and the correct response is to mark it unverified rather than let it carry my
+authority into a production enable.
+
+⭐ **The rehearsal-first ordering is the day's own lesson applied to an operation rather than a test.**
+Three separate mechanisms were found today that were documented and never built — a v1.1 classifier, a
+GET+DEL fallback, a cookie session justifying a real setting. **A rollback procedure is exactly that
+class of artifact: written once, never executed, and trusted at the moment it is needed most.** Phase 0
+costs nothing while the flag is off and converts the escape hatch from a plan into a control.
+
+⚠️ Phase 0 also answers a question that has been open since the flag was written: `DRIFTSTACK_WARM_TABS`
+appears in **zero** ops records despite a bus post recording a daemon carrying it set to `1`
+(`ops=0 bus=8`). **Capturing the daemon env during the rehearsal settles whether it has ever run
+enabled** — "off on the box" and "never ran anywhere" are different claims and only the first is
+established.
+
+**Execution boundary: none of this is mine to run.** A watched enable on fleet hardware is deploy-class
+work on the fork runtime, and my standing constraints are no push, no deploy, and no `driftstack` /
+`webkit-driftstack`. The procedure is the deliverable; the operation needs an owner with those surfaces.
