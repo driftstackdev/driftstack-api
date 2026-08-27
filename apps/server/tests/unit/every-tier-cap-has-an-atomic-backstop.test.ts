@@ -171,4 +171,45 @@ describe('every tier cap has an atomic backstop', () => {
     }
     expect(unlocked.sort(), 'enforcement method(s) that no longer take a lock:').toEqual([]);
   });
+  // ⛔ V-1988 — enforcing under a lock is not enough if the lock counts the wrong
+  // rows. The profile cap deliberately counts LIVE + TRASHED (anti-abuse,
+  // 2026-06-17): a trashed profile still holds a row, a DEK and a sealed blob, so
+  // excluding it would let a customer soft-delete their way past the cap and hoard
+  // unbounded recoverable profiles for the whole 30-day retention window. Adding a
+  // `notDeleted` filter to the enforcement count reopens exactly that, and it
+  // type-checks — measured 2026-08-27, the mutation passed 474 test files / 6374
+  // tests untouched, which is why this arm exists.
+  //
+  // The divergence with `countByAccount` is deliberate and BOTH sides are pinned
+  // here: the enforcement counts trashed, the display/pre-check does not. A
+  // future tidy-up that unifies them must fail this and read the reason.
+  it('CRITICAL the profile cap counts TRASHED rows too, so a soft delete cannot buy a free slot. Enforcement and the display count deliberately differ; both directions are pinned', () => {
+    const repo = readFileSync(resolve(DB_DIR, 'profiles-repo.ts'), 'utf8');
+
+    /** The `select({ n: count() })…;` statement inside one method body. */
+    const capCountIn = (method: string): string => {
+      const start = repo.indexOf(`async ${method}`);
+      expect(start, `${method} still exists`).toBeGreaterThan(-1);
+      const nextMethod = repo.indexOf('\n  async ', start + 1);
+      const body = repo.slice(start, nextMethod === -1 ? start + 4000 : nextMethod);
+      const m = /\.select\(\{ n: count\(\) \}\)[\s\S]*?;/.exec(body);
+      expect(m, `${method} still counts rows against the cap`).not.toBeNull();
+      return m?.[0] ?? '';
+    };
+
+    for (const method of ['insertWithLimit', 'transferAtomic']) {
+      expect(
+        capCountIn(method),
+        `${method} must count LIVE + TRASHED against the cap — a notDeleted filter here lets a customer soft-delete past their limit`,
+      ).not.toContain('notDeleted');
+    }
+
+    // The other direction: the reported/pre-check count is LIVE-only ON PURPOSE.
+    // Without this the arm above could be satisfied by deleting the filter
+    // everywhere, which would silently change what the published profile_count means.
+    expect(
+      capCountIn('countByAccount'),
+      'countByAccount is the LIVE-only population the pre-check and /v1/account/me report',
+    ).toContain('notDeleted');
+  });
 });

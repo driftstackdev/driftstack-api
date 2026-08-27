@@ -230,6 +230,19 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
 
       // Parallel fan-out: counts + tier-derived caps + avatar presign + MFA.
       // Tier caps come from in-memory constants so they cost nothing.
+      //
+      // ⛔ V-1988 — `profile_count` and `profile_cap` are published side by side
+      // and DO NOT describe the same population. `countByAccount` filters
+      // `notDeleted`, so this number counts LIVE profiles only; the cap that
+      // actually refuses a create counts LIVE + TRASHED (profiles-repo
+      // `insertWithLimit`, no notDeleted filter — deliberate anti-abuse from
+      // 2026-06-17, so a customer cannot hoard recoverable profiles past their
+      // limit). A customer holding trashed profiles therefore sees headroom the
+      // create path will not honour, for up to the 30-day trash retention.
+      //
+      // Left as-is rather than quietly changed: making this number include
+      // trashed rows alters what a PUBLISHED field means, which is the owner's
+      // call, not a sweep's. Recorded in docs/internal/OPEN-ITEMS.md.
       const [activeSessions, profileCount, r2AvatarUrl, mfaStatus, oauthFallback] =
         await Promise.all([
           sessionRepo.countActiveSessions(accountId),

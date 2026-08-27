@@ -12050,3 +12050,51 @@ re-widening any SDK reddens it, and renaming the `pair-mode-takeover-fired` ment
 Post-condition: **0 occurrences** of "on every call, in every mode" or of the phrase in any of the
 three SDK surfaces; the pinned sentence intact in all three. Python 400 passed, ruff + mypy clean; Go
 vet, test, gofmt clean; `tsc` clean on the SDK and test projects. No behaviour changed.
+
+## V-1988 — the profile cap counts trashed rows, nothing pinned that, and the published count disagrees (2026-08-27)
+
+Auditing `profiles.purge` / `listTrash` by the V-1980 method. Purge's doc says it frees a cap slot
+"immediately (trashed profiles otherwise count toward the tier limit until the 30-day auto-purge)".
+**That claim is true**, and checking it turned up two things the claim depends on.
+
+⭐ **The two profile counts deliberately disagree, and only one is authoritative.** Side by side:
+
+- `countByAccount` — `.where(and(eq(accountId), notDeleted))`, i.e. **LIVE only**.
+- `insertWithLimit` — `.where(eq(profiles.accountId, …))` with **no filter**, i.e. **LIVE + TRASHED**.
+  `transferAtomic` matches it.
+
+The second is the one that refuses a create, and the comment records why: _"Anti-abuse (2026-06-17):
+count LIVE + TRASHED against the cap… Trashed profiles still hold a row + DEK + sealed [blob]… to
+hoard unbounded recoverable profiles past their limit."_ Every gating call site pairs the loose
+pre-check with the atomic re-check — five call sites checked, all paired — so the loose count never
+gates anything on its own.
+
+⛔ **But nothing pinned the anti-abuse property.** Adding a `notDeleted` filter to `insertWithLimit`
+reopens the hoarding hole and **type-checks**; measured 2026-08-27, that mutation passed **474 test
+files / 6374 tests** — the subset of the suite mentioning profile / cap / limit / tier terms, not all
+3241 — without a single failure. `every-tier-cap-has-an-atomic-backstop` pins that enforcement exists
+and takes a lock, but never what it counts.
+
+A new arm there pins **both** directions, because pinning one invites "fixing" the other: enforcement
+must NOT filter `notDeleted`, and `countByAccount` must. Mutation-proved each way — adding the filter
+to `insertWithLimit` reddens it, and removing it from `countByAccount` reddens it. Sources restored
+byte-identical.
+
+⛔ **The second finding is customer-facing and I did NOT fix it.** `/v1/account/me` publishes
+`profile_cap` and `profile_count` side by side, and `profile_count` is the LIVE-only number while the
+cap that refuses a create counts LIVE + TRASHED. A customer holding trashed profiles sees headroom the
+create path will not honour, for up to the 30-day retention. The field carries **no description** in
+the published spec, so there is no false text to correct — the number itself is what misleads.
+
+**Left for the owner deliberately.** Changing what a published field counts alters the contract, which
+is the same reason W-10 is parked; the schema is also frozen by a 743-character regex and read by the
+dashboard's ProfilesView. The divergence is now documented at the call site in `routes/account-me.ts`
+with the reason and the pointer, so the next reader meets it rather than discovering it. `docs/internal/OPEN-ITEMS.md`
+does not exist in this tree, so this entry is the record.
+
+⛔ **Three of my own instruments failed inside this audit.** A widened mutation run reported
+`exit=1`/"No test files found" — zsh does not word-split an unquoted variable, so 474 paths went in as
+one argument; read as evidence it would have looked like a guard firing. A mutation script aborted on
+its own assertion because the target string occurs twice in the file, and the green run after it
+proved nothing. And the first run's boundary was a grep for "profile", which I widened to the cap
+vocabulary before trusting the zero.
