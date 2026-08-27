@@ -18558,3 +18558,60 @@ blanket-hide everything". Opening it instead of trusting its filename is what st
 if it is ≤25 lines and both parses and throws, and reads the posture from `throw` statements only —
 a helper that returns a result object rather than throwing is outside it, as is one whose parse and
 throw are separated by more than that span. No source change, no new guard, no ratchet movement.
+
+## V-1924 — an audit that expired, and the two internal fields it never saw (2026-08-27)
+
+`project_response_serializer_exposure_clean` audited the read-side field-exposure dimension on
+2026-06-02 and says "don't re-audit". My own note says an audit about another file expires when
+that file changes. **359 commits have touched `routes/` since** — `agent-sessions.ts` alone 131,
+`profiles.ts` 23 — so the instruction and the note disagree, and the note wins on the evidence.
+
+The audit's claim is precise and testable: public serializers are ALLOWLISTS, "each returns a
+hand-picked field set, never the raw row". Probed across `apps/server/src` with a synthetic
+control that was detected: **38** public serializers, **3** of which spread a parameter — all in
+`services/agent-public-redaction.ts`, a file first committed **2026-07-13**, six weeks after the
+audit. The audit was right about what it saw and silent about what came later.
+
+Reading them acquits two of the three and reframes the last. They are not row-to-response
+serializers at all but type-preserving redactors — `publicAgentIntent(intent: AgentIntent):
+AgentIntent` — narrowing a typed object by deleting one field. For the two typed on
+`@driftstack/api-types`, the published contract bounds what a spread can carry. `TranscriptEntry`
+is different: it is an **internal** interface from `services/agent-decomposer.ts`.
+
+### What actually reaches the customer
+
+`publicTranscriptEntry` spreads that internal entry, and `routes/agent-sessions.ts` writes the
+result to the live transcript SSE stream through `JSON.stringify` — no schema in the path, so
+nothing strips anything. Two fields ride along:
+
+| field                   | declared in api-types | read by any client |
+| ----------------------- | --------------------- | ------------------ |
+| `awaitingConfirmation`  | **0 mentions**        | **0**              |
+| `resumeFromIntentIndex` | **0 mentions**        | **0**              |
+
+Zero across `gui-client`, `customer-dashboard`, `admin-panel` and `sdk-typescript`, against 34 and
+18 hits for "transcript" in the first and last — so the search reached those trees.
+
+Neither is a credential; both are executor control state. The finding is not the present exposure
+but the posture: a denylist over an **internal** type means the next field added to
+`TranscriptEntry` reaches customers by default, chosen by nobody. That is precisely the shape
+V-1886 named — "a spread would inherit whatever the schema happens to allow" — and every other
+public serializer here is an allowlist instead.
+
+Removing fields from a live stream is a contract change and the owner's call. **Freezing the
+emitted set is the unblocked half**, and compatible with either decision.
+
+### The guard needed strengthening before it was worth committing
+
+My first version pinned what a FIXTURE emits. A field added to `TranscriptEntry` and set in
+production would have left that fixture untouched and the arm green — the exact regression the
+file exists to catch, invisible to it. The critical arm now reads the interface's declared
+properties from source and requires each to be on the frozen list. Proven on the real subject:
+adding `internalDebugTrace?: string` to `TranscriptEntry` fails that arm and nothing else;
+restoring returns 4/4.
+
+**Boundary:** the property read is syntactic — it takes `PropertySignature` members of an
+interface literally named `TranscriptEntry` in `agent-decomposer.ts`, so an inherited or
+intersected member is invisible to it; and the behavioural arm proves what this projection emits,
+not what the SSE route ultimately writes, which it reaches by spread. Ratchets 3057→3058 and
+3233→3234.
