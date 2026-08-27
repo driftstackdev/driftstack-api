@@ -230,7 +230,17 @@ export class ProfilesResource {
   /**
    * V-666 — transfer ownership of a profile to another Driftstack
    * account by its `acc_<uuid>` id (shared out-of-band; no email path).
-   * Mints a copy in the recipient's account; returns it + the recipient id.
+   * Mints a NEW row in the recipient's account carrying the source's name,
+   * archetype and description, and removes the source from the sender.
+   *
+   * ⚠️ The profile's STORED BROWSER STATE does not move — cookies,
+   * localStorage and site data stay behind, and the recipient receives an
+   * empty profile. This is deliberate: each profile's data key is bound to
+   * its owning account and Driftstack cannot re-encrypt it, so the new row
+   * gets a freshly minted key of its own. Use `export` + `import` to move
+   * the bytes.
+   *
+   * Returns the new profile + the recipient id.
    */
   transfer(id: string, body: { recipient_account_id: string }): Promise<TransferProfileResponse> {
     return this.http.request<TransferProfileResponse>({

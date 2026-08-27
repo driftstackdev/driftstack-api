@@ -21005,3 +21005,66 @@ Sources restored byte-identical, verified by empty `git diff`. Post-conditions: 
 `profiles.{import, launch, listTrash, purge, transfer}` (py+go), `profiles.trim` (py),
 `sessions.extract` (py+go), `sessions.{interact, wait}` (go),
 `team.{listInvites, listMembers}` (go).
+
+## V-1980 — "Mints a copy" was the one sentence customers had, and it implied the opposite (2026-08-27)
+
+Auditing `profiles.transfer` end to end — one of the methods V-1979 left untested in Python and Go,
+picked because a cross-account ownership change is where an authz bug would hide.
+
+⭐ **The authorization and concurrency are sound, and better than I expected.** `transferProfile` looks
+the source up owner-scoped (`findById({ id, accountId: sourceAccountId })`, null → 404), so you cannot
+transfer a profile you do not own. The recipient cap is measured against the RECIPIENT. Retiring the
+source and inserting the recipient row happen in ONE transaction with a checked claim — the comment
+records the concurrent-transfer bug that motivated it, where two transfers of the same source to
+different recipients both "succeeded" and one profile became two. The route honours
+`X-Driftstack-Account` (V-734) and compares the self-transfer guard against the SOURCE account rather
+than the caller.
+
+⛔ **What the audit did find is what the customer is told.** A transfer moves the profile RECORD —
+name, archetype, description — and mints a **fresh** data key bound to the recipient. It does **not**
+move the profile's stored browser state: there is no blob copy anywhere in the path. That is correct
+and deliberate; the server cannot re-encrypt, and D-2026-07-12-01 names "moving a genuinely
+authenticated profile would risk transferring session cookies or other credentials" as a risk to
+avoid. **But every customer-facing surface said only "Mints a copy in the recipient's account"** —
+identical wording in all three SDKs — with no top-level `description` on the OpenAPI operation at all.
+"Copy" reads as "the contents come too", which is the opposite of what happens.
+
+Corrected in all four places, and the retirement was verified as a **post-condition**: `Mints a copy`
+now returns **0 occurrences** repo-wide, rather than deriving that three edits landed.
+
+⭐ **The guard pins the docs AND the behaviour, because a pin on comment text defends a false claim
+just as happily as a true one.** Two arms, kept separate so a mutation cannot be masked:
+
+- all three SDKs plus the OpenAPI description carry the warning and point at export/import, and none
+  still says "Mints a copy" — four surfaces is four places a correction gets applied to three of;
+- `transferProfile` still mints `mintProfileIdentity(args.recipientAccountId)`, inserts
+  `transferIdentity.wrappedDek`, and **never references `source.wrappedDek`** — the source key is
+  bound to the SOURCE account's TMK, so carrying it across accounts would hand the recipient a key
+  wrapped under someone else's master key.
+
+Mutation-proved on the real subjects: stripping the warning from the **Go** SDK alone reddens the
+first arm (`Go warns the stored state does not move`), and changing the service's insert to
+`wrappedDek: source.wrappedDek` reddens the second. Both restored byte-identical.
+
+⛔ **Two of my own instruments failed on the way, both caught by reading.**
+
+- A grep for `wrappedDek` near "transfer" reported the fresh-key property unpinned. It is pinned —
+  `profiles-service.test.ts:1039` **unwraps the DEK with the RECIPIENT's account id and asserts 32
+  bytes**, which is stronger than anything I was about to add. The test spells it "wrapped DEK" with a
+  space; my token could not match it. Sweep the shape, not the token — ninth such over-flag today.
+- My body extractor for `transferProfile` bounded only the start and threw on the end, the same defect
+  that produced a false "DIVERGED" verdict in V-1976. The guard's own extraction bounds **both** ends
+  and asserts the slice is non-trivial before reading it.
+
+⛔ One detail worth keeping: the OpenAPI description is built by string concatenation, and my first
+draft split "STORED BROWSER STATE does not move" across a `' + '` boundary — **the guard failed
+against text that read correctly in the source.** The phrase now sits in a single literal with a
+comment saying why.
+
+Boundary: this audited the route, the service and the three SDK call paths by reading, and pinned the
+result. It did not execute a transfer against a live database — the existing integration suite
+(`profile-transfer.test.ts`, `db-profile-transfer-concurrency-drizzle.test.ts`) does that, and neither
+asserts anything about the stored state either way.
+
+Post-conditions: 9 affected test files / 114 tests green; `tsc` clean on src and tests; Python 391
+passed with ruff and mypy clean; Go vet, test and gofmt clean.

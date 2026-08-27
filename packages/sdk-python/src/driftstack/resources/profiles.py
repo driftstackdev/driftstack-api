@@ -138,8 +138,21 @@ class ProfilesResource:
 
     def transfer(self, profile_id: str, body: dict[str, Any]) -> dict[str, Any]:
         """V-666 — transfer a profile to another account by ``recipient_account_id``
-        (``acc_<uuid>``). Mints a copy in the recipient's account; returns
-        ``{"new_profile": ..., "recipient_account_id": ...}``."""
+        (``acc_<uuid>``).
+
+        Mints a NEW row in the recipient's account carrying the source's name,
+        archetype and description, and removes the source from the sender.
+
+        .. warning::
+           The profile's STORED BROWSER STATE does not move — cookies,
+           localStorage and site data stay behind, and the recipient receives an
+           empty profile. This is deliberate: each profile's data key is bound to
+           its owning account and Driftstack cannot re-encrypt it, so the new row
+           gets a freshly minted key of its own. Use ``export`` + ``import_`` to
+           move the bytes.
+
+        Returns ``{"new_profile": ..., "recipient_account_id": ...}``.
+        """
         return self._http.request(
             "POST",
             f"/v1/profiles/{quote(profile_id, safe='')}/transfer",
@@ -239,7 +252,10 @@ class AsyncProfilesResource:
         return await self._http.request("POST", "/v1/profiles/import", json_body=coerce_body(body))
 
     async def transfer(self, profile_id: str, body: dict[str, Any]) -> dict[str, Any]:
-        """Async mirror — V-666 transfer to another account by recipient_account_id."""
+        """Async mirror of :meth:`ProfilesResource.transfer`.
+
+        The stored browser state does not move; see that method for why.
+        """
         return await self._http.request(
             "POST",
             f"/v1/profiles/{quote(profile_id, safe='')}/transfer",

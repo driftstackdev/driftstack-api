@@ -7992,6 +7992,16 @@ function buildRegistry(): OpenAPIRegistry {
     operationId: 'transferProfile',
     summary:
       'Transfer profile ownership to another Driftstack account by id (requires `write:profiles`, broad `write`, or `account_owner`)',
+    description:
+      "Mints a new profile in the recipient's account carrying the source's name, archetype and " +
+      'description, and removes the source from the sender. ' +
+      // Kept in ONE literal: the cross-SDK guard matches this phrase, and a
+      // concatenation boundary inside it would hide the sentence from the check.
+      'The STORED BROWSER STATE does not move' +
+      ' — cookies, localStorage and site data stay behind, and the recipient receives an empty ' +
+      "profile. This is deliberate: each profile's data key is bound to its owning account and " +
+      'Driftstack cannot re-encrypt it, so the new row gets a freshly minted key of its own. Use ' +
+      '`POST /v1/profiles/{id}/export` + `POST /v1/profiles/import` to move the bytes.',
     tags: ['profiles'],
     security: auth,
     request: {

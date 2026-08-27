@@ -19,6 +19,8 @@ function read(p: string): string {
 const TS = resolve(REPO_ROOT, 'packages/sdk-typescript/src/resources/profiles.ts');
 const PY = resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/resources/profiles.py');
 const GO = resolve(REPO_ROOT, 'packages/sdk-go/profiles.go');
+const OPENAPI = resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts');
+const SERVICE = resolve(REPO_ROOT, 'apps/server/src/services/profiles.ts');
 
 // 11 shared method names across all 3 SDKs ([TS, Python, Go] names;
 // Python uses import_ since `import` is a keyword).
@@ -175,5 +177,62 @@ describe('W824 cross-SDK ProfilesResource methods parity', () => {
         resolve(REPO_ROOT, 'apps/server/tests/unit/sdk-profiles-resource-cross-sdk-parity.test.ts'),
       ),
     ).toBe(true);
+  });
+
+  // ─── transfer: what the customer is told vs what the code does ─────
+  //
+  // V-1980. A transfer moves the profile RECORD and deliberately leaves the
+  // stored browser state behind — the server cannot re-encrypt it, because each
+  // profile's data key is bound to its owning account. Every customer-facing
+  // surface used to say only "Mints a copy in the recipient's account", which a
+  // reader can reasonably take to mean the cookies come too.
+
+  it('CRITICAL every SDK and the published document warn that transfer leaves the stored state behind. Three SDK doc comments plus one OpenAPI description is four places a correction can be applied to three of', () => {
+    for (const [label, path] of [
+      ['TS', TS],
+      ['Python', PY],
+      ['Go', GO],
+      ['OpenAPI', OPENAPI],
+    ] as const) {
+      const body = read(path);
+      expect(body, `${label} warns the stored state does not move`).toMatch(
+        /STORED BROWSER STATE does\s*\n?\s*(?:\*|#|\/\/)?\s*not move/i,
+      );
+      expect(body, `${label} points at export/import for the bytes`).toMatch(
+        /export.{0,40}import/is,
+      );
+    }
+    // The retired wording, which said the opposite by implication.
+    for (const [label, path] of [
+      ['TS', TS],
+      ['Python', PY],
+      ['Go', GO],
+    ] as const) {
+      expect(read(path), `${label} no longer claims a plain copy`).not.toContain('Mints a copy');
+    }
+  });
+
+  it('CRITICAL and the service still behaves that way, so the warning above cannot outlive its truth. transferProfile mints a fresh identity for the recipient and never carries the source wrapped DEK, which is bound to the SOURCE account TMK', () => {
+    const src = read(SERVICE);
+    const start = src.indexOf('async transferProfile');
+    expect(start, 'transferProfile still exists').toBeGreaterThan(-1);
+    // Bound BOTH ends: an unbounded slice runs on into later members and would
+    // report whatever they happen to contain.
+    const rest = src.slice(start + 10);
+    const end =
+      /\n {2}(?:private |protected |public |static )?(?:async )?[A-Za-z_#]\w*\(|\n\}/.exec(rest);
+    expect(end, 'a following member bounds the body').not.toBeNull();
+    const body = rest.slice(0, end?.index ?? rest.length);
+    expect(body.split('\n').length, 'the extracted body is non-trivial').toBeGreaterThan(40);
+
+    expect(body, 'a fresh identity is minted for the RECIPIENT').toContain(
+      'mintProfileIdentity(args.recipientAccountId)',
+    );
+    expect(body, 'the recipient row is inserted with the freshly minted key').toContain(
+      'transferIdentity.wrappedDek',
+    );
+    expect(body, 'the SOURCE wrapped DEK is never carried across accounts').not.toContain(
+      'source.wrappedDek',
+    );
   });
 });
