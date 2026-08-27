@@ -16149,3 +16149,55 @@ contract with the pricing page that no locking test pins.
 ⭐⭐ Two stale self-descriptions in one day, both instructing redundant work, both silently decayed
 because **nothing reds when the gap a comment describes gets closed.** That is now a class worth
 watching rather than two coincidences.
+
+## V-1866 — the vacuous-pass class is closed, proven by running the suite against an empty database
+
+2026-08-26. No defect. A structural guard's claim tested behaviourally, and a detector that took three
+corrections before it measured anything.
+
+**THE CLASS.** `ci.yml` records that the real-Postgres tests once "had NEVER actually executed
+anywhere until 2026-06-12": they probed a schema-less database, hit their reachability guard, and
+reported PASSED. `an-integration-test-cannot-pass-without-its-database` keeps that closed
+_structurally_ — it reads source and requires any file that bails on a missing dependency to also
+assert the dependency was there, position-aware since V-793 because an assertion inside `beforeAll`
+registers nothing. **Structure is not execution**, so this tested the same claim by running it.
+
+**METHOD.** Create an unmigrated database (0 tables, verified), point the integration suite at it, and
+read which files pass. Known positive established first: `db-email-preferences-repo-drizzle` fails on
+an unmigrated database, so the setup can detect the defect it is looking for.
+
+⛔ **THE FIRST RUN MEASURED THE DEFENCE WITH THE DEFENCE SWITCHED OFF.** These tests are deliberately
+two-mode — `if (!dbReachable) { if (process.env.CI) throw 'vacuous pass is forbidden'; return; }`. I
+set `DATABASE_URL` so the `describe.skipIf` block would run, and did not set `CI`. That is the one
+mode where a vacuous pass is intentionally permitted. It produced 65 "files that passed with no
+schema", every one of them designed local behaviour. **Getting past `skipIf` is not the same as arming
+the assertion.**
+
+⛔ **AND THE VARIABLE NEVER REACHED A THIRD OF THE SUBJECTS.** 20 of those files call
+`ensureIsolatedDatabase`, which takes `DATABASE_URL` only for the SERVER, substitutes its own database
+name, creates it, and MIGRATES it. They are immune to an empty-database manipulation by construction —
+the experiment's independent variable did not touch them.
+
+✅ **CORRECTED RUN — `CI=true`, same empty database. The survivor set collapsed from 65 to 3**, with
+failures rising 161 → 266 as the guards fired, and the control (`db-profile-cap-lock-is-taken`) now
+failing as it must. Each of the three was read:
+
+- `canonical-email-sql-matches-the-runtime-drizzle` — **0 table statements**. It compares migration SQL
+  text against the runtime function and needs no database at all.
+- `db-profile-snapshot-restore-dek-drizzle` and `db-teams-backfill-drizzle` — both `CREATE SCHEMA` and
+  then `CREATE TABLE` their fixtures explicitly, rather than `LIKE public.x`, and set `search_path`.
+  Self-provisioning at the SCHEMA level, where my exclusion filter only knew about the DATABASE level.
+
+**RESULT: zero vacuous passes. The class is closed, and now on execution evidence rather than source
+shape.** Boundary, in the same breath: measured against an unmigrated public schema with `CI=true` and
+`DATABASE_URL` set, across `tests/integration`; files that provision their own database or schema are
+outside what this can perturb, which is a property of their design and not a gap in it.
+
+⭐ **A STATIC HALF, VALIDATED BEFORE ITS ZERO WAS BELIEVED.** Of the 136 DB-touching files that bail on
+a missing dependency and do not self-provision, **0** lack both defences (a registered reachability arm,
+or the CI-throw). A zero from an unrun detector is worth nothing, so I manufactured a known positive:
+stripped the CI-throw from a real file on a scratchpad COPY, confirmed the detector flags it, and only
+then trusted the zero.
+
+⚠️ Three corrections before this measured anything — wrong mode, unreachable subjects, an unvalidated
+zero. That is the cost of the answer, and it is worth writing down beside it.
