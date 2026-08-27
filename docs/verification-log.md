@@ -12625,3 +12625,74 @@ re-deriving it.
 ⭐ The transferable half: **e2e runs in CI (`.github/workflows/ci.yml:219`) but not in my gate.** So this
 layer is protected — just not by anything I run. Every "suite green" I report is scoped to vitest, and
 V-1998 states the size of what that scope omits.
+
+## V-2000 — a ceiling went red on a commit that added no debt: the guard counted a comment (2026-08-27)
+
+2026-08-27. The gate came back **NOT TRUSTWORTHY — 1 failed of 3241 files, 32216 passed**:
+
+```
+a-walk-that-swallows-a-missing-root-does-not-spread.test.ts
+AssertionError: walk sites that return [] for a missing directory: 93 across 89 files (ceiling 92).
+```
+
+**Attributed before investigating.** Tree clean at `12df9638c`. Of the commits since the last green gate,
+mine touched only `docs/verification-log.md` — a docs file cannot add a walk. Diffing the swallow-site
+count per changed test file found exactly one mover: `workspace-tier-slug-sweep.test.ts`, 1 → 2, in A2's
+`456021b41`.
+
+**Then the attribution dissolved: A2 added no swallow site.** The two occurrences in that file are
+
+```
+line 16    if (!existsSync(dir)) return out;              <- real code, pre-existing
+line 34   * MISSING root produces — `walk` opens with `if (!existsSync(dir)) return out;`. So a
+```
+
+Line 34 is inside a JSDoc block explaining _why_ the sweep now asserts its walk roots — the commit was
+`test(marketing): assert the walk roots so an empty sweep cannot read as clean`. **Documenting the shape
+incremented the debt counter for it.** The failure was mine, in a guard I own; A2's commit was correct and
+is what exposed it.
+
+**The guard had already made this exact judgement — for one file, and never generalised it.** It excludes
+itself from its own scan, with the reason written out: _"A fixture demonstrating the pattern is not an
+instance of the debt."_ That sentence is the general rule; it was applied as a special case. The fix is to
+apply it everywhere, so the marker counts code and not prose. SELF stays regardless — its fixture is a
+**string literal**, which no comment filter removes.
+
+⛔ **My first fix ate a real site, and only a known-positive test caught it.** I wrote the obvious
+comment-stripper (`/\*[\s\S]*?\*\//g` plus a `//` pass) and measured "2 phantoms". The second was
+`docs-anchor-link-integrity.test.ts:34` — an actual `if (!existsSync(dir)) return out;` in an actual
+`walk`. A regex literal containing a slash-star opened a phantom block comment that swallowed to the next
+`*/`, deleting real code before the matcher ever saw it. **A stripper that narrows the corpus narrows every
+claim built on it**, and shipping it would have made the ceiling blind to genuine debt while looking like a
+correctness fix. The landed version never modifies the source: it matches over the whole file as before and
+discards a hit only when the line it STARTS on opens with `*` or `//`. Whole-file matching is retained
+deliberately so a site wrapped across lines still counts.
+
+⛔ **I re-implemented the guard's walk and got a different population — again.** My replication said 95
+across 91 files; the guard says 92 across 89. The guard gates on `src.includes('readdirSync')` before
+counting, which my copy ignored. **Asked the guard instead** (ceiling → -1, read its own assertion):
+
+```
+before A2's commit, recorded : 92 across 89 files
+with the phantom counted     : 93 across 89 files   <- the red
+after the fix                : 92 across 89 files   <- the recorded baseline, exactly
+```
+
+**The ceiling needs no change.** Returning to the previously recorded number is the strongest evidence the
+filter is right: it neither invented debt nor hid any.
+
+**Mutation-proved in both directions**, on a real subject rather than the guard's own list
+(`a-capability-file-that-is-not-listed-is-inert.test.ts`, snapshot keyed by path, `cmp` before and after):
+
+- append a **real** `if (!existsSync(dir)) return [];` → **93 across 90 files, RED**. The guard still bites.
+- append the **same text inside a JSDoc block** → the raw matcher finds it in the subject, guard **GREEN**.
+
+The first attempt at mutation A appended nothing — my anchor did not match — and the guard passed. That
+green meant "the tree is clean", not "the guard held"; the `cmp` assert is the only reason it was not read
+as a result. `tsc -p apps/server/tsconfig.test.json` clean, `it(` count 3 unchanged, ceiling and header
+comment still accurate at 92/89.
+
+⭐ **The transferable half: a guard that documents its own exception has stated a rule it is not
+enforcing.** The SELF exclusion was a correct judgement written in prose and applied to one path. Every
+other file was left to trip over it, and the one that finally did was a commit whose whole purpose was to
+make a sweep harder to fool.

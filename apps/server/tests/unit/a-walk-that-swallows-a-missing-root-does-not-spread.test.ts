@@ -65,6 +65,50 @@ function testFiles(dir: string, out: string[] = []): string[] {
  */
 const SELF = fileURLToPath(import.meta.url);
 
+/**
+ * Occurrences that are CODE, not prose. A file that DOCUMENTS the shape — quoting
+ * `if (!existsSync(dir)) return out;` in a JSDoc block to explain why it asserts its
+ * walk roots — carries no debt, and counting it turned this ceiling red on a commit
+ * that added no swallow site at all (V-2000).
+ *
+ * The guard already made exactly this judgement once, for itself: SELF is excluded
+ * because "a fixture demonstrating the pattern is not an instance of the debt". That
+ * reasoning was never generalised, so it held for one file and no other. This is the
+ * general form; SELF stays, because its fixture is a STRING literal, which no comment
+ * filter removes.
+ *
+ * Filtering by the line each match STARTS on, rather than stripping comments from the
+ * source: a block-comment stripper mishandles a regex literal containing a slash-star
+ * and silently eats REAL sites — mine ate `docs-anchor-link-integrity`'s before I
+ * tested it against a known member. Matching still runs over the whole file, so a site
+ * wrapped across lines is counted exactly as before.
+ */
+function codeSites(src: string): number {
+  const lineStarts: number[] = [0];
+  for (let i = 0; i < src.length; i += 1) if (src[i] === '\n') lineStarts.push(i + 1);
+  const lineAt = (idx: number): string => {
+    let lo = 0;
+    let hi = lineStarts.length - 1;
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      if ((lineStarts[mid] as number) <= idx) lo = mid;
+      else hi = mid - 1;
+    }
+    const start = lineStarts[lo] as number;
+    const end = src.indexOf('\n', start);
+    return src.slice(start, end === -1 ? src.length : end);
+  };
+  let hits = 0;
+  for (const m of src.matchAll(SWALLOWS_G)) {
+    if (m.index === undefined) continue;
+    // A statement's own line opens with the `if`; a prose mention opens with a
+    // JSDoc continuation `*` or a `//`.
+    if (/^\s*(\*|\/\/)/.test(lineAt(m.index))) continue;
+    hits += 1;
+  }
+  return hits;
+}
+
 function scan(): { occurrences: number; files: string[]; filesScanned: number } {
   const files: string[] = [];
   let occurrences = 0;
@@ -75,7 +119,7 @@ function scan(): { occurrences: number; files: string[]; filesScanned: number } 
       filesScanned += 1;
       const src = readFileSync(file, 'utf8');
       if (src.includes('readdirSync')) {
-        const hits = src.match(SWALLOWS_G)?.length ?? 0;
+        const hits = codeSites(src);
         if (hits > 0) {
           occurrences += hits;
           files.push(file.slice(REPO_ROOT.length + 1));
