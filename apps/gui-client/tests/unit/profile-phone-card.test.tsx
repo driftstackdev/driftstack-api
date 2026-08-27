@@ -189,6 +189,12 @@ describe('ProfilePhoneCard', () => {
     const del = screen.getByLabelText(/^Delete /);
     // W3120 renamed the action: "Trim" was jargon, "Clear cache" is what a
     // customer looks for. The disabled-while-busy property is unchanged.
+    //
+    // The clear scopes moved behind a disclosure (four variants of a rare action
+    // were burying the daily ones in a thirteen-item menu), so the row has to be
+    // revealed before its disabled state can be read. The property under test is
+    // untouched — only how deep the row sits.
+    fireEvent.click(screen.getByLabelText(/^Clearing options for /));
     const trim = screen.getByLabelText(/^Clear cache for /);
     const dup = screen.getByLabelText(/^Duplicate /);
     expect((del as HTMLButtonElement).disabled).toBe(true);

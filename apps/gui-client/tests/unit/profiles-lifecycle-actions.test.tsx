@@ -213,6 +213,17 @@ vi.mock('../../src/lib/agent-session-control', () => ({
 const { ProfilesView } = await import('../../src/views/ProfilesView');
 const { ConfirmProvider } = await import('../../src/components/ConfirmProvider');
 
+/**
+ * The four "Clear …" rows now sit behind a disclosure in the card menu, because
+ * inline they buried the daily actions under variants of a rare one. Tests that
+ * reach a Clear row must open that group first — the rows are not rendered until
+ * it is expanded, so without this they fail on a missing element rather than on
+ * the behaviour they assert.
+ */
+async function openClearGroup(): Promise<void> {
+  fireEvent.click(await screen.findByRole('button', { name: /^Clearing options for / }));
+}
+
 async function openCardMenu(): Promise<void> {
   render(<ProfilesView onGoToSettings={vi.fn()} />);
   // Wait for the card to render then open its ⋯ menu (the Edit/Duplicate rows
@@ -268,6 +279,7 @@ describe('ProfilesView profile-lifecycle actions', () => {
 
     it('exposes a Clear cache action in the card menu, saying what it keeps', async () => {
       await openCardMenu();
+      await openClearGroup();
       const trim = await screen.findByRole('button', { name: 'Clear cache for Demo' });
       expect(trim.getAttribute('title')).toBe(
         'Free re-fetchable files. Logins, site data and tabs are kept',
@@ -287,6 +299,7 @@ describe('ProfilesView profile-lifecycle actions', () => {
         </ConfirmProvider>,
       );
       fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+      await openClearGroup();
       fireEvent.click(await screen.findByRole('button', { name: 'Clear cache for Demo' }));
       // The confirm dialog's primary action is "Clear cache".
       fireEvent.click(await screen.findByRole('button', { name: 'Clear cache' }));
@@ -302,6 +315,7 @@ describe('ProfilesView profile-lifecycle actions', () => {
         </ConfirmProvider>,
       );
       fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+      await openClearGroup();
       fireEvent.click(await screen.findByRole('button', { name: 'Clear cookies for Demo' }));
       // The confirmation must say what is actually lost BEFORE it happens.
       expect(await screen.findByText(/SIGNS THE PROFILE OUT everywhere/)).toBeTruthy();
@@ -319,6 +333,7 @@ describe('ProfilesView profile-lifecycle actions', () => {
         </ConfirmProvider>,
       );
       fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+      await openClearGroup();
       fireEvent.click(await screen.findByRole('button', { name: 'Clear cookies for Demo' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Clear cookies' }));
       const notice = await screen.findByText(/Cleared cookies and site data/);
@@ -332,6 +347,7 @@ describe('ProfilesView profile-lifecycle actions', () => {
         </ConfirmProvider>,
       );
       fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+      await openClearGroup();
       fireEvent.click(await screen.findByRole('button', { name: 'Clear history for Demo' }));
       const body = await screen.findByText(
         /only record of visited pages held in the profile itself/,
@@ -348,8 +364,14 @@ describe('ProfilesView profile-lifecycle actions', () => {
       expect(body.textContent).toMatch(/does NOT clear the server-side record/i);
     });
 
-    it('every clear scope is reachable from the card menu', async () => {
+    it('every clear scope is reachable from the card menu, one disclosure deep', async () => {
       await openCardMenu();
+      // ⛔ The four scopes are behind a disclosure now. Assert the rows are NOT
+      // reachable before it opens: without this the arm would still pass if the
+      // grouping were reverted, and its whole subject is that they live one level
+      // in rather than inline.
+      expect(screen.queryByRole('button', { name: 'Clear cache for Demo' })).toBeNull();
+      await openClearGroup();
       for (const name of [
         'Clear cache for Demo',
         'Clear cookies for Demo',
@@ -371,6 +393,7 @@ describe('ProfilesView profile-lifecycle actions', () => {
         </ConfirmProvider>,
       );
       fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+      await openClearGroup();
       fireEvent.click(await screen.findByRole('button', { name: 'Clear cache for Demo' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Clear cache' }));
       await waitFor(() => expect(profilesTrim).toHaveBeenCalledWith('prof_1'));

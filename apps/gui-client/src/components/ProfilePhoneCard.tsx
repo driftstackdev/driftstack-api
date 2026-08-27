@@ -679,7 +679,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                 title spells out exactly what's kept so the customer knows
                 nothing identity-bearing is dropped. Disabled while busy. */}
             {p.onTrim ? (
-              <>
+              <MenuGroup glyph="🧹" caption="Clear…" label={`Clearing options for ${p.name}`}>
                 <MenuRow
                   glyph="🧹"
                   caption="Clear cache"
@@ -743,7 +743,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                     p.onTrim?.('all');
                   }}
                 />
-              </>
+              </MenuGroup>
             ) : null}
             {p.onDelete ? (
               <>
@@ -843,6 +843,62 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
 // 2026-06-17: "the dots should be a cleaner vertical dropdown with labels").
 // glyph + caption are visible; `label` is the descriptive aria-label/title
 // (kept stable so the harness queries by it).
+/**
+ * A collapsible group of menu rows.
+ *
+ * ⭐ Four "Clear …" rows sat inline in a thirteen-item card menu, so the two
+ * actions a customer reaches for daily were buried under variants of one they use
+ * rarely. Owner-reported: they "take up too many items".
+ *
+ * ⚠️ Opens on hover AND on click/focus, deliberately. Hover alone is what a mouse
+ * user asks for and it is unreachable by keyboard and unusable on touch — the
+ * disclosure would simply never open. Hover is the convenience; the button is the
+ * mechanism.
+ *
+ * Stays open once opened rather than closing on mouseleave: the rows below are
+ * destructive, and a submenu that retracts while the pointer travels toward it
+ * turns a careful click into a mis-click on whatever moves into its place.
+ */
+function MenuGroup({
+  glyph,
+  caption,
+  label,
+  children,
+}: {
+  glyph: ReactNode;
+  caption: string;
+  label: string;
+  children: ReactNode;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  return (
+    <div data-component="menu-group" data-open={open ? 'true' : 'false'}>
+      <button
+        type="button"
+        aria-label={label}
+        aria-expanded={open}
+        title={label}
+        onMouseEnter={() => setOpen(true)}
+        onFocus={() => setOpen(true)}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[11.5px] font-medium text-ink-secondary transition-colors hover:bg-surface-elevated hover:text-ink-primary"
+      >
+        <span className="w-4 shrink-0 text-center text-[13px] leading-none" aria-hidden="true">
+          {glyph}
+        </span>
+        <span className="leading-none">{caption}</span>
+        <span className="ml-auto text-[10px] leading-none text-ink-muted" aria-hidden="true">
+          {open ? '▾' : '▸'}
+        </span>
+      </button>
+      {open ? <div className="border-l border-surface-divider pl-1.5">{children}</div> : null}
+    </div>
+  );
+}
+
 function MenuRow({
   glyph,
   caption,
