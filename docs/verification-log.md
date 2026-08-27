@@ -20341,3 +20341,37 @@ frame pacing**, which lives outside this repo.
 cannot be observed sticking, so no amount of load testing this particular gate would have been
 informative. **The measurement effort belongs on the gates that DO hold state**, and identifying which
 those are is the cheaper first step.
+
+## V-1965 — the inbound gate releases on a clock, not on pressure clearing (2026-08-27)
+
+V-1964 answered the OUTBOUND control-plane gate: stateless, nothing held, cannot fail to release. **The
+INBOUND direction is the opposite shape and gives a different answer.**
+
+`FleetInboundFrameBudget.admit` (`services/fleet-inbound-frame-gate.ts`) is a per-node token bucket. It
+holds state, and its release is a function of ELAPSED TIME, not of congestion having cleared:
+
+    elapsedSeconds = Math.max(0, now - state.refilledAtMs) / 1000
+    frameTokens     = min(256,      frameTokens     + elapsed * 32)        // 8s empty→full
+    byteTokens      = min(64 MiB,   byteTokens      + elapsed * 8 MiB)     // 8s empty→full
+    largeFrameTokens= min(4,        largeFrameTokens+ elapsed * 1)         // 4s empty→full
+
+**So after the bucket is drained, admission is capped at 32 frames/sec for up to 8 seconds regardless of
+whether the network recovered instantly.** A bucket cannot "notice" that pressure cleared — that is what
+a token bucket is, and it is the correct shape for abuse limiting. It is also, precisely, a mechanism
+that does not pick up promptly after a lag.
+
+⛔ **What is certain and what is not, stated separately.** The arithmetic above is certain — read from
+the constants and the refill expression. **What I have NOT established is whether a lag episode actually
+drains these buckets.** A slow network delivers FEWER frames, which does not drain an inbound bucket;
+the drain would come from the backlog arriving as a burst once the link recovers. **That reconnect-burst
+shape is the hypothesis this points at, and it is a measurement, not a reading** — it needs the real
+frame rate of the harness protocol under a recovered link, which I cannot obtain from this repo.
+
+⭐ **The useful half is the triage rule, not the number:** V-1964's gate holds no state, so no amount of
+load testing it could show a stick — testing it would have been effort spent proving a tautology. This
+gate holds three independent buckets with an 8-second worst case. **When asking "does the gate release
+promptly", establish first whether the gate HAS state; the stateless ones are answerable by reading and
+the stateful ones are the only ones worth instrumenting.**
+
+**Boundary: both entries cover `apps/server` control-plane gates only.** The SFU and data-channel pacing
+that governs frame smoothness is outside this repo and unexamined here.
