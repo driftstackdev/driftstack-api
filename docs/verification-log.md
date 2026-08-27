@@ -19379,3 +19379,45 @@ breach; theirs makes it impossible. Adopted.
 of the webhooks test at load ~17, so it establishes those three failures are not V-1938's and does
 not establish the suite is green at this commit — that needs a run neither agent is competing with.
 No source change; ratchets unchanged at 3062/3238.
+
+## V-1940 — the decomposer's bounds, and my own token sweep accusing the one it enforces tightest (2026-08-27)
+
+Closing V-1938's stated boundary from the upstream side: that fix bounds the SUMMARY, and left open
+what actually reaches it. `AgentIntent.selector` is a bare `z.string()` in api-types and the dispatch
+schema admits **262_144**, but intents originate in the decomposer, and the decomposer is the
+narrower gate.
+
+**It bounds every field it emits, and rejects rather than truncates:**
+
+| action             | field            | limit              | mechanism                                             |
+| ------------------ | ---------------- | ------------------ | ----------------------------------------------------- |
+| `tap`              | selector / value | 4096 / 512         | `assertStringWithinLimit` — throws                    |
+| `type`             | selector / value | 4096 / 10_000      | `assertStringWithinLimit` — throws                    |
+| `press`            | value            | **20**             | inline guard `i.value.length <= 20`, drops the intent |
+| `wait`             | selector         | 4096               | `assertStringWithinLimit`                             |
+| `navigate`         | url              | 8192               | `assertStringWithinLimit`                             |
+| `scroll` / `swipe` | —                | no strings emitted | —                                                     |
+
+Also bounded upstream of those: `MAX_ANTHROPIC_RESPONSE_BYTES = 64 * 1024`, `MAX_PLAN_INTENTS = 8`,
+`MAX_OBSERVATION_CHARS = 20_000`.
+
+⛔ **My detector accused `press`, the most tightly bounded field in the file.** I swept for
+`assertStringWithinLimit` per action arm and reported `press` and `scroll` as unguarded. `press`
+caps its value at **20 characters** — a key name — through a filter condition rather than a throwing
+assert, and `scroll` emits no string at all. Sweeping the token (`assertStringWithinLimit`) rather
+than the property (is this field bounded) produced a two-item list in which the first entry was the
+strictest bound in the file. That is the third standing lesson, on my own analysis, for the second
+time today — and the reason the entry above is a table of mechanisms rather than of call sites.
+
+**The correction this forces to V-1938.** That entry called the gap "512× the cap this module
+declares", from `HARNESS_SCRIPT_MAX_CHARS = 262_144`. That figure is the dispatch ceiling and is
+correct as stated, but it is not what is reachable: the widest summary the decomposer can actually
+produce is `typed into ` + a 4096-char selector, ~**4108** characters — **8×** the declared 512 cap,
+not 512×. The fix stands unchanged, and its justification is 8×, not three orders of magnitude. A
+severity I overstated by citing the outer ceiling instead of the reachable one.
+
+**Boundary:** this reads the decomposer's own emission path at `ba5ea6e48` and establishes what IT
+can emit; recipes replay stored `intent_log`s validated against `AgentIntentSchema`, which carries no
+`.max()`, so their bound is whatever the decomposer applied when the transcript was written — I did
+not verify that a recipe cannot be constructed from an intent that predates a tightening. No source
+change; ratchets unchanged at 3062/3238.
