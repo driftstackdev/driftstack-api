@@ -23,6 +23,30 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 
+// ⛔ 2026-08-27 — THE STATUS-SITE SENTENCE ABOVE IS STALE. It has shipped a real
+// `apps/status-site/public/_headers` (3670 bytes) since the referrer hardening;
+// it is no longer fileless. Left in place as the reason this guard was written,
+// corrected here rather than silently edited.
+//
+// ⭐ WHY THE TWO POLICIES DIFFER, recorded because nothing said so and the
+// difference invites a wrong "consistency" fix in either direction. `no-referrer`
+// is not the stricter-is-better choice applied unevenly — it tracks whether the
+// app SERVES a page whose own URL carries a credential. Measured across all six
+// Astro surfaces on 2026-08-27:
+//
+//   serves a token-bearing URL  → no-referrer
+//     customer-dashboard  (reset-password.astro, verify-email.astro)
+//     status-site         (subscribe confirm + one-click unsubscribe)
+//   does not                    → strict-origin-when-cross-origin
+//     admin-panel   (no token route at all — bearer lives in a header)
+//     docs, marketing-site  (they DOCUMENT token URLs in prose; they serve none)
+//     errors-site
+//
+// Six of six consistent. So harmonising admin-panel UP to `no-referrer` would be
+// harmless but meaningless, and harmonising customer-dashboard DOWN to match
+// admin-panel would re-expose a reset token to every same-origin asset the page
+// loads — which is exactly the exposure the status-site fix closed.
+
 const SURFACES = [
   {
     name: 'customer-dashboard',

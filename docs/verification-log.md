@@ -17443,3 +17443,44 @@ mismatch is the signal to widen rather than to infer.
 reasoning lives in the shipped `_headers` comment and in a test title instead. That is the durable
 place for it — a comment travels with the file, a commit body does not — but it does mean `git log`
 alone cannot explain the change.
+
+## V-1899 — the referrer split across six frontends is principled, and nothing said so
+
+2026-08-27. No defect. The generalisation of V-1898, measured across every Astro surface, plus a stale
+sentence in the guard that pins it.
+
+**THE QUESTION V-1898 RAISED.** The status-site hardened `Referrer-Policy` to `no-referrer` because its
+URLs carry bearer tokens. So do the other five frontends agree? Measured:
+
+    no-referrer                       customer-dashboard, status-site
+    strict-origin-when-cross-origin   admin-panel, docs, marketing-site, errors-site
+
+**Admin-panel is an AUTHENTICATED surface rendering cross-customer data and it has the weaker policy**,
+which looks like an oversight and is not.
+
+✅ **THE SPLIT TRACKS ONE PROPERTY EXACTLY: does the app SERVE a page whose own URL carries a
+credential?** Six of six consistent:
+
+- `customer-dashboard` serves `reset-password.astro` and `verify-email.astro` — token in the URL.
+- `status-site` serves subscribe-confirm and one-click unsubscribe — token in the URL.
+- `admin-panel` has **no** token route; its bearer lives in a header.
+- `docs` and `marketing-site` matched my first crude grep with 9 and 4 hits, and **every one is
+  documentation** — `wss://chrome.browserless.io?token=…` in a comparison table,
+  `GET /v1/status/subscribe/confirm?token=<opaque>` in API prose. They DESCRIBE token URLs; they serve
+  none. ⛔ A count of matches would have reported two inconsistencies that do not exist.
+
+⭐⭐ **THE REASON THIS IS WORTH WRITING DOWN IS THE DIRECTION OF THE LIKELY MISTAKE.** An undocumented
+difference between two authenticated frontends invites a "harmonise them" change, and the two
+directions are not symmetric: raising admin-panel to `no-referrer` is harmless but pointless, while
+lowering customer-dashboard to match admin-panel would re-expose a password-reset token to every
+same-origin asset that page loads — precisely the exposure the status-site fix closed. Recorded in the
+guard that pins both values, next to the values.
+
+⛔ **AND THAT GUARD CARRIED A STALE SENTENCE ABOUT A THIRD SURFACE:** "the status-site is pinned as
+intentionally-fileless (CF-edge headers)". It ships a real `apps/status-site/public/_headers`, 3670
+bytes, since the referrer hardening. Corrected in place and left visible as the reason the guard was
+written, rather than quietly deleted.
+
+⚠️ BOUNDARY: this measures the shipped `_headers` of the six Astro apps and which of them serve a
+token-bearing route. It does not cover headers set at the Cloudflare edge outside these files, nor the
+API's own responses, which `api-security-headers-doc-parity` owns.
