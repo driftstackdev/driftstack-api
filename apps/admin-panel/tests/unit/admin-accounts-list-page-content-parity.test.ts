@@ -18,7 +18,7 @@
 //     these filters.
 //   • localStorage key ds_web_session_token.
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -141,8 +141,22 @@ describe('W359.C admin-panel /accounts list page content parity', () => {
   it('row-detail drill-down hrefs use /accounts/:id (V-187 per-account detail route)', () => {
     expect(body).toMatch(/const stripped = a\.id\.replace\(\/\^acc_\/, ''\)/);
     expect(body).toMatch(/'<a href="\/accounts\/'\s*\+\s*encodeURIComponent\(stripped\)/);
-    // Drill-down target page exists.
-    const detailPage = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/accounts');
-    expect(detailPage).toBeTruthy(); // the directory housing [id].astro
+    // Drill-down target resolves. This asserted `resolve(...)` was truthy, which
+    // it always is — resolve() returns a string and never touches the disk, so
+    // the check could not fail and the comment named an `[id].astro` this app
+    // does not use. /accounts/:id is served by a Cloudflare Pages 200-rewrite to
+    // a static shell (astro.config.mjs: no Worker/SSR adapter), so the rewrite
+    // rule IS the drill-down target and is what has to exist.
+    const redirects = readFileSync(
+      resolve(REPO_ROOT, 'apps/admin-panel/public/_redirects'),
+      'utf8',
+    );
+    expect(
+      redirects,
+      'no 200-rewrite for /accounts/:id — every row href in this page 404s without it',
+    ).toMatch(/^\/accounts\/:id\s+\/shells\/account-detail\/?\s+200\s*$/m);
+    expect(
+      existsSync(resolve(REPO_ROOT, 'apps/admin-panel/src/pages/shells/account-detail.astro')),
+    ).toBe(true);
   });
 });

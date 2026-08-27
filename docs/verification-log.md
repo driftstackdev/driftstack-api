@@ -19766,3 +19766,38 @@ walks a page directory with two `toEqual([])` and no count assertion at all. **S
 hand-reading per file, and I am recording it as a candidate list, not a finding.** I checked whether
 that page directory had shrunk under the operational-surface deletion and my before/after command only
 listed the top-level tree, missing nested page dirs — the comparison was invalid and is not reported.
+
+## V-1950 — an assertion that could not fail, guarding a comment that was wrong (2026-08-27)
+
+Chasing the vacuity shape into the other apps, the useful discriminator turned out to be **file versus
+directory**: a test that names a missing FILE is almost always asserting its ABSENCE deliberately
+(`expect(existsSync(PAGE)).toBe(false)`, "mirror page stays deleted"), while a walk names a DIRECTORY.
+My first guard asserted "every path a test names still exists" and immediately flagged 30 intentional
+absence tests — **a large, plausible finding that was entirely the detector's premise being wrong.** It
+was deleted rather than committed.
+
+With the discriminator applied to 3300 declared roots: **zero missing directories, and exactly one
+empty one** — `apps/admin-panel/src/pages/accounts`, which is untracked local cruft and therefore absent
+on a fresh checkout. The test naming it does this:
+
+    const detailPage = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/accounts');
+    expect(detailPage).toBeTruthy(); // the directory housing [id].astro
+
+**`resolve()` returns a string and never touches the disk, so this cannot fail** — not "does not fail
+today", cannot. And its comment names an `[id].astro` this app does not use: `/accounts/:id` is served
+by a Cloudflare Pages 200-rewrite to a static shell, which `astro.config.mjs` documents ("no Worker/SSR
+adapter is required"). **So the line asserted nothing, about a mechanism that was not the mechanism.**
+
+The route itself is sound and well covered — eight tests exercise the detail page — so this is a defect
+in the guard, not in the product. Replaced with the assertion it meant: the `_redirects` rule for
+`/accounts/:id` must exist, and the shell page it points at must exist. **Mutation-proven by removing
+the rewrite rule: the arm reddens with "every row href in this page 404s without it", where the old
+assertion passed unchanged.** `_redirects` is a production file and was restored byte-identical from a
+snapshot taken before the mutation.
+
+**The mechanism behind the whole sweep, now stated precisely: 89 test files use a walk helper beginning
+`if (!existsSync(dir)) return out;`.** That swallows a missing root and returns `[]`, which is the pass
+condition for every emptiness assertion downstream — so a moved source tree makes those guards quiet and
+green at the same instant. Nothing has drifted today (zero missing directories), so this is a recorded
+hazard with a measured population, not an open defect. Making 89 helpers throw instead of swallow is a
+larger change than I should make unilaterally.
