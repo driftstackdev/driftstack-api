@@ -19895,7 +19895,16 @@ semantic/LLM-classifier vocabulary are `agent-consequential-action.ts`, its dist
 > finding is the one that goes unchecked**, because the scrutiny lands on the headline. And the source
 > itself is honest — it says RESIDUAL and "out of scope for this conservative v1.0 keyword matcher".
 > **The accurate defect is one clause: a deferral to a version that was never built** — weaker than
-> "covered elsewhere", and the weaker true claim is the one to hand an owner. `classifyConsequentialAction` is the sole gate, wired through
+> "covered elsewhere", and the weaker true claim is the one to hand an owner.
+>
+> ⛔ **NARROWED AGAIN, and this is the version to use.** "Never built" overstates it: **v1.1 is a real,
+> documented scope**, referenced in `ai-b2b-harness-executor-design.md`, `ai-b1b-activation-design.md`
+> and `byok-anthropic-key-storage-design.md`, with ~11 source sites deferring to it consistently. That
+> is ordinary roadmap deferral, not a phantom. **What survives is only this: the gap is OPEN TODAY,
+> measured, and reachable from attacker-controlled page text.** Whether to pull the fix forward of v1.1
+> is a scheduling decision, not a correction of a false claim. Three successive narrowings of my own
+> finding — "covered elsewhere" → "deferral to a version never built" → "open today, deferred to a real
+> future release" — and each narrowing came from checking one more thing I had assumed. `classifyConsequentialAction` is the sole gate, wired through
 > `consequentialHalt` in `services/agent-executor.ts:143` and applied at two dispatch sites. **So the
 > residual is uncovered today rather than covered elsewhere**, which is a different claim from the one the
 > comment makes.
