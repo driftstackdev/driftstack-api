@@ -16917,3 +16917,45 @@ carries why the warning currently holds and what would break it.
 (a framework 4xx, a serializer) are the error-handler's, whose 5xx no-leak path has its own guard;
 2xx bodies have another. Neither sweeps a 400 that quotes input, which is the gap this probe filled by
 hand for one route rather than for the population.
+
+## V-1884 — the "400 that quotes input" population, swept; one candidate, and it resolves upstream
+
+2026-08-27. No defect. The gap V-1883 left as a boundary, closed for the population, plus a prior
+entry's premise re-verified at HEAD.
+
+**THE SWEEP.** V-1883 probed one route by hand for an error body echoing customer input. Across
+`apps/server/src`, **136 client-facing errors interpolate a value**. Most quote a PATH parameter —
+`req.params.id`, `sessionId`, `order_id`, `deliveryId` — which is the caller's own URL handed back and
+leaks nothing new to them. **15 interpolate a body-derived value**, and of those, thirteen are ids,
+provider names, or a customer's own profile name. Two quote a server constant (a required scope name).
+
+⭐ **ONE CANDIDATE HAD REAL TEETH: `services/webhooks.ts:1019`, `new ConflictError(\`Invalid URL:
+${raw}\`)`.** URLs carry credentials, and it fires exactly when `new URL(raw)` THREW — i.e. only for
+malformed input. Traced end to end: `parseHttpsUrl` is called from webhook create and update, and
+`error-handler.ts` logs 4xx as `request.log.warn({ err, problem }, …)`, so the string reaches the logs.
+
+⛔⛔ **AND `redactText` DOES NOT SCRUB THE MALFORMED CASE — demonstrated, not reasoned.** Probed with a
+marker password: `https://alice:hunter2@example.com/hook` is redacted to `https://[redacted]@…`, and
+`https//alice:hunter2@…` — one missing colon — passes through **untouched**. A plain-text control is
+unchanged, so the probe is not simply always-firing. The echo condition and the redactor's blind spot
+are complementary: it echoes precisely when the URL is malformed, which is precisely what the redactor
+cannot see.
+
+✅ **IT IS STILL NOT REACHABLE, AND A 2026-era ENTRY SAID SO FIRST.** V-964 triaged this exact line off
+a candidate list as "unreachable via any route", reasoning that both callers sit behind
+`z.string().url()`. **That premise was worth re-checking rather than citing, and it holds:**
+`CreateWebhookRequestSchema` and `UpdateWebhookRequestSchema` still carry
+`.url().regex(/^https:\/\//)`, and pushing the marker URL through the real schema rejects it with
+"Invalid url" — **echoing nothing**. An expiry check that PASSED, which is worth recording given how
+many of mine this week did not.
+
+⭐⭐ **AND THE REDACTOR'S BLIND SPOT IS A DELIBERATE TRADE-OFF, with the reason in the source.**
+`URL_USERINFO_RE` is anchored on `scheme://` so that a query-embedded `@` — the comment's own example,
+`?email=a@b.com` — is not mangled. Dropping the anchor to catch malformed schemes would destroy every
+email address in a log line. That is a decision with a written rationale, not an omission; the third
+time this week a candidate resolved into one.
+
+⚠️ **WHAT THIS DOES NOT COVER, stated as the boundary:** the protection is UPSTREAM, in the request
+schema, not in the redactor. Any future path that puts an unvalidated URL-ish string into a client
+error or a log — one not sitting behind `z.string().url()` — is exposed to exactly the probe above.
+The two call sites that exist today (`services/webhooks.ts`, `drivers/mock.ts`) are both schema-gated.
