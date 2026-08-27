@@ -13932,3 +13932,47 @@ throw. ⭐ **The branch was covered; the input was not** — the same distinctio
 fixture of 9 and 40 characters never reached a 36-character branch, and V-2007 found again at 10
 characters against a 36-wide pattern. Third and fourth instances of one rule: **a refusal fixture must be
 the value the other side actually produces.**
+
+## V-2024 — eight hand-copied audit wrappers, all recording on failure, all pinned; and a grep that invented a gap twice (2026-08-27)
+
+2026-08-27. V-1890 mentioned in passing that an admin audit wrapper "records on BOTH paths —
+`result: 'success'` in the try, `` result: `error: ${code}` `` in the catch before re-throwing". That is a
+property worth holding across a compliance surface, and the wrappers are hand-copied, so it is a
+divergent-copy question.
+
+**Boundary: the eight `withAudit*` definitions across six route files in `apps/server/src/routes` —
+`admin-accounts` (three), `admin-crypto-orders`, `admin-force-actions`, `admin-incidents`,
+`admin-validation-harness`, `admin-webhooks`. No shared implementation; each is its own copy.**
+
+**All eight record on the error path**, with the same field set and a re-throw. Verified by reading
+`admin-webhooks`' in full rather than trusting the sweep, and the sweep's detector was checked against a
+constructed success-only wrapper, which it flags. A uniform 8/8 is the shape that usually means the
+instrument is broken; here it survived both checks.
+
+### ⛔ Then my second instrument invented a gap, twice, and mutation refuted it both times
+
+Asking "is the error path PINNED?", I grepped the six content-parity files for `error: ${code}`,
+``result: `error`` and `catch (err)`. Two came back **zero** — `admin-force-actions` and
+`admin-incidents` — which reads as two compliance surfaces where dropping the audit-on-failure would go
+unnoticed.
+
+**Both are pinned. Dropping the catch body proves it:**
+
+```
+admin-force-actions  -> reds "withAudit wrapper: D-025 success + error dual-write with deferred
+                        target/payload authority"
+admin-incidents      -> reds TWO arms, including one pinning the error-code derivation
+                        ("NotFoundError" → "notfound") because the admin audit-log filter chips read it
+```
+
+The pins simply word their assertions differently than my three patterns. **Grepping the guards asks
+whether they use MY wording; mutating asks whether they catch the change.** Those are different questions
+and only the second is the one I wanted.
+
+⭐ **Second time today.** V-1998 read a pin that stopped one character short of a regex flag and concluded
+the flag was unpinned; it was pinned twice, in files I had not opened, and mutation is what showed it.
+**To ask whether a property is guarded, break it.** A guard census answers a question about vocabulary.
+
+**No code changed.** Recorded because "eight hand-copied wrappers on the audit path" is exactly the shape
+that usually yields, and this time the copies agree and every one is held — worth knowing before someone
+spends another sweep on it.
