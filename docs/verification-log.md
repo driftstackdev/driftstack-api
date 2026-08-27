@@ -14939,3 +14939,55 @@ before `.where(...)` (`status-subscribers-repo::markUnsubscribed`, and `closeAct
 itself), and both are correctly scoped. That detector fails toward false positives, which is the safe
 direction. Separately, `echo "tsc: $?"` after a pipe reported 0 while tsc had failed with TS5058 — the
 piped-runner trap, caught by re-running with the exit captured directly.
+
+## V-1839 — sweeping the cross-language-semantics list P-43 names: five of six clean, and the sixth had already bitten
+
+2026-08-26. V-1838 found one instance of a double agreeing with production by coincidence of language.
+A2 argued the general form deserved its own line, which is P-43. A general form is only worth having if
+it is FINDABLE, so I swept the list it names rather than leaving it as a principle.
+
+**The tell P-43 gives: the property turns on a semantic the two languages implement differently.**
+Six candidates, each measured against this database, boundary stated per item.
+
+1. ⭐ **NULL comparison — THE FINDING**, V-1838, fixed in `99860d182`. JS `null === 'node-A'` is false;
+   Postgres `NULL = 'node-A'` is NULL. Same outcome, different mechanism.
+
+2. ✅ **Empty-array membership — CLEAN, and the library is why.** 30 `inArray`/`notInArray` call sites,
+   28 with no `.length` guard. drizzle-orm **0.45.2** normalises both: `inArray(col, [])` returns
+   ``sql`false` `` and `notInArray(col, [])` returns ``sql`true` ``, which is exactly what JS
+   `[].includes(x)` and its negation give. Read from the installed library source, not assumed.
+   ⚠️ BOUNDARY: that is undocumented library internals pinned to one version. The codebase's safety
+   here is inherited, not asserted — only `closeActiveByNodeExcept` guards it explicitly in our code.
+
+3. ✅ **Collation / text ordering — CLEAN, and this one was closest to real.** The database collates
+   `en_US.UTF-8`, and the divergence is easy to demonstrate: `['Stripe_key','stripe_alpha',
+'SENTRY_dsn','sentry_beta']` orders as `sentry_beta, SENTRY_dsn, stripe_alpha, Stripe_key` in
+   Postgres, as `SENTRY_dsn, Stripe_key, sentry_beta, stripe_alpha` under JS `.sort()`, and
+   `localeCompare` reproduces Postgres exactly. The one double sorting a genuinely variable-format text
+   key (`platform-secrets` `ORDER BY name`) uses `localeCompare`. Every other plain `<` is on a
+   uniform lowercase-hex id, where the two agree — the reasoning already recorded in
+   `in-memory-admin-accounts-repo`'s own comment, which I checked rather than took: uuid hyphens sit at
+   fixed positions, so they cannot reorder two ids of the same shape.
+   ⚠️ BOUNDARY: `localeCompare` is ICU and Postgres here is glibc. They agreed on my sample; four
+   values is not a proof of equivalence between two collation implementations.
+
+4. ✅ **Numeric precision — ALREADY FOUND AND FIXED, which is the corroboration.** V-1241:
+   `refill_per_second_centi` is an INTEGER of hundredths and the double stored the caller's float
+   verbatim, so "a test could assert 1.234 while production served 1.23". That is P-43 exactly, a
+   ledger row before the general form existed. ⭐ It is the reason this is a pattern and not a
+   one-off.
+
+5. ✅ **Integer division / SQL `floor()` — CLEAN, and handled the RIGHT way.** `usage-repo` derives
+   session minutes with `floor(sum(extract(epoch …)))`. The double does NOT reimplement it; its header
+   DECLARES the limitation — no sessions to derive minutes from, "a test needing those has to use the
+   real repo". ⭐⭐ That is the correct answer to P-43 and worth copying: a double that refuses a
+   property cannot agree with production by accident, and it sends the test to the implementation that
+   can answer.
+
+6. ✅ **Timezone-naive dates — STRUCTURALLY IMPOSSIBLE.** `information_schema.columns` reports **0**
+   columns of type `timestamp without time zone` against **160** `timestamp with time zone`. Not
+   "none found" — none can exist without a migration changing the schema.
+
+⭐ WHAT THE SWEEP IS WORTH, since five of six are negatives: the list is now a checklist somebody can
+re-run, each item has a one-command test, and item 5 produced a technique (declare the limitation
+rather than mirror the arithmetic) that is better than anything I would have written as advice.
