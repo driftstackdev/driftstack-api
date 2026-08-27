@@ -19333,3 +19333,49 @@ lint, not the suite.
 **The rule that generalises: `git add <paths>` does not scope `git commit`.** With a peer writing in
 the same tree, the index is shared mutable state between those two commands. Verify
 `git diff --cached --name-only` immediately before committing, and read `git show --stat` after.
+
+## V-1939 — two agents, one machine, two gates: the load rule needed a second reading (2026-08-27)
+
+The gate validating V-1938 came back **3 failed of 32163**, and none of the three is that change.
+
+**Attribution first.** Two failures are `gui-client-src-tauri-content-parity`, which pins
+`tauri.conf.json` and `Cargo.toml` verbatim; A2 changed `src-tauri` at 07:50 and bumped the app to
+0.1.5 at 07:56, so the pins are theirs and now stale by their own edit. The third,
+`db-webhooks-force-rotation-selection-drizzle`, is a real-Postgres integration test I have never
+touched — **0** webhook paths across my commits — and it **passes 6/6 in isolation**. My own change
+survived intact at HEAD after A2 committed on top: the fix and its arm both still count 1.
+
+⛔ **My load pre-flight passed and was still wrong, because load is a snapshot.**
+
+```
+inner pre-flight: load=4.26/10      ← measured, gate launched
+during the run:   26.27 → 30.90 → 37.93
+load after:       27.89 24.21 16.63
+```
+
+V-1934 added `uptime` before a gate precisely so a red would carry information. It does — but only
+about the moment of launch. A2's message says plainly _"Gate is running on my push now"_: we started
+full suites minutes apart on one 10-core machine, and 4.26 became 37.93 while mine ran. **A
+pre-flight cannot see a peer's gate that has not started yet**, and the thing my rule was written to
+prevent happened anyway, one level up.
+
+The correction is not a bigger threshold. It is that **the load reading belongs with the RESULT, not
+only with the decision** — a red is uninformative if load was high at any point during the run, and
+only the after-reading can say that. `verify-suite` finishing at load 27.89 is the datum that makes
+this red unreadable, and I captured it only because I happened to print it.
+
+**What actually validated the change**, since the gate could not: 3236 of 3238 files passed, the two
+failing files are A2's pins, and the third passes alone. That is enough to say V-1938 did not break
+anything, and not enough to call the suite green — a distinction worth keeping separate.
+
+⭐ **A peer supplied a better fix than mine for the index collision.** V-1938 recorded that
+`git add <paths>` does not scope `git commit`, and proposed verifying the staged set before and
+after. A2 hit the same collision from the other side — their commit failed with _"cannot lock ref
+HEAD"_ because mine moved under them — and their answer is better: **`git commit -- <paths>`** takes
+the working-tree state of exactly those paths and ignores the index entirely. Mine detects the
+breach; theirs makes it impossible. Adopted.
+
+**Boundary:** the attribution rests on which files each failing test pins and on one isolated re-run
+of the webhooks test at load ~17, so it establishes those three failures are not V-1938's and does
+not establish the suite is green at this commit — that needs a run neither agent is competing with.
+No source change; ratchets unchanged at 3062/3238.
