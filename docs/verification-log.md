@@ -16462,3 +16462,39 @@ reaching for a key-only primitive, and repeating it in a second header would be 
 HKDF derivation, IV freshness, tag verification and key-length validation were the 2026-06-23 review's
 three dimensions and are unchanged by these commits, so that verdict still covers them. What I add is
 the layer it could not have seen.
+
+## V-1873 — no at-rest surface can still write its legacy envelope; the population is nine
+
+2026-08-26. No defect. The post-condition from V-1871 and V-1872 applied to every AES-GCM surface
+rather than the two that happened to come up.
+
+**THE QUESTION, asked once per surface.** A versioned envelope only helps if the OLD version can no
+longer be produced. "A migration exists" says nothing; "no writer emits the old shape" is the claim
+worth making. Nine surfaces under `apps/server/src/lib` reach `createCipheriv`.
+
+✅ **RESULT: every one is write-locked to its current version.** Seven carry an explicit v2 marker and
+each has **exactly one encrypt site, and that site emits the marker** — `platform-secret-value`,
+`account-proxy-secret`, `byok-anthropic`, `livekit-secret`, `mfa-totp`, `webhook-secret`,
+`profile-key-hierarchy`. The two remaining are accounted for rather than excused:
+`gui-control-key-encryption` versions with a magic byte string and requires its context on BOTH
+encrypt and decrypt with no permissive branch, so it never had a v1 to downgrade to; and
+`platform-secret-encryption` is the shared low-level primitive whose callers own the versioning,
+traced in V-1871.
+
+⛔ **THE DETECTOR WAS WRONG TWICE BEFORE IT WAS RIGHT, both times the same way.** First it counted only
+the string idiom `${PREFIX}`, and reported `writes=0 reads=0` for the two surfaces that hold their
+marker as bytes — `Buffer.concat([X_V2_PREFIX_BYTES, iv, tag, ct])` to write, `.subarray(0,n).equals()`
+to read. Then, corrected, it keyed on the NAME `_V2_PREFIX`, and so saw no versioning at all in the
+file whose constant is `GUI_CONTROL_KEY_V2_MAGIC`. **Envelope versioning is the shape; a prefix named
+`_V2_PREFIX` and held as a string is one spelling of it.** Both anomalies read as findings and both
+were the instrument.
+
+⭐ What made the third pass trustworthy was not the regex but the arithmetic: comparing **encrypt sites
+against prefix-emitting writes** rather than counting prefixes. A legacy writer emits no marker, so it
+is invisible to any marker-based count — only the difference between the two numbers can see it. The
+three files where those numbers differ are the two caller-less primitives already recorded and the
+shared primitive, which is why the difference resolves to zero real cases.
+
+⚠️ **BOUNDARY.** This measures the WRITE side of envelope versioning across `src/lib` — that no legacy
+format can be produced. It does not re-check AAD content, key derivation or tag verification, which
+V-1871, V-1872 and the 2026-06-23 review cover between them.
