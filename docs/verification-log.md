@@ -17858,3 +17858,44 @@ open than answer it with an instrument whose failure mode I cannot distinguish f
 ⚠️ Mutation safety: snapshot proven before each edit, difference asserted, restore trapped, and both
 restores verified byte-identical with a clean worktree. Neither mutation reached a suite run — the
 typecheck-first step stopped them, which is the improvement V-1908 called for.
+
+## V-1910 — a plaintext-key orphan closed by bounding retention rather than chasing close paths
+
+2026-08-27. No defect. The seventh stale open-issue note, and the one whose fix is the best answer to a
+shape this ledger keeps meeting.
+
+**THE NOTE.** A 2026-06-03 memory recorded `InMemoryByokKeyCache` holding the DECRYPTED customer BYOK
+Anthropic key in process heap, evicted only by two route handlers. It had already checked and excluded
+the worst reading — cross-account leak is impossible, because the cache key is the session UUID and the
+message route verifies ownership BEFORE `cache.get`. The gap it left open was **orphaning**: a session
+closed out of band by a worker, reaper or sweeper never reached either `delete`, so the plaintext stayed
+in heap.
+
+✅ **CLOSED, AND NOT BY ADDING THE MISSING `delete()` CALLS.** At HEAD the cache does not depend on
+close-path coverage at all:
+
+- **Per-entry TTL**, enforced on `get()` (an expired entry reads as absent) and swept in `set()`.
+  ⭐ The value is DERIVED rather than round: `13h`, sitting just past the **12h orphan-sweep session
+  cap**, so a live session never loses its key mid-run while a leaked one cannot outlive the session's
+  own maximum lifetime. The source names the paths it covers — "worker-initiated / reaper / sweeper
+  terminal close".
+- **LRU cap**, `maxEntries` default 10,000, evicted in `set()` and described exactly as the property
+  that matters: "a hard bound on how many decrypted keys can co-reside, **independent of close-path
+  delete() coverage**".
+- The `byAccount` secondary index is cleaned in the same path, so the account→ids map cannot retain what
+  the primary map dropped — the leak a two-map cache invites.
+
+⭐⭐ **THE SHAPE IS WHY THIS IS WORTH RECORDING BEYOND ONE STALE NOTE.** Fixing it by adding `delete()`
+to every close path would oblige every FUTURE close path to remember — an open set, and the exact
+failure mode this ledger has hit repeatedly under other names. **Bounding lifetime is a closed property
+that holds whatever new path appears.** Same move as replacing an open semantic set with a closed
+syntactic one, applied to secret retention instead of a sweep.
+
+⛔ Seventh stale note this week: SOCKS5 SSRF, unauthenticated rate limits, navigate scheme, bundled-LLM
+cap, LiveKit over-grant, permissive CORS, and this. **None described a live problem.**
+
+⭐ Gate green at `90a72e5de`: 3228 files, 32109 tests, exit 0.
+
+⚠️ BOUNDARY: this verifies the retention bounds and the index cleanup. The note's own cross-account
+finding was re-read but not re-derived — it was checked when written and nothing in the delta touches
+the ownership check it rests on.
