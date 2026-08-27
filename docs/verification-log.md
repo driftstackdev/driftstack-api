@@ -18771,3 +18771,57 @@ margin looks comfortable.
 this establishes that the suite is non-deterministic under contention, not how often, nor which
 tests sit closest to their ceiling under real CI parallelism. Ratchets unchanged at 3060/3236;
 32137 tests pass on the green run.
+
+## V-1928 — quiet-machine timings cannot predict which tests time out, and that is the result (2026-08-27)
+
+V-1927 established the suite is non-deterministic under contention and stated what it had not
+measured: which tests sit closest to their ceiling. Measuring that, and the answer is the opposite
+of what the question assumed.
+
+**The instrument needed fixing first, and its own control caught it.** Comparing every test to the
+10 s project default — as V-1918 did — is wrong, because a test carrying its own override has a
+different margin entirely. A per-test ceiling reader, validated against three known positives,
+failed one of them: `a-workspace-declares-what-its-source-imports` declares 30 s through
+**`vi.setConfig({ testTimeout: 30_000 })`**, a file-level call no per-`it` reader can see. Extended
+to `vi.setConfig` and `describe`-level options, all three controls pass: **29 945 tests, 58 with a
+non-default ceiling.**
+
+**On a quiet machine, nothing is close.** Joining durations to each test's own ceiling across the
+whole suite:
+
+| measure                                                    | result    |
+| ---------------------------------------------------------- | --------- |
+| highest ratio of duration to own ceiling                   | **17.7%** |
+| tests above 50% of their own ceiling                       | **0**     |
+| tests above 80%                                            | **0**     |
+| `the-server-source-type-checks` (42.8 s against its 300 s) | 14.3%     |
+
+And the test that actually timed out at 10 000 ms in V-1927's red run — `a-source-gate-may-not-be-
+satisfied-by-a-comment` — runs here in **1771 ms**. It needed a **5.6× stall** to fail. The 30 s
+one needed roughly 8×.
+
+### The negative result, which is the useful part
+
+**Duration profiling on a quiet machine cannot identify the tests that will flake.** I have now
+built that instrument twice, once in V-1918 and once here with a strictly better ceiling model, and
+both times it reports comfortable margins for a suite that demonstrably reds itself. A ranked list
+of "closest to the ceiling" is not a fragility list: the failures are not marginal tests tipping
+over, they are order-of-magnitude stalls that land wherever the scheduler happens to squeeze.
+
+The corollary matters for anyone tempted by the obvious fix: **raising a timeout is not the
+remedy.** Margins are already 5.6× and more; a number large enough to absorb an 8× stall would
+stop being a timeout in any useful sense.
+
+**One hypothesis tested and refuted.** Tests that shell out compete for whole processes rather than
+threads, so child-process spawning was the natural cause. Neither timing-out file spawns anything —
+`execFileSync`/`execSync`/`spawnSync` count zero in both. The theory does leave a real side
+observation: of the 20 highest-ratio tests, **7** sit in child-process-spawning files, against
+**135 of 32 137** tests suite-wide, so those files are disproportionately slow — they are simply not
+the ones that failed.
+
+**Boundary:** one run on one otherwise-idle machine, joined by (filename, test title); **2104 of
+32 137** durations found no ceiling match and fell back to 10 s. That fallback can only make a test
+look _closer_ to its ceiling than it is, never further, so it cannot be concealing a high-ratio
+test — but it does mean the 58 non-default ceilings are a floor on that count, not an exact census.
+The mechanism behind the stalls is still unidentified; this rules out thin margins and child
+processes, and does not replace them with a cause.
