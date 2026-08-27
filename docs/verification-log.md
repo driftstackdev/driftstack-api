@@ -17640,3 +17640,41 @@ mentions of it.
 
 That single command surfaced V-1801 immediately today. A mention count says how often a word appears; a
 heading match says whether the question has already been answered.
+
+## V-1904 — the corrected prior-art step, used in anger: both sides of the retry-budget contract still agree
+
+2026-08-27. No defect. The first audit run with V-1903's fix in place, and a bounded check that the
+duplication it found was isolated.
+
+✅ **THE DUPLICATION WAS A SINGLE INCIDENT, measured rather than hoped.** Heading-grepped every subject I
+audited this week — session-proxy, transport-report, validation-harness, force-actions, termination,
+status-subscribers, referrer policy, minted-key revocation: **0 prior headings each.** ⭐ And the zeros
+are trustworthy because the detector was proved on two known positives first: `atlas.priority` returns
+V-1801, and `W-10|orphan` returns 9. Only the atlas-priority audit was a repeat.
+
+**THEN THE STEP DONE PROPERLY.** For `admin-webhooks` the heading grep returns **13** prior entries and
+three memories — so the question is not "audit it" but "where did those stop". Two are one thread:
+V-771 and V-787 on the retry budget, the latter a real defect where the in-memory double folded the
+attempt log INTO the budget, so a DLQ requeue granted one attempt where a fresh delivery gets six, and
+the stale index then made that attempt wait the 60-minute tail.
+
+✅ **THE EDGE WORTH CHECKING WAS WHETHER BOTH SIDES STILL AGREE, and they do — read on both sides,
+because a comparison with one side assumed is not a comparison.**
+
+- **Production**: `resetDeliveryToPending` sets `attempts: 0`, with the attempt log in its own table.
+- **The double**: keeps one array but subtracts `attemptsBaseline`, set at arm time and re-set on replay
+  (`entry.attemptsBaseline = replayed.attempts.length`) and on requeue. Attempt number is
+  `attempts.length - attemptsBaseline + 1`, so history appends while the budget restarts.
+
+⭐⭐ **AND THE SUB-QUESTION THAT LOOKED LIKE A GAP RESOLVES STRUCTURALLY.** Production has exactly ONE
+`attempts: 0` for two operations, which reads as replay resetting and requeue not. It is one shared
+method with THREE callers — customer replay, admin replay, DLQ requeue — so they cannot diverge. That is
+a stronger guarantee than three matching implementations, and it is why the count looked wrong.
+
+⭐ That shared method is also fenced against a race its siblings had already solved: its UPDATE once
+matched on id alone, unlike `deleteDelivery`'s `and(id, status='dlq')`, so a reset could stomp a
+delivery a worker currently held. A guard now pins that.
+
+⚠️ BOUNDARY: this closes the retry-budget thread across both implementations and the reset path's
+concurrency fence. The other 11 prior headings on this surface were not re-read, and the DLQ audit's own
+delta beyond this thread — an endpoint-detail fix and a filter-validation fix — is still unexamined.
