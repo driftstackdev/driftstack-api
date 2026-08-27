@@ -36,6 +36,11 @@ function profile() {
     last_used_at: null,
     created_at: '2026-06-08T00:00:00Z',
     updated_at: '2026-06-08T00:00:00Z',
+    // ⭐ 4.3 GiB against the solo_manual cap of 5 GiB = 86%, ABOVE
+    // STORAGE_SOFT_WARN_FRACTION. The meter is now only rendered once storage is
+    // actionable, so a zero-byte fixture would hide it and these collapse arms
+    // would pass vacuously — green while testing nothing.
+    size_bytes: 4_617_089_843,
   };
 }
 

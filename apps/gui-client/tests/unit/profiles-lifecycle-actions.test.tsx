@@ -235,20 +235,31 @@ describe('ProfilesView profile-lifecycle actions', () => {
   // per-profile size, an account-wide storage meter, and a per-profile Trim
   // (the "Clear cache" / W3120 scoped-clear) action.
   describe('Storage + Trim', () => {
-    it('renders the account-wide storage meter ("X of Y used" vs the tier cap)', async () => {
+    it('CRITICAL hides the storage meter below the soft-warn line — 3 MiB of 5 GiB is not worth a row above the grid', async () => {
+      // ⛔ This arm INVERTED. It used to assert the meter always renders. It is now
+      // gated on `nearCap || overCap` (STORAGE_SOFT_WARN_FRACTION = 0.8), because
+      // below that line it is a number nobody acts on while costing vertical space
+      // above the grid on every visit — and on a small window that is the difference
+      // between seeing profile cards and scrolling to them. Owner-reported.
+      //
+      // The rendered-content coverage this arm carried did NOT disappear: it moved to
+      // the-grid-can-be-seen-without-scrolling, whose fixture now sits at 86% and so
+      // exercises the visible meter and its collapse.
       const { container } = render(<ProfilesView onGoToSettings={vi.fn()} />);
-      // Wait for hydration (the meter only renders once profiles load).
-      await screen.findByText(/used across your profiles/);
-      const meter = container.querySelector('[data-component="storage-meter"]');
-      expect(meter).toBeTruthy();
-      // 3 MiB used; solo_manual cap = 5 GiB. The meter shows both legs.
-      expect(meter?.textContent).toContain('3.0 MiB');
-      expect(meter?.textContent).toContain('5.0 GiB');
+      // Anchor on something that renders regardless, so this cannot pass by
+      // asserting absence before the view has hydrated at all.
+      await screen.findByRole('button', { name: 'New profile' });
+      expect(container.querySelector('[data-component="storage-meter"]')).toBeNull();
     });
 
     it('surfaces the per-profile size on the grid card', async () => {
       const { container } = render(<ProfilesView onGoToSettings={vi.fn()} />);
-      await screen.findByText(/used across your profiles/);
+      // ⛔ Hydration anchor was the storage meter's copy, an INCIDENTAL dependency:
+      // this arm is about the per-card size and never needed the meter. When the
+      // meter became conditional the arm hung on an element that no longer renders.
+      // Anchored on the subject itself now, so it cannot be broken by unrelated
+      // chrome appearing or disappearing above the grid.
+      await screen.findByTitle(/Stored profile size/);
       // The card footer shows the formatted sealed-store size (3 MiB) with an
       // explanatory title — distinct from the meter's account total.
       const sized = within(container).getByTitle(/Stored profile size/);

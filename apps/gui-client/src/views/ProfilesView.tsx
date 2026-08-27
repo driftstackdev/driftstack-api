@@ -3308,7 +3308,16 @@ export function ProfilesView({
           warn + an over-cap state. Hidden when there are no profiles; the cap
           leg stays collapsed until the live tier is known. Enterprise is
           soft-only — its over-cap state reads as a warning, not a stop. */}
-      {state.profiles.length > 0 && !chromeCollapsed && (
+      {/* ⭐ Only rendered once storage is ACTIONABLE. Below the soft-warn line this
+          is a number nobody needs, costing a row of vertical furniture above the
+          grid on every visit — and on a small window that is the difference between
+          seeing profile cards and scrolling to them. Owner-reported.
+
+          Gated on the EXISTING `nearCap`/`overCap` rather than a fresh 80 literal, so
+          the threshold that decides "warn" and the one that decides "show" cannot
+          drift apart. `overCap` is required because nearCap is a BAND (>=0.8 and <1)
+          and the over-cap case must not fall out of the bottom of it. */}
+      {state.profiles.length > 0 && !chromeCollapsed && (storage.nearCap || storage.overCap) && (
         <div
           data-component="storage-meter"
           className="flex flex-col gap-1.5 rounded-md border border-surface-divider bg-surface-raised px-3 py-2"
