@@ -12580,3 +12580,48 @@ and named the wrong file.
 Mutation discipline held throughout: snapshot keyed by path, anchor asserted unique (count=1), `cmp`
 proving the file actually differed before the run, restore proved byte-identical afterwards, and both pins
 re-run green (24 passed) on the restored source.
+
+## V-1999 — the May e2e coverage audit's recommendations, checked: the high-leverage half is closed (2026-08-27)
+
+2026-08-27. V-1998's census raised an obvious follow-up: prior art on the e2e layer is
+`docs/internal/v540-e2e-coverage-audit.md`, which catalogued the gap between the route inventory and the
+Playwright specs and sorted the gaps "by leverage" — then ended STAGED, deferring the fix to a later wave.
+A staged recommendation is the same shape as the conditional deferral V-1957 found: neither open nor
+closed at the moment it is written, and nothing fires when its wave arrives.
+
+**The doc is honest about its age and needs no correction.** It carries `Date: 2026-05-10`, `Wave: 19`,
+`Status: STAGED`, and its "32 route modules" is a point-in-time count, not a claim about today (there are
+60). A dated audit that states its date is a record, not a stale assertion — cf. the rollup-date check.
+Its follow-on wave did land: `account-me.spec.ts` is headed "V-540.B-3".
+
+**Checked by paths driven, not by filenames.** A roster keyed on spec filename is the V-1547 error, and
+`team` proves it matters here — `team.spec.ts` exists, but the `/v1/team` paths are actually driven by
+`a-team-member-role-is-enforced-on-the-owner-account.spec.ts` and
+`acting-as-an-owner-spends-your-own-bucket.spec.ts`. **Boundary: the `/v1/...` literals reached through
+`${baseUrl}` in the 41 Playwright specs, matched against each named module's registered prefix.**
+
+```
+HIGH    account-mfa                CLOSED   5 paths
+HIGH    billing                    CLOSED   3 paths
+HIGH    legal                      CLOSED   3 paths
+HIGH    profile-snapshots          CLOSED   3 paths
+MEDIUM  auth-cli                   CLOSED   3 paths
+MEDIUM  team                       CLOSED   5 paths
+MEDIUM  admin-incidents            still no e2e
+MEDIUM  admin-validation-harness   still no e2e
+MEDIUM  admin-overview             still no e2e
+```
+
+**All four HIGH-leverage gaps are closed; two of five MEDIUM are; the residue is three admin surfaces.**
+That is the audit's own ranking being followed, not drift.
+
+**Not written here, and why.** Adding the three specs is real work of the right kind, but a Playwright
+spec cannot be validated in my gate — `vitest.config.ts:13` excludes `tests/e2e/**`, and the suite runs
+under `playwright test` against a real Postgres it drops and migrates. Shipping three specs I had not run
+would be exactly the blind-ship this log exists to prevent, and the machine is at load 23.8 with a peer
+building. Recorded with the residue named so the next wave starts from a verified list rather than
+re-deriving it.
+
+⭐ The transferable half: **e2e runs in CI (`.github/workflows/ci.yml:219`) but not in my gate.** So this
+layer is protected — just not by anything I run. Every "suite green" I report is scoped to vitest, and
+V-1998 states the size of what that scope omits.
