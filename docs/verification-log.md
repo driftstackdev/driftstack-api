@@ -20049,3 +20049,34 @@ expression `this.redis as unknown as`, which prose does not contain.
 primitives "textbook" with `consume` = "atomic Redis GETDEL one-shot". **That description is accurate
 and was never the problem — the inaccuracy was in a clause about a fallback nobody had reason to
 re-read.**
+
+## V-1957 — an OAuth TOCTOU left conditional on future work; the condition fired and is satisfied (2026-08-27)
+
+Picked the target from coverage data rather than instinct: `routes/auth-oauth-client.ts` has 77 branches
+at 63.6% and is security-critical. **Boundary: that figure is from the `--all` run, which excludes the
+233 e2e tests, so branches exercised only end-to-end read as uncovered.** The prior art turned out to be
+the better lead — eight OAuth memories, six clean, two naming gaps.
+
+Both gaps are resolved, but one closed **conditionally**: an authorization-code-reuse TOCTOU, fixed at
+the interface in June, ending _"only the persistent impl's adherence remains"_ — the check deferred until
+a persistent store existed. **It exists now** (`db/oauth-store.ts`, migration
+`0106_oauth_provider_persistence.sql`), so the condition is live.
+
+**It is satisfied.** `consumeCodeForToken` runs entirely inside `db.transaction`, and reads the code row
+with `.limit(1).for('update')` — a `SELECT … FOR UPDATE`. A concurrent exchange blocks on that lock until
+the first commits, then sees `consumedAt !== null` and returns `'code_unavailable'`, so the check-then-act
+is atomic. It also `.for('update')`-locks the client row and compares the client secret with
+`constantTimeHashEqual`. Witnessed against real Postgres by
+`db-oauth-code-single-use-lock-drizzle.test.ts`, whose arm is _"CRITICAL consumeCodeForToken BLOCKS while
+another session holds the authorization-code row"_, driving two exchanges through `Promise.all`.
+
+⛔ **The note would have reported itself unmet if I had grepped for what it prescribed.** It required
+"the single conditional `UPDATE oauth_codes SET consumed_at=$at WHERE code=$code AND consumed_at IS NULL
+RETURNING`", and named the method `consumeCodeIfUnconsumed`. **Neither exists** — that identifier
+survives only inside a comment elsewhere. The implementation satisfies the PROPERTY (atomic against a
+concurrent exchange) by pessimistic locking instead of the prescribed MECHANISM. **A requirement written
+as a mechanism accuses correct code that met the requirement another way**; write the invariant and name
+a mechanism only as an example.
+
+No action. Recording it because a conditional deferral is the easiest kind of item to lose: it is neither
+open nor closed at the moment it is written, and nothing fires when its precondition arrives.
