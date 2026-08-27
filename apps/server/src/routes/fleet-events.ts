@@ -176,10 +176,35 @@ export async function registerFleetEventsRoutes(
         const admission = conn.handleInboundBytes(messageToBuffer(data));
         if (admission === 'accepted') return;
         // Policy-close the whole authenticated socket after the first rejected
-        // frame. Do not log or reflect payload text; the bounded reason is
-        // enough for the node to reconnect/back off and for in-flight requests
-        // to fail through the normal close→unregister path.
+        // frame. Never reflect payload text; the bounded reason is enough for
+        // the node to reconnect/back off and for in-flight requests to fail
+        // through the normal close→unregister path.
+        //
+        // RECORD IT. Until this line the entire path was silent: the budget in
+        // fleet-inbound-frame-gate has no logger and no metric, and the typed
+        // `admission` verdict had no production consumer — so a node losing its
+        // control socket to an exhausted budget left no trace beyond a 1008 the
+        // server never mentioned. The budget is deliberately reconnect-resistant
+        // (state survives register/unregister) and refills on wall-clock, so a
+        // node can be closed again on reconnect until seconds of refill elapse.
+        // That is indistinguishable from "the connection keeps dropping" without
+        // this line.
+        //
+        // A LOG rather than a counter, deliberately: MetricsRegistry is only
+        // constructed when METRICS_SCRAPE_TOKEN is set (lib/bootstrap.ts), so
+        // `metrics?.inc` is a silent no-op on any deployment that has not enabled
+        // scraping — precisely the deployments where this needs to be visible.
+        // The request logger is always wired. Bounded fields only, no payload.
         inboundRejected = true;
+        req.log.warn(
+          {
+            component: 'fleet-events',
+            event: 'inbound_admission_refused',
+            nodeId,
+            reason: admission,
+          },
+          'fleet control socket closed: inbound admission refused',
+        );
         socket.close(1008, admission);
       });
       // Explicitly PONG every inbound ping from the node. With autoPong:false in

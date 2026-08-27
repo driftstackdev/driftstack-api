@@ -25,6 +25,22 @@ function read(p: string): string {
 describe('routes/fleet-events content parity', () => {
   const body = read(LIB);
 
+  it('CRITICAL the 1008 inbound-refusal close RECORDS the event, via the LOGGER not a metric', () => {
+    // Before this line the whole path was silent: the token bucket in
+    // fleet-inbound-frame-gate has no logger and no metric, and the typed
+    // `parse-budget-exhausted` verdict had no production consumer — so a node
+    // losing its control socket to an exhausted budget left no trace.
+    expect(body).toMatch(/req\.log\.warn\(/);
+    expect(body).toMatch(/event: 'inbound_admission_refused'/);
+    expect(body).toMatch(/reason: admission/);
+    // Deliberately NOT a counter. MetricsRegistry is only constructed when
+    // METRICS_SCRAPE_TOKEN is set, so `metrics?.inc` is a silent no-op on any
+    // deployment without scraping — exactly where this must be visible. If a
+    // future change "upgrades" this to a metric it stops recording anything on
+    // those deployments, so that swap must fail here rather than pass quietly.
+    expect(body).not.toMatch(/metrics\?\.inc\([^)]*admission/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

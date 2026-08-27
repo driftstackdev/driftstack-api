@@ -20417,3 +20417,35 @@ impossible to make from production data because nothing records the event.**
 ⭐ The smallest thing that would settle it is in scope and does not touch the fork: a counter on the
 1008-close path, carrying the bounded reason and no payload — which respects the existing comment, since
 that forbids reflecting payload TEXT rather than recording that the event occurred.
+
+## V-1967 — recording the close, and why it had to be a log rather than a counter (2026-08-27)
+
+V-1966 established that exhausting the inbound token budget closes a fleet node's control socket, that
+the budget deliberately survives the reconnect, and that **nothing anywhere records it** — the gate has
+no logger and no metric, and the typed `parse-budget-exhausted` verdict had no production consumer. The
+hypothesis that this is behind "doesn't properly pick up after a lag" was therefore untestable from
+production data.
+
+Landed the recording. `routes/fleet-events.ts` now emits a bounded `req.log.warn` on the 1008 path —
+`component`, `event: 'inbound_admission_refused'`, `nodeId`, `reason` — and no payload, which is what the
+pre-existing comment actually forbade ("do not log or reflect payload TEXT"). The comment is reworded so
+it no longer reads as forbidding the record itself.
+
+⛔ **I proposed a counter and had to withdraw it against my own earlier finding.** V-1944 established
+that `MetricsRegistry` is constructed only when `METRICS_SCRAPE_TOKEN` is set, and that the token is
+unset on the deployment I had notes for. **`metrics?.inc` is optional-chained everywhere, so a counter
+here would be a silent no-op on exactly the deployments where this needs to be visible** — instrumentation
+that cannot emit, proposed to make an invisible failure visible. The request logger is unconditionally
+wired; that is the whole reason for the choice.
+
+**The pin enforces the INTENT, not the line.** Besides asserting the warn and its bounded fields, it
+asserts `body` does NOT match `metrics?.inc(...admission...)`. **A future change that "upgrades" the log
+to a counter looks like an improvement and silently stops recording anything**, so that swap has to fail
+loudly. Mutation-proven both ways: deleting the log reddens the arm, and replacing it with a metric
+reddens it too.
+
+⭐ **The general shape, and it is the third time today: an instrument that is gated on configuration is
+not an instrument.** Verify what is WIRED before choosing where to emit — the same question that
+explained `durable-webhook-delivery`'s coverage and the same one that made "is there a v1.1 classifier"
+answerable. **Boundary: this records the event; it does not establish that the event occurs.** That is
+one production log line away, and if it never fires the hypothesis is excluded cheaply.
