@@ -14272,3 +14272,60 @@ prettier writes a trailing comma on every multi-line call — so a one-argument 
 counted as two and the guard passed a mutation it should have failed. This walker splits at depth-0
 commas and **drops the empty tail**, so both spellings report `1 arg`. Sweep the shape, not the
 token: the same defect has two spellings and only one of them looks wrong.
+
+## V-2030 — a 5-second destructive sweep runs off process-local state (2026-08-27)
+
+Generalised V-2029's wiring question across the codebase. Boundary: 342 tracked `.ts` under
+`apps/server/src` — **17 exported `InMemory*` classes, 14 of which are constructed nowhere in `src`**
+(pure test doubles; production wires a Redis sibling). The three that ARE wired in `bootstrap.ts`:
+
+    InMemoryByokKeyCache              lib/bootstrap.ts   — accelerator, per-instance is correct
+    InMemoryExitIdentityCache         lib/bootstrap.ts   — accelerator, per-instance is correct
+    InMemoryPairModeHeartbeatTracker  lib/bootstrap.ts   — NOT an accelerator
+
+The third has teeth. `PairModeHeartbeatSweep` is wired over it at `bootstrap.ts:3216` on a
+`setInterval` every 5 seconds, and for each session it considers stale it fires the
+`heartbeat-timeout` state-machine transition, persists the post-transition state, and emits an
+`agent_session.pair_mode.timeout` customer audit row. Narrowed: **6 `setInterval` sites in
+bootstrap, exactly one driven by process-local state** — this one. The other five read database,
+Redis, or service state. (My first pass reported line 3187 too; that was my 40-line scan window
+spilling from `statusSnapshotTimer` into the sweep below it, not a second site.)
+
+**The assumption is documented, on one side.** `services/agent-pair-mode-heartbeat.ts` says
+outright: _"Single-replica today. A future redis-backed swap can replace the in-memory Map with
+redis-hash storage."_ Nothing enforces it, and the surrounding code is already multi-replica-ready
+in a way that makes the assumption easy to violate by accident — the pair-mode **takeover lock** for
+the very same feature is `RedisPairModeTakeoverLock` (`bootstrap.ts:1383`), and so are the fleet
+nonce cache and the MFA challenge store. One half of pair mode is distributed; the other half is not.
+
+⛔ **The V-785 boot seed amplifies it rather than containing it.** The tracker is seeded from
+`agentSessionsRepo.listActivePairModeSessionIds()` — a **global** query, not one scoped to this
+process — so on a two-replica deployment BOTH replicas adopt EVERY parked session. Heartbeats arrive
+as ordinary HTTP requests and land on whichever replica the load balancer picks, so the replica that
+does not receive them watches its own copy of the entry go stale and, 30 seconds later, times out a
+session that is alive and heartbeating to its peer — terminating live customer work and writing a
+customer-visible audit row saying it timed out. The seed is right for its stated purpose (V-785: a
+restart must not strand a parked session forever); it is the global scope that does not survive a
+second replica.
+
+**Conditional, and the condition is not verifiable from this repo.** This is inert at one replica
+and I cannot confirm the deployed replica count from source — stated rather than assumed.
+
+⭐ **It joins a known class.** `docs/internal/2026-05-31-autopilot-run-handoff.md:820` already
+records the scheduled-jobs `dedup:true` race in exactly these terms — _"LOW severity today
+(single-replica … ) but a latent MULTI-REPLICA bug"_ — with a clean fix that needs a migration.
+That makes two, recorded in two different places, with no inventory of the class and no ADR or
+runbook stating the constraint that keeps both inert. The scheduled-jobs one costs a duplicate row;
+this one costs a live customer session.
+
+**Not fixed — the fix is a design choice** (redis-hash the tracker, or scope the seed to sessions
+this process owns, or state single-replica as an enforced deployment constraint). Owner's call,
+alongside W-10 and V-2027's parser question.
+
+Audited clean along the way, both never-audited before: `services/mfa-challenge-store.ts` — `consume`
+is `GETDEL` with no fallback (fails closed on pre-6.2 rather than degrading to a non-atomic read),
+`incrAttempts` is one Lua step so a dead connection cannot strand an immortal counter, and
+`releaseAttempt` is one Lua step so it can neither act on a replaced value nor resurrect an expired
+key as `-1`; and `services/fleet-nonce-cache.ts` + `lib/redis-fleet-nonce-cache.ts` — a single
+`SET NX EX` with a clamped TTL and a NUL-separated key, with the in-memory variant wired nowhere in
+`src`.
