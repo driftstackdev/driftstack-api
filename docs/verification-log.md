@@ -14845,3 +14845,41 @@ it is not the arm doing the work.
 ⛔ INSTRUMENT NOTE — the `it(` count rule needs an anchored pattern in this file. A bare `grep -c 'it('`
 reads 16 because `findNearestWithLivekit('eu')` contains the substring; `grep -cE '^\s+it\('` reads 8
 against HEAD's 6, which is the +2 actually added.
+
+## V-1837 — a cross-node write boundary my own tenancy sweep was never scoped to see
+
+2026-08-26. Second finding from the same intersection, and it exposes a boundary in my earlier work.
+
+`AgentSessionsRepo.recordErrorEvent(id, reportingNodeId, event)` writes the error frame a customer is
+shown as the reason their run failed. Its WHERE is
+`and(eq(agentSessions.id, id), eq(agentSessions.nodeId, reportingNodeId))` — the second conjunct is
+the ENTIRE authorisation on the write. Without it any registered Mac in the fleet could stamp its own
+error frame onto a session owned by another node.
+
+Every reference in the test tree is `vi.fn()`. `session-error-event-relay.test.ts` drives the relay
+against a mock eleven times over — retry counts, concurrency caps, a rejecting repo, a hanging repo —
+and all of it exercises the RELAY. The Drizzle method had never executed.
+
+⛔⛔ WHY MY OWN SWEEP MISSED IT, stated because the boundary matters more than the finding. V-1822
+reported the tenant boundary COMPLETE at 23 repos / 126 predicates. That sweep enumerated
+`eq(.accountId)`. This is `eq(.nodeId)` — a second tenancy axis, between FLEET NODES rather than
+between customer accounts, and it was never in scope. "Tenant boundary complete" was true of the axis
+I measured and reads as true of the concept. A predicate class is defined by the COLUMN the sweep
+enumerated, and any claim from it inherits that scope.
+
+**FIXED** — one arm in `db-agent-sessions-concurrency-drizzle`, which already builds the real repo and
+already exercises node ownership via `setNodeId`. Existing file, no ratchet movement. The owning node
+writes first as a positive control, then a stranger node is refused.
+
+⭐⭐ THE THIRD ASSERTION EARNED ITS PLACE, and only an isolating mutation showed that. Refusing to
+return the row is not the property; not WRITING is. Dropping the conjunct fails assertion two
+("a stranger fleet node recorded an error event on a session it does not own") and assertion three
+never runs. So I mutated the other way — keep `eq(id)` alone in the WHERE and gate the RETURN on
+`row.nodeId !== reportingNodeId` — which returns null exactly as the caller expects while the UPDATE
+still lands. Assertion two PASSES there; assertion three fails with "a stranger node's error event
+overwrote the owning node's". **A write that lands and then reports null is the same defect wearing a
+different face**, and the arm now distinguishes them.
+
+Boundary: this covers `recordErrorEvent` only. The other five functions coverage reports uncovered in
+`agent-sessions-repo` are not named here — the summary reporter carries per-file totals, not
+per-function detail, so naming them needs a `--coverage.reporter=json` run.

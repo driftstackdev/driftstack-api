@@ -575,5 +575,52 @@ describe.skipIf(!RUN_DB_TESTS)(
       await expect(repo.setNodeId(session.id, 'node-too-late')).resolves.toBeNull();
       expect(await repo.get(session.id)).toEqual(closed);
     });
+
+    it('CRITICAL recordErrorEvent refuses a session owned by a DIFFERENT fleet node, and writes nothing. The second parameter is the reporting node, and `eq(node_id, reportingNodeId)` is the entire authorisation on this write: without it any registered Mac could stamp its own error frame onto another node’s session, which is what the customer is shown as the reason their run failed.', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleAgentSessionsRepo(
+        { client, db, close: async () => {} },
+        { transcriptEncryptionKeyBase64: TRANSCRIPT_KEY },
+      );
+
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`agt-err-owner-${accountId}@test.local`})`;
+      const session = await repo.create({ accountId, tokenBudgetTotal: 1000 });
+      expect(await repo.setNodeId(session.id, 'node-err-owner')).toMatchObject({
+        nodeId: 'node-err-owner',
+      });
+
+      const mine = {
+        timestamp: '2026-08-26T12:00:00.000Z',
+        code: 'driver_crashed',
+        severity: 'error',
+        summary: 'the owning node reported this',
+        detail: null,
+        customerActionable: false,
+        retryable: true,
+      } as const;
+
+      // Positive control: the owning node CAN write, so the refusal below is a
+      // boundary rather than a method that never records anything.
+      expect(
+        (await repo.recordErrorEvent(session.id, 'node-err-owner', mine))?.lastErrorEvent?.code,
+        'the OWNING node could not record its own error event',
+      ).toBe('driver_crashed');
+
+      const theirs = { ...mine, code: 'stranger_wrote_this', summary: 'a stranger node' } as const;
+      expect(
+        await repo.recordErrorEvent(session.id, 'node-err-stranger', theirs),
+        'a stranger fleet node recorded an error event on a session it does not own',
+      ).toBeNull();
+
+      // Returning null is not enough — the row must be untouched. A write that
+      // lands and then reports null is the same defect wearing a different face.
+      expect(
+        (await repo.get(session.id))?.lastErrorEvent?.code,
+        "a stranger node's error event overwrote the owning node's",
+      ).toBe('driver_crashed');
+    });
   },
 );
