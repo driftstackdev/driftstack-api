@@ -18,6 +18,7 @@ interface RecordedRequest {
   headers?: Record<string, string>;
   timeoutMs?: number;
   transport?: 'json' | 'event-stream';
+  query?: Record<string, unknown>;
 }
 
 function makeFakeHttp<T>(reply: T): { http: HttpClient; calls: RecordedRequest[] } {
@@ -28,6 +29,7 @@ function makeFakeHttp<T>(reply: T): { http: HttpClient; calls: RecordedRequest[]
     body?: unknown;
     headers?: Record<string, string>;
     timeoutMs?: number;
+    query?: Record<string, unknown>;
   };
   const record = <R>(opts: RecordedOptions, transport: 'json' | 'event-stream') => {
     const recorded: RecordedRequest = { method: opts.method, path: opts.path };
@@ -35,6 +37,13 @@ function makeFakeHttp<T>(reply: T): { http: HttpClient; calls: RecordedRequest[]
     if (opts.body !== undefined) recorded.body = opts.body;
     if (opts.headers !== undefined) recorded.headers = opts.headers;
     if (opts.timeoutMs !== undefined) recorded.timeoutMs = opts.timeoutMs;
+    // Recorded only when NON-EMPTY: list() with no arguments must put no key on
+    // the wire, which reads here as the absence of `query`. An empty object would
+    // make that indistinguishable from `{ limit: undefined }`, the defect where a
+    // client serialises the literal string "undefined" into the URL.
+    if (opts.query !== undefined && Object.keys(opts.query).length > 0) {
+      recorded.query = opts.query;
+    }
     calls.push(recorded);
     return Promise.resolve(reply as unknown as R);
   };
@@ -316,5 +325,60 @@ describe('AgentSessionsResource', () => {
     const res = new AgentSessionsResource(http);
     await res.livekitToken('agt_with/slash');
     expect(calls[0]!.path).toBe('/v1/agent-sessions/agt_with%2Fslash/livekit-token');
+  });
+
+  // ⛔ list and iterate had NO arms at all before this: 19 arms covered create,
+  // get, message, close, takeover, handback and livekitToken, and the pagination
+  // surface — method, path and query alike — was untested. The recorder above
+  // could not have seen a query even if one had been asserted.
+  it('list with no arguments GETs /v1/agent-sessions with NO query', async () => {
+    const { http, calls } = makeFakeHttp({ data: [], has_more: false, next_cursor: null });
+    await new AgentSessionsResource(http).list();
+    expect(calls).toEqual([{ method: 'GET', path: '/v1/agent-sessions' }]);
+  });
+
+  it('CRITICAL list forwards limit ALONE without inventing a cursor key', async () => {
+    const { http, calls } = makeFakeHttp({ data: [], has_more: false, next_cursor: null });
+    await new AgentSessionsResource(http).list({ limit: 25 });
+    expect(calls[0]?.query).toEqual({ limit: 25 });
+  });
+
+  it('CRITICAL list forwards cursor ALONE without inventing a limit key', async () => {
+    const { http, calls } = makeFakeHttp({ data: [], has_more: false, next_cursor: null });
+    await new AgentSessionsResource(http).list({ cursor: 'cur_2' });
+    expect(calls[0]?.query).toEqual({ cursor: 'cur_2' });
+  });
+
+  it('CRITICAL iterate threads next_cursor into the following page request', async () => {
+    const page = (id: string, next: string | null): unknown => ({
+      data: [{ id }],
+      has_more: next !== null,
+      next_cursor: next,
+    });
+    const pages = [page('agt_1', 'cur_2'), page('agt_2', null)];
+    const seen: Array<Record<string, unknown> | undefined> = [];
+    let i = 0;
+    const http = {
+      request: (opts: { query?: Record<string, unknown> }) => {
+        seen.push(opts.query);
+        const r = pages[i];
+        i += 1;
+        return Promise.resolve(r);
+      },
+    } as unknown as HttpClient;
+
+    const out: string[] = [];
+    for await (const s of new AgentSessionsResource(http).iterate({ limit: 1 })) {
+      out.push((s as { id: string }).id);
+    }
+
+    expect(out, 'every page is yielded').toEqual(['agt_1', 'agt_2']);
+    // The load-bearing half: page 2 must carry the cursor page 1 returned. Drop
+    // the cursor spread and the walk repeats page 1 or stops early — neither is
+    // visible to a count of yielded items alone.
+    expect(seen, 'page 2 carries page 1 next_cursor').toEqual([
+      { limit: 1 },
+      { limit: 1, cursor: 'cur_2' },
+    ]);
   });
 });

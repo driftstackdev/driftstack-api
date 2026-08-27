@@ -20678,3 +20678,53 @@ files.** So the clock was set to accommodate contention and **regression detecti
 instrument that can actually carry it**: under variable load a wall-clock timeout fires on a busy box
 and passes on an idle one regardless of the code, whereas a census floor fails on its own evidence.
 The floors are now per root, which is why raising the timeout costs no coverage.
+
+## V-1974 — two SDK recorders could not observe the query they were named for (2026-08-27)
+
+Enumerating the request recorders across the 18 `packages/sdk-typescript/tests` files that declare
+one: **12 push `opts` wholesale** (query observable), **3 copy named fields including `query`** (the
+`*-iterate` files, built for it), and **3 copy named fields and drop it** — `agent-sessions`,
+`egress`, `recipes`.
+
+⛔ **A first pass over-flagged 13 of 18 as "cannot assert query", including `audit-log-export`, where
+I had just written five passing arms that assert `seen[0]?.query`.** Its recorder pushes `opts`
+wholesale, so a check for field-by-field copying missed it. The discriminator is wholesale-push
+versus named-field copy, not the presence of a `query` key — the corrected split is above.
+
+Of the three that drop it, **`egress` builds no query at all**, so its recorder is harmless. The
+other two were real:
+
+⭐ **`recipes.test.ts` had an arm literally titled "list forwards pagination query params only when
+present" that tested neither half.** It called `list()` with no arguments — the absent direction
+alone — and the recorder it asserted against destructured only `{method, path, body}`, so **even a
+passing query could not have been seen.** The forwarding half was untestable by construction.
+
+⭐ **`agent-sessions.test.ts` had no `list` or `iterate` arms at all** — 19 arms covering create, get,
+message, close, takeover, handback and livekitToken, with the entire pagination surface (method, path
+and query alike) untested.
+
+Both recorders now capture `query`, **recorded only when non-empty**. That is the property under
+test, not a convenience: `list()` with no arguments must put no key on the wire, which reads as the
+absence of `query`. Recording an empty object would make the absent case indistinguishable from
+`{ limit: undefined }` — the defect where a client serialises the literal string "undefined" into a
+URL. A key present with an undefined value still has length 1, so it is still recorded and caught.
+
+Arms: recipes 5 → 9, agent-sessions 19 → 23. Each assertion sits in its own arm so a mutation cannot
+be masked by an earlier failure in a bundled one.
+
+⭐ **Mutation-proved against the real subject, and — the load-bearing half — proved that HEAD was
+blind to the same mutation.** Deleting the `cursor` spread from `RecipesResource.list` reddens 3 new
+arms; **HEAD's test file passes 5/5 against that identical mutated source.** Deleting it from
+`AgentSessionsResource.list` reddens 2 new arms; **HEAD's passes 19/19.** So the SDK could have
+silently stopped threading pagination cursors — the walk repeating page 1 or stopping early — and
+nothing in either file would have reddened. Sources and tests restored byte-identical from snapshots.
+
+The `iterate` arms are the ones that carry that: they assert page 2 requests
+`{ limit: 1, cursor: 'cur_2' }`, which a count of yielded items cannot see.
+
+⛔ **A truncated grep nearly produced a false finding.** `account.ts` sends `query: { keep: 'current' }`
+under a comment recording that omitting it "made this method a guaranteed 400 in every SDK", and
+`grep -rn keep … | head -4` returned only unrelated matches — reading as an unpinned past regression.
+It is pinned: `untested-resources.test.ts:114` is a CRITICAL arm asserting exactly that query. The
+two irrelevant files sort first, and `head -4` cut the real hit. **A truncated read is a scoped
+search.** Full SDK suite after the change: 31 files, 352 tests, green; `tsc` clean.
