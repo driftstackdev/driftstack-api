@@ -13019,3 +13019,68 @@ the pinned expression (`parsed.data.account_id.length === 36`) it is a clean zer
 backslash-dot), so the pin rewrite matched nothing. `assert n == 1` fired on the first file and **nothing
 was modified** — the run aborted before any write, which is the only reason the next command's output was
 not a false green.
+
+## V-2006 — the class V-2005 fixed, closed: every other call site reads sound, and the guard now says so (2026-08-27)
+
+2026-08-27. V-2005 fixed three routes that substituted `.length === 36` for a uuid shape check. Two
+questions it left open, both answerable: **are there more bypasses**, and **what stops a fourth?**
+
+### Are there more? No — and the counting instrument found three candidates that reading refuted
+
+**Boundary: the 12 route files that DEFINE `uuidFromPrefixedId`, comment lines stripped, comparing parser
+CALLS against request-id READS.** Three files show a gap, and none is a bypass:
+
+```
+admin-webhooks.ts   4 calls / 7 reads   the 3 extra reads pass the RAW public id to withAudit(...)
+sessions.ts        11 calls / 12 reads  an inline /^prof_([0-9a-f]{8}-…)$/ with 400 on mismatch
+admin-accounts.ts  11 calls / 10 reads  more calls than reads — one validates a CURSOR, not a param
+```
+
+`admin-webhooks` is validation-then-reuse: every handler calls the parser on the line above, and the audit
+row should record `wdl_<uuid>` — the id the operator acted on — not the bare uuid. `sessions.ts` cannot use
+its own file's parser because that `PUBLIC_ID_RE` is `[a-z]{3}_` and `prof` is four letters, the same
+constraint that forces `[a-z]+` in profile-snapshots; its inline regex is strict, pins the prefix in the
+pattern, and throws `BadRequestError`. `admin-accounts` running a cursor through the parser is the V-1565
+cursor lesson applied.
+
+⭐ **A call-count gap is a candidate, never a finding.** All three would have been offenders on the count
+alone. The three that were real (V-2005) had the opposite signature — the parser was defined, strict, and
+simply not reached.
+
+### What stops a fourth? Now: an arm on the guard that already owns the parser
+
+`twelve-copies-of-the-id-parser-must-agree` proves every copy is strict — its arms check that each regex
+accepts the prefixes its file asks for and mints, that each REFUSES a non-uuid, and that each pins the
+prefix somewhere. **Not one of them could see V-2005**, because all three defective routes had perfectly
+good parsers. **Verifying a parser exists is not verifying it is reached**, and that distinction is the
+whole finding.
+
+Added there rather than in a new file, because it is a property of the same subject. 36 is the uuid string
+length, so a `.length` comparison against it inside a route file is a shape check wearing a length's
+clothes.
+
+**Detector proved on known positives before its zero was trusted** — the pre-fix sources are still in the
+scratchpad, keyed by path:
+
+```
+3/3  found in the three pre-fix route files
+ ✓   a spelling wrapped across lines is still caught (non-comment lines are joined before matching)
+ ✓   `* … .length === 36 …` in a block comment does NOT count
+ ✓   `// x.length === 36` does NOT count
+ 0   occurrences across 60 route files today
+```
+
+The comment cases matter because the arm's own explanation quotes the construct it forbids — the V-2000
+failure, which I committed once already and will not commit again by writing the guard that describes it.
+
+**Both controls run, not asserted.** Planting `v.length === 36` into `routes/legal.ts` — a route this arm
+was not written for, the same control V-1565 used — reds it naming `legal.ts (1)`. The non-vacuity floor
+was probed rather than trusted: setting it to 999999 reports _"expected **60** to be greater than or equal
+to 999999"_, so the arm really walks 60 route files and the floor of 55 carries ~8% slack. Restored and
+re-run green, 7 of 7.
+
+⛔ **My habitual `it(` check has a false positive, found here.** The standing rule is to compare the `it(`
+count against HEAD after every pin edit. `grep -c 'it('` reported 6 → **8** for a one-arm addition, and the
+extra match is `.split('\n')` — **`split(` ends with `it(`**. The precise count is `^\s+it\(`, which reads
+6 → 7. It has never mattered before only because no line in the files I touched contained `split(`; a
+count that can silently gain a phantom is exactly the instrument this log exists to distrust.

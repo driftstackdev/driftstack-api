@@ -218,4 +218,39 @@ describe('the copied id parsers must agree', () => {
       ).toBe(true);
     }
   });
+  // V-2006 — every arm above proves a PARSER is strict. None of them could see
+  // V-2005, where three routes had perfectly good parsers and simply did not reach
+  // them: the call site tested a LENGTH instead, and a length is not a shape — 36
+  // dashes are 36 characters, so any 36-character string went into a Postgres
+  // `uuid` column and the route answered 500 where the boundary owes 400.
+  // Verifying a parser exists is not verifying it is used.
+  //
+  // 36 is the uuid string length, so a `.length` comparison against it inside a
+  // route file is a shape check wearing a length's clothes. Non-comment lines are
+  // joined before matching, which does two jobs at once: a spelling wrapped across
+  // lines is still caught, and the explanation you are reading — which quotes the
+  // construct it forbids — does not satisfy the check it describes.
+  it('CRITICAL no route file substitutes a length comparison for a uuid shape check. The parser arms above cannot see this: the three routes that did it (V-2005) each defined a strict parser and routed around it.', () => {
+    const LENGTH_AS_SHAPE = /\.length\s*[!=]==?\s*36/g;
+    const offenders: string[] = [];
+    let scanned = 0;
+    for (const file of readdirSync(ROUTES_DIR).sort()) {
+      if (!file.endsWith('.ts')) continue;
+      scanned += 1;
+      const code = readFileSync(join(ROUTES_DIR, file), 'utf8')
+        .split('\n')
+        .filter((l) => !/^\s*(\*|\/\/)/.test(l))
+        .join(' ');
+      const hits = code.match(LENGTH_AS_SHAPE)?.length ?? 0;
+      if (hits > 0) offenders.push(`${file} (${String(hits)})`);
+    }
+    // Non-vacuity: an empty scan satisfies the emptiness assertion below, so a
+    // renamed directory would report perfect compliance having read nothing.
+    expect(scanned, 'route files scanned').toBeGreaterThanOrEqual(55);
+    expect(
+      offenders,
+      "a length check standing in for a uuid shape check — use the file's uuidFromPrefixedId, " +
+        'or a regex that pins the uuid shape, so a malformed id is a 400 and not a Postgres cast error',
+    ).toEqual([]);
+  });
 });
