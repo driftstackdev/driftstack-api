@@ -13752,3 +13752,41 @@ test is missing** — otherwise the next reader adds one and concludes the gap w
 **No code changed.** Recorded so the "is the memory store a faithful double?" question is answered once for
 this subsystem, with its answer (yes, for the arithmetic) and its boundary (the two-capacity case is
 structural, not behavioural).
+
+## V-2020 — a reachability argument recorded in prose, made enforceable (2026-08-27)
+
+2026-08-27. An archived entry examined `BACKOFF_MS_BY_ATTEMPT`, found the tables identical across the
+rails but the **per-lookup fallbacks divergent by a factor of sixty** — the durable service reads
+`?? 60 * 60_000`, the worker `?? 60_000` — and proved the divergence inert: both lookups sit behind a DLQ
+boundary at 6, both tables carry keys 1–5, so no reachable attempt number misses. It changed nothing, and
+said why: _"the divergence is real and the consequence is nil, and those are different things."_ That was
+the right call.
+
+**Re-asked as a post-condition, the argument still holds — and I checked the half it did not.** **Boundary:
+the three real definitions (`durable-webhook-delivery.ts`, `webhook-worker.ts`,
+`webhook-delivery/src/in-memory.ts`; the package's `index.ts` re-exports and `types.ts` only mentions it in
+prose), plus every lookup site.** The archive argued the UPPER bound. The lower one holds too: the durable
+rail indexes `attemptNumber` and the worker `delivery.attempts + 1`, so neither can present `0` to a table
+keyed from 1 — worth checking because `webhook-worker.ts:55` documents "attempt indices 0..5", and a
+0-based index against a 1-keyed table would have missed on the FIRST retry.
+
+⛔ **What nothing enforced is the link the argument rests on.** Raise `DEFAULT_MAX_ATTEMPTS` to 7 without
+extending the tables and attempt 6 becomes reachable on both rails: **the same failing endpoint then
+retries after one HOUR on the durable path and one MINUTE on the worker.** Every existing arm stays green —
+they pin each table's SIZE at 5 and compare the tables to one another, and both remain true when the
+boundary moves. **A reachability argument written in prose protects nothing once the constant it depends on
+is edited by someone who never read it.**
+
+New arm on `webhook-backoff-schedule-agrees-everywhere`: the attempt numbers each DLQ boundary admits must
+be exactly the table's key set, on both rails — `DEFAULT_MAX_ATTEMPTS` imported from the durable service,
+`MAX_ATTEMPTS` parsed out of the worker source.
+
+**Mutation-proved in three directions, each restored byte-identical:** raising the durable boundary to 7
+reds with `expected [1,2,3,4,5] to deeply equal [1,2,3,4,5,6]`; raising the worker's does the same on its
+own rail; and adding an unreachable key 6 to the durable table reds _two_ arms — mine and the existing
+size pin — so the reciprocal drift was already covered and now has a second witness that names the reason.
+
+⭐ The transferable half: **when an entry concludes "real divergence, nil consequence", the consequence is
+nil only while some invariant holds — and that invariant is usually a relationship between two constants
+in different files.** Writing the relationship down is worth less than asserting it, and the assertion is
+generally three lines.

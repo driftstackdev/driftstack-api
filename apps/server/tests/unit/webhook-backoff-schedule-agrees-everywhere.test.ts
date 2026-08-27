@@ -39,7 +39,10 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { BACKOFF_MS_BY_ATTEMPT as DURABLE } from '../../src/services/durable-webhook-delivery.js';
+import {
+  BACKOFF_MS_BY_ATTEMPT as DURABLE,
+  DEFAULT_MAX_ATTEMPTS,
+} from '../../src/services/durable-webhook-delivery.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..', '..', '..', '..');
@@ -137,5 +140,43 @@ describe('the webhook backoff schedule agrees in every place it is stated', () =
     expect(docs, 'the published schedule, in milliseconds, against the implemented one:').toEqual(
       actual,
     );
+  });
+  // V-2020 — the fallbacks are unreachable, and this is what keeps them that way.
+  //
+  // Each lookup ends in a defensive default, and the two rails DISAGREE by a
+  // factor of sixty: the durable service reads `?? 60 * 60_000`, the worker
+  // `?? 60_000`. An archived entry checked that divergence and proved it inert —
+  // both lookups sit behind a DLQ boundary at 6, and both tables carry keys 1
+  // through 5, so no reachable attempt number misses. It recorded the argument in
+  // prose and changed nothing, which was right at the time.
+  //
+  // ⛔ Nothing tied the two constants together. Raise the boundary to 7 without
+  // extending the tables and attempt 6 becomes reachable on both rails: the same
+  // failing endpoint then retries after ONE HOUR on the durable path and ONE
+  // MINUTE on the worker. The existing arms would stay green — they pin each
+  // table's SIZE at 5 and compare the tables to each other, and both remain true.
+  //
+  // The archived argument only examined the UPPER bound. The lower one holds too,
+  // checked while writing this: the durable rail indexes `attemptNumber` and the
+  // worker `delivery.attempts + 1`, so neither can present 0 to a table keyed
+  // from 1. That is why the expected set starts at 1 rather than 0.
+  it('CRITICAL every attempt number the DLQ boundary admits has a backoff entry, on both rails. The per-lookup fallbacks differ by 60x and are only unreachable because the boundary and the key range agree — nothing else asserts that they do.', () => {
+    const workerMax = /const MAX_ATTEMPTS = (\d+);/.exec(readFileSync(WORKER, 'utf8'))?.[1];
+    expect(workerMax, 'MAX_ATTEMPTS parsed from webhook-worker.ts').toBeDefined();
+
+    const reachable = (max: number): number[] =>
+      Array.from({ length: max - 1 }, (_unused, i) => i + 1);
+
+    expect(
+      Object.keys(DURABLE)
+        .map(Number)
+        .sort((a, b) => a - b),
+      'durable table keys vs the attempt numbers DEFAULT_MAX_ATTEMPTS admits',
+    ).toEqual(reachable(DEFAULT_MAX_ATTEMPTS));
+
+    expect(
+      [...tableFromSource(WORKER).keys()].sort((a, b) => a - b),
+      'worker table keys vs the attempt numbers MAX_ATTEMPTS admits',
+    ).toEqual(reachable(Number(workerMax)));
   });
 });
