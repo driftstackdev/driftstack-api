@@ -450,10 +450,14 @@ describe('a workspace declares what its TypeScript source imports', () => {
       }
     }
 
-    // Measured at 3266 files and 4277 specifiers. Floors, not pins: adding or
-    // deleting tests must not fail this, but a walk that stopped finding them must.
-    expect(files, 'test files walked').toBeGreaterThan(2000);
-    expect(specifiers, 'bare-specifier imports parsed out of them').toBeGreaterThan(2000);
+    // V-1991 — floors raised to just under the measured 3324 files / 4334
+    // specifiers. They stood at 2000 and 2000, set when the corpus was smaller and
+    // never revisited, so this walk could have lost 40% of its files and 54% of its
+    // specifiers and still called itself non-vacuous. Same treatment V-936/937/939
+    // gave the other sweeps; floors, not pins, so adding or deleting tests still
+    // must not fail this.
+    expect(files, 'test files walked').toBeGreaterThan(3000);
+    expect(specifiers, 'bare-specifier imports parsed out of them').toBeGreaterThan(3900);
     expect(
       [...new Set(offenders)].sort(),
       'these tests import a package neither their workspace nor the root declares',

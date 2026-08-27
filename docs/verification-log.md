@@ -12191,3 +12191,41 @@ three; without it each zero would have read as "no unguarded caps".
 Boundary: enforcement enumerated by naming convention in `apps/server/src/db` plus a shape sweep over
 all of `apps/server/src`; caps outside both — enforced in a route with no count and no convention —
 would still be missed.
+
+## V-1991 — two non-vacuity floors had drifted 40% and 54% below their corpus (2026-08-27)
+
+V-1990 found a guard watching four files of a larger surface. The generalisation is the same question
+one level down: **how much of a population can vanish before its floor fires?** V-936/937/939 already
+did this sweep once and raised floors "to just under the measured N"; two floors were missed, and both
+are walks the whole suite leans on.
+
+| guard                                                  | population now | floor was | slack   | floor now |
+| ------------------------------------------------------ | -------------- | --------- | ------- | --------- |
+| `a-workspace-declares-what-its-source-imports` (files) | 3,324          | 2,000     | **40%** | 3,000     |
+| same, bare specifiers                                  | 4,334          | 2,000     | **54%** | 3,900     |
+| `no-test-file-runs-in-no-project` (files on disk)      | 3,241          | 2,500     | **23%** | 3,000     |
+
+⭐ **The `no-test-file` raise is demonstrated, not argued.** Truncating its walk to 2,900 files — a loss
+the old floor accepted — now fails with `expected 2900 to be greater than 3000`. 741 files, more than
+an entire workspace's suite, could previously have vanished with the arm still reporting non-vacuous.
+The workspace-walk raise is proved to BITE (a 3-of-15-workspace walk fails at 299) but that mutation
+does **not** demonstrate the improvement, since 299 would have failed the old floor too; there the
+improvement is the arithmetic above, not something the mutation shows.
+
+⛔ **And that guard's recorded measurement was wrong in a way its own file refutes.** The note read
+"MEASURED: 2,891 test files on disk, **of which 29 are e2e (playwright)**" — but the NOTE forty lines
+above it states the e2e specs are named `*.spec.ts`, so a `*.test.ts(x)` walk "never sees them". The
+walk cannot contain a single e2e file; measured now, it contains zero. Both the count and the clause
+are corrected.
+
+⛔ **The sweep that found these was wrong at the top of its own ranking, twice.** Pairing each floor
+with the nearest measurement above it ranked `every-webhook-event…` at 98% slack and
+`global-scope-db-tests…` at 94% — both **false**: the extractor had grabbed the _next_ assertion in the
+arm (an enum length, a sub-count), and both files' real floors were already raised to ~11% slack by
+V-939. A third row paired a "2,891" comment with a `toBeGreaterThan(0)` glob check and reported 100%.
+**Every candidate that survived came from reading the arm, not from the ranking.**
+
+Boundary: floors paired with a recorded measurement within six lines, across
+`apps/server/tests/**/*.test.ts` — 63 pairings, of which the three above are the ones a hand-read
+confirmed. A floor whose measurement is recorded further away, or nowhere, is outside this
+measurement entirely.

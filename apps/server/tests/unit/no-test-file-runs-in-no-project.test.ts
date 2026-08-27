@@ -131,8 +131,13 @@ function collectedBy(file: string): string[] {
 describe('no test file runs in no project', () => {
   it('CRITICAL the walk and the globs both produced something. The arm below asks "which files are collected by nothing", and an empty file list has none — while a config whose globs failed to parse would report every file orphaned. Both directions are silent, so both are measured.', () => {
     const files = testFilesOnDisk();
-    // MEASURED: 2,891 test files on disk, of which 29 are e2e (playwright).
-    expect(files.length, 'test files found on disk').toBeGreaterThan(2500);
+    // V-1991 — MEASURED 3,241 test files on disk. The previous note said 2,891
+    // "of which 29 are e2e (playwright)", which this walk cannot contain: the NOTE
+    // below records that the e2e specs are named `*.spec.ts`, so a `*.test.ts(x)`
+    // walk never sees them. Floor raised to just under the measurement; it stood at
+    // 2500, so 741 files — 23% of the corpus, more than an entire workspace's
+    // suite — could have vanished with this still reporting non-vacuous.
+    expect(files.length, 'test files found on disk').toBeGreaterThan(3000);
     for (const { config } of PROJECT_CONFIGS) {
       const globs = includeGlobs(config);
       expect(globs.length, `include globs parsed from ${config}`).toBeGreaterThan(0);
