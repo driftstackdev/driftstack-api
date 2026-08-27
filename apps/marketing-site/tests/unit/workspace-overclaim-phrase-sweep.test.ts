@@ -27,9 +27,24 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
+// ⛔ This sweep is named workspace-wide and walked TWO of the five page-bearing app
+// directories. The property it enforces — that the product's security claims are
+// honest — has nothing to do with which app renders the page, so a scope narrower
+// than the name is a guard that reads as complete and is not.
+//
+// `status-site` is added because it is CUSTOMER-FACING: an overclaim there reaches
+// the same reader as one on the marketing site. `admin-panel` is deliberately NOT
+// added — it is staff-internal, so the honesty property this enforces does not apply
+// to it in the same way, and adding a directory the rule does not govern would make
+// the scope arbitrary in the other direction.
+//
+// ⚠️ Extending found NOTHING: the added directory is clean today. That is the honest
+// result — this closes a latent gap rather than fixing a live defect, and the guard
+// simply now covers the surface its name has always claimed.
 const targets = [
   resolve(REPO_ROOT, 'apps/marketing-site/src/pages'),
   resolve(REPO_ROOT, 'apps/docs/src/pages'),
+  resolve(REPO_ROOT, 'apps/status-site/src/pages'),
 ];
 const allFiles = targets.flatMap((d) => walk(d)).filter((f) => /\.(astro|md)$/.test(f));
 
@@ -46,7 +61,17 @@ const FORBIDDEN_AFFIRMATIVE_FEATURES: { pattern: RegExp; reason: string }[] = [
 
 describe('W276.B workspace-wide marketing-overclaim sweep', () => {
   it('CRITICAL the sweep read real pages and every phrase still matches. Each assertion below runs INSIDE a loop over the collected pages, so a moved or renamed root leaves all four vacuously true — reporting every page clean because it read none. These are claims about the security of the product, so a silent pass is the expensive outcome.', () => {
-    expect(allFiles.length, 'pages across marketing-site and docs').toBeGreaterThan(100);
+    // ⛔ PER-ROOT, not just the aggregate. The floor below is satisfied by
+    // marketing-site and docs alone, so a third root that silently fails to exist —
+    // a rename, a typo in the path, an app that moves — is INVISIBLE to a total
+    // count. Measured: breaking the status-site path left this file green until
+    // these per-root assertions were added.
+    for (const dir of targets) {
+      expect(existsSync(dir), `walk root missing — this sweep read none of it: ${dir}`).toBe(true);
+    }
+    expect(allFiles.length, 'pages across marketing-site, docs and status-site').toBeGreaterThan(
+      100,
+    );
 
     const samples: [RegExp, string][] = [
       [/mTLS support\b/i, 'Includes mTLS support for every session.'],
