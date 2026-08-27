@@ -201,3 +201,69 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+
+  # ── latest.json, assembled ONCE after every platform has uploaded ─────────
+  #
+  # ⛔ gui-v0.1.6 shipped a manifest with FIVE platform keys and no darwin at
+  # all, while both macOS artifacts sat on the release. gui-v0.1.5, same
+  # workflow, produced all nine. The difference is a race: `includeUpdaterJson`
+  # defaults on, so each of the three matrix jobs read-modify-writes the SAME
+  # latest.json, and whichever pair interleaves badly drops a platform.
+  #
+  # The consequence is silent and total for the dropped platform: the updater
+  # fetches a manifest that parses fine and simply has no key for it, so a macOS
+  # client is told nothing — the exact silence the 0.1.6 release existed to fix.
+  #
+  # Assembling once, after the matrix, removes the concurrency instead of
+  # narrowing it. And the completeness assertion is the point: a manifest that is
+  # merely VALID is what shipped, so validity is not the property worth checking.
+  publish-manifest:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Assemble and verify the updater manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.sig' --dir sigs
+          python3 - <<'PY'
+          import json, os, sys, pathlib
+          tag = os.environ['TAG']
+          repo = os.environ['GITHUB_REPOSITORY']
+          base = f"https://github.com/{repo}/releases/download/{tag}"
+          version = tag.removeprefix('gui-v')
+
+          # asset-suffix -> the platform keys tauri's updater looks up for it.
+          WANT = {
+            '.app.tar.gz': ['darwin-aarch64', 'darwin-aarch64-app',
+                            'darwin-x86_64', 'darwin-x86_64-app'],
+            '.AppImage':   ['linux-x86_64', 'linux-x86_64-appimage'],
+            '.deb':        ['linux-x86_64-deb'],
+            '-setup.exe':  ['windows-x86_64', 'windows-x86_64-nsis'],
+          }
+          sigs = {p.name[:-4]: p.read_text().strip() for p in pathlib.Path('sigs').glob('*.sig')}
+          platforms, missing = {}, []
+          for suffix, keys in WANT.items():
+              hit = next((n for n in sigs if n.endswith(suffix)), None)
+              if hit is None:
+                  missing.append(suffix); continue
+              for k in keys:
+                  platforms[k] = {'signature': sigs[hit], 'url': f"{base}/{hit}"}
+          if missing:
+              print(f"::error::no signature for {missing} — refusing to publish a manifest "
+                    f"that would leave those platforms silently un-updatable")
+              sys.exit(1)
+          expected = sorted(k for keys in WANT.values() for k in keys)
+          if sorted(platforms) != expected:
+              print(f"::error::manifest key set {sorted(platforms)} != {expected}")
+              sys.exit(1)
+          json.dump({'version': version, 'notes': f"Driftstack GUI {tag}",
+                     'pub_date': None, 'platforms': platforms},
+                    open('latest.json', 'w'), indent=2)
+          print(f"assembled {len(platforms)} platform keys for {version}")
+          PY
+          gh release upload "$TAG" latest.json --repo "$GITHUB_REPOSITORY" --clobber
