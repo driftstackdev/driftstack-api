@@ -13489,3 +13489,67 @@ floor was probed rather than trusted: forcing it reports 4, the exact population
 ⭐ The transferable half: **an arm whose subject is "methods matching a shape" needs a plant whose NAME is
 ordinary.** I chose `__probeBoundedScan` because it looked obviously synthetic and easy to spot in a diff,
 and that choice is precisely what made the mutation land in the one blind spot my regex had.
+
+## V-2015 — the guard I landed yesterday knew one word for a two-word convention; and the cursor family, twice misread, is clean (2026-08-27)
+
+2026-08-27. Two things, from one sweep.
+
+### The guard was one token short of its own subject
+
+V-2014's roster arm required every scan-bounded method to publish `truncated`. Sweeping the class
+repo-wide to check whether its file scope was too narrow — the V-2007 question — turned the instrument on
+itself. **Boundary: every `<name>Limit ?? <n>` default in `apps/server/src/services/*.ts` outside
+comments, 25 sites, nothing filtered out.** Three disclose at 10_000, `listForAdminPage` is the silent one
+at 1_000, `sweepExpiredOrders` bounds at 500, and the remaining 20 are page sizes (50) or cap checks (0).
+
+⛔ **I classified `sweepExpiredOrders` as undisclosed. Reading refuted it.** It returns
+`{ expired, capped }`, and its own comment calls `capped` _"the honest signal"_, explaining that an exact
+remaining count would require the full-table scan the limit exists to avoid. **The disclosure vocabulary in
+this codebase is two words, not one** — measured: `truncated:` 13 occurrences, `capped:` 19, and nothing
+else (`partial` is a `CryptoOrderStatus` literal; `hasMore` means "more pages are reachable", which is the
+opposite claim). Sweep the shape — disclosure — not the token.
+
+`sweepExpiredOrders` is outside the arm's population today (it bounds with `limit`, not `scanLimit`), so
+there was no live false red. **But the arm would have redded on a correct `capped` disclosure the moment
+one landed under `scanLimit`, and a guard that cries wolf teaches people to widen the exemption list
+instead of the answer.** Predicate widened to `/\b(truncated|capped):/`.
+
+**Proved on both sides, with ordinary method names** (V-2014's lesson — a plant named `__probeX` landed in
+the one blind spot the attribution regex had):
+
+```
+plant listRecentCapped  disclosing via `capped`   -> GREEN   (the widening works)
+plant listRecentSilent  disclosing via neither    -> RED, naming listRecentSilent
+```
+
+⭐ **B is the control for A.** A green on A alone would also be what an invisible plant looks like; B shows
+the arm does see a method of that name shape, so A's green is the disclosure and not blindness.
+
+### The cursor family: read as a defect twice, clean both times
+
+Chasing V-1565's cursor half further: **three different malformed-cursor behaviours back the published
+list endpoints.** `parseUuidCursor` (8 repos) and `decodeDeliveryCursor` (webhook DLQ) both fall back to
+the first page; crypto-orders' private codec returns an empty page.
+
+**First misreading:** that crypto-orders violated a cross-cutting contract, since `decodeDeliveryCursor`'s
+comment names one — _"first page, matching the prior 'invalid cursor → first page' contract"_. **Second
+misreading:** that the published pagination doc over-generalised, promising the empty-page behaviour for a
+matrix of eight endpoints, seven of which restart.
+
+**Both wrong, and the doc is what settles it.** Its validation bullet says _"a malformed cursor (**not
+valid base64url JSON of `{ts, id}`**)"_ — the crypto-orders cursor format specifically — and its lifetime
+section names the `(created_at, order_id)` pair for the same reason. The doc self-scopes through the
+format it names, and closes by saying encoding, ordering, limits, filters and field names are
+route-specific. The SDKs are defensive independently: the pagination iterators terminate on an
+empty-string cursor with a comment describing the exact `c1 -> "" -> c1` cycle that would otherwise occur,
+plus a stall guard on an unchanged cursor.
+
+**And the contract has no stranded callers.** **Boundary: every GET in `openapi.json` whose 200 schema
+declares `has_more` or `next_cursor` — 16 operations.** Nine publish both; seven use `next_cursor: null`
+alone as the completion signal; **zero publish `has_more` without a `next_cursor`**, which would tell a
+caller more exists while giving no way to reach it.
+
+⛔ **One slip worth recording.** My first attempt at the predicate edit asserted against text with ten
+leading spaces; the file has eight. I had read the indentation off a `sed 's/^/  /'` display that adds two.
+The assert caught it and nothing was written — **derive indentation from the file, never from a rendering
+of it.**

@@ -380,7 +380,12 @@ describe('W405.C apps/server/src/services/crypto-orders.ts content parity', () =
       );
       bounded.push({
         method: owner,
-        discloses: lines.slice(start, end).join('\n').includes('truncated:'),
+        // V-2015 — `truncated` OR `capped`. Both are this codebase's way of saying
+        // "the answer was bounded"; sweepExpiredOrders uses `capped` and its own
+        // comment calls it "the honest signal". A predicate that knew only one
+        // token would red on a correct disclosure, and a guard that cries wolf
+        // teaches people to widen the exemption list instead of the answer.
+        discloses: /\b(truncated|capped):/.test(lines.slice(start, end).join('\n')),
       });
     });
 
