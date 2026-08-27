@@ -20314,3 +20314,30 @@ Running total on the shape: **12 of 19 floorless set-enumerating tests now floor
 8 here). The remaining 7 build their collections inside arms or through per-file shapes and need
 individual reads — the same per-occurrence conclusion the swallowing-walk debt reached, and the reason
 the ceiling guard caps that population rather than pretending it is scriptable.
+
+## V-1964 — the control-plane outbound gate cannot fail to release (2026-08-27)
+
+One of three streaming questions raised for the owner's "picks up after a lag" work is whether the
+congestion gate releases promptly once `bufferedAmount` drops. **For the control-plane gate the answer is
+structural, and answerable statically: it holds no state to release.**
+
+`assertFleetOutboundCapacity(bufferedAmount, frameBytes)` in `routes/fleet-events.ts` is a pure function
+of the CURRENT buffered amount — `if (bufferedAmount + frameBytes > FLEET_WS_MAX_BUFFERED_BYTES) throw`.
+**No latch, no hysteresis, no sticky flag**, so there is no state that can remain set after congestion
+clears. The next frame is admitted the moment the queue has drained enough to fit it. The source states
+the same intent: a synchronous refusal, correlators convert the throw to their bounded error outcome and
+clear their pending timers, and _"the shared node socket stays open, so a later request can proceed once
+the existing queue drains."_ Witnessed by three files, including direct assertions on the exported
+function in `routes-fleet-events-content-parity`.
+
+⛔ **Boundary, and it is the whole value of this entry: this is the FLEET CONTROL-PLANE WebSocket
+outbound gate in `apps/server`. It is not the GUI or SFU data-channel gate.** Searched `apps/server` for
+a stateful shed/backpressure/throttle mechanism and there is none — the only "shed" is a node-lifecycle
+drain/cordon in the harness protocol schema, which is a session-admission state rather than a per-frame
+gate. **So this answers the question for one gate and says nothing about the one that likely matters for
+frame pacing**, which lives outside this repo.
+
+⭐ Recording it because a structural answer is worth more than a measurement here: a gate with no state
+cannot be observed sticking, so no amount of load testing this particular gate would have been
+informative. **The measurement effort belongs on the gates that DO hold state**, and identifying which
+those are is the cheaper first step.
