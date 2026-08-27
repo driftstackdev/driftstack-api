@@ -18208,9 +18208,9 @@ the compiler already covers: a value-returning function is caught by `noImplicit
 permissive default.
 
 Proven against the **real subject**, not its own fixtures: reverting V-1916's marker in
-`account-lifecycle.ts` to a bare `default: return;` fails exactly **1 of 4** arms and names the
-file; restoring returns 4/4. Three further arms prove the detector accuses both known-positive
-shapes (no default, silent default) and acquits all four legitimate ones.
+`account-lifecycle.ts` to a bare `default: return;` fails exactly **1 of 3** arms and names the
+file; restoring returns 3/3. The other two arms prove the detector accuses every unguarded shape
+and acquits every guarded one.
 
 **A flaw in the guard's own self-tests, caught by that mutation.** The first version failed all
 4 arms instead of 1. The synthetic arms build a Program from the full tsconfig, so they were
@@ -18219,8 +18219,27 @@ real regression would red the self-tests too and disguise itself as a broken det
 known-positive proof was never isolated in the first place. The injected arms now judge only the
 injected file.
 
-**Boundary:** `apps/server/src` under `tsconfig.test.json`; the guard classifies by the
-_enclosing function's_ declared return type and treats `Promise<void>` as void-ish, and it reads
-the default clause's text for `never`/`throw` rather than proving the assertion type-checks — a
-default containing the word `throw` in a comment would satisfy it. Ratchets 3053→3054 and
-3229→3230.
+### The first version of this guard went red in the full suite, and both causes were mine
+
+It passed alone and failed the gate — 4 arms, 4 failures, `Test timed out in 10000ms`. Not a
+logic fault: **each arm builds a TypeScript `Program`**, which costs ~2.5s plus ~0.8s for the
+checker on an _idle_ machine. Four of those already exceed the 10s default before the full
+suite's CPU contention is added, so the standalone pass was never evidence the arm would pass
+under load. Two fixes, both measured rather than tuned:
+
+- **Root the program at `src/` (342 files) instead of the config's 2836.** The guard only reads
+  `src/`, and the same **29** switches are visible either way — checked by count before and
+  after — for a third of the cost (~1.1s).
+- **Three arms with an explicit 60s timeout**, not four on the default.
+
+The second correction is to the classifier itself, and it is this log's third lesson turned on my
+own work: the first version tested the default clause's **text** for `never`/`throw`, so a clause
+whose only `throw` sat in a _comment_ — or inside a nested callback the dispatch never invokes —
+satisfied it. It now judges AST nodes, and three of the arm-2 fixtures exist solely to pin those
+false-accept shapes.
+
+**Boundary:** `apps/server/src` under `tsconfig.test.json`, classified by the _enclosing
+function's_ declared return type with `Promise<void>` treated as void-ish. The guard requires the
+default to contain a `throw` or a `never`-annotated declaration; it does not verify that the
+`never` assignment actually type-checks, so a declaration annotated `never` and assigned some
+other way would still satisfy it. Ratchets 3053→3054 and 3229→3230.
