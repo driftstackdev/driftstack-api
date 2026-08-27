@@ -20599,3 +20599,30 @@ you guessed returns absence, not evidence.**
 
 No action: enforcement is intact, and `route-auth-coverage-invariant` already carries an enumerated
 exemption roster (35 public, 1 manual-auth, 54 disabled) for the auth dimension.
+
+## V-1972 — the SDK's audit-log filters were untested end to end (2026-08-27)
+
+`packages/sdk-typescript/src/resources/audit-log.ts` was the lowest-covered file in the gate's summary:
+**0 of 14 branches**, 2/5 statements, 2/5 functions. **Boundary: those figures are from the full-gate
+`coverage-summary.json`, so they describe the whole suite's coverage of that file, not one test's.**
+
+Every uncovered branch was a query-building spread — `...(query.action !== undefined ? { action } : {})`
+and its siblings in `list` and `iterate`. The code is correct and idiomatic; what was missing is any
+assertion that a supplied filter reaches the wire. **The customer-visible failure that implies is a
+filter which silently stops filtering**, and no server-side test can see it because the parameter never
+leaves the SDK. Cross-SDK guards pin the audit action roster and the pagination envelope, but nothing
+pinned the query surface.
+
+Added five arms to the existing test file — no new file, so no ratchet move. The load-bearing one passes
+`action` ALONE and asserts the outgoing query is exactly `{ action }`: **that catches both a dropped
+filter and the opposite defect of inventing `{ limit: undefined }`, which some clients serialise as the
+literal string "undefined".** A second arm covers `iterate` with only `limit`, which is the mirror of
+the action-only case and reaches the two arms the first four left untouched.
+
+**Post-condition, not a derivation: branches 0/14 → 14/14, statements 2/5 → 5/5, functions 2/5 → 5/5.**
+Measured from a fresh coverage run rather than inferred from "I added arms covering those branches".
+
+⭐ **And coverage is not assertion, so it was mutation-proven too.** Deleting the `action` spread from
+`list` reddens three arms including the CRITICAL one. **100% branch coverage is reachable by tests that
+assert nothing about what the branches DO** — the mutation is what distinguishes arms that exercise code
+from arms that check it. Source restored byte-identical; only the test file changed.
