@@ -18178,3 +18178,49 @@ bite." The assert is the only reason those did not become a finding that the mar
 declared return type, and treats `Promise<void>` as void-ish; it does not examine switches that
 already carry a `default` (23 of the 26), any of which could still be non-exhaustive in a way
 this measurement says nothing about. 46 test files touching either service pass unchanged.
+
+## V-1917 — the other 23 switches, and a guard so the population stays closed (2026-08-27)
+
+V-1916 stated its own boundary: it examined only switches _without_ a `default`, and said
+nothing about the rest. Closing that, because `default: break;` in a void function is the same
+silent drop as no default at all — the same defect, a different spelling.
+
+A second AST probe classified every switch in `apps/server/src` that _does_ carry a default by
+what that default does, self-tested first on four synthetic shapes (silent, throw,
+never-assertion, open subject) and correct on all four. Result at `6cabbcb09`: **5** switches
+carry a default; **3** of those are over a finite literal union and **all three assert against
+`never`**; **0** silently swallow.
+
+The three measurements reconcile exactly, which is the reason to trust any of them: 24 switches
+without a default plus 5 with = **29**, the same 29 `switch (` that `git grep` counts. Before
+V-1916 the split was 26 + 3; that commit converted exactly two. Void-ish switches lacking a
+default fell from 3 to **1**, and that one is `routes/auth.ts:109` — `mapAuthFlowError`, whose
+`never` return type is itself the protection (V-1915). **No silent-drop dispatch remains in
+`apps/server/src`.**
+
+### The sweep is worthless the moment someone adds a switch
+
+So it is now an invariant: `a-void-switch-over-a-finite-union-must-be-exhaustive.test.ts`. A
+switch over a finite literal union inside a void-returning function must carry a default that
+asserts against `never` or throws. Scope is deliberately narrow, and each exclusion is a shape
+the compiler already covers: a value-returning function is caught by `noImplicitReturns`, a
+`never`-returning one by TS2534, and a switch over a bare `string` legitimately needs a
+permissive default.
+
+Proven against the **real subject**, not its own fixtures: reverting V-1916's marker in
+`account-lifecycle.ts` to a bare `default: return;` fails exactly **1 of 4** arms and names the
+file; restoring returns 4/4. Three further arms prove the detector accuses both known-positive
+shapes (no default, silent default) and acquits all four legitimate ones.
+
+**A flaw in the guard's own self-tests, caught by that mutation.** The first version failed all
+4 arms instead of 1. The synthetic arms build a Program from the full tsconfig, so they were
+scanning the real tree as well as the injected file and inheriting its offenders — meaning a
+real regression would red the self-tests too and disguise itself as a broken detector, and their
+known-positive proof was never isolated in the first place. The injected arms now judge only the
+injected file.
+
+**Boundary:** `apps/server/src` under `tsconfig.test.json`; the guard classifies by the
+_enclosing function's_ declared return type and treats `Promise<void>` as void-ish, and it reads
+the default clause's text for `never`/`throw` rather than proving the assertion type-checks — a
+default containing the word `throw` in a comment would satisfy it. Ratchets 3053→3054 and
+3229→3230.
