@@ -15080,3 +15080,52 @@ renameTeam, removeMember), `webhooks-repo` (enqueueDelivery, resetDeliveryToPend
 (recordHeartbeat, getDetail), `agent-sessions-repo` (setGuiControlKey, setPairModeState), plus
 `api-keys-repo::setExpiresAt`, `stripe-webhooks-repo::upsertSubscription`,
 `account-proxies-repo::create`, `auth-repo::touchWebSessionLastUsed`.
+
+## V-1842 — the orphan I was about to "fix" was already measured, and the warning against fixing it was already written
+
+2026-08-26. No finding. The value is in why the investigation should have ended in one command.
+
+**What I built.** From the named uncovered-function list (V-1841), three `team-members-repo` methods
+carry `eq(.ownerAccountId)` — a THIRD tenancy axis my V-1822 sweep never had in scope, after
+`accountId` and the `nodeId` gap of V-1837 — and coverage says none of them executes. `removeMember`
+looked like the sharpest: a bare `DELETE ... WHERE and(eq(id), eq(ownerAccountId))`, no transaction,
+no invite cancellation, while the service actually calls `removeMemberWithInvites` — which exists
+because a 2026-07-10 audit fixed a TOCTOU where "a just-removed member can't resurrect their seat".
+So: a dead PRE-FIX implementation of a fixed defect, still on the interface, under the more natural
+name, one careless call away from reintroducing it. I was measuring the blast radius of deleting it.
+
+⛔⛔ **ALL OF IT WAS ALREADY KNOWN, and `tests/integration/team-routes.test.ts:285` says so in a
+mutation ledger with a control:**
+
+    LEDGER — control 19/19:
+      removeMember stops scoping by owner              SURVIVES
+      removeMemberWithInvites stops scoping by owner   1 red
+
+with the note: "The survivor is not a coverage gap — it is the ledger identifying which function is
+actually live... That is worth knowing before someone 'fixes' a scoping bug in the function nobody
+calls and watches the tests stay green either way." ⭐ That sentence describes the exact next move I
+was making. Somebody anticipated this reader and wrote to them.
+
+⭐⭐ AND THE SAME BLOCK CARRIES TODAY'S UNIQUE-ANCHOR LESSON, recorded before I re-derived it:
+"The anchor for that mutation also matched TWICE on first attempt — the same predicate appears at
+three sites in the fixture repo — and the run aborted rather than mutating an arbitrary one." That is
+V-1840's finding, already in this repository, with the better handling: ABORT on a non-unique anchor
+rather than mutate an arbitrary match.
+
+⭐ A SECOND PRIOR-ART NOTE, same family, worth quoting because it inverts the reflex: the in-memory
+double's `seedMintedApiKey` is documented "no caller today, and kept deliberately. It is the ONLY
+writer of `mintedApiKeys`, which `removeMemberWithInvites` reads, so deleting it would not remove
+dead code — it would make live code unreachable." A dead-surface scan flagged it too. **Following the
+READ is what distinguished a dead seam from the sole entry point to a live one.**
+
+⛔ **MY PROCESS ERROR, which is the whole entry.** I opened prior art whenever a hit surfaced — but
+only as hits surfaced, at the END, in a blast-radius check. One `grep -rn removeMember tests/` BEFORE
+reading any source would have returned the ledger and closed the question in a single step. The
+standing rule says open every prior-art hit; the missing half is WHEN. ⭐ **Grep the target's name
+across `tests/` before forming a theory about it, not after** — in a codebase that writes its
+measurements down, the answer is usually already there, and the cost of looking is one command.
+
+⚠️ WHAT STANDS: `eq(.ownerAccountId)` is a third tenancy axis outside V-1822's scope, and the
+`renameTeam` / `listTeamsOwnedBy` members of it are NOT covered by the ledger above — only
+`removeMember` and `removeMemberWithInvites` are. That remains open and is worth a look, with the
+ledger read FIRST this time.
