@@ -12309,3 +12309,36 @@ behaviour arm. Sources restored byte-identical.
 
 Post-conditions: 32 api-keys/grace test files, 442 tests green; Python 400 passed with ruff + mypy
 clean; Go vet, test and gofmt clean; `tsc` clean. No behaviour changed.
+
+## V-1994 — the crypto-order money path documents little and gets all of it right (2026-08-27)
+
+Audited `crypto-orders` by the V-1980 method, picked because it is the money path and the only
+unaudited surface where a doc/behaviour mismatch costs a customer directly. Its SDK docs are terse —
+four checkable claims rather than V-1993's seven — and **all four hold**.
+
+| claim                                                           | verdict                                                                                                                                                            |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `quote` previews "without minting an order"                     | ✓ `billing-crypto-quote.ts` has **0** insert/create/update calls in 114 lines, and sources price from the same `PricingService.listEffective()` the order will use |
+| `createCheckout` — "send an `idempotencyKey` to dedupe retries" | ✓ atomic, see below                                                                                                                                                |
+| `list` — "newest first"                                         | ✓ `listAll` orders `desc(createdAt)`; the `asc` ordering in the same file belongs to `listPendingOlderThan`, a sweeper, where oldest-first is right                |
+| `cancel` — "abandon a **pending** order"                        | ✓ `cancelOrder` re-checks the pending + ownership guards **against the locked row** via `withOrderLock`, returning `not_cancellable` with the blocking status      |
+
+⭐ **The idempotency is the part worth reading.** The key is SCOPED
+(`<account_id|_anon>:<Idempotency-Key>`), so one account's retry cannot return another's order; the
+unique index is **partial** (`WHERE idempotency_key IS NOT NULL`) so the many keyless orders are
+unconstrained; and the dedupe is a single `INSERT … ON CONFLICT DO NOTHING … RETURNING`, with the
+replay path fetching the prior order and comparing a stored body fingerprint so a key reused with a
+different body is logged rather than silently honoured. The route also discards client-supplied
+`price_cents`/`price_currency` in favour of the server table.
+
+⭐⭐ **The transferable detail is the ON CONFLICT arbiter**, and the code carries the scar: a PARTIAL
+unique index only matches an `onConflict` whose arbiter repeats the SAME predicate. Without the
+`where`, "real Postgres raises 42P10 … and every idempotent crypto checkout 500s" — and the comment
+notes it was **"invisible to the pglite/in-memory tests, only real PG enforces it."** A test double
+that accepts an ON CONFLICT the real engine rejects is the failure mode that lets this ship.
+
+Boundary: this verified the four documented claims against the route, service and repository by
+reading, plus the schema for the index backing the dedupe. It did not execute a checkout against real
+Postgres — which is precisely where the 42P10 class of defect appears, and the reason the existing
+integration suite matters more here than anywhere else I have audited today. **No defect found, no
+code changed.**
