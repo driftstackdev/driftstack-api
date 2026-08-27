@@ -18353,3 +18353,56 @@ carrying an explicit date, so a present-tense claim phrased without those words 
 it; of the 25 comment-only candidates I verified the three above by measuring their subjects and
 triaged the rest by reading, without re-measuring each. `it(` counts unchanged at 10/5/5, tsc
 clean, 16 tests pass.
+
+## V-1920 — auditing the fleet-credential route, and the one thing protecting it that nothing pinned (2026-08-27)
+
+Picked by measurement rather than instinct: of 60 route files, ranked by how little the log says
+about them, `mac-nodes-register.ts` stood out — 460 lines, 7 body mentions, none an end-to-end
+audit. The instrument needed correcting first, though. Ranking by _heading_ mentions listed
+`internal-atlas-priority`, which V-1903 records as already audited; ranking by _body_ mentions
+puts it at 14 and the control passes.
+
+**The route is sound, and unusually careful.** All four registrations sit behind `requireAuth` +
+`requireScope('driftstack_internal_admin')`. The LiveKit `api_secret` is encrypted on arrival; an
+encryption failure answers a generic 500 rather than echoing key-shape internals; the admin-audit
+payload carries only `ws_url` and the node id; the response echoes neither credential; and
+`GET /v1/mac-nodes` emits `has_livekit` as a **boolean**. `api_secret` appears in the file only in
+the schema, the encrypt call, and comments.
+
+Its header makes a claim worth testing rather than believing — _the plaintext "does NOT leave this
+scope — never written to logs, never echoed in the response"_. Three independent checks, because
+the risk lives outside the file:
+
+1. **Zod does not echo it.** `ValidationError(parsed.error.flatten())` on an over-long, wrong-typed
+   and empty `api_secret`: the value appears in neither `flatten()` nor the raw issues. The control
+   is what makes that worth stating — `z.enum()` **does** echo the rejected value, through
+   `flatten()` as well, so the check demonstrably detects a leak when one exists. No sensitive
+   field is an enum, so there is no live exposure, but the property is real and worth knowing.
+2. **No custom message interpolates a value.** All 23 `message:` templates across
+   `apps/server/src` + `packages/api-types/src` interpolate constants or state names.
+3. **Nothing logs a request body.** 137 `req.body`/`request.body` references in `apps/server/src`,
+   zero passed to a logger — checked with a six-line proximity window, not line-by-line, after the
+   single-line version would have missed the multi-line form.
+
+### The gap the audit actually found
+
+That third property is what the route's whole design depends on, and **nothing pinned it.**
+`every-credential-header-is-redacted-in-logs` covers headers; `redact-text-scrubs-every-minted-
+credential-shape` covers Driftstack's own minted prefixes — a third party's LiveKit secret matches
+neither. Pino's `redact.paths` is path-keyed, so a logged body is scrubbed by nothing. The header
+guard's own stated reasoning generalises exactly: it scrubs the BYOK and GUI control keys "even
+though the route never logs `req.headers` explicitly", against "a future refactor that adds a
+request-trace log". The body is the larger surface and had no equivalent.
+
+New guard, `no-request-body-reaches-a-logger.test.ts`. It walks the AST rather than matching text,
+because the shape that matters spans lines — `req.log.warn(\n { body: req.body },\n 'msg',\n)` is
+what a real request-trace refactor produces and what a single-line grep misses. Proven against the
+**real subject**: injecting exactly that multi-line form into `mac-nodes-register.ts` fails 1 of 3
+arms and names the file, while both self-test arms stay green; restoring returns 3/3. It runs in
+0.93s, using `createSourceFile` rather than a `Program` — the cost that made V-1917 time out.
+
+**Boundary:** the guard recognises a logger as `<x>.log|logger.<level>(…)` and a body as
+`req.body`/`request.body`, so a body first assigned to another variable, or a logger reached
+through a differently-named handle, passes it; it covers `apps/server/src` only. The audit itself
+read the route end to end but exercised nothing at runtime — every claim above is static. Ratchets
+3055→3056 and 3231→3232.
