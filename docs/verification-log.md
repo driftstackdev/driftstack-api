@@ -16529,3 +16529,47 @@ marked writer, is the gate before the side effect — needs a positional instrum
 The repo already knew this in a neighbouring form: the integration-database guard was rewritten to be
 position-aware after certifying 18 files whose assertion sat in `beforeAll` and never ran. **Same
 mistake, different surface, and I made it one day after reading that header.**
+
+## V-1875 — no team-admin refusal can happen after a side effect, across all 34 gate points
+
+2026-08-26. No defect. A positional property measured positionally, after a verb-list detector proved
+it could not answer the question.
+
+**THE PROPERTY.** A refusal that fires after the work has already happened is not a refusal. The repo
+has fixed this before and says so at the sites — `sessions.ts` notes the role check was moved up "so
+they run before any owner-scoped side effect", `account-me.ts` authorises "before parsing the body …
+must never reach the repo" — and tests it per-route with spies, in the idiom
+`sessions.test.ts:1065` names: "the spies are the point — a refusal that happens after the driver call
+has already leaked a session". **59 test files use that idiom; none derives the property across routes.**
+
+⛔ **FIRST ATTEMPT: A HARDCODED WRITE VOCABULARY, AND IT WAS BLIND.** I matched awaited calls whose verb
+was insert/update/delete/create/emit/dispatch/… and got "0 preceding writes" at all eleven sites. The
+control killed it: the same detector found **0 writes AFTER** `agent-sessions.ts:2034`, where the very
+next statement is `await consumeEffectiveOwnerRateLimit(...)` — **consume** decrements a bucket and was
+not in my list. A vocabulary that misses a write after a gate misses one before it just as well, so
+every zero it produced was worthless. That is the growing-family shape: a guard naming members of an
+open set goes blind as the set grows.
+
+⭐⭐ **SECOND ATTEMPT, AND THE FIX IS THE SHAPE.** Stop asking "is this a write verb I know" — an open,
+semantic set — and ask "does ANY asynchronous operation precede the gate", which is closed and
+syntactic. In this codebase persistence, driver calls and metering are all awaited, so nothing that
+matters can happen without one.
+
+✅ **RESULT, complete over the population.** The eleven `effective.role !== 'admin'` sites are seven
+route-handler gates plus four module-level helpers, and helpers must be judged at their CALL SITES
+rather than their definitions — the first sweep scored them from line 1 of the file and produced a
+number about nothing.
+
+- **7 handler gates: zero awaits before the gate.** Control passed at five of them — the detector finds
+  awaits immediately AFTER each gate, so it is not simply blind.
+- **4 helpers, 27 call sites: zero with an await before the call.** That zero is self-validating: had
+  the handler-start detection failed, the scanned region would begin at line 0 and would almost
+  certainly contain awaits, inflating the count rather than zeroing it.
+
+**34 gate points, none preceded by an asynchronous operation.**
+
+⚠️ **BOUNDARY, stated with the result.** This covers the team-admin role gates, not every authorization
+check, and it is an ordering claim about ASYNCHRONOUS work: a purely synchronous side effect — mutating
+an in-memory cache, say — would not need an await and is outside what this can see. Persistence, driver
+calls and metering in this codebase are all awaited, which is what makes the syntactic question a useful
+proxy rather than a complete one.
