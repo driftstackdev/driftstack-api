@@ -16650,3 +16650,69 @@ and past-tense: it records what was true on a day, which is history.** The one I
 A measurement in a header rots when it claims the PRESENT; the same measurement, dated, is a fact that
 stays true forever. Six instances found today, and this is the first where the two forms sat three
 lines apart in one comment.
+
+## V-1878 — a recorded SSRF is fixed, and a stale "broken" is worse than a stale "clean"
+
+2026-08-26. No open defect. A latent vulnerability from my own notes checked against HEAD and found
+closed, and the note corrected.
+
+⛔ **THE NOTE SAID "NOT FIXED".** `services/proxy-backends/socks5.ts` was recorded on 2026-06-03 as a
+latent SSRF: it TCP-probes a customer-supplied `socks5.host` from the production origin, so a host of
+`169.254.169.254` or `127.0.0.1` or an internal `10.x` turns probe-resolves-versus-errors into an
+internal-network reachability oracle. The note called it latent because the route that reaches it was
+503 at the time, and left it open.
+
+**That premise had an expiry, so I checked it rather than either citing the note or re-investigating
+from scratch.**
+
+✅ **FIXED, IN TWO LAYERS, verified by reading HEAD rather than trusting a commit subject.**
+
+- **Literal host** — `classifyUnsafeHost(host)` runs BEFORE the probe and rejects private, loopback,
+  link-local, metadata and numeric-encoding addresses. It is not a second implementation: it is the
+  same vetted list the webhook target guard uses, shared by six modules. Landed as `8c4fc19fe`,
+  "SSRF-guard the SOCKS5 proxy host at the backend chokepoint (§4.17)".
+- **DNS rebind** — inside `defaultTcpProbe`, the CONNECTED socket's `remoteAddress` is re-classified,
+  so a customer host that is a DOMAIN resolving to an internal IP is rejected at connection time.
+  Landed as `8df4f5bd2`. The literal guard alone could not have caught that, and the code says so.
+
+⚠️ **Residual, named in the source itself and not by me:** the fork re-resolves the hostname
+independently, so pinning the validated IP into its dial is the remaining defense-in-depth layer,
+assigned to A1/go-live. A hardening step rather than the original oracle, and outside this repo.
+
+⛔⛔ **THE LESSON IS THE INVERSE OF THE EXPIRED AUDIT VERDICT, AND IT IS SHARPER.** Yesterday's finding
+was that "audited, sound, don't re-audit" decays when its subject moves. **A note recording an OPEN
+vulnerability decays the same way and is more dangerous stale.** A stale "clean" costs an audit nobody
+repeated. A stale "broken" gets cited as evidence of a live gap, or sends the next session to fix what
+is already fixed — and it sits in a security note, which is exactly the kind of text people quote
+without re-deriving. The check is the same single command against the files the note names.
+
+⭐ Corrected at the source: the memory's own summary line now leads with the fix and the two commits,
+because that line is what gets read first, and a body correction under a description still saying
+"unguarded latent" would have been half a fix.
+
+⭐⭐ **AND A SECOND ONE THE SAME DAY, found by running the same check over my own open-issue notes.**
+`project_unauth_token_route_ratelimit_gap` recorded five mutation routes without an IP limiter, four of
+them unauthenticated token-consume routes registered with empty options. At HEAD all five carry one:
+
+    app.post('/v1/auth/magic-link/consume',     { preHandler: [magicLinkConsumeGate] },     …)
+    app.post('/v1/auth/password-reset/confirm', { preHandler: [passwordResetConfirmGate] }, …)
+    app.post('/v1/auth/refresh',                { preHandler: [refreshGate] },              …)
+    app.post('/v1/auth/logout',                 { preHandler: [logoutGate] },               …)
+
+each an `ipRateLimit(rateLimitStore, { bucketPrefix: 'auth-ip:…', capacity, refillPerSecond })`, noted
+in-file as live per-IP since W424; `POST /v1/oauth/authorize/complete` now carries `rateLimit` too.
+
+⛔ **MY INSTRUMENT FAILED TWICE INSIDE THAT ONE CHECK, and the second failure is the reusable one.**
+First a grep took the FIRST textual match for each path and landed on import lines, so it reported line
+numbers that were not registrations at all. Then, on the real registrations, a search for
+`rateLimit(` returned **nothing for all four** — because the limiter is registered through a NAMED
+CONSTANT in the preHandler array, not called inline. **A route that is limited reads as unlimited to a
+search for the limiter call.** Resolve the identifiers in `preHandler`, do not pattern-match the
+registration line.
+
+⭐ **The healthier finding underneath: most of these notes did NOT rot.** Of the open-sounding
+`project_*` memories I checked, the majority already carry their resolution in the summary line —
+"RESOLVED", "SUPERSEDED → FIXED", "NOT a bug — product observation". Two had not been updated when
+their fix landed, and both were security items. ⚠️ Boundary in the same sentence: I checked the
+server-side subset whose names claim something open, not all 102 name-matches, and the fork-side ones
+belong to another agent's lane.
