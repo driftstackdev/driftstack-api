@@ -18870,3 +18870,57 @@ a rival hypothesis worth eliminating, and both were a single grep away.
 observed frequency on this hardware and not a CI rate; and the refutations rule three candidates out
 without establishing which contended resource — CPU, page cache, or worker scheduling — actually
 starves the scanners.
+
+## V-1930 — 68 unbounded strings, or zero, depending on which direction you measure (2026-08-27)
+
+Turning from egress to ingress: the harness control protocol, where a Mac fleet node's frames
+drive real state. The question was whether length bounds are applied uniformly, since one
+unbounded string among bounded siblings is the growing-family shape.
+
+**My first measurement said 68 and was worthless.** Counting `z.string()` across
+`harness-control-protocol.ts`: 182 occurrences, 112 bounded by `.max()`, 2 by a regex length
+quantifier, **68 apparently unbounded**. Reading three of them stopped that list from being
+published. The file carries BOTH directions and says so at line 732:
+
+- **ControlInbound** — server ENCODES → harness: `sessionAssign`, `intentDispatch`, `sessionEnd`,
+  `ping`, and the CP→node request frames.
+- **HarnessOutbound** — server DECODES ← harness: `heartbeat`, `sessionStatus`, `intentResult`,
+  `capabilityReport`, `errorEvent`, and the rest.
+
+Only the decode side is ingress. `IntentDispatchSchema` and `CookiesRequestSchema` — two of my 68 —
+carry comments saying "server → harness" and "CP→node … NOT in HarnessOutbound". **A schema we
+construct ourselves needs no length cap.** A direction-blind count on a bidirectional protocol is
+not a weak measurement; it is a meaningless one.
+
+**Scoped to the transitive closure of `HarnessOutbound` — 66 schemas — the count is ZERO.** Every
+string a node can send is capped. Both controls hold: `ErrorEventPayloadSchema`, a genuine member
+payload, is inside the closure, and `IntentDispatchSchema` is outside it.
+
+The closure has to be transitive, not top-level: an envelope member reached through another schema
+still carries whatever the node sends, so walking one level would check the envelope and miss every
+payload in it.
+
+### Bounded is not the same as `.max()`
+
+`code: z.string().regex(/^[a-z][a-z0-9_]{0,127}$/)` has no `.max()` and is the most carefully
+bounded field in the file — the same regex that, in V-1926, was what made `errorClass` safe to
+forward to a customer. A checker recognising only `.max()` would report a false positive on it. The
+guard counts `.max(...)`, `.length(...)`, and a `.regex(...)` whose pattern carries an upper length
+quantifier, and one arm exists solely to pin that.
+
+**Proven in both directions on the real schema, which is the whole point:**
+
+| mutation                                                          | result               |
+| ----------------------------------------------------------------- | -------------------- |
+| unbounded string added to `ErrorEventPayloadSchema` (decode side) | **1 of 3 arms reds** |
+| the identical addition to `IntentDispatchSchema` (encode side)    | **stays green**      |
+
+The second is what separates this guard from the file-wide checker that would have accused 68
+innocent fields.
+
+**Boundary:** the closure follows identifier references within
+`apps/server/src/schemas/harness-control-protocol.ts` only, so a schema imported from another
+module and embedded in an outbound frame is invisible to it; and bounding is judged syntactically
+from the call chain, so a cap applied by an enclosing `.transform()` (as `ErrorEventSchema` does for
+total serialized bytes) is not counted — which makes the check strictly conservative rather than
+lenient. Ratchets 3060→3061 and 3236→3237.
