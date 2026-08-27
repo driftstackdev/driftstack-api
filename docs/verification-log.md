@@ -21221,3 +21221,33 @@ Boundary: this traced rotation → storage → both delivery paths → signer �
 reading, and mutation-tested the single link whose redundancy invites removal. It did not deliver a
 webhook to a live endpoint; the existing integration suites cover that. **No defect found and no code
 changed.**
+
+## V-1984 — Python's auth suite reaches Go's, 7 of 14 → 14 of 14 (2026-08-27)
+
+Closing a named slice of the 34 methods V-1979 left enumerated. The auth resource is the sharpest
+case of the asymmetry that entry described: **Go's `auth_test.go` covers all 14 methods; Python's
+covered 7** — the three `cli_authorize` calls, plus the four V-1979 added. Seven were untested:
+`signup`, `login`, `request_magic_link`, `consume_magic_link`, `request_password_reset`,
+`confirm_password_reset`, `logout`.
+
+Each new arm asserts the contract Go already asserts: POST, the exact path, and the body forwarded
+verbatim. That last one is checkable because `coerce_body` passes a dict through unchanged, so an
+extra or renamed key would be a different request than the caller made.
+
+⭐ **The route pairs are the point.** `magic-link/request` vs `magic-link/consume` and
+`password-reset/request` vs `password-reset/confirm` are adjacent, near-identically shaped methods —
+the exact shape a copy-paste slip takes. **So that is what was mutated**: pointing `consume_magic_link`
+at the request route and `confirm_password_reset` at the reset-request route. Three new arms fail on
+it, while **the entire Python suite at HEAD — 391 tests — passes.** Source restored byte-identical.
+
+⭐ The `logout` arm pins a claim its own docstring makes: it "revokes THAT token, not the session the
+call authenticated with", which holds only if the supplied token actually reaches the wire in the
+body. An implementation that ignored it and revoked the caller's own session would be indistinguishable
+from the caller's side — the assertion is on the outgoing body for that reason.
+
+Post-condition, measured rather than derived: **Go covers 14 distinct auth methods, Python now covers 14.** Python suite 400 passed / 9 skipped (was 391); ruff check, ruff format and mypy clean.
+
+Boundary: this is method-and-route coverage, matching what Go's arms assert. It does not exercise the
+server's auth semantics — session minting, token revocation and MFA gating are the server suite's, and
+this only pins that the SDK asks the right endpoint with the caller's own body. **27 of the 34 methods
+in V-1979's list remain.**

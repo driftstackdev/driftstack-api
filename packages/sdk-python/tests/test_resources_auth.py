@@ -301,3 +301,123 @@ async def test_async_mfa_step_up_posts_to_the_step_up_route() -> None:
             out = await client.auth.mfa_step_up({"code": "123456"})
         assert route.called
         assert out["via"] == "totp"
+
+
+# ── The seven auth methods Go's auth_test.go covers and Python's did not
+# ── (V-1984). Go pins all 14; Python pinned 7. Each arm below asserts the
+# ── wire contract Go already asserts: POST, the exact path, and the body
+# ── forwarded verbatim — coerce_body passes a dict through unchanged, so an
+# ── extra or renamed key here would be a different request than the caller made.
+
+
+def test_sync_signup_posts_the_body_verbatim() -> None:
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/auth/signup").mock(
+            return_value=httpx.Response(201, json={"session": SESSION})
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            client.auth.signup({"email": "new@example.test", "password": "supersecret"})
+        assert route.called
+        assert json.loads(route.calls[0].request.content) == {
+            "email": "new@example.test",
+            "password": "supersecret",
+        }
+
+
+def test_sync_login_posts_to_the_login_route() -> None:
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/auth/login").mock(
+            return_value=httpx.Response(200, json={"session": SESSION})
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            out = client.auth.login({"email": "u@example.test", "password": "supersecret"})
+        assert route.called
+        assert out["session"]["token"] == SESSION["token"]
+
+
+def test_sync_request_magic_link_posts_to_the_request_route() -> None:
+    """request and consume are SEPARATE routes; swapping them would send a
+    bare email to the consumer and a token to the requester."""
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/auth/magic-link/request").mock(
+            return_value=httpx.Response(202, json={"message": "sent"})
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            client.auth.request_magic_link({"email": "u@example.test"})
+        assert route.called
+        assert json.loads(route.calls[0].request.content) == {"email": "u@example.test"}
+
+
+def test_sync_consume_magic_link_posts_to_the_consume_route() -> None:
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/auth/magic-link/consume").mock(
+            return_value=httpx.Response(200, json={"session": SESSION})
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            out = client.auth.consume_magic_link({"token": "magic_tok"})
+        assert route.called
+        assert json.loads(route.calls[0].request.content) == {"token": "magic_tok"}
+        assert out["session"]["token"] == SESSION["token"]
+
+
+def test_sync_request_password_reset_posts_to_the_request_route() -> None:
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/auth/password-reset/request").mock(
+            return_value=httpx.Response(202, json={"message": "sent"})
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            client.auth.request_password_reset({"email": "u@example.test"})
+        assert route.called
+        assert json.loads(route.calls[0].request.content) == {"email": "u@example.test"}
+
+
+def test_sync_confirm_password_reset_posts_to_the_confirm_route() -> None:
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/auth/password-reset/confirm").mock(
+            return_value=httpx.Response(200, json={"session": SESSION})
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            client.auth.confirm_password_reset({"token": "reset_tok", "password": "newsupersecret"})
+        assert route.called
+        assert json.loads(route.calls[0].request.content) == {
+            "token": "reset_tok",
+            "password": "newsupersecret",
+        }
+
+
+def test_sync_logout_revokes_the_token_in_the_body_not_the_calling_session() -> None:
+    """The docstring's claim: logout revokes the token SUPPLIED, not the session
+    the call authenticated with. That only holds if the token reaches the wire in
+    the body — an implementation that ignored it and revoked the caller's own
+    session would look identical to this caller."""
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/auth/logout").mock(return_value=httpx.Response(200, json={}))
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            client.auth.logout({"token": "ds_web_someothersession"})
+        assert route.called
+        assert json.loads(route.calls[0].request.content) == {"token": "ds_web_someothersession"}
+
+
+@pytest.mark.asyncio
+async def test_async_login_posts_to_the_login_route() -> None:
+    """Each async method is a separate implementation and therefore a separate
+    chance to point at the wrong route."""
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/auth/login").mock(
+            return_value=httpx.Response(200, json={"session": SESSION})
+        )
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            out = await client.auth.login({"email": "u@example.test", "password": "supersecret"})
+        assert route.called
+        assert out["session"]["token"] == SESSION["token"]
+
+
+@pytest.mark.asyncio
+async def test_async_consume_magic_link_posts_to_the_consume_route() -> None:
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/auth/magic-link/consume").mock(
+            return_value=httpx.Response(200, json={"session": SESSION})
+        )
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            await client.auth.consume_magic_link({"token": "magic_tok"})
+        assert json.loads(route.calls[0].request.content) == {"token": "magic_tok"}
