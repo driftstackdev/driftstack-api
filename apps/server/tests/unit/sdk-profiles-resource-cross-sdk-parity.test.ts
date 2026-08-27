@@ -195,12 +195,18 @@ describe('W824 cross-SDK ProfilesResource methods parity', () => {
       ['OpenAPI', OPENAPI],
     ] as const) {
       const body = read(path);
-      expect(body, `${label} warns the stored state does not move`).toMatch(
-        /STORED BROWSER STATE does\s*\n?\s*(?:\*|#|\/\/)?\s*not move/i,
+      // A plain substring, NOT a regex. The first draft used
+      // `does\\s*\\n?\\s*not move` to tolerate a line wrap, which is the exact
+      // redundant-whitespace construct `a-parity-regex-may-not-be-ambiguous-
+      // about-whitespace` forbids — it accepts precisely what `\\s*` accepts and
+      // backtracks catastrophically when the match fails. That guard caught it.
+      // The phrase is kept contiguous in all four sources instead, so no
+      // whitespace tolerance is needed at all.
+      expect(body, `${label} warns the stored state does not move`).toContain(
+        'STORED BROWSER STATE does not move',
       );
-      expect(body, `${label} points at export/import for the bytes`).toMatch(
-        /export.{0,40}import/is,
-      );
+      expect(body, `${label} points at export/import for the bytes`).toContain('export');
+      expect(body, `${label} names import as the other half`).toMatch(/import_?\b/);
     }
     // The retired wording, which said the opposite by implication.
     for (const [label, path] of [

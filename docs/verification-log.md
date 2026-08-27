@@ -21068,3 +21068,63 @@ asserts anything about the stored state either way.
 
 Post-conditions: 9 affected test files / 114 tests green; `tsc` clean on src and tests; Python 391
 passed with ruff and mypy clean; Go vet, test and gofmt clean.
+
+### V-1980 follow-up — the guard I wrote tripped two guards of its own (2026-08-27)
+
+The gate after V-1980 came back RED on three files, all mine, from two root causes. Both are worth
+recording because each was a rule I already had.
+
+⛔ **I wrote the exact construct my own standing instructions name.** The first draft of the cross-SDK
+arm matched `/STORED BROWSER STATE does\s*\n?\s*(?:\*|#|\/\/)?\s*not move/i` to tolerate a line wrap
+across four comment styles. `a-parity-regex-may-not-be-ambiguous-about-whitespace` failed it:
+_"these guards carry a redundant ambiguous-whitespace construct; it is identical to `\s_`and hangs
+the suite when the match fails"*. That is verbatim the third standing lesson —`\s*\n?\s*`accepts
+precisely what`\s\*` accepts and backtracks catastrophically on a miss.
+
+The fix is not a narrower regex. The phrase is kept **contiguous in all four sources**, so the arm is
+a plain `toContain` and needs no whitespace tolerance at all — the defect class is removed rather than
+patched. Post-condition: **0** occurrences of the construct remain in the file.
+
+⛔ **And a source edit had a committed generated artifact downstream that I did not think to look
+for.** `packages/sdk-python/openapi.json` is a dumped copy of the spec, checked in and read by
+**thirty-one test files**; adding an operation `description` made it stale, failing both
+`openapi.test.ts` and `sdk-python-openapi-snapshot-sync`. The nine tests I pre-ran did not include
+either, because I picked them by _reading the files I had touched_ rather than by asking **what is
+generated FROM the file I touched.**
+
+⭐ Regenerating had a trap of its own: `npm run sdk:python:dump-spec` writes expanded JSON while the
+committed copy is prettier-formatted, so the raw dump produced **6974 insertions / 1698 deletions**
+for a one-line semantic change. Running prettier collapses it to **1 file changed, 1 insertion** —
+exactly the new description. A diff that large for a one-line change is the signal to stop and format,
+not to commit.
+
+## V-1981 — the BYOK credential surface says four things; all four are true (2026-08-27)
+
+Audited `account.{get,set,clear,test}ByokAnthropicKey` — customer-managed Anthropic keys, and the
+methods V-1979 left untested in Python — by taking each claim in the SDK doc comments as a testable
+assertion about the server. **All four hold.**
+
+| claim                                                | verdict                                                                               |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| get returns "metadata only… never the plaintext key" | ✓ returns `{has_key, set_at, last_used_at}` and nothing else                          |
+| get needs "broad read **or** account_owner"          | ✓ route requires `read`, and `auth.ts:796` makes `account_owner` satisfy bare `read`  |
+| set / clear / test need `account_owner`              | ✓ all three                                                                           |
+| clear is "idempotent"                                | ✓ unconditional `clearKey` → 204, no 404 on an already-cleared key                    |
+| test runs "without ever echoing it back"             | ✓ returns `{ok}` or `{ok,reason}`; **every `reason` is one of five module constants** |
+
+⭐ The surrounding code is better than the docs promise: clearing or rotating **evicts the plaintext
+already handed to live sessions** (V-730 — "a clear that does not revoke is not a clear"), and an
+idempotent clear still emits an audit entry so an operator investigating a "key disappeared" report
+sees every DELETE attempt.
+
+⛔ **I twice concluded a property was unpinned and was twice wrong.** The production tester's
+reason-boundedness is pinned directly and thoroughly — `anthropic-key-tester.test.ts` asserts the
+result never contains the upstream body, the key, an internal hostname, or the IP, across the invalid
+/ rate-limit / 5xx / network paths. My candidate guard would have been redundant. Note the distinction
+that nearly misled me: `byok-anthropic-test-metrics.test.ts` pins the metric label through an
+**injected** `testResult`, so it never exercises the production default — the boundedness evidence
+comes from the other file, not that one.
+
+Boundary: this audited the four routes, the tester service and the scope-resolution rule by reading,
+and verified each documented claim against them. No code changed; nothing was executed against a live
+Anthropic endpoint.
