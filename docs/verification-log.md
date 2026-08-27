@@ -16498,3 +16498,34 @@ shared primitive, which is why the difference resolves to zero real cases.
 ⚠️ **BOUNDARY.** This measures the WRITE side of envelope versioning across `src/lib` — that no legacy
 format can be produced. It does not re-check AAD content, key derivation or tag verification, which
 V-1871, V-1872 and the 2026-06-23 review cover between them.
+
+## V-1874 — strengthening V-1873: two counts matching is not co-location
+
+2026-08-26. No defect. The previous entry's claim re-verified on better evidence than it was published
+with, and the gap in its reasoning named.
+
+⛔ **V-1873 CONCLUDED FROM ARITHMETIC.** It compared encrypt sites against marker-emitting writes per
+file and read `1 = 1` as "the encrypt is behind the marker". **It is not the same statement.** A file
+with an unmarked encrypt in one function and the marker emitted in a different one scores exactly the
+same, and would be a legacy writer sitting in plain sight under a clean number. The counts were
+evidence for the claim; they were not the claim.
+
+✅ **RE-VERIFIED BY CO-LOCATION, and it holds.** Brace-matching each `createCipheriv` call to its
+enclosing function and asking whether the marker is emitted in THAT body: six of seven are direct —
+`encryptPlatformSecretValue`, `encryptAccountProxySecret`, `encryptByokAnthropicKey`,
+`encryptLivekitSecret`, `encryptSecret` (mfa-totp), `encryptWebhookSecret` each emit their own marker
+around their own ciphertext.
+
+⭐ **The seventh is the interesting one, and the answer is structural rather than arithmetic.**
+`profile-key-hierarchy` encrypts in `wrapDekPayload`, which emits nothing; the marker is added one
+level up by `wrapProfileDek`. That is only safe if the unmarked helper cannot be called directly — and
+it cannot: `wrapDekPayload` and `unwrapDekPayload` carry no `export` and have zero references outside
+the file. **Module-private, so the only reachable writer is the one that prefixes.** The second encrypt
+site in that file is `wrapSecret`, already recorded in V-1871 as caller-less.
+
+⭐⭐ **THE LESSON, which is not one I had written down: a count is a claim about how MANY, never about
+WHERE.** Every co-location question — is the assertion inside the test, is the encrypt inside the
+marked writer, is the gate before the side effect — needs a positional instrument, not a tallying one.
+The repo already knew this in a neighbouring form: the integration-database guard was rewritten to be
+position-aware after certifying 18 files whose assertion sat in `beforeAll` and never ran. **Same
+mistake, different surface, and I made it one day after reading that header.**
