@@ -20444,6 +20444,13 @@ to a counter looks like an improvement and silently stops recording anything**, 
 loudly. Mutation-proven both ways: deleting the log reddens the arm, and replacing it with a metric
 reddens it too.
 
+⭐ **Wider than the budget, which the entry above understates.** `FleetInboundAdmission` has three
+members — `accepted`, `parse-budget-exhausted`, and `uncorrelated-large-frame` — and the log fires on
+`reason: admission` for BOTH non-accepted verdicts. So it also records a large download frame that
+arrives without a matching pending fetch claim, which closes a node's socket for a different reason and
+was equally silent. **The second cause is arguably the more interesting one**, since an uncorrelated
+large frame implies a claim that expired or never existed rather than a node simply being too fast.
+
 ⭐ **The general shape, and it is the third time today: an instrument that is gated on configuration is
 not an instrument.** Verify what is WIRED before choosing where to emit — the same question that
 explained `durable-webhook-delivery`'s coverage and the same one that made "is there a v1.1 classifier"
