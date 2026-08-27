@@ -14100,3 +14100,70 @@ module cannot inherit the exemption by sitting in the same file.
 Header corrected to state the real family size; the four per-module text pins left untouched, since they
 pin prose those four files actually carry. 12/12 green, `it(` 9 → 12, `tsc -p apps/server/tsconfig.test.json`
 clean.
+
+## V-2027 — the app's JSON parser is chosen by billing configuration (2026-08-27)
+
+Measured which route files have never been audited. Boundary: 60 route files under
+`apps/server/src/routes`; "unmentioned" = the filename stem never appears in any
+`docs/verification-log*.md`. **Exactly one: `_webhook-raw-body.ts`.**
+
+It registers a global `application/json` content-type parser so webhook routes can reach the raw
+bytes for HMAC verification, stashing `req.rawBody` only for URLs in a hand-written
+`RAW_BODY_URLS` set. Two properties audited clean by reading:
+
+- **The URL coupling holds today** — the set is exactly the two paths the two opted-in routes
+  register, and both consumers **fail closed**: missing signature header → 401, then
+  `typeof rawBody !== 'string' || rawBody.length === 0` → 400 _before_ any verification. A path
+  that drifted out of the set would break the webhook, never forge one.
+- **Route-level `bodyLimit` is not clamped by the parser's.** The parser declares
+  `bodyLimit: 1 MiB` for all JSON, and three routes deliberately raise their own above it
+  (`account-me` to 3.5 MiB). Read from the installed fastify 5.11.0 rather than recalled:
+  `content-type-parser.js:237` picks `options.limit === null ? parser.bodyLimit : options.limit`,
+  and `route.js:380` sets `options.limit = opts.bodyLimit || null` — **the route wins.** No app
+  sets a server-level `bodyLimit`, so the default is fastify's own 1 MiB and the parser matches it.
+
+### The finding: which parser runs depends on whether payments are configured
+
+`registerWebhookRawBodyParser(app)` is called only from _inside_ the two webhook route registrars,
+and `lib/app.ts:1338` / `:1350` call those registrars **conditionally**, on
+`stripeWebhookSigningSecret` and `nowpaymentsIpnSecret`. Both trace to optional env vars —
+`STRIPE_WEBHOOK_SECRET` and `NOWPAYMENTS_IPN_SECRET`, conditional spreads at `config.ts:770`/`858`.
+So a deployment with neither configured never registers the parser and runs fastify's built-in one.
+
+The two disagree on one input, and it is not a rare one:
+
+| `Content-Type: application/json`, zero-length body | result                                                           |
+| -------------------------------------------------- | ---------------------------------------------------------------- |
+| custom parser (payments configured)                | `text.length === 0 ? {}` → handler receives `{}`                 |
+| fastify default (neither configured)               | 400 `FST_ERR_CTP_EMPTY_JSON_BODY` (`content-type-parser.js:314`) |
+
+That reaches the whole API, not the webhook routes. **15 request-body schemas parse `{}`
+successfully** — boundary: 88 `.ts` files under `apps/server/src/routes` + `packages/api-types`,
+heuristic over TOP-LEVEL keys of `*Request|*Body*Schema = z.object({…})`, counting a key optional
+if its segment carries `.optional()`/`.default()`/`.nullish()`; `CreateSessionRequestSchema`
+verified by reading. So `POST /v1/sessions` with an empty JSON body **creates a session on a
+payments-configured deployment and 400s on one without.**
+
+⛔ **And the suite only ever exercises the configured side.** `build-test-app.ts:1485` sets
+`stripeWebhookSigningSecret = 'whsec_test_fixture_secret'` unconditionally, so every integration
+test registers the custom parser. The branch a minimal or self-hosted deployment actually runs has
+no coverage at all.
+
+**Not fixed — the fix picks a contract.** Registering the parser unconditionally makes every
+deployment agree but changes empty-body behaviour where payments are unconfigured; making the
+custom parser mirror `FST_ERR_CTP_EMPTY_JSON_BODY` makes them agree the other way and changes it
+where payments ARE configured, which is production. Owner's call, alongside W-10.
+
+**Guarded what does not need that call.** New
+`a-webhook-that-needs-its-raw-body-declares-its-url.test.ts` walks `routes/` for opted-in files
+rather than listing them — the file header invites the drift ("Stripe + NowPayments + future"):
+
+| arm                                  | mutation                                             | result                           |
+| ------------------------------------ | ---------------------------------------------------- | -------------------------------- |
+| census non-vacuity                   | removed one `registerWebhookRawBodyParser(app)` call | 1 failed / 2 passed              |
+| every opted-in path is declared      | dropped `/v1/webhooks/nowpayments` from the set      | reds naming the path             |
+| every consumer refuses an empty body | neutered stripe's refusal to `if (false)`            | reds naming `webhooks-stripe.ts` |
+
+⛔ The third mutation aborted first on `a=0`: I typed a 6-space indent read off a display that had
+been piped through `sed 's/^/  /'`. Derived from the file it is 4. Same class as the aborted-script
+entry in V-2025 — and the same assert caught it.
