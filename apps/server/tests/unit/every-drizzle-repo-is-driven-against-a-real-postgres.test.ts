@@ -26,6 +26,15 @@
 // itself here would be the more expensive failure, because it would stop the
 // per-method work that found those six.
 //
+// ⭐ 2026-08-26 (V-1849) — THE EXAMPLE IS NOW CLOSED, THE POINT IS NOT. Measured
+// with `--coverage.reporter=json` over `apps/server/tests` with DATABASE_URL set:
+// `oauth-store.ts` reports 24 of 24 functions executed, so the six are gone. The
+// distinction this paragraph draws is exactly why they were findable, so it stays
+// — only the illustration has expired. The per-method instrument that closes gaps
+// like it is v8 coverage over the db layer, NOT a method-name census: the census
+// that produced this file is the same one retired in V-1835 for reporting ~10 of
+// 12 false positives, and for the same reason recorded two paragraphs above.
+//
 // ⛔ The census that produced this file was WRONG first time and worth recording.
 // It matched `.methodName(` across integration tests and reported 41 methods whose
 // SQL "never runs" — including all three of `retention-scrub-repo`, which has a

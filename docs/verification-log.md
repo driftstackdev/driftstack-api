@@ -15383,3 +15383,45 @@ Playwright job joins the two against real Postgres.
 2. Writing the run log INSIDE `--coverage.reportsDirectory` — vitest CLEANS that directory before
    writing, so the log recording the run was deleted by the run. Left with an authoritative-looking
    artifact and no evidence about it.
+
+## V-1849 — the prior-art rule finally paid BEFORE the work, and the guard it found had already written my lesson
+
+2026-08-26. Fifth prior-art encounter of the session, and the first that cost one grep instead of an
+investigation.
+
+**What I was about to build.** Having established (V-1848) that the route-driven corpus runs on
+in-memory doubles, the natural next census was: the `db-*-drizzle` specs are the only thing exercising
+repo SQL — is every repo covered by at least one? I grepped for prior art FIRST.
+`tests/unit/every-drizzle-repo-is-driven-against-a-real-postgres.test.ts` is that census, already
+written and already enforced.
+
+⭐⭐ **AND ITS HEADER CONTAINS MY OWN V-1835 LESSON, VERBATIM, INCLUDING THE REPO THAT FOOLED ME TWICE
+TODAY:** "The census that produced this file was WRONG first time... It matched `.methodName(` across
+integration tests and reported 41 methods whose SQL 'never runs' — including all three of
+`retention-scrub-repo`, which has a dedicated `db-retention-scrub-drizzle` file driving it through its
+SERVICE, so the repo method name never appears. Constructing the class is the signal that survives
+that; a method-name match is not."
+
+That is exactly the detector I built and retired in V-1835 at ~10 of 12 false positives, for exactly
+the stated reason — and `retention-scrub` is also the repo whose twice-enforced predicate fooled me in
+V-1840. The same file names the same trap and the same repo. ⭐ The difference today is only that I
+looked before spending anything.
+
+⭐ **ITS OTHER WARNING IS THE CHARTER FOR EVERYTHING I DID THIS SESSION:** "This asserts EXECUTION, not
+assertion quality... A guard that overstated itself here would be the more expensive failure, because
+it would stop the per-method work that found those six." The per-method work is what produced V-1832
+through V-1844.
+
+**MEASURED, and the example it cites is now closed.** Its ⚠️ paragraph names `oauth-store` as
+"six of its fourteen methods had still never run". Re-measured with `--coverage.reporter=json` over
+`apps/server/tests` with DATABASE_URL set: **24 of 24 functions executed.** The six are gone.
+
+**FIXED the header rather than leaving a stale pointer** — a stale guard header is worse than a stale
+comment, because it reads as a live finding to the next person and sends them chasing a closed gap.
+The paragraph's DISTINCTION stays (it is the reason those six were findable); only the illustration is
+marked expired, with the closing measurement and a pointer to the right per-method instrument. `it(`
+count unchanged at 3, tsc 0, guard green 3/3, and nothing pins that file's text.
+
+⚠️ BOUNDARY, in the same sentence as the result: 24/24 is execution under `apps/server/tests` with a
+database, not assertion quality — which is the very distinction the paragraph exists to draw, and I am
+not weakening it by closing its example.
