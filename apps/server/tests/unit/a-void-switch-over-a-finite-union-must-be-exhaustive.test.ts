@@ -90,8 +90,11 @@ function findOffenders(extraFile?: { text: string }): Offender[] {
     host.readFile = (name) => (name === SYNTHETIC ? text : readFileFn(name));
   }
 
+  // A self-testing arm roots the program at its injected file ALONE: it judges
+  // only that file, so pulling in src/ would cost ~5x (235ms vs ~1.1s measured)
+  // and would let a real offender leak into a self-test's result.
   const program = ts.createProgram(
-    extraFile === undefined ? roots : [...roots, SYNTHETIC],
+    extraFile === undefined ? roots : [SYNTHETIC],
     parsed.options,
     host,
   );
@@ -149,11 +152,7 @@ function findOffenders(extraFile?: { text: string }): Offender[] {
     visit(sourceFile);
   }
 
-  // A self-testing arm judges only its injected file: a real offender in src/
-  // must not red a synthetic arm and disguise itself as a broken detector.
-  return extraFile === undefined
-    ? offenders
-    : offenders.filter((o) => o.file.endsWith('__exhaustive_probe.ts'));
+  return offenders;
 }
 
 describe('a void switch over a finite union must be exhaustive', () => {

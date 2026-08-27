@@ -18243,3 +18243,52 @@ function's_ declared return type with `Promise<void>` treated as void-ish. The g
 default to contain a `throw` or a `never`-annotated declaration; it does not verify that the
 `never` assignment actually type-checks, so a declaration annotated `never` and assigned some
 other way would still satisfy it. Ratchets 3053→3054 and 3229→3230.
+
+## V-1918 — the half of W-10 that was never the owner's to decide (2026-08-27)
+
+V-1877 checked prior art, correctly stopped me re-measuring W-10, and recorded a confirmed gap
+alongside it: **nothing prevents a NEW orphan component.** `openapi-spec-validity-invariant`
+catches a _dangling_ `$ref` — an operation pointing at a component that does not exist; an orphan
+is the inverse, and the word "orphan" in that file refers to path parameters. So the next
+`r.register(...)` without a matching `.openapi()` tag would silently have made it 40.
+
+That entry filed the gap as blocked, on the grounds that "the decision that governs it is the
+owner's open one." **That conflated two different things, and it was my own entry.** Fixing the
+39 changes the published contract and is genuinely the owner's call. _Freezing the set so a 40th
+cannot appear unnoticed_ is compatible with every outcome that decision could have — tag them,
+remove them, or leave them — and needs no decision at all. Only the first half was blocked.
+
+**The count re-derived independently, because a swept number deserves it.** 83 components
+declared, **44** reachable, **39** orphans — matching the figure W-10 carries. Reachability is
+transitive on purpose: a schema referenced only by _another_ schema is not an orphan, and
+measuring the naive way gives **43**, over-accusing four. Verified by reading rather than trusting
+the closure: `CreateSessionRequest` occurs exactly **once** in the whole 2.07 MB spec — its own
+declaration, never under `paths` — while the control confirms 40 schemas are directly referenced.
+
+New guard, `the-openapi-orphan-set-does-not-grow-while-w10-is-open.test.ts`, freezing the set **by
+name**. A count would pass on a day when one orphan was fixed and another appeared, and could
+never say which schema moved. Both directions proven against the real 2.07 MB spec, restored
+byte-identical afterwards:
+
+| mutation of the real spec                   | result                                           |
+| ------------------------------------------- | ------------------------------------------------ |
+| register a component nothing references     | 1 of 3 arms reds, naming `ZzSilentlyAddedSchema` |
+| give an existing orphan an operation `$ref` | 1 of 3 arms reds, naming `CreateSessionRequest`  |
+
+The second direction is deliberate: when the owner's decision lands and the set shrinks, the guard
+should red and be updated, not quietly accept it.
+
+### The switch guard's own cost, measured now that it exists
+
+A JSON-reporter run over all 3230 files (written via `--outputFile`, never a shell redirect into
+the file being generated) put V-1917's three arms at **2nd, 4th and 6th slowest** in the suite.
+The cause was visible once measured: each synthetic arm built a program over `src/` (342 files)
+and then _filtered the results down to_ the one injected file. Rooting those arms at the injected
+file alone is **235 ms against ~1.1 s**, and isolates by construction rather than by filtering —
+the post-hoc filter is gone. Wall time for that file: **4.90 s → 2.34 s**, still 1-of-3 on the
+real-subject mutation.
+
+**Boundary:** the same run says only **one** test in the suite exceeds half the 10 s ceiling — a
+type-check test that already carries its own `300_000` override — so there is no latent
+timeout-flake population; V-1917's red was the anomaly, not a symptom. That is a statement about
+this machine on one run, not about CI. Ratchets 3054→3055 and 3230→3231.
