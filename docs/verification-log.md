@@ -19801,3 +19801,41 @@ condition for every emptiness assertion downstream — so a moved source tree ma
 green at the same instant. Nothing has drifted today (zero missing directories), so this is a recorded
 hazard with a measured population, not an open defect. Making 89 helpers throw instead of swallow is a
 larger change than I should make unilaterally.
+
+## V-1951 — retracting my own corrected number, and capping the debt (2026-08-27)
+
+**Retract both the 81% and the 88% from V-1949.** I corrected the first figure after finding the idiom
+regex omitted `toHaveLength(<n>)`, then applied the control I had been recommending all day and the
+classifier failed it: the pre-fix version of the guard I repaired in V-1948 — a known-unfloored file —
+classifies as FLOORED, because it contains `toEqual([...])` with a non-empty list **in its synthetic
+arm**. That is exactly the defect the number was measuring, and a file-level regex cannot see the
+difference. **So the figure counts as protected the very population it was built to find, and errs
+optimistically.** The floored fraction is unmeasured; I would rather record that than a third number.
+
+**A correction is not a control.** I trusted 88% more than 81% _because_ I had corrected it — but the
+revision fixed a missing alternative in the pattern and never asked whether the classifier could
+separate the two cases at all. One known positive would have failed it at either value.
+
+**What survives is what was enumerated or read, not sampled.** V-1950 said the 30 missing FILE paths
+were "all absence tests" on a sample of two; enumerated all 30 — **26 assert absence via a named const,
+and the remaining 4 do the same inline** (`expect(existsSync(resolve(REPO_ROOT, 'vitest.workspace.ts'))).toBe(false)`,
+and three `robots.txt` deliberately absent from the private apps). **30 of 30 intentional**, so the
+file-versus-directory discriminator holds at full enumeration rather than on the two I happened to open.
+
+Two further "cannot fail" shapes swept clean, each with a passing control: **tautological length
+comparisons** (`.length` ≥ 0) — zero; **always-true matchers** (`toContain('')`, `toMatch(/.*/)`) — one
+hit, read, and it is correct code. `mfa-encryption-key-shared-cross-source-invariant` maps four modules
+to their AAD purpose with `m?.[1] ?? ''` and asserts `.not.toContain('')`, so **a regex that stops
+matching produces the identical red as a missing AAD purpose.** That is the inverse of every instrument
+failure today: the fallback is wired to the alarm rather than to a clean-looking result.
+
+Capped the walk-swallowing debt at its measured 89 rather than rewriting it. **A ceiling, not an
+equality — the population must be free to shrink.** Mutation-proven both ways: adding a new swallowing
+helper reddens the ceiling (90 > 89), and breaking the guard's own walker reddens the FLOOR **while the
+ceiling stays green**, which is the point — a ceiling over an empty scan passes for the same reason the
+guards it polices do.
+
+Classified my 13 apps/server members for the follow-up: all but one name a source tree that is
+git-tracked and present on a fresh checkout, so making those helpers throw is safe. The exception reads
+`dist/`, which is gitignored and legitimately absent — **skip is correct there, and the count is a debt
+marker, not a defect list.**
