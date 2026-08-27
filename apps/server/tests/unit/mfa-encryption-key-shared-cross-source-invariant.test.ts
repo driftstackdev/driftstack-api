@@ -4,6 +4,14 @@
 // Drift on one (e.g. a refactor that introduces a separate
 // LIVEKIT_ENCRYPTION_KEY) would break the "single trust boundary"
 // + "one rotation rotates all four ciphertexts" guarantee.
+//
+// The four named above are the ones whose TEXT is pinned here, not the whole
+// family: EIGHT modules under apps/server/src define `decodeKey` for this key
+// (adding platform-secret, platform-secret-value, webhook-secret and
+// recipe-payload), every one is handed `config.mfaEncryptionKey` by bootstrap,
+// and `mfaEncryptionKey` is the only encryption-key field config.ts declares —
+// so one rotation rotates EIGHT surfaces' ciphertexts. The census-derived arms
+// at the foot of this file cover the family; the per-module text pins do not.
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -50,6 +58,28 @@ function aadPurposes(): Map<string, string> {
       for (const m of read(p).matchAll(/const\s+([A-Z0-9_]*AAD_PURPOSE)\s*=\s*'([^']*)'/g)) {
         out.set(`${relative(SRC_ROOT, p)}:${m[1] ?? ''}`, m[2] ?? '');
       }
+    }
+  };
+  walk(SRC_ROOT);
+  return out;
+}
+
+/** Every file under apps/server/src defining `function decodeKey(` — the modules that
+ *  decode the shared AES-256 key — keyed by path relative to SRC_ROOT, mapped to source.
+ *  Derived by walking rather than listed: the enumerated four-module roster above is half
+ *  the real family, and the drift worth catching is a NINTH module joining it. */
+function sharedKeyDecoders(): Map<string, string> {
+  const out = new Map<string, string>();
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const p = resolve(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(p);
+        continue;
+      }
+      if (!entry.name.endsWith('.ts')) continue;
+      const src = read(p);
+      if (/function decodeKey\s*\(/.test(src)) out.set(relative(SRC_ROOT, p), src);
     }
   };
   walk(SRC_ROOT);
@@ -206,5 +236,34 @@ describe('MFA_ENCRYPTION_KEY shared 4-class cross-source invariant', () => {
       new Set(labels).size,
       `the four key-sharing modules must not share an AAD purpose: ${labels.join(', ')}`,
     ).toBe(4);
+  });
+
+  it('CRITICAL the shared-key decoder census found the family. The four modules the arms above enumerate are HALF of it: eight files define `decodeKey`, every one is handed `config.mfaEncryptionKey` by bootstrap, and `mfaEncryptionKey` is the only encryption-key field config.ts declares. A census that silently stops matching would make the binding arm below vacuous.', () => {
+    expect(
+      sharedKeyDecoders().size,
+      'no `function decodeKey(` definitions extracted from apps/server/src',
+    ).toBeGreaterThan(7);
+  });
+
+  it('CRITICAL every module decoding the shared key binds an AAD — either declaring its own *_AAD_PURPOSE label, or taking the context from its caller through an `authenticatedContext` parameter. Keyed by REASON, not by filename: the single module declaring no label is exactly the one whose AAD is caller-supplied, so the exemption states why it is exempt instead of naming it. This is the drift the arms above cannot see — they pin four of the eight, and a label that stops EXISTING leaves the distinctness census smaller but still collision-free.', () => {
+    const unbound = [...sharedKeyDecoders()]
+      .filter(
+        ([, src]) =>
+          !/const\s+[A-Z0-9_]*AAD_PURPOSE\s*=/.test(src) && !/authenticatedContext/.test(src),
+      )
+      .map(([rel]) => rel)
+      .sort();
+    expect(unbound, 'module(s) decoding the shared key with no AAD binding:').toEqual([]);
+  });
+
+  it('the caller-supplied-AAD exemption cannot rot: at least one shared-key decoder must actually rely on it. If every module grows its own label this drops to zero, and the exemption clause above becomes dead text that would silently excuse a future module — delete the clause on that day rather than carrying an untested branch.', () => {
+    const exempt = [...sharedKeyDecoders()]
+      .filter(([, src]) => !/const\s+[A-Z0-9_]*AAD_PURPOSE\s*=/.test(src))
+      .map(([rel]) => rel)
+      .sort();
+    expect(
+      exempt.length,
+      `shared-key decoders relying on a caller-supplied AAD: ${exempt.join(', ')}`,
+    ).toBeGreaterThan(0);
   });
 });

@@ -14044,3 +14044,59 @@ the path key removes the mechanism that would drop an entry.
 typed from memory rather than derived; it died on the first `assert`, edited nothing — and the `prettier`
 and `9/9 passed` lines that followed printed exactly as they would have on success. The assert is the only
 reason that was visible. Same shape as V-1976/V-1986/V-1988.
+
+## V-2026 — eight modules share MFA_ENCRYPTION_KEY, not four; the guard's roster named half (2026-08-27)
+
+Followed the duplicate-name census to `decodeKey`, 8 copies — the least-covered candidate (no prior
+verification-log entry; the two memory hits were `project_livekit_secret_encryption_audit_clean` and
+`project_config_env_validation_audit`, both opened first).
+
+**All 8 copies are one behaviour.** Boundary: 342 tracked `.ts` files under `apps/server/src`, comments
+stripped, whitespace-normalised — 8 `function decodeKey(` definitions, 8 "distinct" bodies, and every
+difference is error-message text. Each does `Buffer.from(keyBase64, 'base64')` and rejects unless the
+result is exactly 32 bytes. So the config audit's claim for its boot-time `.refine()` — _"identical decode
+logic to decodeKey, so they can't disagree"_ — holds across all eight, not just the four it enumerated.
+
+**And all 8 decode the SAME key.** `mfaEncryptionKey` is the only encryption-key field `config.ts`
+declares (one Zod field, one env read), and `bootstrap.ts` hands `config.mfaEncryptionKey` to every
+consumer, including `secretEncryptionKeyBase64` (platform secrets) and `payloadEncryptionKeyBase64`
+(recipe payloads). So the fail-fast guarantee that audit established covers eight surfaces, and one
+rotation rotates eight surfaces' ciphertexts — the header said four.
+
+### What was actually pinned, established by mutation rather than by grep
+
+`mfa-encryption-key-shared-cross-source-invariant.test.ts` is titled "4-class" and enumerates four `lib/*`
+modules. Rather than infer under-coverage from the roster, I planted a rogue key source
+(`process.env.WEBHOOK_ENCRYPTION_KEY ?? keyBase64`) inside `webhook-secret-encryption.ts` — one of the
+four modules the roster does NOT name:
+
+    Tests  1 failed | 8 passed (9)     <- rogueKeyEnvReads()
+
+**It reds.** That arm walks all 342 files, so "no second key source exists" was already a tree-wide
+property, and the distinctness arm (V-2025) spans all 12 labels tree-wide too. The four-module roster
+governs only the per-module TEXT pins. ⭐ The roster reads like a coverage boundary and is not one — the
+same shape as V-2024, where grepping guards invented a gap that mutation refuted.
+
+### The one real hole, and the guard for it
+
+A key-sharing module that silently loses its AAD label reds nothing: the distinctness census just gets
+smaller and stays collision-free, and its non-vacuity floor was `> 9` against a population of 12.
+
+Added `sharedKeyDecoders()` — walks for `function decodeKey(`, keyed by path relative to `SRC_ROOT` (the
+V-2025 lesson) — and three arms:
+
+| arm                        | mutation                                        | result                                                                        |
+| -------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------- |
+| census non-vacuity         | floor probed to `999999`                        | `expected 8 to be greater than 999999` — the guard's own walk, floor set to 7 |
+| every decoder binds an AAD | renamed `WEBHOOK_SECRET_AAD_PURPOSE`            | reds: `[ 'lib/webhook-secret-encryption.ts' ]`                                |
+| the exemption cannot rot   | gave `platform-secret-encryption` its own label | reds — exemption no longer load-bearing                                       |
+
+⭐ **The exemption is keyed by its REASON, not by a filename.** Exactly one of the eight declares no label,
+and it is exactly the one whose AAD is caller-supplied through an `authenticatedContext` parameter —
+V-1679's finding, reached independently here. The clause reads "declares a label OR takes the context from
+its caller", so a module that loses its label without gaining that parameter is caught, and a future
+module cannot inherit the exemption by sitting in the same file.
+
+Header corrected to state the real family size; the four per-module text pins left untouched, since they
+pin prose those four files actually carry. 12/12 green, `it(` 9 → 12, `tsc -p apps/server/tsconfig.test.json`
+clean.
