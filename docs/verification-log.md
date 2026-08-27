@@ -21170,3 +21170,54 @@ misleading sentence was worth correcting rather than shrugging at.
 Boundary: all three audits verified documented claims against the route, service and repository code
 by reading. None executed against a live database or a live provider endpoint; the existing
 integration suites do that, and none of them asserts the specific doc claims checked here.
+
+## V-1983 — the webhook dual-sign promise, traced end to end and attacked (2026-08-27)
+
+V-1978 pinned the _call_ to `rotateSecret`; it never checked the behaviour that method promises —
+"the previous secret stays active for 24h during which Driftstack dual-signs every outbound delivery
+(both new + old HMAC)". If that were false, **every customer who rotated would silently lose
+deliveries** the moment their verifier saw an unknown signature. Traced the whole chain.
+
+**Six links, all sound.**
+
+1. **Customer rotate** stores the old secret and `secret_prev_expires_at = now + graceMs`, where
+   `graceMs = opts.graceMs ?? 24 * 60 * 60 * 1000` — the documented 24h.
+2. **Server force-rotate** (the 91-day auto-rotation) sets `secretPrev` ← current secret **and**
+   `secretPrevExpiresAt` ← the 7-day deadline, alongside `graceWindowEndsAt`.
+3. **Both delivery paths dual-sign** — `webhook-worker.ts` and `durable-webhook-delivery.ts` each
+   compute the same `prev && prevExpiresAt > now` predicate and pass `secretPrev` to the signer.
+4. **The signer emits both**: `parts = ['t=…','v1=<curr>']`, pushing a second `v1=<prev>` when prev is
+   supplied.
+5. **All three SDK verifiers accept ANY `v1`**, in constant time — TS
+   `signatureHexes.some(constantTimeHexEq)`, Python iterating `signature_hexes`, Go ranging the same.
+6. **`clearStaleSecretPrev`** retires rows whose window has elapsed, keyed on
+   `secret_prev_expires_at < now AND secret_prev IS NOT NULL` so never-rotated rows are untouched.
+
+⭐ **The two grace fields look redundant and are not.** `secretPrevExpiresAt` is what the OUTBOUND
+signer reads; `graceWindowEndsAt` is what the INBOUND HMAC validator reads. A force-rotation sets both
+to the same instant, which reads like duplication a tidy-minded change would collapse — and
+collapsing it would stop outbound dual-signing for every server-initiated rotation while every test
+that mentions `graceWindowEndsAt` kept passing.
+
+⛔ **So I attacked exactly that.** Deleting `secretPrevExpiresAt: input.graceWindowEndsAt` from
+`forceRotateSecret` **still type-checks** — the dangerous kind of defect. Two integration arms in
+`db-webhooks-secret-rotation-grace-drizzle.test.ts` fail on it. **The assignment is pinned, proved by
+breaking it rather than by reading a test name.** Source restored byte-identical.
+
+⛔ **And the pin I first found was the wrong kind.** `services-webhook-secret-force-rotation-content-parity`
+freezes a _comment_ — "The 7-day grace window is honoured by the v2-#20 worker via
+`secret_prev` / `secret_prev_expires_at`" — which is text about the behaviour, not the behaviour. Had
+that been the only guard, the mutation would have survived it untouched. The real guard was in an
+integration file my own scan had already listed with six mentions; I fixated on the unit row and did
+not open it. Two instrument misses in one audit: the field is `secretPrev`, not `prevSecret`, so my
+first sweep reported the delivery services as unaware of rotation entirely.
+
+⭐ The customer-visible promise is itself guarded: `published-webhook-verifier-actually-verifies`
+extracts the snippet **published to customers** and asserts it "accepts the OLD secret during a
+rotation grace window", plus that it rejects a tampered body, the wrong secret, and a stale timestamp
+— so the accept case cannot pass vacuously.
+
+Boundary: this traced rotation → storage → both delivery paths → signer → three verifiers → sweep by
+reading, and mutation-tested the single link whose redundancy invites removal. It did not deliver a
+webhook to a live endpoint; the existing integration suites cover that. **No defect found and no code
+changed.**
