@@ -3850,6 +3850,30 @@ export function SimulatorWindow(): JSX.Element {
       }
     });
   };
+
+  // ⛔ P-20 — reset the rotation when the SESSION changes.
+  //
+  // `setLandscape` had exactly one caller, the rotate toggle, so the flag outlived
+  // whatever session it was set in. Relaunch or switch while rotated and the next
+  // session inherited a landscape WINDOW around a device that is always portrait —
+  // the frame arrives pillarboxed and nobody asked for it.
+  //
+  // ⚠️ Only acts when actually rotated. Calling the sizer unconditionally on every
+  // session change would fight `fitWindow`'s first-frame sizing for the common
+  // upright case, which is the bug the audit-#4 comment above records fixing.
+  //
+  // The DEVICE-side rotation remains a harness follow-up: this control has always
+  // turned the window only, and its label says so.
+  useEffect(() => {
+    if (!landscapeRef.current) return;
+    setLandscape(false);
+    landscapeRef.current = false;
+    resetToActualSize();
+    // Re-runs per session. `resetToActualSize` is a stable body closing over refs,
+    // and `landscapeRef` is read rather than `landscape`, so the effect depends on
+    // the session id alone.
+  }, [sessionId]);
+
   const toggleBrowserMode = (): void => {
     const next = !browserMode;
     setBrowserMode(next);
