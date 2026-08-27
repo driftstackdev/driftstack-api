@@ -19523,3 +19523,39 @@ and missing that CORS was the real mechanism — the same instrument error with 
 **Boundary:** this covers the mapper's failure-reason paths and the sensitivity heuristic at
 `bc6b0d0b1`; I did not exercise the harness end, so "the flag is forwarded" is a claim about what
 this file emits, not about what the node does with it. No source change; ratchets unchanged.
+
+## V-1943 — green, and the one-at-a-time protocol is what made the red readable (2026-08-27)
+
+`verify-suite --all` at `60fb8f388`: **exit 0, 3238 files, 32147 passed, 16 skipped.** This is the
+first clean full run since V-1938 landed a source change, so that fix — bounding and redacting the
+intent summary at the customer boundary — is now validated against the whole suite rather than
+against its own file.
+
+**The load record, which V-1939 said belongs with the result rather than only with the decision:**
+
+|                           | 1-min load          |
+| ------------------------- | ------------------- |
+| inner pre-flight (launch) | **4.38** / 10 cores |
+| during                    | 18.04 → 26.76       |
+| after                     | 15.74               |
+
+Load rose to 26 during the run and it was green, because that rise is _my own_ ten-to-sixteen
+workers rather than a second suite. Contrast V-1939, which peaked at 37.93 with a peer's gate running
+and produced three failures that were all spurious — two of A2's own stale pins, one real-Postgres
+test that passed 6/6 alone. **Same suite, same machine, same commit family: uncontended it is green;
+contended it invents three reds.** That is the measurement that makes the protocol worth its cost.
+
+The protocol itself came out of that collision and both agents now run it: announce before a full
+run, hold until the other confirms, and release the slot explicitly. A2 announced at 08:11 with
+`PUSH_EXIT=0`, I held through four firings of static-only work, took the slot at 08:14 and am
+releasing it on this entry. Two suites that cannot both fit on ten cores are not a scheduling
+inconvenience — they manufacture failures that then cost an hour of attribution each.
+
+⭐ Worth recording as the cheapest half: **the log entry must be committed BEFORE the slot is
+released.** Twelve tests read `docs/verification-log.md`, so writing it while the other agent's gate
+runs corrupts their run exactly as their writes would corrupt mine. Ordering is log → commit →
+release, not release → log.
+
+**Boundary:** one green run on this machine at this commit with no peer suite competing; it validates
+V-1938 and says nothing about CI, where the contention profile is different and unmeasured. Ratchets
+unchanged at 3062/3238 and matched exactly by the collected count.
