@@ -15333,3 +15333,53 @@ investigation instead of the start. Today's rule was "grep the target before for
 one is narrower and sharper: **when the target IS a ledger row, read the WHOLE row — both columns —
 before measuring anything.** A row long enough to contain the answer is long enough to be skimmed, and
 the status column is where the work usually is.
+
+## V-1848 — a reachability instrument, retired by its own control on the first run
+
+2026-08-26. No finding, and the instrument does not survive. Recorded so nobody rebuilds it.
+
+**What I was building and why.** Today produced the pair: a column-NAME sweep hands you identity keys
+dressed as boundaries, a FORM sweep hands you unreachable code dressed as exposure. Neither carries
+REACHABILITY, which is what separates a suspect from a finding. The proposed instrument: run coverage
+over `src/db/**` scoped to the **202 integration specs that build the app** (of 397), on the reasoning
+that a db function executed under a route-driven spec is provably reachable from HTTP.
+
+⭐ PRIOR ART CHECKED FIRST, and it shaped rather than preempted this: `every-service-is-wired-or-recorded-as-dormant`
+already enforces reachability at the CLASS level — every exported Service/Sweeper/Worker is reachable
+from `bootstrap.ts`/`app.ts` or listed dormant with a reason (it is where `DurableWebhookDeliveryService`
+is recorded as the V-173 forward path, independently matching what A2 concluded by reading). A wired
+class can still carry an unreachable METHOD, so a method-level column was a genuine complement.
+
+⛔⛔ **THE CONTROL FAILED ON THE FIRST RUN.** Request auth must execute in any app-building test, and
+`findActiveWebSession` was ABSENT from the reachable set. 202 files / 2487 tests produced only ~115
+executing db functions, dominated by `schema.ts` module-initialisation, with no auth function at all.
+That is not the shape of a route-driven run against a database layer.
+
+**Diagnosed by reading the harness, not by inferring from the coverage:**
+`tests/integration/_helpers/build-test-app.ts` carries **133 `InMemory` mentions to 5 `Drizzle`**, and
+its own header says "in-memory auth repo seeded with one Pro-tier account + one API key". **The
+route-driven specs drive the app through in-memory repos and never touch `src/db/**`.\*\* So coverage of
+the db layer under them cannot measure HTTP reachability of db methods — it measures nothing about them.
+
+⭐ AND THE CAUSE WAS ALREADY WRITTEN DOWN, in the gate's own output: `verify-suite` reports on every
+run that the e2e job is "233 Playwright tests — **the only ones hitting real Postgres + Redis**". The
+fact my control discovered is printed by a tool I have run a dozen times today. Fourth prior-art
+near-miss of the session, and the cheapest place it could possibly have been.
+
+⭐⭐ THE INSTRUMENT IS RETIRED, and the reason generalises: **coverage can only measure reachability
+through a harness that uses the thing you are measuring.** Scoping the corpus is not enough — the
+corpus has to exercise the layer. A route-driven harness backed by doubles is the faithful-double
+problem one level up: the whole HTTP surface is integration-tested against in-memory repos, the db
+layer is exercised separately by the 140 `db-*-drizzle` specs calling repos directly, and only the
+Playwright job joins the two against real Postgres.
+
+⛔ TWO INSTRUMENT FAILURES EN ROUTE, both caught by exit codes rather than by output:
+
+1. `npx vitest run $SPECS` — **zsh does not word-split an unquoted variable**, so 202 paths arrived as
+   ONE argument and vitest matched nothing ("No test files found", `PARSE_ERROR`). It still wrote a
+   688 KB `coverage-final.json`. ⭐⭐ A coverage artifact of all zeros reads as "NOTHING is reachable" —
+   the maximally alarming false result, in the direction that manufactures urgent work. **Check the
+   tool's exit code before reading its artifact.** Fixed by inlining `$(...)`, which zsh does split.
+2. Writing the run log INSIDE `--coverage.reportsDirectory` — vitest CLEANS that directory before
+   writing, so the log recording the run was deleted by the run. Left with an authoritative-looking
+   artifact and no evidence about it.
