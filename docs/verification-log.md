@@ -19934,3 +19934,77 @@ this in one command, and I did not run it because adding a test did not feel lik
 agent-safety path, and the direction is favourable but not free — over-matching costs an extra
 confirmation, under-matching is the vulnerability. That is the owner's call, and the guard now makes it
 a one-line decision with the test already written.
+
+## V-1954 — I refuted my own second finding before it reached the owner (2026-08-27)
+
+V-1953 surfaced two items on the consequential-action gate. **Only one survives.**
+
+**Retracted: approval target-binding.** I reported that an approval granted for one element could be
+consumed by a different same-phrase element, because the signature is `category:matchedPhrase` and does
+not name the target. **The mechanism is real and a test asserting it would have passed** — hand-build a
+`Set` with one signature, call the gate twice with same-phrase taps on different selectors, and the
+second consumes the first's approval.
+
+**It is not reachable.** `ControlPlaneAgentExecutor.execute` iterates `args.plan.intents` in plan order
+and **returns on the first halt**. So the sequence is: halt at the first unapproved consequential tap →
+customer approves → the same plan re-runs from the start → the first same-phrase tap consumes the
+approval, which is deterministically the tap the customer was shown. Cross-consumption needs the plan's
+intent ORDER to differ between confirmation and re-run, and nothing I found produces that.
+
+**What caught it was writing the refutation conditions before building the reproduction.** One of them
+was "check where the approval Set is constructed and how long it lives — the whole claim depends on one
+Set outliving a single intent." That read ended it. **Had I written the test first it would have gone
+green**, because the mechanism is real in isolation, and I would have shipped a passing reproduction of
+something production never reaches.
+
+⛔ **A green test cannot separate a mechanism from a reachable defect, because it constructs the
+preconditions itself.** The homoglyph finding has both — the gate misses those strings on input it
+genuinely receives from page content, so mechanism and reachability are one observation. This one had
+only the mechanism, and I described it in language that implied the other.
+
+**Also corrected: a supporting claim in V-1953 that I never ran.** I wrote that the only occurrences of
+`v1.1` in the tree are that comment; **52 files contain it**. A peer checked. The conclusion survives on
+a vocabulary search — the only files matching semantic/LLM-classifier wording are that source, its dist
+build and its test — but the evidence I cited was invented. **Both peer corrections today landed on my
+supporting numbers, never my conclusions: the scrutiny follows the headline and the cheap claim rides in
+behind it.**
+
+**And the framing was narrowed, correctly.** The source says `RESIDUAL ... out of scope for this
+conservative v1.0 keyword matcher` — honest documentation of a known limitation, not a false coverage
+claim. The defect is one clause: a deferral to a version that was never built. **The weaker true claim
+is the one to hand an owner.**
+
+Net: one finding on that gate, not two.
+
+## V-1955 — the gap vocabulary in apps/server/src yields exactly one open item (2026-08-27)
+
+Having found the homoglyph residual by grepping the word rather than building a detector, ran the same
+approach to exhaustion over `apps/server/src`. **Boundary: server source only — not tests, not the
+other apps, not `packages/`.**
+
+**`residual` — 8 sites, 7 closed, 1 open.** Enumerated rather than sampled, and the word is
+systematically ambiguous here: it marks a gap the surrounding code SHUTS at least as often as one left
+standing. `auth-coalescer.ts` describes V-012's cold-start blip as the reason the coalescer exists — the
+comment names the residual and the file IS the fix. `profile-snapshots-repo.ts` spells out how a forged
+cross-account cursor would leak a snapshot-id-exists oracle, then closes it on the next line with
+`eq(profileSnapshots.accountId, args.accountId)`. `openapi.ts` and `billing.ts` both say "V-481 #122
+residual closed" about a route that previously had no scope gate. `ip-rate-limit.ts` and `auth.ts` say
+"these gates close the residual abuse friction". `agent-sessions.ts` narrows a false-block window.
+**Only `agent-consequential-action.ts:73` uses the word for something still standing, and it says so —
+"out of scope for this conservative v1.0 keyword matcher".**
+
+**Everything else in the gap vocabulary resolves to a documented decision.** `known gap`
+(`agent-sessions.ts:3111`) is unbounded growth in two upload-counter maps — capped at 20 000 entries
+with oldest-eviction, and the direction reasoned out: a false-cleared counter only ever widens a
+session's own allowance, accepted as a soft best-effort cap matching the sibling maps. `does not handle`
+is OpenVPN/WireGuard, Phase 2/3 by plan. `we accept` is multi-currency summing without a conversion
+table. Three `TODO`s, all post-launch or gated on unstarted work. **`FIXME`: zero.**
+
+**So the vein is exhausted at one open item, and the discriminator is worth keeping: a comment that
+names a gap and then closes it reads identically to one that names a gap and leaves it.** The word does
+not distinguish them — the surrounding sentence does, and only reading it does. A count of "residual"
+mentions would have reported eight open items; seven are the opposite of that.
+
+⭐ This is the second bounded negative today worth recording as a result rather than a non-event: the
+first was tautological length assertions and always-true matchers, both zero with passing controls.
+**Knowing a vein is dry is worth the same as a finding, provided the boundary is stated with it.**
