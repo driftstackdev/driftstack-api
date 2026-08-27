@@ -12342,3 +12342,44 @@ reading, plus the schema for the index backing the dedupe. It did not execute a 
 Postgres — which is precisely where the 42P10 class of defect appears, and the reason the existing
 integration suite matters more here than anywhere else I have audited today. **No defect found, no
 code changed.**
+
+## V-1995 — swept the ON CONFLICT arbiter class repo-wide; clean, and already guarded where it matters (2026-08-27)
+
+V-1994 surfaced a production-only failure mode worth generalising: **an `ON CONFLICT` whose arbiter
+names a column backed by a PARTIAL unique index must repeat that index's predicate**, or real Postgres
+raises 42P10 and every such insert 500s — and the in-memory twins do not enforce it, so tests pass.
+Swept the whole server for it.
+
+**Measured across `apps/server/src`:** 27 unique indexes in `schema.ts`, of which **7 are partial**;
+**14 `onConflict` call sites**, all through the drizzle builder. Every mention of "ON CONFLICT" in raw
+SQL turned out to be a comment describing one of those 14, so there is no escape hatch outside the
+enumeration. Both partial unique indexes defined in migrations (`profiles_account_name_unique`,
+`crypto_orders_idempotency_key_unique`) are mirrored in `schema.ts`, so classifying from the schema
+does not miss one.
+
+**Result: exactly one site targets a partial index with an arbiter — `crypto-orders-repo`'s
+`insertWithIdempotencyKey` — and it correctly repeats `WHERE idempotency_key IS NOT NULL`.** The only
+other site on a table with partial uniques is `session-operations-repo`'s **bare**
+`onConflictDoNothing()`, which names no arbiter and therefore needs no predicate; its own comment says
+so ("`ON CONFLICT DO NOTHING` covers either"), and covering either of that table's two partial indexes
+is the intent. Every remaining site targets a FULL unique index.
+
+⭐ **And the property is already guarded by the right instrument.** `db-crypto-orders-sweep-ordering-drizzle`
+carries an executing arm in the **real-Postgres** integration block, with the reasoning in full: the
+arbiter "must carry that same predicate or real Postgres raises 42P10 and EVERY idempotent crypto
+checkout 500s. This only reproduces against real Postgres (pglite/in-memory twins don't enforce
+partial-index arbiter matching)". A static guard of mine would have been strictly weaker than an
+assertion that actually runs the engine that enforces it.
+
+⛔ **My first pass reported a defect that does not exist, by the exact mechanism the dominant lesson
+names.** It flagged `stripe-webhooks-repo`'s `onConflict` on `cryptoEntitlements.orderId` as targeting
+a partial index with no predicate — a 42P10 in the entitlement-granting path. Reading the schema
+refuted it: `crypto_entitlements_order_id_unique` carries **no** `.where`. My extractor took a
+300-character lookahead from each `uniqueIndex(...)` and swallowed the `.where` belonging to the NEXT
+index three lines below — matching the text BETWEEN two definitions. Re-classifying with each
+definition bounded at the next one changed the partial count from 5 to 7 and cleared the accusation.
+
+Boundary: unique indexes classified from `schema.ts` with each definition bounded at the next index
+declaration, `onConflict` sites enumerated across `apps/server/src`, migrations cross-checked for
+partial uniques. **No defect found, no code changed, no guard added — the existing one is better than
+the one I would have written.**
