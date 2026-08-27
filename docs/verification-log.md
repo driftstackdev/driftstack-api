@@ -17065,3 +17065,39 @@ the scope from an assumption into a measurement.
 ⚠️ Same shape as V-1874: a conclusion that survived, on evidence that did not. Twice this week the
 correction has been "the answer was right and the reasoning was a fifth of an answer", which is worth
 more attention than either instance alone.
+
+## V-1888 — the scope check, applied to my own claim one turn later: V-1884 swept 5 error classes of 32
+
+2026-08-27. No defect. V-1887 made "enumerate the anchor before sweeping" routine; run against my own
+recent work it immediately found a second instance, in the entry directly before it.
+
+⛔⛔ **V-1884 SWEPT A LIST I TYPED FROM MEMORY.** It reported "136 client-facing errors interpolate a
+value", anchored on `new (BadRequest|Validation|Conflict|NotFound|Forbidden|Unprocessable)Error(`.
+Derived from `lib/errors.ts` instead of recalled, there are **32 `ApiError` subclasses** — and
+`UnprocessableError` is not among them, because it does not exist. **So the sweep covered 5 real
+classes of 32, about 16%**, and the invented name is the tell that the list was imagined rather than
+measured. Re-run with the classes read out of the source: **193 interpolating constructions, not 136.**
+
+⭐ **17 SAT IN CLASSES NEVER SWEPT, and all 17 were read** — `TierLimitError` ×12, `DriverError` ×3,
+`ProfileInUseError` ×2. Sixteen carry server-derived values: tier names with quota counts, and a
+session id. **One has the same shape as V-1884's single candidate:** `drivers/mock.ts:143`,
+`new DriverError(\`Invalid URL: ${input.url}\`)` — and mock is the driver production reports.
+
+✅ **IT IS BLOCKED THE SAME WAY, proven with a positive twin rather than inferred.** Pushed through the
+real `NavigateRequestSchema`: a well-formed URL is ACCEPTED (so the payload is otherwise valid and the
+rejection below is attributable), a malformed-scheme URL carrying credentials is **rejected on `url`
+with both "Invalid url" and "Only http:// and https:// URLs can be navigated."**, echoing nothing. A
+well-formed credential URL is accepted — and then `new URL()` parses it, so this error never fires, and
+`redactText` covers well-formed userinfo regardless. **Two independent upstream checks, exactly as
+V-1885 established for webhooks.**
+
+⭐⭐ **THE PATTERN ACROSS TWO TURNS IS THE POINT.** Two sweeps I published, one anchored on a receiver
+spelling and one on a class list, each covering roughly a sixth of its stated population, each
+conclusion surviving the correction. **A right answer on a narrow scope is indistinguishable from a
+right answer on a complete one** — both print a small number and a clean verdict — which is why the
+anchor has to be derived from the source every time rather than checked when something feels off.
+Nothing felt off in either case.
+
+⚠️ BOUNDARY: this covers template-literal constructions of `ApiError` subclasses in `apps/server/src`.
+Errors built by string concatenation, or raised by libraries and mapped later, are outside it — the
+mapping layer is the error handler, whose own no-leak path has separate coverage.
