@@ -15490,3 +15490,42 @@ only by grepping before starting — carries ONE exemption, `incidents-repo.ts:a
 independently, by a different argument (the UPDATE writes status and resolvedAt from a single decision,
 so no interleaving can break the stated invariant). ⭐⭐ **Two methods agreeing is worth more than either
 method's confidence, and the value is highest when they can fail in DIFFERENT directions.**
+
+## V-1851 — "which workspace is under-guarded" answered: none, and the first metric was measuring the wrong thing
+
+2026-08-26. A measured negative, recorded so the next person does not chase it, plus the instrument
+error that made it look like a finding.
+
+**The question.** Seven prior-art encounters established `apps/server` is thoroughly guarded, so the
+productive place to look is where the guarding ISN'T. All of today's work sat in one workspace of
+sixteen. Density per workspace, source files against test files:
+
+    server 342/2442 (7.14x) · gui-client 177/257 · sdk-typescript 26/31 · behavioural-simulation 15/10
+    recipe-library 9/6 · recapture-automation 7/4 · webrtc-streaming 7/4 · webhook-delivery 5/3
+    api-types 24/4 (0.17x)
+
+⛔⛔ **`api-types` at 0.17x looked like the finding — 42x thinner than server — and the metric was
+wrong.** 410 `apps/server` test files import it. Its consumers live in another workspace, so counting
+tests PER WORKSPACE measures where the tests are filed, not what they cover. Same family as a package
+consumed via `dist` reading as never executed, and it fails in the alarming direction: it manufactures
+an under-tested package out of a correctly-tested one.
+
+⭐ PRIOR ART CAUGHT IT BEFORE THE INVESTIGATION, and it was my own memory rather than the repo's — a
+note that `api-types` carries its own `tests/` dir AND is gated by a parity test in
+`apps/server/tests/unit`, written after a push failed on the half I had not grepped. Checking it cost
+one command.
+
+**RE-MEASURED with external consumers counted (own tests + `apps/server` tests importing the package):**
+
+    api-types 4 + 410 · sdk-typescript 31 + 163 · behavioural-simulation 10 + 26 · webhook-delivery 3 + 16
+    recapture-automation 4 + 15 · webrtc-streaming 4 + 11 · recipe-library 6 + 10
+
+**No package is thin on both axes.** The lowest external count is 10, against packages of 5-9 source
+files. There is no under-guarded workspace to hunt in, which is the answer to the question and not a
+disappointment — it is the same result as the seven prior-art encounters, arrived at from a different
+direction.
+
+⚠️ BOUNDARY, in the same sentence as the result: this counts test files that IMPORT a package, which
+is a coverage proxy and not coverage — an import proves reachability from a test file, not that the
+package's behaviour is asserted. The stronger measurement is per-package v8 coverage, which I have not
+run outside `src/db/**`, and every coverage figure I have reported today carries that same scope.
