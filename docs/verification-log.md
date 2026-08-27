@@ -14216,3 +14216,59 @@ grep that happened not to use `\w` refuted it. Knowing the trap did not prevent 
 now mechanical: no `\s`/`\d`/`\w`/`\b` in a `git grep -E` pattern, and **a zero that would itself be
 a finding gets re-asked with an instrument that cannot fail the same way.** A negative about
 REACHABILITY is the most expensive kind to get wrong — it turns live code into reportable dead code.
+
+## V-2029 — a documented MUST that nothing enforced: the replay verifier's optional nonce cache (2026-08-27)
+
+Continued the never-audited sweep (V-2028's 39) into the fleet nonce caches. **Both implementations
+audit clean.** `lib/redis-fleet-nonce-cache.ts` is a single `SET key '1' EX ttl NX` — the command
+_is_ the check-and-record, so there is no read-then-write window; the key is NUL-separated so a
+crafted nonce cannot forge a different `(nodeId, nonce)` pair, and the TTL is clamped to `max(1, …)`
+so a zero or negative lifetime cannot pin a nonce forever. `services/fleet-nonce-cache.ts`'s
+in-memory variant is instantiated **nowhere under `apps/server/src`** — it is a test/dev double, and
+production wires the Redis one from a non-nullable `const redis = new Redis(...)`.
+
+### The finding is in the verifier, not the caches
+
+`FleetNodeAuthImpl`'s second constructor parameter is optional, and `verify()` skips replay defence
+entirely when it is absent:
+
+```ts
+constructor(private readonly repo: FleetNodesRepo, private readonly nonceCache?: FleetNonceCache) {}
+…
+if (this.nonceCache !== undefined) {           // <- absent cache = no replay check at all
+  const firstSight = await this.nonceCache.checkAndRecord(claims.iss, claims.nonce, ttlSeconds);
+  if (!firstSight) return { ok: false, reason: 'replayed_nonce' };
+}
+```
+
+The optionality is deliberate and the source says so — signature/expiry unit tests want no
+nonce-cache fixture — and the same JSDoc states the consequence: a captured fleet-node JWT "CAN be
+replayed" within its 5-minute window, so "production deployments MUST inject the cache". ⭐ **That
+MUST lived only in prose.** Omitting the argument is not a type error, because the parameter is
+optional, and it reds nothing.
+
+Measured: **exactly one production construction** (`bootstrap.ts:2537`) and it passes the cache. So
+nothing is broken today — the exposure is the next one.
+
+⛔ **And it was already half-guarded, which grepping would have missed in the other direction.**
+`lib-bootstrap-content-parity.test.ts:570` pins both `new RedisFleetNonceCache(redis)` and
+`new FleetNodeAuthImpl(drizzleFleetNodesRepo, fleetNonceCache)` as literals, and its title names the
+risk outright ("split the nonce cache (replay-defence gap)"). **Fourth suspected gap this session
+that mutation refuted.** What that pin cannot do is see a SECOND construction added elsewhere: it
+asserts this line still exists, not that no unguarded construction exists — the distinction in
+`a pin asserts a value, never that the value is enough`.
+
+New `a-replay-verifier-is-never-built-without-its-nonce-cache.test.ts` walks `apps/server/src` (test
+files legitimately use the one-argument form) and requires two arguments at every construction:
+
+| arm                                                    | mutation                              | result                           |
+| ------------------------------------------------------ | ------------------------------------- | -------------------------------- |
+| census non-vacuity                                     | renamed the constructor out of src    | 1 failed / 1 passed              |
+| every construction passes a cache                      | dropped the 2nd arg, single line      | reds: `lib/bootstrap.ts (1 arg)` |
+| ⭐ same, **prettier multi-line with a trailing comma** | one real argument, one trailing comma | reds: `lib/bootstrap.ts (1 arg)` |
+
+⭐ **That third row is the control V-1679 lacked.** Its argument counter counted depth-0 commas, and
+prettier writes a trailing comma on every multi-line call — so a one-argument call spread over lines
+counted as two and the guard passed a mutation it should have failed. This walker splits at depth-0
+commas and **drops the empty tail**, so both spellings report `1 arg`. Sweep the shape, not the
+token: the same defect has two spellings and only one of them looks wrong.
