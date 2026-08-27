@@ -20,7 +20,7 @@
 //     sessions look like curl").
 //   • MfaChallengeStore: challenge payload operations plus atomic attempt
 //     reservation/release.
-//   • RedisMfaChallengeStore: getdel via unknown-cast (Redis 6.2+
+//   • RedisMfaChallengeStore: getdel via the TYPED ioredis client (Redis 6.2+
 //     atomic); peek = redis.get.
 //   • InMemoryMfaChallengeStore: TTL expiry check in BOTH consume
 //     AND peek.
@@ -100,14 +100,12 @@ describe('W397.B apps/server/src/services/mfa-challenge-store.ts content parity'
     expect(body).toMatch(/releaseAttempt\(key: string\): Promise<void>;/);
   });
 
-  it('RedisMfaChallengeStore: GETDEL atomic Redis 6.2+ (Upstash + modern Hetzner-managed both run 7.x)', () => {
+  it('RedisMfaChallengeStore: GETDEL via the TYPED client, no fallback, Redis 6.2+ required', () => {
     expect(body).toMatch(/export class RedisMfaChallengeStore implements MfaChallengeStore \{/);
     expect(body).toMatch(
-      /\/\/ GETDEL is atomic in Redis 6\.2\+; falls back to GET \+ DEL pipeline\s*\/\/\s*for older Redis\. We assume 6\.2\+ \(Upstash \+ modern Hetzner-managed\s*\/\/\s*builds both run 7\.x\)\./,
+      /There is NO fallback here[\s\S]*?fails closed rather than degrading to a non-atomic read/,
     );
-    expect(body).toMatch(
-      /const result = await \(\s*this\.redis as unknown as \{\s*getdel: \(k: string\) => Promise<string \| null>;\s*\}\s*\)\.getdel\(key\);/,
-    );
+    expect(body).toMatch(/return this\.redis\.getdel\(key\);/);
   });
 
   it('RedisMfaChallengeStore: set uses SET …EX ttlSeconds; peek = redis.get', () => {

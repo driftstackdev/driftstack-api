@@ -60,15 +60,17 @@ export class RedisMfaChallengeStore implements MfaChallengeStore {
   constructor(private readonly redis: Redis) {}
 
   async consume(key: string): Promise<string | null> {
-    // GETDEL is atomic in Redis 6.2+; falls back to GET + DEL pipeline
-    // for older Redis. We assume 6.2+ (Upstash + modern Hetzner-managed
-    // builds both run 7.x).
-    const result = await (
-      this.redis as unknown as {
-        getdel: (k: string) => Promise<string | null>;
-      }
-    ).getdel(key);
-    return result;
+    // GETDEL is atomic and requires Redis 6.2+. There is NO fallback here — an
+    // earlier comment claimed a GET + DEL pipeline for older servers and none
+    // was ever implemented, so on a pre-6.2 server this rejects and the verify
+    // fails closed rather than degrading to a non-atomic read. Both deployment
+    // targets run 7.x (Upstash, Hetzner-managed), which is what makes that
+    // acceptable — not a fallback.
+    //
+    // Called through the typed client: ioredis 5.x declares `getdel` in
+    // RedisCommander, so the previous `as unknown as { getdel }` cast bought
+    // nothing and would have silently absorbed a signature change.
+    return this.redis.getdel(key);
   }
 
   async set(key: string, value: string, ttlSeconds: number): Promise<void> {

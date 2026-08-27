@@ -173,11 +173,18 @@ describe('W917 V-353d MFA challenge store cross-source invariant', () => {
 
   // ─── Redis 6.2+ GETDEL assumption ────────────────────────────
 
-  it("CRITICAL Redis GETDEL framing — 'GETDEL is atomic in Redis 6.2+; falls back to GET + DEL pipeline for older Redis. We assume 6.2+ (Upstash + modern Hetzner-managed builds both run 7.x)'. The 6.2+ assumption is the V-353d Redis-version requirement.", () => {
+  it('CRITICAL Redis GETDEL framing — atomic, 6.2+ REQUIRED, and explicitly NO fallback', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/mfa-challenge-store.ts'));
-    expect(p).toMatch(/GETDEL is atomic in Redis 6\.2\+; falls back to GET \+ DEL pipeline/);
-    expect(p).toMatch(/for older Redis\. We assume 6\.2\+ \(Upstash \+ modern Hetzner-managed/);
-    expect(p).toMatch(/builds both run 7\.x\)/);
+    expect(p).toMatch(/GETDEL is atomic and requires Redis 6\.2\+\. There is NO fallback here/);
+    expect(p).toMatch(/fails closed rather than degrading to a non-atomic read/);
+    expect(p).toMatch(/Both deployment[\s\S]*?targets run 7\.x \(Upstash, Hetzner-managed\)/);
+    // The cast is gone: ioredis 5.x types `getdel`, so the call is direct.
+    // NB the absence assertion targets the CALL EXPRESSION, not the bare phrase:
+    // the source comment explains the removed cast and therefore still contains
+    // the words "as unknown as { getdel }". Asserting the phrase absent fails on
+    // the sentence documenting its removal.
+    expect(p).toMatch(/return this\.redis\.getdel\(key\);/);
+    expect(p).not.toMatch(/this\.redis as unknown as/);
   });
 
   it('CRITICAL Redis attempt increment and TTL attachment are one atomic Lua step that repairs no-TTL counters without extending an existing expiry.', () => {

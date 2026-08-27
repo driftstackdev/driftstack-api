@@ -20008,3 +20008,35 @@ mentions would have reported eight open items; seven are the opposite of that.
 ⭐ This is the second bounded negative today worth recording as a result rather than a non-event: the
 first was tautological length assertions and always-true matchers, both zero with passing controls.
 **Knowing a vein is dry is worth the same as a finding, provided the boundary is stated with it.**
+
+## V-1956 — a comment promised a fallback that was never written, and two pins froze it (2026-08-27)
+
+`RedisMfaChallengeStore.consume` carried: _"GETDEL is atomic in Redis 6.2+; falls back to GET + DEL
+pipeline for older Redis."_ **No fallback exists.** The method calls `getdel` directly, so on a pre-6.2
+server the command rejects and MFA verification fails closed — which is the safe direction, but it is
+not what the comment describes, and someone debugging a pre-6.2 deployment would look for a code path
+that was never written.
+
+**The call also went through `this.redis as unknown as { getdel: … }`.** ioredis declares `getdel` in
+`RedisCommander.d.ts:2345`, and `package.json` has pinned `^5.11.0` since the scaffolding commit — the
+only commit that ever touched that declaration. **So the cast was never necessary, and in a
+security-critical path an `as unknown as` is precisely what absorbs a future signature change in
+silence.** Removed; `tsc` via `tsconfig.test.json` is clean against the real ioredis type.
+
+**Two tests pinned the false sentence, including in their arm titles.** A content-parity test matched the
+comment verbatim AND the cast expression; a cross-source invariant matched three fragments of it. Source
+and both pins updated in one commit — and the titles too, because a grep for "falls back to GET + DEL
+pipeline" would otherwise still find the claim living in a test name. **Same shape as the stale OPEN
+markers: the claim and its correction are different lines, and a marker in a title is still a marker.**
+`it(` counts unchanged at 15 and 20; mutation-proven by reinstating the cast, which reddens both.
+
+⛔ **The pin I wrote first was self-referential and failed immediately.** I asserted
+`not.toMatch(/as unknown as \{\s*getdel/)` — and the new comment EXPLAINS the removed cast, so it
+contains that phrase. **An absence assertion broken by the sentence documenting the absence.** Third
+self-reference of the day, after a ceiling guard that counted its own fixture. Retargeted at the call
+expression `this.redis as unknown as`, which prose does not contain.
+
+⭐ Prior art was opened first and did not cover this: the MFA store has five memories, one calling these
+primitives "textbook" with `consume` = "atomic Redis GETDEL one-shot". **That description is accurate
+and was never the problem — the inaccuracy was in a clause about a fallback nobody had reason to
+re-read.**
