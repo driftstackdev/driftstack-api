@@ -699,6 +699,16 @@ export class FleetControlConnection {
         // consumed errored `sessionStatus` remains prefix-filtered to
         // `intent_dispatch_no_session` in onSessionError, so no other diagnostic
         // route can bypass that scrub.
+        default: {
+          // Exhaustiveness. Every HarnessOutbound member must be dispatched here;
+          // a new one added to the schema would otherwise parse cleanly and be
+          // dropped in silence, since this function returns void and so
+          // noImplicitReturns cannot see the omission (V-1915). Assigning to
+          // `never` makes forgetting the case a build error instead.
+          const _exhaustive: never = frame;
+          void _exhaustive;
+          break;
+        }
       }
     } catch {
       // A handler threw on a valid frame — swallow so the node's receive loop (and

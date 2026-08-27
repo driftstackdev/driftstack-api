@@ -209,6 +209,14 @@ export class AccountLifecycleService {
         case 'billing.payment_failed':
           await this.handlePaymentFailed(accountId, event);
           return;
+        default: {
+          // Exhaustiveness. This returns Promise<void>, so noImplicitReturns
+          // cannot catch a LifecycleEvent kind added without a case here
+          // (V-1915) — the event would be accepted and silently never emitted.
+          const _exhaustive: never = event;
+          void _exhaustive;
+          return;
+        }
       }
     } catch (err) {
       this.logger.warn(

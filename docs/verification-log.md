@@ -18130,3 +18130,51 @@ and `rejectEffectiveOwner` (all six sites `return` since V-1912).
 `8b6499083`; it says nothing about runtime behaviour if a helper is invoked through a value
 whose type is widened, and I did not sweep `packages/**` for the same shape. No source change —
 the audit found the code sound and corrects the reasoning recorded in V-1912.
+
+## V-1916 — two dispatch switches that would have dropped a new member in silence (2026-08-27)
+
+V-1915 established that `noImplicitReturns` is what catches a fall-through past a `never`
+helper, which means it can only protect a function that must return a value. The direct
+consequence, swept here: **a switch over a union inside a void-returning function has neither
+protection** — no `default`, no return obligation, nothing.
+
+Measured with a TypeScript AST probe over `apps/server/src` (`tsconfig.test.json`, at
+`4c3ebad99`), self-tested first on a synthetic pair so its zero would be worth something: it
+correctly flagged a `switch` in a `void` function and correctly did **not** flag the same switch
+in a `string`-returning one. Result: **26** switches without a `default`; **3** in void-ish
+functions. One is `routes/auth.ts:109` — `mapAuthFlowError`, already proven sound in V-1915,
+where `never` _is_ the protection and my probe's `voidish` flag simply over-includes it.
+
+The other two were real:
+
+| site                                     | switch subject                          | members | cases |
+| ---------------------------------------- | --------------------------------------- | ------- | ----- |
+| `services/fleet-control-registry.ts:544` | `HarnessOutbound` frame type (`void`)   | 17      | 17    |
+| `services/account-lifecycle.ts:193`      | `LifecycleEvent.kind` (`Promise<void>`) | 6       | 6     |
+
+Both are **complete today** — that is the finding, not a bug. Member counts came from the type
+checker after a hand-rolled `awk` range failed to find the end of a comment-heavy union
+declaration and reported **zero** kinds, which reads exactly like an empty type; the canonical
+resolver was the fix, not a better regex.
+
+**The counterfactual, run rather than asserted.** Adding a 7th `LifecycleEvent` member with no
+matching case:
+
+- **as the code stood:** `0` tsc errors. The event type-checks, reaches `emit()`, falls past
+  every case, and is silently never emitted — no throw, no log, no failing test.
+- **with the guard:** `1` error, `TS2322` at the `_exhaustive` line, naming the new member.
+
+Added `default: { const _exhaustive: never = …; void _exhaustive; … }` to both, matching the
+convention already in `lib/errors-helpers.ts`. Zero runtime effect — the clause is unreachable
+and the assignment compiles away. Each marker was then proven wired to _its own_ subject by
+deleting one case from each switch: fleet reds at its own line naming `"cookiesResult"`,
+lifecycle at its own naming `"billing.payment_failed"`.
+
+Two of these mutations initially failed their own assertion because I guessed the indentation —
+and a mutation that never applied reports `0 errors`, indistinguishable from "the guard does not
+bite." The assert is the only reason those did not become a finding that the markers were inert.
+
+**Boundary:** the probe covers `apps/server/src` only, classifies by the _enclosing function's_
+declared return type, and treats `Promise<void>` as void-ish; it does not examine switches that
+already carry a `default` (23 of the 26), any of which could still be non-exhaustive in a way
+this measurement says nothing about. 46 test files touching either service pass unchanged.
