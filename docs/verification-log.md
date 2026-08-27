@@ -19661,3 +19661,46 @@ symbol re-finds a drifted coordinate in one grep while a bare number that lands 
 answers a different question silently; and a note recording an OPEN vulnerability expires exactly like
 one recording a clean verdict, and is the more dangerous of the two stale, because it carries the
 authority of a security finding while sending someone to fix what is already fixed.
+
+## V-1947 — eight stale HIGHs re-verified, and a CORS escalation that did not happen (2026-08-27)
+
+**Eight `[HIGH]`/`[MED]` findings carrying `⬜ OPEN` markers are all fixed at HEAD.** The note holding
+them already said so, in a status line ten lines below the markers — but a grep for the marker finds
+the marker, never the retraction, so the markers are now flipped in place. Verified individually rather
+than on the strength of that line: `dispatchSessionEndOnClose` binds `targetNodeId = nodeId ?? null`
+and reaches `findAnyWithLivekit()` only with no dispatched row; `vpnEndpointHost` returns early on
+`isIP(e) === 6`, pinned by name against `fc00::9999` and `fc00::9999:5182`; `applyIpnStatus` transitions
+inside `repo.withOrderLock`; `fleet-node-auth.ts` carries `'future_iat'` with a 300s lifetime and 60s
+skew; the cross-node spoof check is factored into `isCrossNodeSpoof` across five call sites with its own
+test — stronger than the per-site fix prescribed; the Go SDK retry loop documents the drift and pins it;
+the per-account agent-session cap is wired. **Two of the eight had moved file (`fleet-node-auth.ts`
+lib→services) or line (`:119`→`:169`), and both were still found in one grep because the note named the
+symbol.**
+
+**The CORS finding's own escalation condition is unfired, so it stays MEDIUM.** That note says prod
+echoes any origin with credentials, and becomes CRITICAL "if a data route ever accepts the session
+cookie." No cookie plugin exists — `@fastify/cookie` is not a dependency and nothing registers one, so
+`request.cookies` is never populated. `middleware/auth.ts` reads only `authorization` and the SSE
+`?ds_token=`. The one cookie the server reads is the PKCE flow cookie: `HttpOnly; Secure; SameSite=Lax`,
+path-scoped, cleared after use, nonce-bound. CORS cannot reach it — SameSite is not overridden by CORS
+and HttpOnly blocks JS reads.
+
+**The near-miss inside that check is the part worth keeping.** Having verified the server, I was about
+to record that `lib/app.ts`'s `credentials: true` comment describes a cookie session that does not
+exist — true as far as it goes, and one step from someone removing the setting. Reading the client
+side: the dashboard keeps its token in `localStorage` as `ds_web_session_token`, so there is no cookie
+session; **but `credentials: 'include'` is deliberate and annotated as the PKCE cookie round-trip, so
+`credentials: true` is required.** The comment names the wrong reason for a correct setting. **A comment
+defect and a config defect are indistinguishable from the server side alone.**
+
+**One of my own ten guards has the vacuity hole I went looking for after a peer shipped an inert
+capability.** `a-void-switch-over-a-finite-union-must-be-exhaustive` asserts `findOffenders()` is empty
+over a real-tree walk that skips anything outside `SRC_DIR`; a prefix drift, a misconfigured program
+root, or a directory move each yield `[]` and a green arm. Its synthetic arms analyse hand-built source,
+so they prove the matcher fires and say nothing about whether discovery found a file — and my own
+comment above them calls those arms "why the arm above is worth anything," which is half true and reads
+as fully true. **Three of the four the crude grep flagged were false positives with real floors** — an
+equality against a frozen 39-element list, a recorded roster of six, and a disk-vs-roster assertion that
+is the strongest floor of the set. Fix drafted with a census floor (`filesScanned`, and
+`finiteUnionSwitches > 0` as the load-bearing half) and three mutations that must redden it; not applied
+yet because the suite was held by a peer.
