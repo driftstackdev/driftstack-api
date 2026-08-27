@@ -16573,3 +16573,47 @@ check, and it is an ordering claim about ASYNCHRONOUS work: a purely synchronous
 an in-memory cache, say — would not need an await and is outside what this can see. Persistence, driver
 calls and metering in this codebase are all awaited, which is what makes the syntactic question a useful
 proxy rather than a complete one.
+
+## V-1876 — all 28 refusals audited for ordering, and the population was never 28 gates
+
+2026-08-26. No defect. The ordering property extended from the 11 team-admin gates to every in-handler
+`ForbiddenError`, and a population I published earlier in this session corrected.
+
+✅ **RESULT: no authorization refusal in `routes/` can fire after a side effect.** 28 throw sites across
+13 files — 20 inside route handlers, 8 inside helpers judged at their call sites. Every apparent
+exception resolved by reading:
+
+- **Nine are a READ before the check** — `authRepo.getAccount(eff)`, `service.get({id, accountId})`,
+  `agentSessionsRepo.get(sessionId)`. That is not a defect but a necessity: you cannot know whether the
+  caller owns a row without loading it. An instrument that flags reads is over-broad by design; it was
+  harmless on the team-admin gates only because their count was zero.
+- **One is a rate-limit consumption before a STATE refusal**, and the authorization already happened.
+  `agent-sessions-livekit-token.ts` runs `callerCanAccessAgentSession` → 404 at line 160, consumes the
+  bucket at 164, then refuses a closed session at 170. Its own comment says why that 403 is not an
+  authz refusal: "the customer DID own this session, they just can't mint a token for a closed one."
+  Metering an authorized-but-futile request is correct.
+- **One is a gate in ARGUMENT POSITION with a preHandler backstop.** `account-mfa.ts` appeared to
+  complete an MFA enrollment before checking for an interactive web session. Line 114 is _inside_ the
+  object literal passed to `completeEnrollment` on 112 — an argument, evaluated before the call runs —
+  and `requireInteractiveWebSession` is already in the route's preHandler chain.
+
+⛔⛔ **AND THE POPULATION ITSELF WAS WRONG, WHICH IS THE MORE USEFUL FINDING.** Earlier this session I
+published "28 in-handler `ForbiddenError` refusals" as a measured population. It is a census of a
+CONSTRUCTOR, not of a property. Read individually the 28 are at least four different things:
+
+- **authorization gates** — team-admin role, interactive-web-session;
+- **state refusals** — "cannot mint a token for a closed session";
+- **entitlement refusals** — "bundled-LLM billing is not available on this account's current plan";
+- **error translation** — `auth.ts:119` sits inside `mapAuthFlowError`, a switch turning a service
+  error into an HTTP one. It is not a gate at all.
+
+Any claim of the form "all 28 authorization checks …" was therefore about a set that does not exist.
+The ordering result above survives because it was verified per site by reading, not because the
+population was sound.
+
+⚠️ **TWO INSTRUMENT LIMITS FOUND, both about position rather than vocabulary.** A multi-line call makes
+an inner line look like it comes AFTER the `await` that is in fact the same expression — argument
+evaluation precedes invocation, so textual line order is not evaluation order. And a display that
+scans from line 1 rather than the enclosing handler shows awaits from NEIGHBOURING handlers: that is
+what briefly made `apiKeysService.revoke` look like it preceded a refusal three handlers away. The
+counter was right both times; the thing I read off the screen was not.
