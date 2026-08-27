@@ -12479,3 +12479,104 @@ retire-when-shipped family executed directly to see which arms skip today. Integ
 `CI`/`DATABASE_URL`/`REDIS_URL` were classified as legitimate by their condition, not by running them
 without a database. **No defect found, no code changed, and no page reported to A2 — the accusation my
 own probe generated did not survive reading.**
+
+## V-1998 — the real-Postgres seam re-measured: V-1576's number holds, its sentence does not (2026-08-27)
+
+2026-08-27. Picked the target from the coverage artifact rather than instinct, then from prior art rather
+than the artifact — the prior art was again the better lead.
+
+**Boundary of the coverage artifact first, because it decides what the ranking can mean.** `coverage/`
+(15:42 today) spans **311 files: 285 in `apps/server`, 26 in `packages/sdk-typescript`** — no api-types, no
+Python/Go SDK, no front-end. Within `apps/server/src` it holds 285 of the 342 tracked `.ts` files, and
+**all 55 files under `src/db` are absent** — v8 reports only modules that were _loaded_, and the run had no
+`DATABASE_URL`, so every `skipIf` integration gate skipped and the persistence layer never loaded. Absent
+is not 0%; it is no row at all. **No statement below is about db-layer coverage.**
+
+### The recorded claim, re-measured
+
+V-1576 (archived) measured 376 integration files and concluded: _"Exactly one integration file uses a real
+database AND injects an HTTP request"_, then generalised one sentence further — _"Nothing drives a
+customer-facing route against real Postgres."_ That sentence is the quotable one, and it is the one that
+is false.
+
+**The narrow claim holds, on a population 9× larger.** Across **every `*.test.ts`/`*.spec.ts` tracked by
+git at HEAD — 3282 files, repo-wide, not one directory** — exactly one _integration_ file both reaches
+real Postgres and drives a route: `atlas-priority-events-end-to-end.test.ts`, still on an internal route.
+`build-test-app.ts` still wires 47 in-memory repositories and contains no `postgres(` call.
+
+**The broad sentence is false, and V-1576 contains its own refutation.** 41 Playwright specs (215 `test()`
+calls) import `./helpers/server.js`, which calls the real `buildApp`, opens `postgres(dbUrl)`, migrates,
+and `listen()`s on a socket. They drive customer-facing routes — `account-me.spec.ts` exercises
+`GET`/`PATCH /v1/account/me` including a **409 slug collision**, which only a real unique constraint can
+produce. V-1576 knew: three paragraphs down it says _"Playwright drives the app end to end"_. The
+generalisation over-reached the evidence in the same entry that supplied it. The sentence appears once, in
+the archive, and is cited nowhere else — stale, not load-bearing.
+
+### The census V-1576 gestured at but never produced
+
+**Boundary: 41 Playwright specs vs the 166 customer-facing operations published in `openapi.json`
+(234 total, 68 admin), path segments normalised.**
+
+```
+ 69  (41%)  driven against real Postgres by an e2e spec
+ 97  (59%)  driven by no e2e spec — in-memory repos only
+```
+
+Those 97 are precisely where a V-1565-class defect (a route handing an unvalidated value to a `uuid`
+column) survives: the route half answers 200 in-memory, the column half is fed already-valid values by
+repo contracts, and the join is untested. **`vitest.config.ts:13` excludes `**/tests/e2e/**`**, so none of
+those 215 tests run in my gate — every green gate I report has an e2e-shaped hole, and this states its size.
+
+⛔ **My normaliser was biased toward the finding.** It collapsed `${id}` but not literal prefixed ids, so
+`wsess_{}` never matched `{web_session_id}` — undercounting coverage and inflating the gap. Corrected to
+normalise per _segment_; the headline did not move (69/97, because the ten mismatches were admin paths or
+duplicates) and the unmatched residue fell 10 → 1. **A number that survives a real correction to its
+instrument is worth more than one that was never corrected.** The single residue,
+`POST /v1/oauth/authorize/complete`, is deliberate: the route-coverage guard's own `NOT_PUBLIC_API` and
+`lib/openapi.ts:2613` both record it as dashboard-internal, requiring an interactive web session.
+
+### Chasing the residue into a clean audit
+
+The class V-1565 fixed is guarded **as a shape** — a scan for the loose hex-or-dash literal, proved by
+planting it in an unrelated route. That cannot see the _no-regex_ case, so I swept the boundary parser
+itself: **`uuidFromPrefixedId` is defined independently in 12 route files and exported from none**, and
+its regex `PUBLIC_ID_RE` exists in **13 copies with 4 distinct spellings** — `[a-z]{3}` (10×), `[a-z]+`,
+`[a-z]+` **case-insensitive**, and a literal `^sub_`.
+
+**All four are correct, and only history shows it.** `git log -L` on each line: `sessions.ts` and
+`admin-audit-log.ts` were born strict from their first commit and never accepted uppercase, so they never
+needed `/i`. `profile-snapshots.ts` was born `[0-9a-fA-F-]{36}` — the loose class — which _did_ accept
+uppercase hex, and its fix (`8ed6e72b4`) added `/i` to preserve the input set customers have had since
+V-312. `[a-z]+` is required, not lax: `psnap_`/`prof_` are 4–5 characters and `[a-z]{3}` cannot parse them.
+`admin-status-subscribers.ts` bakes the prefix into the regex (`^sub_`), so it needs no `startsWith` check
+at all. **Classify divergent copies by reason, not by difference** — differencing them yielded four groups
+and named the wrong file.
+
+**No defect. No code changed.**
+
+### ⛔ Four instrument failures in one investigation, all caught before they were reported
+
+1. **My behavioural grouping accused the best file.** `admin-status-subscribers.ts` came out as the outlier
+   "missing the prefix check" — it is the cleanest of the twelve, because its prefix is _in_ the regex.
+   This is verbatim the standing lesson: a detector whose accused file is the repo's best example of the
+   discipline it tests for.
+2. **My comparison was mis-specified.** I "proved" sessions.ts rejects what profile-snapshots accepts using
+   a `prof_` id — a 4-letter prefix sessions.ts was never meant to parse. The difference I measured was
+   prefix _length_, not case. Re-running with a 3-letter prefix isolated the one real variable.
+3. **A pin that stops one character short reads exactly like the covering pin.** The v312/v326e
+   cross-source invariant freezes the regex body and ends at `$/` — it never asserts the `/i`. I checked
+   that one file, found the flag unpinned, and generalised. **The flag is pinned twice**, proved by
+   mutation: dropping `/i` reds `routes-profile-snapshots-content-parity` ("STRICT uuid shape
+   (case-insensitive)") and V-927 `a-published-bound-matches-the-route`, which compares the route against
+   the generated document and asserts case sensitivity **per path** — "/v1/profiles/{id} is case-sensitive
+   and /v1/profiles/{id}/snapshots is not". Had I trusted the read, I would have added a redundant third
+   pin and logged a coverage gap that does not exist. **Checking one member of a pin set and reporting on
+   the set is the same error as a census that reports its size instead of enumerating it.**
+4. **Two runs that never ran.** `--reporter=basic` is not valid in vitest 4 (it tried to load a reporter
+   module), and BSD `xargs` has no `-a`. Both exited non-zero and printed nothing my grep matched; a
+   summary-line grep on a run that never started is indistinguishable from a clean pass. Read the log's
+   length, not just its greps.
+
+Mutation discipline held throughout: snapshot keyed by path, anchor asserted unique (count=1), `cmp`
+proving the file actually differed before the run, restore proved byte-identical afterwards, and both pins
+re-run green (24 passed) on the restored source.
