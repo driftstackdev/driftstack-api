@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 import respx
@@ -147,3 +149,76 @@ async def test_async_list_owners() -> None:
         assert route.called
         assert isinstance(result, TeamOwnersList)
         assert result.data[0].owner_email == "owner@example.test"
+
+
+# ── list_teams / rename_team shipped with NO test in ANY of the three SDKs
+# ── (V-1978). Both target real routes with matching verbs, so nothing was
+# ── broken; nothing was checking either.
+
+TEAM_ROW: dict = {
+    "id": "team_00000000-0000-4000-8000-000000000001",
+    "name": "Acme",
+    "slug": None,
+    "owner_account_id": "acc_00000000-0000-4000-8000-000000000010",
+    "created_at": "2026-05-08T10:00:00Z",
+    "updated_at": "2026-05-08T10:00:00Z",
+}
+
+
+def test_sync_list_teams_gets_v1_teams() -> None:
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.get("/v1/teams").mock(
+            return_value=httpx.Response(200, json={"data": [TEAM_ROW]})
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            out = client.team.list_teams()
+        assert route.called
+        assert route.calls[0].request.method == "GET"
+        # `slug` is published but always None; parse_model would reject a row
+        # missing it, so this pins the shape as well as the verb.
+        assert out.data[0].slug is None
+        assert out.data[0].name == "Acme"
+
+
+def test_sync_rename_team_patches_with_exactly_the_name() -> None:
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.patch("/v1/teams/team_1").mock(
+            return_value=httpx.Response(200, json={"team": dict(TEAM_ROW, name="New")})
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            out = client.team.rename_team("team_1", "New")
+        assert route.called
+        assert route.calls[0].request.method == "PATCH"
+        # Exactly {"name": ...}: the route runs reportUnknownRequestFields against
+        # RenameTeamBodySchema, so an extra key is a warning the caller never sees.
+        assert json.loads(route.calls[0].request.content) == {"name": "New"}
+        assert out.team.name == "New"
+
+
+def test_sync_rename_team_url_encodes_the_team_id() -> None:
+    """A caller-supplied id must not be able to alter the path.
+
+    Asserted on ``request.url.raw_path``, NOT on the respx route pattern: respx
+    percent-DECODES the pattern before matching, so a route written as
+    ``/v1/teams/team%2Fwith%20space`` also matches a request that sent the slash
+    unencoded. An arm built on the pattern alone cannot fail and was vacuous
+    until a mutation exposed it.
+    """
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.route().mock(return_value=httpx.Response(200, json={"team": TEAM_ROW}))
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            client.team.rename_team("team/with space", "n")
+        assert route.called
+        assert route.calls[0].request.url.raw_path == b"/v1/teams/team%2Fwith%20space"
+
+
+@pytest.mark.asyncio
+async def test_async_rename_team_url_encodes_the_team_id() -> None:
+    """The async mirror is a separate method and therefore a separate chance to
+    skip the encoding."""
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.route().mock(return_value=httpx.Response(200, json={"team": TEAM_ROW}))
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            await client.team.rename_team("team/with space", "n")
+        assert route.called
+        assert route.calls[0].request.url.raw_path == b"/v1/teams/team%2Fwith%20space"

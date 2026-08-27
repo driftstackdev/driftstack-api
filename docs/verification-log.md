@@ -20888,3 +20888,57 @@ symmetry is not evidence about assertions.
 **Boundary, stated with the result:** this measures the public _method surface_ by name only. It says
 nothing about behavioural equivalence, argument shapes, or return types, and nothing about test
 coverage — which is precisely where the real divergence was.
+
+## V-1978 — three shipped SDK methods had no test in any language (2026-08-27)
+
+V-1977 established that the three SDK _surfaces_ are identical and that the divergence lives in what
+each language's tests check. Turning that into a measurement: for every public TS method, is it
+referenced by the TypeScript, Python **and** Go test corpora?
+
+**Three methods are referenced by none of them** — confirmed by direct search over every naming
+convention (`rotateSecret` / `rotate_secret` / `RotateSecret`, and likewise for the others):
+**0 references, in any SDK.**
+
+| method                  | route                                 | verdict               |
+| ----------------------- | ------------------------------------- | --------------------- |
+| `webhooks.rotateSecret` | `POST /v1/webhooks/:id/rotate-secret` | implemented correctly |
+| `team.listTeams`        | `GET /v1/teams`                       | implemented correctly |
+| `team.renameTeam`       | `PATCH /v1/teams/:id`                 | implemented correctly |
+
+⭐ **Audited end to end before writing a line of test: all three are sound in all three languages.**
+Verbs, paths, bodies and documented scopes match the server — `team.ts:155` registers
+`app.get('/v1/teams')` under `read`, `:166` registers `app.patch('/v1/teams/:id')` under
+`account_owner` with `RenameTeamBodySchema`, and `webhooks.ts:321` serves the rotate route. This is a
+pure coverage gap, not a live defect. It is worth closing anyway because `rotateSecret` **mints a
+credential and returns the plaintext exactly once** — a client that dropped a response field would
+lose a secret the server will not show again.
+
+⛔ **An earlier grep for the team routes returned nothing and I did not treat that as absence** — the
+pattern was wrong for the file's style, and the routes are there. An empty grep is not evidence.
+
+⭐⭐ **The most valuable thing here is a vacuous arm that mutation testing caught before it shipped.**
+The two Python encoding arms matched a respx route written as `/v1/teams/team%2Fwith%20space`. **respx
+percent-DECODES the pattern before matching**, so that route also matches a request that sent the
+slash _unencoded_ — the arms passed with `quote()` removed from the source. Proved by observing what
+the mutated SDK actually sends: `b'/v1/teams/team/with%20space'`. Rewritten to assert
+`request.url.raw_path`, they now fail under that mutation. **Two arms that could never fail were
+indistinguishable from two that worked, right up until the mutation.**
+
+The same trap in Go was avoided the same way: `r.URL.Path` is already decoded, so the arms assert
+`r.RequestURI`. A first draft carried a `t.Logf` fallback instead of an assertion — a branch that
+cannot fail — and was replaced.
+
+⭐ **Mutation-proved in all three languages, and HEAD proved blind to every mutation.**
+
+- TS — dropping `encodeURIComponent` from `renameTeam` and `body: {}` from `rotateSecret` reddens the
+  two new CRITICAL arms, while **the entire TS SDK suite at HEAD passes: 31 files, 352 tests.**
+- Python — dropping `json_body={}` from both `rotate_secret` calls reddens 2 arms; dropping `quote()`
+  from both `rename_team` calls reddens the 2 rewritten encoding arms.
+- Go — dropping `url.PathEscape` from both methods reddens both arms, while **the whole Go suite at
+  HEAD reports `ok`.**
+
+Sources restored byte-identical in every case, verified by an empty `git diff`, and one mutation
+script aborted on its own assertion (`n==2` when the async spelling differed) rather than silently
+mutating nothing — the run that followed it was correctly discarded as evidence.
+
+Post-conditions: TS **359 tests** (was 352) and `tsc` clean; Python **384 passed, 9 skipped** (was 377) with ruff check, ruff format and mypy clean; Go `vet`, `go test -count=1` and `gofmt` all clean.

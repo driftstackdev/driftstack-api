@@ -221,3 +221,57 @@ async def test_async_update_partial() -> None:
         async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
             result = await client.webhooks.update("whk_xx", {"description": "from-async-test"})
         assert result.description == "from-async-test"
+
+
+# ── rotate_secret shipped with NO test in ANY of the three SDKs (V-1978). It is
+# ── the one operation here that mints a credential, and its response is the ONLY
+# ── time the plaintext secret is returned — a client that dropped a field would
+# ── lose a secret the server will not show again.
+
+ROTATED: dict = {
+    "id": "whk_00000000-0000-4000-8000-000000000001",
+    "secret": "whsec_freshsecretfreshsecretfreshsecret",
+    "secret_prefix": "whsec_fr",
+    "prev_secret_prefix": "whsec_aA",
+    "grace_expires_at": "2026-05-10T18:00:00Z",
+}
+
+
+def test_sync_rotate_secret_posts_empty_body_and_returns_the_plaintext() -> None:
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post(
+            "/v1/webhooks/whk_00000000-0000-4000-8000-000000000001/rotate-secret"
+        ).mock(return_value=httpx.Response(200, json=ROTATED))
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            out = client.webhooks.rotate_secret("whk_00000000-0000-4000-8000-000000000001")
+        assert route.called
+        assert route.calls[0].request.method == "POST"
+        assert route.calls[0].request.content == b"{}"
+        # Both prefixes and the grace deadline are what a caller needs to keep
+        # verifying deliveries signed with the OLD secret during the dual-sign
+        # window; dropping any of them silently breaks verification at rollover.
+        assert out == ROTATED
+
+
+def test_sync_rotate_secret_url_encodes_the_webhook_id() -> None:
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/webhooks/whk%2Fwith%20space/rotate-secret").mock(
+            return_value=httpx.Response(200, json=ROTATED)
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            client.webhooks.rotate_secret("whk/with space")
+        assert route.called
+
+
+@pytest.mark.asyncio
+async def test_async_rotate_secret_posts_empty_body() -> None:
+    """The async mirror is a separate method and therefore a separate chance to
+    send no body at all."""
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post(
+            "/v1/webhooks/whk_00000000-0000-4000-8000-000000000001/rotate-secret"
+        ).mock(return_value=httpx.Response(200, json=ROTATED))
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            out = await client.webhooks.rotate_secret("whk_00000000-0000-4000-8000-000000000001")
+        assert route.calls[0].request.content == b"{}"
+        assert out == ROTATED

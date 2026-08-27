@@ -3,6 +3,7 @@ package driftstack
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"testing"
 	"time"
@@ -199,5 +200,57 @@ func TestWebhooks_Update(t *testing.T) {
 	}
 	if got.Description == nil || *got.Description != "updated" {
 		t.Errorf("description=%v", got.Description)
+	}
+}
+
+// RotateSecret shipped with NO test in ANY of the three SDKs (V-1978). It is the
+// one operation here that mints a credential, and its response is the ONLY time
+// the plaintext secret is returned — a client that dropped a field would lose a
+// secret the server will not show again.
+func TestWebhooks_RotateSecret(t *testing.T) {
+	t.Parallel()
+	var method, rawURI string
+	var bodyBytes []byte
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		// RequestURI, not URL.Path: URL.Path is already percent-DECODED, so an
+		// arm asserting on it passes whether or not the id was encoded.
+		method, rawURI = r.Method, r.RequestURI
+		bodyBytes, _ = io.ReadAll(r.Body)
+		w.Header().Set("content-type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":                 "whk_abc",
+			"secret":             "whsec_freshsecretvalue",
+			"secret_prefix":      "whsec_fr",
+			"prev_secret_prefix": "whsec_aA",
+			"grace_expires_at":   "2026-05-10T18:00:00Z",
+		})
+	})
+
+	out, err := client.Webhooks.RotateSecret(context.Background(), "whk/with space")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if method != "POST" {
+		t.Errorf("method=%s, want POST", method)
+	}
+	if rawURI != "/v1/webhooks/whk%2Fwith%20space/rotate-secret" {
+		t.Errorf("raw request URI = %q, want the id percent-encoded", rawURI)
+	}
+	// An empty object, not an absent body: some proxies treat a bodyless POST
+	// differently from one carrying {}.
+	if string(bodyBytes) != "{}" {
+		t.Errorf("body=%q, want %q", string(bodyBytes), "{}")
+	}
+	// Both prefixes and the grace deadline are what a caller needs to keep
+	// verifying deliveries signed with the OLD secret during the dual-sign
+	// window; dropping any silently breaks verification at rollover.
+	if out.Secret != "whsec_freshsecretvalue" || out.SecretPrefix != "whsec_fr" {
+		t.Errorf("secret=%q prefix=%q", out.Secret, out.SecretPrefix)
+	}
+	if out.PrevSecretPrefix != "whsec_aA" {
+		t.Errorf("prev_secret_prefix=%q", out.PrevSecretPrefix)
+	}
+	if out.GraceExpiresAt.IsZero() {
+		t.Error("grace_expires_at did not decode")
 	}
 }
