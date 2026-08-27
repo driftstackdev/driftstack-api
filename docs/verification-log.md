@@ -19421,3 +19421,52 @@ can emit; recipes replay stored `intent_log`s validated against `AgentIntentSche
 `.max()`, so their bound is whatever the decomposer applied when the transcript was written — I did
 not verify that a recipe cannot be constructed from an intent that predates a tightening. No source
 change; ratchets unchanged at 3062/3238.
+
+## V-1941 — a peer's finding, the guard that already answers it, and the 3226-item list I nearly built (2026-08-27)
+
+A2 hit a defect worth generalising: in `gui-client-src-tauri-content-parity`, both arm **titles** said
+0.1.3 while both **assertions** read 0.1.4 — a stale claim inside the file whose job is catching stale
+claims. I had the mirror image hours earlier: a roster raised 21 → 33 with every assertion updated
+and a comment thirty-seven lines above still saying 21. Two directions of one asymmetry: **a parity
+file's assertions are checked by running it; its prose is checked by nobody.**
+
+**My first instinct produced 3226 false positives.** The obvious guard — every number a title states
+must appear in its arm's body — flags **3226 of 23373** arms, because titles legitimately name HTTP
+statuses, contrast cases and RFC numbers that never appear as literals (bodies use constants, or
+different representations). Unusable, and exactly V-1936's lesson: do not guard a shape whose
+instances are overwhelmingly fine.
+
+**The repo already solved this, and better.** `a-field-count-in-a-test-title-is-derived` (V-1018,
+extended by V-1019) does not compare title to body — it **derives** the number, resolving
+`X has N fields` against the actual `interface` or `z.object` literal. That found real drift when it
+landed: `ProfileRecord` claimed 8 and has 15 — including `deletedAt`, the recycle bin, and
+`sizeBytes`, the storage a customer is quoted for — `WebhookEndpointRow` claimed 15 and has 20, and
+twelve more. The principle is pick a title shape whose number is DERIVABLE, then derive it.
+
+**The coverage gap is real and currently empty.** That guard's regex requires the word `has`
+(`X has [EXACTLY] N …`), so the `X = EXACTLY N values` phrasing — which is what my own admin-audit
+title used — is outside it. Seventeen arms use that form. Measured against their own bodies:
+
+|                                    | count         |
+| ---------------------------------- | ------------- |
+| title's N asserted in the same arm | **16**        |
+| asserts a DIFFERENT number         | **0**         |
+| no numeric assertion               | 1 — and sound |
+
+The one outlier pins `format = EXACTLY 2 values (csv + json)` with
+`toMatch(/format: z\.enum\(\['csv', 'json'\]\)/)`, an exact-set regex that a third value would break.
+The count is pinned structurally rather than numerically; my flag was looking only for `toBe(N)`.
+
+**So: no guard.** Extending the derived-title regex to the `=` phrasing would fire on nothing today,
+and V-1936 already records what a guard with no live instances is worth. The finding is that the gap
+exists, is measured, and is empty — which is what stops the next person re-deriving it.
+
+⭐ A2's second observation is the one I would act on if it were mine to act on: that parity file
+lives in `apps/server/tests/` while pinning `apps/gui-client/**`, so their full gui-client run — 257
+files, 2424 tests, green — could not have caught it. A suite scoped by where the SOURCE lives does
+not cover pins filed where the TEST lives.
+
+**Boundary:** the 17-arm measurement covers `apps/server/tests` and the exact phrasing
+`X = EXACTLY N (values|members|entries|kinds|actions)`; the 248 `N-value` and 102 `N values total`
+matches are dominated by noise (RFC 7807 parses as 7807) and I did not triage them, so this says the
+`=` phrasing is clean and says nothing about looser ones. No source change; ratchets unchanged.
