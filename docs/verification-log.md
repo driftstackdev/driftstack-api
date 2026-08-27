@@ -18406,3 +18406,52 @@ arms and names the file, while both self-test arms stay green; restoring returns
 through a differently-named handle, passes it; it covers `apps/server/src` only. The audit itself
 read the route end to end but exercised nothing at runtime — every claim above is static. Ratchets
 3055→3056 and 3231→3232.
+
+## V-1921 — closing my own boundary: the body that reaches a logger under another name (2026-08-27)
+
+V-1920 pinned that no request body reaches a logger and stated its own gap in the same breath: it
+matched `req.body`, so _a body first assigned to another variable passes it_. That gap is not
+academic. `mac-nodes-register` reads the LiveKit secret out of `body.livekit.api_secret`, where
+`body = parsed.data` — so the object actually carrying the credential is the one the guard could
+not see. Same defect, different spelling, which is this ledger's third standing lesson turned on
+work I had committed an hour earlier.
+
+**Prior art named the exact shape before I measured it.** V-1886 audited the one route whose job
+is logging client telemetry and recorded why it is safe: _"Every logged field is enumerated by
+hand — seven of them — rather than spread… A spread would inherit whatever the schema happens to
+allow."_ Reading only the one-line body mention had suggested a site logs `parsed.data` wholesale;
+the full entry says the opposite, and names the danger instead.
+
+**Measured before extending anything.** An AST probe over all 342 files in `apps/server/src` finds
+**3** logger calls containing a spread, control-validated against a synthetic `log.warn({...body})`:
+two are conditional spreads of known fields, and `retention-scrub-sweeper.ts:83` is a bare
+`...result` — where `result` is a locally-declared `RetentionScrubTickResult` of three counts and a
+boolean. That is the _safe_ form of the shape: spreading a narrowly-typed local, whose type bounds
+what it can ever carry. **Zero instances of a parsed body reaching a log.**
+
+So the extension changes no behaviour today; it stops the shape appearing later. The guard now
+seeds from any declaration whose initializer mentions `req.body` — catching
+`const parsed = Schema.safeParse(req.body)` as well as a plain alias — then follows
+`const body = parsed.data` to a fixpoint, and accuses only **whole-object** uses:
+
+| shape                                       | verdict                                           |
+| ------------------------------------------- | ------------------------------------------------- |
+| `{ ...body }`, `{ body }`, `log.warn(body)` | accused — hands over everything the schema allows |
+| `body.mac_node_id`, `body['id']`            | acquitted — how every route reads its fields      |
+
+Proven on the **real subject**, both directions, each reporting its own reason: injecting
+`...body` into `mac-nodes-register.ts` fails 1 of 5 arms with _body-derived 'body' passed whole_,
+injecting `req.body` fails with _req.body_, and restoring returns 5/5. Two new self-test arms pin
+the accusal of all three whole-object forms and the acquittal of field and element access.
+
+**One flaw of my own, caught by eslint rather than by tsc.** The reason was accumulated into a
+`let reason: string | null`, assigned inside a closure — TypeScript does not track those
+assignments, so it narrowed the variable to `never` and the template literal reading it back was
+invalid. `tsc` reported zero errors; `@typescript-eslint/restrict-template-expressions` caught it.
+Worth stating plainly: a clean typecheck is not a clean lint, and the two disagree in both
+directions.
+
+**Boundary:** the derivation is syntactic and file-local — it follows declarations, not
+assignments or parameters, so a body handed into a helper function and logged there is still
+invisible; it recognises loggers as `<x>.log|logger.<level>(…)` and covers `apps/server/src` only.
+Arms 3 → 5 in the same file, so no ratchet moves.

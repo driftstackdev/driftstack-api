@@ -67,28 +67,99 @@ function isLoggerCall(node: ts.CallExpression): boolean {
   return false;
 }
 
+/**
+ * Names that hold the request body, or something derived from it.
+ *
+ * Seeded from any declaration whose initializer mentions `req.body` — which
+ * catches `const parsed = Schema.safeParse(req.body)` as well as a direct alias —
+ * then extended to `const body = parsed.data` and repeated to a fixpoint, because
+ * the parsed body is the object that actually carries the credential:
+ * `mac-nodes-register` reads `body.livekit.api_secret` out of exactly that value.
+ */
+function bodyDerivedNames(sourceFile: ts.SourceFile): Set<string> {
+  const names = new Set<string>();
+  const declarations: ts.VariableDeclaration[] = [];
+  const collect = (node: ts.Node): void => {
+    if (ts.isVariableDeclaration(node) && node.initializer !== undefined) {
+      declarations.push(node);
+    }
+    ts.forEachChild(node, collect);
+  };
+  collect(sourceFile);
+
+  for (const declaration of declarations) {
+    if (!ts.isIdentifier(declaration.name)) continue;
+    let mentionsBody = false;
+    const scan = (n: ts.Node): void => {
+      if (isRequestBody(n)) mentionsBody = true;
+      ts.forEachChild(n, scan);
+    };
+    scan(declaration.initializer as ts.Node);
+    if (mentionsBody) names.add(declaration.name.text);
+  }
+
+  // `const body = parsed.data`, and onwards, until nothing new is learned.
+  for (let pass = 0; pass < 5; pass += 1) {
+    const before = names.size;
+    for (const declaration of declarations) {
+      if (!ts.isIdentifier(declaration.name)) continue;
+      const init = declaration.initializer;
+      if (init === undefined || !ts.isPropertyAccessExpression(init)) continue;
+      if (ts.isIdentifier(init.expression) && names.has(init.expression.text)) {
+        names.add(declaration.name.text);
+      }
+    }
+    if (names.size === before) break;
+  }
+  return names;
+}
+
+/**
+ * A WHOLE-OBJECT use of a name. `body.mac_node_id` is how every route reads its
+ * fields and must stay legal; `{ ...body }`, `{ body }`, `{ b: body }` and
+ * `log.warn(body)` all hand over everything the schema allows — the shape V-1886
+ * identified as the real risk, since a field added tomorrow rides along unseen.
+ */
+function isWholeObjectUse(node: ts.Identifier): boolean {
+  const parent = node.parent as ts.Node | undefined;
+  if (parent === undefined) return false;
+  if (ts.isPropertyAccessExpression(parent) && parent.expression === node) return false;
+  if (ts.isElementAccessExpression(parent) && parent.expression === node) return false;
+  if (ts.isPropertyAssignment(parent) && parent.name === node) return false;
+  return true;
+}
+
 export function bodiesReachingALogger(sources: { file: string; text: string }[]): Offender[] {
   const offenders: Offender[] = [];
   for (const { file, text } of sources) {
     const sourceFile = ts.createSourceFile(file, text, ts.ScriptTarget.ES2022, true);
+    const derived = bodyDerivedNames(sourceFile);
     const visit = (node: ts.Node): void => {
       if (ts.isCallExpression(node) && isLoggerCall(node)) {
-        let found = false;
+        // Collected rather than assigned to a `let`: TypeScript does not track
+        // assignments made inside a closure, so a narrowed `string | null` reads
+        // back as `never` at the use site.
+        const reasons: string[] = [];
         const scan = (inner: ts.Node): void => {
-          if (found) return;
+          if (reasons.length > 0) return;
           if (isRequestBody(inner)) {
-            found = true;
+            reasons.push('req.body');
+            return;
+          }
+          if (ts.isIdentifier(inner) && derived.has(inner.text) && isWholeObjectUse(inner)) {
+            reasons.push(`body-derived '${inner.text}' passed whole`);
             return;
           }
           ts.forEachChild(inner, scan);
         };
         for (const arg of node.arguments) scan(arg);
-        if (found) {
+        const reason = reasons[0];
+        if (reason !== undefined) {
           const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart());
           offenders.push({
             file,
             line: line + 1,
-            snippet: node.getText().replace(/\s+/g, ' ').slice(0, 80),
+            snippet: `${reason} — ${node.getText().replace(/\s+/g, ' ').slice(0, 60)}`,
           });
         }
       }
@@ -126,6 +197,38 @@ req.log.error(
       },
     ]);
     expect(found.map((o) => o.line)).toEqual([2, 3]);
+  });
+
+  it('accuses a PARSED body handed over whole — the spread, the shorthand, the bare argument', () => {
+    const found = bodiesReachingALogger([
+      {
+        file: 'probe.ts',
+        text: `declare const req: any; declare const Schema: any;
+const parsed = Schema.safeParse(req.body);
+const body = parsed.data;
+req.log.info({ component: 'x', ...body }, 'spread');
+req.log.info({ body }, 'shorthand');
+req.log.info(body, 'bare argument');
+`,
+      },
+    ]);
+    expect(found.map((o) => o.line)).toEqual([4, 5, 6]);
+    expect(found[0]?.snippet.startsWith("body-derived 'body' passed whole")).toBe(true);
+  });
+
+  it('acquits reading FIELDS off a parsed body, which is how every route uses it', () => {
+    const found = bodiesReachingALogger([
+      {
+        file: 'probe.ts',
+        text: `declare const req: any; declare const Schema: any;
+const parsed = Schema.safeParse(req.body);
+const body = parsed.data;
+req.log.warn({ macNodeId: body.mac_node_id, host: body.livekit.ws_url }, 'fields only');
+req.log.warn({ id: body['mac_node_id'] }, 'element access');
+`,
+      },
+    ]);
+    expect(found).toEqual([]);
   });
 
   it('acquits a body that never reaches a logger, and a logger that never sees a body', () => {
