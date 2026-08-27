@@ -20224,3 +20224,39 @@ appears in many tables in `schema.ts`, so the unanchored regex returned another 
 `['emitted','queued']`. The non-vacuity arm asserts a COUNT per source, so it failed before any set
 comparison could spuriously agree. **Had that arm asserted merely "non-empty", two wrong sets could have
 matched each other.** Anchored to `sessionOperations = pgTable(`.
+
+## V-1961 — three instruments failed before reading found the answer in one grep (2026-08-27)
+
+Targeted `services/durable-webhook-delivery.ts` from coverage data — 125 branches at 62.4%, a delivery
+path with signing, retries and a customer-controlled outbound URL. **Sound, no action, and the low
+coverage has a benign cause I should have established first.**
+
+**Three instrument failures on the way, each producing a confident wrong answer:**
+
+1. **A scoped coverage run reported 0/125 branches.** I selected 27 test files by grepping their text
+   for `durable-webhook-delivery`, so the run measured "do these 27 files touch it" — not "is it
+   covered". **A scoped coverage run answers a different question than coverage**, and 0% next to the
+   gate's 62.4% is the tell.
+2. **Parsing the istanbul HTML gutter gave uncovered "lines" 17-24, 50-67, 103…** The gutter had 179
+   entries for a 901-line file, so the indices are not source lines. The sanity check killed it: line 17
+   is an import, line 50 a comment, line 103 a bare `*/`. **None of those can be a branch.**
+3. **Grepping the file for `unsafeWebhookTargetReason|classifyUnsafeHost` found nothing**, which read as
+   "the durable path is unguarded" — a real finding if true. **The guard is applied through a WRAPPER:**
+   line 49 imports `ssrfGuardedFetch`, line 123 is `const fetchFn = deps.fetch ?? ssrfGuardedFetch`.
+   Sweep the shape, not the token — the guard's name is not the guard's application point.
+
+**The file is SSRF-safe by default and its comment is the model of the practice the rest of today kept
+finding violated:** it states the guarantee, the reason (a future cutover keeps the connection-time
+DNS-rebind pin without the wirer remembering to inject it), the limit (a create-time guard cannot stop
+rebind), AND the exception (_"Tests inject `deps.fetch` and bypass it"_).
+
+⭐ **Why the coverage was low, verified with a control:** `DurableWebhookDelivery` is referenced nowhere
+outside its own file and one schema comment — it is the documented forward path, **not wired in
+production**; the live sender is `webhook-worker.ts`. The control was grepping bootstrap for `tickOnce`,
+which finds three live wirings, so the empty result is real rather than a broken pattern. **Low branch
+coverage on an unwired path is expected, not a defect — so coverage-driven targeting needs "is this path
+wired?" as its FIRST question, not its last.** I asked it fourth, after three instruments.
+
+**Boundary: this audits the durable sender's own guarding and wiring. It does not re-audit the live
+`webhook-worker.ts` path**, whose SSRF layers are recorded as fixed in prior art and were not re-checked
+here.
