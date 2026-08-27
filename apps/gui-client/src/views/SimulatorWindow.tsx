@@ -6912,6 +6912,20 @@ export function SimulatorWindow(): JSX.Element {
     // Clear the prior tab's error overlay / loading bar / stalled badge so they don't
     // cover the fresh new tab (the new-tab page re-asserts its own loading state).
     resetPageChromeForSwitch();
+    // ⭐ Opening a tab is a NAVIGATION, so give it the same optimistic affordance
+    // typing an address and stepping back/forward already get. Without this the
+    // click cleared the loading bar and then showed the PRIOR page until the device
+    // came back — several seconds on a cold tab, with nothing on screen saying work
+    // was happening. The back/forward comment below records the identical finding:
+    // "gave zero loading feedback, so a click read as a dead button".
+    //
+    // ⚠️ Does not make it faster — a cold tab is a real page load on the device, and
+    // the actual fix is warm tabs. It makes the wait LEGIBLE, and arms the shared
+    // deadline so a device that never answers becomes an actionable Retry instead of
+    // a bar that spins forever.
+    currentNavTargetRef.current = '';
+    lastNavAtRef.current = Date.now();
+    setPageLoading(armLoadWatchdog(true));
     // Mark a switch so the ~2s poll's grace window suppresses a stale prior-tab url
     // landing on the fresh blank tab. liveUrl/liveTitle re-derive from the new active
     // tab automatically (the about:blank/'New Tab' record), so there's no manual
