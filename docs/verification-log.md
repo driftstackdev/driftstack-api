@@ -19931,8 +19931,25 @@ already there — the residual itself, and a control proving each homoglyph stri
 from a form that fires.
 
 **Mutation-proven as a live specification:** applying a confusables fold reddens exactly the residual arm
-and leaves **all eleven** others green, so the proposed fix is demonstrated to close the gap without
-regressing any existing coverage. Source restored byte-identical.
+and leaves **all eleven** others green, so the proposed fix regresses no existing coverage. Source
+restored byte-identical.
+
+> ⛔⛔ **CORRECTED — "demonstrated to close the gap" was WRONG, and this is the sharper finding.** The
+> fold I mutated with closed **one of the three** strings. `plaсe order` flips via `с→c`; both `у`
+> strings do NOT — `Bуy Now` folds to `Byy Now` under the canonical skeleton (Unicode maps U+0443 to
+> `y`, but the attack uses it in the `u` slot) and still misses. **The residual arm asserts three
+> strings, and vitest fails an arm on the FIRST failing expect, so it reddened on `plaсe order` and
+> never evaluated the other two. I read one red as three.** An arm that bundles N cases reports the
+> same red whether 1 or N fail — the all-or-nothing shape, inside the proof used to certify the fix.
+> A peer caught it independently. **Split the arm one string per assertion**, so partial coverage is
+> legible instead of collapsing to a boolean.
+>
+> ⭐ The threat model was also backwards in my write-up. I picked `Bуy Now` because U+0443 renders like
+> a Latin `y`, making it look like nonsense — a poor attack string by a visual-deception model.
+> **Nobody is looking: the agent matches text and dispatches.** The attacker is free to choose any
+> substitution that breaks the match, so the fold must generate every plausible skeleton for an
+> ambiguous character rather than the single canonical one. **"Confusable" imports a human observer who
+> is not present.**
 
 **Fourth time today the tree already had it** — after the `toBeGreaterThan(2000)` census floor, the
 existing non-vacuity arm in `public-route-has-a-consumer-invariant`, and a peer finding the same. The
