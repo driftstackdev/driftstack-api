@@ -122,4 +122,10 @@ describe('W586.C packages/sdk-python/src/driftstack/webhook_signature.py content
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });
+  // V-2010 — the empty-secret refusal. Pinned because the behavioural regression
+  // lives in the SDK's own pytest suite, and this file is the drift guard for the
+  // source: deleting the guard here would leave that suite as the only witness.
+  it("CRITICAL verify_webhook_signature refuses an empty secret before hashing — 'if not secret:' → return False. hmac.new accepts a zero-length key and returns a good digest, so without this an attacker who knows the body and timestamp verifies against secret=''.", () => {
+    expect(body).toMatch(/if not secret:\s*\n\s*return False/);
+  });
 });

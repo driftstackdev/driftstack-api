@@ -163,4 +163,10 @@ describe('W594.B packages/sdk-go/webhook_signature.go content parity', () => {
       /return parsedSignature\{timestampSeconds: ts, signatureHexes: sigs\}, true/,
     );
   });
+  // V-2010 — the empty-secret refusal. Pinned because the behavioural regression
+  // lives in the SDK's own go test suite, and this file is the drift guard for the
+  // source: deleting the guard here would leave that suite as the only witness.
+  it('CRITICAL VerifyWebhookSignature refuses an empty secret before hashing — `if secret == "" { return false }`. hmac.New accepts a zero-length key and returns a good digest, so without this an attacker who knows the body and timestamp verifies against an empty secret.', () => {
+    expect(body).toMatch(/if secret == "" \{\s*\n\s*return false\s*\n\s*\}/);
+  });
 });

@@ -340,4 +340,20 @@ describe('verifyWebhookSignature — the header may arrive as an array, and cryp
       'a crypto object without subtle is the same situation and must answer the same way',
     ).resolves.toBe(false);
   });
+  // V-2010 — an empty secret is the one input where all three SDKs answered
+  // differently and all three were wrong: Python and Go hashed with a zero-length
+  // key and VERIFIED an HMAC an attacker computes with no secret at all, and this
+  // one threw DataError out of subtle.importKey where the contract promises a
+  // boolean. The forged header below is built with the empty key on purpose — a
+  // signature made with SECRET would be refused for the ordinary reason and prove
+  // nothing about this branch.
+  it('CRITICAL an empty secret refuses a signature forged with the empty key, and returns false rather than throwing', async () => {
+    const body = JSON.stringify({ id: 'evt_1' });
+    const t = Math.floor(Date.now() / 1000);
+    const forged = createHmac('sha256', '').update(`${t}.${body}`).digest('hex');
+    await expect(
+      verifyWebhookSignature({ body, header: `t=${t},v1=${forged}`, secret: '' }),
+      'an attacker who knows the body and timestamp must not verify against an empty secret',
+    ).resolves.toBe(false);
+  });
 });

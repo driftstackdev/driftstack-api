@@ -55,6 +55,19 @@ export interface VerifySignatureInput {
 const DEFAULT_TOLERANCE_SEC = 300;
 
 export async function verifyWebhookSignature(input: VerifySignatureInput): Promise<boolean> {
+  // V-2010 — refuse before hashing when the signing secret is empty.
+  //
+  // The three SDK verifiers each document "returns false on any failure mode",
+  // and an empty secret is a failure mode. They reached three DIFFERENT wrong
+  // answers: Python and Go hash with a zero-length key (both accept an HMAC an
+  // attacker computes with no secret at all, since the message is the timestamp
+  // and the body they already have), and this one THREW `DataError: Zero-length
+  // key is not supported` out of `subtle.importKey` — safe against forgery by
+  // accident of WebCrypto, but an exception in the customer's webhook handler
+  // where the contract promises a boolean. The server-side sibling has carried
+  // this check since V-1465 for exactly the same reason.
+  if (input.secret.length === 0) return false;
+
   const ok = await verifySingleHeader(input.header, input);
   if (ok) return true;
   // V-359 — fall through to the prev header (rotation grace). When

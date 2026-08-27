@@ -144,6 +144,15 @@ def verify_webhook_signature(
     needed. When set, the verifier accepts EITHER ``header`` OR
     ``header_prev`` matching ``secret``.
     """
+    # V-2010 — refuse before hashing when the signing secret is empty. ``hmac.new``
+    # accepts a zero-length key and returns a perfectly good digest, so without
+    # this an attacker who knows the body and timestamp computes
+    # ``HMAC-SHA256(b"", f"{t}.{body}")`` and it verifies. Measured: that exact
+    # input returned ``True``. The docstring above promises ``False`` on any
+    # failure mode; an empty secret is one.
+    if not secret:
+        return False
+
     body_bytes = body.encode("utf-8") if isinstance(body, str) else bytes(body)
     now = now_seconds if now_seconds is not None else time.time()
 

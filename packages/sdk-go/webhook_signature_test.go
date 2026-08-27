@@ -323,3 +323,21 @@ func TestVerifyWebhookSignature_CaseInsensitivityDoesNotWeaken(t *testing.T) {
 		t.Fatal("an odd-length hex signature verified")
 	}
 }
+
+// V-2010 — hmac.New accepts a zero-length key and returns a perfectly good
+// digest, so an attacker who knows the body and timestamp could compute
+// HMAC-SHA256("", "<t>.<body>") and VerifyWebhookSignature returned true. The
+// forgery below is built with the EMPTY key on purpose: a signature made with a
+// real secret would be refused for the ordinary reason and prove nothing about
+// this branch. The doc comment promises "returns false on any failure mode".
+func TestVerifyWebhookSignature_EmptySecretRefusesEmptyKeyForgery(t *testing.T) {
+	body := []byte(`{"id":"evt_1"}`)
+	ts := time.Now().Unix()
+	tsStr := strconv.FormatInt(ts, 10)
+	mac := hmac.New(sha256.New, []byte(""))
+	mac.Write([]byte(tsStr + "." + string(body)))
+	forged := hex.EncodeToString(mac.Sum(nil))
+	if VerifyWebhookSignature(body, "t="+tsStr+",v1="+forged, "") {
+		t.Fatal("an empty secret verified an HMAC forged with the empty key")
+	}
+}

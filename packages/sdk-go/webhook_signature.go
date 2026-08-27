@@ -52,6 +52,16 @@ type VerifyWebhookOptions struct {
 // for a separately-supplied previous-secret signature; when set, the
 // verifier accepts either header matching `secret`.
 func VerifyWebhookSignature(body []byte, header string, secret string, opts ...VerifyWebhookOptions) bool {
+	// V-2010 — refuse before hashing when the signing secret is empty. Go's
+	// hmac.New accepts a zero-length key and returns a perfectly good digest, so
+	// without this an attacker who knows the body and timestamp computes
+	// HMAC-SHA256("", "<t>.<body>") and it verifies. Measured: that exact input
+	// returned true. The doc above promises "returns false on any failure mode";
+	// an empty secret is one.
+	if secret == "" {
+		return false
+	}
+
 	tolerance := DefaultWebhookTolerance
 	now := time.Now()
 	headerPrev := ""

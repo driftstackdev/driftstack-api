@@ -318,3 +318,19 @@ def test_case_insensitivity_does_not_weaken_verification() -> None:
     # Odd-length hex: refused, not crashed.
     odd = _sig_hex(body, secret, ts)[:-1]
     assert not verify_webhook_signature(body=body, header=f"t={ts},v1={odd}", secret=secret)
+
+
+def test_empty_secret_refuses_a_signature_forged_with_the_empty_key() -> None:
+    """V-2010 — ``hmac.new`` accepts a zero-length key and returns a good digest,
+    so an attacker who knows the body and timestamp could compute
+    ``HMAC-SHA256(b"", f"{t}.{body}")`` and it verified. The forgery below is
+    built with the EMPTY key on purpose: a signature made with a real secret
+    would be refused for the ordinary reason and prove nothing about this branch.
+    The docstring promises ``False`` on any failure mode; an empty secret is one.
+    """
+    body = b'{"id":"evt_1"}'
+    ts = int(time.time())
+    forged = _hmac.new(b"", f"{ts}.".encode() + body, hashlib.sha256).hexdigest()
+    assert not verify_webhook_signature(
+        body=body, header=f"t={ts},v1={forged}", secret=""
+    )

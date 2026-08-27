@@ -13219,3 +13219,68 @@ That is the safe direction — a database id becomes a key — and never the rev
 
 **The class has one member and it is fixed.** Recorded so the next person reading V-2007 does not have to
 re-derive whether it was an instance or a category.
+
+## V-2010 — the customer-facing webhook verifiers: two accept a forgery, the third throws (2026-08-27)
+
+2026-08-27. Ran the same technique that found V-2007 — a **post-condition on a historical fix** — against
+V-1465, which added an empty-secret refusal to `lib/stripe-signing.ts` because _"Node's HMAC accepts an
+EMPTY key and returns a perfectly good digest, so without this an attacker who knows the body and timestamp
+computes `HMAC-SHA256('', "<t>.<body>")` and it verifies."_ The question that generalises: **does every
+verifier in the repo refuse an empty key?**
+
+**Boundary: all 12 `createHmac` call sites in `apps/server/src` and `packages/*/src`.** Signing sites are
+not at risk (an empty key there is a config error, not a bypass); the verifiers are. Server-side, all three
+are guarded — `nowpayments-signing` always was (`!opts.secret`), `stripe-signing` since V-1465, and
+`oauth-client-state` since **V-1466**, whose own comment records that "the verifying half was missing it".
+
+⭐ **The verifier customers actually run is not in the server.** `lib/webhook-signing.ts:46` says so
+outright: it is the _"inverse of `verifyWebhookSignature` in @driftstack/sdk"_. So the question moves to the
+three SDKs — and that is where it had never been asked.
+
+### Measured, in all three, with controls
+
+The forged header is built with the **empty key on purpose**. A signature made with a real secret would be
+refused for the ordinary reason and would prove nothing about this branch.
+
+```
+Python  verify_webhook_signature(secret="")   ->  ACCEPTED  — the forgery verifies
+Go      VerifyWebhookSignature(…, "")         ->  ACCEPTED  — the forgery verifies
+TS      verifyWebhookSignature({secret: ''})  ->  THREW DataError: Zero-length key is not supported
+```
+
+Controls passed in every case: a correct signature under a real secret verified, and a signature under the
+wrong secret was refused — so the probes were discriminating, not vacuous.
+
+**Three SDKs, three answers, and all three contradict their own documented contract.** Python's docstring:
+_"Returns `False` on any failure mode — never raises."_ Go's doc comment, pinned by
+`webhook-signature-policy-cross-source-invariant`: _"Never panics; returns false on any failure mode."_ An
+empty secret is a failure mode. Python and Go neither raise nor return false — they **verify**. TypeScript
+does not verify, but only by accident of WebCrypto refusing a zero-length key, and it violates the same
+contract from the other side by throwing into the customer's webhook handler.
+
+### The fix
+
+An empty-secret refusal at the top of each public entry point, mirroring V-1465's server-side wording.
+Behavioural regressions added to each SDK's **own** suite — TS vitest, Python pytest, Go `go test` — because
+a content-parity pin freezes text while these assert the property. **Each mutation-proved on its real
+subject**: removing the guard reds exactly that SDK's new test and nothing else, and every source restores
+byte-identical from a path-keyed snapshot.
+
+One content-parity pin broke and was updated in the same commit — the TypeScript flow arm asserted the
+function opening immediately followed by its first statement, which the guard now precedes. Retraction
+paraphrased in the arm title, the new line quoted via `toContain` rather than extended into the `\s*` chain,
+which is the shape that rots. The Python and Go drift guards gained a matching assertion so deleting the
+guard cannot leave the SDK's own suite as the only witness. `it(` counts: TS parity unchanged at 24, Python
+6→7, Go 11→12 — each exactly the arm added. `tsc -p tsconfig.test.json` clean.
+
+**Post-condition:** re-probed all three after the fix — Python `False`, Go `false`, TS `false` (no longer
+throwing), with the real-secret control still accepted in each. Full affected surface green: 13 vitest
+files / 149 tests, `go vet` + `go test ./...` ok, and the Python suite 401 passed / 9 skipped.
+
+⛔ **Reachability, stated rather than implied.** This needs a customer who calls the verifier with an empty
+secret — an unset or blank `DRIFTSTACK_WEBHOOK_SECRET`, a config default, a `.get()` that returned empty.
+It is not remotely triggerable against a correctly configured integration. **That is exactly the situation
+V-1465 judged worth fixing server-side**, and the reciprocal comparison between sibling verifiers has now
+paid three times in two days: V-1465 found it by comparing Stripe against NOWPayments, V-2004 was the
+reciprocal of that comparison, and this is the same question asked one layer out — at the boundary the
+customer owns.

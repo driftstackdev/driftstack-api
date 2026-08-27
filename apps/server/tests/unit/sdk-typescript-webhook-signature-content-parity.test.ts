@@ -106,9 +106,17 @@ describe('W424.B packages/sdk-typescript/src/webhook-signature.ts content parity
     expect(body).toMatch(/const DEFAULT_TOLERANCE_SEC = 300;/);
   });
 
-  it('CRITICAL verifyWebhookSignature flow — 3-step short-circuit: (1) try `header` via verifySingleHeader → return true on match; (2) if NOT matched AND `headerPrev !== undefined` → try `headerPrev`; (3) else return false. The `!== undefined` check (NOT `headerPrev ?? falsy`) is load-bearing — customers passing `headerPrev: ""` should still hit the fallback.', () => {
+  it('CRITICAL verifyWebhookSignature flow — an empty-secret refusal FIRST (V-2010), then a 3-step short-circuit: (1) try `header` via verifySingleHeader → return true on match; (2) if NOT matched AND `headerPrev !== undefined` → try `headerPrev`; (3) else return false. The `!== undefined` check (NOT `headerPrev ?? falsy`) is load-bearing — customers passing `headerPrev: ""` should still hit the fallback.', () => {
     expect(body).toMatch(
-      /export async function verifyWebhookSignature\(input: VerifySignatureInput\): Promise<boolean> \{\s*const ok = await verifySingleHeader\(input\.header, input\);\s*if \(ok\) return true;/,
+      /export async function verifyWebhookSignature\(input: VerifySignatureInput\): Promise<boolean> \{/,
+    );
+    // V-2010 — pinned on its own line rather than folded into the flow regex: an
+    // empty secret made Python and Go verify an attacker-computed HMAC, and made
+    // this one throw out of subtle.importKey. Kept as a separate assertion so the
+    // short-circuit chain below stays legible.
+    expect(body).toContain('if (input.secret.length === 0) return false;');
+    expect(body).toMatch(
+      /const ok = await verifySingleHeader\(input\.header, input\);\s*if \(ok\) return true;/,
     );
     expect(body).toMatch(
       /\/\/ V-359 — fall through to the prev header \(rotation grace\)\. When\s*\/\/ unset this is a no-op; when set the customer accepts either the\s*\/\/ new or the old secret's HMAC during the 24h grace window\./,
