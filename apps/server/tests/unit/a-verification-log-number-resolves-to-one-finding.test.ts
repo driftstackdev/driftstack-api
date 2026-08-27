@@ -135,15 +135,35 @@ describe('V-858 a verification-log number resolves to one finding', () => {
     ).toBeGreaterThan(500_000);
     expect(canonicalHeadings().length, 'canonical `## V-<n> ` headings').toBeGreaterThan(700);
 
-    // Known positives, one per half: V-001 exists only in the first archive, V-1201 only in the
-    // second, V-1500 only in the live file — so a discovery that dropped any half fails here
-    // rather than passing quietly on a smaller log than it claims to read.
+    // Known positives, one per archive: V-001 in the first, V-1201 in the second, V-1500 in the
+    // third — so a discovery that dropped any archive fails here rather than passing quietly on a
+    // smaller log than it claims to read.
+    //
+    // V-1985 — V-1500 was the LIVE-file probe until the third split moved it into an archive. A
+    // hardcoded live anchor rots at every split, and the rot is silent: the anchor keeps matching
+    // the ASSEMBLED body from its new home, so the arm goes on passing while no longer probing the
+    // live file at all. The live half is therefore probed structurally instead — it must contribute
+    // headings that appear in NO archive, which stays true across every future split.
     const whole = wholeLog();
     for (const anchor of ['## V-001 ', '## V-1201 ', '## V-1500 ']) {
       expect(whole.includes(anchor), `${anchor.trim()} is missing from the assembled log`).toBe(
         true,
       );
     }
+
+    const numbersIn = (text: string): Set<number> =>
+      new Set(
+        [...text.matchAll(/^## V-(\d+) /gm)]
+          .map((m) => Number(m[1]))
+          .filter((n) => !Number.isNaN(n)),
+      );
+    const archived = new Set<number>();
+    for (const a of archives()) for (const n of numbersIn(readFileSync(a, 'utf8'))) archived.add(n);
+    const liveOnly = [...numbersIn(readFileSync(LOG, 'utf8'))].filter((n) => !archived.has(n));
+    expect(
+      liveOnly.length,
+      'the LIVE file contributes headings found in no archive — without this the arm probes only the frozen halves',
+    ).toBeGreaterThan(0);
   });
 
   it('CRITICAL every number carried by more than one heading is declared with a reason. A V-number is how source and test files cite a finding; reusing one silently makes those citations unresolvable, and the log is append-only so it cannot be fixed by renumbering later.', () => {

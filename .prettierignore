@@ -32,6 +32,7 @@ apps/status-site/dist/
 # lockfiles above: reformatting produces a large meaningless diff on a file nobody should touch.
 docs/verification-log-archive-through-v1200.md
 docs/verification-log-archive-through-v1499.md
+docs/verification-log-archive-through-v1671.md
 #
 # ⛔ Each archive is listed LITERALLY, and a glob here would be a silent mistake.
 # `no-formatted-markdown-outgrows-the-format-hook` keeps this list honest by reading
