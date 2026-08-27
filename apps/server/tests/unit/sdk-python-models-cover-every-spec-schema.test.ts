@@ -22,7 +22,7 @@
 //
 // Direction matters. schema -> class is asserted; class -> schema is NOT,
 // because datamodel-codegen legitimately emits inline models for per-path
-// request and response bodies — 206 classes against 81 component schemas
+// request and response bodies — 209 classes against 83 component schemas
 // today. Asserting the reverse would fail on correct output.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -39,7 +39,7 @@ const MODELS = resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/_generated
  * Compare on alphanumerics only, lowercased.
  *
  * datamodel-codegen rewrites a schema name into a Python class name, dropping
- * separators a JSON key may carry. Every one of the 81 current schemas matches
+ * separators a JSON key may carry. Every one of the 83 current schemas matches
  * its class under this normalisation, so it is loose enough to avoid false
  * positives and tight enough that a genuinely absent model still shows up.
  */

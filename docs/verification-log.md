@@ -16347,3 +16347,38 @@ no issues in 43 files, pytest still 365 passed / 9 skipped, the file's test-func
 9 against HEAD, and the harness that drives it re-run to 2 passed. Boundary: this touches a docstring,
 and nothing else in the tree reads that text — the one vitest file referencing it invokes pytest rather
 than pinning its prose.
+
+## V-1870 — a fourth drifted measurement, and why the sweep for them stops here
+
+2026-08-26. No defect. Two numbers refreshed, and an honest boundary on a class I cannot close today.
+
+⛔ **`sdk-python-models-cover-every-spec-schema` carried two stale figures**, and the second appears in
+the sentence that explains the guard's own direction: "206 classes against 81 component schemas today",
+and "Every one of the 81 current schemas matches". Counted with the guard's OWN extractors rather than
+by hand — `/^class (\w+)\(/gm` for classes and `Object.keys(components.schemas)` for the spec, because
+a hand-rolled count answers a slightly different question — the figures are **209 and 83**. Refreshed
+both; the guard passes, `it(` count unchanged, and the post-condition is that zero stale occurrences
+remain rather than that two edits were applied.
+
+⭐ The claim these numbers support is untouched: the guard asserts schema → class and deliberately not
+the reverse, because the generator emits inline models for per-path bodies. More classes than schemas
+is the expected shape, and it still holds at 209 to 83.
+
+⛔⛔ **THE SWEEP FOR THIS CLASS FAILED FIRST, IN THE USUAL WAY.** My detector for "headers carrying a
+measured number" returned **0** across the whole test tree. 178 files contain the word "Measured". The
+regex required the word and a number on ONE line with no period between, and these claims WRAP — the
+known positive reads "Measured on\n// ... 18 offenders". Anchoring to a line when the content spans
+lines is the same error as every other false zero today.
+
+⚠️ **AND THE FIXED SWEEP IS NOT A FINDING, WHICH IS WHY THIS ENTRY STOPS HERE.** Joining comment blocks
+before matching gives 128 headers carrying a present-tense claim with a number. Reading a sample shows
+most are ordinary prose that happens to contain a numeral — "a row a worker currently has claimed" is
+not a measurement. Separating the real ones needs each header read against its own derivation, and 128
+of those is not a pass I can do carefully in one sitting. **Recorded as a bounded known-unknown rather
+than reported as clean**, because the difference between "I swept it" and "I stopped" is exactly what a
+future reader needs from this line.
+
+⭐ What IS established: four instances found and fixed by hand today — the eleven-role-gate census, the
+profile-limit placeholder, the Python live-contract totals, and these two. All four share one tell,
+which is cheap to apply without any sweep: **a header that states a count of something OUTSIDE the file
+it sits in.** A file can keep its own description true; it cannot keep a claim about its neighbours true.
