@@ -17945,3 +17945,63 @@ build a guard: the only available anchor — "scopes that `/v1/admin/*` routes g
 route gate) and **wrongly including `read`**. A guard on a non-derivable anchor errs in both
 directions, so this is a comment at the const and a line here, not a test. Bounded by layer 1:
 a forgotten scope is a minting gap, not an alias escalation.
+
+## V-1912 — six fail-closed sites, mutation-tested against the whole estate: three are witnessed by nothing (2026-08-27)
+
+`middleware/rate-limit.ts` refuses through one helper, `rejectEffectiveOwner`, at six sites.
+V-1909 left five of them unproven because my mutation there fabricated an `OwnerAuthority`,
+which threw at runtime and read like a catch. The fix was to stop using one blanket mutation:
+**each site has a different return type**, which is why "return a tier" produced 12 tsc errors.
+Six bespoke, type-correct, runtime-valid mutations instead — two `return`-a-tier, two `throw`
+(both catch blocks), two line deletions — each typechecked _before_ running anything.
+
+| site                    | mutation              | targeted (22 files) | full vitest (3228)         | full e2e (233) |
+| ----------------------- | --------------------- | ------------------- | -------------------------- | -------------- |
+| 304 exceeded            | delete reject         | **3 failed**        | —                          | —              |
+| 250 authority lookup    | `throw error`         | **1 failed**        | —                          | —              |
+| 279 fallback error      | `throw fallbackErr`   | **1 failed**        | —                          | —              |
+| 215 no actor receipt    | return `'enterprise'` | 0                   | **32109 passed, 0 failed** | **233 passed** |
+| 234 unauthorized owner  | return `'enterprise'` | 0                   | **32109 passed, 0 failed** | **233 passed** |
+| 318 invocation mismatch | delete reject         | 0                   | **32109 passed, 0 failed** | **233 passed** |
+
+**Boundary:** these are mutation results, not coverage. A zero means _no test fails when the
+refusal is removed_ — it does not distinguish "never executed" from "executed but unasserted",
+and I did not run a coverage instrument to separate them. The two runs that matter span the
+whole estate: all 3228 vitest files and all 233 Playwright tests. Site 304 is the positive
+control and reproduced its 3 catchers on demand, so a zero here is the instrument working.
+
+### The three zeros are not the same kind of zero
+
+- **318 is structurally unreachable.** `consumeEffectiveOwnerRateLimit` records the invocation
+  with `(bucketKey, cost)` and then calls `app.rateLimit(bucketKey, cost)` — the _same two
+  variables_. Line 72 is the only `.set`, so the mismatch it checks cannot occur through the
+  sole writer. Dead branch, not an untested one.
+- **215 and 234 are live wiring guards.** The actor receipt is written only on the actor path
+  (line 500, after `result.allowed`); when an owner invocation is pending the decorator takes
+  the owner branch and never reaches it. So the receipt must come from a _separate earlier_
+  `rateLimit` call with the same `(bucketKey, cost)`. A route that omits it, or pairs a
+  different bucket/cost, is refused by 215 — and by 234 if it resolves a record the caller
+  holds no membership in. Both stand behind **40 call sites** across four route files, and the
+  effective owner is selected by a request header. Nothing in the estate witnesses either.
+
+I did **not** write guards for them. Both route authorization and the limiter read the same
+`request.account.teams`, so isolating 234 needs repo-level mocking that would prove the mock
+rather than the predicate; a rushed guard is worth less than an accurate boundary. Recorded as
+open.
+
+### One-token fix: the only mixed-convention site in the repo
+
+Sweeping the _shape_ rather than the token — a bare call to a `never`-returning helper — over
+all 15 such helpers at HEAD: the ten route `stub`s and atlas-priority's `reject` are passed or
+called _as_ the handler (no continuation possible); `mapAuthFlowError` is uniformly bare across
+8 terminal catch blocks. `rejectEffectiveOwner` was the **only** helper with a mixed
+convention: five `return rejectEffectiveOwner(...)`, one bare call at 318.
+
+It is correct today — the body throws. But its refusal was the only one resting on that, rather
+than on control flow. Verified empirically rather than assumed: tsc rejects a `never`-annotated
+function with a reachable end point (`TS2534`), yet raises **nothing** for the bare-call-then-
+continue shape at the call site. So a throw→`reply.code(429).send()` refactor that also drops
+the annotation leaves 318 falling through to meter the request while the other five still
+return — a silent, partial regression. Added `return`; post-condition is that **zero** bare
+calls to the helper remain and all six are now uniform. Inert at runtime, which the suite
+confirms twice over: it is green both with that line deleted entirely and with the `return`.

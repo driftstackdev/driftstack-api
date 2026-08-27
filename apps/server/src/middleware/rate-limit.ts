@@ -315,7 +315,7 @@ function rateLimitPlugin(
       const ownerInvocation = effectiveOwnerInvocations.get(request);
       if (ownerInvocation !== undefined) {
         if (ownerInvocation.bucketKey !== bucketKey || ownerInvocation.cost !== cost) {
-          rejectEffectiveOwner(reply, 60);
+          return rejectEffectiveOwner(reply, 60);
         }
         ownerInvocation.resolvedTier = await consumeEffectiveOwner(
           request,
