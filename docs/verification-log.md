@@ -20942,3 +20942,66 @@ script aborted on its own assertion (`n==2` when the async spelling differed) ra
 mutating nothing — the run that followed it was correctly discarded as evidence.
 
 Post-conditions: TS **359 tests** (was 352) and `tsc` clean; Python **384 passed, 9 skipped** (was 377) with ruff check, ruff format and mypy clean; Go `vet`, `go test -count=1` and `gofmt` all clean.
+
+## V-1979 — 38 SDK methods are tested in TypeScript only, and four in no language at all (2026-08-27)
+
+V-1978 closed the three methods no SDK tested. Widening the same measurement — for every public TS
+method that Python **and** Go also implement, is it referenced by each language's test corpus? —
+gives the shape of what is left:
+
+**38 methods are implemented in Python and Go, covered in TypeScript, and untested in at least one of
+the other two.** The detector was spot-checked against direct greps rather than trusted: for
+`refresh`, `signup`, `mfa_step_up`, `mfa_challenge`, `transfer`, `set_byok_anthropic_key` the Python
+corpus has **zero mentions at all**, not merely zero call sites.
+
+The distribution is lopsided and worth naming: **Python's `test_resources_auth.py` covers 3 of ~15
+auth methods** — only the `cli-authorize` trio — while Go's `auth_test.go` covers 9. So "the SDKs are
+at parity" (V-1977) and "the SDKs are equally tested" are very different claims.
+
+⭐ **Closed here: the four untested in BOTH Python and Go** — the intersection of security-critical
+and doubly-uncovered.
+
+| method              | route                         |
+| ------------------- | ----------------------------- |
+| `auth.verifyEmail`  | `POST /v1/auth/verify-email`  |
+| `auth.refresh`      | `POST /v1/auth/refresh`       |
+| `auth.mfaChallenge` | `POST /v1/auth/mfa/challenge` |
+| `auth.mfaStepUp`    | `POST /v1/auth/mfa/step-up`   |
+
+Audited before writing tests, as with V-1978: **all four are correct in all three languages**, same
+verb and path throughout. Again a coverage gap, not a live defect.
+
+⭐ **The load-bearing arm is the MFA factor split.** `code` and `recovery_code` are alternatives —
+`omitempty` in Go's `MfaChallengeRequest`/`MfaStepUpRequest` — so a challenge answered with a TOTP
+code must put **no** `recovery_code` on the wire, and the recovery answer must carry no `code`.
+Sending an empty string beside a real factor is a different request than the caller made. Both
+directions are pinned, in both languages.
+
+The other arms pin what a caller cannot recover if it is dropped: `refresh` must return the **rotated**
+token (returning the old one silently pins a caller to an expiring session) with a decodable
+`expires_at`; `verifyEmail` mints the web session; `mfaStepUp` returns `mfa_satisfied_at`, which is how
+a caller knows how long the step-up lasts.
+
+⭐ **Mutation-proved in both languages, with HEAD blind to every mutation.**
+
+- Go — removing `omitempty` from `MfaChallengeRequest.RecoveryCode` makes the key appear on a
+  code-only request and reddens the new arm; **HEAD's whole Go suite passes.**
+- Python — the body is forwarded verbatim there, so what these arms actually pin is the **route**, and
+  that is what was mutated: `step-up → challenge` and `refresh → login` redden 4 arms, while **the
+  entire Python suite at HEAD passes: 384 tests.** Naming what an assertion really pins matters — the
+  Go arm pins serialisation, the Python one pins routing, and mutating the wrong thing would have
+  "proved" nothing.
+
+Sources restored byte-identical, verified by empty `git diff`. Post-conditions: Python **391 passed,
+9 skipped** (was 384) with ruff and mypy clean; Go `vet`, `go test -count=1`, `gofmt` clean.
+
+⛔ **Still open — the remaining 34**, recorded so the next pass has the list rather than the count:
+`account.{clearAvatar, listWebSessions, rateLimits, revokeWebSession, updateMe, uploadAvatar}` (go),
+`account.{clearByokAnthropicKey, getByokAnthropicKey, setByokAnthropicKey, testByokAnthropicKey}` (py),
+`account.{getBundledLlmSettings, getBundledLlmStatus, updateBundledLlmSettings}` (py+go),
+`agent-sessions.{resume, sendInputEvent, setMode}` (py+go),
+`api-keys.revoke` (go),
+`auth.{confirmPasswordReset, consumeMagicLink, logout, requestMagicLink, requestPasswordReset, signup}` (py),
+`profiles.{import, launch, listTrash, purge, transfer}` (py+go), `profiles.trim` (py),
+`sessions.extract` (py+go), `sessions.{interact, wait}` (go),
+`team.{listInvites, listMembers}` (go).

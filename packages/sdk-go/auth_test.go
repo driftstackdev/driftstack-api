@@ -315,3 +315,157 @@ func TestAuth_CliAuthorizeBind(t *testing.T) {
 		t.Errorf("bind response: %+v", out)
 	}
 }
+
+// VerifyEmail, Refresh, MfaChallenge and MfaStepUp were the four auth methods
+// with no test in EITHER the Python or the Go SDK (V-1979). Every other method
+// on this resource already has one here.
+func TestAuth_VerifyEmail(t *testing.T) {
+	t.Parallel()
+	var path string
+	var body map[string]any
+	expiresAt := time.Now().Add(7 * 24 * time.Hour).UTC().Truncate(time.Second)
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.Header().Set("content-type", "application/json")
+		_ = json.NewEncoder(w).Encode(VerifyEmailResponse{
+			Session: WebSession{Token: "ds_web_verified", ExpiresAt: expiresAt, AccountID: "acc_1"},
+		})
+	})
+	got, err := client.Auth.VerifyEmail(context.Background(), &VerifyEmailRequest{Token: "tok_1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != "/v1/auth/verify-email" {
+		t.Errorf("path=%q", path)
+	}
+	if body["token"] != "tok_1" {
+		t.Errorf("body=%v", body)
+	}
+	// Verifying an email mints a web session; dropping it would leave a caller
+	// authenticated on the server and holding nothing.
+	if got.Session.Token != "ds_web_verified" || got.Session.AccountID != "acc_1" {
+		t.Errorf("session=%+v", got.Session)
+	}
+}
+
+func TestAuth_Refresh(t *testing.T) {
+	t.Parallel()
+	var path string
+	var body map[string]any
+	expiresAt := time.Now().Add(7 * 24 * time.Hour).UTC().Truncate(time.Second)
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.Header().Set("content-type", "application/json")
+		_ = json.NewEncoder(w).Encode(RefreshSessionResponse{
+			Session: WebSession{Token: "ds_web_rotated", ExpiresAt: expiresAt, AccountID: "acc_1"},
+		})
+	})
+	got, err := client.Auth.Refresh(context.Background(), &RefreshSessionRequest{Token: "ds_web_old"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != "/v1/auth/refresh" {
+		t.Errorf("path=%q", path)
+	}
+	if body["token"] != "ds_web_old" {
+		t.Errorf("body=%v", body)
+	}
+	// The whole point of a refresh is the NEW token. Returning the old one, or
+	// dropping the field, silently pins a caller to an expiring session.
+	if got.Session.Token != "ds_web_rotated" {
+		t.Errorf("token=%q, want the rotated one", got.Session.Token)
+	}
+	if got.Session.ExpiresAt.IsZero() {
+		t.Error("expires_at did not decode — a caller cannot schedule the next refresh")
+	}
+}
+
+// CRITICAL: `code` and `recovery_code` are both omitempty, so a challenge
+// answered with a TOTP code must put NO recovery_code on the wire — and vice
+// versa. Sending `recovery_code: ""` beside a real code is a different request
+// than the one the caller made.
+func TestAuth_MfaChallenge_SendsOnlyTheFactorSupplied(t *testing.T) {
+	t.Parallel()
+	var body map[string]any
+	var path string
+	expiresAt := time.Now().Add(7 * 24 * time.Hour).UTC().Truncate(time.Second)
+	srv := func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		body = map[string]any{}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.Header().Set("content-type", "application/json")
+		_ = json.NewEncoder(w).Encode(MfaChallengeResponse{
+			Session: WebSession{Token: "ds_web_mfa", ExpiresAt: expiresAt, AccountID: "acc_1"},
+			Via:     "totp",
+		})
+	}
+	_, client := newServer(t, srv)
+
+	got, err := client.Auth.MfaChallenge(context.Background(), &MfaChallengeRequest{
+		ChallengeToken: "chal_1",
+		Code:           "123456",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != "/v1/auth/mfa/challenge" {
+		t.Errorf("path=%q", path)
+	}
+	if _, present := body["recovery_code"]; present {
+		t.Errorf("a code-only challenge must not carry recovery_code; body=%v", body)
+	}
+	if body["challenge_token"] != "chal_1" || body["code"] != "123456" {
+		t.Errorf("body=%v", body)
+	}
+	if got.Via != "totp" || got.Session.Token != "ds_web_mfa" {
+		t.Errorf("via=%q session=%+v", got.Via, got.Session)
+	}
+
+	// The mirror: a recovery-code answer must not carry `code`.
+	if _, err := client.Auth.MfaChallenge(context.Background(), &MfaChallengeRequest{
+		ChallengeToken: "chal_1",
+		RecoveryCode:   "rec-aaaa-bbbb",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, present := body["code"]; present {
+		t.Errorf("a recovery-only challenge must not carry code; body=%v", body)
+	}
+	if body["recovery_code"] != "rec-aaaa-bbbb" {
+		t.Errorf("body=%v", body)
+	}
+}
+
+func TestAuth_MfaStepUp_SendsOnlyTheFactorSupplied(t *testing.T) {
+	t.Parallel()
+	var body map[string]any
+	var path string
+	satisfied := time.Now().UTC().Truncate(time.Second)
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		body = map[string]any{}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.Header().Set("content-type", "application/json")
+		_ = json.NewEncoder(w).Encode(MfaStepUpResponse{Via: "totp", MfaSatisfiedAt: satisfied})
+	})
+	got, err := client.Auth.MfaStepUp(context.Background(), &MfaStepUpRequest{Code: "123456"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != "/v1/auth/mfa/step-up" {
+		t.Errorf("path=%q", path)
+	}
+	if _, present := body["recovery_code"]; present {
+		t.Errorf("a code-only step-up must not carry recovery_code; body=%v", body)
+	}
+	// mfa_satisfied_at is what a caller uses to know how long the step-up lasts;
+	// a zero value would silently read as "never satisfied".
+	if got.MfaSatisfiedAt.IsZero() {
+		t.Error("mfa_satisfied_at did not decode")
+	}
+	if got.Via != "totp" {
+		t.Errorf("via=%q", got.Via)
+	}
+}

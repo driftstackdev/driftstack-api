@@ -5,6 +5,8 @@ Mirrors the V-466 TS / V-466.go wire-shape coverage on the Python SDK.
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 import respx
@@ -182,3 +184,120 @@ async def test_async_audit_log_export() -> None:
         async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
             result = await client.audit_log.export()
         assert result["row_count"] == 0
+
+
+# ── verify_email / refresh / mfa_challenge / mfa_step_up were the four auth
+# ── methods with no test in EITHER the Python or the Go SDK (V-1979). Before
+# ── this, the Python auth suite covered only the three cli-authorize methods.
+
+SESSION: dict = {
+    "token": "ds_web_abcdefghijklmnopqrstuvwxyz",
+    "expires_at": "2026-05-16T18:00:00Z",
+    "account_id": "acc_00000000-0000-4000-8000-000000000001",
+}
+
+
+def test_sync_verify_email_posts_the_token_and_returns_a_session() -> None:
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/auth/verify-email").mock(
+            return_value=httpx.Response(200, json={"session": SESSION})
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            out = client.auth.verify_email({"token": "tok_1"})
+        assert route.called
+        assert json.loads(route.calls[0].request.content) == {"token": "tok_1"}
+        # Verifying an email mints a web session; dropping it would leave the
+        # caller authenticated on the server and holding nothing.
+        assert out["session"]["token"] == SESSION["token"]
+
+
+def test_sync_refresh_posts_the_old_token_and_returns_the_rotated_one() -> None:
+    rotated = {**SESSION, "token": "ds_web_rotatedrotatedrotatedrotated"}
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/auth/refresh").mock(
+            return_value=httpx.Response(200, json={"session": rotated})
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            out = client.auth.refresh({"token": "ds_web_old"})
+        assert route.called
+        assert json.loads(route.calls[0].request.content) == {"token": "ds_web_old"}
+        # The whole point of a refresh is the NEW token. Returning the old one,
+        # or dropping the field, silently pins a caller to an expiring session.
+        assert out["session"]["token"] == rotated["token"]
+        assert out["session"]["expires_at"] == SESSION["expires_at"]
+
+
+def test_sync_mfa_challenge_forwards_exactly_the_factor_supplied() -> None:
+    """`code` and `recovery_code` are alternatives. A challenge answered with a
+    TOTP code must put NO recovery_code on the wire — sending an empty one beside
+    a real code is a different request than the caller made."""
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/auth/mfa/challenge").mock(
+            return_value=httpx.Response(200, json={"session": SESSION, "via": "totp"})
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            out = client.auth.mfa_challenge({"challenge_token": "chal_1", "code": "123456"})
+        sent = json.loads(route.calls[0].request.content)
+        assert sent == {"challenge_token": "chal_1", "code": "123456"}
+        assert "recovery_code" not in sent
+        assert out["via"] == "totp"
+
+
+def test_sync_mfa_challenge_recovery_path_carries_no_code() -> None:
+    """The mirror of the arm above — the recovery answer must not carry `code`."""
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/auth/mfa/challenge").mock(
+            return_value=httpx.Response(200, json={"session": SESSION, "via": "recovery"})
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            out = client.auth.mfa_challenge(
+                {"challenge_token": "chal_1", "recovery_code": "rec-aaaa-bbbb"}
+            )
+        sent = json.loads(route.calls[0].request.content)
+        assert sent == {"challenge_token": "chal_1", "recovery_code": "rec-aaaa-bbbb"}
+        assert "code" not in sent
+        assert out["via"] == "recovery"
+
+
+def test_sync_mfa_step_up_posts_to_the_step_up_route() -> None:
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/auth/mfa/step-up").mock(
+            return_value=httpx.Response(
+                200, json={"via": "totp", "mfa_satisfied_at": "2026-05-16T18:00:00Z"}
+            )
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            out = client.auth.mfa_step_up({"code": "123456"})
+        assert route.called
+        assert json.loads(route.calls[0].request.content) == {"code": "123456"}
+        # mfa_satisfied_at is how a caller knows how long the step-up lasts.
+        assert out["mfa_satisfied_at"] == "2026-05-16T18:00:00Z"
+
+
+@pytest.mark.asyncio
+async def test_async_refresh_posts_to_the_refresh_route() -> None:
+    """Each async method is a separate implementation and therefore a separate
+    chance to point at the wrong route."""
+    rotated = {**SESSION, "token": "ds_web_rotatedrotatedrotatedrotated"}
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/auth/refresh").mock(
+            return_value=httpx.Response(200, json={"session": rotated})
+        )
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            out = await client.auth.refresh({"token": "ds_web_old"})
+        assert route.called
+        assert out["session"]["token"] == rotated["token"]
+
+
+@pytest.mark.asyncio
+async def test_async_mfa_step_up_posts_to_the_step_up_route() -> None:
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/auth/mfa/step-up").mock(
+            return_value=httpx.Response(
+                200, json={"via": "totp", "mfa_satisfied_at": "2026-05-16T18:00:00Z"}
+            )
+        )
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            out = await client.auth.mfa_step_up({"code": "123456"})
+        assert route.called
+        assert out["via"] == "totp"
