@@ -19591,3 +19591,37 @@ miss because it restates the body in a different style.
 
 Corrected all three, stamped the note with the code-side re-verification, and left the ops half open:
 whether the scrape token is set in prod is an owner/ops call and outside what I verify from here.
+
+## V-1945 — swept every line citation in my notes; the instrument was wrong first (2026-08-27)
+
+V-1944 found three stale citations in one note, which is a population question, not a one-file fix.
+Swept all 854 `file.ts:N` citations across 1279 notes against the tree. **Boundary: `.ts/.tsx/.mjs`
+against driftstack-api only. The 564 `.cpp` citations belong to webkit-driftstack and are unchecked.**
+
+**The first detector was wrong, and its control could not see the bug.** The citation regex excluded
+`.` from the filename class, so every multi-dot name — which in this repo means every `*.test.ts` and
+`*.spec.ts` — was captured from its last dot onward: `a-thing.test.ts` became `test.ts`,
+`agent-decomposer-claude.ts` became `decomposer-claude.ts`. Those resolve to nothing, so the sweep
+reported 85 missing files. **The control passed because I built it from `app.ts`, which has one dot.**
+A control drawn from the convenient case tests the detector against the shape that was never at risk;
+re-proving it on `a-thing.test.ts` failed immediately. Corrected, the 85 fell to 16 — 69 were mine.
+
+**Of the 8 distinct survivors, 6 are naming shorthand or pre-monorepo paths whose subject is alive**
+(`sessions-livekit-token.ts` for `routes/agent-sessions-livekit-token.ts`, `control-plane/src/` for
+`packages/`). **Only 2 point at subjects that were retired**, and those are the ones that mislead:
+`routes/saved-proxies.ts` (retired in `fc8fb3de2`; `openapi.ts` now records the /v1/proxies surface as
+intentionally absent) and `pages/sessions.astro` (deleted in `ba1a9d270` with the whole operational
+surface). The second is the worse shape — its note ends "don't wire, don't remove, don't
+re-investigate," a verdict that was right about an implementation that no longer exists and that would
+tell whoever rebuilds that surface its dead anchors were deliberate. Both corrected in place.
+
+**What this sweep does NOT establish, and the number invites the opposite reading:** 638 citations came
+back in-range, and in-range is not correct. The citation that started V-1944 was in range — `app.ts:906`
+resolves today to `'x-ratelimit-bucket'`. This bounds only whether a coordinate resolves, never whether
+it still means what the note says it means. The semantic half stays unmeasured, and a clean census here
+is not evidence about it.
+
+Also checked, since the search surfaced it: stale compiled `dist/routes/saved-proxies.js` for the
+retired route is local residue only — dist is gitignored and untracked, that build is from Jun 10, and
+the sole reference in the compiled entrypoint is a comment. Says nothing about the prod host, which I
+cannot see from here.
