@@ -43,6 +43,26 @@ const liveActions = new Set(AccountAuditActionSchema.options);
 const actionRe = /["']action["']\s*:\s*["']([a-z][a-z0-9_]+\.[a-z][a-z0-9_]+)["']/g;
 
 describe('W277.B workspace-wide audit-action sweep', () => {
+  // ⛔ walk() returns [] for a MISSING root, and [] is also the pass condition for
+  // every emptiness assertion below — so a renamed or moved root turns this whole
+  // sweep silent and green in the same instant, reporting the corpus clean because
+  // it read none of it.
+  //
+  // ⚠️ Asserted in its own arm rather than at the walk. `allFiles` is built at MODULE
+  // scope, where a throw takes the entire file out of collection instead of failing a
+  // test; and the guard inside walk() covers every recursive descent, so making THAT
+  // throw would kill the walk on a vanishing subdirectory or a broken symlink — a
+  // different failure from the one being caught.
+  it('non-vacuous: the sweep read a real corpus, so an empty result is a finding and not a clean bill', () => {
+    for (const dir of targets) {
+      expect(existsSync(dir), `walk root missing — this sweep read nothing: ${dir}`).toBe(true);
+    }
+    expect(
+      allFiles.length,
+      'the walk found no files; an empty sweep is not a clean one',
+    ).toBeGreaterThan(5);
+  });
+
   it('every cited "action": "<name>" maps to AccountAuditActionSchema', () => {
     const offenders: { file: string; action: string }[] = [];
     for (const f of allFiles) {
