@@ -30,6 +30,18 @@ function read(p: string): string {
 const pages = walk(PAGES).filter((f) => /\.astro$/.test(f));
 
 describe('W287.B customer-dashboard page-title baseline', () => {
+  it('CRITICAL the walk found the pages — every assertion below is over `pages`', () => {
+    // `walk` returns [] for a missing directory, so a moved or renamed root makes
+    // every arm in this file pass over an empty list: zero pages have zero
+    // offenders. The named member is the part that cannot be satisfied by an
+    // empty walk, and unlike a count it does not churn as pages are added.
+    expect(pages.length).toBeGreaterThan(12);
+    expect(
+      pages.some((f) => f.endsWith('billing.astro')),
+      'the dashboard pages root produced nothing — the walk did not reach it',
+    ).toBe(true);
+  });
+
   it('every page passes a non-empty title prop to DashboardLayout (string literal OR dynamic expression)', () => {
     const offenders: string[] = [];
     for (const f of pages) {

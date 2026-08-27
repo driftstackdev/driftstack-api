@@ -34,6 +34,18 @@ function read(p: string): string {
 const pages = walk(PAGES).filter((f) => /\.astro$/.test(f));
 
 describe('W299.B customer-dashboard date-formatting baseline', () => {
+  it('CRITICAL the walk found the pages — every assertion below is over `pages`', () => {
+    // `walk` returns [] for a missing directory, so a moved or renamed root makes
+    // every arm in this file pass over an empty list: zero pages have zero
+    // offenders. The named member is the part that cannot be satisfied by an
+    // empty walk, and unlike a count it does not churn as pages are added.
+    expect(pages.length).toBeGreaterThan(12);
+    expect(
+      pages.some((f) => f.endsWith('billing.astro')),
+      'the dashboard pages root produced nothing — the walk did not reach it',
+    ).toBe(true);
+  });
+
   it('pages that touch dates use toLocaleString / toLocaleDateString for display', () => {
     // Any page that mentions a `created_at` / `*_at` field should
     // also use a locale-aware formatter somewhere — not raw string

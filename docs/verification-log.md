@@ -20291,3 +20291,26 @@ have a module-level collection**: `docs-no-dev-notes-baseline`'s
 `const allFiles = targets.flatMap((d) => walk(d)).filter(...)`, missed because my pattern required
 `= walk(` immediately. The dry run correctly stopped a bad batch edit AND under-reported the tractable
 set — **a dry run is an instrument too, and its negatives need the same suspicion as any other zero.**
+
+## V-1963 — the same hole in eight dashboard guards, and this time it WAS a batch (2026-08-27)
+
+Eight `apps/customer-dashboard` guards share one module-level line —
+`const pages = walk(PAGES).filter((f) => /\.astro$/.test(f));` — against one root, and every arm asserts
+`toEqual([])`. Same defect as V-1962: `walk` returns `[]` for a missing directory, so a renamed root
+makes all of them report clean over zero pages. Confirmed by drifting the root in one file: the new arm
+reds and the two original arms pass.
+
+**Unlike the docs set, this genuinely was uniform — and I only know that because I checked instead of
+assuming in either direction.** V-1962's dry run found 3 of 10 sharing a shape and stopped a scripted
+pass; the same dry run here reported 8 of 8 READY, and the applied result matched. **The lesson is not
+"never batch" — it is that whether a batch is safe is a measurement, and it costs one command.**
+
+Each file gets one arm: a floor of 12 against a measured 24 pages, plus
+`pages.some((f) => f.endsWith('billing.astro'))`. **The named member is the load-bearing half** — it
+cannot be satisfied by an empty walk and does not churn as pages are added, while the count alone would
+be bumped without being read the first time someone adds a page.
+
+Running total on the shape: **12 of 19 floorless set-enumerating tests now floored** (4 docs in V-1962,
+8 here). The remaining 7 build their collections inside arms or through per-file shapes and need
+individual reads — the same per-occurrence conclusion the swallowing-walk debt reached, and the reason
+the ceiling guard caps that population rather than pretending it is scriptable.
