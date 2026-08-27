@@ -16830,3 +16830,46 @@ than declaring two edits done: `21-value` → 0, `15-value` → **1 remaining**.
 enum". ⭐ **Left unchanged deliberately** — a log entry records what was true when it was written, and
 the point it supports does not depend on the enum's size. Editing it would falsify the record. Zero
 stale in the guards; one in history, where it belongs.
+
+## V-1882 — "no count assertion" is not a defect class, and the repo's answer is better than one
+
+2026-08-27. No defect. A hypothesis from V-1881 measured, and retired twice over on inspection.
+
+**THE HYPOTHESIS.** V-1881 found two guards whose prose described a 33-value enum as 21 and as 15, and
+noted the D-025 guard pins its values individually with no count assertion — so nothing there would
+notice a value being added. Generalised: which roster guards pin members one by one and assert no
+count? Measured across `*cross-source-invariant.test.ts`: **13 pin five or more members, 11 assert no
+count.**
+
+⛔ **THAT LIST IS A CENSUS OF FILES, NOT OF ROSTERS, and my own known positive disproves it.** The
+D-025 guard has no count because a SIBLING owns that job — W862 carries twelve count assertions for the
+same roster. "No count in this file" and "roster unguarded" are different statements, and the number 11
+is about the first while the concern was about the second. Same error as V-1876's constructor census,
+one day later.
+
+⭐⭐ **AND THE HIGH-VALUE CASE ANSWERS IT BETTER THAN A COUNT WOULD.** `logger-v494-redaction` pins 13
+redaction paths with no count, and its own header names the hazard: pino dot-paths cannot wildcard, so
+"New sensitive fields MUST be added here whenever a request/response shape gains them" — a manual,
+growing roster, which is the shape that goes blind. A count assertion would not help: it forces an
+update when the list changes, and says nothing about a field that SHOULD be on it.
+
+**The repo solved the real property with derivation, in a family of guards named for it** —
+`every-minted-secret-prefix-is-in-the-redactor`, `every-credential-header-is-redacted-in-logs`,
+`query-credential-redaction-completeness-invariant`,
+`redact-text-scrubs-every-minted-credential-shape`. The first states the design exactly: "The pairing
+here is DERIVED on both sides: mint sites are found by their construction, and the allowlist is read
+out of the regex source. Adding a credential to either side is picked up without editing this file."
+It also names the blind spot it exists to close — a hardcoded shape list means "a FOURTH secret prefix
+would be logged in full and every redaction test would stay green" — and records two corrections to its
+own first version (CSPRNG-minted as the discriminator, file-scoped scanning).
+
+⭐⭐⭐ **THE PRINCIPLE, which is the part worth keeping: a count assertion FORCES AN UPDATE; a derived
+pairing DETECTS THE OMISSION.** For a growing family they are not substitutes — the count only proves
+someone edited the list, never that the list is right. Where the roster matters, derive both sides and
+compare; where it does not, pinning members is fine and the absent count is not a finding.
+
+⚠️ **BOUNDARY:** measured over `*cross-source-invariant.test.ts` guards pinning five or more members,
+and the two rosters I traced to their owners were the admin-audit action enum and the log-redaction
+paths. I did not trace the other nine, and on this evidence the right expectation is that most also
+have an owner elsewhere — which is why the 11 is recorded here as a discarded instrument rather than a
+backlog.
