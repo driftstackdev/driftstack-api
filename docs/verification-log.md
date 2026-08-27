@@ -20449,3 +20449,37 @@ not an instrument.** Verify what is WIRED before choosing where to emit — the 
 explained `durable-webhook-delivery`'s coverage and the same one that made "is there a v1.1 classifier"
 answerable. **Boundary: this records the event; it does not establish that the event occurs.** That is
 one production log line away, and if it never fires the hypothesis is excluded cheaply.
+
+## V-1968 — the remaining seven were all false positives; the work was already done (2026-08-27)
+
+V-1962 and V-1963 reported "12 of 19 floorless set-enumerating tests now floored", implying seven
+outstanding. **Enumerated and read all seven. Every one is a false positive.** The correct statement is
+**12 genuinely vacuous, all fixed and mutation-proven, and 7 misclassified** — the remediation was
+complete when I wrote that it was 63% done.
+
+**Five ways a "walks a tree and asserts empty" test is NOT vacuous, four of which my classifier could
+not see:**
+
+- **Reference-set lookup.** The walk builds a `Set` of known-good values and the arm accuses anything
+  NOT in it (`guides-index-href`, `index-card-href`). **An empty walk accuses EVERYTHING** — loud
+  failure, the exact opposite of a vacuous pass. The question is whether the collection is the SUBJECT
+  accused or the REFERENCE accused against.
+- **A bare `readdirSync(dir)` throws.** Only a walk that SWALLOWS — `if (!existsSync(dir)) return out` —
+  degrades quietly. `nav-endpoint-children`, `admin-pages-endpoint-parity` and `tier-table-sweep` have
+  no `existsSync` at all; verified empirically that `readdirSync` on a missing directory raises ENOENT.
+  **The swallow is the defect, not the walk**, and my detector keyed on the walk.
+- **The walk feeds nothing.** `customer-route-doc-coverage-parity` imports `readdirSync` while every
+  assertion iterates a hardcoded `ROUTE_TO_DOC` map. **My tree-reading regex matched the IMPORT.**
+- **A floor in an unrecognised form.** `docs-sdk-method-refs-integrity` already asserts
+  `expect(/client\.\w+\.\w+\(/.test(corpus)).toBe(true)` — a perfectly good non-vacuity check that an
+  empty corpus fails. My pattern list knew counts and member checks, not regex-over-corpus.
+
+⭐ **Why the twelve were right while the residue was entirely wrong: the twelve were confirmed by
+MUTATION and the seven were only classified.** Drifting the root and observing which arms redden is
+unfakeable — the vacuous ones stay green while the new arm fires, and I ran exactly that on one member
+of each batch. **A classifier selects candidates; only running the failure mode confirms one.** The
+seven were never mutated because they were the "remaining work", and remaining work does not get
+proofs — which is precisely how a 100%-false list survives to be reported as a backlog.
+
+**No code change: nothing here needs fixing.** Recording it because "seven files still need a floor"
+would otherwise have stood as a durable, entirely fictional item of debt.
