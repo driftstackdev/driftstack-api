@@ -19625,3 +19625,39 @@ Also checked, since the search surfaced it: stale compiled `dist/routes/saved-pr
 retired route is local residue only — dist is gitignored and untracked, that build is from Jun 10, and
 the sole reference in the compiled entrypoint is a comment. Says nothing about the prod host, which I
 cannot see from here.
+
+## V-1946 — the semantic half: a lead generator, not a census (2026-08-27)
+
+V-1945 left the semantic half of the citation sweep unmeasured — whether a coordinate that resolves
+still _means_ what the note says. Attempted it: pair each citation with the identifier quoted beside it
+and ask whether that symbol appears within six lines. Controls passed on all four cases, including the
+real known-positive (`app.ts:906` + `registerMetricsRoutes` → correctly "symbol exists, but not here").
+
+**It flagged 158 of 186, about 85%, and that number is the instrument.** A stale rate that high across
+a corpus this heavily maintained is not credible, and the mechanism is visible on inspection: the
+heuristic takes the _next_ backticked token after a citation, which is frequently not the symbol at
+that line. Hand-read three. `middleware/auth.ts:144` is a pure false positive — it is exactly the
+`requireTierFeature(ctx.account.tier, 'apiAccess')` its note claims, and the heuristic had paired it
+with the enclosing `requireAuth`. The other two are real coordinate drift with the subject alive
+(`AccountsAdminService` moved from `app.ts:861` to `:1106`). n=3. **So this stays a lead generator and
+is recorded as one; the semantic rate is still unmeasured and 85% is not it.**
+
+**As a lead generator it earned its keep.** It surfaced a note carrying a `[HIGH] ⬜ OPEN` WireGuard
+IPv6 SSRF bypass — an unbracketed `fc00::9999` chopped to `fc00:` by a last-colon port heuristic, which
+then classifies as safe. **Fixed at HEAD and witnessed by name:** `vpnEndpointHost` now returns early
+on `isIP(e) === 6` with the case named in a comment, only strips a trailing `:digits` when the head has
+no further colons or is itself a valid IPv6, and `webhook-target-guard.test.ts:263` asserts both
+`fc00::9999` and `fc00::9999:5182`.
+
+**The instructive part is how close I came to reporting it as live.** The note's own
+`STATUS UPDATE: all 8 were FIXED — the ⬜ OPEN markers are STALE` sits ten lines below the marker I
+matched, outside the 230-character window I printed around the citation. **A grep for a status marker
+finds the marker, never the retraction that follows it, because they are different lines.** What
+prevented the wrong report was ordering, not care: I verified against source before trusting the note,
+so the code answered first. That ordering is the whole defence, and it is cheap.
+
+Recorded two rules that generalize past this sweep: cite the symbol alongside the line, because the
+symbol re-finds a drifted coordinate in one grep while a bare number that lands on plausible code
+answers a different question silently; and a note recording an OPEN vulnerability expires exactly like
+one recording a clean verdict, and is the more dangerous of the two stale, because it carries the
+authority of a security finding while sending someone to fix what is already fixed.
