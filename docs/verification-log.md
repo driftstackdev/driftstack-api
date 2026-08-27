@@ -19470,3 +19470,56 @@ not cover pins filed where the TEST lives.
 `X = EXACTLY N (values|members|entries|kinds|actions)`; the 248 `N-value` and 102 `N values total`
 matches are dominated by noise (RFC 7807 parses as 7807) and I did not triage them, so this says the
 `=` phrasing is clean and says nothing about looser ones. No source change; ratchets unchanged.
+
+## V-1942 — the dispatch mapper audited sound, and the fourth false-positive list of one shape (2026-08-27)
+
+`agent-intent-to-dispatch.ts` is the symmetric companion to the file V-1938 fixed, so it was the
+natural next target: 318 lines, one log mention. **No defect.**
+
+**The one place it could leak, and why it does not.** Every failure `reason` it returns is a constant
+string except one, which interpolates a Zod message:
+
+```ts
+reason: `${mapped.intentName} params failed harness-contract validation: ${parsed.error.message}`;
+```
+
+That matters because the params at that point carry `text: intent.value` — the customer's typed
+secret when `sensitive` is set. Per V-1920 a Zod message CAN echo the value it rejected, so this is
+the shape worth checking rather than assuming. Tested against the four reachable failure modes: a
+too-long text, a bad strategy, an unknown key, and a wrong-typed text. **None carries the secret** —
+the messages hold a length limit, the rejected _strategy_, the unrecognised _key name_, and a type
+name respectively.
+
+⛔ That first run used a MIRROR of `SendKeysParamsSchema`, which is the faithful-double trap. Checked
+against the real one: `text` is `z.string().max(HARNESS_SEND_KEYS_MAX_CHARS)` and the only
+value-echoing field is `strategy`, a `z.enum` whose domain is locator strategies. The conclusion
+survives the correction, which is the only reason it is worth stating.
+
+The sensitivity heuristic behind it is well built: `selectorImpliesSensitiveInput` reads only
+selector metadata, never values, NFKC-normalises first, and its header names the asymmetry —
+"a false negative can expose a password/OTP/card value". It is pinned by a corpus of **16** positive
+selectors and **7** negatives, including `#ｐａｓｓｗｏｒｄ` in full-width characters, which is the
+normalisation arm.
+
+### ⛔ And I reported that corpus as "0 arms"
+
+My count grepped `it(`. The file uses `it.each([...])`. That is the **fourth** list today built by
+grepping for a canonical mechanism and concluding from its absence:
+
+| grepped                   | accused                            | actually present                                             |
+| ------------------------- | ---------------------------------- | ------------------------------------------------------------ |
+| `assertStringWithinLimit` | `press` unbounded                  | inline `value.length <= 20` — the tightest bound in the file |
+| `sessionId !==`           | trim-profile, session-readiness    | `profileId !==`; connection-local ownership                  |
+| `.max(`                   | would have flagged `code`          | `regex(/…{0,127}/)`                                          |
+| `it(`                     | a security heuristic with no tests | `it.each` — 23 fixtures                                      |
+
+**It fails toward accusing the strictest code, and not by accident.** A field guarded by a bespoke
+inline predicate is usually guarded that way _because_ the general helper was too loose — 20 chars
+for a key name, an exact-set regex, a per-key comparison. So the sites that miss the canonical grep
+are disproportionately the careful ones, and a gap list built this way is close to an inverted map of
+the best code in the file. A2 hit the mirror image today — searching for an expected capability grant
+and missing that CORS was the real mechanism — the same instrument error with the opposite sign.
+
+**Boundary:** this covers the mapper's failure-reason paths and the sensitivity heuristic at
+`bc6b0d0b1`; I did not exercise the harness end, so "the flag is forwarded" is a claim about what
+this file emits, not about what the node does with it. No source change; ratchets unchanged.
