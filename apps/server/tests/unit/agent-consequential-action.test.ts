@@ -172,26 +172,38 @@ describe('W443 classifyConsequentialAction', () => {
     expect(classifyConsequentialAction(tap(`Buy Now (nai${acute}ve)`)).category).toBe('purchase');
   });
 
-  // ⛔ RESIDUAL, MEASURED 2026-08-27 — the one evasion class this matcher does
-  // NOT defeat. The arms above close zero-width, bidi, fullwidth and the whole
-  // Default_Ignorable set; NFKC folds none of the cross-script confusables,
-  // correctly, because a Cyrillic "у" is a distinct character rather than a
-  // compatibility variant of "y".
+  // ✅ CLOSED 2026-08-27 (owner-approved). This was the one evasion class the
+  // matcher did not defeat: the arms above close zero-width, bidi, fullwidth and
+  // the whole Default_Ignorable set, but NFKC folds no cross-script confusable --
+  // correctly, since Cyrillic "\u0443" is a distinct letter, not a compatibility
+  // variant of "y".
   //
-  // The source comment delegates this to "the v1.1 LLM-semantic classifier".
-  // THAT CLASSIFIER DOES NOT EXIST — `classifyConsequentialAction` is the only
-  // gate wired, through `consequentialHalt` in services/agent-executor.ts. So
-  // this is uncovered rather than covered elsewhere, and the input is a label
-  // read off whatever page the agent is browsing: attacker-controlled text.
+  // The input is a selector or label read off whatever page the agent is
+  // browsing, so it is ATTACKER-CONTROLLED, and each string below differed from a
+  // halting form by exactly one character. `normalizeForMatch` now folds Cyrillic
+  // and Greek confusables to their Latin skeleton before matching.
   //
-  // These assert CURRENT behaviour so the file is green as it stands. They are
-  // the specification for the fix: fold confusables to their Latin skeleton
-  // before matching, then invert the three expectations here. Folding is safe in
-  // the direction that matters — it can only make the gate halt more often.
-  it('does NOT defeat cross-script homoglyphs — documented residual, no v1.1 classifier exists', () => {
-    expect(classifyConsequentialAction(tap('B\u0443y Now')).requiresConfirmation).toBe(false);
-    expect(classifyConsequentialAction(tap('pla\u0441e order')).requiresConfirmation).toBe(false);
-    expect(classifyConsequentialAction(tap('#b\u0443y-now')).requiresConfirmation).toBe(false);
+  // ⚠️ These arms invert the ones they replace. Keep the control arm below them:
+  // asserting these HALT is only meaningful while the ASCII twins also halt, and a
+  // uniform all-positive result is as unreadable as the all-negative one that made
+  // the first probe of this look like "the gate never fires".
+  it('CRITICAL defeats cross-script homoglyphs — one Cyrillic character no longer bypasses the halt', () => {
+    expect(
+      classifyConsequentialAction(tap('B\u0443y Now')).requiresConfirmation,
+      'cyrillic u in Buy',
+    ).toBe(true);
+    expect(
+      classifyConsequentialAction(tap('pla\u0441e order')).requiresConfirmation,
+      'cyrillic c in place',
+    ).toBe(true);
+    expect(
+      classifyConsequentialAction(tap('#b\u0443y-now')).requiresConfirmation,
+      'cyrillic u in selector',
+    ).toBe(true);
+    expect(
+      classifyConsequentialAction(tap('\u03A1lace order')).requiresConfirmation,
+      'greek Rho in Place',
+    ).toBe(true);
   });
 
   it('CRITICAL each homoglyph string is ONE substitution from a form that DOES fire', () => {
