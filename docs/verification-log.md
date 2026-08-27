@@ -14991,3 +14991,42 @@ Six candidates, each measured against this database, boundary stated per item.
 ⭐ WHAT THE SWEEP IS WORTH, since five of six are negatives: the list is now a checklist somebody can
 re-run, each item has a one-command test, and item 5 produced a technique (declare the limitation
 rather than mirror the arithmetic) that is better than anything I would have written as advice.
+
+## V-1840 — retention-scrub audited SOUND, and a mutation that lied to me about it
+
+2026-08-26. A clean audit, and the lesson is in how nearly I filed it as a defect.
+
+**AUDITED, no defect.** `retention-scrub-repo`'s three arms (session metadata, session operations,
+revoked api keys) are covered by `db-retention-scrub-drizzle` to a standard worth naming: it asserts
+what is past the window is scrubbed and what is inside it is untouched, it BRACKETS the boundary (a
+row exactly at 90 days survives, one a second older is scrubbed), it asserts a scrubbed session KEEPS
+its row so seven years of `usage_records` billing data survive, and it runs a SECOND tick asserting
+all three counters return to zero.
+
+⛔⛔ **THE MUTATION THAT LIED.** I removed `AND name <> ${RETENTION_SCRUB_SENTINEL}` — the api-key
+idempotence guard — and all 4 arms passed. Read on its own that says the guard is unwitnessed, which
+is the finding I have filed five times today, so it looked familiar and right.
+
+It was neither. The predicate is enforced TWICE — once in the candidate SELECT (line 196, `AND name
+<>`) and once again in the UPDATE's own WHERE (line 208, `AND k.name <>`), which the file's header
+says in as many words: "The predicate is repeated in the UPDATE's WHERE". I removed one. The other
+still enforced idempotence, so the suite passed for the correct reason.
+
+⭐⭐ **AND MY SAFETY CHECK IS WHAT GAVE ME THE FALSE CONFIDENCE.** The mutation asserted
+`s.count(old) == 1` before substituting — which passed, because that exact string IS unique. **A
+uniqueness assertion on a mutation ANCHOR proves the anchor is unique; it says nothing about whether
+the PROPERTY is enforced anywhere else.** The second copy differs by a table alias (`k.name` vs
+`name`), so no anchor check could have seen it. This is the "enumerate with BOTH grep patterns" rule
+in mutation costume, and the failure mode is the dangerous direction: a surviving copy makes the
+suite pass and reads exactly like an uncovered guard.
+
+Caught by reading the spec rather than trusting the run — line 339 already asserts
+`expect(second.apiKeysScrubbed).toBe(0)`, so a genuinely unguarded scrub could not have passed, which
+is what sent me back to the source. Re-mutated with BOTH copies removed and a post-condition (zero
+occurrences remain, not "the substitution ran"): the arm fails with **"expected 8 to be +0"** — the
+second tick re-scrubbed eight keys. The guard is doubly enforced and behaviourally witnessed.
+
+⭐ HOW TO NOT REPEAT IT: before believing a surviving mutation, grep the PROPERTY (here
+`RETENTION_SCRUB_SENTINEL`, 4 hits across 3 distinct roles) rather than the anchor string, and read
+what the target spec already asserts. If a spec already names the property you think is unwitnessed,
+the mutation is the thing that is wrong.
