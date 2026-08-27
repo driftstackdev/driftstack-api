@@ -34,7 +34,15 @@ const listed = (conf: string): string[] =>
 describe('a capability file that is not listed is inert', () => {
   it('CRITICAL every capability file on disk is named by one of the two shipping configs', () => {
     const files = readdirSync(resolve(TAURI, 'capabilities')).filter((f) => f.endsWith('.json'));
-    expect(files.length).toBeGreaterThan(0);
+    // ⛔ NON-VACUITY FLOOR. This guard enumerates its OWN inputs, so it goes blind in
+    // exactly the way the defect it guards did: rename the directory, nest it, or break
+    // the extension filter, and the loop below runs zero times while the arm reports
+    // GREEN — indistinguishable from "every capability is listed". A bare `> 0` is not
+    // enough either; it survives a scan that finds one stray file.
+    expect(
+      files.length,
+      'capability scan found almost nothing — the directory moved or the filter broke',
+    ).toBeGreaterThanOrEqual(5);
 
     const identifiers = files.map(
       (f) => (JSON.parse(read(`capabilities/${f}`)) as { identifier: string }).identifier,
@@ -43,12 +51,23 @@ describe('a capability file that is not listed is inert', () => {
 
     // Named individually so a failure says WHICH capability is inert rather than
     // that some count did not match.
+    let checked = 0;
     for (const id of identifiers) {
       expect(
         named.has(id),
         `capability "${id}" exists on disk but no config lists it — it grants NOTHING`,
       ).toBe(true);
+      checked += 1;
     }
+    // The loop having RUN is a separate fact from the files having been found: an
+    // identifier that failed to parse would shrink `identifiers` without shrinking
+    // `files`. Assert the comparison happened once per file.
+    expect(checked, 'no identifier was compared — the assertions above are vacuous').toBe(
+      files.length,
+    );
+    // And the two known-live grants must be among what was checked, so a scan that
+    // silently narrowed to some other subset cannot pass either.
+    expect(identifiers).toEqual(expect.arrayContaining(['default', 'updater-check-macos']));
   });
 
   it('the macOS updater check is listed, since an unlisted grant is why 0.1.5 shipped without its fix', () => {
