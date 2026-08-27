@@ -19886,11 +19886,19 @@ names one directly: **"RESIDUAL: cross-script homoglyph substitution (Cyrillic '
 folded by NFKC — caught by the v1.1 LLM-semantic classifier, out of scope for this conservative v1.0
 keyword matcher."**
 
-**The delegation does not resolve. There is no v1.1 classifier** — grepping the tree, the only
-occurrences of "v1.1" are that comment. `classifyConsequentialAction` is the sole gate, wired through
-`consequentialHalt` in `services/agent-executor.ts:143` and applied at two dispatch sites. **So the
-residual is uncovered today rather than covered elsewhere**, which is a different claim from the one the
-comment makes.
+**The delegation does not resolve. There is no v1.1 classifier** — the only files matching
+semantic/LLM-classifier vocabulary are `agent-consequential-action.ts`, its dist build and its test.
+
+> ⛔ **CORRECTED.** This first read "the only occurrences of 'v1.1' are that comment", which is false —
+> **52 files contain it.** A peer checked and narrowed it. The conclusion stands on the vocabulary
+> search above; the string count never supported it. **A supporting claim cheaper to verify than the
+> finding is the one that goes unchecked**, because the scrutiny lands on the headline. And the source
+> itself is honest — it says RESIDUAL and "out of scope for this conservative v1.0 keyword matcher".
+> **The accurate defect is one clause: a deferral to a version that was never built** — weaker than
+> "covered elsewhere", and the weaker true claim is the one to hand an owner. `classifyConsequentialAction` is the sole gate, wired through
+> `consequentialHalt` in `services/agent-executor.ts:143` and applied at two dispatch sites. **So the
+> residual is uncovered today rather than covered elsewhere**, which is a different claim from the one the
+> comment makes.
 
 **Measured, with controls.** `consequentialHalt` is what stops an agent before a purchase, payment or
 account deletion to wait for human approval, and its input is a selector or value read off whatever page
