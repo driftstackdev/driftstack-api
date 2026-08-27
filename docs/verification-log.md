@@ -17255,3 +17255,56 @@ degrades into a live credential.
 ⚠️ BOUNDARY: this audits the code path. Whether `account_reclaim_failed` is actually alerted on — as
 opposed to merely logged queryably — is an operational question outside the repo, and the BYOK purge is
 deliberately deferred to a 30-day sweeper per the privacy policy rather than done synchronously here.
+
+## V-1893 — the reclaim step that leaves a live credential, verified as a three-link chain
+
+2026-08-27. No defect. The step V-1892 singled out, followed to the bottom.
+
+**WHY THIS ONE.** Of the reclaims in account termination, `revokeAllMintedByAccount` is the only one
+whose silent failure is not absorbed by the auth path: every other surface degrades into something the
+`deleted` status check refuses anyway, while a key minted BY the terminated account lives ON the
+owner's account and authenticates as the owner. Its failure mode is a live credential, so it is worth
+following past "the method exists".
+
+✅ **THREE LINKS, EACH VERIFIED, AND EACH WITH A NAMED FAILURE MODE:**
+
+1. **The revoke** — `throwIfMissingScope(ctx, 'driftstack_internal_admin')`, then for each key
+   `revokeChecked(ctx, key.id, key.accountId)`. ⭐ The scope argument is the KEY's account, not the
+   minter's, and the comment says why: the row belongs to the owner, so scoping to the minter would
+   match nothing and revoke nothing while returning cleanly.
+2. **The query** — `listApiKeysMintedBy` filters `.where(eq(apiKeys.createdByAccountId, minterAccountId))`,
+   the minter column rather than the owning one, which is the whole distinction from
+   `revokeAllForAccount`.
+3. **Rotation** — `createdByAccountId: locked.createdByAccountId` carries the minter forward from the
+   predecessor row. **This is the link that could break the other two silently**: a rotated key with a
+   NULL minter is invisible to the query above, so the offboarded member's credential survives its own
+   rotation. A db-level arm pins it.
+
+⭐ Witnessed, not just written: a dedicated `api-keys-revoke-minted-by-account` file including a scope
+refusal, and failure-path arms in the service tests that reject the reclaim and assert the termination
+still succeeds.
+
+## V-1894 — a flaky red I cannot name, because my own filter discarded the evidence
+
+2026-08-27. No product defect found. A process failure worth more than the run it cost.
+
+⛔⛔ **THE GATE WENT RED AND I CANNOT SAY WHICH TEST.** At `bc576990e`: `1 failed | 3227 passed (3228)`,
+`verify-suite: NOT TRUSTWORTHY`. Attribution first, per the standing rule: tree clean, no peer writes in
+20 minutes, and the three commits since the last green touch **only** `docs/verification-log.md` — all
+12 tests that read that file pass. Re-run at the same commit with the same environment: **3228 passed,
+exit 0.** So it was flaky.
+
+⛔⛔⛔ **AND THE DIAGNOSIS IS GONE, BECAUSE THE GATE COMMAND PIPED THROUGH `grep` BEFORE SAVING.** The
+pattern selected the summary lines and dropped every `FAIL`. **V-1863 recorded this exact failure —
+"the filter I built to extract the verdict removed the caveat attached to the verdict" — and I then
+built the same filter into the gate invocation I have used every turn since.** Knowing a lesson and
+having it in the running command are different things.
+
+⭐ **The fix, applied on the re-run and from now on: redirect the FULL output to a file, then grep the
+FILE.** `node scripts/verify-suite.mjs --all > gate.log 2>&1` costs nothing, keeps 42KB, and makes a
+one-off red diagnosable instead of merely noticed. A filter on a pipe destroys what it does not match;
+a filter on a file does not.
+
+⚠️ This repo treats flakes as defects rather than noise, so the honest state is: **one unexplained
+failure at `bc576990e`, not reproduced, not identified, and now unidentifiable.** Recorded so a second
+occurrence has a first data point to join rather than reading as the first.
