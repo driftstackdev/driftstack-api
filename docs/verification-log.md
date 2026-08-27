@@ -17143,3 +17143,37 @@ independent receiver enumeration summing to 273 against a sweep matching 273.
 ⚠️ BOUNDARY: this covers the sweeps published in this session's entries. Sweeps from earlier sessions
 carry the same risk and were not re-run; the same equality check applies to any of them that a future
 claim leans on.
+
+## V-1890 — the validation-harness route, delta closed; and the anchor check catching an error in one step
+
+2026-08-27. No defect. The third-thinnest route audited, its audit verdict's expiry resolved to three
+commits and every one accounted for — and the instrument rule from V-1889 preventing a false alarm at
+the point of use rather than after publication.
+
+⭐ **THE STORED VERDICT WAS ALREADY HALF-MAINTAINED, which is the good case.** The 2026-06-03 audit of
+`validation-harness.ts` concluded SOUND and surfaced one LOW item — overlapping-tick double-dispatch
+from a bare `setInterval` with no re-entrancy guard. **That memory already carries its own resolution**
+("RESOLVED W422 — `processTick` now has a `ticking` guard, `runTick` in try/finally"), matching commit
+`7d3084f66`. Two commits remained unaccounted for, and both are now read at HEAD:
+
+- **`985f02f80`, refusing an unknown archetype** — present: `if (!KNOWN_ARCHETYPE_IDS.has(archetypeId))
+throw new BadRequestError(...)`, documented as V-1582.
+- **`0e79c4b9f`, "add missing admin-audit logging"** — all three mutating endpoints route through a
+  shared `withAudit` wrapper with distinct actions (`validation_schedule.upserted` / `.removed` /
+  `.triggered`), and the wrapper records on BOTH paths: `result: 'success'` in the try, ``result:
+`error: ${code}` `` in the catch before re-throwing. Those three actions are the same ones the W862
+  roster carries under "D-025 audit-gap fix (6, migration 0097)", so the enum, the route and the guard
+  agree.
+
+⛔⛔ **AND THE ANCHOR RULE EARNED ITS KEEP IMMEDIATELY.** My first detector counted
+`audit\.record\(|recordAdminAudit|auditRepo\.insert` inside each handler body and returned **0 for all
+three mutating endpoints** — which, on a route whose commit message says audit logging was _added_,
+reads as a serious D-025 regression. It was the instrument twice over: the alternation was typed from
+memory, and the calls live in a shared wrapper rather than in the handler bodies the detector searched.
+**Caught in one step, before it became a claim**, because V-1889 made deriving the anchor the first move
+rather than the post-mortem. That is the third turn running the same class has appeared, and the first
+where it cost nothing.
+
+⚠️ BOUNDARY: this closes the delta since the stored audit — the three commits touching the route and its
+service. It does not re-audit `processTick`'s dispatch semantics or the CRUD scoping, which the
+2026-06-03 pass covered and which those commits did not touch.
