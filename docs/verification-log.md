@@ -19734,3 +19734,35 @@ resolving unions, which would make every switch look non-finite.
 
 tsc clean via `tsconfig.test.json` (the bare config excludes tests). No ratchet move: this adds an arm,
 not a file.
+
+## V-1949 — the corpus already floors 81% of these, and my regex was worse than its convention (2026-08-27)
+
+Having found one vacuity hole in my own guard (V-1948), swept the corpus for the shape: a test that
+reads the real tree and asserts emptiness, with nothing establishing the scan was non-empty.
+
+**The instrument needed three versions and the controls killed the first two.** The control pair is the
+strongest available — the same guard before and after V-1948's fix, which must classify differently.
+A file-level detector called the pre-fix version FLOORED, because its _synthetic_ arm asserts against a
+non-empty list: **a floor on a fixture arm is not a floor on the tree-walk arm, which is exactly the
+defect being hunted, reproduced inside the detector for it.** A per-arm version then failed the other
+way, flagging both known-good guards, because **a floor need not live in the arm it protects** — both
+put theirs in a separate arm. Only the hybrid passed all four.
+
+**The population depends on the instrument, and saying so is part of the result: 347 files under the
+arm-parsing version, 514 under the file-level one.** The arm parser balances parentheses and breaks on
+regex literals and strings containing them, so it silently under-collected.
+
+**Of 514 tree-reading emptiness tests, 421 — 81% — already declare a floor in the codebase's own
+idiom** (`non-vacuous:`, `CRITICAL the scan finds …`, `toBeGreaterThan`, `not.toHaveLength(0)`). Two
+hand-reads of my regex's "risks" were both false positives carrying arms named exactly that: _"CRITICAL
+the scan finds the mints AND the logger calls, so an absence is measured against a real set"_ and
+_"non-vacuous: admin force-actions explicitly opt into null scope"_. **The convention already in the
+tree is a better detector than the assertion regex I brought to it** — matching how this codebase says
+a thing beats inferring it from shapes.
+
+The 93 without the idiom are mixed, not a defect list. Sampled two: one reads a single built file, where
+a missing file throws rather than passing empty, so the failure mode does not apply; the other genuinely
+walks a page directory with two `toEqual([])` and no count assertion at all. **So the residue needs
+hand-reading per file, and I am recording it as a candidate list, not a finding.** I checked whether
+that page directory had shrunk under the operational-surface deletion and my before/after command only
+listed the top-level tree, missing nested page dirs — the comparison was invalid and is not reported.
