@@ -11,6 +11,13 @@ import type {
 } from '../services/rate-limit-overrides.js';
 import { BadRequestError } from '../lib/errors.js';
 
+// V-2005 — a BARE uuid is accepted alongside the public `acc_<uuid>` form, and a
+// length check is not a shape check: `.length === 36` admitted ANY 36 characters
+// (36 dashes included) straight into a Postgres `uuid` column, so the route
+// answered 500 where the boundary owes 400. Same literal as the sibling fix in
+// admin-cost.ts (V-1580), `/i` because an uppercase bare uuid verifies today and
+// narrowing that would be a separate decision.
+const BARE_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PUBLIC_ID_RE = /^[a-z]{3}_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 
 function uuidFromPrefixedId(value: string, expectedPrefix: string): string {
@@ -68,7 +75,7 @@ export function registerAdminRateLimitOverridesRoutes(
 
       const accountUuid =
         parsed.data.account_id !== undefined
-          ? parsed.data.account_id.length === 36
+          ? BARE_UUID_RE.test(parsed.data.account_id)
             ? parsed.data.account_id
             : uuidFromPrefixedId(parsed.data.account_id, 'acc')
           : undefined;

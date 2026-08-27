@@ -171,4 +171,30 @@ describe('GET /v1/admin/sessions/stats', () => {
     });
     expect(res.statusCode).toBe(403);
   });
+  // V-2005 — the arm above refuses `not-an-id` (9 chars) and `key_<uuid>` (40), so it
+  // never reached the branch that accepted a BARE uuid. That branch tested
+  // `.length === 36`, and a length is not a shape: 36 dashes are 36 characters and
+  // went straight into a Postgres `uuid` column, answering 500 where the boundary
+  // owes 400. Both inputs here are EXACTLY 36 characters — that is the whole point
+  // of them, and an arm that forgets it stops testing this the moment someone
+  // "tidies" the literals.
+  it('CRITICAL refuses a 36-character account_id that is not a uuid — the length that used to bypass the shape check', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+
+    const dashes = '------------------------------------';
+    const hexNoDashes = '0123456789abcdef0123456789abcdef0123';
+    expect(dashes.length, 'the input must be 36 chars or it misses the branch').toBe(36);
+    expect(hexNoDashes.length, 'the input must be 36 chars or it misses the branch').toBe(36);
+
+    for (const bad of [dashes, hexNoDashes]) {
+      const res = await fx.app.inject({
+        method: 'GET',
+        url: `/v1/admin/sessions?account_id=${bad}`,
+        headers: auth(fx),
+      });
+      expect(res.statusCode, `36-char non-uuid "${bad}" must be a bad request, not a 500`).toBe(
+        400,
+      );
+    }
+  });
 });

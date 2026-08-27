@@ -81,7 +81,7 @@ describe('W1029 routes/admin-sessions cross-source invariant', () => {
 
   it('CRITICAL account_id 2-branch + service.listAll(ctx, {limit, ...cursor?, ...status?, ...accountId?}) + { data, next_cursor } response.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-sessions.ts'));
-    expect(p).toMatch(/parsed\.data\.account_id\.length === 36/);
+    expect(p).toMatch(/BARE_UUID_RE\.test\(parsed\.data\.account_id\)/);
     expect(p).toMatch(/: uuidFromPrefixedId\(parsed\.data\.account_id, 'acc'\)/);
     expect(p).toMatch(/await sessionsService\.listAll\(ctx, \{/);
     expect(p).toMatch(

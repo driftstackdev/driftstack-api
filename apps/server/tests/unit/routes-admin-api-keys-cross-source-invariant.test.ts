@@ -89,7 +89,7 @@ describe('W1026 routes/admin-api-keys cross-source invariant', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-api-keys.ts'));
     expect(p).toMatch(/const accountUuid =/);
     expect(p).toMatch(/parsed\.data\.account_id !== undefined/);
-    expect(p).toMatch(/\? parsed\.data\.account_id\.length === 36/);
+    expect(p).toMatch(/\? BARE_UUID_RE\.test\(parsed\.data\.account_id\)/);
     expect(p).toMatch(/\? parsed\.data\.account_id/);
     expect(p).toMatch(/: uuidFromPrefixedId\(parsed\.data\.account_id, 'acc'\)/);
     expect(p).toMatch(/: undefined;/);

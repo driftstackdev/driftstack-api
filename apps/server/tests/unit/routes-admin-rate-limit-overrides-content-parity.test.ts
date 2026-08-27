@@ -81,7 +81,7 @@ describe('W415.C apps/server/src/routes/admin-rate-limit-overrides.ts content pa
 
   it('account_id resolution: 36-char raw uuid OR uuidFromPrefixedId(value, "acc")', () => {
     expect(body).toMatch(
-      /const accountUuid =\s*parsed\.data\.account_id !== undefined\s*\? parsed\.data\.account_id\.length === 36\s*\? parsed\.data\.account_id\s*: uuidFromPrefixedId\(parsed\.data\.account_id, 'acc'\)\s*: undefined;/,
+      /const accountUuid =\s*parsed\.data\.account_id !== undefined\s*\? BARE_UUID_RE\.test\(parsed\.data\.account_id\)\s*\? parsed\.data\.account_id\s*: uuidFromPrefixedId\(parsed\.data\.account_id, 'acc'\)\s*: undefined;/,
     );
   });
 

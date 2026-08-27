@@ -58,7 +58,7 @@ describe('W1028 routes/admin-rate-limit-overrides cross-source invariant', () =>
 
   it("CRITICAL account_id 2-branch (uuid-as-is OR uuidFromPrefixedId 'acc') + include_expired === 'true' boolean.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-rate-limit-overrides.ts'));
-    expect(p).toMatch(/parsed\.data\.account_id\.length === 36/);
+    expect(p).toMatch(/BARE_UUID_RE\.test\(parsed\.data\.account_id\)/);
     expect(p).toMatch(/: uuidFromPrefixedId\(parsed\.data\.account_id, 'acc'\)/);
     expect(p).toMatch(/const includeExpired = parsed\.data\.include_expired === 'true';/);
   });

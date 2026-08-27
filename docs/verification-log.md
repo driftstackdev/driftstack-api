@@ -12942,3 +12942,80 @@ and the security audit already credits the **length guard** — not the catch �
 the audit's description is accurate. Recorded because V-1465 was the reciprocal of exactly this comparison
 (the empty-secret check NOWPayments always had and Stripe lacked): **reading the two sibling verifiers
 against each other keeps paying, in both directions.**
+
+## V-2005 — a length is not a shape: three routes accepted any 36 characters into a uuid column (2026-08-27)
+
+2026-08-27. Continuing V-2004's target selection — routes ranked by how little the log says about them —
+into the remaining zero-mention files. `admin-billing.ts` and `egress-echo.ts` are clean (the latter's
+`req.ip` rate-limit key is safe because prod sets `trustProxy: 1`, one hop, so a client-supplied
+`X-Forwarded-For` cannot win; archive records CORS/trustProxy as LOCKED). `admin-rate-limit-overrides.ts`
+was not.
+
+### The defect
+
+Three routes normalise an admin `account_id` query parameter that may arrive as `acc_<uuid>` or bare:
+
+```ts
+? parsed.data.account_id.length === 36
+  ? parsed.data.account_id                                    // ← no shape check at all
+  : uuidFromPrefixedId(parsed.data.account_id, 'acc')
+```
+
+**A length is not a shape.** Thirty-six dashes are thirty-six characters, and so are thirty-six hex digits
+with no dashes. Either passes through untouched into `eq(<table>.accountId, value)` where the column is
+`uuid` — verified in `schema.ts` for all three targets (`rateLimitOverrides`, `apiKeys`, `sessions`). Sites:
+`admin-rate-limit-overrides.ts:71`, `admin-api-keys.ts:73`, `admin-sessions.ts:80`.
+
+**The sibling was already fixed, and its comment states the rule.** `admin-cost.ts` carries V-1580:
+_"Stripping and validating are different jobs, so the shape check belongs here, at the call site, on the
+normalised result. `cost_daily.account_id` is a `uuid` column: without this a malformed id reaches Postgres
+as an invalid cast (22P02) and the route answers 500 where the boundary owes 400."_ One file fixed, three
+siblings missed — the same distribution V-1565 found for the loose hex-or-dash class, in the same admin
+surface.
+
+⭐ **This is the residue V-1998 predicted and could not find an instance of.** V-1565 guarded its class _as
+a shape_, scanning route files for the loose regex literal — and that guard structurally cannot see this,
+because there is **no regex here to find**. The bypass is a `.length` comparison. Sweeping the shape
+(`\.length === 36` as a stand-in for uuid acceptance) found all three; sweeping the token would not have.
+
+⛔ **The arm that should have caught it was one character-count away.** Each route already has an arm
+titled _"CRITICAL refuses a malformed account_id, and refuses a WELL-FORMED id carrying another resource
+prefix"_. Its inputs are `not-an-id` (**9** chars) and `key_<uuid>` (**40**). Neither is 36, so both take
+the `uuidFromPrefixedId` branch and the arm passed identically before and after this fix. **A refusal test
+that never supplies the length the branch keys on is testing the other branch.**
+
+### The fix, and what the proof does and does not cover
+
+`BARE_UUID_RE` at each site — V-1580's literal verbatim rather than a new spelling, `/i` deliberately: an
+uppercase bare uuid is accepted today and narrowing that is a separate decision (the same reasoning V-1998
+established for profile-snapshots' `/i`). The malformed branch then falls through to `uuidFromPrefixedId`,
+which already throws `BadRequestError` → **400**, so no new error path was introduced.
+
+**Post-condition, not derivation:** zero occurrences of `parsed.data.account_id.length === 36` remain in
+`apps/server/src` or `apps/server/tests`. Six pins across three content-parity and three cross-source
+files updated in the same commit — retraction paraphrased in the prose, the new expression quoted in the
+assertions; `it(` counts unchanged in all six (9/6/6/14/12/12), `tsc -p tsconfig.test.json` clean.
+
+Three behavioural arms added, one per route, each asserting the refusal with inputs that are **exactly 36
+characters** and asserting that length in the arm itself so a future tidy-up cannot silently defeat it.
+Mutation-proved on the real subject: restoring the pre-fix `admin-sessions.ts` reds exactly that arm.
+
+⛔ **Boundary, and it is the interesting part.** The mutation failed with `expected 200 to be 400` — **not** 500. Against `buildTestApp`'s in-memory repositories a garbage filter matches nothing and the route answers 200. So these arms prove the route now REFUSES AT THE BOUNDARY; **they cannot exhibit the 500**, because no
+route test in this suite meets real Postgres — the seam V-1998 measured, where exactly one integration file
+drives a route against a real database and it is an internal one. The 500 is inferred from the verified
+`uuid` column type plus V-1580's documented experience of the identical shape, and is **not reproduced
+here**. That inference is exactly what V-1565 described: _"the route half is tested in-memory, where a
+garbage filter matches nothing and returns 200; the column half is tested by repo contracts handed
+already-valid values. The failure lives in the join."_
+
+### Two instrument failures, both caught by their own asserts
+
+**My post-condition matched my own comment.** `grep "length === 36"` after the fix returned three hits —
+all of them the explanatory comment I had just written, which quotes the defect. The same shape as V-2000,
+committed by me, one turn later, while writing the comment that explains V-2000's cousin. Re-run against
+the pinned expression (`parsed.data.account_id.length === 36`) it is a clean zero.
+
+**A python raw string double-escaped my anchor** (`r"\\."` is backslash-backslash-dot; the file holds
+backslash-dot), so the pin rewrite matched nothing. `assert n == 1` fired on the first file and **nothing
+was modified** — the run aborted before any write, which is the only reason the next command's output was
+not a false green.
